@@ -13029,11 +13029,7 @@ function arrangeAccountRows(list, p) {
   }
 }
 
-// renderAccounts: every account of an agent magpie has, the one the agent
-// is signed in to first, and a way to add another. Like keys, any number
-// can be ticked: the gateway moves to the next ticked account when the
-// first is out of quota. Each shows how much of its allowance is used, so
-// which one to go to next is plain to see.
+// renderAccounts: an agent's accounts, first on top; the gateway moves to the next ticked one out of quota
 // forgetOwnTitle: what Remove does to the agent's own sign-in, which magpie
 // only reads — it is hidden, and shows again when the agent signs in anew.
 function forgetOwnTitle(a) {
@@ -13111,8 +13107,11 @@ function renderAccounts(a, p) {
     } else if (l.active && (pausable || l.paused)) {
       dot.title = l.paused ? t("Resume: the gateway uses this account first again") : t("Pause: the gateway uses the other accounts, {agent} stays signed in to this one", { agent: a.agentName });
       dot.onclick = () => accountAction("login/" + (l.paused ? "on" : "off"), { agent: a.agent, user: l.user });
+    } else if (l.active && sub?.own && several) {
+      dot.title = t("Stop using this account; the next ticked one is used first");
+      dot.onclick = () => accountAction("login/off", { agent: a.agent, user: l.user });
     } else if (l.active) {
-      dot.title = sub?.own ? t("The gateway uses this account first") : t("{agent} is signed in to this account", { agent: a.agentName });
+      dot.title = sub?.own ? t("The gateway uses this account first; tick another to stop using it") : t("{agent} is signed in to this account", { agent: a.agentName });
       dot.classList.add("fixed");
     } else {
       dot.title = on ? t("Stop using this account") : t("Use this account too");

@@ -96,10 +96,17 @@ func TestCopilotAccounts(t *testing.T) {
 	if got := users(); got != "hubot*+ octocat+" {
 		t.Fatalf("after switch: %s", got)
 	}
-	if err := SetLoginOn("copilot", "hubot", false); err == nil {
-		t.Fatal("turned off the first")
+	// ticked off, the first hands first to the next ticked (Rime_Nan on X)
+	if err := SetLoginOn("copilot", "hubot", false); err != nil {
+		t.Fatal(err)
 	}
-	if err := SwitchLogin("copilot", "octocat"); err != nil {
+	if got := users(); got != "octocat*+ hubot" {
+		t.Fatalf("after turning the first off: %s", got)
+	}
+	if err := SetLoginOn("copilot", "octocat", false); err == nil {
+		t.Fatal("turned off the only account in use")
+	}
+	if err := SetLoginOn("copilot", "hubot", true); err != nil {
 		t.Fatal(err)
 	}
 	if err := ForgetLogin("copilot", "hubot"); err != nil {
