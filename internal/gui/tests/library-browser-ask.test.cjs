@@ -6,9 +6,13 @@
 // connected (read again while the row is shown, no reload), each agent a
 // button that gives it the server through servers/agents; once one has
 // it, the row asks nothing more. Not connected, or given to an agent
-// already, it asks nothing. Every language, Chromium and WebKit, at 1100
-// and 420 wide, nothing running off to the side; no backend, the API is
-// faked here.
+// already, it asks nothing. The ask is a line of its own under the row's
+// first line, as wide as the row past its picture, and that first line
+// is the name and command alone, as tall as any other server's (tao0194
+// on Discord: in the panel it sat inside the name's column, squeezed to
+// a few characters between the command and the agents' chips). Every
+// language, Chromium and WebKit, at 1100, 600, the panel's 440 and 360 wide,
+// nothing running off to the side; no backend, the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -31,10 +35,12 @@ function fixture(lang, st) {
     agents: [
       { id: "claude", name: "Claude Code", icon: "claudecode-color", mcp: `${HOME}/.claude.json`, skills: `${HOME}/.claude/skills`, hub: "on" },
       { id: "codex", name: "Codex", icon: "codex-color", mcp: `${HOME}/.codex/config.toml`, hub: "on" },
+      { id: "zed", name: "Zed", icon: "zed", mcp: `${HOME}/.config/zed/settings.json`, hub: "on" },
     ],
     servers: [
       { name: "magpie-browser", transport: "stdio", command: "/Applications/magpie.app/Contents/MacOS/magpie", args: ["mcp", "browser"], agents: st.agents },
       { name: "notes", transport: "stdio", command: "uvx", args: ["notes-mcp"], agents: [] },
+      { name: "context7", transport: "http", url: "https://mcp.context7.com/mcp", agents: ["claude", "codex", "zed"] },
     ],
     instructions: { agents: [], sets: [] }, foundServers: [], projects: [], foundSkills: [], skills: [], problems: [],
   });
@@ -98,7 +104,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     };
     for (const lang of LANGS) {
       const w = (s) => tr(lang, s);
-      for (const width of [1100, 420]) {
+      for (const width of [1100, 600, 440, 360]) {
         await t.test(`${lang} at ${width}px: asks once connected, a pick gives it, then asks nothing`, async () => {
           const st = { connected: false, agents: [] };
           const { f, context, page, errors, row } = await open(lang, width, st);
@@ -110,12 +116,25 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const ask = row.locator(".lib-browserask");
           await ask.waitFor({ state: "visible", timeout: 10000 });
           assert.equal(await ask.locator(".lib-browserask-q").textContent(), w(ASK));
-          assert.deepEqual(await ask.locator(".lib-browserask-pick").allTextContents(), ["Claude Code", "Codex"]);
+          assert.deepEqual(await ask.locator(".lib-browserask-pick").allTextContents(), ["Claude Code", "Codex", "Zed"]);
           // the other server, given to no agent either, asks nothing
           assert.equal(await page.locator("#view-library .lib-browserask:visible").count(), 1);
           assert.equal(await wide(page), 0);
           assert.equal(await row.evaluate((e) => e.scrollWidth - e.clientWidth), 0);
           shots.push([`${lang}-${width}-ask`, await row.screenshot()]);
+          // its own line: under the name, the command and the chips, from
+          // the name's left edge to the chips' right edge, and the first
+          // line no taller than the server's beside it
+          const box = (l) => l.evaluate((e) => { const r = e.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, height: r.height }; });
+          const [a, who, chips, nm] = await Promise.all([box(ask), box(row.locator(":scope > .who")), box(row.locator(":scope > .lib-agents")), box(row.locator(".name"))]);
+          const other = await box(page.locator("#view-library .lib-server").filter({ has: page.locator(".name", { hasText: "notes" }) }).locator(":scope > .who"));
+          assert(a.top >= who.bottom - 0.5 && a.top >= chips.bottom - 0.5, `ask starts under the first line: ${JSON.stringify({ a, who, chips })}`);
+          assert(Math.abs(a.left - nm.left) <= 1, `ask starts under the name: ${a.left} vs ${nm.left}`);
+          // and the name beside the row's picture, however long the command
+          const pic = await box(row.locator(":scope > .lib-glyph, :scope > .lib-logo"));
+          assert(nm.left >= pic.right && nm.top < pic.bottom, `name beside the picture: ${JSON.stringify({ nm, pic })}`);
+          assert(a.right >= chips.right - 1, `ask reaches the chips' right edge: ${a.right} vs ${chips.right}`);
+          assert(Math.abs(who.height - other.height) <= 1, `first line as tall as another server's: ${who.height} vs ${other.height}`);
 
           await ask.locator('.lib-browserask-pick[data-agent="codex"]').click();
           await page.waitForFunction(() => document.querySelector('#view-library .lib-server .lib-agents .lib-ag[data-agent="codex"]')?.getAttribute("aria-pressed") === "true");

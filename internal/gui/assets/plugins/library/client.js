@@ -2055,7 +2055,8 @@ magpie.plugin("library", (ctx) => {
     row.append(mark(s.icon, s.transport === "stdio" ? GLYPH.cmd : GLYPH.web), who, ...removeAct(() => confirmRemoveServer(s)),
       agentChips(withGone(all, s.agents), s.agents, chipsChange("servers/agents", s.name, "servers", (x) => serverRow(x, all)), { problems: s.problems, blocked: sseBlocked(s), all: true }));
     if (picking) return pickRow(row, s.name);
-    if (s.name === "magpie-browser" && !s.agents?.length) who.append(browserAsk(row));
+    // a line of its own under the row, not in the name's column (tao0194)
+    if (s.name === "magpie-browser" && !s.agents?.length) row.append(browserAsk(row));
     row.onclick = () => editServer(s);
     row.title = t("Edit {name}", { name: s.name });
     return row;
@@ -2096,6 +2097,7 @@ magpie.plugin("library", (ctx) => {
       const on = await browserLink();
       if (on && ask.hidden) draw();
       ask.hidden = !on;
+      row.classList.toggle("lib-asking", on);
       setTimeout(look, 3000);
     };
     requestAnimationFrame(look);

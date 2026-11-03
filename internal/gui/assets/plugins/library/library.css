@@ -497,6 +497,9 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 
 @media (max-width: 560px) {
   .lib-list .row { flex-wrap: wrap; }
+  /* a long command ellipsizes beside the row's picture rather than taking
+     the name to a line under it (tao0194) */
+  .lib-list .lib-row > .lib-glyph + .who, .lib-list .lib-row > .lib-logo + .who { max-width: calc(100% - var(--lib-indent)); }
   .lib-skillfile .bar { flex-wrap: wrap; }
   .lib-skillfile .bar .lib-reaches { flex-basis: 100%; }
   .lib-agents { max-width: 100%; }
@@ -794,7 +797,16 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .mk-sheet .mk-browser-folder > svg { grid-row: span 2; color: var(--fg-2); }
 .mk-sheet .mk-browser-folder-name { font-size: 12.5px; font-weight: 500; }
 .mk-sheet .mk-browser-folder-path { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
-.lib-browserask { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 6px; min-width: 0; font-size: 12px; color: var(--fg-2); cursor: default; }
+/* the ask is a line of its own under the row, from the name's left edge
+   to the row's right one (tao0194: in the name's column it was squeezed
+   between the command and the agents' chips); the line above keeps its
+   name, command and chips as every other server's row has them */
+.lib-row.lib-asking { flex-wrap: wrap; row-gap: 6px; }
+/* where a row's name starts: its picture (26px) and the row's gap, 12px in the window */
+.lib-list .lib-row { --lib-indent: 37px; }
+body.window .lib-list .lib-row { --lib-indent: 38px; }
+@media not all and (max-width: 560px) { .lib-row.lib-asking > .who { flex-basis: 0; } }
+.lib-browserask { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; order: 1; flex: 0 0 calc(100% - var(--lib-indent)); margin-left: var(--lib-indent); min-width: 0; font-size: 12px; color: var(--fg-2); cursor: default; }
 .lib-browserask[hidden] { display: none; }
 .lib-browserask-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex: none; }
 .lib-browserask-q { min-width: 0; flex: 1 1 220px; overflow-wrap: anywhere; }
