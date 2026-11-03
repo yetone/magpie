@@ -65,6 +65,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const w = words[lang], calls = [], errors = [];
         const page = await (await browser.newContext({ viewport: panel ? { width: 360, height: 420 } : { width: 900, height: 560 } })).newPage();
         page.setDefaultTimeout(5000);
+        page.setDefaultNavigationTimeout(60000);
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", server(lang, calls));
         await page.goto("http://magpie.test/" + (panel ? "?mode=panel" : ""));

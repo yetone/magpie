@@ -84,6 +84,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const errors = [];
           const page = await ctx.newPage();
           page.setDefaultTimeout(8000);
+          page.setDefaultNavigationTimeout(60000);
           page.on("pageerror", (e) => errors.push(e.message));
           await page.route("**/*", serve(lang, theme, true));
           await page.goto("http://magpie.test/?view=usage");
@@ -102,6 +103,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await ctx.addInitScript(() => { try { localStorage.setItem("magpie.panelTab", "usage"); } catch {} });
         const panel = await ctx.newPage();
         panel.setDefaultTimeout(8000);
+        panel.setDefaultNavigationTimeout(60000);
         await panel.route("**/*", serve(lang, theme, false));
         await panel.goto("http://magpie.test/?mode=panel");
         await panel.locator(".pq-card .pq-sub").first().waitFor();

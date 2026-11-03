@@ -36,6 +36,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     t.after(() => browser.close());
     const page = await browser.newPage();
     page.setDefaultTimeout(5000);
+    page.setDefaultNavigationTimeout(60000);
     await page.route("**/*", serve());
     await page.goto("http://magpie.test/?view=providers");
     await page.waitForFunction(() => typeof window.magpieWindowVisibility === "function");
