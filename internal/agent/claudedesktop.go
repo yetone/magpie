@@ -15,7 +15,8 @@ package agent
 //	  "inferenceGatewayBaseUrl":"http://127.0.0.1:3425",
 //	  "inferenceGatewayApiKey":"magpie-claude-desktop",
 //	  "inferenceGatewayAuthScheme":"bearer",
-//	  "disableDeploymentModeChooser":true,"coworkEgressAllowedHosts":["*"]}
+//	  "disableDeploymentModeChooser":true,"coworkEgressAllowedHosts":["*"],
+//	  "toolSearchEnabled":true}
 //	Claude-3p/configLibrary/_meta.json     {"appliedId":"<id>",
 //	  "entries":[…,{"id":"<id>","name":"magpie"}]}
 //
@@ -194,14 +195,18 @@ func claudeDesktop(home string) *Agent {
 					Note: "Desktop's third-party gateway: Code and Cowork on magpie's models, no Anthropic sign-in (restart Desktop)"}}
 			},
 		}}, append(desktopTierFields(home, ps), desktopSubagentField(ps), desktopSubagentEffortField(ps))...),
-		// a Desktop already on magpie gets the import policy too
-		// (desktopSeedImport), and a profile for magpie's gateway it
-		// applies a key the gateway takes (desktopKeyApplied)
+		// a Desktop already on magpie gets the import and tool search
+		// policies too (desktopSeedImport, desktopSeedToolSearch), and a
+		// profile for magpie's gateway it applies a key the gateway takes
+		// (desktopKeyApplied)
 		Sync: func() error {
 			var errs []error
 			for _, p := range ps {
 				if desktopWired(p) {
 					if err := desktopSeedImport(p); err != nil {
+						errs = append(errs, err)
+					}
+					if err := desktopSeedToolSearch(p); err != nil {
 						errs = append(errs, err)
 					}
 					if err := desktopKeyApplied(p); err != nil {
@@ -542,11 +547,12 @@ const (
 	desktopProfile = "claude-desktop.profile"
 	desktopLocale  = "claude-desktop.locale"
 	desktopImport  = "claude-desktop.import"
+	desktopSearch  = "claude-desktop.tool-search"
 	desktopMCP     = "claude-desktop.mcp"
 	desktopMCPSeen = "claude-desktop.mcp-seen"
 )
 
-var desktopStashKeys = []string{desktopStashed, desktopMode, desktopMode3p, desktopApplied, desktopMade, desktopProfile, desktopLocale, desktopImport, desktopMCP, desktopMCPSeen, desktopModelsMark}
+var desktopStashKeys = []string{desktopStashed, desktopMode, desktopMode3p, desktopApplied, desktopMade, desktopProfile, desktopLocale, desktopImport, desktopSearch, desktopMCP, desktopMCPSeen, desktopModelsMark}
 
 // desktopAdoptStash moves the stash a packaged Desktop's folders got
 // before they had keys of their own (when magpie wrote only one set) onto
@@ -642,6 +648,9 @@ func desktopOn(p desktopPaths) error {
 	if err := desktopSeedImport(p); err != nil {
 		return err
 	}
+	if err := desktopSeedToolSearch(p); err != nil {
+		return err
+	}
 
 	// a profile for magpie's gateway the user applied since magpie's
 	// (one imported from another computer) stays applied, its connectors
@@ -709,18 +718,46 @@ var desktopImportOn = map[string]any{"enabled": true, "bannerBehavior": "detect"
 // The mark is read, never unstashed: it outlives the check and a switch
 // off, or the next Sync would write the policy back.
 func desktopSeedImport(p desktopPaths) error {
-	if stashShared()[desktopImport+p.key] != "" {
+	return desktopSeedOnce(p, desktopImport, "claudeAiImport", desktopImportOn)
+}
+
+// desktopSeedToolSearch turns on Desktop's own tool search policy
+// (toolSearchEnabled, 3p only, off by default) in magpie's profile. Off,
+// Desktop starts Claude Code with CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1
+// (Desktop 2.7032's Ztr "off" in the session env), and Claude Code 2.1.312
+// and 2.1.316 then keep tool search off whatever ENABLE_TOOL_SEARCH says
+// (its oae: "standard" while experimental betas are off, unless an admin
+// tier forces it), so every MCP tool's schema went whole on each request
+// (bigcat1800 on Discord: Desktop 4.4212, 13 MCP servers, ~162K tokens of
+// tools; a sandbox CLI with 60 MCP tools sent 83 tools, 205KB). On, with
+// the gateway provider and a bundled Claude Code of 2.1.247 or later,
+// Desktop gives the CLI ENABLE_TOOL_SEARCH=force as a managed setting
+// ("host"): the same CLI sent 13 tools, MCP ones behind ToolSearch, 56KB,
+// asking only tool-search-tool-2025-10-19 of the betas. The gateway
+// carries deferred tools to every upstream (Tool.Deferred,
+// withoutDeferredTools). Seeded once, as claudeAiImport is: a value the
+// user set in Desktop's window, false too, or one they took away since,
+// stays theirs.
+func desktopSeedToolSearch(p desktopPaths) error {
+	return desktopSeedOnce(p, desktopSearch, "toolSearchEnabled", true)
+}
+
+// desktopSeedOnce writes key in magpie's profile once, where the profile
+// has none, and marks it in the stash under mark: once marked it is never
+// written again, so the user's own value, or their taking it away, holds.
+func desktopSeedOnce(p desktopPaths, mark, key string, value any) error {
+	if stashShared()[mark+p.key] != "" {
 		return nil
 	}
 	if desktopObject(p.prof) != nil {
 		return nil
 	}
-	if _, ok := edit.GetJSON(p.prof, "claudeAiImport"); !ok {
-		if err := edit.SetJSON(p.prof, edit.KV{Path: "claudeAiImport", Value: desktopImportOn}); err != nil {
+	if _, ok := edit.GetJSON(p.prof, key); !ok {
+		if err := edit.SetJSON(p.prof, edit.KV{Path: key, Value: value}); err != nil {
 			return err
 		}
 	}
-	stash(map[string]string{desktopImport + p.key: "1"})
+	stash(map[string]string{mark + p.key: "1"})
 	return nil
 }
 

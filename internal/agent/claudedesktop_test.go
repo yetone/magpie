@@ -144,7 +144,8 @@ func TestClaudeDesktopFresh(t *testing.T) {
 		"inferenceProvider": "gateway", "inferenceGatewayBaseUrl": gateway.URL(),
 		"inferenceGatewayApiKey": "magpie-claude-desktop", "inferenceGatewayAuthScheme": "bearer",
 		"disableDeploymentModeChooser": true, "coworkEgressAllowedHosts": []any{"*"},
-		"claudeAiImport": map[string]any{"enabled": true, "bannerBehavior": "detect"},
+		"claudeAiImport":    map[string]any{"enabled": true, "bannerBehavior": "detect"},
+		"toolSearchEnabled": true,
 	}
 	if prof := desktopJSON(t, p.prof); !reflect.DeepEqual(prof, want) {
 		t.Errorf("profile: %v", prof)
@@ -834,6 +835,77 @@ func TestClaudeDesktopLanguageOddValues(t *testing.T) {
 	}
 	if m := desktopJSON(t, p.config3p); m["deploymentMode"] != "3p" {
 		t.Errorf("takeover stopped: %v", m)
+	}
+}
+
+// bigcat1800 on Discord: Desktop 4.4212 in 3p mode on magpie, 13 MCP
+// servers, and every tool's schema went whole on each request (~162K
+// tokens). Desktop starts Claude Code with experimental betas off unless
+// its toolSearchEnabled policy is on, and Claude Code then keeps tool
+// search off whatever ENABLE_TOOL_SEARCH says. magpie's profile gets the
+// policy once, on a switch on and, for a Desktop already on magpie, from
+// Sync; a value the user set, false too, or took away since, stays theirs.
+func TestClaudeDesktopTurnsOnToolSearch(t *testing.T) {
+	home, p := desktopSandbox(t)
+	a := claudeDesktop(home)
+	if err := a.Field("provider").Set("magpie"); err != nil {
+		t.Fatal(err)
+	}
+	if got := desktopJSON(t, p.prof)["toolSearchEnabled"]; got != true {
+		t.Fatalf("switch on: toolSearchEnabled %v", got)
+	}
+
+	// on magpie before this change: no toolSearchEnabled, no mark
+	prof := desktopJSON(t, p.prof)
+	delete(prof, "toolSearchEnabled")
+	b, _ := json.Marshal(prof)
+	desktopWrite(t, p.prof, string(b))
+	forget(desktopSearch + p.key)
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if got := desktopJSON(t, p.prof)["toolSearchEnabled"]; got != true {
+		t.Fatalf("Sync on magpie: toolSearchEnabled %v", got)
+	}
+
+	// the user takes it away in Desktop's window: not written back
+	desktopWrite(t, p.prof, string(b))
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Field("provider").Set("magpie"); err != nil {
+		t.Fatal(err)
+	}
+	if _, has := desktopJSON(t, p.prof)["toolSearchEnabled"]; has {
+		t.Fatal("seeded again over the user's choice")
+	}
+
+	// the user's own false, seen first: kept
+	if err := edit.SetJSON(p.prof, edit.KV{Path: "toolSearchEnabled", Value: false}); err != nil {
+		t.Fatal(err)
+	}
+	forget(desktopSearch + p.key)
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if got := desktopJSON(t, p.prof)["toolSearchEnabled"]; got != false {
+		t.Fatalf("the user's toolSearchEnabled: %v", got)
+	}
+	if a.Check() != "" {
+		t.Fatalf("check %q", a.Check())
+	}
+
+	// off magpie: the profile goes, and Sync writes nothing
+	if err := a.Field("provider").Set(""); err != nil {
+		t.Fatal(err)
+	}
+	forget(desktopSearch + p.key)
+	before := desktopTree(t, p)
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if after := desktopTree(t, p); !reflect.DeepEqual(after, before) {
+		t.Fatalf("Sync off magpie wrote:\n%v", after)
 	}
 }
 
