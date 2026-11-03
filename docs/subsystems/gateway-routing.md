@@ -694,7 +694,7 @@ the MCP and an HTTP caller go through one translation and one set of holds.
 | `POST /v1/images/edits` | OpenAI's multipart (`image` or `image[]` files, `mask`), or JSON with `image`/`images` (URL, data URL or `{"image_url": …}`) and `mask` | as generations |
 | `POST /v1/videos` | JSON or OpenAI's multipart: `model`, `prompt`, `seconds`, `size`, `input_reference` (first frame), plus `last_frame` and `reference_images` | OpenAI's video object, `status: "queued"`, an id that names the provider, the vendor's task and the key or account |
 | `GET /v1/videos/{id}` | | the video object: `queued`, `in_progress` (`progress`), `completed` or `failed` (`error`) |
-| `GET /v1/videos/{id}/content` | | the MP4, or 409 while it isn't made |
+| `GET /v1/videos/{id}/content` | | the video (`video/mp4`, or `video/quicktime` for a MOV: `videoType`), or 409 while it isn't made |
 
 Each vendor is sent its own request:
 
@@ -749,15 +749,39 @@ its poll and download go on that key (`videoAsker` checks the calling key
 may use it). `volcengineVideoBody` turns OpenAI's request into Ark's: the
 prompt as a `text` item in `content`, `input_reference` as an `image_url`
 item with role `first_frame`, `last_frame` as `last_frame`,
-`reference_images` as `reference_image`, `seconds` as `duration`, and
-`size` (WIDTHxHEIGHT) as `ratio` and `resolution`. The request's fields
+`reference_images` as `reference_image`, `seconds` as `duration` (`-1`,
+the model picks, kept), and `size` as the nearest of Ark's tiers by pixels
+and ratios (`arkVideoSize`: 3840x2160 is `4k` 16:9, 1470x630 is `720p`
+21:9). A `ratio`, `resolution` or `duration` the caller sends itself is
+never overridden by `size` or `seconds`, so `ratio: "adaptive"` holds. A
+`content` the caller sends is Ark's own and kept whole, its
+`reference_video`, `reference_audio` and `draft_task` items included: the
+prompt is put first only when it has no `text` item, and OpenAI's image
+fields after it. The prompt is optional with an image or a content (Ark's
+image-to-video takes none), and an `asset://` image of Ark's asset
+library is kept as it is. Those three (no prompt, `asset://`, seconds
+`-1`) are Ark's alone: `arkOnly` turns them away with a 400 before any
+other vendor is asked. The request's other fields
 OpenAI's API doesn't have (Ark's `generate_audio`, `seed`, `camera_fixed`,
-`watermark`, `ratio: "adaptive"`…) go to Ark as sent, masked as the prompt
-is; a multipart form's `"false"` or `"42"` goes as `false` or `42`
-(`TestArkVideoTakesLastFrameAndItsOwnFields`). Ark's `succeeded`/`running`/`failed`/`expired` and its
+`watermark`, `tools`, `return_last_frame`…) go to Ark as sent, masked as
+the prompt is. A JSON body's values keep their JSON types; only a
+multipart form's are read as JSON (`formValue`), so its `"false"`, `"42"`
+or `[{"type":"web_search"}]` goes typed, except Ark's text fields
+(`arkTextFields`: `safety_identifier` "12345" stays a string)
+(`TestArkVideoTakesLastFrameAndItsOwnFields`, `TestArkVideoFieldTypes`).
+Ark's `succeeded`/`running`/`failed`/`expired` and its
 `content.video_url` are read back into OpenAI's video object
-(`videoObject`), and `/content` fetches that URL (`vendorClient`).
-`TestArkKeyMakesSeedanceVideos`.
+(`videoObject`), with every other field of Ark's task passed on as it came
+(`videoState.Ark`, all but `arkOwnFields`): `content.last_frame_url`,
+`usage`, `resolution`, `ratio`, `framespersecond`, `seed`, `tools`,
+`output_format` and the rest. Ark's `expired` is a task that ran past its
+`execution_expires_after` unfinished, and is said so. `/content` fetches
+that URL (`vendorClient`) and serves a MOV as `video/quicktime`
+(`videoType` reads the `ftyp` brand). `TestArkKeyMakesSeedanceVideos`,
+`TestArkVideoKeepsCallersContent`, `TestArkVideoFromImageNeedsNoPrompt`,
+`TestOnlyArkTakesItsOwnVideoAsks`, `TestArkVideoSize`,
+`TestArkVideoAnswersItsOwnFields`, `TestVideoType`.
+
 
 A MiniMax API key (no account, a Chat, Anthropic or Responses base on
 api.minimax.io, api.minimaxi.com or api.minimax.cn: `filmsMiniMax`,

@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bufio"
 	"bytes"
 	"cmp"
 	"context"
@@ -333,6 +334,8 @@ type filming struct {
 	// own videos API takes them as they came (Agnes's mode, aspect_ratio;
 	// #1399, shen-joe: "mode 不能为空")
 	Extra map[string]any
+	// Form: the request was a multipart form, whose Extra are all text
+	Form bool
 }
 
 // filmingRead are the fields of a videos request magpie reads itself.
@@ -354,7 +357,7 @@ func readFilming(r *http.Request) (filming, error) {
 			}
 			return ""
 		}
-		f.Model, f.Prompt, f.Seconds, f.Size = get("model"), get("prompt"), get("seconds"), get("size")
+		f.Model, f.Prompt, f.Seconds, f.Size, f.Form = get("model"), get("prompt"), get("seconds"), get("size"), true
 		for k := range m.Value {
 			if !slices.Contains(filmingRead, k) {
 				if f.Extra == nil {
@@ -418,21 +421,21 @@ func readFilming(r *http.Request) (filming, error) {
 			f.Seconds = ""
 		}
 		if srcs := imageSources(in.InputReference); len(srcs) > 0 {
-			pic, err := pictureOf(srcs[0])
+			pic, err := filmPictureOf(srcs[0])
 			if err != nil {
 				return f, err
 			}
 			f.Start = &pic
 		}
 		if srcs := imageSources(in.LastFrame); len(srcs) > 0 {
-			pic, err := pictureOf(srcs[0])
+			pic, err := filmPictureOf(srcs[0])
 			if err != nil {
 				return f, err
 			}
 			f.End = &pic
 		}
 		for _, src := range imageSources(in.ReferenceImages) {
-			pic, err := pictureOf(src)
+			pic, err := filmPictureOf(src)
 			if err != nil {
 				return f, err
 			}
@@ -440,8 +443,16 @@ func readFilming(r *http.Request) (filming, error) {
 		}
 	}
 	f.Model = strings.TrimSpace(f.Model)
-	if strings.TrimSpace(f.Prompt) == "" {
+	// a video made from an image, or from content of Ark's own, may be
+	// asked with no prompt (Ark's image-to-video takes none): whether
+	// the vendor making it may is startVideo's to say
+	if strings.TrimSpace(f.Prompt) == "" && f.Start == nil && f.End == nil && len(f.References) == 0 && !f.hasContent() {
 		return f, errors.New("say what to film in prompt")
+	}
+	// -1 is Ark's "the model picks the length" (Seedance 2.0 and 2.5);
+	// startVideo turns it away for any other vendor
+	if f.Seconds == "-1" {
+		return f, nil
 	}
 	if f.Seconds != "" {
 		n, err := parseSeconds(f.Seconds)
@@ -451,6 +462,51 @@ func readFilming(r *http.Request) (filming, error) {
 		f.Seconds = strconv.Itoa(n)
 	}
 	return f, nil
+}
+
+// filmPictureOf is pictureOf, and an asset:// of Ark's asset library too
+// (a video's images may be one), kept as it is.
+func filmPictureOf(src string) (picture, error) {
+	if src = strings.TrimSpace(src); strings.HasPrefix(src, "asset://") {
+		return picture{URL: src}, nil
+	}
+	return pictureOf(src)
+}
+
+// hasContent says the request sent a content of Ark's own.
+func (f filming) hasContent() bool {
+	c, _ := f.Extra["content"].([]any)
+	if f.Form {
+		if str, ok := f.Extra["content"].(string); ok {
+			c, _ = formValue("content", str, nil).([]any)
+		}
+	}
+	return len(c) > 0
+}
+
+// arkOnly is what f asks of Ark alone, which another vendor is told it
+// can't take: "" when nothing.
+func (f filming) arkOnly() string {
+	switch {
+	case f.Seconds == "-1":
+		return "seconds -1 (the model picks the length) is Volcengine Ark's alone"
+	case strings.TrimSpace(f.Prompt) == "":
+		return "say what to film in prompt (only Volcengine Ark's Seedance films an image with no prompt)"
+	}
+	for _, pic := range append([]*picture{f.Start, f.End}, ptrs(f.References)...) {
+		if pic != nil && strings.HasPrefix(pic.URL, "asset://") {
+			return "an asset:// image is in Volcengine Ark's asset library, which only Ark's Seedance reads"
+		}
+	}
+	return ""
+}
+
+func ptrs(pics []picture) []*picture {
+	out := make([]*picture, len(pics))
+	for i := range pics {
+		out[i] = &pics[i]
+	}
+	return out
 }
 
 // decimalNumber is a number as JSON writes it, not as Go's ParseFloat also
@@ -507,15 +563,109 @@ func pixelResolution(size string) string {
 	return "480p"
 }
 
+// arkVideoRatios are the ratios Seedance takes (Ark's create-task doc,
+// https://www.volcengine.com/docs/82379/1520757); adaptive is the model's
+// own pick, which a size never means.
+var arkVideoRatios = []string{"16:9", "4:3", "1:1", "3:4", "9:16", "21:9"}
+
+// arkVideoTiers are Seedance's resolutions by the pixels a 16:9 frame of
+// each has. Every ratio's frame in Ark's table is within a few percent of
+// its tier's (720p 21:9 is 1470x630, 2.0's 4k 1:1 is 2880x2880), and a
+// tier has about 2.2 to 4 times the one below, so the nearest by pixels
+// is the tier Ark lists a size at.
+var arkVideoTiers = []struct {
+	name   string
+	pixels float64
+}{{"480p", 864 * 480}, {"720p", 1280 * 720}, {"1080p", 1920 * 1080}, {"4k", 3840 * 2160}}
+
+// arkVideoSize is the resolution and ratio Ark is asked for a size in: a
+// WIDTHxHEIGHT as the nearest of its tiers by pixels and of its ratios
+// (3840x2160 is 4k 16:9, 1470x630 is 720p 21:9), a ratio ("21:9") as the
+// nearest of those, a tier ("4k", "720p") as itself. "" for what it
+// doesn't name.
+func arkVideoSize(size string) (resolution, ratio string) {
+	size = strings.ToLower(strings.TrimSpace(size))
+	for _, t := range arkVideoTiers {
+		if size == t.name || t.name == "4k" && size == "2160p" {
+			return t.name, ""
+		}
+	}
+	if strings.Contains(size, ":") {
+		w, h, _ := strings.Cut(size, ":")
+		return "", aspectAmong(w+"x"+h, arkVideoRatios)
+	}
+	w, h, ok := strings.Cut(size, "x")
+	if !ok {
+		return "", ""
+	}
+	x, err1 := strconv.ParseFloat(w, 64)
+	y, err2 := strconv.ParseFloat(h, 64)
+	if err1 != nil || err2 != nil || x <= 0 || y <= 0 {
+		return "", ""
+	}
+	best := math.Inf(1)
+	for _, t := range arkVideoTiers {
+		if d := math.Abs(math.Log(x * y / t.pixels)); d < best {
+			best, resolution = d, t.name
+		}
+	}
+	return resolution, aspectAmong(size, arkVideoRatios)
+}
+
+// arkTextFields are Ark's create-task fields that are text, which a
+// multipart form's value is kept as even when it reads as a number
+// (safety_identifier "12345").
+var arkTextFields = []string{"model", "ratio", "resolution", "safety_identifier", "callback_url", "service_tier", "output_format", "omni_reference_task_type"}
+
+// formValue is a multipart form's field as Ark takes it: the form's
+// fields are all text, so "false", "42", `[{"type":"web_search"}]` and
+// `{"id":"…"}` are read as the JSON they are, except a field Ark takes as
+// text. A JSON body's values are its own and are never read again.
+func formValue(k string, v any, text []string) any {
+	str, ok := v.(string)
+	if !ok || slices.Contains(text, k) {
+		return v
+	}
+	var typed any
+	if json.Unmarshal([]byte(str), &typed) == nil {
+		switch typed.(type) {
+		case bool, float64, []any, map[string]any:
+			return typed
+		}
+	}
+	return v
+}
+
 // volcengineVideoBody is f as Ark's content-generation API takes it: text
 // and images in content, each image's role saying what it is (the first
 // frame, the last frame, a subject to draw from), duration, ratio and
 // resolution as fields of their own, and the request's other fields, which
 // OpenAI's API doesn't have, as the caller sent them: Ark's own
-// (generate_audio, seed, camera_fixed, watermark…), which a caller of
-// OpenAI's shape can only send that way.
+// (generate_audio, seed, watermark, return_last_frame, tools…), which a
+// caller of OpenAI's shape can only send that way (axelburks on Discord).
+//
+// A content the caller sent is Ark's own and is kept as it is, with its
+// reference videos, audio and draft_task: the prompt is put first only
+// when it has no text, and the images of OpenAI's fields after it. An Ark
+// field the caller names (ratio "adaptive", resolution, duration) is
+// never overridden by what magpie makes of size or seconds.
 func volcengineVideoBody(model string, f filming) []byte {
-	content := []map[string]any{{"type": "text", "text": f.Prompt}}
+	req := map[string]any{}
+	for k, v := range f.Extra {
+		if f.Form {
+			v = formValue(k, v, arkTextFields)
+		}
+		req[k] = v
+	}
+	content, _ := req["content"].([]any)
+	content = slices.Clone(content)
+	said := slices.ContainsFunc(content, func(e any) bool {
+		m, _ := e.(map[string]any)
+		return m["type"] == "text"
+	})
+	if f.Prompt != "" && !said {
+		content = append([]any{map[string]any{"type": "text", "text": f.Prompt}}, content...)
+	}
 	frame := func(pic *picture, role string) {
 		content = append(content, map[string]any{"type": "image_url", "image_url": map[string]string{"url": pic.dataURL()}, "role": role})
 	}
@@ -528,30 +678,22 @@ func volcengineVideoBody(model string, f filming) []byte {
 	for i := range f.References {
 		frame(&f.References[i], "reference_image")
 	}
-	req := map[string]any{}
-	for k, v := range f.Extra {
-		// a multipart form's fields are text: "false" and "42" are what
-		// Ark takes as false and 42
-		if str, ok := v.(string); ok {
-			var typed any
-			if json.Unmarshal([]byte(str), &typed) == nil {
-				switch typed.(type) {
-				case bool, float64:
-					v = typed
-				}
-			}
-		}
-		req[k] = v
-	}
 	req["model"], req["content"] = model, content
+	set := func(k string, v any) {
+		if _, named := req[k]; !named {
+			req[k] = v
+		}
+	}
 	if f.Seconds != "" {
-		req["duration"], _ = strconv.Atoi(f.Seconds)
+		n, _ := strconv.Atoi(f.Seconds)
+		set("duration", n) // -1: the model picks
 	}
-	if ar := aspectAmong(f.Size, grokVideoAspects); ar != "" {
-		req["ratio"] = ar
+	res, ar := arkVideoSize(f.Size)
+	if ar != "" {
+		set("ratio", ar)
 	}
-	if res := pixelResolution(f.Size); res != "" {
-		req["resolution"] = res
+	if res != "" {
+		set("resolution", res)
 	}
 	b, _ := json.Marshal(req)
 	return b
@@ -643,7 +785,14 @@ type videoState struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	} `json:"error"`
+	// Ark is an Ark task's whole answer, whose fields OpenAI's video
+	// doesn't have are passed on as they came (videoObject)
+	Ark map[string]any `json:"-"`
 }
+
+// arkOwnFields are an Ark task's fields that a video of OpenAI's shape
+// has its own of, which it isn't given Ark's in place of.
+var arkOwnFields = []string{"id", "object", "model", "status", "progress", "created_at", "updated_at", "error", "prompt", "size", "seconds"}
 
 // videoObject is a video as OpenAI's API gives it.
 func videoObject(id, model string, started time.Time, st videoState, f filming) map[string]any {
@@ -675,12 +824,25 @@ func videoObject(id, model string, started time.Time, st videoState, f filming) 
 	case f.Seconds != "":
 		obj["seconds"] = f.Seconds
 	}
+	// an Ark task's own fields: content (video_url, and last_frame_url
+	// when return_last_frame asked for it), usage, resolution, ratio,
+	// duration or frames, framespersecond, seed, generate_audio, draft,
+	// tools, output_format and the rest (axelburks on Discord)
+	for k, v := range st.Ark {
+		if !slices.Contains(arkOwnFields, k) {
+			obj[k] = v
+		}
+	}
 	if status == "failed" {
 		code, msg := st.Error.Code, st.Error.Message
-		switch st.Status {
-		case "expired":
+		switch {
+		case st.Status == "expired" && st.Ark != nil:
+			// Ark's expired is a task that ran out of time unfinished
+			// (execution_expires_after, 48 hours unless the request set it)
+			code, msg = "expired", "the task timed out: Volcengine Ark ended it unfinished once its execution_expires_after had passed"
+		case st.Status == "expired":
 			code, msg = "expired", "the vendor no longer keeps this video"
-		case "cancelled":
+		case st.Status == "cancelled":
 			code, msg = "cancelled", "the video was cancelled"
 		}
 		if msg == "" {
@@ -807,7 +969,8 @@ func (s *Server) videoStatus(ctx context.Context, p provider.Provider, vendorID 
 	}
 	var st videoState
 	at := strings.TrimRight(p.Base(provider.Responses), "/") + "/videos/" + url.PathEscape(vendorID)
-	if p.Preset == "volcengine" || isArk(p) {
+	ark := p.Preset == "volcengine" || isArk(p)
+	if ark {
 		at = arkTasks(p) + "/" + url.PathEscape(vendorID)
 	}
 	b, code, err := s.sendAs(ctx, p, http.MethodGet, at, "", nil, true)
@@ -816,6 +979,12 @@ func (s *Server) videoStatus(ctx context.Context, p provider.Provider, vendorID 
 	}
 	if err := json.Unmarshal(b, &st); err != nil {
 		return st, 502, fmt.Errorf("%s's answer isn't a video's: %v", p.Name, err)
+	}
+	if ark {
+		json.Unmarshal(b, &st.Ark)
+		if st.Ark == nil {
+			st.Ark = map[string]any{}
+		}
 	}
 	return st, code, nil
 }
@@ -1086,6 +1255,9 @@ func (s *Server) startVideo(ctx context.Context, r *http.Request, p provider.Pro
 	}
 	v := videoStart{p: p, remote: p.IsRemoteMagpie(), onKey: onKey}
 	volcengine := arkFilms(p, model)
+	if msg := f.arkOnly(); msg != "" && !volcengine && !v.remote {
+		return v, 400, errors.New(msg)
+	}
 	v.custom = !v.remote && !volcengine && filmsCustom(p, model)
 	minimax := !v.remote && !v.custom && makesMiniMaxVideo(p, model)
 	// any grok-imagine-video*, not only those listed: the vendor's newer ones work before magpie names them
@@ -1311,12 +1483,32 @@ func (s *Server) videosContent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, provider.Chat, 502, fmt.Sprintf("the video couldn't be fetched: %d %s", res.StatusCode, http.StatusText(res.StatusCode)))
 		return
 	}
-	w.Header().Set("Content-Type", "video/mp4")
+	body := bufio.NewReaderSize(res.Body, 512)
+	head, _ := body.Peek(12)
+	w.Header().Set("Content-Type", videoType(head, res.Header.Get("Content-Type"), st.Ark))
 	if res.ContentLength > 0 {
 		w.Header().Set("Content-Length", strconv.FormatInt(res.ContentLength, 10))
 	}
 	w.WriteHeader(200)
-	io.Copy(w, io.LimitReader(res.Body, maxVideoBytes))
+	io.Copy(w, io.LimitReader(body, maxVideoBytes))
+}
+
+// videoType is the media type of a video whose bytes begin with head:
+// QuickTime's when its ftyp box names the "qt  " brand (Seedance 2.5's
+// output_format "mov", axelburks on Discord), whatever the vendor's host
+// said; else the video type the host said, or the task's output_format;
+// else MP4, which every vendor makes by default.
+func videoType(head []byte, said string, ark map[string]any) string {
+	if len(head) >= 12 && string(head[4:8]) == "ftyp" && string(head[8:12]) == "qt  " {
+		return "video/quicktime"
+	}
+	if mt, _, err := mime.ParseMediaType(said); err == nil && strings.HasPrefix(mt, "video/") {
+		return mt
+	}
+	if f, _ := ark["output_format"].(string); strings.EqualFold(f, "mov") {
+		return "video/quicktime"
+	}
+	return "video/mp4"
 }
 
 // remoteVideoContent passes on the bytes of a video another magpie, or a
