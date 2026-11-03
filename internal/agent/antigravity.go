@@ -35,6 +35,7 @@ import (
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/proc"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 const (
@@ -190,6 +191,22 @@ func antigravity(home string) *Agent {
 					own = []Option{{Value: c, Icon: modelIcon("", c), Direct: "Google"}}
 				}
 				return withVia(group("Antigravity", own), "antigravity", magpieID+"/")
+			},
+		}, {
+			// how hard its models reason: the app's picker lists the
+			// gateway's models by id, with no control of its own for a
+			// level, so Antigravity's own families went at the level
+			// the app asked or their default (MDX-Tom, #4838). The
+			// gateway asks its requests for the level picked here
+			// (provider.AgentEffort), and with none they go as it asks.
+			Key: "effort", Label: "effort",
+			Get: func() string { return provider.AgentEffort("antigravity") },
+			Set: func(v string) error { return provider.SetAgentEffort("antigravity", v) },
+			Options: func(map[string]string) []Option {
+				if !wired() {
+					return nil
+				}
+				return pickedEfforts("antigravity")
 			},
 		}},
 	}

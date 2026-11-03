@@ -316,7 +316,7 @@ func cursorLocal() *Agent {
 				if !cursorLocalWired() {
 					return nil
 				}
-				return cursorLocalEfforts()
+				return pickedEfforts(CursorLocalID)
 			},
 		}},
 		Notice: func() string {
@@ -325,12 +325,13 @@ func cursorLocal() *Agent {
 	}
 }
 
-// cursorLocalEfforts are the levels Cursor Private Inference's effort is
-// picked among: the default, its requests going as it asks, then every
-// level a model its list shows has (low, medium and high for models that
-// reason with levels unknown). None when no model it lists reasons.
-func cursorLocalEfforts() []Option {
-	shown, _ := provider.CatalogFor(CursorLocalID)
+// pickedEfforts are the levels an agent's effort picked in magpie
+// (provider.AgentEffort: Cursor Private Inference, Antigravity) is picked
+// among: the default, its requests going as it asks, then every level a
+// model its list shows has (low, medium and high for models that reason
+// with levels unknown). None when no model it lists reasons.
+func pickedEfforts(agent string) []Option {
+	shown, _ := provider.CatalogFor(agent)
 	has, reasons := map[string]bool{}, false
 	for _, e := range shown {
 		reasons = reasons || e.Reasoning
