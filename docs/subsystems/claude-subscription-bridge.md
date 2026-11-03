@@ -747,6 +747,13 @@ came before any failure is a failure too, as a translated reply cut short
 is (`errEndedShort`). `TestClaudeSubscriptionRunExitedMidReplyFails`
 holds it on all three protocols, streamed and not, `-p` and interactive.
 
+A streamed reply whose run is quiet past `bridgeHeardAfter` begins
+without it and is sent the protocol's pings until the run speaks
+(`keepBridgeHeard`, #5043): the replay of a long conversation can take
+minutes before its first word, and Claude Code hung up at 599s and
+started again from the replay, writing it to the cache once more (#3808).
+See [gateway routing](gateway-routing.md) for the keepalive rules.
+
 magpie ends a run (`abort`) by asking Claude Code to end with SIGTERM
 (`proc.Tree.Stop`) and kills its tree only once it has exited or
 `stopGrace` (5s) has passed; Windows kills the job at once. Claude Code

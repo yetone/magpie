@@ -1141,6 +1141,27 @@ A provider that says nothing at all, not even a keepalive, is handed on a
 `KAlive` every `keepaliveEvery` by the same ticker `streamTranslated` uses
 (`keepThroughSilence`), for up to `translatedQuietLongest` of its silence.
 
+A Claude subscription run is heard from the same way (`keepBridgeHeard`,
+in `claude_subscription.go`). Its run says nothing before its reply: in
+the interactive mode a message is told whole from the transcript, and a
+long conversation replayed to a new Claude Code is prefilled uncached
+first. The held stream's comments stop at `keepaliveLongest`, and Claude
+Code 2.1.316's byte watchdog hung up 300s later, at 599s (#5043). Comments
+forever would not do: its event watchdog counts no comment and hangs up
+600s after the headers. So after `bridgeHeardAfter` (1 minute) of a quiet
+run, the run's events gain an empty `KStart`, which begins the reply
+(`message_start`), and a `KAlive` every `keepaliveEvery` while it stays
+quiet, for up to `translatedQuietLongest`. The client gets the protocol's
+own pings, held like any frames-only stream (`holdLead`). The run's own
+start, later, adds its usage. A failure in the first minute is still a
+status. The gain is bounded: Claude Code 2.1.316 turns every 10s with
+bytes into a ping of its own and counts 30 pings in a row, so a stream of
+pings and comments alone ends 600s after its last other event. The
+reply's start goes out when the hold lets it go, about 4 minutes in, and
+the run has until about 14 minutes where it had 599s. A run quiet for
+longer still ends: only a real event of the reply would keep it. Covered by `TestClaudeBridgeQuietRunKeepsClientAlive` in
+[`claude_bridge_keepalive_test.go`](../../internal/gateway/claude_bridge_keepalive_test.go).
+
 ## Which providers search for another model
 
 `Searchers()` (Settings › Web search's picker) and `autoSearcher` (magpie's

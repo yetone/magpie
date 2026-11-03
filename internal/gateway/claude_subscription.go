@@ -6161,6 +6161,11 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 	run.mu.Lock()
 	req.interactive = run.tui
 	run.mu.Unlock()
+	if req.Stream {
+		quit := make(chan struct{})
+		defer close(quit)
+		events = keepBridgeHeard(events, quit)
+	}
 	return relay(w, r, from, name, req, events, usage, abort, begin, func(said, stop string, ok bool) {
 		if !gone() {
 			return // the client went first: letGo has the run
@@ -6231,6 +6236,89 @@ func thirdPartyRefused(name string, req *Request, code int, msg string) string {
 		"Asking again the same way may draw from the Claude account's extra usage, so magpie doesn't ask again on its own. " +
 		"Claude Code as claude -p is served such prompts: turn off Claude Code's interactive mode in Settings › Models › Replies " +
 		"or in this provider's editor; the plan counts a -p request at about twice the interactive mode's.)"
+}
+
+// bridgeHeardAfter is how long a Claude Code run may work on its turn
+// with nothing of the reply before its client is told the reply goes on
+// (keepBridgeHeard). Before it, a failure is still a status for the next
+// account; after it, the client's stream begins, held for another account
+// all the same (holdLead), so that its first event reaches the client
+// well within the 600s Claude Code waits for one.
+var bridgeHeardAfter = time.Minute
+
+// keepBridgeHeard hands on a run's events, and a KAlive whenever the run
+// has said nothing for keepaliveEvery, from bridgeHeardAfter on, for up
+// to translatedQuietLongest of silence: a run whose Claude Code is still
+// working is heard from, as a translated provider's keepalives are. The
+// interactive mode tells a message only once it is written whole, and a
+// long conversation's first reply, at effort high on claude-opus-5-5,
+// took 385 to 527s (#5043). Its client heard the held stream's comments
+// for keepaliveLongest (keepQuiet), then nothing, and Claude Code 2.1.316
+// ended the request at 599s ("Streaming idle timeout (byte-level): no
+// bytes for 300000ms"); comments for as long as it waited would not do
+// either, since it ends a stream with no event for 600s from its headers
+// ("no chunks received for 300s"). Every new try then started a Claude
+// Code that wrote the whole conversation to the cache again (#3808).
+// What this buys is bounded: Claude Code 2.1.316 makes a ping of its own
+// of every 10s with bytes and counts 30 pings in a row, so a stream that
+// sends only pings and comments is ended 600s after its last other
+// event. The reply's start goes out when the hold lets it (holdLead,
+// ~4 minutes in), and the run then has until ~14 minutes, where it had
+// 599s.
+// The run's end closes events, and with them what this hands on; quit
+// ends it when relay is done with them.
+func keepBridgeHeard(events <-chan Event, quit <-chan struct{}) <-chan Event {
+	out := make(chan Event)
+	go func() {
+		defer close(out)
+		tick := time.NewTicker(keepaliveEvery)
+		defer tick.Stop()
+		began := time.Now()
+		last := began
+		started := false // the reply has its start, the run's or this one's
+		send := func(ev Event) bool {
+			select {
+			case <-quit:
+				return false
+			case out <- ev:
+				return true
+			}
+		}
+		for {
+			select {
+			case <-quit:
+				return
+			case ev, ok := <-events:
+				if !ok {
+					return
+				}
+				last = time.Now()
+				started = started || ev.Kind == KStart
+				if !send(ev) {
+					return
+				}
+			case <-tick.C:
+				quiet := time.Since(last)
+				if time.Since(began) < bridgeHeardAfter || quiet < keepaliveEvery || quiet >= translatedQuietLongest {
+					continue
+				}
+				// the reply begins, with none of it, for the client's
+				// keepalive to be its protocol's own event: an Anthropic
+				// ping before message_start breaks the SDKs (keepalive);
+				// the run's own start that comes later adds its usage
+				if !started {
+					started = true
+					if !send(Event{Kind: KStart}) {
+						return
+					}
+				}
+				if !send(Event{Kind: KAlive}) {
+					return
+				}
+			}
+		}
+	}()
+	return out
 }
 
 // relay answers the client with a reply's events: abort is called when
