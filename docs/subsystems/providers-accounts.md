@@ -88,7 +88,13 @@ bases from one address (`remoteMagpieEndpoints` in
 [`remote_magpie.go`](../../internal/provider/remote_magpie.go)). Its model
 list requests images, videos and decisions with `X-Magpie-Drawers`,
 `X-Magpie-Videomakers` and `X-Magpie-Deciders`. The gateway includes these
-only when asked, with `kind` of `image`, `video` or `decision`. Decision
+only when asked, with `kind` of `image`, `video` or `decision`. Any other
+client asks for image and video models with `?kind=` (`chat`, `image`,
+`video`, comma separated, or `all`; `listKinds` in
+[`gateway.go`](../../internal/gateway/gateway.go)); without it the list is
+chat models alone, so no agent's chat picker offers an image or video
+model, and an unknown kind is a 400 (axelburks on Discord;
+`TestModelsListMediaOnlyWhenAsked`). Decision
 entries pass through `keyAllowed`, including model and account restrictions.
 [`catalog/live.go`](../../internal/catalog/live.go) keeps each kind and all
 models the remote already exposed, including retrieval models. The shared

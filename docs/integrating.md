@@ -61,7 +61,10 @@ it takes images. List them from there rather than shipping a list: the
 user adds and removes providers in magpie. Reasoning is asked in your
 API's own field (`reasoning_effort`, `reasoning.effort`, Anthropic's
 `thinking` or `output_config.effort`). `?format=text` gives the ids one a
-line.
+line. The list holds chat models only. Ask for image and video models
+with `?kind=image,video` (or `?kind=chat,image,video`, or `?kind=all`).
+Each of them is marked `"kind": "image"` or `"kind": "video"` and goes to
+`/v1/images/generations` or `/v1/videos`, never to a chat route.
 
 **Optional.** Send `X-Magpie-Session: <id>` with a conversation's requests
 and `GET /v1/magpie/route?session=<id>` says which model a routing group

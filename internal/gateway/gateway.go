@@ -1442,91 +1442,133 @@ func catalogFor(r *http.Request) []provider.Entry {
 	return keyAllowed(r, shown)
 }
 
+// listKinds is which of magpie's models a /v1/models call lists: its chat
+// models alone, unless it names the kinds it wants in ?kind= (chat, image,
+// video, comma separated; all for the three). Image and video models are
+// listed only when asked for, each marked "kind" (drawerObjects,
+// videomakerObjects): OpenAI's own list puts gpt-image and sora among its
+// chat models with nothing to tell them apart, and the clients and agents
+// that offer every id this list gives as a model to chat with (OpenCode's,
+// Cherry Studio's, ZCode's pasted ?format=text) would offer an image model
+// in their chat pickers (axelburks on Discord asked for them here). A kind
+// it doesn't know is refused, not read as none.
+func listKinds(r *http.Request) (chat, image, video bool, err error) {
+	q, ok := r.URL.Query()["kind"]
+	if !ok {
+		return true, false, false, nil
+	}
+	for _, v := range q {
+		for k := range strings.SplitSeq(v, ",") {
+			switch strings.ToLower(strings.TrimSpace(k)) {
+			case "chat":
+				chat = true
+			case "image":
+				image = true
+			case "video":
+				video = true
+			case "all":
+				chat, image, video = true, true, true
+			default:
+				return false, false, false, fmt.Errorf("kind %q: /v1/models lists the kinds chat, image and video (or all), comma separated", k)
+			}
+		}
+	}
+	return chat, image, video, nil
+}
+
 func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 	data := []map[string]any{}
-	shown := catalogFor(r)
-	if agent := agentOf(r); agent == "claude-desktop" {
-		data = desktopModels(shown, desktopKnowsMythos(r.Header.Get("User-Agent")))
-	} else if agent == ScienceID {
-		data = scienceModels(shown)
-	} else {
-		labels := provider.Labels(shown)
-		// for another magpie: how it searches the web for each model
-		magpie := r.Header.Get(provider.DrawersHeader) != ""
-		searches := magpie && canSearch()
-		// for another magpie, what each model costs here, so its usage
-		// there is counted at the same price: told only to this computer
-		// and to one this magpie is shared with by a gateway key, as the
-		// prices are the user's own settings
-		//
-		// and to any client, OpenRouter's pricing for each model it knows
-		// a price of (cleary5779 on Discord: an agent built on magpie
-		// shows what a call costs), told to the same callers: the price is
-		// what the Usage page counts the model at, the user's own included.
-		// The settings, groups and providers are read once for the list
-		// (EntryPricer), not once a model
-		told := local(r) || sharedWith(r)
-		prices := told && r.Header.Get(provider.PricesHeader) != ""
-		var priceOf func(provider.Entry) (catalog.Price, bool)
-		if told {
-			priceOf = provider.EntryPricer(settings.Load(), provider.GroupFinder())
-		}
-		// the tiers Codex here is offered on each model (#1234), for every
-		// client: another magpie offers them to its own Codex, and Cindy
-		// shows its Fast switch on a model whose tiers hold priority
-		// (#1914). A model with none says nothing
-		tiers := codexTiers(shown)
-		// each model by its bare id as well, after the provider/model ids,
-		// when the user asked for it (settings.BareModelIDs): a client
-		// moved from another proxy asks for gpt-5.6-sol (love1sbug on X).
-		// Never for another magpie, whose provider would list each twice.
-		// Each row is the entry the bare id reaches, its label that one's.
-		rows, ids := slices.Clip(shown), map[int]string{}
-		if !magpie && provider.BareModelIDs() {
-			labels = slices.Clip(labels)
-			for _, b := range provider.BareEntries(shown) {
-				ids[len(rows)] = b.ID
-				rows = append(rows, shown[b.Of])
-				labels = append(labels, labels[b.Of])
+	chat, images, videos, err := listKinds(r)
+	if err != nil {
+		writeError(w, provider.Chat, 400, err.Error())
+		return
+	}
+	// its chat models, unless ?kind= asks for image or video models alone
+	if chat {
+		shown := catalogFor(r)
+		if agent := agentOf(r); agent == "claude-desktop" {
+			data = desktopModels(shown, desktopKnowsMythos(r.Header.Get("User-Agent")))
+		} else if agent == ScienceID {
+			data = scienceModels(shown)
+		} else {
+			labels := provider.Labels(shown)
+			// for another magpie: how it searches the web for each model
+			magpie := r.Header.Get(provider.DrawersHeader) != ""
+			searches := magpie && canSearch()
+			// for another magpie, what each model costs here, so its usage
+			// there is counted at the same price: told only to this computer
+			// and to one this magpie is shared with by a gateway key, as the
+			// prices are the user's own settings
+			//
+			// and to any client, OpenRouter's pricing for each model it knows
+			// a price of (cleary5779 on Discord: an agent built on magpie
+			// shows what a call costs), told to the same callers: the price is
+			// what the Usage page counts the model at, the user's own included.
+			// The settings, groups and providers are read once for the list
+			// (EntryPricer), not once a model
+			told := local(r) || sharedWith(r)
+			prices := told && r.Header.Get(provider.PricesHeader) != ""
+			var priceOf func(provider.Entry) (catalog.Price, bool)
+			if told {
+				priceOf = provider.EntryPricer(settings.Load(), provider.GroupFinder())
 			}
-		}
-		for i, e := range rows {
-			m := modelObject(e)
-			toolsTold(m, e)
-			if id, ok := ids[i]; ok {
-				m["id"] = id
-			}
-			if magpie {
-				if how := webSearchOf(e, searches); how != "" {
-					m["web_search"] = how
+			// the tiers Codex here is offered on each model (#1234), for every
+			// client: another magpie offers them to its own Codex, and Cindy
+			// shows its Fast switch on a model whose tiers hold priority
+			// (#1914). A model with none says nothing
+			tiers := codexTiers(shown)
+			// each model by its bare id as well, after the provider/model ids,
+			// when the user asked for it (settings.BareModelIDs): a client
+			// moved from another proxy asks for gpt-5.6-sol (love1sbug on X).
+			// Never for another magpie, whose provider would list each twice.
+			// Each row is the entry the bare id reaches, its label that one's.
+			rows, ids := slices.Clip(shown), map[int]string{}
+			if !magpie && provider.BareModelIDs() {
+				labels = slices.Clip(labels)
+				for _, b := range provider.BareEntries(shown) {
+					ids[len(rows)] = b.ID
+					rows = append(rows, shown[b.Of])
+					labels = append(labels, labels[b.Of])
 				}
 			}
-			if ts := tiers[e.ID]; len(ts) > 0 {
-				m["service_tiers"] = ts
-			}
-			if told {
-				if pr, ok := priceOf(e); ok {
-					m["pricing"] = catalog.OpenRouterPricing(pr)
-					if prices {
-						m["magpie_price"] = pr
+			for i, e := range rows {
+				m := modelObject(e)
+				toolsTold(m, e)
+				if id, ok := ids[i]; ok {
+					m["id"] = id
+				}
+				if magpie {
+					if how := webSearchOf(e, searches); how != "" {
+						m["web_search"] = how
 					}
 				}
+				if ts := tiers[e.ID]; len(ts) > 0 {
+					m["service_tiers"] = ts
+				}
+				if told {
+					if pr, ok := priceOf(e); ok {
+						m["pricing"] = catalog.OpenRouterPricing(pr)
+						if prices {
+							m["magpie_price"] = pr
+						}
+					}
+				}
+				// for another magpie: its name as the agents' lists here call
+				// it, with its provider's after it unless the user wants it
+				// plain, so two providers' models of one name are told apart
+				// there as they are here
+				m["magpie_label"] = labels[i]
+				if agentOf(r) == "cursor-local" {
+					cursorLocalModel(m, e)
+				}
+				data = append(data, m)
 			}
-			// for another magpie: its name as the agents' lists here call
-			// it, with its provider's after it unless the user wants it
-			// plain, so two providers' models of one name are told apart
-			// there as they are here
-			m["magpie_label"] = labels[i]
-			if agentOf(r) == "cursor-local" {
-				cursorLocalModel(m, e)
-			}
-			data = append(data, m)
 		}
 	}
-	if r.Header.Get(provider.DrawersHeader) != "" {
+	if images || r.Header.Get(provider.DrawersHeader) != "" {
 		data = append(data, drawerObjects(r)...)
 	}
-	if r.Header.Get(provider.VideomakersHeader) != "" {
+	if videos || r.Header.Get(provider.VideomakersHeader) != "" {
 		data = append(data, videomakerObjects(r)...)
 	}
 	if r.Header.Get(provider.DecidersHeader) != "" {
