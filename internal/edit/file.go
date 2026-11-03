@@ -11,10 +11,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/tidwall/jsonc"
 	"github.com/yetone/magpie/internal/appdir"
@@ -128,7 +126,7 @@ func Filtered(f func(path string, data []byte) []byte, fn func() error) error {
 // preserved. When path is a symlink (a config kept in a dotfiles repo) the
 // file it points at is written and the link stays; a file with other hard
 // links is written in place, see writeInPlace. Once written, temp files
-// earlier writes of path left behind go, see removeStaleTemps.
+// earlier writes of path left behind go, see steady.RemoveStaleTemps.
 func WriteAtomic(path string, data []byte) error {
 	path, err := Target(path)
 	if err != nil {
@@ -154,7 +152,7 @@ func WriteAtomic(path string, data []byte) error {
 			if err := writeInPlace(f, data); err != nil {
 				return err
 			}
-			removeStaleTemps(path)
+			steady.RemoveStaleTemps(path)
 			return nil
 		}
 		// A file that can't be opened for writing (mode 0444, or read-only
@@ -215,7 +213,7 @@ func WriteAtomic(path string, data []byte) error {
 		cleanup()
 		return err
 	}
-	removeStaleTemps(path)
+	steady.RemoveStaleTemps(path)
 	return nil
 }
 
@@ -275,41 +273,6 @@ func writeInPlace(f *os.File, data []byte) error {
 	}
 	_ = os.Remove(tmp.Name())
 	return nil
-}
-
-// staleTemp is how long a temp file beside a config goes untouched before
-// the next write of that config takes it for one a crash left. A write
-// takes milliseconds, so a temp file that old belongs to no write still
-// going on.
-const staleTemp = 10 * time.Minute
-
-// removeStaleTemps removes the temp files that earlier writes of path left
-// beside it when they crashed or failed part way, once a later write has
-// gone through: the file then holds newer text than any of them. One
-// younger than staleTemp stays, as another write may still be using it.
-// Should a write stall longer than that (a laptop asleep mid-write) and
-// lose its temp file here, its rename fails and leaves the file as it was,
-// or, writing in place, it only loses the spare copy of its text.
-func removeStaleTemps(path string) {
-	dir, prefix := filepath.Dir(path), "."+filepath.Base(path)+"."
-	es, err := os.ReadDir(dir)
-	if err != nil {
-		return
-	}
-	for _, e := range es {
-		mid, ok := strings.CutPrefix(e.Name(), prefix)
-		if ok {
-			mid, ok = strings.CutSuffix(mid, ".tmp")
-		}
-		// os.CreateTemp puts digits for the *; anything else is another
-		// file's, say .models.yml.bak.1.tmp is models.yml.bak's
-		if !ok || mid == "" || strings.Trim(mid, "0123456789") != "" {
-			continue
-		}
-		if fi, err := e.Info(); err == nil && time.Since(fi.ModTime()) > staleTemp {
-			_ = os.Remove(filepath.Join(dir, e.Name()))
-		}
-	}
 }
 
 // Target is the file a write to path should replace: path itself, or,

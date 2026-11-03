@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -153,6 +154,8 @@ var Sync = (*os.File).Sync
 // machine that went down between the two left logins.json and
 // plugin-auth.json at their full length with every byte zero (#1505). A
 // write or flush that fails removes the temp file and leaves p as it was.
+// A write that is served takes the stale temps earlier writes left beside
+// p when they died (RemoveStaleTemps) along with it.
 func WriteFile(p string, b []byte, perm fs.FileMode) error {
 	tmp, err := os.CreateTemp(filepath.Dir(p), "."+filepath.Base(p)+".*")
 	if err != nil {
@@ -173,6 +176,50 @@ func WriteFile(p string, b []byte, perm fs.FileMode) error {
 	}
 	if err != nil {
 		os.Remove(tmp.Name())
+		return err
 	}
-	return err
+	RemoveStaleTemps(p)
+	return nil
+}
+
+// staleTemps is how long a temp file beside a file goes untouched before
+// the next write of that file takes it for one a crash left. A write takes
+// milliseconds, so a temp file that old belongs to no write still going on.
+const staleTemps = 10 * time.Minute
+
+// RemoveStaleTemps removes the temp files that earlier writes of path left
+// beside it when they died or failed part way, once a later write has gone
+// through: the file then holds newer text than any of them (#4938 — a
+// start-up that exits mid-write left hundreds beside magpie's own files,
+// and every file descriptor a directory watcher holds on them with it).
+// One younger than staleTemps stays, as another write may still be using
+// it. Should a write stall longer than that (a laptop asleep mid-write)
+// and lose its temp file here, its rename fails and leaves the file as it
+// was, or, writing in place, it only loses the spare copy of its text.
+func RemoveStaleTemps(path string) {
+	dir, prefix := filepath.Dir(path), "."+filepath.Base(path)+"."
+	es, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range es {
+		mid, ok := strings.CutPrefix(e.Name(), prefix)
+		if !ok {
+			continue
+		}
+		// os.CreateTemp puts digits for the *: this package's temps are
+		// digits alone, edit.WriteAtomic's digits and ".tmp" (which the
+		// reaping of one file's temps takes with the other's, the two
+		// writers sharing the folder); anything else is another file's,
+		// say .models.yml.bak.1.tmp is models.yml.bak's
+		if t, hasTmp := strings.CutSuffix(mid, ".tmp"); hasTmp {
+			mid = t
+		}
+		if mid == "" || strings.Trim(mid, "0123456789") != "" {
+			continue
+		}
+		if fi, err := e.Info(); err == nil && time.Since(fi.ModTime()) > staleTemps {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
 }
