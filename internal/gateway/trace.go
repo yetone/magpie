@@ -344,6 +344,13 @@ type Weighed struct {
 	// told, why: not read yet, the read failed, or too old near its cap
 	// (provider.Provider.CapCareful)
 	Unread string `json:"unread,omitempty"`
+	// SpendCap: held (Capped, at 100) as the key has spent the spend cap
+	// set on it, in USD: Spent of it over SpendPeriod (day, month or
+	// total, counted from SpendSince)
+	SpendCap    float64    `json:"spendCap,omitempty"`
+	Spent       float64    `json:"spent,omitempty"`
+	SpendPeriod string     `json:"spendPeriod,omitempty"`
+	SpendSince  *time.Time `json:"spendSince,omitempty"`
 	// Credits: a Codex account that goes on past its allowance on its
 	// credits, and is let spend them: all but used up, it still answers,
 	// and goes before those used up with nothing to go on with

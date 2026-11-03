@@ -437,6 +437,11 @@ type Provider struct {
 	// It is magpie's own: the vendor's or plugin's sign-in never sees it
 	// (see account_names.go).
 	AccountNames map[string]string `json:"accountNames,omitempty"`
+	// KeySpendCaps is, for a provider of API keys, how much each key the
+	// user capped may spend, in USD as the Usage page prices its calls,
+	// a day, a month or in all, by its KeyID: past it, routing takes the
+	// key for used up until the period renews (see key_spend.go).
+	KeySpendCaps map[string]SpendCap `json:"keySpendCaps,omitempty"`
 
 	// BalanceURL, when set, is where the vendor tells what is left on a
 	// key, asked with the key the way a chat request carries it; BalancePath
@@ -789,6 +794,7 @@ func (p Provider) clone() Provider {
 	p.AccountProxies = maps.Clone(p.AccountProxies)
 	p.AccountCaps = maps.Clone(p.AccountCaps)
 	p.AccountNames = maps.Clone(p.AccountNames)
+	p.KeySpendCaps = maps.Clone(p.KeySpendCaps)
 	if p.AccountWindowCaps != nil {
 		m := make(map[string]map[string]int, len(p.AccountWindowCaps))
 		for k, v := range p.AccountWindowCaps {
@@ -1548,6 +1554,7 @@ func normalize(p Provider) Provider {
 	p.AccountCaps = normalAccountCaps(p.AccountCaps)
 	p.AccountWindowCaps = normalWindowCaps(p.AccountWindowCaps)
 	p.AccountNames = normalAccountNames(p.AccountNames)
+	p.KeySpendCaps = normalKeySpendCaps(p.KeySpendCaps)
 	if len(p.Models) > 0 {
 		p.NoModels = false // a pick is no longer Select none
 	}

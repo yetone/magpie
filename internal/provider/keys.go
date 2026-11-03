@@ -54,6 +54,19 @@ type KeyInfo struct {
 	// Rest is why the gateway passes it over now, after a failure, and
 	// until when; nil while it takes requests.
 	Rest *KeyRest `json:"rest,omitempty"`
+	// Spend is the spend cap set on it and what it has spent in its
+	// period; nil with none.
+	Spend *KeySpend `json:"spend,omitempty"`
+}
+
+// KeySpend is a key's spend cap as its row tells it: the cap, what magpie
+// counted spent in its period, when that renews (none for a cap in all),
+// and whether routing holds the key at it now.
+type KeySpend struct {
+	SpendCap
+	Spent float64    `json:"spent"`
+	Reset *time.Time `json:"reset,omitempty"`
+	Held  bool       `json:"held,omitempty"`
 }
 
 // KeyRest is a key's rest as the gateway keeps it: failQuota, failRate…,
@@ -643,6 +656,7 @@ func ReplaceKey(id, keyRef, key string) (was, now string, err error) {
 	moveKeyed(p.AccountModels, keyRef, now)
 	moveKeyed(p.AccountProxies, keyRef, now)
 	moveKeyed(p.AccountConcurrency, keyRef, now)
+	moveKeyed(p.KeySpendCaps, keyRef, now)
 	return keyRef, now, Save(*p)
 }
 

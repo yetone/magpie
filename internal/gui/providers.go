@@ -24,6 +24,7 @@ import (
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/update"
 	"github.com/yetone/magpie/internal/upstream"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // The providers page: the vendors the user added, the presets they can add
@@ -778,6 +779,21 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 			out.KeyList[i].Rest = &provider.KeyRest{Why: r.Why, Status: r.Status, Until: r.Until, Key: key, Probed: r.Probed}
 		}
 	}
+	// and one with a spend cap, what it has spent of it (the gateway
+	// holds it at the cap by the same count, gateway.spendHeld)
+	for i, k := range out.KeyList {
+		sc, ok := p.KeySpendCap(k.ID)
+		if !ok {
+			continue
+		}
+		start, reset := sc.Window(time.Now())
+		ks := &provider.KeySpend{SpendCap: sc, Spent: usage.KeySpent(k.ID, start)}
+		ks.Held = ks.Spent >= sc.USD
+		if !reset.IsZero() {
+			ks.Reset = &reset
+		}
+		out.KeyList[i].Spend = ks
+	}
 	if !out.Key.Set && p.Ready() {
 		out.Key.Optional = true
 	}
@@ -1500,6 +1516,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// Weight, for accountweight: the account's share under By
 			// weight routing, 1 to provider.MaxKeyWeight (0 or 1: none)
 			Weight int `json:"weight"`
+			// Spend, for keyspendcap: the spend cap set on the key Account
+			// (its id), in USD a day, a month or in all; none, or an
+			// amount of 0, takes it off
+			Spend *provider.SpendCap `json:"spend"`
 			// Alias, for accountname: the account's name of the user's
 			// own, "" to take it off (#1515)
 			Alias string `json:"alias"`
@@ -1875,6 +1895,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					in.AccountConcurrency = old.AccountConcurrency
 					in.AccountWeights = old.AccountWeights
 					in.AccountNames = old.AccountNames // with accountname
+					in.KeySpendCaps = old.KeySpendCaps // with keyspendcap
 				}
 				// the image models unticked in its editor likewise: []
 				// shows them all (321sssrt on X)
@@ -2121,6 +2142,15 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			}
 		case "accountconcurrency":
 			if err := provider.SetAccountConcurrency(in.ID, req.Account, req.Limit); err != nil {
+				fail(rw, err)
+				return
+			}
+		case "keyspendcap":
+			var c *provider.SpendCap
+			if req.Spend != nil && req.Spend.USD > 0 {
+				c = &provider.SpendCap{USD: req.Spend.USD, Period: req.Spend.Period}
+			}
+			if err := provider.SetKeySpendCap(in.ID, req.Account, c); err != nil {
 				fail(rw, err)
 				return
 			}

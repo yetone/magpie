@@ -87,6 +87,10 @@ const providerUsage = `usage:
   magpie provider account-concurrency <id> [account|key [n|off|default]]
                                           how many requests one account or key has out at once, over every model,
                                           routing group and agent: its own, off for none, default for the provider's
+  magpie provider spend-cap <id> [key [usd [day|month|total]|off]]
+                                          how much an API key may spend, in USD as the Usage page prices its calls,
+                                          a day (the default), a month or in all from now: at it, routing takes the
+                                          key for used up and goes on to the other keys and the fallbacks
   magpie provider account-weight <id> [account [n|default]]
                                           a subscription account's share of the requests with routing=weight:
                                           one weighing 3 takes three for each one weighing 1 takes (default 1)
@@ -631,6 +635,8 @@ func providerCmd(args []string) error {
 		return poolCmd(rest)
 	case "account-concurrency", "account-limit":
 		return accountConcurrencyCmd(rest)
+	case "spend-cap", "spend-caps":
+		return spendCapCmd(rest)
 	case "account-weight", "account-weights":
 		return accountWeightCmd(rest)
 	case "queue":

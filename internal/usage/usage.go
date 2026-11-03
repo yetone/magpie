@@ -292,6 +292,7 @@ func Append(r Record) {
 		observeLedger(r)
 	}
 	defer codexUsedNew(r)
+	defer spentNew(r)
 	b, err := json.Marshal(r)
 	if err != nil {
 		return

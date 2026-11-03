@@ -14095,6 +14095,11 @@ function laneLimitPill(p, ref, who, name) {
   };
   return pill;
 }
+// a key's spend cap, in keyspend.js
+function keySpend(row, p, k) {
+  if (window.keySpendFill) return keySpendFill(row, p, k);
+  import("./keyspend.js").then(() => keySpendFill(row, p, k), () => {});
+}
 // refreshLanes rewrites the pills in place, so nothing moves; with none
 // in sight its tick stops (#3185) until one is drawn
 async function refreshLanes() {
@@ -14573,6 +14578,7 @@ function renderKeyAccounts(p) {
     row.append(acts);
     if (restLine) row.append(restLine);
     if (amBox) row.append(amBox), row.classList.add("with-am");
+    keySpend(row, p, k);
     list.append(row);
   }
   list.append(...folds.after);
