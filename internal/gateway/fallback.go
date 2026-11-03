@@ -42,6 +42,12 @@ import (
 
 const fallbackCooldown = time.Minute
 
+// groupBudget is how long a group's serial walk may wait on members that
+// are slow to start, in all: below the 600s a client gives up at, so the
+// error comes from magpie and names the budget, and no member is blamed
+// for the client hanging up first (#5113). A var for tests.
+var groupBudget = 540 * time.Second
+
 type candidate struct {
 	p     provider.Provider
 	model string
@@ -2234,6 +2240,10 @@ type holdWriter struct {
 	// takes; slow says it took longer, and was let go with nothing sent
 	firstWait time.Duration
 	slow      bool
+	// budgeted says firstWait was cut to what was left of the walk's
+	// total time (groupBudget), so its running out is the budget's end,
+	// not this member being slow (#5113)
+	budgeted bool
 
 	// loop reads a streamed reply for a loop it won't leave (#1359), nil
 	// when Settings' NoLoopGuard is on or the agent asked for no stream;

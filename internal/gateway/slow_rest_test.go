@@ -181,3 +181,37 @@ func TestCanceledSlowStartRestsNothing(t *testing.T) {
 		t.Fatalf("counted: %v", routed.slow)
 	}
 }
+
+// A group's serial walk has a total budget (#5113, mycf_711): nine members
+// at 60s each took 660s, past the 600s a client waits, and the client's
+// hang-up was told as the failure of the member it was on. The member on
+// when the budget runs out gets what is left, the walk stops there, nobody
+// else is asked, nobody rests, and the error names the budget.
+func TestGroupWalkStopsAtItsBudget(t *testing.T) {
+	fresh(t)
+	was := groupBudget
+	groupBudget = 100 * time.Millisecond
+	t.Cleanup(func() { groupBudget = was })
+	up := &keyedSlow{key: "k1", model: "m"}
+	up.slow.Store(true)
+	serveOn(t, "a", "k1", []string{"m", "n"}, up, "k2")
+	if err := provider.SaveGroup(provider.Group{Name: "G", Members: []string{"a/m", "a/n"}, Routing: provider.Ordered, FirstToken: 60}); err != nil {
+		t.Fatal(err)
+	}
+	s := New()
+	// slow twice over: a rest on the first would only show on the second
+	for i := range 2 {
+		up.reset()
+		code, body := postAs(t, s, "", `{"model":"group/g","stream":true,"messages":[{"role":"user","content":"hi"}]}`)
+		r := s.trace.routes[len(s.trace.routes)-1]
+		if code != 504 || !strings.Contains(body, "budget") {
+			t.Fatalf("round %d: %d %s", i, code, body)
+		}
+		if len(r.Tries) != 1 || r.Tries[0].Fail != failSlow || r.Tries[0].Rest != nil || up.first() != "k1/m" {
+			t.Fatalf("round %d: asked %v, tries %+v", i, up.asked, r.Tries)
+		}
+	}
+	if _, ok := restOf("a#" + provider.KeyID("k1") + "/m"); ok {
+		t.Fatal("the budget's end rests the member")
+	}
+}

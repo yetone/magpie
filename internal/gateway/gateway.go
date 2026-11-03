@@ -3095,6 +3095,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// the row of the try before, when it failed, billed something and
 	// handed the request on, written once the next try begins
 	var failedRow func()
+	walkBegan := time.Now() // the serial walk's start, for groupBudget (#5113)
 	for i := 0; i < len(cands); i++ {
 		if failedRow != nil {
 			failedRow()
@@ -3214,6 +3215,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		if isGroup && firstToken > 0 && !last && streams {
 			// slow to start, the next member is asked (Group.FirstToken)
 			hw.firstWait = time.Duration(firstToken) * time.Second
+			if left := groupBudget - time.Since(walkBegan); left < hw.firstWait {
+				// the members before it used the walk's time: it gets
+				// what is left, so the walk ends before the client's
+				hw.firstWait, hw.budgeted = max(left, time.Millisecond), true
+			}
 		}
 		call.Provider, call.To, call.Usage = c.p.ID, "", Usage{}
 		model = c.model
@@ -3779,12 +3785,26 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// account (restSlow)
 			call.Status, call.Error = http.StatusGatewayTimeout, fmt.Sprintf("%s: no first token in %ds", c.p.Name, firstToken)
 			try.Status, try.Error, try.Fail = call.Status, call.Error, failSlow
-			if rest, ok := restSlow(c, time.Now()); ok {
+			if hw.budgeted {
+				// cut short by the walk's budget, not slow of its own
+				// accord: nobody rests for it
+				call.Error = fmt.Sprintf("%s: no first token within the group's %ds budget", c.p.Name, int(groupBudget.Seconds()))
+				try.Error = call.Error
+			} else if rest, ok := restSlow(c, time.Now()); ok {
 				try.Rest = &rest
 			}
 			call.TTFT, call.FirstText, call.Flow, call.FirstReasoning = 0, 0, 0, 0
 			watched.attempt(call, try, c.p.ID, sent, hw, capture)
 			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+			if hw.budgeted || time.Since(walkBegan) >= groupBudget {
+				// the group's time is spent: no further member is asked
+				// to start after the client has given up, and the error
+				// names the budget (#5113)
+				msg := fmt.Sprintf("no member of the group answered within its %ds budget", int(groupBudget.Seconds()))
+				call.Status, call.Error = http.StatusGatewayTimeout, msg
+				failTo(w, kept, from, call.Status, msg)
+				break
+			}
 			if other == nil {
 				other = &Try{Status: call.Status, Error: call.Error}
 			}
