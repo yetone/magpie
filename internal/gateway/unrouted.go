@@ -329,7 +329,11 @@ func (u *unroutedHold) unmaskedLocked(now time.Time) time.Duration {
 
 // checkMost is most's timer: a request held unroutedMost other than
 // masking and earned upload time is answered for; one masking now is
-// looked at again when that ends, and one with time left, when that is up.
+// looked at again when that ends, and one with time left, when that is up,
+// but no sooner than unroutedRecheck. While an upload earns at least as
+// fast as it is read, its held time stands still, so what is left of it
+// doesn't shrink: a sliver left would be looked at again every sliver for
+// as long as the body kept coming.
 func (u *unroutedHold) checkMost() {
 	u.wmu.Lock()
 	if u.mwaits > 0 {
@@ -338,13 +342,18 @@ func (u *unroutedHold) checkMost() {
 		return
 	}
 	if left := unroutedMost - u.unmaskedLocked(time.Now()); left > 0 {
-		u.most.Reset(left)
+		u.most.Reset(max(left, unroutedRecheck()))
 		u.wmu.Unlock()
 		return
 	}
 	u.wmu.Unlock()
 	u.giveUp(false)
 }
+
+// unroutedRecheck is the least checkMost waits before it looks again: a
+// second, or an eighth of unroutedMost when a test makes that shorter. A
+// hold is answered at most that late.
+func unroutedRecheck() time.Duration { return min(time.Second, unroutedMost/8) }
 
 // noteWait tells ctx's watch its request is in a wait magpie knows of
 // until the func it answers is called: the time it spends there counts

@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -147,5 +148,44 @@ func TestUnroutedEmptyEncodedStreamIsBounded(t *testing.T) {
 				t.Fatal("a body still arriving reached the provider")
 			}
 		})
+	}
+}
+
+// #4775 review: an upload that earns at least as fast as it is read holds
+// its charged time still, here a sliver short of unroutedMost. most's
+// timer looks again no sooner than unroutedRecheck, rather than every
+// sliver for as long as the body keeps coming.
+func TestUnroutedMostRecheckIsNoSpin(t *testing.T) {
+	unroutedLimits(t, time.Hour, 800*time.Millisecond)
+	now := time.Now()
+	k := &waitKind{kind: "body", n: 1, since: now}
+	u := &unroutedHold{f: &inflight{start: now.Add(-(unroutedMost - 100*time.Microsecond))}, kinds: []*waitKind{k}}
+	u.bodyRead.Store(1 << 40)
+	var looks, running atomic.Int64
+	var stopped atomic.Bool
+	u.wmu.Lock()
+	u.most = time.AfterFunc(0, func() {
+		running.Add(1)
+		defer running.Add(-1)
+		if stopped.Load() {
+			return
+		}
+		looks.Add(1)
+		u.checkMost()
+	})
+	u.wmu.Unlock()
+	time.Sleep(time.Second)
+	stopped.Store(true)
+	for running.Load() > 0 {
+		time.Sleep(time.Millisecond)
+	}
+	u.most.Stop()
+	// a second at a look per 100ms is about 10; at a look per sliver it
+	// is thousands
+	if n := looks.Load(); n > 30 {
+		t.Fatalf("most's timer looked %d times in a second at a hold standing still", n)
+	}
+	if n := looks.Load(); n == 0 {
+		t.Fatal("most's timer never looked")
 	}
 }

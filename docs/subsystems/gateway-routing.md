@@ -390,7 +390,10 @@ recorded as a prediction failure (`noPrediction`).
   (`bodyArriving`, `bodyEnded`): a decoder spends its time between reads
   too, and a chunked gzip body ended there was answered 504 as magpie's
   own hold (`TestUnroutedChunkedBodyReadWholeHeld504` holds the other
-  side).
+  side). While an upload earns as fast as it is read, its charged time
+  stands still, so `checkMost` looks again no sooner than
+  `unroutedRecheck` (1s) rather than every sliver left
+  (`TestUnroutedMostRecheckIsNoSpin`).
   `TestUnroutedProgressingUploadOutlastsMost` covers TLS through `Front`
   with declared, chunked, gzip and zstd bodies;
   `TestUnroutedUploadCreditKeepsIdleDeadline`, `TestUnroutedUploadTimeIsBounded`,
