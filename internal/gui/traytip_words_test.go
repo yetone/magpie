@@ -51,7 +51,7 @@ func TestPluginWindowWordsSaidInEveryLanguage(t *testing.T) {
 		// units
 		"credits", "tokens", "requests", "questions",
 		// window names
-		"Credits", "Extra credits", "Prepaid credits", "Free model tokens", // workbuddy
+		"Credits", "Extra credits", "Prepaid credits", "Free model tokens", "deepseek-v4.1-flash tokens (est.)", // workbuddy
 		"Add-on credits", "Dedicated credits", "Shared credits", "Total credits", // qoder
 		"Monthly credits", "Purchased credits", "5-hour window", // agnes
 		"Promotional Credits",                         // gcp-ai
