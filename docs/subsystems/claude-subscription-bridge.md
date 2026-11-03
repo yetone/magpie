@@ -219,8 +219,11 @@ connection and TLS left as they were, and tees the body of each reply to
 a request with `x-claude-code-request-class: main`, a `/v1/messages` path
 and a `text/event-stream` reply. Claude Code reads one branch as before.
 The tap parses the other and writes one JSON line per event to the file:
-`{s, open}` when a stream starts, `{s, e}` for each event other than
-`ping`, and `{s, end: "done"|"cut"}` when it ends. At load it writes
+`{s, open}` when a stream starts, with `h`, the reply's
+`anthropic-ratelimit-unified-*` headers, when it has any, `{s, e}` for
+each event other than `ping`, and `{s, end: "done"|"cut"}` when it ends.
+The tap only reads the reply's headers; the request is sent as Claude
+Code made it. At load it writes
 `{tap: "on"}`, or `{tap: "none"}` when there is no `FetchSession` to
 replace.
 
@@ -234,6 +237,19 @@ while a stream is open, and tells each event as `-p` does: a
   and when its stream comes late it is left out (`dropped`).
 - Before a turn's result, `tap.settle` waits up to 1s for the open
   streams to end, and ends the rest there.
+
+The headers become the `rate_limit_event` `-p` tells from them
+(`rateLimitInfo`, as Claude Code 2.1.291 builds it): `status` and
+`unifiedWindows` with each of `five_hour`, `seven_day` and
+`seven_day_overage_included` (`5h`, `7d`, `7d_oi`) whose utilization and
+reset are both said, the reset rounded to a second. A streamed message
+tells it before its `message_start`, so the bridge keeps it
+(`NoteClaudeLimits`) before the reply begins. A reply whose message was
+told whole, or that never started one, tells it at the turn's end
+(`tap.settle`), and only when it is the latest: a later reply's told
+with its stream is never followed by an older one's. A `<synthetic>` API error's own
+`rate_limit_info` is told after that, as the newest. Before this, a
+successful turn in the interactive mode told no allowance (T-076).
 
 A stream cut short gets a `message_stop` with no `message_delta`, as `-p`
 ends such a stream, and the bridge counts it as an attempt and asks
@@ -1532,7 +1548,8 @@ doesn't by default; that path is unchanged.
 ## The account's allowance on the reply (#1257)
 
 Claude Code tells a run's account allowance in its stream-json
-`rate_limit_event`, not as HTTP headers. The bridge keeps it
+`rate_limit_event`, not as HTTP headers; in the interactive mode the
+helper tells the same event from the tap (see above). The bridge keeps it
 (`provider.NoteClaudeLimits`) and says it again on the reply as the
 `anthropic-ratelimit-unified-{5h,7d,7d_oi}-{utilization,reset}` headers
 Anthropic sends (`limitHeaders`, from `provider.KeptClaudeLimits`): a share

@@ -1,6 +1,7 @@
 package claudetui
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -273,5 +274,125 @@ func TestShimStreamsThroughTap(t *testing.T) {
 	}
 	if d := out[4]["event"].(map[string]any)["delta"].(map[string]any)["text"]; d != "hello" {
 		t.Fatalf("the stream said %v", d)
+	}
+}
+
+// replyLimits are a reply's anthropic-ratelimit-unified-* headers as
+// tap.js writes them: the 7d_oi window says no reset, and is left out.
+const replyLimits = `{"anthropic-ratelimit-unified-status":"allowed","anthropic-ratelimit-unified-5h-utilization":"0.42","anthropic-ratelimit-unified-5h-reset":"1790700000.4",` +
+	`"anthropic-ratelimit-unified-7d-utilization":"0.17","anthropic-ratelimit-unified-7d-reset":"1791000000","anthropic-ratelimit-unified-7d_oi-utilization":"0.5"}`
+
+// limitsTold are the rate_limit_info l was told, in order.
+func limitsTold(t *testing.T, l *lines) []string {
+	t.Helper()
+	var got []string
+	for _, m := range l.out {
+		if m["type"] == "rate_limit_event" {
+			b, _ := json.Marshal(m["rate_limit_info"])
+			got = append(got, string(b))
+		}
+	}
+	return got
+}
+
+const wantLimits = `{"status":"allowed","unifiedWindows":{"five_hour":{"resetsAt":1790700000,"utilization":0.42},"seven_day":{"resetsAt":1791000000,"utilization":0.17}}}`
+
+// A reply that succeeds tells the account's allowance from its headers,
+// as -p's rate_limit_event, before its stream: the bridge keeps it
+// (NoteClaudeLimits) and says it on the reply's headers.
+func TestTapTellsReplyLimits(t *testing.T) {
+	l := &lines{}
+	tp, write := testTap(t, l)
+	tr := newTranslator(l)
+	tr.tap = tp
+	write(`{"tap":"on"}`, `{"s":1,"open":true,"h":`+replyLimits+`}`)
+	write(tapReply(1, "msg_1")...)
+	tr.row(whole("msg_1"))
+	tr.row([]byte(`{"type":"system","subtype":"turn_duration"}`))
+	if got, want := kinds(l), append([]string{"rate_limit_event"}, streamedTurn...); !slices.Equal(got, want) {
+		t.Fatalf("told %v, want %v", got, want)
+	}
+	if got := limitsTold(t, l); !slices.Equal(got, []string{wantLimits}) {
+		t.Fatalf("told %v, want %s", got, wantLimits)
+	}
+}
+
+// A reply whose message was told whole, its stream late, still tells its
+// allowance, at the turn's end, the latest reply's; one that says no
+// window, or none with its reset, tells nothing.
+func TestTapLimitsOfMessageToldWhole(t *testing.T) {
+	old := tapWait
+	tapWait = 100 * time.Millisecond
+	t.Cleanup(func() { tapWait = old })
+	l := &lines{}
+	tp, write := testTap(t, l)
+	tr := newTranslator(l)
+	tr.tap = tp
+	older := strings.ReplaceAll(replyLimits, "0.42", "0.3")
+	write(`{"tap":"on"}`, `{"s":1,"open":true,"h":`+older+`}`, `{"s":1,"end":"cut"}`, `{"s":2,"open":true,"h":`+replyLimits+`}`)
+	tr.row(whole("msg_2"))
+	write(tapReply(2, "msg_2")...)
+	write(`{"s":3,"open":true,"h":{"anthropic-ratelimit-unified-status":"allowed","anthropic-ratelimit-unified-5h-utilization":"0.9"}}`, `{"s":3,"end":"cut"}`)
+	tr.row([]byte(`{"type":"system","subtype":"turn_duration"}`))
+	if got, want := kinds(l), []string{"assistant", "rate_limit_event", "result"}; !slices.Equal(got, want) {
+		t.Fatalf("told %v, want %v", got, want)
+	}
+	if got := limitsTold(t, l); !slices.Equal(got, []string{wantLimits}) {
+		t.Fatalf("told %v, want %s", got, wantLimits)
+	}
+}
+
+// A turn that fails tells its error's allowance last, after any an
+// earlier reply of the turn told.
+func TestTapErrorLimitsLast(t *testing.T) {
+	l := &lines{}
+	tp, write := testTap(t, l)
+	tr := newTranslator(l)
+	tr.tap = tp
+	write(`{"tap":"on"}`, `{"s":1,"open":true,"h":`+replyLimits+`}`, `{"s":1,"end":"cut"}`)
+	tr.row([]byte(`{"type":"assistant","isApiErrorMessage":true,"apiErrorStatus":429,"apiErrorParams":{"rate_limit_info":{"status":"rejected"}},"message":{"id":"x","model":"<synthetic>","content":[{"type":"text","text":"You've hit your limit"}]}}`))
+	if got := limitsTold(t, l); !slices.Equal(got, []string{wantLimits, `{"status":"rejected"}`}) {
+		t.Fatalf("told %v", got)
+	}
+}
+
+// The shim tells a tapped reply's allowance before its stream.
+func TestShimTellsTapLimits(t *testing.T) {
+	out := runShim(t, []string{"FAKE_TAP=1", "FAKE_TAP_LIMITS=" + replyLimits}, append([]string{fakePath(t)}, pArgs...), []string{"hello"}, 11)
+	if out[1]["type"] != "rate_limit_event" {
+		t.Fatalf("told %v first", out[1])
+	}
+	if b, _ := json.Marshal(out[1]["rate_limit_info"]); string(b) != wantLimits {
+		t.Fatalf("told %s", b)
+	}
+	if e, ok := out[2]["event"].(map[string]any); !ok || e["type"] != "message_start" {
+		t.Fatalf("told %v after it", out[2])
+	}
+}
+
+// A reply's allowance kept for the turn's end is not told after a later
+// reply's told with its stream: the bridge keeps the last it hears.
+func TestTapKeptLimitsNotAfterNewer(t *testing.T) {
+	older := strings.ReplaceAll(replyLimits, "0.42", "0.3")
+	for name, first := range map[string][]string{
+		// the older reply ends before the later one is told
+		"ended before": {`{"tap":"on"}`, `{"s":1,"open":true,"h":` + older + `}`, `{"s":1,"end":"cut"}`, `{"s":2,"open":true,"h":` + replyLimits + `}`},
+		// and after it, still open while the later one streams
+		"ended after": {`{"tap":"on"}`, `{"s":1,"open":true,"h":` + older + `}`, `{"s":2,"open":true,"h":` + replyLimits + `}`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			l := &lines{}
+			tp, write := testTap(t, l)
+			tr := newTranslator(l)
+			tr.tap = tp
+			write(first...)
+			write(tapReply(2, "msg_2")...)
+			write(`{"s":1,"end":"cut"}`)
+			tr.row(whole("msg_2"))
+			tr.row([]byte(`{"type":"system","subtype":"turn_duration"}`))
+			if got := limitsTold(t, l); !slices.Equal(got, []string{wantLimits}) {
+				t.Fatalf("told %v, want %s alone", got, wantLimits)
+			}
+		})
 	}
 }

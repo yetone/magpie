@@ -4,7 +4,8 @@
 // a FetchSession whose fetch is the real one's, the request, connection
 // and TLS untouched, and copies the reply of each of the main turn's
 // requests (x-claude-code-request-class: main), as it streams, to the
-// file MAGPIE_CLAUDE_TAP names: a JSON line an event. Claude Code reads
+// file MAGPIE_CLAUDE_TAP names: a JSON line an event, and the reply's
+// anthropic-ratelimit-unified-* headers as it opens. Claude Code reads
 // its own copy of the stream as before.
 //
 // MAGPIE_CLAUDE_GUARD names a file of the bridge's holding the
@@ -143,7 +144,13 @@
           // told before Claude Code has the reply, so the helper knows a
           // stream is coming before any of its messages
           const s = ++streams;
-          put({ s, open: true });
+          // with the account's allowance as Anthropic tells it on the
+          // reply, which -p tells in its rate_limit_event
+          const h = {};
+          res.headers.forEach((v, k) => {
+            if (/^anthropic-ratelimit-unified-/i.test(k)) h[k.toLowerCase()] = v;
+          });
+          put(Object.keys(h).length ? { s, open: true, h } : { s, open: true });
           read(s, mine);
         }
       } catch {}

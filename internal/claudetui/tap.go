@@ -4,6 +4,7 @@ import (
 	"bufio"
 	_ "embed"
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -68,11 +69,20 @@ type tap struct {
 	dropped map[string]bool
 	out     emitter
 	sid     string
+	// limits is the allowance a reply told whose message was told whole
+	// or never began, of stream limitsOf: told before the turn's end
+	limits   json.RawMessage
+	limitsOf int
+	// toldOf is the latest stream whose allowance was told with it: an
+	// older one's is never told after it
+	toldOf int
 }
 
 type tapStream struct {
 	id      string
 	stopped bool
+	// limits is the rate_limit_info its reply's headers tell, until told
+	limits json.RawMessage
 }
 
 // newTap writes tap.js and the file it writes to in a folder of the
@@ -151,6 +161,8 @@ func (t *tap) line(b []byte) {
 		Open  bool            `json:"open"`
 		End   string          `json:"end"`
 		Event json.RawMessage `json:"e"`
+		// the reply's anthropic-ratelimit-unified-* headers
+		Headers map[string]string `json:"h"`
 	}
 	if json.Unmarshal(b, &l) != nil || t.ended[l.S] {
 		return
@@ -159,7 +171,7 @@ func (t *tap) line(b []byte) {
 	case l.Tap != "":
 		t.on = l.Tap == "on"
 	case l.Open:
-		t.open[l.S] = &tapStream{}
+		t.open[l.S] = &tapStream{limits: rateLimitInfo(l.Headers)}
 	case len(l.Event) > 0:
 		var e struct {
 			Type    string `json:"type"`
@@ -172,12 +184,27 @@ func (t *tap) line(b []byte) {
 		}
 		st := t.open[l.S]
 		if e.Type == "message_start" {
-			st = &tapStream{id: e.Message.ID}
+			var limits json.RawMessage
+			if st != nil {
+				limits = st.limits
+			}
+			st = &tapStream{id: e.Message.ID, limits: limits}
 			t.open[l.S] = st
 			if t.dropped[st.id] {
+				t.keepLimits(l.S, st)
 				return
 			}
 			t.started[st.id] = true
+			// as -p tells it, before the reply: the bridge says it on
+			// the reply's headers (limitHeaders)
+			if st.limits != nil && l.S > t.toldOf {
+				t.out.emit(map[string]any{"type": "rate_limit_event", "rate_limit_info": st.limits})
+				t.toldOf = l.S
+				if t.limitsOf < l.S {
+					t.limits, t.limitsOf = nil, 0
+				}
+			}
+			st.limits = nil
 		}
 		if st == nil || st.id == "" || t.dropped[st.id] {
 			return
@@ -198,6 +225,7 @@ func (t *tap) end(n int) {
 	st := t.open[n]
 	delete(t.open, n)
 	t.ended[n] = true
+	t.keepLimits(n, st)
 	if st != nil && st.id != "" && !st.stopped && !t.dropped[st.id] {
 		t.event(json.RawMessage(`{"type":"message_stop"}`))
 	}
@@ -254,4 +282,59 @@ func (t *tap) settle() {
 	for n := range t.open {
 		t.end(n)
 	}
+	if t.limits != nil {
+		t.out.emit(map[string]any{"type": "rate_limit_event", "rate_limit_info": t.limits})
+		t.limits, t.limitsOf = nil, 0
+	}
+}
+
+// keepLimits keeps what stream n's reply told of the allowance, not
+// told with its stream, for the turn's end, as a stream told mid-message
+// would end it in the bridge: the latest reply's, and only when no later
+// reply's was told already.
+func (t *tap) keepLimits(n int, st *tapStream) {
+	if st == nil || st.limits == nil {
+		return
+	}
+	if n > t.toldOf && n >= t.limitsOf {
+		t.limits, t.limitsOf = st.limits, n
+	}
+	st.limits = nil
+}
+
+// limitWindows are the windows Anthropic tells on a reply, as
+// anthropic-ratelimit-unified-<window>-*, by the kind -p names them in
+// its rate_limit_event (Claude Code 2.1.291).
+var limitWindows = []struct{ kind, window string }{
+	{"five_hour", "5h"},
+	{"seven_day", "7d"},
+	{"seven_day_overage_included", "7d_oi"},
+}
+
+// rateLimitInfo is a reply's allowance, from its headers, as -p tells it
+// in a rate_limit_event's rate_limit_info: each window that says both its
+// share used and when it renews. Nil when none does.
+func rateLimitInfo(h map[string]string) json.RawMessage {
+	num := func(name string) (float64, bool) {
+		v := strings.TrimSpace(h["anthropic-ratelimit-unified-"+name])
+		f, err := strconv.ParseFloat(v, 64)
+		return f, v != "" && err == nil && !math.IsInf(f, 0) && !math.IsNaN(f)
+	}
+	ws := map[string]any{}
+	for _, w := range limitWindows {
+		used, ok := num(w.window + "-utilization")
+		reset, ok2 := num(w.window + "-reset")
+		if ok && ok2 {
+			ws[w.kind] = map[string]any{"utilization": used, "resetsAt": int64(math.Round(reset))}
+		}
+	}
+	if len(ws) == 0 {
+		return nil
+	}
+	info := map[string]any{"unifiedWindows": ws}
+	if s := h["anthropic-ratelimit-unified-status"]; s != "" {
+		info["status"] = s
+	}
+	b, _ := json.Marshal(info)
+	return b
 }
