@@ -543,6 +543,16 @@ var claudeModelEnv = []string{
 	"ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_DEFAULT_FABLE_MODEL",
 }
 
+// claudeMagpieModel says a model in Claude Code's env or its model, as
+// written there, is one of magpie's: a provider/model name only magpie's
+// gateway serves, at an effort or marked 1M or not. On Anthropic's own
+// endpoint it is a 404, "There's an issue with the selected model"
+// (roswellcsy on X).
+func claudeMagpieModel(v string) bool {
+	m, _ := tierAt(provider.ClaudeRead(v))
+	return isMagpie(strings.TrimSuffix(m, "[1m]"))
+}
+
 // claudeSameModel says two of a tier's models as written are one model,
 // whatever effort each is fixed at and however its 1M is marked: what the
 // env says about the one is about the other.
@@ -1368,6 +1378,31 @@ func claudeIn(at place) *Agent {
 		}
 		return edit.SetJSON(path, edit.KV{Path: "env." + claudeContextEnv, Value: v})
 	}
+	// dropStray takes magpie's model names out of a Claude Code on
+	// Anthropic's own endpoint, where each is a 404 ("There's an issue
+	// with the selected model (claude/claude-opus-5-5)", roswellcsy on X):
+	// left in its env, ANTHROPIC_MODEL over settings.json's model, by an
+	// older magpie that gave one back from the stash as the user's own on
+	// every Disconnect. The user's own models, and any at an endpoint of
+	// theirs, which may name its models so, are left as they are.
+	dropStray := func() error {
+		if env("ANTHROPIC_BASE_URL") != "" {
+			return nil
+		}
+		var keys []string
+		for _, k := range claudeModelEnv {
+			if claudeMagpieModel(rawEnv(k)) {
+				keys = append(keys, "env."+k)
+			}
+		}
+		if claudeMagpieModel(model()) {
+			keys = append(keys, "model")
+		}
+		if len(keys) == 0 {
+			return nil
+		}
+		return edit.DelJSON(path, keys...)
+	}
 	// desktopOnly is what is written while Claude Code itself isn't on
 	// magpie: Claude Desktop's Code tab still runs Claude Code on this
 	// settings.json while Desktop is, so the window and capabilities of
@@ -1520,7 +1555,18 @@ func claudeIn(at place) *Agent {
 			return "", err
 		}
 		if !routed() {
-			return "", nil
+			// magpie's, left at a gateway address since changed: its
+			// endpoint, key and models all go, as set("") takes them
+			if keyOurs() {
+				keys := make([]string, len(claudeEnv))
+				for i, k := range claudeEnv {
+					keys[i] = "env." + k
+				}
+				if err := edit.DelJSON(path, keys...); err != nil {
+					return "", err
+				}
+			}
+			return "", dropStray()
 		}
 		keys := make([]string, len(claudeEnv))
 		for i, k := range claudeEnv {
@@ -1541,7 +1587,9 @@ func claudeIn(at place) *Agent {
 		var back []edit.KV
 		for _, k := range claudeOwnEnv {
 			// one the user set again since is theirs as it is
-			if v := unstash(at.key("claude.env." + k)); v != "" && rawEnv(k) == "" {
+			// one of magpie's kept by an older magpie as the user's is no
+			// model of their endpoint's (roswellcsy on X)
+			if v := unstash(at.key("claude.env." + k)); v != "" && rawEnv(k) == "" && !(contains(claudeModelEnv, k) && claudeMagpieModel(v)) {
 				back = append(back, edit.KV{Path: "env." + k, Value: v})
 			}
 		}
@@ -1598,8 +1646,15 @@ func claudeIn(at place) *Agent {
 						at.key("claude.auth_token"): env("ANTHROPIC_AUTH_TOKEN"),
 					}
 					for _, k := range claudeOwnEnv {
-						// as the user wrote it, never respelled
-						kept[at.key("claude.env."+k)] = rawEnv(k)
+						// as the user wrote it, never respelled; one of
+						// magpie's own left there is not theirs to get back
+						// (roswellcsy on X: it came back as their
+						// ANTHROPIC_MODEL with every Disconnect)
+						v := rawEnv(k)
+						if contains(claudeModelEnv, k) && claudeMagpieModel(v) {
+							v = ""
+						}
+						kept[at.key("claude.env."+k)] = v
 					}
 					// the auto mode classifier's model of their own
 					// endpoint waits in the stash, out of the env, as
@@ -2228,6 +2283,9 @@ func claudeIn(at place) *Agent {
 		Sync: func() error {
 			ask()
 			if !routed() {
+				if err := dropStray(); err != nil {
+					return err
+				}
 				return desktopOnly()
 			}
 			// a switch turned on since, or left by an older magpie
