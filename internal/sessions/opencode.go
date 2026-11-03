@@ -117,6 +117,14 @@ type ocMessage struct {
 	// OpenCode 2: the tools a reply called and the skills a message
 	// brought in, as ocV2DB.messages reads them
 	Calls []ocUse `json:"calls,omitempty"`
+	// ZCode: where a message copied into another session came from
+	// (zcDB.copied)
+	Metadata *struct {
+		ForkOrigin *struct {
+			SessionID string `json:"sessionId"`
+			MessageID string `json:"messageId"`
+		} `json:"forkOrigin"`
+	} `json:"metadata,omitempty"`
 }
 
 // ocUse is a tool called, or a skill brought in with no tool (Name "").
@@ -586,6 +594,9 @@ func parseOpenCode(f file) *state {
 			}
 			if s.Cwd == "" && m.Path != nil {
 				s.Cwd = m.Path.Cwd
+			}
+			if z, ok := f.m().oc.(zcDB); ok && z.copied(m) {
+				continue // the original's session counts it
 			}
 			if t := m.Tokens; t != nil && m.ModelID != "" {
 				u := Tokens{Input: t.Input, Output: t.Output + t.Reasoning, CacheRead: t.Cache.Read, CacheWrite: t.Cache.Write}

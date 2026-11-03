@@ -13,9 +13,19 @@ import (
 	"unsafe"
 )
 
+// unraised holds parseVersions at none raised for a test of the kept
+// file's form, whatever the agents' versions are now: a file with no
+// versions in it is then as current as its parses.
+func unraised(t *testing.T) {
+	kept := parseVersions
+	parseVersions = map[string]int{}
+	t.Cleanup(func() { parseVersions = kept })
+}
+
 // The kept file decoded on a few goroutines is what one json.Unmarshal of
 // it was, and is refused where that was.
 func TestDecodeCacheIsUnmarshal(t *testing.T) {
+	unraised(t)
 	unmarshal := func(b []byte, zone string) (map[string]*state, bool) {
 		var c cacheFile
 		if json.Unmarshal(b, &c) != nil || c.Version != cacheVersion || c.Zone != zone || c.Files == nil {
@@ -64,6 +74,7 @@ func TestDecodeCacheIsUnmarshal(t *testing.T) {
 // once a file: 23.7k sessions a script ran with one prompt held 11 MB of
 // copies of it.
 func TestDecodeCacheSharesRepeats(t *testing.T) {
+	unraised(t)
 	var b strings.Builder
 	fmt.Fprintf(&b, `{"version":%d,"zone":"z","files":{`, cacheVersion)
 	for i := range 2000 {
@@ -99,6 +110,7 @@ func TestDecodeCacheSharesRepeats(t *testing.T) {
 // A file of one day holds that day's models once, and a parse of it, from
 // a clone, counts a call once in each: the kept state is as it was read.
 func TestDecodeCacheSharesOneDaysModels(t *testing.T) {
+	unraised(t)
 	m := `{"gpt-5.5":{"input":10,"output":2,"cache_read":0,"cache_write":0}}`
 	b := fmt.Sprintf(`{"version":%d,"zone":"z","files":{"/one":{"size":1,"models":%s,"days":{"2026-10-24":{"m":%s,"a":5}}},"/other":{"size":1,"models":%s,"days":{"2026-10-24":{"m":{"o3":{"input":1,"output":0,"cache_read":0,"cache_write":0}}}}},"/two":{"size":1,"models":%s,"days":{"2026-10-23":{"m":%s},"2026-10-24":{"a":1}}}}}`, cacheVersion, m, m, m, m, m)
 	files, ok := decodeCache([]byte(b), "z")

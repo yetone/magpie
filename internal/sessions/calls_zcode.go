@@ -74,6 +74,7 @@ func readZCodeCalls(f file) (*callFile, bool) {
 	path, sid := f.path[:i], f.path[i+1:]
 	var info ocInfo
 	var msgs [][]byte
+	copies := map[string]bool{}
 	if !withOCCallDB(path, func(db *sql.DB) {
 		var store ocStore = zcDB{ocDB{db}}
 		if ocHasTable(db, "session_v2") {
@@ -84,6 +85,16 @@ func readZCodeCalls(f file) (*callFile, bool) {
 		}
 		info, _ = store.info(sid)
 		msgs = store.messages(sid)
+		// a copy of a message still in the database (zcDB.copied): the
+		// original's session counts its call
+		if z, ok := store.(zcDB); ok {
+			for _, b := range msgs {
+				var m ocMessage
+				if json.Unmarshal(b, &m) == nil && m.Role == "assistant" && z.copied(m) {
+					copies[m.ID] = true
+				}
+			}
+		}
 	}) {
 		return st, false
 	}
@@ -92,7 +103,7 @@ func readZCodeCalls(f file) (*callFile, bool) {
 	}
 	for _, b := range msgs {
 		var m ocMessage
-		if json.Unmarshal(b, &m) != nil || m.Role != "assistant" || ocGatewayProvider(m.ProviderID) {
+		if json.Unmarshal(b, &m) != nil || m.Role != "assistant" || ocGatewayProvider(m.ProviderID) || copies[m.ID] {
 			continue
 		}
 		if c, ok := ocCall(st, m, info.Directory); ok {

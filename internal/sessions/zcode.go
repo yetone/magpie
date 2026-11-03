@@ -51,3 +51,29 @@ func (s zcDB) info(sid string) (ocInfo, bool) {
 	}
 	return i, err == nil
 }
+
+// copied says whether a message is a copy of one still in the database.
+// ZCode copies a session's messages into another for a side chat on a
+// selection, a fork and a checkpoint restored (ZCode 3.17's CLI): each
+// copy gets an id and session of its own and keeps the original's time,
+// model and tokens, and its metadata.forkOrigin names the message it was
+// copied from, {sessionId, messageId}. The copy made no call, so its
+// tokens are the original's, and counting both counted the session again
+// on the day it ran (Sky, skyhuang1994: a side chat opened on 11-02 from a
+// session of 10-31 put 0.42B more GLM-5.3 tokens on 10-31, where ZCode's
+// own model_usage has none for it). A copy of a copy names the copy it
+// was made from, so one copy is counted only when what it came from is
+// gone: the session deleted, or never in this database. ZCode's own
+// notices of a fork carry a forkOrigin of another shape, with no
+// messageId, and are no copies.
+func (s zcDB) copied(m ocMessage) bool {
+	if m.Metadata == nil || m.Metadata.ForkOrigin == nil {
+		return false
+	}
+	id := m.Metadata.ForkOrigin.MessageID
+	if id == "" || id == m.ID {
+		return false
+	}
+	var n int
+	return s.db.QueryRow(`SELECT COUNT(*) FROM message WHERE id = ?`, id).Scan(&n) == nil && n > 0
+}

@@ -15,7 +15,7 @@ import (
 // (#2278: each raise of cacheVersion read a whole history again).
 func TestParseVersionRaiseReadsThatAgentAlone(t *testing.T) {
 	setup(t)
-	defer func(v map[string]int) { parseVersions = v }(parseVersions)
+	unraised(t)
 	var mu sync.Mutex
 	read := map[string]int{}
 	scanHook = func(p string, off int64) {

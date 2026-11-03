@@ -31,6 +31,9 @@ type codexUsageState struct {
 	SnapshotThread string
 	SnapshotTotal  *cxUsage
 	SnapshotOffset *cxUsage
+	// Copied are the checkpoints of the rollout this one was forked from,
+	// which it holds copies of (codex_fork.go); never written to after.
+	Copied map[cxCheckpoint]bool
 }
 
 // A paginated subagent starts with a restored compaction and a zero-last
@@ -496,6 +499,11 @@ func (s *codexUsageState) record(v codexContribution) *codexChange {
 
 func (s *codexUsageState) count(at time.Time, model string, total, last *cxUsage) *codexChange {
 	if total == nil || !total.valid() || total.Known&3 != 3 || at.IsZero() {
+		return nil
+	}
+	if s.copied(total, last) {
+		// the parent's call, which its own rollout counts
+		s.advance(at, total)
 		return nil
 	}
 	s.alignSnapshot(at, total, last)

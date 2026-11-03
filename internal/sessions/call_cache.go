@@ -60,7 +60,9 @@ const callCacheVersion = "calls-v15"
 //
 // cindy 1: a call through magpie's link (provider "magpie-<8 hex>") is
 // the gateway's, and left out (cindyGatewayProvider).
-var callParseVersions = map[string]int{"cindy": 1}
+// codex 1, zcode 1: a fork's copies of its parent's calls are the
+// parent's (codex_fork.go, zcDB.copied).
+var callParseVersions = map[string]int{"cindy": 1, "codex": 1, "zcode": 1}
 
 // CallCacheVersion is callCacheVersion and callParseVersions, for a cache
 // of what is made of the calls (usage's requests-v1.bin and heatmap): a

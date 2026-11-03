@@ -27,6 +27,7 @@ type cxLine struct {
 		SessionID      string          `json:"session_id"`
 		ThreadID       string          `json:"thread_id"`
 		ParentThreadID string          `json:"parent_thread_id"`
+		ForkedFrom     string          `json:"forked_from_id"`
 		Source         json.RawMessage `json:"source"`
 		TurnID         string          `json:"turn_id"`
 		ResponseID     string          `json:"response_id"`
@@ -723,6 +724,7 @@ func codexBody(s *state, b []byte, main bool) {
 		codexState(s).context(session, "", "")
 		codexState(s).beginSnapshot(at, p.ID, p.cxHistorySnapshot)
 		if s.ID == "" {
+			codexState(s).forkedFrom(s.codexPath, p.ForkedFrom)
 			s.ID = p.ID
 			if s.Provider = p.ModelProvider; s.Provider == "" {
 				s.Provider = "openai"

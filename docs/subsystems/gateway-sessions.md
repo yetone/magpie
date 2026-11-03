@@ -575,7 +575,27 @@ too ("usage" and omp's "model_usage" entries, a compaction's, a branch
 summary's and a tool result's usage, on the model and provider in use);
 the provider `magpie` (or `dial`) is magpie's entry, a failed call has no
 usage, and a fork's copy of its parent's entries (written before its
-header) is the parent's. The other agents the Sessions page reads (Cline,
+header) is the parent's. A Codex fork (/fork, a spawn_agent with the
+parent's context) writes every line of its parent's rollout into its own
+first, token_count events included, stamped at the fork's time; its
+session_meta names the parent (`forked_from_id`), and a checkpoint the
+parent's rollout holds (its total and last call alike) is the parent's,
+on Usage and Sessions both (`codexRolloutOf`, `codexCheckpointsOf` in
+[`codex_fork.go`](../../internal/sessions/codex_fork.go)). The parent is
+looked for in the same Codex home, by the UUIDv7 day of its id, then
+every day, then `archived_sessions`; one not found leaves the fork read
+as before. A ZCode side chat, fork or restored checkpoint copies its
+session's messages with new ids and the originals' times and tokens,
+each naming its original in `metadata.forkOrigin.messageId`; a copy
+whose original is still in the database is not counted (`zcDB.copied`
+in [`zcode.go`](../../internal/sessions/zcode.go)), one whose original
+is gone is. Both came from Sky (skyhuang1994): a ZCode side chat put a
+10-31 session's 0.42B tokens on 10-31 again, and a week of gpt-5.4 read
+5.1B tokens. Verification: `TestCodexForkCountsOnlyItsOwnCalls`,
+`TestCodexForkWithoutItsParentCountsTheCopies`,
+`TestZCodeCopiesCountedOnce`. OpenCode's fork copies the same way with
+no pointer to the original, and is still counted twice (#5072).
+The other agents the Sessions page reads (Cline,
 Qoder, Grok, Droid, Cursor, Hermes, Alma) have no reader yet (#1607). The
 Context page reads the gateway's own traces, so it shows none of these
 calls. Verification: `TestMiniMaxCodeCalls`, `TestKimiCode*` (the

@@ -14,6 +14,10 @@ import (
 // once, and keeps every other agent's shards.
 func TestCallParseVersionRaiseReadsThatAgentAlone(t *testing.T) {
 	d := setupCalls(t)
+	// from a magpie whose agents' calls are all at 0, whatever they are now
+	before := callParseVersions
+	callParseVersions = map[string]int{}
+	t.Cleanup(func() { callParseVersions = before })
 	cc := filepath.Join(d.claude, "projects", "-work-app", "sess1.jsonl")
 	writeLines(t, cc, claudeMsg("m1", "claude-opus-5-5", 100, 20, 5000, 1000, 1), claudeMsg("m2", "claude-opus-5-5", 7, 8, 0, 0, 2))
 	cx := filepath.Join(d.codex, "sessions", "2026", "09", "20", "rollout-2026-09-20T10-00-00-0190aaaa-1111-7222-8333-444455556666.jsonl")
