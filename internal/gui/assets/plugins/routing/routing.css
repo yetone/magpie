@@ -59,7 +59,11 @@
 .rt-hub i { font-style: normal; font-size: 10.5px; font-weight: 560; margin-top: 5px; padding: 1px 8px; border-radius: 999px; background: var(--fg); color: var(--card); }
 .rt-hub.tick, .rt-src.tick { animation: rttick .4s ease-out; }
 @keyframes rttick { 40% { transform: scale(1.04); } }
-.rt-accts { position: relative; z-index: 1; list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; min-width: 0; }
+/* one column as wide as the list: a row out of sight is as wide as WebKit
+   last drew it (content-visibility), and in a column as wide as its rows
+   "No request yet" held the page as wide as a wider window had it, a
+   scrollbar under it (young02036 on Discord) */
+.rt-accts { position: relative; z-index: 1; list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; min-width: 0; }
 .rt-accts li { position: relative; display: grid; grid-template-columns: 10px minmax(0, 1fr) fit-content(60%); align-items: center; column-gap: 10px; row-gap: 6px; padding: 9px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; transition: opacity .3s, border-color .3s, transform .5s cubic-bezier(.2, .8, .2, 1); }
 .rt-accts li { margin-left: calc(var(--depth, 0) * 18px); }
 /* a key off screen is not laid out or painted (#3164): with hundreds of
@@ -520,8 +524,10 @@ button.rt-session { cursor: pointer; }
 .rt-patadd { display: flex; gap: 6px; align-items: center; }
 .rt-pats .fbl:not(:empty) + .rt-patadd { margin-top: 4px; }
 .rt-patadd input { flex: 1; min-width: 0; }
-.rt-group .tags { display: flex; gap: 4px; flex: none; }
-.rt-group .tag { font-size: 11px; line-height: 18px; padding: 0 8px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line); color: var(--muted); white-space: nowrap; }
+/* the tags take up to half the row, onto more lines rather than pushing
+   Edit and the switch out of it (young02036 on Discord) */
+.rt-group .tags { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; flex: 0 1 auto; min-width: 0; max-width: 50%; }
+.rt-group .tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: 11px; line-height: 18px; padding: 0 8px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line); color: var(--muted); white-space: nowrap; }
 .rt-group .tag.bad { color: var(--red); }
 .rt-group .tag.idle { opacity: .55; }
 /* the routing tag is a pop-up button for the group's routings (#3450) */
@@ -601,7 +607,8 @@ button.rt-session { cursor: pointer; }
 .rt-pool .nm span:last-child { font-size: 12px; color: var(--muted); }
 /* a label column and a control column, so Routing's and Stays' segments
    start at one edge whatever their labels' widths */
-.rt-pool .ctl { display: grid; grid-template-columns: auto auto; align-items: center; justify-items: start; gap: 6px 8px; }
+.rt-pool .ctl { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; justify-items: start; gap: 6px 8px; min-width: 0; max-width: 100%; }
+.rt-pool .segs { max-width: 100%; flex-wrap: wrap; }
 .rt-pool .lab { display: contents; }
 .rt-pool .lab small { font-size: 11px; color: var(--muted); }
 /* narrow, a row keeps only its routing, which switches from here */
@@ -611,7 +618,7 @@ button.rt-session { cursor: pointer; }
     display: grid; grid-template-columns: auto minmax(0, 1fr) auto; /* the logos as wide as they are */
     gap: 6px 8px; padding: 12px 12px 12px 14px; /* the grip's room, as wide */
   }
-  body.web .rt-group .tags { display: flex; flex-wrap: wrap; grid-column: 2 / -1; grid-row: 2; }
+  body.web .rt-group .tags { justify-content: flex-start; max-width: none; grid-column: 2 / -1; grid-row: 2; }
   body.web .rt-group > .text { grid-column: 3; grid-row: 1; }
   body.web .rt-group .nm { flex-wrap: wrap; }
   body.web .rt-group .mem { white-space: normal; overflow-wrap: anywhere; }
@@ -628,7 +635,6 @@ button.rt-session { cursor: pointer; }
   body.web .rt-gadd { min-height: 44px; }
   body.web .rt-pool .ctl { grid-template-columns: minmax(0, 1fr); }
   body.web .rt-pool .lab small { padding-top: 6px; }
-  body.web .rt-pool .segs { flex-wrap: wrap; }
   body.web .rt-stats { flex-wrap: wrap; gap: 10px 16px; }
   /* the upstream a request went to takes a line of its own on a phone,
      so the reasoning beside the provider isn't cut to two letters */
