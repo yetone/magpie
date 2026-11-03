@@ -97,6 +97,58 @@ func TestPiGroupThinkingIsWhatPiRuns(t *testing.T) {
 	}
 }
 
+// #5037: a routing group has no api of its own — a Messages-only group
+// stays on Chat (allResponses) — so its entry went out with no promptCache
+// and Pi's cacheWarming stopped with "cache lifetime unavailable". Whatever
+// Claude member the group picks, the gateway's own translation marks the
+// request ephemeral for five minutes, so the group declares that short
+// lifetime; long stays out, the gateway marks an hour only where a
+// session's turns are often far apart (addedMark), so it is not always true.
+func TestPiGroupPromptCache(t *testing.T) {
+	syncHome(t)
+	if err := os.WriteFile(catalog.CachePath(), []byte(`{
+	  "ap": {"models": {"claude-opus-5-5": {"id":"claude-opus-5-5","name":"Claude Opus 5.5","limit":{"context":200000}}}},
+	  "zai": {"models": {"glm-4.6":{"id":"glm-4.6","name":"GLM-4.6","limit":{"context":204800}}}}
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalog.Reset()
+	if err := provider.Save(provider.Provider{ID: "ap", Name: "Anthropic Plugin", Key: "k", Anthropic: "http://127.0.0.1:2", Models: []string{"claude-opus-5-5"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SaveGroup(provider.Group{ID: "auto", Name: "Auto", Members: []string{"ap/claude-opus-5-5", "relay/glm-4.6"}}); err != nil {
+		t.Fatal(err)
+	}
+	ms := magpieProviderJSON("pi").(map[string]any)["models"].([]map[string]any)
+	var group bool
+	for _, e := range ms {
+		switch e["id"] {
+		case "group/auto":
+			group = true
+			if _, set := e["api"]; set {
+				t.Errorf("group api %v, want none (Chat)", e["api"])
+			}
+			if !reflect.DeepEqual(e["promptCache"], map[string]any{"short": 300}) {
+				t.Errorf("group/auto: promptCache %v, want {short: 300}", e["promptCache"])
+			}
+		case "ap/claude-opus-5-5":
+			if e["api"] != "anthropic-messages" {
+				t.Fatalf("member on %v, want anthropic-messages", e["api"])
+			}
+			if !reflect.DeepEqual(e["promptCache"], map[string]any{"short": 300, "long": 3600}) {
+				t.Errorf("member: promptCache %v, want short and long", e["promptCache"])
+			}
+		case "relay/glm-4.6":
+			if _, set := e["promptCache"]; set {
+				t.Errorf("relay/glm-4.6: promptCache %v, want none", e["promptCache"])
+			}
+		}
+	}
+	if !group {
+		t.Fatalf("no group/auto entry among %d", len(ms))
+	}
+}
+
 // Pi's clamp: the level itself, else the nearest above, else below.
 func TestPiClamp(t *testing.T) {
 	for _, c := range []struct {
