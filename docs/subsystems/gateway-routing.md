@@ -485,7 +485,12 @@ used only on the accounts it names, one it doesn't name on every account.
   key rotated) is kept, matching nothing, so the group stays held rather than
   let off to every account. A shared or
   imported group carries no accounts (`ShareGroup`, `ImportGroup`): they are
-  this computer's.
+  this computer's. An import whose text carries the id of a group of the
+  user's own (not a found one) replaces that group when the page asks
+  (`ImportGroupOver`, `replace` in `groups/import`; the Import box reads the
+  id itself and says "Replace <name>" before it is pressed): its accounts,
+  folder rules, switch and place stay. `TestImportGroupOverReplacesSameID`,
+  `group-import-replace.test.cjs`.
 - The group editor's Accounts section (`drawAccounts` in the routing plugin's
   `client.js`) has a row for each member's provider with more than one account
   (`/api/groups`' `accounts`, `groupAccounts` in

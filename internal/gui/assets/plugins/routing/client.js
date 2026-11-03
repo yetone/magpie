@@ -5765,6 +5765,17 @@ function routingPage(part) {
     gImportText.value = "";
     renderGroups();
   }
+  // importOver: the group of the user's own that pasted text would replace,
+  // by the id it carries (provider.ImportGroupOver): not one magpie found
+  function importOver(text) {
+    const a = text.indexOf("{"), b = text.lastIndexOf("}");
+    if (a < 0 || b < a) return null;
+    let x;
+    try { x = JSON.parse(text.slice(a, b + 1)); } catch { return null; }
+    const id = typeof x?.group?.id === "string" ? x.group.id.trim().toLowerCase() : "";
+    if (x?.magpie !== "routing-group" || !id) return null;
+    return groups.groups.find((g) => g.id === id && !g.auto && !g.hidden) || null;
+  }
   // importBox: paste a shared group, Import adds it; then what was added,
   // and what of it this magpie has none of, until Done
   let gImportBox = null;
@@ -5777,15 +5788,27 @@ function routingPage(part) {
       gImportText.setAttribute("aria-label", t("A routing group shared from magpie"));
       const go = el("button", "text primary rt-gimport-go", t("Import"));
       go.type = "button";
+      // a text whose group id is a group of the user's replaces that group:
+      // the button and the line under the box say which, before it is pressed
+      const warn = el("div", "rt-gimport-note rt-gimport-over");
+      warn.hidden = true;
+      const sync = () => {
+        const over = importOver(gImportText.value);
+        go.textContent = over ? t("Replace {name}", { name: over.name }) : t("Import");
+        warn.hidden = !over;
+        warn.textContent = over ? t("{name} has the same id: its models, routing and rules are replaced by this group's; its accounts and folder rules stay", { name: over.name }) : "";
+      };
+      gImportText.oninput = sync;
       go.onclick = async () => {
         const text = gImportText.value;
         if (!text.trim()) { gImportText.focus({ preventScroll: true }); return; }
+        const replace = !!importOver(text);
         go.disabled = true;
         try {
-          groups = groupsFrom(await api("groups/import", { text }));
+          groups = groupsFrom(await api("groups/import", replace ? { text, replace } : { text }));
           gImport = { res: groups.imported };
           gImportText.value = "";
-          status(t("Added {name}", { name: groups.imported.name }), "ok");
+          status(t(groups.imported.replaced ? "Replaced {name}" : "Added {name}", { name: groups.imported.name }), "ok");
           renderGroups();
           load(); // the gateway's model list, the agents' pickers
         } catch (e) { go.disabled = false; status(e.message, "err"); }
@@ -5795,9 +5818,10 @@ function routingPage(part) {
       no.onclick = closeImport;
       const acts = el("div", "acts");
       acts.append(go, no);
-      parts.push(el("div", "rt-gtpl-head", t("Paste a routing group someone shared from their magpie: its models, routing and rules come with it, never a key")), gImportText, acts);
+      sync();
+      parts.push(el("div", "rt-gtpl-head", t("Paste a routing group someone shared from their magpie: its models, routing and rules come with it, never a key")), gImportText, warn, acts);
     } else {
-      parts.push(el("div", "rt-gimport-done", t("Added {name}", { name: res.name })));
+      parts.push(el("div", "rt-gimport-done", t(res.replaced ? "Replaced {name}" : "Added {name}", { name: res.name })));
       if (res.missing?.length) parts.push(el("div", "rt-gimport-missing", t("Not in your magpie, left out: {models}", { models: res.missing.join(", ") })));
       if (res.instead?.length) parts.push(el("div", "rt-gimport-note", t("The same model from your own provider: {models}", { models: res.instead.join(", ") })));
       if (res.rules) parts.push(el("div", "rt-gimport-note", t(res.rules === 1 ? "1 rule left out with them" : "{n} rules left out with them", { n: res.rules })));

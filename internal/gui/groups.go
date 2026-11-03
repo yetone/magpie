@@ -488,6 +488,9 @@ func groupRoutes(mux *http.ServeMux) {
 			Kind string `json:"kind"`
 			// import: a group shared as text (provider.ShareGroup)
 			Text string `json:"text"`
+			// Replace: the text's id, when it is a group of the user's,
+			// replaces that group (provider.ImportGroupOver)
+			Replace bool `json:"replace"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			fail(rw, err)
@@ -539,7 +542,11 @@ func groupRoutes(mux *http.ServeMux) {
 			shared, err = provider.ShareGroup(in.ID)
 		case "import":
 			var res provider.Imported
-			if res, err = provider.ImportGroup(body.Text); err == nil {
+			imp := provider.ImportGroup
+			if body.Replace {
+				imp = provider.ImportGroupOver
+			}
+			if res, err = imp(body.Text); err == nil {
 				imported = &res
 			}
 		case "template":
