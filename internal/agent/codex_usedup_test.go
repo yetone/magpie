@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // A ChatGPT account that runs out of its allowance after a magpie model was
@@ -119,6 +121,11 @@ func TestCodexKeptOnChatGPT(t *testing.T) {
 // its sign-in.
 func TestCodexOwnModelGoesThroughMagpieWhileUsedUp(t *testing.T) {
 	home, read := codexHome(t, `{"tokens":{"access_token":"x","id_token":"x.e30.x"}}`, "model = \"gpt-a\"\n")
+	// the Codex subscription falls back to another provider while the
+	// account is out: magpie has something to serve the turn on
+	if err := provider.Save(provider.Provider{ID: "codex", Fallback: []string{"fake/m1"}}); err != nil {
+		t.Fatal(err)
+	}
 	os.WriteFile(filepath.Join(home, ".codex", "models_cache.json"),
 		[]byte(`{"models":[{"slug":"gpt-a","display_name":"A","priority":1}]}`), 0o644)
 	cx := codex(home)
@@ -176,6 +183,58 @@ func TestCodexOwnModelGoesThroughMagpieWhileUsedUp(t *testing.T) {
 	}
 }
 
+// One ChatGPT account, out, on one of Codex's own models joined beside the
+// sign-in, and nothing else in magpie to serve that model on: no fallback
+// on the Codex subscription and no other account (xiaoq6285 on Discord:
+// a Plus account in the Windows Codex app, the menu down to "magpie" with
+// no quota after the five-hour limit, the app erroring and restarting at
+// the limit and again at the reset). magpie leaves Codex on its sign-in:
+// every turn it took over would be refused on that same account, so the
+// app keeps the account, its usage and its reset, and nothing restarts.
+func TestCodexOwnModelOneSpentAccountStaysOnItsSignIn(t *testing.T) {
+	home, read := codexHome(t, `{"tokens":{"access_token":"x","id_token":"x.e30.x"}}`, "model = \"gpt-a\"\n")
+	os.WriteFile(filepath.Join(home, ".codex", "models_cache.json"),
+		[]byte(`{"models":[{"slug":"gpt-a","display_name":"A","priority":1}]}`), 0o644)
+	cx := codex(home)
+	if ok, err := cx.Join(); err != nil || !ok {
+		t.Fatalf("join: %v %v", ok, err)
+	}
+	if codexOwnViaMagpie("gpt-a") == "" {
+		t.Fatal("magpie lists no codex/gpt-a: the test proves nothing")
+	}
+	route, _, known := codexAppRoute()
+	if !known {
+		t.Fatal("route not known")
+	}
+	// the route is what the app's app-server is ended over
+	// (KeepCodexAppOnItsProvider): unchanged, the app keeps running
+	same := func(when string) {
+		t.Helper()
+		cfg := read()
+		if !strings.Contains(cfg, `model = "gpt-a"`) || strings.Contains(cfg, "model_provider =") || !strings.Contains(cfg, "openai_base_url") {
+			t.Fatalf("%s: Codex moved off its sign-in:\n%s", when, cfg)
+		}
+		if r, out, _ := codexAppRoute(); r != route || out || cx.AppOut() {
+			t.Fatalf("%s: the app's app-server would be ended (out %v):\n%s\nwas:\n%s", when, out, r, route)
+		}
+	}
+	codexUsedUp = func() bool { return true }
+	for _, when := range []string{"used up", "used up, synced again"} {
+		if err := cx.Sync(); err != nil {
+			t.Fatal(err)
+		}
+		same(when)
+	}
+	codexUsedUp = func() bool { return false }
+	if err := cx.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	same("reset")
+	if !cx.Joined() {
+		t.Fatal("reset: not joined")
+	}
+}
+
 // Kept on ChatGPT, a used-up account on one of Codex's own models leaves
 // Codex as it is: the user chose the sign-in.
 func TestCodexOwnModelKeptOnChatGPT(t *testing.T) {
@@ -213,6 +272,10 @@ func TestCodexOwnModelOutThenKeptOnChatGPT(t *testing.T) {
 	cx := codex(home)
 	if ok, err := cx.Join(); err != nil || !ok {
 		t.Fatalf("join: %v %v", ok, err)
+	}
+	// a fallback for magpie to serve the turn on (TestCodexOwnModelOneSpentAccountStaysOnItsSignIn)
+	if err := provider.Save(provider.Provider{ID: "codex", Fallback: []string{"fake/m1"}}); err != nil {
+		t.Fatal(err)
 	}
 	codexUsedUp = func() bool { return true }
 	t.Cleanup(func() { codexUsedUp = func() bool { return false } })

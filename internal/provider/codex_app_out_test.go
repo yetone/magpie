@@ -98,3 +98,61 @@ func TestCodexReadNowSwitchesAtOnce(t *testing.T) {
 		}
 	}
 }
+
+// Whether magpie has anything to serve Codex's own model on while the
+// account Codex is signed in to is out (xiaoq6285 on Discord, one Plus
+// account): with that account alone and no fallback, nothing; another
+// ChatGPT account not known out, or a fallback on the Codex
+// subscription, is something. Another account known out is not.
+func TestCodexServesWhileOut(t *testing.T) {
+	home := signIn(t) // me@example.com
+	rememberLogins(true)
+	if CodexServesWhileOut("gpt-5.5") {
+		t.Fatal("one account, no fallback: serves")
+	}
+	if CodexServesWhileOut("") {
+		t.Fatal("no model: serves")
+	}
+	codexSignIn(t, home, "spare@example.com", "r-spare")
+	rememberLogins(true)
+	var active, other string
+	for _, l := range Logins("codex") {
+		if l.Active {
+			active = l.User
+		} else {
+			other = l.User
+		}
+	}
+	if other == "" {
+		t.Fatalf("no second account: %+v", Logins("codex"))
+	}
+	loginUsageCache.Lock()
+	oldCache := loginUsageCache.m
+	loginUsageCache.m = map[string]loginUsageEntry{
+		"codex/" + active: {at: time.Now(), q: SubscriptionQuota{Provider: "codex", User: active, Held: true}},
+	}
+	loginUsageCache.Unlock()
+	t.Cleanup(func() {
+		loginUsageCache.Lock()
+		loginUsageCache.m = oldCache
+		loginUsageCache.Unlock()
+	})
+	if !CodexServesWhileOut("gpt-5.5") {
+		t.Fatalf("another account (%s), not known out: doesn't serve", other)
+	}
+	loginUsageCache.Lock()
+	loginUsageCache.m["codex/"+other] = loginUsageEntry{at: time.Now(), q: SubscriptionQuota{Provider: "codex", User: other, Held: true}}
+	loginUsageCache.Unlock()
+	if CodexServesWhileOut("gpt-5.5") {
+		t.Fatal("every account out, no fallback: serves")
+	}
+	if err := Save(Provider{ID: "fb", Name: "FB", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"m"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(Provider{ID: "codex", Fallback: []string{"fb/m"}}); err != nil {
+		t.Fatal(err)
+	}
+	if !CodexServesWhileOut("gpt-5.5") {
+		t.Fatal("a fallback on the Codex subscription: doesn't serve")
+	}
+}

@@ -97,16 +97,29 @@ func codexAppRoute() (route string, out, known bool) {
 	}
 	out = a.AppOut != nil && a.AppOut()
 	var b strings.Builder
+	var mp string
 	for _, k := range []string{"model_provider", "openai_base_url"} {
 		v, _ := edit.GetTOMLTop(a.Path, k)
+		if k == "model_provider" {
+			mp = v
+		}
 		b.WriteString(k + "=" + v + "\n")
 	}
 	t, _ := edit.GetTOMLTable(a.Path, "model_providers."+magpieID)
 	b.WriteString("magpie.base_url=" + t["base_url"] + "\n")
-	// and whether it requires OpenAI auth, which decides whether the app
-	// has its ChatGPT account at all (openaiAuth in codex.go): read as the
-	// app-server starts, like the rest
-	b.WriteString("magpie.requires_openai_auth=" + t["requires_openai_auth"] + "\n")
+	// and, while magpie's table is Codex's provider, whether it requires
+	// OpenAI auth, which decides whether the app has its ChatGPT account
+	// at all (openaiAuth in codex.go): read as the app-server starts, like
+	// the rest. The app-server reads the account of the provider Codex is
+	// on (codex-rs account_state), so beside the sign-in, on Codex's
+	// built-in provider, the key follows the account running out and
+	// coming back (openaiAuth) with nothing for the app to read again:
+	// counted there, it ended the app's app-server at the limit and again
+	// at the reset, and the ChatGPT app showed an error and relaunched
+	// each time (xiaoq6285 on Discord, #4550)
+	if mp == magpieID {
+		b.WriteString("magpie.requires_openai_auth=" + t["requires_openai_auth"] + "\n")
+	}
 	if out {
 		b.WriteString("out\n")
 	}
