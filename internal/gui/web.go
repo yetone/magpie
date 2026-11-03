@@ -21,6 +21,7 @@ import (
 	"github.com/klauspost/compress/gzhttp"
 
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/update"
 )
 
@@ -141,6 +142,10 @@ func (w *Web) Wait() error {
 	if err != nil {
 		return err
 	}
+	// the plugin hosts end, waited for, first: one still running at the
+	// exec is a child nothing waits for after it, <defunct> under this
+	// pid from then on (#3285)
+	plugin.EndHosts()
 	return update.Reexec(exe, os.Args[1:], append(os.Environ(), webRunKey+"="+w.key))
 }
 

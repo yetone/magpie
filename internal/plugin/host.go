@@ -518,6 +518,49 @@ func (h *host) wait() error {
 // at once and closes the pipe a moment later, which ends the reader too.
 func (h *host) reap() {
 	h.fail(quitErr(h.wait()))
+	live.Lock()
+	delete(live.hosts, h)
+	live.Unlock()
+}
+
+// live are the hosts started and not yet reaped, the retired ones on their
+// way out among them.
+var live = struct {
+	sync.Mutex
+	hosts map[*host]bool
+	// ended is set by EndHosts: no host starts after it
+	ended bool
+}{hosts: map[*host]bool{}}
+
+// errHostsEnded is a host asked for once EndHosts has run.
+var errHostsEnded = errors.New("magpie is restarting; the plugins are back in a moment")
+
+// EndHosts stops every plugin host, waits until each has been waited for,
+// and starts none after: what magpie runs before it puts a new version in
+// its own place (update.Reexec). A host still running at the exec was one
+// nothing waited for after it, so each restart to update (magpie web's
+// AutoRestart) left one <defunct> magpie-bun under magpie's pid for as long
+// as it ran (#3285, found by skygunner and AAEE86; acezan on Discord saw
+// 57 after 47 hours as a systemd service).
+func EndHosts() {
+	live.Lock()
+	live.ended = true
+	hs := make([]*host, 0, len(live.hosts))
+	for h := range live.hosts {
+		hs = append(hs, h)
+	}
+	live.Unlock()
+	hostMu.Lock()
+	current = nil
+	hostMu.Unlock()
+	var wg sync.WaitGroup
+	for _, h := range hs {
+		wg.Go(func() {
+			h.stop()
+			_ = h.wait()
+		})
+	}
+	wg.Wait()
 }
 
 // quitErr is the error of a host whose child ended with err.
@@ -1040,8 +1083,16 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
+	// started and counted live under one lock, so EndHosts misses none
+	live.Lock()
+	if live.ended {
+		live.Unlock()
+		output.Close()
+		return nil, false, errHostsEnded
+	}
 	waited, err := output.Start(cmd)
 	if err != nil {
+		live.Unlock()
 		return nil, false, err
 	}
 	hctx, hcancel := context.WithCancel(context.Background())
@@ -1062,6 +1113,8 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 		output:   output,
 		waited:   waited,
 	}
+	live.hosts[h] = true
+	live.Unlock()
 	go func() {
 		drainStderr(output.Err)
 		output.ErrRead()

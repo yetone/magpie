@@ -115,3 +115,70 @@ func killSleeps(secs string) {
 		}
 	}
 }
+
+// EndHosts, which magpie runs before it puts a new version in its place,
+// returns with every host ended and waited for, and starts none after: a
+// host left running
+// at the exec was a <defunct> magpie-bun under magpie's pid from then on
+// (#3285).
+func TestEndHostsLeavesNoChild(t *testing.T) {
+	sandbox(t)
+	t.Cleanup(func() {
+		live.Lock()
+		live.ended = false
+		live.Unlock()
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	abs, _ := filepath.Abs("testdata/fake/index.js")
+	if _, err := Add(ctx, abs); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Providers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(childrenNamed("bun")) == 0 {
+		t.Fatal("no host running to end")
+	}
+	EndHosts()
+	if c := childrenNamed("bun"); len(c) > 0 {
+		t.Fatalf("children left once EndHosts returned: %v", c)
+	}
+	hostMu.Lock()
+	_, err := getLocked(ctx)
+	hostMu.Unlock()
+	if err == nil {
+		t.Fatal("a host started after EndHosts")
+	}
+	if c := childrenNamed("bun"); len(c) > 0 {
+		t.Fatalf("children after a host was asked for: %v", c)
+	}
+}
+
+// childrenNamed lists this process's children, running or <defunct>,
+// whose name holds name.
+func childrenNamed(name string) []string {
+	me := strconv.Itoa(os.Getpid())
+	ents, _ := os.ReadDir("/proc")
+	var c []string
+	for _, e := range ents {
+		if _, err := strconv.Atoi(e.Name()); err != nil {
+			continue
+		}
+		b, err := os.ReadFile("/proc/" + e.Name() + "/stat")
+		if err != nil {
+			continue
+		}
+		s := string(b)
+		i := strings.LastIndexByte(s, ')')
+		if i < 0 || i+2 > len(s) {
+			continue
+		}
+		f := strings.Fields(s[i+2:])
+		comm := s[strings.IndexByte(s, '(')+1 : i]
+		if len(f) > 1 && f[1] == me && strings.Contains(comm, name) {
+			c = append(c, e.Name()+" "+f[0]+" "+comm)
+		}
+	}
+	return c
+}
