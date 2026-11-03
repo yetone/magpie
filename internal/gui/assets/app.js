@@ -13231,6 +13231,7 @@ function renderAccounts(a, p) {
     if (l.until) aq.append(Object.assign(planSpan({ until: l.until }), { className: "aq-until" }));
     row.append(aq);
     row.classList.add("with-aq"); // not :has(.aq), which Safari 15.0 lacks (#220)
+    if (p) row.append(...accountRestLines(p, l.user)); // maxleebeta on Discord
     // Remove goes under ⋯ too, but beside Sign in again while signed out
     if (!row.classList.contains("signed-out")) tools.append(...line.querySelectorAll(":scope > .text.quiet"));
     if (tools.childElementCount) {
@@ -14532,24 +14533,7 @@ function renderKeyAccounts(p) {
     // a line of its own under the key's, so the row's controls stay in reach
     let restLine = null;
     if (k.rest && new Date(k.rest.until) > Date.now()) {
-      const r = el("span", "key-rest", t("Resting · {why} · back at {time}", { why: (k.rest.status ? k.rest.status + " " : "") + t(KEY_FAIL[k.rest.why] || "failed"), time: restBack(k.rest.until) }) + (k.rest.probed ? " · " + t("checked in the background, back as soon as it answers") : ""));
-      r.title = t("The gateway passes this key over until then, and tries the next one");
-      // lifted by hand (#1869): the next request asks it again, and a
-      // refusal then rests it again as before
-      const go = el("button", "text key-unrest", t("Try now"));
-      go.title = t("Ends the rest: the next request asks it again. Refused again, it rests again.");
-      go.onclick = async (e) => {
-        e.stopPropagation();
-        go.classList.add("busy");
-        try {
-          await api("gateway/unrest", { key: k.rest.key });
-          k.rest = null;
-          renderProviders();
-          status(t("{key} is asked again from the next request", { key: k.name || k.masked }), "ok");
-        } catch (err) { go.classList.remove("busy"); statusErr(err); }
-      };
-      restLine = el("div", "key-rest-line");
-      restLine.append(r, go);
+      restLine = restLineOf(k.rest, "", t("The gateway passes this key over until then, and tries the next one"), k.name || k.masked, () => { k.rest = null; });
       row.classList.add("resting");
     }
     if (k.on && several) row.append(keyWeight(p, k, weightOf(k), weights));
@@ -14812,6 +14796,35 @@ function splitKeys(text) {
   }
   return out;
 }
+// a rest's line: why, till when, the vendor's words, Try now (#1869)
+function restLineOf(r, model, title, name, lifted) {
+  const why = (r.status ? r.status + " " : "") + t(KEY_FAIL[r.why] || "failed"), time = restBack(r.until);
+  const s = el("span", "key-rest", (model ? t("{model} resting · {why} · back at {time}", { model, why, time }) : t("Resting · {why} · back at {time}", { why, time })) + (r.probed ? " · " + t("checked in the background, back as soon as it answers") : ""));
+  s.title = title;
+  const go = el("button", "text key-unrest", t("Try now"));
+  go.title = t("Ends the rest: the next request asks it again. Refused again, it rests again.");
+  go.onclick = async (e) => {
+    e.stopPropagation();
+    go.classList.add("busy");
+    try {
+      await api("gateway/unrest", { key: r.key });
+      lifted();
+      renderProviders();
+      status(t("{key} is asked again from the next request", { key: name }), "ok");
+    } catch (err) { go.classList.remove("busy"); statusErr(err); }
+  };
+  const line = el("div", "key-rest-line");
+  line.append(s);
+  if (r.error) line.append(Object.assign(el("span", "key-rest-said", r.error), { title: r.error }));
+  line.append(go);
+  return line;
+}
+
+const accountRestLines = (p, user) => {
+  const u = String(user).toLowerCase(), rs = p.accountRests?.[u] || [];
+  return rs.filter((r) => new Date(r.until) > Date.now()).map((r) => restLineOf(r, r.model, r.model ? t("Until then {model} goes to another account; its other models are used as before", { model: r.model }) : t("The gateway passes this account over until then, and tries the next one"), r.model ? r.model + " · " + user : user, () => p.accountRests[u] = rs.filter((x) => x !== r)));
+};
+
 // a key's rest, worded as the Routing page words a failure
 const KEY_FAIL = { rate: "rate limited", credit: "out of credit", quota: "quota used up", other: "failed", auth: "sign-in required", verify: "needs verification", refused: "refused (safety filter)", proxy: "proxy not reachable", slow: "slow to start" };
 

@@ -2816,6 +2816,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc .key-rest-line { flex: 1 0 100%; display: flex; align-items: center; gap: 8px; min-width: 0; padding-left: 25px; }
 .acc .key-rest-line .key-rest { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .acc .key-rest-line .key-unrest { flex: none; white-space: nowrap; }
+.acc .key-rest-line .key-rest-said { flex: 1 1 0; min-width: 0; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .acc .proto { flex: none; display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 5px 0 7px; font: inherit; font-size: 11px; color: var(--muted); border: 0; border-radius: 5px; background: var(--pill); white-space: nowrap; cursor: default; transition: opacity .15s, background .12s, color .12s; }
 .acc .proto svg { opacity: .7; transition: transform .15s var(--ease); }
 .acc .proto.open svg { transform: rotate(180deg); }

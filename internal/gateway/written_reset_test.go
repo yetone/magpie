@@ -375,3 +375,81 @@ func TestFailureReadsEscapedWords(t *testing.T) {
 		}
 	}
 }
+
+// maxleebeta's 429 from WorkBuddy AI (Discord, 11-03), byte for byte: its
+// "WorkBuddy: " in ASCII and a space before 重置, with 82% of the
+// account's credits left. It is read as resetting at 15:57:19 UTC, rests
+// that model alone till then, and RestsUnder lists that rest under the
+// account for the Providers page, with the model and the vendor's words;
+// a rest gone by, another account's and another provider's are not
+// listed.
+func TestRateLimitedModelListedUnderAccount(t *testing.T) {
+	const said = `{"type":"rate_limit_error","message":"WorkBuddy: 您的使用量已超出频率限制，将在 2026-11-03 23:57:19 UTC+8 重置，您也可以切换其他模型继续使用。"}`
+	cst := time.FixedZone("", 8*3600)
+	now := time.Date(2026, 11, 3, 21, 0, 0, 0, cst)
+	if got, want := resetsAt([]byte(said), now), 2*time.Hour+57*time.Minute+19*time.Second; got != want {
+		t.Fatalf("resets in %v, want %v", got, want)
+	}
+	if got := now.Add(resetsAt([]byte(said), now)).UTC(); !got.Equal(time.Date(2026, 11, 3, 15, 57, 19, 0, time.UTC)) {
+		t.Fatalf("resets at %v", got)
+	}
+	if f := failure(429, []byte(said)); f != failQuota {
+		t.Fatalf("failure %s", f)
+	}
+
+	old := allowances
+	defer func() { allowances = old }()
+	allowances = func(string) map[string]provider.Allowance { return nil }
+	s := &Server{}
+	acct := func(id, user, model string) candidate {
+		return candidate{p: provider.Provider{ID: id, Account: &provider.Account{Agent: id, User: user}}, model: model, rest: id + "#" + user}
+	}
+	// the same words, the time moved to 3 hours from now
+	back := 3 * time.Hour
+	body := []byte(strings.Replace(said, "2026-11-03 23:57:19", time.Now().Add(back).In(cst).Format("2006-01-02 15:04:05"), 1))
+	c := acct("workbuddy-ai", "Max.Lee@Example.com", "gpt-6-astra")
+	r := s.restAfter(c, 429, http.Header{}, body)
+	if r.Why != failQuota || r.By != "resets" || r.Key != c.restID() {
+		t.Fatalf("rests %+v", r)
+	}
+	if !resting(c) || resting(acct("workbuddy-ai", "Max.Lee@Example.com", "deepseek-v4.1-flash-sg")) {
+		t.Fatal("not the model alone")
+	}
+	// beside it: a rest gone by, another account's, another provider's
+	restingUntil.Lock()
+	restingUntil.m["workbuddy-ai@max.lee@example.com/glm-5.3-flash"] = time.Now().Add(-time.Minute)
+	restingUntil.m["workbuddy-ai@other@example.com"] = time.Now().Add(time.Hour)
+	restingUntil.m["workbuddy@max.lee@example.com/gpt-6-astra"] = time.Now().Add(time.Hour)
+	restingUntil.Unlock()
+	defer func() {
+		restingUntil.Lock()
+		for _, k := range []string{c.restID(), "workbuddy-ai@max.lee@example.com/glm-5.3-flash", "workbuddy-ai@other@example.com", "workbuddy@max.lee@example.com/gpt-6-astra"} {
+			delete(restingUntil.m, k)
+			delete(restingUntil.note, k)
+		}
+		restingUntil.Unlock()
+	}()
+
+	got := RestsUnder("workbuddy-ai@max.lee@example.com")
+	if len(got) != 1 {
+		t.Fatalf("listed %+v", got)
+	}
+	g := got[0]
+	if g.Key != "workbuddy-ai@max.lee@example.com/gpt-6-astra" || g.Model != "gpt-6-astra" || g.Why != failQuota || g.Status != 429 || g.By != "resets" {
+		t.Fatalf("listed %+v", g)
+	}
+	if d := time.Until(g.Until); d > back || d < back-time.Minute {
+		t.Fatalf("until in %v, want %v", d, back)
+	}
+	if !strings.Contains(g.Error, "将在") || !strings.Contains(g.Error, "重置") {
+		t.Fatalf("the vendor's words: %q", g.Error)
+	}
+	// the provider's: each account's, never another provider's
+	seen := map[string]bool{}
+	for _, r := range RestsUnder("workbuddy-ai@") {
+		seen[r.Key] = true
+	}
+	if !seen[c.restID()] || !seen["workbuddy-ai@other@example.com"] || seen["workbuddy@max.lee@example.com/gpt-6-astra"] || seen["workbuddy-ai@max.lee@example.com/glm-5.3-flash"] {
+		t.Fatalf("the provider's accounts: %v", seen)
+	}
+}

@@ -315,6 +315,10 @@ type providerJSON struct {
 	// Move is where a built-in subscription stands with the community
 	// plugin that can run it (provider.Move): set for those that have one
 	Move *moveJSON `json:"move,omitempty"`
+	// a subscription account's rests in force, by its user in lower case:
+	// its own and each of its models' (maxleebeta on Discord: WorkBuddy's
+	// 429 "将在 … 重置" rested a model, credits left, and nothing here said so)
+	AccountRests map[string][]provider.KeyRest `json:"accountRests,omitempty"`
 }
 
 type moveJSON struct {
@@ -807,6 +811,9 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 			}
 		}
 	}
+	if p.Account != nil {
+		out.AccountRests = accountRests(p.ID)
+	}
 	exposed := map[string]bool{}
 	exposedList := ls.Exposed
 	for _, m := range exposedList {
@@ -1001,6 +1008,28 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 
 // keyRestOf is gateway.RestOf, swapped in tests.
 var keyRestOf = gateway.RestOf
+
+// restsUnder is gateway.RestsUnder, swapped in tests.
+var restsUnder = gateway.RestsUnder
+
+// accountRests are the rests in force of a subscription's accounts, by
+// user in lower case: an account's own (provider@user) and each of its
+// models' (provider@user/model), as the gateway keys them (restKey,
+// restID); nil when none rests.
+func accountRests(id string) map[string][]provider.KeyRest {
+	var out map[string][]provider.KeyRest
+	for _, r := range restsUnder(id + "@") {
+		user, model, _ := strings.Cut(strings.TrimPrefix(r.Key, id+"@"), "/")
+		if user == "" {
+			continue
+		}
+		if out == nil {
+			out = map[string][]provider.KeyRest{}
+		}
+		out[user] = append(out[user], provider.KeyRest{Why: r.Why, Status: r.Status, Until: r.Until, Key: r.Key, Probed: r.Probed, By: r.By, Model: cmp.Or(r.Model, model), Error: r.Error})
+	}
+	return out
+}
 
 func providersState() providersJSON {
 	// an account signed in since start-up is listed with its vendor's
