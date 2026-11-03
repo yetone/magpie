@@ -262,7 +262,9 @@ func trayUsageText(q provider.SubscriptionQuota, now time.Time, left, pace bool)
 // follows its figure, in both, as the Usage page's cards show it. The text
 // has the windows of the kinds given alone (trayShownKinds); the tooltip
 // has them all. The tooltip's own words are in lang (trayLang), as the
-// tray menu's are; a window's name and an error are the card's.
+// tray menu's are, and so are a window's name and unit where the page has
+// a word for them, as its card says them (pageWord); an error is the
+// card's.
 func trayCardText(lang string, q provider.SubscriptionQuota, now time.Time, left, pace bool, kinds []string) (label, tip string) {
 	if strings.HasPrefix(q.Provider, trayTotal) {
 		return q.Balance, q.Name // trayTotalCard's: its rows, and its tooltip
@@ -310,9 +312,13 @@ func trayCardText(lang string, q provider.SubscriptionQuota, now time.Time, left
 		if used != math.Trunc(used) {
 			tipPct = fmt.Sprintf("%.1f%%", used)
 		}
-		line := w.Name + " " + trayText(lang, word, tipPct)
+		// the window's name and its count's unit as its card says them
+		// (t(w.name), t(w.unit) in app.js)
+		name := trayWindowName(lang, w.Name)
+		w.Unit = pageWord(lang, w.Unit)
+		line := name + " " + trayText(lang, word, tipPct)
 		if c := w.Count(left); c != "" {
-			line = w.Name + " " + c + " · " + trayText(lang, word, tipPct)
+			line = name + " " + c + " · " + trayText(lang, word, tipPct)
 		}
 		line += paceNote
 		if at := resetAt(w, now); !at.IsZero() && at.After(now) {
