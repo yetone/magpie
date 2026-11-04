@@ -76,7 +76,7 @@ func storedGroups(t *testing.T) []map[string]any {
 }
 
 func TestParseRoutingStays(t *testing.T) {
-	for in, want := range map[string]string{"smart": "", "": "", "order": "order", "In-Order": "order", "rotate": "rotate", "usage": "usage", "least-used": "usage", "fast": "fast", "Fastest": "fast", "speed": "fast", "speed-first": "fast", "cheap": "cheap", "Cheapest": "cheap", "cheapest-first": "cheap", "price": "cheap"} {
+	for in, want := range map[string]string{"smart": "", "": "", "order": "order", "In-Order": "order", "rotate": "rotate", "usage": "usage", "least-used": "usage", "fast": "fast", "Fastest": "fast", "speed": "fast", "speed-first": "fast", "cheap": "cheap", "Cheapest": "cheap", "cheapest-first": "cheap", "price": "cheap", "expiring": "expiring", "free-expiry": "expiring", "Soonest-Free": "expiring"} {
 		if got, err := parseRouting(in); err != nil || got != want {
 			t.Errorf("routing %q: %q %v, want %q", in, got, err, want)
 		}

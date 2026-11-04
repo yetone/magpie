@@ -2045,6 +2045,11 @@ type weighing struct {
 	// only when the routing weighs by it (routes.Strategy.ByFree)
 	free map[string]bool
 
+	// expires is when each free seat's quota is first lost (routes.Expires),
+	// by rest key: filled only when the routing weighs by plan
+	// (routes.Strategy.ByPlan, Free quota by expiry)
+	expires map[string]time.Time
+
 	// speed is each seat's speed lately, by restID (a group's heads can
 	// be two models on one key): filled only when the routing weighs by
 	// it (routes.Strategy.BySpeed)
@@ -2236,6 +2241,26 @@ func weighRouted(p provider.Provider, cs []candidate, model string, from provide
 		for i, c := range cs {
 			free := c.p.FreeModel(c.model)
 			seats[i].Free, wg.free[c.rest] = free, free
+		}
+	}
+	if st.ByPlan {
+		// an account's plan as its vendor or plugin named it
+		// (Account.Plan): a free one is spent before a paid one, and the
+		// trace tells it free with when its quota is first lost
+		if wg.free == nil {
+			wg.free = map[string]bool{}
+		}
+		wg.expires = map[string]time.Time{}
+		for i, c := range cs {
+			seats[i].FreePlan = c.p.Account != nil && provider.FreePlan(c.p.Account.Plan)
+			if seats[i].FreePlan {
+				wg.free[c.rest] = true
+			}
+			if wg.free[c.rest] {
+				if t := routes.Expires(seats[i]); !t.IsZero() {
+					wg.expires[c.rest] = t
+				}
+			}
 		}
 	}
 	if st.BySpeed {

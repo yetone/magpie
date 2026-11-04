@@ -50,7 +50,27 @@ const (
 	// before it that renews meanwhile doesn't take its requests back
 	// (dzxx0496 on Discord; routes.Drain).
 	Drain = "drain"
+	// FreeExpiring spends free quota before paid, the free quota that is
+	// lost soonest first: a free account (FreePlan, or a model that costs
+	// nothing there, FreeModel) at its next reset or its credits' expiry,
+	// then the paid ones as Smart orders them, and the used up last
+	// (routes.FreeExpiring; wowbbs on Discord: five check-in accounts of
+	// WorkBuddy, MiniMax, Trae and Qoder in one group). A group's only.
+	FreeExpiring = "expiring"
 )
+
+// FreePlan says whether an account's plan, as its vendor or plugin names
+// it, is a free one: "Free", "Free plan", a trial. FreeExpiring spends
+// such an account's quota before a paid one's.
+func FreePlan(plan string) bool {
+	p := strings.ToLower(plan)
+	for _, w := range []string{"free", "trial", "免费", "试用", "體驗", "体验"} {
+		if strings.Contains(p, w) {
+			return true
+		}
+	}
+	return false
+}
 
 // pluginRouting is a routing a plugin serves: "<plugin>/<name>".
 var pluginRouting = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9][A-Za-z0-9._-]*$`)

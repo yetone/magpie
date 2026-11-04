@@ -1251,9 +1251,10 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			if err != nil {
 				return err
 			}
-			if r == provider.Manual || r == provider.Cheapest {
+			if r == provider.Manual || r == provider.Cheapest || r == provider.FreeExpiring {
 				// cheap: its keys and accounts all bill the provider's one
-				// price, so there is nothing to weigh
+				// price, so there is nothing to weigh; expiring weighs
+				// several subscriptions' free quota, a group's members
 				return fmt.Errorf("routing=%s is a group's: a provider's keys or accounts are routed smart, order, rotate, usage, pace, weight, free, fast or drain", r)
 			}
 			p.Routing = r

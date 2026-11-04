@@ -51,13 +51,14 @@ func TestFreeFirstPutsFreeAheadOfPaid(t *testing.T) {
 
 // FreeFirst asks the gateway for Free (Strategy.ByFree), since nothing else
 // fills it; a routing that doesn't is not to pay for reading each model
-// list.
+// list. Free quota by expiry ("expiring") counts a model that costs
+// nothing as free quota too, so it is the other that asks.
 func TestFreeFirstIsByFree(t *testing.T) {
-	if !FreeFirst.ByFree {
-		t.Fatal("FreeFirst doesn't ask the gateway for Free")
+	if !FreeFirst.ByFree || !FreeExpiring.ByFree {
+		t.Fatal("FreeFirst or FreeExpiring doesn't ask the gateway for Free")
 	}
 	for name, s := range Builtin {
-		if name == "free" {
+		if name == "free" || name == "expiring" {
 			continue
 		}
 		if s.ByFree {

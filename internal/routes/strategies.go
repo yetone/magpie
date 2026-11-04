@@ -471,6 +471,74 @@ var FreeFirst = Strategy{ByFree: true, Order: func(_ string, seats []Seat) []int
 	return append(free, paid...)
 }}
 
+// FreeExpiring spends free quota before paid, and of the free, what is
+// lost soonest first (wowbbs on Discord: check-in accounts of WorkBuddy,
+// MiniMax, Trae and Qoder in one group, each given quota that lapses on
+// its own day). A seat is free when its model costs nothing there (Free)
+// or its account's plan is a free one (FreePlan). The order is:
+//
+//   - the free seats with quota left, by when it is lost first, to the
+//     hour (Expires: the soonest of its windows' renewals and of its
+//     credits' lapse); one that tells neither after those that do, those
+//     alike in their listed order;
+//   - the paid seats with quota left, as Smart orders them;
+//   - the used up, free or paid (a known window all but used up, or
+//     resting out of quota or credit), as Smart orders its used up.
+//
+// So a free account is spent until it is used up or expires, then the
+// next free one, and a paid one only once no free one has quota left.
+// Rests and failover are as for every routing.
+var FreeExpiring = Strategy{ByFree: true, ByPlan: true, Order: func(pool string, seats []Seat) []int {
+	var free, paid, spent []int
+	for i, s := range seats {
+		switch {
+		case s.Spent || seatTier(s) == 2:
+			spent = append(spent, i)
+		case s.Free || s.FreePlan:
+			free = append(free, i)
+		default:
+			paid = append(paid, i)
+		}
+	}
+	sort.SliceStable(free, func(i, j int) bool {
+		x, y := Expires(seats[free[i]]).Truncate(time.Hour), Expires(seats[free[j]]).Truncate(time.Hour)
+		if x.Equal(y) {
+			return false
+		}
+		if x.IsZero() || y.IsZero() {
+			return y.IsZero()
+		}
+		return x.Before(y)
+	})
+	if len(paid) > 1 {
+		sub := make([]Seat, len(paid))
+		for k, i := range paid {
+			sub[k] = seats[i]
+		}
+		by := Smart.Order(pool, sub)
+		ordered := make([]int, len(paid))
+		for k, i := range by {
+			ordered[k] = paid[i]
+		}
+		paid = ordered
+	}
+	sort.SliceStable(spent, func(i, j int) bool { return spentBefore(seats[spent[i]], seats[spent[j]]) })
+	return append(append(free, paid...), spent...)
+}}
+
+// Expires is when the soonest of what a seat has left is lost: the first
+// of its windows' renewals (Soon) and its credits' lapse (Lapse), zero
+// when it tells neither.
+func Expires(s Seat) time.Time {
+	var t time.Time
+	for _, x := range append(slices.Clip(s.Soon), s.Lapse) {
+		if !x.IsZero() && (t.IsZero() || x.Before(t)) {
+			t = x
+		}
+	}
+	return t
+}
+
 // Cheapest sends a request where its model costs least at the request's
 // time: the priced seats by Cost (a million tokens in and a million out),
 // those that cost the same by CacheCost, then the seats whose price isn't
@@ -516,13 +584,14 @@ func sameCost(a, b float64) bool {
 // Builtin are the routings besides Smart and their strategies, as
 // plugins/rotation registers them.
 var Builtin = map[string]Strategy{
-	provider.Ordered:   Ordered,
-	provider.Rotate:    Rotate,
-	provider.LeastUsed: LeastUsed,
-	provider.Pace:      Pace,
-	provider.Weighted:  Weighted,
-	provider.FreeFirst: FreeFirst,
-	provider.Fastest:   Fastest,
-	provider.Cheapest:  Cheapest,
-	provider.Drain:     Drain,
+	provider.Ordered:      Ordered,
+	provider.Rotate:       Rotate,
+	provider.LeastUsed:    LeastUsed,
+	provider.Pace:         Pace,
+	provider.Weighted:     Weighted,
+	provider.FreeFirst:    FreeFirst,
+	provider.Fastest:      Fastest,
+	provider.Cheapest:     Cheapest,
+	provider.Drain:        Drain,
+	provider.FreeExpiring: FreeExpiring,
 }

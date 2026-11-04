@@ -129,6 +129,7 @@ const groupUsage = `usage:
        magpie group set deepseek-anywhere routing=fast   # the provider that answered it fastest lately first
        magpie group set deepseek-anywhere routing=cheap  # the provider it costs least on now first (DeepSeek's off-peak hours)
        magpie group set free-pool routing=drain          # one account until it is used up, then the next, never back
+       magpie group set checkins routing=expiring        # free quota first, the soonest to expire first; paid only when none is left
        magpie group pick opus-anywhere copilot/claude-opus-5.5
        magpie claude group/opus-anywhere`
 
@@ -148,6 +149,7 @@ var routingNames = []struct {
 	{provider.Fastest, "fast", []string{"fastest", "speed", "speed-first"}},
 	{provider.Cheapest, "cheap", []string{"cheapest", "cheapest-first", "price", "cost"}},
 	{provider.Drain, "drain", []string{"until-used-up", "use-up", "sticky"}},
+	{provider.FreeExpiring, "expiring", []string{"free-expiring", "free-expiry", "free-soonest", "soonest-free"}},
 	{provider.Manual, "manual", []string{"pick", "picked", "pinned"}},
 }
 

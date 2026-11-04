@@ -6,7 +6,7 @@
 //
 // Smart, the default, is the core's. The others a provider or group can be
 // routed by (order, rotate, usage, pace, weight, free, fast, cheap,
-// drain) are here for a plugin to
+// drain, expiring) are here for a plugin to
 // register: plugins/rotation does, and off, a pool routed by one of them is
 // tried in its listed order, as an unknown routing always was.
 package routes
@@ -61,6 +61,10 @@ type Seat struct {
 	// its vendor serves that model at no cost to the subscription's
 	// allowance or credits (catalog.Model's Free). FreeFirst goes by it.
 	Free bool
+	// FreePlan: an account whose plan is a free one (provider.FreePlan:
+	// "Free", "Free plan", a trial), as its vendor or plugin names it.
+	// FreeExpiring spends it, as it does Free, before a paid one.
+	FreePlan bool
 	// Credits: a Codex account that goes on past its allowance on its
 	// credits, and is let spend them. All but used up, it goes before
 	// those used up with nothing to go on with.
@@ -112,6 +116,9 @@ type Strategy struct {
 	// model costs nothing there, and the routing trace then shows it.
 	// Only when set: working it out reads each provider's model list.
 	ByFree bool
+	// ByPlan: it weighs by FreePlan, so the gateway reads each account's
+	// plan, and the routing trace then shows a free one as free.
+	ByPlan bool
 	// BySpeed: it weighs by TTFT and TPS, so the gateway reads each seat's
 	// recent speed, and the routing trace then shows it.
 	BySpeed bool
