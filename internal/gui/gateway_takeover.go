@@ -18,7 +18,7 @@ import (
 // gateway at once; otherwise it restarts the gateway this one serves, or
 // starts it when none does. The page said only "quit that magpie", and the
 // user couldn't find which one it was. Only a process whose program is a
-// magpie (proc.IsMagpie, by the pid listening on the port and its path) is
+// magpie (proc.RunsMagpie, by the pid listening on the port and its program) is
 // ever ended; anything else is said, never touched.
 
 // gatewayFixJSON is how a take-over or a restart went: what stood in the
@@ -120,7 +120,7 @@ func startHere() gatewayFixJSON {
 			}
 			out.PID = pid
 			out.Path, _ = proc.Executable(pid)
-			if proc.IsMagpie(out.Path) {
+			if proc.RunsMagpie(pid, out.Path) {
 				// a magpie took it back as soon as the other quit
 				out.Reason = "respawned"
 			} else if proc.IsForwarder(out.Path) {
@@ -159,7 +159,7 @@ func quitMagpieOnPort(version string) gatewayFixJSON {
 			out.Reason, out.Error = "unseen", err.Error()
 			return out
 		}
-		if !proc.IsMagpie(path) {
+		if !proc.RunsMagpie(pid, path) {
 			out.Reason = "not-magpie"
 			if proc.IsForwarder(path) {
 				out.Reason = "container"

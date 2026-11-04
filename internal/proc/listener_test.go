@@ -4,7 +4,10 @@ import (
 	"context"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
 	"slices"
 	"testing"
 )
@@ -76,9 +79,11 @@ func TestIsMagpie(t *testing.T) {
 		"/home/u/magpie.old-2":                             true,
 		"/home/u/dial.old-4":                               true,
 		// the numbered suffix is an update's, not another program's
-		`C:\Users\u\other-server.old-2`:   false,
-		`C:\Users\u\magpie.old-backup`:    false,
-		"/home/u/.local/bin/dial":         true,
+		`C:\Users\u\other-server.old-2`: false,
+		`C:\Users\u\magpie.old-backup`:  false,
+		"/home/u/.local/bin/dial":       true,
+		// the program a wrapper script named magpie runs (acezan)
+		"/root/.local/bin/magpie.real":    true,
 		"/opt/magpie-dev":                 true,
 		"/usr/bin/python3":                false,
 		"/usr/bin/magpies":                false,
@@ -111,5 +116,70 @@ func TestIsForwarder(t *testing.T) {
 		if IsForwarder(path) != want {
 			t.Errorf("IsForwarder(%q) = %v", path, !want)
 		}
+	}
+}
+
+// A magpie is told by what its program is, not only its name: Go's build
+// information names magpie's main package. On Linux that is read from the
+// running process (/proc/<pid>/exe), so one whose file an update replaced
+// still reads as magpie (acezan on Discord). Here the test binary, copied
+// under another name and its file removed once it runs, stands in, with
+// magpieMain the test binary's own package.
+func TestRunsMagpieByItsBuild(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a running program's file can't be removed on Windows")
+	}
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		t.Fatal("no build information in the test binary")
+	}
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(self)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(t.TempDir(), "server.real")
+	if err := os.WriteFile(bin, b, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bin, "-test.run=^$")
+	cmd.Env = append(os.Environ(), "MAGPIE_PROC_SLEEP=1")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { stdin.Close(); cmd.Process.Kill(); cmd.Wait() })
+	pid := cmd.Process.Pid
+
+	was := magpieMain
+	defer func() { magpieMain = was }()
+	magpieMain = bi.Path
+	if !RunsMagpie(pid, bin) {
+		t.Fatalf("%s, built from %s, not told as magpie", bin, bi.Path)
+	}
+	magpieMain = "github.com/yetone/magpie"
+	if RunsMagpie(pid, bin) {
+		t.Fatal("another program's build told as magpie")
+	}
+	if runtime.GOOS != "linux" {
+		return
+	}
+	// the update's rename: the file is gone, the process runs on
+	if err := os.Remove(bin); err != nil {
+		t.Fatal(err)
+	}
+	path, err := Executable(pid)
+	if err != nil || filepath.Base(path) != "server.real" {
+		t.Fatalf("Executable of a replaced program: %q, %v", path, err)
+	}
+	magpieMain = bi.Path
+	if !RunsMagpie(pid, path) {
+		t.Fatal("a magpie whose file was replaced isn't told as magpie")
 	}
 }

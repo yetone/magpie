@@ -2,8 +2,11 @@ package proc
 
 import (
 	"context"
+	"debug/buildinfo"
 	"errors"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -41,10 +44,38 @@ func Terminate(pid int) error { return terminate(pid) }
 // Kill ends process pid at once. ErrDenied when this user may not.
 func Kill(pid int) error { return kill(pid) }
 
+// RunsMagpie says whether process pid, running the program at path (as
+// Executable says), is a magpie: by the program's name (IsMagpie), or else
+// by what the program is, magpie's own main package, read from the build
+// information Go writes into it. A magpie under a name of the user's
+// (acezan on Discord: magpie.real, behind a wrapper script installed as
+// magpie) is still one, and on Linux this holds for one whose file an
+// update has since replaced, read through /proc/<pid>/exe: the panel had
+// called that magpie "not magpie" and left it holding the gateway's port.
+func RunsMagpie(pid int, path string) bool {
+	if IsMagpie(path) {
+		return true
+	}
+	file := path
+	if runtime.GOOS == "linux" && pid > 0 {
+		file = filepath.Join("/proc", strconv.Itoa(pid), "exe")
+	}
+	if file == "" {
+		return false
+	}
+	bi, err := buildinfo.ReadFile(file)
+	return err == nil && bi.Path == magpieMain
+}
+
+// magpieMain is magpie's main package, as a build of it names itself; a
+// var for the tests, whose own binary is another package's.
+var magpieMain = "github.com/yetone/magpie"
+
 // IsMagpie says whether the program at path is a magpie: magpie, its
 // magpie-* builds or dial, its name before; with .exe, and Windows' .old
 // for one replaced by an update while it ran, or .old-2 when that one was
-// still held.
+// still held; and magpie.real, the program a wrapper script named magpie
+// runs (acezan on Discord).
 func IsMagpie(path string) bool {
 	if path == "" {
 		return false
@@ -58,6 +89,7 @@ func IsMagpie(path string) bool {
 	n = strings.TrimSuffix(n, ".old")
 	n = strings.TrimSuffix(n, ".new")
 	n = strings.TrimSuffix(n, ".exe")
+	n = strings.TrimSuffix(n, ".real")
 	for _, name := range []string{"magpie", "dial"} {
 		if n == name || strings.HasPrefix(n, name+"-") || strings.HasPrefix(n, name+"_") {
 			return true

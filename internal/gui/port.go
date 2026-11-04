@@ -50,7 +50,7 @@ func magpieOnPort(port string) bool {
 		if pid == os.Getpid() {
 			continue
 		}
-		if path, err := proc.Executable(pid); err == nil && proc.IsMagpie(path) {
+		if path, err := proc.Executable(pid); err == nil && proc.RunsMagpie(pid, path) {
 			return true
 		}
 	}
