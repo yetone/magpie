@@ -71,12 +71,6 @@ func readLive(provider string) (liveFile, error) {
 func mendKinds(ms []Model) {
 	for i := range ms {
 		m := &ms[i]
-		// a list saved before FilmsID kept a video model its id names
-		// among the chat models; it is one from the first read after the
-		// update, not the next fetch
-		if !m.Draws && !m.Films && !m.Decides && !slices.Contains(m.OutputModalities, "text") && !slices.Contains(m.OutputModalities, "text/plain") && !DrawsID(m.ID) && FilmsID(m.ID) {
-			m.Films = true
-		}
 		if m.InputModalities == nil {
 			continue
 		}
@@ -654,10 +648,7 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		// an output of video without text (doubao-seedance-*, wan2-1-*),
 		// which is no model to chat with (axelburks on Discord: Ark's
 		// Seedance sat among its chat models, not under Video models)
-		// — or, where it says nothing of what the model makes, one whose id
-		// names it (FilmsID: Agnes's agnes-video-2.5)
-		films := r.Kind == "video" || r.Kind == "" && (r.Domain == "VideoGeneration" || slices.Contains(outs, "video") && !slices.Contains(outs, "text") ||
-			r.Domain == "" && !slices.Contains(outs, "text") && !DrawsID(id) && FilmsID(id))
+		films := r.Kind == "video" || r.Kind == "" && (r.Domain == "VideoGeneration" || slices.Contains(outs, "video") && !slices.Contains(outs, "text"))
 		drawer := !films && !decision && (DrawsID(id) && !strings.Contains(strings.ToLower(id), "deep-research") || r.Kind == "image" ||
 			r.Kind == "" && (r.Domain == "ImageGeneration" || slices.Contains(outs, "image") && !slices.Contains(outs, "text")))
 		// and none the list says answers without text (Ark's 3D models)
