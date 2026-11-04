@@ -40,6 +40,9 @@ function server(lang, web, ctl) {
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: settingsPayload(lang), fx: settingsPayload(lang).fx });
     if (url.pathname === "/api/settings") return json(settingsPayload(lang));
     if (url.pathname === "/api/update") {
+      // the badge's and the Version row's reads answer a few ms apart, as
+      // on a busy machine: a page that reloads for each one is loaded twice
+      if (ctl.version !== "0.1.400" && ctl.reads++) await new Promise((r) => setTimeout(r, 5));
       return json(ctl.version === "0.1.400"
         ? { state: "ready", current: "0.1.400", latest: "0.1.401" }
         : { state: "latest", current: "0.1.401", latest: "0.1.401" });
@@ -76,23 +79,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     t.after(() => browser.close());
     for (const width of [1100, 420]) for (const lang of langs) {
       await t.test(`${lang} at ${width}: clicked back into`, async () => {
-        const ctl = { version: "0.1.400", pages: 0 };
+        const ctl = { version: "0.1.400", pages: 0, reads: 0 };
         const { page, errors } = await open(browser, width, lang, true, ctl);
         // the app's window put 0.1.401 in, and magpie web restarted into it
         ctl.version = "0.1.401";
         await page.evaluate(() => window.dispatchEvent(new Event("focus")));
         await page.waitForFunction(() => !window.oldPage && document.readyState === "complete");
-        assert.equal(ctl.pages, 2, "loaded again once");
         await page.waitForTimeout(400);
         assert.equal(await pill(page).isHidden(), true, "the reloaded page offers no update");
-        assert.equal(ctl.pages, 2, "no reload after the first");
+        assert.equal(ctl.pages, 2, "loaded again once");
         assert.deepEqual(errors, []);
         await page.context().close();
       });
     }
     for (const lang of langs) {
       await t.test(`${lang}: left on screen, within a minute`, async () => {
-        const ctl = { version: "0.1.400", pages: 0 };
+        const ctl = { version: "0.1.400", pages: 0, reads: 0 };
         const { page, errors } = await open(browser, 1100, lang, true, ctl, true);
         ctl.version = "0.1.401";
         await page.clock.runFor(61e3);
@@ -103,7 +105,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       });
     }
     await t.test("the app's own window doesn't reload", async () => {
-      const ctl = { version: "0.1.400", pages: 0 };
+      const ctl = { version: "0.1.400", pages: 0, reads: 0 };
       const { page, errors } = await open(browser, 1100, "en", false, ctl);
       ctl.version = "0.1.401";
       await page.evaluate(() => window.dispatchEvent(new Event("focus")));
