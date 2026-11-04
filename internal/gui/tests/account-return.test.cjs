@@ -38,6 +38,10 @@ const claude = () => ({
     ],
   },
 });
+// WalterAIBuilder on X: routed Until used up, the gateway keeps the
+// requests on the account it went on to, and Codex's or Claude Code's
+// sign-in stays there with them (provider.returnsToFirst)
+const drains = "Routing picks the account for each request through magpie; {agent} on its own uses the one it is signed in to, which magpie moves to the next ticked account with room once it is used up, and keeps it there till that one is used up too.";
 const stays = "Routing picks the account for each request through magpie; {agent} on its own uses the one it is signed in to, which magpie moves to the next ticked account with room once it is 98% used, and keeps it there till that one is 98% used too.";
 
 function serve(lang, list) {
@@ -60,8 +64,8 @@ function serve(lang, list) {
 }
 
 const words = {
-  en: { first: "First", now: "First for now", again: "First again once it has room", note: /and back to the first once that has room again/, why: /work@example\.com was nearly used up/, stays: /keeps it there till that one is 98% used too/ },
-  zh: { first: "首选", now: "暂为首选", again: "额度恢复后切回首选", note: /首选账号恢复后切回/, why: /work@example\.com 额度将尽/, stays: /直到它也用到 98%/ },
+  en: { first: "First", now: "First for now", again: "First again once it has room", note: /and back to the first once that has room again/, why: /work@example\.com was nearly used up/, stays: /keeps it there till that one is 98% used too/, drains: /once it is used up, and keeps it there till that one is used up too/ },
+  zh: { first: "首选", now: "暂为首选", again: "额度恢复后切回首选", note: /首选账号恢复后切回/, why: /work@example\.com 额度将尽/, stays: /直到它也用到 98%/, drains: /该账号额度用完时.*并一直用它，直到它的额度也用完/ },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -114,6 +118,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const missing = await page.evaluate((k) => ["zh", "zh-TW", "ja", "de"].filter((l) => !I18N[l][k]), stays);
       assert.deepEqual(missing, [], "every language has the note");
       assert.deepEqual(errors, []);
+    });
+
+    test(`${engine} ${lang}: routed Until used up, the note says the sign-in stays on the next`, async (t) => {
+      for (const p of [{ ...codex(false), routing: "drain" }, { ...claude(), routing: "drain" }]) {
+        const { page, errors } = await open(t, false, p);
+        const note = await page.locator(".editor").textContent();
+        assert.match(note, w.drains, p.id);
+        assert.doesNotMatch(note, w.note, p.id);
+        const missing = await page.evaluate((k) => ["zh", "zh-TW", "ja", "de"].filter((l) => !I18N[l][k]), drains);
+        assert.deepEqual(missing, [], "every language has the note");
+        assert.deepEqual(errors, []);
+      }
     });
 
     test(`${engine} ${lang}: with nothing to go back to, the account Codex is on is first`, async (t) => {

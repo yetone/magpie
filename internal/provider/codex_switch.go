@@ -23,8 +23,9 @@ package provider
 // sign-in follows the gateway it stays that: once it is no longer low
 // (backShare) the agent is signed back in to it, as Smart gives it
 // requests again then (#408). Where the sign-in alone spends the accounts
-// (returnsToFirst), the agent stays on the one it moved to till that is
-// spent too. A switch the user makes meanwhile ends that. With KeepLogin on the subscription, the agent
+// (returnsToFirst), or the gateway itself stays on the next (Until used
+// up), the agent stays on the one it moved to till that is spent too. A
+// switch the user makes meanwhile ends that. With KeepLogin on the subscription, the agent
 // stays signed in to the first, whatever it has left (#524); with
 // KeepLoginAs, to that account, wherever it stands in the order. Not while
 // magpie only switches the sign-in (SwitchOnly): moving it is then all
@@ -149,13 +150,17 @@ func loginSwitching(agent string) (share float64, keep bool) {
 // alone magpie switches (SwitchOnly) — going back at the first's reset
 // left the account moved to part used and started the first's next
 // window early, which is not "use one up, then the next" (hxy920830 on
-// X): there it stays, unless the user said the first comes first.
+// X): there it stays, unless the user said the first comes first. Nor
+// does Codex's go back when it is routed Until used up: the gateway then
+// keeps its requests on the account it moved to (routes.Drain), so Codex
+// signed back in to the first showed that one in use while the other's
+// allowance was spent (WalterAIBuilder on X); it stays with the requests.
 func returnsToFirst(agent string) bool {
 	for _, p := range storedFile().Providers {
 		if p.ID == agent {
 			// kept on the first (KeepLogin), set aside under SwitchOnly,
 			// is still the user's word that the first comes first
-			return p.Routing == Ordered || p.KeepLogin || agent == "codex" && !p.SwitchOnly
+			return p.Routing == Ordered || p.KeepLogin || agent == "codex" && !p.SwitchOnly && p.Routing != Drain
 		}
 	}
 	return agent == "codex"
