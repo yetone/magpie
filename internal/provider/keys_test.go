@@ -1,6 +1,9 @@
 package provider
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestSeveralKeys(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -92,5 +95,44 @@ func TestKeyProtocol(t *testing.T) {
 	}
 	if q := p.WithKey(KeyAccount{Key: "k"}); q.Chat == "" || q.Anthropic == "" {
 		t.Fatalf("a key for any protocol: %+v", q)
+	}
+}
+
+// A relay's key made for its Gemini API (corddis_114 on Discord): it can
+// be set so, and is then used on the Gemini API only, while a key made for
+// another protocol is never sent to the Gemini API.
+func TestKeyProtocolGemini(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	if err := Save(Provider{ID: "relay", Name: "Relay", Chat: "https://relay.test/v1", Anthropic: "https://relay.test", Gemini: "https://relay.test/v1beta", Key: "sk-ant-1111", KeyProtocol: Anthropic}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AddKey("relay", "gemini", "sk-gem-2222", Gemini); err != nil {
+		t.Fatal(err)
+	}
+	if err := AddKey("relay", "", "sk-oai-3333", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetKeyProtocol("relay", keyID("sk-oai-3333"), Gemini); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetKeyProtocol("relay", keyID("sk-oai-3333"), Chat); err != nil {
+		t.Fatal(err)
+	}
+	p, _ := Find("relay")
+	ks := p.KeyList()
+	if ks[1].Protocol != Gemini || ks[2].Protocol != Chat {
+		t.Fatalf("keys %+v", ks)
+	}
+	if q := p.WithKey(p.Keys[0]); !slices.Equal(q.Speaks(), []Protocol{Gemini}) || q.Base(Gemini) != "https://relay.test/v1beta" {
+		t.Fatalf("the Gemini key speaks %v", q.Speaks())
+	}
+	for _, k := range []KeyAccount{p.first(), p.Keys[1]} {
+		if q := p.WithKey(k); q.Base(Gemini) != "" || len(q.Speaks()) == 0 {
+			t.Fatalf("the %s key speaks %v", k.Protocol, q.Speaks())
+		}
+	}
+	if q := p.WithKey(KeyAccount{Key: "k"}); q.Base(Gemini) == "" || len(q.Speaks()) != 3 {
+		t.Fatalf("a key for any protocol speaks %v", q.Speaks())
 	}
 }

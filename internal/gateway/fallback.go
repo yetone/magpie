@@ -498,8 +498,18 @@ func keyFit(q provider.Provider, model string, from provider.Protocol) int {
 		}
 		return 2
 	case provider.Chat:
-		if q.KeyProtocol != provider.Anthropic {
+		if q.KeyProtocol != provider.Anthropic && q.KeyProtocol != provider.Gemini {
 			return 0
+		}
+		return 2
+	case provider.Gemini:
+		// a key made for the Gemini API before any other (corddis_114
+		// on Discord); the others keep their order behind it
+		if q.KeyProtocol == provider.Gemini {
+			return 0
+		}
+		if q.Base(from) != "" {
+			return 1
 		}
 		return 2
 	}
@@ -510,7 +520,8 @@ func keyFit(q provider.Provider, model string, from provider.Protocol) int {
 }
 
 // modelFamily is the protocol a model is at home in, when its name says:
-// Anthropic for Claude, Chat (standing for OpenAI's) for GPT and the o-series.
+// Anthropic for Claude, Chat (standing for OpenAI's) for GPT and the o-series,
+// Gemini for Gemini.
 func modelFamily(model string) provider.Protocol {
 	m := strings.ToLower(model)
 	if i := strings.LastIndex(m, "/"); i >= 0 {
@@ -521,6 +532,8 @@ func modelFamily(model string) provider.Protocol {
 		return provider.Anthropic
 	case strings.HasPrefix(m, "gpt-"), strings.Contains(m, "codex"), len(m) > 1 && m[0] == 'o' && m[1] >= '1' && m[1] <= '9':
 		return provider.Chat
+	case strings.HasPrefix(m, "gemini"):
+		return provider.Gemini
 	}
 	return ""
 }

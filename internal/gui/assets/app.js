@@ -14872,12 +14872,13 @@ const PROTO_OPTS = [
   { v: "anthropic", pill: "Anthropic", name: "Anthropic", note: "Messages API · Claude Code, Claude" },
   { v: "chat", pill: "Chat", name: "Chat Completions", note: "OpenAI API · GPT models, most agents" },
   { v: "responses", pill: "Responses", name: "Responses", note: "OpenAI Responses API · Codex" },
+  { v: "gemini", pill: "Gemini", name: "Gemini", note: "Gemini API (generateContent) · Gemini CLI, Gemini models" },
 ];
 
 // keyLacksURL is the protocol a key is set to when its provider has no URL
 // for it (the pill's own name), else "".
 function keyLacksURL(p, k) {
-  if (!["anthropic", "chat", "responses"].includes(k.protocol) || p[k.protocol]) return "";
+  if (!["anthropic", "chat", "responses", "gemini"].includes(k.protocol) || p[k.protocol]) return "";
   return t(PROTO_OPTS.find((o) => o.v === k.protocol).pill);
 }
 
@@ -14885,7 +14886,7 @@ function keyLacksURL(p, k) {
 // that says what each choice is for.
 function protoPicker(p, value, onChange) {
   value = value || "";
-  const have = ["anthropic", "chat", "responses"].filter((x) => p[x]);
+  const have = ["anthropic", "chat", "responses", "gemini"].filter((x) => p[x]);
   if (have.length < 2 && !value) return null;
   return pickPill(PROTO_OPTS.filter((o) => !o.v || have.includes(o.v) || o.v === value), value, "", "Some relays give out a key per protocol. Set it here and the gateway sends each request to the key that fits: Claude models to the Anthropic key, GPT models to the OpenAI one.", undefined, onChange);
 }
