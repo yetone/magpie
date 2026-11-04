@@ -421,6 +421,145 @@ func TestClaudeInteractiveSideQuestionAfterACallKeepsTheReply(t *testing.T) {
 	}
 }
 
+// sleepy_shibe (magpie 0.1.2948, Claude Code 2.1.318): a run's first
+// reply, words only, streamed and over before Claude Code's prompt
+// suggestion began, while the reply's line, read from the session file,
+// came after. The run had heard no line of its own yet, only the reply's
+// message id, so the branch for the next turn had nowhere to be cut, and
+// a new Claude Code was told the whole conversation ("no run waits for
+// this turn ... can't go on with this turn"). The branch is cut by the
+// reply's id alone: U1 and A1, the suggestion left out.
+func TestClaudeInteractiveSideQuestionAfterAFirstReplyOfWordsKeepsTheReply(t *testing.T) {
+	h := newPrefixHarness(t)
+	h.interactive()
+	if err := os.WriteFile(filepath.Join(h.logs, "late"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tools := `"tools":` + prefixTools + `,`
+	u1 := rmsg("user", "what does main.go do")
+	first, _ := h.ask(tools, `[`+u1+`]`)
+	pid := answerPID(t, first)
+	if first != "pid "+pid+" had 0 turn 1" {
+		t.Fatalf("the first turn: %q", first)
+	}
+	conv := u1 + `,` + rmsg("assistant", first)
+	if got, _ := h.ask(tools, `[`+conv+`,`+rmsg("user", suggestionMode)+`]`); got != "pid "+pid+" had 0 turn 2" {
+		t.Fatalf("the suggestion: %q", got)
+	}
+	next, _ := h.ask(tools, `[`+conv+`,`+rmsg("user", "now commit it")+`]`)
+	branch := answerPID(t, next)
+	// the turn's message and the reply: the suggestion's two lines left out
+	if branch == pid || next != "pid "+branch+" had 2 turn 1" {
+		t.Fatalf("the turn after the suggestion: %q (the conversation's run was %s, its session's turn has 2 lines before the suggestion)\n%s", next, pid, h.log(branch))
+	}
+	log := h.log(branch)
+	// resumed from a copy of the run's own session, not a transcript of
+	// the conversation a new Claude Code is given
+	sid := regexp.MustCompile(`--resume (\S+)`).FindStringSubmatch(log)
+	if sid == nil {
+		t.Fatalf("the branch resumed no session: %.600s", log)
+	}
+	copied, _ := filepath.Glob(filepath.Join(h.config, "projects", "*", sid[1]+".jsonl"))
+	if len(copied) != 1 {
+		t.Fatalf("the branch's session %s: %v", sid[1], copied)
+	}
+	if b, _ := os.ReadFile(copied[0]); !strings.Contains(string(b), `"uuid":"u`+pid+`-1"`) || !strings.Contains(string(b), `"uuid":"a`+pid+`-1"`) {
+		t.Fatalf("the branch's session isn't a copy of the run's U1 and A1:\n%s", b)
+	}
+	if told := log[strings.Index(log, "\ntold "):]; strings.Contains(told, "main.go") || strings.Contains(told, "SUGGESTION") || !strings.Contains(told, "now commit it") {
+		t.Fatalf("the branch was told %.600s, want the new turn only", told)
+	}
+}
+
+// The same run let go past idleMost after the suggestion: its session is
+// shelved where the suggestion put it, and the conversation's next turn
+// finds it by the reply's id alone and resumes a copy cut before the
+// suggestion (#4914), not a transcript of the whole conversation.
+func TestClaudeShelvedSideQuestionAfterAFirstReplyOfWordsKeepsTheReply(t *testing.T) {
+	h := newPrefixHarness(t)
+	h.interactive()
+	if err := os.WriteFile(filepath.Join(h.logs, "late"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tools := `"tools":` + prefixTools + `,`
+	u1 := rmsg("user", "what does main.go do")
+	first, _ := h.ask(tools, `[`+u1+`]`)
+	pid := answerPID(t, first)
+	conv := u1 + `,` + rmsg("assistant", first)
+	if got, _ := h.ask(tools, `[`+conv+`,`+rmsg("user", suggestionMode)+`]`); got != "pid "+pid+" had 0 turn 2" {
+		t.Fatalf("the suggestion: %q", got)
+	}
+	for i := range idleMost {
+		h.ask(tools, `[`+rmsg("user", "other conversation "+strconv.Itoa(i))+`]`)
+	}
+	h.s.subscription.mu.Lock()
+	var behindLine, behindMsg string
+	for _, e := range h.s.subscription.shelf {
+		if e.session == "s"+pid {
+			behindLine, behindMsg = e.behindLine, e.behindMsg
+		}
+	}
+	h.s.subscription.mu.Unlock()
+	if behindMsg == "" || behindLine != "" {
+		t.Fatalf("the shelved session is behind line %q, reply %q: want the reply's id alone, its line heard late", behindLine, behindMsg)
+	}
+	next, _ := h.ask(tools, `[`+conv+`,`+rmsg("user", "now commit it")+`]`)
+	resumed := answerPID(t, next)
+	if next != "pid "+resumed+" had 2 turn 1" {
+		t.Fatalf("the turn after the suggestion: %q\n%s", next, h.log(resumed))
+	}
+	log := h.log(resumed)
+	sid := regexp.MustCompile(`--resume (\S+)`).FindStringSubmatch(log)
+	if sid == nil || sid[1] == "s"+pid {
+		t.Fatalf("the next turn resumed no copy of the shelved session: %.600s", log)
+	}
+	copied, _ := filepath.Glob(filepath.Join(h.config, "projects", "*", sid[1]+".jsonl"))
+	if len(copied) != 1 {
+		t.Fatalf("the resumed session %s: %v", sid[1], copied)
+	}
+	if b, _ := os.ReadFile(copied[0]); !strings.Contains(string(b), `"uuid":"u`+pid+`-1"`) || !strings.Contains(string(b), `"uuid":"a`+pid+`-1"`) || strings.Contains(string(b), `"uuid":"a`+pid+`-2"`) {
+		t.Fatalf("the resumed session isn't the run's U1 and A1 alone:\n%s", b)
+	}
+	if told := log[strings.Index(log, "\ntold "):]; strings.Contains(told, "main.go") || !strings.Contains(told, "now commit it") {
+		t.Fatalf("the resumed run was told %.600s, want the new turn only", told)
+	}
+}
+
+// A run that heard a line of an earlier turn last, its new reply's lines
+// not yet in the session as the next turn comes: cutReply waits for the
+// reply's lines, as it would for the line, before it cuts after the
+// earlier line, which would leave the last turn out.
+func TestClaudeCutReplyWaitsForTheReplysLines(t *testing.T) {
+	was := cutWait
+	cutWait = 5 * time.Second
+	t.Cleanup(func() { cutWait = was })
+	dir := t.TempDir()
+	f := filepath.Join(dir, "S.jsonl")
+	early := `{"type":"user","uuid":"u1","sessionId":"S","message":{"role":"user","content":"hi"}}` + "\n" +
+		`{"type":"assistant","uuid":"a1","sessionId":"S","message":{"id":"msg_1","role":"assistant","content":[{"type":"text","text":"hello"}]}}` + "\n" +
+		`{"type":"user","uuid":"u2","sessionId":"S","message":{"role":"user","content":"and now"}}` + "\n"
+	late := `{"type":"assistant","uuid":"a2","sessionId":"S","message":{"id":"msg_2","role":"assistant","content":[{"type":"text","text":"done"}]}}` + "\n"
+	if err := os.WriteFile(f, []byte(early), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	written := make(chan struct{})
+	go func() {
+		defer close(written)
+		// the cut is looking by now: it found a1 and no line of msg_2
+		time.Sleep(200 * time.Millisecond)
+		os.WriteFile(f, []byte(early+late), 0o600)
+	}()
+	id, err := cutReply([]string{dir}, "S", "a1", "msg_2")
+	<-written
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(filepath.Join(dir, id+".jsonl"))
+	if want := strings.ReplaceAll(early+late, `"sessionId":"S"`, `"sessionId":"`+id+`"`); string(got) != want {
+		t.Errorf("copy\n%s\nwant\n%s", got, want)
+	}
+}
+
 // cutReply keeps a reply whole: Claude Code writes a line a content
 // block, each under the message's id, and the line the run heard last as
 // the side question began may be the turn's tool call. The copy goes as
@@ -460,6 +599,8 @@ func TestClaudeCutReplyKeepsTheWholeReply(t *testing.T) {
 		{"the reply's last line heard", "a3", "msg_01B", 6},
 		{"no reply known", "a1", "", 2},
 		{"the reply's lines not in the session", "a1", "msg_none", 2},
+		{"no line heard, the reply's id only", "", "msg_01B", 6},
+		{"no line heard, the call's reply", "", "msg_01A", 2},
 	} {
 		id, err := cutReply([]string{dir}, "S", c.line, c.msg)
 		if err != nil {
@@ -472,5 +613,11 @@ func TestClaudeCutReplyKeepsTheWholeReply(t *testing.T) {
 	}
 	if id, err := cutReply([]string{dir}, "S", "zz", "msg_none"); err == nil {
 		t.Errorf("a cut at no line nor reply: %s, want an error", id)
+	}
+	if id, err := cutReply([]string{dir}, "S", "", "msg_none"); err == nil {
+		t.Errorf("a cut at no line and a reply not in the session: %s, want an error", id)
+	}
+	if id, err := cutReply([]string{dir}, "S", "", ""); err == nil {
+		t.Errorf("a cut at neither a line nor a reply: %s, want an error", id)
 	}
 }

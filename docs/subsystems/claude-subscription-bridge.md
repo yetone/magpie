@@ -850,9 +850,23 @@ before the run is let go and its file removed (`branchAt`, a cut copy as
 in [Tool results another request answers first](#tool-results-another-request-answers-first)),
 and a new interactive run resumes the copy, told only the turn's
 messages. Before, every turn after a suggestion was told whole to a new
-run (bbfatx on X). There is no cut with a client's own cache marks, or for a run with no session or no line;
-then the turn is told whole, as before.
-`TestClaudeInteractiveSideQuestionBranchesBeforeIt` holds it.
+run (bbfatx on X). The interactive mode streams a reply first and tells
+its session lines after, read from the file, so as a suggestion begins
+`lastLine` may be a line before the reply (its tool call) or, in a run's
+first reply, empty. The run also keeps the reply's message id (`lastMsg`
+from `replyBegun`, then `backMsg`, `behindMsg` and the shelf's
+`behindMsg`), and `cutReply` cuts after that reply's last main-thread
+line: by the id alone when no line was heard, waiting up to `cutWait` for
+the reply's lines before it falls back to the line (sleepy_shibe, twice).
+The shelf (`unshelve`, `cutBehind`) takes a session behind a side
+question by either. There is no cut with a client's own cache marks, or
+for a run with no session, or neither a line nor a reply; then the turn
+is told whole, as before.
+`TestClaudeInteractiveSideQuestionBranchesBeforeIt`,
+`TestClaudeInteractiveSideQuestionAfterACallKeepsTheReply`,
+`TestClaudeInteractiveSideQuestionAfterAFirstReplyOfWordsKeepsTheReply`,
+`TestClaudeShelvedSideQuestionAfterAFirstReplyOfWordsKeepsTheReply` and
+`TestClaudeCutReplyWaitsForTheReplysLines` hold it.
 
 A turn after a reply that starts a new run logs why none waited
 (`whyNoRun`, "claude: no run waits for this turn: …"): its run went on
