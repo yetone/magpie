@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Library · magpie docs</title>
+<meta name="description" content="How magpie's Library works: where it writes instructions, MCP servers, skills, hooks and subagents for each agent, and how subagent models are picked.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/library">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/library">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/library">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/library">
+<link rel="canonical" href="https://usemagpie.ai/docs/library">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Library">
+<meta property="og:description" content="One place for instructions, MCP servers, skills, hooks and subagents, written into each agent's own files.">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/library">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>Docs</small></a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/start">Get started</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a class="toc-only" href="/docs/remote">Remote magpie</a>
+    <a class="toc-only" href="/docs/docker">Docker</a>
+    <a class="toc-only" href="/docs/privacy">Privacy</a>
+    <a class="toc-only" href="/docs/masking">Privacy masking</a>
+    <a class="toc-only" href="/docs/mcp-router">MCP router</a>
+    <a class="toc-only" href="/docs/library">Library</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/library" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/library" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/library" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">Download</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Library</p>
+    <a href="#overview">Overview</a>
+    <a href="#where">Where it is kept</a>
+    <a href="#instructions">Instructions</a>
+    <a href="#mcp">MCP servers</a>
+    <a href="#skills">Skills</a>
+    <a href="#subagents">Subagents</a>
+    <a href="#models">Subagent models</a>
+    <a href="#hooks">Hooks</a>
+    <a href="#rtk">RTK</a>
+    <a href="#touch">What magpie touches</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">Docs · Library</p>
+    <h1>Library</h1>
+    <p class="lede">magpie’s <span class="ui">Library</span> keeps instructions, MCP servers, skills, hooks and subagents in one place, and writes each of them into every agent you tick for it, in that agent’s own files and format. The agents read those files as they always do. magpie adds no layer between an agent and what it is given: the agent itself decides when to use a skill, an MCP tool or a subagent.</p>
+    <p>The page has six tabs: <span class="ui">Instructions</span>, <span class="ui">MCP servers</span>, <span class="ui">Skills</span>, <span class="ui">Hooks</span>, <span class="ui">Subagents</span> and <span class="ui">RTK</span>. Each item has a row of agents; tick an agent to give it the item, untick it to take it away. An agent reads the change when it starts again.</p>
+
+    <h2 id="where"><a class="anchor" href="#where">Where it is kept</a></h2>
+    <ul>
+      <li><b>The library</b> is <code>library.json</code> in magpie’s config folder (<code>~/.config/magpie</code>, or <code>$XDG_CONFIG_HOME/magpie</code> when that is set). Instruction texts and skill folders are in <code>library/</code> next to it.</li>
+      <li><b>Every change</b> saves the library and writes it into every agent at once. magpie records what it wrote, so it only ever takes away its own entries and leaves yours alone.</li>
+      <li><b>Backups.</b> Before a change, the files it replaces are copied to <code>backups/</code> in the same folder. The last 30 are kept. The <span class="ui">Backups</span> button at the top of each tab opens them.</li>
+      <li><b>Write it again.</b> After you install an agent, or edit its files by hand, <code>magpie library sync</code> writes the library into every agent again.</li>
+    </ul>
+    <div class="code">
+      <span class="lang">Terminal</span>
+      <button class="copy" data-copy="ex-cli">Copy</button>
+      <pre id="ex-cli">magpie library          # what the library gives each agent
+magpie library sync     # write it into the agents again</pre>
+    </div>
+
+    <h2 id="instructions"><a class="anchor" href="#instructions">Instructions</a></h2>
+    <p>Instructions are text every session of an agent starts with, such as house rules or a coding style. magpie writes its part between two marker lines in the agent’s instructions file:</p>
+    <div class="code">
+      <span class="lang">CLAUDE.md, AGENTS.md…</span>
+      <button class="copy" data-copy="ex-marks">Copy</button>
+      <pre id="ex-marks">&lt;!-- magpie:begin · written by magpie from its Library --&gt;
+…the Library's instructions…
+&lt;!-- magpie:end --&gt;</pre>
+    </div>
+    <p>Everything outside the markers is yours and is never changed. You can keep several named sets and give each set to different agents, and a set can live in a file of your own.</p>
+    <div class="table-wrap"><table>
+      <tr><th>Agent</th><th>File</th></tr>
+      <tr><td>Claude Code</td><td><code>~/.claude/CLAUDE.md</code></td></tr>
+      <tr><td>Codex</td><td><code>~/.codex/AGENTS.md</code> (or <code>AGENTS.override.md</code> when you use one)</td></tr>
+      <tr><td>Gemini CLI</td><td><code>~/.gemini/GEMINI.md</code></td></tr>
+      <tr><td>Antigravity</td><td><code>~/.gemini/config/GEMINI.md</code></td></tr>
+      <tr><td>OpenCode</td><td><code>AGENTS.md</code> in its config folder</td></tr>
+      <tr><td>Copilot CLI</td><td><code>~/.copilot/copilot-instructions.md</code></td></tr>
+      <tr><td>Goose, Crush, Qwen Code, CodeBuddy</td><td><code>.goosehints</code>, <code>CRUSH.md</code>, <code>QWEN.md</code>, <code>CODEBUDDY.md</code></td></tr>
+      <tr><td>Droid, Grok, dsh, omp</td><td><code>AGENTS.md</code> in the agent’s own folder</td></tr>
+      <tr><td>Pi, OmO</td><td>the first one there of <code>AGENTS.md</code> and <code>CLAUDE.md</code></td></tr>
+    </table></div>
+    <p>Folders follow the agent’s own setting: a custom <code>CLAUDE_CONFIG_DIR</code> or <code>CODEX_HOME</code> is used in place of the default.</p>
+
+    <h2 id="mcp"><a class="anchor" href="#mcp">MCP servers</a></h2>
+    <p>An MCP server is either a command (a program the agent starts, such as <code>npx …</code>) or a URL (HTTP or SSE). magpie writes one entry per server into each ticked agent’s MCP config, in that agent’s format, and keeps any fields you added to the entry yourself.</p>
+    <div class="table-wrap"><table>
+      <tr><th>Agent</th><th>File</th></tr>
+      <tr><td>Claude Code</td><td><code>~/.claude.json</code></td></tr>
+      <tr><td>Codex</td><td><code>~/.codex/config.toml</code></td></tr>
+      <tr><td>Gemini CLI</td><td><code>~/.gemini/settings.json</code></td></tr>
+      <tr><td>Antigravity</td><td><code>~/.gemini/config/mcp_config.json</code></td></tr>
+      <tr><td>OpenCode</td><td><code>opencode.json</code></td></tr>
+      <tr><td>Cursor</td><td><code>~/.cursor/mcp.json</code></td></tr>
+      <tr><td>Copilot CLI</td><td><code>~/.copilot/mcp-config.json</code></td></tr>
+      <tr><td>Zed</td><td><code>context_servers</code> in its <code>settings.json</code></td></tr>
+    </table></div>
+    <ul>
+      <li><b>Variables.</b> <code>${NAME}</code> in a header or an env value is written in each agent’s own syntax. An agent that has no such syntax is not given that server, and the page says why.</li>
+      <li><b>SSE.</b> Codex, Goose, dsh, Grok, Command Code and Zed can’t use an SSE server. Claude Desktop takes no remote servers at all.</li>
+      <li><b>Single tools off.</b> You can turn off tools one by one for Codex, Gemini CLI, Crush, Hermes Agent, Claude Code and OpenCode, each in its own setting. Every other agent gets the whole server.</li>
+      <li><b>Sign-in.</b> A server that needs OAuth is signed in to once, in magpie. Agents then reach it through magpie’s gateway at <code>/mcp/&lt;name&gt;</code>.</li>
+      <li><b>This computer only.</b> Turn off <span class="ui">Sync to your other computers</span> for a server that should stay here (<code>magpie library mcp local &lt;name&gt; on</code>).</li>
+    </ul>
+    <p>With the <a href="/docs/mcp-router">MCP router</a> on, each agent gets one server named <code>magpie</code> in place of these entries, and magpie runs each command server once for all of them. It is off by default.</p>
+
+    <h2 id="skills"><a class="anchor" href="#skills">Skills</a></h2>
+    <p>A skill is a folder with a <code>SKILL.md</code> in it. The agent reads each skill’s name and description and loads the rest when a task needs it. Add one from GitHub, any git repository, a folder on this computer, or the market on the <span class="ui">Skills</span> tab.</p>
+    <div class="table-wrap"><table>
+      <tr><th>Agent</th><th>Folder</th></tr>
+      <tr><td>Claude Code</td><td><code>~/.claude/skills</code></td></tr>
+      <tr><td>Codex</td><td><code>~/.codex/skills</code></td></tr>
+      <tr><td>Gemini CLI</td><td><code>~/.gemini/skills</code></td></tr>
+      <tr><td>OpenCode</td><td><code>skills</code> in its config folder</td></tr>
+      <tr><td>Cursor</td><td><code>~/.cursor/skills</code></td></tr>
+      <tr><td>Copilot CLI</td><td><code>~/.copilot/skills</code></td></tr>
+      <tr><td>Goose</td><td><code>~/.agents/skills</code></td></tr>
+    </table></div>
+    <h3>Links or copies</h3>
+    <p><span class="ui">Give skills as</span> sets how a skill reaches an agent, for every agent or, under <span class="ui">By agent</span>, for one:</p>
+    <ul>
+      <li><b>Links</b> (the default). The agent’s folder links to the library’s copy, so an update reaches every agent at once. On Windows without the right to make links, a junction is used.</li>
+      <li><b>Copies.</b> Each agent gets a folder of its own, for tools that don’t follow links. A copy is made again when the library’s skill changes. If the agent, or you, edit a copy, the next sync takes the newest edit into the library and gives it to the other agents. An edit that loses to a newer one is kept with the backups.</li>
+    </ul>
+    <p>A skill folder of your own with the same name is never written over: the page asks whether to use the library’s or keep yours.</p>
+    <h3>Editing and updates</h3>
+    <ul>
+      <li><b>Edit</b> opens a skill’s files on the page; <span class="ui">Save</span> (or ⌘S) writes them. The command line has no editor.</li>
+      <li><b>Updates.</b> When you open the Skills tab, skills from GitHub are checked for updates if 12 hours have passed since the last check (<code>magpie library skill update</code> checks now). A skill you changed is never replaced without asking.</li>
+      <li><b>Put skills in.</b> Skills go to each ticked agent’s own folder (the default), or also into <code>~/.agents/skills</code>, which Codex, Gemini CLI, OpenCode, Crush, Droid, Kimi Code and other tools read.</li>
+      <li><b>Off here.</b> A skill can be turned off on this computer only; a sync from another computer doesn’t turn it back on.</li>
+    </ul>
+
+    <h2 id="subagents"><a class="anchor" href="#subagents">Subagents</a></h2>
+    <p>A subagent is a helper the main agent can hand a task to. It has a name, a description and a prompt. magpie writes it as a file in each ticked agent’s subagent folder. The main agent reads every subagent’s <b>description</b> and decides itself when to call one, so the description should say plainly what it is for and when to use it.</p>
+    <ul>
+      <li><b>Name:</b> 2 to 50 lowercase letters, digits and <code>-</code>. A few names are reserved, such as <code>default</code> and <code>main</code>.</li>
+      <li><b>Description:</b> required, up to 1,000 characters.</li>
+      <li><b>Prompt:</b> required. It becomes the subagent’s instructions.</li>
+      <li><b>Model:</b> optional. See <a href="#models">Subagent models</a>.</li>
+    </ul>
+    <div class="table-wrap"><table>
+      <tr><th>Agent</th><th>File</th><th>Skills, MCP servers</th></tr>
+      <tr><td>Claude Code</td><td><code>~/.claude/agents/&lt;name&gt;.md</code></td><td>the ones you pick</td></tr>
+      <tr><td>Codex</td><td><code>~/.codex/agents/&lt;name&gt;.toml</code></td><td>all the agent has</td></tr>
+      <tr><td>OpenCode</td><td><code>agents/&lt;name&gt;.md</code> in its config folder</td><td>all the agent has</td></tr>
+      <tr><td>Gemini CLI</td><td><code>~/.gemini/agents/&lt;name&gt;.md</code></td><td>all the agent has</td></tr>
+      <tr><td>Qwen Code</td><td><code>agents/&lt;name&gt;.md</code> in its folder</td><td>all the agent has</td></tr>
+      <tr><td>Droid</td><td><code>~/.factory/droids/&lt;name&gt;.md</code></td><td>MCP servers you pick; all skills</td></tr>
+      <tr><td>Grok</td><td><code>agents/&lt;name&gt;.md</code> in its folder</td><td>all the agent has</td></tr>
+      <tr><td>Cursor</td><td><code>~/.cursor/agents/&lt;name&gt;.md</code></td><td>all the agent has</td></tr>
+      <tr><td>Copilot CLI</td><td><code>~/.copilot/agents/&lt;name&gt;.agent.md</code></td><td>all the agent has</td></tr>
+    </table></div>
+    <ul>
+      <li>Only Claude Code limits a subagent to the skills you pick, and only Claude Code and Droid to the MCP servers you pick. Elsewhere a subagent has everything its agent has.</li>
+      <li>Cursor: only the Cursor app reads <code>~/.cursor/agents</code>. <code>cursor-agent</code> reads only a project’s <code>.cursor/agents</code>.</li>
+      <li>Kimi Code, Goose, Crush, Qoder, CodeBuddy, iFlow and Kiro have no user-wide subagent folder, so they get none. Agents in WSL get none either.</li>
+      <li>If you edit a file magpie wrote, it becomes yours and magpie stops changing it. A file of your own with the same name is never written over; the page shows a problem instead.</li>
+    </ul>
+
+    <h2 id="models"><a class="anchor" href="#models">Subagent models</a></h2>
+    <p>A subagent’s <span class="ui">Model</span> field is written only for <b>Codex</b>. Every other agent runs its subagents on the model it picks itself, and the page says so. Left empty, the field reads <span class="ui">Picked by the agent</span>.</p>
+    <p>For Codex, the model goes into the subagent’s <code>.toml</code> file. Codex lays that file over the spawn, so requests carry that model and magpie’s gateway routes them like any other request. You can pick any model in Codex’s list, a magpie <code>provider/model</code>, or a routing group (<code>group/&lt;id&gt;</code>).</p>
+    <h3>Codex’s subagent model on the Agents page</h3>
+    <p>Codex’s row on the <span class="ui">Agents</span> page has a subagent model of its own, for every subagent Codex starts:</p>
+    <ul>
+      <li><b>Lead’s pick</b> (the default). The main agent picks each subagent’s model, one of Codex’s own too. A subagent it names no model for runs on the main agent’s model. A resumed subagent stays on the model it started on.</li>
+      <li><b>Same as the lead.</b> Every subagent runs on the main agent’s model.</li>
+      <li><b>A model or a group.</b> Every subagent runs on it, even when the main agent names another.</li>
+    </ul>
+    <div class="callout"><b>The Agents page wins.</b> When that setting is anything but <span class="ui">Lead’s pick</span>, the gateway sends every Codex subagent request to it, over a Library subagent’s own model too. The Library editor then says so. Picking a model there also removes <code>default_subagent_model</code> from Codex’s config.</div>
+    <p>Codex’s own <code>[agents] default_subagent_model</code> in <code>config.toml</code> is a different thing: only the model a subagent starts on when the main agent names none. One exception to all of the above: a task the ChatGPT backend has sealed stays on the model it asked for, unless the setting is a ChatGPT account’s model.</p>
+    <p>Claude Code has its own order: the model the main agent names in its call, then the subagent file’s <code>model:</code>, then <code>CLAUDE_CODE_SUBAGENT_MODEL</code> (which Claude Code’s row on the Agents page can set), then the session’s model.</p>
+
+    <h2 id="hooks"><a class="anchor" href="#hooks">Hooks</a></h2>
+    <p>A hook is a command an agent runs at a point in its turn: a notification when it finishes, a formatter after it edits a file. Pick a portable event (turn end, after a tool, before a tool, on a prompt, at session start) and magpie writes it under each agent’s own name for that event. Only Claude Code, Codex, Gemini CLI, Cursor, Grok Build and Grok App take hooks. A hook entry you change becomes yours.</p>
+
+    <h2 id="rtk"><a class="anchor" href="#rtk">RTK</a></h2>
+    <p>The RTK tab turns on <a href="https://www.rtk-ai.app/">RTK</a> per agent: the agent’s shell commands run through RTK, which shortens their output to save tokens. magpie can install RTK for you; turning it off works with RTK gone.</p>
+
+    <h2 id="touch"><a class="anchor" href="#touch">What magpie touches</a></h2>
+    <ul>
+      <li>Only what it wrote: the text between its markers, entries it recorded, files it marked as its own.</li>
+      <li>Never a file, entry or skill of yours with the same name. The page shows the clash and lets you choose.</li>
+      <li>Anything it replaces goes to the backups first.</li>
+    </ul>
+    <p>Projects can get skills and MCP servers too, in the project’s own folders (such as <code>.claude/skills</code>, <code>.agents/skills</code>, <code>.mcp.json</code> or <code>.codex/config.toml</code>).</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/start">Get started</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a href="/docs/remote">Remote magpie</a>
+    <a href="/docs/docker">Docker</a>
+    <a href="/docs/privacy">Privacy</a>
+    <a href="/docs/masking">Privacy masking</a>
+    <a href="/docs/mcp-router">MCP router</a>
+    <a href="/docs/library">Library</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/contributors">Contributors</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

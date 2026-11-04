@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>资源库 · magpie 文档</title>
+<meta name="description" content="magpie 资源库怎么工作：指令、MCP 服务器、技能、Hooks 和子代理写进每个 Agent 的哪里，子代理的模型怎么选。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/library">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/library">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/library">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/library">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/library">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="资源库">
+<meta property="og:description" content="指令、MCP 服务器、技能、Hooks 和子代理放在一处，写进每个 Agent 自己的文件。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/library">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/library" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/library" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/library" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>资源库</p>
+    <a href="#overview">概览</a>
+    <a href="#where">存放位置</a>
+    <a href="#instructions">指令</a>
+    <a href="#mcp">MCP 服务器</a>
+    <a href="#skills">技能</a>
+    <a href="#subagents">子代理</a>
+    <a href="#models">子代理的模型</a>
+    <a href="#hooks">Hooks</a>
+    <a href="#rtk">RTK</a>
+    <a href="#touch">magpie 会改什么</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 资源库</p>
+    <h1>资源库</h1>
+    <p class="lede">magpie 的 <span class="ui">资源库</span> 把指令、MCP 服务器、技能、Hooks 和子代理放在一处，再把每一项写进你勾选的每个 Agent，用的是那个 Agent 自己的文件和格式。Agent 像平常一样读这些文件。magpie 不在 Agent 和这些内容之间加任何一层：什么时候用某个技能、某个 MCP 工具或某个子代理，由 Agent 自己决定。</p>
+    <p>页面有六个标签：<span class="ui">指令</span>、<span class="ui">MCP 服务器</span>、<span class="ui">技能</span>、<span class="ui">Hooks</span>、<span class="ui">子代理</span> 和 <span class="ui">RTK</span>。每一项下面有一排 Agent；勾上就给它，取消勾选就拿走。Agent 重启后读到改动。</p>
+
+    <h2 id="where"><a class="anchor" href="#where">存放位置</a></h2>
+    <ul>
+      <li><b>资源库本身</b>是 magpie 配置目录里的 <code>library.json</code>（<code>~/.config/magpie</code>，设置了 <code>$XDG_CONFIG_HOME</code> 时是 <code>$XDG_CONFIG_HOME/magpie</code>）。指令文本和技能文件夹在旁边的 <code>library/</code> 里。</li>
+      <li><b>每次改动</b>都会保存资源库，并立刻写进所有 Agent。magpie 记下自己写了什么，所以只会拿走自己写的条目，不动你的。</li>
+      <li><b>备份。</b>改动前，被替换的文件会复制到同一目录的 <code>backups/</code>，保留最近 30 份。每个标签顶部的 <span class="ui">备份</span> 按钮可以打开它们。</li>
+      <li><b>重新写入。</b>装了新 Agent，或者手动改过它的文件后，<code>magpie library sync</code> 会把资源库重新写进所有 Agent。</li>
+    </ul>
+    <div class="code">
+      <span class="lang">终端</span>
+      <button class="copy" data-copy="ex-cli">复制</button>
+      <pre id="ex-cli">magpie library          # 资源库给了每个 Agent 什么
+magpie library sync     # 重新写进各个 Agent</pre>
+    </div>
+
+    <h2 id="instructions"><a class="anchor" href="#instructions">指令</a></h2>
+    <p>指令是 Agent 每次会话开头都会读到的文字，比如团队规则或代码风格。magpie 把自己的部分写在 Agent 指令文件里的两行标记之间：</p>
+    <div class="code">
+      <span class="lang">CLAUDE.md、AGENTS.md…</span>
+      <button class="copy" data-copy="ex-marks">复制</button>
+      <pre id="ex-marks">&lt;!-- magpie:begin · written by magpie from its Library --&gt;
+…资源库里的指令…
+&lt;!-- magpie:end --&gt;</pre>
+    </div>
+    <p>标记以外的内容都是你的，magpie 从不修改。你可以有多组命名的指令，各自给不同的 Agent；一组指令也可以放在你自己的文件里。</p>
+    <div class="table-wrap"><table>
+      <tr><th>Agent</th><th>文件</th></tr>
+      <tr><td>Claude Code</td><td><code>~/.claude/CLAUDE.md</code></td></tr>
+      <tr><td>Codex</td><td><code>~/.codex/AGENTS.md</code>（用了 <code>AGENTS.override.md</code> 时写它）</td></tr>
+      <tr><td>Gemini CLI</td><td><code>~/.gemini/GEMINI.md</code></td></tr>
+      <tr><td>Antigravity</td><td><code>~/.gemini/config/GEMINI.md</code></td></tr>
+      <tr><td>OpenCode</td><td>配置目录里的 <code>AGENTS.md</code></td></tr>
+      <tr><td>Copilot CLI</td><td><code>~/.copilot/copilot-instructions.md</code></td></tr>
+      <tr><td>Goose、Crush、Qwen Code、CodeBuddy</td><td><code>.goosehints</code>、<code>CRUSH.md</code>、<code>QWEN.md</code>、<code>CODEBUDDY.md</code></td></tr>
+      <tr><td>Droid、Grok、dsh、omp</td><td>各自目录里的 <code>AGENTS.md</code></td></tr>
+      <tr><td>Pi、OmO</td><td><code>AGENTS.md</code> 和 <code>CLAUDE.md</code> 中先存在的那个</td></tr>
+    </table></div>
+    <p>目录跟随 Agent 自己的设置：设置了 <code>CLAUDE_CONFIG_DIR</code> 或 <code>CODEX_HOME</code> 时，用它代替默认目录。</p>
+
+    <h2 id="mcp"><a class="anchor" href="#mcp">MCP 服务器</a></h2>
+    <p>MCP 服务器要么是一条命令（Agent 启动的程序，比如 <code>npx …</code>），要么是一个 URL（HTTP 或 SSE）。magpie 在每个勾选的 Agent 的 MCP 配置里为每个服务器写一个条目，用那个 Agent 的格式，你在条目里自己加的字段会保留。</p>
+    <div class="table-wrap"><table>
+      <tr><th>Agent</th><th>文件</th></tr>
+      <tr><td>Claude Code</td><td><code>~/.claude.json</code></td></tr>
+      <tr><td>Codex</td><td><code>~/.codex/config.toml</code></td></tr>
+      <tr><td>Gemini CLI</td><td><code>~/.gemini/settings.json</code></td></tr>
+      <tr><td>Antigravity</td><td><code>~/.gemini/config/mcp_config.json</code></td></tr>
+      <tr><td>OpenCode</td><td><code>opencode.json</code></td></tr>
+      <tr><td>Cursor</td><td><code>~/.cursor/mcp.json</code></td></tr>
+      <tr><td>Copilot CLI</td><td><code>~/.copilot/mcp-config.json</code></td></tr>
+      <tr><td>Zed</td><td>它的 <code>settings.json</code> 里的 <code>context_servers</code></td></tr>
+    </table></div>
+    <ul>
+      <li><b>变量。</b>请求头或环境变量里的 <code>${NAME}</code> 会按每个 Agent 自己的写法写入。不支持这种写法的 Agent 不会拿到这个服务器，页面会说明原因。</li>
+      <li><b>SSE。</b>Codex、Goose、dsh、Grok、Command Code 和 Zed 用不了 SSE 服务器。Claude Desktop 完全不接受远程服务器。</li>
+      <li><b>单独关掉工具。</b>Codex、Gemini CLI、Crush、Hermes Agent、Claude Code 和 OpenCode 可以逐个关掉工具，各自写进自己的设置。其他 Agent 拿到的是整个服务器。</li>
+      <li><b>登录。</b>需要 OAuth 的服务器只在 magpie 里登录一次，之后 Agent 通过 magpie 网关的 <code>/mcp/&lt;name&gt;</code> 访问它。</li>
+      <li><b>只在这台电脑。</b>不想同步到别处的服务器，关掉 <span class="ui">同步到其他电脑</span>（<code>magpie library mcp local &lt;name&gt; on</code>）。</li>
+    </ul>
+    <p>打开 <a href="/docs/zh/mcp-router">MCP 路由</a> 后，每个 Agent 只拿到一个名为 <code>magpie</code> 的服务器来代替这些条目，命令型服务器由 magpie 为所有 Agent 只运行一份。它默认关闭。</p>
+
+    <h2 id="skills"><a class="anchor" href="#skills">技能</a></h2>
+    <p>一个技能（Skill）就是一个带 <code>SKILL.md</code> 的文件夹。Agent 先读每个技能的名字和描述，任务用得到时再读其余部分。可以从 GitHub、任意 git 仓库、本机文件夹，或 <span class="ui">技能</span> 标签里的市场添加。</p>
+    <div class="table-wrap"><table>
+      <tr><th>Agent</th><th>目录</th></tr>
+      <tr><td>Claude Code</td><td><code>~/.claude/skills</code></td></tr>
+      <tr><td>Codex</td><td><code>~/.codex/skills</code></td></tr>
+      <tr><td>Gemini CLI</td><td><code>~/.gemini/skills</code></td></tr>
+      <tr><td>OpenCode</td><td>配置目录里的 <code>skills</code></td></tr>
+      <tr><td>Cursor</td><td><code>~/.cursor/skills</code></td></tr>
+      <tr><td>Copilot CLI</td><td><code>~/.copilot/skills</code></td></tr>
+      <tr><td>Goose</td><td><code>~/.agents/skills</code></td></tr>
+    </table></div>
+    <h3>链接还是副本</h3>
+    <p><span class="ui">Skills 启用方式</span> 决定技能怎么到达 Agent，可以对所有 Agent 设置，也可以在 <span class="ui">按 Agent</span> 里单独设置：</p>
+    <ul>
+      <li><b>符号链接</b>（默认）。Agent 的目录链接到资源库里的那份，更新立刻到达所有 Agent。在 Windows 上没有创建链接的权限时，用目录联接（junction）。</li>
+      <li><b>副本。</b>每个 Agent 拿到一份自己的文件夹，适合不跟随链接的工具。资源库里的技能变了，副本会重新生成。如果 Agent 或你改了某个副本，下次同步会把最新的修改收进资源库，再给其他 Agent。被更新的修改盖过的那份会放进备份。</li>
+    </ul>
+    <p>你自己有同名的技能文件夹时，magpie 不会覆盖它：页面会问你用资源库的还是保留你的。</p>
+    <h3>编辑和更新</h3>
+    <ul>
+      <li><b>编辑</b>会在页面上打开技能的文件；<span class="ui">保存</span>（或 ⌘S）写入。命令行没有编辑器。</li>
+      <li><b>更新。</b>打开技能标签时，如果距上次检查已过 12 小时，会检查来自 GitHub 的技能有没有更新（<code>magpie library skill update</code> 立即检查）。你改过的技能不会不问就被替换。</li>
+      <li><b>Skills 放在。</b>技能放进每个勾选的 Agent 自己的目录（默认），或者同时放进 <code>~/.agents/skills</code>，Codex、Gemini CLI、OpenCode、Crush、Droid、Kimi Code 等工具都会读这里。</li>
+      <li><b>仅本机关闭。</b>一个技能可以只在这台电脑上关闭；从别的电脑同步过来也不会把它重新打开。</li>
+    </ul>
+
+    <h2 id="subagents"><a class="anchor" href="#subagents">子代理</a></h2>
+    <p>子代理是主 Agent 可以把任务交给它的帮手，有名字、描述和提示词。magpie 把它写成一个文件，放进每个勾选的 Agent 的子代理目录。主 Agent 读每个子代理的 <b>描述</b>，自己决定什么时候调用，所以描述要直白地写清它做什么、什么时候该用它。</p>
+    <ul>
+      <li><b>名字：</b>2 到 50 个小写字母、数字和 <code>-</code>。有几个名字保留不能用，比如 <code>default</code> 和 <code>main</code>。</li>
+      <li><b>描述：</b>必填，最多 1000 个字符。</li>
+      <li><b>提示词：</b>必填，成为子代理的指令。</li>
+      <li><b>模型：</b>可选，见 <a href="#models">子代理的模型</a>。</li>
+    </ul>
+    <div class="table-wrap"><table>
+      <tr><th>Agent</th><th>文件</th><th>技能、MCP 服务器</th></tr>
+      <tr><td>Claude Code</td><td><code>~/.claude/agents/&lt;name&gt;.md</code></td><td>你选的那些</td></tr>
+      <tr><td>Codex</td><td><code>~/.codex/agents/&lt;name&gt;.toml</code></td><td>该 Agent 的全部</td></tr>
+      <tr><td>OpenCode</td><td>配置目录里的 <code>agents/&lt;name&gt;.md</code></td><td>该 Agent 的全部</td></tr>
+      <tr><td>Gemini CLI</td><td><code>~/.gemini/agents/&lt;name&gt;.md</code></td><td>该 Agent 的全部</td></tr>
+      <tr><td>Qwen Code</td><td>其目录里的 <code>agents/&lt;name&gt;.md</code></td><td>该 Agent 的全部</td></tr>
+      <tr><td>Droid</td><td><code>~/.factory/droids/&lt;name&gt;.md</code></td><td>你选的 MCP 服务器；全部技能</td></tr>
+      <tr><td>Grok</td><td>其目录里的 <code>agents/&lt;name&gt;.md</code></td><td>该 Agent 的全部</td></tr>
+      <tr><td>Cursor</td><td><code>~/.cursor/agents/&lt;name&gt;.md</code></td><td>该 Agent 的全部</td></tr>
+      <tr><td>Copilot CLI</td><td><code>~/.copilot/agents/&lt;name&gt;.agent.md</code></td><td>该 Agent 的全部</td></tr>
+    </table></div>
+    <ul>
+      <li>只有 Claude Code 能把子代理限定在你选的技能上，只有 Claude Code 和 Droid 能限定在你选的 MCP 服务器上。其他 Agent 的子代理能用该 Agent 的一切。</li>
+      <li>Cursor：只有 Cursor 应用读 <code>~/.cursor/agents</code>。<code>cursor-agent</code> 只读项目里的 <code>.cursor/agents</code>。</li>
+      <li>Kimi Code、Goose、Crush、Qoder、CodeBuddy、iFlow 和 Kiro 没有用户级的子代理目录，所以拿不到子代理。WSL 里的 Agent 也拿不到。</li>
+      <li>你改了 magpie 写的文件，它就归你，magpie 不再改它。你自己的同名文件永远不会被覆盖，页面会显示一个问题。</li>
+    </ul>
+
+    <h2 id="models"><a class="anchor" href="#models">子代理的模型</a></h2>
+    <p>子代理的 <span class="ui">模型</span> 只会写给 <b>Codex</b>。其他 Agent 的子代理都用 Agent 自己选的模型，页面上会注明。留空时显示 <span class="ui">由 Agent 选择</span>。</p>
+    <p>对 Codex，模型写进子代理的 <code>.toml</code> 文件。Codex 启动子代理时会叠上这个文件，所以请求带的就是这个模型，magpie 网关像路由其他请求一样路由它。可以选 Codex 列表里的任何模型、magpie 的 <code>provider/model</code>，或一个路由组（<code>group/&lt;id&gt;</code>）。</p>
+    <h3>Agent 页面上 Codex 的子代理模型</h3>
+    <p><span class="ui">Agent</span> 页面上 Codex 那一行有一个自己的子代理模型设置，管 Codex 启动的所有子代理：</p>
+    <ul>
+      <li><b>由主代理自选</b>（默认）。主 Agent 为每个子代理选模型，也可能选 Codex 自带的模型。没指定模型的子代理用主 Agent 的模型。恢复的子代理仍用它最初的模型。</li>
+      <li><b>跟主代理一样。</b>所有子代理都用主 Agent 的模型。</li>
+      <li><b>某个模型或路由组。</b>所有子代理都用它，主 Agent 指定了别的也一样。</li>
+    </ul>
+    <div class="callout"><b>Agent 页面的设置优先。</b>只要它不是 <span class="ui">由主代理自选</span>，网关就把 Codex 的每个子代理请求都发到它，资源库里子代理自己的模型也会被取代，资源库的编辑器里会注明这一点。在那里选定模型时，还会把 Codex 配置里的 <code>default_subagent_model</code> 去掉。</div>
+    <p>Codex 自己 <code>config.toml</code> 里的 <code>[agents] default_subagent_model</code> 是另一回事：它只是主 Agent 没指定模型时子代理起步用的模型。以上都有一个例外：ChatGPT 后端封装过的任务保持它要求的模型，除非这个设置本身就是某个 ChatGPT 账号的模型。</p>
+    <p>Claude Code 有自己的顺序：先看主 Agent 调用时指定的模型，再看子代理文件里的 <code>model:</code>，再看 <code>CLAUDE_CODE_SUBAGENT_MODEL</code>（Agent 页面上 Claude Code 那一行可以设置），最后是会话的模型。</p>
+
+    <h2 id="hooks"><a class="anchor" href="#hooks">Hooks</a></h2>
+    <p>Hook 是 Agent 在一轮对话中某个时刻运行的命令：结束时发个通知，改完文件后跑格式化。选一个通用事件（一轮结束、工具之后、工具之前、收到提示词、会话开始），magpie 会按每个 Agent 自己对这个事件的叫法写入。只有 Claude Code、Codex、Gemini CLI、Cursor、Grok Build 和 Grok App 支持 Hooks。你改过的 Hook 条目就归你。</p>
+
+    <h2 id="rtk"><a class="anchor" href="#rtk">RTK</a></h2>
+    <p>RTK 标签可以按 Agent 打开 <a href="https://www.rtk-ai.app/">RTK</a>：Agent 的 shell 命令经过 RTK 运行，输出被压短以节省 token。magpie 可以帮你安装 RTK；RTK 卸掉后也能关闭。</p>
+
+    <h2 id="touch"><a class="anchor" href="#touch">magpie 会改什么</a></h2>
+    <ul>
+      <li>只改它自己写的：标记之间的文字、它记录过的条目、它标记为自己的文件。</li>
+      <li>从不碰你自己的同名文件、条目或技能。页面会显示冲突，让你选择。</li>
+      <li>被替换的内容都会先进备份。</li>
+    </ul>
+    <p>项目也可以拿到技能和 MCP 服务器，放在项目自己的目录里（比如 <code>.claude/skills</code>、<code>.agents/skills</code>、<code>.mcp.json</code> 或 <code>.codex/config.toml</code>）。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
