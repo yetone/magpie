@@ -48,14 +48,20 @@ function redactRouteRow(s) {
 // it holds.
 let wordsRedrawing = false;
 const splitWords = (v) => v.split(/[,，\n]/).map((w) => w.trim()).filter(Boolean);
-function wordList(key, list, ph, label, save) {
+// Import… takes many words at once (acmilan_ on Discord: adding them one
+// by one was slow), pasted a word a line or split at commas; a word the
+// list has, or one pasted twice, is passed over, and the status says how
+// many were added. The box open, and what it holds, outlive a redraw.
+// Copy puts the list on the clipboard a word a line, as Import takes it.
+let wordImport = null;
+function wordList(key, list, ph, label, save, savedNow) {
   const box = el("div", "word-list");
   box.dataset.list = key;
   let cur = list.map((w) => ({ w }));
   const put = (next) => {
     if (next.map((o) => o.w).join("\n") === cur.map((o) => o.w).join("\n")) return;
     cur = next;
-    save(next.map((o) => o.w));
+    return save(next.map((o) => o.w));
   };
   const keys = (i, done, back) => {
     i.onkeydown = (e) => {
@@ -103,6 +109,71 @@ function wordList(key, list, ph, label, save) {
   go.onclick = () => { take(); add.focus(NO_SCROLL); };
   line.append(add, go);
   box.append(line);
+
+  const imp = el("div", "word-import");
+  imp.hidden = wordImport?.key !== key;
+  const area = el("textarea", "word-import-in");
+  area.rows = 5;
+  area.spellcheck = false;
+  area.value = wordImport?.key === key ? wordImport.text : "";
+  area.placeholder = t("Paste words, one a line or separated by commas");
+  area.setAttribute("aria-label", t("Words to import"));
+  const count = el("span", "hint word-import-count");
+  const bring = el("button", "text primary", t("Import"));
+  bring.type = "button";
+  const fresh = () => {
+    const have = new Set(cur.map((o) => o.w));
+    return [...new Set(splitWords(area.value))].filter((w) => !have.has(w));
+  };
+  const counted = () => {
+    const n = fresh().length;
+    count.textContent = area.value.trim() ? (n ? t("New words: {n}", { n }) : t("No new words: each is in the list already")) : "";
+    bring.disabled = !n;
+  };
+  const close = () => { wordImport = null; area.value = ""; imp.hidden = true; counted(); };
+  area.oninput = () => { wordImport = { key, text: area.value }; counted(); };
+  const bringIn = async () => {
+    const pasted = new Set(splitWords(area.value)), add = fresh();
+    if (!add.length) return;
+    close();
+    await put([...cur, ...add.map((w) => ({ w }))]);
+    // said only once the words are saved: a failed save has said why
+    const now = new Set(savedNow?.() || []);
+    if (!add.every((w) => now.has(w))) return;
+    const had = pasted.size - add.length;
+    status(had ? t("Words added: {n} · already in the list: {m}", { n: add.length, m: had }) : t("Words added: {n}", { n: add.length }), "ok");
+  };
+  area.onkeydown = (e) => {
+    e.stopPropagation();
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); bringIn(); }
+    else if (e.key === "Escape") close();
+  };
+  bring.onclick = bringIn;
+  const no = el("button", "text", t("Cancel"));
+  no.type = "button";
+  no.onclick = close;
+  const bar = el("div", "word-import-bar");
+  bar.append(count, el("span", "grow"), no, bring);
+  imp.append(area, bar);
+  counted();
+  box.append(imp);
+
+  const open = el("button", "text word-import-open", t("Import…"));
+  open.type = "button";
+  open.title = t("Add many words at once, pasted one a line or separated by commas");
+  open.onclick = () => {
+    if (!imp.hidden) return void close();
+    wordImport = { key, text: "" };
+    imp.hidden = false;
+    area.focus(NO_SCROLL);
+  };
+  const out = el("button", "text word-copy", t("Copy"));
+  out.type = "button";
+  out.title = t("Copy the list, one word a line");
+  out.disabled = !cur.length;
+  out.onclick = () => copy(cur.map((o) => o.w).join("\n"), "", out, t("Words copied: {n}", { n: cur.length }));
+  box.tools = [open, out];
   return box;
 }
 // wordRow: the row a wordList sits under, its words above and the list
@@ -141,7 +212,8 @@ function redactWordsHidden(r) {
   const eye = el("button", "text redact-eye");
   eye.type = "button";
   const set = () => {
-    for (const i of r.querySelectorAll("input.words")) {
+    for (const i of r.querySelectorAll("input.words, textarea.word-import-in")) {
+      if (i.tagName === "TEXTAREA") { if (dots) i.classList.toggle("words-hidden", !redactWordsShown); continue; }
       if (dots) i.classList.toggle("words-hidden", !redactWordsShown);
       else i.type = redactWordsShown ? "text" : "password";
     }
@@ -158,16 +230,18 @@ function redactWordsHidden(r) {
     const f = wordFocusOf();
     wordsRedrawing = true;
     try { draw(s, keep); } finally { wordsRedrawing = false; }
-    const words = wordRow(t("Masked words"), t("Your own words to keep from vendors, one on each row"),
-      wordList("words", s.redactWords || [], t("names, codenames, hosts"), t("Masked words"), (redactWords) => savePrefs({ ...keep, redactWords })));
+    const wl = wordList("words", s.redactWords || [], t("names, codenames, hosts"), t("Masked words"), (redactWords) => savePrefs({ ...keep, redactWords }), () => prefs?.redactWords);
+    const words = wordRow(t("Masked words"), t("Your own words to keep from vendors, one on each row"), wl, ...wl.tools);
     const at = $("#redactWordsAnyCaseRow");
     if (at) at.before(words); else $("#redactList").append(words);
     redactWordsHidden(words);
     const acts = $("#maskActList");
-    if (acts) acts.append(wordRow(t("Never mask"), t("Values that always go as written, each whole and in any case, one on each row: a team address, a test key"),
-      wordList("allow", s.redactAllow || [], t("ops@company.com, build-01"), t("Never mask"), (allow) => writingPrefs(api("settings/redact-allow", { allow }))
+    if (acts) {
+      const al = wordList("allow", s.redactAllow || [], t("ops@company.com, build-01"), t("Never mask"), (allow) => writingPrefs(api("settings/redact-allow", { allow }))
         .then((ns) => { prefs = ns; renderSettings(); status(t("Saved"), "ok", 1500); })
-        .catch(settingsErr))));
+        .catch(settingsErr), () => prefs?.redactAllow);
+      acts.append(wordRow(t("Never mask"), t("Values that always go as written, each whole and in any case, one on each row: a team address, a test key"), al, ...al.tools));
+    }
     wordFocusBack(f);
     if (s.redact || s.redactPersonal || (s.redactWords || []).length) redactRouteRow(s);
   };

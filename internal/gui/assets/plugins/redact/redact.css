@@ -375,3 +375,11 @@ body.window .msk-onebar::before { inset: -6px calc(var(--bar, 0px) - 16px) -6px 
 .word-line input.words { flex: 1 1 auto; width: auto; min-width: 0; }
 .word-line .word-x { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border-radius: 6px; font-size: 15px; color: var(--muted); }
 .word-line.word-new .text { flex: none; }
+/* Import… under a word list: many words pasted at once, a word a line or
+   split at commas (wordList in settings.js) */
+.word-import { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.word-import textarea.word-import-in { width: 100%; box-sizing: border-box; resize: vertical; min-height: 84px; font: inherit; font-size: 12px; line-height: 1.5; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--fg); }
+#redactList textarea.word-import-in.words-hidden { -webkit-text-security: disc; }
+.word-import-bar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; }
+.word-import-bar .grow { flex: 1; }
+.word-import-count { min-width: 0; }
