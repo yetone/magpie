@@ -1886,7 +1886,7 @@ func (s *Server) countOn(w http.ResponseWriter, r *http.Request, p provider.Prov
 			}
 			keepRetryOut(w.Header(), res.Header, b)
 			passReplyHeaders(w.Header(), c.p, res)
-			writeError(w, provider.Anthropic, res.StatusCode, c.p.Explain(c.p.Name+": "+provider.APIError(b, res.Status), res.StatusCode, b))
+			writeError(w, provider.Anthropic, res.StatusCode, explained(c.p, model, res, b))
 			return
 		}
 		defer res.Body.Close()
@@ -3031,6 +3031,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	sameRefusal := false              // the last try's 5xx was a mate's word for word: the request's
 	autoReset := resetFirst != nil    // a Codex or Claude reset looked at, once a request
 	creditsAsked := map[string]bool{} // Codex accounts asked again onto their credits, once each (creditsAgain)
+	regionAsked := map[string]int{}   // a provider's model refused for where the request came from, times this request (#5182)
 	// the subscription/model pairs an account refused as a model it doesn't
 	// serve, for the accounts whose own list lacks it to be asked next
 	// (unlistedNext); none for a request pinned to an account, a
@@ -4276,6 +4277,26 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		// nor is it asked again after a moment
 		protected = protected || zdr || noRoom
+		if !hw.passing && !hw.refused && hw.failed() && regionRefused(hw.code(), wordsOf(hw.errBody())) {
+			// the vendor refused the model for where the request came from
+			// (regionWords). Once, it may be the edge a kept-alive
+			// connection reached: the next account, or this one again, is
+			// asked on a new connection (regionFresh) and may answer
+			// (#5182, ggdayup: answered 12s on). Refused again, it is the
+			// place: Google serves some models to no request from it
+			// (taoxiaoxin: gemini-3.8-flash refused, Claude models on the
+			// same account answered), so none of the provider's other
+			// accounts is asked that model, nor this one again. Nobody
+			// rests (restAfterMarked); another provider or model left is
+			// asked, and the agent is told why (regionNote)
+			regionAsked[c.p.ID+"\x00"+c.model]++
+			if regionAsked[c.p.ID+"\x00"+c.model] > 1 {
+				cands = append(cands[:i+1:i+1], notMates(cands[i+1:], c)...)
+				busyNow = slices.DeleteFunc(busyNow, func(b busyTry) bool { return b.c.p.ID == c.p.ID && b.c.model == c.model })
+				last = i == len(cands)-1
+				protected = true
+			}
+		}
 		if !hw.passing && !hw.refused && hw.failed() && riskRefused(c, hw.code(), hw.header, hw.errBody()) {
 			// the vendor's risk control restricted the account (WorkBuddy's
 			// 403 11140, ZCode's 3012): its risk control reads the same
@@ -6386,7 +6407,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	u.RequestID = requestID(res.Header)
 	if res.StatusCode >= 400 {
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-		msg := p.Explain(p.Name+": "+provider.APIError(b, res.Status), res.StatusCode, b)
+		msg := explained(p, model, res, b)
 		if wrongEndpoint(res.StatusCode, b) {
 			s.markUnfit(p.ID, model, proto)
 			if len(s.usable(p, model)) > 0 {
@@ -8065,7 +8086,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 	u.RequestID = requestID(res.Header)
 	if res.StatusCode >= 400 {
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-		msg := p.Explain(p.Name+": "+provider.APIError(b, res.Status), res.StatusCode, b)
+		msg := explained(p, model, res, b)
 		if wrongEndpoint(res.StatusCode, b) {
 			msg += wrongAPINote(p, model, res, b)
 		}

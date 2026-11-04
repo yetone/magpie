@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -260,5 +261,76 @@ func TestRegionRefusalRestsNoAccount(t *testing.T) {
 	turnOn(t, s, claudeTurn("You are a helpful assistant."))
 	if _, ok := restOf("antigravity@u@example.com"); !ok {
 		t.Fatalf("a 500 no longer rests the account: %+v", lastRoute(s).Tries)
+	}
+}
+
+// #5182 (taoxiaoxin): Google refuses gemini-3.8-flash from where the
+// user is, on every account and every connection, while the same
+// accounts' Claude models answer. One refusal may be a connection's
+// edge, so one more ask goes out on a new connection; refused again, it
+// is the place: the provider's other accounts aren't asked the model,
+// nobody rests, and the agent is told Google's regional restriction on
+// the model, at the 400 it doesn't retry.
+func TestRegionRefusalOfTheModelEndsAfterOneMoreAsk(t *testing.T) {
+	pause := retryPause
+	retryPause = time.Millisecond
+	t.Cleanup(func() { retryPause = pause })
+	for _, users := range [][]string{{"u@example.com"}, {"u1@example.com", "u2@example.com", "u3@example.com"}} {
+		for _, stream := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%d accounts/stream=%v", len(users), stream), func(t *testing.T) {
+				var mu sync.Mutex
+				var who []string
+				s, askedUsage := antigravityTurnedAwayGroup(t, users, func(w http.ResponseWriter, r *http.Request) {
+					mu.Lock()
+					who = append(who, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+					mu.Unlock()
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusBadRequest)
+					io.WriteString(w, googleRegion400)
+				})
+				code, out := turnOn(t, s, directTurn("You are a helpful assistant.", stream))
+				mu.Lock()
+				asked := slices.Clone(who)
+				mu.Unlock()
+				if len(asked) != 2 {
+					t.Fatalf("asked %v; want one more ask after the first refusal, then none", asked)
+				}
+				if code != http.StatusBadRequest {
+					t.Fatalf("the agent got %d: %s", code, out)
+				}
+				for _, want := range []string{"User location is not supported", "Google doesn't serve m to requests from the region", "not on the account"} {
+					if !strings.Contains(out, want) {
+						t.Fatalf("the agent isn't told %q: %s", want, out)
+					}
+				}
+				for _, u := range users {
+					if r, ok := restOf("antigravity@" + u); ok {
+						t.Fatalf("%s rests: %+v", u, r)
+					}
+				}
+				if *askedUsage != 0 {
+					t.Fatalf("usage asked again %d times", *askedUsage)
+				}
+			})
+		}
+	}
+}
+
+// regionNote names the model and the vendor for a region refusal, and
+// nothing for another 400 or a success that quotes the words.
+func TestRegionNote(t *testing.T) {
+	if n := regionNote("gemini-3.8-flash", 400, []byte(googleRegion400)); !strings.Contains(n, "Google doesn't serve gemini-3.8-flash") {
+		t.Fatalf("Google's: %q", n)
+	}
+	if n := regionNote("gpt-5", 403, []byte(`{"error":{"code":"unsupported_country_region_territory","message":"Country, region, or territory not supported"}}`)); !strings.HasPrefix(n, "the vendor doesn't serve gpt-5") {
+		t.Fatalf("OpenAI's: %q", n)
+	}
+	for _, c := range []struct {
+		status int
+		body   string
+	}{{400, `{"error":{"code":400,"message":"Request contains an invalid argument.","status":"INVALID_ARGUMENT"}}`}, {200, googleRegion400}} {
+		if n := regionNote("m", c.status, []byte(c.body)); n != "" {
+			t.Fatalf("%d %s: %q", c.status, c.body, n)
+		}
 	}
 }

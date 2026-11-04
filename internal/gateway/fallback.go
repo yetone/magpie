@@ -1708,6 +1708,38 @@ func regionRefused(status int, body []byte) bool {
 	return status >= 400 && regionWords.Match(body)
 }
 
+// googleRegionWords is Google's wording of the refusal (Gemini, Code
+// Assist, Antigravity), which names the vendor in regionNote.
+var googleRegionWords = regexp.MustCompile(`(?i)\buser location is not supported for the api use\b`)
+
+// regionNote is what the agent is told beside a refusal of where the
+// request came from (regionRefused), or "" for any other reply: the
+// vendor's restriction is on the model asked, from where the request
+// leaves, so its other models may answer on the same account
+// (taoxiaoxin, #5182: Antigravity's gemini-3.8-flash refused, its Claude
+// models answered), and no account rests for it.
+func regionNote(model string, status int, body []byte) string {
+	words := wordsOf(body)
+	if !regionRefused(status, words) {
+		return ""
+	}
+	who := "the vendor"
+	if googleRegionWords.Match(words) {
+		who = "Google"
+	}
+	return fmt.Sprintf("%s doesn't serve %s to requests from the region this one left from: a regional restriction on the model, not on the account, so no account rests for it and the provider's other models may still answer. Use another provider for %s, or give the provider a proxy in a region %s serves (its Proxy setting)", who, model, model, who)
+}
+
+// explained is p's words for a failed reply b, as the agent is told them
+// (Provider.Explain), with regionNote for a refusal of where it came from.
+func explained(p provider.Provider, model string, res *http.Response, b []byte) string {
+	msg := p.Explain(p.Name+": "+provider.APIError(b, res.Status), res.StatusCode, b)
+	if note := regionNote(model, res.StatusCode, b); note != "" {
+		msg += " — " + note
+	}
+	return msg
+}
+
 // protectionWords are how the ChatGPT backend answers a long Codex
 // conversation it won't take as it is: 502 "response protection is
 // unavailable" (vs on Discord, 0.1.1108). It comes back the same for the

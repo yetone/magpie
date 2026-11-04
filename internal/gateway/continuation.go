@@ -517,7 +517,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 		if err == nil && res.StatusCode >= 400 {
 			b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 			res.Body.Close()
-			failed, failedStatus = p.Explain(p.Name+": "+provider.APIError(b, res.Status), res.StatusCode, b), res.StatusCode
+			failed, failedStatus = explained(p, model, res, b), res.StatusCode
 			if cont.resume && refusesPrefill(res.StatusCode, b) {
 				// a model that takes no prefill (forwardTranslated
 				// remembers it): the reply ends with what cut it, as a
