@@ -16,20 +16,21 @@ import (
 // of Codex, signed in to two accounts, listed first and a pay-as-you-go
 // MiMo key listed second as the backup, routed routing with Stays mode.
 // Codex answers 429 usage_limit_reached while down; allowances, when
-// known, says each account's 5 hours used (100 while down, 10 after) and
-// its week at weekly. up has Codex back: the 5 hours renewed and every
+// known, says each account's 5 hours used (100 while down, five after)
+// and its week at weekly. up has Codex back: the 5 hours renewed and every
 // rest over, as when the vendor's reset passes.
 type standInGroup struct {
 	s      *Server
 	mu     sync.Mutex
 	down   bool
+	five   float64
 	weekly float64
 }
 
 func newStandInGroup(t *testing.T, routing, mode string, known bool) *standInGroup {
 	t.Helper()
 	codexSignedIn(t, "spare@example.com")
-	g := &standInGroup{down: true, weekly: 40}
+	g := &standInGroup{down: true, five: 10, weekly: 40}
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		g.mu.Lock()
@@ -59,7 +60,7 @@ func newStandInGroup(t *testing.T, routing, mode string, known bool) *standInGro
 		}
 		g.mu.Lock()
 		defer g.mu.Unlock()
-		five := 10.0
+		five := g.five
 		if g.down {
 			five = 100
 		}
@@ -199,26 +200,28 @@ func TestGroupBackupGivesTheConversationBack(t *testing.T) {
 
 // TestGroupBackupStandingInWhileTheFirstIsBackAndBehind: the backup that
 // answers on while Codex is back but routing still puts the backup first
-// (Smart's low tier, Codex's week at 92%) is a stand-in still, and gives
-// the conversation back once routing puts Codex first again.
+// (Smart's low tier, Codex's 5 hours at 92%: a rate cap near full; a week
+// at 92% alone no longer is, as what it has left is lost at its reset,
+// #5209) is a stand-in still, and gives the conversation back once
+// routing puts Codex first again.
 func TestGroupBackupStandingInWhileTheFirstIsBackAndBehind(t *testing.T) {
 	g := newStandInGroup(t, "", "", true)
 	if on, why := g.ask(t, "s1", 1); on != "mimo" {
 		t.Fatalf("turn 1 with Codex out went to %s (%s)", on, why)
 	}
 	g.mu.Lock()
-	g.weekly = 92
+	g.five = 92
 	g.mu.Unlock()
 	g.up()
 	if on, why := g.ask(t, "s1", 2); on != "mimo" || why != "cache" {
-		t.Fatalf("turn 2 with Codex back at 92%% of its week went to %s (%s), want mimo (cache)", on, why)
+		t.Fatalf("turn 2 with Codex back at 92%% of its 5 hours went to %s (%s), want mimo (cache)", on, why)
 	}
 	g.mu.Lock()
-	g.weekly = 40
+	g.five = 10
 	g.mu.Unlock()
 	provider.ForgetAccounts()
 	if on, why := g.ask(t, "s1", 3); on != "codex" || why != "back" {
-		t.Fatalf("turn 3 with Codex's week renewed went to %s (%s), want codex (back)", on, why)
+		t.Fatalf("turn 3 with Codex's 5 hours renewed went to %s (%s), want codex (back)", on, why)
 	}
 }
 
@@ -230,14 +233,14 @@ func TestGroupBackupStandingInWhileTheFirstIsBackAndBehind(t *testing.T) {
 func TestGroupMemberPutFirstOnItsMeritsKeepsItsCache(t *testing.T) {
 	g := newStandInGroup(t, "", "", true)
 	g.mu.Lock()
-	g.weekly = 92 // low, not spent: Smart puts the unknown key first
+	g.five = 92 // its rate cap low, not spent: Smart puts the unknown key first
 	g.mu.Unlock()
 	g.up()
 	if on, why := g.ask(t, "s1", 1); on != "mimo" || why != "first" {
-		t.Fatalf("turn 1 with Codex at 92%% of its week went to %s (%s), want mimo (first)", on, why)
+		t.Fatalf("turn 1 with Codex at 92%% of its 5 hours went to %s (%s), want mimo (first)", on, why)
 	}
 	g.mu.Lock()
-	g.weekly = 40
+	g.five = 10
 	g.mu.Unlock()
 	provider.ForgetAccounts()
 	if on, why := g.ask(t, "s1", 2); on != "mimo" || why != "cache" {
@@ -245,6 +248,21 @@ func TestGroupMemberPutFirstOnItsMeritsKeepsItsCache(t *testing.T) {
 	}
 	if on, why := g.ask(t, "s2", 1); on != "codex" {
 		t.Fatalf("a new conversation went to %s (%s), want codex", on, why)
+	}
+}
+
+// TestGroupWeekLowIsSpentBeforeTheKey: Codex back at 92% of its week, its
+// 5 hours with room, goes ahead of the pay-as-you-go key listed after it
+// in a Smart group: what the week has left is lost at its reset
+// (ysicing_01858, #5209), where the key's tokens keep.
+func TestGroupWeekLowIsSpentBeforeTheKey(t *testing.T) {
+	g := newStandInGroup(t, "", "", true)
+	g.mu.Lock()
+	g.weekly = 92
+	g.mu.Unlock()
+	g.up()
+	if on, why := g.ask(t, "s1", 1); on != "codex" {
+		t.Fatalf("a new conversation with Codex at 92%% of its week went to %s (%s), want codex", on, why)
 	}
 }
 
