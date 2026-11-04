@@ -8,7 +8,9 @@ with. The response returns that id in `X-Magpie-Session`; listed browser
 origins can read this header through CORS. magpie never makes up an id for a
 request without one, so such a request has no session and its text is not
 recorded: text kept under an id nothing lists couldn't be opened. Prompt text,
-caller keys and network addresses are never used to guess conversation ownership.
+caller keys and network addresses are never used to guess conversation ownership,
+with one exception, Qoder's below, where the prompt is matched against the
+session files the agent itself wrote.
 So the configs magpie writes have each agent name its session: Pi's provider
 block sets `compat.sendSessionAffinityHeaders` (`x-session-affinity` on Chat and
 Messages; Responses sends `session_id` anyway), and omp 16.0.6 and later gets
@@ -30,6 +32,29 @@ identify the current session. This lets Routing group requests by the same id
 the native WorkBuddy session reader already knows; old requests without a
 recorded session remain unnamed. See `TestWorkBuddySessionHeader`,
 `TestWorkBuddySessionThroughGateway` and `TestRemoteMagpieKeepsTheSession`.
+
+Qoder's CLI (qodercli, qoderclicn) named its session in `session-id` up to
+1.1.81; 1.1.82 sends no session at all (coderlee233 on Discord). For a request
+from Qoder or Qoder CN (by its agent token) on this computer that names no
+session, `qoderSession` ([`qoder_session.go`](../../internal/gateway/qoder_session.go))
+finds the session in Qoder's own folder (`sessions.QoderDir`): of the session
+files written in the last 24 hours (`projects/<project>/<id>.jsonl` and a
+recent one's `<id>/subagents/agent-*.jsonl`, whose lines name the parent
+session), the one whose typed prompts (`user` lines with `humanInput`, or
+`origin.kind` human) appear most in the request's user text, Qoder's
+`<system-reminder>` blocks left out; of equal ones, the file written last. A
+turn holds every prompt of its session, a subagent's turn the Agent tool's
+prompt, a title call the latest prompt or a transcript, a suggestion call
+"User: …". The id goes on the request as `session-id`, and in the caller
+passed to a remote magpie, so it is recorded, titled and grouped as 1.1.81's
+was. Files are read incrementally (whole lines only) and listed at most once
+a second, again at once when nothing matches; a side call (no tools) nothing
+matches is held up to 600 ms, since Qoder asks the first title as the prompt
+is sent, before it writes the file. A request that names a session is left as
+it came. Verification: `TestQoderRequestsFindTheirSession`,
+`TestQoderSamePromptTwoSessions`, `TestQoderFirstTitleBeforeItsFile`,
+`TestQoderSessionThroughGateway`, on qodercli 1.1.82's own requests and files
+(`testdata/qoder-1.1.82`).
 
 DSH names its session in `x-deepseek-harness-session-id`, read the same way
 after the others, and marks a request that compacts its context with

@@ -1,0 +1,12 @@
+{
+ "host": "127.0.0.1:47814",
+ "connection": "keep-alive",
+ "content-type": "application/json",
+ "accept": "text/event-stream",
+ "authorization": "Bearer tok-qoder",
+ "accept-language": "*",
+ "sec-fetch-mode": "cors",
+ "user-agent": "undici",
+ "accept-encoding": "gzip, deflate",
+ "content-length": "83981"
+}
