@@ -482,6 +482,10 @@ type Try struct {
 	// allowance's (Discord, waroy). Whether a try went on is the next
 	// try in Tries, which is appended only as it is asked (#2281)
 	Earlier bool `json:"earlier,omitempty"`
+	// errType: the kind of error the failure's body named (Usage.ErrType),
+	// kept for the one told in place of a later try's (Earlier), so the
+	// row's kind is that failure's and not the later try's
+	errType string
 	// Queued: ms it waited for one of its key's or account's slots, the
 	// provider's MaxConcurrency out already (concurrency.go)
 	Queued int64 `json:"queued,omitempty"`
