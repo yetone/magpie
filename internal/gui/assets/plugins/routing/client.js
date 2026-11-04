@@ -150,7 +150,7 @@ function routingPage(part) {
   moreDays.onclick = (e) => {
     e.stopPropagation();
     if (moreDays.classList.contains("open")) return closeProtoMenu();
-    openProtoMenu(moreDays, unseenDays.map((d) => ({ v: d.day, name: dayName(d.day), literalName: true, note: String(d.requests) })),
+    openProtoMenu(moreDays, unseenDays.map((d) => ({ v: d.day, name: dayName(d.day), literalName: true, note: fmtN(d.requests) })),
       day, (v) => { if (v !== day) lookAt(v); }, "Earlier days", "rt-days-menu");
   };
   function nameMoreDays() {
@@ -158,7 +158,7 @@ function routingPage(part) {
     moreDays.classList.toggle("on", !!picked);
     moreDays.setAttribute("aria-pressed", String(!!picked));
     moreDays.replaceChildren(el("span", "", picked ? dayName(picked.day) : t("Earlier days")),
-      ...(picked ? [el("small", "", String(picked.requests))] : []), svg(CHEV, 10, 1.6));
+      ...(picked ? [count(picked.requests)] : []), svg(CHEV, 10, 1.6));
   }
   function fitDays() {
     if (!dayBar.clientWidth) return; // out of sight: fitted when it shows
@@ -523,6 +523,10 @@ function routingPage(part) {
     if (prompt) s += " · " + t("request cache hit rate {p}", { p: pct(100 * read / prompt) });
     return s;
   }
+  // a count short (fmtN: 12.3K, 1.2 万), exact on hover when they differ
+  // (skyhuang1994 on Discord: "看这么长串的数字有点懵逼")
+  const exactN = (n) => fmtN(n) == String(n) ? "" : ledNum(n);
+  const count = (n) => Object.assign(el("small", "", fmtN(n)), { title: exactN(n) });
   const tokens = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(Math.round(n));
   const pct = (n) => Math.round(n) + "%";
   // an account's window as Settings' allowance display has it, how much is
@@ -3541,7 +3545,7 @@ function routingPage(part) {
       rerouted: done.reduce((n, r) => n + r.tries.filter((tr, i) => tr.rest && i < r.tries.length - 1).length, 0),
       errors: done.filter(failedRoute).length,
     } : traceTotals;
-    [counts.requests, counts.rerouted, counts.errors].forEach((n, i) => setText(statB[i], String(n)));
+    [counts.requests, counts.rerouted, counts.errors].forEach((n, i) => { setText(statB[i], fmtN(n)); setAttr(statB[i], "title", exactN(n)); });
     setAttr(stats, "title", t(scoped ? "Counts for the requests in this list" : "Counts since the gateway started"));
     const failed = rs.some(failedRoute), btn = statB[2].parentElement;
     setAttr(btn, "aria-disabled", String(!failed));
@@ -3588,7 +3592,7 @@ function routingPage(part) {
   function renderDays() {
     const b = (d, label, n) => {
       const x = el("button", "rt-day" + (d === day ? " on" : ""));
-      x.append(el("span", "", label), ...(n != null ? [el("small", "", String(n))] : []));
+      x.append(el("span", "", label), ...(n != null ? [count(n)] : []));
       x.setAttribute("aria-pressed", String(d === day));
       x.onclick = () => { if (d !== day) lookAt(d); };
       return x;

@@ -247,7 +247,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await p.locator("#panelUsage:not(.pu-loading)").waitFor();
       const selectedDay = asked.at(-1).get("day");
       assert.equal(await p.locator('#panelUsage .led-day[aria-pressed="true"]').getAttribute("aria-label"), label);
-      assert.equal(await p.locator("#panelUsage .led-rank .rk").first().locator(".rk-val").textContent(), "900,000");
+      assert.equal(await p.locator("#panelUsage .led-rank .rk").first().locator(".rk-val").textContent(), "900K");
+      assert.equal(await p.locator("#panelUsage .led-rank .rk").first().locator(".rk-val").getAttribute("title"), "900,000");
       assert.deepEqual(await p.locator("#panelUsage rect.col").evaluateAll((rs) => rs.map((r) => [r.dataset.day, r.dataset.k, r.getAttribute("height"), r.dataset.color])), original, "the chart keeps its heights and colors");
       const dimmed = () => p.locator("#panelUsage rect.col").evaluateAll((rs, day) => rs.every((r) => r.dataset.day === day ? r.style.opacity === "" && r.style.fill === r.dataset.color : r.style.opacity === "0.22" && r.style.fill === "var(--faint)"), selectedDay);
       assert(await dimmed(), "the other days are gray");

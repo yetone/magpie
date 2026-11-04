@@ -125,7 +125,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             const at = [heads.indexOf(w), heads.indexOf(r)];
             return [...tb.tBodies[0].rows].filter((x) => x.classList.contains("led-row")).map((x) => at.map((i) => ({ text: x.cells[i].textContent, title: x.cells[i].title })));
           }, [await say("Cache write"), await say("Cache read")]);
-          assert.deepEqual(cells[0].map((c) => c.text), [await p.evaluate(() => ledNum(500)), await p.evaluate(() => ledNum(9000))]);
+          // said short, the exact count on hover
+          assert.deepEqual(cells[0].map((c) => c.text), [await p.evaluate(() => fmtN(500)), await p.evaluate(() => fmtN(9000))]);
+          assert.equal(cells[0][1].title, await p.evaluate(() => ledNum(9000)));
           assert.deepEqual(cells[1], [{ text: "—", title: notCounted }, { text: "—", title: notCounted }]);
           // its details say so beside its tokens
           await rows.nth(1).click();
