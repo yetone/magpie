@@ -304,7 +304,13 @@ func (p Provider) refetch(ctx context.Context) ([]catalog.Model, []string, map[s
 		return ms, nil, nil, err
 	}
 	before := liveIDs(p.ID)
+	marks := keyMarks(p.ID)
 	ms, err := p.fetch(ctx)
+	if err == nil {
+		// each key's own models follow what its list gained and lost
+		// (key_models_refresh.go)
+		refreshKeyModels(p.ID, marks, keyMarks(p.ID))
+	}
 	if err == nil && p.listsDecisions() {
 		// OpenRouter's decision models, listed apart from its chat ones
 		if _, derr := p.fetchDecide(p.Via(ctx)); derr != nil {
