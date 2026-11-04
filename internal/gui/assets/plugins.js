@@ -1225,7 +1225,7 @@
     if (e.tools?.length) nm.append(kindChip("tl"));
     if (e.page) nm.append(kindChip("pg"));
     if (e.panels?.length) nm.append(kindChip("pn"));
-    if (e.providers?.length || !(e.gatewayOnly || e.middlewareOnly || e.inMagpieOnly || toolsOnly || (mw && !e.isMiddleware) || (ag && !e.isAgent))) nm.append(kindChip("pv"));
+    if (e.providers?.length || !(e.gatewayOnly || e.middlewareOnly || e.inMagpieOnly || e.isAgent || toolsOnly || (mw && !e.isMiddleware) || (ag && !e.isAgent))) nm.append(kindChip("pv"));
     who.append(nm);
     const subs = subsOf(pkg);
     const sub = el("div", "sub");
@@ -1280,7 +1280,7 @@
     if ((mw || e.isGateway || ownOpts) && !e.off && !ask && editing?.pkg === pkg) who.append(optionsEditor(e));
     // the plugin's own picture (package.json's magpie.icon) before its
     // first provider's, which a plugin of several gives each its own (#1775)
-    r.append(logo(l?.icon || l?.npm?.icon || e.icon || subs[0]?.icon || ag?.icon, false, e.middlewareOnly ? "mw" : e.inMagpieOnly && e.isAgent && !e.isMiddleware ? "ag" : e.inMagpieOnly && (e.page || e.panels?.length) && !e.isAgent && !e.isMiddleware ? "pg" : toolsOnly && !e.page && !mw && !ag ? "tl" : ""), who);
+    r.append(logo(l?.icon || l?.npm?.icon || e.icon || subs[0]?.icon || ag?.icon, false, e.middlewareOnly ? "mw" : e.isAgent && !e.isMiddleware && !e.providers.length ? "ag" : e.inMagpieOnly && (e.page || e.panels?.length) && !e.isAgent && !e.isMiddleware ? "pg" : toolsOnly && !e.page && !mw && !ag ? "tl" : ""), who);
     const val = el("div", "val");
     const b = busy.get(pkg) || busy.get(e.spec);
     // npm's newer version, or a git one's repository at a newer commit

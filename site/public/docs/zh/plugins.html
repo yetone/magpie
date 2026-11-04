@@ -865,6 +865,7 @@ claude mcp add --transport http magpie-tools http://127.0.0.1:3425/mcp/magpie/to
       <li><b>运行方式。</b>和<a href="#middleware">中间件</a>一样：在 magpie 自己的进程里用 moejs 运行，只能导入插件内的文件，没有 Node API，<code>console.log</code> 进 magpie 的日志。加载和 <code>connect</code> 各有一秒。模块加载失败或 <code>connect</code> 抛错的插件，会在插件页它那一行写明原因，并且什么都不写入。</li>
       <li><b>资源库。</b>写了 <code>library</code>，这个 Agent 就和内置 Agent 一样拿到资源库的内容：指令写在文件里 magpie 的两行标记之间，MCP 服务器和用户自己的写在同一个文件里（用户自己加的字段保留），技能以链接或副本放进文件夹。取消时只拿走 magpie 写的部分，文件原来的内容留在 magpie 的备份里。<code>mcpFormat</code> 不在列表中，或写了 <code>mcp</code> 却没写 <code>mcpFormat</code>，插件不会加载。</li>
       <li><b>声明方式。</b><code>package.json</code> 里写 <code>"magpie": { "agent": "./agent.js" }</code>，或者一个名为 <code>*.agent.js</code>（或 <code>.mjs</code>）的单文件。一个包可以同时是供应商、中间件和 Agent。插件市场里 Agent 条目写 <code>"kind": "agent"</code>，列在 <span class="ui">Agent</span> 下；社区包命名为 <code>@magpie-community/agent-&lt;name&gt;</code>。</li>
+      <li><b>需要运行时的 Agent。</b>Agent 文件仍是 moejs 模块，没有定时器，也不能导入插件以外的东西。Agent 需要更多（定时器、监视文件、把值同步进应用自己的配置）时，包可以再带一个 Bun 模块作为 <code>main</code>，像供应商插件的那样运行。它仍是 Agent 插件：声明了 <code>magpie.agent</code> 的包，不管有没有 <code>main</code>，都列在 <span class="ui">Agent</span> 下，GitHub 上的也一样；它在<span class="ui">已安装</span>里那一行带 Agent 标记，只有它的模块提供了供应商时才同时带供应商标记。</li>
     </ul>
 
     <h2 id="pages"><a class="anchor" href="#pages">窗口里的页面</a></h2>
