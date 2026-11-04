@@ -135,12 +135,6 @@ func TestCursorEditorTranscript(t *testing.T) {
 	if !maps.Equal(before, snapshot(dir)) {
 		t.Fatal("source files changed")
 	}
-	if _, err := Delete("cursor", curMain); err == nil || !strings.Contains(err.Error(), "read only") {
-		t.Fatalf("editor deletion must be rejected: %v", err)
-	}
-	if !maps.Equal(before, snapshot(dir)) {
-		t.Fatal("deletion changed editor files")
-	}
 }
 
 func TestCursorEditorDoesNotDuplicateCLI(t *testing.T) {

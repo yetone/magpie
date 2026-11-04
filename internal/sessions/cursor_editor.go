@@ -11,6 +11,11 @@ import (
 
 // Cursor's editor stores older chats in cursorDiskKV, and newer chats as
 // project transcripts. These are read only: cursor-agent cannot resume them.
+// A chat the editor keeps can't be deleted from outside it: Cursor's own
+// delete clears the chat from several stores in state.vscdb and from the
+// list of chats it holds in memory and writes back while it runs. A
+// transcript whose chat the editor no longer keeps (loose) is files of its
+// own, and is deleted as a CLI chat's transcripts are (cursorEditorPaths).
 type cursorEditorMeta struct {
 	db       *sql.DB
 	revision string
@@ -98,10 +103,14 @@ func cursorEditorFiles(cli []file) []file {
 	metas := map[string]*cursorEditorMeta{}
 	var out []file
 	p := cursorEditorDB()
-	if fileExists(p) {
+	// read: the editor's chats are known, so a transcript none of them is
+	// is Cursor's no longer (a store that can't be read knows nothing)
+	read := !fileExists(p)
+	if !read {
 		if db := openCursorEditorDB(p); db != nil {
 			rows, err := db.Query(cursorComposersQuery)
 			if err == nil {
+				read = true
 				for rows.Next() {
 					var b []byte
 					var m cursorEditorMeta
@@ -111,6 +120,7 @@ func cursorEditorFiles(cli []file) []file {
 					m.db, m.revision = db, hashHead(string(b))
 					metas[m.ID] = &m
 				}
+				read = rows.Err() == nil
 				rows.Close()
 			}
 		}
@@ -124,7 +134,7 @@ func cursorEditorFiles(cli []file) []file {
 			if !safeID.MatchString(id) || seen[id] {
 				continue
 			}
-			f := file{agent: "cursor", key: "cursor:" + id, path: path, main: true, readOnly: true, more: &fileMore{sid: id, editor: metas[id]}}
+			f := file{agent: "cursor", key: "cursor:" + id, path: path, main: true, readOnly: true, more: &fileMore{sid: id, editor: metas[id], loose: read && metas[id] == nil}}
 			if !stat(&f) || !cursorEditorHasMessages(path) {
 				continue
 			}
@@ -363,4 +373,22 @@ func cursorTranscriptParts(m cursorMessage) []Part {
 		}
 	}
 	return parts
+}
+
+// cursorEditorPaths are what a delete moves of a loose editor transcript:
+// the transcripts Cursor wrote of the chat in its agent-transcripts folder,
+// <id>/ (its own and its subagents') and <id>.jsonl and <id>.txt. A chat
+// the editor keeps, or a file that isn't such a transcript, has none.
+func cursorEditorPaths(f file, id string) []string {
+	if !f.m().loose || !safeID.MatchString(id) || !strings.HasSuffix(f.path, ".jsonl") {
+		return nil
+	}
+	dir := filepath.Dir(f.path)
+	if filepath.Base(dir) == id {
+		dir = filepath.Dir(dir)
+	}
+	if filepath.Base(dir) != "agent-transcripts" {
+		return nil
+	}
+	return []string{filepath.Join(dir, id), filepath.Join(dir, id+".jsonl"), filepath.Join(dir, id+".txt")}
 }

@@ -916,7 +916,22 @@ and `update-wait.test.cjs`.
 The session readers include Cursor CLI chat stores, Cursor editor project
 transcripts and older editor `cursorDiskKV` conversations. CLI stores win
 when the same session ID has a project transcript. Editor conversations are
-read only, including at the delete API, and cannot be resumed by cursor-agent.
+read only and cannot be resumed by cursor-agent. A chat the editor still keeps
+in `state.vscdb` (its `composerData:<id>`) is never deleted, the delete API
+included: Cursor's own delete clears several keys of a database it holds open,
+and its in-memory copy, which magpie can't do from outside. A project
+transcript whose chat the editor no longer keeps (`fileMore.loose`: the store
+was read and has no such chat, or there is no store) is files of its own and
+is deleted as a CLI chat's are: `<id>/`, `<id>.jsonl` and `<id>.txt` in its
+`agent-transcripts` folder (`cursorEditorPaths`), never the folder. A store
+that can't be read says nothing, so no transcript is loose then. Each row of
+an agent magpie deletes from has its delete; one it can't delete carries
+`undeletable` (`cursor-editor`, `read-only`; `rowDeletable`), and the row's
+delete is shown off with that reason as its tooltip, never left out (ysm119 on
+Discord). A row without Resume, its terminal, Continue in, and a folder without
+its ⋯, keep hidden room for them (`lanes`, `slot` in plugins/sessions/client.js),
+so the right-hand columns line up on every row (`TestCursorRowsSayWhetherTheyCanBeDeleted`
+in `cursor_editor_delete_test.go`, `sessions-cursor-align.test.cjs`).
 Project transcripts contain no message timestamps or billing data; their
 existing file modification time supplies the activity date, and tokens and
 cost are not inferred. Database bubbles retain their own timestamps.

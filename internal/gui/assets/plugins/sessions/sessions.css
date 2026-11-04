@@ -63,6 +63,15 @@ body.window .sm-group .row.sm-sess { padding-left: 32px; }
 .row.sess .sm-del:hover { color: var(--red); background: var(--red-soft); }
 /* carrying a session on in another agent, and its conversation (#845) */
 .row.sm-sess .sess-carry { height: 24px; color: var(--fg); }
+/* a control's room on a row without it (the icons' are .copy, as wide), so every row's columns line up
+   (ysm119 on Discord); and Resume is as wide when it says Copied */
+.sm-slot { visibility: hidden; pointer-events: none; }
+.sm-slot-resume { flex: none; height: 24px; padding: 0 10px; border: 0; border-radius: 7px; font-size: 11.5px; font-weight: 500; white-space: nowrap; }
+.row.sm-sess .sm-slot-carry { height: 24px; }
+.row.sm-sess [data-wide]::before, .row.sm-sess [data-wide]::after { content: attr(data-wide); display: block; height: 0; overflow: hidden; visibility: hidden; }
+.row.sm-sess [data-wide]::after { content: attr(data-wide2); }
+.row.sess .sm-del.off { opacity: .4; cursor: default; }
+.row.sess .sm-del.off:hover { color: var(--muted); background: none; }
 .pop.proto-menu.sess-carry-menu { width: min(300px, calc(100vw - 16px)); background: var(--card); }
 .sess-talk-btn, .sess-export { height: 22px; padding: 0 8px; font-size: 11.5px; }
 .sess-talk { max-height: min(560px, 70vh); overflow-y: auto; margin-top: 4px; padding: 8px 10px 4px; border-radius: 9px; border: 1px solid var(--line-2); background: var(--bg); }
@@ -100,6 +109,9 @@ body.window .sm-group .row.sm-sess { padding-left: 32px; }
   .row.sess.sm-sess { flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; padding-top: 7px; padding-bottom: 7px; }
   .row.sm-sess > .who { flex-basis: 100%; }
   .row.sm-sess:has(> .sm-check) > .who { flex-basis: calc(100% - 22px); }
+  /* the title has its own line: the cost keeps its width again, so each
+     row's second line wraps at the same place and lines up (ysm119) */
+  .row.sm-sess .cost { min-width: 58px; }
 }
 @media (max-width: 420px) {
   .sm-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; row-gap: 6px; }
