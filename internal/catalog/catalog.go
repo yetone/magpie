@@ -1972,6 +1972,26 @@ func DrawsID(id string) bool {
 	return false
 }
 
+// filmsWords are words of a model id that names one that makes videos:
+// Sora, Veo, Kling, Seedance, Hailuo, Vidu, Runway, and Wan's and
+// HappyHorse's text-, image- and reference-to-video models (t2v, i2v, r2v).
+// Each was checked against models.dev: every id it matches there makes
+// video and no text, save a video classifier that answers in text, and
+// a model whose list says it answers in text is never taken for one
+// (FilmsID's callers). Veo and Kling count only as a word of their own,
+// so thinkingmachines/inkling still chats.
+var filmsWords = regexp.MustCompile(`video|seedance|sora|hailuo|vidu|runway|(^|[/_.-])veo|(^|[/_.-])kling|[/_.-][tir]2v($|[/_.-])`)
+
+// FilmsID is DrawsID for videos: whether a model's id names one that makes
+// videos, for a model the catalog doesn't know and whose list marks no
+// kind. Agnes AI's /v1/models lists agnes-video-2.5 and
+// agnes-video-2.5-flash beside its chat models with nothing but the id to
+// tell them apart (glorious_rabbit_30894 on Discord), and they were offered
+// to agents to chat with.
+func FilmsID(id string) bool {
+	return filmsWords.MatchString(strings.ToLower(id))
+}
+
 // ImagesAPI is whether a model draws on an images API rather than answering
 // in chat with pictures: gpt-image, dall-e, imagen, flux, seedream… — not
 // gemini-*-image or gpt-5-image, which chat. iFlytek Loomy's Hy-Image
