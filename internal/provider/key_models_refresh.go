@@ -22,6 +22,7 @@ package provider
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/yetone/magpie/internal/catalog"
 )
@@ -125,4 +126,26 @@ func refreshKeyModels(id string, before, now map[string]map[string]bool) int {
 		return 0
 	}
 	return n
+}
+
+// KeyListed is the models the provider id's last fetched list marks its
+// key ref (KeyID) as seeing, by the ids the provider lists them by, for
+// the editor's Select all available (young02036 on Discord); nil when no
+// list marks that key (one key on, a fetch not asked per key), which is
+// unknown, not none.
+func KeyListed(id, ref string) []string {
+	p, err := Find(id)
+	if err != nil {
+		return nil
+	}
+	seen := keyMarks(id)[strings.ToLower(strings.TrimSpace(ref))]
+	if len(seen) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(seen))
+	for m := range seen {
+		out = append(out, p.ListedModelID(m))
+	}
+	slices.Sort(out)
+	return out
 }

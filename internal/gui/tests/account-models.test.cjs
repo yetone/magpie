@@ -167,7 +167,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await still(page, "Spare@Example.com", pill(page, "Spare@Example.com"));
       assert.deepEqual(await chips(page, "Spare@Example.com"), ["gpt-6", "gpt-6-mini*"]);
       n = posts.length;
-      await panel(page, "Spare@Example.com").locator("button.action").click();
+      await panel(page, "Spare@Example.com").getByRole("button", { name: w.all, exact: true }).click();
       assert.deepEqual(await posted(posts, n), { id: "codex", account: "Spare@Example.com", allow: [] });
       await page.locator(".editor .acct-models").waitFor({ state: "detached" });
       assert.equal(await pill(page, "Spare@Example.com").textContent(), w.all);

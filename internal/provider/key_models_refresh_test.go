@@ -142,3 +142,42 @@ func TestFetchRefreshesEachKeysModels(t *testing.T) {
 		t.Errorf("the provider's picks were set: %v", p.Models)
 	}
 }
+
+// young02036 on Discord: the editor's Select all available ticks every
+// model a key's own list has, un-ticked ones too. KeyListed is that list,
+// by the ids the provider lists them by; a key no list marks is unknown.
+func TestKeyListedIsTheKeysOwnList(t *testing.T) {
+	prefillHome(t)
+	l := &relayLists{by: map[string][]string{
+		"sk-a": {"gpt-5.5", "glm-5"},
+		"sk-b": {"kimi-k3", "glm-5"},
+	}}
+	srv := l.serve(t)
+	if err := Save(Provider{ID: "relay", Name: "Relay", Chat: srv.URL + "/v1", Key: "sk-a",
+		Keys: []KeyAccount{{Key: "sk-b"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := KeyListed("relay", keyID("sk-b")); got != nil {
+		t.Fatalf("before any fetch: %v, want nil", got)
+	}
+	p, _ := Find("relay")
+	if _, err := p.Fetch(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// the user un-ticks glm-5 for sk-b: its list still has it
+	if err := SetAccountModels("relay", keyID("sk-b"), []string{"kimi-k3"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := KeyListed("relay", strings.ToUpper(keyID("sk-b"))); !slices.Equal(got, []string{"glm-5", "kimi-k3"}) {
+		t.Errorf("sk-b's list: %v, want [glm-5 kimi-k3]", got)
+	}
+	if got := KeyListed("relay", keyID("sk-a")); !slices.Equal(got, []string{"glm-5", "gpt-5.5"}) {
+		t.Errorf("sk-a's list: %v, want [glm-5 gpt-5.5]", got)
+	}
+	if got := KeyListed("relay", keyID("sk-none")); got != nil {
+		t.Errorf("a key no list marks: %v, want nil", got)
+	}
+	if got := KeyListed("nope", keyID("sk-a")); got != nil {
+		t.Errorf("no such provider: %v", got)
+	}
+}

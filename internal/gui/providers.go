@@ -2153,6 +2153,12 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				fail(rw, err)
 				return
 			}
+		case "keylisted":
+			// the models the key Account's own fetched list has, for the
+			// key picker's Select all available; nothing saved
+			ms := provider.KeyListed(in.ID, req.Account)
+			writeJSON(rw, map[string]any{"models": ms, "known": ms != nil})
+			return
 		case "accountcap":
 			if err := provider.SetAccountCap(in.ID, req.Account, req.Cap); err != nil {
 				fail(rw, err)

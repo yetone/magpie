@@ -14403,9 +14403,8 @@ async function accountAction(path, body, okMsg, confirmed = false, say = (m) => 
 // it saved them (#2862).
 let acctModels = null;
 function accountModelsOf(p, ref) { return p.accountModels?.[String(ref).toLowerCase()] || []; }
-// accountModelsDraft: what the open picker of p's has picked and not saved,
-// as provider/accountmodels takes it; null when nothing, false when it has
-// every model unpicked, which no Save keeps.
+// accountModelsDraft: the open picker's unsaved picks as accountmodels takes
+// them; null when none, false when every model is unpicked.
 function accountModelsDraft(p) {
   const a = acctModels;
   if (!p || a?.id !== p.id) return null;
@@ -14430,9 +14429,8 @@ function accountModels(p, ref, isKey, name) {
   if (!open) return [pill, null];
   const box = el("div", "acct-models");
   const chips = el("div", "mchips");
-  // the models the provider serves agents, and any the account has that it no longer lists
+  // served models, and any the account keeps
   const ids = p.models.filter((m) => m.on).map((m) => m.id);
-  for (const id of acctModels.chosen) if (!ids.includes(id)) ids.push(id);
   const foot = el("div", "acm-foot");
   const save = el("button", "text primary", t("Save"));
   const post = async (allow, msg) => {
@@ -14441,6 +14439,7 @@ function accountModels(p, ref, isKey, name) {
     if (!await accountAction("provider/accountmodels", { id: p.id, account: ref, allow }, msg)) { acctModels = was; renderProviders(); }
   };
   const draw = () => {
+    for (const id of acctModels.chosen) if (!ids.includes(id)) ids.push(id);
     chips.replaceChildren();
     const tells = modelTells(ids.map((id) => p.models.find((x) => x.id === id) || { id }));
     for (const id of ids) {
@@ -14459,12 +14458,20 @@ function accountModels(p, ref, isKey, name) {
   };
   draw();
   save.onclick = () => { save.classList.add("busy"); post(acctModels.chosen, t("{who} serves only {models}", { who: name, models: acctModels.chosen.join(", ") })); };
+  const av = el("button", "text action", t("Select all available"));
+  av.title = t(isKey ? "Ticks every model this key's own list has, un-ticked ones too" : "Ticks every model shown");
+  av.onclick = async () => {
+    const was = acctModels, r = isKey && await api("provider/keylisted", { id: p.id, account: ref }).catch((e) => (status(e.message, "warn"), null));
+    if (acctModels !== was || r === null) return;
+    for (const id of r?.known ? r.models.filter((x) => ids.includes(x)) : ids) if (!was.chosen.includes(id)) was.chosen.push(id);
+    chips.isConnected ? draw() : renderProviders();
+  };
   const all = el("button", "text action", t("All models"));
   all.title = t("Every model of the provider, as an account without a list of its own");
   all.onclick = () => own.length ? post([], t("{who} serves every model again", { who: name })) : (acctModels = null, renderProviders());
   const x = el("button", "text", t("Cancel"));
   x.onclick = () => { acctModels = null; renderProviders(); };
-  foot.append(el("span", "hint", t(isKey ? "Only the models picked go to this key; the others go to the provider's other keys." : "Only the models picked go to this account; the others go to the provider's other accounts.")), el("span", "grow"), all, x, save);
+  foot.append(el("span", "hint", t(isKey ? "Only the models picked go to this key; the others go to the provider's other keys." : "Only the models picked go to this account; the others go to the provider's other accounts.")), el("span", "grow"), av, all, x, save);
   box.append(chips, foot);
   return [pill, box];
 }
