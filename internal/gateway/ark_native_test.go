@@ -47,8 +47,8 @@ func newArkNative(t *testing.T) *arkNative {
 
 func arkNativeMux(s *Server) *http.ServeMux {
 	mux := http.NewServeMux()
-	for _, m := range []string{"POST ", "GET ", "DELETE "} {
-		mux.HandleFunc(m+NativePath+"{provider}/{path...}", s.native)
+	for _, m := range nativeMethods {
+		mux.HandleFunc(m+" "+NativePath+"{provider}/{path...}", s.native)
 	}
 	return mux
 }
@@ -63,8 +63,9 @@ func arkNativeAsk(t *testing.T, h http.Handler, who access.Identity, method, pat
 }
 
 // The native route passes Ark's own images and video tasks on, signed
-// with the provider's key, its stream as it comes; nothing else of
-// Ark's, and no key held to models, accounts or a limit.
+// with the provider's key, its stream as it comes, and no key held to
+// models, accounts or a limit. Ark's other paths are the generic route's
+// (native_any_test.go).
 func TestNativeArkRoute(t *testing.T) {
 	fresh(t)
 	up := newArkNative(t)
@@ -109,10 +110,6 @@ func TestNativeArkRoute(t *testing.T) {
 		method, path string
 		code         int
 	}{
-		{free, "POST", NativePath + "ark/chat/completions", 404},
-		{free, "GET", NativePath + "ark/images/generations", 404},
-		{free, "GET", NativePath + "ark/contents/generations/tasks/a/b", 404},
-		{free, "POST", NativePath + "other/images/generations", 404},
 		{free, "POST", NativePath + "nobody/images/generations", 404},
 		{access.Identity{KeyName: "held", Models: []string{"ark/doubao-seedream-4-5-251128"}}, "POST", NativePath + "ark/images/generations", 403},
 		{access.Identity{KeyName: "held", Accounts: []string{"ark"}}, "POST", NativePath + "ark/images/generations", 403},

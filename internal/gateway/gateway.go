@@ -1024,10 +1024,10 @@ func (s *Server) routes() *routeMux {
 	mux.HandleFunc("GET /videos/{id}", s.videosGet)
 	mux.HandleFunc("GET /v1/videos/{id}/content", s.videosContent)
 	mux.HandleFunc("GET /videos/{id}/content", s.videosContent)
-	// a provider's own images and video API, as it is (native.go)
-	mux.HandleFunc("POST "+NativePath+"{provider}/{path...}", s.native)
-	mux.HandleFunc("GET "+NativePath+"{provider}/{path...}", s.native)
-	mux.HandleFunc("DELETE "+NativePath+"{provider}/{path...}", s.native)
+	// a provider's own API, as it is, at its host (native.go)
+	for _, m := range nativeMethods {
+		mux.HandleFunc(m+" "+NativePath+"{provider}/{path...}", s.native)
+	}
 	mux.HandleFunc("POST "+claudeMCPPath+"{token}", s.subscription.mcpCall)
 	mux.HandleFunc("/mcp/{name}", s.mcpProxy)
 	mux.HandleFunc("/mcp/run/{name}", runMCP)

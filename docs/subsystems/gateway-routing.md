@@ -703,7 +703,7 @@ the MCP and an HTTP caller go through one translation and one set of holds.
 | `POST /v1/videos` | JSON or OpenAI's multipart: `model`, `prompt`, `seconds`, `size`, `input_reference` (first frame), plus `last_frame` and `reference_images` | OpenAI's video object, `status: "queued"`, an id that names the provider, the vendor's task and the key or account |
 | `GET /v1/videos/{id}` | | the video object: `queued`, `in_progress` (`progress`), `completed` or `failed` (`error`) |
 | `GET /v1/videos/{id}/content` | | the video (`video/mp4`, or `video/quicktime` for a MOV: `videoType`), or 409 while it isn't made |
-| `POST`, `GET`, `DELETE /v1/magpie/native/{provider}/{path...}` | the vendor's own request | the vendor's own answer, a stream as it comes (`native.go`, below) |
+| `GET`, `POST`, `PUT`, `PATCH`, `DELETE /v1/magpie/native/{provider}/{path...}` | the vendor's own request | the vendor's own answer, a stream as it comes (`native.go`, below) |
 
 Each vendor is sent its own request:
 
@@ -804,24 +804,61 @@ it; anything else asks for `b64_json`. `TestArkImagesPassOnTheirOwnFields`.
 
 `/v1/magpie/native/{provider}/{path...}` ([`native.go`](../../internal/gateway/native.go))
 passes a request to the provider's own API as it is, and its answer back
-as it came, an event stream flushed as it arrives: for what the OpenAI
-shape can't carry (Ark's image stream, its task list and cancel, a field
-newer than magpie). It is served for Volcengine Ark only (`isArk`, not a
-remote magpie), at `images/generations` (POST),
-`contents/generations/tasks` (POST, GET with Ark's query) and
-`contents/generations/tasks/<id>` (GET, DELETE) under the key's base
-(`nativeArkPath`); any other provider or path is a 404 that says what is
-served. It is behind the gateway's guards as every route is (a key beyond
-loopback, corsGuard, the key's rate), refused to a read-only key
-(`readOnlyRefused`), and refused (403, `nativeHeld`) to a key held to
-models, accounts or a spend limit, or issued by one: magpie can't tell
-which model a poll or a cancel is of, and prices no answer it doesn't
-read, so the OpenAI routes serve such a key. A model the user switched off
-is refused. The body's strings are masked (fails closed) and put back in
-the answer (`restoring`), numbers kept exact (`UseNumber`). It is signed
-with the provider's key and magpie's User-Agent, never the caller's
-headers, and each request is a Requests row and a usage record
-(`Operation: "native"`, no tokens). `TestNativeArkRoute`, `TestNativeArkStreamsAsItComes`.
+as it came, an event stream flushed as it arrives and a large answer
+copied through, never held whole (axelburks on Discord): for what the
+OpenAI shape can't carry. GET, POST, PUT, PATCH and DELETE
+(`nativeMethods`) are routed.
+
+- **Which providers.** One reached with an API key (`nativeKeyed`: no
+  `Account`, a `Key`, not a remote magpie, not Vertex AI): a vendor's or
+  the user's own. A subscription's, a sign-in's or a plugin's account is
+  a 403 that says so; an unknown, off or decide-only provider a 404.
+- **Where.** The path after the provider, as the caller escaped it, is
+  joined to the host of the provider's first base (`nativeProto`: Chat,
+  Responses, Anthropic, Gemini), not to the base's path, so a vendor's v2
+  paths are reached too (`nativeTarget`). It refuses (400) an empty path,
+  a `.` or `..` segment (`%2e%2e` and across `%2F` too), a backslash, a
+  leading or encoded leading slash, `://`, a first segment that reads as
+  a scheme, and any URL whose host or scheme, parsed back, isn't the
+  base's. The mux redirects an unencoded `..` before the route sees it.
+- **Headers.** The caller's auth (`Authorization`, `Proxy-Authorization`,
+  `x-api-key`, `api-key`, `x-goog-api-key`, `Cookie`), the browser's and
+  a proxy's (`Origin`, `Referer`, `Sec-*`, `X-Forwarded-*`, `Forwarded`,
+  `Cf-*`), the hop's own and `X-Magpie-*` are dropped (`nativeDropped`),
+  the gateway key's `?key=` too (`nativeQuery`); the rest go as they came.
+  `Sign` puts in the provider's key as it takes one, and magpie's
+  User-Agent goes in (`stampUA`). The answer's hop headers, `Set-Cookie`,
+  `Alt-Svc` and HSTS don't come back (`nativeAnswerDropped`).
+- **Keys.** It is behind the gateway's guards as every route is (a key
+  beyond loopback, lanGuard's Host check against a rebound page,
+  corsGuard: a foreign Origin, `null` and `*.localhost` without a key,
+  the key's rate), refused to a read-only key (`readOnlyRefused`), and
+  refused (403, `nativeHeld`) to a key held to models, accounts or a
+  spend limit, or issued by one: magpie can't tie a path it doesn't read
+  to a model, and prices no answer it doesn't read, so the OpenAI routes
+  serve such a key. A model the user switched off, named in a JSON body's
+  `model`, is refused.
+- **Masking.** With Settings › Privacy masking and a provider not set to
+  go unmasked, the body is decoded as JSON (numbers exact, `UseNumber`)
+  and its strings masked (fails closed); a body that isn't JSON is a 415,
+  as nothing unmasked may go. Only a request something was masked in has
+  its answer read through `restoring`, which holds a JSON answer whole to
+  put the values back; every other answer streams through.
+- **Record.** Each request is a Requests row and a usage record
+  (`Operation: "native"`), with the tokens a JSON or event-stream answer
+  reports (`usageSniffer`, read as the path's protocol, `nativeSniffed`),
+  none otherwise.
+
+Ark's images and video tasks at their short paths under the key's base
+(`nativeArkPath`: `images/generations` POST, `contents/generations/tasks`
+POST and GET, `contents/generations/tasks/<id>` GET and DELETE) are served
+as they were first (`nativeArk`): the body must be a JSON object, it is
+re-encoded after masking, and only `Content-Type` and `Accept` go on.
+`TestNativeArkRoute`, `TestNativeArkStreamsAsItComes`,
+`TestNativeAnyForwardsAtTheHost`, `TestNativeAnyRecordsUsage`,
+`TestNativeAnyRefusals`, `TestNativeAnyStaysOnTheHost`,
+`TestNativeAnyRefusesPagesWithoutAKey`, `TestNativeAnyMasks`,
+`TestNativeAnyStreamsAsItComes`, `TestNativeAnyArkHost`.
 
 A MiniMax API key (no account, a Chat, Anthropic or Responses base on
 api.minimax.io, api.minimaxi.com or api.minimax.cn: `filmsMiniMax`,

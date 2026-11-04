@@ -45,6 +45,7 @@ var readOnlyRefused = []string{
 	"POST /v1/videos", "POST /videos", "GET /v1/videos/{id}", "GET /videos/{id}",
 	"GET /v1/videos/{id}/content", "GET /videos/{id}/content",
 	"POST " + NativePath + "{provider}/{path...}", "GET " + NativePath + "{provider}/{path...}", "DELETE " + NativePath + "{provider}/{path...}",
+	"PUT " + NativePath + "{provider}/{path...}", "PATCH " + NativePath + "{provider}/{path...}",
 	// MCP servers, plugins' and Codex's backends, Gemini, everything else
 	"POST " + claudeMCPPath + "{token}", "/mcp/{name}", "/mcp/run/{name}",
 	SearchMCPPath, VisionMCPPath, ImageMCPPath, ImageMCPFiles + "{name}",

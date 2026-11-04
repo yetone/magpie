@@ -72,12 +72,16 @@ Volcengine Ark's `content` (reference video and audio, `draft_task`),
 `ratio`, `resolution`, `duration: -1`, `tools`, `watermark`,
 `sequential_image_generation` and the rest. A video's answer carries
 Ark's own fields too (`content.last_frame_url`, `usage`, `resolution`).
-For the rest of Ark's API (an image stream, the task list, cancelling a
-task) use `/v1/magpie/native/<provider>/<path>`: `POST
-images/generations`, `POST` or `GET contents/generations/tasks`, `GET` or
-`DELETE contents/generations/tasks/<id>`, sent and answered in Ark's own
-shape on the user's Ark key. It takes the same gateway key as every route,
-and a key held to models, accounts or a budget is refused it.
+For the rest of a vendor's API use
+`/v1/magpie/native/<provider>/<path>`: GET, POST, PUT, PATCH or DELETE,
+with `<path>` joined to the provider's host (not its base URL), sent and
+answered in the vendor's own shape on the user's key for that provider,
+a stream as it comes. So Ark's task list is `GET
+/v1/magpie/native/ark/api/v3/contents/generations/tasks`. It serves a
+provider added with an API key, not a subscription or sign-in. Ark's
+short paths (`images/generations`, `contents/generations/tasks[/<id>]`)
+still work under the key's base. It takes the same gateway key as every
+route, and a key held to models, accounts or a budget is refused it.
 
 **Optional.** Send `X-Magpie-Session: <id>` with a conversation's requests
 and `GET /v1/magpie/route?session=<id>` says which model a routing group
