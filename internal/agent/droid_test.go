@@ -415,3 +415,88 @@ func TestDroidKeepsAnEntryEditedByHand(t *testing.T) {
 		t.Error("record kept after disconnect")
 	}
 }
+
+// tao5010 on Discord: droid offered none of magpie's models any thinking
+// level. droid gives a custom model it doesn't know levels only when its
+// entry has reasoningEffort (droid 1.3.0), and takes a built-in's own
+// through baseModelId.
+func TestDroidReasoningEffort(t *testing.T) {
+	_, path := droidHome(t)
+	provider.Save(provider.Provider{ID: "oa", Name: "OA", Key: "k", Responses: "http://127.0.0.1:1/v1",
+		Models: []string{"gpt-5.4", "plain"}})
+	for ref, levels := range map[string][]string{
+		"deepseek/pro":   {"low", "medium", "high"},
+		"deepseek/flash": {"low", "high"},
+		"resp/grok-5":    {"xhigh"},
+		"oa/gpt-5.4":     {"low", "medium", "high"},
+	} {
+		if err := provider.SetModelEfforts(ref, levels); err != nil {
+			t.Fatal(ref, err)
+		}
+	}
+	if err := provider.SetModelReasonless("oa/plain", true); err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range []provider.Group{
+		{ID: "gpt-5.4", Name: "Both", Members: []string{"deepseek/pro", "oa/gpt-5.4"}},
+		{ID: "apart", Name: "Apart", Members: []string{"deepseek/flash", "resp/grok-5"}},
+	} {
+		if err := provider.SaveGroup(g); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a := droid(os.Getenv("HOME"))
+	if err := a.Apply("model", "magpie/deepseek/pro"); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][2]any{ // reasoningEffort, baseModelId
+		"custom:magpie/deepseek/pro":   {"medium", nil},
+		"custom:magpie/deepseek/flash": {"high", nil},
+		"custom:magpie/resp/grok-5":    {"xhigh", nil},
+		"custom:magpie/oa/gpt-5.4":     {"medium", "gpt-5.4"},
+		"custom:magpie/oa/plain":       {nil, nil},
+		"custom:magpie/group/gpt-5.4":  {"medium", nil}, // never a built-in
+		"custom:magpie/group/apart":    {nil, nil},
+	}
+	check := func(when string, want map[string][2]any) {
+		t.Helper()
+		ms, _, _ := droidFile(t, path)
+		for id, w := range want {
+			e, ok := ms[id]
+			if !ok {
+				t.Errorf("%s: %s missing", when, id)
+				continue
+			}
+			if e["reasoningEffort"] != w[0] || e["baseModelId"] != w[1] {
+				t.Errorf("%s: %s reasoningEffort %v baseModelId %v, want %v %v", when, id, e["reasoningEffort"], e["baseModelId"], w[0], w[1])
+			}
+		}
+	}
+	check("written", want)
+
+	// what the user sets stays theirs, a field they took out stays out
+	var f map[string]any
+	json.Unmarshal([]byte(readFile(path)), &f)
+	for _, m := range f["customModels"].([]any) {
+		e := m.(map[string]any)
+		switch e["id"] {
+		case "custom:magpie/deepseek/pro":
+			e["reasoningEffort"] = "high"
+			e["baseModelId"] = "deepseek-v4"
+		case "custom:magpie/oa/gpt-5.4":
+			delete(e, "baseModelId")
+		}
+	}
+	b, _ := json.MarshalIndent(f, "", "  ")
+	os.WriteFile(path, b, 0o644)
+	want["custom:magpie/deepseek/pro"] = [2]any{"high", "deepseek-v4"}
+	want["custom:magpie/oa/gpt-5.4"] = [2]any{"medium", nil}
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	check("after sync", want)
+	if err := a.Apply("model", "magpie/oa/gpt-5.4"); err != nil {
+		t.Fatal(err)
+	}
+	check("after apply", want)
+}

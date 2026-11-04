@@ -29,6 +29,20 @@ package agent
 // stays theirs (droidKept): what magpie last wrote is stashed, and a value
 // other than it is the user's. baseUrl and apiKey are the wiring, put back
 // at every sync.
+//
+// A model that reasons is given reasoningEffort, the effort droid starts
+// it at: droid offers a custom model it doesn't know as one of its own
+// models no levels at all (droid 1.3.0's B3: ["none"], and no reasoning
+// field is sent whatever the user picks), and one with reasoningEffort
+// off, low, medium and high, with that one as the default (tao5010 on
+// Discord: none of 123 magpie models had thinking levels in /model).
+// One whose own id (the last part of magpie's) is a model droid has built
+// in is given that id as baseModelId too, so droid takes its levels and
+// default from its own table, off included, rather than from a guess at
+// the name (droidBuiltins). A routing group gets reasoningEffort only
+// when its members share levels (provider's group entries keep the levels
+// every member takes), and never a baseModelId: its members are different
+// models. Both are droidKept, so a value the user set stays.
 
 import (
 	"encoding/json"
@@ -43,6 +57,7 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/jsonc"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
@@ -65,6 +80,12 @@ type droidEntry struct {
 	Provider        string `json:"provider"`
 	MaxContextLimit int    `json:"maxContextLimit,omitempty"`
 	MaxOutputTokens int    `json:"maxOutputTokens,omitempty"`
+	// ReasoningEffort is the effort droid starts the model at; a model
+	// that doesn't reason has none (droidEffort)
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+	// BaseModelID is the model of droid's own this one is, whose levels
+	// droid then offers (droidBuiltin)
+	BaseModelID string `json:"baseModelId,omitempty"`
 	// droid takes a model on Chat Completions as seeing no images unless
 	// told otherwise, so this is always written
 	NoImageSupport bool `json:"noImageSupport"`
@@ -91,6 +112,10 @@ func droidEntriesAt(gw string) []droidEntry {
 			e.Provider = "anthropic"
 		}
 		e.BaseURL = droidBase(gw, e.Provider)
+		e.ReasoningEffort = droidEffort(m)
+		if e.ReasoningEffort != "" && !provider.IsGroupRef(m.ID) {
+			e.BaseModelID = droidBuiltin(m.ID)
+		}
 		// the catalog's own label ("pro · DeepSeek") is what the picker
 		// shows; droid finds the model by its id, whatever its name
 		if e.DisplayName = m.Name; e.DisplayName == "" {
@@ -108,6 +133,84 @@ func droidBase(gw, prov string) string {
 		return gw
 	}
 	return gw + "/v1"
+}
+
+// droidLevels are the efforts droid's settings take for a custom model
+// (droid 1.3.0's reasoningEffort enum) that start it reasoning, in the
+// order magpie picks a default from when the model's list names none.
+var droidLevels = []string{"medium", "high", "low", "xhigh", "max", "minimal"}
+
+// droidEffort is the reasoningEffort magpie gives m: the effort its
+// vendor's list says it starts at, else medium, else the nearest level it
+// has. "" for a model that doesn't reason, or a group whose members share
+// no levels.
+func droidEffort(m catalog.Model) string {
+	if provider.IsGroupRef(m.ID) {
+		if len(m.Efforts) == 0 {
+			return ""
+		}
+	} else if !m.Reasoning && len(m.Efforts) == 0 {
+		return ""
+	}
+	has := func(l string) bool { return len(m.Efforts) == 0 || slices.Contains(m.Efforts, l) }
+	if d := m.DefaultEffort; slices.Contains(droidLevels, d) && has(d) {
+		return d
+	}
+	for _, l := range droidLevels {
+		if has(l) {
+			return l
+		}
+	}
+	return ""
+}
+
+// droidBuiltins are the models droid 1.3.0 has built in (its model id
+// enum, the Factory router's "auto" and "auto-fast" aside): the values its
+// settings take for baseModelId. droid drops a baseModelId it doesn't know
+// and keeps the entry, so an older droid reads one named here as none.
+var droidBuiltins = []string{
+	"claude-3-5-sonnet-20241022", "claude-3-7-sonnet-20250219",
+	"claude-sonnet-4-20250514", "claude-opus-4-1-20250805",
+	"claude-3-5-haiku-20241022", "claude-sonnet-4-5-20250929",
+	"claude-opus-4-5-20251101", "claude-haiku-4-5-20251001",
+	"claude-sonnet-4-6", "claude-opus-4-6", "claude-opus-4-6-fast",
+	"claude-opus-4-7", "claude-opus-4-7-fast", "claude-opus-4-8",
+	"claude-opus-4-8-fast", "claude-opus-5", "claude-opus-5-fast",
+	"claude-opus-5-5", "claude-opus-5-5-fast", "claude-sonnet-5",
+	"claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5",
+	"claude-fable-5.1", "atlas-07-21", "aster-07-15", "gpt-5-2025-08-07",
+	"gpt-5-mini-2025-08-07", "gpt-5-nano-2025-08-07", "gpt-5-codex",
+	"gpt-5.1", "gpt-5.1-codex", "gpt-5.1-codex-max", "gpt-5.2",
+	"gpt-5.2-codex", "gpt-5.3-codex", "gpt-5.3-codex-fast", "gpt-5.4",
+	"gpt-5.4-fast", "gpt-5.4-mini", "gpt-5.4-mini-fast", "gpt-5.5",
+	"gpt-5.5-fast", "gpt-5.5-pro", "gpt-5.6-sol", "gpt-5.6-sol-fast",
+	"gpt-5.6-terra", "gpt-5.6-terra-flex", "gpt-5.6-luna",
+	"gpt-5.6-luna-flex", "gpt-6-astra", "gpt-6-astra-ultrafast",
+	"gpt-6-astra-flex", "gpt-6.1-sol", "gpt-6.1-sol-ultrafast",
+	"gpt-6.1-terra", "gpt-6-sol", "gpt-6-sol-fast", "gpt-6-sol-flex",
+	"gpt-6-luna", "gpt-6-luna-fast", "gpt-6-luna-flex", "gemini-2.5-flash",
+	"gemini-2.5-pro", "gemini-3-pro-preview", "gemini-3-flash-preview",
+	"gemini-3.1-pro-preview", "gemini-3.5-flash", "gemini-3.6-flash",
+	"gemini-3.7-flash", "gemini-3.8-flash", "gemini-4-argon",
+	"garnet-07-15", "grok-4.5", "grok-4.6", "grok-4.7", "glm-4.6",
+	"glm-4.7", "kimi-k2.5", "kimi-k2.6", "kimi-k2.7-code", "kimi-k3",
+	"qwen3.8-max", "deepseek-v4.1-flash-1017", "deepseek-v4.1-flash",
+	"deepseek-v4-flash-0731", "deepseek-v4-pro", "minimax-m2.5",
+	"minimax-m2.7", "minimax-m3", "minimax-m3.1-flash", "glm-5", "glm-5.1",
+	"glm-5.2", "glm-5.2-fast", "glm-5.3", "glm-5.3-flash",
+	"mistral-medium-3.5", "mistral-large-4", "inkling", "nemotron-3-ultra",
+	"nemotron-3.5-super", "muse-spark-1.2", "muse-spark-1.3",
+	"muse-spark-open", "beam-1.0",
+}
+
+// droidBuiltin is the model of droid's own whose id is the last part of
+// magpie's id ref ("codex/gpt-5.5" is gpt-5.5), or "".
+func droidBuiltin(ref string) string {
+	name := strings.ToLower(ref[strings.LastIndex(ref, "/")+1:])
+	if slices.Contains(droidBuiltins, name) {
+		return name
+	}
+	return ""
 }
 
 // droid's own reading of a custom model's name (droid 0.231.0, xs and g2
@@ -143,7 +246,7 @@ func droidWants(model string) string {
 
 // droidKept are the fields of magpie's entries a value the user set stays
 // in. baseUrl follows the provider; apiKey is the wiring.
-var droidKept = []string{"provider", "displayName", "maxContextLimit", "maxOutputTokens", "noImageSupport"}
+var droidKept = []string{"provider", "displayName", "maxContextLimit", "maxOutputTokens", "noImageSupport", "reasoningEffort", "baseModelId"}
 
 // droidWrote is what magpie gave the droidKept fields of an entry, as JSON,
 // a field it left out missing.
