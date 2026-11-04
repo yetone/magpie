@@ -203,6 +203,11 @@ capabilities to a gateway row. Verification: `TestDesktopSessionTitles`,
 `TestDesktopSessionTitleInStats`, `TestDesktopTitlesReadOncePerList`,
 `TestDesktopSessionTitlesOnPages`.
 
+A ZCode request names its session without the `sess_` prefix ZCode's
+database gives it, so `Titles` looks a `zcode:` key up under both and
+answers under the id asked for (#5195). Verification:
+`TestZCodeTitlesByRequestID`.
+
 Routing's stage names the session an account is serving (connor_yang on
 Discord): a row answering, or that answered, the request shown adds that
 request's session title after its status, on one line cut short with the
