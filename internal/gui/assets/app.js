@@ -3128,9 +3128,7 @@ function dragListen(handle, move, finish) {
   return () => { for (const [t, n, f, o] of on) t.removeEventListener(n, f, o); };
 }
 
-// A tap-to-click on a trackpad can slide a few pixels between the press and
-// the lift. A press let go within 300ms and under 12px from where it came down
-// is a click, not a drag, though it crossed the 4px that lifts a row.
+// A trackpad tap can slide a few px: a press let go within 300ms and 12px is a click, not a drag.
 const tapLike = (t0, x0, y0, ev) => ev?.type === "pointerup" && performance.now() - t0 < 300 && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 12;
 
 // Shared pointer sorter: transforms each frame, one commit on release. Rows are
@@ -6834,26 +6832,20 @@ function segs(items, current, onPick) {
   });
   return box;
 }
-// where a control is in the page: the nearest element with an id, and which
-// of the same options it is there; "" for one not in the page
+// where a control is: the nearest id, and which of its kind there; "" if not in the page
 function segsPlace(box) {
   const home = box.isConnected && box.parentElement.closest("[id]");
   return home ? box.dataset.kind + "@" + home.id + ":" + [...home.querySelectorAll(".segs")].filter((x) => x.dataset.kind === box.dataset.kind).indexOf(box) : "";
 }
-// A press on an option still picks it when the control is drawn again
-// before the button is let go: a save's answer redraws Settings, and a
-// second option pressed while the first one's save came back was let go
-// on a new button. Down and up were on two buttons, so the browser sent the
-// click to neither and nothing was picked. Let go on the same option of the
-// same control, the new one is clicked; let go anywhere else (dragged off
-// to another option), nothing is, as for any button. A touch tap is left to
-// the browser, which clicks what is under the finger as it lifts; a mouse or
-// trackpad tap that slid off its option within tapLike's bounds still picks it.
+// A press on an option still picks it when the control is drawn again before
+// the button is let go (a save's answer redraws Settings): down and up were on
+// two buttons, so no click came. Let go on the same option of the same
+// control, the new one is clicked; anywhere else, nothing is. A touch tap is
+// the browser's; a mouse tap that slid off its option within tapLike's bounds
+// still picks it.
 let segsPress = null;
 const optAt = (b) => [...b.parentElement.querySelectorAll(":scope > .opt")].indexOf(b);
-// the same control is at the same place, among as many of its kind, in rows
-// that are the same by their data-* (an agent's, a provider's): a list drawn
-// again with a row gone, come in or moved above it is another control there
+// the same control: same place, as many of its kind, rows the same by data-*
 function segsWho(box) {
   const place = segsPlace(box);
   if (!place) return "";
@@ -6872,26 +6864,40 @@ addEventListener("pointerup", (e) => {
   if (!p?.who || !e.isPrimary) return;
   let b;
   if (p.b.isConnected) {
-    // a tap that slid off its option (a trackpad's tap lifts a few pixels
-    // from where it came down, refeccd's first press of Form | JSON): the
-    // browser clicks neither, or their common holder. A tap is the press
-    // let go soon and near, as tapLike has it; a drag off it is not.
+    // a tap that slid off its option: the browser clicks neither
     if (p.b.contains(e.target) || !tapLike(p.t, p.x, p.y, e)) return;
     b = p.b;
   } else {
     b = document.elementFromPoint(e.clientX, e.clientY)?.closest(".segs > .opt");
     if (!b || segsWho(b.parentElement) !== p.who || optAt(b) !== p.i) return;
   }
-  // after the browser's own click, should one come to it after all
   let clicked = false;
   const seen = (c) => { if (b.contains(c.target)) clicked = true; };
   addEventListener("click", seen, true);
   setTimeout(() => {
     removeEventListener("click", seen, true);
-    // its newest self: b, or what a draw since put there (#3922)
+    // its newest self (#3922)
     if (!clicked) [...document.querySelectorAll(".segs")].find((x) => segsWho(x) === p.who)?.querySelectorAll(":scope > .opt")[p.i]?.click();
   });
 }, true);
+
+// A tap whose mouseup comes and no click (refeccd, Tap to click on a Mac): the
+// control pressed and let go is clicked once; a click comes with the mouseup.
+{
+  let d, clicked;
+  addEventListener("mousedown", (e) => {
+    const el = e.isTrusted && !e.button && e.target.closest?.('button, a[href], summary, label, .opt, [role="button"], [role="tab"], [role="switch"], [role="checkbox"], [role="radio"], [role="menuitem"], [role="option"]');
+    d = el && { el, t: performance.now(), x: e.clientX, y: e.clientY };
+  }, true);
+  addEventListener("click", () => { clicked = true; }, true);
+  addEventListener("mouseup", (e) => {
+    const p = d;
+    d = null;
+    if (!p || !e.isTrusted || e.button || !p.el.contains(e.target) || performance.now() - p.t >= 300 || Math.hypot(e.clientX - p.x, e.clientY - p.y) >= 12 || getComputedStyle(p.el).getPropertyValue("--wails-draggable").trim() === "drag") return;
+    clicked = false;
+    setTimeout(() => { if (!clicked && p.el.isConnected && !p.el.disabled && !p.el.closest('[inert], [aria-disabled="true"]')) p.el.click(); }, 30);
+  }, true);
+}
 
 // An installed list's order, the reader's pick, remembered for each list
 // (#481): its names A→Z or Z→A, and for a list that has one, a view of its
