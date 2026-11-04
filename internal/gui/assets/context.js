@@ -1412,7 +1412,9 @@
       foot.append(go);
     }
     // a window of the reader's own (#1860), from the same replay: each
-    // value's tokens past the leanest and compactions, both estimates
+    // value's tokens against the setting now, which the reader picks away
+    // from (hayden4608 on Discord: against the leanest, every line read as
+    // more), and compactions, both estimates
     const pts = (a.compact && a.compact.curve) || [];
     if (pts.length > 1 && !held) {
       const other = el("button", "text ctx-tune-pick", t("Other window…"));
@@ -1422,24 +1424,27 @@
       other.setAttribute("aria-expanded", "false");
       other.onclick = (e) => {
         e.stopPropagation();
-        // timed, the advice may spend over the cheapest to wait no
-        // longer, so each value is said against the cheapest
+        // the fewest tokens: timed, the advice may spend over the cheapest
+        // to wait no longer, so the cheapest
         const cheapest = pts.reduce((x, p) => p.cost < x.cost ? p : x, pts[0]);
-        const base = timed ? cheapest.cost : (pts.find((p) => p.value === best) || {}).cost ?? r.low;
+        const fewest = timed ? cheapest.value : best;
         const now = set.ours && set.value != null ? +set.value : cur;
         const near = pts.reduce((x, p) => Math.abs(p.value - now) < Math.abs(x.value - now) ? p : x, pts[0]);
+        // the setting now's cost: its own point, else the replay's at it
+        const base = near.value === now ? near.cost : r.cost > 0 ? r.cost : near.cost;
         const opts = pts.map((p) => {
-          const extra = Math.max(0, p.cost - base);
-          const spend = p.value === (timed ? cheapest.value : best) ? t("Fewest tokens")
-            : base > 0 && extra / base < 0.005 ? t("As few tokens")
-            : t("+{tokens} tokens (+{pct})", { tokens: fmtK(extra), pct: pct(base > 0 ? extra / base : 0) });
+          const diff = p.cost - base, share = base > 0 ? Math.abs(diff) / base : 0;
+          const spend = p.value === now ? t("Your setting now")
+            : share < 0.005 ? t("As few tokens")
+            : diff < 0 ? t("−{tokens} tokens (−{pct})", { tokens: fmtK(-diff), pct: pct(share) })
+            : t("+{tokens} tokens (+{pct})", { tokens: fmtK(diff), pct: pct(share) });
           const often = p.compacts == null ? "" : p.compacts ? count(p.compacts, "about 1 compaction", "about {n} compactions") : t("no compaction");
           const wait = timed && p.compacts ? t("about {d} waiting", { d: fmtDur(p.wait || 0) }) : "";
-          return { v: String(p.value), name: show(p.value), literalName: true, note: [spend, often, wait].filter(Boolean).join(" · ") };
+          return { v: String(p.value), name: show(p.value), literalName: true, note: [spend, p.value === fewest ? t("Fewest tokens") : "", often, wait].filter(Boolean).join(" · ") };
         });
         openProtoMenu(other, opts, String(near.value), (v) => {
           if (v !== String(now)) send("apply", v);
-        }, "Compact at · estimated from your calls of the range", "ctx-tune-menu");
+        }, "Compact at · against the setting now, from your calls of the range", "ctx-tune-menu");
       };
       foot.append(other);
     }

@@ -214,13 +214,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
 // A window of the reader's own (#1860, MrMengJ: 200K put in, and 250K or
 // 300K wanted for fewer compactions): each window's picker lists every
-// value the replay tried, with what it spends past the leanest and about
-// how many compactions it would have made, in the app's own menu (no native
+// value the replay tried, with what it spends against the setting now
+// (hayden4608 on Discord: against the leanest, the window one had set
+// read as costing more than itself, and every other as more), "Fewest
+// tokens" beside the leanest's, and about how many compactions it would
+// have made, in the app's own menu (no native
 // select), inside a phone's width; a pick puts it in and Undo stays. The
 // row already at the advice keeps its picker. No click scrolls the page.
-const pickHead = { en: "Compact at · estimated from your calls of the range", zh: "压缩阈值 · 按这段时间你的调用估算", "zh-TW": "壓縮閾值 · 依這段時間你的呼叫估算", ja: "コンパクトする値 · この期間の呼び出しからの見積もり", de: "Kompaktieren bei · geschätzt aus deinen Aufrufen im Zeitraum" };
-const note250 = { en: "+270M tokens (+27%) · about 36 compactions", zh: "多花 270M Token（+27%） · 约压缩 36 次", "zh-TW": "多花 270M Token（+27%） · 約壓縮 36 次", ja: "270M トークン多い（+27%） · コンパクト約 36 回", de: "+270M Tokens (+27%) · etwa 36 Kompaktierungen" };
-const note160 = { en: "Fewest tokens · about 56 compactions", zh: "最省 Token · 约压缩 56 次", "zh-TW": "最省 Token · 約壓縮 56 次", ja: "トークン最少 · コンパクト約 56 回", de: "Wenigste Tokens · etwa 56 Kompaktierungen" };
+const pickHead = { en: "Compact at · against the setting now, from your calls of the range", zh: "压缩阈值 · 与当前设置相比，按这段时间你的调用估算", "zh-TW": "壓縮閾值 · 與目前設定相比，依這段時間你的呼叫估算", ja: "コンパクトする値 · 現在の設定との比較、この期間の呼び出しからの見積もり", de: "Kompaktieren bei · verglichen mit der aktuellen Einstellung, geschätzt aus deinen Aufrufen im Zeitraum" };
+// 300K is set: 1.42e9 tokens; 250K 1.27e9, 160K 1.0e9
+const note300 = { en: "Your setting now · about 30 compactions", zh: "当前设置 · 约压缩 30 次", "zh-TW": "目前設定 · 約壓縮 30 次", ja: "現在の設定 · コンパクト約 30 回", de: "Aktuelle Einstellung · etwa 30 Kompaktierungen" };
+const note250 = { en: "−150M tokens (−11%) · about 36 compactions", zh: "少花 150M Token（−11%） · 约压缩 36 次", "zh-TW": "少花 150M Token（−11%） · 約壓縮 36 次", ja: "150M トークン少ない（−11%） · コンパクト約 36 回", de: "−150M Tokens (−11%) · etwa 36 Kompaktierungen" };
+const note160 = { en: "−420M tokens (−30%) · Fewest tokens · about 56 compactions", zh: "少花 420M Token（−30%） · 最省 Token · 约压缩 56 次", "zh-TW": "少花 420M Token（−30%） · 最省 Token · 約壓縮 56 次", ja: "420M トークン少ない（−30%） · トークン最少 · コンパクト約 56 回", de: "−420M Tokens (−30%) · Wenigste Tokens · etwa 56 Kompaktierungen" };
+const note250After = { en: "Your setting now · about 36 compactions", zh: "当前设置 · 约压缩 36 次", "zh-TW": "目前設定 · 約壓縮 36 次", ja: "現在の設定 · コンパクト約 36 回", de: "Aktuelle Einstellung · etwa 36 Kompaktierungen" };
+// once 250K is set, 300K is said against it: more
+const note300After = { en: "+150M tokens (+12%) · about 30 compactions", zh: "多花 150M Token（+12%） · 约压缩 30 次", "zh-TW": "多花 150M Token（+12%） · 約壓縮 30 次", ja: "150M トークン多い（+12%） · コンパクト約 30 回", de: "+150M Tokens (+12%) · etwa 30 Kompaktierungen" };
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   test(`${engine}: a window of the reader's own, with what it costs`, async (t) => {
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
@@ -267,6 +275,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await menu.locator(".pm-item").count(), 20);
         const item = (v) => menu.locator(".pm-item", { has: page.locator(".pm-name", { hasText: new RegExp("^" + v + "$") }) });
         assert.match(await item("300K").getAttribute("class"), /\bon\b/);
+        assert.equal(await item("300K").locator(".pm-note").innerText(), note300[lang]);
         assert.equal(await item("250K").locator(".pm-note").innerText(), note250[lang]);
         assert.equal(await item("160K").locator(".pm-note").innerText(), note160[lang]);
         const box = await menu.boundingBox();
@@ -282,6 +291,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator(".ctx-tune-row").nth(0).locator(".ctx-tune-pick").click();
         await menu.waitFor();
         assert.match(await item("250K").getAttribute("class"), /\bon\b/);
+        assert.equal(await item("250K").locator(".pm-note").innerText(), note250After[lang]);
+        assert.equal(await item("300K").locator(".pm-note").innerText(), note300After[lang]);
         await page.keyboard.press("Escape");
         assert.equal(posts.length, 1, "closing the menu puts nothing in");
         await ctx.close();
@@ -362,7 +373,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 // compaction took, the wait at the advice against the window now, and the
 // cheaper window it passed over for waiting longer; the caveat no longer
 // says tokens only, and each window in the picker says its wait beside its
-// tokens, "Fewest tokens" on the cheapest one, not the advice. A row whose
+// tokens against the window now, "Fewest tokens" on the cheapest one, not
+// the advice. A row whose
 // compactions aren't timed reads as before. In both engines, every
 // language, a phone's width and a desk's.
 const timedCurve = () => {
@@ -403,8 +415,9 @@ const waitCaveat = {
   ja: "トークンと待ち時間だけの見積もりです。コンパクトのあとエージェントが作業をどれだけ保てるかは測っていません。しきい値が低いほどコンパクトの回数は増えます。",
   de: "Nur Tokens und Wartezeit: Wie gut der Agent die Aufgabe nach einer Kompaktierung behält, misst das nicht. Je niedriger die Schwelle, desto öfter wird kompaktiert.",
 };
-const waitNote100 = { en: "Fewest tokens · about 90 compactions · about 1h 54m waiting", zh: "最省 Token · 约压缩 90 次 · 约等 1 小时 54 分", "zh-TW": "最省 Token · 約壓縮 90 次 · 約等 1 小時 54 分", ja: "トークン最少 · コンパクト約 90 回 · 待ち約 1 時間 54 分", de: "Wenigste Tokens · etwa 90 Kompaktierungen · etwa 1 Std. 54 Min. Wartezeit" };
-const waitNote240 = { en: "+70M tokens (+7%) · about 38 compactions · about 48m waiting", zh: "多花 70M Token（+7%） · 约压缩 38 次 · 约等 48 分钟", "zh-TW": "多花 70M Token（+7%） · 約壓縮 38 次 · 約等 48 分鐘", ja: "70M トークン多い（+7%） · コンパクト約 38 回 · 待ち約 48 分", de: "+70M Tokens (+7%) · etwa 38 Kompaktierungen · etwa 48 Min. Wartezeit" };
+// 120K is set: 1.04e9 tokens; 100K 0.95e9, 240K 1.02e9
+const waitNote100 = { en: "−90M tokens (−9%) · Fewest tokens · about 90 compactions · about 1h 54m waiting", zh: "少花 90M Token（−9%） · 最省 Token · 约压缩 90 次 · 约等 1 小时 54 分", "zh-TW": "少花 90M Token（−9%） · 最省 Token · 約壓縮 90 次 · 約等 1 小時 54 分", ja: "90M トークン少ない（−9%） · トークン最少 · コンパクト約 90 回 · 待ち約 1 時間 54 分", de: "−90M Tokens (−9%) · Wenigste Tokens · etwa 90 Kompaktierungen · etwa 1 Std. 54 Min. Wartezeit" };
+const waitNote240 = { en: "−20M tokens (−2%) · about 38 compactions · about 48m waiting", zh: "少花 20M Token（−2%） · 约压缩 38 次 · 约等 48 分钟", "zh-TW": "少花 20M Token（−2%） · 約壓縮 38 次 · 約等 48 分鐘", ja: "20M トークン少ない（−2%） · コンパクト約 38 回 · 待ち約 48 分", de: "−20M Tokens (−2%) · etwa 38 Kompaktierungen · etwa 48 Min. Wartezeit" };
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   test(`${engine}: timed compactions put their wait beside the tokens`, async (t) => {
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
