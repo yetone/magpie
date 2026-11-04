@@ -790,6 +790,16 @@ func codexIn(at place) *Agent {
 	// so do OpenAI's when Codex was on another provider, whose threads
 	// bringBack would hand them to. None while a profile is chosen, whose
 	// provider is the one Codex lists, and none from a distro's Codex.
+	//
+	// Codex 0.166 resumes a thread only on the provider it is on now (the
+	// app: "This chat uses openai, but your current provider is magpie.
+	// Switch to openai to continue", 毅 on Discord), so a packed thread
+	// left on OpenAI could no longer be reopened at all. Those whose last
+	// turn was in the last 30 days move too, rewritten with a copy kept
+	// as bringBack's are (MovePackedCodexThreads), newest first and
+	// packedBudget bytes a sync: the rest of a big history follows over
+	// the next syncs, and older ones from Sessions (ResumeNow moves one
+	// as it is reopened).
 	bringOver := func() {
 		if at.spell != nil || !asProvider() || sessions.CodexProviderIn(dir) != magpieID {
 			return
@@ -803,6 +813,13 @@ func codexIn(at place) *Agent {
 		}
 		if err != nil {
 			log.Println("codex: moving OpenAI's threads to magpie:", err)
+		}
+		packed, err := sessions.MovePackedCodexThreads(dir, "openai", magpieID, time.Now().Add(-packedSince), packedBudget)
+		if len(packed) > 0 {
+			log.Printf("codex: %d packed thread(s) started on OpenAI moved to magpie, where Codex resumes them now", len(packed))
+		}
+		if err != nil {
+			log.Println("codex: moving OpenAI's packed threads to magpie:", err)
 		}
 	}
 	// mirrorsTaken are the mirrors takeMirrors pointed at magpie (#1796)
@@ -838,6 +855,37 @@ func codexIn(at place) *Agent {
 			}
 		}
 		return named
+	}
+	// bringOfficial moves the threads of CC Switch's "cc-switch-official"
+	// to the provider Codex is on with magpie (OpenAI beside the sign-in,
+	// or magpie). CC Switch 3.17 to 3.20 sent the official ChatGPT account
+	// through its own proxy under that id; its threads are OpenAI's, and
+	// CC Switch 4 moves them back to "openai" itself (#7948). Codex 0.166
+	// resumes a thread only on the provider it is on now, so one of them
+	// reopened beside magpie said "This chat uses cc-switch-official, but
+	// your current provider is openai" (AcMilan on Discord). None moves
+	// while config.toml or a profile picks that id, whose threads they
+	// are then, and none from a distro's Codex. A copy of each is kept
+	// (MoveCodexThreads); config.toml is left as it is.
+	bringOfficial := func() {
+		if at.spell != nil || !routed() {
+			return
+		}
+		to := sessions.CodexProviderIn(dir)
+		if to != "openai" && to != magpieID || get("model_provider") == ccSwitchOfficial {
+			return
+		}
+		names, _ := edit.TOMLTables(path)
+		if profileNamed(names)[ccSwitchOfficial] {
+			return
+		}
+		moved, err := sessions.MoveCodexThreads(dir, ccSwitchOfficial, to)
+		if len(moved) > 0 {
+			log.Printf("codex: %d thread(s) of CC Switch's official route moved to %s, where Codex resumes them", len(moved), to)
+		}
+		if err != nil {
+			log.Println("codex: moving CC Switch's official threads:", err)
+		}
 	}
 	// The provider tables in Codex's config a reopened thread goes to,
 	// each one's base URL by its id: CC Switch's, and any other a Codex
@@ -1607,6 +1655,7 @@ func codexIn(at place) *Agent {
 		Sync: func() error {
 			// after the sync, which may have put Codex back beside its
 			// sign-in or made magpie its provider, and whatever it failed at
+			defer bringOfficial()
 			defer bringOver()
 			defer bringBack()
 			// model_catalog_json naming magpie's list with the list gone,
@@ -2075,6 +2124,18 @@ func codexIn(at place) *Agent {
 	}
 	return a
 }
+
+// ccSwitchOfficial is the provider id CC Switch 3.17 to 3.20 gave the
+// official ChatGPT account through its local proxy.
+const ccSwitchOfficial = "cc-switch-official"
+
+// packedSince and packedBudget bound bringOver's move of the threads
+// Codex has packed: those with a turn in the last 30 days, 128 MB of
+// them a sync.
+const (
+	packedSince  = 30 * 24 * time.Hour
+	packedBudget = 128 << 20
+)
 
 // ccSwitchProvider matches the ids of the provider tables CC Switch writes
 // into Codex's config: "custom", and "cc-switch", "cc-switch-2"… from its

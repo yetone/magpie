@@ -29,10 +29,10 @@ func codexThreadOn(t *testing.T, dir, id, p string) string {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL, model_provider TEXT NOT NULL, model TEXT)`); err != nil {
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL, model_provider TEXT NOT NULL, model TEXT, updated_at INTEGER NOT NULL DEFAULT 0)`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO threads VALUES (?, ?, ?, 'fake/m1')`, id, path, p); err != nil {
+	if _, err := db.Exec(`INSERT INTO threads (id, rollout_path, model_provider, model, updated_at) VALUES (?, ?, ?, 'fake/m1', ?)`, id, path, p, day.Unix()); err != nil {
 		t.Fatal(err)
 	}
 	return path

@@ -21,9 +21,14 @@ import (
 //
 // Now the threads Codex started on OpenAI move to magpie while it is
 // Codex's provider, in place (the id is one length), the file's time
-// kept, and back at the Disconnect, with no copy of each. Threads Codex
-// has packed (.zst) stay, a provider of the user's stays, and OpenAI's
-// stay when Codex was on another provider before magpie.
+// kept, and back at the Disconnect, with no copy of each. A provider of
+// the user's stays, and OpenAI's stay when Codex was on another provider
+// before magpie.
+//
+// Threads Codex has packed (.zst) stayed on OpenAI, which Codex 0.166's
+// app refuses to resume on magpie ("This chat uses openai, but your
+// current provider is magpie", 毅 on Discord). A packed one with a turn
+// in the last 30 days moves too, rewritten with a copy kept, and back.
 func TestCodexThreadsFollowMagpieIn(t *testing.T) {
 	const (
 		plain  = "019a0000-0000-7000-8000-0000000000c1"
@@ -34,7 +39,8 @@ func TestCodexThreadsFollowMagpieIn(t *testing.T) {
 		home, _ := codexHome(t, "", "model = \"gpt-5.4\"\n")
 		dir := filepath.Join(home, ".codex")
 		plainPath := codexThreadOn(t, dir, plain, "openai")
-		packThread(t, codexThreadOn(t, dir, packed, "openai"))
+		packedPath := codexThreadOn(t, dir, packed, "openai")
+		packThread(t, packedPath)
 		codexThreadOn(t, dir, theirs, "custom")
 		before, _ := os.Stat(plainPath)
 		cx := codex(home)
@@ -45,10 +51,16 @@ func TestCodexThreadsFollowMagpieIn(t *testing.T) {
 			t.Fatalf("provider %q, want magpie as Codex's provider with no sign-in", p)
 		}
 		// listed where Codex is now, at the switch itself
-		for id, want := range map[string]string{plain: "magpie", packed: "openai", theirs: "custom"} {
+		for id, want := range map[string]string{plain: "magpie", packed: "magpie", theirs: "custom"} {
 			if p := codexRowOn(t, dir, id); p != want {
 				t.Errorf("connected: thread %s on %q, want %q", id, p, want)
 			}
+		}
+		if p := zstMetaProvider(t, packedPath+".zst"); p != "magpie" {
+			t.Fatalf("packed rollout on %q, want magpie", p)
+		}
+		if l, _ := filepath.Glob(filepath.Join(settings.Dir(), "trash", "codex-provider", "*"+packed, "move.json")); len(l) != 1 {
+			t.Fatalf("packed thread moved with no copy kept: %v", l)
 		}
 		b, _ := os.ReadFile(plainPath)
 		if !strings.Contains(string(b), `"model_provider":"magpie"`) {
@@ -75,6 +87,9 @@ func TestCodexThreadsFollowMagpieIn(t *testing.T) {
 		}
 		if b2, _ := os.ReadFile(plainPath); string(b2) != strings.Replace(string(b), `"model_provider":"magpie"`, `"model_provider":"openai"`, 1) {
 			t.Fatalf("rollout not as it was:\n%s", b2)
+		}
+		if p := zstMetaProvider(t, packedPath+".zst"); p != "openai" {
+			t.Fatalf("packed rollout back on %q, want openai", p)
 		}
 		// moved in place both ways: no copy of the history in the trash
 		if l, _ := filepath.Glob(filepath.Join(settings.Dir(), "trash", "codex-provider", "*"+plain)); len(l) > 0 {
@@ -117,4 +132,26 @@ func packThread(t *testing.T, path string) {
 	z.Close()
 	os.Chtimes(path+".zst", fi.ModTime(), fi.ModTime())
 	os.Remove(path)
+}
+
+// zstMetaProvider is the model_provider of a packed rollout's session_meta.
+func zstMetaProvider(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	z, _ := zstd.NewReader(nil)
+	defer z.Close()
+	out, err := z.DecodeAll(b, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	line, _, _ := strings.Cut(string(out), "\n")
+	_, rest, ok := strings.Cut(line, `"model_provider":"`)
+	if !ok {
+		t.Fatalf("no provider in %s", line)
+	}
+	p, _, _ := strings.Cut(rest, `"`)
+	return p
 }
