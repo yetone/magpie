@@ -57,9 +57,16 @@ type Project struct {
 // (getProjectSkillsDir, @qoder-ai/qodercli 1.1.69, whose .agents/skills
 // a setting can turn off), CodeBuddy Code .codebuddy/skills
 // (getProjectSkillsDir, @tencent-ai/codebuddy-code 2.164.0) and Command
-// Code .commandcode/skills (commandcode.ai/docs/skills). MiMo Code, Crush,
-// ZCode, DeepSeek Harness and oh-my-pi say of no project folder magpie can
-// rely on.
+// Code .commandcode/skills (commandcode.ai/docs/skills). DeepSeek Harness
+// reads <projectRoot>/.dsh/skills and <projectRoot>/.agents/skills, the
+// project root being the nearest folder up from where it runs with a .git
+// in it, else that folder itself (the provider's roots and findProjectRoot,
+// @deepseek-ai/dsh-skill-filesystem 0.2.1-rc.5, mounted by dsh-base's
+// cordis.patch.yml in every profile; the same since 0.0.1-rc.3), so it is
+// given the shared one. A project folder inside a repository but not at
+// its root isn't read by dsh: run there, it looks in the repository's
+// root (#5172). MiMo Code, Crush,
+// ZCode and oh-my-pi say of no project folder magpie can rely on.
 var projectSkillsDirs = map[string]string{
 	"claude":      ".claude/skills",
 	"codex":       ".agents/skills",
@@ -74,6 +81,7 @@ var projectSkillsDirs = map[string]string{
 	"grok":        ".agents/skills",
 	"droid":       ".agents/skills",
 	"cline":       ".agents/skills",
+	"dsh":         ".agents/skills",
 	"qoder":       ".qoder/skills",
 	"qoder-cn":    ".qoder/skills",
 	"codebuddy":   ".codebuddy/skills",

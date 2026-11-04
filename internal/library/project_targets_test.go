@@ -129,3 +129,37 @@ func TestProjectServersCodeBuddyMcpJSON(t *testing.T) {
 		t.Errorf("after: %v", s)
 	}
 }
+
+// xingchen_c on Discord: DeepSeek Harness couldn't be given a project's
+// skills. It reads <projectRoot>/.agents/skills (and .dsh/skills), the
+// project root being the nearest folder with a .git, so the project's
+// shared folder is where it gets them, listed for it on the page too.
+func TestProjectSkillsDsh(t *testing.T) {
+	h, proj := projectLib(t)
+	write(t, filepath.Join(h, ".dsh/profiles/web/cordis.patch.yml"), "[]\n")
+	os.MkdirAll(filepath.Join(proj, ".git"), 0o755)
+	ok(t)(ProjectSkill(proj, "pdf", []string{"dsh"}))
+	p := filepath.Join(proj, ".agents/skills/pdf")
+	if !isLink(t, p) || !ours(p, "pdf") {
+		t.Errorf("%s isn't a link to the library's", p)
+	}
+	if g := read(t, filepath.Join(proj, ".gitignore")); !strings.Contains(g, "/.agents/skills/pdf\n") {
+		t.Errorf(".gitignore lacks /.agents/skills/pdf:\n%s", g)
+	}
+	v, err := Read(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(v.Agents, func(a AgentView) bool { return a.ID == "dsh" })
+	if i < 0 {
+		t.Fatal("no dsh on the page")
+	}
+	if v.Agents[i].ProjectSkills != ".agents/skills" {
+		t.Errorf("dsh's project skills: %q", v.Agents[i].ProjectSkills)
+	}
+	// it reads no project MCP file: its servers are rows in its profiles'
+	// patch lists, which have no project layer
+	if v.Agents[i].ProjectMCP != "" {
+		t.Errorf("dsh's project MCP: %q", v.Agents[i].ProjectMCP)
+	}
+}

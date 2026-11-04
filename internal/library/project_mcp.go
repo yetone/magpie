@@ -37,6 +37,10 @@ import (
 // (docs.factory.com/cli/configuration/mcp). Qoder and CodeBuddy, like
 // Claude Code, ask the user to approve a project's server before using
 // it. Each is written in the shape the agent's user-wide file has.
+// DeepSeek Harness has none: its servers are @deepseek-ai/dsh-mcp-client
+// rows in a profile's patch layers (bundles, the profile's and
+// $DSH_HOME's cordis.patch.yml, --patch overlays; composeProfile in
+// @deepseek-ai/dsh 0.2.1-rc.5's profile-boot), none of them the project's.
 var projectMCPFiles = map[string]struct {
 	rel    string
 	format mcpFormat
