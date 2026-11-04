@@ -227,6 +227,22 @@ neither does a Codex request whose parent was only matched by its prompt
 (`parentMatched`), since that match is a guess. Verification:
 `routing-session-title.test.cjs`.
 
+A By session head reads as its title (flandern1211_58540 on Discord: a
+folder and an id told nothing): the agent, then the session's title on one
+line (whitespace folded), then its folder in a quieter `.dir`; with no title
+the folder takes its place, and with neither the id. The tooltip keeps the
+title, the folder and the id. Where `sessions.Titles` and Codex's name index
+find nothing, the same endpoint falls back to the first prompt the gateway
+recorded for that session (`sessions.GatewayTitler`, the title its list
+shows), looked up under the agent the page names and the one the gateway
+records it under (`usage.AgentOf`): `withGatewayTitles` and
+`codexReadableTitles` in [`trace.go`](../../internal/gui/trace.go). Codex
+ids the index doesn't name go to `sessions.Titles` as `codex:` keys first,
+so a rollout's own first prompt names it. Nothing is read that the page
+couldn't already show on the Sessions page, and nothing leaves the local
+GUI. Verification: `TestSessionTitlesFallBackToFirstPrompt`,
+`routing-session-folder.test.cjs`.
+
 A gateway projection can be deleted (lc on Discord). `sessions.DeleteGateway`
 moves its recorded text folders (`gateway-conversations/<date>/<identity hash>`)
 into magpie's session trash under `trash/sessions/gateway/`, with a note

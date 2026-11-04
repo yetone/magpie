@@ -284,6 +284,59 @@ func quotaView(id string) string {
 	return view
 }
 
+// withGatewayTitles fills in, for each agent:id key the agent's own files
+// left without a title, the first words its user said through the gateway,
+// as the Sessions page heads a session it knows only from there
+// (flandern1211_58540 on Discord: Routing named a session by its folder and
+// id). Nothing is read that the Sessions page doesn't show already.
+func withGatewayTitles(out map[string]string, keys []string) map[string]string {
+	var title func(agent, id string) string
+	for _, k := range keys {
+		agent, id, ok := strings.Cut(k, ":")
+		if !ok || id == "" || out[k] != "" {
+			continue
+		}
+		if title == nil {
+			title = sessions.GatewayTitler()
+		}
+		// recorded under the agent its User-Agent named, as a route's
+		// agent may not have been
+		name := title(agent, id)
+		if name == "" {
+			if a := usage.AgentOf(agent); a != agent {
+				name = title(a, id)
+			}
+		}
+		if name != "" {
+			out[k] = name
+		}
+	}
+	return out
+}
+
+// codexReadableTitles is each Codex thread's name from Codex's index, else
+// the title its own files give (its first prompt, as the Sessions page
+// heads it), else the first words recorded through the gateway: a thread
+// never named was headed by its folder and id alone.
+func codexReadableTitles(ids []string) map[string]string {
+	out := sessions.CodexTitles(ids)
+	var keys []string
+	for _, id := range ids {
+		if id != "" && out[id] == "" {
+			keys = append(keys, "codex:"+id)
+		}
+	}
+	if len(keys) == 0 {
+		return out
+	}
+	for k, name := range withGatewayTitles(sessions.Titles(keys), keys) {
+		if name != "" {
+			out[strings.TrimPrefix(k, "codex:")] = name
+		}
+	}
+	return out
+}
+
 // traceRoutes serves the routing trace for the Gateway view to play: it
 // waits up to 25 s for something to change after the seq it is given, so
 // the page hears of a request as it happens.
@@ -307,7 +360,7 @@ func traceRoutes(mux *http.ServeMux) {
 			return
 		}
 		if len(in.Sessions) > 0 && len(in.IDs) == 0 {
-			writeJSON(rw, map[string]any{"titles": sessions.Titles(in.Sessions)})
+			writeJSON(rw, map[string]any{"titles": withGatewayTitles(sessions.Titles(in.Sessions), in.Sessions)})
 			return
 		}
 		if !in.Groups {
@@ -344,7 +397,7 @@ func traceRoutes(mux *http.ServeMux) {
 				in.IDs = append(in.IDs, row.ParentSession)
 			}
 		}
-		writeJSON(rw, map[string]any{"names": sessions.CodexTitles(in.IDs), "parents": parents, "matched": matched,
+		writeJSON(rw, map[string]any{"names": codexReadableTitles(in.IDs), "parents": parents, "matched": matched,
 			"resetInferred": in.Day != "" && rows == nil})
 	})
 	mux.HandleFunc("GET /api/gateway/route", func(rw http.ResponseWriter, r *http.Request) {

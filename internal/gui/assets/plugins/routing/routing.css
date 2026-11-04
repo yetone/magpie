@@ -381,6 +381,8 @@
 button.rt-session { cursor: pointer; }
 .rt-session .arrow { flex: none; width: 10px; color: var(--muted); }
 .rt-session .nm { flex: 1 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.rt-session .dir { flex: 0 1 auto; min-width: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.rt-session .dir[hidden] { display: none; }
 .rt-session .summary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .rt-session > .cost { flex: none; margin-left: auto; font-variant-numeric: tabular-nums; }
 .rt-session > .cost[hidden] { display: none; }

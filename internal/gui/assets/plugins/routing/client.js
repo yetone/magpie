@@ -3754,9 +3754,9 @@ function routingPage(part) {
     for (const g of groups.values()) {
       let x = sessionRows.get(g.key);
       if (!x) {
-        const b = el(g.key ? "button" : "div", "rt-session"), name = el("span", "nm"), meta = el("span", "summary"), cost = el("span", "cost"), arrow = el("span", "arrow");
-        b.append(arrow, name, meta, cost);
-        x = { b, name, meta, cost, arrow };
+        const b = el(g.key ? "button" : "div", "rt-session"), name = el("span", "nm"), dir = el("span", "dir"), meta = el("span", "summary"), cost = el("span", "cost"), arrow = el("span", "arrow");
+        b.append(arrow, name, dir, meta, cost);
+        x = { b, name, dir, meta, cost, arrow };
         if (g.key) b.onclick = () => {
           if (closedSessions.has(g.key)) closedSessions.delete(g.key); else closedSessions.add(g.key);
           steady(renderHist);
@@ -3783,11 +3783,17 @@ function routingPage(part) {
       // for one purpose without renaming a chat that also made helper calls.
       const memory = g.r.agent === "codex" && g.rows.every((r) => purposeOf(r.kind) === "kind:memory_consolidation");
       const suggestions = g.r.agent === "codex" && g.rows.every((r) => purposeOf(r.kind) === "kind:ambient_suggestions");
-      const name = g.rows.find((r) => r.sessionTitle)?.sessionTitle || otherTitles.get(ownKey(g.r)) || (memory ? t("Background memory task") : suggestions ? t("Background prompt suggestions") : "");
+      // its title: the agent's own, else its first prompt, on one line
+      // (flandern1211_58540 on Discord: a folder and an id told nothing)
+      const name = (g.rows.find((r) => r.sessionTitle)?.sessionTitle || otherTitles.get(ownKey(g.r)) || (memory ? t("Background memory task") : suggestions ? t("Background prompt suggestions") : "")).replace(/\s+/g, " ").trim();
       // the folder the session works in, as its latest request said it
       // (#1068): it tells two runs of one agent apart before their titles
       const folder = g.key ? g.rows.find((r) => r.folder)?.folder || "" : "";
-      setText(x.name, g.key ? [agentName(g.r.agent), folder, name || (folder ? "" : groupSession(g.r))].filter(Boolean).join(" · ") : t("No session ID"));
+      // the title first; the folder after it, quieter, or in its place
+      // when there is no title; the id only when there is neither
+      setText(x.name, g.key ? [agentName(g.r.agent), name || folder || groupSession(g.r)].filter(Boolean).join(" · ") : t("No session ID"));
+      setText(x.dir, name && folder ? folder : "");
+      if (x.dir.hidden !== !(name && folder)) x.dir.hidden = !(name && folder);
       const purpose = memory ? t("Codex is organizing memories from earlier chats in the background. This can continue after a chat finishes.") + "\n"
         : suggestions ? kindWhy(g.r) + "\n"
         : g.rows.some((r) => r.parentMatched) ? t("Title requests were automatically matched using the prompt and the applied chat title.") + "\n" : "";
