@@ -299,6 +299,13 @@ func drawsGrok(p provider.Provider) bool {
 	return p.Account != nil && (p.Account.Agent == "grok" || p.PluginProvider() == "grok") && p.Base(provider.Responses) != ""
 }
 
+// drawsCopilot is whether p is a GitHub Copilot account, whose image models
+// (its /models entries that make images) draw at {api}/images/generations
+// and /images/edits, as Copilot CLI's image_generation tool does.
+func drawsCopilot(p provider.Provider) bool {
+	return p.Account != nil && p.Account.Agent == "copilot"
+}
+
 // drawsCodex is whether p is a ChatGPT account, which draws at its Codex
 // backend's images API.
 func drawsCodex(p provider.Provider) bool {
@@ -327,6 +334,16 @@ func DrawersOf(p provider.Provider, avail func() []catalog.Model) []catalog.Mode
 		}
 		for i := range out {
 			out[i].Provider = p.ID
+		}
+		return out
+	}
+	if drawsCopilot(p) {
+		// the image models the account's /models lists (Copilot CLI's GPT
+		// Image 2.5 Flare), drawn at its /images API
+		var out []catalog.Model
+		for _, m := range catalog.LiveDrawers(p.ID) {
+			m.Provider = p.ID
+			out = append(out, m)
 		}
 		return out
 	}
@@ -1176,6 +1193,9 @@ func (s *Server) draw(ctx context.Context, p provider.Provider, model string, d 
 	if drawsCodex(p) || drawsGrok(p) {
 		return s.drawImages(ctx, p, model, d)
 	}
+	if drawsCopilot(p) {
+		return s.drawImages(ctx, p, model, d)
+	}
 	if googleAccount(p) || pluginDrawsGemini(p, model) {
 		return s.drawCodeAssist(ctx, p, model, d)
 	}
@@ -1435,7 +1455,12 @@ func (s *Server) drawImages(ctx context.Context, p provider.Provider, model stri
 		body, _ = json.Marshal(req)
 	} else if len(d.Images) == 0 {
 		req := map[string]any{"model": model, "prompt": d.Prompt, "n": d.N}
-		for k, v := range map[string]string{"size": d.Size, "quality": d.Quality, "background": d.Background, "output_format": d.Format} {
+		fields := map[string]string{"size": d.Size, "quality": d.Quality, "background": d.Background, "output_format": d.Format}
+		if drawsCopilot(p) {
+			// Copilot CLI sends model, prompt, size and quality
+			fields = map[string]string{"size": d.Size, "quality": d.Quality}
+		}
+		for k, v := range fields {
 			if v != "" {
 				req[k] = v
 			}

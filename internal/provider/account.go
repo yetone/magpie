@@ -1790,6 +1790,14 @@ func copilotModels(ctx context.Context, app copilotApp) ([]catalog.Model, error)
 	}
 	copilotSeenMu.Unlock()
 	for _, m := range v.Data {
+		if copilotDrawsModel(m.Capabilities.Type, m.ID) && !copilotInternal.MatchString(m.ID) {
+			// an image model (GPT Image 2.5 Flare in Copilot CLI): drawn at
+			// the account's /images API, never offered to an agent's chat
+			if m.Policy == nil || m.Policy.State == "enabled" {
+				out = append(out, catalog.Model{ID: m.ID, Name: m.Name, Draws: true})
+			}
+			continue
+		}
 		if m.Capabilities.Type != "chat" || copilotInternal.MatchString(m.ID) {
 			continue
 		}
@@ -1848,4 +1856,17 @@ func forgetClaudeStatus() {
 	claudeStatusGen++
 	claudeStatusBusy = false
 	claudeStatusMu.Unlock()
+}
+
+// copilotDrawsModel is whether a /models entry of capabilities.type typ is
+// an image model: Copilot types it for images, or it isn't a chat, embedding
+// or other known type and its id names images.
+func copilotDrawsModel(typ, id string) bool {
+	switch strings.ToLower(typ) {
+	case "image", "images", "image_generation", "image-generation":
+		return true
+	case "chat", "embeddings", "embedding", "completion", "completions":
+		return false
+	}
+	return catalog.DrawsID(id)
 }
