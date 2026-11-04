@@ -490,3 +490,37 @@ func TestTuneCodexAsyncOwn(t *testing.T) {
 		}
 	})
 }
+
+// TestTuneAgentOwnLong: where an agent has its own Long conversations
+// (molianyin4227), its Usage card reads and sets that one, every other
+// agent's left as it was, and Undo puts the agent's own back.
+func TestTuneAgentOwnLong(t *testing.T) {
+	home := tuneSandbox(t)
+	tuneWrite(t, filepath.Join(home, ".codex", "config.toml"), "model = \"gpt-5.5\"\n")
+	if err := provider.SetCompactAt(200000); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SetAgentCompact("codex", &settings.AgentCompact{Full: true}); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := TuneRead(home, "codex", TuneCompact, ""); s.Value != "" || s.Source != TuneLong {
+		t.Fatalf("read codex's own full window %+v", s)
+	}
+	if err := TuneApply(home, "codex", TuneCompact, "", "350000"); err != nil {
+		t.Fatal(err)
+	}
+	got := settings.Load()
+	if c := got.AgentCompacts["codex"]; c.At != 350000 || c.Full || got.CompactAt != 200000 || got.FullContext {
+		t.Fatalf("after apply: codex %+v, every agent's %d full=%v", c, got.CompactAt, got.FullContext)
+	}
+	if s, _ := TuneRead(home, "codex", TuneCompact, ""); s.Value != "350000" || !s.Ours {
+		t.Fatalf("read after apply %+v", s)
+	}
+	if err := TuneUndo(home, "codex", TuneCompact, ""); err != nil {
+		t.Fatal(err)
+	}
+	got = settings.Load()
+	if c, ok := got.AgentCompacts["codex"]; !ok || !c.Full || got.CompactAt != 200000 {
+		t.Fatalf("after undo: codex %+v %v, every agent's %d", c, ok, got.CompactAt)
+	}
+}

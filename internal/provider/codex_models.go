@@ -624,7 +624,7 @@ func buildCodexListTag(kind string) string {
 	ms = append(ms, codexWindowsTag()...)
 	// and where a model with no threshold of its own is compacted, when
 	// that isn't the working window
-	if n := settings.Load().Compact(); n != settings.WorkingWindow {
+	if n := settings.Load().ForAgent("codex").Compact(); n != settings.WorkingWindow {
 		ms = append(ms, catalog.Model{ID: "~compact", Context: n})
 	}
 	// and the model Codex's auto-review runs on (#938)
@@ -764,7 +764,7 @@ func codexListed(shown []Entry, members func(id string) []Member, own bool) []ca
 	// are in Codex's picker beside these
 	labels := Labels(shown)
 	seen := described()
-	s := settings.Load()
+	s := settings.Load().ForAgent("codex")
 	find := func(id string) (Group, []Member, bool) { return Group{}, members(id), true }
 	listed := func(e Entry) bool { return own || !CodexOwn(e) }
 	apart := codexApart(shown, labels, listed)

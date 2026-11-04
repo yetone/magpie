@@ -307,8 +307,9 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	in.BareModelIDs = cur.BareModelIDs // set on its own (bare-ids)
 	in.BusyLoad = cur.BusyLoad         // and so is this (busy-load)
 	in.CodexAgentsV1 = cur.CodexAgentsV1
-	in.FullContext = cur.FullContext // set on its own (full-context)
-	in.CompactAt = cur.CompactAt     // and so is the threshold
+	in.FullContext = cur.FullContext     // set on its own (full-context)
+	in.CompactAt = cur.CompactAt         // and so is the threshold
+	in.AgentCompacts = cur.AgentCompacts // and each agent's own (agent-compact)
 	// Codex's background compaction, set on its own (codex-async-compact)
 	in.CodexAsyncCompact, in.CodexAsyncCompactPercent = cur.CodexAsyncCompact, cur.CodexAsyncCompactPercent
 	// Claude Desktop's list, set in its row on the Agents page

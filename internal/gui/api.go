@@ -781,7 +781,7 @@ func settingsState() settingsJSON {
 	s.CodexUsers, s.ClaudeUsers = loginUsers("codex"), loginUsers("claude")
 	s.CodexAsyncHeld = agent.CodexAsyncHeld()
 	s.CodexCompactKeys = codexKeysText(agent.CodexCompactHeld(""))
-	s.CodexWindow = codexWindowUnder(s.Settings, agent.CodexModel(""))
+	s.CodexWindow = codexWindowUnder(s.Settings.ForAgent("codex"), agent.CodexModel(""))
 	s.WorkBuddy, s.WorkBuddyCheckins = provider.HasWorkBuddy(), provider.WorkBuddyCheckins()
 	s.Trae, s.TraeCheckins = provider.HasTrae(), provider.TraeCheckins()
 	s.MiniMax, s.MiniMaxCheckins = provider.HasMiniMax(), provider.MiniMaxCheckins()
@@ -1658,6 +1658,28 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			err = provider.SetCompactAt(*in.At)
 		}
 		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
+	// an agent's own Long conversations (settings.AgentCompacts): Own
+	// false follows the one for every agent again
+	mux.HandleFunc("POST /api/settings/agent-compact", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Agent     string
+			Own, Full bool
+			At        int
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		var c *settings.AgentCompact
+		if in.Own {
+			c = &settings.AgentCompact{At: in.At, Full: in.Full}
+		}
+		if err := provider.SetAgentCompact(in.Agent, c); err != nil {
 			fail(rw, err)
 			return
 		}

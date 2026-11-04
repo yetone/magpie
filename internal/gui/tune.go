@@ -166,7 +166,7 @@ func adviseOf(by map[string][]tune.Call, days int, home string) tuneState {
 			if err != nil {
 				continue
 			}
-			st := settings.Load()
+			st := settings.Load().ForAgent("codex")
 			window, told, own, apart := codexWindow(calls, st, provider.Catalog(), provider.GroupFinder())
 			// Long conversations' value is the setting; where Codex runs
 			// now is that as magpie tells it for these models (their

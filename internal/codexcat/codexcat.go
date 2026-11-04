@@ -352,7 +352,7 @@ func Entries(ms []catalog.Model, after int) []any {
 func entriesAt(ms []catalog.Model, after int, effort string) []any {
 	own := CacheEntries()
 	v1 := V1()
-	work := settings.Load()
+	work := settings.Load().ForAgent("codex")
 	autoReview := AutoReviewModel()
 	var entries []any
 	for i, m := range ms {

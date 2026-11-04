@@ -67,6 +67,27 @@ func TestCodexCatalogCompactAt(t *testing.T) {
 		"d/flash": {float64(1000000), float64(500000)},
 		"x/big":   {float64(1000000), nil},
 	})
+	// Codex's own Long conversations (molianyin4227) over every agent's;
+	// another agent's is not Codex's
+	if err := settings.Save(settings.Settings{CompactAt: 400000, AgentCompacts: map[string]settings.AgentCompact{"codex": {At: 700000}, "claude": {At: 150000}}}); err != nil {
+		t.Fatal(err)
+	}
+	check("codex's own 700K", map[string][2]any{
+		"d/flash": {float64(1000000), float64(500000)},
+		"x/big":   {float64(1000000), float64(700000)},
+	})
+	if err := settings.Save(settings.Settings{CompactAt: 400000, AgentCompacts: map[string]settings.AgentCompact{"codex": {Full: true}}}); err != nil {
+		t.Fatal(err)
+	}
+	check("codex's own full window", map[string][2]any{
+		"x/big": {float64(1000000), nil},
+	})
+	if err := settings.Save(settings.Settings{FullContext: true, AgentCompacts: map[string]settings.AgentCompact{"claude": {At: 150000}}}); err != nil {
+		t.Fatal(err)
+	}
+	check("claude's own, codex follows every agent's full window", map[string][2]any{
+		"x/big": {float64(1000000), nil},
+	})
 }
 
 // Codex shows a model's context_window (95% of it) as the conversation's

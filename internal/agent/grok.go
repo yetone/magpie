@@ -49,7 +49,7 @@ var grokModelTable = `model."` + magpieID + "/"
 // as they set it.
 func grokModelTables(v1 string, had, wrote map[string]int) ([]edit.Table, map[string]int) {
 	var out []edit.Table
-	st, gave := settings.Load(), map[string]int{}
+	st, gave := settings.Load().ForAgent("grok"), map[string]int{}
 	for _, m := range sharedModels("grok") {
 		kvs := []edit.KV{
 			{Path: "model", Value: m.ID},

@@ -732,6 +732,11 @@ type Settings struct {
 	// off, in tokens: 0 is WorkingWindow (#876: 272K was the only one).
 	// A provider's or a model's own (ModelCompacts) comes before it.
 	CompactAt int `json:"compactAt,omitempty"`
+	// AgentCompacts is Long conversations of an agent's own, by its kind
+	// (CompactAgents), over CompactAt and FullContext for that agent alone
+	// (molianyin4227 on Discord: models differ, so one size for every
+	// agent fits none). An agent with none follows those two (ForAgent).
+	AgentCompacts map[string]AgentCompact `json:"agentCompacts,omitempty"`
 	// CodexAsyncCompact has Codex (0.163 on) compact a long conversation
 	// in the background, while its turn goes on, once it is past
 	// CodexAsyncCompactPercent of the model's window (#2490, lantern2077
@@ -1322,6 +1327,29 @@ func (s Settings) Working(n int) int {
 		return w
 	}
 	return n
+}
+
+// AgentCompact is one agent's Long conversations: Full its FullContext,
+// At its CompactAt (0 is WorkingWindow).
+type AgentCompact struct {
+	At   int  `json:"at,omitempty"`
+	Full bool `json:"full,omitempty"`
+}
+
+// CompactAgents are the agents whose configs magpie writes a compaction
+// window into, by the key each reads: Codex's model catalog
+// (auto_compact_token_limit), Claude Code's settings.json
+// (CLAUDE_CODE_AUTO_COMPACT_WINDOW, autoCompactWindow) and Grok Build's
+// model tables (context_window). Only these take an AgentCompact.
+var CompactAgents = []string{"codex", "claude", "grok"}
+
+// ForAgent is s as the agent of that kind reads Long conversations: its
+// own AgentCompact in CompactAt and FullContext, when it has one.
+func (s Settings) ForAgent(kind string) Settings {
+	if c, ok := s.AgentCompacts[kind]; ok {
+		s.CompactAt, s.FullContext = c.At, c.Full
+	}
+	return s
 }
 
 // Compact is where a conversation on a longer window is compacted when

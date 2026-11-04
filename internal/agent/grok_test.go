@@ -432,4 +432,21 @@ func TestGrokWindowFollowsLongConversations(t *testing.T) {
 	if pro, flash := grokWindows(t, path); pro != 400000 || flash != 200000 {
 		t.Fatalf("pro's own threshold: pro %d, flash %d", pro, flash)
 	}
+	// Grok Build's own Long conversations (molianyin4227) over every
+	// agent's, a model's own still first; another agent's is not Grok's
+	set(func(s *settings.Settings) {
+		s.ModelCompacts, s.CompactAt = nil, 300000
+		s.AgentCompacts = map[string]settings.AgentCompact{"grok": {At: 500000}, "codex": {At: 250000}}
+	})
+	if pro, flash := grokWindows(t, path); pro != 500000 || flash != 200000 {
+		t.Fatalf("grok's own 500K: pro %d, flash %d", pro, flash)
+	}
+	set(func(s *settings.Settings) { s.AgentCompacts = map[string]settings.AgentCompact{"grok": {Full: true}} })
+	if pro, flash := grokWindows(t, path); pro != 1000000 || flash != 200000 {
+		t.Fatalf("grok's own full window: pro %d, flash %d", pro, flash)
+	}
+	set(func(s *settings.Settings) { s.AgentCompacts = map[string]settings.AgentCompact{"codex": {Full: true}} })
+	if pro, flash := grokWindows(t, path); pro != 300000 || flash != 200000 {
+		t.Fatalf("codex's full window reached grok: pro %d, flash %d", pro, flash)
+	}
 }

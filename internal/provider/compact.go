@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/yetone/magpie/internal/catalog"
@@ -214,6 +216,45 @@ func SetModelCompacts(providerID string, cs map[string]int) error {
 	}
 	if !changed {
 		return nil
+	}
+	if err := settings.Save(s); err != nil {
+		return err
+	}
+	catalog.Touched()
+	return nil
+}
+
+// SetAgentCompact gives an agent of CompactAgents a Long conversations of
+// its own, c, over the one for every agent; nil takes it away, and the
+// agent follows that one again.
+func SetAgentCompact(agent string, c *settings.AgentCompact) error {
+	if !slices.Contains(settings.CompactAgents, agent) {
+		return errorf("%q writes no compaction window magpie sets", agent)
+	}
+	if c != nil && c.At < 0 {
+		return errorf("a compaction threshold is a number of tokens, not %d", c.At)
+	}
+	s := settings.Load()
+	cur, had := s.AgentCompacts[agent]
+	if c == nil {
+		if !had {
+			return nil
+		}
+		s.AgentCompacts = maps.Clone(s.AgentCompacts)
+		delete(s.AgentCompacts, agent)
+	} else {
+		n := *c
+		if n.At == settings.WorkingWindow {
+			n.At = 0
+		}
+		if had && cur == n {
+			return nil
+		}
+		s.AgentCompacts = maps.Clone(s.AgentCompacts)
+		if s.AgentCompacts == nil {
+			s.AgentCompacts = map[string]settings.AgentCompact{}
+		}
+		s.AgentCompacts[agent] = n
 	}
 	if err := settings.Save(s); err != nil {
 		return err

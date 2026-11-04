@@ -139,3 +139,62 @@ func TestOwnModelsSwitchTellsTheAgents(t *testing.T) {
 		t.Fatalf("shown: told %d times, hidden=%v; want twice, false", told, OwnModelsHidden("claude"))
 	}
 }
+
+// An agent sets its own Long conversations (molianyin4227 on Discord: one
+// size for every agent fits none when their models differ): Codex, Claude
+// Code and Grok Build take one over the one every agent has, another
+// agent has no window magpie writes and is refused, nil goes back to
+// every agent's, and the agent's 272K is kept as magpie's default.
+func TestSetAgentCompact(t *testing.T) {
+	limitsHome(t)
+	told := 0
+	catalog.Changed = func() { told++ }
+	t.Cleanup(func() { catalog.Changed = nil })
+	if err := SetCompactAt(400000); err != nil {
+		t.Fatal(err)
+	}
+	told = 0
+	if err := SetAgentCompact("codex", &settings.AgentCompact{At: 600000}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetAgentCompact("claude", &settings.AgentCompact{Full: true}); err != nil {
+		t.Fatal(err)
+	}
+	s := settings.Load()
+	if c, cl, g := s.ForAgent("codex"), s.ForAgent("claude"), s.ForAgent("grok"); c.Compact() != 600000 || cl.Compact() != 0 || g.Compact() != 400000 {
+		t.Fatalf("codex %d, claude %d, grok %d; want 600000, 0 (full), 400000", c.Compact(), cl.Compact(), g.Compact())
+	}
+	if s.CompactAt != 400000 || s.FullContext {
+		t.Fatalf("every agent's changed: %d full=%v", s.CompactAt, s.FullContext)
+	}
+	if told != 2 {
+		t.Fatalf("told the agents %d times; want 2", told)
+	}
+	if err := SetAgentCompact("codex", &settings.AgentCompact{At: 600000}); err != nil || told != 2 {
+		t.Fatalf("the same value again: %v, told %d", err, told)
+	}
+	if err := SetAgentCompact("codex", &settings.AgentCompact{At: settings.WorkingWindow}); err != nil {
+		t.Fatal(err)
+	}
+	if c, ok := settings.Load().AgentCompacts["codex"]; !ok || c.At != 0 || settings.Load().ForAgent("codex").Compact() != settings.WorkingWindow {
+		t.Fatalf("codex at 272K: %+v %v", c, ok)
+	}
+	for _, bad := range []string{"opencode", "", "codex@wsl:Ubuntu"} {
+		if err := SetAgentCompact(bad, &settings.AgentCompact{At: 300000}); err == nil {
+			t.Errorf("%q took a window", bad)
+		}
+	}
+	if err := SetAgentCompact("grok", &settings.AgentCompact{At: -1}); err == nil {
+		t.Error("a negative size was accepted")
+	}
+	if err := SetAgentCompact("claude", nil); err != nil {
+		t.Fatal(err)
+	}
+	s = settings.Load()
+	if _, ok := s.AgentCompacts["claude"]; ok || s.ForAgent("claude").Compact() != 400000 {
+		t.Fatalf("claude back to every agent's: %+v", s.AgentCompacts)
+	}
+	if len(s.AgentCompacts) != 1 {
+		t.Fatalf("others left: %+v", s.AgentCompacts)
+	}
+}

@@ -151,6 +151,23 @@ func TestClaudeCompactAt(t *testing.T) {
 	expect("full window, the model's own", "200000")
 	must(a.Field("model").Set("v/big"))
 	expect("full window", "")
+	// Claude Code's own Long conversations (molianyin4227) over every
+	// agent's Full window; Codex's own is not Claude Code's
+	must(provider.SetAgentCompact("codex", &settings.AgentCompact{At: 700000}))
+	must(a.Sync())
+	expect("codex's own", "")
+	must(provider.SetAgentCompact("claude", &settings.AgentCompact{At: 300000}))
+	must(a.Sync())
+	expect("claude's own 300K", "300000")
+	if s := tuned(); s.Value != "300000" || s.Source != TuneLong {
+		t.Fatalf("tune reads claude's own 300K as %+v", s)
+	}
+	must(a.Field("model").Set("v/flash"))
+	expect("claude's own, the model's first", "200000")
+	must(a.Field("model").Set("v/big"))
+	must(provider.SetAgentCompact("claude", nil))
+	must(a.Sync())
+	expect("back to every agent's full window", "")
 }
 
 // An auto-compact window the user set in Claude Code (autoCompactWindow,

@@ -13,7 +13,8 @@ package agent
 // sets that value, so the Usage page and the agents' settings never show
 // two numbers (7eleven on Discord). Before, tune wrote Codex's
 // model_auto_compact_token_limit beside it; tuneMigrateCodex moves such a
-// value into Long conversations.
+// value into Long conversations. An agent with a Long conversations of
+// its own (settings.AgentCompacts) has tune read and set that one.
 
 import (
 	"encoding/json"
@@ -71,8 +72,18 @@ type tuneLong struct {
 	Set       int  `json:"set"`
 }
 
-func tuneLongStashed() (tuneLong, bool) {
-	raw := stashShared()[tuneLongKey]
+// longKey is where Long conversations as agent reads it is stashed: the
+// one for every agent, or the agent's own (settings.AgentCompacts), which
+// a Use puts the advice in instead.
+func longKey(s settings.Settings, agent string) string {
+	if _, own := s.AgentCompacts[agent]; own {
+		return tuneLongKey + "." + agent
+	}
+	return tuneLongKey
+}
+
+func tuneLongStashed(key string) (tuneLong, bool) {
+	raw := stashShared()[key]
 	var st tuneLong
 	if raw == "" || json.Unmarshal([]byte(raw), &st) != nil {
 		return tuneLong{}, false
@@ -89,36 +100,47 @@ func longValue(s settings.Settings) string {
 	return ""
 }
 
-// longOurs says Long conversations still holds the window tune put in.
-func longOurs(s settings.Settings) bool {
-	st, ok := tuneLongStashed()
-	return ok && !s.FullContext && s.Compact() == st.Set
+// longOurs says Long conversations, as agent reads it, still holds the
+// window tune put in.
+func longOurs(s settings.Settings, agent string) bool {
+	st, ok := tuneLongStashed(longKey(s, agent))
+	a := s.ForAgent(agent)
+	return ok && !a.FullContext && a.Compact() == st.Set
 }
 
 // longApply puts n in Long conversations, what it was kept the first time
 // for Undo. Sync then writes it into every agent magpie routes.
-func longApply(n int) error {
+func longApply(agent string, n int) error {
 	s := settings.Load()
-	st, ok := tuneLongStashed()
+	key, a := longKey(s, agent), s.ForAgent(agent)
+	st, ok := tuneLongStashed(key)
 	if !ok {
-		st = tuneLong{CompactAt: s.CompactAt, Full: s.FullContext}
+		st = tuneLong{CompactAt: a.CompactAt, Full: a.FullContext}
 	}
 	st.Set = n
 	b, _ := json.Marshal(st)
-	stash(map[string]string{tuneLongKey: string(b)})
+	stash(map[string]string{key: string(b)})
+	if key != tuneLongKey {
+		return provider.SetAgentCompact(agent, &settings.AgentCompact{At: n})
+	}
 	return provider.SetCompactAt(n) // Full window off too
 }
 
 // longUndo puts Long conversations back as it was before tune, unless the
 // user changed it since: then it is theirs, and only forgotten.
-func longUndo() error {
-	st, ok := tuneLongStashed()
+func longUndo(agent string) error {
+	s := settings.Load()
+	key := longKey(s, agent)
+	st, ok := tuneLongStashed(key)
 	if !ok {
 		return fmt.Errorf("magpie didn't set Long conversations")
 	}
-	defer forget(tuneLongKey)
-	if !longOurs(settings.Load()) {
+	defer forget(key)
+	if !longOurs(s, agent) {
 		return nil
+	}
+	if key != tuneLongKey {
+		return provider.SetAgentCompact(agent, &settings.AgentCompact{At: st.CompactAt, Full: st.Full})
 	}
 	if st.Full {
 		return provider.SetFullContext(true)
@@ -145,9 +167,9 @@ func tuneMigrateCodex(home string) {
 		return
 	}
 	if n, err := strconv.Atoi(st.Set); err == nil && n > 0 {
-		s := settings.Load()
+		s := settings.Load().ForAgent("codex")
 		if s.CompactAt == 0 || s.FullContext || n < s.Compact() {
-			if err := longApply(n); err != nil {
+			if err := longApply("codex", n); err != nil {
 				return
 			}
 		}
@@ -254,7 +276,7 @@ func TuneRead(home, agent, knob, model string) (TuneSetting, error) {
 			return s, nil
 		}
 		st := settings.Load()
-		return TuneSetting{Value: longValue(st), Source: TuneLong, Ours: longOurs(st)}, nil
+		return TuneSetting{Value: longValue(st.ForAgent(agent)), Source: TuneLong, Ours: longOurs(st, agent)}, nil
 	}
 	var s TuneSetting
 	for _, k := range p.env {
@@ -262,7 +284,7 @@ func TuneRead(home, agent, knob, model string) (TuneSetting, error) {
 			if k == claudeCompactEnv && claudeLongEnv(p.path, v) {
 				// as Long conversations has it now, which Sync is writing
 				st := settings.Load()
-				return TuneSetting{Value: longValue(st), Source: TuneLong, Ours: longOurs(st)}, nil
+				return TuneSetting{Value: longValue(st.ForAgent(agent)), Source: TuneLong, Ours: longOurs(st, agent)}, nil
 			}
 			s.Locked = k
 			s.Value, s.Source = v, "env"
@@ -283,8 +305,7 @@ func TuneRead(home, agent, knob, model string) (TuneSetting, error) {
 			// own: magpie's Long conversations where magpie wrote it
 			if v, ok := edit.GetJSON(p.path, "autoCompactWindow"); ok && v != "auto" {
 				if claudeLongWindow(p.path, "autoCompactWindow", "claude.compact_default") {
-					st := settings.Load()
-					return TuneSetting{Value: v, Source: TuneLong, Ours: longOurs(st)}, nil
+					return TuneSetting{Value: v, Source: TuneLong, Ours: longOurs(settings.Load(), agent)}, nil
 				}
 				s.Value, s.Source = v, "settings"
 			}
@@ -316,7 +337,7 @@ func claudeLongWindow(path, key, stashKey string) bool {
 	if !ok || v == "" || v != stashShared()[stashKey] {
 		return false
 	}
-	return v == longValue(settings.Load())
+	return v == longValue(settings.Load().ForAgent("claude"))
 }
 
 func tuneStashed(agent, knob, model string) (tuneStash, bool) {
@@ -354,7 +375,7 @@ func TuneApply(home, agent, knob, model, value string) error {
 		if agent == "claude" && (n < 100000 || n > 1000000) {
 			return fmt.Errorf("Claude Code takes a window of 100000 to 1000000 tokens, not %d", n)
 		}
-		return longApply(n)
+		return longApply(agent, n)
 	}
 	var v any = value
 	if p.number {
@@ -397,7 +418,7 @@ func TuneUndo(home, agent, knob, model string) error {
 		return err
 	}
 	if cur, _ := TuneRead(home, agent, knob, model); cur.Source == TuneLong {
-		return longUndo()
+		return longUndo(agent)
 	}
 	st, ok := tuneStashed(agent, knob, model)
 	if !ok {
