@@ -533,12 +533,17 @@ func wordsOf(body []byte) []byte { return catalog.Words(body) }
 // 200 it came with, OpenAI's "Rate limit reached for gpt-6.1-sol … on
 // tokens per min (TPM) … Please try again in 6ms." held usedUpWords'
 // "limit reached" and rested the account as out of quota (monater on
-// Discord), where its 429 is a minute's rate limit. Words streamStatus
-// doesn't know (its 502) keep the 200, and read as before; any other
-// status is the reply's own.
+// Discord), where its 429 is a minute's rate limit. The status the error
+// object names for itself comes first (#4855: a plugin's in-stream frame
+// is the only place its runtime can say one); words streamStatus doesn't
+// know (its 502) keep the 200, and read as before; any other status is
+// the reply's own.
 func carriedStatus(status int, body []byte) int {
 	if status < 200 || status >= 400 {
 		return status
+	}
+	if said := namedStatus(body); said != 0 {
+		return said
 	}
 	if said := streamStatus(string(wordsOf(body))); said != http.StatusBadGateway {
 		return said
@@ -1290,8 +1295,9 @@ func (s *Server) restAfter(c candidate, status int, header http.Header, body []b
 // translation without putting it in the response sent to the client.
 func (s *Server) restAfterMarked(c candidate, status int, header http.Header, body []byte, sharedPool bool) Rest {
 	// an error carried under a 200 rests as its own status would, and
-	// says that status where the rest is shown
-	status = carriedStatus(status, body)
+	// says that status where the rest is shown — first among equals the
+	// one its stream's error frame named outright (#4855)
+	status = failedNamed(header, carriedStatus(status, body))
 	now := time.Now()
 	d := fallbackCooldown
 	why := failureOf(c, status, body)
@@ -1977,6 +1983,23 @@ const refusedHeader = "X-Magpie-Refused"
 // out of quota said it's back. A held error that is passed on after all
 // leaves it out; one written straight to the agent carries it, harmlessly.
 const resetsHeader = "X-Magpie-Resets-At"
+
+// namedStatusHeader carries, from a relayed stream's error frame to the
+// routing loop and restAfter, the status the frame named for itself
+// (#4855): a plugin that already sent its 200 can only say what went
+// wrong in the frame, and the status it names there — not the one its
+// message's words guess — is what the failure rests as. The client never
+// sees it.
+const namedStatusHeader = "X-Magpie-Named-Status"
+
+// failedNamed is status, or the status a relayed stream's error frame named
+// for itself (#4855, namedStatusHeader), which the failure reads as.
+func failedNamed(h http.Header, status int) int {
+	if n, err := strconv.Atoi(h.Get(namedStatusHeader)); err == nil && n >= 400 && n < 600 {
+		return n
+	}
+	return status
+}
 
 // resetsNoted is how long until the time keepRetry noted, if it did.
 func resetsNoted(h http.Header, now time.Time) time.Duration {

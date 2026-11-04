@@ -26,6 +26,9 @@ type usageSniffer struct {
 	// failed: what an explicit error event said; a terminal event can end
 	// the stream successfully or with a failure despite its HTTP 200.
 	failed string
+	// failedNamed: the status the error frame named for itself, when it
+	// named one (#4855); 0 when it didn't
+	failedNamed int
 	// tail: what a Chat stream's chunks say of its end (chatTail)
 	tail chatTail
 	// found: the searches the reply ran by itself (searchTally)
@@ -126,6 +129,9 @@ func (s *usageSniffer) parse(b []byte) {
 			}
 			s.failed = provider.APIError(body, "upstream stream failed")
 			s.u.ErrType = provider.ErrorType(body)
+			if body != nil {
+				s.failedNamed = namedStatus(body)
+			}
 		}
 	}
 	s.found.see(s.proto, b)

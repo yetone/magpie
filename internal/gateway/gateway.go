@@ -4740,7 +4740,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// and a vendor that failed (not a reply too long, nor one its
 			// filter refused) rests, so the retry goes to another member. A
 			// reply the agent stopped itself is booked as before
-			try.Fail = failureOf(c, call.Status, []byte(call.Error))
+			try.Fail = failureOf(c, failedNamed(hw.header, call.Status), []byte(call.Error))
 			// a compaction a rule sent to a model of its own isn't a turn of
 			// the conversation: it leaves the stick where it was when it
 			// answers (below), and breaking off mid-reply forgets nothing
@@ -4765,6 +4765,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			} else if lateRests(call.Error) {
 				rest := s.restAfter(c, call.Status, hw.header, []byte(call.Error))
 				try.Fail, try.Rest = rest.Why, &rest
+			}
+			if hw.looped == "" && !hw.refusedAfter {
+				// an upstream's error frame that named its status (#4855,
+				// mycf_711: wps-lingxi's "（HTTP 503）" rows read status=200)
+				// is booked at it, in the Routing and Usage views, though
+				// the agent's 200 went out before it
+				if named := failedNamed(hw.header, namedStatus([]byte(call.Error))); named >= 400 {
+					call.Status = named
+				}
 			}
 		} else if call.Status < 400 {
 			servedCandidate(c, call.Usage.Input+call.Usage.Output+call.Usage.CacheRead+call.Usage.CacheWrite)
@@ -6743,6 +6752,12 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	} else {
 		sniff.settleWhole()
 	}
+	if sniff.failedNamed != 0 {
+		// the stream's error frame named its own status: the failure is
+		// booked and rested as it (saidStatusHeader, #4855), while the
+		// frame itself goes to the client as it came
+		noteSaidStatus(w, sniff.failedNamed)
+	}
 	if gather != nil {
 		// the gathered stream is read here, not by the client: it gets
 		// every byte, a last line the upstream never ended included, as
@@ -6822,6 +6837,15 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 // dsh's pi-ai for an error it doesn't retry, and the turn failed (#470).
 func cutMidReply(name string, err error) string {
 	return name + ": connection lost mid-reply (" + err.Error() + ")"
+}
+
+// noteSaidStatus carries the status a relayed stream's error frame named
+// for itself onto the try's writer (#4855), for the routing loop and
+// restAfter to read (namedStatusHeader); the client never sees it.
+func noteSaidStatus(w http.ResponseWriter, status int) {
+	if h, ok := w.(*holdWriter); ok {
+		h.note(namedStatusHeader, strconv.Itoa(status))
+	}
 }
 
 // streamFailure is an error event ending a stream in proto, as each
