@@ -221,6 +221,12 @@ type Settings struct {
 	// tool's description (gateway.hubWhere). "" is this computer's name, said
 	// only to an agent on another computer. This computer's own (KeepOwn).
 	RouterNote string `json:"routerNote,omitempty"`
+	// RouterAllTools gives every agent the router's tools whole. Off, an
+	// agent that doesn't search its MCP tools itself and is given more
+	// than a few is given two in their place, one that finds a tool and
+	// one that runs it (gateway.hubOnDemand; ArvinCharl on X: the tools
+	// filled the context). This computer's own (KeepOwn).
+	RouterAllTools bool `json:"routerAllTools,omitempty"`
 	// Port is the gateway's port on this computer, 0 for DefaultPort.
 	// MAGPIE_ADDR, where it is set, comes first (GatewayAddr).
 	Port int `json:"port,omitempty"`
@@ -1392,7 +1398,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.QuotaReads = cur.QuotaReads
 	s.NoAccountDiscovery = cur.NoAccountDiscovery
 	s.LAN, s.AllowIPs = cur.LAN, cur.AllowIPs
-	s.RouterNote = cur.RouterNote
+	s.RouterNote, s.RouterAllTools = cur.RouterNote, cur.RouterAllTools
 	s.FetchPrivate = cur.FetchPrivate
 	s.SessionTerminal = cur.SessionTerminal
 	s.PanelShortcut = cur.PanelShortcut
@@ -1900,6 +1906,18 @@ func SetRouterNote(note string) error {
 		return err
 	}
 	s.RouterNote = CleanRouterNote(note)
+	return save(s, true)
+}
+
+// SetRouterAllTools sets RouterAllTools alone, from what the file holds
+// now. A settings file that can't be read is left as it is, with the error.
+func SetRouterAllTools(on bool) error {
+	defer lockFile()()
+	s, err := loadChecked()
+	if err != nil {
+		return err
+	}
+	s.RouterAllTools = on
 	return save(s, true)
 }
 

@@ -49,6 +49,9 @@ type mcpUseKey struct{}
 type mcpUse struct {
 	mu                             sync.Mutex
 	agent, server, provider, model string
+	// tool is the tool that ran, when the call named another: the hub's
+	// call_tool runs the tool it names
+	tool string
 }
 
 func mcpUseOf(ctx context.Context) *mcpUse {
@@ -106,6 +109,16 @@ func (u *mcpUse) as(agent string) {
 	u.mu.Unlock()
 }
 
+// named names the tool that ran, for the hub's call_tool.
+func (u *mcpUse) named(tool string) {
+	if u == nil || tool == "" {
+		return
+	}
+	u.mu.Lock()
+	u.tool = tool
+	u.mu.Unlock()
+}
+
 func (u *mcpUse) get() (agent, server, provider, model string) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -122,6 +135,11 @@ func callMCPTool(r *http.Request, server string, m mcpMessage, call func(*http.R
 	}
 	json.Unmarshal(m.Params, &p)
 	agent, server, prov, model := use.get()
+	use.mu.Lock()
+	if use.tool != "" {
+		p.Name = use.tool
+	}
+	use.mu.Unlock()
 	logMCPCall(r, agent, server, r.URL.Path, p.Name, prov, model, start, time.Since(start), mcpFailure(result, rpcErr))
 	return result, rpcErr
 }

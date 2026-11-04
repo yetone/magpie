@@ -464,6 +464,9 @@ func (s *Server) hubMCPCall(r *http.Request, agent string, m mcpMessage) (any, m
 		if MCPHub != nil {
 			ss = hubServersFor(r.Context(), agent)
 		}
+		if hubOnDemand(agent, hubToolCount(ss)) {
+			say += hubOnDemandSay
+		}
 		say = hubAbout(ss, here, say)
 		if MCPHub == nil || !MCPHub.On() {
 			say = errHubOff
@@ -479,25 +482,12 @@ func (s *Server) hubMCPCall(r *http.Request, agent string, m mcpMessage) (any, m
 	case "tools/list":
 		ts := hubTools(r.Context(), agent)
 		where := hubWhere(r)
+		if hubOnDemand(agent, len(ts)) {
+			return map[string]any{"tools": hubOnDemandSpecs(where)}, nil
+		}
 		list := make([]any, 0, len(ts))
 		for _, t := range ts {
-			spec := make(map[string]json.RawMessage, len(t.Spec)+1)
-			for k, v := range t.Spec {
-				spec[k] = v
-			}
-			name, _ := json.Marshal(t.name)
-			spec["name"] = name
-			if s, ok := spec["inputSchema"]; !ok || !json.Valid(s) {
-				spec["inputSchema"] = json.RawMessage(`{"type":"object","properties":{}}`)
-			}
-			if where != "" {
-				var d string
-				json.Unmarshal(spec["description"], &d)
-				d, _ = strings.CutPrefix(d, "["+where+"]")
-				d = strings.TrimSpace("[" + where + "] " + strings.TrimSpace(d))
-				spec["description"], _ = json.Marshal(d)
-			}
-			list = append(list, spec)
+			list = append(list, hubSpecOf(t, where))
 		}
 		return map[string]any{"tools": list}, nil
 	case "tools/call":
@@ -513,14 +503,17 @@ func (s *Server) hubMCPCall(r *http.Request, agent string, m mcpMessage) (any, m
 			return toolResult(errHubOff, true), nil
 		}
 		ts := hubTools(r.Context(), agent)
-		t, ok := hubToolNamed(ts, agent, p.Name)
-		if ok {
-			c := HubCaller{Session: hubSession(r, agent, p.Meta)}
-			if t.Roots {
-				c.Roots, c.Client = hubRoots(r, p.Meta), hubClient(r)
-			}
-			r = r.WithContext(WithHubCaller(r.Context(), c))
-			return s.hubMCPRun(r, agent, t, p.Arguments), nil
+		// the two tools an agent given its tools on demand calls them by
+		// (hub_ondemand.go), taken whatever it was given: what it lists
+		// can change between its list and its call
+		switch p.Name {
+		case hubFindTool:
+			return hubFind(ts, p.Arguments, hubWhere(r)), nil
+		case hubCallTool:
+			return s.hubCallByName(r, agent, ts, p.Arguments, p.Meta), nil
+		}
+		if t, ok := hubToolNamed(ts, agent, p.Name); ok {
+			return s.hubCall(r, agent, t, p.Arguments, p.Meta), nil
 		}
 		if agent == "" {
 			return nil, map[string]any{"code": -32602, "message": "unknown tool " + p.Name + ": no MCP server in magpie's Library gives it"}
@@ -565,6 +558,17 @@ func hubToolNamed(ts []hubTool, agent, name string) (hubTool, bool) {
 	return found[0], true
 }
 
+// hubCall runs t for the caller r is: its session, and for a tool that
+// reads them, its workspaces and client (HubCaller).
+func (s *Server) hubCall(r *http.Request, agent string, t hubTool, args json.RawMessage, meta hubCallMeta) any {
+	c := HubCaller{Session: hubSession(r, agent, meta)}
+	if t.Roots {
+		c.Roots, c.Client = hubRoots(r, meta), hubClient(r)
+	}
+	r = r.WithContext(WithHubCaller(r.Context(), c))
+	return s.hubMCPRun(r, agent, t, args)
+}
+
 // hubMCPRun runs one tool on its server, held to the calling gateway key's
 // limit. A server that is down or doesn't answer in time is an error
 // result naming it, never a wait past the client's.
@@ -573,6 +577,7 @@ func (s *Server) hubMCPRun(r *http.Request, agent string, t hubTool, args json.R
 	use := mcpUseOf(r.Context())
 	use.on(t.Server)
 	use.as(agent)
+	use.named(t.name)
 	release, err := reserveFor(access.Caller(r.Context()), int64(len(args)), "", limitClock())
 	if err != nil {
 		return toolResult(err.Error(), true)

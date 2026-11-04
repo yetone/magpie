@@ -1741,7 +1741,7 @@ magpie.plugin("library", (ctx) => {
     connect.classList.add("lib-hubconnect");
     at.append(glyph(GLYPH.web), aw, copyBtn(hubURL(), t("Address")), connect);
     list.append(at);
-    list.append(hubNoteRow());
+    list.append(hubNoteRow(), hubToolsRow());
     const names = (why) => hubAgents().filter((a) => a.hub === why).map((a) => a.name).join(", ");
     const why = [
       ["no-remote", "{agents} reaches no MCP server over HTTP, so it keeps each server's own entry."],
@@ -1801,6 +1801,25 @@ magpie.plugin("library", (ctx) => {
     };
     f.onblur = save;
     row.append(glyph(GLYPH.doc), who, f);
+    return row;
+  }
+  // Tools on demand (ArvinCharl on X: the router's tools filled the
+  // context): on, the default, an agent that doesn't search its MCP tools
+  // itself and is given more than a few is given two in their place, one
+  // finding a tool and one running it (gateway.hubOnDemand). Off gives
+  // every agent every tool whole (settings' routerAllTools).
+  function hubToolsRow() {
+    const row = el("div", "row lib-row lib-hubtoolsrow");
+    const who = el("div", "who");
+    who.append(el("div", "name", t("Tools on demand")));
+    who.append(el("div", "sub wraps", t("An agent given more than 10 tools gets two in their place, one that finds a tool and one that runs it, so their definitions stay out of every request. Claude Code, Claude Desktop, Codex and Pi find tools themselves and are given every one.")));
+    const on = !lib.hubAllTools;
+    row.append(glyph(GLYPH.search), who, toggle(on, t("Tools on demand"), (v) =>
+      change("servers/hub-tools", { on: !v }).then((ok) => {
+        if (ok) status(v
+          ? t("Agents are given the router's tools on demand — restart them to use it")
+          : t("Agents are given every tool of the router — restart them to use it"), "ok");
+      })));
     return row;
   }
   // every server is behind the hub, magpie's own image server too, but one

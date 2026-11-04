@@ -2,6 +2,10 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Tools on demand": "按需加载工具",
+    "An agent given more than 10 tools gets two in their place, one that finds a tool and one that runs it, so their definitions stay out of every request. Claude Code, Claude Desktop, Codex and Pi find tools themselves and are given every one.": "给一个 Agent 的工具超过 10 个时，改为给它两个工具：一个查找工具，一个运行工具，这样工具定义不会出现在每次请求里。Claude Code、Claude Desktop、Codex 和 Pi 会自己查找工具，仍会拿到全部工具。",
+    "Agents are given the router's tools on demand — restart them to use it": "Agent 现在按需拿到路由的工具 — 重启它们后生效",
+    "Agents are given every tool of the router — restart them to use it": "Agent 现在拿到路由的全部工具 — 重启它们后生效",
     "Show more ({n} left)": "显示更多（还有 {n} 个）",
     "Not through the router": "不经过路由",
     "Each agent is given its own entry for it, as with the MCP router off": "每个 Agent 各自有它的条目，和关掉 MCP 路由时一样",
@@ -773,6 +777,10 @@ magpie.strings({
     "{agents} can be changed once it runs.": "{agents} 要等它运行后才能修改。",
   },
   "zh-TW": {
+    "Tools on demand": "按需載入工具",
+    "An agent given more than 10 tools gets two in their place, one that finds a tool and one that runs it, so their definitions stay out of every request. Claude Code, Claude Desktop, Codex and Pi find tools themselves and are given every one.": "給一個 Agent 的工具超過 10 個時，改為給它兩個工具：一個尋找工具，一個執行工具，這樣工具定義不會出現在每次請求裡。Claude Code、Claude Desktop、Codex 和 Pi 會自己尋找工具，仍會拿到全部工具。",
+    "Agents are given the router's tools on demand — restart them to use it": "Agent 現在按需取得路由的工具 — 重新啟動它們後生效",
+    "Agents are given every tool of the router — restart them to use it": "Agent 現在取得路由的全部工具 — 重新啟動它們後生效",
     "Show more ({n} left)": "顯示更多（還有 {n} 個）",
     "Not through the router": "不經過路由",
     "Each agent is given its own entry for it, as with the MCP router off": "每個 Agent 各自有它的條目，和關掉 MCP 路由時一樣",
@@ -1544,6 +1552,10 @@ magpie.strings({
     "{agents} can be changed once it runs.": "{agents} 要等它執行後才能修改。",
   },
   ja: {
+    "Tools on demand": "ツールをオンデマンドで渡す",
+    "An agent given more than 10 tools gets two in their place, one that finds a tool and one that runs it, so their definitions stay out of every request. Claude Code, Claude Desktop, Codex and Pi find tools themselves and are given every one.": "エージェントに渡すツールが 10 個を超えると、代わりにツールを探すものと実行するものの 2 つを渡し、ツールの定義が毎回のリクエストに入らないようにします。Claude Code、Claude Desktop、Codex、Pi は自分でツールを探すので、すべてのツールが渡されます。",
+    "Agents are given the router's tools on demand — restart them to use it": "エージェントにルーターのツールをオンデマンドで渡します — 反映するにはエージェントを再起動してください",
+    "Agents are given every tool of the router — restart them to use it": "エージェントにルーターのすべてのツールを渡します — 反映するにはエージェントを再起動してください",
     "Show more ({n} left)": "さらに表示（残り {n} 件）",
     "Not through the router": "ルーターを通さない",
     "Each agent is given its own entry for it, as with the MCP router off": "各エージェントに個別のエントリを渡します（MCP ルーターがオフのときと同じ）",
@@ -2315,6 +2327,10 @@ magpie.strings({
     "{agents} can be changed once it runs.": "{agents} は起動後に変更できます。",
   },
   de: {
+    "Tools on demand": "Tools bei Bedarf",
+    "An agent given more than 10 tools gets two in their place, one that finds a tool and one that runs it, so their definitions stay out of every request. Claude Code, Claude Desktop, Codex and Pi find tools themselves and are given every one.": "Ein Agent, der mehr als 10 Tools bekäme, bekommt stattdessen zwei: eines findet ein Tool, das andere führt es aus, damit ihre Definitionen nicht in jeder Anfrage stehen. Claude Code, Claude Desktop, Codex und Pi suchen Tools selbst und bekommen alle.",
+    "Agents are given the router's tools on demand — restart them to use it": "Agents bekommen die Tools des Routers bei Bedarf — starte sie neu, damit sie es nutzen",
+    "Agents are given every tool of the router — restart them to use it": "Agents bekommen alle Tools des Routers — starte sie neu, damit sie es nutzen",
     "Show more ({n} left)": "Mehr zeigen (noch {n})",
     "Not through the router": "Nicht über den Router",
     "Each agent is given its own entry for it, as with the MCP router off": "Jeder Agent bekommt einen eigenen Eintrag dafür, wie bei ausgeschaltetem MCP-Router",

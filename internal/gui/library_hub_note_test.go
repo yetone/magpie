@@ -43,3 +43,36 @@ func TestHubNoteSaved(t *testing.T) {
 		t.Fatalf("cleared: %d %q", rec.Code, settings.Load().RouterNote)
 	}
 }
+
+// The router's switch for giving every agent its tools whole, not on
+// demand (ArvinCharl on X), is this computer's setting, comes back in the
+// page's view, and a save from the Settings page leaves it as it is.
+func TestHubAllToolsSaved(t *testing.T) {
+	sandboxHome(t)
+	h := Handler(nil, nil)
+	post := func(path, body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest("POST", path, strings.NewReader(body)))
+		return rec
+	}
+	rec := post("/api/library/servers/hub-tools", `{"on":true}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	var v struct{ HubAllTools bool }
+	if err := json.Unmarshal(rec.Body.Bytes(), &v); err != nil {
+		t.Fatal(err)
+	}
+	if !v.HubAllTools || !settings.Load().RouterAllTools {
+		t.Fatalf("view %+v, saved %v", v, settings.Load().RouterAllTools)
+	}
+	if rec := post("/api/settings", `{"theme":"dark","lang":"en"}`); rec.Code != http.StatusOK {
+		t.Fatalf("settings: %d %s", rec.Code, rec.Body)
+	}
+	if !settings.Load().RouterAllTools {
+		t.Fatal("the Settings page's save turned it off")
+	}
+	if rec := post("/api/library/servers/hub-tools", `{"on":false}`); rec.Code != http.StatusOK || settings.Load().RouterAllTools {
+		t.Fatalf("off: %d %v", rec.Code, settings.Load().RouterAllTools)
+	}
+}

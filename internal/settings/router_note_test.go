@@ -11,9 +11,9 @@ import (
 // alone, beside the rest of the file.
 func TestRouterNote(t *testing.T) {
 	from := Settings{RouterNote: "China"}
-	from.KeepOwn(Settings{RouterNote: "Los Angeles"})
-	if from.RouterNote != "Los Angeles" {
-		t.Fatalf("a sync brought %q", from.RouterNote)
+	from.KeepOwn(Settings{RouterNote: "Los Angeles", RouterAllTools: true})
+	if from.RouterNote != "Los Angeles" || !from.RouterAllTools {
+		t.Fatalf("a sync brought %q, all tools %v", from.RouterNote, from.RouterAllTools)
 	}
 	if got := CleanRouterNote("  Los\tAngeles\n(US) "); got != "Los Angeles (US)" {
 		t.Fatalf("cleaned %q", got)
@@ -35,5 +35,11 @@ func TestRouterNote(t *testing.T) {
 	}
 	if s := Load(); s.RouterNote != "" {
 		t.Fatalf("not cleared: %q", s.RouterNote)
+	}
+	if err := SetRouterAllTools(true); err != nil {
+		t.Fatal(err)
+	}
+	if s := Load(); !s.RouterAllTools || s.Theme != "dark" {
+		t.Fatalf("saved %+v", s)
 	}
 }
