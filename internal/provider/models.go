@@ -2751,10 +2751,21 @@ var grokEffort = regexp.MustCompile(`^((?:.*/)?grok-[0-9][^/]*?)-(?:minimal|low|
 // k.
 var grokWindow = regexp.MustCompile(`^((?:.*/)?grok-[0-9][^/@]*)@[0-9]+k?$`)
 
+// modelWindow is an id a plugin offers a model by at one context window
+// of its own, the window in thousands or millions of tokens after an @:
+// the Cursor plugin's claude-opus-5-5@300k, claude-opus-5-5@1m,
+// gpt-5.5@272k (one entry per size Cursor's picker has), the grok
+// plugin's grok-4.7@500k. It is the same model asked for at that window,
+// at the same price per token; a long prompt's own rate is the price's
+// tier (Price.At), read from the call's tokens, not from the window.
+var modelWindow = regexp.MustCompile(`^([^@]+)@[0-9]+[km]$`)
+
 // pricedNames are the ids a model is priced by, in order: its own, then,
-// for a Grok id named at an effort, the model it is that effort of — the
-// same model, at the same price (#224) — or at a window (grok-4.7@500k),
-// the model it is that window of. Codex Auto Review uses GPT-5.6 Luna
+// for an id at a window (claude-opus-5-5@300k, grok-4.7@500k), the model
+// it is that window of (modelWindow), so a Cursor account's sized ids are
+// priced as their model and not left without a cost (RyuJeXu on X); for a
+// Grok id named at an effort, the model it is that effort of — the same
+// model, at the same price (#224). Codex Auto Review uses GPT-5.6 Luna
 // according to OpenAI's rate card (2026-09-30):
 // https://help.openai.com/en/articles/11481834-chatgpt-rate-card-business-enterpriseedu-credit-based-pricing
 // This is a list-price estimate, not evidence of a response's served model.
@@ -2767,13 +2778,20 @@ func pricedNames(model string) []string {
 	if model == "codex-auto-review" {
 		out = append(out, "gpt-5.6-luna")
 	}
-	// both patterns name grok-: every other model of every provider's list
-	// went through two regexps on each Providers poll
 	l := strings.ToLower(strings.TrimSpace(model))
+	// a regexp only for an id with an @: every model of every provider's
+	// list is priced on each Providers poll
+	if strings.Contains(l, "@") {
+		if m := modelWindow.FindStringSubmatch(l); m != nil {
+			out = append(out, m[1])
+		}
+	}
+	// both patterns name grok-, for the same reason
 	if !strings.Contains(l, "grok-") {
 		return out
 	}
-	if m := grokWindow.FindStringSubmatch(l); m != nil {
+	// a Grok window the id names without a k (grok-4.7@131072)
+	if m := grokWindow.FindStringSubmatch(l); m != nil && !slices.Contains(out, m[1]) {
 		out = append(out, m[1])
 	}
 	if m := grokEffort.FindStringSubmatch(l); m != nil {
