@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -414,8 +415,10 @@ func TestRemoteKeyNames(t *testing.T) {
 
 // #1981: a remote magpie that holds this computer's key to a budget,
 // models or accounts tells it none of its accounts. The cards read before
-// the key was held go, and only the key's own card stays; a 403 for that
-// reason doesn't say the remote isn't shared.
+// the key was held go: the key's own card stays, and the remote's own card
+// says the key is told no quotas and where that is turned on (yi_time on
+// Discord: a Claude shared over the network showed no usage anywhere, with
+// no word why). A 403 for that reason doesn't say the remote isn't shared.
 func TestRemoteMagpieHeldKeyShowsOnlyItsOwnCard(t *testing.T) {
 	peer := &fakePeer{
 		cards:  []SubscriptionQuota{{Provider: "codex", Name: "Codex", User: "boss@x.com", Kind: "subscription", Windows: []QuotaWindow{{Name: "5h", Used: 40}}}},
@@ -435,8 +438,8 @@ func TestRemoteMagpieHeldKeyShowsOnlyItsOwnCard(t *testing.T) {
 	}
 	remoteCards(ctx, *p, true)
 	all := RemoteCards(ctx)
-	if cs := peerCards(all); len(cs) != 0 {
-		t.Errorf("a held key still shows the remote's accounts: %+v", cs)
+	if cs := peerCards(all); len(cs) != 1 || cs[0].Provider != "office" || cs[0].Error != errRemoteHeld || cs[0].User != "" || len(cs[0].Windows) != 0 {
+		t.Errorf("a held key: want the remote's own card saying why, and none of its accounts: %+v", cs)
 	}
 	for _, q := range all {
 		if strings.Contains(q.Error, "isn't shared") || strings.Contains(q.User, "boss") {
@@ -450,8 +453,13 @@ func TestRemoteMagpieHeldKeyShowsOnlyItsOwnCard(t *testing.T) {
 	}
 	// a read asked before the held one came back after it: not kept
 	keepRemoteCards(remoteCardsID(*p), time.Now().Add(-time.Hour), peer.cards, nil)
-	if cs := peerCards(RemoteCards(ctx)); len(cs) != 0 {
+	if cs := peerCards(RemoteCards(ctx)); len(cs) != 1 || cs[0].Error != errRemoteHeld {
 		t.Errorf("a slow earlier read brought the cards back: %+v", cs)
+	}
+	// the remote can't be reached since: that is what its card says now
+	keepRemoteCards(remoteCardsID(*p), time.Now(), nil, errors.New(errRemoteUnreachable+": refused"))
+	if cs := peerCards(RemoteCards(ctx)); len(cs) != 1 || !strings.HasPrefix(cs[0].Error, errRemoteUnreachable) {
+		t.Errorf("unreachable after held: %+v", cs)
 	}
 }
 

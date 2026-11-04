@@ -69,6 +69,14 @@ const errRemoteNoShare = "remote magpie doesn't share its quotas; update magpie 
 // every other machine and, given one, answers the quotas too.
 const errRemoteNotShared = "remote magpie isn't shared; turn on Share on local network on that computer"
 
+// errRemoteHeld is the remote's own card while it holds this provider's
+// key to a budget, models or accounts (errKeyHeld): its accounts' cards
+// aren't told to the key, and the card says so and where that is turned
+// on, rather than leaving the remote's Claude or Codex out with no word
+// (yi_time on Discord: a Claude shared from another computer showed no
+// usage on any page here, its key held to Claude's models there).
+const errRemoteHeld = "remote magpie tells this key none of its quotas, as it holds the key to a budget, models or accounts; turn on Quotas for the key under Gateway keys on that computer"
+
 // errRemoteKey is a remote magpie that didn't take this provider's key (401).
 const errRemoteKey = "remote magpie didn't take this key; use one of its enabled gateway keys"
 
@@ -88,7 +96,7 @@ const KeyHeldCode = "gateway_key_held"
 // errKeyHeld is a remote magpie that holds this provider's key to a
 // budget, models or accounts: it tells the key's own card (remoteKeyCards)
 // and none of its accounts', so none is shown, not even one kept from
-// before the key was held.
+// before the key was held; the remote's own card says why (errRemoteHeld).
 var errKeyHeld = errors.New("remote magpie holds this key to a budget, models or accounts")
 
 // errRemoteUnreachable starts the error of a remote magpie that couldn't
@@ -240,12 +248,13 @@ func remoteCards(ctx context.Context, p Provider, fresh bool) []SubscriptionQuot
 		r = keepRemoteCards(id, asked, cards, err)
 	}
 	name := remoteName(p)
-	if r.held {
-		return nil
-	}
-	if len(r.cards) == 0 {
+	if len(r.cards) == 0 || r.held {
+		// the latest read's failure first: one since the key was held
+		// says the remote can't be read now
 		msg := r.err
-		if msg == "" {
+		if msg == "" && r.held {
+			msg = errRemoteHeld
+		} else if msg == "" {
 			msg = errRemoteNothingRead
 		}
 		return []SubscriptionQuota{{Provider: p.ID, Name: name, Icon: "magpie", Kind: "subscription", From: name, Windows: []QuotaWindow{}, Error: msg}}

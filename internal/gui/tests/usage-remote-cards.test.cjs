@@ -3,10 +3,11 @@
 // another's magpie (remote-magpie) shows that magpie's cards, each named
 // with the computer ("Codex · Office"), without the buttons that would act
 // on this computer's accounts. The remote's own card says why it has none
-// (nothing read there yet, or a magpie too old to share) in the reader's
+// (nothing read there yet, a magpie too old to share, or a key it holds
+// to models or a budget and tells no quotas) in the reader's
 // language, and its refresh asks for it by its id (?provider=office), the
-// remote's card by its own (?provider=office/codex). English, Chinese,
-// Japanese and German; no backend, the API is faked here.
+// remote's card by its own (?provider=office/codex). English, Chinese
+// (both scripts), Japanese and German; no backend, the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -32,6 +33,10 @@ function fixtures(now) {
       error: "remote magpie isn't shared; turn on Share on local network on that computer" },
     { provider: "osprey", name: "Osprey", icon: "magpie", from: "Osprey", kind: "subscription", windows: [],
       error: "remote magpie didn't take this key; use one of its enabled gateway keys" },
+    // yi_time on Discord: a key held to models there was told no quotas,
+    // and the remote's Claude showed nowhere here, with no word why
+    { provider: "egret", name: "Egret", icon: "magpie", from: "Egret", kind: "subscription", windows: [],
+      error: "remote magpie tells this key none of its quotas, as it holds the key to a budget, models or accounts; turn on Quotas for the key under Gateway keys on that computer" },
     { provider: "heron", name: "Heron", icon: "magpie", from: "Heron", kind: "subscription", windows: [],
       error: "couldn't reach the remote magpie Heron: dial tcp 10.0.0.9:3425: connect: connection refused" },
   ];
@@ -69,14 +74,15 @@ function serve(lang, state) {
 }
 
 const words = {
-  en: { none: "Nothing read on that computer yet — refresh this card to have it read", old: "That computer's magpie doesn't share its quotas yet — update magpie there", shed: "That computer's magpie isn't shared — turn on Settings → Network and sharing → Share on local network there", den: "That computer's magpie didn't take this key — use one of its gateway keys in this provider", barn: "Couldn't reach that computer's magpie — check that it is running and its address" },
-  zh: { none: "那台电脑还没有读过额度 — 刷新这张卡片让它读取", old: "那台电脑的 magpie 还不能共享额度 — 请在那台电脑上更新 magpie", shed: "那台电脑的 magpie 没有共享 — 请在那台电脑上打开 设置 → 网络与共享 → 局域网共享", den: "那台电脑的 magpie 不认这个密钥 — 请在这个服务商里填它的一个网关密钥", barn: "连不上那台电脑的 magpie — 请确认它在运行、地址正确" },
-  ja: { none: "そのコンピューターではまだ読み取っていません — このカードを更新すると読み取ります", old: "そのコンピューターの magpie はまだ利用枠を共有できません — そちらの magpie を更新してください", shed: "そのコンピューターの magpie は共有されていません — そちらで 設定 → ネットワークと共有 → ローカルネットワークで共有 をオンにしてください", den: "そのコンピューターの magpie はこのキーを受け付けませんでした — このプロバイダーにそちらのゲートウェイキーを入れてください", barn: "そのコンピューターの magpie に接続できません — 起動しているか、アドレスが正しいか確認してください" },
-  de: { none: "Auf diesem Computer wurde noch nichts gelesen — diese Karte aktualisieren, um es lesen zu lassen", old: "Das magpie dieses Computers teilt seine Kontingente noch nicht — aktualisiere magpie dort", shed: "Das magpie dieses Computers ist nicht freigegeben — schalte dort Einstellungen → Netzwerk und Freigabe → Im lokalen Netzwerk freigeben ein", den: "Das magpie dieses Computers hat diesen Schlüssel nicht angenommen — trage bei diesem Anbieter einen seiner Zugangsschlüssel ein", barn: "Das magpie dieses Computers ist nicht erreichbar — prüfe, ob es läuft und die Adresse stimmt" },
+  en: { none: "Nothing read on that computer yet — refresh this card to have it read", old: "That computer's magpie doesn't share its quotas yet — update magpie there", shed: "That computer's magpie isn't shared — turn on Settings → Network and sharing → Share on local network there", den: "That computer's magpie didn't take this key — use one of its gateway keys in this provider", held: "That computer's magpie tells this key no quotas: it holds the key to a budget, models or accounts — turn on Quotas for the key under Gateway keys there", barn: "Couldn't reach that computer's magpie — check that it is running and its address" },
+  zh: { none: "那台电脑还没有读过额度 — 刷新这张卡片让它读取", old: "那台电脑的 magpie 还不能共享额度 — 请在那台电脑上更新 magpie", shed: "那台电脑的 magpie 没有共享 — 请在那台电脑上打开 设置 → 网络与共享 → 局域网共享", den: "那台电脑的 magpie 不认这个密钥 — 请在这个服务商里填它的一个网关密钥", held: "那台电脑的 magpie 不向这个密钥显示额度：那边给它限定了预算、模型或账号 — 请在那台电脑的「网关密钥」里打开这个密钥的「额度」", barn: "连不上那台电脑的 magpie — 请确认它在运行、地址正确" },
+  ja: { none: "そのコンピューターではまだ読み取っていません — このカードを更新すると読み取ります", old: "そのコンピューターの magpie はまだ利用枠を共有できません — そちらの magpie を更新してください", shed: "そのコンピューターの magpie は共有されていません — そちらで 設定 → ネットワークと共有 → ローカルネットワークで共有 をオンにしてください", den: "そのコンピューターの magpie はこのキーを受け付けませんでした — このプロバイダーにそちらのゲートウェイキーを入れてください", held: "そのコンピューターの magpie はこのキーに利用枠を伝えません：そちらで予算・モデル・アカウントが制限されています — そちらの「ゲートウェイキー」でこのキーの「残量」をオンにしてください", barn: "そのコンピューターの magpie に接続できません — 起動しているか、アドレスが正しいか確認してください" },
+  de: { none: "Auf diesem Computer wurde noch nichts gelesen — diese Karte aktualisieren, um es lesen zu lassen", old: "Das magpie dieses Computers teilt seine Kontingente noch nicht — aktualisiere magpie dort", shed: "Das magpie dieses Computers ist nicht freigegeben — schalte dort Einstellungen → Netzwerk und Freigabe → Im lokalen Netzwerk freigeben ein", den: "Das magpie dieses Computers hat diesen Schlüssel nicht angenommen — trage bei diesem Anbieter einen seiner Zugangsschlüssel ein", held: "Das magpie dieses Computers nennt diesem Schlüssel keine Kontingente: Er ist dort auf ein Budget, Modelle oder Konten beschränkt — schalte dort unter „Zugangsschlüssel“ bei ihm „Kontingente“ ein", barn: "Das magpie dieses Computers ist nicht erreichbar — prüfe, ob es läuft und die Adresse stimmt" },
+  "zh-TW": { none: "那臺電腦還沒有讀過額度 — 重新整理這張卡片讓它讀取", old: "那臺電腦的 magpie 還不能共享額度 — 請在那臺電腦上更新 magpie", shed: "那臺電腦的 magpie 沒有共享 — 請在那臺電腦上開啟 設定 → 網路與共享 → 區域網共享", den: "那臺電腦的 magpie 不認這個金鑰 — 請在這個服務商裡填它的一個閘道金鑰", held: "那臺電腦的 magpie 不向這個金鑰顯示額度：那邊給它限定了預算、模型或帳號 — 請在那臺電腦的「閘道金鑰」裡打開這個金鑰的「額度」", barn: "連不上那臺電腦的 magpie — 請確認它在執行、位址正確" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
-  for (const lang of ["en", "zh", "ja", "de"]) {
+  for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
     const w = words[lang];
     test(`${engine} ${lang}: another computer's quota cards`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
@@ -97,7 +103,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal((await home.locator(".subscription-error").textContent()).trim(), w.none);
       const attic = page.locator(".subscription-card", { hasText: "Attic" });
       assert.equal((await attic.locator(".subscription-error").textContent()).trim(), w.old);
-      for (const [k, name] of [["shed", "Kestrel"], ["den", "Osprey"], ["barn", "Heron"]]) {
+      for (const [k, name] of [["shed", "Kestrel"], ["den", "Osprey"], ["held", "Egret"], ["barn", "Heron"]]) {
         const card = page.locator(".subscription-card", { hasText: name });
         assert.equal((await card.locator(".subscription-error").textContent()).trim(), w[k], k);
       }
