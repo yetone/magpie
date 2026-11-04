@@ -75,12 +75,11 @@ func TestCodexUsedUpIsWhatTheAppHolds(t *testing.T) {
 		{"Pro with credits, at a spend cap", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
 			m["spend_control"].(map[string]any)["reached"] = true
 		}), false},
-		// allowed false holds it. With allowed not said, so does a limit
-		// reached or a window at 100%; with allowed true, only every
-		// window at 100% (the 26.1029 app blocked such an account, with
-		// 用量 showing it used up). A 5h window at 100% with the week open
-		// is not held: the app still sends, and holding takes it out of
-		// ChatGPT (#996).
+		// allowed false holds it, and nothing else does: the app's composer
+		// gate (26.1029, as 26.930 and 26.1021) greys Send on allowed false
+		// alone, and holding an account it still sends for takes it out of
+		// ChatGPT (#996). Not said, or allowed with every window at 100%,
+		// the app still sends.
 		{"limit reached but allowed, no credits", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
 			delete(m, "credits")
 			rateLimit(m)["limit_reached"], rateLimit(m)["allowed"] = true, true
@@ -90,11 +89,26 @@ func TestCodexUsedUpIsWhatTheAppHolds(t *testing.T) {
 			delete(m, "credits")
 			rateLimit(m)["limit_reached"] = true
 			delete(rateLimit(m), "allowed")
-		}), true},
+		}), false},
+		{"window at 100%, allowed not said, no credits", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
+			delete(m, "credits")
+			rateLimit(m)["limit_reached"] = false
+			delete(rateLimit(m), "allowed")
+		}), false},
 		{"every window at 100% but allowed, no credits", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
 			delete(m, "credits")
 			rateLimit(m)["limit_reached"], rateLimit(m)["allowed"] = false, true
 			rateLimit(m)["primary_window"].(map[string]any)["used_percent"] = 100
+		}), false},
+		// xiaoq6285's case: a Plus account, its 5h window used up, the
+		// week open. The backend says not allowed there (the real Team
+		// reply: 5h at 100%, week at 63%, allowed false), so it is held.
+		{"Plus, 5h window at 100%, week open, not allowed, no credits", with(read("codex_usage_team_spend_cap.json"), func(m map[string]any) {
+			m["plan_type"] = "plus"
+			delete(m, "credits")
+			delete(m, "spend_control")
+			delete(m, "rate_limit_upsell")
+			m["rate_limit_reached_type"] = map[string]any{"type": "rate_limit_reached", "details": "default"}
 		}), true},
 		{"5h window at 100%, week open, allowed, no credits", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
 			delete(m, "credits")
