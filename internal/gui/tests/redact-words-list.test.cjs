@@ -75,7 +75,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(saved, [], "opening the page saves nothing");
         const fit = await page.evaluate((sel) => {
           const l = document.querySelector("#redactList").getBoundingClientRect();
-          return [...document.querySelectorAll(`${sel} input, ${sel} button`)].every((n) => { const b = n.getBoundingClientRect(); return b.left >= l.left - 1 && b.right <= l.right + 1; })
+          // what is drawn: the closed Import… box's controls have no box
+          return [...document.querySelectorAll(`${sel} input, ${sel} button`)].filter((n) => n.getClientRects().length).every((n) => { const b = n.getBoundingClientRect(); return b.left >= l.left - 1 && b.right <= l.right + 1; })
             && document.documentElement.scrollWidth <= document.documentElement.clientWidth;
         }, LIST);
         assert(fit, "every row fits the page");
