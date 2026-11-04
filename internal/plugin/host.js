@@ -2079,7 +2079,8 @@ const shown = (v, n) => (typeof v === "string" ? v.trim().slice(0, n) : "")
 
 // optionsOf are the switches a plugin declares for its provider, magpie's
 // own field (#2038, Vocllum): auth.options, each {key, label, description?,
-// default?, confirm?, labels?, descriptions?, confirms?, filtersModels?}.
+// default?, confirm?, labels?, descriptions?, confirms?, filtersModels?,
+// placement?}.
 // magpie shows each as an Off/On switch in the provider's editor and keeps
 // what the user sets; the plugin reads it with input.magpie.option(provider,
 // key). A switch is kept and handed over, and the models listed again (one
@@ -2090,7 +2091,9 @@ const shown = (v, n) => (typeof v === "string" ? v.trim().slice(0, n) : "")
 // "…"}), as a page's titles are (plugins#590): label stays a string beside
 // them, so an older magpie still reads the option. filtersModels says the
 // plugin's model list leaves models out while the switch is on, which the
-// editor says by the models.
+// editor says by the models. placement "top" draws the switch under the
+// accounts, above Routing, for one about the whole plugin (#5269); anything
+// else, or none, keeps it under the models, where an older magpie draws it.
 const MAX_OPTIONS = 16
 const OPTION_KEY = /^[a-z0-9_-]{1,40}$/
 // inLanguages are words by language, each capped at n, at most 16, without
@@ -2126,6 +2129,7 @@ function optionsOf(auth) {
       descriptions: inLanguages(o.descriptions, 300),
       confirms: inLanguages(o.confirms, 300),
       filtersModels: o.filtersModels === true,
+      placement: o.placement === "top" ? "top" : undefined,
     })
   }
   return out

@@ -50,13 +50,13 @@ func TestPluginOptions(t *testing.T) {
 		t.Errorf("first = %+v", opts[0])
 	}
 	// plugins#590: the words in other languages, without what isn't one
-	if want := (Option{Key: "beta", Label: "Beta models", Confirm: "Beta models may be withdrawn.",
+	if want := (Option{Key: "beta", Label: "Beta models", Placement: "top", Confirm: "Beta models may be withdrawn.",
 		Labels: map[string]string{"zh": "测试版模型", "de": "Beta-Modelle"}, Confirms: map[string]string{"zh": "测试版模型可能会下线。"}}); !reflect.DeepEqual(opts[1], want) {
 		t.Errorf("second = %+v", opts[1])
 	}
-	if o := opts[2]; o.Key != "long" || len([]rune(o.Label)) > 60 || len([]rune(o.Description)) > 300 || o.Default || o.FiltersModels || o.Labels != nil ||
+	if o := opts[2]; o.Key != "long" || len([]rune(o.Label)) > 60 || len([]rune(o.Description)) > 300 || o.Default || o.FiltersModels || o.Placement != "" || o.Labels != nil ||
 		len([]rune(o.Descriptions["zh"])) != 300 || len(o.Confirms) != 16 {
-		t.Errorf("long = %q (%d), %d, default %v, filters %v, labels %v, %d, %d confirms", o.Key, len([]rune(o.Label)), len([]rune(o.Description)), o.Default, o.FiltersModels, o.Labels, len([]rune(o.Descriptions["zh"])), len(o.Confirms))
+		t.Errorf("long = %q (%d), %d, default %v, filters %v, placement %q, labels %v, %d, %d confirms", o.Key, len([]rune(o.Label)), len([]rune(o.Description)), o.Default, o.FiltersModels, o.Placement, o.Labels, len([]rune(o.Descriptions["zh"])), len(o.Confirms))
 	}
 	if opts[15].Key != "o12" {
 		t.Errorf("last = %q, want o12", opts[15].Key)

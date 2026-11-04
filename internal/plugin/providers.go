@@ -214,6 +214,10 @@ type Option struct {
 	// the switch is on (WorkBuddy's "Free models only"): the editor says
 	// so by the models
 	FiltersModels bool `json:"filtersModels,omitempty"`
+	// Placement is where the editor draws the switch: "top" under the
+	// accounts, above Routing, for a switch about the whole plugin
+	// (#5269); "" under the models
+	Placement string `json:"placement,omitempty"`
 }
 
 // OptionOn is option o of a provider as it stands with the user's values

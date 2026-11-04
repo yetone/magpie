@@ -605,7 +605,9 @@ A plugin can also declare its own switches for its provider (`auth.options`).
 They are listed under **Plugin options** in the provider's editor, an Off/On
 each with the plugin's own words (in the window's language when the
 plugin gives them, `labels` and `descriptions`), and saved with the
-provider. While a switch that leaves models out (`filtersModels`) is on,
+provider. A switch about the whole plugin can say `placement: "top"`, and
+is then listed right under the accounts, above Routing. While a switch that
+leaves models out (`filtersModels`) is on,
 the Models field says the list is filtered. The values are
 kept in `pluginOptions` in `settings.json`, and the plugin reads them as it
 works. Changing one starts nothing by itself. See

@@ -352,6 +352,13 @@ the Models field's chips that the list is filtered, inside the editor; off,
 none. A WorkBuddy moved onto its plugin, Chromium and WebKit, 1100 and 420
 wide, every language.
 
+`plugin-option-placement.test.cjs` checks a plugin option that says
+`placement: "top"` (#5269): drawn under the accounts, above Routing, while
+the rest stay under the models; a plugin with no placement, or one magpie
+doesn't know, drawn as before; the note with the first block only; the top
+switch saved like any other. Chromium and WebKit, 1100 and 420 wide, every
+language.
+
 `plugin-move-overflow.test.cjs` checks a Plugins card that offers a
 built-in's accounts: the button is one word beside the name, as Install is
 ("Move", its title saying whose accounts and how many), on one line, and it

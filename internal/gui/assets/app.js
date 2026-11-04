@@ -7758,10 +7758,14 @@ function rateWindowsField() {
   return field(t("Rate windows"), box);
 }
 // pluginOptionsField: a plugin's declared switches (auth.options, #2038),
-// confirmed first where it asks, kept as draft.pluginOptions[key]
-function pluginOptionsField(sub) {
-  const opts = sub?.plugin?.options || [];
+// confirmed first where it asks, kept as draft.pluginOptions[key]. Those
+// that say placement "top" are drawn under the accounts, above Routing
+// (#5269); the rest under the models. The note goes with the first drawn.
+function pluginOptionsField(sub, top) {
+  const all = sub?.plugin?.options || [];
+  const opts = all.filter((o) => (o.placement === "top") === !!top);
   if (!opts.length) return [];
+  const first = top || !all.some((o) => o.placement === "top");
   const now = (o) => (draft.pluginOptions && o.key in draft.pluginOptions ? draft.pluginOptions[o.key] : !!o.on);
   const set = (o, on) => {
     const own = { ...draft.pluginOptions };
@@ -7789,7 +7793,8 @@ function pluginOptionsField(sub) {
     row.append(text, draw());
     box.append(row);
   }
-  return field(t("Plugin options"), box, t("{plugin} declares these and reads them as it works; nothing runs on its own when one changes.", { plugin: sub.plugin.name || sub.plugin.pid }));
+  box.classList.toggle("top", !!top);
+  return field(t("Plugin options"), box, first ? t("{plugin} declares these and reads them as it works; nothing runs on its own when one changes.", { plugin: sub.plugin.name || sub.plugin.pid }) : "");
 }
 // a plugin option's words in the window's language (plugins#590)
 function optionWords(o, which) {
@@ -9375,6 +9380,7 @@ function drawEditor(p, presetID) {
       // switched connected or not (Greatrobbort on X)
       const via = a.wsl ? t("Runs through WSL · {distro}: Claude Code there signs in and answers; Windows has none of its own.", { distro: a.wsl }) + " " : "", alone = /^c(laude|odex)$/.test(a.agent) ? " " + t("Just want accounts switched? {agent} needn't be connected to magpie.", { agent: a.agentName }) : "";
       ed.append(...field(t("Accounts"), renderAccounts(a, p), via + (p.routing ? t("Tick every account to use; Routing says how requests spread over them.") : subOf(a.agent).single ? t("{agent} keeps one account; the gateway runs it for every request. Signing in to another replaces it.", { agent: a.agentName }) : subOf(a.agent).own && (a.logins || []).some((l) => l.own) ? t("The gateway uses the first. Tick more and it moves on to the next when the one before it is out of quota. {agent} itself stays signed in as it is.", { agent: a.agentName && a.agentName !== a.agent ? a.agentName : p.name }) : subOf(a.agent).own || subOf(a.agent).plugin ? t("The gateway uses the first. Tick more and it moves on to the next when the one before it is out of quota.") : t("{agent} signs in to the first. Tick more and magpie moves on to the next when the one before it is out of quota. Sessions already running keep theirs until restarted.", { agent: a.agentName })) + alone));
+      ed.append(...pluginOptionsField(subOf(a.agent), true));
       if ((a.logins || []).filter((l) => l.active || l.on).length > 1) ed.append(...renderRouting(p));
       if (p.move) ed.append(...renderMove(p));
     } else {
