@@ -852,10 +852,12 @@ func leastHeld(scope, key string, cs []candidate, pl planned, ready bool) ([]can
 // readyForNew says whether order[i], behind order[0], is one routing would
 // put a new conversation on: not resting, nor a key for another protocol,
 // nor a fallback while the provider's own model leads, nor used past
-// lowShare unless it spends its credits first (Weighed.CreditsFirst).
+// lowShare unless it spends its credits first (Weighed.CreditsFirst) or
+// is that low on its week alone, which Smart and Use before expiry keep
+// with those that have room (Weighed.WeekLow).
 func readyForNew(order []Weighed, i int) bool {
 	w := order[i]
-	return w.Rest == nil && !w.Aside && !standsIn(order, i) && !(w.Known && w.Used >= lowShare && !w.CreditsFirst) && !lastBehind(order, i) && !busyBehind(order, i)
+	return w.Rest == nil && !w.Aside && !standsIn(order, i) && !(w.Known && w.Used >= lowShare && !w.CreditsFirst && !(w.WeekLow && w.Used < usedShare)) && !lastBehind(order, i) && !busyBehind(order, i)
 }
 
 // standsIn says whether order[i] is a provider's fallback while one of the

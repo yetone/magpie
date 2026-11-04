@@ -407,6 +407,29 @@ func (a Allowance) For(model string, now time.Time) (used float64, renews []time
 	return used, renews
 }
 
+// CapUsed is For's share over the windows that count model other than a
+// budget known to run a day or longer: a rate cap (the five hours), or a
+// window that doesn't say how long it runs. Smart and Use before expiry
+// hold an account back at routes.LowShare of these only: a rate cap near
+// full refuses the requests sent into it before the allowance is read
+// again, while what a week has left is lost at its reset, so a week at
+// 90% renewing today is spent first, not kept for last
+// (ysicing_01858 on Discord). A window whose reset has passed is empty.
+func (a Allowance) CapUsed(model string, now time.Time) float64 {
+	model = strings.ToLower(model)
+	used := 0.0
+	for _, l := range a {
+		if !l.applies(model) || l.Span >= budgetSpan {
+			continue
+		}
+		if !l.Resets.IsZero() && !l.Resets.After(now) {
+			continue
+		}
+		used = max(used, l.Used)
+	}
+	return used
+}
+
 // Fullest is when the window For's share is of renews: the fullest that
 // counts model, the later of those as full. A display pairs the two, so
 // it names one window: a Factory account 32% into its week and 16% into

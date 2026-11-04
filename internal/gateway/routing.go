@@ -2076,8 +2076,11 @@ func (c candidate) allowanceKey() allowanceKey {
 }
 
 type left struct {
-	used   float64
-	renews []time.Time
+	used float64
+	// weekLow: used is at lowShare or more for its budget windows alone,
+	// no rate cap of it near full (Allowance.CapUsed, routes.Seat.WeekLow)
+	weekLow bool
+	renews  []time.Time
 	// fullest: when the window used is the share of renews
 	// (Allowance.Fullest), zero when not known
 	fullest time.Time
@@ -2136,6 +2139,14 @@ func routingOf(routing string) string {
 	return provider.Ordered
 }
 
+// keepsWeek: routed so, a pool keeps an account running low on its week
+// alone with those that have room (routes.Seat.WeekLow): Smart and Use
+// before expiry, which spend what a reset would lose.
+func keepsWeek(routing string) bool {
+	r := routingOf(routing)
+	return r == "" || r == provider.Pace
+}
+
 // goesRound: routed so, a pool goes round by itself (in turn, by weight),
 // so its first is marked as the turn's and the rate limited aren't sent
 // back.
@@ -2180,6 +2191,7 @@ func weighRouted(p provider.Provider, cs []candidate, model string, from provide
 			l := left{used: u, renews: r, fullest: a.Fullest(c.model, now), soon: a.Renewal(c.model, now), lapse: a.Lapse(c.model, now), pace: pc, due: due, amount: amt, of: of, unit: unit,
 				restarts: rs, dueRestart: !rs.IsZero() && due.Equal(rs), credits: spendsCredits(c.p, a)} // one not known counts as unused
 			l.dueExpiry = !l.dueRestart && !l.lapse.IsZero() && due.Equal(l.lapse)
+			l.weekLow = u >= lowShare && u < usedShare && a.CapUsed(c.model, now) < lowShare
 			l.first = l.credits && provider.CodexCreditsFirst(c.p.Account.User)
 			if b, bu, has := a.Left(c.model); has {
 				// a wallet's figure is weighed only against the same
@@ -2207,7 +2219,7 @@ func weighRouted(p provider.Provider, cs []candidate, model string, from provide
 			pace = provider.FreshPace
 		}
 		seats[i] = routes.Seat{Key: c.rest, Account: c.p.Account != nil, Known: known, Learns: learns(c, wg.lefts),
-			Used: l.used, Soon: l.soon, Lapse: l.lapse, Pace: pace, Weight: keyWeight(c), Resting: resting(c), Tokens: routed.used[c.restKey()].now(now), Credits: l.credits, First: l.first,
+			Used: l.used, WeekLow: l.weekLow, Soon: l.soon, Lapse: l.lapse, Pace: pace, Weight: keyWeight(c), Resting: resting(c), Tokens: routed.used[c.restKey()].now(now), Credits: l.credits, First: l.first,
 			Left: l.bal, LeftIn: l.balIn, Spent: spentRest(c)}
 	}
 	routed.Unlock()

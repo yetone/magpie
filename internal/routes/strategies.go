@@ -11,7 +11,8 @@ import (
 )
 
 // Shares of an allowance past which an account is kept for when the others
-// can't take a request: low, and all but used up — where the agent signed
+// can't take a request: low (in Smart and Use before expiry, of a rate cap:
+// Seat.WeekLow), and all but used up — where the agent signed
 // in to it is signed in to another, too (provider.SpentShare).
 const (
 	LowShare  = 90
@@ -31,12 +32,19 @@ func tier(share float64) int {
 
 // seatTier is tier of the seat's share used, but 0 for one set to spend
 // its credits before another account (Seat.First): a window it uses up
-// doesn't send its requests elsewhere (jojonas_xyz on X).
+// doesn't send its requests elsewhere (jojonas_xyz on X). Running low on
+// its week alone (Seat.WeekLow) is 0 too: Smart and Use before expiry
+// spend what is lost at the reset, and a week at 90% renewing today was
+// kept for last behind one renewing tomorrow (ysicing_01858 on Discord).
+// All but used up is 2 whatever the window.
 func seatTier(s Seat) int {
 	if s.First {
 		return 0
 	}
-	return tier(s.Used)
+	if t := tier(s.Used); t != 1 || !s.WeekLow {
+		return t
+	}
+	return 0
 }
 
 // byLeft is how a pool's wallets go by what they have left (Seat.Left),
@@ -342,9 +350,11 @@ var LeastUsed = Strategy{ByUse: true, Order: func(_ string, seats []Seat) []int 
 // the most left alone (least used) sends a fresh account ahead of one with
 // 80% left and an hour to go, and the soonest reset alone (smart) sends one
 // with 3% left and an hour to go ahead of one with 90% and two. The tiers
-// are Smart's: one at 90% or more of any window that counts the model — the
-// five hours too, a rate cap it would be sent into before its allowance was
-// read again — waits until the others can't answer, one all but used up
+// are Smart's: one at 90% or more of a rate cap that counts the model —
+// the five hours, which it would be sent into before its allowance was
+// read again — waits until the others can't answer (a week at 90% alone
+// doesn't: what it has left is lost at its reset, Seat.WeekLow), one all
+// but used up
 // until nothing else can; each tier by the share used, one all but used up
 // that goes on on its credits first (spentBefore). Among the rest, one
 // not known that tells what it has left as it answers goes first while it

@@ -32,6 +32,13 @@ type Seat struct {
 	Learns bool
 	// Used is the share of its allowance used that counts the model, 0–100
 	Used float64
+	// WeekLow: Used is at LowShare or more for its budget windows alone
+	// (a day or longer: the week), no rate cap of it near full
+	// (provider.Allowance.CapUsed). Smart and Use before expiry keep it
+	// with those that have room: what the week has left is lost at its
+	// reset, and kept for last a week at 90% renewing today went unused
+	// (ysicing_01858 on Discord).
+	WeekLow bool
 	// Soon is when its windows renew, the biggest first (Allowance.Renewal)
 	Soon []time.Time
 	// Lapse is when the soonest of what it has left is lost, apart from

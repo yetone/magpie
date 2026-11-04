@@ -299,6 +299,10 @@ type Weighed struct {
 	Known    bool    `json:"known,omitempty"`  // the vendor said what the account has left
 	Learns   bool    `json:"learns,omitempty"` // not known, but its answer will tell
 	Used     float64 `json:"used"`             // share of the allowance counting the model, used
+	// WeekLow: Used is at 90% or more for its week alone, so Smart and Use
+	// before expiry keep it with those that have room rather than for
+	// last (routes.Seat.WeekLow); false under another routing
+	WeekLow bool `json:"weekLow,omitempty"`
 	// Amount of Limit in Unit: the count that share is of, when the
 	// vendor counts it so (WorkBuddy's credits, #659)
 	Amount float64 `json:"amount,omitempty"`
@@ -541,6 +545,7 @@ func weighed(c candidate, p provider.Provider, wg weighing, fallback bool, from 
 	}
 	if l, ok := wg.lefts[c.allowanceKey()]; ok {
 		w.Known, w.Used, w.Renews, w.Pace, w.Credits, w.CreditsFirst = true, l.used, l.renews, l.pace, l.credits, l.first
+		w.WeekLow = l.weekLow && keepsWeek(p.Routing)
 		if !l.fullest.IsZero() {
 			ur := l.fullest
 			w.UsedRenews = &ur
