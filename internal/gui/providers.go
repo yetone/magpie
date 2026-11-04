@@ -747,8 +747,9 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		}
 	}
 	// a provider of a preset with such a plan among its regions takes one
-	// wherever it is, the editor showing it at those regions
-	vendor := provider.AccessKeyVendor(p)
+	// wherever it is, the editor showing it at those regions; a custom
+	// provider none until it has one (provider.AsksAccessKey, ysm119)
+	vendor := provider.AsksAccessKey(p)
 	if pr := provider.Preset(p.Preset); vendor == "" && pr != nil {
 		vendor, _ = presetAccessKey(*pr)
 	}

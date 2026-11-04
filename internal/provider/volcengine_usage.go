@@ -110,7 +110,10 @@ func volcPlanQuotas(ctx context.Context) []SubscriptionQuota {
 			continue
 		}
 		if p.AccessKeyID == "" || p.SecretAccessKey == "" {
-			keyless = append(keyless, job{p, action, plan, region})
+			// a custom provider is asked for none (AsksAccessKey)
+			if AsksAccessKey(p) != "" {
+				keyless = append(keyless, job{p, action, plan, region})
+			}
 			continue
 		}
 		keyed[action] = true

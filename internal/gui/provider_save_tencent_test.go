@@ -53,6 +53,19 @@ func TestProviderListTellsTencentAccessKey(t *testing.T) {
 	if err := provider.Save(personal); err != nil {
 		t.Fatal(err)
 	}
+	// a custom provider is the user's own address and key: one at the
+	// plan's address, or at Ark's, is asked for no access key (ysm119),
+	// and one given one anyway keeps it shown
+	for _, c := range []provider.Provider{
+		{ID: "my-tokenhub", Name: "My TokenHub", Chat: "https://tokenhub.tencentmaas.com/plan/v3", Key: "sk-tp-own"},
+		{ID: "my-intl", Name: "My TokenHub intl", Chat: "https://tokenhub-intl.tencentmaas.com/plan/v3", Key: "sk-tp-own2"},
+		{ID: "my-ark", Name: "My Ark", Chat: "https://ark.cn-beijing.volces.com/api/coding/v3", Key: "ark-own"},
+		{ID: "my-keyed", Name: "My keyed", Chat: "https://tokenhub-intl.tencentmaas.com/plan/v3", Key: "sk-tp-own3", AccessKeyID: "AKID-own", SecretAccessKey: "SK-own"},
+	} {
+		if err := provider.Save(c); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/providers", nil))
@@ -87,6 +100,14 @@ func TestProviderListTellsTencentAccessKey(t *testing.T) {
 	// at China's plan, 个人版's and 企业版's both, it takes one too
 	if a := ps["tc-personal"]; a == nil || a.Vendor != "tencent" || a.ID != "" || a.SecretSet {
 		t.Errorf("personal: %+v", a)
+	}
+	for _, id := range []string{"my-tokenhub", "my-intl", "my-ark"} {
+		if a, ok := ps[id]; !ok || a != nil {
+			t.Errorf("custom %s: asked for an access key: %+v (listed %v)", id, a, ok)
+		}
+	}
+	if a := ps["my-keyed"]; a == nil || a.Vendor != "tencent" || a.ID != "AKID-own" || !a.SecretSet {
+		t.Errorf("custom with an access key saved: %+v", a)
 	}
 	seen := 0
 	for _, pr := range got.Presets {

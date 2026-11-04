@@ -170,16 +170,20 @@ func TestPlanCardWithoutAccessKey(t *testing.T) {
 	forgetPlanQuotas()
 	t.Cleanup(forgetPlanQuotas)
 	for _, p := range []Provider{
-		{ID: "volcengine", Name: "Volcengine Ark", Chat: "https://ark.cn-beijing.volces.com/api/coding/v3", Key: "ark-k"},
+		{ID: "volcengine", Name: "Volcengine Ark", Preset: "volcengine", Chat: "https://ark.cn-beijing.volces.com/api/coding/v3", Key: "ark-k"},
 		// the same plan again: one card
-		{ID: "volc-copy", Name: "Ark copy", Anthropic: "https://ark.cn-beijing.volces.com/api/coding", Key: "ark-k", AccessKeyID: "AK-half"},
+		{ID: "volc-copy", Name: "Ark copy", Preset: "volcengine", Anthropic: "https://ark.cn-beijing.volces.com/api/coding", Key: "ark-k", AccessKeyID: "AK-half"},
 		// pay-as-you-go reads nothing with an access key
-		{ID: "volc-payg", Name: "Ark API", Chat: "https://ark.cn-beijing.volces.com/api/v3", Key: "ark-k"},
-		{ID: "volc-off", Name: "Ark off", Chat: "https://ark.cn-beijing.volces.com/api/plan/v3", Key: "ark-k", Off: true},
-		{ID: "tencent-cloud", Name: "Tencent Cloud", Chat: "https://tokenhub-intl.tencentmaas.com/plan/v3", Key: "sk-tp-1"},
+		{ID: "volc-payg", Name: "Ark API", Preset: "volcengine", Chat: "https://ark.cn-beijing.volces.com/api/v3", Key: "ark-k"},
+		{ID: "volc-off", Name: "Ark off", Preset: "volcengine", Chat: "https://ark.cn-beijing.volces.com/api/plan/v3", Key: "ark-k", Off: true},
+		{ID: "tencent-cloud", Name: "Tencent Cloud", Preset: "tencent-cloud", Chat: "https://tokenhub-intl.tencentmaas.com/plan/v3", Key: "sk-tp-1"},
 		// China's /plan is Token Plan 个人版's too, which has no usage to
 		// read (ysm119): no card asks it for an access key
-		{ID: "tc-gz", Name: "Tencent China", Chat: "https://tokenhub.tencentmaas.com/plan/v3", Key: "sk-tp-2"},
+		{ID: "tc-gz", Name: "Tencent China", Preset: "tencent-cloud", Chat: "https://tokenhub.tencentmaas.com/plan/v3", Key: "sk-tp-2"},
+		// a custom provider at a plan's address is the user's own: no card
+		// asks it for an access key either (ysm119)
+		{ID: "my-intl", Name: "My TokenHub", Chat: "https://tokenhub-intl.tencentmaas.com/plan/v3", Key: "sk-tp-3"},
+		{ID: "my-ark", Name: "My Ark", Chat: "https://ark.cn-beijing.volces.com/api/plan/v3", Key: "ark-k3"},
 	} {
 		if err := Save(p); err != nil {
 			t.Fatal(err)

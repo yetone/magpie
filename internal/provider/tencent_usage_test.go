@@ -267,3 +267,26 @@ func TestTencentPlanQuotas(t *testing.T) {
 		t.Errorf("asked %v", asked)
 	}
 }
+
+// A custom provider at the Token Plan's address is the user's own (ysm119):
+// its key goes as typed, as a Bearer token on chat and Responses, with no
+// Tencent Cloud signing, and nothing asks it for a SecretId and SecretKey.
+func TestCustomTokenHubIsSentAsTyped(t *testing.T) {
+	p := Provider{ID: "mine", Chat: "https://tokenhub.tencentmaas.com/plan/v3", Key: "sk-tFAKEueJF"}
+	for _, proto := range []Protocol{Chat, Responses} {
+		if h := AuthHeaders(p, proto); len(h) != 1 || h["Authorization"] != "Bearer sk-tFAKEueJF" {
+			t.Errorf("%s: %v", proto, h)
+		}
+	}
+	if v := AsksAccessKey(p); v != "" {
+		t.Errorf("a custom provider is asked for %s's access key", v)
+	}
+	p.Preset = "tencent-cloud"
+	if v := AsksAccessKey(p); v != "tencent" {
+		t.Errorf("the preset's provider: %q", v)
+	}
+	p.Preset, p.AccessKeyID = "", "AKID"
+	if v := AsksAccessKey(p); v != "tencent" {
+		t.Errorf("a custom provider with one saved: %q", v)
+	}
+}

@@ -73,6 +73,19 @@ func AccessKeyVendor(p Provider) string {
 	return ""
 }
 
+// AsksAccessKey is whose account access key p's editor and Usage page
+// ask for: AccessKeyVendor's for a preset's provider, and for a custom
+// one only once it has one saved. A custom provider is the user's own
+// address and key, sent as typed, whatever host it is on: one at
+// tokenhub.tencentmaas.com/plan was asked for a SecretId and SecretKey
+// it never needs (ysm119 on Discord).
+func AsksAccessKey(p Provider) string {
+	if p.Preset == "" && p.AccessKeyID == "" && p.SecretAccessKey == "" {
+		return ""
+	}
+	return AccessKeyVendor(p)
+}
+
 // tencentPlanRegion is the cloud API region of the enterprise plan p's
 // endpoint is on: ap-guangzhou for tokenhub.tencentmaas.com/plan (which
 // is 个人版's too), ap-singapore for tokenhub-intl.tencentmaas.com/plan;
@@ -119,7 +132,9 @@ func tencentPlanQuotas(ctx context.Context) []SubscriptionQuota {
 			continue
 		}
 		if p.AccessKeyID == "" || p.SecretAccessKey == "" {
-			keyless = append(keyless, job{p, region})
+			if AsksAccessKey(p) != "" {
+				keyless = append(keyless, job{p, region})
+			}
 			continue
 		}
 		keyed[region] = true
