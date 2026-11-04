@@ -1,8 +1,8 @@
-// Settings › Privacy's Instead of masking, send to, and Masked words kept
-// as dots until Show (the redact plugin's part of Settings). Run after
-// app.js, whose helpers it shares (el, icon, openPicker, modelOpt,
-// prefWrite, api), and before start.js draws
-// Settings. It wraps renderRedact, so app.js carries none of it: the row
+// Settings › Privacy's Instead of masking, send to, and Masked words and
+// Never mask as lists, Masked words as dots until Show (the redact
+// plugin's part of Settings). Run after app.js, whose helpers it shares
+// (el, icon, openPicker, modelOpt, prefWrite, api), and before start.js
+// draws Settings. It wraps renderRedact, so app.js carries none of it: the row
 // shows while anything is masked, after the masked-words rows.
 
 // redactRouteRow: where a request masking would change goes instead
@@ -39,34 +39,136 @@ function redactRouteRow(s) {
   const after = $("#redactWordsWholeRow");
   if (after) after.after(r); else $("#redactList").append(r);
 }
+// wordList: Masked words and Never mask as a list, one row a value
+// (noahhrreion on Discord: many words were hard to keep in one small
+// box). A row is edited in place and saved on Enter or on leaving it;
+// emptied, or its ×, takes it out. The box under them adds one, or
+// several split at commas as the one box was, so what is saved is the
+// same list of strings. A redraw keeps the box being typed in, and what
+// it holds.
+let wordsRedrawing = false;
+const splitWords = (v) => v.split(/[,，\n]/).map((w) => w.trim()).filter(Boolean);
+function wordList(key, list, ph, label, save) {
+  const box = el("div", "word-list");
+  box.dataset.list = key;
+  let cur = list.map((w) => ({ w }));
+  const put = (next) => {
+    if (next.map((o) => o.w).join("\n") === cur.map((o) => o.w).join("\n")) return;
+    cur = next;
+    save(next.map((o) => o.w));
+  };
+  const keys = (i, done, back) => {
+    i.onkeydown = (e) => {
+      e.stopPropagation();
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === "Enter") done(true);
+      else if (e.key === "Escape") { i.value = back; i.blur(); }
+    };
+    // a box a redraw takes away saves nothing: wordFocusBack puts it back
+    i.onblur = () => { if (!wordsRedrawing && i.isConnected) done(false); };
+  };
+  for (const o of cur) {
+    const line = el("div", "word-line"), i = input(o.w, "");
+    i.className = "words";
+    i.dataset.word = o.w;
+    i.setAttribute("aria-label", label);
+    keys(i, (enter) => {
+      if (enter) return i.blur();
+      if (i.value.trim() === o.w) return;
+      const n = cur.indexOf(o);
+      if (n >= 0) put([...cur.slice(0, n), ...splitWords(i.value).map((w) => ({ w })), ...cur.slice(n + 1)]);
+    }, o.w);
+    const x = el("button", "text danger word-x", "×");
+    x.type = "button";
+    x.title = t("Remove {word}", { word: o.w });
+    x.setAttribute("aria-label", x.title);
+    // pressed, the box being edited keeps its focus and its words
+    x.onmousedown = (e) => e.preventDefault();
+    x.onclick = () => put(cur.filter((c) => c !== o));
+    line.append(i, x);
+    box.append(line);
+  }
+  const line = el("div", "word-line word-new"), add = input("", ph);
+  add.className = "words word-add";
+  add.setAttribute("aria-label", label);
+  const go = el("button", "text", t("Add"));
+  go.type = "button";
+  const take = () => {
+    const v = splitWords(add.value);
+    add.value = "";
+    if (v.length) put([...cur, ...v.map((w) => ({ w }))]);
+  };
+  keys(add, (enter) => { if (enter || add.value.trim()) take(); }, "");
+  go.onmousedown = (e) => e.preventDefault();
+  go.onclick = () => { take(); add.focus(NO_SCROLL); };
+  line.append(add, go);
+  box.append(line);
+  return box;
+}
+// wordRow: the row a wordList sits under, its words above and the list
+// across the row's width
+function wordRow(name, sub, list, ...tools) {
+  const r = el("div", "row pref word-rows"), who = el("div", "who"), val = el("div", "val");
+  who.append(el("div", "name", name), el("div", "sub", sub));
+  val.append(...tools);
+  r.append(who, val, list);
+  return r;
+}
+// the box typed in before a redraw, found again after it
+function wordFocusOf() {
+  const i = document.activeElement;
+  const box = i?.closest?.(".word-list");
+  if (!box || i.tagName !== "INPUT") return null;
+  return { key: box.dataset.list, word: i.dataset.word, value: i.value, a: i.selectionStart, b: i.selectionEnd };
+}
+function wordFocusBack(f) {
+  if (!f) return;
+  const box = document.querySelector(`.word-list[data-list="${f.key}"]`);
+  const i = [...(box?.querySelectorAll("input.words") || [])].find((i) => i.dataset.word === f.word);
+  if (!i) return;
+  i.value = f.value;
+  i.focus(NO_SCROLL);
+  try { i.setSelectionRange(f.a, f.b); } catch {}
+}
 // redactWordsHidden: Masked words drawn as dots until Show, as a key is
 // (noahhrreion on Discord: a screen share showed the words kept from
-// vendors). Still a text box, so an IME writes 百度; a password box only
+// vendors). Still text boxes, so an IME writes 百度; password boxes only
 // where the engine has no text security. Show holds until the window
 // reloads.
 let redactWordsShown = false;
-function redactWordsHidden() {
-  const r = [...$("#redactList").children].find((r) => r.querySelector(".who .name")?.textContent === t("Masked words"));
-  const i = r?.querySelector("input.words");
-  if (!i) return;
+function redactWordsHidden(r) {
   const dots = CSS.supports("-webkit-text-security", "disc");
   const eye = el("button", "text redact-eye");
   eye.type = "button";
   const set = () => {
-    if (dots) i.classList.toggle("words-hidden", !redactWordsShown);
-    else i.type = redactWordsShown ? "text" : "password";
+    for (const i of r.querySelectorAll("input.words")) {
+      if (dots) i.classList.toggle("words-hidden", !redactWordsShown);
+      else i.type = redactWordsShown ? "text" : "password";
+    }
     eye.textContent = t(redactWordsShown ? "Hide" : "Show");
     eye.setAttribute("aria-pressed", String(redactWordsShown));
   };
   eye.onclick = () => { redactWordsShown = !redactWordsShown; set(); };
   set();
-  i.after(eye);
+  r.querySelector(".val").append(eye);
 }
 {
   const draw = renderRedact;
   renderRedact = function (s, keep) {
-    draw(s, keep);
-    redactWordsHidden();
+    const f = wordFocusOf();
+    wordsRedrawing = true;
+    try { draw(s, keep); } finally { wordsRedrawing = false; }
+    const words = wordRow(t("Masked words"), t("Your own words to keep from vendors, one on each row"),
+      wordList("words", s.redactWords || [], t("names, codenames, hosts"), t("Masked words"), (redactWords) => savePrefs({ ...keep, redactWords })));
+    const at = $("#redactWordsAnyCaseRow");
+    if (at) at.before(words); else $("#redactList").append(words);
+    redactWordsHidden(words);
+    const acts = $("#maskActList");
+    if (acts) acts.append(wordRow(t("Never mask"), t("Values that always go as written, each whole and in any case, one on each row: a team address, a test key"),
+      wordList("allow", s.redactAllow || [], t("ops@company.com, build-01"), t("Never mask"), (allow) => writingPrefs(api("settings/redact-allow", { allow }))
+        .then((ns) => { prefs = ns; renderSettings(); status(t("Saved"), "ok", 1500); })
+        .catch(settingsErr))));
+    wordFocusBack(f);
     if (s.redact || s.redactPersonal || (s.redactWords || []).length) redactRouteRow(s);
   };
 }

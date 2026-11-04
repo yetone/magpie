@@ -21788,18 +21788,7 @@ function renderRedact(s, keep) {
     r.append(who, val);
     box.append(r);
   }
-  const words = (s.redactWords || []).join(", ");
-  const i = input(words, t("names, codenames, hosts"));
-  i.className = "words";
-  const save = () => {
-    const v = i.value.split(/[,，\n]/).map((w) => w.trim()).filter(Boolean);
-    if (v.join(", ") === words) return;
-    savePrefs({ ...keep, redactWords: v });
-  };
-  i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") save(); else if (e.key === "Escape") { i.value = words; i.blur(); } };
-  i.onblur = save;
-  row(t("Masked words"), t("Your own words to keep from vendors, separated by commas"), i);
-  // plain words, matched as written unless the user asks for any case
+  // Masked words go above this, a list of the redact plugin's (wordList)
   row(t("Masked words in any case"), t("A word also matches in other capitals: Nightjar masks NIGHTJAR and nightjar too"),
     onOff(s.redactWordsAnyCase, (redactWordsAnyCase) => savePrefs({ ...keep, redactWordsAnyCase }))).id = "redactWordsAnyCaseRow";
   row(t("Whole words only"), t("A word is not masked inside a longer one: ABC masks ABC and 'ABC' but not XABCD, and 123456 not 0.123456"),
@@ -22202,21 +22191,7 @@ function renderMaskActions(s) {
     more.onclick = () => { maskActAll = !maskActAll; renderSettings(); };
     row(t("Personal data"), t("Emails, phone numbers, names and the rest, masked unless set here"), more).classList.add("mask-act-more");
   }
-  // the allow list: values sent as written whichever finder finds them
-  const allow = (s.redactAllow || []).join(", ");
-  const i = input(allow, t("ops@company.com, build-01"));
-  i.className = "words mask-allow";
-  i.setAttribute("aria-label", t("Never mask"));
-  const save = () => {
-    const v = i.value.split(/[,，\n]/).map((w) => w.trim()).filter(Boolean);
-    if (v.join(", ") === allow) return;
-    writingPrefs(api("settings/redact-allow", { allow: v }))
-      .then((ns) => { prefs = ns; renderSettings(); status(t("Saved"), "ok", 1500); })
-      .catch(settingsErr);
-  };
-  i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") save(); else if (e.key === "Escape") { i.value = allow; i.blur(); } };
-  i.onblur = save;
-  row(t("Never mask"), t("Values that always go as written, each whole and in any case, separated by commas: a team address, a test key"), i);
+  // Never mask's list goes under these, the redact plugin's (wordList)
 }
 
 // renderMaskTry: text typed here is masked as a request would be now, and

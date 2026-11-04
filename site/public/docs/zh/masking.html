@@ -96,7 +96,7 @@
       <li><b>打开页面</b>进入 <span class="ui">设置</span> → <span class="ui">隐私</span>。</li>
       <li><b>脱敏密钥</b>在 <span class="ui">要遮什么</span> 下把 <span class="ui">脱敏密钥</span> 设为 <span class="ui">开启</span>：API Key、私钥、Token 和密码。</li>
       <li><b>个人信息（按需）</b>把 <span class="ui">脱敏个人信息</span> 设为 <span class="ui">开启</span>，邮箱、手机号、身份证号和银行卡号也一并脱敏。打开后，下面会列出其他各类个人信息，每类有自己的开关。</li>
-      <li><b>自定义词</b>在 <span class="ui">脱敏词</span> 里填不想让厂商看到的人名、项目代号或主机名，用逗号分隔。<span class="ui">脱敏词不区分大小写</span> 打开后，<em>Nightjar</em> 也会遮掉 <em>NIGHTJAR</em>。magpie 不认识的密钥（比如你自己网关的 key）加到 <span class="ui">自定义脱敏规则</span>：填它的开头，或一个正则表达式。</li>
+      <li><b>自定义词</b>在 <span class="ui">脱敏词</span> 里填不想让厂商看到的人名、项目代号或主机名，每行一个（粘贴用逗号隔开的几个词，会各占一行）。<span class="ui">脱敏词不区分大小写</span> 打开后，<em>Nightjar</em> 也会遮掉 <em>NIGHTJAR</em>。magpie 不认识的密钥（比如你自己网关的 key）加到 <span class="ui">自定义脱敏规则</span>：填它的开头，或一个正则表达式。</li>
       <li><b>试一试</b>把一段文字粘到 <span class="ui">试一试</span>，就能看到厂商实际会收到什么。粘进去的内容不会保存。</li>
     </ol>
     <p>改动从下一个请求开始生效，不用重启，Agent 那边也不用改。实际做脱敏的是内置插件 <span class="ui">隐私遮盖</span>（<code>redact</code>，在 <span class="ui">设置</span> → <span class="ui">插件</span>），只要设置里要求了任何脱敏，它就是开着的。</p>

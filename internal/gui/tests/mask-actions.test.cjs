@@ -2,7 +2,7 @@
 // Settings › Privacy says what is done with each kind of value found
 // (#1977): Mask, Warn or Block, saved as the kind's choice, Mask saved as
 // no choice at all; personal kinds behind Show all kinds; a Never mask
-// list saved whole; and Try it, which shows text as the vendor would get
+// list saved whole, a value a row; and Try it, which shows text as the vendor would get
 // it, what was found and what would be done, says a block holds the
 // request back, keeps the text nowhere in the browser and shows no value
 // the preview didn't hand back. Every language, Chromium and WebKit,
@@ -105,14 +105,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction(() => !document.querySelector('#maskActList .mask-act[data-kind="EMAIL"] .sub.act-warn'));
         assert.deepEqual(posted.at(-1), ["actions", { actions: { API_KEY: "block" } }]);
 
-        // the allow list, split on commas and saved whole
-        const allow = acts.locator("input.mask-allow");
+        // the allow list, its add box split on commas, saved whole and
+        // drawn a value a row (wordList)
+        const allow = acts.locator('.word-list[data-list="allow"] input.word-add');
         await reach(page, allow);
         await allow.fill(" team@kelvarn.io，build-01 ,, ");
         await allow.press("Enter");
         for (let i = 0; i < 100 && !posted.some(([k]) => k === "allow"); i++) await page.waitForTimeout(40);
         assert.deepEqual(posted.filter(([k]) => k === "allow").at(-1), ["allow", { allow: ["team@kelvarn.io", "build-01"] }]);
-        await page.waitForFunction(() => document.querySelector("#maskActList input.mask-allow")?.value === "team@kelvarn.io, build-01");
+        await page.waitForFunction(() => [...document.querySelectorAll('#maskActList .word-list[data-list="allow"] input[data-word]')].map((i) => i.value).join("|") === "team@kelvarn.io|build-01");
 
         // Try it: the vendor's text, what was found, and that it is held back
         const box = page.locator("#maskTryList textarea.mask-try-in");

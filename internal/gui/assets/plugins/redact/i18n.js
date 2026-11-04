@@ -95,6 +95,9 @@ magpie.strings({
     "Play the demo": "播放",
     "Where the demo is": "进度",
     "Sign in to github.com for me with the password {pw}, the account is {email}.": "用密码 {pw} 帮我登录 github.com，账号是 {email}。",
+    "Your own words to keep from vendors, one on each row": "不想让模型厂商看到的词，每行一个",
+    "Values that always go as written, each whole and in any case, one on each row: a team address, a test key": "总是按原样发送的值，整段匹配、不分大小写，每行一个：比如团队邮箱、测试密钥",
+    "Remove {word}": "移除 {word}",
   },
   "zh-TW": {
     "Turn on masking": "開啟脫敏",
@@ -190,6 +193,9 @@ magpie.strings({
     "Play the demo": "播放",
     "Where the demo is": "進度",
     "Sign in to github.com for me with the password {pw}, the account is {email}.": "用密碼 {pw} 幫我登入 github.com，帳號是 {email}。",
+    "Your own words to keep from vendors, one on each row": "不想讓模型廠商看到的詞，每行一個",
+    "Values that always go as written, each whole and in any case, one on each row: a team address, a test key": "一律照原樣送出的值，整段比對、不分大小寫，每行一個：例如團隊信箱、測試金鑰",
+    "Remove {word}": "移除 {word}",
   },
   ja: {
     "Turn on masking": "マスクをオンにする",
@@ -285,6 +291,9 @@ magpie.strings({
     "Play the demo": "再生",
     "Where the demo is": "再生位置",
     "Sign in to github.com for me with the password {pw}, the account is {email}.": "パスワード {pw} で github.com にサインインして。アカウントは {email}。",
+    "Your own words to keep from vendors, one on each row": "ベンダーに見せたくない語（1 行に 1 つ）",
+    "Values that always go as written, each whole and in any case, one on each row: a team address, a test key": "常にそのまま送る値。全体一致、大文字小文字を区別せず、1 行に 1 つ：チームのアドレス、テスト用キーなど",
+    "Remove {word}": "{word} を削除",
   },
   de: {
     "Turn on masking": "Maskierung einschalten",
@@ -380,5 +389,8 @@ magpie.strings({
     "Play the demo": "Abspielen",
     "Where the demo is": "Fortschritt",
     "Sign in to github.com for me with the password {pw}, the account is {email}.": "Melden Sie mich mit dem Passwort {pw} bei github.com an, das Konto ist {email}.",
+    "Your own words to keep from vendors, one on each row": "Eigene Wörter, die Anbieter nicht sehen sollen, eines pro Zeile",
+    "Values that always go as written, each whole and in any case, one on each row: a team address, a test key": "Werte, die immer unverändert gehen, jeweils ganz und ohne Groß-/Kleinschreibung, einer pro Zeile: eine Team-Adresse, ein Testschlüssel",
+    "Remove {word}": "{word} entfernen",
   },
 });

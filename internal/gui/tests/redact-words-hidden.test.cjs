@@ -1,9 +1,9 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Settings › Privacy's Masked words are drawn as dots until Show
 // (noahhrreion on Discord: a screen share showed the words kept from
-// vendors), as a provider's key is. The box stays a text box, so an IME
-// still writes into it; Show reveals them and holds through a redraw;
-// a word typed while hidden saves as before. In every language, Chromium
+// vendors), as a provider's key is. Each word's row and the add box stay
+// text boxes, so an IME still writes into them; Show reveals them and
+// holds through a redraw; a word added while hidden saves as before. In every language, Chromium
 // and WebKit, wide and narrow.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -46,17 +46,19 @@ function serve(lang, saved) {
   };
 }
 
-// what the box shows, read from the page as it is in one go (a save
+// what the boxes show, read from the page as it is in one go (a save
 // redraws the list, so a row found a moment before can be gone): dots by
 // text security, or a password box where the engine has none
 const shown = (page, name) => page.evaluate((name) => {
   const r = [...document.querySelector("#redactList").children].find((r) => r.querySelector(".who .name")?.textContent === name);
-  const i = r.querySelector("input.words"), s = getComputedStyle(i), eye = r.querySelector(".redact-eye");
-  const list = document.querySelector("#redactList").getBoundingClientRect(), b = i.getBoundingClientRect(), e = eye.getBoundingClientRect();
+  const boxes = [...r.querySelectorAll("input.words")], eye = r.querySelector(".redact-eye");
+  const hid = (i) => getComputedStyle(i).getPropertyValue("-webkit-text-security") === "disc" || i.type === "password";
+  const list = document.querySelector("#redactList").getBoundingClientRect(), e = eye.getBoundingClientRect();
   return {
-    type: i.type, dots: s.getPropertyValue("-webkit-text-security") === "disc" || i.type === "password", value: i.value,
+    types: [...new Set(boxes.map((i) => i.type))], dots: boxes.every(hid), shown: boxes.every((i) => !hid(i)),
+    value: boxes.filter((i) => i.dataset.word).map((i) => i.value).join(", "),
     eye: eye.textContent, pressed: eye.getAttribute("aria-pressed"),
-    inside: b.left >= list.left - 1 && e.right <= list.right + 1 && b.width >= 80,
+    inside: boxes.every((i) => { const b = i.getBoundingClientRect(); return b.left >= list.left - 1 && b.right <= list.right + 1 && b.width >= 80; }) && e.right <= list.right + 1,
     wide: document.documentElement.scrollWidth > document.documentElement.clientWidth,
   };
 }, name);
@@ -83,14 +85,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         let m = await shown(page, w.name);
         assert.equal(m.value, "Nightjar, 百度");
         assert(m.dots, "hidden at first");
-        assert.equal(m.type, "text", "a text box, so an IME writes into it");
+        assert.deepEqual(m.types, ["text"], "text boxes, so an IME writes into them");
         assert.equal(m.eye, w.show);
         assert.equal(m.pressed, "false");
         assert(m.inside && !m.wide, "the box and Show fit the page");
 
         await row.locator(".redact-eye").click();
         m = await shown(page, w.name);
-        assert(!m.dots, "shown");
+        assert(m.shown, "shown");
         assert.equal(m.eye, w.hide);
         assert.equal(m.pressed, "true");
 
@@ -100,21 +102,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction(() => document.querySelector("#redactWordsWholeRow .segs .opt.on")?.textContent === t("On"));
         await row.locator(".redact-eye").waitFor();
         m = await shown(page, w.name);
-        assert(!m.dots && m.eye === w.hide, "Show holds through a redraw");
+        assert(m.shown && m.eye === w.hide, "Show holds through a redraw");
 
         // hidden again, a word typed saves as before
         await row.locator(".redact-eye").click();
         assert((await shown(page, w.name)).dots);
-        const box = row.locator("input.words");
-        await box.fill("Nightjar, 百度, Kestrel");
+        const box = row.locator("input.word-add");
+        await box.fill("Kestrel");
         await box.press("Enter");
         for (let n = 0; n < 50 && !saved.at(-1)?.redactWords?.includes("Kestrel"); n++) await new Promise((r) => setTimeout(r, 100));
         assert.deepEqual(saved.at(-1).redactWords, ["Nightjar", "百度", "Kestrel"]);
         // the save redraws the page (Enter, then the old box's blur): wait
         // for the box on the page now, never one a redraw took away
         await page.waitForFunction(() => {
-          const i = document.querySelector("#redactList input.words");
-          return i?.isConnected && i.value.includes("Kestrel") && i.nextElementSibling?.classList.contains("redact-eye") && getComputedStyle(i).getPropertyValue("-webkit-text-security") === "disc";
+          const i = document.querySelector('#redactList input.words[data-word="Kestrel"]');
+          return i?.isConnected && i.closest(".row")?.querySelector(".redact-eye") && getComputedStyle(i).getPropertyValue("-webkit-text-security") === "disc";
         }, null, { timeout: 3000 }).catch(() => {});
         const last = await shown(page, w.name);
         assert(last.dots && last.eye === w.show, "still hidden after the save's redraw " + JSON.stringify(last));
