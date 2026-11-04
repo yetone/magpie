@@ -836,6 +836,7 @@ func identifyCaller(w http.ResponseWriter, r *http.Request) (*http.Request, bool
 		// the names the key gives models, before any route reads one
 		r = aliasRequest(r, who)
 	}
+	r = keepCodexListAuth(r, ok)
 	r.Header = r.Header.Clone()
 	r.Header.Set("Authorization", "Bearer "+Token)
 	for _, h := range []string{"x-api-key", "x-goog-api-key"} {
