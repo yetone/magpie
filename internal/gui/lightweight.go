@@ -137,6 +137,7 @@ func (h *host) makePanel() *application.WebviewWindow {
 	trayOwnClicks()
 	w.OnWindowEvent(events.Mac.WindowShow, func(*application.WindowEvent) { trayHighlight(true) })
 	w.OnWindowEvent(events.Mac.WindowHide, func(*application.WindowEvent) { trayHighlight(false) })
+	sayWailsHides(w)
 	// The system's close hides the panel, as Escape does: a title bar's X
 	// (KWin's, #1283), Alt+F4 or the window manager's close key. Closed, it
 	// was gone while the tray still opened it, and the icon did nothing

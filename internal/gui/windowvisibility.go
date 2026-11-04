@@ -6,6 +6,7 @@ import (
 	"runtime"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 // A macOS window hidden with orderOut keeps its WKWebView's page visible, so
@@ -35,6 +36,19 @@ func showWebview(w *application.WebviewWindow) *application.WebviewWindow {
 	w.Show()
 	w.ExecJS(pageShownJS)
 	return w
+}
+
+// sayWailsHides tells the panel's page when Wails hides the panel itself:
+// on a click elsewhere (HideOnFocusLost), the way it is mostly closed, and
+// on Escape (HideOnEscape), both a plain Hide that hideWebview never sees.
+// A page never told it was hidden isn't told it is back either, so it kept
+// the settings it was drawn with: Settings' ¥ and 万 / 亿 never reached the
+// panel's Usage tab (blrbrzkj on Discord).
+func sayWailsHides(w *application.WebviewWindow) {
+	if js := pageHiddenJSOn(runtime.GOOS); js != "" {
+		w.OnWindowEvent(events.Common.WindowLostFocus, func(*application.WindowEvent) { w.ExecJS(js) })
+	}
+	w.RegisterKeyBinding("escape", func(application.Window) { hideWebview(w) })
 }
 
 // pageHiddenJSOn is what a page on goos is told as its window hides.

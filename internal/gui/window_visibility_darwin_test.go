@@ -27,8 +27,21 @@ func TestClosingWindowMarksPageOutOfSight(t *testing.T) {
 	}
 }
 
+// The tray panel is hidden by Wails itself more often than by magpie: on a
+// click elsewhere (HideOnFocusLost) and on Escape, a plain Hide that
+// hideWebview never sees. Its page is told all the same, or it is never
+// told it is back and keeps what it was drawn with: Settings' currency and
+// number units never reached it (blrbrzkj on Discord).
+func TestPanelHiddenByWailsMarksPageOutOfSight(t *testing.T) {
+	out, err := runAppKit(t, 30*time.Second, []string{"MAGPIE_TEST_WINDOW_VISIBILITY=panel"})
+	if err != nil || !strings.Contains(string(out), "window visibility: ok") {
+		t.Fatalf("panel visibility: %v\n%s", err, out)
+	}
+}
+
 func init() {
-	if os.Getenv("MAGPIE_TEST_WINDOW_VISIBILITY") != "1" {
+	which := os.Getenv("MAGPIE_TEST_WINDOW_VISIBILITY")
+	if which != "1" && which != "panel" {
 		return
 	}
 	ready := make(chan struct{}, 1)
@@ -46,6 +59,12 @@ html.magpie-out-of-sight #probe{animation-play-state:paused!important}
 </style><i id="probe"></i><script>
 const probe = document.querySelector("#probe");
 window.magpieWindowVisibility = (visible) => {
+  // shown again: what it last saw while hidden, once
+  const seen = visible && localStorage.getItem("hiddenProbe");
+  if (seen) {
+    localStorage.removeItem("hiddenProbe");
+    fetch("/report?probe=" + encodeURIComponent(seen));
+  }
   document.documentElement.classList.toggle("magpie-out-of-sight", !visible);
   document.dispatchEvent(new Event("visibilitychange"));
 };
@@ -59,10 +78,6 @@ document.addEventListener("visibilitychange", () => {
     }));
   }
 });
-setInterval(() => {
-  const probe = localStorage.getItem("hiddenProbe");
-  if (probe) fetch("/report?probe=" + encodeURIComponent(probe));
-}, 100);
 fetch("/ready");
 </script>`)
 			case "/ready":
@@ -96,10 +111,39 @@ fetch("/ready");
 			return nil
 		}
 	}
+	// each way the window is closed: the main window by magpie; the panel
+	// by Wails, on a click elsewhere and on Escape
+	closes := map[string][]func(*host, *application.WebviewWindow){
+		"1": {func(h *host, _ *application.WebviewWindow) { application.InvokeSync(h.hideMain) }},
+		"panel": {
+			func(_ *host, w *application.WebviewWindow) { w.HandleWindowEvent(uint(events.Common.WindowLostFocus)) },
+			func(_ *host, w *application.WebviewWindow) { w.HandleKeyEvent("escape") },
+		},
+	}
+	check := func(report url.Values) {
+		probe := struct {
+			Hidden bool   `json:"hidden"`
+			State  string `json:"state"`
+			Marked bool   `json:"marked"`
+			Play   string `json:"play"`
+		}{}
+		if err := json.Unmarshal([]byte(report.Get("probe")), &probe); err != nil {
+			fail("the page's hidden event is %q: %v", report.Get("probe"), err)
+		}
+		if !probe.Hidden || probe.State != "hidden" || !probe.Marked || probe.Play != "paused" {
+			fail("while hidden the page saw hidden=%v state=%q marked=%v play=%q", probe.Hidden, probe.State, probe.Marked, probe.Play)
+		}
+	}
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
 		go func() {
 			var win *application.WebviewWindow
 			application.InvokeSync(func() {
+				if which == "panel" {
+					win = h.makePanel()
+					h.panel = win
+					win.Show()
+					return
+				}
 				win = app.Window.NewWithOptions(application.WebviewWindowOptions{
 					Name:   "visibility",
 					Title:  "visibility",
@@ -115,21 +159,12 @@ fetch("/ready");
 				fail("timed out waiting for the page")
 			}
 
-			application.InvokeSync(h.hideMain)
-			time.Sleep(500 * time.Millisecond)
-			application.InvokeSync(func() { showWebview(win).Focus() })
-			report := wait("the page's hidden report", reports)
-			probe := struct {
-				Hidden bool   `json:"hidden"`
-				State  string `json:"state"`
-				Marked bool   `json:"marked"`
-				Play   string `json:"play"`
-			}{}
-			if err := json.Unmarshal([]byte(report.Get("probe")), &probe); err != nil {
-				fail("the page's hidden event is %q: %v", report.Get("probe"), err)
-			}
-			if !probe.Hidden || probe.State != "hidden" || !probe.Marked || probe.Play != "paused" {
-				fail("while hidden the page saw hidden=%v state=%q marked=%v play=%q", probe.Hidden, probe.State, probe.Marked, probe.Play)
+			// the panel by a click elsewhere, then by Escape
+			for _, hide := range closes[which] {
+				hide(h, win)
+				time.Sleep(500 * time.Millisecond)
+				application.InvokeSync(func() { showWebview(win).Focus() })
+				check(wait("the page's hidden report", reports))
 			}
 			fmt.Println("window visibility: ok")
 			app.Quit()
