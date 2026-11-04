@@ -4201,8 +4201,10 @@ function routingPage(part) {
     const mine = quotas.filter((q) => q.from && q.kind === "subscription" && (q.provider === w.provider || q.provider.startsWith(w.provider + "/")));
     const cards = mine.filter((q) => q.provider !== w.provider && !q.error && q.windows?.length && (!fam || q.provider === w.provider + "/" + fam));
     if (!cards.length) {
-      // the remote's own card, saying why nothing was read from it
-      const bad = mine.find((q) => q.provider === w.provider && q.error);
+      // the remote's own card, saying why nothing was read from it, or
+      // the account's card there saying its read failed (Usage shows it)
+      const bad = mine.find((q) => q.provider === w.provider && q.error)
+        || mine.find((q) => q.provider !== w.provider && q.error && (!fam || q.provider === w.provider + "/" + fam));
       return bad ? [{ text: t("Allowance unavailable — hover for why"), title: bad.error }] : [];
     }
     const out = [];

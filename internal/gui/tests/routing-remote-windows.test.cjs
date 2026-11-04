@@ -3,7 +3,8 @@
 // windows in Routing's Accounts and keys like a local account does, as the
 // computer that holds the account read them: the Usage page's cards with
 // `from`. Claude's row is told Claude's cards, not Codex's; a remote whose
-// read failed says the allowance is unavailable, never 0. In every
+// read failed, or whose Claude card did, says the allowance is unavailable,
+// never 0. In every
 // language, at a window's width and at 420px, in both engines.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -15,7 +16,8 @@ const assets = path.resolve(__dirname, "../assets");
 const now = Date.now();
 const iso = (ms) => new Date(ms).toISOString();
 const remote = (id, name, model) => ({ id: id + "-k", provider: id, name, preset: "remote-magpie", icon: "magpie", kind: "provider", model, known: false });
-const accts = [remote("home", "Home", "claude-opus-5"), remote("den", "Den", "claude-opus-5")];
+// elm's model as a remote names it, its provider there first
+const accts = [remote("home", "Home", "claude-opus-5"), remote("den", "Den", "claude-opus-5"), remote("elm", "Elm", "claude/claude-opus-5")];
 const route = {
   id: 7, seq: 7, time: iso(now - 2000), agent: "claude", model: "claude-opus-5", provider: "home", done: true, status: 200, ms: 900, tokens: 1500,
   order: accts, tries: [{ id: "home-k", model: "claude-opus-5", start: iso(now - 2000), done: true, ms: 800, status: 200 }],
@@ -27,6 +29,10 @@ const cards = [
   ] },
   { provider: "home/codex", name: "Codex · Home", kind: "subscription", user: "c@example.com", from: "Home", windows: [{ name: "5 hours", used: 77 }] },
   { provider: "den", name: "Den", icon: "magpie", kind: "subscription", from: "Den", windows: [], error: "couldn't reach the remote magpie: connection refused" },
+  // the remote read, its Claude card didn't: the Usage page shows why, so does Routing
+  { provider: "elm", name: "Elm", icon: "magpie", kind: "subscription", from: "Elm", windows: [] },
+  { provider: "elm/claude", name: "Claude · Elm", kind: "subscription", user: "e@example.com", from: "Elm", windows: [], error: "Claude's usage read was rate limited" },
+  { provider: "elm/codex", name: "Codex · Elm", kind: "subscription", user: "e@example.com", from: "Elm", windows: [], error: "codex is signed out" },
 ];
 
 function serve(lang, asks) {
@@ -79,12 +85,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             await page.goto("http://magpie.test/?view=routing");
                     await page.locator(".rt-act .wins span").first().waitFor();
             const rows = page.locator(".rt-act");
-            const denRow = rows.nth(0), homeRow = rows.nth(1); // listed by name
+            const denRow = rows.nth(0), elmRow = rows.nth(1), homeRow = rows.nth(2); // listed by name
             // Claude's windows only: Codex's 77% on the same remote is not on Claude's row
             assert.deepEqual(await homeRow.locator(".wins span").allTextContents(), words[lang].wins);
             // a failed read is unknown, with the reason on hover, never a figure
             assert.deepEqual(await denRow.locator(".wins span").allTextContents(), [words[lang].unknown]);
             assert.match(await denRow.locator(".wins span").getAttribute("title"), /connection refused/);
+            // its Claude card's failed read, not its Codex's, on Claude's row
+            assert.deepEqual(await elmRow.locator(".wins span").allTextContents(), [words[lang].unknown]);
+            assert.match(await elmRow.locator(".wins span").getAttribute("title"), /rate limited/);
             const over = await homeRow.evaluate((e) => Math.max(e.scrollWidth - e.clientWidth, document.documentElement.scrollWidth - innerWidth));
             assert.ok(over <= 1, `${lang} at ${width}: ${over}px past`);
             assert.ok(asks.every((s) => !s.includes("asked")), "never an asked read: " + asks.join(", "));

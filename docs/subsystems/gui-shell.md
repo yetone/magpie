@@ -224,8 +224,10 @@ whose provider id is the remote's, a slash and the card's. The computer
 that holds the account tells its usage; this one reads nothing new. A
 Claude model's row is told Claude's cards alone and a ChatGPT model's
 Codex's; with more than one card the account's user leads each window. A
-remote whose read failed shows "Allowance unavailable" with the reason on
-hover, never a figure. See `routing-remote-windows.test.cjs`.
+remote whose read failed, or whose card of the row's family failed there
+(the remote read, its Claude's read didn't), shows "Allowance unavailable"
+with the reason on hover, never a figure and never nothing; a remote that
+holds this computer's key tells why the same way (`errRemoteHeld`). See `routing-remote-windows.test.cjs`.
 
 The refresh beside the Accounts and keys heading (`#rtReadAllowances`,
 #1834) reads them again by hand: `loadQuotas(true)`, the asked read the
