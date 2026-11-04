@@ -19,10 +19,18 @@ import (
 // bytes are still arriving. Exercise the listener's guards and TLS, with
 // only a local fake provider. A large first write buys ample rate room;
 // waiting on the watch's measured body time makes the old cutoff fail.
+//
+// Only time spent in a wire read earns upload time: the handler's own
+// time between reads (decoding, being scheduled again) counts toward
+// unroutedMost. That is well under 2ms here, but a loaded macOS runner
+// spent about 1s of it reading the 256 KB, past a 1s unroutedMost
+// (#5274). So most is 3s, and the wait is half of it more, well under
+// the 6s (gzip) to 8s the wire bytes earn.
 func TestUnroutedProgressingUploadOutlastsMost(t *testing.T) {
+	const most = 3 * time.Second
 	for _, encoding := range []string{"identity", "chunked", "gzip", "zstd"} {
 		t.Run(encoding, func(t *testing.T) {
-			unroutedLimits(t, 20*time.Millisecond, time.Second)
+			unroutedLimits(t, 20*time.Millisecond, most)
 			s, up := slowEyed(t, 0)
 			srv := httptest.NewTLSServer(s.Front())
 			defer srv.Close()
@@ -30,7 +38,7 @@ func TestUnroutedProgressingUploadOutlastsMost(t *testing.T) {
 			defer pr.Close()
 			defer pw.Close()
 			// Incompressible text keeps the compressed wire credit well
-			// above the three seconds spent reading, even under -race.
+			// above the seconds spent reading, even under -race.
 			rng := rand.New(rand.NewPCG(1, 2))
 			noise := make([]byte, 192<<10)
 			for i := range noise {
@@ -71,7 +79,7 @@ func TestUnroutedProgressingUploadOutlastsMost(t *testing.T) {
 			if _, err := io.CopyN(pw, bytes.NewReader(wire), int64(len(wire)-1)); err != nil {
 				t.Fatal(err)
 			}
-			if r := heldPast(t, watchedHold(t, s), 3*unroutedMost, got); r != nil {
+			if r := heldPast(t, watchedHold(t, s), most+most/2, got); r != nil {
 				t.Fatalf("progressing upload cut off before routing: %d %q %v", r.code, r.body, r.err)
 			}
 			if n := watchedHold(t, s).bodyRead.Load(); n != int64(len(wire)-1) {
