@@ -1105,9 +1105,11 @@ type codexUsage struct {
 	RateLimit struct {
 		// false once its allowance is used up; held only with no credits
 		// to go on with (codexHeld)
-		Allowed   *bool        `json:"allowed"`
-		Primary   *codexWindow `json:"primary_window"`
-		Secondary *codexWindow `json:"secondary_window"`
+		Allowed *bool `json:"allowed"`
+		// the backend's own word that a limit is hit
+		LimitReached *bool        `json:"limit_reached"`
+		Primary      *codexWindow `json:"primary_window"`
+		Secondary    *codexWindow `json:"secondary_window"`
 	} `json:"rate_limit"`
 	SpendControl *struct {
 		Reached bool `json:"reached"`
@@ -1163,7 +1165,7 @@ var codexReservePlans = []string{"team", "self_serve_business_prolite"}
 // says held: wrongly held costs the app its ChatGPT extras while magpie
 // serves the turn, wrongly not held leaves it sending nothing at all.
 func codexHeld(u codexUsage) bool {
-	if u.RateLimit.Allowed == nil || *u.RateLimit.Allowed {
+	if !codexAtLimit(u) {
 		return false
 	}
 	c := u.Credits
@@ -1178,6 +1180,38 @@ func codexHeld(u codexUsage) bool {
 		return false
 	}
 	return true
+}
+
+// codexAtLimit is whether the reading says the allowance is used up:
+// rate_limit.allowed false, which is what ChatGPT.app 26.1021 gates on, or
+// else one the backend does not call open (allowed not said) with
+// limit_reached or a window at 100%, or one it calls allowed with every
+// window it reports at 100%. The 26.1029 app blocked an account magpie's
+// 用量 showed used up, with no credits (xiaoq6285 on Discord), and a
+// reading that did not say allowed false is the only way codexHeld could
+// have missed it. Held wrongly takes the app out of ChatGPT (durable
+// threads, remote control) while it would still send (#996 undid that for
+// limit_reached alone), so allowed true stands unless nothing is left in
+// any window: a 5h window at 100% with the week open is not held.
+func codexAtLimit(u codexUsage) bool {
+	r := u.RateLimit
+	if r.Allowed != nil && !*r.Allowed {
+		return true
+	}
+	spent, any := true, false
+	for _, w := range []*codexWindow{r.Primary, r.Secondary} {
+		if w == nil {
+			continue
+		}
+		any = true
+		if w.UsedPercent < 100 {
+			spent = false
+		}
+	}
+	if r.Allowed != nil { // allowed true: held only with every window gone
+		return any && spent
+	}
+	return r.LimitReached != nil && *r.LimitReached || any && spent
 }
 
 type codexWindow struct {

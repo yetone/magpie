@@ -75,15 +75,37 @@ func TestCodexUsedUpIsWhatTheAppHolds(t *testing.T) {
 		{"Pro with credits, at a spend cap", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
 			m["spend_control"].(map[string]any)["reached"] = true
 		}), false},
-		// only allowed false holds it: limit_reached alone doesn't
+		// allowed false holds it. With allowed not said, so does a limit
+		// reached or a window at 100%; with allowed true, only every
+		// window at 100% (the 26.1029 app blocked such an account, with
+		// 用量 showing it used up). A 5h window at 100% with the week open
+		// is not held: the app still sends, and holding takes it out of
+		// ChatGPT (#996).
 		{"limit reached but allowed, no credits", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
 			delete(m, "credits")
 			rateLimit(m)["limit_reached"], rateLimit(m)["allowed"] = true, true
+			rateLimit(m)["primary_window"].(map[string]any)["used_percent"] = 40
 		}), false},
 		{"limit reached, allowed not said, no credits", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
 			delete(m, "credits")
 			rateLimit(m)["limit_reached"] = true
 			delete(rateLimit(m), "allowed")
+		}), true},
+		{"every window at 100% but allowed, no credits", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
+			delete(m, "credits")
+			rateLimit(m)["limit_reached"], rateLimit(m)["allowed"] = false, true
+			rateLimit(m)["primary_window"].(map[string]any)["used_percent"] = 100
+		}), true},
+		{"5h window at 100%, week open, allowed, no credits", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
+			delete(m, "credits")
+			rateLimit(m)["limit_reached"], rateLimit(m)["allowed"] = false, true
+			rateLimit(m)["primary_window"].(map[string]any)["used_percent"] = 100
+			rateLimit(m)["secondary_window"] = map[string]any{"used_percent": 30, "limit_window_seconds": 18000, "reset_after_seconds": 100, "reset_at": 1791640059}
+		}), false},
+		{"window at 99%, allowed, no credits", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
+			delete(m, "credits")
+			rateLimit(m)["limit_reached"], rateLimit(m)["allowed"] = false, true
+			rateLimit(m)["primary_window"].(map[string]any)["used_percent"] = 99
 		}), false},
 		{"not allowed, limit not reached, no credits", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
 			delete(m, "credits")
