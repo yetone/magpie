@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 	"sync/atomic"
@@ -43,6 +44,62 @@ func TestDecodeJSONChecksALongBodyOnce(t *testing.T) {
 	}
 	if n := scans.Load(); n != 1 {
 		t.Fatalf("a %d-byte body was checked %d times over six decodes, want 1", len(body), n)
+	}
+}
+
+// A member of a body being served, decoded alone (a Responses request's
+// input, by each of the request's readers, two of them at once), is not
+// checked byte by byte again: the body was found valid whole. A 516 MB
+// Codex turn of generated images was checked three times over before
+// routing (#5281). A part of the body that isn't a member's whole value is
+// still checked, and refused when it isn't valid.
+func TestDecodeJSONHeldMemberNotCheckedAgain(t *testing.T) {
+	body := []byte(`{"model":"` + t.Name() + `","stream":true,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"` +
+		strings.Repeat("a long prompt ", 6000) + `"}]}]}`)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	holdBody(ctx, body)
+	var whole, parts atomic.Int32
+	f := func(data []byte) {
+		if bytes.Equal(data, body) {
+			whole.Add(1)
+		} else {
+			parts.Add(1)
+		}
+	}
+	validScanned.Store(&f)
+	t.Cleanup(func() { validScanned.Store(nil) })
+	var q struct {
+		Model string          `json:"model"`
+		Input json.RawMessage `json:"input"`
+	}
+	if err := decodeJSON(body, &q); err != nil || q.Model != t.Name() {
+		t.Fatalf("decode: %v %q", err, q.Model)
+	}
+	for range 3 {
+		var s string
+		if decodeJSON(q.Input, &s) == nil {
+			t.Fatal("an array decoded as a string")
+		}
+		var items []struct {
+			Role string `json:"role"`
+		}
+		if err := decodeJSON(q.Input, &items); err != nil || len(items) != 1 || items[0].Role != "user" {
+			t.Fatalf("input: %v %+v", err, items)
+		}
+		if !jsonValid(q.Input) {
+			t.Fatal("input not valid")
+		}
+	}
+	if w, p := whole.Load(), parts.Load(); w != 1 || p != 0 {
+		t.Fatalf("the body was checked %d times and its input %d, want 1 and 0", w, p)
+	}
+	// a part that is no member's whole value: checked, and refused
+	if cut := q.Input[:len(q.Input)-1]; jsonValid(cut) {
+		t.Fatal("a cut input was found valid")
+	}
+	if parts.Load() != 1 {
+		t.Fatalf("a cut input was checked %d times, want 1", parts.Load())
 	}
 }
 

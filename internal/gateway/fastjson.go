@@ -856,7 +856,7 @@ func longBody(data []byte) (valid bool, members []memberSpan) {
 		return true, members
 	}
 	validMemo.Unlock()
-	if i < 0 {
+	if i < 0 && !heldMember(data) {
 		if f := validScanned.Load(); f != nil {
 			(*f)(data)
 		}
@@ -946,6 +946,44 @@ func heldLongOf(data []byte) (heldLong, bool) {
 	return e, true
 }
 
+// heldMember is whether data is the whole value of a top-level member of a
+// body being served that heldLongOf found valid: a part of a valid value
+// split at its members is valid itself, so it is not checked byte by byte
+// again. A request's conversation (a Responses request's input, a chat's
+// messages) is decoded alone by each of its readers, and the first decode
+// of each, as a value of its own, checked all of it again: two readers at
+// once (the prompt's, the folder's) each did, before the hash memo knew
+// it. A 516 MB Codex turn of generated images was checked three times over
+// before routing, past the 30s magpie gives its own work there under
+// -race on a loaded CI machine (#5281).
+func heldMember(data []byte) bool {
+	if len(data) == 0 {
+		return false
+	}
+	p := uintptr(unsafe.Pointer(unsafe.SliceData(data)))
+	l := heldBodies.list.Load()
+	if l == nil {
+		return false
+	}
+	heldBodies.Lock()
+	defer heldBodies.Unlock()
+	for _, b := range *l {
+		e, ok := heldBodies.long[unsafe.SliceData(b)]
+		if !ok || !e.valid || e.n != len(b) || len(e.members) == 0 {
+			continue
+		}
+		raw := trimJSON(b)
+		start := uintptr(unsafe.Pointer(unsafe.SliceData(raw)))
+		if p < start || p+uintptr(len(data)) > start+uintptr(len(raw)) {
+			continue
+		}
+		off := int(p - start)
+		i, found := slices.BinarySearchFunc(e.members, off, func(m memberSpan, off int) int { return m.v0 - off })
+		return found && e.members[i].v1-e.members[i].v0 == len(data)
+	}
+	return false
+}
+
 // validScanned, when set (tests), is told of each body of validMemoMin or
 // more that jsonValid checks byte by byte.
 var validScanned atomic.Pointer[func(data []byte)]
@@ -959,6 +997,9 @@ func jsonValid(data []byte) bool {
 	}
 	if e, held := heldLongOf(data); held {
 		return e.valid
+	}
+	if heldMember(data) {
+		return true
 	}
 	s := validSum{len(data), validHash(data)}
 	validMemo.Lock()
