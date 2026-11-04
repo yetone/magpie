@@ -432,8 +432,10 @@ button.rt-session { cursor: pointer; }
    in columns, each provider's heading over its own (in one block with
    its first row, .rt-lead): one to a line, or a heading across each
    line, a page of many providers ran on far below the requests (Jiabubu
-   on Discord, twice). Beside the requests (min1150) the column holds one */
-:where(.rt-more:not(.min1150)) .rt-acts, .rt-cols.solo .rt-acts { columns: 168px; column-gap: 0; }
+   on Discord, twice). Beside the requests (min1150) the column holds one.
+   A column is wide enough for an account's name, plan and Try now on one
+   line (danzi002 on Discord), two of them still on a phone */
+:where(.rt-more:not(.min1150)) .rt-acts, .rt-cols.solo .rt-acts { columns: min(240px, 40vw); column-gap: 0; }
 :where(.rt-more:not(.min1150)) .rt-acts > *, .rt-cols.solo .rt-acts > * { break-inside: avoid; }
 .rt-cols.solo { grid-template-columns: minmax(0, 1fr); }
 .rt-reqs.none { display: block; background: none; border-color: transparent; }
@@ -456,14 +458,33 @@ button.rt-session { cursor: pointer; }
 .rt-found { animation: rtfound 1.4s ease-out; }
 @keyframes rtfound { 0%, 40% { box-shadow: inset 0 0 0 2px var(--fg); } 100% { box-shadow: inset 0 0 0 2px transparent; } }
 @media (prefers-reduced-motion: reduce) { .rt-found { animation: none; } }
-.rt-act { display: grid; gap: 3px; padding: 6px 12px 6px 33px; font-size: 12px; }
-.rt-act .nm { display: flex; gap: 6px; min-width: 0; }
+/* an account or key: one cell each, alike (danzi002 on Discord: "显示的好
+   乱"). Its name, plan and Try now on one line, a dot before it for how it
+   is; under it what is left or when it is back, how it fared on hover.
+   Red only for what the reader has to do (.act) */
+.rt-act { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 10px; padding: 6px 12px 9px 33px; font-size: 12px; line-height: 18px; }
+.rt-act > * { grid-column: 1 / -1; min-width: 0; }
+.rt-act > .nm { grid-column: 1; grid-row: 1; }
+.rt-act > .fix { grid-column: 2; grid-row: 1; }
+/* Try now no taller than the name beside it (WebKit's button is): the
+   cell keeps its height when the rest is lifted */
+.rt-act:not(.act) > .fix { height: 18px; align-items: center; }
+/* what the reader has to do has a line of its own, its words in full */
+.rt-act.act > .fix { grid-column: 1 / -1; grid-row: auto; flex-wrap: wrap; white-space: normal; }
+.rt-act .nm { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .rt-act .nm b { font-weight: 560; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rt-act .nm span { color: var(--muted); white-space: nowrap; }
-.rt-act .st { color: var(--fg-2); }
+/* narrow, the plan gives way before the name does */
+.rt-act:not(.rt-keys) .nm span { flex: 0 1000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rt-act .nm .dot { position: absolute; left: 19px; top: 12px; width: 6px; height: 6px; border-radius: 50%; background: color-mix(in srgb, var(--muted) 45%, transparent); }
+.rt-act.on .nm .dot { background: var(--green); }
+.rt-act.rest .nm .dot { background: var(--amber); }
+.rt-act.act .nm .dot { background: var(--red); }
+/* in full, a second line if it must: when it is back is what it says (#1016) */
+.rt-act .st { color: var(--fg-2); overflow-wrap: anywhere; }
 .rt-act .st:empty { display: none; }
-.rt-act .st.rest { color: var(--red); }
-.rt-act .st.left { color: var(--muted); }
+.rt-act .st.rest, .rt-act .st.left { color: var(--muted); }
+.rt-act.act .st.rest { color: var(--red); }
 /* the accounts' allowances read again by hand (#1834), beside the heading */
 .rt-read { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 20px; height: 20px; margin: -3px 0 -3px 6px; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--muted); cursor: pointer; transition: background .12s, color .12s; }
 .rt-read[hidden] { display: none; }
@@ -477,10 +498,22 @@ button.rt-session { cursor: pointer; }
    figure of its own, the rest of it on hover */
 .rt-act .wins { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-2); font-size: 11px; font-variant-numeric: tabular-nums; }
 .rt-act .wins span + span { margin-left: 12px; }
-.rt-act .tally { display: flex; flex-wrap: wrap; gap: 2px 12px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-.rt-act .tally .bad { color: var(--red); }
-.rt-act .fix { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11px; }
-.rt-act .bar { height: 3px; border-radius: 2px; background: var(--card-2); overflow: hidden; }
+.rt-act .tally { display: flex; gap: 0 10px; overflow: hidden; white-space: nowrap; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.rt-act .tally > span { flex: none; }
+.rt-act .tally > span:last-child { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* with a line of its own, how it fares is on hover; one to fix says it */
+.rt-act.said > .tally { display: none; }
+.rt-act.act .tally .bad { color: var(--red); }
+.rt-act .fix { display: flex; gap: 10px; font-size: 11px; white-space: nowrap; }
+.rt-act .fix button.link { color: var(--muted); }
+.rt-act .fix button.link:hover { color: var(--fg); }
+.rt-act .fix button.link:focus-visible { color: var(--fg); }
+.rt-act .fix button.rt-signin, .rt-act.act .fix button.link { color: var(--red); }
+/* under the cell, in its bottom padding: every cell keeps its height. In
+   the flow, not absolute: Chromium put an absolute bar of a row in a
+   column's unbroken block (.rt-lead) over the row above it */
+.rt-act .bar { height: 2px; margin: 2px 0 -4px; border-radius: 2px; background: var(--card-2); overflow: hidden; }
+.rt-act:has(> .bar) { padding-bottom: 8px; }
 .rt-act .bar i { display: block; height: 100%; border-radius: 2px; background: var(--muted); }
 /* a provider's keys summed up in one row (#1319), opened to each */
 .rt-act.rt-keys { cursor: pointer; user-select: none; }

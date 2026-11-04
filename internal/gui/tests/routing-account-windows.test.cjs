@@ -83,8 +83,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             await page.goto("http://magpie.test/?view=routing");
             const act = page.locator(".rt-act", { hasText: "work@example.com" }).first();
             // the one figure routing went by, the windows each on hover over
-            // it: a card keeps one line of what is left (ferock4669 on Discord)
-            await page.waitForFunction((want) => [...document.querySelectorAll(".rt-act")].some((e) => e.textContent.includes("work@example.com") && e.querySelector(".st")?.title === want), words[lang].join("\n"));
+            // it: a card keeps one line of what is left (ferock4669 on
+            // Discord), and when it was read comes last on hover (danzi002)
+            await page.waitForFunction((want) => [...document.querySelectorAll(".rt-act")].some((e) => e.textContent.includes("work@example.com") && (e.querySelector(".st")?.title || "").split("\n").slice(0, 2).join("\n") === want), words[lang].join("\n"));
             assert.ok(await act.locator(".st").isVisible());
             assert.equal(await act.locator(".wins").count(), 0);
             const spare = page.locator(".rt-act", { hasText: "spare@example.com" }).first();

@@ -246,11 +246,20 @@ fullest window while idle, what it is doing while it answers. See
 
 ### Routing account cards
 
-Each row under Accounts and keys keeps its name, one line of what is left
-(or its rest), and how it fares (tried, answered, failed, last answered),
-with Try now or Sign in again when it needs one (ferock4669 and iyou00 on
-Discord: many keys ran the list on and on). The models it answered are in
-its tooltip, under its id; a folded row of keys or accounts names none.
+Each row under Accounts and keys is one cell like the others: a dot, its
+name, plan and Try now on one line, and under it what is left (or its
+rest) in full (ferock4669 and iyou00 on Discord: many keys ran the list
+on and on). The dot is green for the one in use (of a provider's rows not
+resting, the one that answered last), amber resting, red for what the
+reader has to do (`.act`: sign in again, a restriction or verification, a
+key failing with no answer), grey otherwise. Red is only on `.act` rows:
+a quota rest or old failures are muted (danzi002 on Discord, "显示的好
+乱"). How it fares (tried, answered, failed, last answered) is a line of
+its own only on a row with nothing else to say or one to act on; on the
+others (`.said`) it is in the tooltip with the models it answered, under
+its id. A folded row of keys or accounts names no models. Columns are
+`min(240px, 40vw)` wide, so a name and its Try now share a line
+(`routing-acts-calm.test.cjs`).
 `renderActs` in
 [`plugins/routing/client.js`](../../internal/gui/assets/plugins/routing/client.js)
 shows the first `ACTS_SHOWN` (8) rows of a longer list and puts the rest

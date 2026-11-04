@@ -4440,6 +4440,15 @@ function routingPage(part) {
     // of keys looked through the whole list for its own (#3164)
     const kin = new Map(), kinOf = (w) => w.provider + "\u0000" + w.kind;
     for (const a of list) { const k = kinOf(a.w); kin.has(k) ? kin.get(k).push(a) : kin.set(k, [a]); }
+    // the one in use, a dot of its own: of each provider's not resting,
+    // the one that answered last (danzi002 on Discord: which account is
+    // in use, which are out and when each is back, at a glance)
+    const inUse = new Map();
+    for (const a of list) {
+      if (!a.last || (a.rest && at(a.rest.until) > n)) continue;
+      const u = inUse.get(a.w.provider);
+      if (!u || a.last > u.last) inUse.set(a.w.provider, a);
+    }
     for (const a of list) {
       const w = a.w;
       let opened = false;
@@ -4477,7 +4486,7 @@ function routingPage(part) {
       // a provider's own row: its model, the provider's name is the heading
       if (w.kind === "provider") name.append(el("b", "", w.model || w.name));
       else name.append(el("b", "", who(w)), el("span", "", w.plan || (w.kind === "key" ? t("API key") : "")));
-      let st, cls = "";
+      let st, cls = "", asOf = "";
       const resting = a.rest && at(a.rest.until) > n;
       // its models resting alone, while the account answers its others:
       // a line of their own, naming them, under what the account has left
@@ -4489,7 +4498,10 @@ function routingPage(part) {
       else if (w.known) {
         const soon = usedRenews(w);
         st = soon && soon <= n ? quota(w, "{n} used at {time}; it has renewed since", "{n} left at {time}; it has renewed since", { time: clock(a.at) })
-          : (soon ? quota(w, "{n} used · renews in {d}", "{n} left · renews in {d}", { d: dur(soon - n) }) : quota(w, "{n} used", "{n} left")) + " · " + t("as of {time}", { time: clock(a.at) });
+          : (soon ? quota(w, "{n} used · renews in {d}", "{n} left · renews in {d}", { d: dur(soon - n) }) : quota(w, "{n} used", "{n} left"));
+        // when it was read is on hover: the line says what is left and
+        // when it renews, on one line in every language (danzi002)
+        if (!(soon && soon <= n)) asOf = t("as of {time}", { time: clock(a.at) });
       } else if (w.kind === "account") st = t("what's left not known yet");
       else st = "";
       const tally = el("div", "tally");
@@ -4512,7 +4524,7 @@ function routingPage(part) {
       const ws = day ? [] : [...winsOf(w).map((text) => ({ text })), ...remoteWinsOf(w)];
       const figure = !!st && (resting || w.known || w.unlisted || w.noURL);
       if (resting && restTip(a.rest)) stEl.title = restTip(a.rest);
-      else if (figure && ws.length) stEl.title = ws.map((x) => x.text).join("\n");
+      else if (figure && (ws.length || asOf)) stEl.title = [...ws.map((x) => x.text), asOf].filter(Boolean).join("\n");
       row.append(name, stEl);
       if (parts.length) {
         const r0 = parts[0][1].rest;
@@ -4570,7 +4582,20 @@ function routingPage(part) {
         bar.append(bi);
         row.append(bar);
       }
-      row.title = w.id + (mdls.length ? "\n" + mdls.join(", ") : "");
+      // one cell each, alike (danzi002 on Discord: "显示的好乱"): its
+      // name and a dot for how it is, then one line, what is left or when
+      // it is back, in a quiet colour. Red is for what the reader has to
+      // do: sign in again, a vendor's restriction or verification, a key
+      // failing with no answer. How it fares is that line where it has no
+      // other, and on hover, unless it is the reader's to fix.
+      const act = signIn || (!a.ok && fails.length > 0) || (resting && (a.rest.why === "restricted" || a.rest.why === "verify"));
+      const said = !!st || (ws.length > 0 && !figure);
+      row.classList.toggle("act", act);
+      row.classList.toggle("rest", !act && !!resting);
+      row.classList.toggle("on", !act && inUse.get(w.provider) === a);
+      row.classList.toggle("said", said && !act);
+      name.prepend(el("i", "dot"));
+      row.title = w.id + (mdls.length ? "\n" + mdls.join(", ") : "") + (said && !act ? "\n" + [...tally.children].map((e) => e.textContent).join(" · ") : "");
       put(row, false, opened || signIn || resting || parts.length > 0 || remoteBad || (!a.ok && Object.keys(a.fails).length > 0));
     }
     // a long list shows its first ACTS_SHOWN rows and every one kept in
@@ -4650,7 +4675,10 @@ function routingPage(part) {
       el("span", "ok", t("answered {n}", { n: sum((a) => a.ok) })),
       ...(bad.length ? [el("span", "bad", bad.join(", "))] : []),
       ...(last ? [el("span", "", t("last answered {time}", { time: clock(last) }))] : []));
-    // the models they answered are each one's, opened
+    // the models they answered are each one's, opened. A cell like each
+    // account's: its name, then how many are available and resting; how
+    // they fared together is each one's, on hover
+    row.classList.toggle("said", true);
     const kids = [name, el("div", "st" + (resting === ks.length ? " rest" : ""), st.join(" · ")), tally];
     // drawn again only when what it says changes
     if (kids.length !== row.children.length || kids.some((k, i) => !k.isEqualNode(row.children[i]))) row.replaceChildren(...kids);
