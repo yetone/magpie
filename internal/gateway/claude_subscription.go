@@ -519,8 +519,8 @@ func claudeWorkDir() (string, error) {
 	return dir, nil
 }
 
-// clientWorkDir is the working directory the caller names, the last one
-// it names, as Claude Code ("Primary working directory:", or just "CWD:"
+// clientWorkDir is the working directory the caller names, the first one
+// it names (clientNamedWorkPlace), as Claude Code ("Primary working directory:", or just "CWD:"
 // on a --bare run), Codex (<cwd>), OpenCode ("Working directory:") and pi
 // ("Current working directory:") write it; "" when they name none, or one
 // that isn't an absolute path to a folder on this computer (a caller
@@ -564,8 +564,26 @@ func clientNamedWorkDir(req *Request) string {
 // (Codex's <environment_context> is one of the user's, OpenCode's <env> a
 // later message), and a line quoted from Claude Code's own words — its
 // instructions or a --bare run's "CWD:" — is never one of them.
+//
+// Of the texts that name a folder, the first goes: the one the
+// conversation started in (in that text, its last line). A caller that
+// moves says so in a message after (Claude
+// Code's "# Environment update", "Primary working directory: /y (was
+// /x)"), and taking that one gave a run started again for the
+// conversation (its saved session resumed, a branch, a replay) another
+// system prompt than the conversation's first run: envTurnsNote names the
+// folder, and a run in the caller's own folder has it in Claude Code's own
+// environment and saves its session in that folder's project, so the
+// session wasn't found. The prompt differed right after Claude Code's own
+// part, and the whole conversation was written to the cache again
+// (EricWvi on X: …/frontend, then …/frontend/src). The run has no tools
+// of its own; the move reaches the model in the conversation as the
+// caller said it.
 func clientNamedWorkPlace(req *Request) (dir string, inTurns bool) {
 	look := func(t string, turn bool, re *regexp.Regexp) {
+		if dir != "" {
+			return
+		}
 		for _, m := range re.FindAllStringSubmatch(t, -1) {
 			for _, g := range m[1:] {
 				g = strings.Trim(strings.TrimSpace(g), "`'\"")

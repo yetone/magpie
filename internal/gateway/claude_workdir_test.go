@@ -158,7 +158,7 @@ func TestClaudeWorkDirSymlinkIsAvoided(t *testing.T) {
 // directory, and a model told magpie's own folder wrote the caller's files
 // into it (a pelican.html left in magpie-claude-work), through tools that
 // run in the caller's. Each client's way of saying it is read, the last
-// said counting. The caller's folder keeps sessions of its own, which are
+// said in the first text that says one counting. The caller's folder keeps sessions of its own, which are
 // never swept, and its repository's status is not added to the prompt.
 func TestClaudeRunsInTheCallersWorkDir(t *testing.T) {
 	for _, c := range []struct{ name, said string }{
