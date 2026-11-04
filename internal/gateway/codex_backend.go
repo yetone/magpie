@@ -3463,6 +3463,16 @@ func developerItemsAsSystem(body []byte) []byte {
 
 func userMessage(text string) map[string]any { return codexsummary.UserMessage(text) }
 
+// compactWithin is how long a compaction's summary is waited for before
+// magpie's own goes in its place. Codex hears nothing while the summary is
+// made, and gives up on a stream that says nothing for 300s
+// (stream_idle_timeout_ms; agentQuietMost): a summary later than that is
+// never read, and the local one written after it reached nobody, so Codex
+// sent the same ~3MB history again, each time waiting 300s (#5275,
+// hayden4608: a slow uplink still sending it at 299s). A minute short of
+// it, as agentQuietMost.
+var compactWithin = 4 * time.Minute
+
 // codexCompact compacts a conversation held by a magpie model: the model
 // summarises it, and the summary goes back to Codex as the compaction item
 // the backend would have made, marked as magpie's so magpie reads it back
@@ -3509,6 +3519,22 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 		r = r.Clone(r.Context())
 		r.Header.Set(turnMetadataHeader, turn)
 	}
+	// the summary has compactWithin, Codex hearing nothing meanwhile: past
+	// it, the summary is magpie's own, which Codex still takes (#5275)
+	client := r.Context()
+	budget, stop := context.WithCancelCause(client)
+	timer := time.AfterFunc(compactWithin, func() { stop(sideTimedOut{"compaction summary", compactWithin}) })
+	defer func() {
+		timer.Stop()
+		stop(context.Canceled)
+	}()
+	late := func() bool { _, ok := sideTimeout(budget); return ok }
+	lateSummary := func() string {
+		why := fmt.Sprintf("no summary came in %s, and Codex stops waiting at 5 minutes", compactWithin)
+		log.Printf("codex compaction: %s: %s; compacting locally", model, why)
+		return localSummary(body, why)
+	}
+	r = r.WithContext(budget)
 	r = askWhole(r)
 	r = askCompaction(r)
 	ask := func(b []byte) (*recorder, compactResult, error) {
@@ -3527,7 +3553,10 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 	}
 	rec, res, err := ask(body)
 	local := ""
-	if first := rec.status; lacksEndpoint(first) || itemNotFound(rec) || upstreamFailed(rec) || protectionRefused(first, rec.body.Bytes()) ||
+	if late() {
+		local = lateSummary()
+		rec, res, err = &recorder{header: http.Header{}, status: 200}, compactResult{}, nil
+	} else if first := rec.status; lacksEndpoint(first) || itemNotFound(rec) || upstreamFailed(rec) || protectionRefused(first, rec.body.Bytes()) ||
 		summaryTooLarge(rec) || err != nil && protectionWords.MatchString(err.Error()) {
 		who, msg := compactFailure(body, rec)
 		if err != nil {
@@ -3535,7 +3564,10 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 		}
 		log.Printf("codex compaction: %s answered %d (%s); asking again with the conversation as text", who, first, msg)
 		rec, res, err = ask(plainCompact(body))
-		if rec.status >= 400 || err != nil {
+		if late() {
+			local = lateSummary()
+			rec, res, err = &recorder{header: http.Header{}, status: 200}, compactResult{}, nil
+		} else if rec.status >= 400 || err != nil {
 			again := ""
 			if err != nil {
 				again = "broken off: " + err.Error()
@@ -3634,6 +3666,8 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 		log.Printf("codex compaction: %s wrote no summary%s; asking again with the conversation as text", who, called)
 		prec, pres, perr := ask(plainCompact(body))
 		switch {
+		case late():
+			local = lateSummary()
 		case perr == nil && prec.status < 400 && pres.Status != "incomplete" && strings.TrimSpace(pres.summary()) != "":
 			rec, res = prec, pres
 		default:
@@ -3661,6 +3695,18 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 		why := "the model wrote no summary" + answeredWith(res.Output)
 		s.compactFails.failed(key, http.StatusBadGateway, why)
 		writeError(w, provider.Responses, 502, "compaction: "+why)
+		return
+	}
+	if client.Err() != nil {
+		// Codex left before it was answered: what was made never reaches
+		// it, so the conversation is no shorter and is no success; Codex
+		// asks the same huge summary again (#5275)
+		why := "Codex left before the summary reached it"
+		if local != "" {
+			why += " (magpie's own)"
+		}
+		log.Printf("codex compaction: %s: %s", model, why)
+		s.compactFails.failed(key, 499, why)
 		return
 	}
 	s.compactFails.done(key)
