@@ -804,7 +804,12 @@ func AdaptiveThinking(model string) bool { return adaptiveOnly(model) }
 // are asked the same way as MiniMax Code asks them: a budget alone gave
 // medium to max one budget under an 8192 cap, so the level was lost
 // (shin4 on plugins#316).
-var effortInOutputConfig = regexp.MustCompile(`(?i)glm-5\.[23](?:$|[-.:/\[])|minimax-m3\.1-flash(?:$|[-.:/\[])`)
+//
+// GPT models are asked so too, on whatever Messages endpoint serves them (a
+// relay the user set up): a relay that maps Messages onto OpenAI reads the
+// level from output_config.effort, and a budget alone left every request at
+// its default, medium (zxz8009195489 on Discord, 2026-11-04).
+var effortInOutputConfig = regexp.MustCompile(`(?i)glm-5\.[23](?:$|[-.:/\[])|minimax-m3\.1-flash(?:$|[-.:/\[])|(?:^|[^a-z0-9])gpt-\d`)
 
 // deepseekHost is DeepSeek's own API, whose Anthropic endpoint
 // (api.deepseek.com/anthropic) takes the effort in output_config.
