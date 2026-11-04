@@ -649,6 +649,7 @@ func KeepOnAnAccountWithRoom(ctx context.Context) {
 		syncClaudeProxyEnvNow()
 		c, cancel := context.WithTimeout(ctx, time.Minute)
 		noteCodexUsedUp(CodexUsedUp(c))
+		restartCodexAppLeftOnSpent(c)
 		cancel()
 		// Codex's own sign-in refused for good, or signed in again since
 		noteCodexGoneNow()
@@ -658,6 +659,45 @@ func KeepOnAnAccountWithRoom(ctx context.Context) {
 		t.Reset(min(every, claudeLookEvery))
 	}
 }
+
+// restartCodexAppLeftOnSpent has the Codex app's app-server restarted, as
+// a switch off a used-up account has it (codexAppSwitched spent), when it
+// is still on an account Codex was switched off (CodexAppStale) and that
+// account is now held (codexHeld). magpie's switch back to the first, or to
+// the account Codex is kept signed in to, leaves the app running unless
+// RestartApp is on, and the app-server keeps the account it started on:
+// once that one ran out, the app greyed Send for every model, magpie's and
+// another provider's too, while magpie read only the account Codex is
+// signed in to, which had room, and never restarted it (nb5p on Discord:
+// B first in magpie, the app on A). Once for each app-server left.
+func restartCodexAppLeftOnSpent(ctx context.Context) {
+	was := CodexAppStale()
+	if was == "" {
+		return
+	}
+	codexDaemonMu.Lock()
+	left := codexAppLeft
+	done := left == codexAppLeftRestarted
+	codexDaemonMu.Unlock()
+	if done || !strings.EqualFold(left.user, was) {
+		return
+	}
+	for user, q := range someLoginUsage(ctx, "codex", was) {
+		if !strings.EqualFold(user, was) || q.Error != "" || !q.Held {
+			continue
+		}
+		codexDaemonMu.Lock()
+		codexAppLeftRestarted = left
+		codexDaemonMu.Unlock()
+		log.Printf("codex: the Codex app is still signed in to %s, which is used up; its app-server is restarted once no Codex turn runs, for the app to read the account Codex is signed in to", was)
+		codexAppSwitched(true, false)
+		return
+	}
+}
+
+// codexAppLeftRestarted is the app-server left on an account that
+// restartCodexAppLeftOnSpent last had restarted. codexDaemonMu is held.
+var codexAppLeftRestarted leftDaemon
 
 // firstSignInLook is when KeepOnAnAccountWithRoom first looks. A var so
 // tests can say.
