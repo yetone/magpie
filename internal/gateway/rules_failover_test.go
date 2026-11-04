@@ -60,10 +60,11 @@ func TestHeldRuleFailsOverWithinItsMember(t *testing.T) {
 	if r := send("one", 0, "q1"); order(r) != "q1 q2 f1 f2" {
 		t.Fatalf("turn start: %s", order(r))
 	}
-	// q1 fails in a tool round: q2, coding-quality's other, takes it
+	// q1 fails in a tool round: asked once more, as the turn is kept on
+	// it (keptAgain), then q2, coding-quality's other, takes it
 	k.fail["kq1"] = 500
 	r := send("one", 1, "q2")
-	if strings.Join(k.tried, " ") != "kq1 kq2" || !r.Rule.Held || r.Rule.Unready {
+	if strings.Join(k.tried, " ") != "kq1 kq1 kq2" || !r.Rule.Held || r.Rule.Unready {
 		t.Fatalf("failover: tried %v order %s rule %+v", k.tried, order(r), r.Rule)
 	}
 	// q2 is kept for the turn, q1 back or not: it is of the rule's member
@@ -77,7 +78,7 @@ func TestHeldRuleFailsOverWithinItsMember(t *testing.T) {
 	send("two", 0, "q1")
 	k.fail["kq1"], k.fail["kq2"] = 500, 500
 	send("two", 1, "f1")
-	if strings.Join(k.tried, " ") != "kq1 kq2 kf1" {
+	if strings.Join(k.tried, " ") != "kq1 kq1 kq2 kf1" { // q1, kept, asked once more
 		t.Fatalf("tried %v", k.tried)
 	}
 	// both resting, the turn stays on f1

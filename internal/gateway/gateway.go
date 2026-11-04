@@ -3092,6 +3092,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// the try whose plugin ended the turn on its upstream's stream dying
 	// mid-call (plugins#38), asked again where it stood (cutReasks, #2873)
 	cuts := 0
+	// the conversation's own key or account, kept for what its vendor
+	// cached, asked once more after a moment for a failure that passes
+	// before it moves (keptAgain, jiabubu)
+	keptAsked := false
 	// ended is when the last try's reply ended: the request's ms end there,
 	// not after what magpie writes down of it once it has (#1939: sticks
 	// and the provider's last answer, saved to disk, took seconds on a busy
@@ -4455,6 +4459,30 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				i--
 			}
 			continue
+		}
+		if wait, ok := keptAgain(aff, c, hw, keptAsked); ok && !last && !kept.tooQuiet(wait) {
+			// the one the conversation is kept on, for what its vendor
+			// cached of it, failed a way that passes — overloaded, a 5xx,
+			// timed out, not a rate limit, quota or sign-in: it is asked
+			// once more after a moment, without resting, before the
+			// conversation moves and the next one is sent it all uncached
+			// (jiabubu on Discord: a channel that errs once and is back a
+			// moment later had the conversation moved off it at once)
+			keptAsked = true
+			try.Fail, try.Again = failureOf(c, hw.code(), hw.errBody()), wait.Milliseconds()
+			try.Kept = true
+			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+			skipped = append(skipped, c.label()+": "+call.Error)
+			select {
+			case <-time.After(wait):
+				i--
+				continue
+			case <-r.Context().Done():
+				call.Status, call.Error = canceled(r.Context())
+				try.Gone = true
+				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+			}
+			break
 		}
 		if !last && hw.failed() {
 			if f := failure(hw.code(), hw.errBody()); other == nil && f != failQuota && f != failCredit {

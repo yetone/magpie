@@ -77,7 +77,9 @@ func TestFixedMemberEffort(t *testing.T) {
 	if sent := sentBody(t, b); !strings.Contains(out, "from kb") || sent["model"] != "big" || sent["reasoning_effort"] != "medium" {
 		t.Fatalf("fallback sent %v (%s)", sent, out)
 	}
-	if len(r.Tries) != 2 || r.Tries[0].Fixed != "low" || r.Tries[1].Fixed != "" || r.Tries[1].Effort != "medium" {
+	// the conversation was kept on a for its cache, so a's 500 is asked
+	// of it once more before it moves (keptAgain)
+	if len(r.Tries) != 3 || !r.Tries[0].Kept || r.Tries[0].Fixed != "low" || r.Tries[1].Fixed != "low" || r.Tries[2].Fixed != "" || r.Tries[2].Effort != "medium" {
 		t.Fatalf("fallback traced %+v", r.Tries)
 	}
 }

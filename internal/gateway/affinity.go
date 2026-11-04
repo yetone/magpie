@@ -1379,3 +1379,24 @@ func withoutKinds(body []byte, kinds ...string) ([]byte, bool) {
 	b, err := marshalJSON(q)
 	return b, err == nil
 }
+
+// keptAgain says whether c, having failed through hw, is asked once more
+// after a moment before the request moves on, and how long that moment is:
+// c is the key or account (and model) the conversation was kept on for
+// what its vendor cached of it (aff.Kept: Stays Auto with a warm cache,
+// Session, or within a turn), not asked again so already (asked), and the
+// failure is one that may be gone a moment later (busy: overloaded, a 5xx
+// that says nothing of quota, timed out) and not a rate limit, which rests
+// and moves as before. Moved at once, the next one is sent the whole
+// conversation uncached, and within a turn may refuse the reasoning the
+// first sealed; a moment's wait costs far less. Strict needs none of it:
+// its one is the last left, asked again as the last one is.
+func keptAgain(aff *Affinity, c candidate, hw *holdWriter, asked bool) (time.Duration, bool) {
+	if asked || aff == nil || !aff.Kept || aff.Why == "strict" || c.rest != aff.Last {
+		return 0, false
+	}
+	if !hw.failed() || hw.turnedAway || hw.refused || hw.code() == http.StatusTooManyRequests || !busy(hw.code(), hw.errBody()) {
+		return 0, false
+	}
+	return passing(hw.code(), hw.header, hw.errBody(), 0)
+}

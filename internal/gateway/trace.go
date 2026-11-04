@@ -463,6 +463,10 @@ type Try struct {
 	Error      string `json:"error,omitempty"`
 	Rest       *Rest  `json:"rest,omitempty"`  // how long it now sits out; none when it was the last to try
 	Again      int64  `json:"again,omitempty"` // ms waited before it was tried again, the last one left
+	// Kept: Again was waited though others were left, because the
+	// conversation is kept on this one for what its vendor cached of it,
+	// so it is asked once more before it moves (keptAgain, jiabubu)
+	Kept bool `json:"kept,omitempty"`
 	// Replan: every member had failed in a way that passes, so after
 	// Again the Replan of them that may answer by then were asked again,
 	// in turn, within the group's Patience (seconds) for the request
