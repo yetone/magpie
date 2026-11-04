@@ -144,9 +144,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await rclick(c);
       const menu = page.locator(".pop.row-menu");
       await menu.waitFor();
-      // Test this model, off, and Copy model ID, which is on
+      // Test this model, off, then Copy model ID and image input, which are on
       const items = menu.locator(".rm-item");
-      assert.equal(await items.count(), 2);
+      assert.equal(await items.count(), 3);
       assert(await items.nth(1).isEnabled(), "its id can still be copied");
       const item = items.first();
       assert(await item.isDisabled(), "Test this model is off");
