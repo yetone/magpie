@@ -236,6 +236,9 @@ type crTidy struct {
 	buf   []byte
 	calls map[string]*crDropper // a streamed call's cut escape, by its index or item id
 	texts map[string]*crBytes   // a custom tool's input, by its item id
+	// looked is how many bytes were searched for a line's end or the
+	// escape, what a test bounds by the stream's length (#5282)
+	looked int
 }
 
 func (t *crTidy) write(b []byte) []byte {
@@ -246,6 +249,7 @@ func (t *crTidy) write(b []byte) []byte {
 	old := len(t.buf)
 	t.buf = append(t.buf, b...)
 	// the bytes before these were searched for a line's end when they came
+	t.looked += len(b)
 	i := bytes.LastIndexByte(b, '\n')
 	if i < 0 {
 		return nil
@@ -292,6 +296,7 @@ func (t *crTidy) cut() bool {
 // still has a tail waiting behind it, in whose room an unchanged region
 // would not survive being said from where it lies.
 func (t *crTidy) lines(b []byte, copy bool) []byte {
+	t.looked += len(b)
 	if !bytes.Contains(b, crSeq) && !t.cut() {
 		if copy {
 			return append([]byte(nil), b...)
@@ -332,6 +337,7 @@ func (t *crTidy) lines(b []byte, copy bool) []byte {
 // its event carries gone. A line with none of the escape, and no cut one
 // to answer, goes as it came.
 func (t *crTidy) line(l []byte) ([]byte, bool) {
+	t.looked += len(l)
 	if !bytes.Contains(l, crSeq) && !t.cut() {
 		return l, false
 	}

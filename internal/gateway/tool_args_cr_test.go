@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http/httptest"
 	"strings"
@@ -933,7 +934,11 @@ func TestGLMFlashScope(t *testing.T) {
 // line (a big response.completed) in 32KB reads. Without the escape the
 // line comes back as it came, at a scan's cost; with one, the call it
 // carries is read once and said again. The reads themselves were
-// quadratic once (yetone's review of #4256 measured 2.43s).
+// quadratic once (yetone's review of #4256 measured 2.43s). What is
+// bounded is the work the code controls, the bytes searched and the bytes
+// allocated, each a small multiple of the line's: a wall-clock bar
+// measured the machine, and went red under -race beside heavy shards
+// (16.9s on ubuntu CI, #5282).
 func TestCRTidyTwentyFourMBLine(t *testing.T) {
 	unit := `{"type":"text","text":"hello \"world\" padding "}`
 	rep := (24 << 20) / (len(unit) + 1)
@@ -981,32 +986,43 @@ func TestCRTidyTwentyFourMBLine(t *testing.T) {
 		name string
 		line string
 		want string
+		// times the line's size it may allocate: the held line grows a
+		// quarter at a time (~5x in all), and a mended line is also
+		// decoded into maps and said again (27x, 32x under -race); a
+		// copy of what is held on each read is ~400x
+		room uint64
 	}{
-		{"no escape", big(false), big(false)},
-		{"one call mended", big(true), ""},
+		{"no escape", big(false), big(false), 8},
+		{"one call mended", big(true), "", 40},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			tidy := &crTidy{proto: provider.Responses, sse: true}
+			line := []byte(c.line)
+			outs := make([][]byte, 0, len(line)/(32<<10)+2)
 			start := time.Now()
-			var got []byte
-			for i := 0; i < len(c.line); i += 32 << 10 {
-				j := min(i+32<<10, len(c.line))
-				if out := tidy.write([]byte(c.line[i:j])); out != nil {
-					got = append(got, out...)
+			made := allocated(func() {
+				for i := 0; i < len(line); i += 32 << 10 {
+					if out := tidy.write(line[i:min(i+32<<10, len(line))]); out != nil {
+						outs = append(outs, out)
+					}
 				}
-			}
-			if out := tidy.flush(); out != nil {
-				got = append(got, out...)
-			}
-			elapsed := time.Since(start)
-			t.Logf("24MB line in 32KB reads: %s", elapsed)
-			if c.want == "" {
+				if out := tidy.flush(); out != nil {
+					outs = append(outs, out)
+				}
+			})
+			t.Logf("24MB line in 32KB reads: %s, %d bytes searched, %d allocated", time.Since(start), tidy.looked, made)
+			if got := bytes.Join(outs, nil); c.want == "" {
 				mended(t, string(got))
 			} else if string(got) != c.want {
 				t.Fatal("the line came out other than wanted")
 			}
-			if elapsed > 8*time.Second {
-				t.Fatalf("24MB took %s", elapsed)
+			// a read searched only for its own bytes, the line once
+			// for the escape, and the changed line once more
+			if n := len(line); tidy.looked > 3*n {
+				t.Errorf("a %d-byte line was searched through %d bytes, over 3 times its size", n, tidy.looked)
+			}
+			if n := uint64(len(line)); made > c.room*n {
+				t.Errorf("a %d-byte line allocated %d bytes, over %d times its size", n, made, c.room)
 			}
 		})
 	}
