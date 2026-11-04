@@ -1103,8 +1103,18 @@ function freshKey(provider) {
   }
 }
 
-function inScope(provider, key, fn) {
-  return scope.run({ provider, key }, fn)
+// inScope runs fn for provider's account key. had is whether the account
+// was signed in as fn began: a hook's auth.set for one signed out while it
+// ran (a models list spending a rotating token) doesn't sign it in again.
+// A sign-in's steps (signIn) save whatever they are given.
+function inScope(provider, key, fn, signIn = false) {
+  let had = false
+  if (!signIn) {
+    try {
+      had = key in readAuth()
+    } catch {}
+  }
+  return scope.run({ provider, key, had }, fn)
 }
 
 function whoOf(a) {
@@ -1197,7 +1207,11 @@ function makeClient() {
           // tokens over the old; nothing is merged. It goes to the
           // account the request is for.
           const key = keyFor(id)
+          const s = scope.getStore()
+          const had = s?.provider === id && s.had
           const kept = await changeAuth((all) => {
+            // signed out while the hook ran: it stays signed out
+            if (had && !(key in all)) return false
             if (JSON.stringify(all[key]) === JSON.stringify(body)) return false
             all[key] = body
           })
@@ -2478,7 +2492,7 @@ function abortedSignIn() {
 // signingIn runs a plugin's sign-in step fn for key under proxy and
 // signal; it ends when signal aborts, whether fn does or not.
 function signingIn(signal, proxy, provider, key, fn) {
-  const step = via.run(proxy, () => inScope(provider, key, () => signInSignal.run(signal, fn)))
+  const step = via.run(proxy, () => inScope(provider, key, () => signInSignal.run(signal, fn), true))
   return signal ? bounded(Promise.resolve(step), signal) : step
 }
 

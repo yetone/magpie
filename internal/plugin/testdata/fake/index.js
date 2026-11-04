@@ -370,6 +370,14 @@ export const FakePlugin = async ({ client }) => ({
       // the vendor unreachable: the list kept, as Zed's plugin keeps it
       if (auth?.refresh === "r-unreachable") await fetch("http://127.0.0.1:9/models").catch(() => {})
       if (auth?.type === "oauth" && auth.refresh?.startsWith("rot-")) {
+        // $FAKE_MODELS_HOLD: say the hook came ($FAKE_MODELS_HOLD.in), and
+        // spend the token only once that file is there
+        const hold = process.env.FAKE_MODELS_HOLD
+        if (hold) {
+          const fs = await import("node:fs")
+          fs.writeFileSync(hold + ".in", "")
+          while (!fs.existsSync(hold)) await new Promise((r) => setTimeout(r, 10))
+        }
         await client.auth.set({ path: { id: ID }, body: { ...auth, refresh: auth.refresh + "+" } })
       }
       // fake-1 costs the plan nothing, as a WorkBuddy model of x0.00
