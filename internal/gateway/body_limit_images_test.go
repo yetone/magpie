@@ -139,6 +139,10 @@ func TestCodexGeneratedImagesPastOldLimit(t *testing.T) {
 		t.Skip("allocates a few GB")
 	}
 	codexMemory(t, 16<<30)
+	// a 516MB turn is scanned and parsed a few times before routing, which
+	// takes ~3s without -race and ~15s to 34s under it on a loaded box
+	// (#5281): the cut stays for a real build
+	largeBodyRoom(t)
 	setup(t, provider.Chat, &fake{t: t})
 	var got atomic.Int64
 	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
