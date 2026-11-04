@@ -159,6 +159,7 @@ var cliForRoute = map[string]string{
 	"POST /api/usage/workbuddy-checkin":    "magpie accounts checkin",
 	"GET /api/update":                      "magpie update check",
 	"POST /api/update/check":               "magpie update check",
+	"POST /api/settings/agent-compact":     "magpie model compact",
 	"POST /api/update/install":             "magpie update",
 }
 

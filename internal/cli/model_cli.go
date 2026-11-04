@@ -102,6 +102,9 @@ const modelUsage = `usage:
                                                  settings on the Agents page,
                                                  is the same switch; a provider's own Compact at (its
                                                  editor) comes before it
+  magpie model compact <agent> [every|off|<size>] codex, claude or grok's own Long conversations: every
+                                                 follows the one above; off runs to the whole window; a
+                                                 size compacts there
 
   Each is looked for in this order: this model, then <provider id>/*, then the provider's own
   list, then models.dev. --reset removes only the first, and says so when a <provider id>/* value
@@ -702,6 +705,9 @@ func modelSuffix(args []string) error {
 // sets it: off is the app's Full window, every model run to its whole
 // window; a size is compacting there (#876).
 func modelCompact(args []string) error {
+	if len(args) > 0 && slices.Contains(settings.CompactAgents, args[0]) {
+		return agentCompact(args[0], args[1:])
+	}
 	if len(args) == 0 {
 		if s := settings.Load(); s.FullContext {
 			fmt.Println("off", muted.Render("· Codex, Claude Code and Grok Build run a conversation to the model's whole window · magpie model compact on"))
@@ -735,6 +741,49 @@ func modelCompact(args []string) error {
 		fmt.Println(green.Render("✓"), fmt.Sprintf("Codex, Claude Code and Grok Build compact at %dK again", settings.Load().Compact()/1000))
 	}
 	return nil
+}
+
+// agentCompact says or sets an agent's own Long conversations
+// (settings.AgentCompacts): every follows the one above for every agent,
+// off runs to the whole window, a size compacts there.
+func agentCompact(agent string, args []string) error {
+	if len(args) == 0 {
+		s := settings.Load()
+		own, has := s.AgentCompacts[agent]
+		switch a := s.ForAgent(agent); {
+		case !has:
+			fmt.Println("every", muted.Render(fmt.Sprintf("· %s follows every agent's (%s) · magpie model compact %s <size>|off", agent, compactWords(a), agent)))
+		case own.Full:
+			fmt.Println("off", muted.Render(fmt.Sprintf("· %s runs a conversation to the model's whole window · magpie model compact %s every", agent, agent)))
+		default:
+			fmt.Println(fmt.Sprintf("%dK", a.Compact()/1000), muted.Render(fmt.Sprintf("· %s's own · magpie model compact %s every", agent, agent)))
+		}
+		return nil
+	}
+	var c *settings.AgentCompact
+	switch strings.ToLower(args[0]) {
+	case "every", "all", "default":
+	case "off", "no", "false", "full":
+		c = &settings.AgentCompact{Full: true}
+	default:
+		n, err := provider.ParseTokens(args[0])
+		if err != nil || n <= 0 {
+			return fmt.Errorf("magpie model compact %s every|off|<size such as 500k>, not %q", agent, args[0])
+		}
+		c = &settings.AgentCompact{At: n}
+	}
+	if err := provider.SetAgentCompact(agent, c); err != nil {
+		return err
+	}
+	fmt.Println(green.Render("✓"), agent+":", compactWords(settings.Load().ForAgent(agent)))
+	return nil
+}
+
+func compactWords(s settings.Settings) string {
+	if s.FullContext {
+		return "the model's whole window"
+	}
+	return fmt.Sprintf("compacts at %dK on a longer window", s.Compact()/1000)
 }
 
 func modelNames() error {
