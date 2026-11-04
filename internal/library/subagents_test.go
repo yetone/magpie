@@ -203,3 +203,72 @@ func TestSubagentCheck(t *testing.T) {
 		}
 	}
 }
+
+// A subagent's model (luckymanjc on Discord: a routing group set for a
+// subagent, which Codex ran on its lead's model) goes into Codex's role
+// file, whose model Codex lays over the lead's pick; no other agent's file
+// is written one, and the page is told only Codex takes it. Changed in the
+// library, the role file magpie wrote changes with it; taken away, the
+// role is as one written without a model.
+func TestSubagentModelGoesToCodex(t *testing.T) {
+	h := sandbox(t)
+	files := subagentAgents(t, h)
+	s := reviewer
+	for id := range files {
+		s.Agents = append(s.Agents, id)
+	}
+	ok(t)(SaveSubagent("", s))
+	plain := map[string]string{}
+	for id, f := range files {
+		plain[id] = read(t, f)
+	}
+	role := func() map[string]any {
+		t.Helper()
+		var r map[string]any
+		if err := toml.Unmarshal([]byte(read(t, files["codex"])), &r); err != nil {
+			t.Fatalf("codex role: %v\n%s", err, read(t, files["codex"]))
+		}
+		return r
+	}
+
+	s.Model = " group/review "
+	ok(t)(SaveSubagent("reviewer", s))
+	if r := role(); r["model"] != "group/review" || r["developer_instructions"] != "You review code.\n\nReport bugs only.\n" || len(r) != 4 {
+		t.Errorf("codex role with a model: %#v", r)
+	}
+	for id, f := range files {
+		if id != "codex" && read(t, f) != plain[id] {
+			t.Errorf("%s's file changed with the model:\n%s", id, read(t, f))
+		}
+	}
+	v, err := Read(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Subagents[0].Model != "group/review" {
+		t.Errorf("view's model: %q", v.Subagents[0].Model)
+	}
+	for _, av := range v.SubagentAgents {
+		if av.Model != (av.ID == "codex") {
+			t.Errorf("agent view %+v", av)
+		}
+	}
+
+	s.Model = "gpt-6-sol"
+	ok(t)(SaveSubagent("reviewer", s))
+	if r := role(); r["model"] != "gpt-6-sol" {
+		t.Errorf("codex role after the model changed: %#v", r)
+	}
+	s.Model = ""
+	ok(t)(SaveSubagent("reviewer", s))
+	if got := read(t, files["codex"]); got != plain["codex"] {
+		t.Errorf("codex role with the model taken away:\n%s\nwant:\n%s", got, plain["codex"])
+	}
+
+	for _, m := range []string{"group/a b", "x\ny", strings.Repeat("m", 201)} {
+		s.Model = m
+		if _, err := SaveSubagent("reviewer", s); err == nil {
+			t.Errorf("model %q saved", m)
+		}
+	}
+}

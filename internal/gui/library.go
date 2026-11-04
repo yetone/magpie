@@ -14,6 +14,7 @@ import (
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/library"
 	"github.com/yetone/magpie/internal/mcpauth"
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -31,6 +32,36 @@ type libraryJSON struct {
 	// Problems are every one still standing, the page's list of what an
 	// agent couldn't be given: not only those a chip can carry
 	Problems []library.Problem `json:"problems,omitempty"`
+	// SubagentModels are what a subagent's model may be set to: the models
+	// and routing groups Codex's lists show, the only agent that takes one
+	// (library.Subagent.Model). CodexSubagentModel is the model the
+	// gateway puts every Codex subagent on when set on the Agents page,
+	// which a subagent's own then gives way to.
+	SubagentModels     []subagentModel `json:"subagentModels"`
+	CodexSubagentModel string          `json:"codexSubagentModel,omitempty"`
+}
+
+// subagentModel is a model a subagent may be set to run on.
+type subagentModel struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Note  string `json:"note,omitempty"`
+	Group bool   `json:"group,omitempty"`
+}
+
+func subagentModels() []subagentModel {
+	out := []subagentModel{}
+	for _, e := range provider.CodexSubagentModels() {
+		m := subagentModel{ID: e.ID, Name: e.Name, Note: e.Provider.Name, Group: e.Group != ""}
+		if a := e.Provider.Account; a != nil && a.User != "" {
+			m.Note = a.User
+		}
+		if m.Group {
+			m.Note = ""
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 func libraryView(res *library.Result) (libraryJSON, error) { return libraryRead(res, false) }
@@ -51,7 +82,8 @@ func libraryRead(res *library.Result, glance bool) (libraryJSON, error) {
 	}
 	v, err := read(p)
 	home, _ := os.UserHomeDir()
-	return libraryJSON{View: v, Result: res, Home: home, Problems: p}, err
+	return libraryJSON{View: v, Result: res, Home: home, Problems: p,
+		SubagentModels: subagentModels(), CodexSubagentModel: provider.CodexSubagentModel()}, err
 }
 
 // instructionsJSON answers a change to the instructions: what the page's
