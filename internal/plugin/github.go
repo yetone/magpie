@@ -49,6 +49,12 @@ type Tagged struct {
 	// its package.json's magpie.icon, as an installed plugin gives its
 	// provider one: an https URL or a data:image URI, as it is written
 	Icon string `json:"icon,omitempty"`
+	// Name and Summary are what its own package.json says it is
+	// (magpie.name, magpie.summary): its card shows them as the package's
+	// own words, never as reviewed, and they never resolve a name (#3608).
+	// npm's copy says them when the card installs from npm.
+	Name    string            `json:"name,omitempty"`
+	Summary map[string]string `json:"summary,omitempty"`
 }
 
 // Where GitHub is asked, moved by tests.
@@ -427,7 +433,10 @@ func readTagged(pc context.Context, t Tagged, branch string) (Tagged, bool, bool
 			Agent      string `json:"agent"`
 			Hooks      string `json:"hooks"`
 			Icon       string `json:"icon"`
-			Page       struct {
+			Name       string `json:"name"`
+			// a map of language to sentence, anything else read as none
+			Summary json.RawMessage `json:"summary"`
+			Page    struct {
 				File string `json:"file"`
 			} `json:"page"`
 		} `json:"magpie"`
@@ -447,6 +456,9 @@ func readTagged(pc context.Context, t Tagged, branch string) (Tagged, bool, bool
 	// a picture, as host.js's iconOf takes one: magpie checks and
 	// keeps it before the page shows it (the GUI's /api/plugins/github)
 	t.Icon = ownIcon(pj.Magpie.Icon)
+	// and what it says of itself, shown on its card as its own words
+	// rather than the community's (#3608)
+	t.Name, t.Summary = ownName(pj.Magpie.Name), ownSummary(pj.Magpie.Summary)
 	if pj.Main == "" && len(pj.Exports) == 0 {
 		switch {
 		case strings.TrimSpace(pj.Magpie.Middleware) != "":
@@ -478,6 +490,14 @@ func readTagged(pc context.Context, t Tagged, branch string) (Tagged, bool, bool
 		var l npmLatest
 		if json.Unmarshal(b, &l) == nil && l.Version != "" && strings.EqualFold(githubRepo(repoURL(l.Repository)), t.Repo) {
 			t.Spec, t.Version = pj.Name, l.Version
+			// the copy installed says what it is: its words when it
+			// says any, else the repository's
+			if n := ownName(l.Magpie.Name); n != "" {
+				t.Name = n
+			}
+			if s := ownSummary(l.Magpie.Summary); s != nil {
+				t.Summary = s
+			}
 			npmNames = l.Main != "" || len(l.Exports) > 0
 		}
 	}

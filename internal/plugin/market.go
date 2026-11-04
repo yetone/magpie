@@ -432,7 +432,9 @@ type npmLatest struct {
 		Name string `json:"name"`
 	} `json:"_npmUser"`
 	Magpie struct {
-		Icon string `json:"icon"`
+		Icon    string          `json:"icon"`
+		Name    string          `json:"name"`
+		Summary json.RawMessage `json:"summary"`
 	} `json:"magpie"`
 }
 
@@ -803,6 +805,42 @@ func ownName(said string) string {
 		}
 	}
 	return n
+}
+
+// ownSummary is what a package.json's magpie.summary says of the package,
+// by language ("en", "zh"), as its card shows it (#3608): a sentence a
+// language, trimmed, of at most 300 bytes on one line, with nothing that
+// could make it read as other text (control or format characters, a bidi
+// override); a language that says anything else is left out, and nil is
+// none. Not an object of strings at all is none too, never a failed read
+// of the whole package.json.
+func ownSummary(raw json.RawMessage) map[string]string {
+	var said map[string]any
+	if len(raw) == 0 || json.Unmarshal(raw, &said) != nil {
+		return nil
+	}
+	out := map[string]string{}
+	for lang, v := range said {
+		s, ok := v.(string)
+		l, t := strings.TrimSpace(lang), strings.TrimSpace(s)
+		if !ok || l == "" || len(l) > 12 || t == "" || len(t) > 300 || !utf8.ValidString(t) || !utf8.ValidString(l) {
+			continue
+		}
+		bad := false
+		for _, r := range l + t {
+			if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+				bad = true
+				break
+			}
+		}
+		if !bad {
+			out[l] = t
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // Upgrade installs the newest version of one plugin: npm's, or its git

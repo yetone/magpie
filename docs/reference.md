@@ -1135,6 +1135,15 @@ OpenCode ignores:
   ASCII, so this is where a name like 华为云 HUAWEI goes. One line of at
   most 80 bytes; anything else is ignored. It is the package's own word:
   never shown as reviewed, and never used to find a plugin by name.
+  A repository tagged `magpie-plugin` shows it on its card under Discover
+  → Unofficial, on GitHub too, in place of the repository's name (npm's
+  copy of the package says it when the card installs from npm).
+- **What the plugin is**: `"magpie": { "summary": { "en": "…", "zh": "…" } }`
+  is its card's line under Discover → Unofficial, on GitHub, in the window's
+  language (zh-TW reads `zh`), else in English, else GitHub's description.
+  A sentence a language: one line of at most 300 bytes, a language code of
+  at most 12; anything else is ignored. A card that shows a name or a
+  summary of the package's own says "Its own words": nobody reviewed them.
 - **An API key's field**: a `type: "api"` method's `label` titles the key's
   field, as OpenCode's dialog does (one that only says "API key" reads
   "<provider> API key"), and its `placeholder` is the hint inside the field

@@ -268,7 +268,8 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
     <div class="table-wrap"><table>
       <tr><th>字段</th><th>含义</th></tr>
       <tr><td><code>magpie.icon</code></td><td>插件自己的图标，用在「发现」里的卡片（从 npm 读取，GitHub 上的插件从仓库读取）和「已安装」里的那一行；没有自己图标的供应商也用它：<code>https://</code> 地址或 <code>data:image/…</code> URI，最大 1 MB，SVG、PNG 等都行。</td></tr>
-      <tr><td><code>magpie.name</code></td><td>插件在「已安装」里那一行的名字；它的页面没写标题时，也是侧边栏标签的名字。只对社区列表没收录的插件有效（列表里的名字优先）。npm 包名只能是 ASCII，所以「华为云 HUAWEI」这样的名字写在这里。一行，最多 80 字节，否则忽略。它只是包自己的说法：不会显示为已审核，也不会用来按名字查找插件。</td></tr>
+      <tr><td><code>magpie.name</code></td><td>插件在「已安装」里那一行的名字；它的页面没写标题时，也是侧边栏标签的名字。只对社区列表没收录的插件有效（列表里的名字优先）。npm 包名只能是 ASCII，所以「华为云 HUAWEI」这样的名字写在这里。一行，最多 80 字节，否则忽略。它只是包自己的说法：不会显示为已审核，也不会用来按名字查找插件。打了 <code>magpie-plugin</code> 标签的仓库，在「发现 → 非官方插件 · GitHub」的卡片上也用它代替仓库名。</td></tr>
+      <tr><td><code>magpie.summary</code></td><td>「发现 → 非官方插件 · GitHub」卡片上的那行简介，按语言写：<code>{ "en": "…", "zh": "…" }</code>。按窗口语言显示（繁体中文读 <code>zh</code>），没有就用英文，再没有就用 GitHub 的仓库描述。每种语言一行，最多 300 字节，否则忽略。卡片上的名字或简介来自包自己时，会标「包自己的话」：没有人审阅过。</td></tr>
       <tr><td><code>magpie.maxConcurrency</code></td><td>每个账号同时接多少个请求，1 到 1000 的整数。用户在供应商上设置的上限优先。</td></tr>
     </table></div>
     <p>同样的字段也可以写在 <code>auth</code> 钩子上（<code>auth.icon</code>、<code>auth.maxConcurrency</code>），优先于 <code>package.json</code>。一个插件登录多个供应商时，可以给每个供应商各写一个 <code>auth.icon</code>，<code>magpie.icon</code> 留给插件本身。</p>

@@ -268,7 +268,8 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
     <div class="table-wrap"><table>
       <tr><th>フィールド</th><th>意味</th></tr>
       <tr><td><code>magpie.icon</code></td><td>プラグイン自身の画像。「発見」のカード（npm から、GitHub のものはリポジトリから読み込み）と「インストール済み」の行に表示され、自分の画像を持たないプロバイダにも使われます：<code>https://</code> URL または <code>data:image/…</code> URI、最大 1 MB。SVG、PNG など。</td></tr>
-      <tr><td><code>magpie.name</code></td><td>「インストール済み」の行に表示されるプラグインの名前。ページがタイトルを持たないときはサイドバーのタブ名にもなります。コミュニティのリストに載っていないプラグインだけに効きます（リストの名前が優先）。npm のパッケージ名は ASCII に限られるので、「华为云 HUAWEI」のような名前はここに書きます。1 行、最大 80 バイト。それ以外は無視されます。パッケージ自身の言葉として扱われ、レビュー済みとは表示されず、名前でプラグインを探すのにも使われません。</td></tr>
+      <tr><td><code>magpie.name</code></td><td>「インストール済み」の行に表示されるプラグインの名前。ページがタイトルを持たないときはサイドバーのタブ名にもなります。コミュニティのリストに載っていないプラグインだけに効きます（リストの名前が優先）。npm のパッケージ名は ASCII に限られるので、「华为云 HUAWEI」のような名前はここに書きます。1 行、最大 80 バイト。それ以外は無視されます。パッケージ自身の言葉として扱われ、レビュー済みとは表示されず、名前でプラグインを探すのにも使われません。<code>magpie-plugin</code> タグの付いたリポジトリでは、「発見 → 非公式 · GitHub」のカードでもリポジトリ名の代わりに表示されます。</td></tr>
+      <tr><td><code>magpie.summary</code></td><td>「発見 → 非公式 · GitHub」のカードの説明文。言語ごとに <code>{ "en": "…", "zh": "…" }</code> と書きます。ウィンドウの言語で表示され（繁体字中国語は <code>zh</code>）、なければ英語、それもなければ GitHub の説明です。1 言語 1 行、最大 300 バイト。それ以外は無視されます。名前や説明がパッケージ自身のものであるカードには「パッケージ自身の言葉」と表示されます。誰も審査していません。</td></tr>
       <tr><td><code>magpie.maxConcurrency</code></td><td>各アカウントが同時に受けるリクエスト数。1 から 1000 の整数。ユーザーがプロバイダに設定した上限が優先されます。</td></tr>
     </table></div>
     <p>同じフィールドは <code>auth</code> フックにも設定でき（<code>auth.icon</code>、<code>auth.maxConcurrency</code>）、そちらが <code>package.json</code> より優先されます。複数のプロバイダにサインインするプラグインは、プロバイダごとに <code>auth.icon</code> を設定し、<code>magpie.icon</code> をプラグイン自身のものにできます。</p>
