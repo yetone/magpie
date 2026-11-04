@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -310,6 +311,72 @@ func TestLastOneLeftIsTriedAgain(t *testing.T) {
 	scriptedOn(t, "a", provider.Chat, a)
 	if code, _ := postAs(t, New(), "", `{"model":"a/m","messages":[{"role":"user","content":"hi"}]}`); code != 400 || a.n != 1 {
 		t.Fatalf("a request at fault: %d after %d tries", code, a.n)
+	}
+}
+
+// A relay behind Cloudflare that answers with one of Cloudflare's own
+// errors now and then (vdaoren on Discord: an API-key provider's 5xx
+// reached the agent) is asked again as for a 502 or 503, before anything
+// is sent to the agent: 520 to 524, as Cloudflare words them to an API
+// client and to a browser. A sign-in refused or a request the vendor
+// turns away is still the agent's after one try.
+func TestCloudflareErrorIsTriedAgain(t *testing.T) {
+	page := func(code int, what string) string {
+		return fmt.Sprintf(`<!DOCTYPE html>
+<html class="no-js" lang="en-US"> <head>
+<title>relay.example.com | %d: %s</title>
+<meta charset="UTF-8" />
+</head><body><div id="cf-wrapper"><h1><span class="inline-block">%s</span> <span class="code-label">Error code %d</span></h1>
+<span>Cloudflare Ray ID: <strong class="font-semibold">8f1e2d3c4b5a6978</strong></span></div></body></html>`, code, what, what, code)
+	}
+	for _, x := range []struct {
+		name  string
+		first reply
+	}{
+		{"520 plain", reply{520, "text/plain; charset=UTF-8", "error code: 520"}},
+		{"521 plain", reply{521, "text/plain; charset=UTF-8", "error code: 521"}},
+		{"522 page", reply{522, "text/html; charset=UTF-8", page(522, "Connection timed out")}},
+		{"523 plain", reply{523, "text/plain; charset=UTF-8", "error code: 523"}},
+		{"524 page", reply{524, "text/html; charset=UTF-8", page(524, "A timeout occurred")}},
+	} {
+		fresh(t)
+		a := &scripted{replies: []reply{x.first, x.first, {200, "", chatOK}}}
+		scriptedOn(t, "a", provider.Chat, a)
+		s := New()
+		code, body := postAs(t, s, "", `{"model":"a/m","messages":[{"role":"user","content":"hi"}]}`)
+		if code != 200 || !strings.Contains(body, "hello") || a.n != 3 {
+			t.Errorf("%s: %d after %d tries: %s", x.name, code, a.n, body)
+			continue
+		}
+		r := s.trace.routes[len(s.trace.routes)-1]
+		if len(r.Tries) != 3 || r.Tries[0].Again == 0 || r.Tries[1].Again == 0 {
+			t.Errorf("%s: tries %+v", x.name, r.Tries)
+		}
+	}
+
+	// a stream: the agent is sent nothing of the failed tries, only the
+	// reply that came
+	fresh(t)
+	good := "data: {\"id\":\"ok\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hello\"},\"finish_reason\":null}]}\n\n" +
+		"data: {\"id\":\"ok\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"
+	a := &scripted{replies: []reply{{524, "text/html; charset=UTF-8", page(524, "A timeout occurred")}, {200, "text/event-stream", good}}}
+	scriptedOn(t, "a", provider.Chat, a)
+	code, body := postAs(t, New(), "", `{"model":"a/m","stream":true,"messages":[{"role":"user","content":"hi"}]}`)
+	if code != 200 || !strings.Contains(body, "hello") || strings.Contains(body, "524") || strings.Contains(body, "timeout") || a.n != 2 {
+		t.Errorf("stream: %d after %d tries: %s", code, a.n, body)
+	}
+
+	// what fails the same however often it is asked is the agent's at once
+	for _, x := range []reply{
+		{401, "", `{"error":{"message":"Invalid API key","type":"invalid_request_error","code":"invalid_api_key"}}`},
+		{400, "", `{"error":{"message":"Your request was rejected as a result of our safety system.","type":"invalid_request_error","code":"content_policy_violation"}}`},
+	} {
+		fresh(t)
+		a := &scripted{replies: []reply{x, {200, "", chatOK}}}
+		scriptedOn(t, "a", provider.Chat, a)
+		if code, body := postAs(t, New(), "", `{"model":"a/m","messages":[{"role":"user","content":"hi"}]}`); code != x.code || a.n != 1 {
+			t.Errorf("%d: %d after %d tries: %s", x.code, code, a.n, body)
+		}
 	}
 }
 

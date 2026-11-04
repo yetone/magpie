@@ -65,12 +65,28 @@ type busyTry struct {
 // 502, or an upstream that answered a stream request with a whole reply
 // (didNotStream) isn't: each fails the same however often it is asked.
 func busy(status int, body []byte) bool {
-	switch status {
-	case 408, 500, 502, 503, 504, 529:
+	switch {
+	case busyStatus(status):
 		return failure(status, body) == failOther && !protectionRefused(status, body) &&
 			!bytes.Contains(body, []byte(didNotStream))
-	case 429:
+	case status == 429:
 		return failure(status, body) == failRate && !creditWords.Match(wordsOf(body)) && !walled(body)
+	}
+	return false
+}
+
+// busyStatus says whether an error status is one a vendor or the relay in
+// front of it gives for a moment's trouble: a timeout, an internal error,
+// a gateway or the service unavailable, Anthropic's 529 overloaded, and
+// Cloudflare's 520 to 524 (the origin gave an unknown error, is down,
+// timed out, unreachable, or slow to answer), which a relay behind
+// Cloudflare answers with now and then (vdaoren on Discord: an API-key
+// provider's 4xx/5xx went straight to the agent). The same-one retries
+// (passing) and the patience's rounds (busy) both read it.
+func busyStatus(status int) bool {
+	switch status {
+	case 408, 500, 502, 503, 504, 529, 520, 521, 522, 523, 524:
+		return true
 	}
 	return false
 }
