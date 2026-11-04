@@ -4276,6 +4276,20 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		// nor is it asked again after a moment
 		protected = protected || zdr || noRoom
+		if !hw.passing && !hw.refused && hw.failed() && riskRefused(c, hw.code(), hw.header, hw.errBody()) {
+			// the vendor's risk control restricted the account (WorkBuddy's
+			// 403 11140, ZCode's 3012): its risk control reads the same
+			// request on whichever account it comes from, so none of the
+			// provider's other accounts is sent it, now or in a later
+			// round of this request (_teamtaylor_ on Discord: one request
+			// sent on from account to account got each restricted in
+			// turn, until its tries ran out). It rests as restricted;
+			// another provider left is asked, else the agent is told
+			cands = append(cands[:i+1:i+1], elsewhere(cands[i+1:], c)...)
+			busyNow = slices.DeleteFunc(busyNow, func(b busyTry) bool { return b.c.p.ID == c.p.ID })
+			small, smallW = elsewhereWeighed(small, smallW, c)
+			last = i == len(cands)-1
+		}
 		if wait, ok := passing(hw.code(), hw.header, hw.errBody(), again); ok && !protected && !last && hw.failed() && spentAfter(cands[i+1:]) {
 			// the others left are out of their allowance (Discord, waroy: a
 			// Codex account run out, Grok busy a moment): this one is the
@@ -4798,7 +4812,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				// (offline.go): told so, and it doesn't rest
 				try.Fail = failOffline
 			}
-			if try.Fail == failVerify && !held || strictAlone {
+			// and one its vendor restricted (riskRefused), for the next
+			// request not to be sent to it again
+			if (try.Fail == failVerify || try.Fail == failRestricted) && !held || strictAlone {
 				// the last one left rests too, for the app to show and the
 				// next requests to be held
 				rest := s.restAfter(c, call.Status, hw.header, []byte(call.Error))

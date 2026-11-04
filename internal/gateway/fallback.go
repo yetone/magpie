@@ -1757,6 +1757,41 @@ func elsewhere(left []candidate, c candidate) []candidate {
 	return out
 }
 
+// riskRefused says c's vendor refused it for the account's safety — its
+// risk control restricted or blocked the account (failRestricted:
+// WorkBuddy's 11140, ZCode's 3012, or any plugin's refusal ending in
+// provider.WBRestrictedHint or provider.ZCodeRestrictedHint) — rather
+// than for quota or a passing fault. A vendor's risk control reads the
+// request as well as the account, so the same request sent on to another
+// of its accounts trips it there too. Another computer's magpie that
+// says so (remoteModelRest) speaks for one account of its own, and its
+// other models may be other vendors: it walls off nothing here.
+func riskRefused(c candidate, status int, header http.Header, body []byte) bool {
+	return failureOf(c, status, body) == failRestricted && !remoteModelRest(c, failRestricted, header)
+}
+
+// elsewhereWeighed is elsewhere on a list of candidates beside their
+// weights (roomy's left out as too small), the two kept paired: weights
+// that don't pair with the list are kept as they are.
+func elsewhereWeighed(left []candidate, w []Weighed, c candidate) ([]candidate, []Weighed) {
+	paired := len(w) == len(left)
+	var out []candidate
+	var outW []Weighed
+	for k, x := range left {
+		if x.p.ID == c.p.ID {
+			continue
+		}
+		out = append(out, x)
+		if paired {
+			outW = append(outW, w[k])
+		}
+	}
+	if !paired {
+		outW = w
+	}
+	return out, outW
+}
+
 // retryable says whether another provider may do better with a request
 // that failed this way: the vendor was busy, out of quota or failing, or
 // this key or provider can't serve it — not the request itself at fault.

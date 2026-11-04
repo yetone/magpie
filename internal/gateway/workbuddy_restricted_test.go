@@ -119,11 +119,14 @@ func TestOnlyWorkBuddyRestrictedRestsAsRestricted(t *testing.T) {
 }
 
 // Through a plugin, as the moved WorkBuddy is served: an account whose
-// answer is the plugin's restricted refusal rests two hours and the next
-// account answers, on this request and on the ones after it, which don't
-// ask the restricted one again (before #1849 it was back within minutes
-// and asked by every request). The same vendor's raw 11140 from a plugin
-// that isn't WorkBuddy's (fakeco) rests as any failure does.
+// answer is the plugin's restricted refusal rests two hours, and the
+// request it refused isn't sent on to the provider's other account: the
+// vendor's risk control reads the request too, and restricted each account
+// it was sent on to in turn (_teamtaylor_ on Discord). The agent is told;
+// the next request goes to the other account, never the restricted one
+// (before #1849 it was back within minutes and asked by every request).
+// The same vendor's raw 11140 from a plugin that isn't WorkBuddy's
+// (fakeco) rests as any failure does, and the next account answers it.
 func TestPluginRestrictedAccountSkipped(t *testing.T) {
 	bun := testenv.Bun(t)
 	for _, tc := range []struct {
@@ -182,12 +185,17 @@ func TestPluginRestrictedAccountSkipped(t *testing.T) {
 			}
 			s := New()
 			code, body := postAs(t, s, "", `{"model":"fakeco/fake-1","messages":[{"role":"user","content":"hi"}]}`)
-			if code != 200 || !strings.Contains(body, "from b") {
-				t.Fatalf("%d %s", code, body)
-			}
 			r := s.trace.routes[len(s.trace.routes)-1]
-			if len(r.Tries) != 2 {
-				t.Fatalf("tries %+v", r.Tries)
+			mu.Lock()
+			first := strings.Join(tried, ",")
+			mu.Unlock()
+			if tc.why == failRestricted {
+				// the agent is told, and b never sent the request
+				if code != http.StatusForbidden || !strings.Contains(body, provider.WBRestrictedHint) || first != "a" || len(r.Tries) != 1 {
+					t.Fatalf("%d %s; asked %s; tries %+v", code, body, first, r.Tries)
+				}
+			} else if code != 200 || !strings.Contains(body, "from b") || len(r.Tries) != 2 {
+				t.Fatalf("%d %s; tries %+v", code, body, r.Tries)
 			}
 			f := r.Tries[0]
 			if f.Fail != tc.why || f.Rest == nil || f.Rest.Why != tc.why {
