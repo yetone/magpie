@@ -545,6 +545,49 @@ func TestPluginCheckinQoderRechecksCampaigns(t *testing.T) {
 	}
 }
 
+// plugins#503 (MiniFullC): a ZCode account whose claim asked for the
+// app's captcha was asked again every 30 minutes, the claim posted and
+// answered 3007 each time, six more times in one evening. A captcha, or
+// an own-app answer, waits on the user, so the loop leaves it for the
+// day under a recheck too; a press still asks, and the next day asks.
+func TestPluginCheckinRecheckLeavesCaptcha(t *testing.T) {
+	for _, id := range []string{"zcode", "qoder"} {
+		for _, first := range []string{CheckinCaptcha, CheckinOwnApp} {
+			t.Run(id+"/"+first, func(t *testing.T) {
+				claudeHome(t)
+				now := time.Date(2026, 11, 3, 14, 16, 0, 0, time.UTC) // 22:16 Beijing
+				outcome, calls := first, 0
+				p := pluginCheckinCounter(id, &outcome, &calls)
+				run := func(press bool) WorkBuddyCheckin {
+					t.Helper()
+					got := p.checkiner(func() time.Time { return now }).checkinNow(context.Background(), press)
+					if len(got) != 1 {
+						t.Fatalf("at %s: %+v", now, got)
+					}
+					return got[0]
+				}
+				run(false)
+				outcome = CheckinClaimed
+				for _, step := range []time.Duration{31 * time.Minute, 31 * time.Minute, 30 * time.Minute} {
+					now = now.Add(step)
+					if r := run(false); r.Outcome != first || calls != 1 {
+						t.Fatalf("loop at %s: %+v after %d asks; want %s kept after 1", now.In(beijing).Format(time.TimeOnly), r, calls, first)
+					}
+				}
+				if r := run(true); r.Outcome != CheckinClaimed || calls != 2 {
+					t.Fatalf("press: %+v after %d asks", r, calls)
+				}
+				outcome = first
+				now = time.Date(2026, 11, 4, 14, 0, 0, 0, time.UTC) // the next Beijing day
+				run(false)
+				if calls != 3 {
+					t.Fatalf("the next day: %d asks, want 3", calls)
+				}
+			})
+		}
+	}
+}
+
 // Every other plugin's check-in is settled for the Beijing day by a claim,
 // or by a done, inactive or ineligible answered from noon Beijing on: the
 // loop doesn't ask again after 30 minutes (#2696 changes Qoder's, plugins#503 ZCode's).

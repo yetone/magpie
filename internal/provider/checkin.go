@@ -3,9 +3,9 @@ package provider
 // A daily check-in, whichever vendor's: WorkBuddy's (workbuddy_checkin.go)
 // and Trae CN's (trae_checkin.go). Each account in use is checked in once
 // a Beijing day, except Qoder's campaigns and ZCode's gift plans,
-// rechecked every 30 minutes,
-// and an answer that may be the vendor's day before (provisional, #3326),
-// asked again every 30 minutes until a claim or an answer from noon on.
+// rechecked every 30 minutes but for a captcha or own-app answer, which
+// waits on the user, and an answer that may be the vendor's day before
+// (provisional, #3326), asked again every 30 minutes until a claim or an answer from noon on.
 // A press asks the vendor again for a done, inactive or ineligible one.
 // What came of it is kept in the vendor's file by its key for reuse
 // (see workbuddy_checkin.go for when a failure is tried again).
@@ -108,7 +108,13 @@ func (c checkiner) checkinNow(ctx context.Context, soon bool) []WorkBuddyCheckin
 			settled = now.Sub(prev.At) < wbCheckinEvery
 		}
 		if c.recheck {
-			settled = settled && !soon && now.Sub(prev.At) < wbCheckinEvery
+			// a captcha or own-app answer waits on the user, in the
+			// vendor's app, so the loop leaves it for the day: asked
+			// again every 30 minutes, ZCode's claim only answered 3007
+			// again, and the reporter's accounts went on to 3012
+			// (plugins#503). A press still asks.
+			waits := prev.Outcome == CheckinCaptcha || prev.Outcome == CheckinOwnApp
+			settled = settled && !soon && (waits || now.Sub(prev.At) < wbCheckinEvery)
 			if prev.Checked() && !prev.ValidUntil.IsZero() {
 				settled = settled && now.Before(prev.ValidUntil)
 			}
