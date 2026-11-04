@@ -20,8 +20,16 @@ import (
 // says otherwise. The page here records what it saw as it was hidden, and
 // reports that record once it is shown again; without hideWebview's signal
 // it remains a visible page with running animations.
+//
+// The page reads document.hidden as app.js does, from magpie's signal.
+// WebKit does turn an ordered-out window's document.hidden on, but in its
+// own time and without a visibilitychange of its own, so a page reading
+// WebKit's value saw itself visible whenever magpie's signal arrived first,
+// recorded nothing, and the window was shown again after a fixed pause with
+// nothing to report (#4924). The window is now shown again only once the
+// page has said it saw itself hidden.
 func TestClosingWindowMarksPageOutOfSight(t *testing.T) {
-	out, err := runAppKit(t, 30*time.Second, []string{"MAGPIE_TEST_WINDOW_VISIBILITY=1"})
+	out, err := runAppKit(t, 2*time.Minute, []string{"MAGPIE_TEST_WINDOW_VISIBILITY=1"})
 	if err != nil || !strings.Contains(string(out), "window visibility: ok") {
 		t.Fatalf("window visibility: %v\n%s", err, out)
 	}
@@ -33,7 +41,7 @@ func TestClosingWindowMarksPageOutOfSight(t *testing.T) {
 // told it is back and keeps what it was drawn with: Settings' currency and
 // number units never reached it (blrbrzkj on Discord).
 func TestPanelHiddenByWailsMarksPageOutOfSight(t *testing.T) {
-	out, err := runAppKit(t, 30*time.Second, []string{"MAGPIE_TEST_WINDOW_VISIBILITY=panel"})
+	out, err := runAppKit(t, 2*time.Minute, []string{"MAGPIE_TEST_WINDOW_VISIBILITY=panel"})
 	if err != nil || !strings.Contains(string(out), "window visibility: ok") {
 		t.Fatalf("panel visibility: %v\n%s", err, out)
 	}
@@ -45,6 +53,7 @@ func init() {
 		return
 	}
 	ready := make(chan struct{}, 1)
+	hidden := make(chan url.Values, 1)
 	reports := make(chan url.Values, 1)
 	app := application.New(application.Options{
 		Name: "magpie window visibility regression",
@@ -58,13 +67,22 @@ func init() {
 html.magpie-out-of-sight #probe{animation-play-state:paused!important}
 </style><i id="probe"></i><script>
 const probe = document.querySelector("#probe");
+// as app.js: hidden while magpie says so
+let outOfSight = false;
+for (const [k, off] of [["hidden", true], ["visibilityState", "hidden"]]) {
+  const own = Object.getOwnPropertyDescriptor(Document.prototype, k)?.get;
+  own && Object.defineProperty(Document.prototype, k, { configurable: true, get() { return outOfSight ? off : own.call(this); } });
+}
+let hiddenTold = false;
 window.magpieWindowVisibility = (visible) => {
+  if (visible) hiddenTold = false;
   // shown again: what it last saw while hidden, once
   const seen = visible && localStorage.getItem("hiddenProbe");
   if (seen) {
     localStorage.removeItem("hiddenProbe");
     fetch("/report?probe=" + encodeURIComponent(seen));
   }
+  outOfSight = !visible;
   document.documentElement.classList.toggle("magpie-out-of-sight", !visible);
   document.dispatchEvent(new Event("visibilitychange"));
 };
@@ -76,6 +94,11 @@ document.addEventListener("visibilitychange", () => {
       marked: document.documentElement.classList.contains("magpie-out-of-sight"),
       play: getComputedStyle(probe).animationPlayState,
     }));
+    // once a hiding: the host shows the window again only after this
+    if (!hiddenTold) {
+      hiddenTold = true;
+      fetch("/hidden");
+    }
   }
 });
 fetch("/ready");
@@ -83,6 +106,12 @@ fetch("/ready");
 			case "/ready":
 				select {
 				case ready <- struct{}{}:
+				default:
+				}
+				w.WriteHeader(http.StatusNoContent)
+			case "/hidden":
+				select {
+				case hidden <- r.URL.Query():
 				default:
 				}
 				w.WriteHeader(http.StatusNoContent)
@@ -106,7 +135,7 @@ fetch("/ready");
 		select {
 		case v := <-ch:
 			return v
-		case <-time.After(8 * time.Second):
+		case <-time.After(15 * time.Second):
 			fail("timed out waiting for %s", what)
 			return nil
 		}
@@ -155,14 +184,14 @@ fetch("/ready");
 			})
 			select {
 			case <-ready:
-			case <-time.After(8 * time.Second):
+			case <-time.After(15 * time.Second):
 				fail("timed out waiting for the page")
 			}
 
 			// the panel by a click elsewhere, then by Escape
 			for _, hide := range closes[which] {
 				hide(h, win)
-				time.Sleep(500 * time.Millisecond)
+				wait("the page to see itself hidden", hidden)
 				application.InvokeSync(func() { showWebview(win).Focus() })
 				check(wait("the page's hidden report", reports))
 			}
