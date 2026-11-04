@@ -468,6 +468,24 @@ func MoveCodexThreads(home, from, to string) ([]CodexMove, error) {
 	return moveCodexThreadIDs(home, from, to, codexThreadsOn(home, from), 0)
 }
 
+// MoveCodexThreadIDs moves those of the threads ids that a Codex folder's
+// state database still keeps on the provider from to the provider to, as
+// MoveCodexThreads moves them: to undo a move of those threads alone,
+// where moving every thread of from would take others with them.
+func MoveCodexThreadIDs(home, from, to string, ids []string) ([]CodexMove, error) {
+	if !codexProviderRe.MatchString(from) || !codexProviderRe.MatchString(to) || from == to {
+		return nil, fmt.Errorf("can't move Codex's threads from %q to %q", from, to)
+	}
+	on := codexThreadsOn(home, from)
+	var still []string
+	for _, id := range ids {
+		if contains(on, id) {
+			still = append(still, id)
+		}
+	}
+	return moveCodexThreadIDs(home, from, to, still, 0)
+}
+
 // moveCodexThreadIDs moves the threads ids of a Codex folder from the
 // provider from to the provider to, as MoveCodexThreads says, in the
 // order given. With a budget over 0 it stops once the files it has moved
