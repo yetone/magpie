@@ -52,12 +52,31 @@ func watchedHold(t *testing.T, s *Server) *unroutedHold {
 		}
 		s.active.mu.Unlock()
 		if u != nil {
+			// a hold magpie answered writes its report after the answer,
+			// from its timer: the test's temp HOME stays until it has
+			t.Cleanup(func() { holdReported(t, u) })
 			return u
 		}
 		if time.Now().After(deadline) {
 			t.Fatal("no request was held before routing")
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// holdReported waits for u's report when magpie answered it.
+func holdReported(t *testing.T, u *unroutedHold) {
+	t.Helper()
+	u.f.mu.Lock()
+	ended := u.ended
+	u.f.mu.Unlock()
+	if !ended {
+		return
+	}
+	select {
+	case <-u.saved:
+	case <-time.After(30 * time.Second):
+		t.Error("a held request's report was never written")
 	}
 }
 

@@ -216,6 +216,9 @@ type unroutedHold struct {
 	shown  *Route       // under f.mu
 	ended  bool         // under f.mu: answered by magpie
 	over   bool         // under f.mu: its handler returned
+	// saved is closed once giveUp, having answered, has written its
+	// report: a test waits for it before its temp HOME goes
+	saved chan struct{}
 	// masking counts the maskings under way for it: one held there waits
 	// for Settings → Privacy's local model, and its error says so
 	masking atomic.Int32
@@ -586,7 +589,7 @@ func (s *Server) watchUnrouted(w http.ResponseWriter, r *http.Request, f *inflig
 		return w, r, func() {}
 	}
 	ctx, cancel := context.WithCancelCause(r.Context())
-	u := &unroutedHold{s: s, f: f, w: newHeldWriter(w), cancel: cancel, agent: callerFrom(r).agent}
+	u := &unroutedHold{s: s, f: f, w: newHeldWriter(w), cancel: cancel, agent: callerFrom(r).agent, saved: make(chan struct{})}
 	r = r.WithContext(context.WithValue(ctx, unroutedKey{}, u))
 	if r.Body != nil && r.Body != http.NoBody {
 		r.Body = waitedBody{r.Body, u}
@@ -712,6 +715,7 @@ func (u *unroutedHold) giveUp(unknown bool) {
 		_ = http.NewResponseController(u.w.w).SetReadDeadline(time.Now())
 	}
 	u.ended = true
+	defer close(u.saved)
 	if u.shown == nil {
 		u.showLocked()
 	}
