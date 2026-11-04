@@ -223,6 +223,14 @@ func (rw *Writer) event(ev []byte) error {
 		_, err := rw.w.Write([]byte(restore(string(ev), false, rw.count())))
 		return err
 	}
+	if rw.pending != nil && waiting(name, data) {
+		// a keepalive between two pieces of a text goes on ahead of the
+		// piece held: released for it, the held piece went out with the
+		// start of its placeholder as it was, the next piece with the
+		// rest, and neither was a placeholder to put back (#5287)
+		_, err := rw.w.Write(rebuild(pre, restoreJSON(data, rw.count()), post))
+		return err
+	}
 	ctx := name + "|" + eventCtx(data)
 	// the starts of placeholders the last event ended in go on here
 	var carry map[string]string
@@ -278,6 +286,22 @@ func (rw *Writer) event(ev []byte) error {
 	})
 	rw.pending = &held{ctx: ctx, tails: tails, full: full, cut: rebuild(pre, cutData, post)}
 	return nil
+}
+
+// waitEvents are the events a stream sends while the model is slow, which
+// say nothing of the answer: Anthropic's ping, which its API and magpie's
+// encoder send in the middle of a tool call's arguments, Responses'
+// keepalive, and response.in_progress and response.queued, magpie's
+// keepalive on that protocol.
+var waitEvents = []string{"ping", "keepalive", "response.in_progress", "response.queued"}
+
+// waiting says an event of name with data is one of waitEvents.
+func waiting(name string, data []byte) bool {
+	typ := typeOf(data)
+	if typ == "" {
+		typ = name
+	}
+	return slices.Contains(waitEvents, typ)
 }
 
 // sealedText says a string of a vendor's answer goes on as it came: what the
