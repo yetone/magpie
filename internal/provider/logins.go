@@ -128,6 +128,12 @@ type savedLogin struct {
 	// magpie last looked: its saved copy is that very sign-in, which
 	// Claude Code's /logout revokes (claudeLoggedOut).
 	Held bool `json:"held,omitempty"`
+	// HeldAs is, on the Held account, the account ~/.claude.json named
+	// when magpie last looked (claudeProfileKey): it can be another's, a
+	// Claude Code started on that one writing its profile after a switch
+	// (claudeSignInOwner). A sign-in renewed under that same profile is
+	// the Held account's still (claudeRenewedHeld).
+	HeldAs string `json:"heldAs,omitempty"`
 	// was is the name a Copilot account read under a new one had in the
 	// file (#1220): its per-account settings are still kept by it, and
 	// move to the new one before the new name is written (renameSettled).
@@ -715,6 +721,7 @@ func liveLogin(agent string) (savedLogin, bool) {
 		var acct map[string]any
 		if l.User, acct = claudeSignedInUser(l.Plan, plan, user); acct != nil {
 			l.Profile, _ = json.Marshal(acct)
+			l.HeldAs = claudeProfileKey(l.Profile)
 		}
 		if l.User == "" {
 			return savedLogin{}, false
@@ -884,7 +891,7 @@ func rememberLogins(force bool) {
 		l.Seen = now
 		if agent == "claude" {
 			for i := range ls {
-				ls[i].Held = false
+				ls[i].Held, ls[i].HeldAs = false, ""
 			}
 			l.Held = true
 		}
@@ -1679,9 +1686,61 @@ func claudeHolders(ls []savedLogin, l savedLogin) (same bool, others []savedLogi
 // that one. Named by the profile, the account switched to was taken for
 // the one before: its /usage went through the other's proxy and was shown
 // on the other's card (#1938).
+//
+// Held by none, the sign-in is new: Claude Code signed in anew, or renewed
+// the one it had, whose tokens are new too. Under a profile that names
+// another account than the one Claude Code held at the last look, and the
+// very profile it named then (HeldAs), it is the held account's renewed:
+// a /login writes its own account's profile, while a Claude Code started
+// on the other account before a switch kept writing that one's. Named by
+// the profile, the account the user made first was saved with the other's
+// name and shown as that one, and the other's record took its tokens
+// (motui9535: made first in Providers, then a refresh of Usage, whose
+// /usage renewed the sign-in, turned the first back).
 func claudeSignInOwner(ls []savedLogin, l savedLogin) savedLogin {
-	if same, others := claudeHolders(ls, l); !same && len(others) == 1 {
+	same, others := claudeHolders(ls, l)
+	switch {
+	case !same && len(others) == 1:
 		l.User, l.Profile = others[0].User, others[0].Profile
+	case !same && len(others) == 0:
+		if h, ok := claudeRenewedHeld(ls, l); ok {
+			l.User, l.Profile = h.User, h.Profile
+		}
 	}
 	return l
+}
+
+// claudeRenewedHeld is the Held account whose sign-in Claude Code renewed,
+// when l, held by no saved account, is that (claudeSignInOwner): its
+// profile is the one read at the last look, and names another account
+// than the held one; the plan, when both say one, the held one's.
+func claudeRenewedHeld(ls []savedLogin, l savedLogin) (savedLogin, bool) {
+	key := claudeProfileKey(l.Profile)
+	if l.Agent != "claude" || key == "" {
+		return savedLogin{}, false
+	}
+	c, ok := parseClaudeCredentials(l.Auth)
+	if !ok {
+		return savedLogin{}, false
+	}
+	for _, h := range ls {
+		if h.Agent != "claude" || !h.Held || h.HeldAs != key || sameLogin(h, l) || claudeSetupToken(h.Auth) != "" {
+			continue
+		}
+		if plan := c.OAuth.SubscriptionType; plan != "" && h.Plan != "" && !strings.EqualFold(plan, h.Plan) {
+			return savedLogin{}, false
+		}
+		return h, true
+	}
+	return savedLogin{}, false
+}
+
+// claudeProfileKey is the account a ~/.claude.json profile names, by
+// email and organization: "" for none.
+func claudeProfileKey(profile json.RawMessage) string {
+	email, org := claudeWho(profile)
+	if strings.TrimSpace(email) == "" {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(email)) + " " + org
 }
