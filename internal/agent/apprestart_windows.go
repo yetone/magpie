@@ -56,7 +56,7 @@ func readWinProc(pid uint32) (winProc, bool) {
 	if err := windows.QueryFullProcessImageName(h, 0, &buf[0], &n); err != nil {
 		return winProc{}, false
 	}
-	p := winProc{pid: int(pid), image: windows.UTF16ToString(buf[:n])}
+	p := winProc{pid: int(pid), image: windows.UTF16ToString(buf[:n]), cmd: proc.CommandLine(int(pid))}
 	var created, exited, kernel, user windows.Filetime
 	if windows.GetProcessTimes(h, &created, &exited, &kernel, &user) == nil {
 		p.start = time.Unix(0, created.Nanoseconds())

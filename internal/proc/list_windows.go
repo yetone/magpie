@@ -40,6 +40,10 @@ func list(ctx context.Context, prefix string) ([]Process, error) {
 	return ps, nil
 }
 
+// CommandLine is the command line process pid was started with, "" when
+// it can't be read.
+func CommandLine(pid int) string { return commandLine(uint32(pid)) }
+
 // commandLine is a process's command line as it was started, "" when it
 // can't be read.
 func commandLine(pid uint32) string {

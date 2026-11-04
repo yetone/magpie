@@ -78,13 +78,92 @@ var (
 )
 
 // winProc is a process running on Windows: its id, its parent's, its
-// image's full path, when it started, and its AppUserModelID when it is a
-// packaged (Store or MSIX) app's.
+// image's full path, its command line ("" when it can't be read), when it
+// started, and its AppUserModelID when it is a packaged (Store or MSIX)
+// app's.
 type winProc struct {
 	pid, parent int
-	image       string
+	image, cmd  string
 	start       time.Time
 	aumid       string
+}
+
+// runsScript says whether a process of an app's own executable exe runs a
+// script on it as Node (ELECTRON_RUN_AS_NODE), which is no copy of the app
+// itself: its command line names a .js, .cjs or .mjs file, or its first
+// argument that is no flag is a file's absolute path. WorkBuddy 5.5 and
+// 5.6 run their daemon so ("WorkBuddy.exe"
+// --disable-warning=ExperimentalWarning "…\app.asar\main\
+// daemon-app-server-entry.js" --stdio, seen on the Windows box), their
+// sidecar (…/main/sidecar-entry.js --token …) and the CLI workers and
+// prewarmed CLIs it keeps (…/cli/bin/codebuddy --prewarm …, a script with
+// no extension). The sidecar is spawned detached, outlives the app's quit
+// and is taken up again by the next start (ensureSidecar: "reconnected to
+// existing sidecar"). Counted as the app, it kept the app's start at its
+// own, so the row said to restart WorkBuddy after every real restart, and
+// a Restart waited for it to end and never opened WorkBuddy again (Northes
+// on Discord, 11-04). Electron's own processes name no script: the main
+// one runs bare, or with flags, or a link it was opened with
+// (workbuddy://…); its helpers run with flags (--type=renderer …) and, on
+// Windows, /prefetch:N. exe may be "" when it isn't known; the command
+// line's first word is taken for it then. A command line that can't be
+// read ("") is the app's.
+func runsScript(cmd, exe string) bool {
+	cmd = strings.TrimSpace(cmd)
+	for _, f := range strings.Fields(cmd) {
+		f = strings.ToLower(strings.Trim(f, `"'`))
+		if strings.HasSuffix(f, ".js") || strings.HasSuffix(f, ".cjs") || strings.HasSuffix(f, ".mjs") {
+			return true
+		}
+	}
+	// the arguments: the command line past the executable, which a Mac's
+	// may show with spaces in its path, and Windows' in quotes
+	rest := ""
+	switch {
+	case exe != "" && len(cmd) >= len(exe)+2 && strings.EqualFold(cmd[:len(exe)+2], `"`+exe+`"`):
+		rest = cmd[len(exe)+2:]
+	case exe != "" && len(cmd) >= len(exe) && strings.EqualFold(cmd[:len(exe)], exe):
+		rest = cmd[len(exe):]
+	case strings.HasPrefix(cmd, `"`):
+		if i := strings.Index(cmd[1:], `"`); i >= 0 {
+			rest = cmd[i+2:]
+		}
+	default:
+		_, rest, _ = strings.Cut(cmd, " ")
+	}
+	for _, f := range strings.Fields(rest) {
+		f = strings.Trim(f, `"'`)
+		if strings.HasPrefix(f, "-") {
+			continue
+		}
+		return absArg(f)
+	}
+	return false
+}
+
+// absArg says whether an argument is an absolute file path, on either
+// system: /…, C:\… or C:/…, \\server\…; never Windows' /prefetch:N.
+func absArg(f string) bool {
+	switch {
+	case strings.HasPrefix(f, "/prefetch:"):
+		return false
+	case strings.HasPrefix(f, "/"), strings.HasPrefix(f, `\\`):
+		return true
+	}
+	return len(f) >= 3 && f[1] == ':' && (f[2] == '\\' || f[2] == '/') &&
+		('a' <= f[0]|0x20 && f[0]|0x20 <= 'z')
+}
+
+// appProcs are those of ps, processes of the executable exe, that are the
+// app's own, not a script run on it (runsScript).
+func appProcs(ps []runningProc, exe string) []runningProc {
+	var out []runningProc
+	for _, p := range ps {
+		if !runsScript(p.cmd, exe) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // The Windows part of a restart, vars so tests stand in for each:
@@ -110,10 +189,12 @@ var (
 )
 
 // appRunning is r's app as it runs here: when it started, and on macOS its
-// bundle, on Windows its processes and the one the rest hang off.
+// bundle and the bundle's main executable, on Windows its processes and
+// the one the rest hang off.
 type appRunning struct {
 	since  time.Time
 	bundle string
+	exe    string
 	procs  []winProc
 	main   winProc
 }
@@ -126,7 +207,7 @@ func findRestartable(r restartable) (appRunning, bool) {
 		}
 		var ps []winProc
 		for _, p := range winProcs(r.winExe) {
-			if r.win(p.image) {
+			if r.win(p.image) && !runsScript(p.cmd, p.image) {
 				ps = append(ps, p)
 			}
 		}
@@ -159,7 +240,8 @@ func findRestartable(r restartable) (appRunning, bool) {
 		if exe == "" {
 			continue
 		}
-		ps := running("^" + regexp.QuoteMeta(filepath.Join(b, "Contents", "MacOS", exe)) + "( |$)")
+		main := filepath.Join(b, "Contents", "MacOS", exe)
+		ps := appProcs(running("^"+regexp.QuoteMeta(main)+"( |$)"), main)
 		if len(ps) == 0 {
 			continue
 		}
@@ -167,7 +249,7 @@ func findRestartable(r restartable) (appRunning, bool) {
 		for _, p := range ps[1:] {
 			up = max(up, p.up)
 		}
-		return appRunning{since: time.Now().Add(-up), bundle: b}, true
+		return appRunning{since: time.Now().Add(-up), bundle: b, exe: main}, true
 	}
 	return appRunning{}, false
 }
@@ -300,7 +382,8 @@ func restartErr(n notice, a *Agent) error { return errors.New(n.say("agent", a.N
 // RestartApp quits the agent's desktop app and opens it again, so it reads
 // what magpie wrote. Only the Agents row's Restart calls it, after the
 // user confirmed, and only an app AppBehind lists is quit. macOS: asked to
-// quit as ⌘Q does, every process of its bundle waited for; one still open
+// quit as ⌘Q does, every process of its bundle waited for (but a script
+// run on it, runsScript); one still open
 // then (it may be asking something) is left, never forced, and not opened
 // a second time. Windows: its windows are asked to close; an app still
 // running then (Electron apps stay in the tray) is ended with its tree.
@@ -320,7 +403,7 @@ func (a *Agent) RestartApp(ctx context.Context) error {
 		return restartErr(noticeRestartCurrent, a)
 	}
 	if c.bundle != "" {
-		return reopenBundle(ctx, a, c.bundle)
+		return reopenBundle(ctx, a, c.bundle, c.exe)
 	}
 	return a.restartWin(ctx, r, c)
 }
@@ -418,14 +501,16 @@ func waitGone(ctx context.Context, r restartable, limit time.Duration) bool {
 }
 
 // reopenBundle quits the app at bundle, as ⌘Q does, waits for every
-// process under it to end and opens it again (codex_app.go's way).
-func reopenBundle(ctx context.Context, a *Agent, bundle string) error {
+// process under it to end, but for a script run on its executable exe,
+// which may outlive it by design (runsScript), and opens it again
+// (codex_app.go's way).
+func reopenBundle(ctx context.Context, a *Agent, bundle, exe string) error {
 	if err := appQuit(ctx, bundle); err != nil {
 		return restartErr(noticeRestartAsk, a)
 	}
 	pat := regexp.QuoteMeta(bundle + "/Contents/")
 	end := time.Now().Add(appQuitWait)
-	for len(running(pat)) > 0 {
+	for len(appProcs(running(pat), exe)) > 0 {
 		if time.Now().After(end) {
 			return restartErr(noticeRestartStillOpen, a)
 		}
