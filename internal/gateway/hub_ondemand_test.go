@@ -126,7 +126,9 @@ func TestHubMCPToolsOnDemand(t *testing.T) {
 	}
 }
 
-// An agent that searches its tools itself (a WSL one's id too), the
+// An agent that searches its tools itself (a WSL one's id too: Droid,
+// which defers every MCP tool to its ToolSearch, and omp, which names them
+// in a catalog, are such agents; tao5010 on Discord), the
 // address for any other app, an agent given a few tools, and every agent
 // once the user turns on every tool whole, are given every tool.
 func TestHubMCPToolsWhole(t *testing.T) {
@@ -134,11 +136,12 @@ func TestHubMCPToolsWhole(t *testing.T) {
 	many := manyHubTools(hubOnDemandOver + 2)
 	f := &fakeHub{on: true, tools: map[string][]HubTool{
 		"claude": many, "claude@wsl:Ubuntu": many, "claude-desktop": many, "codex": many, "pi": many, "": many,
+		"droid": many, "droid@wsl:Ubuntu": many, "omp": many,
 		"gemini": manyHubTools(hubOnDemandOver), "opencode": many,
 	}}
 	withHub(t, f)
 	h := lanGuard(New().Handler())
-	for _, a := range []string{"claude", "claude@wsl:Ubuntu", "claude-desktop", "codex", "pi", "gemini"} {
+	for _, a := range []string{"claude", "claude@wsl:Ubuntu", "claude-desktop", "codex", "pi", "droid", "droid@wsl:Ubuntu", "omp", "gemini"} {
 		if got := listedNames(t, readMCP(t, hubPost(h, a, here, toolsList))); len(got) != len(f.tools[a]) {
 			t.Fatalf("%s listed %v", a, got)
 		}
@@ -158,5 +161,90 @@ func TestHubMCPToolsWhole(t *testing.T) {
 	})
 	if got := listedNames(t, readMCP(t, hubPost(h, "opencode", here, toolsList))); len(got) != len(many) {
 		t.Fatalf("with every tool whole, listed %v", got)
+	}
+}
+
+// listedSpecs are tools/list's tools, by name, with their descriptions.
+func listedSpecs(t *testing.T, body string) map[string]string {
+	t.Helper()
+	var m struct {
+		Result struct {
+			Tools []struct{ Name, Description string }
+		}
+	}
+	if err := json.Unmarshal([]byte(body), &m); err != nil {
+		t.Fatalf("%v: %s", err, body)
+	}
+	out := map[string]string{}
+	for _, x := range m.Result.Tools {
+		out[x.Name] = x.Description
+	}
+	return out
+}
+
+// imageAndNotes are an image server and one of n tools, ticked for agent,
+// as the hub lists and describes them.
+func imageAndNotes(agent string, n int) *fakeHub {
+	img := []HubTool{
+		{Server: "magpie-image", Tool: "generate_image", Spec: map[string]json.RawMessage{
+			"name":        json.RawMessage(`"generate_image"`),
+			"description": json.RawMessage(`"Generate an image from a text prompt, saved in the project."`),
+			"inputSchema": json.RawMessage(`{"type":"object","properties":{"prompt":{"type":"string"}},"required":["prompt"]}`),
+		}},
+	}
+	notes := HubServer{Name: "notes", Known: true}
+	ts := slices.Clone(img)
+	for i := 1; i <= n; i++ {
+		name := fmt.Sprintf("note_op%d", i)
+		ts = append(ts, HubTool{Server: "notes", Tool: name, Spec: hubSpec(name)})
+		notes.Tools = append(notes.Tools, HubToolNote{Name: name, About: "Does " + name})
+	}
+	return &fakeHub{on: true, tools: map[string][]HubTool{agent: ts}, servers: map[string][]HubServer{agent: {
+		{Name: "magpie-image", About: "Generate and edit images", Known: true, Tools: []HubToolNote{{Name: "generate_image", About: "Generate an image from a text prompt"}}},
+		notes,
+	}}}
+}
+
+// An agent given its tools on demand learns from tools/list alone what is
+// behind them: find_tools' description starts with the line naming each
+// server and what it is for, the part an agent showing a tool by its first
+// line shows (omp's catalog), and names each server's tools after what it
+// does. Told only how to search, a model asked for a picture of a cat
+// searched three times and stopped (tao5010 on Discord, 11-04). Many
+// servers keep it bounded.
+func TestHubFindToolsSaysWhatIsBehind(t *testing.T) {
+	fresh(t)
+	withHub(t, imageAndNotes("opencode", hubOnDemandOver+2))
+	h := lanGuard(New().Handler())
+	specs := listedSpecs(t, hubPost(h, "opencode", here, toolsList).Body.String())
+	find, ok := specs[hubFindTool]
+	if !ok || len(specs) != 2 {
+		t.Fatalf("listed %v", specs)
+	}
+	first, _, _ := strings.Cut(find, "\n")
+	if !strings.Contains(first, "magpie-image (Generate and edit images)") || !strings.Contains(first, "notes") {
+		t.Fatalf("find_tools' first line doesn't say what is behind it: %q", first)
+	}
+	for _, x := range []string{"generate_image (Generate an image from a text prompt)", "note_op12", "query"} {
+		if !strings.Contains(find, x) {
+			t.Fatalf("find_tools' description has no %q: %s", x, find)
+		}
+	}
+
+	// forty servers of twenty tools each: the description stays bounded
+	many := &fakeHub{on: true, tools: map[string][]HubTool{}, servers: map[string][]HubServer{}}
+	for i := range 40 {
+		s := HubServer{Name: fmt.Sprintf("server%02d", i), About: "Does a long list of things for the user, each of them described at length", Known: true}
+		for j := range 20 {
+			name := fmt.Sprintf("tool_with_a_long_name_%d", j)
+			many.tools["opencode"] = append(many.tools["opencode"], HubTool{Server: s.Name, Tool: name, Spec: hubSpec(name)})
+			s.Tools = append(s.Tools, HubToolNote{Name: name, About: "Does something rather long to describe in a clause"})
+		}
+		many.servers["opencode"] = append(many.servers["opencode"], s)
+	}
+	withHub(t, many)
+	find = listedSpecs(t, hubPost(h, "opencode", here, toolsList).Body.String())[hubFindTool]
+	if max := hubLineMax + len(hubFindHow) + hubFindSayMax + 2; runeLen(find) > max || !strings.Contains(find, "server00") {
+		t.Fatalf("with 40 servers find_tools' description is %d characters (at most %d): %s", runeLen(find), max, find)
 	}
 }

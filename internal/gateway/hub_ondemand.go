@@ -15,14 +15,18 @@ import (
 // the context). An agent that searches its MCP tools itself, loading one
 // only when its model asks for it, is given every tool: Claude Code
 // (ENABLE_TOOL_SEARCH, agent/claude.go), Claude Desktop, whose Code tab is
-// Claude Code, Codex (supports_search_tool, codexcat.go) and Pi, whose MCP
-// extension lists a server's tools only when they are searched for. Any
-// other agent sends every tool it is given, with its whole inputSchema, on
-// every request, so past hubOnDemandOver tools it is given two in their
-// place: find_tools, which gives the tools that match what the model looks
-// for with their parameters, and call_tool, which runs one by name. The
-// instructions still name every server and its tools (hubDetails), so the
-// model knows what there is to find. settings' RouterAllTools turns it off.
+// Claude Code, Codex (supports_search_tool, codexcat.go), Pi, whose MCP
+// extension lists a server's tools only when they are searched for, Droid,
+// which defers every MCP tool to its ToolSearch, and omp, which mounts
+// them as xd:// devices named in a catalog. Any other agent sends every
+// tool it is given, with its whole inputSchema, on every request, so past
+// hubOnDemandOver tools it is given two in their place: find_tools, which
+// gives the tools that match what the model looks for with their
+// parameters, and call_tool, which runs one by name. find_tools' own
+// description names every server and its tools (hubFindSay), since a model
+// picks a tool by what tools/list says and not every agent shows the
+// instructions (Droid shows none); the instructions name them too
+// (hubDetails). settings' RouterAllTools turns it off.
 
 // hubFindTool and hubCallTool are the two tools. A tool of the hub's is
 // <server>__<tool>, so neither is ever one of its tools' names.
@@ -37,7 +41,12 @@ const hubOnDemandOver = 10
 
 // hubSearchesItself are the agents that load MCP tools only when searched
 // for, by their id without a WSL distro (claude@wsl:Ubuntu is claude).
-var hubSearchesItself = map[string]bool{"claude": true, "claude-desktop": true, "codex": true, "pi": true}
+// Droid (0.231) defers every MCP tool but GitHub's and agent-browser's to
+// its ToolSearch, which matches the names and descriptions it is given, and
+// omp (18.9) mounts every MCP tool as an xd:// device, its schema read only
+// when asked for: given find_tools in their place, neither showed its
+// model which tools were behind it (tao5010 on Discord, 11-04).
+var hubSearchesItself = map[string]bool{"claude": true, "claude-desktop": true, "codex": true, "pi": true, "droid": true, "omp": true}
 
 // hubFindFull is how many of find_tools' matches come with their
 // parameters, and hubFindMore how many more it names after them.
@@ -72,9 +81,33 @@ func hubToolCount(ss []HubServer) int {
 // hubOnDemandSay is what the instructions add when the tools are on demand.
 const hubOnDemandSay = " Its tools are given on demand: " + hubFindTool + " gives a tool's description and parameters, and " + hubCallTool + " runs it by name."
 
+// hubFindSayMax is how many characters of find_tools' description name the
+// servers behind it and their tools (hubFindSay), sent with every request
+// of an agent given its tools on demand: about the cost of three tools'
+// schemas, in place of them all.
+const hubFindSayMax = 1200
+
+// hubFindHow is what find_tools does, after what there is to find.
+const hubFindHow = "Finds the tools of the MCP servers behind this one that match query: words of what you want done, or a tool's name. Gives each match's name, description and parameters (inputSchema); run one with " + hubCallTool + ". An empty query names every tool."
+
+// hubFindSay is find_tools' description: first a line naming each server
+// with what it is for (HubLine; an agent that lists a tool by its first
+// line, as omp's catalog does, shows that much), then what find_tools
+// does, then each server's tools (hubDetails) in hubFindSayMax characters.
+// A model given only find_tools and call_tool learns from it what there is
+// to find: told only how to search, a model asked for a picture of a cat
+// searched three times and stopped (tao5010 on Discord, 11-04).
+func hubFindSay(ss []HubServer) string {
+	line := HubLine(ss)
+	if line == "" {
+		return hubFindHow
+	}
+	return strings.TrimRight(line+"\n"+hubFindHow+"\n"+hubDetails(ss, hubFindSayMax), "\n")
+}
+
 // hubOnDemandSpecs are the two tools an agent is given in place of its
-// tools, their descriptions after where, as each tool's are.
-func hubOnDemandSpecs(where string) []any {
+// tools, ss's, their descriptions after where, as each tool's are.
+func hubOnDemandSpecs(where string, ss []HubServer) []any {
 	pre := ""
 	if where != "" {
 		pre = "[" + where + "] "
@@ -82,7 +115,7 @@ func hubOnDemandSpecs(where string) []any {
 	return []any{
 		map[string]any{
 			"name":        hubFindTool,
-			"description": pre + "Finds the tools of the MCP servers behind this one that match query: words of what you want done, or a tool's name. Gives each match's name, description and parameters (inputSchema); run one with " + hubCallTool + ". An empty query names every tool.",
+			"description": pre + hubFindSay(ss),
 			"inputSchema": json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","description":"Words of what you want done, or a tool's name; empty names every tool"},"server":{"type":"string","description":"Only this server's tools"}}}`),
 		},
 		map[string]any{

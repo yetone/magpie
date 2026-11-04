@@ -483,7 +483,8 @@ func (s *Server) hubMCPCall(r *http.Request, agent string, m mcpMessage) (any, m
 		ts := hubTools(r.Context(), agent)
 		where := hubWhere(r)
 		if hubOnDemand(agent, len(ts)) {
-			return map[string]any{"tools": hubOnDemandSpecs(where)}, nil
+			// hubTools ran, so each server's tools are as just listed
+			return map[string]any{"tools": hubOnDemandSpecs(where, MCPHub.Servers(agent))}, nil
 		}
 		list := make([]any, 0, len(ts))
 		for _, t := range ts {
