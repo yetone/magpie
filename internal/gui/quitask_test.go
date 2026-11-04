@@ -18,7 +18,7 @@ import (
 func TestWindowQuitAsksFirst(t *testing.T) {
 	quits := 0
 	asked := make(chan struct{}, 4)
-	h := Handler(askingHost{webHost{quit: func() { quits++ }}, asked}, nil)
+	h := webPageHandler(t, askingHost{webHost{quit: func() { quits++ }}, asked}, nil)
 	post := func(url string) {
 		t.Helper()
 		r := httptest.NewRecorder()
@@ -48,7 +48,7 @@ func TestWindowQuitAsksFirst(t *testing.T) {
 	default:
 	}
 
-	web := Handler(webHost{quit: func() { quits++ }}, nil)
+	web := webPageHandler(t, webHost{quit: func() { quits++ }}, nil)
 	r := httptest.NewRecorder()
 	web.ServeHTTP(r, httptest.NewRequest("POST", "/api/window/quit", nil))
 	if quits != 2 {
@@ -88,7 +88,7 @@ func TestQuitAPIListsAgents(t *testing.T) {
 	t.Cleanup(func() { quitAgents = old })
 	quitAgents = func() []quitAgentJSON { return []quitAgentJSON{{ID: "codex", Name: "Codex", Icon: "openai"}} }
 	r := httptest.NewRecorder()
-	Handler(webHost{}, nil).ServeHTTP(r, httptest.NewRequest("GET", "/api/quit", nil))
+	webPageHandler(t, webHost{}, nil).ServeHTTP(r, httptest.NewRequest("GET", "/api/quit", nil))
 	var got struct{ Agents []quitAgentJSON }
 	if err := json.Unmarshal(r.Body.Bytes(), &got); err != nil || len(got.Agents) != 1 || got.Agents[0].ID != "codex" {
 		t.Fatalf("GET /api/quit = %d %s (%v)", r.Code, r.Body, err)
@@ -145,7 +145,7 @@ func TestQuitDontAskAgain(t *testing.T) {
 	}
 
 	quits := 0
-	h := Handler(askingHost{webHost{quit: func() { quits++ }}, make(chan struct{}, 1)}, nil)
+	h := webPageHandler(t, askingHost{webHost{quit: func() { quits++ }}, make(chan struct{}, 1)}, nil)
 	r := httptest.NewRecorder()
 	h.ServeHTTP(r, httptest.NewRequest("POST", "/api/window/quit?now=1&noAsk=1", nil))
 	if r.Code != 204 || quits != 1 {

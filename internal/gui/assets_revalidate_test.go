@@ -22,7 +22,7 @@ func TestPageFilesRevalidate(t *testing.T) {
 	t.Setenv("USERPROFILE", h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
-	srv := Handler(webHost{}, nil)
+	srv := webPageHandler(t, webHost{}, nil)
 	get := func(path, etag string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest("GET", path, nil)
 		if etag != "" {
@@ -80,7 +80,7 @@ func TestPageNamesItsFilesByContent(t *testing.T) {
 	t.Setenv("USERPROFILE", h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
-	srv := Handler(webHost{}, nil)
+	srv := webPageHandler(t, webHost{}, nil)
 	get := func(path, etag string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest("GET", path, nil)
 		if etag != "" {

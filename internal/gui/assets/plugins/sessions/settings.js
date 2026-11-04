@@ -50,6 +50,12 @@ let sessionReadsSeq = 0;
 function renderSessionReads(s) {
   const box = $("#sessionReadsList");
   const r = sessionReads || { asked: !!s?.sessionReads?.asked, all: !!s?.sessionReads?.all, found: [] };
+  // gateway mode reads no agent's session history here, whatever these
+  // say (ownSessionsOff), so they are left out
+  const gw = !!(s?.gatewayOn || r.gateway);
+  box.hidden = gw;
+  box.previousElementSibling.hidden = gw;
+  if (gw) return;
   const save = (body) => {
     const n = ++sessionReadsSeq;
     writingPrefs(api("sessions/reads", body))

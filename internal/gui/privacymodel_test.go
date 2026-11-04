@@ -23,7 +23,7 @@ func TestPrivacyModelOnlyOnOnceDownloaded(t *testing.T) {
 	t.Setenv("USERPROFILE", h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
-	srv := Handler(webHost{func() {}}, nil)
+	srv := webPageHandler(t, webHost{func() {}}, nil)
 	do := func(method, path, body string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
 		srv.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader(body)))
@@ -79,7 +79,7 @@ func TestPrivacyModelCancelledDefaultIsOff(t *testing.T) {
 	t.Setenv("USERPROFILE", h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
-	srv := Handler(webHost{func() {}}, nil)
+	srv := webPageHandler(t, webHost{func() {}}, nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, httptest.NewRequest("POST", "/api/privacy-model", strings.NewReader(`{"do":"cancel"}`)))
 	var st privacyModelJSON
@@ -143,7 +143,7 @@ func TestPrivacyModelPick(t *testing.T) {
 	t.Cleanup(func() { modelOf, models = wasOf, wasModels })
 	modelOf = func(id string) pii.Model { return fakes[id] }
 	models = func() []pii.Model { return []pii.Model{fakes[pii.PrivacyFilter], fakes[pii.AstrLinkGuard]} }
-	srv := Handler(webHost{func() {}}, nil)
+	srv := webPageHandler(t, webHost{func() {}}, nil)
 	do := func(body string) privacyModelJSON {
 		t.Helper()
 		rec := httptest.NewRecorder()

@@ -128,7 +128,7 @@ docker logs magpie</pre>
 
     <h2 id="web"><a class="anchor" href="#web">ブラウザ UI</a></h2>
     <p>ログのリンクを開きます。リンクのキーは cookie に置き換わり、アドレスから消えます。キーなしで開いたページは拒否されます（401）。<code>MAGPIE_WEB_KEY</code>（英数字か <code>- . _ ~</code> で 16 文字以上。<code>openssl rand -hex 16</code> で作れます）を設定すると、再起動してもキーは変わらず、ブラウザは 400 日サインインしたままです。設定しなければ起動のたびに新しいキーができ、cookie はそのブラウザセッションの間だけ有効です。</p>
-    <p>ページは<b>ゲートウェイモード</b>で開きます：<span class="ui">プロバイダ</span>、<span class="ui">ゲートウェイ</span>、<span class="ui">ルーティング</span>、<span class="ui">使用量</span>、<span class="ui">プラグイン</span>、<span class="ui">設定</span>だけで、コンテナにはエージェントがないのでエージェント、セッション、ライブラリはありません。<span class="ui">設定</span> → <span class="ui">一般</span> → <span class="ui">ゲートウェイモード</span>でオフにできます。</p>
+    <p>ページは<b>ゲートウェイモード</b>で開きます：<span class="ui">プロバイダ</span>、<span class="ui">ゲートウェイ</span>、<span class="ui">ルーティング</span>、<span class="ui">使用量</span>、<span class="ui">セッション</span>、<span class="ui">プラグイン</span>、<span class="ui">設定</span>だけで、コンテナにはエージェントがないのでエージェントとライブラリはありません。<span class="ui">セッション</span>には、このゲートウェイを通った他のコンピュータのエージェントのセッションだけが並び、このマシンのエージェントのセッションファイルは読みません。<span class="ui">設定</span> → <span class="ui">一般</span> → <span class="ui">ゲートウェイモード</span>でオフにできます。</p>
     <p>NAS や SSH で入るサーバーでは、3430 を公開せずにトンネル経由でページを開きます：<code>ssh -L 3430:127.0.0.1:3430 you@nas</code> を実行してから、自分のコンピューターでログのリンクを開きます。</p>
     <div class="callout"><b>リンクを持つ人は誰でも magpie を変更し、そのキーを見られます。</b>3430 はループバックか VPN 上に置いてください。ネットワーク越しなら HTTPS で：<code>MAGPIE_TLS_CERT</code> と <code>MAGPIE_TLS_KEY</code> で magpie に証明書を渡すか、Caddy のような TLS 付きのリバースプロキシの後ろに置きます。</div>
 

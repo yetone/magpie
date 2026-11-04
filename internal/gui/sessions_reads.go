@@ -30,6 +30,9 @@ type readsJSON struct {
 	// Found: the agents with session history on this computer, and those
 	// the user named
 	Found []readAgentJSON `json:"found"`
+	// Gateway: gateway mode, which reads no agent's files here whatever
+	// the choice (ownSessionsOff), so nothing is asked and none is found
+	Gateway bool `json:"gateway,omitempty"`
 }
 
 func readsNow() readsJSON {
@@ -37,7 +40,7 @@ func readsNow() readsJSON {
 	if s := settings.Shared().SessionReads; s != nil {
 		r = s
 	}
-	out := readsJSON{Found: []readAgentJSON{}}
+	out := readsJSON{Found: []readAgentJSON{}, Gateway: ownSessionsOff()}
 	if r != nil {
 		out.Asked, out.All = r.Asked, r.All
 	}

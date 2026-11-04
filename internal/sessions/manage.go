@@ -698,6 +698,11 @@ func Trash() []Trashed {
 		if err != nil || json.Unmarshal(b, &t) != nil {
 			continue
 		}
+		// gateway mode lists what the gateway kept, not this computer's
+		// agents' sessions (OwnOff)
+		if !t.Gateway && ownOff() {
+			continue
+		}
 		dir := filepath.Dir(p)
 		t.Key = filepath.Base(filepath.Dir(dir)) + "/" + filepath.Base(dir)
 		if t.Gateway {
@@ -728,6 +733,9 @@ func Purge(key string) error {
 	if dir == "" {
 		return errors.New("no such deleted session")
 	}
+	if !isGatewayKey(key) && ownOff() {
+		return ErrNotRead
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	for _, p := range []string{filepath.Dir(dir), dir} {
@@ -754,6 +762,9 @@ func Restore(key string) (Trashed, error) {
 		return Trashed{}, errors.New("no such deleted session")
 	}
 	t.Key = key
+	if !isGatewayKey(key) && ownOff() {
+		return Trashed{}, ErrNotRead
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	if isGatewayKey(key) {

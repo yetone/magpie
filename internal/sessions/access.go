@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/yetone/magpie/internal/settings"
@@ -42,7 +43,28 @@ func Reads(agent string) bool {
 	return currentReads().Reads(agent)
 }
 
+// readsNone is the answer while OwnOff holds: no agent's files are read.
+var readsNone = &settings.SessionReads{Asked: true}
+
+// OwnOff, when set and true, is gateway mode on magpie web's page
+// (gui.gatewayMode; paultian on Discord): the page lists what came
+// through this gateway from other computers, never this computer's own
+// agents' session files, so no agent's files are read, whatever
+// SessionReads says. Gateway-recorded sessions (the usage ledger and the
+// gateway's own store) are not behind this gate and still show. It is
+// asked on every Reads, so it must be cheap.
+var OwnOff atomic.Pointer[func() bool]
+
+// ownOff is whether OwnOff is set and says so.
+func ownOff() bool {
+	f := OwnOff.Load()
+	return f != nil && (*f)()
+}
+
 func currentReads() *settings.SessionReads {
+	if ownOff() {
+		return readsNone
+	}
 	if r := settings.Shared().SessionReads; r != nil {
 		return r
 	}
@@ -169,6 +191,10 @@ func allowed(fs []file) []file {
 // their folders only (nothing in them is read): those the consent lists.
 // WSL distros are not looked into; allow all covers them.
 func Found() []string {
+	// gateway mode reads none of them, so it asks about none (OwnOff)
+	if ownOff() {
+		return nil
+	}
 	exists := func(p string) bool {
 		if p == "" {
 			return false

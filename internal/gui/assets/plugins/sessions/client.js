@@ -365,7 +365,9 @@ magpie.plugin("sessions", (ctx) => {
   // this card comes first: the agents found here, each with its own
   // switch, off; Allow selected reads those picked, and Allow all every
   // agent, those found later too. Settings › Privacy changes it later.
-  const consentApplies = () => data?.reads && data.reads.asked === false;
+  // In gateway mode no agent's files here are read (reads.gateway), so
+  // there is nothing to ask.
+  const consentApplies = () => data?.reads && data.reads.asked === false && !data.reads.gateway;
 
   function consentCard() {
     const found = data.reads.found || [];
@@ -514,7 +516,10 @@ magpie.plugin("sessions", (ctx) => {
     if (!data.agents.length) {
       if (consentApplies()) return box;
       const e = el("div", "empty-state");
-      e.append(el("b", "", t("No sessions yet")), el("span", "", t("Claude Code's, Codex's, Hermes's, OpenCode's and Pi's sessions on this computer show up here, by the folder they ran in.")));
+      e.append(el("b", "", t("No sessions yet")), el("span", "", data.reads?.gateway
+        // gateway mode lists no session of this computer's agents
+        ? t("The sessions of agents on other computers that use this gateway show up here, by the folder they ran in.")
+        : t("Claude Code's, Codex's, Hermes's, OpenCode's and Pi's sessions on this computer show up here, by the folder they ran in.")));
       box.append(e);
       return box;
     }

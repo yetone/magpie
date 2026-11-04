@@ -161,7 +161,7 @@ func TestFontSettingsAPIAndBoot(t *testing.T) {
 	if err := json.Unmarshal(boot(h)["uiFont"], &first); err != nil || !reflect.DeepEqual(&first, face) {
 		t.Fatalf("first paint font = %#v: %v", first, err)
 	}
-	web := Handler(webHost{}, nil)
+	web := webPageHandler(t, webHost{}, nil)
 	post(web, map[string]any{"uiFont": nil, "codeFont": nil}, 200)
 	if !reflect.DeepEqual(settings.Load().UIFont, face) {
 		t.Fatal("browser save replaced a desktop font")

@@ -335,6 +335,34 @@ choice from the CLI (`sessionReadsTo`); while it is not asked,
 says how (`sessNothing`). Tests: `TestSessionsRead`,
 `TestSessionsNotAskedSaysHow`.
 
+In gateway mode (`magpie web`'s page, [`gatewaymode.go`](../../internal/gui/gatewaymode.go))
+no agent's own session files are read, whatever `SessionReads` says
+(paultian on Discord: a server put in gateway mode with agents installed
+listed its own sessions beside those other computers sent). The gui sets
+`sessions.OwnOff` to `ownSessionsOff`, and `currentReads` answers "none"
+while it holds, so `Reads`, `allowed` and every route above (the list,
+`one`, `transcript`, `markdown`, `export`, stats, the overview, search,
+`manage`, delete, carry, the Codex provider move, and Usage's agent-file
+calls) see no local session; `Found` and `Dirs` are empty, the
+trash lists and restores only what the gateway kept, and moving Claude
+Code's project folder is refused (`ErrNotRead`). Gateway-recorded
+sessions (the ledger's projection and the recorded conversations) are not
+behind this gate and still show, a local agent's that went through this
+gateway among them. `ownSessionsOff` asks `settings.Shared()` and an
+agents look kept for 30 s, as it is asked on every read, and when its
+answer turns it resets the sessions' caches and the stats
+(`forgetOwnSessions`), as `POST /api/settings/gateway-mode` does at once.
+`/api/sessions/reads` says `gateway: true` then: the Sessions page asks
+nothing, its empty state says the sessions shown are those of other
+computers' agents that use this gateway, and Settings › Privacy leaves
+*Agents' session history* out. A session is listed only when its
+requests name one in a header (`sessionOf`: `X-Magpie-Session`, or the
+agent's own, `sessionHeaders`), under the agent its User-Agent names
+(`usage.AgentOf`, magpie's agents and plugins' agents; another client by
+its product name).
+The app's windows are never in gateway mode. Tests:
+`TestGatewayModeListsNoOwnSessions`, `gateway-mode-sessions.test.cjs`.
+
 What is read either way: the gateway's own usage ledger, its
 projections and the conversations it recorded (they are magpie's own),
 the agents' config and sign-in files, Claude Code's and Codex's

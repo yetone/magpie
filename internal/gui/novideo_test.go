@@ -26,7 +26,7 @@ func TestBootSaysNoVideo(t *testing.T) {
 	if b := boot(Handler(nil, nil)); !strings.Contains(b, `"noVideo":true`) {
 		t.Fatalf("the app, with no video: %s", b)
 	}
-	if b := boot(Handler(webHost{}, nil)); strings.Contains(b, "noVideo") {
+	if b := boot(webPageHandler(t, webHost{}, nil)); strings.Contains(b, "noVideo") {
 		t.Fatalf("a browser tab plays its own video: %s", b)
 	}
 	webkitPlaysVideo = func() bool { return true }

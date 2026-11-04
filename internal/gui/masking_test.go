@@ -42,7 +42,7 @@ func TestMaskingRecordsAPI(t *testing.T) {
 		Snips:  map[string]string{p: sent}})
 	other := maskrec.Add(maskrec.Record{What: "search", N: 1, Values: []maskrec.Value{{Placeholder: "{{EMAIL_00000000}}", Kind: "EMAIL", By: redact.ByRule}}})
 
-	srv := Handler(webHost{func() {}}, nil)
+	srv := webPageHandler(t, webHost{func() {}}, nil)
 	get := func(path string, into any) int {
 		rw := httptest.NewRecorder()
 		srv.ServeHTTP(rw, httptest.NewRequest("GET", path, nil))
@@ -159,7 +159,7 @@ func TestMaskingPreviewKeepsKeyForm(t *testing.T) {
 	t.Setenv("USERPROFILE", h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
-	srv := Handler(webHost{func() {}}, nil)
+	srv := webPageHandler(t, webHost{func() {}}, nil)
 	preview := func() string {
 		rw := httptest.NewRecorder()
 		srv.ServeHTTP(rw, httptest.NewRequest("POST", "/api/masking/preview", strings.NewReader(`{"text":"用密钥 `+key+` 部署可以吗，或用密钥 OPENAI_API_KEY=`+key+`"}`)))

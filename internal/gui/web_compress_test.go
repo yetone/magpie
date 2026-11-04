@@ -26,7 +26,7 @@ func TestWebCompresses(t *testing.T) {
 	t.Setenv("USERPROFILE", h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
-	srv := webHandler("3430", "0123456789abcdef-key", 0, Handler(webHost{}, nil))
+	srv := webHandler("3430", "0123456789abcdef-key", 0, webPageHandler(t, webHost{}, nil))
 	cookie := &http.Cookie{Name: "magpie_web_3430", Value: "0123456789abcdef-key"}
 	get := func(path, enc, etag string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest("GET", path, nil)
@@ -112,7 +112,7 @@ func TestVersionedFilesKept(t *testing.T) {
 	t.Setenv("USERPROFILE", h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
-	srv := Handler(webHost{}, nil)
+	srv := webPageHandler(t, webHost{}, nil)
 	get := func(path string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
 		srv.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))

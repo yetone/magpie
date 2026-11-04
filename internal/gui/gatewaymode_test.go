@@ -27,7 +27,7 @@ func TestGatewayMode(t *testing.T) {
 	agentsHere = func() bool { return here }
 	t.Cleanup(func() { agentsHere = was; WebGateway.Store(false); webPage.Store(false) })
 
-	srv := Handler(webHost{func() {}}, nil)
+	srv := webPageHandler(t, webHost{func() {}}, nil)
 	do := func(method, path, body string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
 		srv.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader(body)))

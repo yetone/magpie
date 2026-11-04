@@ -128,7 +128,7 @@ docker logs magpie</pre>
 
     <h2 id="web"><a class="anchor" href="#web">Web 界面</a></h2>
     <p>打开日志里的链接。链接里的 key 会换成一个 cookie，并从地址栏里去掉；不带 key 打开会被拒绝（401）。设置了 <code>MAGPIE_WEB_KEY</code>（16 个以上的字母、数字或 <code>- . _ ~</code>；<code>openssl rand -hex 16</code> 可以生成一个）时，重启后 key 不变，浏览器保持登录 400 天。不设置时每次启动都会生成新 key，cookie 只在本次浏览器会话里有效。</p>
-    <p>这个页面处于<b>网关模式</b>：只有 <span class="ui">供应商</span>、<span class="ui">网关</span>、<span class="ui">路由</span>、<span class="ui">用量</span>、<span class="ui">插件</span>和 <span class="ui">设置</span>，没有 Agent、会话和资源库，因为容器里没有 Agent。<span class="ui">设置</span> → <span class="ui">常规</span> → <span class="ui">网关模式</span> 可以关掉它。</p>
+    <p>这个页面处于<b>网关模式</b>：只有 <span class="ui">供应商</span>、<span class="ui">网关</span>、<span class="ui">路由</span>、<span class="ui">用量</span>、<span class="ui">会话</span>、<span class="ui">插件</span>和 <span class="ui">设置</span>，没有 Agent 和资源库，因为容器里没有 Agent。<span class="ui">会话</span>只列出其他电脑上通过这个网关的 Agent 会话，从不读这台机器上 Agent 的会话文件。<span class="ui">设置</span> → <span class="ui">常规</span> → <span class="ui">网关模式</span> 可以关掉它。</p>
     <p>NAS 或通过 SSH 访问的服务器上，用隧道打开页面，不要发布 3430：<code>ssh -L 3430:127.0.0.1:3430 you@nas</code>，然后在自己电脑上打开日志里的链接。</p>
     <div class="callout"><b>拿到链接的人都能修改 magpie、看到它的密钥。</b>让 3430 只在回环地址或 VPN 上。要跨网络访问，就用 HTTPS：用 <code>MAGPIE_TLS_CERT</code> 和 <code>MAGPIE_TLS_KEY</code> 给 magpie 一张证书，或者放在带 TLS 的反向代理（如 Caddy）后面。</div>
 

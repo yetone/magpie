@@ -66,7 +66,7 @@ func TestOpenSaysTheBrowserDidntOpen(t *testing.T) {
 		t.Fatalf("open: %d %s", rec.Code, rec.Body)
 	}
 	rec = httptest.NewRecorder()
-	Handler(webHost{}, nil).ServeHTTP(rec, httptest.NewRequest("POST", "/api/open", strings.NewReader(`{"url":"https://example.invalid/authorize"}`)))
+	webPageHandler(t, webHost{}, nil).ServeHTTP(rec, httptest.NewRequest("POST", "/api/open", strings.NewReader(`{"url":"https://example.invalid/authorize"}`)))
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("an open that worked: %d %s", rec.Code, rec.Body)
 	}
