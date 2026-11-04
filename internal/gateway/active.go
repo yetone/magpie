@@ -50,6 +50,8 @@ type inflight struct {
 	tr *trace
 	// redaction: its maskings, their phase and time (redact_phase.go)
 	redaction redaction
+	// live: its reply counted as it reaches the agent (live.go)
+	live atomic.Pointer[liveRow]
 }
 
 type inflightKey struct{}

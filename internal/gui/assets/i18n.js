@@ -4570,6 +4570,12 @@ const I18N = {
     "Remove this window": "删除这个时段",
     "Rate windows: every window is days, a time like 09:00, another time for it to end, and a rate from 0 to 1000 with at most three decimals": "时段倍率：每个时段是星期、一个如 09:00 的时间、另一个结束时间，以及一个 0 到 1000、至多三位小数的倍率",
     "Bills at {rate} now: the price rate times this hour's window": "现在按 {rate} 计费：价格倍率乘以当前时段的倍率",
+    // Insights › Routing (plugins/routing): the live progress a request still being answered shows
+    "≈ {n} tokens": "≈ {n} token",
+    "{d} ago": "{d}前",
+    "How much of this reply has reached the client, framing included": "这条回复已经送到客户端的字节数，含流式封装",
+    "What the words written so far are worth in output tokens, learned per provider and model": "已经写出的这些字值多少输出 tokens，按上游与模型学来的比例估算",
+    "How long ago the model last wrote something. A quiet reply is not a failed one": "模型最近一次写出内容是多久以前。安静不代表失败",
     // Insights › Masking (plugins/redact), words said elsewhere too
     "Masking": "脱敏",
     "Each request masking changed, what the vendor saw, and how, on Insights › Masking": "每条被脱敏的请求、厂商看到的样子和遮法，都在 观测 › 脱敏",
@@ -9140,6 +9146,12 @@ const I18N = {
     "Remove this window": "刪除這個時段",
     "Rate windows: every window is days, a time like 09:00, another time for it to end, and a rate from 0 to 1000 with at most three decimals": "時段倍率：每個時段是星期、一個如 09:00 的時間、另一個結束時間，以及一個 0 到 1000、至多三位小數的倍率",
     "Bills at {rate} now: the price rate times this hour's window": "現在以 {rate} 計費：價格倍率乘上目前時段的倍率",
+    // Insights › Routing (plugins/routing): the live progress a request still being answered shows
+    "≈ {n} tokens": "≈ {n} token",
+    "{d} ago": "{d}前",
+    "How much of this reply has reached the client, framing included": "這條回覆已經送到客戶端的位元組數，含串流封裝",
+    "What the words written so far are worth in output tokens, learned per provider and model": "已經寫出的這些字值多少輸出 tokens，按上游與模型學來的比例估算",
+    "How long ago the model last wrote something. A quiet reply is not a failed one": "模型最近一次寫出內容是多久以前。安靜不代表失敗",
     // Insights › Masking (plugins/redact), words said elsewhere too
     "Masking": "脫敏",
     "Each request masking changed, what the vendor saw, and how, on Insights › Masking": "每則被脫敏的請求、廠商看到的樣子和遮法，都在 觀測 › 脫敏",
@@ -13712,6 +13724,12 @@ const I18N = {
     "Remove this window": "この時間帯を削除",
     "Rate windows: every window is days, a time like 09:00, another time for it to end, and a rate from 0 to 1000 with at most three decimals": "時間帯倍率：各時間帯は曜日、09:00 のような時刻、終了する別の時刻、そして小数3位までの 0 から 1000 の倍率で指定します",
     "Bills at {rate} now: the price rate times this hour's window": "現在は {rate} で計上：価格倍率×現在の時間帯の倍率",
+    // Insights › Routing (plugins/routing): the live progress a request still being answered shows
+    "≈ {n} tokens": "≈ {n} tokens",
+    "{d} ago": "{d}前",
+    "How much of this reply has reached the client, framing included": "この返信がクライアントに届いたバイト数（ストリームの枠を含む）",
+    "What the words written so far are worth in output tokens, learned per provider and model": "ここまでに書かれた語が出力 tokens で何個ぶんか。上流とモデルごとに学んだ比率で推定",
+    "How long ago the model last wrote something. A quiet reply is not a failed one": "モデルが最後に内容を書いたのはいつか。静かなのは失敗ではない",
     // Insights › Masking (plugins/redact), words said elsewhere too
     "Masking": "マスク",
     "Each request masking changed, what the vendor saw, and how, on Insights › Masking": "マスクしたリクエストごとに、ベンダーに届いた姿とマスクの仕方を 観測 › マスク で見られます",
@@ -18284,6 +18302,12 @@ const I18N = {
     "Remove this window": "Dieses Zeitfenster entfernen",
     "Rate windows: every window is days, a time like 09:00, another time for it to end, and a rate from 0 to 1000 with at most three decimals": "Zeitfenster: jedes Zeitfenster besteht aus Wirktagen, einer Zeit wie 09:00, einer anderen Endzeit und einer Rate von 0 bis 1000 mit höchstens drei Dezimalstellen",
     "Bills at {rate} now: the price rate times this hour's window": "Rechnet gerade mit {rate} ab: der Preisfaktor mal das Zeitfenster dieser Stunde",
+    // Insights › Routing (plugins/routing): the live progress a request still being answered shows
+    "≈ {n} tokens": "≈ {n} tokens",
+    "{d} ago": "vor {d}",
+    "How much of this reply has reached the client, framing included": "Wie viele Bytes dieser Antwort schon beim Client angekommen sind, samt Stream-Rahmen",
+    "What the words written so far are worth in output tokens, learned per provider and model": "Was die bisher geschriebenen Wörter in Ausgabe-tokens wert sind, geschätzt aus dem je Anbieter und Modell gelernten Verhältnis",
+    "How long ago the model last wrote something. A quiet reply is not a failed one": "Wie lange es her ist, dass das Modell zuletzt etwas geschrieben hat. Still heißt nicht gescheitert",
     // Insights › Masking (plugins/redact), words said elsewhere too
     "Masking": "Maskierung",
     "Each request masking changed, what the vendor saw, and how, on Insights › Masking": "Jede maskierte Anfrage, was der Anbieter sah und wie, unter Einblick › Maskierung",

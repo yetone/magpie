@@ -151,6 +151,12 @@ type Route struct {
 	// is unknown (maskingMs)
 	Phase   string `json:"phase,omitempty"`
 	Masking int64  `json:"masking,omitempty"`
+	// Bytes, ContentAt and EstTok: the reply as it reaches the agent
+	// (live.go), the bytes it has had, the epoch ms content last came, and
+	// the output tokens estimated from it, 0 while its pair has no rate
+	Bytes     int64 `json:"bytes,omitempty"`
+	ContentAt int64 `json:"contentAt,omitempty"`
+	EstTok    int   `json:"estTok,omitempty"`
 	// Held: the file name, in HeldDir, of the report saved of a request
 	// magpie held too long before routing it and stopped (giveUp)
 	Held string `json:"held,omitempty"`
@@ -859,6 +865,22 @@ func (t *trace) update(r *Route, f func(r *Route)) {
 	if after := activityOf(r); before != after {
 		t.noteActivity(r, activityChange(before, after))
 	}
+}
+
+// liveBytes writes a reply's running totals on its route (live.go): the
+// bytes the agent has had, when content last came, and its estimated
+// output tokens. Each write wakes the pages waiting, which gather a
+// moment before they read (traceGather), so a stream's many writes reach
+// a page a few times a second, and the last before a pause is not lost.
+func (t *trace) liveBytes(rt *Route, bytes, contentAt int64, est int) {
+	if rt == nil {
+		return
+	}
+	t.mu.Lock()
+	rt.Bytes, rt.ContentAt, rt.EstTok = bytes, contentAt, est
+	t.changed()
+	rt.Seq = t.seq
+	t.mu.Unlock()
 }
 
 // gatewayTrace tells this gateway's routing to another magpie on the same

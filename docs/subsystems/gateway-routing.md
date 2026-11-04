@@ -1065,6 +1065,45 @@ had, was left out: the read-only key already reads more than this feed
 [`route_events_test.go`](../../internal/gateway/route_events_test.go), and
 `TestReadOnlyKeyEveryRoute`.
 
+### A reply's progress while it is out
+
+A long or reasoning reply otherwise looks stuck on the Routing page (#4951,
+Canda15). [`live.go`](../../internal/gateway/live.go) counts each request's
+reply as it reaches the agent: `serve` begins a `liveRow` on the request's
+`inflight` (`liveBegin`, none for the gateway's own requests), and
+`captureResponseWriter.Write`, which every byte to the agent passes, calls
+`observe`. The route (the full trace only, never `routeActivity`) gets
+`bytes` (every byte written, SSE framing and keepalives included),
+`contentAt` (epoch ms of the last write that was not only SSE comments, so
+a keepalive never moves it) and `estTok`. `trace.liveBytes` writes them
+under `trace.mu` and bumps the route's `Seq`, so a long poll gathers them
+like any change.
+
+`estTok` is the content written so far (text, reasoning, tool names and
+arguments, per the agent's protocol,
+[`live_content.go`](../../internal/gateway/live_content.go)) at the rate
+learned for the provider and model that answer (`routed`, per try), from
+streamed replies that did not fail and whose vendor said its output
+tokens ([`live_rates.go`](../../internal/gateway/live_rates.go)). Under
+three such replies there is no estimate and the page shows none. Rates
+are in memory only (256 pairs), learned again after a restart; an
+estimate is never learned from.
+
+Cost: `observe` takes the row's lock and the trace's, neither held while
+anything blocks. A whole JSON reply (its first byte `{` or `[`) is counted
+in bytes only, never copied or decoded; a stream is cut into lines in
+place, only a line cut by the end of a write is copied, and a line over
+1 MiB is passed over. The ChatGPT backend's chain (`codex_backend.go`)
+writes past the capture writer and is not counted.
+
+The page ([`plugins/routing/client.js`](../../internal/gui/assets/plugins/routing/client.js),
+`liveParts`, `paintLive`) shows the numbers on a request in flight's row
+and beside the account answering it, changed in place each second; after
+15 s with no content the account's dot stops pulsing. Nothing stays once
+the request is done. `TestLiveCountsARealStream` and the other tests in
+[`live_test.go`](../../internal/gateway/live_test.go), and
+`routing-live-bytes.test.cjs`.
+
 ## Turning provider search off
 
 [Settings](../../internal/settings/settings.go)' `searcher: "off"` disables magpie's provider-assisted search,

@@ -409,6 +409,17 @@ function routingPage(part) {
     return t("{n} d", { n: Math.round(m / 1440) });
   }
   const took = (ms = 0) => ms < 1000 ? t("{n} ms", { n: ms }) : t("{n} s", { n: (ms / 1000).toFixed(ms < 10e3 ? 1 : 0) });
+  // A reply in flight (#4951): the bytes the agent has had, what the content
+  // is worth in tokens, and how long ago content last came. For requests
+  // still out only: an ended row has its own metrics, which say more.
+  const liveSize = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + " MiB"
+    : n >= 1024 ? (n / 1024).toFixed(1) + " KiB" : Math.round(n || 0) + " B";
+  // an estimate always carries ≈, and with no rate learned yet there is none
+  const liveTokens = (r) => r.estTok ? t("≈ {n} tokens", { n: tokens(r.estTok) }) : "";
+  // quiet is not failed: the row says how long ago, and its dot stops
+  // pulsing after liveQuietMs with no content
+  const liveQuietMs = 15e3;
+  const liveSince = (r, now = Date.now()) => r.contentAt ? t("{d} ago", { d: dur(Math.max(0, now - r.contentAt)) }) : "";
   // (the formats made once: made for each call, they were much of what the
   // accounts' countdowns cost), made again when the GUI's language changes
   let fmtLang = null, HM, WD;
@@ -2732,7 +2743,17 @@ function routingPage(part) {
       else if (w.window) s = t("request longer than its {n} window · passed over", { n: ctxShort(w.window) });
       // a row another request weighed, answering that one: the header
       // tells of this request, so it says the answer is not this one's
-      else if (trying.has(id)) { s = (r.id !== cur.id && agents.size <= 1 ? t("answering another request…") : t("answering…")) + (said && " · " + said); named = titleOf(trying.get(id)); }
+      else if (trying.has(id)) {
+        // this request's progress beside the account answering it; not
+        // when the account answers another request, whose numbers they are
+        const live = r.id === cur.id ? liveParts(r).map(([value]) => value).join(" · ") : "";
+        // gone quiet, it says the numbers only: "answering…" would read as
+        // the vendor still writing
+        const hushed = live && r.contentAt && Date.now() - r.contentAt >= liveQuietMs;
+        s = hushed ? live
+          : (r.id !== cur.id && agents.size <= 1 ? t("answering another request…") : t("answering…")) + (said && " · " + said) + (live ? " · " + live : "");
+        named = titleOf(trying.get(id));
+      }
       else if (answered.has(id)) { s = (agents.size > 1 ? t("answered {agent}", { agent: agentName(r.agent) }) : t("answered this request")) + (said && " · " + said); named = titleOf(r); }
       else if (gave.has(id)) s = t("{status} · {fail} · passed to {agent}", { status: gave.get(id).status, fail: failWord(gave.get(id).fail), agent: agentName(r.agent) });
       else if (went.has(id)) s = t("{status} · {fail} · went on to the next", { status: went.get(id).status, fail: failWord(went.get(id).fail) });
@@ -2794,6 +2815,10 @@ function routingPage(part) {
       const flying = !resting && (trying.has(id) || onWire.has(id));
       const on = flying || (!resting && answered.has(id));
       lightRow(row.li, row.wire, on, flying);
+      // quiet: the reply is still out but no content came for liveQuietMs;
+      // the dot stops pulsing, as it has not failed
+      const quiet = flying && r.id === cur.id && !cur.done && cur.contentAt && Date.now() - cur.contentAt >= liveQuietMs;
+      row.li.classList.toggle("quiet", !!quiet);
       row.li.classList.toggle("low", !!(tiered(w) && w.known && group(w) !== "fine"));
       row.li.classList.toggle("rest", !!resting || gave.has(id));
       row.li.classList.toggle("left", !!w.unlisted || !!w.window);
@@ -3925,8 +3950,50 @@ function routingPage(part) {
       rowsMoved = true;
     }
     x.r = r;
+    // a row is built again only when what it says changes (#3731); the live
+    // numbers aren't in its sig, so they are changed in place
+    paintLive(x.b, r);
     if (x.b.getAttribute("aria-pressed") !== sel) x.b.setAttribute("aria-pressed", sel);
     return x.b;
+  }
+  // liveParts: a request in flight's numbers, [value, help], for its row and
+  // for the account answering it
+  function liveParts(r, now = Date.now()) {
+    if (r.done || !r.bytes) return [];
+    const parts = [[liveSize(r.bytes), t("How much of this reply has reached the client, framing included")]];
+    if (r.estTok) parts.push([liveTokens(r), t("What the words written so far are worth in output tokens, learned per provider and model")]);
+    if (r.contentAt) parts.push([liveSince(r, now), t("How long ago the model last wrote something. A quiet reply is not a failed one")]);
+    return parts;
+  }
+  // liveCells: those numbers as the row's cells, unlabelled (each value
+  // carries its unit), found again by paintLive by their .recv class
+  function liveCells(r, now = Date.now()) {
+    return liveParts(r, now).map(([value, help]) => ["recv", "", value, help]);
+  }
+  // paintLive changes the cells in place, or adds or removes them all when
+  // their count changed (a new number, or the request ended)
+  function paintLive(button, r) {
+    const meta = button.querySelector(".meta");
+    if (!meta) return;
+    const cells = liveCells(r);
+    const had = [...meta.querySelectorAll(".rt-metric.recv")];
+    if (had.length !== cells.length) {
+      had.forEach((c) => c.remove());
+      cells.forEach((c) => meta.append(metricElement(c, true)));
+      meta.hidden = !meta.children.length;
+      return;
+    }
+    cells.forEach(([cls, label, value, help], i) => {
+      const cell = had[i];
+      const v = cell.querySelector(".v");
+      if (v && v.textContent !== value) v.textContent = value;
+      if (cell.title !== help) cell.title = help;
+    });
+  }
+  // with nothing written, no poll answers and "ago" would stand still: the
+  // page's second paints the rows in flight again
+  function livePaint() {
+    for (const x of reqRows.values()) if (x.r && !x.r.done && x.r.bytes) paintLive(x.b, x.r);
   }
   // A day of history is up to 2,000 requests, and a row is ~20 elements:
   // all of them in the list, a day picked took the page 0.4–0.7s here and
@@ -4195,7 +4262,10 @@ function routingPage(part) {
     const info = el("span", "meta");
     if (meta.length) info.append(el("span", "retry-count", meta.join(" · ")));
     info.append(...metrics.map((m) => metricElement(m, true)));
-    info.hidden = !metrics.length && !meta.length;
+    // a request in flight: its progress where an ended row's metrics go
+    const live = liveCells(r);
+    for (const cell of live) info.append(metricElement(cell, true));
+    info.hidden = !metrics.length && !meta.length && !live.length;
     b.append(when, asked, to, info);
 
     b.title = title;
@@ -5084,7 +5154,7 @@ function routingPage(part) {
   let second = 0;
   function countdown() {
     if (!shown()) { clearInterval(second); second = 0; return; }
-    second ||= setInterval(() => { if (!shown()) return countdown(); if (!pinned && loaded && cur) sync(); render(); renderActs(listed()); groupsReadAgain(); }, 1000);
+    second ||= setInterval(() => { if (!shown()) return countdown(); if (!pinned && loaded && cur) sync(); render(); renderActs(listed()); groupsReadAgain(); livePaint(); }, 1000);
   }
   countdown();
 

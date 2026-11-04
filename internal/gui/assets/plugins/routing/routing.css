@@ -142,6 +142,8 @@
 @keyframes rtlive { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--fg) 40%, transparent); } 70%, 100% { box-shadow: 0 0 0 6px transparent; } }
 .rt-accts li.low em { color: var(--fg-2); }
 .rt-accts li.rest { border-style: dashed; }
+/* a reply still out with no content for 15s: the dot stops pulsing */
+.rt-accts li.quiet .dot { background: var(--amber); border-color: var(--amber); animation: none; }
 .rt-accts li.rest > :not(.tag) { opacity: .5; }
 .rt-accts li.rest em { color: var(--red); opacity: .85; }
 .rt-accts li.left { border-style: dotted; }

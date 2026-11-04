@@ -55,9 +55,13 @@ type captureResponseWriter struct {
 	whole *spool
 	// tools: whether the reply calls a tool, for a turn's end (turns)
 	tools *toolScan
+	// live: the reply counted for the Routing page while it is out
+	// (live.go), nil when it isn't
+	live *liveRow
 }
 
 func (w *captureResponseWriter) Write(p []byte) (int, error) {
+	w.live.observe(p)
 	w.body.add(p)
 	w.tools.add(p)
 	if w.full != nil {
