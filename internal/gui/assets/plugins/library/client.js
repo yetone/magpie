@@ -4955,7 +4955,7 @@ magpie.plugin("library", (ctx) => {
     const by = button(own ? t("By agent ({n})", { n: own }) : t("By agent"), "action lib-updall lib-howagent", () => openSkillHow());
     by.title = t("Give an agent its skills its own way");
     bar.append(by, el("span", "note", how === "copy"
-      ? t("Each agent gets a folder of its own, made again when the library's skill changes; edits made in a copy are replaced.")
+      ? t("Each agent gets a folder of its own, made again when the library's skill changes. An edit made in a copy goes into the library and to the other agents.")
       : t("Links follow the library's skill: an update reaches the agents at once.")));
     return bar;
   }

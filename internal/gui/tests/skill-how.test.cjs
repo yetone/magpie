@@ -79,7 +79,7 @@ const words = {
   en: {
     label: "Give skills as", links: "Links", copies: "Copies", byAgent: "By agent", byAgentOne: "By agent (1)",
     linkNote: "Links follow the library's skill: an update reaches the agents at once.",
-    copyNote: "Each agent gets a folder of its own, made again when the library's skill changes; edits made in a copy are replaced.",
+    copyNote: "Each agent gets a folder of its own, made again when the library's skill changes. An edit made in a copy goes into the library and to the other agents.",
     copied: "The agents get copies of their skills now", behind: "Copy out of date", behindTip: "The copy in Codex differs from the library's skill. Click to copy it again.",
     synced: "Copies updated", sheet: "How each agent gets its skills", libWay: "Library's way", only: "Only ever takes copies", getsCopies: "Gets copies", getsLinks: "Gets links",
     codexLinks: "Codex gets links to its skills now",
@@ -87,7 +87,7 @@ const words = {
   zh: {
     label: "Skills 启用方式", links: "符号链接", copies: "副本", byAgent: "按 Agent", byAgentOne: "按 Agent（1）",
     linkNote: "符号链接跟着资源库里的 Skill 走：一更新，各 Agent 立刻就用上。",
-    copyNote: "每个 Agent 拿到一份独立的文件夹，资源库里的 Skill 变了就重新复制；在副本里做的修改会被覆盖。",
+    copyNote: "每个 Agent 拿到一份独立的文件夹，资源库里的 Skill 变了就重新复制。在副本里做的修改会收进资源库，再给其他 Agent。",
     copied: "现在各 Agent 拿到的是 Skills 的副本", behind: "副本已落后", behindTip: "Codex 里的副本和资源库里的 Skill 不一样了。点一下重新复制。",
     synced: "副本已更新", sheet: "各 Agent 的 Skills 启用方式", libWay: "跟随资源库", only: "只能用副本", getsCopies: "用副本", getsLinks: "用符号链接",
     codexLinks: "Codex 现在用的是符号链接",
