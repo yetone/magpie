@@ -130,3 +130,75 @@ func TestMovePackedCodexThreadsNoUpdatedAt(t *testing.T) {
 		t.Fatalf("row on %q", got)
 	}
 }
+
+// hxy920830 on X: Codex had been on a provider of the user's own, a
+// relay's table, and once magpie was its provider the app listed those
+// threads and refused to open one ("This chat uses myrelay, but your
+// current provider is magpie"). An id of another length than magpie's
+// can't be written in place, so MoveRecentCodexThreads moves the recent
+// ones, plain or packed, each rewritten with a copy kept; an older one
+// and another provider's stay.
+func TestMoveRecentCodexThreads(t *testing.T) {
+	_, home := manageSetup(t)
+	const (
+		plain  = "019a0000-0000-7000-8000-0000000000f1"
+		packed = "019a0000-0000-7000-8000-0000000000f2"
+		old    = "019a0000-0000-7000-8000-0000000000f3"
+		theirs = "019a0000-0000-7000-8000-0000000000f4"
+	)
+	week := time.Now().Add(-8 * 24 * time.Hour).Truncate(time.Second)
+	paths := map[string]string{}
+	on := map[string]string{plain: "myrelay", packed: "myrelay", old: "myrelay", theirs: "custom"}
+	for id, p := range on {
+		paths[id] = cxRollout(t, home, "sessions", id, p, week)
+	}
+	pack(t, paths[packed], false)
+	db := filepath.Join(home, "state_5.sqlite")
+	d, err := sql.Open("sqlite", db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec(`CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL, model_provider TEXT NOT NULL, title TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	for id, ago := range map[string]time.Duration{plain: 8, packed: 9, old: 40, theirs: 8} {
+		if _, err := d.Exec(`INSERT INTO threads VALUES (?, ?, ?, 't', 0, ?)`, id, paths[id], on[id], now.Add(-ago*24*time.Hour).Unix()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d.Close()
+	since := now.Add(-30 * 24 * time.Hour)
+	moved, err := MoveRecentCodexThreads(home, "myrelay", "magpie", since, 64<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(moved) != 2 || moved[0].ID != plain || moved[1].ID != packed {
+		t.Fatalf("moved %+v, want the plain then the packed one", moved)
+	}
+	for _, mv := range moved {
+		if _, err := os.Stat(filepath.Join(mv.Backup, "move.json")); err != nil {
+			t.Fatalf("%s: no copy kept: %v", mv.ID, err)
+		}
+	}
+	want := map[string]string{plain: "magpie", packed: "magpie", old: "myrelay", theirs: "custom"}
+	for id, prov := range want {
+		if got, _, _ := threadProvider(t, db, id); got != prov {
+			t.Errorf("row %s on %q, want %q", id, got, prov)
+		}
+		f := paths[id]
+		if id == packed {
+			f += zstSuffix
+		}
+		if got := codexMetaProvider(f); got != prov {
+			t.Errorf("file %s on %q, want %q", filepath.Base(f), got, prov)
+		}
+	}
+	if b, _ := os.ReadFile(paths[plain]); !bytes.Contains(b, []byte("remember: the build uses make")) {
+		t.Fatalf("plain rollout after the move:\n%s", b)
+	}
+	// the packed-only move of the same leaves a plain thread
+	if moved, err = MovePackedCodexThreads(home, "custom", "magpie", since, 64<<20); err != nil || len(moved) != 0 {
+		t.Fatalf("packed-only: %+v %v", moved, err)
+	}
+}

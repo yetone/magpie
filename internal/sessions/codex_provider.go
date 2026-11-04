@@ -542,6 +542,21 @@ func moveCodexThreadIDs(home, from, to string, ids []string, budget int64) ([]Co
 // provider is magpie"), so a packed thread left on OpenAI couldn't be
 // reopened while magpie was Codex's provider.
 func MovePackedCodexThreads(home, from, to string, since time.Time, budget int64) ([]CodexMove, error) {
+	return moveRecentCodexThreads(home, from, to, since, budget, true)
+}
+
+// MoveRecentCodexThreads is MovePackedCodexThreads for every thread on
+// from whose last turn is since since, plain or packed: for a provider
+// whose id isn't magpie's length, which RelabelCodexThreads can't write
+// in place, so each one moved is rewritten with a copy kept. A thread of
+// the user's own provider (a relay's, "myrelay") was listed by the Codex
+// app once magpie was its provider, and refused: "This chat uses myrelay,
+// but your current provider is magpie" (hxy920830 on X).
+func MoveRecentCodexThreads(home, from, to string, since time.Time, budget int64) ([]CodexMove, error) {
+	return moveRecentCodexThreads(home, from, to, since, budget, false)
+}
+
+func moveRecentCodexThreads(home, from, to string, since time.Time, budget int64, packedOnly bool) ([]CodexMove, error) {
 	if !codexProviderRe.MatchString(from) || !codexProviderRe.MatchString(to) || from == to || budget <= 0 {
 		return nil, fmt.Errorf("can't move Codex's threads from %q to %q", from, to)
 	}
@@ -566,12 +581,14 @@ func MovePackedCodexThreads(home, from, to string, since time.Time, budget int64
 				if !filepath.IsAbs(path) || !strings.Contains(filepath.Base(path), id) || !sameDir(codexHomeOf(path), home) {
 					continue
 				}
-				// packed: the plain file gone, the .zst there and on from
+				// packed: the plain file gone, the .zst there and on
+				// from; or, packedOnly not, the plain file on from
 				plain, _ := strings.CutSuffix(path, zstSuffix)
-				if _, err := os.Lstat(plain); err == nil {
-					continue
-				}
-				if fi, err := os.Lstat(plain + zstSuffix); err != nil || !fi.Mode().IsRegular() || codexMetaProvider(plain+zstSuffix) != from {
+				if fi, err := os.Lstat(plain); err == nil {
+					if packedOnly || !fi.Mode().IsRegular() || codexMetaProvider(plain) != from {
+						continue
+					}
+				} else if fi, err := os.Lstat(plain + zstSuffix); err != nil || !fi.Mode().IsRegular() || codexMetaProvider(plain+zstSuffix) != from {
 					continue
 				}
 				ids = append(ids, id)
