@@ -47,6 +47,7 @@ func stubCodexApp(t *testing.T) *codexAppStub {
 		codexApp.Lock()
 		codexApp.seen, codexApp.route, codexApp.stale, codexApp.stuck, codexApp.switched, codexApp.auto = false, "", nil, false, false, false
 		codexApp.ended, codexApp.backBy, codexApp.spent, codexApp.why = nil, time.Time{}, false, ""
+		codexApp.back, codexApp.backAt = nil, time.Time{}
 		codexApp.Unlock()
 	}
 	t.Cleanup(func() {
@@ -1160,5 +1161,78 @@ func TestCodexAppFirstLookOnAUsedUpAccountRestarts(t *testing.T) {
 	}
 	if got := codexAppStep(context.Background(), now, idle); got != nil {
 		t.Fatalf("after the first look: ended %v", got)
+	}
+}
+
+// With Restart the Codex app to follow off, magpie leaves the app's
+// app-server running when it gives Codex back its ChatGPT account at the
+// reset. That app-server started with magpie as Codex's provider and
+// answers account/read with no account, so the app shows no account name
+// and no usage until it restarts (練習^1.0beta by mail, 11-04). CodexAppBack
+// says so till that app-server is gone, and only for the takeover's end:
+// not for magpie's own account switch back, nor after the app restarted.
+func TestCodexAppBackSaidTillItRestarts(t *testing.T) {
+	signIn(t)
+	s := stubCodexApp(t)
+	codexRestartsApp = func() bool { return false }
+	now := time.Now()
+	idle := func() (int, time.Time) { return 0, now.Add(-time.Minute) }
+	step := func() []int { return codexAppStep(context.Background(), now, idle) }
+
+	s.running = []int{60}
+	step()
+	codexAppSwitched(false, true)
+	step()
+	if CodexAppBack() {
+		t.Fatal("magpie's own switch back among ChatGPT accounts reads as the takeover left")
+	}
+	s.on = true
+	if got := step(); !slices.Equal(got, []int{60}) {
+		t.Fatalf("the takeover: ended %v, want [60]", got)
+	}
+	step()
+	if CodexAppBack() {
+		t.Fatal("said while magpie is still Codex's provider")
+	}
+	s.on = false // the reset, the app left running on app-server 100
+	if got := step(); got != nil {
+		t.Fatalf("the reset with Restart off: ended %v", got)
+	}
+	if !CodexAppBack() {
+		t.Fatal("the app left on the takeover's app-server isn't said")
+	}
+	// still running at the next looks, listed again only every so often
+	now = now.Add(codexAppBackEvery)
+	step()
+	if !CodexAppBack() {
+		t.Fatal("forgotten while its app-server still runs")
+	}
+	// the user restarts the app: another app-server, which reads the account
+	s.running = []int{200}
+	now = now.Add(codexAppBackEvery / 2)
+	step()
+	if !CodexAppBack() {
+		t.Fatal("listed again before codexAppBackEvery")
+	}
+	now = now.Add(codexAppBackEvery)
+	step()
+	if CodexAppBack() {
+		t.Fatal("still said after the app-server it named went")
+	}
+
+	// a listing that fails keeps what was known
+	s.running = []int{300}
+	s.on = true
+	step()
+	s.on = false
+	step()
+	if !CodexAppBack() {
+		t.Fatal("the second reset isn't said")
+	}
+	s.listErr = errors.New("ps failed")
+	now = now.Add(2 * codexAppBackEvery)
+	step()
+	if !CodexAppBack() {
+		t.Fatal("a failed listing read as the app-server gone")
 	}
 }

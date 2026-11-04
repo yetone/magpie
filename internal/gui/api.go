@@ -239,6 +239,11 @@ type agentJSON struct {
 	// signed in to is used up (agent.Agent.AppOut), which turns the Codex
 	// app's ChatGPT side off until the reset
 	AppOut *appOutJSON `json:"appOut,omitempty"`
+	// AppBack: magpie gave Codex back its ChatGPT account at the reset
+	// and left the Codex app on the app-server it started while magpie
+	// was its provider, which shows no account or usage till it restarts
+	// (provider.CodexAppBack), for the row's Restart
+	AppBack bool `json:"appBack,omitempty"`
 	// Failover: not connected, yet its requests go through magpie for
 	// account failover alone (agent.Agent.FailingOver, #1385)
 	Failover bool `json:"failover,omitempty"`
@@ -2760,6 +2765,8 @@ func state() stateJSON {
 			aj.Joined = a.Joined != nil && a.Joined()
 			if a.AppOut != nil && a.AppOut() {
 				aj.AppOut = codexAppOut()
+			} else if a.ID == "codex" && a.WSL == "" {
+				aj.AppBack = provider.CodexAppBack()
 			}
 		} else {
 			aj.Source = a.Source()

@@ -1419,6 +1419,12 @@ function connectLine(a, kind) {
     words.title = appOutSaid(a);
     return line;
   }
+  if (a.appBack) {
+    say(t("Back on ChatGPT · restart the {agent} app to see its account", { agent: a.name }), "wait");
+    words.title = appBackSaid(a);
+    line.append(appBackRestart());
+    return line;
+  }
   if (a.appRestart) {
     say(t("Connected · restart {agent} to use it", { agent: a.name }), "wait");
     line.append(appRestart(a));
@@ -2008,9 +2014,33 @@ function appOutSaid(a) {
   let s = o.user
     ? t("{user}'s ChatGPT allowance is used up, so magpie serves {agent}'s turns until it resets.", { user: o.user, agent: a.name })
     : t("{agent}'s ChatGPT allowance is used up, so magpie serves its turns until it resets.", { agent: a.name });
-  s += " " + t("Till then the {agent} app's ChatGPT side is off: its ChatGPT chats and projects, browser use (its Chrome control), cloud tasks, its usage meter and Log out. It all comes back on its own at the reset.", { agent: a.name });
+  s += " " + t("Till then the {agent} app's ChatGPT side is off: its ChatGPT chats and projects, browser use (its Chrome control), cloud tasks, its account, its usage meter and Log out. They come back after the reset, once the app's app-server restarts: this row offers the restart then.", { agent: a.name });
   if (o.stuck) s += " " + t("magpie couldn't restart the {agent} app's app-server: quit the app and open it again to send.", { agent: a.name });
   return s + " " + t("Keep on ChatGPT (its sign-in's Always ChatGPT) leaves {agent} on its ChatGPT account instead: it shows its own limit message till the reset, and magpie no longer takes it over.", { agent: a.name });
+}
+
+// appBackSaid: Codex back on its ChatGPT account after the reset, its app
+// still on the app-server it started while magpie was its provider, which
+// reads the account only as it starts (a bug report by mail, 11-04)
+function appBackSaid(a) {
+  return t("magpie gave {agent} back its ChatGPT account after the reset. The {agent} app still runs on the app-server it started while magpie served it, so it shows no account, no usage and none of its ChatGPT side until that restarts. Restart does it now; its window stays.", { agent: a.name });
+}
+
+// appBackRestart: the Codex app's app-server restarted, so it reads its
+// ChatGPT account again, as the accounts' "still signed in as" Restart
+function appBackRestart() {
+  const go = el("button", "ag-quiet accent", t("Restart"));
+  go.type = "button";
+  go.onclick = async () => {
+    if (!(await confirmRestart(t("The Codex app"), t("Only its app-server restarts, for its ChatGPT account; its window stays. A running turn stops.")))) return;
+    go.disabled = true;
+    go.classList.add("busy");
+    if (!(await accountAction("codex/daemon/restart-app", {}, t("Codex app-server restarted"), true, tNotice)) && go.isConnected) {
+      go.disabled = false;
+      go.classList.remove("busy");
+    }
+  };
+  return go;
 }
 
 // keepChatGPT: the takeover turned off where it is told (eddie.zhan on
@@ -2134,6 +2164,11 @@ function connectPanel(a, { fields, fieldBtn }) {
       // its own line: WebKit sized a wrapped flex line to the text alone,
       // and the next line lay over the button
       parts.unshift(w, line(keepChatGPT(a)));
+    }
+    if (a.appBack) {
+      const w = line(el("span", "ag-dot"), el("span", "", appBackSaid(a)));
+      w.classList.add("ag-warn", "ag-app-back");
+      parts.unshift(w, line(appBackRestart()));
     }
     kv(t("In {agent}", { agent: a.name }), ...parts);
   } else if (menuFromList(a)) {
