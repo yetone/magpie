@@ -22,12 +22,13 @@ import (
 //
 // The session is two lines, the ones a run started at the reply's turn
 // would have written: the user's, the conversation before the reply as
-// renderClaudePrompt tells it (the reply's turn marked as the one to
-// answer; the caller's instructions not in it when the run has them after
-// Claude Code's system prompt, req.appendPrompt), and the assistant's, the
-// reply's words. nil when there is no
-// such reply (none that calls no tool, or one with no words), or the file
-// can't be written; the run is then told the conversation whole.
+// renderClaudePrompt tells it, every turn of it as history (none marked as
+// the one to answer: that is the turn typed after the reply; the caller's
+// instructions not in it when the run has them after Claude Code's system
+// prompt, req.appendPrompt), and the assistant's, the reply's words. nil
+// when there is no such reply (none that calls no tool, or one with no
+// words), or the file can't be written; the run is then told the
+// conversation whole.
 func replaySession(dirs []string, work, model string, req *Request) *savedSession {
 	split := historyEnd(req.Messages)
 	if split < 2 || len(dirs) == 0 {
@@ -41,7 +42,13 @@ func replaySession(dirs []string, work, model string, req *Request) *savedSessio
 	before.Messages = req.Messages[:split-1]
 	// Claude Code puts its own marks on what it sends
 	before.clientCache = nil
-	blocks, err := renderClaudePrompt(&before)
+	// every turn before the reply is history, the last of them the one the
+	// reply answers: none is the turn to answer, which is typed after it.
+	// Rendered as a first message (renderClaudePrompt's own split), the
+	// turn the reply answers was marked <current_turn>, "the turn to answer
+	// now", and the resumed run answered it again, or said its tool calls
+	// had no results (愛睏柴犬阿茶 on Discord)
+	blocks, err := renderClaudePromptAt(&before, len(before.Messages))
 	if err != nil {
 		return nil
 	}

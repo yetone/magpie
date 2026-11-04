@@ -712,8 +712,16 @@ history to the 1h cache at 2×.
    file of two lines, a user line holding the conversation before that
    reply as below (its images as image blocks, client cache marks taken
    out) and an assistant line holding the reply's words (thinking left
-   out). The run starts with `--resume` on it and is typed only the turns
-   after the reply, as a saved session's run is (the session is
+   out). The user line tells every message before the reply inside
+   `<conversation_history>`, with no `<current_turn>`
+   (`renderClaudePromptAt` with the split at the end): the reply answers
+   the last of them, and the turn to answer is the one typed after it.
+   Before 11-04 the user line was rendered as a first message, so the
+   turn the reply answers was marked `<current_turn>`, "the turn to answer
+   now", and a resumed run answered an old question again or said its
+   tool calls had no results (愛睏柴犬阿茶 on Discord,
+   `TestClaudeTUIReplayMarksNoEarlierTurnCurrent`). The run starts with
+   `--resume` on it and is typed only the turns after the reply, as a saved session's run is (the session is
    discarded if the run doesn't take it). The file goes in the project
    folder of the work folder with its links followed, which is the one
    Claude Code reads (on a Mac `/var` is `/private/var`). Before 11-01

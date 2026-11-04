@@ -116,3 +116,101 @@ func TestClaudeTUIReplayOnlyWithAReply(t *testing.T) {
 		}
 	}
 }
+
+// A transcript's user line is the turns before its reply, all of them
+// told as history: the reply answers the last of them, and the turn the
+// run is to answer is the one typed after it. Rendered as a first
+// message, the user line marked the turn its reply answers as the
+// <current_turn>, "the turn to answer now", so a run resumed on
+// U0 A0 U1 A1 and typed U2 saw U1, answered already, as the one to
+// answer: the model answered an old question again, or said earlier tool
+// calls had no results (愛睏柴犬阿茶 on Discord).
+func TestClaudeTUIReplayMarksNoEarlierTurnCurrent(t *testing.T) {
+	user := func(s string) Message { return Message{Role: "user", Parts: []Part{{Kind: Text, Text: s}}} }
+	reply := func(s string) Message { return Message{Role: "assistant", Parts: []Part{{Kind: Text, Text: s}}} }
+	call := func(id string) Message {
+		return Message{Role: "assistant", Parts: []Part{{Kind: ToolCall, ID: id, Name: "read", Args: json.RawMessage(`{}`)}}}
+	}
+	result := func(id, s string) Message {
+		return Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: id, Text: s}}}
+	}
+	for _, tc := range []struct {
+		name  string
+		msgs  []Message
+		told  []string // in the transcript's user line
+		reply string   // its assistant line
+		typed int      // messages typed after it
+	}{
+		{"two turns", []Message{user("U1 first ask"), reply("A1 answer"), user("U2 newest ask")},
+			[]string{"U1 first ask"}, "A1 answer", 1},
+		{"three turns", []Message{user("U0 first ask"), reply("A0 answer"), user("U1 second ask"), reply("A1 answer"), user("U2 newest ask")},
+			[]string{"U0 first ask", "A0 answer", "U1 second ask"}, "A1 answer", 1},
+		{"tool results", []Message{
+			user("U0 first ask"), call("c0"), result("c0", "R0 result"), reply("A0 answer"),
+			user("U1 second ask"), call("c1"), result("c1", "R1 result"), reply("A1 answer"),
+			user("U2 newest ask")},
+			[]string{"U0 first ask", "R0 result", "A0 answer", "U1 second ask", "R1 result"}, "A1 answer", 1},
+		{"tool results only before the reply", []Message{
+			user("U1 first ask"), call("c1"), result("c1", "R1 result"), reply("A1 answer"), user("U2 newest ask")},
+			[]string{"U1 first ask", "R1 result"}, "A1 answer", 1},
+		{"the client's calls after the reply", []Message{
+			user("U0 first ask"), reply("A0 answer"), user("U1 second ask"), reply("A1 answer"),
+			user("U2 newest ask"), call("c2"), result("c2", "R2 result")},
+			[]string{"U0 first ask", "A0 answer", "U1 second ask"}, "A1 answer", 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			req := &Request{System: "rules", Tools: []Tool{{Name: "read"}}, Messages: tc.msgs}
+			s := replaySession([]string{dir}, dir, "claude-sonnet-5", req)
+			if s == nil {
+				t.Fatal("no transcript")
+			}
+			b, err := os.ReadFile(filepath.Join(dir, s.session+".jsonl"))
+			s.discard()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(s.since) != tc.typed {
+				t.Fatalf("typed %d messages, want %d", len(s.since), tc.typed)
+			}
+			if got := s.since[0].Parts[0].Text; got != "U2 newest ask" {
+				t.Fatalf("typed %q first, want the newest ask", got)
+			}
+			lines := strings.Split(strings.TrimSpace(string(b)), "\n")
+			if len(lines) != 2 {
+				t.Fatalf("the transcript:\n%s", b)
+			}
+			var first, second struct {
+				Message struct {
+					Content []map[string]any `json:"content"`
+				} `json:"message"`
+			}
+			if json.Unmarshal([]byte(lines[0]), &first) != nil || json.Unmarshal([]byte(lines[1]), &second) != nil {
+				t.Fatalf("the transcript:\n%s", b)
+			}
+			var told strings.Builder
+			for _, c := range first.Message.Content {
+				s, _ := c["text"].(string)
+				told.WriteString(s)
+			}
+			text := told.String()
+			if strings.Contains(text, "current_turn") || strings.Contains(text, "turn to answer now") {
+				t.Fatalf("the transcript marks a turn its reply answers as the one to answer now:\n%s", text)
+			}
+			if open := strings.Index(text, historyOpen); open < 0 || open > strings.Index(text, tc.told[0]) || !strings.HasSuffix(strings.TrimSpace(text), "</conversation_history>") {
+				t.Fatalf("the transcript's turns aren't told as history:\n%s", text)
+			}
+			for _, w := range tc.told {
+				if !strings.Contains(text, w) {
+					t.Fatalf("the transcript's user line doesn't have %q:\n%s", w, text)
+				}
+			}
+			if strings.Contains(text, "newest ask") || strings.Contains(text, tc.reply) {
+				t.Fatalf("the transcript's user line has the reply or the turn after it:\n%s", text)
+			}
+			if got, _ := second.Message.Content[0]["text"].(string); got != tc.reply {
+				t.Fatalf("the transcript's reply is %q, want %q", got, tc.reply)
+			}
+		})
+	}
+}
