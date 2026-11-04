@@ -381,3 +381,92 @@ func TestAntigravityTierNotRestedForOtherFailures(t *testing.T) {
 		t.Errorf("asked %v", f.fetches)
 	}
 }
+
+// An account that becomes Google AI Ultra while magpie runs gets Ultra's
+// models on the next list, without a restart (rick_49551 on Discord: an
+// Ultra account without Gemini 4). The tiers loadCodeAssist gave were kept
+// for as long as magpie ran, so every hourly list went on naming none, and
+// Google went on listing gemini-4-argon-disabled, as it does a free
+// account (magpie's own log on 11-04: "disabled [gemini-4-argon-disabled]").
+// Now they are asked again once an hour old, as Gemini CLI's experiments
+// are, and a list names the tier the account has now.
+func TestAntigravityTierAskedAgainAfterUpgrade(t *testing.T) {
+	const free = `{"currentTier":{"id":"free-tier","name":"Antigravity"},"cloudaicompanionProject":"aicode-consumers"}`
+	const ultra = `{"currentTier":{"id":"standard-tier","name":"Antigravity","usesGcpTos":true},
+		"paidTier":{"id":"g1-ultra-tier","name":"Google AI Ultra"},"cloudaicompanionProject":"aicode-consumers"}`
+	f := &fakeGoogle{load: free, modelsFor: func(body map[string]any) (int, string) {
+		e, _ := body["entitlement"].(map[string]any)
+		switch tier, _ := e["userTier"].(string); tier {
+		case "":
+			return 200, `{"models":{
+				"gemini-3.8-flash-high":{"displayName":"Gemini 3.8 Flash (High)","maxTokens":1048576,"quotaInfo":{"remainingFraction":1}},
+				"gemini-4-argon-disabled":{"displayName":"Gemini 4 Argon","maxTokens":1048576,"disabled":true,"quotaInfo":{"remainingFraction":1}}}}`
+		case "g1-ultra-tier":
+			return 200, `{"models":{
+				"gemini-3.8-flash-high":{"displayName":"Gemini 3.8 Flash (High)","maxTokens":1048576,"quotaInfo":{"remainingFraction":1}},
+				"gemini-4-argon":{"displayName":"Gemini 4 Argon","maxTokens":1048576,"quotaInfo":{"remainingFraction":1}}}}`
+		default:
+			return 400, tierRefused
+		}
+	}}
+	googleSandbox(t, f)
+	buf := captureLog(t)
+	auth := googleAuth{AccessToken: "tok", RefreshToken: "rt-ultra", Expiry: time.Now().Add(time.Hour).UnixMilli()}
+	if err := addGoogleLogin("antigravity", "ultra@example.com", "", auth); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := antigravityModelIDs(t, "antigravity"), []string{"gemini-3.8-flash-high"}; !slices.Equal(got, want) {
+		t.Fatalf("free: models %v, want %v", got, want)
+	}
+
+	// the account becomes Ultra; within the hour the tiers stand
+	f.mu.Lock()
+	f.load = ultra
+	loads := len(f.loads)
+	f.mu.Unlock()
+	if got := antigravityModelIDs(t, "antigravity"); slices.Contains(got, "gemini-4-argon") {
+		t.Fatalf("tiers asked again within the hour: %v", got)
+	}
+	f.mu.Lock()
+	if len(f.loads) != loads {
+		t.Errorf("loadCodeAssist asked %d times within the hour", len(f.loads)-loads)
+	}
+	f.mu.Unlock()
+
+	// an hour on, the list names Ultra and has Gemini 4 Argon
+	googleState.Lock()
+	for k, p := range googleState.projects {
+		p.at = p.at.Add(-googleTiersFor)
+		googleState.projects[k] = p
+	}
+	googleState.Unlock()
+	if got, want := antigravityModelIDs(t, "antigravity"), []string{"gemini-3.8-flash-high", "gemini-4-argon"}; !slices.Equal(got, want) {
+		t.Fatalf("Ultra: models %v, want %v", got, want)
+	}
+	f.mu.Lock()
+	last := f.fetches[len(f.fetches)-1]
+	f.mu.Unlock()
+	if fmt.Sprint(last["entitlement"]) != "map[userTier:g1-ultra-tier]" || last["project"] != "aicode-consumers" {
+		t.Errorf("asked %v", last)
+	}
+	if w := `paid tier g1-ultra-tier (Google AI Ultra), project "aicode-consumers" (was current tier "free-tier", paid tier "")`; !strings.Contains(buf.String(), w) {
+		t.Errorf("log lacks %q:\n%s", w, buf.String())
+	}
+	if q := googleLogins("antigravity")[0].acct.quota(context.Background(), ""); q.Plan != "Google AI Ultra" {
+		t.Errorf("plan %q", q.Plan)
+	}
+
+	// loadCodeAssist failing keeps the tiers it gave
+	f.mu.Lock()
+	f.load = `not json`
+	f.mu.Unlock()
+	googleState.Lock()
+	for k, p := range googleState.projects {
+		p.at = p.at.Add(-googleTiersFor)
+		googleState.projects[k] = p
+	}
+	googleState.Unlock()
+	if got := antigravityModelIDs(t, "antigravity"); !slices.Contains(got, "gemini-4-argon") {
+		t.Fatalf("tiers lost on a failed loadCodeAssist: %v", got)
+	}
+}

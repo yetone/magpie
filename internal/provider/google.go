@@ -383,6 +383,8 @@ type googleProject struct {
 	// is on ("free-tier", "standard-tier") and the Google One plan it pays
 	// for ("g1-pro-tier"), "" when not known
 	tier, paid string
+	// when loadCodeAssist was last asked for them (antigravityTiers)
+	at time.Time
 }
 
 // entitlements are the tiers to name in fetchAvailableModels'
@@ -574,10 +576,52 @@ func (g googleAccount) project(ctx context.Context) (googleProject, error) {
 	if err != nil {
 		return googleProject{}, err
 	}
+	p.at = time.Now()
 	googleState.Lock()
 	googleState.projects[key] = p
 	googleState.Unlock()
 	return p, nil
+}
+
+// googleTiersFor is how long the tiers loadCodeAssist gave an Antigravity
+// account are named in its fetchAvailableModels before they are asked
+// again. They were kept for as long as magpie ran: an account that became
+// Google AI Pro or Ultra after magpie first asked went on naming the tier
+// it had then, and Google listed it the models of that tier, with Gemini 4
+// Argon marked disabled and so left out, until magpie restarted (rick_49551
+// on Discord: an Ultra account without Gemini 4). Asked again at most every
+// hour, as Gemini CLI's experiments are (flags).
+const googleTiersFor = time.Hour
+
+// antigravityTiers is p with the account's tiers and plan as
+// loadCodeAssist gives them now, once p's are googleTiersFor old; p as it
+// was, its project the same, when they can't be read, asked again after
+// another googleTiersFor.
+func (g googleAccount) antigravityTiers(ctx context.Context, p googleProject) googleProject {
+	if time.Since(p.at) < googleTiersFor {
+		return p
+	}
+	var load loadCodeAssistReply
+	body := map[string]any{"metadata": map[string]any{"ideType": "ANTIGRAVITY"}}
+	if err := g.call(ctx, g.app.loadBase, "loadCodeAssist", body, &load, nil); err != nil {
+		log.Printf("antigravity %s: loadCodeAssist at %s: %v; naming the tiers it gave before (current %q, paid %q)", g.user, g.app.loadBase, err, p.tier, p.paid)
+	} else if cur, paid := load.tiers(); cur != "" || paid != "" {
+		if cur != p.tier || paid != p.paid {
+			log.Printf("antigravity %s: loadCodeAssist at %s: %s (was current tier %q, paid tier %q)", g.user, g.app.loadBase, load.describe(), p.tier, p.paid)
+		}
+		p.tier, p.paid = cur, paid
+		if pl := load.plan(); pl != "" {
+			p.plan = pl
+		}
+	}
+	p.at = time.Now()
+	key := g.app.agent + "\x00" + g.auth.RefreshToken
+	googleState.Lock()
+	if _, ok := googleState.projects[key]; ok { // not since forgotten (setGoogleProject)
+		googleState.projects[key] = p
+	}
+	googleState.Unlock()
+	return p
 }
 
 type loadCodeAssistReply struct {
@@ -984,6 +1028,7 @@ func (g googleAccount) modelInfo(ctx context.Context) ([]googleModelInfo, error)
 	}
 	var out []googleModelInfo
 	if g.app.agent == "antigravity" {
+		p = g.antigravityTiers(ctx, p)
 		var res struct {
 			Models map[string]struct {
 				DisplayName     string `json:"displayName"`
