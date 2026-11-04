@@ -292,7 +292,7 @@ func TestSyncCatalogAgesCodexCache(t *testing.T) {
 		t.Errorf("stale cache: %+v", c)
 	}
 
-	fresh := `{"fetched_at":"2026-09-25T10:00:00Z","etag":` + string(must(json.Marshal(codexcat.WithTag(`W/"v1"`, codexcat.Tag(provider.CodexListed()))))) + `,"models":[]}`
+	fresh := `{"fetched_at":"2026-09-25T10:00:00Z","etag":` + string(must(json.Marshal(codexcat.WithTag(`W/"v1"`, provider.CodexListTag())))) + `,"models":[]}`
 	writeFile(t, cache, fresh)
 	SyncCatalog()
 	if got := readFile(cache); got != fresh {

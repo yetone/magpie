@@ -2281,6 +2281,17 @@ func (s *Server) codexModels(w http.ResponseWriter, r *http.Request) {
 // provider, with magpie's models after them. The entries are written into.
 func codexMerged(own []any, cached bool) []any {
 	defer provider.Hold()()
+	// the slugs the sign-in's list has, before the user's narrowing: a
+	// ChatGPT account's model it lacks is listed by magpie's id after it
+	// (provider.CodexListedBeside)
+	backend := make(map[string]bool, len(own))
+	for _, m := range own {
+		if o, ok := m.(map[string]any); ok {
+			if slug, _ := o["slug"].(string); slug != "" {
+				backend[slug] = true
+			}
+		}
+	}
 	// the windows the user set on the codex provider, as /v1/models says
 	// them (#674); a cached entry, which keeps what magpie handed Codex
 	// last, takes the account's own list's back when none is set
@@ -2363,15 +2374,21 @@ func codexMerged(own []any, cached bool) []any {
 	// keeps to its own models (#1385: 62 of magpie's were in its list)
 	var ms []catalog.Model
 	if !codexOwnOnly() {
-		ms = provider.CodexListed()
+		ms = provider.CodexListedBeside(backend)
 	}
-	// Codex's own, as the user left them in its list
+	// Codex's own, as the user left them in its list, and a ChatGPT
+	// account's that the sign-in's list lacks
 	mine := make(map[string]bool, len(own))
 	for _, m := range own {
 		if o, ok := m.(map[string]any); ok {
 			if slug, _ := o["slug"].(string); slug != "" {
 				mine[slug] = true
 			}
+		}
+	}
+	for _, m := range ms {
+		if codexcat.ChatGPTOwn(m.ID) {
+			mine[m.ID] = true
 		}
 	}
 	all := append(own, codexcat.Entries(ms, len(own)+100)...)

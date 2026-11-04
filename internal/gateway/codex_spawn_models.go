@@ -269,7 +269,8 @@ func spawnChoices(r *http.Request, lead string, codexPath bool) []spawnChoice {
 			at int
 		}
 		var owns []own
-		for slug, e := range codexcat.CacheEntries() {
+		cached := codexcat.CacheEntries()
+		for slug, e := range cached {
 			if v, _ := e["visibility"].(string); v != "list" || hidden[slug] || narrowed && !keep[slug] {
 				continue
 			}
@@ -284,7 +285,13 @@ func spawnChoices(r *http.Request, lead string, codexPath bool) []spawnChoice {
 		if sealed || codexOwnOnly() {
 			return out
 		}
-		for _, m := range provider.CodexListed() {
+		// and a ChatGPT account's own the sign-in's list lacks, by
+		// magpie's id, as codexMerged lists them
+		backend := make(map[string]bool, len(cached))
+		for slug := range cached {
+			backend[slug] = true
+		}
+		for _, m := range provider.CodexListedBeside(backend) {
 			out = append(out, spawnChoice{m.ID, m.Name})
 		}
 		return out

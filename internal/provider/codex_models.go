@@ -522,6 +522,23 @@ func CodexListed() []catalog.Model {
 	}, false)
 }
 
+// CodexListedBeside is CodexListed for a Codex whose sign-in's list, from
+// the backend, has the slugs in backend: with a ChatGPT account's own
+// models that list lacks among them, by magpie's id (codex/<slug>), which
+// reaches them through magpie on the account that has them. Codex signed
+// in to a Free account, a Team one on in magpie beside it, was handed the
+// Free plan's list alone, and the Team plan's models were in every agent
+// but Codex (bigfisheatsmall on X), though the codex provider lists them
+// (codexPoolModels) and routing sends them to that account.
+func CodexListedBeside(backend map[string]bool) []catalog.Model {
+	shown, _ := CatalogFor("codex")
+	find := GroupFinder()
+	return codexListedIf(shown, func(id string) []Member {
+		_, ms, _ := find(id)
+		return ms
+	}, func(e Entry) bool { return !CodexOwn(e) || !backend[e.Model] })
+}
+
 // CodexCatalog is shown as a Codex that names magpie its model_provider is
 // handed it from GET /v1/codex/models (#1281): every model, a ChatGPT
 // account's own among them, since that Codex reaches them through magpie's
@@ -600,6 +617,17 @@ func CodexOwnListTag() string { return codexListTag("own") }
 // buildCodexListTag is codexListTag built afresh from the catalog.
 func buildCodexListTag(kind string) string {
 	ms := CodexListed()
+	// and a ChatGPT account's own models, listed by magpie's id where the
+	// sign-in's list lacks them (CodexListedBeside): another account on
+	// gaining or losing one has Codex ask for the list again
+	if kind != "own" {
+		shown, _ := CatalogFor("codex")
+		for _, e := range shown {
+			if CodexOwn(e) {
+				ms = append(ms, catalog.Model{ID: "+" + e.ID})
+			}
+		}
+	}
 	off := slices.Sorted(maps.Keys(CodexNativeHidden()))
 	for _, slug := range off {
 		ms = append(ms, catalog.Model{ID: "-" + slug})
@@ -759,6 +787,11 @@ func codexWindowsTag() []catalog.Model {
 // account (buildResponses). own keeps a ChatGPT account's own models in,
 // which a signed-in Codex has from the backend already.
 func codexListed(shown []Entry, members func(id string) []Member, own bool) []catalog.Model {
+	return codexListedIf(shown, members, func(e Entry) bool { return own || !CodexOwn(e) })
+}
+
+// codexListedIf is codexListed for the entries of shown listed says.
+func codexListedIf(shown []Entry, members func(id string) []Member, listed func(Entry) bool) []catalog.Model {
 	var ms []catalog.Model
 	// named among all shown: the account's own, which the backend lists,
 	// are in Codex's picker beside these
@@ -766,7 +799,6 @@ func codexListed(shown []Entry, members func(id string) []Member, own bool) []ca
 	seen := described()
 	s := settings.Load().ForAgent("codex")
 	find := func(id string) (Group, []Member, bool) { return Group{}, members(id), true }
-	listed := func(e Entry) bool { return own || !CodexOwn(e) }
 	apart := codexApart(shown, labels, listed)
 	for i, e := range shown {
 		if !listed(e) {
