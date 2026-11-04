@@ -53,6 +53,7 @@ func ShareGroup(id string) (string, error) {
 	g.Matched = nil
 	g.Auto, g.Hidden, g.Disabled = false, false, false
 	g.Accounts = nil // this magpie's accounts: another has its own
+	g.Seen = nil     // what this magpie found: another finds its own
 	g.Rules = slices.DeleteFunc(g.Rules, Rule.ByFolder)
 	out, err := json.Marshal(SharedGroup{Magpie: ShareMark, Version: ShareVersion, Group: g})
 	return string(out), err

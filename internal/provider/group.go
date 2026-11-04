@@ -279,6 +279,14 @@ type Group struct {
 	Spelled string `json:"-"`
 	// Hidden is stored for a found group the user removed.
 	Hidden bool `json:"hidden,omitempty"`
+	// Seen is stored for a found group the user changed (an auto-… id):
+	// the models, as "provider/model", magpie had found in it by the
+	// user's last save, and those the user named. A provider that serves
+	// the model since joins the group as it is read (joined), as it joins
+	// one magpie finds; one seen and not a member is one the user took
+	// out, and stays out. Empty, the group was changed before magpie
+	// kept this, and gets no member it doesn't name (Kxsg79bEYFP4 on X).
+	Seen []string `json:"seen,omitempty"`
 	// Disabled is a group of the user's switched off (PAMI on Discord):
 	// kept on the Routing page as it is, but not offered to agents, a
 	// request to it turned away with a word of why, and skipped where
@@ -425,7 +433,7 @@ func cloneGroups(gs []Group) []Group {
 	for i, g := range gs {
 		g.Members, g.Match, g.Matched, g.Placed = slices.Clone(g.Members), slices.Clone(g.Match), slices.Clone(g.Matched), slices.Clone(g.Placed)
 		g.Off, g.Levels, g.Fast = slices.Clone(g.Off), slices.Clone(g.Levels), slices.Clone(g.Fast)
-		g.Accounts = slices.Clone(g.Accounts)
+		g.Accounts, g.Seen = slices.Clone(g.Accounts), slices.Clone(g.Seen)
 		g.Weights = maps.Clone(g.Weights)
 		if g.Rules != nil {
 			rs := make([]Rule, len(g.Rules))
@@ -455,6 +463,10 @@ func buildGroupsIn(entries []Entry) []Group {
 	var out []Group
 	hidden := map[string]bool{}
 	var have map[string]bool // the providers magpie has, switched off or not
+	var found []Group        // the groups magpie finds, for a changed one to follow
+	if !f.NoAutoGroups {
+		found = foundGroups(entries)
+	}
 	for _, g := range f.Groups {
 		if g.Hidden {
 			hidden[g.ID] = true
@@ -467,7 +479,7 @@ func buildGroupsIn(entries []Entry) []Group {
 					have[p.ID] = true
 				}
 			}
-			g = withoutRemoved(g, have)
+			g = joined(withoutRemoved(g, have), found, entries)
 		}
 		out = append(out, withMatches(entries, g.own()))
 	}
@@ -475,7 +487,7 @@ func buildGroupsIn(entries []Entry) []Group {
 		out = slices.DeleteFunc(out, func(g Group) bool { return !g.Auto })
 	}
 	if !f.NoAutoGroups {
-		for _, g := range foundGroups(entries) {
+		for _, g := range found {
 			if slices.ContainsFunc(out, func(o Group) bool { return o.ID == g.ID }) {
 				continue // the user changed it: theirs now
 			}
@@ -530,6 +542,66 @@ func withoutRemoved(g Group, have map[string]bool) Group {
 	return g
 }
 
+// joined is a found group the user changed (an "auto-…" id kept in
+// providers.json) with the providers that serve its model since the
+// user's last save: found's members it neither names nor has seen
+// (Group.Seen), after its own. A third provider with the model, a
+// plugin's among them, joins it as it joins one magpie finds
+// (Kxsg79bEYFP4 on X: changed, the group had stayed at the two it was
+// found with). One the user took out was seen, and stays out; so does
+// every provider of a group changed before Seen was kept, as nothing
+// says which of its models the user took out. It is how the group is
+// read, not stored: a save names the joined, and sees them.
+func joined(g Group, found []Group, entries []Entry) Group {
+	if len(g.Seen) == 0 {
+		return g
+	}
+	i := slices.IndexFunc(found, func(o Group) bool { return o.ID == g.ID })
+	if i < 0 {
+		return g
+	}
+	names := make(map[string]bool, len(g.Members))
+	for _, m := range g.Members {
+		base, _ := memberEffortIn(entries, m)
+		names[base] = true
+	}
+	var add []string
+	for _, m := range found[i].Members {
+		if !names[m] && !slices.Contains(g.Seen, m) {
+			add = append(add, m)
+		}
+	}
+	if len(add) == 0 {
+		return g
+	}
+	g.Members = slices.Concat(g.Members, add)
+	return g
+}
+
+// seenIn is the Seen a found group the user changed is saved with: what
+// it had seen (was), the models magpie finds in it now, and those the
+// user names (own), each "provider/model" once.
+func seenIn(id string, was, own []string, entries []Entry) []string {
+	seen := slices.Clone(was)
+	see := func(m string) {
+		if m != "" && !strings.HasPrefix(m, GroupPrefix) && !IsPattern(m) && !slices.Contains(seen, m) {
+			seen = append(seen, m)
+		}
+	}
+	for _, g := range foundGroups(entries) {
+		if g.ID == id {
+			for _, m := range g.Members {
+				see(m)
+			}
+		}
+	}
+	for _, m := range own {
+		base, _ := memberEffortIn(entries, m)
+		see(base)
+	}
+	return seen
+}
+
 // own is the group with lists of its own. f.Groups is the providers.json
 // every look-up shares while a request holds the catalog (heldOf), so a
 // caller changing its group in place — the TUI deleting a rule, SaveGroup
@@ -544,6 +616,7 @@ func (g Group) own() Group {
 	g.Levels = slices.Clone(g.Levels)
 	g.Fast = slices.Clone(g.Fast)
 	g.Accounts = slices.Clone(g.Accounts)
+	g.Seen = slices.Clone(g.Seen)
 	g.Weights = maps.Clone(g.Weights)
 	g.Rules = slices.Clone(g.Rules)
 	for i, r := range g.Rules {
@@ -1547,6 +1620,17 @@ func SaveGroup(g Group) error {
 	}
 	g.Auto, g.Hidden = false, false
 	g.Members = own // what the patterns match is found again as it is read
+	// a found group changed keeps following its model: what magpie had
+	// found in it is seen, so a model taken out stays out and one a new
+	// provider serves joins it (joined)
+	g.Seen = nil
+	if strings.HasPrefix(g.ID, "auto-") {
+		var was []string
+		if i := slices.IndexFunc(f.Groups, func(x Group) bool { return x.ID == g.ID }); i >= 0 {
+			was = f.Groups[i].Seen
+		}
+		g.Seen = seenIn(g.ID, was, own, entries)
+	}
 	g.Disabled = false
 	for i := range f.Groups {
 		if f.Groups[i].ID == g.ID {

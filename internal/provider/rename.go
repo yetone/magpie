@@ -119,7 +119,7 @@ func Rename(from, to string) error {
 }
 
 // mapModelRefs gives every model ref the file keeps for routing — the
-// providers' fallbacks, and the routing groups' members, rules, fast and
+// providers' fallbacks, and the routing groups' members, rules, fast, seen and
 // placed members, those turned off, weights, classifiers and picks — as
 // to has it: what a provider's rename (Rename) and a model given another
 // id at its provider (SetModelID) both rewrite.
@@ -142,6 +142,9 @@ func mapModelRefs(f *file, to func(string) string) {
 		}
 		for k, m := range g.Placed {
 			g.Placed[k] = to(m)
+		}
+		for k, m := range g.Seen {
+			g.Seen[k] = to(m)
 		}
 		for k, m := range g.Off {
 			g.Off[k] = to(m)
