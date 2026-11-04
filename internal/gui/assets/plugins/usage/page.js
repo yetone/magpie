@@ -389,7 +389,12 @@ function renderUsageLoading() {
   view.setAttribute("aria-busy", "true");
   renderPeriod(true);
   $("#usageCost").replaceChildren(el("span", "skeleton sk-cost"));
-  renderQuotas();
+  // cards drawn already stay as they are: the read of the allowances that
+  // goes with every load (loadQuotas) draws them again once it answers.
+  // Drawn here as well, every card and curve was built twice, the first
+  // time inside the click that opened the page, so its motion stuttered
+  // (_hii11 on Discord)
+  if (!quotas || !$("#subscriptionUsage").hasChildNodes()) renderQuotas();
   const stats = $("#stats");
   stats.classList.remove("empty");
   stats.replaceChildren();

@@ -16361,6 +16361,19 @@ function quotaHistOf(sub) {
   const user = (sub.user || "").toLowerCase();
   return quotaHist?.find?.((h) => h.provider === sub.provider && h.user === user);
 }
+// a history line's points as numbers, read once for each read of the
+// history (loadQuotaHist puts a new quotaHist): every card's draw asked for
+// them three times, and a busy account's 6000 readings parsed again each
+// time held the click that opens the Usage page (_hii11 on Discord)
+const quotaPointsRead = new WeakMap();
+function quotaPoints(l) {
+  let points = quotaPointsRead.get(l);
+  if (!points) quotaPointsRead.set(l, points = l.points.map((p) => ({
+    at: Date.parse(p.at), left: p.left,
+    start: p.start ? Date.parse(p.start) : null, reset: p.resetsAt ? Date.parse(p.resetsAt) : null,
+  })));
+  return points;
+}
 // the lines of sub's windows, as its card lists them, with points
 function quotaLines(sub) {
   const h = quotaHistOf(sub);
@@ -16372,10 +16385,7 @@ function quotaLines(sub) {
     const name = w.pool ? w.pool + " · " + w.name : w.name;
     const l = h.lines.find((x) => x.name === name);
     if (!l?.points?.length || out.some((x) => x.name === l.name)) continue;
-    out.push({ name, label: w.pool ? w.pool + " · " + t(w.name) : t(w.name), window: w, points: l.points.map((p) => ({
-      at: Date.parse(p.at), left: p.left,
-      start: p.start ? Date.parse(p.start) : null, reset: p.resetsAt ? Date.parse(p.resetsAt) : null,
-    })) });
+    out.push({ name, label: w.pool ? w.pool + " · " + t(w.name) : t(w.name), window: w, points: quotaPoints(l) });
   }
   return out;
 }
@@ -16392,9 +16402,13 @@ function quotaCycleBreak(a, b) {
 }
 // Recorded cycles, never weeks counted back from today's deadline. An
 // early reset ends the preceding cycle at the first observed new reading
-// unless the vendor's new start fits between those readings.
+// unless the vendor's new start fits between those readings. Found once
+// for a line's points (quotaPoints), however often its card is drawn.
+const quotaCyclesRead = new WeakMap();
 function quotaRecordedCycles(l) {
-  const cycles = [];
+  let cycles = quotaCyclesRead.get(l.points);
+  if (cycles) return cycles;
+  quotaCyclesRead.set(l.points, cycles = []);
   for (const p of l.points) {
     let c = cycles[cycles.length - 1];
     const prev = c?.points[c.points.length - 1];
