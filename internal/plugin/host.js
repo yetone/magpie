@@ -1744,6 +1744,14 @@ async function runTool({ spec, name, args, ms, agent }) {
 // status (401, 402, 403, 429…) is the API refusing the key, which magpie
 // rests as it does a built-in's; retryAfter is its Retry-After.
 // magpie keeps the keys, order and limits, and masks the query before it.
+//
+// An entry may name auth: "<provider id>", one this plugin's auth hook
+// signs in to (a model provider, or an auth hook with no models of its
+// own). It then takes no key: magpie tries the provider's accounts that
+// are on, in their order, one per call, and the hook reads the one chosen
+// through ctx.getAuth(), renewed first if due (the wait counts within the
+// search's time). A refusal rests the account for search only, never for
+// its models.
 
 const SEARCH_ID = /^[a-z0-9][a-z0-9-]{0,31}$/
 
@@ -1769,22 +1777,48 @@ function searchList(spec) {
       ...(typeof def.keysURL === "string" && /^https?:\/\//.test(def.keysURL) ? { keysURL: def.keysURL } : {}),
       ...(def.keyOptional === true ? { keyOptional: true } : {}),
       ...(def.url === true ? { needURL: true } : {}),
+      ...(searchAuthOf(spec, def) ? { auth: def.auth } : {}),
     })
   }
   return out
 }
 
-async function runSearch({ spec, id, query, count, key, url, ms }) {
+// searchAuthOf is the provider a search entry signs in as: one the same
+// plugin's auth hooks name, "" for none (an id it doesn't sign in to is
+// none, so the entry stays a key's).
+function searchAuthOf(spec, def) {
+  return typeof def.auth === "string" && def.auth && signsIn(spec).includes(def.auth) ? def.auth : ""
+}
+
+async function runSearch({ spec, id, query, count, key, url, ms, account, proxy }) {
   const def = searchesOf(spec).get(id)
   if (!def) throw new Error(`${spec} has no search API ${id}`)
   const abort = AbortSignal.timeout(ms > 0 ? ms : 60_000)
+  const late = new Promise((_, reject) => abort.addEventListener("abort", () => reject(new Error("no answer in time")), { once: true }))
+  late.catch(() => {})
   const ctx = { directory, worktree: directory, abort }
+  const provider = searchAuthOf(spec, def)
+  let run = () => def.execute({ query, count, key: key ?? "", url: url ?? "" }, ctx)
+  if (provider) {
+    // the account magpie chose, and that one only: never the provider's
+    // first in its place, nor one of another provider
+    if (auths().get(provider)?.spec !== spec) throw new Error(`another plugin signs in to ${provider}`)
+    const k = typeof account === "string" && account && providerOf(account) === provider ? account : ""
+    if (!k || !(k in readAuth())) throw new Error(`not signed in to ${provider}`)
+    ctx.getAuth = async () => authCopy(k)
+    const execute = run
+    run = () =>
+      via.run(proxy ?? "", () =>
+        inScope(provider, k, async () => {
+          await Promise.race([fresh(provider, k), late])
+          if (!(k in readAuth())) throw new Error(`not signed in to ${provider}`)
+          return execute()
+        }),
+      )
+  }
   let out
   try {
-    out = await Promise.race([
-      Promise.resolve().then(() => def.execute({ query, count, key: key ?? "", url: url ?? "" }, ctx)),
-      new Promise((_, reject) => abort.addEventListener("abort", () => reject(new Error("no answer in time")), { once: true })),
-    ])
+    out = await Promise.race([Promise.resolve().then(run), late])
   } catch (e) {
     const status = Number(e?.status)
     if (Number.isInteger(status) && status >= 300 && status < 600) {

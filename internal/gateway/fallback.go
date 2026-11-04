@@ -335,6 +335,36 @@ func keepAtOnce(n int, out, aside []candidate) ([]candidate, []candidate) {
 	return keptOf(out, 0), append(keptOf(aside, len(out)), reserves...)
 }
 
+// accountsOn are the accounts of p (signed in: p.Account) a request may
+// take, in the user's order: the one signed in to, unless the user paused
+// it for the others on (#263), then the others on; kept signed in to an
+// account of the user's choosing, the one signed in to stands at its own
+// place in the order, not first (#524). A search API that signs in as a
+// plugin's provider takes its accounts so too (search_signin.go).
+func accountsOn(p provider.Provider, model string) []candidate {
+	also := p.AlsoOn()
+	var all []candidate
+	if len(also) == 0 || !p.OwnPaused() {
+		all = append(all, candidate{p: p, model: model, rest: p.ID})
+	}
+	for i, q := range also {
+		all = append(all, candidate{p: q, model: model, rest: p.ID + "@" + q.Account.User, rank: i + 1})
+	}
+	if ranks := p.LoginRanks(); ranks != nil {
+		at := func(c candidate) int {
+			if r, ok := ranks[strings.ToLower(c.p.Account.User)]; ok {
+				return r
+			}
+			return len(ranks)
+		}
+		slices.SortStableFunc(all, func(a, b candidate) int { return at(a) - at(b) })
+		for i := range all {
+			all[i].rank = i
+		}
+	}
+	return all
+}
+
 // perKeyEvery is perKeyBarred with every account or key routed over, the
 // provider's AtOnce aside.
 func perKeyEvery(p provider.Provider, model string, from provider.Protocol) (out, aside, left, barred []candidate) {
@@ -342,31 +372,7 @@ func perKeyEvery(p provider.Provider, model string, from provider.Protocol) (out
 		return nil, nil, nil, nil // the user disabled it (#1867): never planned, a fallback no more than the model asked
 	}
 	if p.Account != nil {
-		also := p.AlsoOn()
-		var all []candidate
-		// the account the agent is signed in to, unless the user paused
-		// it for the others on (#263)
-		if len(also) == 0 || !p.OwnPaused() {
-			all = append(all, candidate{p: p, model: model, rest: p.ID})
-		}
-		for i, q := range also {
-			all = append(all, candidate{p: q, model: model, rest: p.ID + "@" + q.Account.User, rank: i + 1})
-		}
-		// kept signed in to an account of the user's choosing, the one
-		// signed in to stands at its own place in the order, not first
-		// (#524)
-		if ranks := p.LoginRanks(); ranks != nil {
-			at := func(c candidate) int {
-				if r, ok := ranks[strings.ToLower(c.p.Account.User)]; ok {
-					return r
-				}
-				return len(ranks)
-			}
-			slices.SortStableFunc(all, func(a, b candidate) int { return at(a) - at(b) })
-			for i := range all {
-				all[i].rank = i
-			}
-		}
+		all := accountsOn(p, model)
 		all = slices.DeleteFunc(all, func(c candidate) bool {
 			if p.AccountServes(c.p.Account.User, model) {
 				return false

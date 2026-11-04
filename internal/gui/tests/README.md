@@ -2045,6 +2045,13 @@ and what was typed kept, and Remove posts `{vendor, remove: true}`. No click
 moves the page. English and Chinese, Chromium and WebKit, with `/api/plugins`
 faked.
 
+`search-signs-in.test.cjs` checks a plugin's search API that signs in as the
+plugin's provider (axelburks on Discord): the add row says "Signs in with
+{provider}" where the key field and Get a key were, Add posts it with no key,
+and each added one's row says how many of the provider's accounts are on, or,
+as an error, that none is signed in or none is on. All five languages, 980px
+and 420px, Chromium and WebKit, the API faked.
+
 `searcher-pick.test.cjs` checks the Web search section's "Searches for other
 models" row (01huadalang on Discord: pick which provider searches for a model
 that can't). With none named it shows Automatic and magpie's own pick; its

@@ -1195,6 +1195,45 @@ treated as a built-in's 401/402/403/429 is; any other throw is a failure
 and the next search API is asked. It has the time a search API has
 (a quarter of a search's limit); `ctx.abort` fires then.
 
+A search API can use a sign-in instead of a key: `auth` names a provider
+this plugin's `auth` hook signs in to (one with models, or an auth hook
+with none). It is added with no key, and its row in Settings says whose
+sign-in it uses and how many of that provider's accounts are on. A search
+asks one account at a time: the accounts that are on (Providers' switches),
+in the order the provider's model requests take them, one resting from a
+search refusal last. For each,
+`ctx.getAuth()` returns a copy of that one account's sign-in, renewed first
+when it is due; the renewal counts within the search's time, and the plugin
+never reads `plugin-auth.json`. A token the hook saves with
+`client.auth.set({path: {id: "<provider>"}, body})` goes to that same
+account. A throw with `status` 429 (or 401, 402, 403)
+rests that account for search only, never for the provider's models, and
+the next account is asked. Not signed in, or no account on, is said in the
+row and in the request log, and the next search API is asked. A plugin with
+several providers adds one search entry per provider.
+
+```js
+export const SeekCo = async () => ({
+  auth: { provider: "seekco", methods: [/* … */], async loader(getAuth) { /* … */ } },
+  search: {
+    seek: {
+      name: "SeekCo",
+      auth: "seekco",              // the provider whose sign-in it uses; no key
+      async execute({ query, count }, ctx) {
+        const a = await ctx.getAuth() // { type: "oauth", access, refresh, expires, accountId, … }
+        const r = await fetch(`https://api.seek.example/search?q=${encodeURIComponent(query)}&n=${count}`,
+          { headers: { authorization: `Bearer ${a.access}` }, signal: ctx.abort })
+        if (!r.ok) throw Object.assign(new Error(await r.text()), { status: r.status })
+        return (await r.json()).results
+      },
+    },
+  },
+})
+```
+
+An `auth` naming a provider this plugin doesn't sign in to is ignored: the
+entry is an ordinary keyed one, and its `ctx` has no `getAuth`.
+
 #### Gateway middleware
 
 A plugin can also be gateway middleware: `onRequest(body, ctx)` sees each

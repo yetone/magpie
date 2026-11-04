@@ -137,6 +137,9 @@ func (s *Server) apiSearch(ctx context.Context, query string) (string, []Hit, er
 // turned away; #1477), which then rests (searchRestFor). Anything else, such as
 // no answer in time, isn't about the key, and the next isn't tried.
 func (s *Server) askSearchAPIKeys(ctx context.Context, a provider.SearchAPI, query string) ([]foundPage, error) {
+	if v, ok := provider.SearchVendorOf(a.Vendor); ok && v.Plugin != "" && v.Auth != "" {
+		return s.askSearchSignedIn(ctx, a, v, query)
+	}
 	keys := a.Keys()
 	if len(keys) == 0 {
 		keys = []string{""}
@@ -441,6 +444,12 @@ func (s *Server) askPluginSearch(ctx context.Context, a provider.SearchAPI, v pr
 		}
 		return nil, err
 	}
+	return pluginPages(got), nil
+}
+
+// pluginPages are the pages a plugin's search found, cut and cleaned as a
+// built-in's are.
+func pluginPages(got []plugin.SearchPage) []foundPage {
 	var pages []foundPage
 	for _, r := range got {
 		if r.URL == "" {
@@ -455,7 +464,7 @@ func (s *Server) askPluginSearch(ctx context.Context, a provider.SearchAPI, v pr
 			break
 		}
 	}
-	return pages, nil
+	return pages
 }
 
 // readSearchAPI reads the pages out of a search API's reply.

@@ -50,6 +50,9 @@ function renderSearch(s, keep) {
   key.setAttribute("aria-label", t("API key"));
   const get = el("button", "link", t("Get a key ↗"));
   get.onclick = () => vendor().keysURL && api("open", { url: vendor().keysURL });
+  // a plugin's API that signs in as the plugin's provider takes no key: its
+  // accounts are the provider's, on Providers
+  const signs = el("span", "search-signs");
   const draw = () => {
     const v = vendor();
     pick.replaceChildren(el("span", "", v.name || ""), svg(CHEV, 11, 1.6));
@@ -63,7 +66,10 @@ function renderSearch(s, keep) {
       : saved()?.key ? t("A new key, or empty to keep {key}", { key: saved().key })
       : v.keyOptional ? t("API key, or empty for its free search")
       : t("API key, or several split by commas");
-    get.hidden = !v.keysURL;
+    get.hidden = !v.keysURL || !!v.auth;
+    key.hidden = !!v.auth;
+    signs.hidden = !v.auth;
+    signs.textContent = v.auth ? t("Signs in with {name}", { name: v.auth.name }) : "";
   };
   pick.onclick = (e) => {
     e.stopPropagation();
@@ -76,7 +82,7 @@ function renderSearch(s, keep) {
     d.key = key.value.trim(); d.url = url.value.trim();
     // one added before keeps its key when none is typed
     // You.com is asked at its free search with none (#1626)
-    if (vendor().needURL ? !d.url : !d.key && !saved()?.key && !vendor().keyOptional) return (vendor().needURL ? url : key).focus();
+    if (vendor().needURL ? !d.url : !d.key && !saved()?.key && !vendor().keyOptional && !vendor().auth) return (vendor().needURL ? url : key).focus();
     set({ vendor: d.vendor, key: d.key, url: d.url },
       () => { searchDraft = { vendor: d.vendor, key: "", url: "", err: "" }; });
   };
@@ -93,7 +99,7 @@ function renderSearch(s, keep) {
     : apiFirst ? t("Asked before {who}, which searches when these fail", { who: s.searchProvider })
     : t("Now done by {who}; these come after it", { who: s.searchProvider });
   const head = row(t("Search APIs"), d.err || t("When a model can't search the web, magpie searches for it with these, in this order, and gives it what they found") + " · " + by,
-    pick, key, get, add, url);
+    pick, key, signs, get, add, url);
   head.classList.add("rule-row", "search-add");
   head.querySelector(".val").classList.add("rule-add");
   if (d.err) head.querySelector(".sub").classList.add("err");
@@ -106,7 +112,13 @@ function renderSearch(s, keep) {
     units.push(unit);
     const x = el("button", "text", t("Remove"));
     x.onclick = () => set({ vendor: a.vendor, remove: true });
-    const what = [a.key || (a.ready ? "" : t("needs its key")), a.url].filter(Boolean).join(" · ");
+    // one that signs in says whose accounts it uses, or why it has none
+    const auth = vendors.find((v) => v.id === a.vendor)?.auth;
+    const signedIn = !auth ? ""
+      : !auth.signedIn ? t("Not signed in to {name}: sign in to it on Providers", { name: auth.name })
+      : !auth.on ? t("No account of {name} is on", { name: auth.name })
+      : t("Signed in to {name} · accounts on: {n}", { name: auth.name, n: auth.on });
+    const what = [signedIn || a.key || (a.ready ? "" : t("needs its key")), a.url].filter(Boolean).join(" · ");
     const tools = [x];
     if (a.key) {
       // its saved key shown in its row and hidden again, as a provider's
@@ -146,6 +158,7 @@ function renderSearch(s, keep) {
     tools.push(sw);
     const r = row(`${n + 1}. ${a.name}`, a.off ? [t("Off"), what].filter(Boolean).join(" · ") : what, ...tools);
     r.classList.add("search-api");
+    if (auth && !a.off && !(auth.signedIn && auth.on)) r.querySelector(".sub").classList.add("err");
     // with-keys, not :has(), which Safari before 15.4 can't parse
     if (a.keys > 1 || a.quota) { unit.classList.add("with-keys"); searchKeysRow(s, a, row, set); }
     into = box;

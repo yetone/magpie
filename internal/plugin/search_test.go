@@ -93,3 +93,149 @@ func TestPluginSearch(t *testing.T) {
 		t.Error("a corrupt note counted as no searches")
 	}
 }
+
+// A search entry with auth (testdata/searchauth) signs in as the plugin's
+// own provider: it is listed with that provider and no key, an id the
+// plugin doesn't sign in to leaves the entry a key's, and one without auth
+// is as before (a key, no getAuth). A search runs as the one account Go
+// names, ctx.getAuth() giving that account alone, renewed first when due;
+// the renewal's wait counts within the search's time; and an account that
+// isn't signed in, or is another provider's, is an error, never the
+// provider's first account in its place.
+func TestPluginSearchSignsIn(t *testing.T) {
+	sandbox(t)
+	hold := filepath.Join(t.TempDir(), "hold")
+	t.Setenv("SEARCHAUTH_HOLD", hold)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	abs, _ := filepath.Abs("testdata/searchauth")
+	if _, err := Add(ctx, abs); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Plugins(ctx)
+	if err != nil || len(loaded) != 1 {
+		t.Fatalf("%v %v", loaded, err)
+	}
+	got := map[string]SearchDef{}
+	for _, d := range loaded[0].Searches {
+		got[d.ID] = d
+	}
+	if got["seek"].Auth != "seekco" || got["stray"].Auth != "" || got["keyed"].Auth != "" || len(got) != 3 {
+		t.Fatalf("searches = %+v", loaded[0].Searches)
+	}
+	if ns, err := NotedSearches(); err != nil || len(ns) != 3 || ns[0].Auth != "seekco" {
+		t.Fatalf("noted = %+v, %v", ns, err)
+	}
+
+	later := time.Now().Add(time.Hour).UnixMilli()
+	soon := time.Now().Add(time.Minute).UnixMilli()
+	account := func(who, access, refresh string, expires int64) string {
+		t.Helper()
+		k, err := Import(ctx, "seekco", map[string]any{"type": "oauth", "access": access, "refresh": refresh, "expires": expires, "accountId": who})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return k
+	}
+	a := account("a@seek", "acc-a", "r-a", later)
+	b := account("b@seek", "acc-b", "r-b", later)
+	due := account("due@seek", "acc-due", "r-due", soon)
+	slow := account("slow@seek", "acc-slow", "r-slow", soon)
+	if a == b {
+		t.Fatalf("two accounts at one key %q", a)
+	}
+
+	title := func(account string) string {
+		t.Helper()
+		pages, err := RunSearchAs(ctx, abs, "seek", "go", 5, account)
+		if err != nil || len(pages) != 1 {
+			t.Fatalf("as %s: %+v, %v", account, pages, err)
+		}
+		if pages[0].Text != "key= fields=access,accountId,expires,refresh,type" {
+			t.Errorf("as %s the hook saw %q", account, pages[0].Text)
+		}
+		return pages[0].Title
+	}
+	if s := title(b); s != "b@seek acc-b" {
+		t.Errorf("as the second account: %q", s)
+	}
+	if s := title(a); s != "a@seek acc-a" {
+		t.Errorf("as the first account: %q", s)
+	}
+	// a token the hook saves (client.auth.set) goes to the account it
+	// searched as, never the provider's first (inScope)
+	if _, err := RunSearchAs(ctx, abs, "seek", "rotate", 5, b); err != nil {
+		t.Fatal(err)
+	}
+	if got := Auths("seekco"); got[b]["access"] != "rotated-b@seek" || got[a]["access"] != "acc-a" {
+		t.Errorf("a token saved while searching as b: a %v, b %v", got[a]["access"], got[b]["access"])
+	}
+	// due: renewed before the search, which sees the new sign-in
+	if s := title(due); s != "due@seek renewed-r-due" {
+		t.Errorf("a sign-in due for renewal searched as %q", s)
+	}
+
+	for _, bad := range []string{"seekco#nobody", "elsewhere", "elsewhere#x"} {
+		if _, err := RunSearchAs(ctx, abs, "seek", "go", 5, bad); err == nil || !strings.Contains(err.Error(), "not signed in") {
+			t.Errorf("as %s: %v", bad, err)
+		}
+	}
+	if _, err := RunSearchAs(ctx, abs, "seek", "go", 5, ""); err == nil {
+		t.Error("a search that signs in ran with no account")
+	}
+
+	// the renewal (3s) counts within the search's time (1s)
+	short, stop := context.WithTimeout(ctx, time.Second)
+	t0 := time.Now()
+	_, err = RunSearchAs(short, abs, "seek", "go", 5, slow)
+	stop()
+	if err == nil || time.Since(t0) > 2500*time.Millisecond {
+		t.Errorf("a renewal past the search's time: %v after %s", err, time.Since(t0))
+	}
+
+	// a refused search is a SearchRefused, as a key's
+	spent := account("spent@seek", "spent", "r-spent", later)
+	var r SearchRefused
+	if _, err := RunSearchAs(ctx, abs, "seek", "go", 5, spent); !errors.As(err, &r) || r.Status != 429 || r.RetryAfter != "60" {
+		t.Errorf("a refused search: %#v", err)
+	}
+
+	// signed out while its renewal runs: the search doesn't go out as it,
+	// and the renewal doesn't sign it in again (renew's own guard, cd83c3147)
+	gone := account("gone@seek", "acc-gone", "r-hold", soon)
+	ran := make(chan error, 1)
+	go func() {
+		_, err := RunSearchAs(ctx, abs, "seek", "go", 5, gone)
+		ran <- err
+	}()
+	for {
+		if _, err := os.Stat(hold + ".in"); err == nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("the renewal never began")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if err := SignOut(ctx, "seekco", gone); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(hold, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-ran; err == nil || !strings.Contains(err.Error(), "not signed in") {
+		t.Errorf("a search as an account signed out mid-renewal: %v", err)
+	}
+	if _, ok := Auths("seekco")[gone]; ok {
+		t.Error("the renewal signed the account in again")
+	}
+
+	// entries without auth: a key, as before, and no getAuth
+	for _, id := range []string{"keyed", "stray"} {
+		pages, err := RunSearch(ctx, abs, id, "go", 5, "k9", "")
+		if err != nil || len(pages) != 1 || pages[0].Title != "k9 undefined" {
+			t.Errorf("%s: %+v, %v", id, pages, err)
+		}
+	}
+}

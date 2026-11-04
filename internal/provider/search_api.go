@@ -58,6 +58,10 @@ type SearchVendor struct {
 	Plugin, PluginID string
 	// NeedURL: a plugin's API the user gives an address for, as a SearXNG
 	NeedURL bool
+	// Auth: a plugin's API that signs in as the same plugin's provider of
+	// this id (plugin.SearchDef.Auth), taking no key: each search is one
+	// of that provider's accounts that are on (SearchSignIn)
+	Auth string
 }
 
 // WantsURL is whether the user must give its address (a SearXNG's, or a
@@ -95,7 +99,7 @@ func AllSearchVendors() []SearchVendor {
 	ps, _ := plugin.NotedSearches()
 	for _, p := range ps {
 		out = append(out, SearchVendor{ID: p.VendorID(), Name: p.Name, KeysURL: p.KeysURL, KeyOptional: p.KeyOptional,
-			Plugin: p.Spec, PluginID: p.ID, NeedURL: p.NeedURL})
+			Plugin: p.Spec, PluginID: p.ID, NeedURL: p.NeedURL, Auth: p.Auth})
 	}
 	return out
 }
@@ -181,10 +185,12 @@ func (a SearchAPI) ownBase() string {
 }
 
 // Ready is whether it can be asked: a vendor magpie knows, at an address,
-// with a key where it needs one (a SearXNG, You.com, may not).
+// with a key where it needs one (a SearXNG, You.com, may not; one that
+// signs in never does: signed out, a search says so and the next API is
+// asked).
 func (a SearchAPI) Ready() bool {
 	v, known := SearchVendorOf(a.Vendor)
-	return known && (a.Base() != "" || (v.Plugin != "" && !v.NeedURL)) && (a.Key != "" || v.KeyOptional)
+	return known && (a.Base() != "" || (v.Plugin != "" && !v.NeedURL)) && (a.Key != "" || v.KeyOptional || v.Auth != "")
 }
 
 // check says what is wrong with a search API the user gives.
@@ -217,7 +223,7 @@ func (a SearchAPI) check() error {
 	if v.Plugin != "" && v.NeedURL && a.URL == "" {
 		return fmt.Errorf("%s needs its address, as url=https://…", a.Name())
 	}
-	if a.Key == "" && !v.KeyOptional {
+	if a.Key == "" && !v.KeyOptional && v.Auth == "" {
 		return fmt.Errorf("%s needs its API key", a.Name())
 	}
 	return nil

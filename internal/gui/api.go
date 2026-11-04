@@ -611,6 +611,17 @@ type searchVendorJSON struct {
 	KeyOptional bool `json:"keyOptional,omitempty"`
 	// its own address, the one used while no base URL is set (#1580)
 	Base string `json:"base,omitempty"`
+	// Auth: a plugin's API that signs in as the plugin's provider, taking
+	// no key (provider.SearchVendor.Auth)
+	Auth *searchAuthJSON `json:"auth,omitempty"`
+}
+
+// searchAuthJSON is the provider a search API signs in as: its name, and
+// how many of its accounts are on (0 with none signed in).
+type searchAuthJSON struct {
+	Name     string `json:"name"`
+	SignedIn bool   `json:"signedIn"`
+	On       int    `json:"on"`
 }
 
 func searchState(s *settingsJSON) {
@@ -627,7 +638,16 @@ func searchState(s *settingsJSON) {
 		s.SearchAPIs = append(s.SearchAPIs, j)
 	}
 	for _, v := range provider.AllSearchVendors() {
-		s.SearchVendors = append(s.SearchVendors, searchVendorJSON{ID: v.ID, Name: v.Name, KeysURL: v.KeysURL, NeedURL: v.WantsURL(), KeyOptional: v.KeyOptional, Base: v.Base})
+		j := searchVendorJSON{ID: v.ID, Name: v.Name, KeysURL: v.KeysURL, NeedURL: v.WantsURL(), KeyOptional: v.KeyOptional, Base: v.Base}
+		if v.Auth != "" {
+			name, p := provider.SearchSignIn(v)
+			j.Auth = &searchAuthJSON{Name: name}
+			if p != nil {
+				j.Auth.SignedIn = true
+				j.Auth.On = gateway.SearchAccountsOn(*p)
+			}
+		}
+		s.SearchVendors = append(s.SearchVendors, j)
 	}
 	s.SearchProvider = gateway.Searcher()
 	s.SearchAuto, s.SearchUnused = gateway.AutoSearcher(), gateway.SearcherUnused()

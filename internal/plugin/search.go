@@ -30,6 +30,10 @@ type SearchDef struct {
 	// NeedURL: the user gives an address (a SearXNG's), passed to the
 	// plugin as url
 	NeedURL bool `json:"needURL,omitempty"`
+	// Auth is the provider id the API signs in as, one the same plugin's
+	// auth hook signs in to: it takes no key, and each call is one of that
+	// provider's accounts (RunSearchAs)
+	Auth string `json:"auth,omitempty"`
 }
 
 // PluginSearch is a search API with the plugin that gives it.
@@ -76,6 +80,22 @@ const searchSlack = 5 * time.Second
 // time ctx has (60s with none), starting the host if need be. A refusal of
 // the key is a SearchRefused.
 func RunSearch(ctx context.Context, spec, id, query string, count int, key, url string) ([]SearchPage, error) {
+	return runSearch(ctx, map[string]any{"spec": spec, "id": id, "query": query, "count": count, "key": key, "url": url})
+}
+
+// RunSearchAs asks a search API that signs in (SearchDef.Auth) as the
+// account at its host key (provider or provider#slot), through the
+// account's proxy in ctx. The host renews the sign-in first if due, within
+// the time ctx has, and the hook reads that account alone (ctx.getAuth).
+// One signed out is an error, never a sign-in to another account.
+func RunSearchAs(ctx context.Context, spec, id, query string, count int, account string) ([]SearchPage, error) {
+	if account == "" {
+		return nil, errors.New("no account to search as")
+	}
+	return runSearch(ctx, map[string]any{"spec": spec, "id": id, "query": query, "count": count, "account": account, "proxy": proxyOf(ctx)})
+}
+
+func runSearch(ctx context.Context, params map[string]any) ([]SearchPage, error) {
 	ms := int64(60_000)
 	if d, ok := ctx.Deadline(); ok {
 		ms = max(time.Until(d).Milliseconds(), 1)
@@ -86,9 +106,8 @@ func RunSearch(ctx context.Context, spec, id, query string, count int, key, url 
 		Error      string       `json:"error"`
 		RetryAfter string       `json:"retryAfter"`
 	}
-	err := callWithTimeout(ctx, "search", map[string]any{
-		"spec": spec, "id": id, "query": query, "count": count, "key": key, "url": url, "ms": ms,
-	}, &out, time.Duration(ms)*time.Millisecond+searchSlack)
+	params["ms"] = ms
+	err := callWithTimeout(ctx, "search", params, &out, time.Duration(ms)*time.Millisecond+searchSlack)
 	if err != nil {
 		return nil, err
 	}
