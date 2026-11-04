@@ -613,6 +613,15 @@ func tierEfforts(model string) []string {
 
 func claude(home string) *Agent { return claudeIn(here(home)) }
 
+// claudeRouted says the Claude Code at a place, its settings.json at path,
+// sends its requests to magpie's gateway: its ANTHROPIC_BASE_URL is the
+// gateway, or a proxy to it where magpie has answered (#1985,
+// claudeProxied). Whatever its model and however it signs in to magpie.
+func claudeRouted(at place, path string) bool {
+	u, _ := edit.GetJSON(path, "env.ANTHROPIC_BASE_URL")
+	return u == at.gw() || claudeProxied(at, path, u)
+}
+
 // claudeIn is Claude Code as it lives at a place: this machine's home, or
 // a WSL distro's (see wsl.go), its settings.json naming the gateway as it
 // reaches it from there.
@@ -634,7 +643,7 @@ func claudeIn(at place) *Agent {
 	model := jsonGet(path, "model")
 	// routed: on magpie's gateway, or on a proxy to it where magpie has
 	// answered (#1985, claudeProxied), which a pick keeps (gwAt)
-	routed := func() bool { u := env("ANTHROPIC_BASE_URL"); return u == at.gw() || claudeProxied(at, path, u) }
+	routed := func() bool { return claudeRouted(at, path) }
 	gwAt := func() string {
 		if u := env("ANTHROPIC_BASE_URL"); claudeProxied(at, path, u) {
 			return u

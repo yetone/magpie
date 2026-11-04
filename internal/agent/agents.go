@@ -61,6 +61,14 @@ func init() {
 	provider.CodexAppReopen = codexAppReopen
 	// and what the Codex app holds is read while Codex takes magpie's
 	// models beside its sign-in, Codex switched off in magpie or not
+	// Claude Code's own sign-in is left where the user put it while its
+	// requests go through the gateway, which moves them to an account with
+	// room by itself (oreoft on Discord)
+	provider.ClaudeThroughMagpie = func() bool {
+		home, _ := homes()
+		at := here(home)
+		return claudeRouted(at, filepath.Join(at.claudeDir(), "settings.json"))
+	}
 	provider.CodexHoldMatters = func() bool {
 		home, _ := homes()
 		a := codex(home)

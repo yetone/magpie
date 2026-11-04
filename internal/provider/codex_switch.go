@@ -50,6 +50,13 @@ import (
 	"github.com/yetone/magpie/internal/lastgood"
 )
 
+// ClaudeThroughMagpie is set by the agent package: whether Claude Code's
+// settings send its requests to magpie's gateway (ANTHROPIC_BASE_URL),
+// whatever its model and however it signs in there. NextLogin then never
+// moves its sign-in off a spent account. false until it is set, and in a
+// process without the agent package.
+var ClaudeThroughMagpie = func() bool { return false }
+
 // loginSwitchEvery is how often the account each agent is on is looked at.
 const loginSwitchEvery = 5 * time.Minute
 
@@ -300,6 +307,18 @@ func NextLogin(ctx context.Context, agent string) (from, to string, back, ok boo
 		if q, known := u[first.User]; known && q.Error == "" && !q.Held && !usedPast(q, backShare, now) && !capped(first.User, q) {
 			return from, first.User, true, true
 		}
+	}
+	// Claude Code sending its requests to the gateway: the gateway moves
+	// them on to an account with room by itself, so the sign-in moved off
+	// a spent account served nothing and only took away what Claude Code
+	// has as that account, its claude.ai connectors (MCP) among them. The
+	// user set Claude Code back to their main account over and over, and
+	// magpie moved it to their quota account again each time (oreoft on
+	// Discord). It stays where the user put it then; moving it is all
+	// magpie is asked to do under SwitchOnly, whose accounts the gateway
+	// doesn't serve.
+	if agent == "claude" && ClaudeThroughMagpie() && !SwitchOnly(agent) {
+		return "", "", false, false
 	}
 	// kept on the first, it stays there however little that has left; and
 	// it moves on at the share its routing counts the account spent at.
