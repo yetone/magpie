@@ -421,6 +421,11 @@ type Provider struct {
 	// an account by its name in lower case, a key by its KeyID. One not in
 	// it serves every model the provider does (see account_models.go).
 	AccountModels map[string][]string `json:"accountModels,omitempty"`
+	// AccountModelsAll is the keys, by KeyID, the user set back to every
+	// model (All models, or `accountmodels` with none): a Fetch models
+	// that ticks a key's own list for it (key_models_refresh.go) leaves
+	// these as the user set them.
+	AccountModelsAll map[string]bool `json:"accountModelsAll,omitempty"`
 	// AccountCaps is, for a subscription, the share (1–99) of its usage
 	// windows each account the user capped is used to at most, by its name
 	// in lower case: past it, routing takes the account for used up until
@@ -824,6 +829,7 @@ func (p Provider) clone() Provider {
 	p.AccountConcurrency = maps.Clone(p.AccountConcurrency)
 	p.AccountWeights = maps.Clone(p.AccountWeights)
 	p.Contexts = maps.Clone(p.Contexts)
+	p.AccountModelsAll = maps.Clone(p.AccountModelsAll)
 	if p.AccountModels != nil {
 		m := make(map[string][]string, len(p.AccountModels))
 		for k, v := range p.AccountModels {
@@ -919,7 +925,7 @@ func accountSettings(a, pk Provider) Provider {
 	// Send requests unmasked, the user's for a subscription and a
 	// plugin's provider too (isee1_1 on Discord)
 	a.Unredacted = pk.Unredacted
-	a.Proxy, a.AccountProxies, a.AccountModels = pk.Proxy, pk.AccountProxies, pk.AccountModels
+	a.Proxy, a.AccountProxies, a.AccountModels, a.AccountModelsAll = pk.Proxy, pk.AccountProxies, pk.AccountModels, pk.AccountModelsAll
 	a.AccountCaps, a.AccountWindowCaps = pk.AccountCaps, pk.AccountWindowCaps
 	a.CapStop, a.CapCareful = pk.CapStop, pk.CapCareful
 	a.AccountNames = pk.AccountNames
@@ -1574,6 +1580,7 @@ func normalize(p Provider) Provider {
 	p.Proxy = strings.TrimSpace(p.Proxy)
 	p.AccountProxies = normalAccountProxies(p.AccountProxies)
 	p.AccountModels = normalAccountModels(p.AccountModels)
+	p.AccountModelsAll = normalModelsAll(p.AccountModelsAll, p.AccountModels)
 	p.AccountCaps = normalAccountCaps(p.AccountCaps)
 	p.AccountWindowCaps = normalWindowCaps(p.AccountWindowCaps)
 	p.AccountNames = normalAccountNames(p.AccountNames)

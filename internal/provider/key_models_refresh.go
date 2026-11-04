@@ -15,10 +15,18 @@ package provider
 // out. A model the user un-ticked for a key that its list had before and
 // still has stays un-ticked, and one the user ticked that its list never
 // had stays ticked: magpie's default never overrides what the user set.
-// Only a key the user, or its add, narrowed has a list to carry it into;
-// a key that serves every model still does. A key with no marks before or
-// now (one key on, a key just added, one switched off) is unknown, and
-// its models stay as they are.
+//
+// A key with no models of its own yet (All models: one added before its
+// own list was asked for, the provider's first key, one whose list wasn't
+// read in time when it was added) is given its own list, as a key added
+// now is (PrefillNewKeys), when that list leaves out a model the
+// provider's other keys list (young02036 on Discord: Fetch models ticks
+// the models each key can serve). A key the user set back to every model
+// (AccountModelsAll) stays so, and one whose list has every model the
+// others list serves every model still, so the vendor's later additions
+// reach it. A key with no marks now (one key on, one switched off, a
+// list that failed with nothing kept) is unknown, and its models stay as
+// they are.
 
 import (
 	"slices"
@@ -47,14 +55,22 @@ func keyMarks(id string) map[string]map[string]bool {
 
 // refreshKeyModels carries what each of the provider id's keys' lists
 // gained and lost between before and now into the models it serves
-// (AccountModels), and answers how many keys' models changed.
+// (AccountModels), gives a key with none of its own its list now when
+// that is short of the others', and answers how many keys' models changed.
 func refreshKeyModels(id string, before, now map[string]map[string]bool) int {
-	if len(before) == 0 || len(now) == 0 {
+	if len(now) == 0 {
 		return 0
 	}
 	p, err := Find(id)
-	if err != nil || len(p.AccountModels) == 0 {
+	if err != nil {
 		return 0
+	}
+	// every model the keys' lists have between them
+	every := map[string]bool{}
+	for _, set := range now {
+		for m := range set {
+			every[m] = true
+		}
 	}
 	var am map[string][]string
 	n := 0
@@ -62,37 +78,49 @@ func refreshKeyModels(id string, before, now map[string]map[string]bool) int {
 		kid := keyID(k.Key)
 		was := p.AccountModels[accountKey(kid)]
 		o, w := before[kid], now[kid]
-		if was == nil || len(o) == 0 || len(w) == 0 {
+		if len(w) == 0 {
 			continue
 		}
 		var list []string
-		for _, m := range was {
-			own := p.OwnModelID(m)
-			if o[own] && !w[own] {
-				continue // its list had it and has no more
+		if was == nil {
+			// a key on every model, by magpie's default and not the
+			// user's, whose list leaves some of the others' out
+			if p.AccountModelsAll[accountKey(kid)] || len(w) >= len(every) {
+				continue
 			}
-			list = append(list, m)
-		}
-		var gained []string
-		for m := range w {
-			if !o[m] {
-				gained = append(gained, m)
-			}
-		}
-		slices.Sort(gained)
-		for _, m := range gained {
-			if !slices.ContainsFunc(list, func(x string) bool { return x == m || p.OwnModelID(x) == m }) {
+			for m := range w {
 				list = append(list, p.ListedModelID(m))
+			}
+			slices.Sort(list)
+		} else {
+			if len(o) == 0 {
+				continue
+			}
+			for _, m := range was {
+				own := p.OwnModelID(m)
+				if o[own] && !w[own] {
+					continue // its list had it and has no more
+				}
+				list = append(list, m)
+			}
+			var gained []string
+			for m := range w {
+				if !o[m] {
+					gained = append(gained, m)
+				}
+			}
+			slices.Sort(gained)
+			for _, m := range gained {
+				if !slices.ContainsFunc(list, func(x string) bool { return x == m || p.OwnModelID(x) == m }) {
+					list = append(list, p.ListedModelID(m))
+				}
 			}
 		}
 		if len(list) == 0 || slices.Equal(list, was) {
 			continue // nothing left would read as every model: keep it
 		}
 		if am == nil {
-			am = make(map[string][]string, len(p.AccountModels))
-			for k, v := range p.AccountModels {
-				am[k] = v
-			}
+			am = map[string][]string{}
 		}
 		am[accountKey(kid)] = list
 		n++
@@ -112,7 +140,7 @@ func refreshKeyModels(id string, before, now map[string]map[string]bool) int {
 	}
 	n = 0
 	for k, v := range am {
-		if slices.Equal(v, p.AccountModels[k]) || !slices.Equal(q.AccountModels[k], p.AccountModels[k]) {
+		if !slices.Equal(q.AccountModels[k], p.AccountModels[k]) || q.AccountModelsAll[k] != p.AccountModelsAll[k] {
 			continue
 		}
 		merged[k] = v

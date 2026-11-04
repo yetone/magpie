@@ -1913,7 +1913,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				// each account's own models are set on their own, with
 				// accountmodels
 				if old != nil {
-					in.AccountModels = old.AccountModels
+					in.AccountModels, in.AccountModelsAll = old.AccountModels, old.AccountModelsAll
 				}
 				// and their usage caps, with accountcap and windowcap, their
 				// limits on requests at once, with accountconcurrency, and

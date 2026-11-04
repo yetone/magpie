@@ -62,7 +62,8 @@ func TestNewKeyTakesItsOwnModels(t *testing.T) {
 		"sk-old":    `{"data":[{"id":"deepseek-v4"}]}`,
 	})
 	// sk-old was there before, with no list of its own though its group
-	// lists one model: it is not new, so it keeps every model
+	// lists one model: the Fetch below gives it its list (young02036 on
+	// Discord, v0.1.2965: Fetch models ticks every key's own models)
 	if err := Save(Provider{ID: "relay", Name: "Relay", Chat: srv.URL + "/v1", Key: "sk-all",
 		Keys:          []KeyAccount{{Key: "sk-mine"}, {Key: "sk-old"}},
 		AccountModels: map[string][]string{keyID("sk-mine"): {"gpt-5.5"}}}); err != nil {
@@ -83,7 +84,7 @@ func TestNewKeyTakesItsOwnModels(t *testing.T) {
 	if got := p.AccountModels[keyID("sk-claude")]; !slices.Equal(got, []string{"claude-opus-4-7"}) {
 		t.Fatalf("the new key's models %v, want its own list", got)
 	}
-	if p.AccountModels[keyID("sk-all")] != nil || p.AccountModels[keyID("sk-old")] != nil || !slices.Equal(p.AccountModels[keyID("sk-mine")], []string{"gpt-5.5"}) {
+	if p.AccountModels[keyID("sk-all")] != nil || !slices.Equal(p.AccountModels[keyID("sk-old")], []string{"deepseek-v4"}) || !slices.Equal(p.AccountModels[keyID("sk-mine")], []string{"gpt-5.5"}) {
 		t.Fatalf("the keys it had changed: %v", p.AccountModels)
 	}
 	// the gateway's rule: the new key is never sent a model its list lacks

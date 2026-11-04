@@ -659,6 +659,7 @@ func ReplaceKey(id, keyRef, key string) (was, now string, err error) {
 		p.Keys[i].Key = key
 	}
 	moveKeyed(p.AccountModels, keyRef, now)
+	moveKeyed(p.AccountModelsAll, keyRef, now)
 	moveKeyed(p.AccountProxies, keyRef, now)
 	moveKeyed(p.AccountConcurrency, keyRef, now)
 	moveKeyed(p.KeySpendCaps, keyRef, now)
