@@ -2952,6 +2952,14 @@ type keptAlive struct {
 	streams bool
 	// codex, whether Codex sent the request (fromCodex)
 	codex bool
+	// whole, a reply wanted only whole (wantsWhole): a compaction's summary
+	// ask, written into codexCompact's recorder, which Codex never reads.
+	// It is never sent a 200 or a comment: once one went, a refusal after
+	// it came as the stream's error, not its status, and a summary over
+	// the vendor's byte cap whose fitting tries took past keepHeldAfter (a
+	// 40 MB upload asked four times) failed 502 instead of being made
+	// without a model (#4862)
+	whole bool
 	// Only opted-in Claude cache reporting can defer initial keepalives.
 	// Selection releases it before process startup; expiry keeps the stream alive.
 	cacheReportUntil time.Time
@@ -2975,9 +2983,11 @@ var agentQuietMost = 4 * time.Minute
 // a 413 for an unexpected status and a 400 context_length_exceeded for an
 // invalid request, and either ends the turn with nothing compacted, a
 // compaction refused the same way failing outright (codex-rs codex-api
-// api_bridge.rs). Another client keeps the status.
+// api_bridge.rs). Another client keeps the status, and so does magpie's
+// own summary ask (whole), whose 413 codexCompact reads as its cue to ask
+// the conversation as text and then compact without a model.
 func (a *keptAlive) compactsInStream(status int, msg string) bool {
-	return a.codex && a.streams && a.proto == provider.Responses && (status == http.StatusRequestEntityTooLarge || tooLong(status, msg))
+	return a.codex && !a.whole && a.streams && a.proto == provider.Responses && (status == http.StatusRequestEntityTooLarge || tooLong(status, msg))
 }
 
 // tooQuiet says whether a Responses agent that has had no event of its
@@ -2996,7 +3006,7 @@ func (h *holdWriter) keepAlive() {
 	a := h.alive
 	// a Gemini stream has none, as geminiEncoder.keepalive: agy fails on
 	// the comment ("invalid stream chunk: : keepalive", #934)
-	if a == nil || a.proto == provider.Gemini || time.Since(a.at) < min(keepaliveEvery, keepHeldEvery) {
+	if a == nil || a.whole || a.proto == provider.Gemini || time.Since(a.at) < min(keepaliveEvery, keepHeldEvery) {
 		return
 	}
 	if !a.sent {
