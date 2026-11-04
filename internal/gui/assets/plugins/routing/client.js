@@ -4170,6 +4170,35 @@ function routingPage(part) {
       + (x.resetsAt ? " · " + resetInText(new Date(x.resetsAt)) : "")) : [];
   }
 
+  // remoteWinsOf: the windows of the accounts signed in on another
+  // computer's magpie (a Remote magpie provider, joined over the network),
+  // as the Usage page has read them from there: its cards are app.js's
+  // quotas with `from`, their provider id the remote's, a slash, and the
+  // card's. The computer that holds the account tells its usage, and the
+  // row says which account when the remote has more than one. A model of
+  // Claude's is told Claude's cards alone, ChatGPT's Codex's. A remote
+  // whose read failed says it is unknown, never 0 or nothing.
+  const REMOTE_FAMILY = [[/^claude/i, "claude"], [/^(gpt|codex|o\d)/i, "codex"]];
+  function remoteWinsOf(w) {
+    if (w.preset !== "remote-magpie" || w.kind === "account" || !Array.isArray(quotas)) return [];
+    const fam = REMOTE_FAMILY.find(([re]) => re.test(w.model || ""))?.[1];
+    const mine = quotas.filter((q) => q.from && q.kind === "subscription" && (q.provider === w.provider || q.provider.startsWith(w.provider + "/")));
+    const cards = mine.filter((q) => q.provider !== w.provider && !q.error && q.windows?.length && (!fam || q.provider === w.provider + "/" + fam));
+    if (!cards.length) {
+      // the remote's own card, saying why nothing was read from it
+      const bad = mine.find((q) => q.provider === w.provider && q.error);
+      return bad ? [{ text: t("Allowance unavailable — hover for why"), title: bad.error }] : [];
+    }
+    const out = [];
+    for (const q of cards) {
+      const who = cards.length > 1 && q.user ? q.user + ": " : "";
+      for (const x of familyWindows(q.windows) || []) {
+        out.push({ text: who + t(x.name) + " " + quotaText(x) + (x.resetsAt ? " · " + resetInText(new Date(x.resetsAt)) : "") });
+      }
+    }
+    return out;
+  }
+
   // modelRest keeps the latest word of one of an account's models resting
   // alone (#1960)
   function modelRest(a, m, rest, when) {
@@ -4347,10 +4376,10 @@ function routingPage(part) {
       // the Usage page read them (#1833): the figure above is the one
       // window routing went by. Live only: a kept day's requests were
       // weighed by readings long gone.
-      const ws = day ? [] : winsOf(w);
+      const ws = day ? [] : [...winsOf(w).map((text) => ({ text })), ...remoteWinsOf(w)];
       if (ws.length) {
         const line = el("div", "wins");
-        line.append(...ws.map((s) => el("span", "", s)));
+        line.append(...ws.map((x) => { const e = el("span", "", x.text); if (x.title) e.title = x.title; return e; }));
         row.append(line);
       }
       row.append(tally);

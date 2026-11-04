@@ -217,6 +217,16 @@ missing or over a minute old), never `?asked=1`. A kept day's list shows
 none, since those requests were weighed by readings long gone. See
 `routing-account-windows.test.cjs`.
 
+A Claude (or Codex) joined over the network, a Remote magpie provider's
+row, shows the windows of the accounts signed in on that computer the same
+way (`remoteWinsOf` in `client.js`): the Usage page's cards with `from`
+whose provider id is the remote's, a slash and the card's. The computer
+that holds the account tells its usage; this one reads nothing new. A
+Claude model's row is told Claude's cards alone and a ChatGPT model's
+Codex's; with more than one card the account's user leads each window. A
+remote whose read failed shows "Allowance unavailable" with the reason on
+hover, never a figure. See `routing-remote-windows.test.cjs`.
+
 The refresh beside the Accounts and keys heading (`#rtReadAllowances`,
 #1834) reads them again by hand: `loadQuotas(true)`, the asked read the
 Usage page's Refresh now makes. It turns while the read is on its way,
