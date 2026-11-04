@@ -147,7 +147,10 @@ func TestClaudeSwitchWeeklyOnly(t *testing.T) {
 	}
 	q := LoginUsage(ctx, "claude")
 	for user, u := range q {
-		if strings.HasPrefix(user, "pro@x.com") && (len(u.Windows) != 2 || u.Windows[0].Name != "7 days" || u.Windows[1].Model != "fable") {
+		// the card has the 5-hour window /usage left out, not started
+		// (motui9535): Anthropic leaves one out while it hasn't started
+		if strings.HasPrefix(user, "pro@x.com") && (len(u.Windows) != 3 || u.Windows[0].Name != "5 hours" || u.Windows[0].Used != 0 || u.Windows[0].ResetsAt != nil ||
+			u.Windows[1].Name != "7 days" || u.Windows[2].Model != "fable") {
 			t.Fatalf("Claude Code's own account read: %+v", u)
 		}
 	}

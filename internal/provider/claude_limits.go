@@ -37,6 +37,31 @@ var claudeKinds = []struct {
 	{"seven_day_overage_included", "7 days · Fable", "fable", 7 * 24 * time.Hour},
 }
 
+// claudeKindOrder is w's place among claudeKinds, the windows Claude Code
+// names, as a reading orders them; one it doesn't name goes last.
+func claudeKindOrder(w QuotaWindow) int {
+	for i, k := range claudeKinds {
+		if k.name == w.Name {
+			return i
+		}
+	}
+	return len(claudeKinds)
+}
+
+// claudeWithUnstarted is a whole reading ws with the 5-hour window every
+// Claude account has (as claudeWindowsExpected), when it leaves it out, as not
+// started: Anthropic leaves a window out (null) while it hasn't started, so
+// /usage has no "Current session" line for an account not used in the last
+// five hours, and its card showed no 5-hour window at all (motui9535).
+// The week needs none: a reading that tells any window tells the week, a
+// session used being the week used too. Ordered as Claude Code names
+// them, the 5-hour window first.
+func claudeWithUnstarted(ws []QuotaWindow) []QuotaWindow {
+	out := withExpected(ws, []QuotaWindow{{Name: "5 hours", Span: 5 * time.Hour}})
+	slices.SortStableFunc(out, func(a, b QuotaWindow) int { return claudeKindOrder(a) - claudeKindOrder(b) })
+	return out
+}
+
 // claudeHeard is how long what Claude Code said as it answered stands in
 // for the usage endpoint when that fails.
 const claudeHeard = time.Hour
@@ -81,15 +106,7 @@ func NoteClaudeLimits(user string, ls []ClaudeLimit) {
 		}
 	}
 	ws = append(ws, heard...)
-	order := func(w QuotaWindow) int {
-		for i, k := range claudeKinds {
-			if k.name == w.Name {
-				return i
-			}
-		}
-		return len(claudeKinds)
-	}
-	slices.SortStableFunc(ws, func(a, b QuotaWindow) int { return order(a) - order(b) })
+	slices.SortStableFunc(ws, func(a, b QuotaWindow) int { return claudeKindOrder(a) - claudeKindOrder(b) })
 	e.ws, e.at, e.heard = ws, time.Now(), time.Now()
 	e.heardSeq = quotaReadSequence.Add(1) // after every reading started before it, as the cards order them
 	e.err = nil                           // a new observation supersedes the failed reading

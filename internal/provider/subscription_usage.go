@@ -919,6 +919,8 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 		}
 		return ws, err
 	}
+	// a whole reading: a window it leaves out hasn't started
+	ws = claudeWithUnstarted(ws)
 	c.Lock()
 	if c.m == nil {
 		c.m = map[string]claudeUsageEntry{}
