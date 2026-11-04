@@ -166,16 +166,31 @@ func unicodeNullEscape(pattern string) string {
 	return out.String()
 }
 
+// deepseekModel is whether id, the model as the body going upstream names
+// it, is one of DeepSeek's, under whatever prefix a relay or router gives
+// it (deepseek/deepseek-v4.1, openrouter's deepseek/…). DeepSeek's quirks
+// are DeepSeek's whoever serves them: a relay that upstream-validates
+// like DeepSeek carries a DeepSeek model's name (#5030, #4852).
+func deepseekModel(id string) bool {
+	if i := strings.LastIndexByte(id, '/'); i >= 0 {
+		id = id[i+1:]
+	}
+	return strings.HasPrefix(strings.ToLower(id), "deepseek")
+}
+
 // deepseekTokenField names a chat request's reply length max_tokens, the
 // field DeepSeek's chat API reads: it has no max_completion_tokens and
 // ignores one, so a client that asks OpenAI's way (DSH's pi-ai with a
 // custom provider) got DeepSeek's default, 8K without thinking (#2355).
-// Only the key is renamed, in place, so the rest of the body keeps its
-// bytes. A request that names max_tokens too goes as it is, since
-// DeepSeek reads that one. Another vendor's chat API is left alone:
-// OpenAI's and Azure's want max_completion_tokens.
+// It is DeepSeek's API whoever serves a DeepSeek model: on a relay's own
+// domain the model named in the body tells (#5030, NOMOAX), as Grok's
+// schema quirk is told by its model (grokModel). Only the key is renamed,
+// in place, so the rest of the body keeps its bytes. A request that names
+// max_tokens too goes as it is, since DeepSeek reads that one. Another
+// vendor's chat API is left alone: OpenAI's and Azure's want
+// max_completion_tokens.
 func deepseekTokenField(p provider.Provider, to provider.Protocol, body []byte) []byte {
-	if to != provider.Chat || p.Preset != "deepseek" && provider.HostOf(p.Base(to)) != "api.deepseek.com" {
+	if to != provider.Chat || p.Preset != "deepseek" && provider.HostOf(p.Base(to)) != "api.deepseek.com" && !deepseekModel(gjson.GetBytes(body, "model").String()) {
 		return body
 	}
 	if !bytes.Contains(body, []byte(`"max_completion_tokens"`)) || gjson.GetBytes(body, "max_tokens").Exists() {
