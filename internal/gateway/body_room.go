@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"runtime"
 	"slices"
 	"sync"
 	"time"
@@ -65,7 +64,7 @@ const bodyRoomFloor = 64 << 20
 // is not a small one.
 func bodyRoomSize() (int64, string) {
 	limit, why := memLimit(memGOOS, memRoot)
-	if limit <= 0 && memGOOS == runtime.GOOS {
+	if limit <= 0 && memOwn() {
 		limit, why = proc.MemTotal(), "the computer's memory"
 	}
 	if limit <= 0 {

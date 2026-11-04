@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -53,7 +52,7 @@ func codexBodyLimit() int64 {
 	defer codexLimit.Unlock()
 	if codexLimit.goos != memGOOS || codexLimit.root != memRoot || codexLimit.n == 0 {
 		limit, _ := memLimit(memGOOS, memRoot)
-		if limit <= 0 && memGOOS == runtime.GOOS {
+		if limit <= 0 && memOwn() {
 			limit = proc.MemTotal()
 		}
 		codexLimit.goos, codexLimit.root = memGOOS, memRoot

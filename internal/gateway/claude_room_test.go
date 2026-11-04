@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -340,6 +341,28 @@ func TestClaudeMemRunsUnknownBoundsNothing(t *testing.T) {
 	t.Cleanup(func() { memGOOS, memRoot = oldGOOS, oldRoot })
 	if n, why := claudeRunsMost(); n != 0 {
 		t.Fatalf("unknown memory bounded runs to %d (%s)", n, why)
+	}
+}
+
+// A test's root is not this computer, even one naming this computer's
+// system: holding nothing, it leaves memory unknown to every reader that
+// falls back on the computer's memory. The computer's memory stood in for
+// such a root, so each read the test machine's (#5118: a Codex turn's
+// limit on an "unknown" machine was 998 MiB on ubuntu CI, 1994 MiB on WSL).
+func TestAFixtureRootIsNotThisComputer(t *testing.T) {
+	oldGOOS, oldRoot := memGOOS, memRoot
+	memGOOS, memRoot = runtime.GOOS, t.TempDir()
+	t.Cleanup(func() { memGOOS, memRoot = oldGOOS, oldRoot })
+	if n, why := bodyRoomSize(); n != 0 {
+		t.Errorf("body room %d MiB (%s), want none", n>>20, why)
+	}
+	runBudget.Once = sync.Once{}
+	t.Cleanup(func() { runBudget.Once = sync.Once{} })
+	if n, why := claudeRunBudget(); n != claudeRunUnknown {
+		t.Errorf("run budget %d MiB (%s), want the unknown %d MiB", n>>20, why, claudeRunUnknown>>20)
+	}
+	if n := codexBodyLimit(); n != defaultBodyLimit {
+		t.Errorf("Codex turn limit %d MiB, want %d MiB", n>>20, defaultBodyLimit>>20)
 	}
 }
 

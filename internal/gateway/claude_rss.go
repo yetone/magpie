@@ -3,7 +3,6 @@ package gateway
 import (
 	"fmt"
 	"log"
-	"runtime"
 	"sync"
 	"time"
 
@@ -43,7 +42,7 @@ var runBudget struct {
 func claudeRunBudget() (int64, string) {
 	runBudget.Do(func() {
 		limit, why := memLimit(memGOOS, memRoot)
-		if limit <= 0 && memGOOS == runtime.GOOS {
+		if limit <= 0 && memOwn() {
 			limit, why = proc.MemTotal(), "the computer's memory"
 		}
 		if limit <= 0 {
