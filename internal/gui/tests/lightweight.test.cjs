@@ -81,7 +81,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // one measured before that is gone (null) by the time it is clicked
         await page.waitForFunction(() => prefsBusy === 0);
         const b = await loc.boundingBox();
-        await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+        // wholly in sight and on nothing drawn over: rows grown above put the
+        // row under the window's foot, the press landed on nothing, no save
+        // ever came, and the test read "posted []" (#3078)
+        const x = b.x + b.width / 2, y = b.y + b.height / 2;
+        const clear = await loc.evaluate((o, [x, y]) => {
+          const v = o.closest("#view-settings").getBoundingClientRect(), r = o.getBoundingClientRect();
+          return r.top >= v.top && r.bottom <= v.bottom && o.contains(document.elementFromPoint(x, y));
+        }, [x, y]);
+        assert.ok(clear, `the option is out of sight at (${Math.round(x)}, ${Math.round(y)}) of ${page.viewportSize().height}`);
+        await page.mouse.click(x, y);
       };
       // another setting saved while it was never chosen leaves it unchosen,
       // so the default goes on applying
