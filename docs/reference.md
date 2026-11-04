@@ -3358,6 +3358,28 @@ MAGPIE_OTEL_ENABLED=true MAGPIE_OTEL_ENDPOINT=http://localhost:4318 magpie serve
 - `MAGPIE_OTEL_BODIES_WHOLE`: `true` or `false`, off by default; with bodies on,
   keeps them entire rather than cut at 256 KB. A long reply is written to a
   temporary file; a body too large for the collector is still refused.
+- `OTEL_RESOURCE_ATTRIBUTES`: the standard OpenTelemetry variable, merged into
+  the resource of both traces and metrics, for example to tell servers apart:
+
+  ```sh
+  OTEL_RESOURCE_ATTRIBUTES='service.instance.id=magpie-prod-01,host.name=server-a,deployment.environment.name=production' \
+    MAGPIE_OTEL_ENABLED=true MAGPIE_OTEL_ENDPOINT=http://localhost:4318 magpie serve
+  ```
+
+  Comma-separated `key=value` pairs, as the
+  [OTel resource SDK spec](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/resource/sdk.md#specifying-resource-information-via-an-environment-variable)
+  has them: keys and values are trimmed and percent-decoded (write `,` as
+  `%2C`, `=` as `%3D` and `%` as `%25`; `+` stays a plus), every value is a
+  string, and the last of a repeated key wins. Any invalid entry (no `=`, an
+  empty key, a bad escape, bytes that aren't UTF-8 once decoded, an empty
+  entry such as a trailing comma) discards the whole variable: magpie logs
+  which entry, never its contents, and exports with the default resource.
+  Nothing else about the machine is looked up or sent.
+- `OTEL_SERVICE_NAME`: the resource's `service.name`, over a `service.name` in
+  `OTEL_RESOURCE_ATTRIBUTES`. With neither set, or set empty, it is `magpie`.
+
+  Neither variable turns export on, and both are read in the process that
+  exports (the app, or `magpie serve`), so restart it after changing them.
 
 For Langfuse, pick **Collector › Langfuse**, then the host (Cloud EU
 `https://cloud.langfuse.com`, Cloud US `https://us.cloud.langfuse.com`, or

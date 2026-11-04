@@ -26,6 +26,9 @@ func otelConfig(t *testing.T, config settings.OTel) {
 	t.Setenv("MAGPIE_OTEL_ENDPOINT", config.Endpoint)
 	t.Setenv("MAGPIE_OTEL_HEADERS", "Authorization=Bearer%20collector-test")
 	t.Setenv("MAGPIE_OTEL_METRICS", "false")
+	// The shell's own resource variables never reach a test's export.
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "")
+	t.Setenv("OTEL_SERVICE_NAME", "")
 	if config.Metrics {
 		t.Setenv("MAGPIE_OTEL_METRICS", "true")
 	}
