@@ -1113,15 +1113,25 @@ func plainSchema(raw json.RawMessage) json.RawMessage {
 						out["maxItems"] = 0
 					}
 				case "enum":
-					// Google takes string enums only
+					// Google takes string enums only, and none of them
+					// blank: Portainer's "" (no operation running) turned
+					// the whole turn away ("enum[3]: cannot be empty",
+					// #5235). A blank value is left out; an enum with
+					// nothing else in it is left out whole.
 					if es, ok := v.([]any); ok {
 						strs := make([]any, 0, len(es))
+						all := true
 						for _, e := range es {
-							if s, ok := e.(string); ok {
+							s, ok := e.(string)
+							if !ok {
+								all = false
+								break
+							}
+							if strings.TrimSpace(s) != "" {
 								strs = append(strs, s)
 							}
 						}
-						if len(strs) == len(es) {
+						if all && len(strs) > 0 {
 							out[k] = strs
 						}
 					}
@@ -1132,7 +1142,7 @@ func plainSchema(raw json.RawMessage) json.RawMessage {
 				}
 			}
 			if c, ok := x["const"]; ok {
-				if s, ok := c.(string); ok {
+				if s, ok := c.(string); ok && strings.TrimSpace(s) != "" {
 					out["enum"] = []any{s}
 				}
 			}
