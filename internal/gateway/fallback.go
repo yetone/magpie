@@ -1694,8 +1694,10 @@ func shapeRefused(status int, body []byte) bool {
 // supported for the API use." (Gemini, Antigravity, Code Assist; #1621),
 // and OpenAI's "unsupported_country_region_territory", which a relay may
 // pass on as a 400. It is about the address the request leaves from, not
-// the request or the model: another member, going another way, may
-// answer, and this one rests only as briefly as any other failure does.
+// the request, the model or the account: another member, going another
+// way, may answer, and none rests for it (restAfterMarked, #5182). Google
+// decides it per connection, so the connection it came on is not used
+// again (regionFresh).
 // A request's own field named location ("location field is not
 // supported") isn't one.
 var regionWords = regexp.MustCompile(`(?i)\buser location is not supported for the api use\b|unsupported_country_region_territory|country, region,? or territory not supported`)
@@ -2011,6 +2013,11 @@ func passing(status int, header http.Header, body []byte, again int) (time.Durat
 		// 后再试"); a plan used up or no money left won't clear in seconds,
 		// nor an account's token wall (walled)
 		return wait, again < rateRetries && failure(status, body) == failRate && !creditWords.Match(wordsOf(body)) && !walled(body)
+	case regionRefused(status, wordsOf(body)):
+		// refused at the edge the connection reached, which a new
+		// connection a moment later may not be (#5182: answered 12s on);
+		// the try goes out on a new one (regionFresh)
+		return wait, again < lastRetries
 	}
 	return 0, false
 }

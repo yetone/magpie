@@ -55,8 +55,8 @@ func TestRegionRefusalIsNotTooLong(t *testing.T) {
 }
 
 // #1621: a group's member refused for its region hands the request to the
-// next member, and rests as briefly as any failure, not as one out of
-// credit or quota.
+// next member, and rests not at all (#5182): not as one out of credit or
+// quota, nor as any failure.
 func TestGroupFailsOverARegionRefusal(t *testing.T) {
 	for _, body := range []string{antigravityRegion400, googleRegion400} {
 		fresh(t)
@@ -76,7 +76,7 @@ func TestGroupFailsOverARegionRefusal(t *testing.T) {
 		if len(r.Tries) != 2 || r.Tries[0].Status != 400 || r.Tries[0].Rest == nil {
 			t.Fatalf("tries %+v", r.Tries)
 		}
-		if rest := r.Tries[0].Rest; rest.Why != failOther || time.Until(rest.Until) > longestRetry {
+		if rest := r.Tries[0].Rest; rest.Why != failOther || rest.By != "off" || rest.Failures != 0 || time.Until(rest.Until) > 0 {
 			t.Fatalf("rested %+v", rest)
 		}
 	}

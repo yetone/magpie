@@ -1318,6 +1318,16 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		// was, and is asked again once the network is back (offline.go)
 		return Rest{Why: failOffline, Status: status, By: "off", Until: now}
 	}
+	if regionRefused(status, wordsOf(body)) {
+		// the vendor refused where the request came from (regionWords):
+		// the network's doing, and the edge's the connection reached, not
+		// the account's. Every account asked on that connection was
+		// refused the same, and all of them rested, while a new
+		// connection answered seconds later (#5182). None is set aside
+		// and the failure counts nowhere; the next try goes out on a new
+		// connection (regionFresh)
+		return Rest{Why: why, Status: status, By: "off", Until: now}
+	}
 	if status == http.StatusBadGateway && bytes.Contains(body, []byte(openCodeBare)) {
 		// OpenCode's bare 400 (openCodeBareRefusal, #3740) is about the
 		// request, not the key: the key's other requests go through, so
