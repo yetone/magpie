@@ -556,9 +556,10 @@ type Server struct {
 	// (UnixNano, 0 for never): while that is recent, a group skips it for
 	// such a request when someone is left after it (antigravityForeseen)
 	agTurnedAway atomic.Int64
-	// thoughtMu keeps the count of each DeepSeek member's thinking replies
-	// that went on to an answer in a row, by "<provider>/<model>"
-	// (holdsThinking, #4512)
+	// thoughtMu keeps the count of each member's thinking replies that
+	// went on to an answer in a row, by "<provider>/<model>", for a
+	// vendor that may refuse after its thinking (holdsThinking, #4512,
+	// #4166)
 	thoughtMu    sync.Mutex
 	thoughtClean map[string]int
 }
@@ -3205,7 +3206,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// thoughtCleanMost times running (holdsThinking, #4512): its
 		// filter refuses after thinking hardly ever, and held, the agent
 		// waited every request's whole thinking out.
-		hw.thinkingShown = !s.holdsThinking(c) || last
+		// Claude's, GPT's and Gemini's go as they come the same way while
+		// a refusal after them can still be handed over (hw.over): held,
+		// a group's Claude showed Claude Code its thinking only with its
+		// text, all at once, and never its "thinking with <effort>
+		// effort" (#4166). Set below, once hw.over is.
 		hw.ctx, hw.alive, hw.streams = r.Context(), kept, streams
 		// a Claude subscription account's refusal of a big conversation
 		// isn't told again to the subscription's other accounts
@@ -3221,6 +3226,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// same stream (refusalHandover; yhwangl on X)
 			hw.over = &refusalHandover{proto: from, seq: -1}
 		}
+		// the reasoning's hold, above, once the handover is known
+		hw.thinkingShown = !s.holdsThinking(c, hw.over != nil) || last
 		report := cacheReport
 		if c.p.Account == nil || c.p.Account.Agent != "claude" {
 			report = nil

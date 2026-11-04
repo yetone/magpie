@@ -274,3 +274,110 @@ func TestSensitiveContentRefusals(t *testing.T) {
 		t.Error("Zhipu's sensitive is not the filter's stop")
 	}
 }
+
+// A group's Claude, GPT or Gemini member trusted with its reasoning
+// (holdsThinking, #4166) lets it through as it comes, and what ends the
+// try before a word of the answer still goes to the next member, as it
+// did while the reasoning was held (#248): a refusal and a retryable
+// error alike, whose answer follows the reasoning in the same stream, as
+// one reply, for Claude Code, Codex and a Chat client. An error the next
+// member wouldn't answer otherwise (a request at fault) is the agent's.
+func TestTrustedThinkingFailsOverOnEveryPath(t *testing.T) {
+	chatAnswered := sse(
+		`data: {"id":"c1","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"hm"}}]}`,
+		`data: {"id":"c1","choices":[{"index":0,"delta":{"content":"from a"}}]}`,
+		`data: {"id":"c1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":5,"total_tokens":8}}`,
+		`data: [DONE]`)
+	chatThought := strings.Join(strings.SplitAfter(glmThoughtThenSensitive, "\n\n")[:2], "")
+	anthropicThought := strings.Join(strings.SplitAfter(glmAnthropicThoughtThenRefused, "\n\n")[:4], "")
+	anthropicError := func(typ, msg string) string {
+		return anthropicThought + sse(`event: error`+"\n"+`data: {"type":"error","error":{"type":"`+typ+`","message":"`+msg+`"}}`)
+	}
+	for _, up := range []struct {
+		name, model string
+		proto       provider.Protocol
+		answered    string
+		refused     string
+		overloaded  string
+		invalid     string
+	}{
+		{"claude", "claude-opus-5-5", provider.Anthropic, anthropicThoughtThenAnswered, glmAnthropicThoughtThenRefused,
+			anthropicError("overloaded_error", "Overloaded"), anthropicError("invalid_request_error", "invalid tool schema")},
+		{"gpt", "gpt-5.5", provider.Chat, chatAnswered, chatThoughtThenFiltered,
+			chatThought + sse(`data: {"error":{"message":"Overloaded","type":"server_error"}}`),
+			chatThought + sse(`data: {"error":{"message":"invalid tool schema","type":"invalid_request_error"}}`)},
+		{"gemini", "gemini-3-pro", provider.Chat, chatAnswered, chatThoughtThenFiltered,
+			chatThought + sse(`data: {"error":{"message":"Overloaded","type":"server_error"}}`),
+			chatThought + sse(`data: {"error":{"message":"invalid tool schema","type":"invalid_request_error"}}`)},
+	} {
+		for _, end := range []string{"refused", "overloaded", "invalid"} {
+			for _, client := range []struct {
+				name, path, ask string
+				check           func(t *testing.T, body string)
+			}{
+				{"messages", "/v1/messages", claudeCodeAsk, checkAnthropicSpliced},
+				{"chat", "/v1/chat/completions", chatStreamAsk, checkChatSpliced},
+				{"responses", "/v1/responses", codexAsk, checkResponsesSpliced},
+			} {
+				t.Run(up.name+" "+end+" to "+client.name, func(t *testing.T) {
+					fresh(t)
+					last := map[string]string{"refused": up.refused, "overloaded": up.overloaded, "invalid": up.invalid}[end]
+					a := &scripted{replies: []reply{
+						{200, "text/event-stream", up.answered},
+						{200, "text/event-stream", up.answered},
+						{200, "text/event-stream", up.answered},
+						{200, "text/event-stream", last},
+					}}
+					scriptedOn(t, "a", up.proto, a)
+					pa, err := provider.Find("a")
+					if err != nil {
+						t.Fatal(err)
+					}
+					pa.Models = []string{up.model}
+					if err := provider.Save(*pa); err != nil {
+						t.Fatal(err)
+					}
+					b := &scripted{replies: []reply{{200, "text/event-stream", anthropicAnswer}}}
+					scriptedOn(t, "b", provider.Anthropic, b)
+					refusalGroup(t, "a/"+up.model, "b/m")
+					s := New()
+					for i := range thoughtCleanMost {
+						if code, body := sendTo(s, client.path, client.ask); code != 200 || !strings.Contains(body, "from a") {
+							t.Fatalf("warm-up %d: %d %s (a %d)", i+1, code, body, a.n)
+						}
+					}
+					code, body := sendTo(s, client.path, client.ask)
+					// trusted: the reasoning went through as it came
+					if code != 200 || a.n != thoughtCleanMost+1 || !strings.Contains(body, "first thought") {
+						t.Fatalf("%d (a %d, b %d): %s", code, a.n, b.n, body)
+					}
+					r := lastRoute(s)
+					if end == "invalid" {
+						if b.n != 0 || !strings.Contains(body, "invalid tool schema") || len(r.Tries) != 1 {
+							t.Fatalf("a request at fault isn't the agent's (b %d): %s %+v", b.n, body, r.Tries)
+						}
+						return
+					}
+					if b.n != 1 || !strings.Contains(body, "from b") {
+						t.Fatalf("the next member didn't answer (b %d): %s", b.n, body)
+					}
+					for _, w := range []string{"content_filter", `"refusal"`, "Overloaded", "overloaded"} {
+						if strings.Contains(body, w) {
+							t.Fatalf("the failure (%s) reached the agent: %s", w, body)
+						}
+					}
+					client.check(t, body)
+					if len(r.Tries) != 2 || r.Tries[1].Fail != "" {
+						t.Fatalf("tries: %+v", r.Tries)
+					}
+					if end == "refused" && (r.Tries[0].Fail != failRefused || r.Tries[0].Rest != nil) {
+						t.Fatalf("refused try: %+v", r.Tries[0])
+					}
+					if end == "overloaded" && r.Tries[0].Status != 529 {
+						t.Fatalf("overloaded try: %+v", r.Tries[0])
+					}
+				})
+			}
+		}
+	}
+}

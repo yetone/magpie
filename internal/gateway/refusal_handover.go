@@ -92,7 +92,20 @@ func (h *holdWriter) passOver(b []byte) {
 		switch kind, status, msg := streamEvent(ev); kind {
 		case eventRefusal, eventRefusalError:
 			o.pending = nil
-			h.handOver(status, msg)
+			h.handOver(status, msg, true)
+			return
+		case eventError:
+			// a failure the next candidate may answer, nothing yet said
+			// (Anthropic's overloaded_error after its thinking): handed
+			// over as a refusal is, as it went to the next candidate
+			// while the reasoning was held (#4166). One that isn't
+			// retryable is the agent's, as before.
+			if !retryable(status, []byte(msg)) {
+				o.spoke = true
+				break
+			}
+			o.pending = nil
+			h.handOver(status, msg, false)
 			return
 		case eventThinking, eventLead, eventBuffering:
 			o.track(ev)
@@ -124,8 +137,10 @@ func (h *holdWriter) out(b []byte) {
 // what went before it, an Anthropic block still open is stopped, and the
 // try fails as a refusal with nothing said does, for the next candidate's
 // stream to follow in the same response. Its account doesn't rest: the
-// request was refused, not the account (#248).
-func (h *holdWriter) handOver(status int, msg string) {
+// request was refused, not the account (#248). A retryable error handed
+// over (refused false) fails the try as one held would have, its status
+// and its words for the account's rest.
+func (h *holdWriter) handOver(status int, msg string, refused bool) {
 	o := h.over
 	if o.proto == provider.Anthropic && len(o.open) > 0 {
 		open := make([]int, 0, len(o.open))
@@ -140,7 +155,7 @@ func (h *holdWriter) handOver(status int, msg string) {
 	}
 	h.flush()
 	h.handedOver, h.passing = true, false
-	h.refused, h.failure, h.failMsg = true, status, msg
+	h.refused, h.failure, h.failMsg = refused, status, msg
 	// the refusal's own end (message_stop, [DONE]) wasn't sent: the
 	// reply isn't whole, and the next one's stream follows without its
 	// 200 and headers again

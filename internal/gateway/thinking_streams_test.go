@@ -307,6 +307,190 @@ func TestDeepSeekRefusalHoldsATrustedMemberAgain(t *testing.T) {
 	}
 }
 
+// A group's Claude member is trusted as a DeepSeek one is: once its
+// thinking has gone on to an answer thoughtCleanMost times running, its
+// reasoning goes as it comes while a refusal after it is still handed to
+// the next member in the same stream (refusalHandover). Held, Claude Code
+// on a group of one model's accounts saw the thinking only with the text,
+// all at once, and never its "thinking with <effort> effort" (#4166). A
+// refusal takes the trust back, as DeepSeek's does.
+func TestClaudeThinkingStreamsOnceTrusted(t *testing.T) {
+	fresh(t)
+	a := &scripted{replies: []reply{
+		{200, "text/event-stream", anthropicThoughtThenAnswered},
+		{200, "text/event-stream", anthropicThoughtThenAnswered},
+		{200, "text/event-stream", anthropicThoughtThenAnswered},
+		{200, "text/event-stream", anthropicThoughtThenRefused},
+		{200, "text/event-stream", anthropicThoughtThenRefused},
+	}}
+	scriptedOn(t, "a", provider.Anthropic, a)
+	pa, err := provider.Find("a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pa.Models = []string{"claude-opus-5-5"}
+	if err := provider.Save(*pa); err != nil {
+		t.Fatal(err)
+	}
+	b := &scripted{replies: []reply{{200, "text/event-stream", anthropicAnswer}, {200, "text/event-stream", anthropicAnswer}}}
+	scriptedOn(t, "b", provider.Anthropic, b)
+	refusalGroup(t, "a/claude-opus-5-5", "b/m")
+	s := New()
+	if !s.holdsThinking(candidate{p: *pa, model: "claude-opus-5-5"}, true) {
+		t.Fatal("an untried Claude member's reasoning isn't held")
+	}
+	for i := 0; i < thoughtCleanMost; i++ {
+		if code, body := sendTo(s, "/v1/messages", claudeCodeAsk); code != 200 || !strings.Contains(body, "from a") || strings.Contains(body, "from b") {
+			t.Fatalf("warm-up %d: %d %s (a %d, b %d)", i+1, code, body, a.n, b.n)
+		}
+	}
+	// trusted only where a refusal can still be handed over: where it
+	// can't, it would reach the agent and end the turn with nothing said
+	if s.holdsThinking(candidate{p: *pa, model: "claude-opus-5-5"}, true) {
+		t.Fatal("a trusted Claude member's reasoning is still held")
+	}
+	if !s.holdsThinking(candidate{p: *pa, model: "claude-opus-5-5"}, false) {
+		t.Fatal("a trusted Claude member's reasoning goes through with no handover behind it")
+	}
+	// trusted, the refused reply's reasoning went through as it came, and
+	// the refusal after it, nothing yet said, went to the next member,
+	// whose answer follows in the same stream, as one reply
+	code, body := sendTo(s, "/v1/messages", claudeCodeAsk)
+	if code != 200 || !strings.Contains(body, "The user wants a plan for") || !strings.Contains(body, "from b") || strings.Contains(body, `"refusal"`) ||
+		strings.Count(body, "event: message_start") != 1 || a.n != thoughtCleanMost+1 || b.n != 1 {
+		t.Fatalf("trusted refusal: %d %s (a %d, b %d)", code, body, a.n, b.n)
+	}
+	if r := lastRoute(s); len(r.Tries) != 2 || r.Tries[0].Fail != failRefused || r.Tries[0].Rest != nil || r.Tries[1].Fail != "" {
+		t.Fatalf("tries: %+v", r.Tries)
+	}
+	// and the member is held again: the same refusal goes to the next
+	// member with its reasoning shown to nobody
+	code, body = sendTo(s, "/v1/messages", claudeCodeAsk)
+	if code != 200 || !strings.Contains(body, "from b") || strings.Contains(body, "The user wants a plan for") || a.n != thoughtCleanMost+2 || b.n != 2 {
+		t.Fatalf("held again: %d %s (a %d, b %d)", code, body, a.n, b.n)
+	}
+}
+
+// Trusted, a group's Claude member's thinking reaches the agent as it
+// comes, the text a good while after the first thought (#4166).
+func TestClaudeTrustedThinkingStreamsThroughGroup(t *testing.T) {
+	fresh(t)
+	a := &scripted{replies: []reply{
+		{200, "text/event-stream", anthropicThoughtThenAnswered},
+		{200, "text/event-stream", anthropicThoughtThenAnswered},
+		{200, "text/event-stream", anthropicThoughtThenAnswered},
+	}}
+	scriptedOn(t, "a", provider.Anthropic, a)
+	pa, err := provider.Find("a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pa.Models = []string{"claude-opus-5-5"}
+	if err := provider.Save(*pa); err != nil {
+		t.Fatal(err)
+	}
+	scriptedOn(t, "b", provider.Anthropic, &scripted{replies: []reply{{200, "text/event-stream", anthropicAnswer}}})
+	refusalGroup(t, "a/claude-opus-5-5", "b/m")
+	s := New()
+	for i := 0; i < thoughtCleanMost; i++ {
+		if code, body := sendTo(s, "/v1/messages", claudeCodeAsk); code != 200 || !strings.Contains(body, "from a") {
+			t.Fatalf("warm-up %d: %d %s (a %d)", i+1, code, body, a.n)
+		}
+	}
+	up := &slowThinker{events: glmThinksSlowly, gap: 200 * time.Millisecond, done: make(chan time.Time, 1)}
+	vendor := httptest.NewServer(up)
+	t.Cleanup(vendor.Close)
+	pa, err = provider.Find("a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pa.Anthropic = vendor.URL
+	if err := provider.Save(*pa); err != nil {
+		t.Fatal(err)
+	}
+	gw := httptest.NewServer(s.Handler())
+	t.Cleanup(gw.Close)
+	res, err := http.Post(gw.URL+"/v1/messages", "application/json", strings.NewReader(claudeCodeAsk))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var firstThought, firstText time.Time
+	rd := bufio.NewReader(res.Body)
+	for {
+		ln, err := rd.ReadString('\n')
+		if firstThought.IsZero() && strings.Contains(ln, `"thinking_delta"`) {
+			firstThought = time.Now()
+		}
+		if firstText.IsZero() && strings.Contains(ln, `"text_delta"`) {
+			firstText = time.Now()
+		}
+		if err != nil {
+			break
+		}
+	}
+	select {
+	case <-up.done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the vendor never finished")
+	}
+	if firstThought.IsZero() || firstText.IsZero() {
+		t.Fatal("no thinking or no text reached the client")
+	}
+	// three thoughts 200ms apart come before the text
+	if firstText.Sub(firstThought) < 300*time.Millisecond {
+		t.Fatalf("thinking held: first thought only %v before the text", firstText.Sub(firstThought))
+	}
+	if r := lastRoute(s); len(r.Tries) != 1 {
+		t.Fatalf("the trusted member's reply was asked again: %+v", r.Tries)
+	}
+}
+
+// Trusted, a group's Claude member whose stream fails after its thinking
+// went through, nothing yet said (Anthropic's overloaded_error), still
+// fails over: the next member answers in the same stream, as one reply,
+// as it did while the thinking was held (#4166). Let through, the error
+// reached Claude Code and the group's next member was never asked.
+func TestClaudeTrustedThinkingErrorFailsOver(t *testing.T) {
+	fresh(t)
+	overloaded := sse(`event: message_start`+"\n"+`data: {"type":"message_start","message":{"id":"m1","role":"assistant","model":"m","content":[],"usage":{"input_tokens":2}}}`,
+		`event: content_block_start`+"\n"+`data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}`,
+		`event: content_block_delta`+"\n"+`data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"The user wants a plan for"}}`,
+		`event: error`+"\n"+`data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`)
+	a := &scripted{replies: []reply{
+		{200, "text/event-stream", anthropicThoughtThenAnswered},
+		{200, "text/event-stream", anthropicThoughtThenAnswered},
+		{200, "text/event-stream", anthropicThoughtThenAnswered},
+		{200, "text/event-stream", overloaded},
+	}}
+	scriptedOn(t, "a", provider.Anthropic, a)
+	pa, err := provider.Find("a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pa.Models = []string{"claude-opus-5-5"}
+	if err := provider.Save(*pa); err != nil {
+		t.Fatal(err)
+	}
+	b := &scripted{replies: []reply{{200, "text/event-stream", anthropicAnswer}}}
+	scriptedOn(t, "b", provider.Anthropic, b)
+	refusalGroup(t, "a/claude-opus-5-5", "b/m")
+	s := New()
+	for i := 0; i < thoughtCleanMost; i++ {
+		if code, body := sendTo(s, "/v1/messages", claudeCodeAsk); code != 200 || !strings.Contains(body, "from a") {
+			t.Fatalf("warm-up %d: %d %s (a %d)", i+1, code, body, a.n)
+		}
+	}
+	code, body := sendTo(s, "/v1/messages", claudeCodeAsk)
+	if code != 200 || !strings.Contains(body, "from b") || strings.Contains(body, "Overloaded") ||
+		strings.Count(body, "event: message_start") != 1 || b.n != 1 {
+		t.Fatalf("error after trusted thinking: %d %s (a %d, b %d)", code, body, a.n, b.n)
+	}
+	if r := lastRoute(s); len(r.Tries) != 2 || r.Tries[0].Status != 529 || r.Tries[1].Fail != "" {
+		t.Fatalf("tries: %+v", r.Tries)
+	}
+}
+
 // A try that is asked again asks the same fake vendor again: a reply
 // that only reasoned is asked again in place (#667), and a full run's
 // state may have any ask retried. The fake's done holds one send, and
