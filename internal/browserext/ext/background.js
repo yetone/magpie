@@ -224,6 +224,7 @@ const AFTER = {
   SITE_REFUSED: "The site turned the browser away. Don't try again at once: tell the user, who may need to sign in or wait.",
   LOAD_FAILED: "The address didn't load: check it, or the user's connection.",
   PAGE_BLOCKED: "Nothing works in this tab until that changes: use another tab.",
+  SCREENSHOT_FAILED: "Go on without the picture: take a snapshot to read the page.",
   OUTCOME_UNKNOWN: "It may or may not have happened: take a snapshot to see before doing it again, since a form or a purchase could go twice.",
 };
 const GONE = /Execution context was destroyed|Cannot find context|Inspected target navigated or closed|Target closed|No node with given id|Could not find node|Node with given id does not belong/i;
@@ -313,7 +314,13 @@ async function act(t, what, fn, el = null, press = false) {
   const was = press ? await look(t, el) : null;
   t.sentInput = false;
   let opened = null;
-  const onCreated = (tab) => { if (!before.has(tab.id) && (tab.openerTabId === t.tabId || (behind && tab.openerTabId === behind.id) || !opened)) opened = tab; };
+  // a tab the link opens comes up in front of the user's: their tab is
+  // given back at once, not after the new page has loaded
+  const onCreated = (tab) => {
+    if (before.has(tab.id) || !(tab.openerTabId === t.tabId || (behind && tab.openerTabId === behind.id) || !opened)) return;
+    opened = tab;
+    if (behind && (tab.openerTabId === t.tabId || tab.openerTabId === behind.id)) chrome.tabs.update(behind.id, { active: true }).catch(() => {});
+  };
   chrome.tabs.onCreated.addListener(onCreated);
   let said;
   try {
@@ -453,6 +460,15 @@ async function mouse(t, x, y, opts = {}) {
   }
 }
 
+// opensATab is whether el is, or is in, a link that opens in a new tab
+async function opensATab(t, el) {
+  return await call(t, el, `function () {
+    const a = this.closest && this.closest("a[href], area[href]");
+    const to = a && (a.getAttribute("target") || (document.querySelector("base[target]") || {}).target || "").toLowerCase();
+    return !!to && !["_self", "_parent", "_top"].includes(to) && !/^(javascript|mailto|tel):/i.test(a.getAttribute("href"));
+  }`).catch(() => false);
+}
+
 async function call(t, el, fn, args = []) {
   const r = await send(t.tabId, "Runtime.callFunctionOn", {
     objectId: el.objectId, functionDeclaration: fn, arguments: args.map((value) => ({ value })),
@@ -550,9 +566,16 @@ const TOOLS = {
     need(args, "ref");
     const t = await ready(session, args);
     const el = await find(t, args.ref);
+    let how = args;
+    if (!args.button && !args.double && !(args.modifiers || []).length && await opensATab(t, el) && !(await chrome.tabs.get(t.tabId)).active) {
+      // a link that opens a tab, clicked in a tab behind the user's: with
+      // Cmd (Ctrl) held, as a person opens one in the background, so the
+      // new tab never comes up in front of the user's for a moment
+      how = { ...args, modifiers: [/Mac/.test(navigator.userAgent) ? "Meta" : "Control"] };
+    }
     return act(t, `Clicked ${el.ref} (${el.role} "${el.name}").`, async () => {
       const p = await point(t, el);
-      await mouse(t, p.x, p.y, args);
+      await mouse(t, p.x, p.y, how);
     }, el, PRESSES.has(el.role) && !args.button && !args.double);
   },
 
@@ -768,20 +791,11 @@ const TOOLS = {
       params.captureBeyondViewport = true;
     }
     const shot = () => send(t.tabId, "Page.captureScreenshot", params);
-    let r = await Promise.race([shot(), sleep(8000).then(() => null)]);
-    if (!r) {
-      // a tab in the background isn't drawn: show it for the picture,
-      // then give the window back the tab the user had in front
-      const tab = await chrome.tabs.get(t.tabId);
-      const [shown] = await chrome.tabs.query({ active: true, windowId: tab.windowId });
-      await chrome.tabs.update(t.tabId, { active: true });
-      try {
-        await sleep(300);
-        r = await shot();
-      } finally {
-        if (shown && shown.id !== t.tabId) await chrome.tabs.update(shown.id, { active: true }).catch(() => {});
-      }
-    }
+    // Chrome draws a tab behind the user's for the picture (the first one
+    // can take a few seconds); the tab is never brought forward for it,
+    // which took the user's tab from under them for a moment each time
+    const r = await Promise.race([shot(), sleep(20000).then(() => null)]);
+    if (!r) throw fault("SCREENSHOT_FAILED", "the tab, behind the one the user is looking at, wasn't drawn in 20s; it is left behind rather than brought in front of the user");
     return { content: [{ type: "image", data: r.data, mimeType: args.png ? "image/png" : "image/jpeg" }, text(await head(t))] };
   },
 

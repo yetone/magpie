@@ -272,6 +272,11 @@ func realBrowserFrom(t *testing.T, ext func(*httptest.Server) string) (srv, site
 		case "/frames":
 			io.WriteString(w, strings.Replace(framesFixture, "SRC", html.EscapeString(r.URL.Query().Get("src")), 1))
 			return
+		case "/watch":
+			// the user's own page: its title counts the times it was put
+			// behind another tab
+			io.WriteString(w, `<!doctype html><title>Watch 0</title><h1>The user's page</h1><script>let hid = 0; document.addEventListener("visibilitychange", () => { if (document.hidden) document.title = "Watch " + ++hid; });</script>`)
+			return
 		case "/refused":
 			w.WriteHeader(http.StatusForbidden)
 			io.WriteString(w, "<!doctype html><title>Denied</title><h1>Access denied</h1>")
@@ -283,13 +288,21 @@ func realBrowserFrom(t *testing.T, ext func(*httptest.Server) string) (srv, site
 
 	dir := ext(srv)
 	profile := t.TempDir()
-	cmd := exec.Command(chrome, "--headless=new", "--user-data-dir="+profile,
+	head := "--headless=new"
+	if os.Getenv("MAGPIE_BROWSER_HEADFUL") != "" {
+		// a window on the screen: only then does Chrome put a tab behind
+		// another one out of sight (headless, every tab is visible)
+		head = "--window-size=1000,700"
+	}
+	cmd := exec.Command(chrome, head, "--user-data-dir="+profile,
 		"--disable-extensions-except="+dir, "--load-extension="+dir,
 		"--no-first-run", "--no-default-browser-check", "--disable-gpu", "--remote-debugging-port=0",
 		// with the test's own HOME there is no keychain (macOS) or keyring
 		// (Linux), and Chrome waits on it before the extension's storage
 		// answers
-		"--use-mock-keychain", "--password-store=basic", "about:blank")
+		"--use-mock-keychain", "--password-store=basic",
+		// the user's own page, which the extension never attaches to
+		site.URL+"/watch")
 	var logs bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &logs, &logs
 	if err := cmd.Start(); err != nil {
@@ -445,23 +458,31 @@ func TestBrowserToolActionsInARealBrowser(t *testing.T) {
 }
 
 // Agents leave the user's tab alone (the owner, 11-03: Magpie Browser
-// "老是会代替掉用户正在浏览的网页"): a call that names no tab works in a
-// new one, behind the tab the user is looking at, in the session's Magpie
-// group; a link that opens a tab, and tab_new, open behind it too, and a
-// screenshot gives the window its shown tab back.
+// "老是会代替掉用户正在浏览的网页"; 11-04: "你到底彻底修复了没啊"): a call
+// that names no tab works in a new one, behind the tab the user is looking
+// at, in the session's Magpie group; a link that opens a tab, tab_new,
+// screenshots and a recording all happen behind it too. The user's page
+// counts each time it is put behind another tab, so a tab brought forward
+// for a moment and given back fails as well as one left in front.
 func TestBrowserLeavesTheUsersTabAlone(t *testing.T) {
 	srv, site := realBrowser(t)
 	call, ok := browserCaller(t, srv, "quiet")
-	users := regexp.MustCompile(`(?m)^\+ (t\d+) .*about:blank$`).FindStringSubmatch(ok("browser_tabs", nil))
+	users := regexp.MustCompile(`(?m)^\+ (t\d+) "Watch 0" .*/watch$`).FindStringSubmatch(ok("browser_tabs", nil))
 	if users == nil {
-		t.Fatal("no shown about:blank tab to start with")
+		t.Fatal("no shown user's page to start with")
 	}
 	shown := func(when string) {
 		t.Helper()
 		list := ok("browser_tabs", nil)
-		if !regexp.MustCompile(`(?m)^\+ ` + users[1] + ` .*about:blank$`).MatchString(list) {
-			t.Fatalf("%s, the user's tab %s isn't shown and unchanged:\n%s", when, users[1], list)
+		if !regexp.MustCompile(`(?m)^\+ ` + users[1] + ` "Watch 0" .*/watch$`).MatchString(list) {
+			t.Fatalf("%s, the user's tab %s isn't shown, unchanged and never put behind (Watch N counts the times):\n%s", when, users[1], list)
 		}
+	}
+	shown("to start with")
+	if os.Getenv("MAGPIE_BROWSER_HEADFUL") == "" {
+		// headless, every tab is visible, so a tab brought forward for a
+		// moment and given back can't be told
+		t.Log("headless: only where the user's tab ends up is checked; MAGPIE_BROWSER_HEADFUL=1 catches a tab brought forward for a moment too")
 	}
 	page := ok("browser_navigate", map[string]any{"url": site.URL}, "Magpie fixture")
 	if strings.Contains(page, users[1]+":") {
@@ -486,8 +507,11 @@ func TestBrowserLeavesTheUsersTabAlone(t *testing.T) {
 		t.Fatalf("screenshot: %+v", m.Result.Content)
 	}
 	shown("after a screenshot")
+	ok("browser", map[string]any{"action": "record_start"}, "Recording")
 	ok("browser", map[string]any{"action": "tab_new", "url": site.URL}, "Opened t")
-	shown("after the one tool's tab_new")
+	ok("browser", map[string]any{"action": "navigate", "url": site.URL + "/two", "screenshot": true}, "Page two")
+	ok("browser", map[string]any{"action": "record_stop"}, "Recorded 2 frames")
+	shown("after a recording")
 }
 
 // An older extension, loaded from the folder magpie writes, has the folder
