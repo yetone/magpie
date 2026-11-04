@@ -4,7 +4,10 @@
 // instead of moving as iOS does. Opened, the name and the switch stay where
 // they were and the opened part starts right where the shut row ended; it
 // slides open and shut through the heights between, and no step at either
-// end. With reduced motion it opens at once. Wide and narrow windows; no
+// end — the slide is the opened part's height animation, and that animation
+// is what the test checks for: on a busy machine frames are dropped, and the
+// drawn heights may show only the ends (#2935). With reduced motion it opens
+// at once. Wide and narrow windows; no
 // backend, the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -51,11 +54,20 @@ const where = (page) => page.evaluate((r) => {
   const at = (s) => Math.round((el.querySelector(s)?.getBoundingClientRect().top - top) * 4) / 4;
   return { height: Math.round(el.getBoundingClientRect().height), line: parseFloat(getComputedStyle(el).borderBottomWidth), who: at(":scope > .who"), sw: at(":scope > .ag-conn"), exp: el.querySelector(".ag-exp") ? at(":scope > .ag-exp") : null };
 }, row);
-// the row's height every frame for a while, from a click on its link
-const heights = (page, ms) => page.evaluate(([r, ms]) => new Promise((done) => {
+// the row's height every frame for a while, from a click on its link, and
+// whether the click drove a height animation on the row's opened part: on a
+// busy machine frames are dropped (WebKit once drew the whole slide in one
+// frame, #2935), so the drawn heights alone can't tell a slide from a jump —
+// the animation on the opened part can
+const slide = (page, ms) => page.evaluate(([r, ms]) => new Promise((done) => {
   const hs = [], t0 = performance.now();
-  const f = () => { hs.push(Math.round(document.querySelector(r).getBoundingClientRect().height)); if (performance.now() - t0 < ms) requestAnimationFrame(f); else done(hs); };
+  const f = () => { hs.push(Math.round(document.querySelector(r).getBoundingClientRect().height)); if (performance.now() - t0 < ms) requestAnimationFrame(f); else done({ hs, animated }); };
   document.querySelector(r + " .ag-link").click();
+  // the click drove the slide before it returned: the opened part carries a
+  // height animation (none comes when motion is reduced, and none is wanted
+  // there)
+  const exp = document.querySelector(r + " > .ag-exp");
+  const animated = !!exp && exp.getAnimations().some((a) => a.effect.getKeyframes().some((k) => "height" in k));
   requestAnimationFrame(f);
 }), [row, ms]);
 
@@ -74,7 +86,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator(`${row} .ag-conn`).waitFor();
 
       const shut = await where(page);
-      const opening = await heights(page, 800);
+      const opening = await slide(page, 800);
       const open = await where(page);
       assert.equal(open.who, shut.who, "the name moved");
       assert.equal(open.sw, shut.sw, "the switch moved");
@@ -82,13 +94,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(open.exp, shut.height - shut.line, "the opened part starts where the shut row ended");
       const full = open.height;
       assert.ok(full > shut.height + 60, `opened: ${full}`);
-      // the heights between, growing, no step bigger than a frame's worth
-      const mid = opening.filter((h) => h > shut.height && h < full);
-      assert.ok(mid.length >= 3, "slid open: " + opening);
-      for (let i = 1; i < opening.length; i++) assert.ok(opening[i] >= opening[i - 1], "grew only: " + opening);
-      const closing = await heights(page, 700);
-      assert.ok(closing.filter((h) => h > shut.height && h < full).length >= 3, "slid shut: " + closing);
-      for (let i = 1; i < closing.length; i++) assert.ok(closing[i] <= closing[i - 1], "shrank only: " + closing);
+      // the slide, not a jump: the opened part was animated through the
+      // heights between, whatever number of frames the machine drew (#2935),
+      // and the frames it did draw kept the order
+      assert.ok(opening.animated, "slid open: " + opening.hs);
+      for (let i = 1; i < opening.hs.length; i++) assert.ok(opening.hs[i] >= opening.hs[i - 1], "grew only: " + opening.hs);
+      const closing = await slide(page, 700);
+      assert.ok(closing.animated, "slid shut: " + closing.hs);
+      for (let i = 1; i < closing.hs.length; i++) assert.ok(closing.hs[i] <= closing.hs[i - 1], "shrank only: " + closing.hs);
       assert.deepEqual(await where(page), shut, "shut again as it was");
 
       // another row open: the one open slides shut, this one opens
@@ -108,8 +121,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await reach(page, goose);
       await goose.click();
       await page.waitForTimeout(500);
-      const now = await heights(page, 120);
-      assert.equal(now[0], full, "opened at once: " + now);
+      const now = await slide(page, 120);
+      assert.equal(now.hs[0], full, "opened at once: " + now.hs);
       assert.deepEqual(errors, []);
     });
   }
