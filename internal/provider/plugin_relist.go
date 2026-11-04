@@ -79,7 +79,8 @@ func KeepPluginsListed(ctx context.Context) {
 }
 
 // pluginListedIDs is the ids each plugin provider lists, by magpie's id for
-// it, those that fell back left out: their list wasn't read.
+// it, those that fell back left out: their list wasn't read. A model the
+// user lists as another id is there under that one, as a pick is.
 func pluginListedIDs(ps []plugin.Provider) map[string]map[string]bool {
 	out := map[string]map[string]bool{}
 	for _, p := range ps {
@@ -90,7 +91,8 @@ func pluginListedIDs(ps []plugin.Provider) map[string]map[string]bool {
 		for _, m := range p.Models {
 			ids[m.ID] = true
 		}
-		out[PluginID(p.ID)] = ids
+		// picks are of the ids the user lists them by (SetModelID)
+		out[PluginID(p.ID)] = modelIDsOf(PluginID(p.ID)).ids(ids)
 	}
 	return out
 }

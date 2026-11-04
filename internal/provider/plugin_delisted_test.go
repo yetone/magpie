@@ -338,3 +338,63 @@ func TestPicksGoneForGoodServeTheList(t *testing.T) {
 		t.Fatalf("served %v once the pick is listed again", got)
 	}
 }
+
+// A plugin's model the user lists as another id (SetModelID, "list as")
+// is picked under that id, but the plugin's list names it by its own. The
+// pick left with the model all the same (axelburks on Discord: aaa listed
+// as claude-opus-5.5 stayed picked and on after its plugin dropped aaa),
+// its "list as" stayed, and both are back when the plugin lists aaa again.
+// A pick typed by hand, listed by neither list, stays throughout.
+func TestListedAsPickLeavesWithItsModel(t *testing.T) {
+	claudeHome(t)
+	t.Setenv("MAGPIE_BUN", "")
+	if err := os.MkdirAll(settings.Dir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, v := range map[string]any{
+		"plugins.json":     map[string]any{"plugins": []map[string]any{{"spec": "magpie-our-free-model"}}},
+		"plugin-auth.json": map[string]any{"our-free-model": map[string]any{"type": "api", "key": "managed"}},
+	} {
+		b, _ := json.Marshal(v)
+		if err := os.WriteFile(filepath.Join(settings.Dir(), name), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before := ourFree("aaa", "bbb")
+	plugin.UseCached(before)
+	t.Cleanup(func() { plugin.UseCached(nil) })
+	s := settings.Load()
+	s.ModelIDs = map[string]string{"our-free-model/claude-opus-5.5": "aaa"}
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(Provider{ID: "our-free-model", Models: []string{"claude-opus-5.5", "bbb", "typed-by-hand"}}); err != nil {
+		t.Fatal(err)
+	}
+	now := ourFree("bbb")
+	plugin.UseCached(now)
+	if got := dropGonePluginPicks(before, now)["our-free-model"]; !slices.Equal(got, []string{"claude-opus-5.5"}) {
+		t.Fatalf("dropped %v, want the pick listed as claude-opus-5.5", got)
+	}
+	p, _ := Find("our-free-model")
+	if !slices.Equal(p.Models, []string{"bbb", "typed-by-hand"}) || !slices.Equal(p.Delisted, []string{"claude-opus-5.5"}) {
+		t.Fatalf("picks %v, set aside %v", p.Models, p.Delisted)
+	}
+	if got := settings.Load().ModelIDs["our-free-model/claude-opus-5.5"]; got != "aaa" {
+		t.Fatalf("the list-as is %q after the model left", got)
+	}
+	// the next relist compares the same lists: nothing more happens
+	if got := dropGonePluginPicks(now, now)["our-free-model"]; len(got) != 0 {
+		t.Fatalf("dropped %v again", got)
+	}
+	back := ourFree("aaa", "bbb")
+	plugin.UseCached(back)
+	dropGonePluginPicks(now, back)
+	p, _ = Find("our-free-model")
+	if !slices.Equal(p.Models, []string{"bbb", "typed-by-hand", "claude-opus-5.5"}) || len(p.Delisted) != 0 {
+		t.Fatalf("aaa listed again: picks %v, set aside %v", p.Models, p.Delisted)
+	}
+	if got := settings.Load().ModelIDs["our-free-model/claude-opus-5.5"]; got != "aaa" {
+		t.Fatalf("the list-as is %q after the model came back", got)
+	}
+}
