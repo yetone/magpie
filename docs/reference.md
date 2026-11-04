@@ -698,7 +698,12 @@ stored with the key (`since` in caller-keys.json, magpie's own: a value a
 client sends is ignored), so it survives a restart; the usage log itself is
 untouched. Keys saved before keep their JSON as it was.
 A key can read its own status with `GET /v1/magpie/limit`; it is told its
-own and no other key's, whatever the request names. A magpie that has this
+own and no other key's, whatever the request names. A key held to a
+budget, models or accounts is also told `heldTo` (`budget`, `models`,
+`accounts`), `models` (what it may use), `quotas` (whether its owner lets
+it see quotas and the status line) and, while that is on,
+`quotaProviders` (the providers whose cards it is told); `limited` stays
+about its budget alone. A magpie that has this
 one as a Remote magpie provider shows each of its keys' limits on its
 Usage page this way (#1547). Requests from
 this computer that send no gateway key are not limited; a gateway key used
@@ -2400,8 +2405,15 @@ the `session_id` of the JSON Claude Code sends on stdin) adds the model like
 `/v1/magpie/route`, and `?only=` (comma separated, repeatable) keeps the
 accounts as `magpie statusline claude` does. A caller that isn't this
 computer needs a gateway key, a read-only one included (it gets the windows
-without the model); a key held to a budget, models or accounts sees only
-what it may. On the computer Claude Code runs on:
+without the model). A key held to a budget, models or accounts is refused
+it (403 `gateway_key_held`) until its owner turns on Quotas for the key
+(below); it then sees the accounts it may use of each provider whose every
+model it may use, so a key held to `claude/*` gets
+`claude <account> 5h 12% 7d 33%` and no other provider's. `?format=json`
+answers the same as JSON for a status line that draws its own (claude-hud):
+`text` the line, `model` the session's, and `accounts` the cards it shows,
+each in `/v1/magpie/quotas`' shape (`windows[].used`, `resetsAt`). On the
+computer Claude Code runs on:
 `"statusLine": {"type": "command", "command": "curl -fsS -m 1 -H 'Authorization: Bearer <gateway key>' --data-binary @- http://<host>:3425/v1/magpie/statusline || true"}`.
 `magpie web` shows this command with its own address under Settings → About.
 
@@ -2512,8 +2524,9 @@ card it isn't told is refused a refresh (403 `gateway_key_held`), and a
 refresh that names none reads again only the cards it is told. A key
 told none of the cards is answered `/v1/magpie/quotas/cards` 403
 `gateway_key_held` as before, so another magpie shows its own card, not
-that nothing was read. `/v1/magpie/concurrency` and `/v1/magpie/usage`
-still refuse it.
+that nothing was read. The status line (`/v1/magpie/statusline`) is told
+the same cards. `/v1/magpie/concurrency` and `/v1/magpie/usage` still
+refuse it.
 
 A Codex account's rate-limit reset can be used through the gateway as
 the Usage page's **Use a reset** does (#3850, the same code):

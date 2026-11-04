@@ -19,9 +19,17 @@ package gateway
 // It answers like the quotas and the route it is made of: this computer,
 // and another only with an enabled gateway key (lanGuard asks for it), a
 // key held to a budget, models or accounts is told none of it, or only
-// what it may use when its owner lets it be told its quotas, and the route
-// of its own requests alone. A read-only key may ask it, and is told the
-// accounts' use without the model (it may not ask for a route).
+// what it may use when its owner lets it be told its quotas (scopeQuotas:
+// a key held to Claude's models is told Claude's accounts it may use, and
+// no other provider's), and the route of its own requests alone. A
+// read-only key may ask it, and is told the accounts' use without the
+// model (it may not ask for a route).
+//
+// ?format=json answers the same as JSON, for a status line that draws its
+// own (claude-hud's external usage snapshot, steven_4422): "text" the line,
+// "model" the session's, and "accounts" the cards the line shows, each in
+// /v1/magpie/quotas?kept=1's shape (a window that has started again since
+// it was read is used 0 there too).
 
 import (
 	"encoding/json"
@@ -87,9 +95,14 @@ func (s *Server) statusline(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	now := time.Now()
-	line := provider.StatuslineText(model, scope.quotas(provider.KeptQuotaReport(now)), names, now)
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	qs := scope.quotas(provider.KeptQuotaReport(now))
+	line := provider.StatuslineText(model, qs, names, now)
 	w.Header().Set("Cache-Control", "no-store")
+	if q.Get("format") == "json" {
+		writeJSON(w, http.StatusOK, map[string]any{"text": line, "model": model, "accounts": append([]provider.Quota{}, provider.StatuslineCards(qs, names)...)})
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, line+"\n")
 }

@@ -191,12 +191,12 @@ steps:
     <p>换到的密钥由规则里的网关密钥签发，和其他签发的密钥一样受它约束，有效期不超过规则所写，名字是仓库、分支和运行编号。其他仓库或分支的 token、过期的 token、已经换过的 token 会收到 <code>401</code> 和原因。只有 magpie 共享时其他电脑才能调用这个接口，被拒的 token 计入失败认证次数。没有规则就什么都换不到。</p>
 
     <h2 id="api"><a class="anchor" href="#api">统计 API</a></h2>
-    <p>用量页上的内容也以 JSON 提供给本机；共享 magpie 时，也提供给带网关密钥的请求。受预算、模型或账号限制的密钥只能看到自己的请求和限额。</p>
+    <p>用量页上的内容也以 JSON 提供给本机；共享 magpie 时，也提供给带网关密钥的请求。受预算、模型或账号限制的密钥只能看到自己的请求和限额；主人为它打开<span class="ui">额度</span>后（<code>magpie gateway-key quotas &lt;id&gt; on</code>），还能看到它可用部分的额度。</p>
     <ul>
       <li><code>/v1/magpie/usage?period=today|7d|30d|all</code>：总量，以及按模型、agent、提供商、账号和网关密钥的分项。</li>
       <li><code>/v1/magpie/usage/requests</code>：请求记录，支持 <code>period</code>、<code>day</code>、<code>offset</code>、<code>limit</code>，以及筛选 <code>model</code>、<code>agent</code>、<code>provider</code>、<code>account</code>、<code>callerKey</code>、<code>failed=1</code>、<code>retried=1</code> 和 <code>q</code>。</li>
       <li><code>/v1/magpie/quotas</code>：每个订阅的额度窗口（<code>?kept=1</code> 不去问厂商）；<code>/v1/magpie/quotas/history?days=</code>：剩余额度的历史，最多 45 天。</li>
-      <li><code>/v1/magpie/limit</code>：这把密钥自己的限额、过期时间，以及签发它的密钥的限额。</li>
+      <li><code>/v1/magpie/limit</code>：这把密钥自己的限额、过期时间，以及签发它的密钥的限额；受限的密钥还会告诉它受什么限制（<code>heldTo</code>）、可用的模型（<code>models</code>），以及能否看到额度（<code>quotas</code>、<code>quotaProviders</code>）。</li>
       <li><code>/v1/magpie/concurrency</code>：每个账号正在进行的请求。</li>
     </ul>
     <div class="code">

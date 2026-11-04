@@ -37,6 +37,12 @@ func heldKey(who access.Identity) bool {
 // magpie's Usage page). The key's own limit stays at /v1/magpie/limit.
 const heldRefused = "this gateway key is held to a budget, models or accounts, so it is told nothing of this magpie's accounts: GET /v1/magpie/limit tells it its own limit"
 
+// heldQuotasOff is what a held key whose owner hasn't turned its quotas on
+// is told by the quotas and the status line (scopeQuotas): it names the
+// switch that tells it those of what it may use (#2216), as steven_4422
+// read the bare refusal as "a held key gets no status line".
+const heldQuotasOff = "this gateway key is held to a budget, models or accounts, so it is told nothing of this magpie's accounts until its owner turns on Quotas for it (Gateway → Gateway keys, or magpie gateway-key quotas <id> on); it is then told the accounts it may use of each provider whose every model it may use. GET /v1/magpie/limit tells it its own limit and what holds it"
+
 // refuseHeld answers a held key 403 with msg, marked with
 // provider.KeyHeldCode so another magpie shows the key's own card alone
 // rather than "isn't shared", and says whether it did.

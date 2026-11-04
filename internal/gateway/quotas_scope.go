@@ -44,7 +44,7 @@ func scopeQuotas(w http.ResponseWriter, r *http.Request) (*quotaScope, bool) {
 		return nil, true
 	}
 	if !who.Quotas {
-		refuseHeld(w, r, heldRefused)
+		refuseHeld(w, r, heldQuotasOff)
 		return nil, false
 	}
 	return newQuotaScope(who, provider.Catalog()), true

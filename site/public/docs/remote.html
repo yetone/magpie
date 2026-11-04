@@ -191,12 +191,12 @@ steps:
     <p>The key is issued under the rule’s gateway key and held to it like any other issued key, lives no longer than the rule says, and is named after the repository, branch and run. A token from another repository or branch, an expired one, or one already traded gets <code>401</code> and why. The route answers another computer only while magpie is shared, and refused tokens count against the failed sign-ins it allows. Without a rule nothing is traded.</p>
 
     <h2 id="api"><a class="anchor" href="#api">Stats API</a></h2>
-    <p>What the Usage page shows is also served as JSON, to this computer and, while magpie is shared, to a request with a gateway key. A key held to a budget, models or accounts is told only its own calls and limit.</p>
+    <p>What the Usage page shows is also served as JSON, to this computer and, while magpie is shared, to a request with a gateway key. A key held to a budget, models or accounts is told only its own calls and limit, and the quotas of what it may use once its owner turns on <span class="ui">Quotas</span> for it (<code>magpie gateway-key quotas &lt;id&gt; on</code>).</p>
     <ul>
       <li><code>/v1/magpie/usage?period=today|7d|30d|all</code>: totals, by model, agent, provider, account and gateway key.</li>
       <li><code>/v1/magpie/usage/requests</code>: the request log, with <code>period</code>, <code>day</code>, <code>offset</code>, <code>limit</code>, and filters <code>model</code>, <code>agent</code>, <code>provider</code>, <code>account</code>, <code>callerKey</code>, <code>failed=1</code>, <code>retried=1</code> and <code>q</code>.</li>
       <li><code>/v1/magpie/quotas</code>: each subscription’s windows (<code>?kept=1</code> without asking the vendors); <code>/v1/magpie/quotas/history?days=</code>: what was left over time, 45 days at most.</li>
-      <li><code>/v1/magpie/limit</code>: the key’s own limits, its expiry, and its issuer’s limits.</li>
+      <li><code>/v1/magpie/limit</code>: the key’s own limits, its expiry, and its issuer’s limits; for a held key, what holds it (<code>heldTo</code>), its <code>models</code>, and whether it is told quotas (<code>quotas</code>, <code>quotaProviders</code>).</li>
       <li><code>/v1/magpie/concurrency</code>: requests in flight, per account.</li>
     </ul>
     <div class="code">
