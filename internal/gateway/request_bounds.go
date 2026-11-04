@@ -280,11 +280,13 @@ const sizedReadFirst = 1 << 20
 // copies them into a slice of their sum, two copies of every body, and an
 // agent sends its whole conversation, ~1 MB, on every turn (yg6888 on X:
 // ~1 GB). Content-Length is not trusted for the allocation: room grows by
-// doubling, from sizedReadFirst, up to what was declared, so an honest body
-// of 1 MB or less is read into one slice of its own size, a larger one into
-// a final slice of its own size, and a body shorter than it said costs at
-// most about twice what it sent. A body longer than it said reads on, as
-// io.ReadAll would. The error is io.ReadAll's: nil at io.EOF.
+// doubling, from sizedReadFirst, up to what was declared, and straight to
+// it once that is within a quarter, so an honest body of 1 MB or less is
+// read into one slice of its own size, and a larger one into a final slice
+// of its own size, with at most 2.6 times the body allocated in all (a
+// doubling that fell just short of it made that 3). A body shorter than it
+// said is held in at most two and a half times what it sent. A body longer
+// than it said reads on, as io.ReadAll would. The error is io.ReadAll's: nil at io.EOF.
 func readSized(r io.Reader, declared int64) ([]byte, error) {
 	if declared <= 0 {
 		return io.ReadAll(r)
@@ -307,7 +309,15 @@ func readSized(r io.Reader, declared int64) ([]byte, error) {
 				}
 				continue
 			}
-			b = append(make([]byte, 0, min(int64(cap(b))*2, declared)), b...)
+			next := min(int64(cap(b))*2, declared)
+			if declared-next < next/4 {
+				// within a quarter of what it said: a doubling that
+				// fell just short would copy the whole body again for
+				// its last few bytes (a 516 MB turn read into 512 MB,
+				// then all of it into 516 MB, #5281)
+				next = declared
+			}
+			b = append(make([]byte, 0, next), b...)
 		}
 		n, err := r.Read(b[len(b):cap(b)])
 		b = b[:len(b)+n]

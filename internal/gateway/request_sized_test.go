@@ -70,6 +70,24 @@ func TestRequestBodyReadOnceAtItsLength(t *testing.T) {
 	}
 }
 
+// A body a little over a doubling of the first slice is not copied whole
+// again for its last bytes: a Codex turn of 516 MB of generated images was
+// read into 1+2+…+512 MB and then all of it into 516 MB, 1.5 GB allocated
+// and copied outside the body's wait, and under -race on a loaded CI
+// machine the turn was answered 504 for magpie's own work (#5281).
+func TestRequestBodyNotCopiedForItsLastBytes(t *testing.T) {
+	sent := bytes.Repeat([]byte("0123456789abcdef"), (4*sizedReadFirst+64<<10)/16) // 4 MB + 64 KB
+	var got []byte
+	var err error
+	read := allocated(func() { got, err = readSized(&chunked{sent, 64 << 10}, int64(len(sent))) })
+	if err != nil || !bytes.Equal(got, sent) || cap(got) != len(got) {
+		t.Fatalf("read %d bytes (cap %d), %v", len(got), cap(got), err)
+	}
+	if limit := uint64(len(sent)) * 2; read > limit {
+		t.Fatalf("a %d-byte body allocated %d bytes to read, over twice its size", len(sent), read)
+	}
+}
+
 // Content-Length is the client's word: a body shorter than it said costs
 // no more than the first slice, one longer reads on, a failed read is
 // returned as io.ReadAll returns it, and no length is io.ReadAll.
