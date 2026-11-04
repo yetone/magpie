@@ -27,6 +27,7 @@ import (
 	"github.com/yetone/magpie/internal/imagemcp"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/notices"
+	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/pluginrt"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/profile"
@@ -282,6 +283,24 @@ var startUp = func() {
 	release()
 }
 
+// servesPages is whether magpie run with args serves plugins' pages,
+// and so runs the services they talk to (plugin.ServePages): the app,
+// tray, web, serve and the TUI do; a command that does its work and
+// ends doesn't.
+func servesPages(args []string) bool {
+	if len(args) == 0 {
+		return true
+	}
+	if strings.HasPrefix(strings.ToLower(args[0]), "magpie:") {
+		return hasGUI
+	}
+	switch args[0] {
+	case "tui", "web", "serve", "tray", "app", "gui", "panel", "-Embedding":
+		return true
+	}
+	return false
+}
+
 func run(args []string) error {
 	// a command that saved a provider or a group ends with the agents'
 	// files written, which its save no longer waits for; and a test's run
@@ -379,6 +398,9 @@ func run(args []string) error {
 	if len(args) > 0 && args[0] == "serve" && plainServe(args[1:]) {
 		awaitGatewayFree(gatewayFreeEvery)
 	}
+	// a command that serves no pages starts a plugin host beside the
+	// app's, whose page services it leaves to the app (#5187)
+	plugin.ServePages(servesPages(args))
 	startUp()
 	// a provider added, edited or removed, or a list fetched anew, reaches
 	// the model lists agents keep in files of their own, behind the save

@@ -1,0 +1,9 @@
+{
+  "name": "magpie-pageservice-test",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "magpie": {
+    "page": { "title": "Page service", "file": "page.html", "service": { "port": 3477, "option": "port" } }
+  }
+}
