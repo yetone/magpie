@@ -44,6 +44,9 @@ type caller struct {
 	// ua is the User-Agent the request came with, as it came: the one a
 	// provider that passes the agent's on is sent (userAgentFor)
 	ua string
+	// keepTurn: another magpie asked that its Responses turn be kept
+	// though it says store false (KeepTurnHeader, remote_delta.go)
+	keepTurn bool
 }
 
 type callerCtx struct{}
@@ -60,6 +63,7 @@ func withCaller(next http.Handler) http.Handler {
 		r.Header.Del(AgentHeader)
 		r.Header.Del(ViaHeader)
 		r.Header.Del(SearchingHeader)
+		r.Header.Del(KeepTurnHeader)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -81,7 +85,8 @@ func callerFrom(r *http.Request) caller {
 			break
 		}
 	}
-	if strings.HasPrefix(r.Header.Get("User-Agent"), "magpie/") {
+	c.keepTurn = keepTurnAsks(r)
+	if magpieAsks(r) {
 		if a := label(r.Header.Get(AgentHeader)); a != "" {
 			c.agent = usage.AgentOf(a)
 			c.via = label(r.Header.Get(ViaHeader))
@@ -131,6 +136,10 @@ func boundedSession(v string) string {
 // agent the name it asked for itself.
 func passOnCaller(ctx context.Context, req *http.Request) {
 	req.Header.Set(responseModelHeader, "vendor")
+	if keepTurnAsked(ctx) {
+		// the turn kept though it says store false (remote_delta.go)
+		req.Header.Set(KeepTurnHeader, magpieUA())
+	}
 	c, ok := ctx.Value(callerCtx{}).(caller)
 	if !ok {
 		return

@@ -2220,8 +2220,9 @@ serves it on `/v1/responses`, `/responses` and the Codex backend's
 - Not covered: the leg to the vendor is the whole conversation each turn,
   as before (for the ChatGPT backend, a socket per turn: see
   [Providers and accounts](providers-accounts.md)); what is saved is
-  Codex's upload to magpie. A socket's conversation doesn't outlive the
-  socket or the gateway.
+  Codex's upload to magpie, and, when the provider is another magpie, the
+  leg between the two magpies (below). A socket's conversation doesn't
+  outlive the socket or the gateway.
 
 ## A Responses request that names the response it follows
 
@@ -2264,6 +2265,53 @@ included). `previousResponse` in
   request is still read and masked whole on this computer before the
   delta is cut.
 
+### Turns to another magpie
+
+Two magpies that share their gateways (LotusDecoder on X: one in China,
+one in the US, each the other's provider) sent the leg between them the
+whole conversation every turn. Codex says `store: false`, so
+`prevResponses` and `prevDelta` don't apply.
+[`remote_delta.go`](../../internal/gateway/remote_delta.go) handles it in
+`passthrough`, after `prevDelta` and only on Responses.
+
+- A Responses request to a remote magpie (`IsRemoteMagpie`) whose body
+  names no previous response and whose input is a list of items asks the
+  other magpie to keep the turn: `X-Magpie-Keep-Turn: magpie/<version>`,
+  put on in `passOnCaller`.
+- The other magpie honours the header only from a request shaped as a
+  magpie's hop (`keepTurnAsks`): the value starts `magpie/`, and the
+  User-Agent is magpie's, or Codex's (forwardOnce passes Codex's headers
+  on as Codex sent them). It then keeps the turn in `prevResponses`
+  whatever `store` says, under the caller's `prevScope` and the same caps,
+  and answers `X-Magpie-Kept-Turn: 1`. An id such a request names that it
+  doesn't hold gets `previous_response_not_found` before anything is sent,
+  never relayed to a vendor that might ignore it (`keptTurnLost` in
+  `serveAgent`).
+- The header comes off every request as it arrives (`withCaller`), and
+  `X-Magpie-` is never a passable request header, so no vendor is sent it.
+  A client that copies a hop's headers is kept to its own scope and the
+  caps, as `store: true` would have it.
+- When the reply says it was kept, this magpie records the turn per route
+  and scope (`remoteTurns`): a SHA-256 of each input item as sent (after
+  masking and translation), each output item's type, id and call_id, and
+  the other magpie's response id. At most 16 per route and scope, 32 MB in
+  all, each for `prevTTL`.
+- The next request whose input starts with exactly those items, then as
+  many items as the reply had with the same type and call_id (and id where
+  both have one; Codex sends its items back without ids), and then at least
+  one more, goes as the items after them with `previous_response_id`.
+  Anything else goes whole: an edited or shortened history, another
+  answer in place of the reply, a request naming its own previous
+  response, or a magpie that never said it keeps turns (one from before
+  this).
+- A delta the other magpie refuses (`prevRefused`: it restarted, or let
+  the turn go under its cap) is sent again whole at once, the record is
+  dropped, and that route goes whole for 30 minutes (`remoteRefusedWait`).
+- Not covered: the reply's output is matched by type and ids only, so a
+  client that edits the text of the last answer (no ids) is sent a delta
+  over the answer the other magpie kept. Tools and instructions still go
+  every turn. The other magpie's kept turns are in memory only.
+
 ## Verification
 
 ```sh
@@ -2273,7 +2321,7 @@ go test -tags nogui ./internal/gateway -run 'TestPlain403|TestOrderedKeepsAnAcco
 go test -tags nogui ./internal/gateway -run 'TestVertex'
 go test -tags nogui ./internal/gateway -run 'TestWeightedKeys|TestAccountWeightSharesRequests'
 node --test internal/gui/tests/key-weight.test.cjs internal/gui/tests/account-weight.test.cjs internal/gui/tests/routing-weight-chip.test.cjs
-go test -tags nogui ./internal/gateway -run 'TestPreviousResponse|TestUnknownPreviousResponse|TestPrevStore'
+go test -tags nogui ./internal/gateway -run 'TestPreviousResponse|TestUnknownPreviousResponse|TestPrevStore|TestRemoteMagpieSentTheNewInputAfterAKeptTurn|TestRemoteMagpieLostTurnSentWhole|TestOlderRemoteMagpieSentWhole|TestRemoteMagpieEditedHistorySentWhole|TestKeepTurnOnlyFromAMagpie'
 go test -tags nogui ./internal/gateway -run 'TestBedrock'
 go test -tags nogui ./internal/gateway -run 'TestPublicAddr|TestEditImageURL|TestPrivateDialer|TestFetchPrivateEntries|TestVendorImageURLAtPrivateAddress|TestVideoContentAtPrivateAddress'
 go test -tags nogui ./internal/gateway ./internal/provider ./internal/cli ./internal/gui -run 'TestDisabled|TestModelDisableCmd'

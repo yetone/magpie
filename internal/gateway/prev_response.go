@@ -35,7 +35,7 @@ import (
 // A client that says store false (Codex over HTTP, whose requests never
 // name a previous response: codex-rs/codex-api/src/common.rs keeps
 // previous_response_id to its websocket's response.create) has nothing
-// kept.
+// kept, but for another magpie asking its turns kept (remote_delta.go).
 
 const (
 	prevTTL = 6 * time.Hour
@@ -255,8 +255,13 @@ func previousResponse(w http.ResponseWriter, r *http.Request, from provider.Prot
 		r = r.WithContext(context.WithValue(r.Context(), prevAskKey{}, ask))
 	}
 	var store bool
-	if json.Unmarshal(q["store"], &store) == nil && !store {
+	if json.Unmarshal(q["store"], &store) == nil && !store && !keepsTurnFor(r) {
 		return w, r, body, nothing // the client asked that nothing be kept
+	}
+	if keepsTurnFor(r) {
+		// another magpie asked it kept, store false or not, and is told
+		// it is (remote_delta.go)
+		w.Header().Set(KeptTurnHeader, "1")
 	}
 	// what this turn adds: its input, copied out of the body. A view held
 	// the whole body, tools and instructions with it, on every turn kept,
