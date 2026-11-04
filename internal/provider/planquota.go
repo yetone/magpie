@@ -818,7 +818,9 @@ func PlanQuotas(ctx context.Context) []SubscriptionQuota {
 					q.Resets = <-resets
 				}
 			}
-			q = keepReading(ctx, q, tag)
+			// read just now: the card says when (jiabubu: Kimi Code's
+			// said nothing while every other card did)
+			q = keepReading(ctx, readNow(q), tag)
 			got[i] = &q
 		}()
 	}
@@ -837,9 +839,12 @@ func PlanQuotas(ctx context.Context) []SubscriptionQuota {
 			out = append(out, *q)
 		}
 	}
-	out = append(out, <-stepfun...)
-	out = append(out, <-volc...)
-	out = append(out, <-tencent...)
+	// StepFun's, Volcengine's and Tencent's, read just now too
+	for _, qs := range [][]SubscriptionQuota{<-stepfun, <-volc, <-tencent} {
+		for _, q := range qs {
+			out = append(out, readNow(q))
+		}
+	}
 	if ctx.Err() == nil {
 		noteQuotaHistory(out, time.Now())
 		c.Lock()
