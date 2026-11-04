@@ -27,6 +27,8 @@ const searchUsage = `usage:
   magpie search rm <api>                     take one away
 
   apis: tavily, brave, exa, firecrawl, you, deepseek, volcengine, wsa, searxng
+        and the ones a plugin gives (its search hook), as <plugin>:<id> in magpie's Settings
+        › Models › Web search; a plugin that is off gives none
 
   url= is the API's base URL, for an endpoint of your own that answers as that API
   does (e.g. url=https://search.example.com/tavily). Without it the vendor's own is

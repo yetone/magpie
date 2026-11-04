@@ -51,3 +51,16 @@ node --test internal/gui/tests/plugin-tools.test.cjs internal/gui/tests/builtins
 ```
 
 The example plugin the tests load is [`internal/plugin/testdata/tools`](../../internal/plugin/testdata/tools/index.js): tools with a zod shape, a raw JSON Schema, one that sleeps past the timeout, one that throws, and two that are left out.
+
+## Search APIs from a plugin
+
+The same host and `Loaded` list carry a second hook, `search`: `{search: {<id>: {name, keysURL?, keyOptional?, url?, execute({query, count, key, url}, ctx)}}}`, which adds a web search API to magpie's own ([`provider.SearchVendors`](../../internal/provider/search_api.go)). It is not part of the tools MCP server; it belongs to the search path ([Gateway routing](gateway-routing.md), "A search API's base URL").
+
+| Part | Responsibility | Source |
+| --- | --- | --- |
+| Collect | `searchesOf` keeps the ids that match `^[a-z0-9][a-z0-9-]{0,31}$` and have an `execute`; `searchList` returns `{id, name, keysURL, keyOptional, needURL}` with the plugin (`Loaded.Searches`). | `searchesOf`, `searchList` in [`host.js`](../../internal/plugin/host.js); [`search.go`](../../internal/plugin/search.go) |
+| Note | After every load the host notes them in `plugin-searches.json` (whole, only when changed). `NotedSearches` reads it without starting the host (`filememo`), for plugins that are on in plugins.json; a note that can't be parsed is an error, and `AllSearchVendors` then adds none. The API's vendor id is `<plugin short name>:<id>` (`PluginSearch.VendorID`), so it can't take a built-in's id. | `noteSearches`, `NotedSearches` in `search.go` |
+| List | `provider.AllSearchVendors` is `SearchVendors` plus the noted ones; `SearchVendorOf`, `Ready`, `check` and the GUI's `searchVendors` use it. A user's saved key and order stay in providers.json under that id; with the plugin off or removed the API is not ready, so never asked, and comes back with the plugin. | `search_api.go` in `internal/provider`, `searchVendorJSON` in [`api.go`](../../internal/gui/api.go) |
+| Ask | `askSearchAPI` hands a plugin's vendor to `askPluginSearch`, below `askSearchAPIKeys`: the same keys, rest, timeout (a quarter of `searchTimeout`) and request-log row as a built-in, with the query `apiSearch` already masked. `plugin.RunSearch` runs the host's `search` call; a throw with a numeric `status` comes back as `SearchRefused`, which becomes `searchRefused`. Pages are cleaned with `searchPlain` and `clipText`, six at most. | `askPluginSearch` in [`search_api.go`](../../internal/gateway/search_api.go) |
+
+Constraints: the plugin runs with the user's rights and sees the key and the (masked) query, as a built-in's vendor does. A backup or sync that restores search APIs on a computer without the plugin drops the plugin's entry there (`RestoreSearchAPIs` keeps only vendors it knows). The vendor list is read from the last load's note, so a plugin just added is listed after the host has loaded it. Tests: `TestPluginSearch` (host, `testdata/search`), `TestPluginSearchAPI` and `TestPluginSearchAPISeesMaskedQuery` (gateway).

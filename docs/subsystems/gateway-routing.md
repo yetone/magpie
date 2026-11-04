@@ -1404,6 +1404,20 @@ Covered by `TestSearchAPIAtItsOwnBaseURL`, `TestSearchKeyStaysAtItsBaseURL`,
 `TestSearchAPIBaseURLFromSettings`, `TestSearchCLI` and
 `search-api.test.cjs`.
 
+### A search API a plugin gives
+
+A plugin's `search` hook adds search APIs under the id `<plugin>:<id>`
+(`provider.AllSearchVendors`; [plugin-tools](plugin-tools.md#search-apis-from-a-plugin)).
+`askSearchAPI` hands one to `askPluginSearch`, so the keys, their rest after a
+401/402/403/429 (`SearchRefused`), the listed order, the switch, the masked
+query and the request-log row are the built-ins' own, and the plugin is
+asked only while it is on. A plugin API has no `Base` of its own: its URL
+field shows only when the plugin declares `url: true`, and then is required.
+Its pages are cleaned like a built-in's (`searchPlain`, `clipText`, six at
+most). It is asked with the time left of a quarter of the search's limit, and
+`plugin.RunSearch` returns when that is out, though the plugin's own fetch may
+run on until the host's abort reaches it. `TestPluginSearchAPI`.
+
 ## The search APIs' order, and one switched off
 
 `provider.SearchAPIs` gives the search APIs in their saved order, the

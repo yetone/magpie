@@ -626,8 +626,8 @@ func searchState(s *settingsJSON) {
 		}
 		s.SearchAPIs = append(s.SearchAPIs, j)
 	}
-	for _, v := range provider.SearchVendors {
-		s.SearchVendors = append(s.SearchVendors, searchVendorJSON{ID: v.ID, Name: v.Name, KeysURL: v.KeysURL, NeedURL: v.Base == "", KeyOptional: v.KeyOptional, Base: v.Base})
+	for _, v := range provider.AllSearchVendors() {
+		s.SearchVendors = append(s.SearchVendors, searchVendorJSON{ID: v.ID, Name: v.Name, KeysURL: v.KeysURL, NeedURL: v.WantsURL(), KeyOptional: v.KeyOptional, Base: v.Base})
 	}
 	s.SearchProvider = gateway.Searcher()
 	s.SearchAuto, s.SearchUnused = gateway.AutoSearcher(), gateway.SearcherUnused()

@@ -1556,6 +1556,8 @@ const signsIn = (spec) => [...new Set(hooks.filter((h) => h.spec === spec && h.h
 function withProviders(l) {
   const tools = l.error ? [] : toolList(l.spec)
   if (tools.length) l = { ...l, tools }
+  const searches = l.error ? [] : searchList(l.spec)
+  if (searches.length) l = { ...l, searches }
   const ids = l.error ? [] : signsIn(l.spec)
   if (!ids.length) return l
   const a = auths()
@@ -1717,6 +1719,73 @@ async function runTool({ spec, name, args, ms, agent }) {
   if (typeof out === "string") return { text: out }
   if (out && typeof out === "object" && typeof out.output === "string") return { text: out.output }
   return { text: out === undefined ? "" : JSON.stringify(out) }
+}
+
+// ---- web search APIs --------------------------------------------------------
+//
+// A plugin's search hook adds web search APIs to magpie's own list (Tavily,
+// Brave, …): {search: {<id>: {name, keysURL?, keyOptional?, url?, execute}}}.
+// execute({query, count, key, url}, ctx) returns the pages found:
+// [{title, url, text?, age?}] (or {results: [...]}). A throw with a numeric
+// status (401, 402, 403, 429…) is the API refusing the key, which magpie
+// rests as it does a built-in's; retryAfter is its Retry-After.
+// magpie keeps the keys, order and limits, and masks the query before it.
+
+const SEARCH_ID = /^[a-z0-9][a-z0-9-]{0,31}$/
+
+function searchesOf(spec) {
+  const m = new Map()
+  for (const h of hooks) {
+    if (h.spec !== spec) continue
+    const t = h.hooks.search
+    if (!t || typeof t !== "object") continue
+    for (const [id, def] of Object.entries(t)) {
+      if (SEARCH_ID.test(id) && def && typeof def.execute === "function") m.set(id, def)
+    }
+  }
+  return m
+}
+
+function searchList(spec) {
+  const out = []
+  for (const [id, def] of searchesOf(spec)) {
+    out.push({
+      id,
+      name: typeof def.name === "string" && def.name ? def.name : id,
+      ...(typeof def.keysURL === "string" && /^https?:\/\//.test(def.keysURL) ? { keysURL: def.keysURL } : {}),
+      ...(def.keyOptional === true ? { keyOptional: true } : {}),
+      ...(def.url === true ? { needURL: true } : {}),
+    })
+  }
+  return out
+}
+
+async function runSearch({ spec, id, query, count, key, url, ms }) {
+  const def = searchesOf(spec).get(id)
+  if (!def) throw new Error(`${spec} has no search API ${id}`)
+  const abort = AbortSignal.timeout(ms > 0 ? ms : 60_000)
+  const ctx = { directory, worktree: directory, abort }
+  let out
+  try {
+    out = await Promise.race([
+      Promise.resolve().then(() => def.execute({ query, count, key: key ?? "", url: url ?? "" }, ctx)),
+      new Promise((_, reject) => abort.addEventListener("abort", () => reject(new Error("no answer in time")), { once: true })),
+    ])
+  } catch (e) {
+    const status = Number(e?.status)
+    if (Number.isInteger(status) && status >= 300 && status < 600) {
+      return { status, error: String(e?.message ?? e), retryAfter: e?.retryAfter == null ? "" : String(e.retryAfter) }
+    }
+    throw e
+  }
+  const rs = Array.isArray(out) ? out : Array.isArray(out?.results) ? out.results : null
+  if (!rs) throw new Error("the search returned neither a list nor {results}")
+  const str = (v) => (typeof v === "string" ? v : v == null ? "" : String(v))
+  return {
+    pages: rs.filter((r) => r && typeof r === "object").map((r) => ({
+      title: str(r.title), url: str(r.url), text: str(r.text ?? r.content ?? r.snippet), age: str(r.age ?? r.date),
+    })),
+  }
 }
 
 function authOf(provider) {
@@ -3029,6 +3098,7 @@ const handlers = {
   authorize,
   callback,
   tool: runTool,
+  search: runSearch,
   apiKey,
   load,
   usage,

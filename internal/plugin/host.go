@@ -617,6 +617,8 @@ type Loaded struct {
 	ServedBy map[string]string `json:"servedBy,omitempty"`
 	// Tools are the tools its tool hook gives (tools.go)
 	Tools []Tool `json:"tools,omitempty"`
+	// Searches are the web search APIs its search hook gives (search.go)
+	Searches []SearchDef `json:"searches,omitempty"`
 }
 
 // Clash is a provider id more than one plugin signs in to. The host runs
@@ -1169,6 +1171,7 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 	}
 	h.loaded = res.Plugins
 	noteTools(res.Plugins)
+	noteSearches(res.Plugins)
 	for _, p := range res.Plugins {
 		if p.Error != "" {
 			log.Printf("plugin %s didn't load: %s", p.Spec, p.Error)
