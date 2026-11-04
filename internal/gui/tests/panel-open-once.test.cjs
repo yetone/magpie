@@ -56,6 +56,7 @@ async function open(engine, lang, platform, t) {
   t.after(() => browser.close());
   const page = await (await browser.newContext({ viewport: { width: 360, height: 520 }, reducedMotion: "reduce" })).newPage();
   page.setDefaultTimeout(8000);
+  page.setDefaultNavigationTimeout(60000); // the first load, slow on a busy machine (#4470)
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   if (platform) await page.addInitScript((p) => Object.defineProperty(Navigator.prototype, "platform", { get: () => p }), platform);

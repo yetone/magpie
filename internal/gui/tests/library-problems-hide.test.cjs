@@ -129,7 +129,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await ctx.addInitScript((tab) => { try { localStorage.setItem("magpie.libTab", tab); } catch {} }, tab);
       const page = await ctx.newPage();
       page.setDefaultTimeout(5000);
-      page.setDefaultNavigationTimeout(20000); // the page's first load, slow on a busy machine
+      page.setDefaultNavigationTimeout(60000); // the page's first load, slow on a busy machine (#4470)
       page.on("pageerror", (e) => errors.push(e.message));
       // s01 is given to Grok Build too, which its skills folder may refuse
       const st = { last: structuredClone(problems), fails: fails || (() => structuredClone(problems)), reads: 0, syncs: 0, set: "default", agents: Object.fromEntries(names.map((n) => [n, n === "s01" ? ["claude", "codex", "grok"] : ["claude", "codex"]])) };
