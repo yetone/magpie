@@ -1,14 +1,17 @@
 package gateway
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+	"weak"
 
 	"github.com/yetone/magpie/internal/gwmw"
 	"github.com/yetone/magpie/internal/settings"
@@ -590,4 +593,31 @@ func TestUnroutedCodexPathShowsItsModel(t *testing.T) {
 	case <-time.After(15 * time.Second):
 		t.Fatal("never answered once masked")
 	}
+}
+
+// TestUnroutedTimersLetGoOfRequest: a stopped timer is not gone. The
+// runtime keeps it, and its func, in the timer heap of the P that set it
+// until its time comes or that P tidies its heap, so a timer that reached
+// the request kept its body up to unroutedMost after the handler returned
+// (#5250). The test holds the stopped timers as that heap does.
+func TestUnroutedTimersLetGoOfRequest(t *testing.T) {
+	body := make([]byte, 64<<10)
+	gone := weak.Make(&body[0])
+	f := &inflight{}
+	r := httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	body = nil
+	_, r, unwatch := (&Server{}).watchUnrouted(httptest.NewRecorder(), r, f)
+	f.mu.Lock()
+	u := f.unrouted
+	f.mu.Unlock()
+	u.wmu.Lock()
+	timers := []*time.Timer{u.unknown, u.most}
+	u.wmu.Unlock()
+	unwatch()
+	u, r, f = nil, nil, nil
+	runtime.GC()
+	if gone.Value() != nil {
+		t.Fatal("a stopped unrouted timer still reaches its request's body")
+	}
+	runtime.KeepAlive(timers)
 }

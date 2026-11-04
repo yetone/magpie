@@ -1,15 +1,18 @@
 package gateway
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+	"weak"
 
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -39,14 +42,16 @@ func TestSocketTurnBodiesFreed(t *testing.T) {
 	if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Key: "k", Responses: up.URL + "/v1", Models: []string{"m1"}}); err != nil {
 		t.Fatal(err)
 	}
-	var made, freed atomic.Int64
+	var mu sync.Mutex
+	var bodies []weak.Pointer[byte]
 	socketTurnBody = func(body []byte) {
-		made.Add(1)
-		runtime.AddCleanup(&body[0], func(struct{}) { freed.Add(1) }, struct{}{})
+		mu.Lock()
+		bodies = append(bodies, weak.Make(&body[0]))
+		mu.Unlock()
 	}
 	t.Cleanup(func() { socketTurnBody = nil })
 
-	_, ts := sockServer(t)
+	s, ts := sockServer(t)
 	c, _, err := dialSock(t, ts, "/v1/responses", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -67,17 +72,30 @@ func TestSocketTurnBodiesFreed(t *testing.T) {
 		id = end.Get("response.id").String()
 	}
 	c.c.CloseNow()
-	if made.Load() != turns {
-		t.Fatalf("%d turn bodies for %d turns", made.Load(), turns)
+	// the socket's handler ends after its client goes (drain waits for
+	// it); nothing of a turn is kept after, but the trace's routes. Not a
+	// wait for the collector: a weak pointer is gone at the first
+	// collection after its body is unreachable (#5250: a stopped timer
+	// kept the last turn's request for up to unroutedMost).
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	s.sockets.drain(ctx)
+	if ctx.Err() != nil {
+		t.Fatal("the socket's handler did not end after its client went")
 	}
-	// the socket's handler ends after its client goes; nothing of a
-	// turn is kept after, but the trace's routes
-	deadline := time.Now().Add(10 * time.Second)
-	for freed.Load() < turns && time.Now().Before(deadline) {
-		runtime.GC()
-		time.Sleep(20 * time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	if len(bodies) != turns {
+		t.Fatalf("%d turn bodies for %d turns", len(bodies), turns)
 	}
-	if n := freed.Load(); n < turns {
-		t.Fatalf("%d of %d socket turn bodies still kept after the socket closed", turns-n, turns)
+	runtime.GC()
+	var kept []int
+	for i, b := range bodies {
+		if b.Value() != nil {
+			kept = append(kept, i)
+		}
+	}
+	if len(kept) > 0 {
+		t.Fatalf("turn bodies %v of %d still kept after the socket's handler ended", kept, turns)
 	}
 }
