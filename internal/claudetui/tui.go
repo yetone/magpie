@@ -703,6 +703,16 @@ func (s *shim) command(name string) error {
 		loading, failed := usageLoading.MatchString(now), usageFailed.MatchString(now)
 		figures := panel != "" || usageUsed.MatchString(p)
 		switch {
+		case usageStale.MatchString(now) && still >= commandSettle:
+			// the figures drawn are the last ones Claude Code saved,
+			// which it couldn't refresh: told as unknown below
+			drawn = true
+		case usageRefreshing.MatchString(now):
+			// "Refreshing…": the figures drawn are the last ones Claude
+			// Code saved (up to an hour old) while it asks for today's.
+			// Taken once they stood still a second, every read told the
+			// one before it, its time now (jsc9495)
+			s.doing.Store("was still refreshing " + name + "'s figures")
 		case loading:
 			// the panel is drawn before its figures, which Claude Code
 			// asks Anthropic for: a slow answer kept "Loading usage
@@ -749,7 +759,17 @@ func (s *shim) command(name string) error {
 	if panel == "" {
 		text = usageText(p)
 	}
+	stale := usageStale.FindString(now)
+	if stale == "" && usageRefreshing.MatchString(now) {
+		stale = "still refreshing its figures after " + commandWait.String()
+	}
 	switch {
+	case stale != "":
+		// figures Claude Code saved before, not refreshed: unknown, the
+		// card keeping its own last reading and that reading's time
+		s.emit(map[string]any{"type": "result", "subtype": "error_during_execution", "is_error": true, "session_id": s.sid,
+			"result": name + " couldn't load the plan's usage: " + stale})
+		return nil
 	case !usageUsed.MatchString(panel+p) && (usageLoading.MatchString(now) || usageFailed.MatchString(now)):
 		// no figures, the panel still loading them or saying it
 		// couldn't: unknown, not a plan with no allowance
@@ -776,6 +796,18 @@ func usageDrawn(screen string) bool {
 
 // /usage's panel once its figures failed to load (Claude Code 2.1.316)
 var usageFailed = regexp.MustCompile(`Failed to load usage data`)
+
+// /usage's panel drawing the figures Claude Code saved on an earlier read
+// (cachedUsageUtilization, up to an hour old) while it asks for today's
+// ("Refreshing…"), and once it couldn't ("Showing last-known usage as of
+// 20m ago (rate limited until 12:11am)", "… (could not refresh)"), as
+// Claude Code 2.1.316 draws them. Figures it seeded from this session's
+// own replies ("Partial usage data", "Could not refresh usage data") are
+// today's, and are told.
+var (
+	usageRefreshing = regexp.MustCompile(`\bRefreshing(?:…|\.\.\.)`)
+	usageStale      = regexp.MustCompile(`Showing last-known usage[^\n]*?\)|Showing last-known usage`)
+)
 
 var (
 	usageName    = regexp.MustCompile(`^(session|week(?: \([^)]*\))?)`)

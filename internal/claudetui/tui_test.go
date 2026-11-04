@@ -955,6 +955,46 @@ func TestShimWaitsForUsageFigures(t *testing.T) {
 	}
 }
 
+// /usage's panel draws the figures Claude Code saved on its last read
+// (cachedUsageUtilization, kept an hour) at once, "Refreshing…" under
+// them, while it asks for today's, and "Showing last-known usage as of
+// 20m ago (rate limited until 12:11am)" once it couldn't. Both were told
+// as the account's figures, read now: the card showed the read before,
+// up to an hour old (jsc9495: 92% left where Claude's usage page said
+// 53%). The first frames are the bytes a real Claude Code 2.1.316 drew in
+// a sandbox whose saved figures were 20 minutes old, its sign-in refused
+// (testdata/usage-refreshing-2.1.316.bin, usage-last-known-2.1.316.bin).
+// The refreshed panel is the earlier capture, drawn on a cleared screen.
+func TestShimWaitsPastSavedUsage(t *testing.T) {
+	refreshing, _ := filepath.Abs(filepath.Join("testdata", "usage-refreshing-2.1.316.bin"))
+	lastKnown, _ := filepath.Abs(filepath.Join("testdata", "usage-last-known-2.1.316.bin"))
+	b, err := os.ReadFile(filepath.Join("testdata", "usage-2.1.316.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh := filepath.Join(t.TempDir(), "usage-refreshed.bin")
+	if err := os.WriteFile(fresh, append([]byte("\x1b[2J\x1b[H"), b...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Run("refreshed", func(t *testing.T) {
+		out := runShim(t, []string{"FAKE_USAGE=" + fresh, "FAKE_USAGE_FIRST=" + refreshing, "FAKE_USAGE_THEN=slow"},
+			append([]string{fakePath(t)}, pArgs...), []string{`raw:{"type":"command","command":"/usage"}`}, 2)
+		want := "Current session: 0% used · resets 12am (Asia/Shanghai)\nCurrent week (all models): 81% used · resets Nov 4 at 6am (Asia/Shanghai)"
+		if r := out[1]; r["type"] != "result" || r["is_error"] != false || r["result"] != want {
+			t.Fatalf("told %v", r)
+		}
+	})
+	t.Run("last known", func(t *testing.T) {
+		out := runShim(t, []string{"FAKE_USAGE=" + lastKnown},
+			append([]string{fakePath(t)}, pArgs...), []string{`raw:{"type":"command","command":"/usage"}`}, 2)
+		r := out[1]
+		want := "/usage couldn't load the plan's usage: Showing last-known usage as of 20m ago (rate limited until 12:11am)"
+		if r["type"] != "result" || r["is_error"] != true || r["result"] != want {
+			t.Fatalf("told %v", r)
+		}
+	})
+}
+
 // A command other than /usage is told as an error, and none is typed.
 func TestShimRunsNoOtherCommand(t *testing.T) {
 	out := runShim(t, nil, append([]string{fakePath(t)}, pArgs...), []string{`raw:{"type":"command","command":"/login"}`}, 2)
