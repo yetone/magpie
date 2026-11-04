@@ -203,9 +203,12 @@ gateway's order and choice of seat don't change. Two stay two rows. See
 
 ### Routing account windows
 
-A subscription account's row in Accounts and keys shows each of its
-windows under the one figure routing went by, with when each resets
-("5 hours 40% used · resets in 2h"), as the Usage page reads them (#1833).
+A subscription account's row in Accounts and keys shows the one figure
+routing went by, and each of its windows, with when each resets
+("5 hours 40% used · resets in 2h"), on hover over that figure (the
+`.st`'s title), as the Usage page reads them (#1833). A row with no figure
+of its own (a remote's, or an account not read yet) shows its windows as
+its one line instead (`.wins`, cut to one line, all of it on hover).
 `cardOf` in [`plugins/routing/client.js`](../../internal/gui/assets/plugins/routing/client.js) matches
 the route's account to app.js's `quotas`: a `subscription` card of this
 computer (no `from`) whose provider is the account's `agent` (a plugin's
@@ -240,6 +243,29 @@ On the stage, an account's seat tells the same windows in its tooltip,
 under its id (`render`, #1835). The row itself keeps one line: the
 fullest window while idle, what it is doing while it answers. See
 `routing-seat-windows.test.cjs`.
+
+### Routing account cards
+
+Each row under Accounts and keys keeps its name, one line of what is left
+(or its rest), and how it fares (tried, answered, failed, last answered),
+with Try now or Sign in again when it needs one (ferock4669 and iyou00 on
+Discord: many keys ran the list on and on). The models it answered are in
+its tooltip, under its id; a folded row of keys or accounts names none.
+`renderActs` in
+[`plugins/routing/client.js`](../../internal/gui/assets/plugins/routing/client.js)
+shows the first `ACTS_SHOWN` (8) rows of a longer list and puts the rest
+behind "Show N more" at its foot (`.rt-acts-foot`), kept across a reload
+in localStorage `magpie.routingActsAll`. The button clicked stays where it
+is on the screen while rows come in or go above it (`actMore.onclick`
+scrolls the page by what it moved). Never behind it: a row that needs
+the reader (to sign in again, resting, a model resting, failures with no
+answer, a remote whose allowance can't be read), the rows under a fold
+the reader opened themselves, and the heading of a provider with a row
+shown. A row to sign in again is drawn under its fold even while the fold
+is shut. Two more alone aren't folded. "View usage" beside it opens the
+Usage page's Overview (`window.openUsageOverview` in
+`plugins/usage/page.js`), where each account's card says it all, without
+keeping that tab as the reader's own. See `routing-acts-compact.test.cjs`.
 
 ### A provider's accounts together
 

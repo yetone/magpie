@@ -1157,6 +1157,13 @@ window.openUsageRoute = (route) => {
   ledger = null;
   show("usage");
 };
+// Routing's account list sends its reader to each account's
+// allowances in full: the Overview, its tab not kept as the reader's own
+window.openUsageOverview = () => {
+  if (usageTab === "requests") ledLeave();
+  usageTab = "usage";
+  show("usage");
+};
 // the one request a route from Routing listed gives way to the list as it
 // was before it
 function ledRouteOff() {

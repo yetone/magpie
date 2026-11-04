@@ -7,7 +7,7 @@
 // said only the total, "6,291 积分 left". Now the row says what goes
 // first too, as the Usage card words it: "6,291 积分 left · 185 积分
 // expire 23:59", on the stage and in the accounts listed below, and the
-// tooltip and the list name the four rows. A wallet whose card tells no
+// tooltips of the stage and the list name the four rows. A wallet whose card tells no
 // lapse, and an account with a share, read as before. Every language, at
 // a window's width and at 420px, in both engines.
 const assert = require("node:assert/strict");
@@ -105,7 +105,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             // the Usage page's readings come in beside the trace, and the stage is
             // drawn again with them: read the row until it says what it should,
             // or until it has had time to, and compare what it said last
-            await page.locator(".rt-act .wins").first().waitFor();
+            await page.waitForFunction(() => [...document.querySelectorAll(".rt-act .st")].some((e) => e.title));
             const settled = async (id, want) => {
               let got = "";
               for (let i = 0; i < 20 && got !== want; i++) {
@@ -120,10 +120,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             // the tooltip names the four rows the Usage card shows
             const tip = await row("magicrew#big@example.com").getAttribute("title");
             for (const s of ["185 / 200 积分 · 今日 23:59 到期", "1,106 积分 · 最早 2026-11-03 到期", "5,000 积分"]) assert.ok(tip.includes(s), tip);
-            // the accounts listed below: the figure and its lapse, then when it was read
+            // the accounts listed below: the figure and its lapse, then when it
+            // was read, each window on hover over it
             const acts = page.locator(".rt-act");
             await acts.filter({ hasText: "6,291" }).first().waitFor();
-            const list = await acts.evaluateAll((as) => as.map((a) => ({ st: a.querySelector(".st")?.textContent || "", wins: a.querySelector(".wins")?.innerText || "" })));
+            const list = await acts.evaluateAll((as) => as.map((a) => ({ st: a.querySelector(".st")?.textContent || "", wins: a.querySelector(".st")?.title || "" })));
             const b = list.find((a) => a.st.startsWith(big + " · "));
             assert.ok(b, `${big}: ${JSON.stringify(list)}`);
             assert.ok(b.wins.includes("185 / 200 积分 · 今日 23:59 到期") && b.wins.includes("5,000 积分"), b.wins);

@@ -1,7 +1,7 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // #1833: the Routing page's Accounts and keys list shows a subscription
 // account's windows each (Claude's 5 hours and 7 days), with when each
-// resets, as the Usage page read them: its card matched by the agent the
+// resets, as the Usage page read them, on hover over its one figure: its card matched by the agent the
 // account is signed in to and its user, whatever their case. Nothing new
 // is read for it: opening Routing asks /api/usage/quotas in the ordinary
 // way, never ?asked=1. An account with no card of its own (another
@@ -82,14 +82,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             await page.route("**/*", serve(lang, asks));
             await page.goto("http://magpie.test/?view=routing");
             const act = page.locator(".rt-act", { hasText: "work@example.com" }).first();
-            await act.locator(".wins span").first().waitFor();
-            assert.deepEqual(await act.locator(".wins span").allTextContents(), words[lang]);
-            // the one figure routing went by stays above them
+            // the one figure routing went by, the windows each on hover over
+            // it: a card keeps one line of what is left (ferock4669 on Discord)
+            await page.waitForFunction((want) => [...document.querySelectorAll(".rt-act")].some((e) => e.textContent.includes("work@example.com") && e.querySelector(".st")?.title === want), words[lang].join("\n"));
             assert.ok(await act.locator(".st").isVisible());
+            assert.equal(await act.locator(".wins").count(), 0);
             const spare = page.locator(".rt-act", { hasText: "spare@example.com" }).first();
             await spare.waitFor();
             assert.equal(await spare.locator(".wins").count(), 0);
-            // the windows wrap inside the row, never past the list
+            // nothing in the row runs past the list
             const over = await act.evaluate((e) => Math.max(e.scrollWidth - e.clientWidth, document.documentElement.scrollWidth - innerWidth));
             assert.ok(over <= 1, `${lang} at ${width}: ${over}px past`);
             assert.ok(asks.length >= 1, "the readings were asked for");

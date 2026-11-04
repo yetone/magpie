@@ -469,13 +469,12 @@ button.rt-session { cursor: pointer; }
 .rt-read.busy { cursor: default; color: var(--fg-2); }
 .rt-read.busy svg > * { transform-box: view-box; transform-origin: 50% 50%; animation: spin .8s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .rt-read.busy svg > * { animation: none; } }
-/* a subscription account's windows each (#1833), under its one figure */
-.rt-act .wins { display: flex; flex-wrap: wrap; gap: 2px 12px; min-width: 0; color: var(--fg-2); font-size: 11px; font-variant-numeric: tabular-nums; }
-.rt-act .wins span { min-width: 0; overflow-wrap: anywhere; }
+/* a subscription account's windows (#1833), one line where it has no
+   figure of its own, the rest of it on hover */
+.rt-act .wins { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-2); font-size: 11px; font-variant-numeric: tabular-nums; }
+.rt-act .wins span + span { margin-left: 12px; }
 .rt-act .tally { display: flex; flex-wrap: wrap; gap: 2px 12px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .rt-act .tally .bad { color: var(--red); }
-.rt-act .mdls { display: flex; flex-wrap: wrap; gap: 4px; }
-.rt-act .mdls code { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rt-act .fix { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11px; }
 .rt-act .bar { height: 3px; border-radius: 2px; background: var(--card-2); overflow: hidden; }
 .rt-act .bar i { display: block; height: 100%; border-radius: 2px; background: var(--muted); }
@@ -1022,3 +1021,11 @@ body.window .rt-gedit > .bar { --vfoot: 8px; }
 .rt-gtpl-card .acts { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 4px; }
 .rt-gtplbtn { display: inline-flex; align-items: center; gap: 4px; }
 .rt-log-head .mask-badge { margin-left: 8px; }
+/* under Accounts and keys: Show N more, and the way to each account's
+   allowances in full on the Usage page (ferock4669, iyou00 on Discord) */
+.rt-acts-foot { display: flex; align-items: center; gap: 12px; padding: 2px 12px 4px 33px; font-size: 11px; }
+.rt-acts-foot[hidden] { display: none; }
+.rt-acts-foot .grow { flex: 1; }
+.rt-acts-foot button.text { font-size: 11px; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rt-acts-foot button.text:hover { color: var(--fg); }
+.rt-acts-foot button.text[hidden] { display: none; }

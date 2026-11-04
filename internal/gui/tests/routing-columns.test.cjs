@@ -2,8 +2,8 @@
 // The Routing page's Requests and Accounts and keys, side by side (a report
 // with a screenshot: "这里排版是不是有问题啊？感觉好乱"): the two lists end on one
 // line, the accounts scrolling like the requests instead of running on down
-// the page beside an empty column; the models an account answered sit on a
-// line of their own, not wrapped in among its numbers; a provider's row
+// the page beside an empty column; the models an account answered are in
+// its tooltip, not wrapped in among its numbers; a provider's row
 // says its model once, under the provider's name, not the name again and the
 // model twice. One column, the accounts list is as long as it is. Side by
 // side only where each request still fits one line; narrower, one column of
@@ -83,9 +83,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForTimeout(300);
 
       const box = (s) => page.locator(s).evaluate((e) => { const b = e.getBoundingClientRect(); return { left: b.left, right: b.right, bottom: b.bottom, scroll: e.scrollHeight > e.clientHeight + 1 }; });
-      const reqs = await box(".rt-reqs"), acts = await box(".rt-acts");
+      const reqs = await box(".rt-reqs"), acts = await box(".rt-acts"), foot = await box(".rt-acts-foot");
       assert(acts.left >= reqs.right, "side by side");
-      assert(Math.abs(acts.bottom - reqs.bottom) <= 1, `the lists end on one line: ${reqs.bottom} / ${acts.bottom}`);
+      // the accounts' column ends at its foot (Show N more, View usage)
+      assert(Math.abs(foot.bottom - reqs.bottom) <= 1 && foot.bottom >= acts.bottom, `the lists end on one line: ${reqs.bottom} / ${foot.bottom}`);
       assert(acts.scroll, "the rest of the accounts scroll");
       // a request on one line: its destination and numbers beside its model
       const oneLine = () => page.locator(".rt-req").evaluateAll((rs) => rs.every((r) => {
@@ -107,20 +108,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const rw = requests.right - requests.left, aw = accounts.right - accounts.left;
         assert(rw > aw * 1.6, `${width}px: requests should have more room than accounts (${rw} / ${aw})`);
         assert(aw >= 260 && aw <= 360.5, `${width}px: account column stays readable and capped (${aw})`);
-        const rightList = await box(".rt-acts"), leftList = await box(".rt-reqs");
+        const rightList = await box(".rt-acts-foot"), leftList = await box(".rt-reqs");
         assert(Math.abs(rightList.bottom - leftList.bottom) <= 1, `${width}px: list bottoms stay aligned`);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${width}px: no horizontal overflow`);
-        const clipped = await page.locator(".rt-act .mdls code").evaluateAll((es) => es.some((e) => e.getBoundingClientRect().right > e.closest(".rt-act").getBoundingClientRect().right + 1));
-        assert.equal(clipped, false, `${width}px: models stay inside the narrower account column`);
         assert(await oneLine(), `${width}px: side by side, each request still on one line`);
       }
 
-      // the Codex account's three models on their own line, none in the tally
+      // the Codex account's three models in its tooltip, under its id, none
+      // in the card: a card says its name, what is left and how it fares
+      // (ferock4669 on Discord)
       const codex = page.locator(".rt-act", { hasText: "ann@example.com" });
-      assert.deepEqual((await codex.locator(".mdls code").allInnerTexts()).sort(), ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-6-luna"]);
-      assert.equal(await codex.locator(".tally code").count(), 0);
-      const tally = await codex.locator(".tally").boundingBox(), mdls = await codex.locator(".mdls").boundingBox();
-      assert(mdls.y >= tally.y + tally.height - 0.5, "the models under the numbers");
+      const [id, models] = (await codex.getAttribute("title")).split("\n");
+      assert.equal(id, "codex:a");
+      assert.deepEqual(models.split(", ").sort(), ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-6-luna"]);
+      assert.equal(await codex.locator("code").count(), 0);
 
       // a provider's row: its model once, not its name again
       const ai = page.locator(".rt-act").first();

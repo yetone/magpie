@@ -214,6 +214,31 @@ function routingPage(part) {
     }
   };
   actHead.append(actLabel, actRead, el("span", "grow"), actNote);
+  // under the list: the rest of a long one, behind Show N more (kept
+  // across a reload, magpie.routingActsAll), and the way to each
+  // account's allowances in full, the Usage page's Overview
+  // (ferock4669, iyou00 on Discord: many keys ran the list on and on)
+  const actFoot = el("div", "rt-acts-foot");
+  const actMore = el("button", "text rt-acts-more");
+  actMore.type = "button";
+  let actsAll = false;
+  try { actsAll = localStorage.getItem("magpie.routingActsAll") === "1"; } catch {}
+  actMore.onclick = () => {
+    actsAll = !actsAll;
+    try { localStorage.setItem("magpie.routingActsAll", actsAll ? "1" : "0"); } catch {}
+    // the button clicked stays where it is on the screen, the rows coming
+    // in (or going) above it: neither engine's scroll anchoring does it
+    // for every place the page can be scrolled to
+    const v = $("#view-routing"), y = actMore.getBoundingClientRect().top;
+    steady(() => renderActs(listed()));
+    const moved = actMore.getBoundingClientRect().top - y;
+    if (moved) v.scrollTop += moved;
+  };
+  const actUsage = el("button", "text rt-acts-usage");
+  actUsage.type = "button";
+  actUsage.dataset.feature = "usage"; // it opens on the Usage page
+  actUsage.onclick = () => window.openUsageOverview();
+  actFoot.append(actMore, el("span", "grow"), actUsage);
   const hist = el("div", "rt-cols");
   const colA = el("div", "rt-col"), colB = el("div", "rt-col");
   const filters = el("div", "rt-filters");
@@ -260,7 +285,7 @@ function routingPage(part) {
   };
   filters.append(dayBar, groupBar);
   colA.append(reqHead, filters, reqs);
-  colB.append(actHead, acts);
+  colB.append(actHead, acts, actFoot);
   hist.append(colA, colB);
   more.append(hist);
   // the narrow and wide layouts go by a box's own width, as container
@@ -1513,6 +1538,9 @@ function routingPage(part) {
   // more of them, else open. Which the reader opened or folded is kept, by
   // provider and model, or "group/<id>", whatever the default.
   const FOLD_AT = 3, LONG = 6;
+  // Accounts and keys shows this many rows of a longer list, and every
+  // one needing the reader, the rest behind Show N more
+  const ACTS_SHOWN = 8;
   const folds = new Map();  // foldKey → { li, wire, st, tg, n, w, ids, up, open, pk }
   let keysOpen = new Set(), keysShut = new Set();
   try { keysOpen = new Set(JSON.parse(localStorage.getItem("magpie.routingKeysOpen") || "[]")); } catch {}
@@ -4311,19 +4339,26 @@ function routingPage(part) {
     // after them: laid out in columns, a heading at a column's foot over
     // nothing, its accounts at the next one's top, WebKit having no
     // break-after: avoid (Jiabubu on Discord)
-    const put = (e, leads) => {
+    // each block put, with its provider and whether it is kept in sight:
+    // one needing the reader (an error, a rest, a sign-in), or under a
+    // fold the reader opened themselves. Show N more never hides those
+    const meta = new Map();
+    const put = (e, leads, keep = false) => {
       if (leads) return lead.push(e);
-      if (!lead.length) return out.push(e);
-      const b = el("div", "rt-lead");
-      b.append(...lead.splice(0), e);
+      const b = lead.length ? el("div", "rt-lead") : e;
+      if (lead.length) b.append(...lead.splice(0), e);
       out.push(b);
+      meta.set(b, { prov, keep, n: b === e ? 1 : b.querySelectorAll(".rt-act").length });
     };
+    // refused for its sign-in, and not answered since
+    const needsSignIn = (a) => a.w.kind === "account" && a.authAt > a.last;
     // each provider's keys and accounts, gathered once: each of hundreds
     // of keys looked through the whole list for its own (#3164)
     const kin = new Map(), kinOf = (w) => w.provider + "\u0000" + w.kind;
     for (const a of list) { const k = kinOf(a.w); kin.has(k) ? kin.get(k).push(a) : kin.set(k, [a]); }
     for (const a of list) {
       const w = a.w;
+      let opened = false;
       if (w.provider !== prov) {
         prov = w.provider;
         const h = el("div", "rt-prov");
@@ -4345,8 +4380,12 @@ function routingPage(part) {
         const ks = kin.get(kinOf(w));
         if (ks.length >= FOLD_AT) {
           const pk = w.provider + (w.kind === "account" ? "/@" : "/*"), open = isOpen(pk, w.kind === "account" && ks.length < LONG);
-          if (ks[0] === a) put(keysRow(ks, pk, open, n, w.kind), open);
-          if (!open) continue;
+          // folded, an account to sign in again is still drawn under it:
+          // what the reader has to fix is never folded away
+          const signIns = !open && ks.some(needsSignIn);
+          opened = open && keysOpen.has(pk);
+          if (ks[0] === a) put(keysRow(ks, pk, open, n, w.kind), open || signIns, ks.some((k) => needsSignIn(k) || (k.rest && at(k.rest.until) > n)));
+          if (!open && !needsSignIn(a)) continue;
         }
       }
       const row = el("div", "rt-act");
@@ -4374,7 +4413,7 @@ function routingPage(part) {
       // in again, here where the card says so. Answered since, the
       // refusals are the day's past, not what it needs now (adorable_piglet
       // on Discord: "2 需要重新登录" on an account the editor showed in use)
-      const signIn = w.kind === "account" && a.authAt > a.last;
+      const signIn = needsSignIn(a);
       const fails = Object.entries(a.fails).map(([k, v]) => `${v} ${k === "auth" && a.authAt && !signIn ? t("sign-in refused (answered since)") : failWord(k)}`);
       tally.append(
         el("span", "", t("tried {n}", { n: a.tried })),
@@ -4382,7 +4421,14 @@ function routingPage(part) {
         ...(fails.length ? [el("span", "bad", fails.join(", "))] : []),
         ...(a.last ? [el("span", "", t("last answered {time}", { time: clock(a.last) }))] : []));
       const stEl = el("div", "st " + cls, st);
+      // a subscription account's windows each, with when they reset, as
+      // the Usage page read them (#1833): the figure is the one window
+      // routing went by, the others on hover and on the Usage page. Live
+      // only: a kept day's requests were weighed by readings long gone.
+      const ws = day ? [] : [...winsOf(w).map((text) => ({ text })), ...remoteWinsOf(w)];
+      const figure = !!st && (resting || w.known || w.unlisted || w.noURL);
       if (resting && restTip(a.rest)) stEl.title = restTip(a.rest);
+      else if (figure && ws.length) stEl.title = ws.map((x) => x.text).join("\n");
       row.append(name, stEl);
       if (parts.length) {
         const r0 = parts[0][1].rest;
@@ -4390,25 +4436,21 @@ function routingPage(part) {
         if (restTip(r0)) part.title = restTip(r0);
         row.append(part);
       }
-      // a subscription account's windows each, with when they reset, as
-      // the Usage page read them (#1833): the figure above is the one
-      // window routing went by. Live only: a kept day's requests were
-      // weighed by readings long gone.
-      const ws = day ? [] : [...winsOf(w).map((text) => ({ text })), ...remoteWinsOf(w)];
-      if (ws.length) {
+      // with no figure of its own (a remote's row, an account not read
+      // yet), its windows are its one line of what is left, the rest of
+      // the line on hover
+      if (ws.length && !figure) {
         const line = el("div", "wins");
         line.append(...ws.map((x) => { const e = el("span", "", x.text); if (x.title) e.title = x.title; return e; }));
+        if (ws.length > 1) line.title = ws.map((x) => x.text).join("\n");
         row.append(line);
       }
       row.append(tally);
-      // the models it answered, on a line of their own, not wrapped in
-      // among the numbers; a provider's one model is already its name
+      // the models it answered on hover, with its id: a card says its name,
+      // what is left and how it fares (ferock4669, iyou00 on Discord); a
+      // provider's one model is already its name
       const mdls = [...a.models].filter((m) => !(w.kind === "provider" && m === w.model));
-      if (mdls.length) {
-        const ms = el("div", "mdls");
-        ms.append(...mdls.map((m) => el("code", "mdl", m)));
-        row.append(ms);
-      }
+      const remoteBad = ws.some((x) => x.title);
       const lifts = resting ? (a.rest.key ? [a.rest] : []) : parts.map(([, x]) => x.rest).filter((x) => x.key);
       if (lifts.length) {
         // any rest can be lifted by hand (#1869): a quota, a backoff, a
@@ -4444,10 +4486,33 @@ function routingPage(part) {
         bar.append(bi);
         row.append(bar);
       }
-      row.title = w.id;
-      put(row);
+      row.title = w.id + (mdls.length ? "\n" + mdls.join(", ") : "");
+      put(row, false, opened || signIn || resting || parts.length > 0 || remoteBad || (!a.ok && Object.keys(a.fails).length > 0));
     }
-    patch(acts, out);
+    // a long list shows its first ACTS_SHOWN rows and every one kept in
+    // sight, with its provider's heading; the rest behind Show N more.
+    // A few more alone aren't folded: the button would take their room
+    const hide = new Set(), seen = new Set();
+    let shown = 0, hidden = 0;
+    for (const b of out) {
+      const m = meta.get(b);
+      if (m.keep) seen.add(m.prov);
+      else if (shown < ACTS_SHOWN) { shown += m.n; seen.add(m.prov); } else hide.add(b);
+    }
+    // a provider's heading, in one block with its first row, goes with
+    // the rows of it shown
+    for (const b of out) if (hide.has(b) && seen.has(meta.get(b).prov) && b.querySelector(":scope > .rt-prov")) hide.delete(b);
+    for (const b of hide) hidden += meta.get(b).n;
+    if (hidden <= 2) hide.clear();
+    // written only when changed: a redraw with nothing new writes nothing
+    const unhide = (e, h) => { if (e.hidden !== h) e.hidden = h; };
+    unhide(actMore, !hide.size);
+    setText(actMore, actsAll ? t("Show fewer") : t("Show {n} more", { n: hidden }));
+    setAttr(actMore, "aria-expanded", String(actsAll));
+    setText(actUsage, t("View usage"));
+    unhide(actUsage, !list.length);
+    unhide(actFoot, actMore.hidden && actUsage.hidden);
+    patch(acts, actsAll ? out : out.filter((b) => !hide.has(b)));
   }
 
   // signInAgain signs the account of seat w in again, in its provider's
@@ -4501,13 +4566,8 @@ function routingPage(part) {
       el("span", "ok", t("answered {n}", { n: sum((a) => a.ok) })),
       ...(bad.length ? [el("span", "bad", bad.join(", "))] : []),
       ...(last ? [el("span", "", t("last answered {time}", { time: clock(last) }))] : []));
+    // the models they answered are each one's, opened
     const kids = [name, el("div", "st" + (resting === ks.length ? " rest" : ""), st.join(" · ")), tally];
-    const mdls = [...new Set(ks.flatMap((a) => [...a.models]))];
-    if (mdls.length) {
-      const ms = el("div", "mdls");
-      ms.append(...mdls.map((m) => el("code", "mdl", m)));
-      kids.push(ms);
-    }
     // drawn again only when what it says changes
     if (kids.length !== row.children.length || kids.some((k, i) => !k.isEqualNode(row.children[i]))) row.replaceChildren(...kids);
     return row;

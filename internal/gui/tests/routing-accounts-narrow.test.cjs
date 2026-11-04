@@ -6,7 +6,8 @@
 // across them, which left a page of many providers of one key each one to a
 // line still. Under the requests they flow in columns now, each provider's
 // heading over its own; beside the requests (1150px and wider) the column
-// still holds one.
+// still holds one. Its "Show N more" is opened first, so every provider
+// is drawn.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -65,6 +66,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       t.after(() => browser.close());
       await page.goto("http://magpie.test/?view=routing");
       await page.locator(".rt-act", { hasText: "dan@example.com" }).waitFor();
+      // a long list shows its first rows, the rest behind "Show N more"
+      // at its foot (ferock4669 on Discord): opened, every provider here
+      await page.locator(".rt-acts-foot button.rt-acts-more").click();
+      await page.locator(".rt-acts .rt-prov", { hasText: "Baichuan" }).waitFor();
 
       // the account rows' boxes: how many share the first one's line
       const rows = () => page.locator(".rt-acts .rt-act:not(.rt-keys)").evaluateAll((es) => es.map((e) => {

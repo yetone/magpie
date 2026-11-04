@@ -95,8 +95,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             page.on("pageerror", (e) => errors.push(e.message));
             await page.route("**/*", serve(lang, [acct], asks, held));
             await page.goto("http://magpie.test/?view=routing");
-            const act = page.locator(".rt-act", { hasText: "work@example.com" }).first();
-            await act.locator(".wins span").filter({ hasText: w.before }).waitFor();
+            const tip = (want) => page.waitForFunction((want) => [...document.querySelectorAll(".rt-act")].some((e) => e.textContent.includes("work@example.com") && (e.querySelector(".st")?.title || "").includes(want)), want);
+            await tip(w.before);
             const b = page.locator("#rtReadAllowances");
             await b.waitFor({ state: "visible" });
             assert.equal(await b.getAttribute("title"), w.title);
@@ -114,7 +114,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             // a second click while it turns asks nothing more
             await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
             release();
-            await act.locator(".wins span").filter({ hasText: w.after }).waitFor();
+            await tip(w.after);
             await page.waitForFunction(() => !document.querySelector("#rtReadAllowances").classList.contains("busy"));
             assert.equal(await page.locator("#view-routing").evaluate((v) => v.scrollTop), top, "the click moved the page");
             // and nothing reads again by itself
