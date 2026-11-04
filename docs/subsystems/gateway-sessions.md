@@ -585,6 +585,10 @@ on Usage and Sessions both (`codexRolloutOf`, `codexCheckpointsOf` in
 are the head of the fork only: its first turn the parent never had (a
 `turn_id` of its own) ends them, so a call of the fork's own is counted
 even when its numbers are those of one the parent made after the fork.
+A `rollout-<n>` turn id is not a turn of the fork's own: codex-rs names
+a turn that has no id of its own that way (its canonicalizer for older
+rollouts, its thread-history builder), and a copied head can hold one
+the parent doesn't (`ownTurn`).
 The parent is
 looked for in the same Codex home, by the UUIDv7 day of its id, then
 every day, then `archived_sessions`; one not found leaves the fork read

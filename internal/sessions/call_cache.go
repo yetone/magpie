@@ -64,7 +64,7 @@ const callCacheVersion = "calls-v15"
 // parent's (codex_fork.go, zcDB.copied).
 // codex 2, zcode 2: only the copies are; a fork's own calls are its own
 // (zcode 1 left out every call of a session holding one copy).
-var callParseVersions = map[string]int{"cindy": 1, "codex": 2, "zcode": 2}
+var callParseVersions = map[string]int{"cindy": 1, "codex": 3, "zcode": 2}
 
 // CallCacheVersion is callCacheVersion and callParseVersions, for a cache
 // of what is made of the calls (usage's requests-v1.bin and heatmap): a

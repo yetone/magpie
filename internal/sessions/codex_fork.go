@@ -49,8 +49,17 @@ func (s *codexUsageState) forkedFrom(path, parent string) {
 	}
 }
 
-// ownTurn ends the copies at a turn of the fork's own.
+// ownTurn ends the copies at a turn of the fork's own. A turn id of
+// "rollout-<n>" is not one: codex-rs gives that name to a turn a rollout
+// line belongs to when it has no id of its own (the rollout canonicalizer's
+// implicit turns, the thread-history builder), where a parent's own ids are
+// uuids. A fork's copied head can hold such a marker the parent's file
+// doesn't, and ending the copies there booked every copied checkpoint after
+// it as the fork's call (#5090).
 func (s *codexUsageState) ownTurn(turn string) {
+	if strings.HasPrefix(turn, "rollout-") {
+		return
+	}
 	if turn != "" && s.Copied != nil && s.CopiedTurns != nil && !s.CopiedTurns[turn] {
 		s.Copied, s.CopiedTurns = nil, nil
 	}

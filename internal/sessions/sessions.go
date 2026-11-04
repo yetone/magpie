@@ -1123,7 +1123,7 @@ const cacheVersion = 29
 //
 // codex 2: only a fork's copies are; its own calls after them are its own,
 // whatever their numbers.
-var parseVersions = map[string]int{"codex": 2, "zcode": 1}
+var parseVersions = map[string]int{"codex": 3, "zcode": 1}
 
 type cacheFile struct {
 	Version int    `json:"version"`
