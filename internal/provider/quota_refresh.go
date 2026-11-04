@@ -153,7 +153,7 @@ func refreshCards(ctx context.Context, provider, user string) (subs, plans, bala
 		out := fetchSubscriptionUsage(ctx)
 		now := time.Now()
 		noteDailyCredits(out, now)
-		noteQuotaHistory(out, now)
+		noteCardHistory(out, now)
 		c := &subscriptionUsageCache
 		c.Lock()
 		c.data = cacheCards(c.data, out, seq, true)

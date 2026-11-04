@@ -331,7 +331,7 @@ func SubscriptionUsage(ctx context.Context) []SubscriptionQuota {
 		go func() {
 			out := fetchSubscriptionUsage(readCtx)
 			noteDailyCredits(out, time.Now())
-			noteQuotaHistory(out, time.Now())
+			noteCardHistory(out, time.Now())
 			c.Lock()
 			c.data = cacheCards(c.data, out, seq, false)
 			c.at, c.pending = time.Now(), nil

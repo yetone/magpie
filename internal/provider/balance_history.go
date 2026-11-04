@@ -304,3 +304,32 @@ func balanceTrend(pts []BalancePoint, now time.Time) *BalanceTrend {
 }
 
 func round4(v float64) float64 { return math.Round(v*1e4) / 1e4 }
+
+// noteCardHistory keeps what an account's cards among qs tell over time:
+// each window's share (noteQuotaHistory) and, for a card that tells a
+// balance and no window, its balance, with the trend set on that card as
+// KeyBalances sets it on a key's. A plugin's account told by a balance
+// alone (Raccoon's credits when its bills don't add up to the balance)
+// had no curve on the Usage page, where every other card has one
+// (corddis_114 on Discord). A card with windows keeps its windows' curve
+// alone.
+func noteCardHistory(qs []SubscriptionQuota, now time.Time) {
+	noteQuotaHistory(qs, now)
+	var idx []int
+	for i, q := range qs {
+		if q.Balance != "" && len(q.Windows) == 0 && len(q.BalanceParts) == 0 {
+			idx = append(idx, i)
+		}
+	}
+	if len(idx) == 0 {
+		return
+	}
+	sub := make([]SubscriptionQuota, len(idx))
+	for j, i := range idx {
+		sub[j] = qs[i]
+	}
+	noteBalanceHistory(sub, now)
+	for j, i := range idx {
+		qs[i].BalanceTrend = sub[j].BalanceTrend
+	}
+}

@@ -5,7 +5,8 @@
 // "Runs out in 3d at this pace" in the curve's head, with what is spent a
 // day in its legend. A click on the plot makes it larger, another back, and
 // neither moves the page; Enter does the same. A key of one reading has no
-// curve, and the allowances' "Off" takes it away too.
+// curve, and the allowances' "Off" takes it away too. A plugin account's
+// balance alone (Raccoon's credits) has the same curve.
 // English and Chinese, light and dark; no backend, the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -25,6 +26,10 @@ function fixtures(now) {
       balanceTrend: { points, fitFrom: iso(now - 48 * H), fitStart: 50, fitNow: 30, perDay: 10, runsOut: iso(now + 72 * H) } },
     { provider: "moonshot", name: "Moonshot", icon: "moonshot", windows: [], balance: "$12.00", readAt: iso(now),
       balanceTrend: { points: [{ at: iso(now), amount: 12 }] } },
+    // a plugin's account told by its balance alone, as Raccoon's is when its
+    // bills don't add up to it (corddis_114 on Discord): the same curve
+    { provider: "raccoon", name: "Raccoon", icon: "raccoon", user: "138****0000", plan: "Free", windows: [], balance: "5900 credits", readAt: iso(now),
+      balanceTrend: { points: [[48, 6122], [24, 6000], [0, 5900]].map(([h, v]) => ({ at: iso(now - h * H), amount: v })) } },
   ];
 }
 
@@ -98,6 +103,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.ok(x1 > 50 && x1 < 150 && y1 < 10, `they start at the top-up: ${x1},${y1}`);
         assert.ok(await page.locator("#quotaHead #quotaTrend").isVisible(), "the range pick is there for balances alone too");
         assert.equal(await page.locator(".subscription-card", { hasText: "Moonshot" }).locator(".balance-curve").count(), 0, "one reading, no curve");
+        const wallet = page.locator(".subscription-card", { hasText: "Raccoon" }).locator(".balance-curve");
+        assert.equal(await wallet.count(), 1, "an account's balance alone has its curve too");
+        assert.equal(await wallet.locator("path.qc-line").count(), 1);
         assert.equal(await page.locator(".quota-curve select, .quota-curve button").count(), 0, "no control on the card");
         const left = await curve.evaluate((e) => [...e.querySelectorAll("*")].filter((x) => parseFloat(getComputedStyle(x).borderLeftWidth) > 0).length);
         assert.equal(left, 0, "no left borders");
