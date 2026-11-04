@@ -452,7 +452,8 @@ func untilShort(d time.Duration) string {
 // addAccount signs in to one more subscription in the browser, the way the
 // window's "Add account" does.
 func addAccount(agentID string) error {
-	if risk := map[string]string{"antigravity": provider.AntigravityRisk, "claude": provider.ClaudeRisk}[agentID]; risk != "" {
+	if risk := map[string]string{"antigravity": provider.AntigravityRisk, "claude": provider.ClaudeRisk,
+		"workbuddy": provider.WorkBuddyRisk, "workbuddy-ai": provider.WorkBuddyRisk}[agentID]; risk != "" {
 		fmt.Println(bold.Render("!"), risk)
 		fmt.Print("Sign in anyway? [y/N] ")
 		var yes string

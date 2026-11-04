@@ -111,6 +111,10 @@ const AntigravityRisk = "Google may suspend an Antigravity account it sees used 
 // window does.
 const ClaudeRisk = "Anthropic may suspend or ban a Claude account it sees used outside its own apps. magpie sends requests through Claude Code, but Anthropic may still act on them; you use it at your own risk. Use an account you can afford to lose."
 
+// WorkBuddyRisk is what magpie says before a WorkBuddy or WorkBuddy AI
+// account is added, as the window does (WORKBUDDY_RISK in app.js).
+const WorkBuddyRisk = "Tencent may suspend a WorkBuddy account it sees used outside WorkBuddy. Accounts of the international build, WorkBuddy AI, have been banned after use through other agents (DeepSeek Harness among them), and changing an agent's prompt doesn't prevent it. Use an account you can afford to lose."
+
 // geminiCLIVersion is the Gemini CLI magpie says it is.
 const geminiCLIVersion = "0.61.0"
 
