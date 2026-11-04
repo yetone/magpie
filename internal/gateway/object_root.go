@@ -21,7 +21,11 @@ import (
 // Schema of 'type: "object"', got 'type: "None"'"). xAI's own API gets
 // such a tool folded to an object root (provider.ObjectRoot) from the
 // start; any other upstream that refuses one is asked once more with them
-// folded, and so from then on for that model.
+// folded, and so from then on for that model. An Anthropic Messages body is
+// folded from the start for every upstream, as one translated to Messages
+// is (objectSchema): a client that speaks Messages itself (ZCode, Claude
+// Code) had its tools sent as they came, and Claude behind Zed's
+// subscription refused every request whose tools had a oneOf at a root.
 
 // rootUnionRefusal is an upstream refusing a tool's parameters for a
 // union at their root.
@@ -33,13 +37,14 @@ func rootUnionRefused(model string) string { return "root union\x00" + model }
 // foldsRoots reports whether p's requests for model go with their tools'
 // parameters folded to an object root.
 func (s *Server) foldsRoots(p provider.Provider, model string, proto provider.Protocol) bool {
-	return p.Host() == "api.x.ai" || !s.fits(p.ID, rootUnionRefused(model), proto)
+	return proto == provider.Anthropic || p.Host() == "api.x.ai" || !s.fits(p.ID, rootUnionRefused(model), proto)
 }
 
-// objectRootsBody is a Chat or Responses body whose function tools'
-// parameters have an object root, and whether any was changed.
+// objectRootsBody is a Chat, Responses or Messages body whose function
+// tools' parameters (a Messages tool's input_schema) have an object root,
+// and whether any was changed.
 func objectRootsBody(proto provider.Protocol, body []byte) ([]byte, bool) {
-	if (proto != provider.Chat && proto != provider.Responses) || !bytes.Contains(body, []byte(`Of"`)) {
+	if (proto != provider.Chat && proto != provider.Responses && proto != provider.Anthropic) || !bytes.Contains(body, []byte(`Of"`)) {
 		return body, false
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))
@@ -71,6 +76,14 @@ func foldTools(proto provider.Protocol, tools []any) bool {
 		if proto == provider.Responses && tm["type"] == "namespace" {
 			nested, _ := tm["tools"].([]any)
 			if foldTools(proto, nested) {
+				changed = true
+			}
+			continue
+		}
+		if proto == provider.Anthropic {
+			// a client tool; a server tool (web_search_…) has a type and
+			// no input_schema
+			if ps, _ := tm["input_schema"].(map[string]any); ps != nil && provider.ObjectRoot(ps) {
 				changed = true
 			}
 			continue
