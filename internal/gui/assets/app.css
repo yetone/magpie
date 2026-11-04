@@ -2368,6 +2368,9 @@ body .foot .status.lift { white-space: normal; overflow-wrap: anywhere; text-ove
 .pop li.cur .check { display: inline-flex; }
 .pop li.group { height: 22px; padding: 6px 8px 0; font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); pointer-events: none; }
 .pop li.group:not(:first-child) { margin-top: 2px; }
+/* the agent's own sign-in, after a group of its own models' name: quiet, in the sentence's own case */
+.pop li.group.own { gap: 4px; white-space: nowrap; }
+.pop li.group .own-sign { min-width: 0; overflow: hidden; text-overflow: ellipsis; text-transform: none; letter-spacing: 0; font-weight: 500; }
 .pop li.reset { margin-bottom: 3px; }
 .pop li.reset .v { color: var(--fg); }
 .pop li.reset .ic { opacity: .75; }

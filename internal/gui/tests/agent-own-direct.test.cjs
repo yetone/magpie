@@ -8,6 +8,10 @@
 // pick is asked first, Cancel leaving Pi connected, as Claude Code's own
 // models are (#726). The options are what /api/state sends since the fix:
 // an own model carries direct. Every language, wide and narrow.
+// Its section's heading was OPENCODE GO alone, the name of the user's own
+// OpenCode Go provider in magpie, read as magpie's section that ignored
+// the one model picked there (maxleebeta); it now says it is Pi's own
+// sign-in, below magpie's OpenCode Go.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -21,6 +25,7 @@ const options = [
   { value: "opencode-go/kimi-k2.6", note: "Kimi K2.6", group: "OpenCode Go", direct: "OpenCode Go" },
   { value: DS, label: "DeepSeek V4.1 Flash", ref: "deepseek/deepseek-v4.1-flash", group: "DeepSeek", note: "DeepSeek · via magpie" },
   { value: "magpie/deepseek/deepseek-v4.1-pro", label: "DeepSeek V4.1 Pro", ref: "deepseek/deepseek-v4.1-pro", group: "DeepSeek", note: "DeepSeek · via magpie" },
+  { value: "magpie/opencode-go/minimax-m2.7", label: "MiniMax M2.7", ref: "minimax/minimax-m2.7", group: "OpenCode Go", note: "OpenCode Go · via magpie" },
 ];
 
 function server(lang, posts) {
@@ -55,7 +60,7 @@ function server(lang, posts) {
 }
 
 const row = '.row.agent[data-id="pi"]';
-const KEYS = ["direct, not via magpie", "via magpie", "Take {agent} off magpie?", "Cancel", "Use {model}",
+const KEYS = ["{agent}'s own sign-in", "direct, not via magpie", "via magpie", "Take {agent} off magpie?", "Cancel", "Use {model}",
   "{model} is {agent}'s own model: {agent} asks {vendor} for it itself, with its own sign-in, not through magpie. Picking it takes {agent} off magpie, and it starts on {model}."];
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -91,6 +96,25 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const order = await page.locator("#pop #list li").allTextContents();
         const at = (s) => order.findIndex((x) => x.includes(s));
         assert.ok(at("DeepSeek V4.1 Pro") >= 0 && at("DeepSeek V4.1 Pro") < at("GLM-5.1"), `magpie's first: ${JSON.stringify(order)}`);
+
+        // magpie's OpenCode Go section is OpenCode Go; Pi's own says whose
+        // sign-in it is, in the page's language, quiet and on one line
+        const heads = (await page.locator("#pop #list li.group").allTextContents()).map((s) => s.trim());
+        const own = "OpenCode Go · " + await tr("{agent}'s own sign-in", { agent: "Pi" });
+        assert.deepEqual(heads.filter((h) => h.startsWith("OpenCode Go")), ["OpenCode Go", own], JSON.stringify(heads));
+        const ownHead = order.findIndex((x) => x.trim() === own);
+        assert.ok(at("MiniMax M2.7") < ownHead && ownHead < at("GLM-5.1"), `Pi's own heading over its own models: ${JSON.stringify(order)}`);
+        const head = page.locator("#pop #list li.group.own");
+        const look = await head.evaluate((li) => {
+          const s = li.querySelector(".own-sign"), cs = getComputedStyle(s), r = li.getBoundingClientRect(), list = li.closest("#pop").getBoundingClientRect();
+          return { transform: cs.textTransform, height: r.height, inside: r.right <= list.right + 0.5, border: getComputedStyle(li).borderLeftWidth, image: getComputedStyle(li).backgroundImage };
+        });
+        assert.equal(look.transform, "none", "the words read as written");
+        const plain = await page.locator("#pop #list li.group:not(.own)", { hasText: "OpenCode Go" }).evaluate((li) => li.getBoundingClientRect().height);
+        assert.equal(look.height, plain, "one line, as tall as magpie's OpenCode Go heading");
+        assert.ok(look.inside, `inside the picker at ${width}px`);
+        assert.equal(look.border, "0px", "no stripe");
+        assert.equal(look.image, "none", "no gradient");
 
         // the OpenCode Go model is asked first; Cancel leaves Pi connected
         await item("GLM-5.1").click();
