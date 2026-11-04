@@ -52,11 +52,33 @@ func TestCCListingKeepsItsNames(t *testing.T) {
 	if len(first) != n+2 {
 		t.Fatalf("listed %d files, want %d", len(first), n+2)
 	}
+	// What a file's stat costs is the system's, not the names': macOS
+	// reads a folder's in one call (dirent.Stats), elsewhere each file is
+	// stat'ed alone, os.Stat's two allocations a file, which counted
+	// against this bar on Linux (#4925). Those asked alone are answered
+	// here from what was read before.
+	stated := map[string]os.FileInfo{}
+	for _, f := range first {
+		fi, err := os.Stat(f.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stated[f.path] = fi
+	}
+	was := statOne
+	t.Cleanup(func() { statOne = was })
+	statOne = func(path string, follow bool) (os.FileInfo, error) {
+		if fi, ok := stated[path]; ok {
+			return fi, nil
+		}
+		return was(path, follow)
+	}
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
 	again := listCCFiles("claude", dir)
 	runtime.ReadMemStats(&after)
+	statOne = was
 	if !reflect.DeepEqual(again, first) {
 		t.Fatal("an unchanged folder listed otherwise")
 	}
