@@ -2690,3 +2690,15 @@ hasn't.
 ```sh
 node --test internal/gui/tests/nav-timeout.test.cjs
 ```
+
+## Logos that show on both grounds
+
+`icon-one-tone.test.cjs` draws every logo that `icon()` shows as a picture
+(`*-color.svg` and the PNG set) on the dark and the light card, and measures
+from a screenshot how much of each stands apart from the ground. It also
+opens the Plugins page's Installed row for Open Design, whose picture
+(`fixtures/opendesign-favicon.svg`, the real open-design.ai favicon) is one
+tone, #26251E. It checks that the row draws that picture as a mask in the
+text colour, and that it shows in both themes, all five languages, at 980px
+and 420px, in Chromium and WebKit (chen2652). `ARTIFACT_DIR` keeps the row's
+screenshots.

@@ -347,6 +347,30 @@ function maskSpan(src, failed) {
   if (failed) load.then((ok) => ok || failed());
   return m;
 }
+// A picture in one near-black or near-white tone (Open Design's #26251E,
+// chen2652) can't be seen on the ground of that tone: once it is in, it is
+// drawn as a mono logo is, a mask in the text colour. Judged once a picture.
+const oneTone = new Map();
+function toneCheck(img) {
+  const swap = () => oneTone.get(img.src) && img.parentNode && img.replaceWith(maskSpan(img.src));
+  if (oneTone.has(img.src)) return swap();
+  img.addEventListener("load", () => {
+    if (!oneTone.has(img.src)) {
+      let one = false;
+      try {
+        const x = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+        x.canvas.width = x.canvas.height = 24;
+        x.drawImage(img, 0, 0, 24, 24);
+        const d = x.getImageData(0, 0, 24, 24).data, lo = [255, 255, 255], hi = [0, 0, 0];
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i + 3] >= 200 && ++n) for (let k = 0; k < 3; k++) lo[k] = Math.min(lo[k], d[i + k]), hi[k] = Math.max(hi[k], d[i + k]);
+        one = n > 0 && hi.every((v, k) => v - lo[k] <= 24) && (Math.max(...hi) <= 72 || Math.min(...lo) >= 224);
+      } catch {}
+      oneTone.set(img.src, one);
+    }
+    swap();
+  }, { once: true });
+}
 const pngIcons = new Set(["crush", "zcode", "alma", "hanako", "cindy", "lody", "typesafe", "atomcode", "snow", "mlx-serve", "mothx", "zoo-code", "kimi-code-desktop"]);
 
 // lazy: a picture in a long list (Plugins' rows) is asked for near the
@@ -370,6 +394,7 @@ function icon(name, lazy) {
     img.draggable = false;
     img.onerror = () => e.replaceWith(icon("generic"));
     e.append(img);
+    toneCheck(img);
     return e;
   }
   // a URL: the server keeps pictures (file:…), never the page
@@ -382,6 +407,7 @@ function icon(name, lazy) {
       img.alt = "";
       img.draggable = false;
       e.append(img);
+      toneCheck(img);
     } else {
       // a mask that fails to load draws nothing, and says nothing
       e.append(maskSpan(`icons/${name}.svg`, () => {
