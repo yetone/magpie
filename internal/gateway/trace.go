@@ -851,6 +851,11 @@ func (t *trace) update(r *Route, f func(r *Route)) {
 			t.totals.Errors++
 		}
 		t.turns.end(r, turnFinal(r), time.Now())
+		// read: the scan's context is its request's, which keeps the
+		// request on it (inflight's unrouted watch) and so its body; a
+		// socket turn's is the whole conversation, in memory, and 60
+		// routes are kept
+		r.tools = nil
 		if keepsRoutes() {
 			c := *r
 			c.Order = append([]Weighed{}, r.Order...) // [] for none: the GUI reads it as a list
