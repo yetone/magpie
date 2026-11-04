@@ -92,6 +92,9 @@ type shim struct {
 
 	exited chan struct{}
 	exit   error
+	// readDone closes as read ends; nread counts the bytes it has read
+	readDone chan struct{}
+	nread    atomic.Int64
 
 	// images is where a message's images are written for their paths to
 	// be pasted, made with the first; images counts them
@@ -143,7 +146,7 @@ func Run(args []string) error {
 		return fmt.Errorf("Claude Code's interactive mode didn't run: %s", why)
 	}
 	args = interactiveArgs(pargs[len(wslArgs(wsl)):])
-	s := &shim{out: os.Stdout, changed: make(chan struct{}, 1), rowsCh: make(chan struct{}, 1), exited: make(chan struct{}), wsl: wsl, listed: mcpListed(args)}
+	s := &shim{out: os.Stdout, changed: make(chan struct{}, 1), rowsCh: make(chan struct{}, 1), exited: make(chan struct{}), readDone: make(chan struct{}), wsl: wsl, listed: mcpListed(args)}
 	resume := ""
 	for i, a := range args {
 		if a == "--resume" && i+1 < len(args) {
@@ -274,13 +277,47 @@ func childEnv(extra ...string) []string {
 	return append(append(env, extra...), "TERM=xterm-256color")
 }
 
+// ended records how Claude Code ended, err, once read has what it drew
+// before it ended: its exit can be seen before the bytes it wrote just
+// before are read, and the error said then carried an empty screen, not
+// the reason it gave (#5283, a loaded Linux CI runner). A terminal that
+// ends with its last writer (Unix) is read to its end; a pseudo console
+// that stays open (Windows, open) is read until it has gone quiet after
+// its first bytes. Two seconds at most, for a terminal a child of Claude
+// Code keeps open.
+func (s *shim) ended(err error, open bool) {
+	if s.readDone != nil {
+		limit := time.After(2 * time.Second)
+		for last := int64(0); ; {
+			var tick <-chan time.Time
+			if open {
+				tick = time.After(250 * time.Millisecond)
+			}
+			select {
+			case <-s.readDone:
+			case <-limit:
+			case <-tick:
+				if n := s.nread.Load(); n == 0 || n != last {
+					last = n
+					continue
+				}
+			}
+			break
+		}
+	}
+	s.exit = err
+	close(s.exited)
+}
+
 // read keeps the tail of what Claude Code draws, and answers what it asks
 // of the terminal: where the cursor is, and what terminal it is.
 func (s *shim) read() {
+	defer close(s.readDone)
 	buf := make([]byte, 64<<10)
 	for {
 		n, err := s.pty.Read(buf)
 		if n > 0 {
+			s.nread.Add(int64(n))
 			d := buf[:n]
 			if bytes.Contains(d, []byte("\x1b[6n")) {
 				_, _ = io.WriteString(s.pty, "\x1b[1;1R")

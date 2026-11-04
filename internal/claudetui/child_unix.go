@@ -44,9 +44,7 @@ func (s *shim) start(path string, args []string) error {
 	tty.Close()
 	s.pty, s.cmd = m, cmd
 	go func() {
-		err := cmd.Wait()
-		s.exit = err
-		close(s.exited)
+		s.ended(cmd.Wait(), false)
 	}()
 	go s.read()
 	return nil

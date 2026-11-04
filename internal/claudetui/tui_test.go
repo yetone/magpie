@@ -1038,3 +1038,39 @@ func TestShownWaitGrowsWithThePaste(t *testing.T) {
 		t.Fatalf("a 3MB paste waits %v", got)
 	}
 }
+
+// Claude Code's exit is seen only once what it wrote before it is read:
+// seen first, the reason it gave was left out of the error, which had an
+// empty screen (#5283, ubuntu CI). Here the reader is given the last
+// words late, as a loaded machine schedules it, on a terminal that ends
+// (Unix) and on one that stays open (Windows' pseudo console).
+func TestShimEndedAfterLastWordsRead(t *testing.T) {
+	for _, closes := range []bool{true, false} {
+		t.Run(fmt.Sprintf("terminal ends %v", closes), func(t *testing.T) {
+			r, w := io.Pipe()
+			t.Cleanup(func() { _ = w.Close() })
+			s := &shim{changed: make(chan struct{}, 1), exited: make(chan struct{}), readDone: make(chan struct{}),
+				pty: struct {
+					io.Reader
+					io.Writer
+				}{r, io.Discard}}
+			go s.read()
+			go s.ended(fmt.Errorf("exit status 3"), !closes)
+			go func() {
+				time.Sleep(300 * time.Millisecond)
+				_, _ = io.WriteString(w, "something went wrong\r\n")
+				if closes {
+					_ = w.Close()
+				}
+			}()
+			select {
+			case <-s.exited:
+			case <-time.After(10 * time.Second):
+				t.Fatal("the exit was never recorded")
+			}
+			if got := s.lastScreen(); !strings.Contains(got, "something went wrong") {
+				t.Fatalf("the exit was recorded with the screen %q", got)
+			}
+		})
+	}
+}

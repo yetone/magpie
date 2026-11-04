@@ -77,12 +77,13 @@ func (s *shim) start(path string, args []string) error {
 	go func() {
 		_, _ = windows.WaitForSingleObject(h, windows.INFINITE)
 		var code uint32
+		var exit error
 		if err := windows.GetExitCodeProcess(h, &code); err != nil {
-			s.exit = err
+			exit = err
 		} else if code != 0 {
-			s.exit = fmt.Errorf("exit status %d", code)
+			exit = fmt.Errorf("exit status %d", code)
 		}
-		close(s.exited)
+		s.ended(exit, true)
 	}()
 	go s.read()
 	return nil
