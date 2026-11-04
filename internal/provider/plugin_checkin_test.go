@@ -773,3 +773,45 @@ func TestPluginCheckinAsksAgainAtUntil(t *testing.T) {
 		})
 	}
 }
+
+// The provider editor's account rows have each account's check-in as its
+// Usage card does, with the key its own Check in now presses by
+// (xwoffice_91592): a press of one account's asks that account alone.
+func TestLoginCheckinsPressOneAccount(t *testing.T) {
+	keys := []string{"ck-claim", "ck-done"}
+	presses := pluginCheckinSandbox(t, keys...)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	ps := pluginCheckinProviders()
+	if len(ps) != 1 || len(ps[0].accounts) != len(keys) {
+		t.Fatalf("the plugins that check in: %+v", ps)
+	}
+	for _, agent := range []string{PluginID("fakeco"), "plugin:fakeco"} {
+		m := map[string]SubscriptionQuota{}
+		for _, a := range ps[0].accounts {
+			m[a.User] = SubscriptionQuota{Plan: "Credits"}
+		}
+		got := LoginCheckins(agent, m)
+		for u, q := range got {
+			if !q.Checkins || q.CheckinBy != "plugin:fakeco" || q.CheckinKey == "" || q.Plan != "Credits" {
+				t.Fatalf("%s: %s: %+v", agent, u, q)
+			}
+		}
+		if m[ps[0].accounts[0].User].Checkins {
+			t.Fatal("LoginCheckins changed the map it was given")
+		}
+	}
+	a := ps[0].accounts[1]
+	q := LoginCheckins(PluginID("fakeco"), map[string]SubscriptionQuota{a.User: {}})[a.User]
+	rs := CheckInAccount(ctx, q.CheckinBy, q.CheckinKey)
+	if len(rs) != 1 || rs[0].Outcome != CheckinDone && rs[0].Outcome != CheckinClaimed {
+		t.Fatalf("the press: %+v", rs)
+	}
+	if p := pressed(t, presses); len(p) != 1 || p[0] != "ck-done" {
+		t.Fatalf("pressed %q", p)
+	}
+	// another provider's accounts are not marked
+	if q := LoginCheckins("codex", map[string]SubscriptionQuota{a.User: {}})[a.User]; q.Checkins || q.CheckinKey != "" {
+		t.Fatalf("codex: %+v", q)
+	}
+}

@@ -221,6 +221,9 @@ type SubscriptionQuota struct {
 	// CheckinOff is set on such an account the user left out of its
 	// vendor's check-in (settings.CheckinOff, #1902): it isn't checked in.
 	CheckinOff bool `json:"checkinOff,omitempty"`
+	// CheckinKey is such an account's entry in its vendor's check-in, the
+	// key Check in now presses it by (CheckInAccount).
+	CheckinKey string `json:"checkinKey,omitempty"`
 	// Kind is the card's kind as another magpie is told it (CachedCards):
 	// subscription, plan or balance; "" here.
 	Kind string `json:"kind,omitempty"`

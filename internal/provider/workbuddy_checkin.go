@@ -461,6 +461,33 @@ func WithCheckins(qs []SubscriptionQuota) []SubscriptionQuota {
 	return pluginCheckinMarks(qs)
 }
 
+// LoginCheckins is m, agent's accounts' readings by user (LoginUsage),
+// with each account's daily check-in as its Usage card has it
+// (WithCheckins), for the provider editor's account rows (xwoffice_91592).
+func LoginCheckins(agent string, m map[string]SubscriptionQuota) map[string]SubscriptionQuota {
+	if len(m) == 0 {
+		return m
+	}
+	card := loginProvider(Login{Agent: agent})
+	if pp, ok := pluginOfAgent(agent); ok {
+		card = PluginID(pp.ID)
+	}
+	users := make([]string, 0, len(m))
+	qs := make([]SubscriptionQuota, 0, len(m))
+	for u := range m {
+		users = append(users, u)
+		qs = append(qs, SubscriptionQuota{Provider: card, User: u})
+	}
+	qs = WithCheckins(qs)
+	out := make(map[string]SubscriptionQuota, len(m))
+	for i, u := range users {
+		q, c := m[u], qs[i]
+		q.Checkins, q.CheckinBy, q.Checkin, q.CheckinOff, q.CheckinKey = c.Checkins, c.CheckinBy, c.Checkin, c.CheckinOff, c.CheckinKey
+		out[u] = q
+	}
+	return out
+}
+
 func withCheckins(qs []SubscriptionQuota, accts []wbAccount, st map[string]WorkBuddyCheckin) []SubscriptionQuota {
 	var on []checkinCard
 	for _, a := range accts {
@@ -507,7 +534,7 @@ func markCheckins(qs []SubscriptionQuota, on []checkinCard, st map[string]WorkBu
 		if a == nil {
 			continue
 		}
-		out[i].Checkins, out[i].CheckinBy, out[i].CheckinOff = true, by, off[a.key]
+		out[i].Checkins, out[i].CheckinBy, out[i].CheckinOff, out[i].CheckinKey = true, by, off[a.key], a.key
 		if r, ok := st[a.key]; ok {
 			r.User, r.By = a.User, by
 			out[i].Checkin = &r

@@ -3048,6 +3048,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc-line > .quota-refresh { width: 14px; margin: 0 0 0 -5px; opacity: 1; }
 .acc .aq-w { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .acc .aq-until { white-space: nowrap; }
+/* an account's own Check in now, at its usage line's end (xwoffice_91592) */
+.acc .aq > .ci-acct { flex: none; margin: -2px 0 -2px auto; padding: 1px 7px; font-size: 10.5px; }
 .acc .aq-track { width: 54px; height: 4px; border-radius: 2px; background: var(--pill); overflow: hidden; }
 .acc .aq-track i { display: block; height: 100%; border-radius: inherit; background: var(--fg-2); }
 /* the account's usage cap: a tick across the meter where it stands */

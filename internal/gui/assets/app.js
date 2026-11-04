@@ -13116,17 +13116,14 @@ function renderAccounts(a, p) {
   if (p) list.dataset.provider = p.id, list.classList.toggle("weighted", (draft?.routing ?? (p.routing || "")) === "weight");
   // a Claude account refused or with no sign-in waits to sign in again
   const unusable = (l) => a.agent === "claude" && !!l.lapsed;
-  // one whose sign-in its vendor refused (a plugin's, #1363; Copilot's
-  // revoked token; #1793's token_revoked) keeps Sign in again and Remove
+  // refused by its vendor (#1363, #1793): Sign in again and Remove
   const signedOut = (l) => !unusable(l) && (sub?.plugin ? !!l.lapsed || SIGN_IN_GONE.test(quota?.[l.user]?.error || "") : (a.agent === "copilot" && !!l.lapsed) || SIGN_IN_GONE.test(l.lapsed || ""));
-  // a Copilot account on an enterprise's GHE.com is named login@host, and
-  // signs in again there
+  // GHE.com's Copilot is login@host, signed in again there
   const againSite = (l) => !sub?.plugin && a.agent === "copilot" && String(l.user).includes("@") ? String(l.user).split("@").pop() : undefined;
   const several = ls.filter((l) => !unusable(l) && ((l.active && !l.paused) || l.on)).length > 1;
   // each one's weight (provider.AccountWeights), for its share
   const isOn = (l) => !unusable(l) && !l.paused && (l.active || l.on), wOf = (l) => Math.max(p?.accountWeights?.[String(l.user).toLowerCase()] || 0, 1), weights = ls.filter(isOn).reduce((n, l) => n + wOf(l), 0);
-  // kept signed in to one of the user's choosing (#524), the first is the
-  // first in use in the order, which Make first sets without a sign-in
+  // kept signed in to one (#524): the first is the order's
   const kept = keptLogin(p);
   const firstUser = kept ? ls.find((l) => (l.active || l.on) && !l.paused && !l.lapsed)?.user : ls.find((l) => l.active)?.user;
   const makeFirst = (l) => {
@@ -13135,12 +13132,10 @@ function renderAccounts(a, p) {
     b.onclick = () => { b.classList.add("busy"); accountAction("provider/arrange", { id: p.id, accountOrder: [l.user, ...ls.filter((x) => x !== l).map((x) => x.user)] }, t("The gateway now uses {user} first", { user: l.user })); };
     return b;
   };
-  // the agent's account can be paused while another is on: the gateway
-  // passes over it, the agent staying signed in (#263)
+  // pausable while another is on (#263)
   const pausable = (a.agent === "claude" || a.agent === "codex") && ls.some((l) => !unusable(l) && !l.active && l.on);
   const quota = loginUsageOf(a.agent);
-  // the first, which magpie signed the agent out of while it was spent:
-  // it is signed back in once it has room (#408)
+  // signed out while spent, back once it has room (#408)
   const back = ls.find((l) => l.returns && !l.active);
   for (const l of ls) {
     const on = isOn(l);
@@ -13267,6 +13262,13 @@ function renderAccounts(a, p) {
     const aq = accountQuota(l.lapsed ? { [l.user]: { error: t(l.lapsed) } } : quota, l.user, capFor, p ? (m, w) => windowCapMeter(m, p, l.user, w) : null, a.agent);
     // its plan's end, under its line (danzi002)
     if (l.until) aq.append(Object.assign(planSpan({ until: l.until }), { className: "aq-until" }));
+    // Check in now (xwoffice_91592)
+    const ci = !l.lapsed && quota?.[l.user];
+    if (ci?.checkinKey && checkinDue(ci)) {
+      const s = el("span"), f = () => ciAcctFill(s, ci, a.agent, l.user);
+      aq.append(s);
+      window.ciAcctFill ? f() : import("./checkinnow.js").then(f, () => {});
+    }
     row.append(aq);
     row.classList.add("with-aq"); // not :has(.aq), which Safari 15.0 lacks (#220)
     if (p) row.append(...accountRestLines(p, l.user)); // maxleebeta on Discord
@@ -18057,12 +18059,7 @@ function checkinRow(q, first, subs) {
     }
   };
   row.append(auto);
-  // pressed now: shown while an account isn't in today and could be; a
-  // Qoder campaign can open later in the day, so its inactive too (#2696),
-  // and an answer magpie asks again, which may be the vendor's day before
-  // (#3326)
-  const later = /^(plugin:)?qoder(-cn)?$/.test(by);
-  const due = subs.filter((x) => x.checkins && !x.checkinOff && (x.checkinBy || "") === by && !(x.checkin?.day === today && x.checkin.outcome !== "failed" && !x.checkin.again && !(later && x.checkin.outcome === "inactive")));
+  const due = subs.filter((x) => (x.checkinBy || "") === by && checkinDue(x, today));
   if (due.length) {
     const now = el("button", "text ci-now", t("Check in now"));
     now.type = "button";
@@ -18083,6 +18080,13 @@ function checkinRow(q, first, subs) {
     row.append(now);
   }
   return row;
+}
+
+// checkinDue: not in today and could be; a Qoder campaign can open later
+// (#2696), an answer asked again may be the vendor's day before (#3326)
+function checkinDue(x, today = wbToday()) {
+  const later = /^(plugin:)?qoder(-cn)?$/.test(x.checkinBy || "");
+  return x.checkins && !x.checkinOff && !(x.checkin?.day === today && x.checkin.outcome !== "failed" && !x.checkin.again && !(later && x.checkin.outcome === "inactive"));
 }
 
 // checkinPressSaid: what a press came to, a count per kind (#3326)

@@ -42,6 +42,27 @@ window.ciNowFill = function (row, s, by) {
   row.hidden = false;
 };
 
+// ciAcctFill puts an account's own Check in now in slot, on its row in
+// the provider editor (xwoffice_91592): q is its reading, which carries
+// its check-in (checkinBy, checkinKey). The press is Settings' one,
+// said the same way, and the row's reading is asked again after.
+window.ciAcctFill = function (slot, q, agent, user) {
+  const b = el("button", "text ci-acct", t("Check in now"));
+  b.type = "button";
+  b.title = t("Checks one account in once now; the daily check-in's switches stay as they are");
+  b.onclick = (e) => {
+    e.stopPropagation();
+    ciNowSend({ key: q.checkinKey, user }, q.checkinBy || "", (o) => {
+      b.disabled = !!o.busy;
+      b.classList.toggle("busy", !!o.busy);
+      if (o.busy) return;
+      if (loginUsage[agent]) loginUsage[agent].at = 0;
+      loginUsageOf(agent);
+    });
+  };
+  slot.replaceWith(b);
+};
+
 // ciNowSend checks account a of vendor by in once now and says, through
 // say, how it went; no switch is changed.
 window.ciNowSend = async function (a, by, say) {
