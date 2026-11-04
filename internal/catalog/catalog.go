@@ -38,6 +38,11 @@ type Model struct {
 	// Keys, for a vendor whose keys each see models of their own, are the
 	// keys (by fingerprint) whose list has this one; empty is every key.
 	Keys []string `json:",omitempty"`
+	// EffortsBorrowed is set when Efforts are not the source's word but
+	// borrowed for its id (a plugin's model that thinks with no variants):
+	// a model listed by another id (provider's localIDs) borrows them for
+	// that id again.
+	EffortsBorrowed bool `json:"-"`
 	// APIs, when the vendor says, are the APIs the model is served on
 	// ("chat", "responses", "anthropic"); empty is not known.
 	APIs []string `json:",omitempty"`

@@ -99,6 +99,15 @@ func (l localIDs) list(ms []catalog.Model) []catalog.Model {
 				m.Name = local
 			}
 			m.ID = local
+			// levels borrowed for the vendor's id are borrowed for the
+			// one it is listed by too, and for the model the user said
+			// that one is the same as: a plugin's qfmodel listed as
+			// claude-opus-5.5 has its levels (axelburks on Discord)
+			if m.EffortsBorrowed {
+				if e := borrowedEfforts(local); len(e) > 0 {
+					m.Efforts = e
+				}
+			}
 		} else if own, ok := l.own[m.ID]; ok && has[own] {
 			continue // listed by the model given its id
 		}
