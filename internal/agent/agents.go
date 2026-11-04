@@ -290,6 +290,7 @@ func onMachine(home, cfg string) []*Agent {
 		openPencil(home, cfg),
 		openBot(home, cfg),
 		newMax(home),
+		liveAgent(home),
 		raycast(home),
 		kiroCrew(home),
 		t3code(home),

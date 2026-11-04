@@ -71,6 +71,9 @@ var Vars = []string{
 	"ANTE_HOME",
 	// NewMax's data folder (its newmax.db), ~/.newmax without it
 	"NEWMAX_USER_DATA_DIR",
+	// LiveAgent's data folder (K-brain's config.json), else the one
+	// ~/.liveagent/data-dir.json points to, else ~/.liveagent
+	"LIVEAGENT_HOME", "K_BRAIN_HOME",
 	// AstrBot's root, the folder holding its data/ (else ~/.astrbot, the desktop app's)
 	"ASTRBOT_ROOT",
 	// jcode's folder, ~/.jcode without it
