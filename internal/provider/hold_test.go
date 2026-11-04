@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -438,5 +440,134 @@ func TestAllReadsNoSettingsPerLookWhileHeld(t *testing.T) {
 		if p.Account != nil {
 			t.Fatalf("%s's account listed with discovery off", p.ID)
 		}
+	}
+}
+
+// heldBuilding starts a build of key that waits for its go-ahead, and
+// returns once it is under way: a caller missing key now waits on it.
+func heldBuilding[T any](t *testing.T, key string, v T) (goAhead func(), got <-chan T) {
+	t.Helper()
+	started, ahead, out := make(chan struct{}), make(chan struct{}), make(chan T, 1)
+	go func() {
+		out <- heldOf(key, func() T { close(started); <-ahead; return v })
+	}()
+	<-started
+	return sync.OnceFunc(func() { close(ahead) }), out
+}
+
+// heldWaiting is a caller missing key while the build above is under
+// way, its build counted in n; it returns once that caller waits.
+func heldWaiting[T any](t *testing.T, key string, n *atomic.Int64, v T) <-chan T {
+	t.Helper()
+	out := make(chan T, 1)
+	go func() { out <- heldOf(key, func() T { n.Add(1); return v }) }()
+	for deadline := time.Now().Add(10 * time.Second); ; {
+		held.Lock()
+		c := heldFlight[key]
+		held.Unlock()
+		if c != nil && waiting() {
+			return out
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the second caller never waited on the build")
+		}
+		runtime.Gosched()
+	}
+}
+
+// waiting says a goroutine is parked in heldCall.wait: the second
+// caller has missed and waits.
+func waiting() bool {
+	buf := make([]byte, 1<<20)
+	return strings.Contains(string(buf[:runtime.Stack(buf, true)]), "(*heldCall).wait")
+}
+
+// A caller that missed while another built takes what was built, unless a
+// write came meanwhile: a sign-in, a sign-out or a setting saved while the
+// list was built made it stale, and the caller, which may have asked
+// after the write, builds again (#5104). A filememo-only write
+// (settings.Save tells only filememo) counts too: kept, the value read
+// before it was given for a second after it.
+func TestHeldWaiterBuildsAgainAfterAWrite(t *testing.T) {
+	for name, write := range map[string]func(){"Changed": Changed, "filememo.Forget": filememo.Forget} {
+		t.Run(name, func(t *testing.T) {
+			release := Hold()
+			defer release()
+			dropHeld()
+			var n atomic.Int64
+			goAhead, first := heldBuilding(t, "t-write", "before")
+			defer goAhead()
+			second := heldWaiting(t, "t-write", &n, "after")
+			write()
+			goAhead()
+			if v := <-first; v != "before" {
+				t.Fatalf("the builder got %q", v)
+			}
+			if v := <-second; v != "after" || n.Load() != 1 {
+				t.Fatalf("after a write meanwhile: got %q, built %d times; want what is there now, built once", v, n.Load())
+			}
+			if v := heldOf("t-write", func() string { return "later" }); v != "after" {
+				t.Fatalf("what was read before the write was kept: %q", v)
+			}
+		})
+	}
+}
+
+// With nothing written meanwhile, a caller that missed while another
+// built takes what it built: a value held for no time at all (heldFor 0)
+// too, which a look at what was kept would never find.
+func TestHeldWaiterTakesTheBuild(t *testing.T) {
+	old := heldFor
+	heldFor = 0
+	defer func() { heldFor = old }()
+	release := Hold()
+	defer release()
+	var n atomic.Int64
+	goAhead, first := heldBuilding(t, "t-take", 1)
+	defer goAhead()
+	second := heldWaiting(t, "t-take", &n, 2)
+	goAhead()
+	if v, w := <-first, <-second; v != 1 || w != 1 || n.Load() != 0 {
+		t.Fatalf("got %d and %d, the second built %d times; want 1, 1 and 0", v, w, n.Load())
+	}
+}
+
+// A build that never ends, or panics, keeps no one waiting for good: a
+// waiter builds on its own after heldWait, as every caller did before
+// (#5104), and one whose builder panicked builds at once.
+func TestHeldWaiterNeverStuck(t *testing.T) {
+	old := heldWait
+	heldWait = 50 * time.Millisecond
+	defer func() { heldWait = old }()
+	release := Hold()
+	defer release()
+	goAhead, _ := heldBuilding(t, "t-stuck", "never")
+	defer goAhead()
+	var n atomic.Int64
+	start := time.Now()
+	if v := heldOf("t-stuck", func() string { n.Add(1); return "own" }); v != "own" || n.Load() != 1 {
+		t.Fatalf("got %q, built %d times; want its own", v, n.Load())
+	}
+	if d := time.Since(start); d < heldWait {
+		t.Fatalf("built on its own after %v, before heldWait", d)
+	}
+
+	heldWait = time.Minute
+	ahead := make(chan struct{})
+	started := make(chan struct{})
+	go func() {
+		defer func() { recover() }()
+		heldOf("t-panic", func() string { close(started); <-ahead; panic("build") })
+	}()
+	<-started
+	second := heldWaiting(t, "t-panic", &n, "own")
+	close(ahead)
+	select {
+	case v := <-second:
+		if v != "own" {
+			t.Fatalf("after a build that panicked: %q", v)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("a build that panicked kept its waiter")
 	}
 }

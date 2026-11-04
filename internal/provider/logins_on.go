@@ -101,14 +101,19 @@ func pausedOwn(ls []savedLogin, agent, user string) bool {
 
 // OwnPaused says the provider is the account a Claude Code or Codex agent
 // is signed in to, paused while another of its accounts is on (#263): the
-// gateway passes over it, the agent staying signed in to it.
+// gateway passes over it, the agent staying signed in to it. A request's
+// plan asks it of every account provider, each ask its own read of
+// logins.json under its lock: listed once a request, as Logins is (#5104),
+// and a write lists it anew.
 func (p Provider) OwnPaused() bool {
 	if p.Account == nil || p.Account.token != nil && !p.Account.standIn || !slices.Contains(loginAgents, p.Account.Agent) {
 		return false
 	}
-	loginsMu.Lock()
-	defer loginsMu.Unlock()
-	return pausedOwn(readLogins(), p.Account.Agent, p.Account.User)
+	return heldOf("ownPaused\x00"+p.Account.Agent+"\x00"+p.Account.User, func() bool {
+		loginsMu.Lock()
+		defer loginsMu.Unlock()
+		return pausedOwn(readLogins(), p.Account.Agent, p.Account.User)
+	})
 }
 
 // AlsoOn is a signed-in agent's other accounts that are on, each as a
