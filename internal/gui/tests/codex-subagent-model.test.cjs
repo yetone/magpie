@@ -221,9 +221,33 @@ for (const engine of engines) {
         }).length);
         assert.equal(left, 0, "a coloured left border");
 
+        // Lead's pick, already the choice, still takes away the model
+        // Codex's config starts subagents on (luckymanjc on Discord: it sent
+        // nothing, and every subagent stayed on gpt-6.1-terra)
+        await page.locator("#pop #list li").first().click();
+        await page.waitForFunction(() => !document.querySelector('.row.agent[data-id="codex@wsl:Ubuntu-24.04"] .field.extra.set[data-key="subagent_model"]'));
+        assert.deepEqual(sets, [{ agent: wsl, field: "subagent_model", value: "" }]);
+        assert.equal(await square.getAttribute("aria-label"), w.unset + "\n" + w.line);
+        assert.equal(await page.evaluate(() => scrollY), y, "the pick scrolled the page");
+        await square.click();
+        await page.locator("#pop:not([hidden]) #list li").first().waitFor();
         await page.locator("#pop #list li", { hasText: "GPT-6 Astra" }).first().click();
         await page.waitForFunction(() => document.querySelector('.row.agent[data-id="codex@wsl:Ubuntu-24.04"] .field.extra.set[data-key="subagent_model"]'));
-        assert.deepEqual(sets, [{ agent: wsl, field: "subagent_model", value: "codex/gpt-6-astra" }]);
+        assert.deepEqual(sets.at(-1), { agent: wsl, field: "subagent_model", value: "codex/gpt-6-astra" });
+        // with nothing left in Codex's config, Lead's pick again sends nothing
+        await square.click();
+        await page.locator("#pop:not([hidden]) #list li").first().waitFor();
+        await page.locator("#pop #list li").first().click();
+        await page.waitForFunction(() => !document.querySelector('.row.agent[data-id="codex@wsl:Ubuntu-24.04"] .field.extra.set[data-key="subagent_model"]'));
+        await square.click();
+        await page.locator("#pop:not([hidden]) #list li").first().waitFor();
+        await page.locator("#pop #list li").first().click();
+        await page.waitForTimeout(200);
+        assert.equal(sets.length, 3, JSON.stringify(sets));
+        await square.click();
+        await page.locator("#pop:not([hidden]) #list li").first().waitFor();
+        await page.locator("#pop #list li", { hasText: "GPT-6 Astra" }).first().click();
+        await page.waitForFunction(() => document.querySelector('.row.agent[data-id="codex@wsl:Ubuntu-24.04"] .field.extra.set[data-key="subagent_model"]'));
         assert.equal(await square.getAttribute("aria-label"), w.set + "\n" + w.setLine);
 
         // Same as the lead: every subagent on the model asked for again, and

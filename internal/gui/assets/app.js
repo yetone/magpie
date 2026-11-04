@@ -3974,9 +3974,6 @@ const MEMORIES = "memories";
 // Desktop's subagent model is the same square: the gateway puts each of
 // its subagents' turns on it
 const SUB_MODEL = "subagent model";
-// Codex's subagents square is [agents] default_subagent_model: a subagent's
-// model when its lead names none (codex-rs child_config.rs); the lead may
-// name another (willz on Discord), so it points at the subagent model.
 // Claude Code's auto mode square: the model its client-side auto mode
 // classifier runs on (CLAUDE_CODE_AUTO_MODE_MODEL); unset, Claude Code's own
 // pick, not the model's
@@ -3991,9 +3988,9 @@ const LEAD_PICKS = "The model a subagent starts on when Codex's lead names none;
 const CLAUDE_PICKS = "Claude Code's lead, or a subagent's own definition, may name a model or tier for it; a model set here is for the subagents that name none";
 const claudePicks = (a, f) => leadPicks(a, f) && kindOf(a) === "claude";
 // Codex's two subagent squares read alike (the owner, HoGee_xxl on X): the
-// card shows the subagent model alone, saying what each does. A pick there takes away [agents] default_subagent_model too (the
-// backend), and one left in the config is said on it until then. With no
-// model of magpie's to pick there, Codex's own square stays.
+// card shows the subagent model alone. A pick there, Lead's pick again too
+// (luckymanjc), takes away Codex's [agents] default_subagent_model, said
+// till then. With none of magpie's models to pick, Codex's square stays.
 const codexSub = (a) => kindOf(a) === "codex" && a.fields.some((f) => f.label === SUB_MODEL && (f.options.length || f.value));
 const codexOwnSub = (a, f) => f.label === "subagents" && codexSub(a);
 // named rows in Codex's settings: no square too (the owner, 10-25)
@@ -5624,7 +5621,7 @@ async function commit(value) {
     if (tier) openPicker(agent, tier, anchor, { stopPropagation() {} });
     return;
   }
-  if (value === field.value) return;
+  if (value === field.value && (value || field.label !== SUB_MODEL || !codexSubSaid(agent, field).old)) return;
   if (agent.native) return setPick(agent, field, value, opt);
   // a pick that takes a connected agent off magpie (its Default, or a
   // model of its own asked of its vendor directly) is asked first, as the
