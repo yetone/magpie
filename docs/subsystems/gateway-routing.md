@@ -1152,11 +1152,11 @@ the request is done. `TestLiveCountsARealStream` and the other tests in
 ## Turning provider search off
 
 [Settings](../../internal/settings/settings.go)' `searcher: "off"` disables magpie's provider-assisted search,
-including Kimi Code's and WorkBuddy's search services and Google sign-ins'
+including Kimi Code's, a GLM Coding Plan's and WorkBuddy's search services and Google sign-ins'
 separate search requests. Configured Search APIs still run in their saved order; failures
 never fall back to a provider while this setting is off. Without a ready
 Search API, [`canSearchFor`](../../internal/gateway/search_kimi.go) does not offer magpie's replacement search tool.
-`searchesOwn` is the one check for a provider searching for its own models (Kimi Code, WorkBuddy, a Google sign-in), so
+`searchesOwn` is the one check for a provider searching for its own models (Kimi Code, a GLM Coding Plan, WorkBuddy, a Google sign-in), so
 `ownSearcher` and the model list another magpie reads (`webSearchOf`, which then says no search) follow it too.
 A provider's native search on the client's protocol remains unchanged,
 unless `searchAll` is on (next section).
@@ -1210,6 +1210,31 @@ refusal (15001 is its search quota) is reported as an error, never as no
 results. Covered by `TestWorkBuddyPluginSearches` (Claude Code's literal
 WebSearch request, the real service's reply bytes, the quota refusal and
 search turned off).
+
+## A GLM Coding Plan's search MCP server
+
+A GLM Coding Plan's key (Zhipu's or Z.ai's) is also given for the plan's
+Web Search MCP server, which users otherwise add to each agent by hand
+(young02036 on Discord). `glmSearch`
+([`search_glm.go`](../../internal/gateway/search_glm.go)) asks it with the
+provider's own key, nothing to set up: a Streamable HTTP session at
+`<host>/api/mcp/web_search_prime/mcp` (`provider.ZhipuCodingSearch`, only
+for a provider or key on the plan's `/api/coding/paas/v4`, since the
+server serves no pay-as-you-go key), `initialize`, one `tools/call` of
+`webSearchPrime` with `{"search_query"}`, then the session's DELETE. The
+tool's text is read as a list of results, a list in a JSON string or a list
+under `search_result`/`results`/`items`/`data` (`readGLMSearch`); `isError`
+or words with no results are reported as an error, the key masked. A
+provider with several keys asks each of the plan's keys in turn.
+`searchesOwn` names it for the plan's own models first, as with Kimi Code,
+but only while Settings names no searcher (`glmSearches`): a searcher the
+user named searches for every model. It is not a searcher choice for other
+providers' models: a plan with the Responses base already searches by
+itself there (#660). Covered by `TestGLMCodingPlanSearchesForItsModels`
+(a fake server with an event-stream reply, the refusal, a named searcher,
+a pay-as-you-go key), `TestReadGLMSearch` and
+`TestZhipuCodingSearchAddress`. Not tried against the real server: the
+docs give neither the tool's arguments nor its reply's shape.
 
 ## Search results in translated Responses replies
 
@@ -1569,7 +1594,7 @@ Rests are held by vendor and a hash of the key (`searchKeyID`), never the
 key itself, and the vendor's error has the key masked
 (`provider.MaskSearchKey`, `tvly-…abcd`) before it is logged or returned.
 
-The query a search API, a Kimi Code plan's search service or WorkBuddy's
+The query a search API, a Kimi Code plan's or GLM Coding Plan's search service or WorkBuddy's
 search is asked is masked as Settings → Privacy says (`maskedQuery` in
 [`redact.go`](../../internal/gateway/redact.go); a plan set to go unmasked,
 `provider.SkipsRedaction`, gets it as it is). A searcher model is asked
@@ -1621,7 +1646,7 @@ total, budget or provider share, and never exported (`observeLedger`), so
 telemetry, which reads no usage row, has nothing new to send. The Usage
 page's Requests tab badges one "Search API" with the host and masked key
 where the provider goes. A searcher model's request is a model row of its
-own, as before. A plan's own search service (Kimi Code's, WorkBuddy's:
+own, as before. A plan's own search service (Kimi Code's, a GLM Coding Plan's, WorkBuddy's:
 `ownSearch`, through `logOwnSearch`) is a row the same way, under the
 plan's provider id and name, badged "Web search". Not covered: the
 Routing page, which lists only requests through `serve`.

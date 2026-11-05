@@ -182,3 +182,60 @@ func LearnZhipuCoding(p Provider, from string) {
 		return
 	}
 }
+
+// ZhipuSearchPath is where a GLM Coding Plan's web search MCP server is,
+// on the plan's own host: Zhipu's Web Search MCP at
+// open.bigmodel.cn/api/mcp/web_search_prime/mcp and Z.ai's at
+// api.z.ai/api/mcp/web_search_prime/mcp, a Streamable HTTP server asked
+// with the plan's key as a Bearer (docs.bigmodel.cn/cn/coding-plan/mcp/search-mcp-server,
+// docs.z.ai/devpack/mcp/search-mcp-server).
+const ZhipuSearchPath = "/api/mcp/web_search_prime/mcp"
+
+// ZhipuCodingSearch is where p, a GLM Coding Plan with a key, searches the
+// web (ZhipuSearchPath on its OpenAI endpoint's host), "" for a provider
+// that isn't one. A plan is known by its OpenAI endpoint, the Coding Plan's
+// /api/coding/paas/v4, on Zhipu's or Z.ai's host or at the zhipu or zai
+// preset's: the Anthropic endpoint is the same for a plan and pay as you
+// go, and the MCP server serves only a plan's key. A key of another plan
+// than p's (KeyAccount.Plan) is asked at its own: see ZhipuSearchKeys.
+func ZhipuCodingSearch(p Provider) string {
+	if p.Account != nil || p.Key == "" {
+		return ""
+	}
+	b := strings.TrimRight(strings.TrimSpace(p.Chat), "/")
+	if basePath(b) != zhipuCodingPath || !zhipuHost(HostOf(b)) && p.Preset != "zhipu" && p.Preset != "zai" {
+		return ""
+	}
+	return strings.TrimSuffix(b, zhipuCodingPath) + ZhipuSearchPath
+}
+
+// ZhipuSearches is whether a key of p in use is on a GLM Coding Plan
+// (ZhipuSearchKeys has one), read from the keys themselves: the gateway
+// asks it for every request, and KeysOn is counted per list.
+func ZhipuSearches(p Provider) bool {
+	if p.Key == "" || p.Account != nil {
+		return false
+	}
+	if ZhipuCodingSearch(p) != "" {
+		return true
+	}
+	for _, k := range p.Keys {
+		if !k.Off && k.Key != "" && ZhipuCodingSearch(p.WithKey(k)) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// ZhipuSearchKeys are p with each of its keys in use that is on a GLM
+// Coding Plan (ZhipuCodingSearch of p with that key), in the order requests
+// try them; none for a provider with no plan's key.
+func ZhipuSearchKeys(p Provider) []Provider {
+	var out []Provider
+	for _, k := range p.KeysOn() {
+		if v := p.WithKey(k); ZhipuCodingSearch(v) != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
