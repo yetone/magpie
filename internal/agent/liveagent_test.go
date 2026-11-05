@@ -12,6 +12,7 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/jsonc"
 
+	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -115,8 +116,9 @@ func liveAgentIDs(r gjson.Result) []string {
 }
 
 // LiveAgent v2 lists the providers of K-brain's config.json in its model
-// picker. magpie adds itself as "magpie" on the gateway's Anthropic
-// Messages with the key naming LiveAgent, makes magpie's first model the
+// picker. magpie adds itself as "magpie", an OpenAI provider on the
+// gateway's Chat Completions for models served natively on no other API,
+// with the key naming LiveAgent, makes magpie's first model the
 // pick when the pick is still K-brain's empty demo, keeps the rest of the
 // file, writes nothing when nothing changed, keeps the user's name, models
 // turned off, order and K-brain's fields through a sync, and off gives
@@ -154,10 +156,14 @@ func TestLiveAgentProvider(t *testing.T) {
 	}
 	r := liveAgentJSON(t, got)
 	e := r.Get("providers.magpie")
-	if e.Get("name").String() != "magpie" || e.Get("type").String() != "claude_code" || e.Get("api").String() != "anthropic-messages" ||
-		e.Get("baseUrl").String() != gw || strings.HasSuffix(gw, "/v1") || e.Get("apiKey").String() != agentKeyAt("liveagent", gw) ||
+	if e.Get("name").String() != "magpie" || e.Get("type").String() != "codex" || e.Get("api").String() != "openai-completions" ||
+		e.Get("requestFormat").String() != "openai-completions" ||
+		e.Get("baseUrl").String() != gw+"/v1" || e.Get("apiKey").String() != agentKeyAt("liveagent", gw) ||
 		e.Get("activeModels").Type != gjson.Null || !e.Get("activeModels").Exists() {
 		t.Errorf("entry: %s", e.Raw)
+	}
+	if r.Get("providers.magpie-responses").Exists() || r.Get("providers.magpie-anthropic").Exists() {
+		t.Errorf("a provider with no model of its own: %s", got)
 	}
 	sorted := slices.Clone(want)
 	slices.Sort(sorted)
@@ -211,8 +217,9 @@ func TestLiveAgentProvider(t *testing.T) {
 	order := slices.Clone(want[:len(want)-1])
 	slices.Reverse(order)
 	mine, _ := json.Marshal(map[string]any{
-		"name": "My magpie", "type": "claude_code", "baseUrl": gw, "api": "anthropic-messages", "apiKey": e.Get("apiKey").String(),
-		"activeModels": []string{want[1]}, "modelOrder": order, "metadata": map[string]any{"providerOrder": 3}, "models": models,
+		"name": "My magpie", "type": "codex", "baseUrl": gw + "/v1", "api": "openai-completions", "apiKey": e.Get("apiKey").String(),
+		"requestFormat": "openai-completions",
+		"activeModels":  []string{want[1]}, "modelOrder": order, "metadata": map[string]any{"providerOrder": 3}, "models": models,
 	})
 	var edited map[string]any
 	json.Unmarshal(jsonc.ToJSON([]byte(got)), &edited)
@@ -458,4 +465,189 @@ func TestLiveAgentProcess(t *testing.T) {
 			t.Errorf("taken for LiveAgent: %s", cmd)
 		}
 	}
+}
+
+// liveAgentProtocolSetup is liveAgentSetup with a provider serving its
+// model on OpenAI's Responses API alone and one on Anthropic's Messages
+// API alone, beside the DeepSeek on Chat, and the ids of the two.
+func liveAgentProtocolSetup(t *testing.T) (a *Agent, want []string, gpt, claude string) {
+	t.Helper()
+	_, a, _ = liveAgentSetup(t)
+	for _, p := range []provider.Provider{
+		{ID: "resp", Name: "Resp", Key: "k", Responses: "http://127.0.0.1:1/v1", Models: []string{"gpt-5.5"}},
+		{ID: "anth", Name: "Anth", Key: "k", Anthropic: "http://127.0.0.1:1", Models: []string{"claude-sonnet-5"}},
+	} {
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, m := range magpieModels("liveagent") {
+		want = append(want, m.ID)
+		switch {
+		case strings.HasSuffix(m.ID, "gpt-5.5"):
+			gpt = m.ID
+		case strings.HasSuffix(m.ID, "claude-sonnet-5"):
+			claude = m.ID
+		}
+	}
+	if gpt == "" || claude == "" {
+		t.Fatalf("models %v", want)
+	}
+	return a, want, gpt, claude
+}
+
+// Discord (xiaoxiaofei): magpie 默认导入的是 message 格式的，要可以自定义请求格式.
+// Every model went to LiveAgent on Anthropic Messages, a provider type
+// whose API LiveAgent's settings lock. Each model now goes on the provider
+// of the API it is served on natively: a GPT on Responses, a Claude on
+// Messages, the rest on Chat Completions; the two OpenAI ones are of the
+// type whose request format LiveAgent lets the user switch, and the
+// format they pick stays through a sync.
+func TestLiveAgentRequestFormat(t *testing.T) {
+	a, want, gpt, claude := liveAgentProtocolSetup(t)
+	gw := gateway.URL()
+	liveAgentWrite(t, a.Path, liveAgentDefault)
+	f := a.Field("provider")
+	if err := f.Set(magpieID); err != nil {
+		t.Fatal(err)
+	}
+	r := liveAgentJSON(t, liveAgentFile(t, a.Path))
+	for _, c := range []struct{ key, typ, api, base, format, model string }{
+		{"magpie", "codex", "openai-completions", gw + "/v1", "openai-completions", ""},
+		{"magpie-responses", "codex", "openai-responses", gw + "/v1", "openai-responses", gpt},
+		{"magpie-anthropic", "claude_code", "anthropic-messages", gw, "", claude},
+	} {
+		e := r.Get("providers." + c.key)
+		if e.Get("type").String() != c.typ || e.Get("api").String() != c.api || e.Get("baseUrl").String() != c.base ||
+			e.Get("requestFormat").String() != c.format || e.Get("apiKey").String() != agentKeyAt("liveagent", gw) {
+			t.Errorf("%s: %s", c.key, e.Raw)
+		}
+		ids := liveAgentIDs(e.Get("models"))
+		if c.model != "" && !slices.Equal(ids, []string{c.model}) {
+			t.Errorf("%s: models %v, want %s", c.key, ids, c.model)
+		}
+		if c.model == "" && (slices.Contains(ids, gpt) || slices.Contains(ids, claude) || len(ids) == 0) {
+			t.Errorf("%s: models %v", c.key, ids)
+		}
+	}
+	if on := liveAgentFor(gw).On[want[0]]; r.Get("defaultModel").String() != want[0] || r.Get("defaultProvider").String() != on || on == "" {
+		t.Errorf("default %s on %s, want %s on %s", r.Get("defaultModel"), r.Get("defaultProvider"), want[0], on)
+	}
+
+	// the user switches the formats in LiveAgent's settings, which write
+	// api and requestFormat: both stay through a sync, and one LiveAgent
+	// doesn't offer goes back to magpie's
+	edited := liveAgentFile(t, a.Path)
+	for _, c := range [][3]string{{"magpie-responses", "openai-completions", "openai-completions"}, {"magpie", "openai-responses", "openai-responses"}} {
+		var err error
+		b := jsonc.ToJSON([]byte(edited))
+		if b, err = liveAgentSet(b, "providers."+c[0]+".api", c[1]); err != nil {
+			t.Fatal(err)
+		}
+		if b, err = liveAgentSet(b, "providers."+c[0]+".requestFormat", c[2]); err != nil {
+			t.Fatal(err)
+		}
+		edited = string(b)
+	}
+	liveAgentWrite(t, a.Path, edited)
+	before, _ := os.Stat(a.Path)
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if got := liveAgentFile(t, a.Path); got != edited {
+		t.Errorf("the user's formats not kept:\n%s\nwas\n%s", got, edited)
+	}
+	if after, _ := os.Stat(a.Path); !after.ModTime().Equal(before.ModTime()) {
+		t.Error("file touched with nothing changed")
+	}
+	b, _ := liveAgentSet([]byte(edited), "providers.magpie-responses.requestFormat", "anthropic-messages")
+	b, _ = liveAgentSet(b, "providers.magpie-responses.api", "anthropic-messages")
+	liveAgentWrite(t, a.Path, string(b))
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	e := liveAgentJSON(t, liveAgentFile(t, a.Path)).Get("providers.magpie-responses")
+	if e.Get("api").String() != "openai-responses" || e.Get("requestFormat").String() != "openai-responses" {
+		t.Errorf("a format LiveAgent doesn't offer kept: %s", e.Raw)
+	}
+
+	// off: every provider of magpie's goes, and the file is K-brain's
+	if err := f.Set(""); err != nil {
+		t.Fatal(err)
+	}
+	if !jsonEqual(jsonc.ToJSON([]byte(liveAgentFile(t, a.Path))), jsonc.ToJSON([]byte(liveAgentDefault))) {
+		t.Errorf("after off:\n%s", liveAgentFile(t, a.Path))
+	}
+}
+
+// A config.json from before, with every model on one Anthropic "magpie":
+// a sync moves each model to its provider with what the user set on it —
+// its name, turned off — and a pick of it follows. A provider whose last
+// model goes is taken out.
+func TestLiveAgentFormatMove(t *testing.T) {
+	a, want, gpt, claude := liveAgentProtocolSetup(t)
+	gw := gateway.URL()
+	var models []map[string]any
+	sorted := slices.Clone(want)
+	slices.Sort(sorted)
+	for _, id := range sorted {
+		m := map[string]any{"id": id, "contextWindow": 1}
+		if id == claude {
+			m["displayName"] = "Mine"
+		}
+		models = append(models, m)
+	}
+	var active []string
+	for _, id := range want {
+		if id != claude {
+			active = append(active, id)
+		}
+	}
+	old := map[string]any{
+		"defaultModel": gpt, "defaultProvider": "magpie", "taskModel": claude, "taskProvider": "magpie",
+		"providers": map[string]any{
+			"ds":     map[string]any{"name": "ds", "baseUrl": "https://api.deepseek.com", "api": "openai-completions", "apiKey": "sk-u", "activeModels": nil, "models": []any{map[string]any{"id": "deepseek-chat"}}},
+			"magpie": map[string]any{"name": "magpie", "type": "claude_code", "baseUrl": gw, "api": "anthropic-messages", "apiKey": agentKeyAt("liveagent", gw), "activeModels": active, "modelOrder": want, "models": models},
+		},
+	}
+	ob, _ := json.MarshalIndent(old, "", "  ")
+	liveAgentWrite(t, a.Path, string(ob))
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	r := liveAgentJSON(t, liveAgentFile(t, a.Path))
+	m := r.Get("providers.magpie")
+	if m.Get("type").String() != "codex" || m.Get("api").String() != "openai-completions" || m.Get("baseUrl").String() != gw+"/v1" ||
+		slices.Contains(liveAgentIDs(m.Get("models")), claude) || slices.Contains(liveAgentIDs(m.Get("activeModels")), gpt) {
+		t.Errorf("magpie: %s", m.Raw)
+	}
+	c := r.Get("providers.magpie-anthropic")
+	if c.Get("models.0.displayName").String() != "Mine" ||
+		!c.Get("activeModels").IsArray() || len(c.Get("activeModels").Array()) != 0 {
+		t.Errorf("magpie-anthropic: the user's name or off lost: %s", c.Raw)
+	}
+	if g := r.Get("providers.magpie-responses"); g.Get("activeModels").Type != gjson.Null && !slices.Equal(liveAgentIDs(g.Get("activeModels")), []string{gpt}) {
+		t.Errorf("magpie-responses: %s", g.Raw)
+	}
+	if r.Get("defaultProvider").String() != "magpie-responses" || r.Get("defaultModel").String() != gpt ||
+		r.Get("taskProvider").String() != "magpie-anthropic" || r.Get("providers.ds.apiKey").String() != "sk-u" {
+		t.Errorf("picks: %s", r.Raw)
+	}
+
+	// Anthropic's provider gone from magpie: its provider goes too
+	if err := provider.Delete("anth"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	r = liveAgentJSON(t, liveAgentFile(t, a.Path))
+	if r.Get("providers.magpie-anthropic").Exists() || !r.Get("providers.magpie-responses").Exists() || !r.Get("providers.magpie").Exists() {
+		t.Errorf("after Anthropic's went: %s", r.Raw)
+	}
+}
+
+// liveAgentSet is b with the string v at path.
+func liveAgentSet(b []byte, path, v string) ([]byte, error) {
+	return edit.PatchJSON(b, []edit.KV{{Path: path, Value: v}}, nil)
 }
