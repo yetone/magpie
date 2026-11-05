@@ -128,8 +128,8 @@ func notePluginSearch(ctx context.Context, spec string, asked map[string]any, go
 // pluginSearchAsked is what magpie hands a plugin's search hook, as its
 // archive says it: the provider, the query, how many pages, the address
 // set (when one is) and the key masked or the account it signs in as.
-func pluginSearchAsked(v provider.SearchVendor, query, at, key, account string) map[string]any {
-	m := map[string]any{"hook": "search", "provider": v.PluginID, "query": query, "count": searchHits}
+func pluginSearchAsked(v provider.SearchVendor, query string, count int, at, key, account string) map[string]any {
+	m := map[string]any{"hook": "search", "provider": v.PluginID, "query": query, "count": count}
 	if at != "" {
 		m["url"] = at
 	}

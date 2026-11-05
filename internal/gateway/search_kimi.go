@@ -137,7 +137,7 @@ func (s *Server) kimiSearch(ctx context.Context, p provider.Provider, query stri
 	if err != nil {
 		return "", nil, err
 	}
-	body, _ := json.Marshal(map[string]any{"text_query": q, "limit": searchHits, "enable_page_crawling": false, "timeout_seconds": 30})
+	body, _ := json.Marshal(map[string]any{"text_query": q, "limit": searchCount(ctx), "enable_page_crawling": false, "timeout_seconds": 30})
 	r, err := http.NewRequestWithContext(ctx, http.MethodPost, provider.KimiCodeSearch(p), bytes.NewReader(body))
 	if err != nil {
 		return "", nil, err
@@ -188,7 +188,7 @@ func (s *Server) kimiSearch(ctx context.Context, p provider.Provider, query stri
 			text = x.Snippet
 		}
 		pages = append(pages, foundPage{Title: title, URL: x.URL, Text: clipText(searchPlain(text), pageText), Age: x.Date})
-		if len(pages) == searchHits {
+		if len(pages) == searchCount(ctx) {
 			break
 		}
 	}

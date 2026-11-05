@@ -88,8 +88,9 @@ func SearchAccountsOn(p provider.Provider) int { return len(accountsOn(p, "")) }
 // askPluginSearchAs is askPluginSearch as one account of the provider the
 // API signs in to.
 func (s *Server) askPluginSearchAs(ctx context.Context, v provider.SearchVendor, p provider.Provider, query string) ([]foundPage, error) {
-	got, err := runPluginSearchAs(ctx, v.Plugin, v.PluginID, query, searchHits, p.PluginAccountKey())
-	notePluginSearch(ctx, v.Plugin, pluginSearchAsked(v, query, "", "", p.Account.User), got, err)
+	n := searchCount(ctx)
+	got, err := runPluginSearchAs(ctx, v.Plugin, v.PluginID, query, n, p.PluginAccountKey())
+	notePluginSearch(ctx, v.Plugin, pluginSearchAsked(v, query, n, "", "", p.Account.User), got, err)
 	if err != nil {
 		var r plugin.SearchRefused
 		if errors.As(err, &r) {
@@ -103,5 +104,5 @@ func (s *Server) askPluginSearchAs(ctx context.Context, v provider.SearchVendor,
 		}
 		return nil, err
 	}
-	return pluginPages(got), nil
+	return pluginPages(got, n), nil
 }

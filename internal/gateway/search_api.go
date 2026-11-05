@@ -28,8 +28,30 @@ import (
 // model as it came, each page's title, address and what it says, with no
 // model asked to read it first.
 
-// searchHits is how many pages a search API is asked for.
-const searchHits = 6
+// searchHits is how many pages a search API is asked for when the search
+// names no count, and searchHitsMost the most one may name (web_search's
+// count): Brave and Tavily take no more than 20.
+const (
+	searchHits     = 6
+	searchHitsMost = 20
+)
+
+type searchCountKey struct{}
+
+// withSearchCount is ctx with the search in it asking for n pages, held
+// to 1 through searchHitsMost.
+func withSearchCount(ctx context.Context, n int) context.Context {
+	return context.WithValue(ctx, searchCountKey{}, min(max(n, 1), searchHitsMost))
+}
+
+// searchCount is how many pages the search in ctx asks for: the count it
+// named (withSearchCount), else searchHits.
+func searchCount(ctx context.Context) int {
+	if n, ok := ctx.Value(searchCountKey{}).(int); ok {
+		return n
+	}
+	return searchHits
+}
 
 // pageText is the most of a page's text a hit carries.
 const pageText = 1500
@@ -272,6 +294,7 @@ func (s *Server) askSearchAPI(ctx context.Context, a provider.SearchAPI, query s
 	if v, ok := provider.SearchVendorOf(a.Vendor); ok && v.Plugin != "" {
 		return s.askPluginSearch(ctx, a, v, query)
 	}
+	n := searchCount(ctx)
 	var r *http.Request
 	var err error
 	var sent []byte
@@ -288,32 +311,32 @@ func (s *Server) askSearchAPI(ctx context.Context, a provider.SearchAPI, query s
 	get := func(path string, q url.Values) { getAt(a.Base()+path, q) }
 	switch a.Vendor {
 	case "tavily":
-		post("/search", map[string]any{"query": query, "max_results": searchHits, "search_depth": "basic"})
+		post("/search", map[string]any{"query": query, "max_results": n, "search_depth": "basic"})
 	case "brave":
-		get("/res/v1/web/search", url.Values{"q": {query}, "count": {fmt.Sprint(searchHits)}})
+		get("/res/v1/web/search", url.Values{"q": {query}, "count": {fmt.Sprint(n)}})
 	case "exa":
-		post("/search", map[string]any{"query": query, "numResults": searchHits,
+		post("/search", map[string]any{"query": query, "numResults": n,
 			"contents": map[string]any{"text": map[string]any{"maxCharacters": pageText}}})
 	case "firecrawl":
-		post("/v2/search", map[string]any{"query": query, "limit": searchHits})
+		post("/v2/search", map[string]any{"query": query, "limit": n})
 	case "deepseek":
 		// DeepSeek's Search API takes a query of 1 to 128 characters
 		// (api-docs.deepseek.com/guides/search); its page text is its
 		// summary, so need_content is left false
-		post("/v1/tools/search", map[string]any{"query": firstRunes(query, deepseekQueryMax), "count": searchHits})
+		post("/v1/tools/search", map[string]any{"query": firstRunes(query, deepseekQueryMax), "count": n})
 	case "volcengine":
 		// Doubao Search Custom (volcengine.com/docs/87772/2272953): a
 		// query of 1 to 100 characters, web pages only, and only those
 		// with a URL (NeedUrl leaves out its 火山如意 cards, which have none)
 		post("/search_api/web_search", map[string]any{"Query": firstRunes(query, volcQueryMax), "SearchType": "web",
-			"Count": searchHits, "Filter": map[string]any{"NeedUrl": true}})
+			"Count": n, "Filter": map[string]any{"NeedUrl": true}})
 	case "wsa":
 		// Tencent Cloud's Yuanbao Search by its service API key
 		// (cloud.tencent.com/document/product/1806/130615): Cnt is one of
 		// 10/20/30/40/50 (cloud.tencent.com/document/api/1806/121811), and
-		// a smaller one is turned away, so the fewest, cut to searchHits
-		// below
-		post("/SearchPro", map[string]any{"Query": query, "Cnt": wsaCnt})
+		// a smaller one is turned away, so the fewest that covers n, cut
+		// to n below
+		post("/SearchPro", map[string]any{"Query": query, "Cnt": wsaCntFor(n)})
 	case "searxng":
 		get("/search", url.Values{"q": {query}, "format": {"json"}})
 	case "you":
@@ -321,11 +344,11 @@ func (s *Server) askSearchAPI(ctx context.Context, a provider.SearchAPI, query s
 		// at an address of the user's own when one is set
 		switch {
 		case a.Key != "":
-			post("/v1/search", map[string]any{"query": query, "count": searchHits})
+			post("/v1/search", map[string]any{"query": query, "count": n})
 		case a.URL != "":
-			get("/v1/agents/search", url.Values{"query": {query}, "count": {fmt.Sprint(searchHits)}})
+			get("/v1/agents/search", url.Values{"query": {query}, "count": {fmt.Sprint(n)}})
 		default:
-			getAt(provider.YouFreeSearch, url.Values{"query": {query}, "count": {fmt.Sprint(searchHits)}})
+			getAt(provider.YouFreeSearch, url.Values{"query": {query}, "count": {fmt.Sprint(n)}})
 		}
 	default:
 		return nil, fmt.Errorf("magpie can't ask %q", a.Vendor)
@@ -414,8 +437,8 @@ func (s *Server) askSearchAPI(ctx context.Context, a provider.SearchAPI, query s
 	if err != nil {
 		return nil, fmt.Errorf("unexpected reply: %w", err)
 	}
-	if len(pages) > searchHits {
-		pages = pages[:searchHits]
+	if len(pages) > n {
+		pages = pages[:n]
 	}
 	return pages, nil
 }
@@ -430,8 +453,9 @@ var runPluginSearch = plugin.RunSearch
 // row in the request log; and with the query apiSearch masked. What it
 // found is cut and cleaned as a built-in's pages are.
 func (s *Server) askPluginSearch(ctx context.Context, a provider.SearchAPI, v provider.SearchVendor, query string) ([]foundPage, error) {
-	got, err := runPluginSearch(ctx, v.Plugin, v.PluginID, query, searchHits, a.Key, a.Base())
-	notePluginSearch(ctx, v.Plugin, pluginSearchAsked(v, query, a.Base(), a.Key, ""), got, err)
+	n := searchCount(ctx)
+	got, err := runPluginSearch(ctx, v.Plugin, v.PluginID, query, n, a.Key, a.Base())
+	notePluginSearch(ctx, v.Plugin, pluginSearchAsked(v, query, n, a.Base(), a.Key, ""), got, err)
 	if err != nil {
 		var r plugin.SearchRefused
 		if errors.As(err, &r) {
@@ -452,12 +476,12 @@ func (s *Server) askPluginSearch(ctx context.Context, a provider.SearchAPI, v pr
 		}
 		return nil, err
 	}
-	return pluginPages(got), nil
+	return pluginPages(got, n), nil
 }
 
 // pluginPages are the pages a plugin's search found, cut and cleaned as a
-// built-in's are.
-func pluginPages(got []plugin.SearchPage) []foundPage {
+// built-in's are, at most n.
+func pluginPages(got []plugin.SearchPage, n int) []foundPage {
 	var pages []foundPage
 	for _, r := range got {
 		if r.URL == "" {
@@ -468,7 +492,7 @@ func pluginPages(got []plugin.SearchPage) []foundPage {
 			title = r.URL
 		}
 		pages = append(pages, foundPage{Title: title, URL: r.URL, Text: clipText(searchPlain(r.Text), pageText), Age: r.Age})
-		if len(pages) == searchHits {
+		if len(pages) == n {
 			break
 		}
 	}
@@ -629,8 +653,9 @@ func readVolcSearch(b []byte) ([]foundPage, error) {
 	return pages, nil
 }
 
-// wsaCnt is the Cnt Yuanbao Search is asked for: the fewest it takes.
-const wsaCnt = 10
+// wsaCntFor is the Cnt Yuanbao Search is asked for to find n pages: the
+// fewest of the 10/20/30/40/50 it takes that covers n.
+func wsaCntFor(n int) int { return min(max((n+9)/10*10, 10), 50) }
 
 // wsaSearchError is the status a Yuanbao Search (Tencent Cloud) reply
 // stands for, and its error's words. Tencent Cloud answers 200 whenever

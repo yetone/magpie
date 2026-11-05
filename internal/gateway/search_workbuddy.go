@@ -59,7 +59,13 @@ func (s *Server) wbSearch(ctx context.Context, p provider.Provider, query string
 	if err != nil {
 		return "", nil, err
 	}
-	body, _ := json.Marshal(map[string]any{"query": q, "type": "text2text", "max_results": wbSearchResults})
+	// as many as its client asks for, unless the search named more
+	n := searchCount(ctx)
+	ask := wbSearchResults
+	if n > searchHits {
+		ask = n
+	}
+	body, _ := json.Marshal(map[string]any{"query": q, "type": "text2text", "max_results": ask})
 	r, err := http.NewRequestWithContext(ctx, http.MethodPost, origin+wbSearchPath, bytes.NewReader(body))
 	if err != nil {
 		return "", nil, err
@@ -114,7 +120,7 @@ func (s *Server) wbSearch(ctx context.Context, p provider.Provider, query string
 		}
 		title := cmp.Or(searchPlain(x.Title), searchPlain(x.Site), x.URL)
 		pages = append(pages, foundPage{Title: title, URL: x.URL, Text: clipText(searchPlain(x.Snippet), pageText)})
-		if len(pages) == searchHits {
+		if len(pages) == n {
 			break
 		}
 	}

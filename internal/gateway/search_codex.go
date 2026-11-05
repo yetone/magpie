@@ -160,7 +160,7 @@ func (s *Server) codexSearch(ctx context.Context, p provider.Provider, query str
 	if err := json.Unmarshal(b, &out); err != nil || out.Output == nil {
 		return "", nil, fmt.Errorf("%sunexpected reply: %s", who, provider.APIError(b, res.Status))
 	}
-	pages := codexPages(*out.Output, out)
+	pages := codexPages(*out.Output, out, searchCount(ctx))
 	if len(pages) == 0 {
 		return "", nil, fmt.Errorf("%s%w", who, errFoundNothing)
 	}
@@ -174,7 +174,7 @@ func (s *Server) codexSearch(ctx context.Context, p provider.Provider, query str
 // then what the page says, and a rule of 80 dashes before the next. The
 // results name each page's title and address by its ref_id, which the
 // mark carries.
-func codexPages(output string, out codexSearchReply) []foundPage {
+func codexPages(output string, out codexSearchReply, n int) []foundPage {
 	type result struct{ title, url, snippet string }
 	byRef := map[string]result{}
 	for _, x := range out.Results {
@@ -217,7 +217,7 @@ func codexPages(output string, out codexSearchReply) []foundPage {
 			title = link
 		}
 		pages = append(pages, foundPage{Title: title, URL: link, Text: clipText(searchPlain(strings.Map(dropPrivateUse, text)), pageText)})
-		if len(pages) == searchHits {
+		if len(pages) == n {
 			break
 		}
 	}

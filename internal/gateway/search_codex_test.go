@@ -207,7 +207,7 @@ func TestCodexPagesRead(t *testing.T) {
 		"Bare (https://example.com/a)\njust text"
 	var reply codexSearchReply
 	json.Unmarshal([]byte(`{"results":[{"ref_id":"turn0search0","title":"The Go Programming Language","url":"https://go.dev/"}]}`), &reply)
-	pages := codexPages(out, reply)
+	pages := codexPages(out, reply, searchHits)
 	if len(pages) != 2 || pages[0].Title != "The Go Programming Language" || pages[0].URL != "https://go.dev/" ||
 		!strings.Contains(pages[0].Text, "Build simple software.") || strings.Contains(pages[0].Text, "wordlim") ||
 		pages[1].URL != "https://example.com/a" || pages[1].Text != "just text" {

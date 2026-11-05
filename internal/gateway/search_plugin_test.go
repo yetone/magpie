@@ -61,7 +61,7 @@ func TestSearchOnAndOff(t *testing.T) {
 		return sent
 	}
 	mcp := func() (string, error) {
-		return s.searchMCPRun(httptest.NewRequest("POST", "/mcp/search", nil), "latest go")
+		return s.searchMCPRun(httptest.NewRequest("POST", "/mcp/search", nil), "latest go", nil)
 	}
 
 	// on

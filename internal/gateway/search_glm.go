@@ -120,10 +120,11 @@ func (s *Server) glmSearchKey(ctx context.Context, p provider.Provider, query st
 		return nil, errors.New(c.masked(clipText(cmp.Or(strings.Join(texts, " "), "the search tool failed"), 500)))
 	}
 	var pages []foundPage
+	n := searchCount(ctx)
 	for _, t := range texts {
 		pages = append(pages, readGLMSearch(t)...)
-		if len(pages) >= searchHits {
-			pages = pages[:searchHits]
+		if len(pages) >= n {
+			pages = pages[:n]
 			break
 		}
 	}
