@@ -2214,7 +2214,7 @@ func saveOwn(s Settings, recording, reads bool) error {
 	}
 	s.ImageGen = strings.TrimSpace(s.ImageGen)
 	if s.ImageGen != "" && s.ImageGen != "off" && !strings.Contains(s.ImageGen, "/") {
-		return fmt.Errorf("the image generation model must be a model's id such as openai/gpt-image-1, or off, not %q", s.ImageGen)
+		return fmt.Errorf("the image generation model must be a model's id such as openai/gpt-image-2, or off, not %q", s.ImageGen)
 	}
 	rules, err := redact.CheckRules(s.RedactRules)
 	if err != nil {
