@@ -106,10 +106,18 @@ type cliSpec struct {
 	// only are the systems (GOOS) its vendor builds it for, when not all:
 	// on any other its package installs nothing that runs
 	only []string
+	// scripts: its npm package's install script is what makes it run
+	// (OpenCode's postinstall puts the platform's binary in place of a stub
+	// that only says "@opencode/cli's postinstall script was not run"),
+	// and npm 12, bun and pnpm 10 run a package's install script only for
+	// one they are told to: npm install -g --allow-scripts=<pkg>, bun add
+	// -g --trust, pnpm add -g --allow-build=<pkg>. npm 10 and 11 run it
+	// anyway, and take --allow-scripts as a config they don't know.
+	scripts bool
 }
 
 var cliSpecs = map[string]cliSpec{
-	"claude": {npm: []string{"@anthropic-ai/claude-code"}, brew: []string{"claude-code"},
+	"claude": {npm: []string{"@anthropic-ai/claude-code"}, brew: []string{"claude-code"}, scripts: true,
 		self: func(bin, real string) []string {
 			// ~/.local/bin/claude → ~/.local/share/claude/versions/2.1.3;
 			// on Windows the binary itself, in ~/.local/bin
@@ -135,14 +143,14 @@ var cliSpecs = map[string]cliSpec{
 	// both of which deveco upgrade replaces
 	// Its npm package carries macOS and Windows binaries only (and
 	// OpenHarmony's), none for Linux.
-	"deveco": {npm: []string{"@deveco/deveco-code"}, only: []string{"darwin", "windows"},
+	"deveco": {npm: []string{"@deveco/deveco-code"}, only: []string{"darwin", "windows"}, scripts: true,
 		self: func(bin, real string) []string {
 			if strings.Contains(real, "/.local/share/deveco/versions/") || strings.HasSuffix(strings.ToLower(real), "/.local/bin/deveco.exe") {
 				return []string{bin, "upgrade"}
 			}
 			return nil
 		}},
-	"opencode": {npm: []string{"opencode-ai"}, brew: []string{"opencode"}, target: true,
+	"opencode": {npm: []string{"opencode-ai"}, brew: []string{"opencode"}, target: true, scripts: true,
 		self: func(bin, real string) []string {
 			if strings.Contains(real, "/.opencode/bin/") {
 				return []string{bin, "upgrade"}
@@ -176,8 +184,8 @@ var cliSpecs = map[string]cliSpec{
 			return nil
 		}},
 	"copilot":   {npm: []string{"@github/copilot"}, brew: []string{"copilot-cli"}},
-	"crush":     {npm: []string{"@charmland/crush"}, brew: []string{"crush"}},
-	"cline":     {npm: []string{"cline"}, brew: []string{"cline"}},
+	"crush":     {npm: []string{"@charmland/crush"}, brew: []string{"crush"}, scripts: true},
+	"cline":     {npm: []string{"cline"}, brew: []string{"cline"}, scripts: true},
 	"dsh":       {npm: []string{"@deepseek-ai/dsh"}},
 	"codebuddy": {npm: []string{"@tencent-ai/codebuddy-code"}},
 	"goose":     {brew: []string{"block-goose-cli"}},
@@ -193,10 +201,10 @@ var cliSpecs = map[string]cliSpec{
 	// only its npm package and brew cask are recognized
 	"atomcode": {npm: []string{"@atomgit.com/atomcode"}, brew: []string{"atomcode"}},
 	// Snow CLI is published on npm alone (snow-ai)
-	"snow": {npm: []string{"snow-ai"}},
+	"snow": {npm: []string{"snow-ai"}, scripts: true},
 	// MothX: its npm installer package, which brings the native binary
 	// for the platform as an optional dependency
-	"mothx": {npm: []string{"mothx-installer"}},
+	"mothx": {npm: []string{"mothx-installer"}, scripts: true},
 	// PenguinHarness: its npm package, or install.sh's tarball in
 	// ~/.penguin (bin, lib, node; ~/.local/bin/penguin links there), which
 	// penguin update re-runs the installer for. On Windows its update
@@ -214,7 +222,7 @@ var cliSpecs = map[string]cliSpec{
 		}},
 	// omo update, however it was installed: OmO's own updater, which moves
 	// the engine it pins (senpi) with it
-	"omo": {npm: []string{"omo-ai"},
+	"omo": {npm: []string{"omo-ai"}, scripts: true,
 		self: func(bin, real string) []string { return []string{bin, "update"} }},
 }
 
@@ -280,7 +288,7 @@ func howInstalled(spec cliSpec, bin string) *updater {
 	// otherwise a package manager's before Homebrew's: npm under Homebrew's
 	// node (a keg-only node@20's Cellar/node@20/<v>/lib/node_modules) is npm's
 	for _, pkg := range spec.npm {
-		if u := fromNodeModules(pkg, bin, slash); u != nil {
+		if u := fromNodeModules(pkg, spec.scripts, bin, slash); u != nil {
 			return u
 		}
 	}
@@ -296,7 +304,7 @@ func howInstalled(spec cliSpec, bin string) *updater {
 // that runs it, so the folder holds that node too.
 func selfPath(spec cliSpec, bin, real string) string {
 	for _, pkg := range spec.npm {
-		if u := fromNodeModules(pkg, bin, real); u != nil {
+		if u := fromNodeModules(pkg, false, bin, real); u != nil {
 			if u.via == "npm" {
 				return u.path
 			}
@@ -356,7 +364,8 @@ func brewBin(spec cliSpec) string {
 // fromNodeModules is the updater of a CLI the package pkg installed in a
 // global node_modules: the binary leads there (npm's and bun's links), or
 // is a shim that names it (npm's .cmd on Windows, pnpm's scripts).
-func fromNodeModules(pkg, bin, real string) *updater {
+// scripts: the package's install script is let run (cliSpec.scripts).
+func fromNodeModules(pkg string, scripts bool, bin, real string) *updater {
 	mark := "/node_modules/" + pkg + "/"
 	modules := ""
 	if i := strings.Index(real, mark); i >= 0 {
@@ -379,13 +388,13 @@ func fromNodeModules(pkg, bin, real string) *updater {
 				return nil
 			}
 		}
-		return &updater{via: "bun", pkg: pkg, cmd: []string{bun, "add", "-g", pkg + "@latest"}}
+		return &updater{via: "bun", pkg: pkg, cmd: withScripts([]string{bun, "add", "-g"}, "bun", pkg, scripts)}
 	case strings.Contains(lower, "/pnpm/") || strings.Contains(lower, "/.pnpm/"):
 		pnpm, err := proc.Look("pnpm")
 		if err != nil {
 			return nil
 		}
-		return &updater{via: "pnpm", pkg: pkg, cmd: []string{pnpm, "add", "-g", pkg + "@latest"}}
+		return &updater{via: "pnpm", pkg: pkg, cmd: withScripts([]string{pnpm, "add", "-g"}, "pnpm", pkg, scripts)}
 	case strings.Contains(lower, "/.volta/") || strings.Contains(lower, "/yarn/") || strings.Contains(lower, "/.yarn/"):
 		return nil // installed by a manager of its own, which magpie leaves to it
 	}
@@ -421,8 +430,25 @@ func fromNodeModules(pkg, bin, real string) *updater {
 			return nil
 		}
 	}
-	u.cmd = []string{npm, "install", "-g", "--prefix", prefix, pkg + "@latest"}
+	u.cmd = withScripts([]string{npm, "install", "-g", "--prefix", prefix}, "npm", pkg, scripts)
 	return u
+}
+
+// withScripts is cmd, a package manager's global install, followed by
+// what lets pkg's install script run when scripts (cliSpec.scripts),
+// then pkg@latest, last: a retry puts another version there.
+func withScripts(cmd []string, via, pkg string, scripts bool) []string {
+	if scripts {
+		switch via {
+		case "npm":
+			cmd = append(cmd, "--allow-scripts="+pkg)
+		case "bun":
+			cmd = append(cmd, "--trust")
+		case "pnpm":
+			cmd = append(cmd, "--allow-build="+pkg)
+		}
+	}
+	return append(cmd, pkg+"@latest")
 }
 
 // bunxNames says whether bin is bun's Windows shim of pkg's program: a
@@ -1142,6 +1168,17 @@ var runCheck = func(ctx context.Context, bin string, env []string) (string, int,
 	return string(out), code, err
 }
 
+// scriptsFlag is the flag u's update lets its package's install script
+// run with (withScripts), and a space; "" for none.
+func scriptsFlag(u *updater) string {
+	for _, a := range u.cmd {
+		if a == "--trust" || strings.HasPrefix(a, "--allow-scripts=") || strings.HasPrefix(a, "--allow-build=") {
+			return a + " "
+		}
+	}
+	return ""
+}
+
 // mendHint is how to put back a CLI an update left unable to run.
 func mendHint(u *updater, version string) string {
 	at := version
@@ -1154,9 +1191,9 @@ func mendHint(u *updater, version string) string {
 		if strings.ContainsAny(prefix, " \t") {
 			prefix = `"` + prefix + `"`
 		}
-		return fmt.Sprintf("its install is incomplete (npm can leave out a native package and still succeed); reinstall it with: npm install -g --prefix %s %s@%s --include=optional", prefix, u.pkg, at)
+		return fmt.Sprintf("its install is incomplete (npm can leave out a native package and still succeed); reinstall it with: npm install -g --prefix %s %s%s@%s --include=optional", prefix, scriptsFlag(u), u.pkg, at)
 	case "bun", "pnpm":
-		return fmt.Sprintf("its install is incomplete; reinstall it with: %s add -g %s@%s", u.via, u.pkg, at)
+		return fmt.Sprintf("its install is incomplete; reinstall it with: %s add -g %s%s@%s", u.via, scriptsFlag(u), u.pkg, at)
 	case "brew":
 		cask := ""
 		if u.cask {

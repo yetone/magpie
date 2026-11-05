@@ -27,16 +27,16 @@ func TestInstallCommands(t *testing.T) {
 		id, goos string
 		want     []string
 	}{
-		{"claude", "darwin", []string{"script: curl -fsSL https://claude.ai/install.sh | bash", "npm: npm install -g @anthropic-ai/claude-code"}},
-		{"claude", "windows", []string{"powershell: irm https://claude.ai/install.ps1 | iex", "npm: npm install -g @anthropic-ai/claude-code"}},
+		{"claude", "darwin", []string{"script: curl -fsSL https://claude.ai/install.sh | bash", "npm: npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code"}},
+		{"claude", "windows", []string{"powershell: irm https://claude.ai/install.ps1 | iex", "npm: npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code"}},
 		{"codex", "darwin", []string{"script: curl -fsSL https://chatgpt.com/codex/install.sh | sh", "brew: brew install --cask codex", "npm: npm install -g @openai/codex"}},
 		{"codex", "linux", []string{"script: curl -fsSL https://chatgpt.com/codex/install.sh | sh", "npm: npm install -g @openai/codex"}},
 		{"gemini", "linux", []string{"brew: brew install gemini-cli", "npm: npm install -g @google/gemini-cli"}},
 		{"gemini", "windows", []string{"npm: npm install -g @google/gemini-cli"}},
-		{"opencode", "darwin", []string{"script: curl -fsSL https://opencode.ai/install | bash", "npm: npm install -g opencode-ai"}},
-		{"opencode", "windows", []string{"npm: npm install -g opencode-ai"}},
-		{"deveco", "darwin", []string{"npm: npm install -g @deveco/deveco-code"}},
-		{"deveco", "windows", []string{"npm: npm install -g @deveco/deveco-code"}},
+		{"opencode", "darwin", []string{"script: curl -fsSL https://opencode.ai/install | bash", "npm: npm install -g --allow-scripts=opencode-ai opencode-ai"}},
+		{"opencode", "windows", []string{"npm: npm install -g --allow-scripts=opencode-ai opencode-ai"}},
+		{"deveco", "darwin", []string{"npm: npm install -g --allow-scripts=@deveco/deveco-code @deveco/deveco-code"}},
+		{"deveco", "windows", []string{"npm: npm install -g --allow-scripts=@deveco/deveco-code @deveco/deveco-code"}},
 		{"deveco", "linux", nil}, // no Linux build in its package
 		{"pi", "linux", []string{"npm: npm install -g @earendil-works/pi-coding-agent"}},
 		{"cursor", "darwin", nil}, // no command magpie knows
@@ -81,7 +81,7 @@ func TestInstallCommandsWithoutNode(t *testing.T) {
 		{"pi", "windows", []InstallCmd{{Via: "npm", Node: "winget", Command: winget + "@earendil-works/pi-coding-agent"}}},
 		{"claude", "linux", []InstallCmd{
 			{Via: "script", Command: "curl -fsSL https://claude.ai/install.sh | bash"},
-			{Via: "npm", Node: "nvm", Command: nvm + "@anthropic-ai/claude-code"},
+			{Via: "npm", Node: "nvm", Command: nvm + "--allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code"},
 		}},
 	} {
 		if got := installCommands(c.id, c.goos, false); !reflect.DeepEqual(got, c.want) {

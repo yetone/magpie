@@ -64,8 +64,8 @@ func TestUpdateCLIChecksItRuns(t *testing.T) {
 		t.Fatalf("mended: %+v, %v", c, err)
 	}
 	want := []string{
-		npm + " install -g --prefix " + prefix + " @anthropic-ai/claude-code@latest",
-		npm + " install -g --prefix " + prefix + " @anthropic-ai/claude-code@2.1.299 --include=optional",
+		npm + " install -g --prefix " + prefix + " --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code@latest",
+		npm + " install -g --prefix " + prefix + " --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code@2.1.299 --include=optional",
 	}
 	if strings.Join(ran, "\n") != strings.Join(want, "\n") {
 		t.Errorf("ran:\n%s\nwant:\n%s", strings.Join(ran, "\n"), strings.Join(want, "\n"))
@@ -97,7 +97,7 @@ func TestUpdateCLIChecksItRuns(t *testing.T) {
 	}
 	_, err = a.UpdateCLI()
 	if err == nil || !strings.Contains(err.Error(), "claude native binary not installed") ||
-		!strings.Contains(err.Error(), "npm install -g --prefix "+prefix+" @anthropic-ai/claude-code@2.1.299 --include=optional") || len(ran) != 2 {
+		!strings.Contains(err.Error(), "npm install -g --prefix "+prefix+" --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code@2.1.299 --include=optional") || len(ran) != 2 {
 		t.Fatalf("not mended: %v, ran %q", err, ran)
 	}
 }

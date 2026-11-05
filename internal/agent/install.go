@@ -109,7 +109,11 @@ func installCommands(id, goos string, node bool) []InstallCmd {
 		out = append(out, f(goos)...)
 	}
 	if spec, ok := cliSpecs[id]; ok && len(spec.npm) > 0 {
-		out = append(out, npmInstall(spec.npm[0], goos, node))
+		pkg := spec.npm[0]
+		if spec.scripts {
+			pkg = "--allow-scripts=" + pkg + " " + pkg
+		}
+		out = append(out, npmInstall(pkg, goos, node))
 	}
 	return out
 }
@@ -118,8 +122,10 @@ func installCommands(id, goos string, node bool) []InstallCmd {
 // (github.com/nvm-sh/nvm/releases/latest).
 const nvmVersion = "v0.40.8"
 
-// npmInstall is the command installing pkg with npm on goos, with Node.js
-// installed first when node is false.
+// npmInstall is the command installing pkg (what follows npm install -g:
+// the package, with --allow-scripts for it when it has an install script
+// it needs, which npm 12 runs only when asked) with npm on goos, with
+// Node.js installed first when node is false.
 //
 // On a Mac or Linux: nvm's installer, then nvm.sh read into the shell the
 // command runs in (the installer adds it to the profile, which only the

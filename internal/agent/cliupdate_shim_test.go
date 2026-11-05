@@ -75,7 +75,7 @@ func TestMiseShimIsNodesNpm(t *testing.T) {
 	if u == nil || u.via != "npm" || u.path != filepath.Join(prefix, "bin") {
 		t.Fatalf("mise's shim: %+v", u)
 	}
-	if want := []string{filepath.Join(prefix, "bin/npm"), "install", "-g", "--prefix", prefix, "snow-ai@latest"}; !reflect.DeepEqual(u.cmd, want) {
+	if want := []string{filepath.Join(prefix, "bin/npm"), "install", "-g", "--prefix", prefix, "--allow-scripts=snow-ai", "snow-ai@latest"}; !reflect.DeepEqual(u.cmd, want) {
 		t.Errorf("update %q, want %q", u.cmd, want)
 	}
 	if want := []string{mise, "reshim"}; !reflect.DeepEqual(u.reshim, want) {
@@ -155,7 +155,7 @@ func TestUpdateCLIThroughMiseShim(t *testing.T) {
 	if err != nil || c.Version != "0.9.2" || c.Update {
 		t.Fatalf("after: %+v, %v", c, err)
 	}
-	want := [][]string{{filepath.Join(prefix, "bin/npm"), "install", "-g", "--prefix", prefix, "snow-ai@latest"}, {mise, "reshim"}}
+	want := [][]string{{filepath.Join(prefix, "bin/npm"), "install", "-g", "--prefix", prefix, "--allow-scripts=snow-ai", "snow-ai@latest"}, {mise, "reshim"}}
 	if !reflect.DeepEqual(ran, want) {
 		t.Errorf("ran %q, want %q", ran, want)
 	}
@@ -189,7 +189,7 @@ func TestAsdfShimIsNodesNpm(t *testing.T) {
 	if real != filepath.Join(prefix, "bin/snow") || u == nil || u.reshim != nil {
 		t.Fatalf("asdf's shim: %q %+v", real, u)
 	}
-	if want := []string{npm, "install", "-g", "--prefix", prefix, "snow-ai@latest"}; !reflect.DeepEqual(u.cmd, want) {
+	if want := []string{npm, "install", "-g", "--prefix", prefix, "--allow-scripts=snow-ai", "snow-ai@latest"}; !reflect.DeepEqual(u.cmd, want) {
 		t.Errorf("update %q, want %q", u.cmd, want)
 	}
 }
@@ -247,7 +247,7 @@ func TestMiseShimWindows(t *testing.T) {
 		if real != filepath.Join(prefix, "snow.cmd") {
 			t.Errorf("%s: program %q", c.mode, real)
 		}
-		if u == nil || !reflect.DeepEqual(u.cmd, []string{npm, "install", "-g", "--prefix", prefix, "snow-ai@latest"}) || u.path != prefix {
+		if u == nil || !reflect.DeepEqual(u.cmd, []string{npm, "install", "-g", "--prefix", prefix, "--allow-scripts=snow-ai", "snow-ai@latest"}) || u.path != prefix {
 			t.Errorf("%s: %+v", c.mode, u)
 			continue
 		}

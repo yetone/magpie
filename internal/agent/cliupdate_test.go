@@ -188,7 +188,7 @@ func TestHowInstalled(t *testing.T) {
 		t.Errorf("pnpm without pnpm: %+v", u)
 	}
 	pnpm := file(t, filepath.Join(fake, "pnpm"), "#!/bin/sh\n")
-	if u := howInstalled(cliSpecs["claude"], shim); u == nil || !reflect.DeepEqual(u.cmd, []string{pnpm, "add", "-g", "@anthropic-ai/claude-code@latest"}) {
+	if u := howInstalled(cliSpecs["claude"], shim); u == nil || !reflect.DeepEqual(u.cmd, []string{pnpm, "add", "-g", "--allow-build=@anthropic-ai/claude-code", "@anthropic-ai/claude-code@latest"}) {
 		t.Errorf("pnpm: %+v", u)
 	}
 
@@ -454,7 +454,7 @@ func TestUpdateCLIOpenCodeByNpmTakesNoVersion(t *testing.T) {
 	if _, err := a.UpdateCLI(); err != nil {
 		t.Fatal(err)
 	}
-	if len(ran) != 1 || !strings.HasSuffix(strings.Join(ran[0], " "), "install -g --prefix "+prefix+" opencode-ai@latest") {
+	if len(ran) != 1 || !strings.HasSuffix(strings.Join(ran[0], " "), "install -g --prefix "+prefix+" --allow-scripts=opencode-ai opencode-ai@latest") {
 		t.Errorf("ran %q", ran)
 	}
 }
@@ -692,7 +692,7 @@ func TestHowInstalledBunWindowsShim(t *testing.T) {
 	omp := file(t, filepath.Join(bunDir, "bin/omp.exe"), "MZ\x90\x00 node_modules")
 	file(t, filepath.Join(bunDir, "bin/omp.bunx"), bunxOf(t, `install\global\node_modules\@oh-my-pi\pi-coding-agent\dist\cli.js`,
 		[]byte{'b', 0, 'u', 0, 'n', 0, ' ', 0, 0x82, 0, 0, 0, 8, 0, 0, 0, 0x35, 0xab}))
-	if u := howInstalled(cliSpecs["opencode"], opencode); u == nil || u.via != "bun" || !reflect.DeepEqual(u.cmd, []string{bun, "add", "-g", "opencode-ai@latest"}) {
+	if u := howInstalled(cliSpecs["opencode"], opencode); u == nil || u.via != "bun" || !reflect.DeepEqual(u.cmd, []string{bun, "add", "-g", "--trust", "opencode-ai@latest"}) {
 		t.Errorf("opencode's bun shim: %+v", u)
 	}
 	if u := howInstalled(cliSpecs["omp"], omp); u == nil || u.via != "bun" || !reflect.DeepEqual(u.cmd, []string{bun, "add", "-g", "@oh-my-pi/pi-coding-agent@latest"}) {
