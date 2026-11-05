@@ -161,6 +161,10 @@ type Status struct {
 	// (or for the one it is on)
 	Loading bool `json:"loading,omitempty"`
 	Waiting int  `json:"waiting,omitempty"`
+	// Rosetta: AstrLink Guard runs in an Intel magpie under Rosetta,
+	// in Go and translated, several times slower than in Apple silicon's
+	// build, which has CoreML too
+	Rosetta bool `json:"rosetta,omitempty"`
 }
 
 // Now is the model's status.

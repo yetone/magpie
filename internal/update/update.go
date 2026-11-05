@@ -35,6 +35,7 @@ import (
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
+	"github.com/yetone/magpie/internal/rosetta"
 	"github.com/yetone/magpie/internal/source"
 )
 
@@ -199,14 +200,35 @@ func parse(v string) *semver {
 // one.
 var GUI bool
 
-// AppAsset and BinaryAsset name the files this machine would install.
-func AppAsset() string { return "magpie-darwin-" + runtime.GOARCH + ".zip" }
-func BinaryAsset() string {
-	name := "magpie-cli-" + runtime.GOOS + "-" + runtime.GOARCH
-	if GUI && runtime.GOOS != "darwin" {
-		name = "magpie-" + runtime.GOOS + "-" + runtime.GOARCH
+// goos and goarch are the system this magpie was built for, and
+// translated says it runs under Rosetta; tests set them.
+var (
+	goos, goarch = runtime.GOOS, runtime.GOARCH
+	translated   = rosetta.Translated
+)
+
+// arch is the architecture an update installs: this build's, but Apple
+// silicon's for an Intel magpie under Rosetta. Kept on the Intel build,
+// such a Mac ran the local masking model in Go under translation, with no
+// CoreML, at 150% of a core (cdredfox on Discord), and every update
+// fetched the Intel build again. Installing Apple silicon's is the same
+// swap: the zip's magpie.app is renamed over the bundle, signed by the
+// same team (sameSigner), and the bare binary is renamed over itself.
+func arch() string {
+	if goos == "darwin" && goarch == "amd64" && translated() {
+		return "arm64"
 	}
-	if runtime.GOOS == "windows" {
+	return goarch
+}
+
+// AppAsset and BinaryAsset name the files this machine would install.
+func AppAsset() string { return "magpie-darwin-" + arch() + ".zip" }
+func BinaryAsset() string {
+	name := "magpie-cli-" + goos + "-" + arch()
+	if GUI && goos != "darwin" {
+		name = "magpie-" + goos + "-" + arch()
+	}
+	if goos == "windows" {
 		name += ".exe"
 	}
 	return name

@@ -402,3 +402,23 @@ func TestGuardPanicFailsOnlyItsRequest(t *testing.T) {
 		t.Fatalf("Now = %+v after one request's panic", st)
 	}
 }
+
+// Now says when AstrLink Guard runs under Rosetta, for Settings → Privacy
+// to say why it is slow (cdredfox on Discord: 150% of a core in the Intel
+// build on Apple silicon); Privacy Filter's pf-serve is Apple silicon's
+// there (target), so it says nothing.
+func TestGuardNowSaysRosetta(t *testing.T) {
+	guardSandbox(t)
+	was := translated
+	t.Cleanup(func() { translated = was })
+	for _, tr := range []bool{false, true} {
+		translated = func() bool { return tr }
+		if st := Of(AstrLinkGuard).Now(); st.Rosetta != tr {
+			t.Errorf("translated=%v: AstrLink Guard's Rosetta = %v", tr, st.Rosetta)
+		}
+	}
+	translated = func() bool { return true }
+	if st := Of(PrivacyFilter).Now(); st.Rosetta {
+		t.Error("Privacy Filter says Rosetta, though its pf-serve is Apple silicon's")
+	}
+}
