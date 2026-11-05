@@ -694,15 +694,24 @@ func listCCFiles(agent, dir string) []file {
 // files.
 var filesHook func()
 
-func allFiles() []file {
+func allFiles() []file { return allFilesWith(zcodeFiles) }
+
+// allFilesForTitles is allFiles with ZCode's sessions listed from their own
+// rows alone: a name poll needs titles, not every message counted
+// (zcodeFiles joins them for a session's size and last activity).
+func allFilesForTitles() []file { return allFilesWith(zcodeTitleFiles) }
+
+func allFilesWith(zcode func() []file) []file {
 	if filesHook != nil {
 		filesHook()
 	}
+	lists := callFileLists(codexFiles())
+	lists = append(lists, openCodeFiles(), piFiles(), raftFiles(), cindyFiles(), wslFiles("pi", "raft", "omp", "kimi"), zcode())
+	lists = append(lists, dshFiles(), clineFiles(), ccFiles("qoder", QoderDir("qoder")), ccFiles("qoder-cn", QoderDir("qoder-cn")),
+		grokFiles(), workbuddyFiles(), workbuddyAIFiles(), codebuddyFiles(), droidFiles(), ompFiles(), cursorFiles(), hermesFiles(), almaFiles(), kimiFiles(), agyFiles())
 	// each lister asked Reads already; a file listed under another
 	// agent's name is held to that agent too
-	return allowed(distinctOf(append(callFileLists(codexFiles()), openCodeFiles(), piFiles(), raftFiles(), cindyFiles(),
-		wslFiles("pi", "raft", "omp", "kimi"), zcodeFiles(), dshFiles(), clineFiles(), ccFiles("qoder", QoderDir("qoder")), ccFiles("qoder-cn", QoderDir("qoder-cn")),
-		grokFiles(), workbuddyFiles(), workbuddyAIFiles(), codebuddyFiles(), droidFiles(), ompFiles(), cursorFiles(), hermesFiles(), almaFiles(), kimiFiles(), agyFiles())...))
+	return allowed(distinctOf(lists...))
 }
 
 // distinctOf is lists one after another with each path kept once, the
@@ -2733,7 +2742,29 @@ func Titles(keys []string) map[string]string {
 	defer mu.Unlock()
 	loadCache()
 	defer useDBs()()
-	files := allFiles()
+	files := allFilesForTitles()
+	// ZCode files a subagent under sess_subagent_agent_<id>, with its
+	// conversation under the parent session's key (ocRoots). A request
+	// names it by the bare id, so its title is read from its own file
+	// when no group carries the key asked for.
+	subFiles := map[string]*file{}
+	for i := range files {
+		f := &files[i]
+		if id, ok := strings.CutPrefix(f.m().sid, "sess_subagent_agent_"); ok && f.agent == "zcode" {
+			subFiles[id] = f
+		}
+	}
+	subAsked := map[string]string{} // the key asked for → the subagent's file
+	for _, k := range keys {
+		agent, id, ok := strings.Cut(k, ":")
+		if !ok || agent != "zcode" {
+			continue
+		}
+		if f := subFiles[strings.TrimPrefix(id, "sess_subagent_agent_")]; f != nil {
+			want[f.key] = true
+			subAsked[k] = f.path
+		}
+	}
 	groups := byKey(files, func(f *file) bool { return want[f.key] })
 	var fs []file
 	for _, f := range files {
@@ -2763,6 +2794,16 @@ func Titles(keys []string) map[string]string {
 			out[k] = s.Title
 			if asked := alias[k]; asked != "" {
 				out[asked] = s.Title
+			}
+		}
+	}
+	for k, path := range subAsked {
+		if out[k] != "" {
+			continue
+		}
+		if st := cache[path]; st != nil {
+			if name := cmp.Or(st.Named, st.Title, st.First); name != "" {
+				out[k] = name
 			}
 		}
 	}
