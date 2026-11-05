@@ -37,3 +37,28 @@ func zcodeTitleFiles() []file {
 	}
 	return ocRoots(out, parent)
 }
+
+// zcodeTitleStamps gives the ZCode sessions a name poll asks for the size
+// and last activity zcodeFiles would give them, read from each one's own
+// messages: ZCode writes a message without touching its session's row, so
+// the row's time alone missed a first prompt typed since the last poll, and
+// a stamp unlike the full listing's had the Sessions page and the poll each
+// read the session again after the other. A session whose messages can't
+// be read keeps its row's stamp.
+func zcodeTitleStamps(files []file, want map[string]bool) {
+	for i := range files {
+		f := &files[i]
+		if f.agent != "zcode" || !want[f.key] {
+			continue
+		}
+		zc, ok := f.m().oc.(zcDB)
+		if !ok {
+			continue
+		}
+		var n, last int64
+		if zc.db.QueryRow(`SELECT COUNT(id), COALESCE(MAX(time_updated), 0) FROM message WHERE session_id = ?`, f.m().sid).Scan(&n, &last) != nil {
+			continue
+		}
+		f.size, f.mod = n, ms(max(f.mod.UnixMilli(), last))
+	}
+}

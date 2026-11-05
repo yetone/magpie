@@ -114,3 +114,62 @@ func TestZCodeDefaultTitleFallsBackToFirstPrompt(t *testing.T) {
 		t.Fatalf("title %q, want %q (all %v)", got["zcode:"+id], prompt, got)
 	}
 }
+
+// A name poll sees a ZCode session's new messages, as the full listing
+// does: ZCode writes a message without touching its session's row, so a
+// session still under its default title is named by its first prompt once
+// that prompt is in, not when the row next changes.
+func TestZCodeTitlesSeeNewMessages(t *testing.T) {
+	home := setupAgents(t)
+	const id = "9a1d2c3b-4e5f-4a6b-8c7d-0e1f2a3b4c5d"
+	const prompt = "The prompt typed after the first poll"
+	db, err := sql.Open("sqlite", filepath.Join(home, ".zcode", "cli", "db", "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if _, err := db.Exec(`INSERT INTO session (id, project_id, parent_id, slug, directory, title, title_source, version, time_created, time_updated) VALUES (?, 'p', NULL, 's', '/work/zc', 'New session - default', 'default', '0.16.9', 1790496400000, 1790496400000)`, "sess_"+id); err != nil {
+		t.Fatal(err)
+	}
+	if got := Titles([]string{"zcode:" + id}); got["zcode:"+id] != "" {
+		t.Fatalf("before any prompt: %q, want none", got["zcode:"+id])
+	}
+	ocInsert(t, db, "sess_"+id, "msg_late", 1790496401000, 1790496401000, `{"id":"msg_late","role":"user","time":{"created":1790496401000},"semantics":{"origin":"real_user"}}`)
+	if _, err := db.Exec("INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)", "prt_late", "msg_late", "sess_"+id, 1790496401000, 1790496401000, `{"type":"text","text":"`+prompt+`"}`); err != nil {
+		t.Fatal(err)
+	}
+	if got := Titles([]string{"zcode:" + id}); got["zcode:"+id] != prompt {
+		t.Fatalf("after the prompt: %q, want %q (all %v)", got["zcode:"+id], prompt, got)
+	}
+}
+
+// What a name poll keeps of a ZCode session is what the Sessions page's
+// listing would keep: the same size and last activity, so neither reads
+// the session again only because the other read it last.
+func TestZCodeTitlesKeepTheListingsStamp(t *testing.T) {
+	setupAgents(t)
+	if got := Titles([]string{"zcode:ses_zcA"}); got["zcode:ses_zcA"] == "" {
+		t.Fatalf("no title for ses_zcA")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	release := useDBs()
+	defer release()
+	var checked bool
+	for _, f := range zcodeFiles() {
+		if f.m().sid != "ses_zcA" {
+			continue
+		}
+		checked = true
+		st := cache[f.path]
+		if st == nil {
+			t.Fatalf("%s not kept", f.path)
+		}
+		if st.Size != f.size || st.Mod != f.mod.UnixNano() {
+			t.Fatalf("kept size %d mod %d, listing has size %d mod %d", st.Size, st.Mod, f.size, f.mod.UnixNano())
+		}
+	}
+	if !checked {
+		t.Fatal("ses_zcA not listed")
+	}
+}
