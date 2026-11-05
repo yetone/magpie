@@ -1024,7 +1024,10 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 		}
 		f.Model, call.Model = m, m
 	}
-	p, model, ok := provider.Resolve(f.Model)
+	p, model, ok := mediaGroupFirst(f.Model)
+	if !ok {
+		p, model, ok = provider.Resolve(f.Model)
+	}
 	if !ok {
 		p, model, ok = bareVideomaker(f.Model)
 	}
@@ -1036,7 +1039,7 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 		fail(404, fmt.Sprintf("magpie knows no model %q to make videos with", f.Model))
 		return
 	}
-	g, ms, isGroup := groupToMake(f.Model, p, model, provider.FindGroup)
+	g, ms, isGroup := groupToMake(f.Model, p, model, mediaMembers)
 	if isGroup {
 		r = heldByGroup(r, g) // held to the group's accounts, if it is
 	}
