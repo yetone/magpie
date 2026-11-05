@@ -780,6 +780,16 @@ func codexIn(at place) *Agent {
 				log.Println("codex: moving magpie's threads back:", err)
 			}
 		}
+		// then a paginated thread by its row alone, packed or not (bringOver's, and those
+		// started on magpie): Codex reads its provider there, so none of
+		// a big history is copied to the trash or rewritten
+		retagged, err := sessions.RetagPagedCodexThreads(dir, magpieID, to)
+		if len(retagged) > 0 {
+			log.Printf("codex: %d paginated thread(s) on magpie moved back to %s, where Codex resumes them", len(retagged), to)
+		}
+		if err != nil {
+			log.Println("codex: moving magpie's paginated threads back:", err)
+		}
 		moved, err := sessions.MoveCodexThreads(dir, magpieID, to)
 		if len(moved) > 0 {
 			log.Printf("codex: %d thread(s) started on magpie moved to %s, where Codex lists them", len(moved), to)
@@ -836,6 +846,15 @@ func codexIn(at place) *Agent {
 	// packedBudget bytes a sync: the rest of a big history follows over
 	// the next syncs, and older ones from Sessions (ResumeNow moves one
 	// as it is reopened).
+	//
+	// A paginated thread (Codex 0.166 on) goes by its row in Codex's state
+	// database, not its files: Codex lists and resumes it on the provider
+	// the row names. Every one moves by that row alone, of any age, packed
+	// or not, any id's length (RetagPagedCodexThreads): the 30 days and
+	// the budget above left an API-key user's older OpenAI threads, and
+	// the Codex app refused each one ("This chat uses openai, but your
+	// current provider is magpie", Parry_Moody and Cyrus on Discord).
+	// bringBack moves them back the same way.
 	bringOver := func() {
 		if at.spell != nil || !asProvider() || sessions.CodexProviderIn(dir) != magpieID {
 			return
@@ -862,6 +881,16 @@ func codexIn(at place) *Agent {
 			if err != nil {
 				log.Printf("codex: moving %s's threads to magpie: %v", from, err)
 			}
+		}
+		// every paginated thread by its row, of any age: Codex resumes
+		// one on the provider its row names (Parry_Moody and Cyrus on
+		// Discord, whose old OpenAI threads the file moves below left)
+		retagged, err := sessions.RetagPagedCodexThreads(dir, from, magpieID)
+		if len(retagged) > 0 {
+			log.Printf("codex: %d paginated thread(s) started on %s moved to magpie, where Codex resumes them now", len(retagged), from)
+		}
+		if err != nil {
+			log.Printf("codex: moving %s's paginated threads to magpie: %v", from, err)
 		}
 		move := sessions.MovePackedCodexThreads
 		if len(from) != len(magpieID) {
@@ -919,6 +948,13 @@ func codexIn(at place) *Agent {
 		if profileNamed(names)[ccSwitchOfficial] {
 			return
 		}
+		retagged, err := sessions.RetagPagedCodexThreads(dir, ccSwitchOfficial, to)
+		if len(retagged) > 0 {
+			log.Printf("codex: %d paginated thread(s) of CC Switch's official route moved to %s, where Codex resumes them", len(retagged), to)
+		}
+		if err != nil {
+			log.Println("codex: moving CC Switch's official paginated threads:", err)
+		}
 		moved, err := sessions.MoveCodexThreads(dir, ccSwitchOfficial, to)
 		if len(moved) > 0 {
 			log.Printf("codex: %d thread(s) of CC Switch's official route moved to %s, where Codex resumes them", len(moved), to)
@@ -972,6 +1008,11 @@ func codexIn(at place) *Agent {
 				log.Printf("codex: moving %s's threads to OpenAI: %v", from, err)
 			}
 		}
+		retagged, err := sessions.RetagPagedCodexThreads(dir, from, "openai")
+		ids = append(ids, retagged...)
+		if err != nil {
+			log.Printf("codex: moving %s's paginated threads to OpenAI: %v", from, err)
+		}
 		move := sessions.MovePackedCodexThreads
 		if len(from) != len("openai") {
 			move = sessions.MoveRecentCodexThreads
@@ -1017,9 +1058,13 @@ func codexIn(at place) *Agent {
 				return
 			}
 		}
+		retagged, err := sessions.RetagPagedCodexThreadIDs(dir, "openai", to, b.IDs)
+		if err != nil {
+			log.Printf("codex: moving %s's paginated threads to %s: %v", b.From, to, err)
+		}
 		moved, err := sessions.MoveCodexThreadIDs(dir, "openai", to, b.IDs)
-		if len(moved) > 0 {
-			log.Printf("codex: %d thread(s) started on %s moved from OpenAI to %s", len(moved), b.From, to)
+		if n := len(moved) + len(retagged); n > 0 {
+			log.Printf("codex: %d thread(s) started on %s moved from OpenAI to %s", n, b.From, to)
 		}
 		if err != nil {
 			log.Printf("codex: moving %s's threads to %s: %v", b.From, to, err)
