@@ -848,6 +848,7 @@ claude mcp add --transport http magpie-tools http://127.0.0.1:3425/mcp/magpie/to
       <tr><td><code>config</code></td><td>magpie 修改的文件。会展开 <code>~</code> 和 <code>$VAR</code>。文件不存在时会新建。</td></tr>
       <tr><td><code>format</code></td><td><code>json</code>、<code>yaml</code> 或 <code>env</code>，文件名看不出格式时才需要写（<code>.json</code>/<code>.jsonc</code>、<code>.yaml</code>/<code>.yml</code>、<code>.env</code>）。暂不支持 TOML。</td></tr>
       <tr><td><code>model</code></td><td>文件里模型的键，JSON 和 YAML 用点分路径（<code>llm.model</code>）。模型在 Agent 自己里面选（从 <code>connect</code> 写入的模型里挑，比如 Raycast）时不写它：这一行就只有连接开关、没有模型选择器，而 <code>connect</code>（这种插件必须有）调用时不带 <code>model</code>。</td></tr>
+      <tr><td><code>startup</code></td><td>Agent 把新会话起始的模型存在 <code>connect</code> 所写文件之外的另一个文件里时，用它代替 <code>model</code>：那个文件的 <code>config</code> 和 <code>format</code>，<code>model</code> 是其中模型的键，<code>keys</code> 是原样写在模型旁边的键。PiG 的 provider 在 <code>models.json</code>，默认模型在 <code>settings.json</code>：<code>startup: { config: "~/.pig/agent/settings.json", model: "defaultModel", keys: { defaultProvider: "magpie" } }</code>。这一行就能选模型，断开时两个文件都还原。v0.1.3008 之前的 magpie 把这样的插件当作没写 <code>model</code> 的插件。</td></tr>
       <tr><td><code>prefix</code></td><td>写在 magpie 模型 id 前面的内容：通过 LiteLLM 访问 OpenAI 兼容接口的 Agent 用 <code>openai/</code>。id 本身是网关接受的 <code>&lt;供应商&gt;/&lt;模型&gt;</code>。</td></tr>
       <tr><td><code>bin</code>、<code>dir</code></td><td><code>PATH</code> 上的命令和配置目录，用来判断 Agent 是否已安装。</td></tr>
       <tr><td><code>ua</code></td><td>Agent 的 User-Agent 里的词，请求没带它的 key 时，用来在用量里认出它。</td></tr>

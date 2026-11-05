@@ -23,6 +23,20 @@
 // only, a switch on the Agents page as an app whose one setting is magpie
 // as its provider is, and connect is called without a model (#2374).
 //
+// An agent that keeps the model a new session starts on in a file apart
+// from the one connect writes (PiG: the provider and its models in
+// models.json, defaultProvider and defaultModel in settings.json) says so
+// with startup, and model stays out: the row picks the model, written into
+// startup's file with startup's keys beside it, and connect writes the
+// rest into config. A magpie without startup reads the same module as
+// connect only, so a plugin can say it to every magpie.
+//
+//	startup: {
+//	  config: "~/.pig/agent/settings.json",
+//	  model: "defaultModel",
+//	  keys: { defaultProvider: "magpie" },
+//	}
+//
 // The agent export may also say where its agent reads what magpie's
 // Library gives (internal/library): an instructions file, an MCP file in
 // one of MCPFormats, and a skills folder; each is optional.
@@ -89,6 +103,21 @@ type Desc struct {
 	// Library is where the agent reads the Library's instructions, MCP
 	// servers and skills
 	Library Places `json:"library"`
+	// Startup is the file and key of the model a new session starts on,
+	// for an agent that keeps it apart from config; nil for one that
+	// keeps it in config (Model) or picks it itself
+	Startup *Startup `json:"startup"`
+}
+
+// Startup is where an agent keeps the model it starts on, apart from the
+// file connect writes: Config and Format as Desc's are, Model the key
+// path of the model in it, and Keys what is written beside it, as it is
+// (PiG's defaultProvider, the provider id its connect writes).
+type Startup struct {
+	Config string         `json:"config"`
+	Format string         `json:"format"`
+	Model  string         `json:"model"`
+	Keys   map[string]any `json:"keys"`
 }
 
 // Places are where an agent reads what the Library gives it, each a path
@@ -274,6 +303,9 @@ func Compile(spec, file string) (*Agent, error) {
 	}
 	// connect only: with no model key, connect's keys are all magpie
 	// writes, so a module with neither would write nothing
+	if a.Desc.Startup != nil && !a.has {
+		return nil, errors.New("agent.startup names the model, but there is no connect to write the gateway into agent.config")
+	}
 	if a.Desc.Model == "" && !a.has {
 		return nil, errors.New("agent.model names no key, and there is no connect to write the gateway: say one or both")
 	}
@@ -301,6 +333,32 @@ func (d *Desc) check() error {
 		return fmt.Errorf("agent.config %q: say its agent.format (json, yaml or env)", d.Config)
 	default:
 		return fmt.Errorf("agent.format %q: json, yaml or env", d.Format)
+	}
+	if st := d.Startup; st != nil {
+		st.Model = strings.TrimSpace(st.Model)
+		switch {
+		case d.Model != "":
+			return errors.New("agent.model and agent.startup.model both name the model: say one")
+		case strings.TrimSpace(st.Config) == "":
+			return errors.New("agent.startup.config names no file")
+		case st.Model == "":
+			return errors.New("agent.startup.model names no key")
+		case strings.TrimSpace(st.Config) == strings.TrimSpace(d.Config):
+			return errors.New("agent.startup.config is agent.config: name the model in it with agent.model")
+		}
+		if _, ok := st.Keys[st.Model]; ok {
+			return fmt.Errorf("agent.startup.keys has %q, the model's own key", st.Model)
+		}
+		if st.Format == "" {
+			st.Format = FormatOf(st.Config)
+		}
+		switch st.Format {
+		case "json", "yaml", "env":
+		case "":
+			return fmt.Errorf("agent.startup.config %q: say its agent.startup.format (json, yaml or env)", st.Config)
+		default:
+			return fmt.Errorf("agent.startup.format %q: json, yaml or env", st.Format)
+		}
 	}
 	l := &d.Library
 	l.Instructions, l.MCP, l.Skills = strings.TrimSpace(l.Instructions), strings.TrimSpace(l.MCP), strings.TrimSpace(l.Skills)

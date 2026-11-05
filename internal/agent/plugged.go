@@ -7,7 +7,9 @@ package agent
 // returns (where the gateway is, its key). What the user had under every
 // key magpie writes is stashed first and put back when magpie steps out,
 // so a plugin needs no code for that. The plugin says only where things
-// go; magpie does every write, to the one file the plugin names.
+// go; magpie does every write, to the one file the plugin names, and to
+// the file of its startup model when it keeps that apart (PiG's
+// settings.json beside its models.json, agentplug.Startup).
 
 import (
 	"encoding/json"
@@ -213,6 +215,40 @@ func (f pluggedFile) del(keys []string) error {
 	return edit.DelEnvFile(f.path, keys...)
 }
 
+// put writes kvs into f, keeping in st.Had what each key held before
+// magpie's first write, and puts back what the user had under a key
+// magpie wrote before and kvs no longer has.
+func (f pluggedFile) put(st *pluggedStash, kvs []edit.KV) error {
+	wrote := map[string]bool{}
+	for _, kv := range kvs {
+		wrote[kv.Path] = true
+		if _, ok := st.Had[kv.Path]; ok {
+			continue
+		}
+		if v, ok := f.raw(kv.Path); ok {
+			st.Had[kv.Path] = v
+		} else {
+			st.Had[kv.Path] = "\x00"
+		}
+	}
+	var del []string
+	for _, k := range sortedKeys(st.Had) {
+		if wrote[k] {
+			continue
+		}
+		if v := st.Had[k]; v == "\x00" {
+			del = append(del, k)
+		} else {
+			kvs = append(kvs, edit.KV{Path: k, Value: f.back(v)})
+		}
+		delete(st.Had, k)
+	}
+	if err := f.del(del); err != nil {
+		return err
+	}
+	return f.set(kvs)
+}
+
 // wired says the agent id's file is still as magpie wired it, by st: the
 // gateway's key magpie wrote is there.
 func (f pluggedFile) wired(id string, st pluggedStash) bool {
@@ -269,8 +305,81 @@ func plugged(home string, p *agentplug.Agent) *Agent {
 	}
 	restore := func(st pluggedStash) error { return f.restore(key, st) }
 	// only: the agent picks its model itself among those connect writes
-	// (#2374), so magpie writes no model, and the switch is its one field
+	// (#2374), so magpie writes no model, and the switch is its one field;
+	// or it keeps its startup model in a file apart (sf), which its model
+	// field writes, and config holds connect's keys alone
 	only := d.Model == ""
+	var sf *pluggedFile
+	var skey string
+	if d.Startup != nil {
+		sf = &pluggedFile{pluggedPath(home, d.Startup.Config), d.Startup.Format}
+		skey = "plugin:" + id + ":" + sf.path
+	}
+	// startSaved is what magpie keeps of the startup file
+	startSaved := func() (pluggedStash, bool) {
+		var st pluggedStash
+		v := stashShared()[skey]
+		return st, sf != nil && v != "" && json.Unmarshal([]byte(v), &st) == nil
+	}
+	// startOn: the startup file starts on magpie's provider still, as
+	// startup's first key of a string says (PiG's defaultProvider), else
+	// on the model magpie wrote. A model picked in the agent since among
+	// magpie's (PiG's /model, saved) is still magpie's.
+	startOn := func() (pluggedStash, bool) {
+		st, ok := startSaved()
+		return st, ok && sf.wired(id, st)
+	}
+	// startWire writes the startup model ref and startup's keys beside it
+	startWire := func(ref string) error {
+		kvs := []edit.KV{{Path: d.Startup.Model, Value: d.Prefix + ref}}
+		mark, value := d.Startup.Model, d.Prefix+ref
+		first := true
+		for _, k := range sortedKeys(d.Startup.Keys) {
+			v := d.Startup.Keys[k]
+			kvs = append(kvs, edit.KV{Path: k, Value: v})
+			if s, ok := v.(string); ok && first {
+				mark, value, first = k, s, false
+			}
+		}
+		st, was := startOn()
+		if !was {
+			st = pluggedStash{Had: map[string]string{}}
+		}
+		if err := sf.put(&st, kvs); err != nil {
+			return err
+		}
+		st.Ref, st.Mark, st.Value, st.Wrote = ref, mark, value, nil
+		st.Spec, st.Format = p.Spec, sf.format
+		b, _ := json.Marshal(st)
+		stash(map[string]string{skey: string(b)})
+		return nil
+	}
+	// startModel is the startup model as the field shows it: magpie's
+	// when the file starts on magpie still and the model is one of its
+	startModel := func() string {
+		v, _ := sf.get(d.Startup.Model)
+		if _, ok := onMagpie(); ok {
+			if st, ok := startOn(); ok {
+				if r, has := strings.CutPrefix(v, d.Prefix); has && (r == st.Ref || isMagpie(r)) {
+					return magpieID + "/" + r
+				}
+			}
+		}
+		return v
+	}
+	// startRestore puts back what the user had in the startup file, where
+	// it starts on magpie still; a model of their own picked in the agent
+	// since is theirs, and the stash is dropped
+	startRestore := func() error {
+		if sf == nil {
+			return nil
+		}
+		if st, ok := startOn(); ok {
+			return sf.restore(skey, st)
+		}
+		forget(skey)
+		return nil
+	}
 	// wire writes ref and connect's keys, stashing what each key had; a
 	// connect-only agent's ref is ""
 	wire := func(ref string) error {
@@ -305,7 +414,7 @@ func plugged(home string, p *agentplug.Agent) *Agent {
 			"models":  models,
 			"agent":   map[string]any{"id": id, "config": f.path},
 		}
-		if !only {
+		if !only || ref != "" {
 			in["model"] = model
 		}
 		out, err := p.Connect(in)
@@ -336,44 +445,23 @@ func plugged(home string, p *agentplug.Agent) *Agent {
 		if !was {
 			st = pluggedStash{Had: map[string]string{}}
 		}
-		wrote := map[string]bool{}
-		for _, kv := range kvs {
-			wrote[kv.Path] = true
-			if _, ok := st.Had[kv.Path]; ok {
-				continue
-			}
-			if v, ok := f.raw(kv.Path); ok {
-				st.Had[kv.Path] = v
-			} else {
-				st.Had[kv.Path] = "\x00"
-			}
-		}
 		// a key magpie wrote before that connect no longer returns gets
 		// what the user had back
-		var del []string
-		for _, k := range sortedKeys(st.Had) {
-			if wrote[k] {
-				continue
-			}
-			if v := st.Had[k]; v == "\x00" {
-				del = append(del, k)
-			} else {
-				kvs = append(kvs, edit.KV{Path: k, Value: f.back(v)})
-			}
-			delete(st.Had, k)
+		if err := f.put(&st, kvs); err != nil {
+			return err
 		}
 		st.Ref, st.Mark, st.Value, st.Wrote = ref, mark, gk, strs
 		st.Spec, st.Format = p.Spec, f.format
-		if err := f.del(del); err != nil {
-			return err
-		}
-		if err := f.set(kvs); err != nil {
-			return err
-		}
 		save(st)
+		if sf != nil && ref != "" {
+			return startWire(ref)
+		}
 		return nil
 	}
 	get := func() string {
+		if sf != nil {
+			return startModel()
+		}
 		v, _ := f.get(d.Model)
 		if st, ok := onMagpie(); ok && v == d.Prefix+st.Ref {
 			return magpieID + "/" + st.Ref
@@ -395,13 +483,16 @@ func plugged(home string, p *agentplug.Agent) *Agent {
 			if v, _ := f.get(d.Model); !only && v != d.Prefix+st.Ref {
 				return ""
 			}
+			if _, ok := startOn(); sf != nil && !ok {
+				return ""
+			}
 			var kvs []string
 			for _, k := range sortedKeys(st.Wrote) {
 				kvs = append(kvs, k, st.Wrote[k])
 			}
 			return wiringOff(d.Name, f.path, f.get, kvs...)
 		},
-		ListsModels: only,
+		ListsModels: only && sf == nil,
 		Fields: []Field{{
 			Key: "model", Label: "model",
 			Get: get,
@@ -409,15 +500,22 @@ func plugged(home string, p *agentplug.Agent) *Agent {
 				if ref, ok := strings.CutPrefix(v, magpieID+"/"); ok && isMagpie(ref) {
 					return wire(ref)
 				}
+				if err := startRestore(); err != nil {
+					return err
+				}
 				if st, ok := onMagpie(); ok {
 					if err := restore(st); err != nil {
 						return err
 					}
 				}
-				if v == "" {
-					return f.del([]string{d.Model})
+				mf, key := f, d.Model
+				if sf != nil {
+					mf, key = *sf, d.Startup.Model
 				}
-				return f.set([]edit.KV{{Path: d.Model, Value: v}})
+				if v == "" {
+					return mf.del([]string{key})
+				}
+				return mf.set([]edit.KV{{Path: key, Value: v}})
 			},
 			Options: func(cur map[string]string) []Option {
 				return withVia(ownOptions("", cur["model"]), id, magpieID+"/")
@@ -425,7 +523,14 @@ func plugged(home string, p *agentplug.Agent) *Agent {
 		}},
 		// the catalog changed: what connect writes for the model may too
 		Sync: func() error {
-			if st, ok := onMagpie(); ok {
+			if st, ok := onMagpie(); ok && sf != nil {
+				// the startup model too while it is magpie's, as it is
+				// now; else connect's list alone, for the agent's picker
+				if r, ok := strings.CutPrefix(startModel(), magpieID+"/"); ok {
+					return wire(r)
+				}
+				return wire("")
+			} else if ok {
 				if v, _ := f.get(d.Model); only || v == d.Prefix+st.Ref {
 					return wire(st.Ref)
 				}
@@ -433,13 +538,26 @@ func plugged(home string, p *agentplug.Agent) *Agent {
 			return nil
 		},
 		Unwire: func() error {
+			if err := startRestore(); err != nil {
+				return err
+			}
 			if st, ok := onMagpie(); ok {
 				return restore(st)
 			}
 			return nil
 		},
 	}
-	if only {
+	paths := []string{f.path}
+	if sf != nil {
+		// a model of the agent's own picked in it, magpie's provider still
+		// in its list: connected, as joined, not drift (#2424's Beside)
+		a.Beside = func() bool {
+			_, ok := onMagpie()
+			return ok
+		}
+		paths = append(paths, sf.path)
+	}
+	if only && sf == nil {
 		// magpie as its provider, on or off: the models are the agent's
 		// to pick, in the list connect writes
 		a.Fields = []Field{{
@@ -467,7 +585,7 @@ func plugged(home string, p *agentplug.Agent) *Agent {
 	if d.Dir != "" {
 		a.Dir = pluggedPath(home, d.Dir)
 	}
-	return atomic(a, f.path)
+	return atomic(a, paths...)
 }
 
 // pluggedIcon is the picture the plugin gives its agent, else the one the
