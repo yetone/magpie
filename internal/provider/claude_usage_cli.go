@@ -82,13 +82,25 @@ var errClaudeCannotRun = errors.New("Claude Code can't be run from here")
 // rate limit. It is not a temporary failure to read the usage endpoint.
 var claudeUsageDenied = regexp.MustCompile(`(?i)\b(401|403)\b|not (logged|signed) in|signed out|sign-in (has )?expired|unauthorized|forbidden|authentication (failed|required)|invalid (access )?token|(session|usage) limit|hit your limit`)
 
+// claudeDenied says s tells an account error (claudeUsageDenied). Claude
+// Code's "(not your usage limit)", which it says of Anthropic turning the
+// usage page's requests away for a while ("Claude is temporarily limiting
+// requests to the usage page (not your usage limit)"), tells none: read as
+// one, a /usage that couldn't load had the account refused.
+func claudeDenied(s string) bool {
+	return claudeUsageDenied.MatchString(claudeNotYourLimit.ReplaceAllString(s, ""))
+}
+
+var claudeNotYourLimit = regexp.MustCompile(`(?i)\(not your usage limit\)`)
+
 // claudeUsageCounts is /usage's closing line of the account's local
-// activity ("Last 7d · 403 requests · 388 sessions"): counts, not the
-// HTTP statuses a count of 401 or 403 reads as (SCIYYDy, #4995). Read
-// whole, the line is no account error; read with more words, as "Last
-// 7d · 403 requests · 388 sessions · HTTP 403 Forbidden", it is. Any span
-// and a count with thousands separators ("1,403 requests") are counts too.
-var claudeUsageCounts = regexp.MustCompile(`^Last [0-9]+[a-z]+ · [0-9][0-9,]* requests? · [0-9][0-9,]* sessions?$`)
+// activity ("Last 7d · 403 requests · 388 sessions"), with the " · "
+// before it wherever it sits in a line: counts, not the HTTP statuses a
+// count of 401 or 403 reads as (SCIYYDy, #4995). Taken out, what is left
+// of the line is read: "Last 7d · 403 requests · 388 sessions · HTTP 403
+// Forbidden" is an account error. Any span and a count with thousands
+// separators ("1,403 requests") are counts too.
+var claudeUsageCounts = regexp.MustCompile(`(?: · )?Last [0-9]+[a-z]+ · [0-9][0-9,]* requests? · [0-9][0-9,]* sessions?`)
 
 // claudeOverages is /usage's line for an account past its plan's limits
 // and billed for what it uses ("You are currently using your overages to
@@ -124,10 +136,10 @@ func parseClaudeUsage(text string, now time.Time) ([]QuotaWindow, error) {
 	lines := strings.Split(text, "\n")
 	// Account errors take precedence over notices (and partial readings).
 	for _, line := range lines {
-		if claudeUsageCounts.MatchString(strings.TrimSpace(line)) {
-			continue
-		}
-		if claudeUsageDenied.MatchString(line) {
+		// the counts are no HTTP status, wherever the line has them: the
+		// interactive panel's words come joined on one line
+		// (claudetui.usagePart)
+		if claudeDenied(claudeUsageCounts.ReplaceAllString(line, "")) {
 			return out, errors.New("Claude Code's /usage told no allowance: " + clipLine(strings.TrimSpace(line)))
 		}
 	}
@@ -169,27 +181,51 @@ func parseClaudeUsage(text string, now time.Time) ([]QuotaWindow, error) {
 		out = append(out, claudeOveragesWindow(out))
 	}
 	if len(out) == 0 {
+		if text == claudeNoWindow {
+			// the interactive panel loaded with none of the account's
+			// windows: none has started (claudeWithUnstarted)
+			return out, nil
+		}
 		if text == "" || slices.ContainsFunc(lines, func(line string) bool {
 			return strings.TrimSuffix(strings.TrimSpace(line), ".") == "You are currently using your subscription to power your Claude Code usage"
 		}) {
 			return out, errClaudeUsageUnavailable
 		}
 		// a panel with no figure says nothing of the account's allowance:
-		// unknown, its words told
-		first, _, _ := strings.Cut(text, "\n")
-		if claudeUsageCounts.MatchString(strings.TrimSpace(first)) {
-			// its counts, told in the error, would read as a 401 or 403
-			// where the error is matched again (claudeUsageDenied)
+		// unknown, its words told whole, not the first line clipped, which
+		// left out why (koohoko5924); its counts, told in the error, would
+		// read as a 401 or 403 where the error is matched again
+		// (claudeUsageDenied)
+		var said []string
+		for _, line := range lines {
+			line = strings.TrimSpace(claudeUsageCounts.ReplaceAllString(line, ""))
+			if line != "" {
+				said = append(said, line)
+			}
+		}
+		if len(said) == 0 {
 			return out, errors.New("Claude Code's /usage showed no usage figures")
 		}
-		return out, errors.New("Claude Code's /usage showed no usage figures: " + clipLine(first))
+		return out, errors.New("Claude Code's /usage showed no usage figures: " + clipReason(strings.Join(said, " · ")))
 	}
 	return out, nil
 }
 
+// claudeNoWindow is the helper's word for an interactive /usage panel that
+// loaded with no window drawn (claudetui.NoUsageWindow).
+const claudeNoWindow = "No usage window has started"
+
 func clipLine(s string) string {
 	if r := []rune(s); len(r) > 120 {
 		return string(r[:120]) + "…"
+	}
+	return s
+}
+
+// clipReason is a failure's words, kept long enough to say why.
+func clipReason(s string) string {
+	if r := []rune(s); len(r) > 600 {
+		return string(r[:600]) + "…"
 	}
 	return s
 }

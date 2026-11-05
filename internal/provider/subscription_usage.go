@@ -905,7 +905,7 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 	heard := e.ws != nil && now.Sub(e.heard) < claudeHeard
 	if !read {
 		switch {
-		case ok && e.err != nil && !(heard && !claudeUsageDenied.MatchString(e.err.Error())):
+		case ok && e.err != nil && !(heard && !claudeDenied(e.err.Error())):
 			return []QuotaWindow{}, e.err
 		case ok && e.ws != nil:
 			return e.windows(now), nil
@@ -949,7 +949,7 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 		if f, ok := c.m[key]; ok {
 			// A failed read cannot establish that an account refusal cleared.
 			// A successful reading or a new header clears it instead.
-			if f.err != nil && claudeUsageDenied.MatchString(f.err.Error()) && !claudeUsageDenied.MatchString(err.Error()) {
+			if f.err != nil && claudeDenied(f.err.Error()) && !claudeDenied(err.Error()) {
 				err = f.err
 			}
 			if f.tried.Equal(now) {
@@ -959,7 +959,7 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 			e = f // headers received while /usage ran are newer than e
 		}
 		c.Unlock()
-		if e.ws != nil && time.Since(e.heard) < claudeHeard && !claudeUsageDenied.MatchString(err.Error()) {
+		if e.ws != nil && time.Since(e.heard) < claudeHeard && !claudeDenied(err.Error()) {
 			return e.windows(time.Now()), nil // a fresh header stands unless the account was refused
 		}
 		return ws, err

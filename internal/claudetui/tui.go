@@ -826,12 +826,19 @@ func (s *shim) command(name string) error {
 		// no figures, the panel still loading them or saying it
 		// couldn't: unknown, not a plan with no allowance
 		s.emit(map[string]any{"type": "result", "subtype": "error_during_execution", "is_error": true, "session_id": s.sid,
-			"result": name + " couldn't load the plan's usage: " + strings.Join(strings.Fields(now), " ")})
+			"result": name + " couldn't load the plan's usage: " + usageWhy(now)})
 		return nil
 	case !drawn:
 		s.emit(map[string]any{"type": "result", "subtype": "error_during_execution", "is_error": true, "session_id": s.sid,
 			"result": fmt.Sprintf("Claude Code hadn't drawn /usage's panel in %s: %s", commandWait, s.lastScreen())})
 		return nil
+	case !usageWindow.MatchString(text) && (usageNoWindow(now) || usageNoWindow(panel)):
+		// the panel loaded, and none of the account's windows is
+		// running: Anthropic leaves a window out until the request that
+		// starts it. Told as the panel, its banner was read as the
+		// account's error (koohoko5924, a Claude Enterprise account with
+		// a five-hour window only, idle)
+		text = NoUsageWindow
 	}
 	s.emit(map[string]any{"type": "result", "subtype": "success", "is_error": false, "session_id": s.sid,
 		"local_command": "usage", "result": text})
@@ -846,8 +853,75 @@ func usageDrawn(screen string) bool {
 	return usagePanel.MatchString(t) && !usageLoading.MatchString(t)
 }
 
-// /usage's panel once its figures failed to load (Claude Code 2.1.316)
-var usageFailed = regexp.MustCompile(`Failed to load usage data`)
+// /usage's panel once its figures failed to load, as Claude Code 2.1.316
+// says it: "Error: Failed to load usage data", and Anthropic turning the
+// usage page's requests away for a while ("Error: Claude is temporarily
+// limiting requests to the usage page (not your usage limit). Try again
+// in a moment.", "Error: Usage endpoint is rate limited until 12:11am."),
+// which were read as a panel with no window.
+var usageFailed = regexp.MustCompile(`Failed to load usage data|limiting requests to the usage page|Usage endpoint is rate limited`)
+
+// NoUsageWindow is what the helper tells for a /usage panel that loaded
+// with none of the account's windows drawn: each is left out until the
+// request that starts it, so none has started.
+const NoUsageWindow = "No usage window has started"
+
+// usageWindow is one of the account's windows as usageText tells it.
+var usageWindow = regexp.MustCompile(`(?m)^Current (?:session|week)\b`)
+
+// usageNoWindow says whether screen is /usage's panel loaded, its figures
+// told, with none of the account's windows among them: the Usage tab's
+// "Session" and its "Total cost:" (Claude Code 2.1.316 draws them first), nothing loading,
+// refreshing or failed, no gateway's "Spend limit" in place of the plan's
+// windows, and no "Current session" or "Current week" drawn. What else it
+// draws is no window: the plan's credit ("Usage credits", "Claude Code and
+// Cowork credit") and what used the account ("What's contributing to your
+// usage?").
+func usageNoWindow(screen string) bool {
+	t := strings.Join(strings.Fields(screen), " ")
+	at := usagePanel.FindStringIndex(t)
+	if at == nil || !usageDrawn(t) {
+		return false
+	}
+	t = t[at[0]:]
+	return usageSession.MatchString(t) && !usageFailed.MatchString(t) && !usageRefreshing.MatchString(t) &&
+		!usageStale.MatchString(t) && !strings.Contains(t, "Spend limit") && !usageCurrent.MatchString(t)
+}
+
+var (
+	usageSession = regexp.MustCompile(`\bSession\b|\bTotal cost:`)
+	usageCurrent = regexp.MustCompile(`\bCurrent (?:session|week)\b`)
+	// the panel's "Error: …", however many rows it wraps to, up to the
+	// keys it draws under it ("r to retry · Esc to cancel")
+	usageError = regexp.MustCompile(`\bError: .*?(?: r to retry\b|$)`)
+)
+
+// usagePart is the words of /usage's panel in t (its fields joined) that
+// can say why it told no window: from its tabs on, not Claude Code's
+// banner above them, and without the session's cost the Usage tab draws
+// first ("Total cost: $0.0000 … Usage: 0 input, 0 output, 0 cache read, 0
+// cache write"), whose counts ("403 lines added") read as an HTTP status.
+// t whole when no tabs are drawn.
+func usagePart(t string) string {
+	at := usagePanel.FindStringIndex(t)
+	if at == nil {
+		return t
+	}
+	return strings.Join(strings.Fields(usageCost.ReplaceAllString(t[at[0]:], "")), " ")
+}
+
+var usageCost = regexp.MustCompile(`\bTotal cost:.*?\bcache write\b`)
+
+// usageWhy is why /usage's panel told no figures, as it says it: its
+// "Error: …" whole, else what it drew from its tabs on, not Claude Code's
+// banner above them, which said nothing of why (koohoko5924).
+func usageWhy(screen string) string {
+	t := usagePart(strings.Join(strings.Fields(screen), " "))
+	if m := usageError.FindString(t); m != "" {
+		return strings.TrimSuffix(m, " r to retry")
+	}
+	return t
+}
 
 // /usage's panel drawing the figures Claude Code saved on an earlier read
 // (cachedUsageUtilization, up to an hour old) while it asks for today's
@@ -901,7 +975,7 @@ func usageText(screen string) string {
 		lines = append(lines, "You are currently using your overages to power your Claude Code usage.")
 	}
 	if len(lines) == 0 {
-		return t
+		return usagePart(t)
 	}
 	return strings.Join(lines, "\n")
 }

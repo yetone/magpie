@@ -97,7 +97,7 @@ func keepLast(q SubscriptionQuota, user string) SubscriptionQuota {
 		}
 		return q
 	}
-	if q.Provider == "claude" && claudeUsageDenied.MatchString(q.Error) {
+	if q.Provider == "claude" && claudeDenied(q.Error) {
 		return q
 	}
 	claudeUnavailable := q.Provider == "claude" && claudeUsageUnknown.MatchString(q.Error)

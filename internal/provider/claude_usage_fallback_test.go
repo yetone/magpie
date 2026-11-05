@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/claudetui"
 )
 
 const subscriptionNotice = "You are currently using your subscription to power your Claude Code usage"
@@ -349,5 +351,54 @@ func TestClaudeUsageWithoutFiguresIsUnknown(t *testing.T) {
 				t.Fatalf("a panel that couldn't load its figures should keep this account's reading: %+v", q)
 			}
 		})
+	}
+}
+
+// An interactive /usage panel with none of the account's windows (a Claude
+// Enterprise account with a five-hour window only, idle) is an account
+// whose windows haven't started, never a failure: it was told as the
+// panel's words, and the card showed Claude Code's banner as its error
+// and no window (koohoko5924, v0.1.3057).
+func TestClaudeUsageNoWindowStarted(t *testing.T) {
+	if claudeNoWindow != claudetui.NoUsageWindow {
+		t.Fatalf("the helper says %q, the card reads %q", claudetui.NoUsageWindow, claudeNoWindow)
+	}
+	_, card := claudeUsageCards(t, claudeNoWindow, nil)
+	q := card()
+	if q.Error != "" || len(q.Windows) != 1 || q.Windows[0].Name != "5 hours" || q.Windows[0].Used != 0 || q.Windows[0].ResetsAt != nil {
+		t.Fatalf("no window started read as %+v", q)
+	}
+}
+
+// A panel that couldn't load its figures is told with its whole reason,
+// and Anthropic turning the usage page away for a while, "(not your usage
+// limit)", is no account refused: read as "usage limit", it was.
+func TestClaudeUsageWhyKept(t *testing.T) {
+	now := time.Now()
+	why := "Settings Status Config Usage Stats Session What's contributing to your usage? Approximate · sessions on this machine only · Last 7d · 403 requests · 388 sessions · Esc to cancel"
+	_, err := parseClaudeUsage(why, now)
+	want := "Claude Code's /usage showed no usage figures: Settings Status Config Usage Stats Session What's contributing to your usage? Approximate · sessions on this machine only · Esc to cancel"
+	if err == nil || err.Error() != want {
+		t.Fatalf("told %v, want %q", err, want)
+	}
+	if claudeDenied(err.Error()) {
+		t.Fatalf("%q read as an account refused", err)
+	}
+	limited := "Claude Code: /usage couldn't load the plan's usage: Error: Claude is temporarily limiting requests to the usage page (not your usage limit). Try again in a moment."
+	if claudeDenied(limited) {
+		t.Fatalf("%q read as an account refused", limited)
+	}
+	if !claudeDenied("You've hit your session limit · resets 7pm") || !claudeDenied("Error: 401 unauthorized") {
+		t.Fatal("an account refused isn't read as one")
+	}
+	at := time.Now().Add(-10 * time.Minute).Truncate(time.Second)
+	reset := time.Now().Add(time.Hour).Truncate(time.Second)
+	snapshot := lastQuota{At: at, Q: SubscriptionQuota{Provider: "claude", Plan: "pro", Windows: []QuotaWindow{
+		{Name: "5 hours", Used: 40, ResetsAt: &reset},
+	}}}
+	_, card := claudeUsageCards(t, "", &snapshot)
+	UsageClaudeVia(func(context.Context, string) (string, error) { return "", errors.New(limited) })
+	if q := card(); q.Error != "" || q.AsOf == nil || !q.AsOf.Equal(at) || len(q.Windows) != 1 || q.Windows[0].Used != 40 {
+		t.Fatalf("the usage page turned away should keep this account's reading: %+v", q)
 	}
 }

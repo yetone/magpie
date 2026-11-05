@@ -486,7 +486,21 @@ The provider keeps the account's last reading on that error
 (`claudeUsageUnknown`, as for Claude Code's own "temporarily
 unavailable"), and a panel with no figure otherwise is "Claude Code's
 /usage showed no usage figures: …", never "told no allowance", which is
-kept for an account Claude Code refuses (`claudeUsageDenied`).
+kept for an account Claude Code refuses (`claudeUsageDenied`, matched by
+`claudeDenied`, which drops "(not your usage limit)" and the request
+counts first). That error names the panel's own text from its tabs on,
+or its "Error: …" line (`usageWhy`, `usagePart`), never the banner and
+folder drawn above it. A panel drawn whole, with its Session tab and no
+error, loading or stale mark, that has no "Current session" or "Current
+week" is an account with no window started yet: Anthropic leaves a
+window out until the request that starts it. Its result is
+`NoUsageWindow`, and the card shows the five-hour window unused, with no
+error (`TestShimReadsUsageWithNoWindow`, `TestClaudeUsageNoWindowStarted`;
+koohoko5924 on Discord, a Claude Enterprise account, on panels built from
+2.1.316's strings, not captured). The Usage endpoint's own errors
+("temporarily limiting requests to the usage page", "rate limited
+until …") are failures as "Failed to load usage data" is
+(`TestShimToldWhyUsageFailed`).
 
 These one-off interactive runs (`askClaudeTUI`, `claudeUsageTUI`) work in
 magpie's shared work folder (`oneOffDir`: `claudeWorkDir`, a fresh temp

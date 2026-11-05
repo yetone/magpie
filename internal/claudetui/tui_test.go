@@ -966,6 +966,105 @@ func TestShimReadsUsageBelowTheTwentyFourthRow(t *testing.T) {
 	}
 }
 
+// usagePanel200 is /usage's panel as Claude Code 2.1.316 draws it in the
+// helper's 200 by 50 terminal, from its Usage tab (ko: the tabs, the
+// session's cost, then what gi draws for the plan), a row at a time
+// (CR, ESC[nB). The words are 2.1.316's own; the Enterprise panels below
+// weren't captured from a real account, and are built from them.
+func usagePanel200(t *testing.T, rows ...string) string {
+	t.Helper()
+	var b strings.Builder
+	b.WriteString("\x1b[H\r\x1b[20B   Settings  Status   Config   Usage   Stats\x1b[K")
+	for _, r := range append([]string{"", " Session", "", " Total cost:            $0.0000", " Total duration (API):  0s",
+		" Total duration (wall): 10s", " Total code changes:    0 lines added, 0 lines removed",
+		" Usage:                 0 input, 0 output, 0 cache read, 0 cache write", ""}, rows...) {
+		b.WriteString("\r\x1b[1B   " + r + "\x1b[K")
+	}
+	b.WriteString("\x1b[50;1H")
+	panel := filepath.Join(t.TempDir(), "usage-200x50.bin")
+	if err := os.WriteFile(panel, []byte(b.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return panel
+}
+
+// A Claude Enterprise account with a five-hour window only, idle: its
+// panel draws no window, Anthropic leaving each out until the request that
+// starts it, at most the plan's credit. It was told as the panel's words,
+// and Claude Code's banner above them was the card's error ("Claude Code's
+// usage showed no usage figures: …magpie-claude-work…", koohoko5924,
+// v0.1.3057). It is told as no window started.
+func TestShimReadsUsageWithNoWindow(t *testing.T) {
+	for name, rows := range map[string][]string{
+		"none":                {" Esc to cancel"},
+		"credit":              {" Usage credits", " ████▌" + strings.Repeat(" ", 46) + "12% used", " Resets Dec 1 (Asia/Shanghai)", "", " Esc to cancel"},
+		"what's contributing": {" What's contributing to your usage?", " Approximate · sessions on this machine only", "", " Esc to cancel"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			out := runShim(t, []string{"FAKE_USAGE=" + usagePanel200(t, rows...), "FAKE_USAGE_BANNER=0"},
+				append([]string{fakePath(t)}, pArgs...), []string{`raw:{"type":"command","command":"/usage"}`}, 2)
+			if r := out[1]; r["type"] != "result" || r["is_error"] != false || r["result"] != NoUsageWindow {
+				t.Fatalf("told %v", r)
+			}
+		})
+	}
+}
+
+// Anthropic turning the usage page's requests away for a while is a
+// failure to load, told with the panel's own words, retried once: read as
+// a panel with no window, its reason was lost. The banner above the panel
+// is never the reason (koohoko5924).
+func TestShimToldWhyUsageFailed(t *testing.T) {
+	for _, why := range []string{
+		"Failed to load usage data",
+		"Claude is temporarily limiting requests to the usage page (not your usage limit). Try again in a moment.",
+		"Usage endpoint is rate limited until 12:11am.",
+	} {
+		t.Run(why, func(t *testing.T) {
+			failed := usagePanel200(t, " Error: "+why, "", " r to retry · Esc to cancel")
+			out := runShim(t, []string{"FAKE_USAGE=" + failed, "FAKE_USAGE_FIRST=" + failed, "FAKE_USAGE_THEN=retry-fails", "FAKE_USAGE_BANNER=0"},
+				append([]string{fakePath(t)}, pArgs...), []string{`raw:{"type":"command","command":"/usage"}`}, 2)
+			want := "/usage couldn't load the plan's usage: Error: " + why
+			if r := out[1]; r["type"] != "result" || r["is_error"] != true || r["result"] != want {
+				t.Fatalf("told %v, want %q", r, want)
+			}
+		})
+	}
+}
+
+func TestUsageWhy(t *testing.T) {
+	banner := "▐▛███▜▌ Claude Code v2.1.316 ▘▘ ▝▝ /private/var/folders/3d/x/T/magpie-claude-work-501 ──── ❯ /usage ──── "
+	for screen, want := range map[string]string{
+		banner + "Settings Status Config Usage Stats Session Total cost: $0.0000 Usage: 0 input, 0 output, 0 cache read, 0 cache write Error: Failed to load usage data r to retry · Esc to cancel":            "Error: Failed to load usage data",
+		banner + "Settings Status Config Usage Stats Session Total cost: $1.20 Total code changes: 403 lines added, 2 lines removed Usage: 9 input, 0 output, 0 cache read, 0 cache write Loading usage data…": "Settings Status Config Usage Stats Session Loading usage data…",
+		"no panel at all": "no panel at all",
+	} {
+		if got := usageWhy(screen); got != want {
+			t.Errorf("usageWhy(%q) = %q, want %q", screen, got, want)
+		}
+	}
+}
+
+func TestUsageNoWindow(t *testing.T) {
+	tab := "Settings Status Config Usage Stats Session Total cost: $0.0000 Usage: 0 input, 0 output, 0 cache read, 0 cache write "
+	for screen, want := range map[string]bool{
+		tab + "Esc to cancel": true,
+		tab + "Usage credits ██ 12% used Resets Dec 1 Esc to cancel":            true,
+		tab + "Current session ██ 12% used Resets 7pm Esc to cancel":            false,
+		tab + "Current week (all models) █ 3% used Esc to cancel":               false,
+		tab + "Loading usage data…":                                             false,
+		tab + "Error: Usage endpoint is rate limited until 12:11am. r to retry": false,
+		tab + "Refreshing…":                                               false,
+		tab + "Spend limit $50 Esc to cancel":                             false,
+		"Settings Usage /usage is only available for subscription plans.": false,
+		"▐▛███▜▌ Claude Code v2.1.316 /private/var/folders/3d/x/T/magpie-claude-work-501": false,
+	} {
+		if got := usageNoWindow(screen); got != want {
+			t.Errorf("usageNoWindow(%q) = %v, want %v", screen, got, want)
+		}
+	}
+}
+
 // Claude Code draws its banner again before /usage's panel, and a slow
 // /usage leaves it still for seconds. It is waited past, never told as the
 // panel: read as one, the banner was an allowance's error (ikunbots on X,

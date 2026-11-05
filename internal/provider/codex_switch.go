@@ -465,7 +465,7 @@ func NextInOrder(ctx context.Context, agent string) (to string, over bool, err e
 // by: never read (a /usage not run), or a read that failed for a reason
 // not the account's own. Its /usage is then run (readSpare).
 func unreadSpare(q SubscriptionQuota) bool {
-	return q.Error != "" && (readDeferred(q.Error) || !claudeUsageDenied.MatchString(q.Error))
+	return q.Error != "" && (readDeferred(q.Error) || !claudeDenied(q.Error))
 }
 
 // readSpare is the reading of the saved Claude account l, its /usage run
