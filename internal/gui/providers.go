@@ -1909,6 +1909,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				if !in.CodexAsSent && old != nil {
 					in.CodexAsSent = old.CodexAsSent
 				}
+				// and DeepSeek's images sent inline, set with `magpie
+				// provider set <id> image-files=off` (#5407)
+				if !in.ImageFilesOff && old != nil {
+					in.ImageFilesOff = old.ImageFilesOff
+				}
 				// and Antigravity's prompt as written, set with `magpie
 				// provider set antigravity prompt=as-written`
 				if !in.PromptAsWritten && old != nil {

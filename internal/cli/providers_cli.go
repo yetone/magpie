@@ -55,6 +55,9 @@ const providerUsage = `usage:
                                           keeps the cache); OpenAI's API and a ChatGPT (Codex) account do so by
                                           default; additional-tools=off puts it with the other tools,
                                           additional-tools=default is magpie's
+                                          image-files=off sends DeepSeek's API an agent's images inline on every
+                                          turn; image-files=on, the default, uploads each once (for a day)
+                                          and names it by its file id
                                           patience=2m keeps a request to it alone (not through a group) that long
                                           while it is busy or briefly rate limited, asking again after a pause
                                           (at most 4m); patience=off hands the agent the error at once;
@@ -1142,6 +1145,17 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 				p.CodexAsSent = false
 			default:
 				return fmt.Errorf("codex=as-sent|default, not %q", v)
+			}
+		case "image-files":
+			// off: DeepSeek's own API is sent an agent's images inline on
+			// every turn, not uploaded once and named by file id (#5407)
+			switch strings.ToLower(v) {
+			case "off", "no", "inline":
+				p.ImageFilesOff = true
+			case "on", "yes", "default":
+				p.ImageFilesOff = false
+			default:
+				return fmt.Errorf("image-files=on|off, not %q", v)
 			}
 		case "prompt":
 			// as-written: Antigravity's subscription is sent the system

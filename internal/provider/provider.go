@@ -318,6 +318,12 @@ type Provider struct {
 	// fitting, which a backend that isn't OpenAI's needs (#350).
 	CodexAsSent bool `json:"codexAsSent,omitempty"`
 
+	// ImageFilesOff, `image-files=off`, has DeepSeek's own API sent an
+	// agent's inline images inline on every turn. By default each goes up
+	// once through DeepSeek's Files API, for a day, and the turns name it
+	// by its file id (gateway's deepseek_files.go, #5407).
+	ImageFilesOff bool `json:"imageFilesOff,omitempty"`
+
 	// PromptAsWritten, on Antigravity's subscription, has the system prompt
 	// go to Google exactly as the agent wrote it. By default the few lines
 	// Google answers with a 429 "Resource has been exhausted" whatever

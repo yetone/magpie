@@ -5347,7 +5347,16 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 			heardNet() // the network is up (offline.go)
 		}
 	}()
+	if provider.HostOf(p.Base(to)) == deepseekHost {
+		// which images a try named by file (deepseek_files.go)
+		ctx = context.WithValue(ctx, dsSentKey{}, &dsSent{})
+	}
 	res, err = s.forwardOnce(ctx, p, to, path, body, in)
+	if err == nil && res.StatusCode >= 400 {
+		// a file DeepSeek no longer holds: uploaded again, or the
+		// images sent inline (deepseek_files.go)
+		res, err = s.dsRetryGone(ctx, p, to, path, body, in, res)
+	}
 	if err == nil && res.StatusCode >= 400 {
 		// a body over the provider's byte cap: asked again with its
 		// oldest images left out, or said as a 413 (body_cap.go)
@@ -5413,6 +5422,7 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 
 // forwardOnce is one request to the provider, as forward makes it.
 func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provider.Protocol, path string, body []byte, in http.Header) (*http.Response, error) {
+	reqCtx := ctx
 	ctx = s.metered(p.Via(ctx), p, "")
 	body = deepseekToolPatterns(p, to, body)
 	body = grokToolPatterns(p, to, body)
@@ -5429,6 +5439,9 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	// the tool turns' thinking a provider's model asked for before
 	// (thinking_back.go)
 	body = s.withThinkingBack(p, to, body)
+	// DeepSeek's own API: inline images it holds for this key named by
+	// file id, uploaded once (deepseek_files.go)
+	body, byFile := s.withDeepSeekFiles(reqCtx, p, to, path, body)
 	// under the byte cap the provider refused a larger request over,
 	// its oldest images left out (body_cap.go)
 	body = s.withinCap(p, to, path, body)
@@ -5480,6 +5493,9 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		}
 		// auto mode's review goes to Claude alone (automode.go)
 		betas, body = s.serverReview(p, asked, body)
+		if byFile {
+			betas = dsBeta(betas)
+		}
 	}
 	// the conversation ${sessionId} and ${threadId} stand for in the
 	// user's own fields and headers for the provider (conversation.go);
