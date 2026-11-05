@@ -561,7 +561,7 @@ function routingPage(part) {
   const quota = (w, used, left, vars) => w.balance != null ? t(left, { n: balText(w), ...vars }) + lapses(w)
     : (w.limit > 0 ? quotaCount(w) + " · " : "") + t(quotaLeft ? left : used, { n: pct(share(w)), ...vars });
   const fill = (w) => Math.max(0, Math.min(100, share(w))) + "%";
-  const FAIL = { rate: "rate limited", credit: "out of credit", quota: "quota used up", other: "failed", auth: "sign-in required", canceled: "canceled", foreign: "another account's reasoning", floor: "reply too short", verify: "needs verification", refused: "refused (safety filter)", shape: "request not understood", sight: "images not taken", proxy: "proxy not reachable", offline: "network down", effort: "reasoning effort not in its plan", overflow: "too long for its model", room: "reply asked past the window left", slow: "slow to start", prompt: "agent's prompt turned away", restricted: "account restricted by the vendor" };
+  const FAIL = { rate: "rate limited", credit: "out of credit", quota: "quota used up", other: "failed", auth: "sign-in required", canceled: "canceled", foreign: "another account's reasoning", floor: "reply too short", verify: "needs verification", refused: "refused (safety filter)", shape: "request not understood", sight: "images not taken", proxy: "proxy not reachable", offline: "network down", overloaded: "servers overloaded", effort: "reasoning effort not in its plan", overflow: "too long for its model", room: "reply asked past the window left", slow: "slow to start", prompt: "agent's prompt turned away", restricted: "account restricted by the vendor" };
   const failWord = (why) => t(FAIL[why] || "failed");
   // a resting row: a failure that names no kind says the status it
   // answered, and the vendor's own words are over it (restTip), as
@@ -3519,8 +3519,11 @@ function routingPage(part) {
 
   // how a request that wasn't answered ended: its status and its last
   // try's failure, or that its agent left in the pause before the next
-  // try (#1894)
-  const endWord = (r, last) => `${r.status} · ${failWord(last.gone ? "canceled" : last.fail)}`;
+  // try (#1894). When the agent was told an earlier try's failure in the
+  // last one's place, the route says that one's kind (fail): an
+  // earlier 529 overload read "529 · quota used up" beside the last
+  // account's usage limit (danzi002 on Discord)
+  const endWord = (r, last) => `${r.status} · ${failWord(last.gone ? "canceled" : r.fail || last.fail)}`;
 
   // what a request not yet out at a vendor is doing: being masked
   // (Settings → Privacy, the gateway's "redact" phase), or being routed

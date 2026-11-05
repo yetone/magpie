@@ -121,9 +121,16 @@ type Route struct {
 	Done   bool    `json:"done"`
 	Status int     `json:"status,omitempty"`
 	Error  string  `json:"error,omitempty"`
-	Millis int64   `json:"ms,omitempty"`
-	Tokens int     `json:"tokens,omitempty"`
-	Output int     `json:"out,omitempty"` // of Tokens, the reply's
+	// Fail: why the failure the agent was told failed (toldFail), set
+	// when it was an earlier try's than the last (Try.Earlier, or every
+	// account after it passed over by a middleware): the request's row
+	// pairs Status with it, not with the last try's own Fail (danzi002 on
+	// Discord: an earlier account's 529 server_is_overloaded read
+	// "529 · quota used up" beside the last account's usage limit)
+	Fail   string `json:"fail,omitempty"`
+	Millis int64  `json:"ms,omitempty"`
+	Tokens int    `json:"tokens,omitempty"`
+	Output int    `json:"out,omitempty"` // of Tokens, the reply's
 	// Reasoning: of Output, the reply's reasoning, which its speed leaves
 	// out (usage.DecodeOf)
 	Reasoning int `json:"reasoning,omitempty"`
