@@ -30,6 +30,9 @@ type clientCache struct {
 	// keeps its own prompt caching (startRun): every mark but the tools'
 	// is dropped
 	pasted bool
+	// print: the run is claude -p though the interactive mode is on
+	// (Request.tuiRefused)
+	print  bool
 	report func()
 }
 
@@ -57,7 +60,7 @@ func (c *clientCache) selected(fresh bool) {
 		return
 	}
 	c.fresh = fresh
-	c.pasted = claudeTUIOn()
+	c.pasted = claudeTUIOn() && !c.print
 	if c.report != nil {
 		c.report()
 	}

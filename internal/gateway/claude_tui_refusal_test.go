@@ -1,13 +1,17 @@
 package gateway
 
 import (
+	"encoding/json"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/claudetui"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/testenv"
 )
 
@@ -34,9 +38,10 @@ func TestClaudeTUIRefusalIsNoAccountsFault(t *testing.T) {
 const tuiThirdPartyRefusal = `{"type":"result","subtype":"error_during_execution","is_error":true,"result":"API Error: 400 Third-party apps now draw from your extra usage, not your plan limits. Add more at claude.ai/settings/usage and keep going.","api_error_status":400}`
 
 // tuiThirdPartyHarness is tuiHelperHarness whose interactive Claude Code
-// answers every turn with that refusal; as claude -p it answers "ok".
+// answers every turn with that refusal, after hold (a shell command);
+// as claude -p it answers "ok", or runs print first when it is given.
 // (ggbdpq's harness, #4503.)
-func tuiThirdPartyHarness(t *testing.T) (*resumeHarness, string) {
+func tuiThirdPartyHarness(t *testing.T, hold, print string) (*resumeHarness, string) {
 	t.Helper()
 	start := `if [ -n "$MG_TEST_TUI" ]; then
   echo '{"type":"system","subtype":"init","session_id":"'$sid'"}'
@@ -46,12 +51,13 @@ func tuiThirdPartyHarness(t *testing.T) (*resumeHarness, string) {
       echo '{"type":"control_response","response":{"subtype":"success","request_id":"'$id'"}}'
       continue ;;
     esac
+    ` + hold + `
     echo '` + tuiThirdPartyRefusal + `'
     exit 1
   done
   exit 0
 fi
-`
+` + print
 	h := newScriptHarness(t, "ok", start)
 	claudeTUIRuns = true
 	t.Cleanup(func() { claudeTUIRuns = false })
@@ -70,51 +76,209 @@ exec "$claude" "$@"
 	return h, started
 }
 
-// A turn Anthropic refuses in the interactive mode as a third-party app's
-// (#4503) reaches the client as a 400 that says what happened, that asking
-// again may draw from extra usage, and where to turn the interactive mode
-// off. magpie asks nothing again on its own: no claude -p run starts, which
-// the plan counts at about twice and which may draw from extra usage (the
-// owner's call), and no account rests for it or is asked next.
-func TestClaudeTUIThirdPartyRefusalSaysWhy(t *testing.T) {
+// piSystem is Pi 1.1.0's own system prompt, as the reporter's Pi in Cindy
+// sends it, its working directory dir.
+func piSystem(t *testing.T, dir string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("testdata", "workdir", "pi-1.1.0.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var req struct {
+		Messages []json.RawMessage `json:"messages"`
+	}
+	var first struct {
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(b, &req); err != nil || len(req.Messages) == 0 {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(req.Messages[0], &first); err != nil {
+		t.Fatal(err)
+	}
+	sys := first.Content
+	if !strings.Contains(sys, "operating inside pi") || !strings.Contains(sys, "/Users/me/work/proj/My Proj") {
+		t.Fatalf("not Pi's prompt: %.200s", sys)
+	}
+	return strings.ReplaceAll(sys, "/Users/me/work/proj/My Proj", dir)
+}
+
+// askThirdParty asks h's Claude subscription a first turn under system,
+// on claude-opus-5-5 as the reporter's group/auto did.
+func askThirdParty(t *testing.T, h *resumeHarness, system string, stream bool) (int, string, string, Usage) {
+	t.Helper()
+	sys, _ := json.Marshal(system)
+	s := ""
+	if stream {
+		s = `"stream":true,`
+	}
+	body := `{"model":"claude-opus-5-5","max_tokens":100,` + s + `"system":` + string(sys) + `,"tools":[{"name":"read","input_schema":{"type":"object"}}],"messages":[{"role":"user","content":"hi"}]}`
+	rec := httptest.NewRecorder()
+	var u Usage
+	code, msg := h.s.serveClaudeSubscription(rec, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body)), provider.Anthropic, h.p, "claude-opus-5-5", []byte(body), &u)
+	return code, msg, rec.Body.String(), u
+}
+
+// A turn Anthropic refuses in the interactive mode as a third-party app's,
+// with nothing of its reply said (#4503; Raven on Discord: Pi in Cindy,
+// group/auto to a Claude subscription, every turn refused), is asked again
+// once as claude -p, which is served such prompts, and the client has its
+// answer: no error, and nothing to turn off in Settings. Before, the
+// client had the 400 and was told to turn the interactive mode off for
+// every request.
+func TestClaudeTUIThirdPartyRefusalRedoneAsPrint(t *testing.T) {
 	for _, stream := range []bool{false, true} {
 		t.Run(map[bool]string{false: "whole", true: "stream"}[stream], func(t *testing.T) {
-			h, started := tuiThirdPartyHarness(t)
-			s := ""
-			if stream {
-				s = `"stream":true,`
+			h, started := tuiThirdPartyHarness(t, "", "")
+			code, msg, body, u := askThirdParty(t, h, piSystem(t, "/Users/raven/cindy"), stream)
+			if code != 200 || !strings.Contains(body, "ok") {
+				t.Fatalf("%d %.300s %.400s", code, msg, body)
 			}
-			body := `{"model":"claude-sonnet-5","max_tokens":100,` + s + `"system":"You are pi, a coding agent harness.","tools":[{"name":"read","input_schema":{"type":"object"}}],"messages":[{"role":"user","content":"hi"}]}`
-			rec := httptest.NewRecorder()
-			var u Usage
-			code, msg := h.s.serveClaudeSubscription(rec, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body)), provider.Anthropic, h.p, "claude-sonnet-5", []byte(body), &u)
-			if code != 400 {
-				t.Fatalf("%d %.400s", code, msg)
-			}
-			for _, w := range []string{thirdPartyWords, "interactive mode with your agent's own system prompt", "may draw from the Claude account's extra usage", "doesn't ask again on its own", "Settings › Models › Replies"} {
-				if !strings.Contains(msg, w) || !strings.Contains(rec.Body.String(), w) {
-					t.Fatalf("the client isn't told %q: %s", w, rec.Body.String())
-				}
+			if strings.Contains(body, thirdPartyWords) || u.ErrType != "" {
+				t.Fatalf("the client, or its usage row, has the refusal: %q %s", u.ErrType, body)
 			}
 			if n := helperStarts(started); n != 1 {
 				t.Fatalf("the interactive mode started %d times, want once", n)
 			}
-			if runs := h.runs(); len(runs) != 1 {
-				t.Fatalf("%d runs, want the interactive one alone: nothing is asked again as claude -p", len(runs))
+			if runs := h.runs(); len(runs) != 2 {
+				t.Fatalf("%d runs, want two: the interactive mode's, then claude -p", len(runs))
 			}
-			if retryable(code, rec.Body.Bytes()) {
-				t.Fatalf("the refusal is asked of the next account: %s", rec.Body.String())
-			}
-			switch f := failure(code, rec.Body.Bytes()); f {
-			case failCredit, failQuota, failRate, failAuth:
-				t.Fatalf("the refusal reads as the account's (%s): %s", f, rec.Body.String())
+			if claudeTUIOn() == false || settings.Load().ClaudePrintMode {
+				t.Fatal("the user's setting changed")
 			}
 		})
 	}
 }
 
+// The next turns of the same agent's prompt run as claude -p from the
+// start, in another conversation of it too (Pi's working directory comes
+// after its own part); another agent's prompt is still tried in the
+// interactive mode first.
+func TestClaudeTUIThirdPartyPromptRemembered(t *testing.T) {
+	h, started := tuiThirdPartyHarness(t, "", "")
+	if code, msg, body, _ := askThirdParty(t, h, piSystem(t, "/Users/raven/cindy"), false); code != 200 {
+		t.Fatalf("%d %.300s %.300s", code, msg, body)
+	}
+	if code, msg, body, _ := askThirdParty(t, h, piSystem(t, "/Users/raven/other"), true); code != 200 || !strings.Contains(body, "ok") {
+		t.Fatalf("%d %.300s %.300s", code, msg, body)
+	}
+	if n := helperStarts(started); n != 1 {
+		t.Fatalf("the interactive mode started %d times, want once: the prompt it refused runs as -p", n)
+	}
+	if runs := len(h.runs()); runs != 3 {
+		t.Fatalf("%d runs, want 3", runs)
+	}
+	if code, msg, _, _ := askThirdParty(t, h, "You are a careful reviewer.", false); code != 200 {
+		t.Fatalf("%d %.300s", code, msg)
+	}
+	if n := helperStarts(started); n != 2 {
+		t.Fatalf("the interactive mode started %d times, want twice: another prompt is tried there first", n)
+	}
+}
+
+// The redo is once: claude -p too refusing the turn the same way, the
+// client has that refusal, saying it ran as -p, and no third run starts.
+func TestClaudeTUIThirdPartyRefusalRedoneOnce(t *testing.T) {
+	print := `if [ -z "$MG_TEST_TUI" ]; then
+  echo '{"type":"system","subtype":"init","session_id":"'$sid'"}'
+  while read -r line; do
+    case $line in *'"type":"control_request"'*)
+      id=$(printf '%s' "$line" | sed 's/.*"request_id":"\([^"]*\)".*/\1/')
+      echo '{"type":"control_response","response":{"subtype":"success","request_id":"'$id'"}}'
+      continue ;;
+    esac
+    echo '` + tuiThirdPartyRefusal + `'
+    exit 1
+  done
+  exit 0
+fi
+`
+	h, started := tuiThirdPartyHarness(t, "", print)
+	code, msg, body, _ := askThirdParty(t, h, piSystem(t, "/w"), false)
+	if code != 400 || !strings.Contains(msg, thirdPartyWords) || !strings.Contains(body, "run as claude -p") {
+		t.Fatalf("%d %.300s %.300s", code, msg, body)
+	}
+	if n := helperStarts(started); n != 1 {
+		t.Fatalf("the interactive mode started %d times, want once", n)
+	}
+	if runs := len(h.runs()); runs != 2 {
+		t.Fatalf("%d runs, want two: the interactive mode's, then claude -p", runs)
+	}
+	if retryable(code, []byte(body)) {
+		t.Fatalf("the refusal is asked of the next account: %s", body)
+	}
+	switch f := failure(code, []byte(body)); f {
+	case failCredit, failQuota, failRate, failAuth:
+		t.Fatalf("the refusal reads as the account's (%s): %s", f, body)
+	}
+}
+
+// A turn whose reply had begun reaching the client before the refusal is
+// not asked again: the client has the reply's start already. Its agent's
+// next turn runs as claude -p.
+func TestClaudeTUIThirdPartyRefusalAfterStartNotRedone(t *testing.T) {
+	heard, every := bridgeHeardAfter, keepaliveEvery
+	bridgeHeardAfter, keepaliveEvery = 0, 20*time.Millisecond
+	t.Cleanup(func() { bridgeHeardAfter, keepaliveEvery = heard, every })
+	h, started := tuiThirdPartyHarness(t, "sleep 1", "")
+	code, _, body, _ := askThirdParty(t, h, piSystem(t, "/w"), true)
+	if code != 200 || !strings.Contains(body, "message_start") || !strings.Contains(body, thirdPartyWords) {
+		t.Fatalf("%d %.400s", code, body)
+	}
+	if runs := len(h.runs()); runs != 1 {
+		t.Fatalf("%d runs, want the interactive one alone", runs)
+	}
+	if code, msg, body, _ := askThirdParty(t, h, piSystem(t, "/w"), false); code != 200 || !strings.Contains(body, "ok") {
+		t.Fatalf("%d %.300s %.300s", code, msg, body)
+	}
+	if n := helperStarts(started); n != 1 {
+		t.Fatalf("the interactive mode started %d times, want once", n)
+	}
+}
+
+// A turn that said some of its reply before the refusal is not asked
+// again either, whole or streamed: what it said may have been acted on,
+// and asked again it would be said and counted twice.
+func TestClaudeTUIThirdPartyRefusalAfterWordsNotRedone(t *testing.T) {
+	said := `echo '{"type":"stream_event","event":{"type":"message_start","message":{"id":"m","model":"claude-opus-5-5","usage":{"input_tokens":1}}}}'
+    echo '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"half"}}}'`
+	for _, stream := range []bool{false, true} {
+		t.Run(map[bool]string{false: "whole", true: "stream"}[stream], func(t *testing.T) {
+			h, started := tuiThirdPartyHarness(t, said, "")
+			code, _, body, _ := askThirdParty(t, h, piSystem(t, "/w"), stream)
+			if !strings.Contains(body, thirdPartyWords) || !stream && code != 400 {
+				t.Fatalf("%d %.400s", code, body)
+			}
+			if runs := len(h.runs()); runs != 1 {
+				t.Fatalf("%d runs, want the interactive one alone", runs)
+			}
+			if code, msg, body, _ := askThirdParty(t, h, piSystem(t, "/w2"), false); code != 200 || !strings.Contains(body, "ok") {
+				t.Fatalf("%d %.300s %.300s", code, msg, body)
+			}
+			if n := helperStarts(started); n != 1 {
+				t.Fatalf("the interactive mode started %d times, want once", n)
+			}
+		})
+	}
+}
+
+// With the interactive mode turned off, every run is claude -p as before:
+// nothing is remembered or asked again.
+func TestClaudeThirdPartyRefusalPrintModeAlone(t *testing.T) {
+	h, started := tuiThirdPartyHarness(t, "", "")
+	printMode(t, true)
+	code, msg, body, _ := askThirdParty(t, h, piSystem(t, "/w"), false)
+	if code != 200 || !strings.Contains(body, "ok") {
+		t.Fatalf("%d %.300s %.300s", code, msg, body)
+	}
+	if n := helperStarts(started); n != 0 {
+		t.Fatalf("the interactive mode started %d times with it turned off", n)
+	}
+}
+
 // The same refusal of a claude -p run says so without telling the user to
-// turn the interactive mode off, which it already is.
+// turn the interactive mode off, which it already is; one of the
+// interactive mode whose reply had begun says the next turns run as -p.
 func TestClaudeThirdPartyRefusalOfPrint(t *testing.T) {
 	msg := thirdPartyRefused("Claude Code", &Request{Model: "m"}, 400, "API Error: 400 Third-party apps now draw from your extra usage, not your plan limits.")
 	if !strings.Contains(msg, "run as claude -p") || strings.Contains(msg, "turn off") {
@@ -122,5 +286,9 @@ func TestClaudeThirdPartyRefusalOfPrint(t *testing.T) {
 	}
 	if got := thirdPartyRefused("Claude Code", &Request{interactive: true}, 502, "other"); got != "other" {
 		t.Fatal(got)
+	}
+	msg = thirdPartyRefused("Claude Code", &Request{Model: "m", interactive: true}, 400, "API Error: 400 Third-party apps now draw from your extra usage, not your plan limits.")
+	if !strings.Contains(msg, "next turns as claude -p") || strings.Contains(msg, "Settings") {
+		t.Fatal(msg)
 	}
 }

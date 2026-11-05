@@ -5,8 +5,8 @@
 // each is good for (the owner, 10-31). Here:
 // - on, its last request interactive: TUI pressed, the last request said;
 // - hovering or focusing the switch shows both modes, the one chosen
-//   marked, each with its advantage, inside the window, and says nothing
-//   ever runs as -p with the interactive mode on; moving away hides it;
+//   marked, each with its advantage, inside the window, and says a turn
+//   Anthropic refuses as a third-party app's runs as -p; moving away hides it;
 // - turned off: claude -p pressed, every request said to run as it;
 //   pressing TUI saves claudePrintMode false with the rest kept, reads the
 //   mode again and draws TUI pressed; pressing claude -p turns it back;
@@ -127,7 +127,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         { on: false, name: "claude -p", now: "", good: 1, bad: 1 },
       ]);
       // nothing in the card says a request falls back to -p (the owner, 11-01)
-      assert.equal((await tip.locator(".foot").textContent()).trim(), await tr("Switched here or in Settings › Models › Replies. With the interactive mode on, nothing ever runs as -p: a request it can't take, or one it fails to start for, fails saying why."));
+      assert.equal((await tip.locator(".foot").textContent()).trim(), await tr("Switched here or in Settings › Models › Replies. With the interactive mode on, a request it can't take, or one it fails to start for, fails saying why. A turn Anthropic refuses there as a third-party app's runs as -p."));
       assert.equal((await tip.locator(".cc-m").nth(1).locator("p.good").textContent()).trim(), await tr("It starts at once, with no terminal of its own to open first."));
       const box = await tip.boundingBox();
       assert(box.x >= 0 && box.y >= 0 && box.x + box.width <= width && box.y + box.height <= 760, `the card is inside the window: ${JSON.stringify(box)}`);

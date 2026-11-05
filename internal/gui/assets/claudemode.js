@@ -2,8 +2,9 @@
 // Claude subscription's runs are Claude Code's interactive mode (TUI) or
 // claude -p, switched right there, how the last request went, and on hover
 // what each is and what it is good for (the owner, 10-31, 11-01). With the
-// interactive mode on nothing runs as -p: a request it can't take fails,
-// saying why (the owner, 11-01). app.js imports this with the row's first
+// interactive mode on a request it can't take fails, saying why (the owner,
+// 11-01); a turn Anthropic refuses there as a third-party app's runs as -p
+// (#4503). app.js imports this with the row's first
 // read of /api/claude/mode (claudeModeRow), so it weighs nothing on the
 // core.
 
@@ -39,7 +40,7 @@ function ccTip(anchor, tui) {
       t("Claude Code's print mode, the one scripts and the Agent SDK use: a request in, its reply out."),
       t("It starts at once, with no terminal of its own to open first."),
       t("The plan counts a -p request at about twice the interactive mode's.")),
-    el("div", "foot", t("Switched here or in Settings › Models › Replies. With the interactive mode on, nothing ever runs as -p: a request it can't take, or one it fails to start for, fails saying why.")));
+    el("div", "foot", t("Switched here or in Settings › Models › Replies. With the interactive mode on, a request it can't take, or one it fails to start for, fails saying why. A turn Anthropic refuses there as a third-party app's runs as -p.")));
   document.body.append(tip);
   const a = anchor.getBoundingClientRect(), b = tip.getBoundingClientRect();
   tip.style.left = Math.max(8, Math.min(a.left, innerWidth - b.width - 8)) + "px";

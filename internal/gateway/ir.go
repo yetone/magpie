@@ -223,6 +223,12 @@ type Request struct {
 	// request is Claude Code's interactive mode, not claude -p: what a
 	// refusal it ends in is told with (thirdPartyRefused, #4503)
 	interactive bool
+	// tuiRefused, for the Claude bridge, is a request whose agent's
+	// system prompt Anthropic refused in the interactive mode as a
+	// third-party app's (#4503): its run is claude -p, which is served
+	// such prompts, with the interactive mode on all the same
+	// (thirdPartyPrint)
+	tuiRefused bool
 	// hourMarks has the cache marks magpie adds on Anthropic's Messages
 	// (anthropicBody) last an hour: a Responses client's (Codex's), whose
 	// turns are often more than five minutes apart and whose own vendor

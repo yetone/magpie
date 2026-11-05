@@ -303,6 +303,25 @@ path or isn't macOS, Linux or Windows. Nothing a request asks is refused
 any more (`claudePrint` keeps an image known by its URL, which
 `serveClaudeSubscription` has downloaded before any run, below).
 
+The one exception to "nothing runs as `-p`" with it On is a turn Anthropic
+refuses in the interactive mode as a third-party app's: a 400 "Third-party
+apps now draw from your extra usage" (#4503). Anthropic judges the agent's
+own system prompt, as a whole, there and serves the same prompt to `-p`
+(isjiajia01's controlled tests; Raven on Discord: Pi in Cindy through
+`group/auto`, every turn refused). When the refusal comes with nothing of
+the reply said or sent (`relay` hands it back as `redoAsPrint`,
+`redoable`), the turn is asked again once as `-p` (`serveSubscriptionAs`,
+`Request.tuiRefused`, `claudePrint` code `third-party`). Anthropic answered
+the refused turn nothing, so the `-p` run is its only answer; a turn that
+would draw from extra usage would have been served, not refused. The
+prompt's fingerprint (`thirdPartyKey`: its first 2KB, the agent's own part
+before Pi's working directory) is kept on the bridge for 12 hours
+(`thirdPartyFor`), and its next turns start as `-p`, their runs going on
+with tool results as a `-p` run does (`wantTUI`). A `-p` run's refusal, a
+turn whose reply had begun, and Off are never asked again
+(`thirdPartyRefused` says why). Settings' own value is not changed.
+`claude_tui_refusal_test.go` holds each case.
+
 A JSON schema is answered through an answer tool of magpie's
 (`claude_tui_schema.go`): interactive Claude Code takes `--json-schema`
 and does nothing with it (2.1.316, a real run: its result's
