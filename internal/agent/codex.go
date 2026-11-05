@@ -1359,6 +1359,115 @@ func codexIn(at place) *Agent {
 	// writes nothing of its own back (paynezhuang on Discord: the base URL
 	// was back after every update)
 	disconnected := func() bool { return stashShared()[at.key("codex"+disconnectedKey)] == "1" }
+	// lent are the threads lendOwn moved off OpenAI, and the provider of
+	// the user's they went to
+	type lentMove struct {
+		To  string   `json:"to"`
+		IDs []string `json:"ids"`
+	}
+	lent := func() lentMove {
+		var l lentMove
+		json.Unmarshal([]byte(stashShared()[at.key("codex.lent")]), &l)
+		return l
+	}
+	// lendOwn is bringBeside the other way: Codex on a provider of the
+	// user's at the top (CC Switch's "custom", left there when the user
+	// came to magpie, which keeps it since #4347), the threads it started
+	// on OpenAI before could not be continued at all. Codex 0.166 resumes
+	// a thread only on the provider it is on now ("This chat uses openai,
+	// but your current provider is custom. Switch to openai to continue",
+	// harris on Discord, the Codex app after CC Switch), and switching
+	// would refuse every thread of theirs instead. Those threads move to
+	// that provider, where Codex resumes them, as bringBeside moves that
+	// provider's onto OpenAI: in place when the id is OpenAI's length, the
+	// last 30 days of them rewritten with a copy kept otherwise, a
+	// paginated one by its row. Each one moved is kept (codex.lent) for
+	// giveLent to give back once Codex is on OpenAI again. None while a
+	// profile is chosen (Codex lists that one's threads) or names OpenAI,
+	// none once the user disconnected Codex from magpie, and none from a
+	// distro's Codex.
+	lendOwn := func() {
+		if at.spell != nil || disconnected() {
+			return
+		}
+		to := get("model_provider")
+		if to == "" || to == "openai" || to == magpieID || to == ccSwitchOfficial || isCCSwitchMirror(to) || sessions.CodexProviderIn(dir) != to {
+			return
+		}
+		names, _ := edit.TOMLTables(path)
+		if profileNamed(names)["openai"] {
+			return
+		}
+		var ids []string
+		if len(to) == len("openai") {
+			moved, err := sessions.RelabelCodexThreads(dir, "openai", to)
+			ids = append(ids, moved...)
+			if err != nil {
+				log.Printf("codex: moving OpenAI's threads to %s: %v", to, err)
+			}
+		}
+		retagged, err := sessions.RetagPagedCodexThreads(dir, "openai", to)
+		ids = append(ids, retagged...)
+		if err != nil {
+			log.Printf("codex: moving OpenAI's paginated threads to %s: %v", to, err)
+		}
+		move := sessions.MovePackedCodexThreads
+		if len(to) != len("openai") {
+			move = sessions.MoveRecentCodexThreads
+		}
+		packed, err := move(dir, "openai", to, time.Now().Add(-packedSince), packedBudget)
+		for _, m := range packed {
+			ids = append(ids, m.ID)
+		}
+		if err != nil {
+			log.Printf("codex: moving OpenAI's threads to %s: %v", to, err)
+		}
+		if len(ids) == 0 {
+			return
+		}
+		log.Printf("codex: %d thread(s) started on OpenAI moved to %s, the provider Codex is on, where it resumes them", len(ids), to)
+		l := lent()
+		if l.To != to {
+			l = lentMove{To: to}
+		}
+		for _, id := range ids {
+			if !slices.Contains(l.IDs, id) {
+				l.IDs = append(l.IDs, id)
+			}
+		}
+		out, _ := json.Marshal(l)
+		stash(map[string]string{at.key("codex.lent"): string(out)})
+	}
+	// giveLent gives the threads lendOwn moved back to OpenAI once Codex
+	// is on OpenAI again (CC Switch's official card, the user's provider
+	// taken out): those still on the provider they went to. While Codex is
+	// on that provider, or on magpie (bringOver took them there, and
+	// bringBack gives them to the provider Codex goes back to), the record
+	// stays; on any other provider it goes, and they stay where they are.
+	giveLent := func() {
+		l := lent()
+		if l.To == "" {
+			return
+		}
+		now := sessions.CodexProviderIn(dir)
+		if now == l.To || now == magpieID {
+			return
+		}
+		if now == "openai" && at.spell == nil {
+			retagged, err := sessions.RetagPagedCodexThreadIDs(dir, l.To, "openai", l.IDs)
+			if err != nil {
+				log.Printf("codex: moving paginated threads back from %s to OpenAI: %v", l.To, err)
+			}
+			moved, err := sessions.MoveCodexThreadIDs(dir, l.To, "openai", l.IDs)
+			if n := len(moved) + len(retagged); n > 0 {
+				log.Printf("codex: %d thread(s) started on OpenAI moved back from %s", n, l.To)
+			}
+			if err != nil {
+				log.Printf("codex: moving threads back from %s to OpenAI: %v", l.To, err)
+			}
+		}
+		forget(at.key("codex.lent"))
+	}
 	// Codex on one of its own models goes through magpie too while more of
 	// its ChatGPT accounts are on there, so one out of its allowance hands
 	// the turn to the next; with none, or once the user disconnected Codex,
@@ -1849,6 +1958,8 @@ func codexIn(at place) *Agent {
 		Sync: func() error {
 			// after the sync, which may have put Codex back beside its
 			// sign-in or made magpie its provider, and whatever it failed at
+			defer lendOwn()
+			defer giveLent()
 			defer followBeside()
 			defer bringBeside()
 			defer bringOfficial()
