@@ -402,3 +402,44 @@ func TestClaudeUsageWhyKept(t *testing.T) {
 		t.Fatalf("the usage page turned away should keep this account's reading: %+v", q)
 	}
 }
+
+// A warm-up has the account it started read again, and until that read
+// its card keeps the last reading's time: the warm-up cleared that time
+// and kept the windows, so the card stamped a reading minutes old as
+// read just now (koohoko5924, v0.1.3057), and nothing read it again,
+// the next read waiting on when /usage last ran.
+func TestClaudeWarmedReadAgain(t *testing.T) {
+	reset := time.Now().Add(2 * time.Hour).UTC().Format("3:04pm")
+	out, card := claudeUsageCards(t, "Current session: 10% used · resets "+reset+" (UTC)", nil)
+	if q := card(); q.Error != "" || len(q.Windows) == 0 {
+		t.Fatalf("first read: %+v", q)
+	}
+	// read three minutes ago, within the wait before the next read
+	at := time.Now().Add(-3 * time.Minute).Truncate(time.Second)
+	claudeUsage.Lock()
+	e := claudeUsage.m["a@example.com"]
+	e.at, e.tried = at, at
+	claudeUsage.m["a@example.com"] = e
+	claudeUsage.Unlock()
+	look := func() SubscriptionQuota {
+		t.Helper()
+		StaleAllowance("claude", "a@example.com")
+		q, ok := LoginUsage(context.Background(), "claude")["a@example.com"]
+		if !ok {
+			t.Fatal("no card for the signed-in account")
+		}
+		return q
+	}
+	if q := look(); q.ReadAt == nil || !q.ReadAt.Equal(at) || q.Windows[0].Used != 10 {
+		t.Fatalf("not due: %+v", q)
+	}
+	out.Store("Current session: 1% used · resets " + reset + " (UTC)\nCurrent week (all models): 1% used · resets " + reset + " (UTC)")
+	claudeWarmedNow("a@example.com")
+	if r := claudeReadAt("a@example.com"); r == nil || !r.Equal(at) {
+		t.Fatalf("warmed, the kept reading's time is %v, want %v", r, at)
+	}
+	q := look()
+	if q.ReadAt == nil || time.Since(*q.ReadAt) > time.Minute || len(q.Windows) < 2 || q.Windows[0].Used != 1 {
+		t.Fatalf("warmed, not read again: %+v", q)
+	}
+}
