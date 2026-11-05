@@ -399,6 +399,7 @@ button.rt-session { cursor: pointer; }
 .rt-purpose.open svg { transform: rotate(180deg); }
 .rt-metric-pick { display: inline-flex; align-items: center; gap: 3px; height: 24px; margin-left: 6px; }
 .rt-metric-pick.open svg { transform: rotate(180deg); }
+.rt-fold-all { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; margin-left: 2px; }
 .pop.proto-menu.rt-metric-menu { width: 190px; max-width: calc(100vw - 16px); background: var(--card); }
 .rt-metric-menu .pm-item { align-items: center; }
 .rt-metric-menu .pm-tick { height: 13px; width: 13px; border: 1px solid var(--line); border-radius: 3px; }

@@ -3659,7 +3659,16 @@ function routingPage(part) {
   // button made again each time is one WebKit may drop a click on
   const reqLabel = el("span", "label"), replayAll = el("button", "text");
   replayAll.onclick = () => replay(listed(), pinned);
-  reqHead.append(reqLabel, el("span", "grow"), reqNote, purposeTools, metricPick, replayAll);
+  // every group folded or opened at once (zzzkl on Discord): folds them
+  // all while any is open
+  const foldAll = el("button", "text rt-fold-all");
+  foldAll.type = "button";
+  foldAll.onclick = () => {
+    if ([...sessionRows.keys()].some((k) => !closedSessions.has(k))) for (const k of sessionRows.keys()) closedSessions.add(k);
+    else closedSessions.clear();
+    steady(renderHist);
+  };
+  reqHead.append(reqLabel, el("span", "grow"), reqNote, purposeTools, metricPick, foldAll, replayAll);
   // each request's row, kept while what it says is the same: the list
   // is redrawn on every trace update, and made again whole each time it
   // was most of what a busy gateway cost the page (#308)
@@ -3781,10 +3790,10 @@ function routingPage(part) {
     for (const g of groups.values()) {
       let x = sessionRows.get(g.key);
       if (!x) {
-        const b = el(g.key ? "button" : "div", "rt-session"), name = el("span", "nm"), dir = el("span", "dir"), meta = el("span", "summary"), cost = el("span", "cost"), arrow = el("span", "arrow");
+        const b = el("button", "rt-session"), name = el("span", "nm"), dir = el("span", "dir"), meta = el("span", "summary"), cost = el("span", "cost"), arrow = el("span", "arrow");
         b.append(arrow, name, dir, meta, cost);
         x = { b, name, dir, meta, cost, arrow };
-        if (g.key) b.onclick = () => {
+        b.onclick = () => {
           if (closedSessions.has(g.key)) closedSessions.delete(g.key); else closedSessions.add(g.key);
           steady(renderHist);
         };
@@ -3805,7 +3814,7 @@ function routingPage(part) {
         }
         return s;
       }, { cost: 0, tokens: 0, priced: 0, unpriced: 0, running: 0, completed: 0, prompt: 0, read: 0, cached: 0, decodeMs: 0, decodeOut: 0, timed: 0 });
-      setText(x.arrow, g.key ? open ? "▾" : "▸" : "");
+      setText(x.arrow, open ? "▾" : "▸");
       // Background workers have their own IDs. Label groups made entirely
       // for one purpose without renaming a chat that also made helper calls.
       const memory = !byKey && g.r.agent === "codex" && g.rows.every((r) => purposeOf(r.kind) === "kind:memory_consolidation");
@@ -3857,7 +3866,7 @@ function routingPage(part) {
       setText(x.cost, [total.priced ? "≈" + fmtCost({ cost: total.cost, unpriced: 0 }) + (total.unpriced ? "+" : "") : "", credits].filter(Boolean).join(" · "));
       x.cost.hidden = !visibleMetrics.includes("cost") || !total.priced && !credits;
       x.cost.title = [total.priced ? costNote() : "", credits ? t("What {n} of these requests cost in their plan's credits, as the replies said", { n: g.rows.filter((r) => routeCredits([r])).length }) : ""].filter(Boolean).join("\n");
-      if (g.key) x.b.setAttribute("aria-expanded", String(open));
+      x.b.setAttribute("aria-expanded", String(open));
       els.push(x.b);
       if (open) els.push(...g.els);
     }
@@ -3929,6 +3938,7 @@ function routingPage(part) {
       reqRows.clear();
       sessionRows.clear();
       closedSessions.clear();
+      foldAll.hidden = true;
       renderActs(rs);
       return;
     }
@@ -3936,7 +3946,13 @@ function routingPage(part) {
     for (const id of reqRows.keys()) if (!ids.has(id)) reqRows.delete(id);
     // the requests, with their sessions' heads between them when grouped:
     // a request's row is made only when it is drawn
-    listItems = by === "key" ? groupedRows(rs, rs, true) : by === "session" && rs.some((r) => r.session) ? groupedRows(rs, rs) : rs;
+    const grouped = by === "key" || by === "session" && rs.some((r) => r.session);
+    listItems = by === "key" ? groupedRows(rs, rs, true) : grouped ? groupedRows(rs, rs) : rs;
+    const folds = grouped && [...sessionRows.keys()].some((k) => !closedSessions.has(k)), fold = t(folds ? "Collapse all" : "Expand all");
+    foldAll.hidden = !grouped || sessionRows.size < 2;
+    setAttr(foldAll, "title", fold);
+    setAttr(foldAll, "aria-label", fold);
+    if (foldAll.dataset.on !== String(folds)) { foldAll.dataset.on = folds; foldAll.replaceChildren(svg(folds ? "m5 3 3 3 3-3M5 13l3-3 3 3" : "m5 6 3-3 3 3M5 10l3 3 3-3", 13, 1.6)); }
     rowsMoved = false;
     drawList();
     // measuring the rows' lines forces a layout: only when a row was made

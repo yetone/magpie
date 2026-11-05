@@ -117,7 +117,7 @@ for (const engine of engines) {
         await page.locator("#view-routing .rt-req").nth(39).waitFor();
         // grouped by session, as the reporter's list was
         await page.locator("#view-routing .rt-group-by button").nth(1).click();
-        assert.equal(await page.locator("#view-routing div.rt-session .nm").textContent(), lang === "zh" ? "未提供会话标识" : "No session ID");
+        assert.equal(await page.locator("#view-routing .rt-session", { hasText: lang === "zh" ? "未提供会话标识" : "No session ID" }).locator(".nm").textContent(), lang === "zh" ? "未提供会话标识" : "No session ID");
         await page.waitForTimeout(500);
         await heldAtEnds(page, view, page.locator("#view-routing .rt-reqs").first(), "the requests' list");
         await ctx.close();

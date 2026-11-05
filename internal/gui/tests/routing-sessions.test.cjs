@@ -74,7 +74,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.match(await group.locator(".summary").textContent(), lang === "zh" ? /3 个请求.*6.0k/ : /3 requests.*6.0k/);
       assert.equal(await group.locator(".cost").textContent(), "≈$0.030+", "partial totals must be marked");
       assert.equal(await page.locator("button.rt-session").filter({ hasText: "Claude Code" }).locator(".cost").textContent(), "≈$0.000", "zero price is known");
-      assert.equal(await page.locator("div.rt-session .cost").isVisible(), false, "unknown cost is omitted for legacy requests");
+      assert.equal(await page.locator(".rt-session", { hasText: lang === "zh" ? "未提供会话标识" : "No session ID" }).locator(".cost").isVisible(), false, "unknown cost is omitted for legacy requests");
       assert.equal(await page.locator(".rt-req").count(), 6);
 
       await group.click();
@@ -162,7 +162,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await group("named-memory").locator(".nm").textContent(), "Codex · Named memory");
       assert.equal(await group("mixed").locator(".nm").textContent(), "Codex · mixed");
       assert.equal(await group("unknown").locator(".nm").textContent(), "Codex · unknown");
-      assert.equal(await page.locator("div.rt-session .nm").textContent(), lang === "zh" ? "未提供会话标识" : "No session ID");
+      assert.equal(await page.locator(".rt-session", { hasText: lang === "zh" ? "未提供会话标识" : "No session ID" }).locator(".nm").textContent(), lang === "zh" ? "未提供会话标识" : "No session ID");
       assert.equal(await page.locator(".rt-session").count(), 7, "separate memory IDs must not merge with each other or the chat");
 
       const memory = group("memory-a"), handle = await memory.elementHandle();
@@ -242,7 +242,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await group("mixed").locator(".nm").textContent(), "Codex · mixed");
       assert.equal(await group("named-chat").locator(".nm").textContent(), "Codex · Chat title");
       assert.equal(await group("other-agent").locator(".nm").textContent(), "Claude Code · other-agent");
-      assert.equal(await page.locator("div.rt-session .nm").textContent(), lang === "zh" ? "未提供会话标识" : "No session ID");
+      assert.equal(await page.locator(".rt-session", { hasText: lang === "zh" ? "未提供会话标识" : "No session ID" }).locator(".nm").textContent(), lang === "zh" ? "未提供会话标识" : "No session ID");
       assert.equal(await page.locator(".rt-session").count(), 8, "suggestion workers retain separate session groups");
       assert.deepEqual(errors, []);
     });
