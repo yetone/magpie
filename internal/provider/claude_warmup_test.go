@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -198,5 +199,115 @@ func TestUsageReadKicksTheWarmUp(t *testing.T) {
 	case u := <-sent:
 		t.Fatalf("off, sent %s", u)
 	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+// A Claude Enterprise account with a five-hour window only: its reading
+// never has a week. Taken as a week not started, it was warmed every few
+// hours for good, each warm-up leaving it not started (koohoko5924, the
+// state "Idle": 189). A week left out while the five hours run is one the
+// account hasn't, and isn't warmed, the five hours idle too; the five
+// hours are still started on their reset.
+func TestClaudeWarmLeavesAWeekTheAccountHasnt(t *testing.T) {
+	now := time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC)
+	five := win("5 hours", fiveHours, 30, now.Add(2*time.Hour))
+	for _, which := range []string{"week", "all"} {
+		t.Run(which, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "claude-warmup.json")
+			// the state the account had: its week warmed 189 times, due again
+			writeFile(t, path, warmState{"a@x": {
+				"5 hours": {ResetsAt: now.Add(2 * time.Hour), Used: 30},
+				"7 days":  {Warmed: now.Add(-4 * time.Hour), Idle: 189, Retry: now.Add(-time.Minute)},
+			}})
+			at, sent := now, map[string]int{}
+			w := codexWarmer{path: path, now: func() time.Time { return at }, expect: claudeWindowsExpected,
+				usage: func(context.Context) map[string]SubscriptionQuota {
+					if five.ResetsAt != nil && !at.Before(*five.ResetsAt) {
+						five = QuotaWindow{Name: "5 hours", Span: fiveHours} // not started (claudeWithUnstarted)
+					}
+					return map[string]SubscriptionQuota{"a@x": {Provider: "claude", Windows: []QuotaWindow{five}}}
+				},
+				send: func(context.Context, string) error {
+					five = win("5 hours", fiveHours, 0, at.Add(fiveHours))
+					return nil
+				}}
+			five = win("5 hours", fiveHours, 30, now.Add(2*time.Hour))
+			for ; at.Before(now.Add(48 * time.Hour)); at = at.Add(5 * time.Minute) {
+				for _, r := range w.warmNow(context.Background(), which, nil) {
+					for _, name := range r.Windows {
+						sent[name]++
+					}
+				}
+			}
+			if sent["7 days"] != 0 {
+				t.Fatalf("warmed a week the account hasn't %d times in two days (%v)", sent["7 days"], sent)
+			}
+			if which == "all" && sent["5 hours"] == 0 {
+				t.Fatalf("the five hours weren't started on their reset: %v", sent)
+			}
+			if st := readWarmState(path)["a@x"]["7 days"]; !st.Absent {
+				t.Fatalf("the week kept as %+v", st)
+			}
+		})
+	}
+}
+
+// A week seen running that a reading leaves out while the five hours run
+// has reset, and is warmed: only a week never seen is one the account
+// hasn't. So is a week a reading only partly told leaves out.
+func TestClaudeWarmStartsAWeekThatReset(t *testing.T) {
+	now := time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC)
+	five := win("5 hours", fiveHours, 30, now.Add(2*time.Hour))
+	for name, c := range map[string]struct {
+		prev  warmState
+		five  QuotaWindow
+		which string
+	}{
+		"reset":       {warmState{"a@x": {"5 hours": {ResetsAt: now.Add(2 * time.Hour), Used: 30}, "7 days": {ResetsAt: now.Add(-time.Minute), Used: 40}}}, five, "week"},
+		"partly told": {warmState{}, func() QuotaWindow { w := five; w.partial = true; return w }(), "week"},
+		"never read":  {nil, five, "all"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "claude-warmup.json")
+			if c.prev != nil {
+				writeFile(t, path, c.prev)
+			}
+			w := codexWarmer{path: path, now: func() time.Time { return now }, expect: claudeWindowsExpected,
+				usage: func(context.Context) map[string]SubscriptionQuota {
+					return map[string]SubscriptionQuota{"a@x": {Provider: "claude", Windows: []QuotaWindow{c.five}}}
+				},
+				send: func(context.Context, string) error { return nil }}
+			rs := w.warmNow(context.Background(), c.which, nil)
+			if name == "never read" {
+				// the first look at an account whose five hours run: its week
+				// was never seen, and isn't one it has
+				if len(rs) != 0 {
+					t.Fatalf("warmed %+v", rs)
+				}
+				return
+			}
+			if len(rs) != 1 || !slices.Contains(rs[0].Windows, "7 days") {
+				t.Fatalf("the week not warmed: %+v", rs)
+			}
+		})
+	}
+}
+
+// A usage read has the warm-up look at an account with a window not
+// started at once, but not for a week left out while the five hours run.
+func TestUsageReadLeavesAWeekTheAccountHasnt(t *testing.T) {
+	var told []string
+	defer onNotStarted("claude-test-absent", claudeWindowsExpected, func(user string) { told = append(told, user) })()
+	now := time.Now()
+	running := win("5 hours", fiveHours, 30, now.Add(2*time.Hour))
+	usageRead("claude-test-absent", map[string]SubscriptionQuota{
+		"five-only@x": {Windows: []QuotaWindow{running}},
+		"idle@x":      {Windows: []QuotaWindow{{Name: "5 hours", Span: fiveHours}}},
+		"never@x":     {Windows: []QuotaWindow{}},
+		"max@x":       {Windows: []QuotaWindow{running, win("7 days", week, 0, time.Time{})}},
+	})
+	slices.Sort(told)
+	if strings.Join(told, ",") != "idle@x,max@x,never@x" {
+		t.Fatalf("told %v", told)
 	}
 }

@@ -71,6 +71,9 @@ type warmWindow struct {
 	// when it is sent the next while it still isn't.
 	Idle  int       `json:"idle,omitempty"`
 	Retry time.Time `json:"retry,omitzero"`
+	// Absent is an expected window the account hasn't (windowAbsent),
+	// never warmed while its reading leaves it out.
+	Absent bool `json:"absent,omitempty"`
 }
 
 // warmState is every account's windows, by lower-cased user and window name.
@@ -173,9 +176,16 @@ func (c codexWarmer) warmNow(ctx context.Context, which string, dayAts []string)
 			if w.Span <= 0 || w.Aside || w.Model != "" || !onItsReset && !(short && len(at) > 0) {
 				continue
 			}
+			p, seen := prev[w.Name]
+			if windowAbsent(q, w, p, now) {
+				// an account without it (a Claude Enterprise plan with five
+				// hours only): warmed, it stayed not started, sent again
+				// every few hours for good (koohoko5924, Idle 189)
+				next[w.Name] = warmWindow{Absent: true}
+				continue
+			}
 			cur := asOf(w, now)
 			unstarted[w.Name] = idle(cur, now)
-			p, seen := prev[w.Name]
 			n := warmWindow{Used: cur.Used, Warmed: p.Warmed, Daily: p.Daily}
 			if cur.ResetsAt != nil {
 				n.ResetsAt = *cur.ResetsAt
@@ -274,6 +284,33 @@ func withExpected(ws, expect []QuotaWindow) []QuotaWindow {
 	return out
 }
 
+// windowAbsent says whether w, as withExpected gives it, is a window q's
+// account hasn't, as it was seen before as p: one every account is
+// expected to have that q's reading leaves out while a shorter window of
+// the account runs, never seen running itself. Any use starts each of
+// Claude's windows, the week with the five hours, so a week left out
+// while the five hours run is one the plan doesn't have, not one not
+// started yet. Taken so, it is so while readings leave it out, the five
+// hours idle too; a reading that has it, the account used since, ends it.
+// A week seen running and left out now, reset while the five hours run,
+// is not started, as is any window a reading only partly told
+// (claudeUsageEntry.whole) leaves out.
+func windowAbsent(q SubscriptionQuota, w QuotaWindow, p warmWindow, now time.Time) bool {
+	if slices.ContainsFunc(q.Windows, func(x QuotaWindow) bool { return x.Name == w.Name }) {
+		return false
+	}
+	return p.Absent || p.ResetsAt.IsZero() && p.Used == 0 && !slices.ContainsFunc(q.Windows, func(x QuotaWindow) bool { return x.partial }) &&
+		shorterRunning(q.Windows, w.Span, now)
+}
+
+// shorterRunning says whether one of ws, the account's own and shorter
+// than span, is running as of now.
+func shorterRunning(ws []QuotaWindow, span time.Duration, now time.Time) bool {
+	return slices.ContainsFunc(ws, func(x QuotaWindow) bool {
+		return x.Span > 0 && x.Span < span && !x.Aside && x.Model == "" && !idle(asOf(x, now), now)
+	})
+}
+
 // windowSeen is window name of q as now, as warmNow keeps it; one q
 // leaves out is not started.
 func windowSeen(q SubscriptionQuota, name string, now time.Time) warmWindow {
@@ -297,7 +334,7 @@ func mapsEqual(a, b map[string]warmWindow) bool {
 	for k, x := range a {
 		y, ok := b[k]
 		if !ok || !x.ResetsAt.Equal(y.ResetsAt) || x.Used != y.Used || !x.Warmed.Equal(y.Warmed) || x.Failed != y.Failed || x.Pending != y.Pending || x.Daily != y.Daily ||
-			x.Idle != y.Idle || !x.Retry.Equal(y.Retry) {
+			x.Idle != y.Idle || !x.Retry.Equal(y.Retry) || x.Absent != y.Absent {
 			return false
 		}
 	}
@@ -659,7 +696,8 @@ func onNotStarted(agent string, expect []QuotaWindow, f func(user string)) func(
 
 // usageRead tells onNotStarted's f of each account in usage, read for
 // agent, with a window not started: nothing used and no reset known, or
-// left out of the read.
+// left out of the read, but for one left out while a shorter window runs,
+// which the account hasn't (windowAbsent).
 func usageRead(agent string, usage map[string]SubscriptionQuota) {
 	h := &notStartedHooks
 	h.Lock()
@@ -668,8 +706,18 @@ func usageRead(agent string, usage map[string]SubscriptionQuota) {
 	if !ok {
 		return
 	}
+	now := time.Now()
 	for user, q := range usage {
-		if q.Error == "" && slices.ContainsFunc(withExpected(q.Windows, hook.expect), notStarted) {
+		if q.Error != "" {
+			continue
+		}
+		ws := q.Windows
+		for _, e := range hook.expect {
+			if !slices.ContainsFunc(q.Windows, func(w QuotaWindow) bool { return w.Name == e.Name }) && !shorterRunning(q.Windows, e.Span, now) {
+				ws = append(slices.Clip(ws), QuotaWindow{Name: e.Name, Span: e.Span})
+			}
+		}
+		if slices.ContainsFunc(ws, notStarted) {
 			hook.f(user)
 		}
 	}
