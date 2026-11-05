@@ -90,6 +90,16 @@ func claudeRelocationRoot(in ClaudeRelocation) (string, string, error) {
 }
 
 func claudeProjectName(p string) (string, error) {
+	n := claudeSlug(p)
+	if len(n) > 200 {
+		return "", errors.New("long hashed Claude project paths are not supported yet")
+	}
+	return n, nil
+}
+
+// claudeSlug is p as Claude Code names a project folder after it, before it
+// cuts a long one: each UTF-16 unit that isn't a letter or digit is "-".
+func claudeSlug(p string) string {
 	var b strings.Builder
 	for _, c := range utf16.Encode([]rune(p)) {
 		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' {
@@ -98,10 +108,7 @@ func claudeProjectName(p string) (string, error) {
 			b.WriteByte('-')
 		}
 	}
-	if b.Len() > 200 {
-		return "", errors.New("long hashed Claude project paths are not supported yet")
-	}
-	return b.String(), nil
+	return b.String()
 }
 
 func relocationPaths(in ClaudeRelocation) (string, string, error) {
@@ -146,12 +153,16 @@ func relocationCwd(cwd, from, to string) (string, bool) {
 	return cwd, false
 }
 
-// Only top-level cwd metadata changes. Message/tool content and UUID links
-// remain untouched, including historical absolute paths in tool arguments.
+// Only top-level cwd metadata changes (and the folder of a /cd move's
+// relocated line). Message/tool content and UUID links remain untouched,
+// including historical absolute paths in tool arguments.
 func relocateClaudeJSONL(b []byte, from, to string, main bool) ([]byte, bool, error) {
 	lines := bytes.Split(b, []byte("\n"))
 	found := false
 	sawCwd := false
+	// the session's project: its first cwd, or the folder /cd last moved
+	// it to (ccRelocated), whose lines before name the folder it left
+	foreign, moved := "", false
 	for i, line := range lines {
 		if len(bytes.TrimSpace(line)) == 0 {
 			continue
@@ -160,7 +171,22 @@ func relocateClaudeJSONL(b []byte, from, to string, main bool) ([]byte, bool, er
 		if err := json.Unmarshal(line, &row); err != nil || row == nil {
 			return nil, false, errors.New("invalid transcript JSON; repair it before relocating")
 		}
-		raw, ok := row["cwd"]
+		key := "cwd"
+		if raw, ok := row["relocatedCwd"]; ok && string(row["type"]) == `"relocated"` {
+			var cwd string
+			if err := json.Unmarshal(raw, &cwd); err != nil {
+				return nil, false, err
+			}
+			_, in := relocationCwd(cwd, from, to)
+			if main {
+				moved, foreign = true, ""
+				if !in {
+					foreign = cwd
+				}
+			}
+			key = "relocatedCwd"
+		}
+		raw, ok := row[key]
 		if !ok {
 			continue
 		}
@@ -169,17 +195,22 @@ func relocateClaudeJSONL(b []byte, from, to string, main bool) ([]byte, bool, er
 			return nil, false, err
 		}
 		next, ok := relocationCwd(cwd, from, to)
-		if main && !sawCwd && !ok {
-			return nil, false, fmt.Errorf("transcript contains a different project cwd %q", cwd)
+		if main && !sawCwd && !moved && !ok {
+			foreign = cwd
 		}
-		sawCwd = true
+		if key == "cwd" {
+			sawCwd = true
+		}
 		if !ok {
 			// A session may have visited other projects or a subagent worktree.
 			continue
 		}
 		found = true
-		row["cwd"], _ = json.Marshal(next)
+		row[key], _ = json.Marshal(next)
 		lines[i], _ = json.Marshal(row)
+	}
+	if foreign != "" {
+		return nil, false, fmt.Errorf("transcript contains a different project cwd %q", foreign)
 	}
 	return bytes.Join(lines, []byte("\n")), found, nil
 }

@@ -3,6 +3,7 @@ package sessions
 import (
 	"bytes"
 	"encoding/json"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -76,6 +77,9 @@ func claudeLine(s *state, b []byte, main bool) {
 			// a message laid out type first
 		case "ai-title", "custom-title", "summary":
 			claudeFull(s, b, main)
+			return
+		case "relocated":
+			ccRelocated(s, b, main)
 			return
 		default:
 			s.saw(tsAt(b, true), main)
@@ -182,6 +186,44 @@ func ccWhere(s *state, b []byte) {
 	if s.ID == "" {
 		s.ID = strAt(b, ccSession)
 	}
+}
+
+var ccRelocatedCwd = []byte(`"relocatedCwd":"`)
+
+// ccRelocated reads the line Claude Code's /cd adds when it moves a session
+// to another folder: it moves the file into that folder's project and
+// writes {"type":"relocated","relocatedCwd":…}, while the lines before keep
+// the old cwd. The session is then the new folder's, the last move's.
+func ccRelocated(s *state, b []byte, main bool) {
+	s.saw(tsAt(b, true), main)
+	if !main {
+		return
+	}
+	if c := strAt(b, ccRelocatedCwd); c != "" {
+		s.Cwd = c
+	}
+}
+
+// ccStale reports whether a Claude Code session's kept parse was made by a
+// magpie that didn't read /cd's relocated lines, and the folder it names is
+// not the project the file is in: the session was moved with /cd, and its
+// parse names the folder it left. Read again once, the parse is current.
+func ccStale(f file, s *state) bool {
+	if f.agent != "claude" || !f.main || s == nil || s.CdRead || s.Cwd == "" {
+		return false
+	}
+	return !ccInProject(filepath.Base(filepath.Dir(f.path)), s.Cwd)
+}
+
+// ccInProject reports whether dir is the name Claude Code gives cwd's
+// project folder: cwd with each UTF-16 unit not a letter or digit as "-",
+// past 200 of them cut and a hash added.
+func ccInProject(dir, cwd string) bool {
+	n := claudeSlug(cwd)
+	if len(n) <= 200 {
+		return dir == n
+	}
+	return strings.HasPrefix(dir, n[:200]+"-")
 }
 
 // strAt is the string after the last key in b.

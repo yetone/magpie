@@ -239,7 +239,8 @@ const tailBytes = 64 << 10
 
 // claudeTail reads the titles at the end of a Claude Code file into s: the
 // one Claude Code gives a session, and one the user gave it, are lines it
-// adds as the session goes on, the last of each the one that stands.
+// adds as the session goes on, the last of each the one that stands. So is
+// /cd's relocated line, naming the folder the session was moved to.
 func claudeTail(s *state, f file) {
 	from := max(f.size-tailBytes, 0)
 	p := parserFor(f.agent)
@@ -247,7 +248,7 @@ func claudeTail(s *state, f file) {
 		if start == from && from > 0 {
 			return true // the end of a line begun before
 		}
-		if bytes.Contains(b, ccTitle) || bytes.Contains(b, ccCustom) {
+		if bytes.Contains(b, ccTitle) || bytes.Contains(b, ccCustom) || bytes.Contains(b, ccRelocatedCwd) {
 			p.line(s, b, true)
 		}
 		return true
