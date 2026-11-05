@@ -7190,8 +7190,12 @@ function routingPage(part) {
     rAdd.append(svg(PLUS, 11, 1.8), el("span", "", t("Add a rule")));
     const RULES_TIP = "Checked top first when you send a message: the first that matches sends that turn to its model first; the rest stay behind it if it fails. A turn under way is never moved.";
     const rTip = infoTip(t(RULES_TIP));
+    // with no rule yet, an example of the split asked for most (mr_coffee0083:
+    // one model to think, others to write code), added as a rule to edit
+    const rTry = el("button", "text rt-try", t("Add an example rule"));
+    rTry.type = "button";
     const rAdds = el("div", "rt-gadds");
-    rAdds.append(rAdd, rTip);
+    rAdds.append(rAdd, rTip, rTry);
     const rHint2 = el("div", "hint");
     // the conditions opened on each rule while the editor is open: one just
     // added, or emptied while typing, stays in its place until it is taken
@@ -7307,10 +7311,13 @@ function routingPage(part) {
       condsSeen.disconnect();
       condsSeen.observe(rlist);
       rAdd.hidden = rTip.hidden = d.members.length < 2;
-      // only what holds the rules back is said in a line: how they work is
-      // under the ⓘ beside Add a rule
+      const none = d.members.length > 1 && d.routing !== "manual" && !d.rules.length;
+      rTry.hidden = !none;
+      // only what holds the rules back is said in a line, and with no rule
+      // yet what one is for: how they work is under the ⓘ beside Add a rule
       rHint2.textContent = d.members.length < 2 ? t("With two models or more, a rule can send some turns to one of them first.")
-        : d.routing === "manual" ? t("The rules wait while you pick the model by hand.") : "";
+        : d.routing === "manual" ? t("The rules wait while you pick the model by hand.")
+        : none ? t("No rule yet: every turn goes by the routing. For one model to think and others to write code, put the coding models in a group of their own, add it here first and the thinking model after it, route In order, and add a rule sending planning and hard problems to the thinking model.") : "";
       rHint2.hidden = !rHint2.textContent;
       let focus = null;
       d.rules.forEach((r, i) => {
@@ -7679,6 +7686,14 @@ function routingPage(part) {
       addCond(r, "intent");
     };
     rAdd.onclick = addIntentRule;
+    // the example: turns asking for planning or hard thinking to the last
+    // member, its words in the box to change
+    rTry.onclick = () => {
+      const r = newRule();
+      r.intent = t("planning, design, or a hard problem to think through");
+      d.rules.push(r);
+      addCond(r, "intent");
+    };
     // the classifier, once a rule has an intent or the effort is picked
     // per turn: the model asked which intent a turn's message is and how
     // hard it is. Jev (a decision provider's model) answers both in one
