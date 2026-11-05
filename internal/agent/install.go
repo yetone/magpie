@@ -69,7 +69,9 @@ var vendorInstall = map[string]func(goos string) []InstallCmd{
 		if goos == "windows" {
 			return nil
 		}
-		return []InstallCmd{{Via: "script", Command: "curl -fsSL https://opencode.ai/install | bash"}}
+		// OpenCode 2's (its README, opencode.ai/v2/docs); opencode.ai/install
+		// installs OpenCode 1 only, and refuses a 2.x version
+		return []InstallCmd{{Via: "script", Command: "curl -fsSL https://opencode.ai/v2/install | bash"}}
 	},
 	"codex": func(goos string) []InstallCmd {
 		switch goos {

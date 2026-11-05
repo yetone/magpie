@@ -195,6 +195,9 @@ func runnable(p string) string {
 func installedAt(spec cliSpec, bin string) (string, *updater) {
 	real, s := throughShim(bin)
 	u := howInstalled(spec, real)
+	if u != nil && u.via == "self" && spec.line != nil {
+		u.pkg = spec.line(installedVersion(real))
+	}
 	if u != nil && s != nil && s.kind == "mise" {
 		u.reshim = []string{s.mgr, "reshim"}
 	}

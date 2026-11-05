@@ -114,6 +114,13 @@ type cliSpec struct {
 	// -g --trust, pnpm add -g --allow-build=<pkg>. npm 10 and 11 run it
 	// anyway, and take --allow-scripts as a config they don't know.
 	scripts bool
+	// line is the npm package of the line version is in, for a CLI whose
+	// own updater (self) stays on its line: OpenCode 1's opencode upgrade
+	// runs opencode.ai/install, which installs OpenCode 1 only and refuses
+	// a 2.x version, so an OpenCode 1 from that installer is told
+	// opencode-ai's newest, an OpenCode 2 @opencode/cli's. "" when the
+	// version isn't known: no version is promised.
+	line func(version string) string
 }
 
 var cliSpecs = map[string]cliSpec{
@@ -150,7 +157,24 @@ var cliSpecs = map[string]cliSpec{
 			}
 			return nil
 		}},
-	"opencode": {npm: []string{"opencode-ai"}, brew: []string{"opencode"}, target: true, scripts: true,
+	// OpenCode 2 is @opencode/cli on npm (opencode-ai has OpenCode 1
+	// only, its latest 1.19.5 while @opencode/cli's is 2.2.5, 2026-11-05;
+	// math_milian on Discord), its installer opencode.ai/v2/install, which
+	// puts it in ~/.opencode/bin as OpenCode 1's did, and Homebrew's
+	// opencode formula (2.2.0) or anomalyco/tap's opencode-v2. An install
+	// of either package is updated on its own: npm, bun and pnpm keep it
+	// to its package, and line keeps opencode upgrade to its version's.
+	"opencode": {npm: []string{"@opencode/cli", "opencode-ai"}, brew: []string{"opencode", "opencode-v2"}, target: true, scripts: true,
+		line: func(v string) string {
+			major, _, _ := strings.Cut(strings.TrimPrefix(v, "v"), ".")
+			switch n, err := strconv.Atoi(major); {
+			case err != nil:
+				return ""
+			case n < 2:
+				return "opencode-ai"
+			}
+			return "@opencode/cli"
+		},
 		self: func(bin, real string) []string {
 			if strings.Contains(real, "/.opencode/bin/") {
 				return []string{bin, "upgrade"}

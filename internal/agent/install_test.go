@@ -33,8 +33,8 @@ func TestInstallCommands(t *testing.T) {
 		{"codex", "linux", []string{"script: curl -fsSL https://chatgpt.com/codex/install.sh | sh", "npm: npm install -g @openai/codex"}},
 		{"gemini", "linux", []string{"brew: brew install gemini-cli", "npm: npm install -g @google/gemini-cli"}},
 		{"gemini", "windows", []string{"npm: npm install -g @google/gemini-cli"}},
-		{"opencode", "darwin", []string{"script: curl -fsSL https://opencode.ai/install | bash", "npm: npm install -g --allow-scripts=opencode-ai opencode-ai"}},
-		{"opencode", "windows", []string{"npm: npm install -g --allow-scripts=opencode-ai opencode-ai"}},
+		{"opencode", "darwin", []string{"script: curl -fsSL https://opencode.ai/v2/install | bash", "npm: npm install -g --allow-scripts=@opencode/cli @opencode/cli"}},
+		{"opencode", "windows", []string{"npm: npm install -g --allow-scripts=@opencode/cli @opencode/cli"}},
 		{"deveco", "darwin", []string{"npm: npm install -g --allow-scripts=@deveco/deveco-code @deveco/deveco-code"}},
 		{"deveco", "windows", []string{"npm: npm install -g --allow-scripts=@deveco/deveco-code @deveco/deveco-code"}},
 		{"deveco", "linux", nil}, // no Linux build in its package

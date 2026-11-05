@@ -316,7 +316,7 @@ func airAt(home string, a *Agent, path string, done notice) *Agent {
 
 // what air says after a change (notice.go)
 var (
-	noticeAir1   = newNotice("Air runs magpie's models through OpenCode's ACP server, and OpenCode isn't installed here: install OpenCode (npm i -g opencode-ai), then pick Magpie in a new Air task.")
+	noticeAir1   = newNotice("Air runs magpie's models through OpenCode's ACP server, and OpenCode isn't installed here: install OpenCode (npm i -g --allow-scripts=@opencode/cli @opencode/cli), then pick Magpie in a new Air task.")
 	noticeAir2   = newNotice("In Air, start a new task and pick Magpie in its agent menu: magpie's models and routing groups are in its model menu.")
 	noticeAirIDE = newNotice("In your JetBrains IDE (2026.3, or 2026.2 with the Air plugin), pick Magpie in Air's agent menu — restart the IDE if it isn't listed yet: magpie's models and routing groups are in its model menu.")
 )
