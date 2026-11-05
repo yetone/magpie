@@ -6224,6 +6224,7 @@ function renderProviders(quiet) {
     const name = el("div", "name", p.name);
     if (p.sponsored) name.append(el("span", "badge", t("sponsored")));
     if (p.off) name.append(el("span", "badge off", t("Switched off")));
+    if (p.self) name.append(Object.assign(el("span", "badge" + (p.keepSelf ? "" : " off"), t("This magpie")), { title: selfNote(p) }));
     if (p.move && p.move.state !== "plugin") name.append(deprecatedBadge());
     const n = p.models.filter((m) => m.on).length;
     // rate windows: what it bills at now (#2463)
@@ -9230,6 +9231,14 @@ function drawEditor(p, presetID) {
     if (p) h.append(providerSwitch(p));
     ed.append(h);
     if (p?.off) ed.append(el("div", "hint off-note", t("Switched off: agents aren't given its models and no request goes to it. Its keys and settings are kept; switch it on to use it again.")));
+    // a Remote magpie that is this magpie, which sync brought here (hanslin1666)
+    if (p?.self) {
+      const [keep, cb] = tick(t("Use it anyway"), !!p.keepSelf);
+      cb.onchange = () => accountAction("provider/keepself", { id: p.id, keepSelf: cb.checked }, t(cb.checked ? "{name} is used anyway" : "{name} is left out: it is this magpie", { name: p.name }));
+      const note = el("div", "hint off-note self-note", selfNote(p));
+      note.append(keep);
+      ed.append(note);
+    }
   }
 
   // a vendor's global and China endpoints are presets of their own, one row
@@ -20412,6 +20421,11 @@ function askLANNames(urls, then) {
       then();
     } catch { hosts.forEach((h) => lanNames.delete(h)); }
   }, 300);
+}
+
+function selfNote(p) {
+  return t(p.keepSelf ? "This Remote magpie is this magpie itself. It is used anyway: its models are listed beside this magpie's own, and a request through it passes through this magpie twice."
+    : "This Remote magpie is this magpie itself: sync brought it from a computer that uses this one. It is left out, so its models aren't listed twice; a request for one of them is served here at once.");
 }
 
 function tick(label, on) {

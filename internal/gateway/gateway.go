@@ -266,8 +266,12 @@ func namesInCatalog() map[string]bool {
 
 // switchedOff says a request for model went nowhere because p, which
 // serves it, is switched off in magpie (provider.Provider.Off), or kept to
-// Claude Code's own sign-in (provider.Provider.KeptToAgent).
+// Claude Code's own sign-in (provider.Provider.KeptToAgent), or a Remote
+// magpie that is this one (provider.Provider.SelfLeftOut).
 func switchedOff(p provider.Provider, model string) string {
+	if p.SelfLeftOut() && !p.Off {
+		return fmt.Sprintf("%s is a Remote magpie that is this magpie itself, so %q is not served through it; ask for the model without %q in front, or tick \"Use it anyway\" on it in Magpie's Providers", p.Name, model, p.ID+"/")
+	}
 	if p.KeptToAgent() {
 		return fmt.Sprintf("%s's accounts are kept to Claude Code's own sign-in in Magpie, so %q is not served; untick \"Only switch Claude Code's sign-in\" under its accounts in Magpie's Providers to use it", p.Name, model)
 	}

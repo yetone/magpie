@@ -2702,6 +2702,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .row.model .minfo .mi-img svg, .rt-gedit .fbrow .minfo .mi-img svg { display: block; }
 .provider .pswitch { margin-left: 8px; }
 .editor .off-note { grid-column: 1 / -1; }
+.editor .self-note label.tick { margin-top: 6px; }
 .uses { display: flex; align-items: center; gap: 4px; margin-left: auto; flex: none; }
 .use {
   width: 26px; height: 26px; border-radius: 8px;

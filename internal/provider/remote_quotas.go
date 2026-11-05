@@ -207,7 +207,7 @@ func ForgetKeptCardsForTest() {
 func remoteMagpies() []Provider {
 	var out []Provider
 	for _, p := range All() {
-		if p.IsRemoteMagpie() && !p.Hidden && !p.Off && p.Key != "" && p.Anthropic != "" {
+		if p.IsRemoteMagpie() && !p.Hidden && !p.Off && !p.SelfLeftOut() && p.Key != "" && p.Anthropic != "" {
 			out = append(out, p)
 		}
 	}

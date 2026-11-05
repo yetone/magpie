@@ -251,6 +251,11 @@ type providerJSON struct {
 	// RestartApp: magpie restarts the Codex app's app-server for an
 	// account change it makes by itself (provider.Provider.RestartApp)
 	RestartApp bool `json:"restartApp,omitempty"`
+	// Self: a Remote magpie that turned out to be this magpie (sync
+	// brought it from the computer that uses this one), left out of
+	// routing unless KeepSelf (provider.Provider.SelfAnswered)
+	Self     bool `json:"self,omitempty"`
+	KeepSelf bool `json:"keepSelf,omitempty"`
 	// CapStop and CapCareful: how its accounts end at their caps
 	// (plugins#349), set on their own with capstop and capcareful
 	CapStop    bool `json:"capStop,omitempty"`
@@ -702,7 +707,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		Catalog: p.Catalog, Website: p.Website, KeysURL: p.KeysURL,
 		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, Headers: p.Headers, ExtraBody: p.ExtraBody, ReplyHeaders: p.ReplyHeaders, PassHeaders: p.PassHeaders, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, CountFree: p.CountFree, InsecureTLS: p.InsecureTLS, TakesInsecureTLS: p.TakesInsecureTLS(), LimitRestOff: p.LimitRestOff, NativeCompaction: p.NativeCompaction, CarriesCompaction: p.CarriesCompaction(), PassUserAgent: p.PassUserAgent, OwnClient: p.OwnClient(), AuthHeader: p.AuthHeader, BothAuth: p.BothAuth(), BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, BalanceMethod: p.BalanceMethod, ModelsURL: p.ModelsURL,
 		Ready: p.Ready(), Chosen: p.PicksOf(avail), Agents: make([]providerAgent, 0, len(agents)),
-		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, RestartApp: p.RestartApp, CapStop: p.CapStop, CapCareful: p.CapCareful, Unlisted: p.Unlisted, NoModels: p.ServesNone(), BestInFamily: p.BestInFamily && len(p.Models) == 0 && !p.NoModels, Off: p.Off, Contexts: p.Contexts,
+		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, RestartApp: p.RestartApp, Self: p.SelfAnswered(), KeepSelf: p.KeepSelf, CapStop: p.CapStop, CapCareful: p.CapCareful, Unlisted: p.Unlisted, NoModels: p.ServesNone(), BestInFamily: p.BestInFamily && len(p.Models) == 0 && !p.NoModels, Off: p.Off, Contexts: p.Contexts,
 		MaxConcurrency: p.MaxConcurrency, PluginConcurrency: p.PluginConcurrency(), MaxAccounts: p.MaxAccounts, PluginAccounts: p.PluginAtOnce(), PriceRate: p.PriceRate,
 		RateWindows: p.RateWindows, RateNow: rateNowOf(p, time.Now()),
 		AccountConcurrency: p.AccountConcurrency, AccountWeights: p.AccountWeights, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM,
@@ -2001,6 +2006,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					in.KeepLogin = old.KeepLogin // set on its own, with keeplogin
 					in.KeepLoginAs = old.KeepLoginAs
 					in.SwitchOnly, in.RestartApp = old.SwitchOnly, old.RestartApp // switchonly, restartapp
+					in.KeepSelf = old.KeepSelf                                    // keepself
 					in.CapStop, in.CapCareful = old.CapStop, old.CapCareful       // capstop, capcareful
 					in.Off = old.Off                                              // and this with off and on
 					if in.Contexts == nil {
@@ -2243,6 +2249,13 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// the Codex app's app-server restarted for an account change
 			// magpie makes by itself, or left be (atom0964 on Discord)
 			if err := provider.SetRestartApp(in.ID, in.RestartApp); err != nil {
+				fail(rw, err)
+				return
+			}
+		case "keepself":
+			// a Remote magpie that is this magpie, used anyway or left out
+			// (hanslin1666 on Discord)
+			if err := provider.SetKeepSelf(in.ID, in.KeepSelf); err != nil {
 				fail(rw, err)
 				return
 			}

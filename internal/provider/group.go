@@ -1136,7 +1136,7 @@ func unpicked(find entryOf, p Provider, m string) bool {
 // Resolve, which still takes it.
 func ResolveRoute(id string) (Provider, string, bool) {
 	entries := providerEntries()
-	p, m, ok := resolveIn(entries, strings.TrimSuffix(strings.TrimSpace(id), "[1m]"))
+	p, m, ok := resolveIn(entries, ThroughSelf(strings.TrimSuffix(strings.TrimSpace(id), "[1m]")))
 	// one pass for the one model, not a map of every entry (entriesBy):
 	// a request asks it for each fallback it may go to
 	find := func(pid, model string) int {
