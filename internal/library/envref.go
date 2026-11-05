@@ -178,6 +178,13 @@ func (f *mcpFile) refsOf() envSyntax {
 		// (kiro.dev/docs/mcp/configuration), the ones its Mcp Approved Env
 		// Vars setting approves
 		return envSyntax{refDollar, refDollar}
+	case fmtLiveAgent:
+		// K-brain, LiveAgent's engine, reads ${NAME} (and $NAME,
+		// ${NAME:-default}) in a server's env and headers as it starts it,
+		// and leaves out one whose variable is unset (internal/config/
+		// secret.go ResolveEnvMapContext, ResolveHeaderContext; internal/
+		// mcp/manager.go defaultTransport, K-brain 507f560)
+		return envSyntax{refDollar, refDollar}
 	}
 	// None: Claude Desktop gives a command its env as written and only
 	// HOME, LOGNAME, PATH, SHELL, TERM and USER of its own (2.7032's app.asar

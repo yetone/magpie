@@ -128,6 +128,10 @@ type Applied struct {
 	// entry (Codex's startup_timeout_sec): one there other than this is
 	// the user's
 	Startup map[string]float64 `json:"startup,omitempty"`
+	// Picked are the skills magpie picked in the agent's own list of
+	// those it uses (LiveAgent's skills-settings.json, liveagent.go): one
+	// the user unpicked since stays unpicked
+	Picked []string `json:"picked,omitempty"`
 }
 
 // empty is whether a holds nothing magpie wrote: a sync that only looked
@@ -137,7 +141,7 @@ type Applied struct {
 func (a *Applied) empty() bool {
 	return !a.Instructions && a.InstrHash == "" && len(a.MCP) == 0 && len(a.Skills) == 0 &&
 		len(a.ToolsOff) == 0 && len(a.ToolRules) == 0 && len(a.Hooks) == 0 &&
-		len(a.Subagents) == 0 && len(a.Startup) == 0
+		len(a.Subagents) == 0 && len(a.Startup) == 0 && len(a.Picked) == 0
 }
 
 var mu lock // one change at a time, from the page or the CLI's process

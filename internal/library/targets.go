@@ -515,6 +515,17 @@ func targetOf(a *agent.Agent) *Target {
 		t.Instructions = filepath.Join(d, "steering", "AGENTS.md")
 		t.MCP = &mcpFile{Path: filepath.Join(d, "settings", "mcp.json"), Format: fmtKiro}
 		t.Skills = filepath.Join(d, "skills")
+	case "liveagent":
+		// LiveAgent's engine, K-brain, keeps its MCP servers in
+		// config.json.live-mcp.json beside its config.json, in the folder
+		// LiveAgent hands it as $LIVEAGENT_HOME (agent.liveAgentDir), and
+		// its own skills in skills there, as copies: it refuses a link in
+		// a skill's path. A skill there is used once it is picked in
+		// skills-settings.json (liveagent.go; K-brain 507f560 cmd/kn/
+		// backend.go, internal/skills/managed.go; zero2sin on Discord)
+		t.MCP = &mcpFile{Path: filepath.Join(a.Dir, liveAgentMCP), Format: fmtLiveAgent}
+		t.Skills = filepath.Join(a.Dir, "skills")
+		t.Copy = true
 	case "claude-desktop":
 		// Claude Desktop reads only commands from its file: a remote server
 		// is added in its own Connectors settings. In its 3p mode (magpie's

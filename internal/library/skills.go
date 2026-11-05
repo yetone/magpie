@@ -595,6 +595,8 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 		return
 	}
 	id := t.Agent.ID
+	// LiveAgent uses a skill in its folder only once it is picked there
+	defer l.syncLiveAgentPicks(t, res)
 	a := l.applied(id)
 	// another agent may read the very same folder (one linked to the other):
 	// what that agent is to have stays
@@ -2169,6 +2171,10 @@ func foundSkills(l *Library) []FoundSkill {
 		es, _ := os.ReadDir(pl.dir)
 		for _, e := range es {
 			name := e.Name()
+			// LiveAgent's own, which it makes again in its folder
+			if pl.agent == "liveagent" && slices.Contains(liveAgentBuiltins, name) {
+				continue
+			}
 			p := filepath.Join(pl.dir, name)
 			f := byName[name]
 			// magpie's link to the library's folder is an agent having the
