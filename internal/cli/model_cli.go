@@ -70,6 +70,10 @@ const modelUsage = `usage:
                                                  your own (a key) only
   magpie model id <provider/model> --reset       list it by the provider's own id again
   magpie model ids                               the models you list by an id of your own
+  magpie model api <provider/model>... <api>     ask the model(s) on one API of the provider's: chat,
+                                                 responses, anthropic, gemini, or auto (--reset) for the
+                                                 vendor's list and every URL it has (magpie model api --help)
+  magpie model apis [<provider>]                 the models you set an API for, or each of a provider's
   magpie model names                             the models you named or narrowed
   magpie model alias <model> <name>              count the model's usage under another model id in Usage,
                                                  Sessions and the usage summaries, e.g. deepseek-v4.1-flash
@@ -155,6 +159,10 @@ func modelCmd(args []string) error {
 		return modelSpecs()
 	case "id":
 		return modelID(args[1:])
+	case "api", "protocol":
+		return modelAPICmd(args[1:])
+	case "apis", "protocols":
+		return modelAPIs(args[1:])
 	case "ids":
 		return modelIDs()
 	case "alias":

@@ -1656,6 +1656,34 @@ as broken. An image model is the exception that follows the rule above: it is
 tested by the name magpie knows it by, on the images API and on the chat it
 falls back to, because that is how a drawing is asked for.
 
+### The API a model is asked on
+
+A relay whose one key serves some models on chat completions and others on
+Responses, Anthropic's messages or Gemini's generateContent can be told which
+API each model is asked on. It is the provider editor's **API this model is
+asked on**, under Names, prices & levels, and `magpie model api` sets the same
+setting from the terminal, so a script can set many models:
+
+```sh
+magpie model api relay/gpt-5.5                                  # what it is asked on, and what the provider has
+magpie model api relay/gpt-5.5 responses                        # chat, responses, anthropic, gemini or auto
+magpie model api relay/claude-opus-5-5 relay/claude-sonnet-5 anthropic   # several at once
+magpie model api relay/gpt-5.5 --reset                          # auto again: the vendor's list and every URL
+magpie model apis                                               # the models you set an API for
+magpie model apis relay                                         # each of relay's models and its API
+```
+
+It is saved as the editor's Save saves it (`provider.SetModelPrefs`, into
+`modelAPIs` in settings.json), so a running gateway asks the model on that
+API from its next request, and the model lists magpie writes into the agents
+are brought up to date. The provider needs a URL for the API (More endpoints
+in its editor) and at least two of the four for there to be a choice; Vertex
+AI's model ids say their own. An API that isn't one, an API the provider has
+no URL for, a model the provider doesn't list, or a flag in place of a model
+is refused, and when several models are named all are checked first, so a
+refused command writes nothing. A setting kept for a model the vendor no
+longer lists can still be taken off with `--reset`.
+
 ### Routing groups
 
 A routing group is several models, from one provider or many, that an agent
