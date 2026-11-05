@@ -307,6 +307,13 @@ func (p Provider) drawsOnImages(model string) bool {
 	return p.Account == nil && p.Chat != "" && catalog.ImagesAPI(model)
 }
 
+// chatGPTDraws is whether model is one of the GPT Image family a ChatGPT
+// account draws with at its Codex backend's images API (the gateway's
+// drawsCodex and drawsFamily): the backend takes any gpt-image-* name.
+func (p Provider) chatGPTDraws(model string) bool {
+	return p.Account != nil && p.Account.Agent == "codex" && p.Base(Responses) != "" && strings.HasPrefix(model, "gpt-image-")
+}
+
 // tinyDrawing is the smallest images request for model: one picture of
 // next to nothing, at the lowest quality gpt-image offers, at the size
 // the vendor draws by default (the smallest one takes differs by model).
@@ -375,6 +382,15 @@ func (p Provider) testOne(ctx context.Context, model string) Result {
 	}
 	if p.isClaudeAccount() {
 		return p.testClaude(ctx, model)
+	}
+	if client == "" && p.chatGPTDraws(model) {
+		// a ChatGPT account's GPT Image draws on its Codex backend's images
+		// API, as the gateway draws it (drawImages): asked as a chat on
+		// /responses it is refused, "The 'gpt-image-2.5' model is not
+		// supported when using Codex with a ChatGPT account" (ChangQiu on
+		// Discord)
+		b, _ := json.Marshal(map[string]any{"model": model, "prompt": "a dot", "n": 1, "quality": "low"})
+		return probe(ctx, p, Chat, strings.TrimRight(p.Base(Responses), "/")+"/images/generations", b, model, drawWait)
 	}
 	if p.testsTranslated() || client == "" && p.pluginTranslated(model) {
 		return p.testTranslated(ctx, model)
@@ -709,6 +725,14 @@ func probeOnce(ctx context.Context, p Provider, proto Protocol, url string, body
 	if err := p.Sign(ctx, req, proto, body); err != nil {
 		r.Error = err.Error()
 		return r
+	}
+	if p.chatGPTDraws(model) && strings.HasSuffix(req.URL.Path, "/images/generations") {
+		// as the gateway asks it: the images API answers in JSON, not the
+		// stream Codex's signing asks of its Responses, with Codex CLI's
+		// own ids (codex-rs ext/image-generation)
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("x-codex-imagegen-request-id", randomUUID())
+		req.Header.Set("x-codex-image-turn-id", randomUUID())
 	}
 	start := time.Now()
 	// each request sent, a retry's too, is a row; the last one carries

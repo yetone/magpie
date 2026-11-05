@@ -30,8 +30,8 @@ func TestProviderInfoListsImageModels(t *testing.T) {
 		t.Fatal(err)
 	}
 	j := providerInfo(p, nil)
-	if got := strings.Join(j.DrawIDs, ","); got != "gpt-image-2,flux-kontext-pro" || j.Draws != 2 {
-		t.Fatalf("drawIds %q draws %d", got, j.Draws)
+	if got := strings.Join(j.DrawIDs, ","); got != "gpt-image-2,flux-kontext-pro" || j.Draws != 2 || j.DrawPicks {
+		t.Fatalf("drawIds %q draws %d, vendor picks %v", got, j.Draws, j.DrawPicks)
 	}
 	for _, m := range j.Models {
 		if m.ID != "gpt-5.5" {

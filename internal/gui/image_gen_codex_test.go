@@ -61,4 +61,13 @@ func TestImageGenCodexOneEntry(t *testing.T) {
 	if s := settingsState(); s.ImageGenShown != "" {
 		t.Fatalf("a listed pick is shown as %q", s.ImageGenShown)
 	}
+	// its editor's Image models says why it lists one (ChangQiu on
+	// Discord looked there for gpt-image-2.5)
+	p, err := provider.Find("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j := providerInfo(*p, nil); !j.DrawPicks || len(j.DrawIDs) != 1 {
+		t.Fatalf("editor's drawIds %v, drawPicks %v", j.DrawIDs, j.DrawPicks)
+	}
 }

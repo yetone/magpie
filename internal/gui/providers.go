@@ -301,6 +301,9 @@ type providerJSON struct {
 	Exposed   int         `json:"exposed"`           // how many reach the agents
 	Draws     int         `json:"draws,omitempty"`   // how many of its models draw images (gateway.Drawers)
 	DrawIDs   []string    `json:"drawIds,omitempty"` // those models' ids, listed apart in its editor
+	// its vendor draws with the model it picks, whichever is named: a
+	// ChatGPT account's one GPT Image (gateway.VendorPicksDrawer)
+	DrawPicks bool `json:"drawPicks,omitempty"`
 	// those of them unticked in its editor (provider.HiddenDrawers)
 	HiddenDrawers []string `json:"hiddenDrawers,omitempty"`
 	// its video models (gateway.Videomakers), listed apart in its editor
@@ -1023,6 +1026,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		out.DrawIDs = append(out.DrawIDs, m.ID)
 	}
 	out.Draws = len(out.DrawIDs)
+	out.DrawPicks = out.Draws > 0 && gateway.VendorPicksDrawer(p)
 	for _, id := range out.DrawIDs {
 		if p.DrawerHidden(id) {
 			out.HiddenDrawers = append(out.HiddenDrawers, id)
