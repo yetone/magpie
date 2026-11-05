@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -187,6 +188,52 @@ What's contributing to your limits usage?
 	}
 	if _, err := parseClaudeUsage("Error: not logged in", now); err == nil {
 		t.Fatal("nothing told, no error")
+	}
+}
+
+func TestParseClaudeUsageCountsSayRequests(t *testing.T) {
+	now := time.Date(2026, 10, 1, 4, 0, 0, 0, time.UTC)
+	// /usage closes with the account's local activity. A count of 401 or
+	// 403 is not the HTTP status it reads as (SCIYYDy, #4995)
+	text := `Current session: 48% used
+Current week (all models): 57% used
+
+What's contributing to your usage?
+Approximate · sessions on this machine only · shares overlap
+
+Last 24h · 291 requests · 276 sessions
+Last 7d · 403 requests · 388 sessions`
+	ws, err := parseClaudeUsage(text, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ws) != 2 {
+		t.Fatalf("windows %+v", ws)
+	}
+	if ws[0].Name != "5 hours" || ws[0].Used != 48 {
+		t.Errorf("session: %+v", ws[0])
+	}
+	if ws[1].Name != "7 days" || ws[1].Used != 57 {
+		t.Errorf("week: %+v", ws[1])
+	}
+	// another span, and a count past a thousand written with separators
+	if ws, err := parseClaudeUsage("Current session: 48% used\nLast 30d · 1,403 requests · 1,401 sessions", now); err != nil || len(ws) != 1 {
+		t.Fatalf("a separated count: %+v %v", ws, err)
+	}
+	// a count alone tells no windows: unknown, not denied
+	if _, err := parseClaudeUsage("Last 24h · 401 requests · 403 sessions", now); err == nil || !strings.Contains(err.Error(), "no usage figures") || claudeUsageDenied.MatchString(err.Error()) {
+		t.Fatalf("counts: %v", err)
+	}
+	// a denial still reads as one: on its own line, with the account's
+	// windows around it, or on a count line that says more
+	for _, line := range []string{
+		"Error: HTTP 401 Unauthorized",
+		"Last 7d · 403 requests · 388 sessions · HTTP 403 Forbidden",
+		"Last 24h · 291 requests · 276 sessions\nError: authentication failed",
+	} {
+		if _, err := parseClaudeUsage("Current session: 48% used\n"+line, now); err == nil {
+			t.Errorf("%q: no error", line)
+		}
 	}
 }
 

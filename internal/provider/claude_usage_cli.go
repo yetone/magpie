@@ -82,6 +82,14 @@ var errClaudeCannotRun = errors.New("Claude Code can't be run from here")
 // rate limit. It is not a temporary failure to read the usage endpoint.
 var claudeUsageDenied = regexp.MustCompile(`(?i)\b(401|403)\b|not (logged|signed) in|signed out|sign-in (has )?expired|unauthorized|forbidden|authentication (failed|required)|invalid (access )?token|(session|usage) limit|hit your limit`)
 
+// claudeUsageCounts is /usage's closing line of the account's local
+// activity ("Last 7d · 403 requests · 388 sessions"): counts, not the
+// HTTP statuses a count of 401 or 403 reads as (SCIYYDy, #4995). Read
+// whole, the line is no account error; read with more words, as "Last
+// 7d · 403 requests · 388 sessions · HTTP 403 Forbidden", it is. Any span
+// and a count with thousands separators ("1,403 requests") are counts too.
+var claudeUsageCounts = regexp.MustCompile(`^Last [0-9]+[a-z]+ · [0-9][0-9,]* requests? · [0-9][0-9,]* sessions?$`)
+
 // claudeOverages is /usage's line for an account past its plan's limits
 // and billed for what it uses ("You are currently using your overages to
 // power your Claude Code usage. We will automatically switch you back to
@@ -116,6 +124,9 @@ func parseClaudeUsage(text string, now time.Time) ([]QuotaWindow, error) {
 	lines := strings.Split(text, "\n")
 	// Account errors take precedence over notices (and partial readings).
 	for _, line := range lines {
+		if claudeUsageCounts.MatchString(strings.TrimSpace(line)) {
+			continue
+		}
 		if claudeUsageDenied.MatchString(line) {
 			return out, errors.New("Claude Code's /usage told no allowance: " + clipLine(strings.TrimSpace(line)))
 		}
@@ -166,6 +177,11 @@ func parseClaudeUsage(text string, now time.Time) ([]QuotaWindow, error) {
 		// a panel with no figure says nothing of the account's allowance:
 		// unknown, its words told
 		first, _, _ := strings.Cut(text, "\n")
+		if claudeUsageCounts.MatchString(strings.TrimSpace(first)) {
+			// its counts, told in the error, would read as a 401 or 403
+			// where the error is matched again (claudeUsageDenied)
+			return out, errors.New("Claude Code's /usage showed no usage figures")
+		}
 		return out, errors.New("Claude Code's /usage showed no usage figures: " + clipLine(first))
 	}
 	return out, nil
