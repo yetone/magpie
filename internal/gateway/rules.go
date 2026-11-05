@@ -139,7 +139,7 @@ var turnRules = struct {
 // ruleKey is the conversation a group's rules keep a turn's decision for:
 // the agent's session and the conversation's first words (firstWords).
 func ruleKey(g provider.Group, in http.Header, req *Request) string {
-	return provider.GroupPrefix + g.ID + "|" + conversationID(in, nil) + "|" + firstWords(req)
+	return provider.GroupPrefix + g.ID + "|" + affinityID(in, nil) + "|" + firstWords(req)
 }
 
 // firstWords tells an agent's subagents from it: they share its session

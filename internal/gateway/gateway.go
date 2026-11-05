@@ -2540,7 +2540,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		conv := conversationID(r.Header, body)
 		sealedLead = leadProvider(scope, parent)
-		sealers = []string{sealedLead, leadProvider(scope, conv)}
+		sealers = []string{sealedLead, leadProvider(scope, affinityID(r.Header, body))}
 		readable := func() bool {
 			return isGroup && slices.ContainsFunc(ms, func(m provider.Member) bool { return s.sealedReader(m.Provider, m.Model, sealers) }) || !isGroup && s.sealedReader(p, model, sealers)
 		}
@@ -3000,6 +3000,18 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// grown conversation is refused again, and the member that answered
 	// is asked first (#3453)
 	cands, pl = behindOverflow(stuck, cands, pl, len(body))
+	// requests that came together go to as many keys or accounts as are
+	// alike for them, each counted where it goes until it ends (#5242);
+	// one kept, pinned, sealed to its account, or a new conversation
+	// leastHeld spread is counted where it is
+	poolRouting, poolGroup := p.Routing, (*provider.Group)(nil)
+	if isGroup {
+		poolRouting, poolGroup = g.Routing, &g
+	}
+	leastHeldIt := aff.Why == "first" && (rotate || spread)
+	reorder := !aff.Kept && aff.Why != "strict" && pin == "" && leadAccount == "" && checkpoint == nil && !leastHeldIt
+	cands, pl, unburst := burstSpread(poolRouting, poolGroup, hit != nil && hit.Use != "", reorder, cands, pl)
+	defer unburst()
 	// of those resting, only the one back soonest is asked (#1799); the
 	// whole list still finds a Codex account to spend a reset on
 	all := cands
@@ -9157,6 +9169,24 @@ func nativeSessionOf(in http.Header) string {
 // (conversationOpening). One message is hashed as the request has it, as
 // it always was; several are hashed as writeOpening reads them, so the
 // cache mark an agent moves on from turn to turn doesn't move the id.
+// affinityID is the conversation a turn's account is kept for: an agent's
+// own session (conversationID), else the caller's X-Magpie-Session, else
+// the conversation's hash. Two callers that send the same opening with
+// their own X-Magpie-Session are two conversations (#5242). It is magpie's
+// own key and never goes upstream: conversationID, which a vendor or a
+// plugin is sent (Kilo, ConversationHeader), doesn't read X-Magpie-Session.
+func affinityID(in http.Header, body []byte) string {
+	for _, h := range sessionHeaders {
+		if v := strings.TrimSpace(in.Get(h)); v != "" {
+			return v
+		}
+	}
+	if v := strings.TrimSpace(in.Get(SessionHeader)); v != "" {
+		return v
+	}
+	return conversationID(in, body)
+}
+
 func conversationID(in http.Header, body []byte) string {
 	for _, h := range sessionHeaders {
 		if v := strings.TrimSpace(in.Get(h)); v != "" {

@@ -522,7 +522,7 @@ func strictOnly(cs []candidate, pl planned, at int) ([]candidate, planned) {
 // the session's as before, so what is kept of it, and Codex's leadFirst,
 // which reads a lead's stick by its thread id, are as they were.
 func stickKey(scope string, in http.Header, body []byte) string {
-	key := scope + "|" + conversationID(in, body)
+	key := scope + "|" + affinityID(in, body)
 	if sub := subOf(in); sub != "" {
 		key += "|agent:" + sub
 	}
