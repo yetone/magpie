@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -423,5 +424,53 @@ func TestPluginModelsSayExpired(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("lapsed after reading the models: %v, want gone@fake alone (dead@fake's hook said nothing)", lapsed)
 		}
+	}
+}
+
+// young02036 on Discord: Select all available ticked every model shown
+// for a plugin's account, so a ZCode account with only GLM-5.3-Flash got
+// the models of the provider's other account too. It now ticks the
+// models the plugin lists for that account; a provider with no account
+// list of its own (one account) and an account it doesn't know stay
+// unknown, which ticks every model shown.
+func TestKeyListedIsAPluginAccountsOwnList(t *testing.T) {
+	bun := testenv.Bun(t)
+	claudeHome(t)
+	t.Setenv("MAGPIE_BUN", bun)
+	t.Cleanup(plugin.Settle)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	abs, _ := filepath.Abs("../plugin/testdata/fake/index.js")
+	if _, err := plugin.Add(ctx, abs); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := plugin.Providers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	st, err := StartPluginSignIn("fakeco", 1, map[string]string{"where": "work", "team": "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := SubmitSignInCallback(st.ID, "good"); err != nil {
+		t.Fatal(err)
+	}
+	id := PluginID("fakeco")
+	if got := KeyListed(id, "a@fake"); got != nil {
+		t.Fatalf("one account, which has every model: %v, want nil", got)
+	}
+	if _, err := PluginAPIKey(ctx, "fakeco", 0, nil, "few"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := plugin.Providers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := KeyListed(id, "api KEY"); !slices.Equal(got, []string{"fake-1"}) {
+		t.Errorf("the key account's list: %v, want [fake-1]", got)
+	}
+	if got := KeyListed(id, "a@fake"); len(got) < 2 || !slices.Contains(got, "fake-1") || !slices.IsSorted(got) {
+		t.Errorf("the signed-in account's list: %v", got)
+	}
+	if got := KeyListed(id, "nobody@fake"); got != nil {
+		t.Errorf("an account the plugin doesn't have: %v, want nil", got)
 	}
 }

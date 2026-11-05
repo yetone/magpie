@@ -4,8 +4,11 @@
 // picker now has Select all available, which ticks every model the key's own
 // fetched list has (provider/keylisted), the un-ticked ones too, since the
 // user asks it; models the list lacks stay as they are, and nothing is saved
-// until Save. A key no list marks, and a subscription's account, tick every
-// model shown. In both engines, every language, at a narrow window.
+// until Save. A plugin's account ticks the models its plugin lists for it
+// (young02036: a ZCode account with only GLM-5.3-Flash got the other
+// account's models). A key no list marks, and an account with no list of
+// its own, tick every model shown. In both engines, every language, at a
+// narrow window.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -27,6 +30,19 @@ const fresh = () => ({
     },
     accountModels: { "spare@example.com": ["gpt-6-mini"] },
   },
+  zcode: {
+    id: "zcode", name: "ZCode", icon: "generic", chat: "", responses: "", anthropic: "", catalog: "",
+    models: [{ id: "GLM-5.3-Flash", name: "", on: true }, { id: "GLM-5.2", name: "", on: true }, { id: "GLM-5-Turbo", name: "", on: true }, { id: "GLM-5.3-Flash-Trial", name: "", on: true }],
+    agents: [], fallback: [], headers: {}, keyList: [], proxy: "",
+    account: {
+      agent: "zcode", agentName: "ZCode", user: "paid@example.com", plan: "Coding Plan",
+      logins: [
+        { user: "paid@example.com", plan: "Coding Plan", active: true, on: true },
+        { user: "free@example.com", plan: "Start Plan", on: true },
+      ],
+    },
+    accountModels: { "free@example.com": ["GLM-5.2"] },
+  },
   relay: {
     id: "relay", name: "Relay", icon: "generic", chat: "https://relay.example.com/v1", responses: "", anthropic: "", catalog: "",
     models: [{ id: "big", name: "", on: true }, { id: "cheap", name: "", on: true }, { id: "mid", name: "", on: true }, { id: "off", name: "", on: false }],
@@ -39,11 +55,13 @@ const fresh = () => ({
 });
 // each key's own fetched list: the second key's group has big, cheap and a
 // model the provider doesn't serve agents; the first key's is unknown
-const listed = { bbbbbbbbbb: { models: ["big", "cheap", "off"], known: true }, aaaaaaaaaa: { models: null, known: false } };
+const listed = { bbbbbbbbbb: { models: ["big", "cheap", "off"], known: true }, aaaaaaaaaa: { models: null, known: false },
+  // what the ZCode plugin lists for its gift-only account
+  "free@example.com": { models: ["GLM-5.3-Flash"], known: true } };
 
 function serve(lang, posts) {
   const ps = fresh();
-  const providers = { providers: [ps.codex, ps.relay], presets: [], excluded: [], gateway: { running: true, window: true } };
+  const providers = { providers: [ps.codex, ps.relay, ps.zcode], presets: [], excluded: [], gateway: { running: true, window: true } };
   const state = { agents: [], profiles: [], settings: { lang, theme: "light" } };
   return async (route) => {
     const url = new URL(route.request().url());
@@ -163,10 +181,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await fits(page, "spare@example.com");
         await avail(page, "spare@example.com").click();
         assert(await until(async () => (await chips(page, "spare@example.com")).join() === "gpt-6*,gpt-6-mini*"));
-        assert.equal(posts.filter((x) => x.asked).length, 0, "an account asked a key's list");
-        const missing = await page.evaluate(() => ["Select all available", "Ticks every model this key's own list has, un-ticked ones too", "Ticks every model shown"]
+        assert.deepEqual(posts.filter((x) => x.asked), [{ asked: "spare@example.com", id: "codex" }]);
+        const missing = await page.evaluate(() => ["Select all available", "Ticks every model this key's own list has, un-ticked ones too", "Ticks every model this account's own list has, else every model shown"]
           .flatMap((k) => ["zh", "zh-TW", "ja", "de"].filter((l) => !I18N[l]?.[k]).map((l) => `${l}: ${k}`)));
         assert.deepEqual(missing, [], "every string has its translations");
+        assert.deepEqual(errors, []);
+      });
+
+      test(`${engine} ${lang} ${width}px: a plugin account's Select all available ticks the models its plugin lists for it`, async (t) => {
+        const { page, errors, posts } = await open(t, "ZCode", ".editor .accts .acc .amodels.set");
+        await pill(page, "free@example.com").click();
+        assert.deepEqual(await chips(page, "free@example.com"), ["GLM-5.3-Flash", "GLM-5.2*", "GLM-5-Turbo", "GLM-5.3-Flash-Trial"]);
+        await fits(page, "free@example.com");
+        await avail(page, "free@example.com").click();
+        assert(await until(async () => (await chips(page, "free@example.com")).join() === "GLM-5.3-Flash*,GLM-5.2*,GLM-5-Turbo,GLM-5.3-Flash-Trial"), `chips after: ${await chips(page, "free@example.com")}`);
+        assert.deepEqual(posts.filter((x) => x.asked), [{ asked: "free@example.com", id: "zcode" }]);
+        assert.equal(posts.filter((x) => x.allow).length, 0, "Select all available saved by itself");
         assert.deepEqual(errors, []);
       });
     }

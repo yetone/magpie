@@ -160,11 +160,16 @@ func refreshKeyModels(id string, before, now map[string]map[string]bool) int {
 // key ref (KeyID) as seeing, by the ids the provider lists them by, for
 // the editor's Select all available (young02036 on Discord); nil when no
 // list marks that key (one key on, a fetch not asked per key), which is
-// unknown, not none.
+// unknown, not none. A plugin's account is listed by the models its
+// plugin says that account has (young02036: a ZCode account with only
+// GLM-5.3-Flash got its other account's models ticked).
 func KeyListed(id, ref string) []string {
 	p, err := Find(id)
 	if err != nil {
 		return nil
+	}
+	if p.IsPlugin() {
+		return pluginAccountListed(*p, ref)
 	}
 	seen := keyMarks(id)[strings.ToLower(strings.TrimSpace(ref))]
 	if len(seen) == 0 {
@@ -176,4 +181,27 @@ func KeyListed(id, ref string) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// pluginAccountListed is the models plugin provider p's account ref (its name)
+// has by its plugin's own list, by the ids p lists them by; nil when the
+// plugin keeps none for it (one account has them all) or has no such
+// account.
+func pluginAccountListed(p Provider, ref string) []string {
+	pp, ok := PluginOf(p.ID)
+	if !ok {
+		return nil
+	}
+	for _, l := range pluginLogins(pp) {
+		if accountKey(l.User) != accountKey(ref) || l.acct.Models == nil {
+			continue
+		}
+		out := make([]string, 0, len(l.acct.Models))
+		for _, m := range l.acct.Models {
+			out = append(out, p.ListedModelID(m))
+		}
+		slices.Sort(out)
+		return out
+	}
+	return nil
 }
