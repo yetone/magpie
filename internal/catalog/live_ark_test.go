@@ -16,7 +16,8 @@ import (
 // list and in LiveVideomakers (axelburks on Discord: Ark's Seedance sat
 // among the chat models, and the editor had no Video models to tick);
 // Seedream draws, the one listed with no modalities too; a 3D model
-// (output three_d) is no chat model; the text models stay.
+// (output three_d) is no chat model; the embedding model is kept for
+// /v1/embeddings, out of the chat models (#5339); the text models stay.
 func TestFetchArkMarksVideoModels(t *testing.T) {
 	body, err := os.ReadFile("testdata/volcengine-ark-models-2026-11-03.json")
 	if err != nil {
@@ -30,9 +31,11 @@ func TestFetchArkMarksVideoModels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var films, draws, chat []string
+	var films, draws, chat, serves []string
 	for _, m := range ms {
 		switch {
+		case m.Serves != "":
+			serves = append(serves, m.ID+" "+m.Serves)
 		case m.Films:
 			films = append(films, m.ID)
 		case m.Draws:
@@ -49,6 +52,9 @@ func TestFetchArkMarksVideoModels(t *testing.T) {
 	}
 	if want := []string{"doubao-seedream-5-0-flash-260915", "doubao-seedream-5-0-pro-260628"}; !slices.Equal(draws, want) {
 		t.Errorf("image models %v, want %v", draws, want)
+	}
+	if want := []string{"doubao-embedding-vision-251215 embedding"}; !slices.Equal(serves, want) {
+		t.Errorf("models of other APIs %v, want %v", serves, want)
 	}
 	if want := []string{"doubao-seed-2-1-pro-260915", "doubao-seed-translation-250915", "kimi-k3-1-pro-261024"}; !slices.Equal(chat, want) {
 		t.Errorf("chat models %v, want %v", chat, want)

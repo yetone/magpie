@@ -302,7 +302,8 @@ func TestTencentCloudOldPresetsKeepWorking(t *testing.T) {
 }
 
 // TokenHub's /v1/models, as its docs show it, asked with the key as a
-// Bearer: its language models are kept, the embedding one left out.
+// Bearer: its language models are kept, the embedding one kept for
+// /v1/embeddings, out of the chat models (#5339).
 func TestTencentTokenHubList(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/models" || r.Header.Get("Authorization") != "Bearer sk-test" {
@@ -319,8 +320,11 @@ func TestTencentTokenHubList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ms) != 2 || ms[0].ID != "hy3" || ms[1].ID != "deepseek-v4-pro" {
+	if chat := catalog.Chat(ms); len(chat) != 2 || chat[0].ID != "hy3" || chat[1].ID != "deepseek-v4-pro" {
 		t.Fatalf("%+v", ms)
+	}
+	if len(ms) != 3 || ms[2].ID != "kinfra-text-embedding-0.6b" || ms[2].Serves != catalog.ServesEmbedding {
+		t.Fatalf("the embedding model: %+v", ms)
 	}
 }
 

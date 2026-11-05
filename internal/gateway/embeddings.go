@@ -97,8 +97,9 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 		s.record(call)
 		return
 	}
-	p, model, ok := resolveRetrievalModel(asked)
-	if _, _, isGroup := mediaMembers(asked); ok && !isGroup {
+	kind := retrievalKind(operation)
+	p, model, ok := resolveRetrievalModel(asked, kind)
+	if _, _, isGroup := mediaMembers(asked, kind); ok && !isGroup {
 		if msg, off := modelOff(p, model, asked); off {
 			call.Status, call.Error = 403, msg
 			writeError(w, provider.Chat, 403, msg)
@@ -116,7 +117,7 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 		s.record(call)
 		return
 	}
-	g, ms, isGroup := mediaMembers(asked)
+	g, ms, isGroup := mediaMembers(asked, kind)
 	if isGroup {
 		r = heldByGroup(r, g) // held to the group's accounts, if it is
 	}
@@ -322,8 +323,8 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 // resolveRetrievalModel also finds a preset plan's embedding model by its
 // bare id. Such models stay out of agents' chat-model lists, so the general
 // resolver does not otherwise see them there.
-func resolveRetrievalModel(id string) (provider.Provider, string, bool) {
-	if p, model, ok := mediaGroupFirst(id); ok {
+func resolveRetrievalModel(id, kind string) (provider.Provider, string, bool) {
+	if p, model, ok := mediaGroupFirst(id, kind); ok {
 		return p, model, true
 	}
 	if p, model, ok := provider.Resolve(id); ok {

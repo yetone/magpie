@@ -43,8 +43,9 @@ func TestNvidiaModelScopePresets(t *testing.T) {
 	}
 }
 
-// Their /v1/models, as each answers it: NVIDIA's embedding models are left
-// out, ModelScope's rows (object "") are kept.
+// Their /v1/models, as each answers it: NVIDIA's embedding models are kept
+// for /v1/embeddings, out of the chat models (#5339); ModelScope's rows
+// (object "") are kept.
 func TestNvidiaModelScopeLiveList(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/models" || r.Header.Get("Authorization") != "Bearer k" {
@@ -61,7 +62,10 @@ func TestNvidiaModelScopeLiveList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ms) != 2 || ms[0].ID != "deepseek-ai/deepseek-v4-pro" || ms[1].ID != "ZhipuAI/GLM-5.2" {
+	if chat := catalog.Chat(ms); len(chat) != 2 || chat[0].ID != "deepseek-ai/deepseek-v4-pro" || chat[1].ID != "ZhipuAI/GLM-5.2" {
 		t.Fatalf("%+v", ms)
+	}
+	if len(ms) != 3 || ms[1].ID != "nvidia/nemotron-3-embed-1b" || ms[1].Serves != catalog.ServesEmbedding {
+		t.Fatalf("the embedding model: %+v", ms)
 	}
 }

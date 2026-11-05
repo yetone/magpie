@@ -39,6 +39,9 @@ type liveFile struct {
 	// merged into Models. A base that can't be asked keeps its own part
 	// from the list saved before (#904).
 	Sides map[string][]Model `json:"sides,omitempty"`
+	// Kinded is set on a list saved since lists keep the models made for
+	// another API, tagged (Model.Serves): LiveKinded.
+	Kinded bool `json:"kinded,omitempty"`
 	// byID is the chat models by their id, in the list's order, made
 	// once a read: asked for every model of a list, a copy and a scan of
 	// the list each time cost 2,500 models' /v1/models seconds (K.Liu on
@@ -182,11 +185,37 @@ func LiveVideomakers(provider string) []Model {
 	return out
 }
 
-// Chat is ms without the models that draw or make videos.
+// LiveServing are the models in the provider's fetched list made for the
+// API serves names (Model.Serves), in the list's order; "" is every such
+// model, whatever its API.
+func LiveServing(provider, serves string) []Model {
+	f, err := readLive(provider)
+	if err != nil {
+		return nil
+	}
+	var out []Model
+	for _, m := range f.Models {
+		if m.Serves != "" && (serves == "" || m.Serves == serves) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// LiveKinded is whether the provider's fetched list was saved since lists
+// keep the models made for other APIs (Model.Serves): one saved before
+// left them out, and is fetched again once to have them (#5339).
+func LiveKinded(provider string) bool {
+	f, err := readLive(provider)
+	return err == nil && f.Kinded
+}
+
+// Chat is ms without the models that draw, make videos or are made for
+// another API (Model.Serves).
 func Chat(ms []Model) []Model {
 	out := make([]Model, 0, len(ms))
 	for _, m := range ms {
-		if !m.Draws && !m.Films {
+		if !m.Draws && !m.Films && m.Serves == "" {
 			out = append(out, m)
 		}
 	}
@@ -217,7 +246,7 @@ func SaveLiveSides(provider, base string, models []Model, sides map[string][]Mod
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}
-	b, _ := json.MarshalIndent(liveFile{Fetched: time.Now(), Base: base, Models: models, Sides: sides}, "", "  ")
+	b, _ := json.MarshalIndent(liveFile{Fetched: time.Now(), Base: base, Models: models, Sides: sides, Kinded: true}, "", "  ")
 	if err := os.WriteFile(p, b, 0o644); err != nil {
 		return err
 	}
@@ -658,7 +687,15 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		// and none the list says answers without text (Ark's 3D models)
 		md := mdModel{ID: id}
 		md.Modalities.Output = outs
-		if !drawer && !films && !decision && headers["X-Magpie-Drawers"] == "" && !textModel(md) {
+		// one made for another API (embeddings, rerank, speech,
+		// transcriptions) is kept, said so, for that API's routes and
+		// groups (#5339); another magpie's list keeps them as it lists
+		// them
+		serves := ""
+		if !drawer && !films && !decision && headers["X-Magpie-Drawers"] == "" {
+			serves = ServesOf(id)
+		}
+		if !drawer && !films && !decision && serves == "" && headers["X-Magpie-Drawers"] == "" && !textModel(md) {
 			continue
 		}
 		name, plain := r.DisplayName, ""
@@ -684,7 +721,7 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		if len(apis) == 0 {
 			apis = targetAPIs(r.TypeTarget)
 		}
-		m := Model{ID: id, Name: name, Plain: plain, ImageInput: input, APIs: apis, Draws: drawer, Films: films, Decides: decision,
+		m := Model{ID: id, Name: name, Plain: plain, ImageInput: input, APIs: apis, Draws: drawer, Films: films, Decides: decision, Serves: serves,
 			InputModalities: ins, OutputModalities: outs}
 		if n, ok := r.ContextLength.(float64); ok && n > 0 {
 			m.Context = int(n)

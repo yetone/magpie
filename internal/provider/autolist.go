@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/beat"
+	"github.com/yetone/magpie/internal/catalog"
 )
 
 // MinRefreshEvery is the shortest RefreshEvery: a vendor's list changes
@@ -295,17 +296,27 @@ func refreshDueLists(ctx context.Context, now time.Time) []string {
 	own, _ := ownOf(f)
 	for _, p := range ordered(own, f.Order) {
 		every := p.RefreshInterval()
+		// a list saved before lists kept the models made for other APIs
+		// (embeddings, rerank, speech, transcriptions) is fetched again
+		// once, schedule or none, so their routes and groups have them
+		// without the user's Refresh (#5339); tried once a run, so one
+		// that fails waits for its schedule, the next start or a Refresh
+		listsTried.Lock()
+		_, triedOnce := listsTried.m[p.ID]
+		listsTried.Unlock()
+		_, fetched := p.Fetched()
+		once := !triedOnce && fetched && !catalog.LiveKinded(p.ID)
 		// one that lists nothing (Preset.NoList) has no list to keep fresh
-		if every == 0 || p.Off || !p.lists() {
+		if every == 0 && !once || p.Off || !p.lists() {
 			continue
 		}
-		if at, ok := p.Fetched(); ok && now.Sub(at) < every {
+		if at, ok := p.Fetched(); ok && !once && now.Sub(at) < every {
 			continue
 		}
 		listsTried.Lock()
 		tried, ok := listsTried.m[p.ID]
 		retry := min(every, listRetry)
-		if ok && now.Sub(tried) < retry {
+		if !once && ok && now.Sub(tried) < retry {
 			listsTried.Unlock()
 			continue
 		}
@@ -320,7 +331,11 @@ func refreshDueLists(ctx context.Context, now time.Time) []string {
 		cancel()
 		switch {
 		case err != nil && !errors.Is(err, context.Canceled):
-			log.Printf("%s: its scheduled list fetch failed: %s (tried again in %s)", p.ID, err, retry)
+			again := "tried again in " + retry.String()
+			if every == 0 {
+				again = "tried again on the next start or Refresh"
+			}
+			log.Printf("%s: its scheduled list fetch failed: %s (%s)", p.ID, err, again)
 		case err == nil:
 			log.Printf("%s: fetched its list on schedule, %d models%s%s", p.ID, len(ms), listNote(" taken by rule: ", taken), listNote(" no longer listed: ", dropped))
 		}
