@@ -61,9 +61,10 @@ func (s *Server) glmSearch(ctx context.Context, p provider.Provider, query strin
 	}
 	var errs []error
 	for _, k := range keys {
+		ctx, _ := withSearchWire(ctx, k.Key)
 		start := time.Now()
 		pages, err := s.glmSearchKey(ctx, k, query)
-		logOwnSearch(ctx, k, provider.ZhipuCodingSearch(k), query, start, len(pages), err)
+		s.logOwnSearch(ctx, k, provider.ZhipuCodingSearch(k), query, start, len(pages), err)
 		if err == nil {
 			said, hits := pagesSaid(pages)
 			return said, hits, nil
@@ -215,7 +216,8 @@ func (c *glmMCP) post(ctx context.Context, body []byte) (*http.Response, error) 
 		r.Header.Set("Mcp-Session-Id", c.session)
 		r.Header.Set("MCP-Protocol-Version", glmSearchProtocol)
 	}
-	return c.s.client.Do(r)
+	res, err := c.s.client.Do(r)
+	return tapSearch(ctx, r, body, res), err
 }
 
 // call asks the server method and gives its result.

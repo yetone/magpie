@@ -6,6 +6,9 @@
 // worked; its tooltip says the query is not kept and it counts nowhere.
 // A plan's own search service (Kimi Code's, #3528) is badged "Web search"
 // under the plan's name.
+// An ask with a route and an archive (axelburks on Discord: 搜索API代搜时
+// 路由页面不显示是请求了哪个API … 无请求存档) opens both from its details:
+// View routing, and the request and answer it sent the API.
 // In every language, Chromium and WebKit, wide and narrow, light and dark;
 // no backend, the API is faked.
 const assert = require("node:assert/strict");
@@ -17,7 +20,13 @@ const { chromium, webkit } = require("playwright");
 const assets = path.resolve(__dirname, "../assets");
 const tot = (calls, tokens, cost) => ({ calls, errors: 0, input: tokens * 0.2, output: tokens * 0.1, cache_write: 0, cache_read: tokens * 0.7, cost });
 const ROW = { t: new Date().toISOString(), agent: "claude", agentName: "Claude Code", icon: "claudecode-color", provider: "anthropic", providerName: "Claude", model: "claude-sonnet-5", in: 2, out: 600, cache_write: 0, cache_read: 3900, ms: 2380, status: 200, cost: 0.08, priced: true };
-const ASKED = { ...ROW, provider: "", providerName: "", model: "", req: "Tavily", host: "api.tavily.com", providerKeyName: "tvly…ab12", in: 0, out: 0, cache_read: 0, ms: 820, status: 200, cost: 0, priced: false, source: "search", kind: "web_search" };
+const KEPT = "2026-11-05/040654-a02c8d68dfe256d8";
+const ASKED = { ...ROW, provider: "", providerName: "", model: "", req: "Tavily", host: "api.tavily.com", providerKeyName: "tvly…ab12", in: 0, out: 0, cache_read: 0, ms: 820, status: 200, cost: 0, priced: false, source: "search", kind: "web_search", route_id: 1793851649094, archive: KEPT };
+const ARCHIVED = {
+  id: KEPT, call: { kind: "web_search", model: "Tavily", provider: "api.tavily.com", status: 200 },
+  request: { method: "POST", path: "/search", headers: { Authorization: ["[REDACTED]"], "Content-Type": ["application/json"] }, body: '{"max_results":5,"query":"latest go","search_depth":"basic"}', size: 61 },
+  response: { status: 200, headers: { "Content-Type": ["application/json"] }, body: '{"results":[{"title":"Go downloads","url":"https://go.dev/dl/"}]}', size: 66 },
+};
 // a plan's own search service (#3528): under the plan, badged as a web search
 const PLAN = { ...ASKED, t: new Date(Date.now() - 30000).toISOString(), provider: "kimi", providerName: "Kimi Code", req: "Kimi Code", host: "api.kimi.com", providerKeyName: "", ms: 1300 };
 const FAILED = { ...ASKED, t: new Date(Date.now() - 60000).toISOString(), req: "Brave Search", host: "api.search.brave.com", providerKeyName: "", ms: 40, status: 0, err: "Get api.search.brave.com: EOF" };
@@ -41,6 +50,7 @@ function server(lang, theme, called, asked) {
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme }, fx: { rate: 7.2, at: new Date().toISOString() } });
     if (url.pathname === "/api/usage/requests") { asked.push(url.searchParams); return json(page(url.searchParams, called)); }
     if (url.pathname === "/api/usage/quotas") return json([]);
+    if (url.pathname === "/api/archive") return json(`${url.searchParams.get("date")}/${url.searchParams.get("id")}` === KEPT ? ARCHIVED : { error: "not found" });
     if (url.pathname === "/api/usage") return json({ calls: 1, errors: 0, input: 1, output: 1, cache_read: 0, cache_write: 0, reasoning: 0, unpriced: 0, cost: 1, bucket: "day", series: [], agents: [], models: [], path: "~/.config/magpie/usage.jsonl" });
     if (url.pathname === "/api/sessions") return json({ sessions: [], dirs: [] });
     if (url.pathname === "/api/sessions/stats") return json({ from: "", to: "", days: [], agents: {} });
@@ -108,6 +118,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert((await plan.locator(".where-name").textContent()).includes("Kimi Code"));
           const failed = p.locator(".led tr.led-row", { hasText: "Brave Search" });
           assert((await failed.locator(".st").textContent()).startsWith(w.bad));
+          // its details: the route it went by, and the archive of what it
+          // sent the API and what came back
+          await asked.click();
+          const detail = p.locator(".led-detail").first();
+          await detail.locator(".led-route-link").waitFor();
+          const box = detail.locator(".led-archive .call-archive");
+          assert.equal(await box.locator(".call-archive-id").innerText(), KEPT);
+          await box.locator(".call-body-head button").first().click();
+          await box.locator(".call-details").waitFor();
+          const kept = await box.innerText();
+          assert(kept.includes("POST /search") && kept.includes("latest go") && kept.includes("go.dev/dl") && kept.includes("[REDACTED]"), kept);
+          await asked.click(); // closed again
+          await detail.waitFor({ state: "detached" });
           // the purpose picker names it in the page's language
           assert.equal(await p.evaluate(() => purposeOptions(["kind:web_search"], "")[0].name), w.purpose);
           // no coloured stripe down its side, and the page doesn't scroll sideways

@@ -11,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -86,9 +85,7 @@ var codexSearchRule = "\n" + strings.Repeat("-", 80) + "\n"
 // codexSearchBy searches with a ChatGPT account: by the backend's search,
 // then, when it fails, by the account's small model.
 func (s *Server) codexSearchBy(ctx context.Context, p provider.Provider, query string) (string, []Hit, error) {
-	start := time.Now()
-	said, hits, err := s.codexSearch(ctx, p, query)
-	logOwnSearch(ctx, p, provider.CodexBase, query, start, len(hits), err)
+	said, hits, err := s.askOwnSearch(ctx, p, provider.CodexBase, query, s.codexSearch)
 	if err == nil || ctx.Err() != nil {
 		return said, hits, err
 	}
@@ -142,6 +139,7 @@ func (s *Server) codexSearch(ctx context.Context, p provider.Provider, query str
 		return "", nil, errors.New(who + why)
 	}
 	res, err := s.client.Do(r)
+	res = tapSearch(ctx, r, body, res)
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", nil, fmt.Errorf("%sno answer in time", who)

@@ -148,11 +148,12 @@ func (s *Server) askSearchAPIKeys(ctx context.Context, a provider.SearchAPI, que
 	for _, i := range searchKeyOrder(a, keys, time.Now()) {
 		one := a
 		one.Key = keys[i]
+		ctx, _ := withSearchWire(ctx, one.Key)
 		ctx, cancel := context.WithTimeout(ctx, searchTimeout/4)
 		start := time.Now()
 		pages, err := s.askSearchAPI(ctx, one, query)
 		cancel()
-		logSearchAPI(ctx, one, query, start, len(pages), err)
+		s.logSearchAPI(ctx, one, query, start, len(pages), err)
 		if err == nil {
 			wakeSearchKey(a.Vendor, keys[i])
 			return pages, nil
@@ -178,20 +179,22 @@ func (s *Server) askSearchAPIKeys(ctx context.Context, a provider.SearchAPI, que
 // with one key (usage.SourceSearch; cybercaius on Discord: which search
 // API each search used, and how much, couldn't be seen): the API by name,
 // where it was asked, the key masked, how long it took and how it ended.
-func logSearchAPI(ctx context.Context, a provider.SearchAPI, query string, start time.Time, found int, err error) {
+func (s *Server) logSearchAPI(ctx context.Context, a provider.SearchAPI, query string, start time.Time, found int, err error) {
 	rec := usage.Record{Requested: a.Name(), Host: provider.HostOf(a.Base())}
 	if a.Key != "" {
 		rec.ProviderKeyID, rec.ProviderKeyName = searchKeyID(a.Vendor, a.Key), provider.MaskSearchKey(a.Key)
 	}
-	logSearch(ctx, rec, query, start, found, err)
+	s.logSearch(ctx, rec, query, start, found, err)
 }
 
 // logSearch writes rec, a search magpie ran with a search API or a plan's
 // own search service, as the request log's row of it: the agent it was
 // for, how long it took and how it ended (200, the API's refusal, the
 // error, "found nothing"). The query is never kept, nor said in the
-// error: the row may go to another computer the usage syncs with.
-func logSearch(ctx context.Context, rec usage.Record, query string, start time.Time, found int, err error) {
+// error: the row may go to another computer the usage syncs with. The
+// ask is a request of the Routing page's and Recent calls', its exchange
+// kept by the request archive when it is on (keepSearch).
+func (s *Server) logSearch(ctx context.Context, rec usage.Record, query string, start time.Time, found int, err error) {
 	rec.Time, rec.Agent, rec.Kind, rec.Source = start, "magpie", "web_search", usage.SourceSearch
 	rec.Millis = time.Since(start).Milliseconds()
 	if f := searchFor(ctx); f != nil && f.Agent != "" {
@@ -223,6 +226,7 @@ func logSearch(ctx context.Context, rec usage.Record, query string, start time.T
 	default:
 		rec.Status = http.StatusOK
 	}
+	s.keepSearch(ctx, &rec, start)
 	budget.Append(rec)
 }
 
@@ -270,8 +274,10 @@ func (s *Server) askSearchAPI(ctx context.Context, a provider.SearchAPI, query s
 	}
 	var r *http.Request
 	var err error
+	var sent []byte
 	post := func(path string, body any) {
 		b, _ := json.Marshal(body)
+		sent = b
 		if r, err = http.NewRequestWithContext(ctx, http.MethodPost, a.Base()+path, bytes.NewReader(b)); err == nil {
 			r.Header.Set("Content-Type", "application/json")
 		}
@@ -358,6 +364,7 @@ func (s *Server) askSearchAPI(ctx context.Context, a provider.SearchAPI, query s
 		return nil
 	}
 	res, err := c.Do(r)
+	res = tapSearch(ctx, r, sent, res)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, errors.New("no answer in time")
@@ -424,6 +431,7 @@ var runPluginSearch = plugin.RunSearch
 // found is cut and cleaned as a built-in's pages are.
 func (s *Server) askPluginSearch(ctx context.Context, a provider.SearchAPI, v provider.SearchVendor, query string) ([]foundPage, error) {
 	got, err := runPluginSearch(ctx, v.Plugin, v.PluginID, query, searchHits, a.Key, a.Base())
+	notePluginSearch(ctx, v.Plugin, pluginSearchAsked(v, query, a.Base(), a.Key, ""), got, err)
 	if err != nil {
 		var r plugin.SearchRefused
 		if errors.As(err, &r) {

@@ -76,6 +76,7 @@ func (s *Server) wbSearch(ctx context.Context, p provider.Provider, query string
 		r.Header.Set("X-Conversation-Message-ID", id)
 	}
 	res, err := p.Do(s.client, r) // a moved one's through its plugin
+	res = tapSearch(ctx, r, body, res)
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", nil, fmt.Errorf("%s: no answer in time", p.Name)

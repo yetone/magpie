@@ -1648,8 +1648,37 @@ page's Requests tab badges one "Search API" with the host and masked key
 where the provider goes. A searcher model's request is a model row of its
 own, as before. A plan's own search service (Kimi Code's, a GLM Coding Plan's, WorkBuddy's:
 `ownSearch`, through `logOwnSearch`) is a row the same way, under the
-plan's provider id and name, badged "Web search". Not covered: the
-Routing page, which lists only requests through `serve`.
+plan's provider id and name, badged "Web search".
+
+Each such ask is on the Routing page and in Recent calls too, with its
+exchange in the request archive when that is on (axelburks on Discord:
+the Routing page didn't say which API answered, and the row had no
+archive). `logSearch` calls `keepSearch` in
+[`search_archive.go`](../../internal/gateway/search_archive.go) before
+the row is written: a done route, agent `magpie` with `For` the agent
+the search was for, `Kind` `web_search`, the API's or service's name as
+the model and its host (a plan's provider id) as the provider, its seat
+the masked key or the account. The row gets the route's id (`RouteID`)
+and the archive's name (`Archive`), which the Requests tab opens. Each
+ask runs with a `searchWire` in its context (`withSearchWire`, one per
+key or account); the place that sends it fills it (`tapSearch`: the
+request as signed, its body, and the answer as it is read, the last
+exchange standing, so GLM's MCP search keeps its `tools/call`). A
+plugin's search API is noted as magpie handed it to the plugin
+(`notePluginSearch`, method `PLUGIN`, the key masked) and what came
+back. The key an ask went with is replaced with its masked form in the
+path, query, headers and both bodies before anything is kept (`taken`),
+and the archive's own scrub takes Authorization and the like out as for
+every call. Bodies are kept up to `RequestArchiveMaxMB` (a longer answer
+is marked cut) and Recent calls keep their own 256 KiB; with the
+archive off nothing is archived, but the route and Recent call are
+still there. Covered by `TestSearchAPIAskIsRoutedAndArchived`,
+`TestSearchAPIKeyInQueryNotArchived`, `TestPluginSearchAPIRoutedAndArchived`,
+`TestKimiPlanSearchRoutedAndArchived`, `TestGLMPlanSearchArchivesItsToolsCall`,
+`TestSearchRowKeepsRouteAndArchive` (internal/gui),
+`usage-ledger-search.test.cjs` and `routing-side-calls.test.cjs`. Not
+covered: `web_fetch` (`search_fetch.go`) and a vendor's own search
+(`search_native.go`), which magpie doesn't send.
 
 A search a provider's model runs with its provider's own tool is a row
 the same way when its reply shows it (cybercaius on Discord: DeepSeek
