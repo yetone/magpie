@@ -5,10 +5,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"unicode"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -27,6 +29,13 @@ import (
 const (
 	AgentHeader = "X-Magpie-Agent"
 	ViaHeader   = "X-Magpie-Via"
+	// HopsHeader is how many magpies a request was passed on through
+	// before it came here. Two magpies each the other's remote (cdredfox
+	// on Discord), or one that is its own (a Remote magpie provider sync
+	// brought to the computer it names, hanslin1666), could pass a request
+	// round and round, masked again on each pass: one passed on through
+	// catalog.MaxVia magpies is answered 508 Loop Detected instead.
+	HopsHeader = "X-Magpie-Hops"
 )
 
 // caller is who a request is recorded as: its agent, and the computer it
@@ -47,6 +56,9 @@ type caller struct {
 	// keepTurn: another magpie asked that its Responses turn be kept
 	// though it says store false (KeepTurnHeader, remote_delta.go)
 	keepTurn bool
+	// hops: the magpies the request was passed on through before this
+	// one (HopsHeader)
+	hops int
 }
 
 type callerCtx struct{}
@@ -55,7 +67,12 @@ type callerCtx struct{}
 // headers that said so off it.
 func withCaller(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), callerCtx{}, callerFrom(r))
+		c := callerFrom(r)
+		if c.hops >= catalog.MaxVia {
+			writeError(w, protoOfPath(r.URL.Path), http.StatusLoopDetected, "this request went round magpies that are each other's Remote magpie "+strconv.Itoa(c.hops)+" times: on one of them, turn off or remove the Remote magpie provider that points back")
+			return
+		}
+		ctx := context.WithValue(r.Context(), callerCtx{}, c)
 		if searchingFrom(r) {
 			// another magpie's search: only the model itself searches
 			ctx = context.WithValue(ctx, searchingKey{}, true)
@@ -64,6 +81,7 @@ func withCaller(next http.Handler) http.Handler {
 		r.Header.Del(ViaHeader)
 		r.Header.Del(SearchingHeader)
 		r.Header.Del(KeepTurnHeader)
+		r.Header.Del(HopsHeader)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -87,6 +105,9 @@ func callerFrom(r *http.Request) caller {
 	}
 	c.keepTurn = keepTurnAsks(r)
 	if magpieAsks(r) {
+		if n, err := strconv.Atoi(strings.TrimSpace(r.Header.Get(HopsHeader))); err == nil && n > 0 {
+			c.hops = min(n, 1<<20)
+		}
 		if a := label(r.Header.Get(AgentHeader)); a != "" {
 			c.agent = usage.AgentOf(a)
 			c.via = label(r.Header.Get(ViaHeader))
@@ -141,6 +162,7 @@ func passOnCaller(ctx context.Context, req *http.Request) {
 		req.Header.Set(KeepTurnHeader, magpieUA())
 	}
 	c, ok := ctx.Value(callerCtx{}).(caller)
+	req.Header.Set(HopsHeader, strconv.Itoa(c.hops+1))
 	if !ok {
 		return
 	}

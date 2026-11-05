@@ -20,10 +20,13 @@ import (
 // it passes through on its way to its vendor (magpie_via): the one
 // listing it, and those its own list had from, each by its Self. A list
 // that names this magpie and another along the way is of a model that
-// leaves here and comes back: it isn't taken. A magpie pointed at itself
-// (the gateway's tests, which serve their remote from one process) is
-// this magpie alone, and its list is taken as it was. A list from a
-// magpie from before names nothing, and is taken as it was.
+// leaves here and comes back: it isn't taken. A Remote magpie that is
+// this magpie itself (sync brought one to the computer it names,
+// hanslin1666 on Discord; the gateway's tests serve their remote from
+// one process) has this magpie's own models, through this one alone,
+// once: a model that went that way twice or more (rem/rem/own/m1) isn't
+// taken either. A list from a magpie from before names nothing, and is
+// taken as it was.
 
 // MaxVia is the most magpies a model's way may pass through before a list
 // is taken to loop through a magpie from before magpie_via, which
@@ -44,8 +47,7 @@ func loops(via []string) bool {
 	if len(via) > MaxVia {
 		return true
 	}
-	self := Self()
-	return slices.Contains(via, self) && slices.ContainsFunc(via, func(v string) bool { return v != self })
+	return len(via) > 1 && slices.Contains(via, Self())
 }
 
 // ViaHere is the magpie_via a model goes out with in this magpie's list

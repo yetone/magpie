@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -97,5 +98,87 @@ func TestRemoteMagpieListLoopsNoMore(t *testing.T) {
 	}
 	if _, ok := via["rem/back/own/m1"]; ok {
 		t.Errorf("this magpie's own model came back through the remote: %v", via)
+	}
+}
+
+// A request that went round magpies each the other's remote (or one that
+// is its own) is stopped once it has passed catalog.MaxVia of them, even
+// where their lists came from magpies too old to say: each magpie tells
+// the next how many it passed through (HopsHeader), and no vendor is
+// asked.
+func TestRemoteMagpieRequestLoopStops(t *testing.T) {
+	var vendor int
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		vendor++
+		io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`)
+	}))
+	t.Cleanup(up.Close)
+	var hops []string
+	peer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			io.WriteString(w, `{"object":"list","data":[{"id":"up/m1","object":"model"}]}`)
+			return
+		}
+		hops = append(hops, r.Header.Get(HopsHeader))
+		io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`)
+	}))
+	t.Cleanup(peer.Close)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	if err := provider.Save(provider.Provider{ID: "own", Name: "Own", Key: "k", Models: []string{"m1"}, Chat: up.URL + "/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.SaveLive("own", up.URL+"/v1", []catalog.Model{{ID: "m1"}}); err != nil {
+		t.Fatal(err)
+	}
+	id, err := provider.Add(provider.Provider{ID: "rem", Name: "Rem", Preset: provider.RemoteMagpiePreset, Chat: strings.TrimPrefix(peer.URL, "http://")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rem, _ := provider.Find(id)
+	if _, err := rem.Fetch(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(New().Handler())
+	t.Cleanup(srv.Close)
+	ask := func(model, ua, hop string) int {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/chat/completions", strings.NewReader(`{"model":"`+model+`","messages":[{"role":"user","content":"hi"}]}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("User-Agent", ua)
+		if hop != "" {
+			req.Header.Set(HopsHeader, hop)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	// an agent's request goes on as the first pass, another magpie's as
+	// one more than it came with
+	if code := ask("rem/up/m1", "curl/8", ""); code != http.StatusOK {
+		t.Fatalf("an agent's request to the remote: %d", code)
+	}
+	if code := ask("rem/up/m1", "magpie/test", "3"); code != http.StatusOK {
+		t.Fatalf("another magpie's request to the remote: %d", code)
+	}
+	if !slices.Equal(hops, []string{"1", "4"}) {
+		t.Errorf("the remote was told %v passes; want [1 4]", hops)
+	}
+	// one that has gone round as many as a list may name is stopped here
+	before := vendor
+	if code := ask("own/m1", "magpie/test", strconv.Itoa(catalog.MaxVia)); code != http.StatusLoopDetected {
+		t.Errorf("a request passed on through %d magpies: %d, want 508", catalog.MaxVia, code)
+	}
+	if vendor != before {
+		t.Errorf("the vendor was asked a request that went round in a loop")
+	}
+	// only a magpie's count is read: an agent can't stop its own request
+	if code := ask("own/m1", "curl/8", "99"); code != http.StatusOK {
+		t.Errorf("an agent's request with a hops header of its own: %d, want 200", code)
 	}
 }
