@@ -46,10 +46,13 @@ type ModelMove struct {
 }
 
 type Route struct {
-	// callerKey: the gateway key the request came with, so a key held to
-	// a budget, models or accounts is told the routes of its own requests
-	// alone (sessionLatest, #1981)
-	callerKey     string
+	// CallerKey: the gateway key the request came with, by its id and the
+	// name it had then, never its secret: a key held to a budget, models
+	// or accounts is told the routes of its own requests alone
+	// (sessionLatest, #1981), and the Routing page groups the requests by
+	// key (acezan on Discord). None for a request without one.
+	CallerKey     string `json:"callerKey,omitempty"`
+	CallerKeyName string `json:"callerKeyName,omitempty"`
 	imageTurn     string
 	imageCaller   string
 	imageProvider string
@@ -696,10 +699,19 @@ func (t *trace) changed() {
 // Every route of a request begins here, so a held key's own routes are
 // told it: one begun without (begin alone) is told to no held key.
 func (t *trace) beginFor(req *http.Request, r Route) *Route {
-	r.callerKey = access.Caller(req.Context()).KeyID
+	r.CallerKey, r.CallerKeyName = callerKeyOf(req.Context())
 	rt := t.begin(r)
 	noteRoute(req.Context(), rt)
 	return rt
+}
+
+// callerKeyOf is the gateway key ctx's request came with: its id and name.
+func callerKeyOf(ctx context.Context) (id, name string) {
+	who := access.Caller(ctx)
+	if who.KeyID == "" {
+		return "", ""
+	}
+	return who.KeyID, who.KeyName
 }
 
 func (t *trace) begin(r Route) *Route {

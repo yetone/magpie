@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/usage"
@@ -198,9 +197,10 @@ func (s *Server) keepSearch(ctx context.Context, rec *usage.Record, start time.T
 	where := cmp.Or(rec.Provider, rec.Host, rec.Requested)
 	err := rec.Error
 	// magpie asked, as for a model's search; whose search it was is For
-	rt := Route{callerKey: access.Caller(ctx).KeyID, Time: start, Agent: "magpie", Kind: "web_search", For: searchFor(ctx),
+	rt := Route{Time: start, Agent: "magpie", Kind: "web_search", For: searchFor(ctx),
 		Model: rec.Requested, Provider: where, Order: []Weighed{seat},
 		Tries: []Try{{ID: seat.ID, Model: seat.Model, Start: start, Done: true, Status: rec.Status, Millis: rec.Millis, Error: err}}}
+	rt.CallerKey, rt.CallerKeyName = callerKeyOf(ctx)
 	tr := s.trace.begin(rt)
 	rec.RouteID = tr.ID
 	c := Call{Route: tr.ID, Time: start, Agent: rt.Agent, Kind: "web_search", For: rt.For, Model: rec.Requested,

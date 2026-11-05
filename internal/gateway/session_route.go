@@ -145,7 +145,7 @@ func (t *trace) sessionLatest(ctx context.Context, session, only string, after i
 		var seq int64
 		var found *Route
 		for i := len(t.routes) - 1; i >= 0; i-- {
-			if r := t.routes[i]; r.Session == session && (only == "" || r.callerKey == only) {
+			if r := t.routes[i]; r.Session == session && (only == "" || r.CallerKey == only) {
 				c := *r
 				c.Order = append([]Weighed{}, r.Order...) // [] for none: the GUI reads it as a list
 				c.Left = append([]Weighed(nil), r.Left...)

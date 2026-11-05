@@ -17,7 +17,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/masking"
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -665,7 +664,7 @@ func (u *unroutedHold) showLocked() {
 	if u.f.redacting() {
 		rt.Phase = phaseRedact
 	}
-	rt.callerKey = access.Caller(u.r.Context()).KeyID
+	rt.CallerKey, rt.CallerKeyName = callerKeyOf(u.r.Context())
 	u.shown = u.s.trace.begin(rt)
 }
 
