@@ -498,6 +498,9 @@ type host struct {
 	// fake hosts, which have no child
 	output *proc.Output
 	waited func() error
+	// tree is the child with what it starts (Output.StartTree), ended
+	// together; nil in the fake hosts
+	tree *proc.Tree
 }
 
 // wait is the child's end: what Wait said, once it has ended and the
@@ -923,8 +926,21 @@ func (h *host) stop() {
 		case <-tick.C:
 		}
 	}
+	h.kill()
+}
+
+// kill ends the host's child and every process it started: a plugin's
+// headless browser or daemon outlived a host killed alone, with no parent
+// to end it (620 msedge.exe and 57GB of temp profiles in an hour on one
+// Windows machine, #5402). The tree is the host's session on Unix and its
+// job on Windows (proc.StartTree), so nothing outside it is reached.
+func (h *host) kill() {
+	if h.tree != nil {
+		h.tree.Kill()
+		return
+	}
 	if h.cmd.Process != nil {
-		h.cmd.Process.Kill()
+		_ = h.cmd.Process.Kill()
 	}
 }
 
@@ -1094,7 +1110,8 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 		output.Close()
 		return nil, false, errHostsEnded
 	}
-	waited, err := output.Start(cmd)
+	// in a tree of its own: what its plugins start is ended with it
+	tree, waited, err := output.StartTree(cmd)
 	if err != nil {
 		live.Unlock()
 		return nil, false, err
@@ -1116,6 +1133,7 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 		addr:     addr,
 		output:   output,
 		waited:   waited,
+		tree:     tree,
 	}
 	live.hosts[h] = true
 	live.Unlock()
@@ -1265,9 +1283,7 @@ func (h *host) read(out io.Reader) {
 		if errors.Is(err, errLineTooLong) {
 			// a child that never ends a line: stop it rather than allocate
 			h.fail(fmt.Errorf("the plugin host sent a line longer than %d bytes", h.lineLimit()))
-			if h.cmd.Process != nil {
-				_ = h.cmd.Process.Kill()
-			}
+			h.kill()
 			break
 		}
 		if err != nil {

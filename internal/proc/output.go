@@ -68,7 +68,29 @@ func (o *Output) Close() {
 // output has been read or closed; any number of goroutines can call it,
 // any number of times. When cmd doesn't start, o is closed.
 func (o *Output) Start(cmd *exec.Cmd) (wait func() error, err error) {
-	err = cmd.Start()
+	return o.start(cmd, cmd.Start, cmd.Wait)
+}
+
+// StartTree is Start for a command started as a Tree (StartTree): what
+// it starts in turn is ended with it by the Tree's Kill, and, once it has
+// ended on its own, by the wait. A plugin host ended alone left the
+// headless browser its plugin had started running with no parent, one
+// more for every host ended (620 msedge.exe on one Windows machine,
+// #5402).
+func (o *Output) StartTree(cmd *exec.Cmd) (*Tree, func() error, error) {
+	var t *Tree
+	wait, err := o.start(cmd, func() (err error) {
+		t, err = StartTree(cmd)
+		return err
+	}, func() error { return t.Wait() })
+	if err != nil {
+		return nil, nil, err
+	}
+	return t, wait, nil
+}
+
+func (o *Output) start(cmd *exec.Cmd, start, waitFor func() error) (wait func() error, err error) {
+	err = start()
 	for _, w := range o.ws {
 		w.Close() // the command has its own copies
 	}
@@ -80,7 +102,7 @@ func (o *Output) Start(cmd *exec.Cmd) (wait func() error, err error) {
 	ended := make(chan struct{})
 	var werr error
 	go func() {
-		werr = cmd.Wait()
+		werr = waitFor()
 		grace := time.NewTimer(OutputGrace)
 		defer grace.Stop()
 		for _, s := range []struct {
