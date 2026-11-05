@@ -9899,9 +9899,7 @@ function drawEditor(p, presetID) {
         : t("The plan's 5-hour, weekly and monthly windows are told only to the account's access key (Volcengine console → API Access Keys), not to the plan's API key. Give it here for the Usage page to show them; it is used for nothing else.")),
     ];
     ed.append(...rows);
-    // a preset with the plan at some of its regions only (Tencent Cloud's
-    // 企业版 beside its personal plan) asks for it at those, and at an
-    // endpoint none of its regions has, which may be one of them
+    // the plan at some regions only (Tencent's 企业版)
     const at = pr?.accessKeyRegions;
     if (at?.length) {
       accessAt = (r) => {
@@ -9948,9 +9946,7 @@ function drawEditor(p, presetID) {
   }
 
   if (p) ed.append(...field(t("Models"), renderModels(p), ""));
-  // Azure OpenAI's models are its deployments, which magpie lists with the
-  // key once the resource is added (#1995): said here, so no one takes the
-  // add page for one where they must type them
+  // Azure's models are its deployments, listed with the key (#1995)
   else if (pr?.id === "azure") ed.append(...field(t("Models"), el("div", "hint azure-models", t("No need to type them: once added, magpie lists the deployments this key can call. Type a deployment's name as a model id only if that list can't be fetched.")), ""));
   if (p?.drawIds?.length) ed.append(...renderDrawers(p));
   if (p?.filmIds?.length) ed.append(...renderVideomakers(p));
@@ -10005,10 +10001,7 @@ function drawEditor(p, presetID) {
     onRegion = (r) => { draft.region = r.id; if (r.decide) { draft.decide = du.value = r.decide; fill(); } };
     ed.append(...wsRow);
     fill();
-    // Jev's own presets (TypeSafe, Vercel, Cloudflare) name it and the
-    // gateway docs' address; a provider that also serves conversations
-    // (OpenRouter, OpenCode Zen, Ollama …) asks its own decision models
-    // on System One, and Jev's title and Cloudflare's example aren't its
+    // Jev's own presets name it; the others ask their own decision models
     const jev = decideOnly(p || pr) && /jev/i.test(pr?.name || p?.name || "");
     ed.append(...field(t(jev ? "Jev endpoint" : "System One endpoint"), du, tmpl().includes(WORKSPACE) ? t("The address the decision model is asked at, POST …/systemone under it; the workspace ID above fills it in") : jev ? t("The address Jev is asked at; paste the one from your gateway's docs, e.g. Cloudflare's …/accounts/<account id>/ai/run") : t("The address its decision models are asked at, POST …/systemone under it")));
   }
@@ -10072,6 +10065,7 @@ function drawEditor(p, presetID) {
     method.title = t("How the Balance URL is asked: GET, or POST with no body for a vendor that answers only a POST");
     const balAsk = el("div", "pair bal-ask");
     balAsk.append(method, bal);
+    if (p && !draft.balanceURL) import("./balfound.js").then(() => balFound(balAsk, p, draft, bal, () => balPath), () => {});
     balSlot.append(...field(t("Balance URL"), balAsk, t("Where the vendor tells what is left on the key, asked with it like a chat request; {key} in it or in a header is each key's own, for a vendor that takes the key in the URL (…?key={key}); shown on the Usage page")));
     const balPath = input(draft.balancePath, balanceFieldOf(draft.balanceURL));
     balPath.classList.add("bal-path");
@@ -10095,7 +10089,8 @@ function drawEditor(p, presetID) {
         try {
           const r = await api("provider/balance", body);
           res.className = "bal-res " + (r.error ? "bad" : r.ok ? "ok" : "");
-          res.textContent = r.error ? balanceError(r.error) || r.error : r.ok ? t("Balance") + " " + r.amount : t("No Balance URL to ask");
+          res.textContent = r.error ? balanceError(r.error) || r.error : r.ok ? t("Balance") + " " + r.amount : t(r.looked ? "No balance at /v1/usage or /api/usage/token" : "No Balance URL to ask");
+          if (r.looked) window.balFoundShow?.(r);
           res.title = r.error || "";
         } catch (e) { res.className = "bal-res bad"; res.textContent = e.message; }
         check.classList.remove("busy");

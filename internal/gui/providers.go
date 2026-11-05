@@ -175,7 +175,11 @@ type providerJSON struct {
 	BalanceURL    string `json:"balanceURL,omitempty"`
 	BalancePath   string `json:"balancePath,omitempty"`
 	BalanceMethod string `json:"balanceMethod,omitempty"`
-	ModelsURL     string `json:"modelsURL,omitempty"`
+	// the query magpie found by itself for a relay added by hand with no
+	// Balance URL, and its field (provider.BalanceFound)
+	BalanceFound      string `json:"balanceFound,omitempty"`
+	BalanceFoundField string `json:"balanceFoundField,omitempty"`
+	ModelsURL         string `json:"modelsURL,omitempty"`
 	// an account-wide balance token (provider.BalanceToken): whether the
 	// vendor takes one, and whether one is saved; never the token itself
 	BalanceToken struct {
@@ -728,6 +732,9 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 				out.AccountUsers[strings.ToLower(strings.TrimSpace(r))] = u
 			}
 		}
+	}
+	if p.BalanceURL == "" {
+		out.BalanceFound, out.BalanceFoundField, _ = provider.BalanceFound(p)
 	}
 	if out.Fallback == nil {
 		out.Fallback = []string{}
@@ -2405,6 +2412,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			out := map[string]any{"ok": ok, "amount": amount}
 			if err != nil {
 				out["error"] = err.Error()
+			}
+			if u, field, looked := provider.BalanceFound(q); looked {
+				// asked where relays tell a key its balance: where, or that
+				// neither told it
+				out["looked"], out["found"], out["foundField"] = true, u, field
 			}
 			writeJSON(rw, out)
 			return
