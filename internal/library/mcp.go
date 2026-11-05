@@ -474,6 +474,11 @@ func (f *mcpFile) behind(s *Server, old map[string]any) bool {
 	if f.Format == fmtCodex && old != nil && startupBehind(s, old) {
 		return true
 	}
+	// a key Codex refuses for the entry's transport stops Codex from
+	// starting at all, so such an entry is written again without it
+	if f.Format == fmtCodex && slices.ContainsFunc(codexRefused(s), func(k string) bool { _, ok := old[k]; return ok }) {
+		return true
+	}
 	if selfTimeout(s, 0) == 0 {
 		return false
 	}
@@ -1388,13 +1393,32 @@ func (f *mcpFile) merged(s *Server, old map[string]any) ordered {
 		}
 	}
 	keys := slices.Sorted(maps.Keys(old))
+	var refused []string
+	if f.Format == fmtCodex {
+		refused = codexRefused(s)
+	}
 	for _, k := range keys {
-		if slices.Contains(mine, k) || slices.ContainsFunc(o, func(e kv) bool { return e.k == k }) {
+		if slices.Contains(mine, k) || slices.ContainsFunc(o, func(e kv) bool { return e.k == k }) || slices.Contains(refused, k) {
 			continue
 		}
 		o = append(o, kv{k, old[k]})
 	}
 	return o
+}
+
+// codexRefused are the keys of the other transport, which Codex refuses
+// in an entry of s's: a command's beside a URL, a URL's beside a command.
+// Codex then won't load its config at all ("env_vars is not supported for
+// streamable_http"), so such a key, left from when the server was the
+// other kind, goes when magpie writes the entry; the user's keys of s's
+// own transport stay (codex-rs/config/src/mcp_types.rs, TryFrom
+// RawMcpServerConfig). bearer_token, which Codex refuses for both, is the
+// user's to take out.
+func codexRefused(s *Server) []string {
+	if s.Remote() {
+		return []string{"args", "env", "env_vars", "cwd"}
+	}
+	return []string{"url", "bearer_token_env_var", "http_headers", "env_http_headers", "http_headers_helper", "oauth", "oauth_resource", "auth"}
 }
 
 // put writes the server into the file, in place of one by its name.
