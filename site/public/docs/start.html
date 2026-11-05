@@ -337,6 +337,15 @@ IP-CIDR6,::1/128,DIRECT,no-resolve</pre>
         contextWindow: 1000000</pre>
     </div>
     <p><code>baseURL</code> has no <code>/anthropic</code>. The model ids are magpie’s (<code>magpie models</code>), and a <code>models</code> list replaces dsh’s defaults, so keep the two update lines. <code>MAGPIE_DS_KEY</code> holds the gateway key (<code>magpie</code> on this computer), not your DeepSeek key: export it, put it in <code>~/.dsh/.env</code>, or enter it on the DeepSeek row in dsh’s Models page. Pick the model in dsh; Disconnect leaves the entry alone. magpie has no Files API, so dsh sends images inline as base64 each turn, up to <code>maxInlineRequestImageBytes</code> (20 MiB by default, 64 MiB above). Keep the row on DeepSeek’s own models. <a href="https://github.com/yetone/magpie/blob/main/docs/reference.md#deepseek-harness-the-deepseek-row-by-hand">More in the reference</a>.</p>
+    <h3 id="trae">Can Trae or Trae CN use magpie’s models?</h3>
+    <p>Users report that this works. Trae keeps custom models in your Trae account, on its servers, so magpie can’t set it up for you, and Trae may not reach <code>127.0.0.1</code>. So:</p>
+    <ol>
+      <li>In magpie, turn on <span class="ui">Settings</span> → <span class="ui">Network and sharing</span> → <span class="ui">Share on local network</span>, and note the <span class="ui">Address</span> it shows.</li>
+      <li>Take a gateway key (<span class="ui">Gateway</span> → <span class="ui">Gateway keys</span>, or <code>magpie gateway-key add "Trae"</code>).</li>
+      <li>In Trae’s custom model settings, enter that address as the address and the gateway key as the API key.</li>
+    </ol>
+    <p>The model id is magpie’s (<code>magpie models</code>). Sharing lets other computers on your network in with a gateway key; see <a href="/docs/remote#share">Remote magpie</a>.</p>
+
     <p style="margin-top:48px">Stuck, or have a setup worth sharing? Ask on <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>. Vendors who want to hand their users a ready-made provider: see <a href="/docs/import">Add to magpie</a>.</p>
   </article>
 </main>

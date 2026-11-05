@@ -337,6 +337,15 @@ IP-CIDR6,::1/128,DIRECT,no-resolve</pre>
         contextWindow: 1000000</pre>
     </div>
     <p><code>baseURL</code> 不带 <code>/anthropic</code>。模型 id 用 magpie 的（<code>magpie models</code>）；写了 <code>models</code> 就会替换 dsh 的默认列表，所以两行更新方式要保留。<code>MAGPIE_DS_KEY</code> 里放网关密钥（本机是 <code>magpie</code>），不是你的 DeepSeek 密钥：export、写进 <code>~/.dsh/.env</code>，或在 dsh 模型页的 DeepSeek 行填入都行。模型在 dsh 里选；在 magpie 里断开不会动这一项。magpie 没有 Files API，dsh 会把图片按 base64 每轮内联发送，上限是 <code>maxInlineRequestImageBytes</code>（默认 20 MiB，上面设成 64 MiB）。这一行只用 DeepSeek 自己的模型。<a href="https://github.com/yetone/magpie/blob/main/docs/reference.md#deepseek-harness-the-deepseek-row-by-hand">详见参考文档</a>。</p>
+    <h3 id="trae">Trae / Trae CN 能用 magpie 的模型吗？</h3>
+    <p>有用户反馈这样可以用。Trae 把自定义模型存在你的 Trae 账号里（在它的服务器上），所以 magpie 没法一键帮你配好，而且 Trae 不一定连得到 <code>127.0.0.1</code>。做法是：</p>
+    <ol>
+      <li>在 magpie 里打开 <span class="ui">设置</span> → <span class="ui">网络与共享</span> → <span class="ui">局域网共享</span>，记下它显示的 <span class="ui">地址</span>。</li>
+      <li>准备一个网关密钥（<span class="ui">网关</span> → <span class="ui">网关密钥</span>，或 <code>magpie gateway-key add "Trae"</code>）。</li>
+      <li>在 Trae 的自定义模型设置里，地址填这个地址，API 密钥填这个网关密钥。</li>
+    </ol>
+    <p>模型 id 用 magpie 的（<code>magpie models</code>）。打开共享后，局域网里的其他电脑凭网关密钥也能连入；见 <a href="/docs/zh/remote#share">远程 magpie</a>。</p>
+
     <p style="margin-top:48px">遇到问题，或者有值得分享的配置？来 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 聊。想给自己的用户一键添加供应商的厂商，请看 <a href="/docs/zh/import">Add to magpie</a>。</p>
   </article>
 </main>

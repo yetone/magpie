@@ -337,6 +337,15 @@ IP-CIDR6,::1/128,DIRECT,no-resolve</pre>
         contextWindow: 1000000</pre>
     </div>
     <p><code>baseURL</code> に <code>/anthropic</code> は付けません。モデル id は magpie のもの（<code>magpie models</code>）で、<code>models</code> を書くと dsh の既定の一覧が置き換わるので、更新方法の 2 行も残してください。<code>MAGPIE_DS_KEY</code> には DeepSeek のキーではなくゲートウェイのキー（このコンピュータでは <code>magpie</code>）を入れます。export するか、<code>~/.dsh/.env</code> に書くか、dsh のモデルページの DeepSeek 行に入力します。モデルは dsh で選びます。magpie で接続を解除してもこの設定は残ります。magpie には Files API がないため、dsh は画像を毎ターン base64 でインライン送信します。上限は <code>maxInlineRequestImageBytes</code>（既定 20 MiB、上の例では 64 MiB）です。この行では DeepSeek 自身のモデルだけを使ってください。<a href="https://github.com/yetone/magpie/blob/main/docs/reference.md#deepseek-harness-the-deepseek-row-by-hand">詳しくはリファレンスへ</a>。</p>
+    <h3 id="trae">Trae / Trae CN で magpie のモデルを使えますか？</h3>
+    <p>この方法で動いたという報告があります。Trae はカスタムモデルを Trae アカウント（Trae のサーバー側）に保存するため、magpie からワンクリックで設定することはできず、Trae から <code>127.0.0.1</code> に届かないこともあります。手順：</p>
+    <ol>
+      <li>magpie で <span class="ui">設定</span> → <span class="ui">ネットワークと共有</span> → <span class="ui">ローカルネットワークで共有</span> をオンにし、表示される <span class="ui">アドレス</span> を控えます。</li>
+      <li>ゲートウェイキーを用意します（<span class="ui">ゲートウェイ</span> → <span class="ui">ゲートウェイキー</span>、または <code>magpie gateway-key add "Trae"</code>）。</li>
+      <li>Trae のカスタムモデル設定で、アドレスにそのアドレスを、API キーにそのゲートウェイキーを入力します。</li>
+    </ol>
+    <p>モデル id は magpie のもの（<code>magpie models</code>）です。共有をオンにすると、同じネットワークのほかのコンピューターもゲートウェイキーで接続できます。<a href="/docs/ja/remote#share">リモート magpie</a> を参照してください。</p>
+
     <p style="margin-top:48px">困ったときや、共有したい構成があるときは <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> でどうぞ。ユーザーにすぐ使えるプロバイダを配りたいベンダーの方は <a href="/docs/ja/import">magpie に追加</a> をご覧ください。</p>
   </article>
 </main>
