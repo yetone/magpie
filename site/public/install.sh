@@ -29,15 +29,20 @@
 #                      be installed now (it opens once they are)
 #   --tui              the terminal build (TUI, web UI and CLI), on Linux even
 #                      with a desktop (MAGPIE_CLI=1 does the same)
-#   --uninstall        takes off what this script put there: the magpie
+#   --uninstall        `magpie uninstall --yes --keep-data` first (every
+#                      agent disconnected and put back as it was), then
+#                      takes off what this script put there: the magpie
 #                      command, and the app (macOS) or its menu entry, icon
 #                      and magpie:// handler (Linux), and the service and
 #                      opening at login that would start a magpie no longer
 #                      there. Your settings, providers and usage in
 #                      ~/.config/magpie stay, for when you install again.
-#   --purge            --uninstall, and before it `magpie uninstall --yes`:
-#                      every agent disconnected and put back as it was, and
-#                      magpie's settings, providers and usage deleted.
+#   --purge            the same with `magpie uninstall --yes`: magpie's
+#                      settings, providers and usage deleted too.
+#                      With magpie deleted by hand already (or one too old
+#                      to keep its files), both download the newest magpie
+#                      to a temporary folder, checked like an install, to
+#                      disconnect the agents with; nothing of it stays.
 set -eu
 
 site=https://usemagpie.ai
@@ -70,8 +75,9 @@ while [ $# -gt 0 ]; do
         "                     the SHA-256 is still checked against $site's" \
         "  --gui              Linux: the desktop app, even when GTK 3 and WebKitGTK 4.1 can't be installed now" \
         "  --tui              Linux: the terminal build (TUI, web UI, CLI), even on a desktop (or MAGPIE_CLI=1)" \
-        "  --uninstall        take off what this script installed; your settings in ~/.config/magpie stay" \
-        "  --purge            with --uninstall: also disconnect every agent and delete magpie's settings (magpie uninstall)"
+        "  --uninstall        disconnect every agent, putting back what each had, and take off what this script installed;" \
+        "                     your settings in ~/.config/magpie stay (a magpie deleted already is downloaded to do it)" \
+        "  --purge            with --uninstall: also delete magpie's settings, providers and usage (magpie uninstall)"
       exit 0 ;;
     *) die "unknown option $1 (--gui, --tui, --proxy <url>, --mirror <prefix>, --uninstall, --purge)" ;;
   esac
@@ -108,6 +114,54 @@ esac
 share="${XDG_DATA_HOME:-$HOME/.local/share}"
 config="${XDG_CONFIG_HOME:-$HOME/.config}"
 
+case "$(uname -m)" in
+  arm64|aarch64) arch=arm64 ;;
+  x86_64|amd64) arch=amd64 ;;
+  *) arch= ;;
+esac
+
+tmp=
+# fetch <file>: the newest release's <file> downloaded into $tmp and
+# checked against the SHA-256 the site gives, never a mirror's
+fetch() {
+  file=$1
+  if [ -z "$tmp" ]; then
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+  fi
+  # the release list and its checksums: always from the site, never a mirror
+  feed=$(get "$site/api/latest") || die "could not reach $site${proxy:+ through $proxy}"
+  # The feed is one line of JSON; pull this file's url and hash out of it.
+  entry=$(printf '%s' "$feed" | sed -n "s/.*\"$file\":{\([^}]*\)}.*/\1/p")
+  url=$(printf '%s' "$entry" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
+  sum=$(printf '%s' "$entry" | sed -n 's/.*"sha256":"\([^"]*\)".*/\1/p')
+  version=$(printf '%s' "$feed" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+  if [ "$os" = android ] && { [ -z "$url" ] || [ -z "$sum" ]; }; then
+    die "the newest release has no $file; build in Termux with go build -tags nogui (see $site/docs/start)"
+  fi
+  [ -n "$url" ] && [ -n "$sum" ] || die "the newest release has no $file"
+
+  from=$url
+  case "$url" in
+    https://github.com/*) [ -z "$mirror" ] || from="$mirror$url" ;;
+  esac
+  if [ "$from" != "$url" ]; then say "downloading magpie $version ($file) through $mirror"
+  else say "downloading magpie $version ($file)"; fi
+  get -o "$tmp/$file" "$from" || die "could not download $from"
+  if command -v sha256sum >/dev/null; then got=$(sha256sum "$tmp/$file" | cut -d' ' -f1)
+  else got=$(shasum -a 256 "$tmp/$file" | cut -d' ' -f1); fi
+  if [ "$got" != "$sum" ]; then
+    [ "$from" = "$url" ] || die "$file from $mirror does not match its checksum from $site; not installed"
+    die "$file does not match its checksum"
+  fi
+}
+
+# keeps <exe>: whether this magpie can disconnect the agents and keep its
+# files (magpie uninstall --keep-data, which an older one doesn't know)
+keeps() {
+  "$1" uninstall --help 2>&1 | grep -q -- --keep-data
+}
+
 # runs <file> <key>: the program an entry's Exec= or a unit's ExecStart=
 # starts, its first word, quoted or not
 runs() {
@@ -119,12 +173,45 @@ runs() {
 # magpie: left, they would start a program that is gone at each login.
 if [ -n "$uninstall" ]; then
   exe="$bin/magpie"
-  if [ "$uninstall" = purge ]; then
-    # magpie disconnects the agents it connected and deletes its own
-    # folders; deleting them here by hand would leave the agents pointed
-    # at a gateway that is gone
-    [ -x "$exe" ] || die "no magpie at $exe to disconnect your agents and delete its settings: install it again and run this again, or run --uninstall alone to keep them"
-    "$exe" uninstall --yes || die "magpie uninstall didn't finish (see above), so the magpie command and app are left: run this again once it does"
+  # magpie disconnects the agents it connected first, putting back what
+  # each had: taking it off alone left them pointed at a gateway that is
+  # gone (Codex, whimsical_wolf_15477 on Discord). The one installed does
+  # it; with none (deleted by hand: a broken link, an app in the Trash)
+  # or one too old to keep its files, the newest is downloaded to do it,
+  # while magpie's settings (and the record of what each agent had) are
+  # still here.
+  with=
+  if [ -x "$exe" ]; then with=$exe
+  elif [ "$os" = darwin ]; then
+    for apps in /Applications "$HOME/Applications"; do
+      [ -n "$with" ] || [ ! -x "$apps/magpie.app/Contents/MacOS/magpie" ] || with="$apps/magpie.app/Contents/MacOS/magpie"
+    done
+  fi
+  if [ -n "$with" ] && [ "$uninstall" != purge ] && ! keeps "$with"; then with=; fi
+  if [ -z "$with" ] && [ -d "$config/magpie" ]; then
+    other=$(command -v magpie 2>/dev/null || true)
+    if [ -n "$other" ] && [ "$other" != "$exe" ] && [ -x "$other" ]; then
+      # another magpie, not this script's, serves the agents still: it
+      # is the one to take off, and its agents are its own to put back
+      say "magpie at $other isn't one this script installed, so your agents are left on it: run $other uninstall to disconnect them and take it off"
+    else
+      [ -n "$arch" ] || die "unsupported CPU: $(uname -m)"
+      case "$os" in
+        darwin) fetch "magpie-darwin-$arch.zip"
+                ditto -x -k "$tmp/$file" "$tmp/x"
+                with="$tmp/x/magpie.app/Contents/MacOS/magpie" ;;
+        android) fetch "magpie-cli-android-$arch"; chmod 755 "$tmp/$file"; with="$tmp/$file" ;;
+        *) fetch "magpie-cli-linux-$arch"; chmod 755 "$tmp/$file"; with="$tmp/$file" ;;
+      esac
+      say "disconnecting your agents with it (it is deleted after)"
+    fi
+  fi
+  if [ -n "$with" ]; then
+    if [ "$uninstall" = purge ]; then
+      MAGPIE_UNINSTALL_SCRIPT=1 "$with" uninstall --yes || die "magpie uninstall didn't finish (see above), so the magpie command and app are left: run this again once it does"
+    else
+      MAGPIE_UNINSTALL_SCRIPT=1 "$with" uninstall --yes --keep-data || die "magpie couldn't disconnect your agents (see above), so the magpie command and app are left: run this again once it can"
+    fi
   fi
   removed=
   gone() { rm -rf "$1"; removed=1; say "removed $1"; }
@@ -184,9 +271,6 @@ if [ -n "$uninstall" ]; then
   [ "$removed" ] || say "no magpie installed by this script at $exe"
   if [ "$uninstall" != purge ]; then
     say "kept your settings, providers and usage in $config/magpie: install again to have them back, or run with --purge to delete them"
-    if pid=$(pgrep -f "^$exe( |\$)" 2>/dev/null) && [ -n "$pid" ]; then
-      say "magpie is still running (pid $(printf '%s' "$pid" | tr '\n' ' ' | sed 's/ $//')) and ends when you quit it; agents connected to it reach its gateway until then"
-    fi
   fi
   # magpie uninstall said so already
   [ "$uninstall" = purge ] || say "magpie is uninstalled"
@@ -321,11 +405,7 @@ install_gui_libs() {
   has_gui_libs
 }
 
-case "$(uname -m)" in
-  arm64|aarch64) arch=arm64 ;;
-  x86_64|amd64) arch=amd64 ;;
-  *) die "unsupported CPU: $(uname -m)" ;;
-esac
+[ -n "$arch" ] || die "unsupported CPU: $(uname -m)"
 case "$os" in
   darwin) file="magpie-darwin-$arch.zip" ;;
   android) file="magpie-cli-android-$arch" ;;
@@ -344,34 +424,7 @@ case "$os" in
     esac ;;
 esac
 
-tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
-
-# the release list and its checksums: always from the site, never a mirror
-feed=$(get "$site/api/latest") || die "could not reach $site${proxy:+ through $proxy}"
-# The feed is one line of JSON; pull this file's url and hash out of it.
-entry=$(printf '%s' "$feed" | sed -n "s/.*\"$file\":{\([^}]*\)}.*/\1/p")
-url=$(printf '%s' "$entry" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
-sum=$(printf '%s' "$entry" | sed -n 's/.*"sha256":"\([^"]*\)".*/\1/p')
-version=$(printf '%s' "$feed" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
-if [ "$os" = android ] && { [ -z "$url" ] || [ -z "$sum" ]; }; then
-  die "the newest release has no $file; build in Termux with go build -tags nogui (see $site/docs/start)"
-fi
-[ -n "$url" ] && [ -n "$sum" ] || die "the newest release has no $file"
-
-from=$url
-case "$url" in
-  https://github.com/*) [ -z "$mirror" ] || from="$mirror$url" ;;
-esac
-if [ "$from" != "$url" ]; then say "downloading magpie $version ($file) through $mirror"
-else say "downloading magpie $version ($file)"; fi
-get -o "$tmp/$file" "$from" || die "could not download $from"
-if command -v sha256sum >/dev/null; then got=$(sha256sum "$tmp/$file" | cut -d' ' -f1)
-else got=$(shasum -a 256 "$tmp/$file" | cut -d' ' -f1); fi
-if [ "$got" != "$sum" ]; then
-  [ "$from" = "$url" ] || die "$file from $mirror does not match its checksum from $site; not installed"
-  die "$file does not match its checksum"
-fi
+fetch "$file"
 
 mkdir -p "$bin"
 if [ "$os" = darwin ]; then

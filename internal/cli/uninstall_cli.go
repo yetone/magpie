@@ -15,26 +15,31 @@ import (
 	"github.com/yetone/magpie/internal/uninstall"
 )
 
-const uninstallUsage = "usage: magpie uninstall [--yes]"
+const uninstallUsage = "usage: magpie uninstall [--yes] [--keep-data]"
 
 // what uninstallCmd asks of the system; the tests put fakes in
 var (
 	servedBy      = gateway.ServedBy
 	serviceStatus = daemon.Get
 	runUninstall  = uninstall.Run
+	runKeepData   = uninstall.KeepData
 )
 
 // magpie uninstall [--yes]: every agent disconnected and put back as it
 // was, magpie's service, login item and shortcuts removed, then its own
 // files (uninstall.Run). Deleting magpie's folders by hand left Codex
 // pointed at a gateway that was gone (Jevik_AI on X). It asks first on a
-// terminal; with no terminal to ask on, only --yes does it.
+// terminal; with no terminal to ask on, only --yes does it. --keep-data
+// does all but deleting its files, for install.sh --uninstall, which keeps
+// them for a magpie installed again.
 func uninstallCmd(args []string) error {
-	yes := false
+	yes, keepData := false, false
 	for _, a := range args {
 		switch a {
 		case "--yes", "-y":
 			yes = true
+		case "--keep-data":
+			keepData = true
 		default:
 			return fmt.Errorf("unknown %q: nothing was changed\n%s", a, uninstallUsage)
 		}
@@ -60,8 +65,14 @@ func uninstallCmd(args []string) error {
 	}
 	connected := uninstall.Connected()
 	remove, keep := uninstall.Folders()
+	if keepData {
+		remove, keep = nil, ""
+	}
 	if !yes {
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
+			if keepData {
+				return fmt.Errorf("this disconnects every agent and removes magpie's service and shortcuts; run it with --yes to do so without being asked")
+			}
 			return fmt.Errorf("this disconnects every agent and deletes magpie's settings, providers and usage; run it with --yes to do so without being asked")
 		}
 		fmt.Println("This takes magpie off this computer:")
@@ -79,13 +90,22 @@ func uninstallCmd(args []string) error {
 		if keep != "" {
 			fmt.Println("  · keeps", keep, "(skills and servers your agents use)")
 		}
-		fmt.Print("Uninstall magpie? Your providers, keys and usage in magpie can't be brought back. [y/N] ")
+		if keepData {
+			fmt.Println("  · keeps magpie's settings, providers and usage, for a magpie installed again")
+			fmt.Print("Uninstall magpie? [y/N] ")
+		} else {
+			fmt.Print("Uninstall magpie? Your providers, keys and usage in magpie can't be brought back. [y/N] ")
+		}
 		line, _ := stdin().ReadString('\n')
 		if a := strings.ToLower(strings.TrimSpace(line)); a != "y" && a != "yes" {
 			return fmt.Errorf("nothing was changed")
 		}
 	}
-	r := runUninstall(context.Background())
+	run := runUninstall
+	if keepData {
+		run = runKeepData
+	}
+	r := run(context.Background())
 	for _, l := range r.Says() {
 		switch {
 		case strings.HasPrefix(l, "✓"):
@@ -99,13 +119,18 @@ func uninstallCmd(args []string) error {
 	if r.CodexApp {
 		fmt.Println(amber.Render("!"), "the Codex app is still on what it read before: quit it and open it again")
 	}
-	if r.Exe != "" {
+	// install.sh --uninstall deletes magpie itself after this (a
+	// downloaded copy too) and says so, so the lines about it are its own.
+	script := os.Getenv("MAGPIE_UNINSTALL_SCRIPT") == "1"
+	if r.Exe != "" && !script {
 		fmt.Println(muted.Render("  magpie itself is left at " + r.Exe + ": delete it to finish"))
 	}
 	if r.Failed() {
 		return fmt.Errorf("some of magpie couldn't be taken off; what is marked ! above is left")
 	}
-	fmt.Println(green.Render("✓"), "magpie is uninstalled")
+	if !script {
+		fmt.Println(green.Render("✓"), "magpie is uninstalled")
+	}
 	return nil
 }
 

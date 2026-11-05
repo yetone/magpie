@@ -107,6 +107,25 @@ func TestRunOrder(t *testing.T) {
 	}
 }
 
+// KeepData, for install.sh --uninstall, does Run's agents and system and
+// leaves magpie's files for a magpie installed again.
+func TestKeepData(t *testing.T) {
+	codex := &agent.Agent{ID: "codex", Name: "Codex"}
+	did := fakes(t, []*agent.Agent{codex}, map[string]bool{"codex": true}, nil)
+	settings := filepath.Join(appdir.Config(), "settings.json")
+	write(t, settings, "{}")
+
+	r := KeepData(context.Background())
+
+	want := []string{"service", "autostart", "shortcut", "scheme", "pii", "failover", "disconnect codex", "rollouts", "codex app"}
+	if !slices.Equal(*did, want) {
+		t.Fatalf("did %q, want %q", *did, want)
+	}
+	if gone(t, settings) || len(r.Data) != 0 || r.Failed() {
+		t.Fatalf("settings gone or data touched: %+v", r)
+	}
+}
+
 // An agent that can't be disconnected is said, and the rest are still
 // done; Codex not among them leaves the Codex app alone.
 func TestRunSaysWhatFailed(t *testing.T) {
