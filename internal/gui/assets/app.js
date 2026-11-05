@@ -10839,9 +10839,8 @@ function showRest(n, open) {
 // DETECT_MAX: the most models one detection asks (provider.DetectMax)
 const DETECT_MAX = 30;
 // addFormModels: the add form's models, typed in (ex) or picked from the
-// vendor's list, asked with the form as it stands before anything is saved
-// (#578). A chip
-// ticked or unticked is in draft.extra, which the Save sends as the models.
+// vendor's list before anything is saved (#578); a chip ticked is in
+// draft.extra, which the Save sends as the models.
 function addFormModels(ex) {
   const box = el("div", "stack add-models");
   const row = el("div", "detect-row");
@@ -10868,7 +10867,7 @@ function addFormModels(ex) {
     const tells = modelTells(listed);
     for (const m of match) {
       const on = draft.extra.includes(m.id);
-      // past the first 120 only the picked are drawn, till the rest are asked for
+      // past 120 only the picked are drawn, till the rest are asked for
       if (shown >= 120 && !f && !showAll && !on) { hidden++; continue; }
       const c = el("button", "mchip pick" + (on ? " on" : ""));
       c.append(el("span", "", m.name || m.id));
@@ -10902,10 +10901,9 @@ function addFormModels(ex) {
       const r = await api("provider/list", body);
       listed = r?.models || [];
       out.replaceChildren();
-      if (!listed.length) { out.append(el("span", "hint", t("The vendor's list is empty. Type the model ids instead."))); return; }
+      if (!listed.length) { out.append(el("span", "hint", t(r?.retrieval ? emptyModelsHint(r) : "The vendor's list is empty. Type the model ids instead."))); return; }
       q.placeholder = t("filter {n} models…", { n: listed.length });
-      // the picks' count and Pick all / none above the chips, which a pick
-      // can make a line longer or shorter, so they stay where they are
+      // the picks' count and Pick all / none above the chips: they stay put
       if (listed.length > 24) out.append(q);
       out.append(acts, chips);
       draw();
@@ -11151,6 +11149,7 @@ let picksLeft = null;
 const MCHIPS_MAX = 240;
 // emptyModelsHint: an empty list's words; Azure's is its deployments (#1995)
 function emptyModelsHint(p) {
+  if (p.retrieval) return "Only embedding and rerank models are listed. They need no pick: ask them on /v1/embeddings and /v1/rerank.";
   if (p.preset !== "azure") return "The vendor's list is empty. Fetch models again, or type a model id.";
   if (providers?.fetching && !p.fetched && !p.listError) return "Asking your resource for its deployments with this key…";
   return "No deployments came back for this key. Fetch models again, or type a deployment's name as a model id.";

@@ -524,3 +524,156 @@ func TestDetectGemini(t *testing.T) {
 		t.Fatalf("detecting saved %+v", ps)
 	}
 }
+
+// retrievalRelay serves embeddings and rerank under /v1 and nothing to
+// chat with, listing list; each request is asked.
+func retrievalRelay(t *testing.T, list string) (*httptest.Server, func() []asked) {
+	var mu sync.Mutex
+	var got []asked
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		var body map[string]any
+		json.Unmarshal(b, &body)
+		m, _ := body["model"].(string)
+		mu.Lock()
+		got = append(got, asked{r.Method, r.URL.Path, r.Header.Get("Authorization"), m, body})
+		mu.Unlock()
+		switch r.Method + " " + r.URL.Path {
+		case "GET /v1/models":
+			io.WriteString(w, list)
+		case "POST /v1/embeddings":
+			if _, ok := body["input"]; !ok || !strings.Contains(m, "bge-m3") {
+				http.Error(w, `{"error":{"message":"bad embeddings request"}}`, http.StatusBadRequest)
+				return
+			}
+			io.WriteString(w, `{"object":"list","data":[{"object":"embedding","index":0,"embedding":[0.1,0.2]}],"model":"bge-m3"}`)
+		case "POST /v1/rerank":
+			if _, ok := body["documents"]; !ok || body["query"] == nil {
+				http.Error(w, `{"error":{"message":"bad rerank request"}}`, http.StatusBadRequest)
+				return
+			}
+			io.WriteString(w, `{"results":[{"index":0,"relevance_score":0.9}]}`)
+		case "POST /v1/chat/completions":
+			// an embedding model asked to chat, as heatonz's vendor answers
+			http.Error(w, `{"error":{"message":"The model `+m+` does not support chat"}}`, http.StatusBadRequest)
+		default:
+			http.Error(w, `{"error":{"message":"Invalid URL (POST `+r.URL.Path+`)"}}`, http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, func() []asked {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(got)
+	}
+}
+
+// A vendor of embedding and rerank models alone (heatonz on Discord,
+// 11-05): Detect APIs found nothing, as it asked an embedding model to
+// chat. Its OpenAI URL is asked as the gateway asks it for such a model,
+// at /embeddings, the smallest request with nothing a chat sends; the
+// other APIs say why they weren't asked.
+func TestDetectEmbeddingOnly(t *testing.T) {
+	detectHome(t)
+	for _, c := range []struct {
+		list, model, path string
+	}{
+		{`{"data":[{"id":"BAAI/bge-m3"},{"id":"BAAI/bge-reranker-v2-m3"}]}`, "BAAI/bge-m3", "/v1/embeddings"},
+		{`{"data":[{"id":"BAAI/bge-reranker-v2-m3"}]}`, "BAAI/bge-reranker-v2-m3", "/v1/rerank"},
+	} {
+		srv, got := retrievalRelay(t, c.list)
+		res, err := Provider{Key: "sk-relay"}.Detect(context.Background(), srv.URL, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res) != 4 || res[0].Protocol != Chat || !res[0].OK || res[0].Model != c.model || res[0].Base != srv.URL+"/v1" {
+			t.Fatalf("%s: chat = %+v", c.model, res)
+		}
+		for _, r := range res[1:] {
+			if r.OK || r.Model != c.model || !strings.Contains(r.Error, "model: asked at OpenAI's URL") || r.Status != 0 {
+				t.Fatalf("%s on %s: %+v", c.model, r.Protocol, r)
+			}
+		}
+		var posts []asked
+		for _, a := range got() {
+			if a.method == "POST" {
+				posts = append(posts, a)
+			}
+		}
+		if len(posts) != 1 || posts[0].path != c.path || posts[0].model != c.model || posts[0].auth != "Bearer sk-relay" {
+			t.Fatalf("%s: asked %+v", c.model, posts)
+		}
+		for _, k := range []string{"max_tokens", "messages", "stream", "temperature"} {
+			if _, ok := posts[0].body[k]; ok {
+				t.Fatalf("%s: %s sent %s: %v", c.model, c.path, k, posts[0].body)
+			}
+		}
+	}
+
+	// a list with a model to chat with asks it on chat, as before
+	srv, got := retrievalRelay(t, `{"data":[{"id":"BAAI/bge-m3"},{"id":"glm-5"}]}`)
+	res, err := Provider{Key: "sk-relay"}.Detect(context.Background(), srv.URL, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range res {
+		if r.Model != "glm-5" {
+			t.Fatalf("%s asked %+v", r.Protocol, r)
+		}
+	}
+	for _, a := range got() {
+		if a.method == "POST" && a.path == "/v1/embeddings" {
+			t.Fatalf("an embedding model was asked beside a chat one: %+v", a)
+		}
+	}
+
+	// each model asked: the embedding model at /embeddings, once
+	srv, got = retrievalRelay(t, `{"data":[]}`)
+	each, sum, err := Provider{Key: "sk-relay"}.DetectModels(context.Background(), srv.URL+"/v1", []string{"BAAI/bge-m3"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(each) != 1 || !each[0].Results[0].OK || !sum[0].OK {
+		t.Fatalf("%+v", each)
+	}
+	if n := len(got()); n != 1 {
+		t.Fatalf("%d requests for one embedding model: %+v", n, got())
+	}
+	if ps := All(); len(ps) != 0 {
+		t.Fatalf("detecting saved %+v", ps)
+	}
+}
+
+// Saved, such a provider's Test asks a model its list keeps apart where
+// the gateway sends it, and a model's own test too; the extra body a chat
+// carries isn't sent to /embeddings or /rerank, as the gateway sends none.
+func TestTestEmbeddingOnly(t *testing.T) {
+	detectHome(t)
+	srv, got := retrievalRelay(t, `{"data":[{"id":"BAAI/bge-m3"},{"id":"BAAI/bge-reranker-v2-m3"}]}`)
+	if err := Save(Provider{ID: "relay", Name: "Relay", Chat: srv.URL + "/v1", Key: "sk-relay",
+		ExtraBody: ExtraBody{"prompt_cache_key": json.RawMessage(`"${sessionId}"`)}}); err != nil {
+		t.Fatal(err)
+	}
+	p, _ := Find("relay")
+	if rs := p.Test(context.Background()); len(rs) != 1 || !rs[0].OK || rs[0].Model != "BAAI/bge-m3" {
+		t.Fatalf("Test: %+v", rs)
+	}
+	rs := p.TestModels(context.Background(), []string{"BAAI/bge-reranker-v2-m3", "BAAI/bge-m3"})
+	if len(rs) != 2 || !rs[0].OK || !rs[1].OK || rs[0].Protocol != Chat {
+		t.Fatalf("TestModels: %+v", rs)
+	}
+	var paths []string
+	for _, a := range got() {
+		if a.method != "POST" {
+			continue
+		}
+		paths = append(paths, a.path)
+		if _, ok := a.body["prompt_cache_key"]; ok {
+			t.Fatalf("%s carried the extra body: %v", a.path, a.body)
+		}
+	}
+	slices.Sort(paths)
+	if !slices.Equal(paths, []string{"/v1/embeddings", "/v1/embeddings", "/v1/rerank"}) {
+		t.Fatalf("asked %v", paths)
+	}
+}

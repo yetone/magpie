@@ -170,9 +170,20 @@ func (q Provider) detectOne(proto Protocol, m string, wait time.Duration) (Detec
 		d.Error = "no key is on for this endpoint"
 		return d, nil
 	}
+	if proto != Chat {
+		// served by OpenAI's base alone, at /embeddings or /rerank
+		switch retrievalOf(m) {
+		case catalog.ServesEmbedding:
+			d.Error = "an embedding model: asked at OpenAI's URL, on /embeddings"
+			return d, nil
+		case catalog.ServesRerank:
+			d.Error = "a rerank model: asked at OpenAI's URL, on /rerank"
+			return d, nil
+		}
+	}
 	return d, func(ctx context.Context) Result {
 		u, body := tiny(k, proto, UpstreamName(q, m))
-		ctx, b := k.tested(ctx, body)
+		ctx, b := k.tested(ctx, u, body)
 		return probe(ctx, k, proto, u, b, m, wait)
 	}
 }
@@ -322,7 +333,8 @@ func (p Provider) detectModels(ctx context.Context) []string {
 
 // detectModel is the model of ids to ask proto for: one made for it — a
 // Claude model on Anthropic's, an OpenAI one on Responses, a Gemini one on
-// Gemini's, any other on Chat — else the first that chats.
+// Gemini's, any other on Chat — else the first that chats, else, on Chat,
+// an embedding or rerank model.
 func detectModel(ids []string, proto Protocol) string {
 	made := func(id string) bool {
 		switch proto {
@@ -335,9 +347,15 @@ func detectModel(ids []string, proto Protocol) string {
 		}
 		return !isClaude(id)
 	}
-	for _, want := range []func(string) bool{made, func(string) bool { return true }} {
+	chats := func(id string) bool { return !catalog.ImagesAPI(id) && retrievalOf(id) == "" }
+	for _, want := range []func(string) bool{
+		func(id string) bool { return made(id) && chats(id) }, chats,
+		// none chats: an embedding or rerank model, which OpenAI's base
+		// is asked for at /embeddings or /rerank (tiny)
+		func(id string) bool { return proto == Chat && retrievalOf(id) != "" },
+	} {
 		for _, id := range ids {
-			if want(id) && !catalog.ImagesAPI(id) {
+			if want(id) {
 				return id
 			}
 		}

@@ -310,6 +310,9 @@ type providerJSON struct {
 	DrawPicks bool `json:"drawPicks,omitempty"`
 	// those of them unticked in its editor (provider.HiddenDrawers)
 	HiddenDrawers []string `json:"hiddenDrawers,omitempty"`
+	// with none listed to chat with, how many embedding and rerank models
+	// it lists: served on /v1/embeddings and /v1/rerank, with no pick
+	Retrieval int `json:"retrieval,omitempty"`
 	// its video models (gateway.Videomakers), listed apart in its editor
 	// as its image models are, and those unticked there
 	// (provider.HiddenVideomakers)
@@ -1024,6 +1027,14 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		out.Deciders = &deciders
 	}
 	out.Exposed = len(exposed)
+	if len(out.Models) == 0 {
+		// a vendor of embedding and rerank models alone (heatonz)
+		for _, m := range catalog.LiveServing(p.ID, "") {
+			if m.Serves == catalog.ServesEmbedding || m.Serves == catalog.ServesRerank {
+				out.Retrieval++
+			}
+		}
+	}
 	// its image models aren't among those agents chat with; the editor
 	// lists them apart, as Settings → Images is where one is picked
 	for _, m := range gateway.DrawersOf(p, func() []catalog.Model { return ls.Available }) {
@@ -2459,7 +2470,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			p = typed(p, in, req.Proxy, req.InsecureTLS)
 			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 			defer cancel()
-			ms, err := p.List(ctx)
+			all, err := p.ListAll(ctx)
 			if err != nil {
 				fail(rw, err)
 				return
@@ -2468,6 +2479,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				ID   string `json:"id"`
 				Name string `json:"name,omitempty"`
 			}
+			ms := catalog.Chat(all)
 			out := make([]listed, 0, len(ms))
 			for _, m := range ms {
 				x := listed{ID: m.ID}
@@ -2476,7 +2488,15 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				}
 				out = append(out, x)
 			}
-			writeJSON(rw, map[string]any{"models": out})
+			// embedding and rerank models need no pick: they are served
+			// on /v1/embeddings and /v1/rerank as listed (heatonz)
+			retrieval := 0
+			for _, m := range all {
+				if m.Serves == catalog.ServesEmbedding || m.Serves == catalog.ServesRerank {
+					retrieval++
+				}
+			}
+			writeJSON(rw, map[string]any{"models": out, "retrieval": retrieval})
 			return
 		case "models":
 			p, err := provider.Find(in.ID)

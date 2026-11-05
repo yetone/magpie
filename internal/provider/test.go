@@ -63,7 +63,7 @@ func (p Provider) Test(ctx context.Context) []Result {
 			return []Result{{Protocol: proto, Error: zenPublicNone}}
 		}
 		url, body := tiny(q, proto, UpstreamName(p, model))
-		ctx, b := q.tested(ctx, asClient(client, proto, body))
+		ctx, b := q.tested(ctx, url, asClient(client, proto, body))
 		return []Result{probe(ctx, q, proto, url, b, model, testWait)}
 	}
 	if p.isClaudeAccount() {
@@ -92,7 +92,7 @@ func (p Provider) Test(ctx context.Context) []Result {
 			continue
 		}
 		url, body := tiny(q, proto, UpstreamName(p, model))
-		ctx, b := q.tested(ctx, body)
+		ctx, b := q.tested(ctx, url, body)
 		out = append(out, probe(ctx, q, proto, url, b, model, testWait))
 	}
 	if len(out) == 0 && p.zenPublic() {
@@ -112,6 +112,13 @@ func (p Provider) Test(ctx context.Context) []Result {
 // tiny is the smallest request for model on proto's endpoint, streamed
 // to a backend that only streams.
 func tiny(q Provider, proto Protocol, model string) (url, body string) {
+	if kind := retrievalOf(model); kind != "" && proto == Chat && q.Account == nil {
+		// an embedding or rerank model chats nowhere: it is asked where
+		// the gateway sends it (retrieve), the OpenAI-style base's
+		// /embeddings or /rerank (heatonz on Discord: a relay serving
+		// only those detected nothing, asked on /chat/completions)
+		return tinyRetrieval(q.OpenAIBase(), kind, model)
+	}
 	url, body = tinyBody(q, proto, model)
 	if q.Account != nil && q.Account.Stream && body != "" {
 		body = strings.TrimSuffix(body, "}") + `,"stream":true}`
@@ -123,6 +130,26 @@ func tiny(q Provider, proto Protocol, model string) (url, body string) {
 		body = clineProbe(body)
 	}
 	return url, body
+}
+
+// retrievalOf is the retrieval API model is made for, as its id says
+// (catalog.ServesOf): embeddings or rerank, else "".
+func retrievalOf(model string) string {
+	switch s := catalog.ServesOf(model); s {
+	case catalog.ServesEmbedding, catalog.ServesRerank:
+		return s
+	}
+	return ""
+}
+
+// tinyRetrieval is the smallest request for a model of kind's at an
+// OpenAI-style base: one input to embed, or one document to rank.
+func tinyRetrieval(base, kind, model string) (url, body string) {
+	base = strings.TrimRight(base, "/")
+	if kind == catalog.ServesRerank {
+		return base + "/rerank", fmt.Sprintf(`{"model":%q,"query":"hi","documents":["hi"]}`, model)
+	}
+	return base + "/embeddings", fmt.Sprintf(`{"model":%q,"input":"hi"}`, model)
 }
 
 // clineProbe is the smallest request asked as Cline's own clients ask:
@@ -414,6 +441,10 @@ func (p Provider) testOne(ctx context.Context, model string) Result {
 		proto = clientProto(client, protos)
 	} else if draws {
 		proto = Chat
+	} else if retrievalOf(model) != "" && slices.Contains(protos, Chat) {
+		// an embedding or rerank model, at the OpenAI-style base's
+		// /embeddings or /rerank, where the gateway sends it (tiny)
+		proto = Chat
 	} else if apis := p.APIs(model); apis != nil {
 		if i := slices.IndexFunc(protos, func(pr Protocol) bool { return slices.Contains(apis, pr) }); i >= 0 {
 			proto = protos[i]
@@ -438,7 +469,7 @@ func (p Provider) testOne(ctx context.Context, model string) Result {
 		r := probe(ctx, q, proto, url, []byte(body), model, drawWait)
 		if !r.OK && ((r.Status == 404 || r.Status == 405) && HostOf(q.Chat) != "openrouter.ai" || r.Status == 400 && catalog.PointsToChat(r.Error)) {
 			url, body := tiny(q, proto, model)
-			ctx, b := q.tested(ctx, body)
+			ctx, b := q.tested(ctx, url, body)
 			if c := probe(ctx, q, proto, url, b, model, testWait); c.OK {
 				return c
 			}
@@ -456,7 +487,7 @@ func (p Provider) testOne(ctx context.Context, model string) Result {
 			return d
 		}
 	}
-	if !r.OK && r.otherAPI && client != ClientClaudeCode {
+	if !r.OK && r.otherAPI && client != ClientClaudeCode && retrievalOf(model) == "" {
 		// the vendor's word that the model isn't served on that API: it
 		// is asked on the next one that may serve it, as the gateway asks
 		// a request there (usable), and that one's answer is the model's
@@ -508,7 +539,7 @@ func (p Provider) testOn(ctx context.Context, client string, proto Protocol, mod
 	if client != "" {
 		body = asClient(client, proto, body)
 	}
-	ctx, b := p.tested(ctx, body)
+	ctx, b := p.tested(ctx, url, body)
 	return probe(ctx, p, proto, url, b, model, testWait)
 }
 
@@ -580,6 +611,16 @@ func (p Provider) testModel(q Provider, proto Protocol) string {
 				if !p.DecidesModel(m.ID) && !off(p.ID, m.ID) && want(m.ID) && (k.Key == "" || p.Serves(k, m.ID)) {
 					return m.ID
 				}
+			}
+		}
+	}
+	if proto == Chat && q.Account == nil && !public {
+		// none to chat with: an embedding or rerank model its list
+		// keeps apart (catalog.LiveServing), asked where the gateway
+		// sends it (heatonz on Discord: a provider serving only those)
+		for _, m := range catalog.LiveServing(p.ID, "") {
+			if retrievalOf(m.ID) != "" && !off(p.ID, m.ID) && (k.Key == "" || p.Serves(k, m.ID)) {
+				return m.ID
 			}
 		}
 	}

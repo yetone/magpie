@@ -54,10 +54,15 @@ func TestProviderListBeforeSave(t *testing.T) {
 		t.Fatalf("%d %s", w.Code, w.Body)
 	}
 	var got struct {
-		Models []struct{ ID, Name string }
+		Models    []struct{ ID, Name string }
+		Retrieval int
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
+	}
+	// counted apart, for a list of them alone to say so (heatonz)
+	if got.Retrieval != 1 {
+		t.Fatalf("retrieval = %d, want 1: %s", got.Retrieval, w.Body)
 	}
 	var ids []string
 	for _, m := range got.Models {

@@ -501,13 +501,23 @@ func (p Provider) fetchList(ctx context.Context) ([]catalog.Model, error) {
 // nothing: a provider still being added (#578, the add form's Fetch models)
 // is shown its vendor's list to pick from before it is saved.
 func (p Provider) List(ctx context.Context) ([]catalog.Model, error) {
+	ms, err := p.ListAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return catalog.Chat(ms), nil
+}
+
+// ListAll is List with the models served on an API of their own kept:
+// embedding and rerank models, tagged Serves.
+func (p Provider) ListAll(ctx context.Context) ([]catalog.Model, error) {
 	ctx = p.ownRequests(p.Via(ctx), probelog.KindList)
 	if pr := Preset(p.Preset); pr != nil && pr.NoList && strings.TrimSpace(p.ModelsURL) == "" && !p.listRegion(pr) {
-		return catalog.Chat(p.planModels(nil)), nil
+		return p.planModels(nil), nil
 	}
 	if p.IsCline() && strings.TrimSpace(p.ModelsURL) == "" {
 		if ms, _, err := p.clineFeed(ctx); err == nil {
-			return catalog.Chat(ms), nil
+			return ms, nil
 		}
 	}
 	if p.IsKilo() && strings.TrimSpace(p.ModelsURL) == "" {
@@ -515,13 +525,13 @@ func (p Provider) List(ctx context.Context) ([]catalog.Model, error) {
 		if err != nil {
 			return nil, err
 		}
-		return catalog.Chat(ms), nil
+		return ms, nil
 	}
 	l, err := p.fetchOne(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return catalog.Chat(l.models), nil
+	return l.models, nil
 }
 
 // ListAsks says List asks a vendor over the network, with p's own key,
