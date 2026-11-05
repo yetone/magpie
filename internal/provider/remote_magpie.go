@@ -183,3 +183,18 @@ func (p Provider) RemotePriced(model string) bool {
 	_, ok := p.remotePrice(model)
 	return ok
 }
+
+// RemoteVia is the magpies a remote magpie's model passes through to its
+// vendor, as its list said, that magpie last (catalog's magpie_via.go);
+// nil for another provider's, or a list from a magpie from before.
+func (p Provider) RemoteVia(model string) []string {
+	if !p.IsRemoteMagpie() {
+		return nil
+	}
+	for _, m := range p.liveByID(model) {
+		if len(m.Via) > 0 {
+			return m.Via
+		}
+	}
+	return nil
+}

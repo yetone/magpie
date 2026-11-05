@@ -633,6 +633,10 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		if id == "" {
 			continue
 		}
+		// one that goes from here and comes back (magpie_via.go)
+		if loops(r.Via) {
+			continue
+		}
 		// Another magpie's list is already what its user exposed. Keep
 		// its retrieval models too; a vendor's general list still leaves
 		// out models agents can't chat with.
@@ -704,6 +708,7 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 			codexFacts(&m, r, codex)
 		}
 		kimiFacts(&m, r)
+		m.Via = slices.Clip(r.Via)
 		out = append(out, m)
 	}
 	return out, v.HasMore, v.LastID, nil
@@ -781,6 +786,9 @@ type liveModel struct {
 	// its X-Magpie-Prices header: the price its user set, else its list
 	// price. Raw, as an odd value mustn't lose the whole list
 	Price json.RawMessage `json:"magpie_price"`
+	// the magpies another magpie's model passes through to its vendor,
+	// itself last (magpie_via.go)
+	Via []string `json:"magpie_via"`
 	// the protocol family PipeLLM routes the model by: openai, anthropic
 	// or gemini
 	TypeTarget string `json:"type_target"`

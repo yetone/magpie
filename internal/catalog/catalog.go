@@ -84,6 +84,9 @@ type Model struct {
 	// provider after it (magpie_label): the name Provider in model names
 	// Off has here (ARNO on Discord).
 	Plain string `json:",omitempty"`
+	// Via, on a model of another magpie's list, is the magpies it passes
+	// through to its vendor, that one last (magpie_via.go)
+	Via []string `json:",omitempty"`
 	// Apart, in a list magpie hands Codex, is what tells the model from
 	// another entry Codex's picker would call the same (two providers
 	// named Codex each serving GPT-6.1-Sol, nb5p on Discord): its

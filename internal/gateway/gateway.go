@@ -1428,7 +1428,8 @@ func drawerObjects(r *http.Request) []map[string]any {
 			name := cmp.Or(m.Name, m.ID)
 			o := map[string]any{"id": p.ID + "/" + m.ID, "object": "model", "type": "model", "kind": "image", "created": 0,
 				"owned_by": p.ID, "display_name": name, "magpie_label": name + " · " + p.Name,
-				"modalities": map[string]any{"input": []string{"text"}, "output": []string{"image"}}}
+				"modalities": map[string]any{"input": []string{"text"}, "output": []string{"image"}},
+				"magpie_via": catalog.ViaHere(m.Via)}
 			if m.Images {
 				o["modalities"] = map[string]any{"input": []string{"text", "image"}, "output": []string{"image"}}
 			}
@@ -1456,10 +1457,33 @@ func videomakerObjects(r *http.Request) []map[string]any {
 			name := cmp.Or(m.Name, m.ID)
 			out = append(out, map[string]any{"id": p.ID + "/" + m.ID, "object": "model", "type": "model", "kind": "video", "created": 0,
 				"owned_by": p.ID, "display_name": name, "magpie_label": name + " · " + p.Name,
-				"modalities": map[string]any{"input": []string{"text", "image"}, "output": []string{"video"}}})
+				"modalities": map[string]any{"input": []string{"text", "image"}, "output": []string{"video"}},
+				"magpie_via": catalog.ViaHere(m.Via)})
 		}
 	}
 	return out
+}
+
+// viaOf is the magpies e's model passes through after this one, as the
+// remote magpie serving it listed them; nil for a provider's own model.
+// A routing group's are its members' together: a group with a remote
+// magpie's group in it (two magpies each the other's remote, each with an
+// auto/ group of the model) reaches every magpie that one does (catalog's
+// magpie_via.go).
+func viaOf(e provider.Entry) []string {
+	if e.Group == "" {
+		return e.Provider.RemoteVia(e.Model)
+	}
+	_, ms, _ := provider.FindGroup(e.ID)
+	var via []string
+	for _, m := range ms {
+		for _, v := range m.Provider.RemoteVia(m.Model) {
+			if !slices.Contains(via, v) {
+				via = append(via, v)
+			}
+		}
+	}
+	return via
 }
 
 // catalogFor is the catalog as the agent asking is shown it.
@@ -1567,6 +1591,10 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 					if how := webSearchOf(e, searches); how != "" {
 						m["web_search"] = how
 					}
+					// the magpies it goes through, this one last, so a
+					// magpie that is this one's remote too doesn't take
+					// back its own models (catalog's magpie_via.go)
+					m["magpie_via"] = catalog.ViaHere(viaOf(e))
 				}
 				if ts := tiers[e.ID]; len(ts) > 0 {
 					m["service_tiers"] = ts
@@ -1610,6 +1638,7 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 			m := modelObject(e)
 			m["kind"], m["magpie_label"] = "decision", labels[i]
 			m["native_endpoints"] = []string{"/v1/systemone"}
+			m["magpie_via"] = catalog.ViaHere(viaOf(e))
 			data = append(data, m)
 		}
 	}
