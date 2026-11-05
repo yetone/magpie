@@ -787,6 +787,15 @@ func codexIn(at place) *Agent {
 		if err != nil {
 			log.Println("codex: moving magpie's threads:", err)
 		}
+		// one written to in the last minute (the thread the takeover's
+		// turn ran in, as the account came back) stayed on magpie, and
+		// nothing else may Sync for hours: the Codex app then can't resume
+		// it on the provider it is on now, so Retry fails the same way
+		// each time and its model reads unavailable (nb5p on Discord).
+		// Another Sync comes once the thread is quiet.
+		if sessions.CodexThreadsBusyOn(dir, magpieID) {
+			codexThreadsLater()
+		}
 	}
 	// bringOver is bringBack the other way: while magpie is Codex's
 	// provider, the threads Codex started on OpenAI before are listed
@@ -2604,6 +2613,33 @@ func codexStaleCache(path, tag string) error {
 		return err
 	}
 	return edit.WriteAtomic(path, out)
+}
+
+// codexThreadsAgain is the Sync codexThreadsLater asks for; a test
+// replaces it. Set in init: a var's initializer naming SyncCatalogSoon
+// would be an initialization cycle through the agents' list.
+var codexThreadsAgain func()
+
+func init() { codexThreadsAgain = SyncCatalogSoon }
+
+// codexThreadsWait is how long codexThreadsLater waits: past the window
+// in which a thread counts as being written to.
+var codexThreadsWait = sessions.ActiveWindow + 5*time.Second
+
+var codexThreadsPending satomic.Bool
+
+// codexThreadsLater runs codexThreadsAgain once codexThreadsWait has
+// passed, for the threads bringBack left on magpie as they were being
+// written to. One wait at a time: another call while one is pending
+// adds none.
+func codexThreadsLater() {
+	if !codexThreadsPending.CompareAndSwap(false, true) {
+		return
+	}
+	time.AfterFunc(codexThreadsWait, func() {
+		codexThreadsPending.Store(false)
+		codexThreadsAgain()
+	})
 }
 
 // codexUsedUp reports whether the ChatGPT account Codex is signed in to

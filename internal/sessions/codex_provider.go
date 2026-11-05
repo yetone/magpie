@@ -451,6 +451,43 @@ func codexThreadsOn(home, p string) []string {
 	return out
 }
 
+// CodexThreadsBusyOn says whether a thread a Codex folder's state
+// databases keep on the provider p was written to in the last
+// ActiveWindow, which a move of p's threads leaves where it is: such a
+// move has more to do once the thread is quiet. A database that can't be
+// read, and a rollout that can't be found, say nothing.
+func CodexThreadsBusyOn(home, p string) bool {
+	now := time.Now()
+	for _, path := range codexStateDBs(home) {
+		u := url.URL{Scheme: "file", Path: filepath.ToSlash(path), RawQuery: "mode=ro&_pragma=busy_timeout(2000)"}
+		if len(u.Path) >= 2 && u.Path[1] == ':' {
+			u.Path = "/" + u.Path
+		}
+		db, err := sql.Open("sqlite", u.String())
+		if err != nil {
+			continue
+		}
+		var paths []string
+		rows, err := db.Query(`SELECT rollout_path FROM threads WHERE model_provider = ?`, p)
+		if err == nil {
+			for rows.Next() {
+				var r string
+				if rows.Scan(&r) == nil && r != "" {
+					paths = append(paths, r)
+				}
+			}
+			rows.Close()
+		}
+		db.Close()
+		for _, r := range paths {
+			if fi, err := os.Stat(filepath.Clean(r)); err == nil && now.Sub(fi.ModTime()) < ActiveWindow {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // MoveCodexThreads moves every thread of a Codex folder its state database
 // keeps on the provider from to the provider to, each as MoveCodexProvider
 // moves one: its files' session_meta and its row, a copy of the files kept
