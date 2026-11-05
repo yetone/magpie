@@ -210,7 +210,7 @@ function routingPage(part) {
     if (actRead.classList.contains("busy")) return;
     actRead.classList.add("busy");
     actRead.setAttribute("aria-busy", "true");
-    try { await loadQuotas(true); } finally {
+    try { await loadQuotas("all"); } finally {
       actRead.classList.remove("busy");
       actRead.removeAttribute("aria-busy");
       steady(() => renderActs(listed()));

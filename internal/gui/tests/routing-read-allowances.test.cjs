@@ -38,7 +38,8 @@ function serve(lang, order, asks, held) {
     }
     if (url.pathname === "/api/usage/quotas") {
       const asked = url.searchParams.get("asked") === "1";
-      asks.push(asked);
+      // the button's read is of every account, a saved Claude one's too (#5380)
+      asks.push(asked && url.searchParams.get("all") === "1" ? "all" : asked);
       if (!asked) return json(card(40));
       await held; // the vendor takes its time
       return json(card(70));
@@ -110,7 +111,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             const box = await b.boundingBox();
             await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
             await page.waitForFunction(() => document.querySelector("#rtReadAllowances").classList.contains("busy"));
-            assert.equal(asks.filter(Boolean).length, 1, "one asked read");
+            assert.deepEqual(asks.filter(Boolean), ["all"], "one asked read, of every account");
             // a second click while it turns asks nothing more
             await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
             release();

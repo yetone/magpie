@@ -19,12 +19,14 @@ const words = {
   en: {
     agents: "Look for agents on this computer again: one just installed or removed, or its settings changed",
     usage: "Read the usage again now",
+    allowances: "Read the allowances again now",
     models: "Refresh model lists (models.dev and every vendor)",
     nav: { usage: "Usage", providers: "Providers" },
   },
   zh: {
     agents: "重新检测本机的 Agent：刚安装或卸载的，或在别处改过配置的",
     usage: "立即重新读取用量",
+    allowances: "立即重新读取额度",
     models: "刷新模型列表（models.dev 与各供应商）",
     nav: { usage: "用量", providers: "供应商" },
   },
@@ -55,7 +57,7 @@ function server(lang, ctl) {
     if (url.pathname === "/api/agents/install") return json(ctl.installs);
     if (url.pathname === "/api/agents/cli") return json({ agents: {}, pending: false });
     if (url.pathname === "/api/update") return json({ state: "latest", current: "0.1.400" });
-    if (url.pathname === "/api/usage/quotas") return json([]);
+    if (url.pathname === "/api/usage/quotas") return json(ctl.quotas || []);
     if (url.pathname === "/api/usage/quotas/history") return json([]);
     if (url.pathname === "/api/usage") return json({ totals: {}, days: [], providers: [], models: [], agents: [] });
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
@@ -110,9 +112,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator(`#nav [data-view="usage"]`).click();
         assert.equal(await sync.getAttribute("title"), words[lang].usage);
         await page.waitForTimeout(300);
-        const asked = count(ctl, /\/api\/usage\/quotas\?asked=1/);
+        const asked = count(ctl, /\/api\/usage\/quotas\?asked=1&all=1$/);
         await click(page, sync);
-        assert.equal(count(ctl, /\/api\/usage\/quotas\?asked=1/), asked + 1, "the allowances read afresh");
+        // every account's, a saved Claude account's too (#5380)
+        assert.equal(count(ctl, /\/api\/usage\/quotas\?asked=1&all=1$/), asked + 1, "the allowances read afresh, every account");
         assert.equal(count(ctl, /\/api\/sync$/), 0);
 
         // Providers: refreshes the model lists
@@ -142,6 +145,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator('.row.agent[data-id="claude"]').waitFor();
         assert.equal(count(ctl, /^POST \/api\/agents\/rescan$/), 1);
         assert.equal(count(ctl, /\/api\/sync$|\/api\/update\/check/), 0);
+        // Allowances: every account read again, a saved Claude account's
+        // too, as its card's refresh reads it (#5380); opening the tab
+        // asks without
+        await page.locator("#sync:not(.spin)").waitFor();
+        ctl.quotas = [{ provider: "claude", name: "Claude", user: "a@x.com", windows: [{ label: "5h", used: 9, limit: 100 }] }];
+        await page.evaluate(() => loadQuotas());
+        await page.locator('#ptabs [data-ptab="usage"]').click();
+        await page.waitForFunction(() => document.body.dataset.ptab === "usage");
+        await page.waitForTimeout(300);
+        assert.equal(count(ctl, /\/api\/usage\/quotas\?.*all=1/), 0, "opening the tab reads every account: " + ctl.calls.join(" "));
+        assert.equal(await sync.getAttribute("title"), words[lang].allowances);
+        await click(page, sync);
+        await page.locator("#sync:not(.spin)").waitFor();
+        assert.equal(count(ctl, /\/api\/usage\/quotas\?asked=1&all=1$/), 1, "the top refresh reads every account");
         assert.deepEqual(errors, []);
       });
     }

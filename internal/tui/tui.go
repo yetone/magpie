@@ -383,6 +383,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.flash, m.flashOK = "reloaded", true
 					if m.page == pageUsage {
 						m.quotas = nil
+						// every account read again, a saved Claude
+						// account's /usage run too, as the app's
+						// Refresh does (#5380)
+						provider.AskEveryClaudeUsage()
 						return m, m.loadQuotas(true)
 					}
 					return m, nil

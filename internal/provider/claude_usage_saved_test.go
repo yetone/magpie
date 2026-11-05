@@ -91,6 +91,118 @@ func TestRefreshSavedClaudeUsage(t *testing.T) {
 	}
 }
 
+// The tray panel's top refresh of the allowances, and the Usage page's
+// Refresh (AskEveryClaudeUsage, &all=1), read every saved Claude account
+// anew, as each card's refresh does (#5380: the panel said "Allowances
+// refreshed" while each saved account kept a reading half an hour old).
+// Opening the page and an unasked read still start no saved account's
+// Claude Code, and the 30-second floor holds.
+func TestRefreshEveryReadsSavedClaude(t *testing.T) {
+	claudeThree(t)
+	var text atomic.Value
+	text.Store("Current session: 9% used\nCurrent week (all models): 97% used")
+	runs := fakeClaudeUsage(t, &text, nil)
+	var mu sync.Mutex
+	ran := map[string]int{}
+	UsageClaudeVia(func(_ context.Context, dir string) (string, error) {
+		runs.Add(1)
+		mu.Lock()
+		ran[dir]++
+		mu.Unlock()
+		return text.Load().(string), nil
+	})
+	runsIn := func(user string) int {
+		mu.Lock()
+		defer mu.Unlock()
+		return ran[claudeAccountDir(user)]
+	}
+	var saved []string
+	for _, l := range Logins("claude") {
+		if !l.Active {
+			saved = append(saved, l.User)
+		}
+	}
+	if len(saved) != 2 {
+		t.Fatalf("saved accounts: %v", saved)
+	}
+	age := func(user string) {
+		claudeUsage.Lock()
+		e := claudeUsage.m[strings.ToLower(user)]
+		e.tried = e.tried.Add(-time.Hour)
+		claudeUsage.m[strings.ToLower(user)] = e
+		claudeUsage.Unlock()
+	}
+	ctx := context.Background()
+
+	// the page opened: asked, but no saved account's Claude Code
+	AskClaudeUsage()
+	LoginUsage(Asked(ctx), "claude")
+	for _, user := range saved {
+		if n := runsIn(user); n != 0 {
+			t.Fatalf("opening ran saved %s %d times", user, n)
+		}
+	}
+
+	// the top refresh: every saved account read, each once, in its own
+	// directory
+	AskEveryClaudeUsage()
+	got := LoginUsage(Asked(ctx), "claude")
+	for _, user := range saved {
+		q := got[user]
+		if q.Error != "" || len(q.Windows) != 2 || q.Windows[0].Used != 9 || q.Windows[1].Used != 97 || q.ReadAt == nil {
+			t.Fatalf("top refresh read no allowance of saved %s: %+v", user, q)
+		}
+		if n := runsIn(user); n != 1 {
+			t.Fatalf("top refresh ran saved %s %d times, want once", user, n)
+		}
+	}
+
+	// Claude Code used meanwhile; past the floor, nobody asking, and the
+	// page opened again: the readings stand
+	text.Store("Current session: 36% used\nCurrent week (all models): 100% used")
+	for _, user := range saved {
+		age(user)
+	}
+	for _, user := range saved {
+		if ws, err := claudeWindows(ctx, user, false); err != nil || len(ws) != 2 || ws[0].Used != 9 || runsIn(user) != 1 {
+			t.Fatalf("unasked read ran saved %s: %v %+v", user, err, ws)
+		}
+	}
+	AskClaudeUsage()
+	for _, user := range saved {
+		if q := LoginUsage(Asked(ctx), "claude")[user]; q.Windows[0].Used != 9 || runsIn(user) != 1 {
+			t.Fatalf("opening again ran saved %s: %+v", user, q)
+		}
+	}
+
+	// the top refresh again reads the new figures
+	AskEveryClaudeUsage()
+	got = LoginUsage(Asked(ctx), "claude")
+	for _, user := range saved {
+		if q := got[user]; q.Error != "" || q.Windows[0].Used != 36 || q.Windows[1].Used != 100 || runsIn(user) != 2 {
+			t.Fatalf("second top refresh kept an old reading of %s: %+v, %d runs", user, q, runsIn(user))
+		}
+	}
+
+	// rapid clicks keep to the per-account floor: one account past it is
+	// read, the other not
+	age(saved[0])
+	AskEveryClaudeUsage()
+	LoginUsage(Asked(ctx), "claude")
+	if runsIn(saved[0]) != 3 || runsIn(saved[1]) != 2 {
+		t.Fatalf("rapid top refresh: %s ran %d, %s ran %d; want 3 and 2", saved[0], runsIn(saved[0]), saved[1], runsIn(saved[1]))
+	}
+
+	// an ask the floor put off isn't run by a read long after it
+	AskEveryClaudeUsage() // saved[1] is inside its floor: not read
+	LoginUsage(Asked(ctx), "claude")
+	claudeEveryAt.Store(time.Now().Add(-claudeEveryFor - time.Second).UnixNano())
+	age(saved[1])
+	if _, err := claudeWindows(ctx, saved[1], false); err != nil || runsIn(saved[1]) != 2 {
+		t.Fatalf("a timed read ran saved %s for a refresh long gone: %v, %d runs", saved[1], err, runsIn(saved[1]))
+	}
+}
+
 // Claude Code run in a saved account's directory refreshes the sign-in it
 // keeps there when it is due, spending the old refresh token. magpie keeps
 // the new one at once, and doesn't hand the account to Claude Code itself

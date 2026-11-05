@@ -7,7 +7,10 @@
 // window coming back to the front within 30s of that (#1588,
 // allowance-open-read.test.cjs) and the timed reload load it without; an
 // asked load isn't swallowed by an unasked one already on its way, it goes
-// after it. Chromium and WebKit; no backend, the API is faked here.
+// after it. Refresh's is every account's (&all=1, #5380): a saved Claude
+// account's /usage is run too; opening's isn't, and an opening's asked
+// load on its way doesn't swallow it. Chromium and WebKit; no backend, the
+// API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -152,7 +155,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     page.on("pageerror", (e) => errors.push(e.message));
     const asks = [], hold = { on: false };
     await page.route("**/*", serve(asks, hold));
-    const asked = () => asks.filter((s) => s === "?asked=1").length;
+    const asked = () => asks.filter((s) => s.startsWith("?asked=1")).length;
+    const every = () => asks.filter((s) => s === "?asked=1&all=1").length;
     const settle = async (n) => { for (let i = 0; i < 100 && asks.length < n; i++) await page.waitForTimeout(20); await page.waitForTimeout(150); };
 
     // opening the page asks
@@ -160,6 +164,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await page.locator("#usageReload").waitFor();
     await settle(1);
     assert.equal(asked(), 1, `opening Usage asks once: ${JSON.stringify(asks)}`);
+    assert.equal(every(), 0, `opening Usage reads no saved account: ${JSON.stringify(asks)}`);
 
     // the window coming back to the front at once reads what is kept, asking nothing
     let n = asks.length;
@@ -176,6 +181,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await page.locator("#usageReload").click();
     await settle(asks.length + 1);
     assert.equal(asked(), 2, `Refresh asks: ${JSON.stringify(asks)}`);
+    assert.equal(every(), 1, `Refresh reads every account: ${JSON.stringify(asks)}`);
 
     // an unasked load on its way doesn't swallow Refresh: it goes after it
     hold.on = true;
@@ -186,7 +192,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     hold.on = false;
     hold.release();
     await settle(n + 2);
-    assert.deepEqual(asks.slice(n), ["", "?asked=1"], "Refresh went after the load on its way");
+    assert.deepEqual(asks.slice(n), ["", "?asked=1&all=1"], "Refresh went after the load on its way");
+    // nor does an opening's asked load on its way swallow it
+    hold.on = true;
+    hold.release = null;
+    n = asks.length;
+    await page.evaluate(() => { loadQuotas(true); });
+    for (let i = 0; i < 100 && !hold.release; i++) await page.waitForTimeout(20);
+    await page.locator("#usageReload").click();
+    hold.on = false;
+    hold.release();
+    await settle(n + 2);
+    assert.deepEqual(asks.slice(n), ["?asked=1", "?asked=1&all=1"], "Refresh went after the opening's ask on its way");
     assert.deepEqual(errors, []);
   });
 }

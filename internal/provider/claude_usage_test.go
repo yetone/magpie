@@ -37,10 +37,14 @@ func fakeClaudeUsage(t *testing.T, out *atomic.Value, fail *atomic.Bool) *atomic
 	claudeUsageWait = func() time.Duration { return usageTestWait }
 	claudeUsedSince = func(time.Time) bool { return true }
 	claudeAsked.Store(0)
+	// no refresh of every allowance (AskEveryClaudeUsage) left from
+	// another test
+	claudeEveryAsked.Store(0)
 	claudeUsage.Lock()
 	claudeUsage.m = nil
 	claudeUsage.Unlock()
 	t.Cleanup(func() {
+		claudeEveryAsked.Store(0)
 		UsageClaudeVia(old)
 		claudeBase, claudeUsageWait, claudeUsedSince = oldBase, oldWait, oldUsed
 		claudeAsked.Store(oldAsked)

@@ -255,10 +255,18 @@ func usageRoutes(mux *http.ServeMux, w Windows) {
 	// own /usage is run at once (provider.AskClaudeUsage).
 	// Only then are they read while the user has allowances read only
 	// when asked (#1518).
+	// &all=1 is the user's Refresh of every allowance by hand (the tray
+	// panel's, the Usage page's, routing's): each saved Claude account's
+	// /usage is run too, as its card's refresh runs it (#5380); opening
+	// the page asks without it.
 	mux.HandleFunc("GET /api/usage/quotas", func(rw http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		if r.URL.Query().Get("asked") != "" {
-			provider.AskClaudeUsage()
+		if q := r.URL.Query(); q.Get("asked") != "" {
+			if q.Get("all") != "" {
+				provider.AskEveryClaudeUsage()
+			} else {
+				provider.AskClaudeUsage()
+			}
 			ctx = provider.Asked(ctx)
 		}
 		ctx, cancel := context.WithTimeout(ctx, 12*time.Second)

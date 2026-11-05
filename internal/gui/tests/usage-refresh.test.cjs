@@ -32,7 +32,7 @@ function server(lang, calls) {
       calls.overview++;
       return json({ calls: 1, errors: 0, input: 100, output: 10, cache_read: 0, cache_write: 0, reasoning: 0, unpriced: 0, cost: 0.01 + calls.overview * 0.001, bucket: "day", series: [{ label: "Mon", input: 100, output: 10, calls: 1, cost: 0.01 }], agents: [{ name: "Codex", calls: 1, cost: 0.01 }], models: [{ name: "gpt-6-sol", calls: 1, cost: 0.01 }], path: "~/.config/magpie/usage.jsonl" });
     }
-    if (url.pathname === "/api/usage/quotas") { calls.quotas++; if (url.search === "?asked=1") calls.asked++; return json([]); }
+    if (url.pathname === "/api/usage/quotas") { calls.quotas++; if (url.searchParams.get("asked") === "1") calls.asked++; if (url.searchParams.get("all") === "1") calls.all++; return json([]); }
     if (url.pathname === "/api/sessions") return json({ sessions: [], dirs: [] });
     if (url.pathname === "/api/sessions/stats") return json({ from: "", to: "", days: [], agents: {} });
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
@@ -54,7 +54,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       t.after(() => browser.close());
       const w = L[lang];
-      const errors = [], calls = { requests: 0, overview: 0, quotas: 0, asked: 0 };
+      const errors = [], calls = { requests: 0, overview: 0, quotas: 0, asked: 0, all: 0 };
       const context = await browser.newContext({ viewport: { width: 1180, height: 700 }, reducedMotion: "reduce" });
       const open = async () => {
         const p = await context.newPage();
@@ -112,7 +112,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // on Overview it reads the summary, and the allowances are read now too
       await p.locator(":is(#usageTab .opt, .nav-s):visible").nth(0).click();
       await p.locator("#stats .kpi:not(.loading-kpi)").first().waitFor();
-      const o = calls.overview, q = calls.quotas, a = calls.asked;
+      const o = calls.overview, q = calls.quotas, a = calls.asked, every = calls.all;
       await p.locator("#usageReload").click();
       await p.waitForTimeout(200);
       assert(calls.overview > o, "the summary again");
@@ -120,6 +120,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // it is the allowances' Refresh too (#486): asked, as that one was, and
       // there is no second Refresh beside them
       assert(calls.asked > a, "the allowances asked for, a Claude account's by its /usage");
+      // every account's, a saved Claude account's too (#5380)
+      assert(calls.all > every, "every account's allowance asked for");
       assert.equal(await p.locator("#quotaRefresh").count(), 0, "one refresh on the page");
       const tip = await p.locator("#usageReload").getAttribute("title");
       assert(tip.startsWith(w.now) && tip.includes("/usage"), tip);
