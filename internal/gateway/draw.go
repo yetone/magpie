@@ -635,7 +635,7 @@ func (s *Server) images(edit bool) http.HandlerFunc {
 			if keyHeld {
 				keeps = groupKeeps(keyWho, g, ms)
 			}
-			t := s.drawingTries(g, ms, keeps)
+			t := s.drawingTries(g, ms, keeps, drawsModel)
 			if len(t) == 0 && keeps != nil {
 				fail(403, keyModelError(keyWho, d.Model))
 				return
@@ -790,8 +790,15 @@ func groupToMake(asked string, p provider.Provider, model string, find func(ref 
 // own keys or accounts by drawOnAccounts. A member planning leaves out (all
 // its keys barred, say) goes last, so its refusal is the one told only
 // when every other failed too; one a calling key may not use (keeps, when
-// not nil) is never asked.
-func (s *Server) drawingTries(g provider.Group, ms []provider.Member, keeps map[string]bool) []provider.Member {
+// not nil) is never asked. A group with chat models beside the ones that
+// make it (makes) is asked on those alone: its chat members are its
+// conversations', and asking one to draw sends the request to a model, or
+// a provider's images API, the user never put there to draw
+// (changqiu4890 on Discord).
+func (s *Server) drawingTries(g provider.Group, ms []provider.Member, keeps map[string]bool, makes func(p provider.Provider, model string) bool) []provider.Member {
+	if slices.ContainsFunc(ms, func(m provider.Member) bool { return makes(m.Provider, m.Model) }) {
+		ms = slices.DeleteFunc(slices.Clone(ms), func(m provider.Member) bool { return !makes(m.Provider, m.Model) })
+	}
 	byRef := map[string]provider.Member{}
 	for _, m := range ms {
 		if ref := m.Provider.ID + "/" + m.Model; byRef[ref].Model == "" {

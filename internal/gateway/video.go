@@ -1071,7 +1071,7 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 		if keyHeld {
 			keeps = groupKeeps(keyWho, g, ms)
 		}
-		t := s.drawingTries(g, ms, keeps)
+		t := s.drawingTries(g, ms, keeps, servesKind(provider.KindVideo))
 		if len(t) == 0 && keeps != nil {
 			fail(403, keyModelError(keyWho, f.Model))
 			return

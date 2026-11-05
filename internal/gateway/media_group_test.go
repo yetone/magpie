@@ -118,3 +118,26 @@ func TestVideoGroupOfProvidersWithChatPicks(t *testing.T) {
 		t.Fatalf("the first member was never asked: %v", a.log())
 	}
 }
+
+// The video sibling of TestMixedGroupDrawsOnItsImageMemberOnly: a group of
+// a chat model and a video model starts the video on its video member
+// alone, never on the chat model, which comes first in the group.
+func TestMixedGroupMakesVideoOnItsVideoMemberOnly(t *testing.T) {
+	fresh(t)
+	a := newOpenAIVideos(t)
+	saveFetched(t, provider.Provider{ID: "a", Name: "A", Chat: a.URL + "/v1", Key: "sk-a", Models: []string{"gpt-5.5"}})
+	if err := provider.SaveGroup(provider.Group{ID: "mixed", Name: "mixed", Members: []string{"a/gpt-5.5", "a/vid-1"}, Routing: "order"}); err != nil {
+		t.Fatal(err)
+	}
+	code, obj, raw := asKey(t, New().Handler(), "", "POST", "/v1/videos", `{"model":"group/mixed","prompt":"a cat on a fence"}`)
+	if code != 200 || obj["model"] != "a/vid-1" {
+		t.Fatalf("video: %d %s", code, raw)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, b := range a.bodies {
+		if strings.Contains(b, "gpt-5.5") {
+			t.Fatalf("the chat member was asked for the video: %v", a.bodies)
+		}
+	}
+}

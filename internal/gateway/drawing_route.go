@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"cmp"
 	"net/http"
 	"strings"
 
@@ -11,7 +12,15 @@ func (server *Server) drawingModel(request *http.Request, id string) (provider.P
 	if agentOf(request) != "codex" || strings.Contains(id, "/") {
 		return resolveDrawing(id)
 	}
-	if preferred := server.codexDrawingProvider(request); preferred != "" {
+	preferred, group := server.codexDrawingProvider(request)
+	if group != "" && GroupDraws(group) {
+		// the turn's routing group has an image model of its own: Codex
+		// draws on it, on the provider the user put it there with, not on
+		// a chat member's provider or Settings' pick (changqiu4890 on
+		// Discord)
+		return resolveDrawing(group)
+	}
+	if preferred != "" {
 		if matched, err := provider.Find(preferred); err == nil && matched.On() && !matched.DecideOnly() {
 			for _, model := range Drawers(*matched) {
 				if model.ID == id {
@@ -37,12 +46,15 @@ func drawingTurnID(id string) string {
 	return id
 }
 
-func (server *Server) codexDrawingProvider(request *http.Request) string {
+// codexDrawingProvider is the provider that served the Codex turn an
+// image tool call is of, and the routing group the turn asked for, if it
+// did.
+func (server *Server) codexDrawingProvider(request *http.Request) (string, string) {
 	rawTurn := strings.TrimSpace(request.Header.Get("x-codex-image-turn-id"))
 	turn := drawingTurnID(rawTurn)
 	session := sessionOf(request.Header)
 	if rawTurn != "" && turn == "" || turn == "" && session == "" {
-		return ""
+		return "", ""
 	}
 	caller := codexTurnKey(request, callerOf(request).agent)
 	server.trace.mu.Lock()
@@ -55,10 +67,15 @@ func (server *Server) codexDrawingProvider(request *http.Request) string {
 		if turn != "" && route.imageTurn != turn || session != "" && route.Session != session {
 			continue
 		}
-		if route.Done && (route.Status >= 400 || route.Error != "") {
-			return ""
+		group := ""
+		if route.Group != nil {
+			group = cmp.Or(route.Group.Ref, provider.GroupPrefix+route.Group.ID)
 		}
-		return route.imageProvider
+		if route.Done && (route.Status >= 400 || route.Error != "") {
+			// a failed turn served nothing; its group is still the user's
+			return "", group
+		}
+		return route.imageProvider, group
 	}
-	return ""
+	return "", ""
 }

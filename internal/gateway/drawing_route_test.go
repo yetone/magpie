@@ -361,3 +361,32 @@ func TestDrawingTurnMetadata(t *testing.T) {
 		t.Fatalf("private routing fields exposed: %s %v", encoded, err)
 	}
 }
+
+// changqiu4890 on Discord: Codex set to a routing group of chat models
+// and one image model, a relay's gpt-image-2.5, while Settings' pick and
+// another relay have GPT Image models of their own. Codex's image tool
+// draws on the group's image model, on its relay, whichever member served
+// the turn: never on Settings' pick or the provider the chat went to.
+func TestCodexDrawingTakesItsGroupsImageMember(t *testing.T) {
+	fresh(t)
+	chat := drawingRelay(t, "chat", "gpt-image-2")
+	cpa := drawingRelay(t, "cpa", "gpt-image-2.5")
+	other := drawingRelay(t, "other", "gpt-image-2", "gpt-image-2.5")
+	if err := provider.SaveGroup(provider.Group{ID: "smart-split", Name: "smart split", Members: []string{"chat/text", "cpa/gpt-image-2.5"}, Routing: provider.Ordered}); err != nil {
+		t.Fatal(err)
+	}
+	st := settings.Load()
+	st.ImageGen = "other/gpt-image-2"
+	if err := settings.Save(st); err != nil {
+		t.Fatal(err)
+	}
+	s := New()
+	drawingMainTurn(t, s, "group/smart-split", "session", "turn", "", "magpie-codex")
+	code, answer, raw := drawingToolCall(t, s, "/v1/images/generations", "gpt-image-2", "", "turn", "magpie-codex")
+	if code != 200 || answer.Model != "cpa/gpt-image-2.5" {
+		t.Fatalf("drew on %d %s", code, raw)
+	}
+	if len(chat.got("/v1/images/generations")) != 0 || len(other.got("/v1/images/generations")) != 0 || len(cpa.got("/v1/images/generations")) != 1 {
+		t.Fatalf("asked chat %v, other %v, cpa %v", chat.got("/v1/images/generations"), other.got("/v1/images/generations"), cpa.got("/v1/images/generations"))
+	}
+}
