@@ -28,13 +28,13 @@ func init() { provider.ReckonHolds = WithWindowHolds }
 func WithWindowHolds(qs []provider.SubscriptionQuota, now time.Time) []provider.SubscriptionQuota {
 	since, ok := holdsSince(qs, now)
 	if !ok { // none can be reckoned: each one only says why
-		return windowHolds(qs, now, time.Time{}, nil, provider.Renames{}, nil, func(func(Record)) {})
+		return windowHolds(qs, now, time.Time{}, nil, provider.Renames{}, nil, nil, func(func(Record)) {})
 	}
 	s := readLogSnapshot()
 	hist := provider.QuotaHistories(since, "", "")
 	started := withRecordedWindowStarts(qs, hist, now)
 	dry := dryRuns(started, hist, now)
-	out := windowHolds(started, now, s.firstOwn, apiPricer(), provider.UsageRenames(), dry, func(fn func(Record)) { s.visit(since, fn) })
+	out := windowHolds(started, now, s.firstOwn, apiPricer(), provider.UsageRenames(), provider.SamePlanAccounts(), dry, func(fn func(Record)) { s.visit(since, fn) })
 	return withSpansOf(out, qs)
 }
 
@@ -180,8 +180,11 @@ func dryRuns(qs []provider.SubscriptionQuota, hist []provider.QuotaHistory, now 
 // it has calls magpie can't see, and isn't reckoned. Nor is a window with a
 // call in one of its account's dry runs that may have been paid otherwise:
 // one where the vendor answered a call after a reading of none left, or
-// where no reading with some left is known before it.
-func windowHolds(qs []provider.SubscriptionQuota, now, first time.Time, priceOf func(Record) *catalog.Price, renamed provider.Renames, dry map[string][]dryRun, read func(func(Record))) []provider.SubscriptionQuota {
+// where no reading with some left is known before it. same maps an account
+// to the one whose card reads the plan it draws on (a ChatGPT API account
+// to the same ChatGPT account in Codex, provider.SamePlanAccounts): its
+// calls are counted as that one's.
+func windowHolds(qs []provider.SubscriptionQuota, now, first time.Time, priceOf func(Record) *catalog.Price, renamed provider.Renames, same map[string]string, dry map[string][]dryRun, read func(func(Record))) []provider.SubscriptionQuota {
 	type slot struct{ q, w int }
 	type span struct{ start, end time.Time }
 	want := map[slot]span{}
@@ -231,6 +234,9 @@ func windowHolds(qs []provider.SubscriptionQuota, now, first time.Time, priceOf 
 			who = r.ProviderKeyName
 		}
 		acct := r.Provider + "\x00" + strings.ToLower(who)
+		if to, ok := same[acct]; ok {
+			acct = to
+		}
 		var runs []runKey
 		for i, d := range dry[acct] {
 			if !d.holds(r.Time) {
