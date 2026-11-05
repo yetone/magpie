@@ -9,6 +9,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/yetone/magpie/internal/agentplug"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -68,5 +69,47 @@ func TestPluginAgentsNotInstalled(t *testing.T) {
 	mux.ServeHTTP(rec, httptest.NewRequest("GET", "/api/plugins/agents", nil))
 	if body := rec.Body.String(); body != "[]\n" && body != "[]" {
 		t.Errorf("all installed: %q, want []", body)
+	}
+}
+
+// A plugin's agent magpie doesn't find on this computer gets no row on
+// Agents (zzZ: Kimi's plugin installed, Kimi not in Agents). Its row on
+// Plugins says so, with where magpie looks and the plugin's own notice,
+// where it said "Adds Kimi to Agents"; once its folder is there it is found.
+func TestPluginAgentMissingSaysSo(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	t.Setenv("PATH", t.TempDir())
+	dir := filepath.Join(home, "plugins", "kimi")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"kimi","magpie":{"agent":"./agent.js"}}`), 0o644)
+	os.WriteFile(filepath.Join(dir, "agent.js"), []byte(`
+export const agent = { id: "kimi-desktop", name: "Kimi", config: "~/.config/magpie-kimi/connection.json", dir: "~/.config/magpie-kimi", model: "model", ua: ["Desktop Kimi Work"], notice: "Open Kimi first." };
+export function connect({ gateway, model }) { return { base: gateway.v1, key: gateway.key }; }
+`), 0o644)
+	os.MkdirAll(settings.Dir(), 0o755)
+	b, _ := json.Marshal(plugin.List{Plugins: []plugin.Entry{{Spec: dir}}})
+	if err := os.WriteFile(filepath.Join(settings.Dir(), "plugins.json"), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	agentplug.Reload()
+	t.Cleanup(agentplug.Reload)
+
+	got := pluginAgentOf(dir, nil)
+	if got == nil || got.Name != "Kimi" {
+		t.Fatalf("got %+v, want Kimi", got)
+	}
+	if !got.Missing || got.Notice != "Open Kimi first." || got.Looks != "~/.config/magpie-kimi" {
+		t.Errorf("not on this computer: %+v, want missing, its notice and ~/.config/magpie-kimi", got)
+	}
+
+	if err := os.MkdirAll(filepath.Join(home, ".config", "magpie-kimi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := pluginAgentOf(dir, nil); got == nil || got.Missing || got.Notice != "" || got.Looks != "" {
+		t.Errorf("found: %+v, want neither missing nor its notice", got)
 	}
 }

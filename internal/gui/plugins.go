@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -898,6 +899,13 @@ type pluginAgentJSON struct {
 	Name  string `json:"name,omitempty"`
 	Icon  string `json:"icon,omitempty"`
 	Error string `json:"error,omitempty"`
+	// Missing is an agent magpie doesn't find on this computer, so Agents
+	// has no row for it (zzZ: Kimi's plugin installed and no Kimi there);
+	// Looks is where it looks, and Notice the plugin's own word on what
+	// the agent needs first
+	Missing bool   `json:"missing,omitempty"`
+	Looks   string `json:"looks,omitempty"`
+	Notice  string `json:"notice,omitempty"`
 }
 
 func pluginAgentOf(spec string, errs map[string]string) *pluginAgentJSON {
@@ -905,9 +913,18 @@ func pluginAgentOf(spec string, errs map[string]string) *pluginAgentJSON {
 		return &pluginAgentJSON{Error: err}
 	}
 	for _, a := range agent.All() {
-		if a.Plugin == spec {
-			return &pluginAgentJSON{ID: a.ID, Name: a.Name, Icon: a.Icon}
+		if a.Plugin != spec {
+			continue
 		}
+		j := &pluginAgentJSON{ID: a.ID, Name: a.Name, Icon: a.Icon}
+		if !a.Detected() {
+			j.Missing = true
+			j.Looks = tilde(cmp.Or(a.Dir, a.Path))
+			if a.Notice != nil {
+				j.Notice = a.Notice()
+			}
+		}
+		return j
 	}
 	return nil
 }

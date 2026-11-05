@@ -1,7 +1,8 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Agent plugins on the Plugins page: a plugin that adds an agent wears the
 // Agent chip, not Provider, and says which agent it adds to the Agents
-// page (or why it didn't load, in red); one switched off is an Agent still;
+// page (or why it didn't load, in red, or that magpie doesn't find it on
+// this computer, with the plugin's notice); one switched off is an Agent still;
 // one that is middleware too wears both chips. One with a Bun module of its
 // own (main) beside its agent, which needs a runtime, is an Agent too, not
 // a Provider, on or off (miaocell, plugins#737); one whose module serves a
@@ -19,7 +20,7 @@ const { chromium, webkit } = require("playwright");
 const assets = path.resolve(__dirname, "../assets");
 
 const AIDER = "/Users/x/ag/aider", BROKEN = "/Users/x/ag/broken", OFF = "/Users/x/ag/off", BOTH = "/Users/x/ag/both";
-const DEVA = "/Users/x/ag/deva", DEVAOFF = "/Users/x/ag/idle", PROV = "/Users/x/ag/prov";
+const DEVA = "/Users/x/ag/deva", DEVAOFF = "/Users/x/ag/idle", PROV = "/Users/x/ag/prov", KIMI = "/Users/x/ag/kimi";
 const state = { bun: true, bunVersion: "1.3.0", plugins: [
   { spec: AIDER, providers: [], moved: [], isAgent: true, inMagpieOnly: true, agent: { id: "aider", name: "Aider" } },
   { spec: BROKEN, providers: [], moved: [], isAgent: true, inMagpieOnly: true, agent: { error: `agent id "codex" is magpie's own` } },
@@ -28,6 +29,8 @@ const state = { bun: true, bunVersion: "1.3.0", plugins: [
   { spec: DEVA, providers: [], moved: [], named: true, isAgent: true, agent: { id: "deva", name: "Deva" } },
   { spec: DEVAOFF, off: true, providers: [], moved: [], isAgent: true },
   { spec: PROV, providers: ["provx"], moved: [], named: true, isAgent: true, agent: { id: "provx", name: "Provx" } },
+  // not on this computer, so not in Agents (zzZ): the line says so, with the plugin's notice
+  { spec: KIMI, providers: [], moved: [], isAgent: true, inMagpieOnly: true, agent: { id: "kimi-desktop", name: "Kimi", missing: true, looks: "~/.config/magpie-kimi", notice: "请先打开 Kimi，插件会在本地 Agent 就绪后连接；Chat 不受影响。" } },
 ] };
 // a 1x1 picture
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
@@ -58,11 +61,11 @@ function server(lang) {
 }
 
 const L = {
-  en: { addsDeva: "Adds Deva to Agents", installed: "Installed", agent: "Agent", mw: "Middleware", provider: "Provider", adds: "Adds Aider to Agents", addsJot: "Adds Jot to Agents", broken: /^Agent didn't load: agent id "codex"/, off: "Off", nothing: "Signs in to nothing", sec: "Agents" },
-  zh: { addsDeva: "把 Deva 加到 Agent 页", installed: "已安装", agent: "Agent", mw: "中间件", provider: "供应商", adds: "把 Aider 加到 Agent 页", addsJot: "把 Jot 加到 Agent 页", broken: /^Agent 没有加载：agent id "codex"/, off: "关闭", nothing: "不能登录", sec: "Agent" },
-  "zh-TW": { addsDeva: "把 Deva 加到 Agent 頁", installed: "已安裝", agent: "Agent", adds: "把 Aider 加到 Agent 頁", addsJot: "把 Jot 加到 Agent 頁", broken: /^Agent 沒有載入：/, sec: "Agent" },
-  ja: { addsDeva: "Deva をエージェントページに追加します", installed: "インストール済み", agent: "エージェント", adds: "Aider をエージェントページに追加します", addsJot: "Jot をエージェントページに追加します", broken: /^エージェントを読み込めませんでした：/, sec: "エージェント" },
-  de: { addsDeva: "Fügt Deva zu Agenten hinzu", installed: "Installiert", agent: "Agent", adds: "Fügt Aider zu Agenten hinzu", addsJot: "Fügt Jot zu Agenten hinzu", broken: /^Agent nicht geladen: /, sec: "Agenten" },
+  en: { kimi: "Kimi isn't in Agents: magpie doesn't find it in ~/.config/magpie-kimi", addsDeva: "Adds Deva to Agents", installed: "Installed", agent: "Agent", mw: "Middleware", provider: "Provider", adds: "Adds Aider to Agents", addsJot: "Adds Jot to Agents", broken: /^Agent didn't load: agent id "codex"/, off: "Off", nothing: "Signs in to nothing", sec: "Agents" },
+  zh: { kimi: "Kimi 不在 Agent 页：magpie 在 ~/.config/magpie-kimi 没有找到它", addsDeva: "把 Deva 加到 Agent 页", installed: "已安装", agent: "Agent", mw: "中间件", provider: "供应商", adds: "把 Aider 加到 Agent 页", addsJot: "把 Jot 加到 Agent 页", broken: /^Agent 没有加载：agent id "codex"/, off: "关闭", nothing: "不能登录", sec: "Agent" },
+  "zh-TW": { kimi: "Kimi 不在 Agent 頁：magpie 在 ~/.config/magpie-kimi 沒有找到它", addsDeva: "把 Deva 加到 Agent 頁", installed: "已安裝", agent: "Agent", adds: "把 Aider 加到 Agent 頁", addsJot: "把 Jot 加到 Agent 頁", broken: /^Agent 沒有載入：/, sec: "Agent" },
+  ja: { kimi: "Kimi はエージェントページにありません：magpie は ~/.config/magpie-kimi に見つけられません", addsDeva: "Deva をエージェントページに追加します", installed: "インストール済み", agent: "エージェント", adds: "Aider をエージェントページに追加します", addsJot: "Jot をエージェントページに追加します", broken: /^エージェントを読み込めませんでした：/, sec: "エージェント" },
+  de: { kimi: "Kimi fehlt unter Agenten: magpie findet es nicht in ~/.config/magpie-kimi", addsDeva: "Fügt Deva zu Agenten hinzu", installed: "Installiert", agent: "Agent", adds: "Fügt Aider zu Agenten hinzu", addsJot: "Fügt Jot zu Agenten hinzu", broken: /^Agent nicht geladen: /, sec: "Agenten" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -124,10 +127,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(await kinds(row("idle")), [w.agent], "off, an agent with a main is an agent still");
         if (w.provider) assert.deepEqual(await kinds(row("prov")), [w.agent, w.provider], "an agent whose module serves a provider is both");
 
+        // one magpie doesn't find here: not "Adds Kimi to Agents", but why
+        // it isn't there, and what its plugin says it needs first
+        const kimi = row("kimi");
+        const kl = (await kimi.locator(".pm-mw").innerText()).trim();
+        assert.ok(kl.startsWith(w.kimi + " "), kl);
+        assert.ok(kl.endsWith("Chat 不受影响。"), kl);
+        assert.ok(!(await kimi.locator(".pm-mw").evaluate((e) => e.classList.contains("bad"))), "not found isn't a failure");
+
         // the row's text fits: nothing wider than the page
         const over = await page.evaluate(() => document.scrollingElement.scrollWidth - document.scrollingElement.clientWidth);
         assert.ok(over <= 0, "page scrolls sideways by " + over);
-        for (const r of [aider, broken]) {
+        for (const r of [aider, broken, kimi]) {
           const [line, box] = await Promise.all([r.locator(".pm-mw").boundingBox(), r.boundingBox()]);
           assert.ok(line.x + line.width <= box.x + box.width + 1, "the agent line overflows its row");
         }

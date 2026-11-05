@@ -1464,6 +1464,12 @@
       d.title = a.error;
       return d;
     }
+    // not found here, so Agents has no row (zzZ): say so, and the plugin's notice
+    if (a.missing) {
+      d.classList.add("pm-clash");
+      d.textContent = d.title = [t("{name} isn't in Agents: magpie doesn't find it in {path}", { name: a.name, path: a.looks || "~" }), a.notice].filter(Boolean).join(" ");
+      return d;
+    }
     d.textContent = d.title = t("Adds {name} to Agents", { name: a.name });
     return d;
   }
