@@ -911,11 +911,44 @@ func (b *subscriptionBridge) startTrusted(ctx context.Context, req *Request, mod
 		return run, events, err
 	}
 	// passed over from now on (passedOver): this run, and the next,
-	// aren't in the caller's folder
+	// aren't in the caller's folder. The conversation's session, kept
+	// (startRun), is gone on with there when it is magpie's folder's: a
+	// run started anew replayed the whole conversation once in each
+	// folder (sleepy_shibe on Discord)
 	b.untrusted.Store(untrusted.key, time.Now())
 	log.Printf("claude: Claude Code asks whether to trust %s, which its user hasn't; the run goes in magpie's own folder, told the caller's", untrusted.dir)
-	req.branch = nil
-	return b.startRun(ctx, req, model, configDir, owner, nil)
+	return b.startRun(ctx, req, model, configDir, owner, from)
+}
+
+// untrustedHere is whether a run in the caller's folder work goes in
+// magpie's own instead: in the interactive mode under the account Claude
+// Code is signed in to, Claude Code would ask whether to trust it, which
+// only the user answers. It is decided for each run as Claude Code
+// decides it (claudeTrusts), before the run, so a conversation whose
+// session is in magpie's folder goes on with it there instead of being
+// replayed in the caller's, asked about and replayed again in magpie's
+// every time passedOver's 10 minutes were up (sleepy_shibe on Discord),
+// and a folder the user trusts since is run in from the next turn on.
+// A folder Claude Code asked about lately all the same stays passed
+// over, as one is while the user's answers can't be read.
+func (b *subscriptionBridge) untrustedHere(req *Request, binary claudeCLI, configDir, work string) bool {
+	if b.passedOver(configDir, work) {
+		return true
+	}
+	if configDir != "" || claudePrintWhy(req, binary) != "" {
+		// a saved account's folder is magpie's, which answers yes, and
+		// claude -p asks nothing
+		return false
+	}
+	trusted, err := claudeTrusts(work)
+	if err != nil {
+		log.Printf("claude: whether Claude Code trusts the caller's folder is unknown (%v); the run goes there", logSafe(err.Error()))
+		return false
+	}
+	if !trusted {
+		log.Printf("claude: Claude Code hasn't been told to trust %s; the run goes in magpie's own folder, told the caller's", logSafe(work))
+	}
+	return !trusted
 }
 
 // startRun is start's Claude Code, from the saved session from when set.
@@ -993,7 +1026,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	work := ""
 	if binary.wsl == nil {
 		work = clientWorkDir(req)
-		if work != "" && b.passedOver(configDir, work) {
+		if work != "" && b.untrustedHere(req, binary, configDir, work) {
 			work = ""
 		}
 	}
@@ -1041,8 +1074,15 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 			b.sweepSessions(sessions)
 		}
 	}
+	// kept is the session from was, for startTrusted to go on with in
+	// magpie's folder when Claude Code asks about the caller's
+	kept := false
 	if from != nil {
-		defer from.discard() // unless the run took it
+		defer func(from *savedSession) {
+			if !kept {
+				from.discard() // unless the run took it
+			}
+		}(from)
 		if sessions == nil || !slices.Equal(from.sessions, sessions) || !from.saved() {
 			from = nil
 		}
@@ -1291,6 +1331,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		if err := run.cliControlWithin(ctx, map[string]any{"subtype": "initialize"}, wait); err != nil {
 			run.abort()
 			if tui && client && configDir == "" && run.saidOnEnd(claudetui.Untrusted) {
+				kept = true
 				return nil, nil, &tuiUntrusted{key: configDir + "\x00" + work, dir: work, err: err}
 			}
 			var unanswered *controlUnanswered

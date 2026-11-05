@@ -350,15 +350,21 @@ func claudeTrustKeys(binary claudeCLI, work string) []string {
 	}
 	var keys []string
 	for _, w := range []string{work, evalSymlinks(work)} {
-		k := norm.NFC.String(filepath.Clean(w))
-		if trustGOOS == "windows" {
-			k = strings.ReplaceAll(k, `\`, "/")
-		}
-		if !slices.Contains(keys, k) {
+		if k := claudeTrustKey(w); !slices.Contains(keys, k) {
 			keys = append(keys, k)
 		}
 	}
 	return keys
+}
+
+// claudeTrustKey is the projects key Claude Code (2.1.316) gives folder
+// dir: its path in NFC, on Windows with forward slashes.
+func claudeTrustKey(dir string) string {
+	k := norm.NFC.String(filepath.Clean(dir))
+	if trustGOOS == "windows" {
+		k = strings.ReplaceAll(k, `\`, "/")
+	}
+	return k
 }
 
 // dropOneOff removes the session a one-off interactive run left in

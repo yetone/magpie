@@ -85,6 +85,10 @@ func TestClaudeTUIHungHelperNeverPrint(t *testing.T) {
 // and again, so the turn hung (lwjef on X). The turn goes in magpie's own
 // folder, told the caller's, and that folder is passed over for the
 // conversation's next turns rather than asked about again.
+//
+// The user's answers say the folder is trusted here, so the run goes
+// there first (untrustedHere); Claude Code asking all the same is the case
+// this test is about.
 func TestClaudeTUIUntrustedFolderAnswered(t *testing.T) {
 	caller := t.TempDir()
 	cwds := filepath.Join(t.TempDir(), "cwds")
@@ -93,6 +97,7 @@ func TestClaudeTUIUntrustedFolderAnswered(t *testing.T) {
   exit 1
 fi
 pwd >> '`+cwds+`'`)
+	trustInProfile(t, h, caller)
 	h.ask("Primary working directory: "+caller, "hi") // fails the test on anything but 200
 	b, _ := os.ReadFile(cwds)
 	ran := strings.Fields(string(b))

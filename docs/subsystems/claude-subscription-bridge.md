@@ -271,12 +271,36 @@ both magpie's. In the caller's folder under the account Claude Code is
 signed in to, the question is the user's: the helper ends there, saying
 so (`claudetui.Untrusted`), and the turn goes in magpie's own folder,
 told the caller's as any run whose folder isn't here is (`envElsewhere`;
-`startTrusted`). That folder is passed over for 10 minutes
-(`passedOver`, `untrustedFor`), then tried again, the user having maybe
-trusted it since. Until 11-01 such a run became `-p`; from then until
-this change it was a 502, which a Claude Code client (paseo) asked again
+`startTrusted`). Until 11-01 such a run became `-p`; from then until
+the fallback it was a 502, which a Claude Code client (paseo) asked again
 with backoff, so the chat hung (lwjef on X).
-`TestClaudeTUIUntrustedFolderAnswered` holds it. The question opens on "No, exit", and a key
+`TestClaudeTUIUntrustedFolderAnswered` holds it.
+
+Before each such run the bridge decides as Claude Code does whether it
+would ask (`untrustedHere`, `claudeTrusts` in `claude_trusted.go`), from
+the user's own answers in the profile `provider.ClaudeTrustedProjects`
+reads (`CLAUDE_CONFIG_DIR/.claude.json` or `~/.claude.json`), so a folder
+the user never trusted is never run in and a folder they trust is run in
+from the next run on. The rules are Claude Code 2.1.316's, read from its
+code (`claudeTrustedBy`): a `projects` key, the path in NFC (forward
+slashes on Windows), with `hasTrustDialogAccepted` true for the
+repository's main checkout (its root; for a worktree the checkout it was
+added from, `claudeMainCheckout`), or for any folder from the run's up
+to the repository's root and never past it, so a repository inside a
+trusted one is asked about; outside a repository every folder above
+counts. The run's folder as written and with links followed both count.
+A profile that can't be read is unknown, and the run goes in the
+caller's folder as before. A folder Claude Code asked about all the same
+is passed over for 10 minutes (`passedOver`, `untrustedFor`). The run
+that goes in magpie's folder after the question goes on from the
+conversation's saved session (`startRun` keeps it for `startTrusted`).
+Before, only the 10 minutes decided: past them, a conversation whose
+session was in magpie's folder ran in the caller's again, was told the
+whole conversation there, was asked, and was told it all once more in
+magpie's folder with its branch dropped, every 10 minutes (sleepy_shibe
+on Discord). `TestClaudeTUIUntrustedFolderKeepsItsSession`,
+`TestClaudeTUIFolderTrustedLaterRunInAtOnce` and
+`TestClaudeTrustedFolders` hold it. The question opens on "No, exit", and a key
 sent as it is first drawn can be lost to its being drawn again, so the
 helper presses ↓ until "Yes" is the last choice drawn and Enter only once
 it has stayed so for 300ms (`ready`, `trustSettle`). Pressing Enter blind

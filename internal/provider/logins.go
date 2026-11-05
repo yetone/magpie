@@ -620,6 +620,43 @@ func claudeProfileAccount() (map[string]any, bool) {
 	return acct, err == nil && acct != nil
 }
 
+// ClaudeTrustedProjects are the projects keys of the folders the user
+// told Claude Code to trust (hasTrustDialogAccepted), in the state file of
+// the account it is signed in to (claudeProfilePath, so CLAUDE_CONFIG_DIR's
+// when set), read again only when the file changes. Only read, never
+// written: the answers are the user's. A file that isn't there trusts
+// nothing; one that can't be read or parsed, which Claude Code may be
+// writing, or account discovery turned off, is an error: unknown. What it
+// returns is shared and must not be changed.
+func ClaudeTrustedProjects() (map[string]bool, error) {
+	if settings.AccountDiscoveryOff() {
+		return nil, errAccountDiscoveryOff
+	}
+	trusted, err := filememo.Read("claude trusted projects", claudeProfilePath(), func(b []byte) (map[string]bool, error) {
+		var m struct {
+			Projects map[string]struct {
+				Trusted any `json:"hasTrustDialogAccepted"`
+			} `json:"projects"`
+		}
+		if err := json.Unmarshal(b, &m); err != nil {
+			return nil, err
+		}
+		out := map[string]bool{}
+		for k, p := range m.Projects {
+			// Claude Code counts only true (=== true, or truthy: a
+			// bool either way in what it writes)
+			if t, _ := p.Trusted.(bool); t {
+				out[k] = true
+			}
+		}
+		return out, nil
+	})
+	if errors.Is(err, fs.ErrNotExist) {
+		return map[string]bool{}, nil
+	}
+	return trusted, err
+}
+
 // claudeSignedInUser names the account Claude Code is signed in to, by the
 // one name both the account (claudeAccount) and its saved login (liveLogin)
 // go by: ~/.claude.json's, or status, what `claude auth status` said, when
