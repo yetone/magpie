@@ -498,15 +498,44 @@ async function proxyFor(input) {
 const reach = new AsyncLocalStorage()
 
 async function sent(input, init) {
-  if (init && "proxy" in init) return bunFetch(input, init)
+  if (init && "proxy" in init) return bunFetch(input, init).catch((e) => throwTLS(e, input))
   const p = await proxyFor(input)
-  if (!p) return bunFetch(input, init)
+  if (!p) return bunFetch(input, init).catch((e) => throwTLS(e, input))
   return bunFetch(input, { ...init, proxy: p }).catch(async (e) => {
     if (e?.name === "AbortError" || init?.signal?.aborted) throw e
     const why = await proxyRefuses(p, input)
     if (why) throw Object.assign(new Error(`proxyconnect tcp: ${why}`), { code: e?.code, cause: e })
-    throw e
+    throwTLS(e, input)
   })
+}
+
+// The codes Bun gives a fetch whose server's certificate it didn't take.
+const tlsCodes = new Set([
+  "UNABLE_TO_GET_ISSUER_CERT",
+  "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "CERT_HAS_EXPIRED",
+  "CERT_NOT_YET_VALID",
+  "CERT_UNTRUSTED",
+  "ERR_TLS_CERT_ALTNAME_INVALID",
+])
+
+// throwTLS throws e, its message saying which host's certificate the
+// plugin host refused and with what code, when that is why it failed:
+// Bun says only "unable to get issuer certificate", which read like the
+// vendor's own fault, for a chain that verified outside the host
+// (youyo.p_10001). The message Bun gave stays first, and the error is
+// the same one, its code and cause kept.
+function throwTLS(e, input) {
+  if (e && tlsCodes.has(e.code) && typeof e.message === "string" && !e.message.includes("plugin host's TLS")) {
+    const h = hostOf(input)?.host
+    try {
+      e.message = `${e.message} (${e.code}: the plugin host's TLS didn't verify ${h ? h + "'s" : "the server's"} certificate chain against the roots it trusts)`
+    } catch {}
+  }
+  throw e
 }
 
 // proxyRefuses is why the proxy p won't carry a request to input, "" when

@@ -1075,6 +1075,7 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 	proxy := hostProxy(env()) // what bunCommand gives it
 	cmd := bunCommand(context.Background(), bun, settings.Dir(), "run", js)
 	addr := hostAddr(cmd.Env)
+	log.Printf("plugin: host starts with %s", netLine(cmd.Env))
 	cmd.Env = hostEnv(cmd.Env)
 	in, err := cmd.StdinPipe()
 	if err != nil {
@@ -1914,7 +1915,51 @@ func (h *host) proxyMoved() bool {
 	}
 	h.proxyAt = time.Now()
 	e := env()
-	return hostProxy(e) != h.proxy || h.addr != "" && hostAddr(e) != h.addr
+	if p := hostProxy(e); p != h.proxy {
+		log.Printf("plugin: the proxy moved, from %s to %s; a new host takes over",
+			netLine(strings.Split(h.proxy, "\x00")), netLine(strings.Split(p, "\x00")))
+		return true
+	}
+	if a := hostAddr(e); h.addr != "" && a != h.addr {
+		log.Printf("plugin: the gateway moved, from %s to %s; a new host takes over", h.addr, a)
+		return true
+	}
+	return false
+}
+
+// netLine is a host's network settings in env as a log line says them:
+// its proxy, without the user and password (netproxy.Redact), NO_PROXY,
+// and what tells Bun which roots to trust. A host's TLS or proxy failure
+// ("unable to get issuer certificate" for a chain that verifies outside
+// it, youyo.p_10001) is read beside it.
+func netLine(env []string) string {
+	keys := []string{"HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "NO_PROXY",
+		"NODE_EXTRA_CA_CERTS", "NODE_USE_SYSTEM_CA", "NODE_TLS_REJECT_UNAUTHORIZED", "SSL_CERT_FILE", "SSL_CERT_DIR"}
+	got := map[string]string{}
+	for _, e := range env {
+		k, v, _ := strings.Cut(e, "=")
+		k = strings.ToUpper(k)
+		if slices.Contains(keys, k) {
+			got[k] = v // exec takes the last
+		}
+	}
+	var parts []string
+	for _, k := range keys {
+		v := strings.TrimSpace(got[k])
+		if v == "" {
+			continue
+		}
+		if strings.HasSuffix(k, "_PROXY") && k != "NO_PROXY" {
+			if v = netproxy.Redact(v); v == "" {
+				v = "(malformed)"
+			}
+		}
+		parts = append(parts, k+"="+v)
+	}
+	if !slices.ContainsFunc(parts, func(p string) bool { return strings.Contains(p, "_PROXY=") && !strings.HasPrefix(p, "NO_PROXY=") }) {
+		parts = append([]string{"no proxy"}, parts...)
+	}
+	return strings.Join(parts, " ")
 }
 
 // hostAddr is the gateway's address a host is told, as MAGPIE_ADDR: the

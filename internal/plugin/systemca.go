@@ -3,6 +3,7 @@ package plugin
 import (
 	"bytes"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
 	"os"
@@ -103,17 +104,87 @@ var systemCAFile = func() string {
 			systemCAPath = p
 			return
 		}
-		certs := systemRoots()
-		if len(certs) == 0 {
-			return
-		}
-		var b bytes.Buffer
-		for _, der := range certs {
-			_ = pem.Encode(&b, &pem.Block{Type: "CERTIFICATE", Bytes: der})
-		}
-		systemCAPath = writeCAFile(b.Bytes())
+		systemCAPath = rootsFile(systemRoots())
 	})
 	return systemCAPath
+}
+
+// rootsFile is a PEM file of certs as rootsFirst orders them, "" when
+// none are left.
+func rootsFile(certs [][]byte) string {
+	certs = rootsFirst(certs)
+	if len(certs) == 0 {
+		return ""
+	}
+	var b bytes.Buffer
+	for _, der := range certs {
+		_ = pem.Encode(&b, &pem.Block{Type: "CERTIFICATE", Bytes: der})
+	}
+	return writeCAFile(b.Bytes())
+}
+
+// rootsFirst is certs as Bun can be given them: the self-signed ones
+// first, then each other one whose issuer is among them. Bun (BoringSSL,
+// 1.4.2) builds a chain up through the first certificate it trusts with
+// the subject it is after, NODE_EXTRA_CA_CERTS's before its own roots',
+// and goes no further when that one's issuer is missing. A copy of a root
+// that another root cross-signed (USERTrust RSA's, issued by AAA
+// Certificate Services, which agent.minimaxi.com's chain goes up to) in
+// the user's ROOT store came ahead of the self-signed one Bun ships, and
+// every request there failed "unable to get issuer certificate"
+// (UNABLE_TO_GET_ISSUER_CERT, youyo.p_10001 on Discord, Windows), while
+// Node, curl and a browser got through. With the self-signed copy ahead
+// of it, or with its issuer beside it, Bun got through. One whose issuer
+// isn't here either is left out: Bun never ends a chain on a certificate
+// that isn't self-signed, so it can only stand in front of a root. One
+// Go can't parse is kept, after the rest, as before.
+func rootsFirst(certs [][]byte) [][]byte {
+	type cert struct {
+		der []byte
+		x   *x509.Certificate
+	}
+	var roots, rest []cert
+	var odd [][]byte
+	for _, der := range certs {
+		x, err := x509.ParseCertificate(der)
+		switch {
+		case err != nil:
+			odd = append(odd, der)
+		case bytes.Equal(x.RawSubject, x.RawIssuer):
+			roots = append(roots, cert{der, x})
+		default:
+			rest = append(rest, cert{der, x})
+		}
+	}
+	kept := append([]cert(nil), roots...)
+	issued := func(c cert) bool {
+		for _, k := range kept {
+			if bytes.Equal(k.x.RawSubject, c.x.RawIssuer) &&
+				(len(c.x.AuthorityKeyId) == 0 || len(k.x.SubjectKeyId) == 0 || bytes.Equal(c.x.AuthorityKeyId, k.x.SubjectKeyId)) {
+				return true
+			}
+		}
+		return false
+	}
+	// an intermediate's issuer can be another intermediate
+	for grew := true; grew; {
+		grew = false
+		left := rest[:0]
+		for _, c := range rest {
+			if issued(c) {
+				kept = append(kept, c)
+				grew = true
+			} else {
+				left = append(left, c)
+			}
+		}
+		rest = left
+	}
+	out := make([][]byte, 0, len(kept)+len(odd))
+	for _, k := range kept {
+		out = append(out, k.der)
+	}
+	return append(out, odd...)
 }
 
 // writeCAFile keeps pem beside Bun's install cache, named by its content so
