@@ -69,5 +69,8 @@ func TestImageGenCodexOneEntry(t *testing.T) {
 	}
 	if j := providerInfo(*p, nil); !j.DrawPicks || len(j.DrawIDs) != 1 {
 		t.Fatalf("editor's drawIds %v, drawPicks %v", j.DrawIDs, j.DrawPicks)
+	} else if j.DrawNames[j.DrawIDs[0]] != "GPT Image" {
+		// StarBits on X read the chip's gpt-image-2 as an old model
+		t.Fatalf("editor shows %q by %v", j.DrawIDs[0], j.DrawNames)
 	}
 }

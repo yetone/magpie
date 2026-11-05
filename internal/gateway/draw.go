@@ -467,9 +467,21 @@ func kindModel(p provider.Provider, id string) catalog.Model {
 // AutoDrawer is the model magpie draws with when the Settings name none:
 // a ChatGPT account's, which its plan pays for, else the cheapest of the
 // models the API keys set up can draw with, the newest of those whose price
-// isn't known. "" when none can.
+// isn't known. A GPT Image that a newer one set up supersedes is never its
+// choice (StarBits on X): an OpenAI key lists gpt-image-2.6-sunburst with no
+// price, so cost alone left Automatic on the priced gpt-image-2. A GPT Image
+// with no price is costed as the newest priced one, as OpenAI has priced each
+// alike (gpt-image-2 to 2.6: $5 in, $30 out). "" when none can.
 func AutoDrawer() string {
-	best, bestCost, bestDate := "", 0.0, ""
+	type cand struct {
+		ref, released string
+		cost          float64
+		priced, gen   bool
+		key           gptImageGen
+	}
+	var cands []cand
+	newest, newestPriced := gptImageGen{}, gptImageGen{}
+	familyCost, haveFamilyCost := 0.0, false
 	for _, p := range provider.All() {
 		if !p.On() || p.DecideOnly() || drawsWorkBuddy(p) {
 			// WorkBuddy's images cost the plan's credits: it draws only
@@ -483,19 +495,83 @@ func AutoDrawer() string {
 				// refused the others (chatgpt.com: 403, #545)
 				continue
 			}
-			cost := 1e9
+			c := cand{ref: p.ID + "/" + m.ID, released: m.Released, cost: 1e9}
 			switch {
 			case drawsCodex(p), drawsGrok(p):
-				cost = 0 // a ChatGPT or Grok plan's images come with it
+				c.cost, c.priced = 0, true // a ChatGPT or Grok plan's images come with it
 			case m.Price != nil:
-				cost = m.Price.Input + m.Price.Output
+				c.cost, c.priced = m.Price.Input+m.Price.Output, true
 			}
-			if best == "" || cost < bestCost || cost == bestCost && m.Released > bestDate {
-				best, bestCost, bestDate = p.ID+"/"+m.ID, cost, m.Released
+			// a ChatGPT account's name says nothing of the model its
+			// backend draws with (#1865), so it is never one superseded
+			if k, ok := gptImageGenOf(m.ID); ok && !drawsCodex(p) {
+				c.gen, c.key = true, k
+				if newest.less(k) {
+					newest = k
+				}
+				if c.priced && (!haveFamilyCost || newestPriced.less(k)) {
+					newestPriced, familyCost, haveFamilyCost = k, c.cost, true
+				}
 			}
+			cands = append(cands, c)
+		}
+	}
+	best, bestCost, bestDate := "", 0.0, ""
+	for _, c := range cands {
+		if c.gen && c.key.less(newest) {
+			continue
+		}
+		if c.gen && !c.priced && haveFamilyCost {
+			c.cost = familyCost
+		}
+		if best == "" || c.cost < bestCost || c.cost == bestCost && c.released > bestDate {
+			best, bestCost, bestDate = c.ref, c.cost, c.released
 		}
 	}
 	return best
+}
+
+// gptImageGen orders OpenAI's image models: by version (gpt-image-2.6 over
+// 2.5 over 2 over 1.5; dall-e and chatgpt-image-latest, unversioned, under
+// every gpt-image), then by variant (the base or Sunburst, the most capable,
+// over Flare over mini). A dated snapshot is its model's version.
+type gptImageGen struct {
+	version float64
+	variant int
+}
+
+func (g gptImageGen) less(o gptImageGen) bool {
+	return g.version < o.version || g.version == o.version && g.variant < o.variant
+}
+
+// gptImageGenOf is id's place among OpenAI's image models, a namespace
+// (openai/gpt-image-2) aside; false for any other model.
+func gptImageGenOf(id string) (gptImageGen, bool) {
+	id = strings.ToLower(id[strings.LastIndexByte(id, '/')+1:])
+	g := gptImageGen{variant: 2}
+	switch {
+	case strings.Contains(id, "mini"):
+		g.variant = 0
+	case strings.Contains(id, "flare"):
+		g.variant = 1
+	}
+	rest, ok := strings.CutPrefix(id, "gpt-image-")
+	if !ok {
+		if strings.HasPrefix(id, "dall-e") || strings.HasPrefix(id, "chatgpt-image") {
+			return gptImageGen{}, true
+		}
+		return gptImageGen{}, false
+	}
+	n := 0
+	for n < len(rest) && (rest[n] >= '0' && rest[n] <= '9' || rest[n] == '.') {
+		n++
+	}
+	v, err := strconv.ParseFloat(rest[:n], 64)
+	if err != nil {
+		return gptImageGen{}, false
+	}
+	g.version = v
+	return g, true
 }
 
 // picture is an image sent along to draw from, or one drawn.

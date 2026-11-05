@@ -2093,6 +2093,24 @@ pick stays listed as picked, and `imageGenHidden` puts a line under the
 row that it is unticked and leaves the list once another is picked.
 Refusing a model outright is Disabled models, below.
 
+The editor shows each image model by its name where it has one
+(`drawNames`), with the id as the chip's tooltip: a ChatGPT account's
+`gpt-image-2`, the id Codex CLI asks for, is its one GPT Image, since its
+backend draws with the model it picks whichever is named (#1865; StarBits
+on X read the id as an old model). Unticking it still saves the id.
+
+`AutoDrawer` never picks a GPT Image that a newer one set up supersedes
+(`gptImageGenOf`: by version, gpt-image-2.6 over 2.5 over 2, unversioned
+dall-e and chatgpt-image-latest under them all; then the base or Sunburst
+over Flare over mini). An OpenAI key's list names 2.5 and 2.6 with no
+price while models.dev prices gpt-image-2, so cost alone took the old one.
+A GPT Image with no price is costed as the newest priced one, as OpenAI
+prices them alike. A ChatGPT account's GPT Image is never superseded, as
+its name says nothing of what draws, so the plan's images stay Automatic's
+choice. Another kind of model that costs less is still the cheaper choice.
+`TestAutoDrawerTakesNewestGPTImage`, `TestAutoDrawerKeepsChatGPTsOwnPick`,
+`chatgpt-image-chip.test.cjs`.
+
 Video models are listed the same way, under Video models (axelburks on
 Discord: an Ark key's Seedance had nowhere to be ticked). The editor's
 `filmIds` are `gateway.VideomakersOf` the listing it already has, and an

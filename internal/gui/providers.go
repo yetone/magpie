@@ -301,6 +301,10 @@ type providerJSON struct {
 	Exposed   int         `json:"exposed"`           // how many reach the agents
 	Draws     int         `json:"draws,omitempty"`   // how many of its models draw images (gateway.Drawers)
 	DrawIDs   []string    `json:"drawIds,omitempty"` // those models' ids, listed apart in its editor
+	// the names those are shown by where one isn't its id: a ChatGPT
+	// account's gpt-image-2 is its one GPT Image, whichever model its
+	// backend draws with (StarBits on X read the id as an old model)
+	DrawNames map[string]string `json:"drawNames,omitempty"`
 	// its vendor draws with the model it picks, whichever is named: a
 	// ChatGPT account's one GPT Image (gateway.VendorPicksDrawer)
 	DrawPicks bool `json:"drawPicks,omitempty"`
@@ -1024,6 +1028,12 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 	// lists them apart, as Settings → Images is where one is picked
 	for _, m := range gateway.DrawersOf(p, func() []catalog.Model { return ls.Available }) {
 		out.DrawIDs = append(out.DrawIDs, m.ID)
+		if m.Name != "" && m.Name != m.ID {
+			if out.DrawNames == nil {
+				out.DrawNames = map[string]string{}
+			}
+			out.DrawNames[m.ID] = m.Name
+		}
 	}
 	out.Draws = len(out.DrawIDs)
 	out.DrawPicks = out.Draws > 0 && gateway.VendorPicksDrawer(p)
