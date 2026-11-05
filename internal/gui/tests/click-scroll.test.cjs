@@ -94,7 +94,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
     await t.test("date controls stay separate from request grouping controls", async () => {
       await reset();
-      assert.equal(await page.locator(".rt-group-by .rt-day").count(), 2, "the grouping controls share the date-button class");
+      assert.equal(await page.locator(".rt-group-by .rt-day").count(), 3, "the grouping controls share the date-button class");
+      assert.equal(await page.locator('.rt-group-by .rt-day[data-by="key"]').evaluate((b) => b.hidden), true, "By key waits for a gateway key");
       assert.equal(await dayButtons.count(), 2, "only Live and the fixture's history day should be selected");
       assert.match(await dayButtons.first().innerText(), /Live/);
       await dayButtons.nth(1).click();

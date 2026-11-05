@@ -1763,7 +1763,10 @@ curl -s localhost:3425/v1/systemone -H 'Authorization: Bearer magpie' \
 
 The Routing page's Requests list defaults to the time-ordered By request view.
 Choose By session to group calls by the agent's session ID; the page remembers
-your choice across reloads.
+your choice across reloads. Once there is a gateway key, By key groups them by
+the key each came with (its name now, its agents beside it); a call with no key,
+from this computer or kept from before routes named their key, is under No
+gateway key.
 Codex title helpers with an explicit parent or fork source join their originating
 chat, retaining their title badge and contributing to its cost. Titles without
 ancestry and ordinary forked chats stay separate.

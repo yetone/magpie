@@ -599,8 +599,11 @@ from every call in the period, so without the cut they would name other keys.
 A held key is refused (`refuseHeld`, 403 `provider.KeyHeldCode`) the
 quotas, their history, kept cards and refresh, and `/v1/magpie/concurrency`
 (#1981); `/v1/magpie/route` tells it only routes whose `callerKey` is its
-own. `Route.callerKey` is set by `trace.beginFor` from the request's
-caller, so a route begun without it is told to no held key.
+own. `Route.CallerKey` (and `CallerKeyName`, the key's name then; never
+its secret) is set by `trace.beginFor` from the request's caller, so a
+route begun without it is told to no held key. Both go out in the GUI's
+trace and the routing history, and the Routing list's By key groups by
+them (`TestTraceNamesCallerKey`, `routing-by-key.test.cjs`).
 `TestHeldKeyToldNoAccounts` covers every one of these from loopback and
 the LAN, for a key held each of the three ways and one held to nothing.
 A held key whose owner set `access.Key.Quotas` (#2216) is told the four

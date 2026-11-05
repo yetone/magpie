@@ -176,15 +176,19 @@ function routingPage(part) {
     }
   }
   new ResizeObserver(() => fitDays()).observe(dayBar);
+  // the list by request, by session, or by the gateway key each came
+  // with, as the Usage page splits it (acezan on Discord): By key only
+  // once there is a key (callerKeys, from Gateway keys)
   const groupBar = el("div", "rt-group-by");
-  let bySession = false;
-  try { bySession = localStorage.getItem("magpie.routingBySession") === "1"; } catch {}
-  const groupButtons = [[false, "By request"], [true, "By session"]].map(([on, label]) => {
+  let groupBy = "request", callerKeys = [];
+  try { groupBy = localStorage.getItem("magpie.routingGroupBy") === "key" ? "key" : localStorage.getItem("magpie.routingBySession") === "1" ? "session" : "request"; } catch {}
+  const groupButtons = [["request", "By request"], ["session", "By session"], ["key", "By key"]].map(([on, label]) => {
     const b = el("button", "rt-day");
     b.dataset.label = label;
+    b.dataset.by = on;
     b.onclick = () => {
-      bySession = on;
-      try { localStorage.setItem("magpie.routingBySession", on ? "1" : "0"); } catch {}
+      groupBy = on;
+      try { localStorage.setItem("magpie.routingBySession", on === "session" ? "1" : "0"); localStorage.setItem("magpie.routingGroupBy", on); } catch {}
       steady(renderHist);
     };
     groupBar.append(b);
@@ -3553,7 +3557,8 @@ function routingPage(part) {
     const head = `${agentName(r.agent)} · ${r.model} → `;
     // the folder its agent works in, the last two levels of it (#1068),
     // and why it went on another model than it named
-    const folder = (movedSays(r) ? "\n" + movedWhy(r) : "") + (r.folder ? "\n" + t("Folder") + ": " + r.folder : "");
+    const folder = (movedSays(r) ? "\n" + movedWhy(r) : "") + (r.folder ? "\n" + t("Folder") + ": " + r.folder : "")
+      + (r.callerKey ? "\n" + t("Gateway key") + ": " + keyName(r) : "");
     const w = how !== "bad" && r.tries.length > 1 && tr && tried(r, tr);
     if (!w) return head + r.provider + folder;
     const first = r.tries[0], f = tried(r, first);
@@ -3565,6 +3570,20 @@ function routingPage(part) {
   // listed: the requests the list shows, newest first — the gateway's last
   // few, or a day the history keeps
   const allListed = () => (day ? past : [...routes.values()]).slice().sort((a, b) => b.id - a.id);
+  // a request's gateway key by its name now, else the one it had then
+  const keyName = (r) => !r.callerKey ? t("No gateway key") : callerKeys.find((k) => k.id === r.callerKey)?.name || r.callerKeyName || r.callerKey;
+  // the gateway keys, read as the page is shown: By key is offered once
+  // there is one
+  async function loadCallerKeys() {
+    try {
+      const res = await fetch("/api/caller-keys");
+      if (!res.ok) return;
+      const ks = ((await res.json()).keys || []).map((k) => ({ id: k.id, name: k.name }));
+      if (JSON.stringify(ks) === JSON.stringify(callerKeys)) return;
+      callerKeys = ks;
+      steady(renderHist);
+    } catch {}
+  }
   const matchesPurpose = (r) => !purpose.length || purpose.includes(purposeOf(r.kind));
   const listed = () => allListed().filter(matchesPurpose);
   // Match the rows and story: a broken-off 200 fails, an informational note
@@ -3744,11 +3763,14 @@ function routingPage(part) {
     if (!r.priced) return credits || "—";
     return "≈" + fmtCost({ cost: r.cost || 0, unpriced: 0 }) + (r.unpriced ? "+" : "") + (credits ? " · " + credits : "");
   }
-  function groupedRows(rs, rowEls) {
-    askUnnamed(rs);
+  // byKey: grouped by the gateway key each came with, one sent with none
+  // (from this computer, or kept before routes named their key) a group of
+  // its own; else by session
+  function groupedRows(rs, rowEls, byKey) {
+    if (!byKey) askUnnamed(rs);
     const groups = new Map();
     rs.forEach((r, i) => {
-      const key = sessionKey(r);
+      const key = byKey ? "key:" + (r.callerKey || "") : sessionKey(r);
       if (!groups.has(key)) groups.set(key, { key, r, rows: [], els: [] });
       const g = groups.get(key);
       g.rows.push(r); g.els.push(rowEls[i]);
@@ -3784,8 +3806,8 @@ function routingPage(part) {
       setText(x.arrow, g.key ? open ? "▾" : "▸" : "");
       // Background workers have their own IDs. Label groups made entirely
       // for one purpose without renaming a chat that also made helper calls.
-      const memory = g.r.agent === "codex" && g.rows.every((r) => purposeOf(r.kind) === "kind:memory_consolidation");
-      const suggestions = g.r.agent === "codex" && g.rows.every((r) => purposeOf(r.kind) === "kind:ambient_suggestions");
+      const memory = !byKey && g.r.agent === "codex" && g.rows.every((r) => purposeOf(r.kind) === "kind:memory_consolidation");
+      const suggestions = !byKey && g.r.agent === "codex" && g.rows.every((r) => purposeOf(r.kind) === "kind:ambient_suggestions");
       // its title: the agent's own, else its first prompt, on one line
       // (flandern1211_58540 on Discord: a folder and an id told nothing)
       const name = (g.rows.find((r) => r.sessionTitle)?.sessionTitle || otherTitles.get(ownKey(g.r)) || (memory ? t("Background memory task") : suggestions ? t("Background prompt suggestions") : "")).replace(/\s+/g, " ").trim();
@@ -3794,6 +3816,15 @@ function routingPage(part) {
       const folder = g.key ? g.rows.find((r) => r.folder)?.folder || "" : "";
       // the title first; the folder after it, quieter, or in its place
       // when there is no title; the id only when there is neither
+      if (byKey) {
+        // the key's name, its agents dim beside it
+        const ags = [...new Set(g.rows.map((r) => agentName(r.agent)))].join(", ");
+        setText(x.name, keyName(g.r));
+        setText(x.dir, ags);
+        if (x.dir.hidden) x.dir.hidden = false;
+        x.name.title = g.r.callerKey ? t("Gateway key") + ": " + keyName(g.r) + "\n" + ags
+          : t("These requests came with no gateway key: from this computer, or from before magpie noted the key.") + "\n" + ags;
+      } else {
       setText(x.name, g.key ? [agentName(g.r.agent), name || folder || groupSession(g.r)].filter(Boolean).join(" · ") : t("No session ID"));
       setText(x.dir, name && folder ? folder : "");
       if (x.dir.hidden !== !(name && folder)) x.dir.hidden = !(name && folder);
@@ -3801,6 +3832,7 @@ function routingPage(part) {
         : suggestions ? kindWhy(g.r) + "\n"
         : g.rows.some((r) => r.parentMatched) ? t("Title requests were automatically matched using the prompt and the applied chat title.") + "\n" : "";
       x.name.title = g.key ? (name ? name + "\n" : "") + purpose + (folder ? t("Folder") + ": " + folder + "\n" : "") + t("Session id") + ": " + groupSession(g.r) : t("These requests did not provide a session ID; they are not treated as one conversation.");
+      }
       const bits = [t(g.rows.length === 1 ? "{n} request" : "{n} requests", { n: g.rows.length })];
       if (visibleMetrics.includes("tokens") && total.tokens) bits.push(t("{n} tokens", { n: tokens(total.tokens) }));
       if (total.running) bits.push(t("{n} in progress", { n: total.running }));
@@ -3867,10 +3899,12 @@ function routingPage(part) {
     setText(reqNote, day ? t(pastCut ? "the last {n} of {day}" : "{n} on {day}", { n: rs.length, day: dayName(day) })
       : t("the last {n} the gateway keeps", { n: rs.length }));
     renderDays();
-    groupButtons.forEach((b, i) => {
+    const by = groupBy === "key" && !callerKeys.length ? "request" : groupBy;
+    groupButtons.forEach((b) => {
       setText(b, t(b.dataset.label));
-      b.classList.toggle("on", bySession === !!i);
-      setAttr(b, "aria-pressed", String(bySession === !!i));
+      b.classList.toggle("on", by === b.dataset.by);
+      setAttr(b, "aria-pressed", String(by === b.dataset.by));
+      if (b.dataset.by === "key") b.hidden = !callerKeys.length;
     });
     groupBar.hidden = !rs.length;
     if (!reqs.style.maxHeight) requestAnimationFrame(fitReqs); // first shown
@@ -3900,7 +3934,7 @@ function routingPage(part) {
     for (const id of reqRows.keys()) if (!ids.has(id)) reqRows.delete(id);
     // the requests, with their sessions' heads between them when grouped:
     // a request's row is made only when it is drawn
-    listItems = bySession && rs.some((r) => r.session) ? groupedRows(rs, rs) : rs;
+    listItems = by === "key" ? groupedRows(rs, rs, true) : by === "session" && rs.some((r) => r.session) ? groupedRows(rs, rs) : rs;
     rowsMoved = false;
     drawList();
     // measuring the rows' lines forces a layout: only when a row was made
@@ -5154,6 +5188,7 @@ function routingPage(part) {
     inSightAgain();
     countdown();
     if (!shown()) { pause(); return; }
+    loadCallerKeys();
     backToPick(!waking);
     kick();
   }

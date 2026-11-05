@@ -173,7 +173,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForFunction(() => document.querySelectorAll(".rt-req").length === 8);
       assert.equal(await page.locator(".rt-req").count(), 8);
       await choose("#rtPurpose", "kind:thread_title");
-      await page.locator(".rt-group-by button").last().click();
+      await page.locator(".rt-group-by button[data-by=\"session\"]").click();
       assert.match(await page.locator(".rt-session .summary").textContent(), /^4/);
       await page.locator(".rt-days .rt-day").nth(1).click();
       assert.equal(await page.locator(".rt-req").count(), 4);
@@ -187,7 +187,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await click(page, page.locator("#rtPurposeClear"));
       await page.waitForFunction(() => document.querySelector("#rtPurposeClear").hidden && document.querySelectorAll(".rt-req").length === 8);
       assert.equal(await page.locator(".rt-req").count(), 8);
-      assert.equal(await page.locator(".rt-group-by button").last().getAttribute("aria-pressed"), "true");
+      assert.equal(await page.locator(".rt-group-by button[data-by=\"session\"]").getAttribute("aria-pressed"), "true");
       assert.equal(await page.locator(".rt-days .rt-day").nth(1).getAttribute("aria-pressed"), "true");
       await choose("#rtPurpose", "unmarked");
       await choose("#rtPurpose", "");
@@ -253,7 +253,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await menu.isVisible(), true);
       await page.keyboard.press("Escape");
       assert.equal(await page.locator("#rtPurpose").evaluate((e) => e === document.activeElement), true);
-      await page.locator(".rt-group-by button").last().click();
+      await page.locator(".rt-group-by button[data-by=\"session\"]").click();
       assert.match(await page.locator(".rt-session .summary").textContent(), /^5/);
       await page.locator(".rt-days .rt-day").nth(1).click();
       assert.equal(await page.locator(".rt-req").count(), 5, "the same union applies to history and sessions");
