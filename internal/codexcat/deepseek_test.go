@@ -27,11 +27,12 @@ func TestCodexCatalogDeepSeekAsDeepSeekSays(t *testing.T) {
 		{ID: "deepseek/deepseek-v4-pro", Name: "DeepSeek V4 Pro", Context: 1048576, Efforts: []string{"low", "high", "max"}},
 		{ID: "deepseek/deepseek-flash", Name: "DeepSeek V4.1 Flash", Context: 1048576, Images: true, Efforts: []string{"low", "high", "max"}},
 		{ID: "relay/deepseek-ai/DeepSeek-V4-Pro-0813", Name: "DeepSeek V4 Pro 0813", Context: 1000000},
+		{ID: "opencode-go/deepseek-v4.1-flash", Name: "DeepSeek V4.1 Flash", Context: 1048576, Images: true},
 		{ID: "moonshot/kimi-k3", Name: "Kimi K3", Context: 262144, Images: true, Efforts: []string{"low", "high"}},
 		{ID: "zai/glm-5.2", Name: "GLM-5.2", Context: 200000},
 		{ID: "group/deepseek", Name: "deepseek"},
 		{ID: "x/deepseek-r1-distill-qwen-32b", Name: "R1 Distill Qwen"},
-	}), &got); err != nil || len(got.Models) != 7 {
+	}), &got); err != nil || len(got.Models) != 8 {
 		t.Fatalf("%v %v", err, got)
 	}
 	by := map[string]map[string]any{}
@@ -54,6 +55,15 @@ func TestCodexCatalogDeepSeekAsDeepSeekSays(t *testing.T) {
 	}
 	if by["deepseek/deepseek-flash"]["supports_image_detail_original"] != true {
 		t.Error("deepseek-flash takes images: supports_image_detail_original true, as DeepSeek's setup says")
+	}
+	// A relay's DeepSeek takes images at no detail Codex names: OpenCode
+	// Go answers 400 "invalid image detail" to "original" (qiu_eth)
+	if e := by["opencode-go/deepseek-v4.1-flash"]; e["supports_image_detail_original"] != nil || e["shell_type"] != "shell_command" {
+		t.Errorf("opencode-go/deepseek-v4.1-flash: supports_image_detail_original %v, shell %v; want none, DeepSeek's shell_command",
+			e["supports_image_detail_original"], e["shell_type"])
+	}
+	if in, _ := by["opencode-go/deepseek-v4.1-flash"]["input_modalities"].([]any); len(in) != 2 {
+		t.Errorf("opencode-go/deepseek-v4.1-flash input_modalities %v; it takes images", in)
 	}
 	if v, ok := by["deepseek/deepseek-v4-pro"]["supports_image_detail_original"]; ok {
 		t.Errorf("deepseek-v4-pro takes no images; supports_image_detail_original %v", v)

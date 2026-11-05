@@ -456,7 +456,10 @@ func entriesAt(ms []catalog.Model, after int, effort string) []any {
 			if e.MultiAgent == "" {
 				e.MultiAgent = "v2"
 			}
-			e.DetailOriginal = m.Images
+			// The original detail only on DeepSeek's own API: a relay's
+			// may refuse it, as OpenCode Go does with 400 "invalid image
+			// detail" (qiu_eth)
+			e.DetailOriginal = m.Images && strings.HasPrefix(m.ID, "deepseek/")
 		}
 		for _, ef := range m.Efforts {
 			e.Efforts = append(e.Efforts, level{Effort: ef})

@@ -2,7 +2,10 @@ package gateway
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
+
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // chatImageDetails is the detail of every image_url in a Chat body, in
@@ -93,5 +96,49 @@ func TestChatImageDetailReachesResponses(t *testing.T) {
 		if d, _ := im["detail"].(string); d != want[i] {
 			t.Errorf("image %d: detail %q, want %q\n%s", i, d, want[i], out)
 		}
+	}
+}
+
+// Codex's screenshot, detail "original", goes to a Responses API other
+// than OpenAI's or DeepSeek's own as high, the closest it has: OpenCode
+// Go answered 400 "invalid image detail" for DeepSeek V4.1 Flash
+// (qiu_eth). The rest of the body goes as it came, low and auto too.
+func TestOriginalDetailHighOnARelay(t *testing.T) {
+	sent := toolImageUp(t, provider.Responses)
+	img := `"image_url":"data:image/png;base64,` + pngA + `"`
+	postToolImages(t, "/v1/responses", `{"model":"probe/eye","stream":true,"input":[
+		{"role":"user","content":[{"type":"input_text","text":"look"},
+			{"type":"input_image","detail":"original",`+img+`},
+			{"type":"input_image","detail":"low",`+img+`}]},
+		{"type":"function_call","call_id":"c1","name":"view_image","arguments":"{}"},
+		{"type":"function_call_output","call_id":"c1","output":[{"type":"input_image","detail":"original",`+img+`}]},
+		{"role":"user","content":[{"type":"input_text","text":"and now?"}]}]}`)
+	var got []string
+	for _, im := range inputImages(t, sent()) {
+		d, _ := im["detail"].(string)
+		got = append(got, d)
+	}
+	if want := []string{"high", "low", "high"}; !slices.Equal(got, want) {
+		t.Errorf("details %q, want %q\n%s", got, want, sent())
+	}
+}
+
+// OpenAI's own API, a ChatGPT account's and DeepSeek's take "original";
+// a relay's, OpenCode Go's among them, isn't known to.
+func TestTakesOriginalDetail(t *testing.T) {
+	for base, want := range map[string]bool{
+		"https://api.openai.com/v1":             true,
+		"https://chatgpt.com/backend-api/codex": true,
+		"https://api.deepseek.com/v1":           true,
+		"https://opencode.ai/zen/go/v1":         false,
+		"https://openrouter.ai/api/v1":          false,
+		"":                                      false,
+	} {
+		if got := takesOriginalDetail(provider.Provider{ID: "x", Responses: base}); got != want {
+			t.Errorf("%q: %v, want %v", base, got, want)
+		}
+	}
+	if !takesOriginalDetail(provider.Provider{ID: "x", Preset: provider.RemoteMagpiePreset, Responses: "http://10.0.0.2:3425/v1"}) {
+		t.Error("a remote magpie decides for its own upstream")
 	}
 }
