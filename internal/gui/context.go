@@ -283,8 +283,22 @@ func joinConvs(routes []ctxRec, list func() []sessions.Session) {
 	if !loose {
 		return
 	}
+	of := convOwners(list())
+	for i, r := range routes {
+		if r.Session == "" && r.Parent == "" && r.Conv != "" {
+			if id := of[r.Agent+"\x00"+r.Conv]; id != "" {
+				routes[i].Session = id
+			}
+		}
+	}
+}
+
+// convOwners is each agent's conversation id (agent, NUL, the gateway's
+// id) and the session of that agent it was read from (sessions' Convs);
+// "" for an id two sessions share, which stays as it is.
+func convOwners(list []sessions.Session) map[string]string {
 	of := map[string]string{}
-	for _, s := range list() {
+	for _, s := range list {
 		for _, c := range s.Convs {
 			k := s.Agent + "\x00" + c
 			if id, ok := of[k]; ok && id != s.ID {
@@ -294,13 +308,7 @@ func joinConvs(routes []ctxRec, list func() []sessions.Session) {
 			}
 		}
 	}
-	for i, r := range routes {
-		if r.Session == "" && r.Parent == "" && r.Conv != "" {
-			if id := of[r.Agent+"\x00"+r.Conv]; id != "" {
-				routes[i].Session = id
-			}
-		}
-	}
+	return of
 }
 
 // compacted says a prompt is a compaction of the one before it: under 60%
