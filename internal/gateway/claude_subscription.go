@@ -2505,7 +2505,9 @@ func (r *subscriptionRun) noteLines(uuid, model, msg string, ids []string) {
 	}
 	r.lineSeq++
 	for _, id := range ids {
-		r.lines[id] = callLine{uuid: uuid, seq: r.lineSeq}
+		// the conversation its reply answered, kept as the run parked on
+		// the call before its line was read (park)
+		r.lines[id] = callLine{uuid: uuid, seq: r.lineSeq, told: r.lines[id].told}
 	}
 	if len(r.lines) > linesMost {
 		for id, l := range r.lines {
@@ -2577,7 +2579,7 @@ func (b *subscriptionBridge) branch(req *Request, owner string) *savedSession {
 		run.mu.Lock()
 		at, seq, said := "", 0, ""
 		for _, id := range calls {
-			if l, ok := run.lines[id]; ok && l.seq > seq {
+			if l, ok := run.lines[id]; ok && l.uuid != "" && l.seq > seq {
 				at, seq, said = l.uuid, l.seq, l.told
 			}
 		}
@@ -3078,6 +3080,31 @@ func (r *subscriptionRun) park() {
 		if l.seq > r.parkedSeq && l.told == "" {
 			l.told = r.told
 			r.lines[id] = l
+		}
+	}
+	// The interactive mode streams a reply first and its session lines
+	// come after, read from the file Claude Code writes (118 to 162ms
+	// after the call), so the run parks before it has the line of a call
+	// it made. The calls the client was shown are this reply's: they
+	// answer the conversation heard now, whenever their line comes
+	// (noteLines keeps it). Before, the line came with no conversation
+	// and the next park gave it the next request's, so no request that
+	// answered those calls after another did matched it (branch): Claude
+	// Code's AgentSummary, asking its sub-agent's progress with the
+	// results the sub-agent's own next turn had taken, and a fork's
+	// directive were told the whole conversation by a new Claude Code,
+	// pasted as one text, and read only the tools and system prompt from
+	// the cache, 6% of 169k twice in 35s (kay20475 on X).
+	if r.lines == nil {
+		r.lines = map[string]callLine{}
+	}
+	for _, c := range r.shown {
+		if l := r.lines[c.id]; l.told == "" {
+			if l.uuid == "" {
+				l.seq = r.lineSeq // aged as a line noted now (linesMost)
+			}
+			l.told = r.told
+			r.lines[c.id] = l
 		}
 	}
 	r.parkedSeq = r.lineSeq

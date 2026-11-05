@@ -1300,7 +1300,18 @@ Each cost about a fifth of a Pro plan's five hours. The run that made the
 calls instead keeps where in its session each call of the client's tools
 was written: the uuid on Claude Code's `assistant` line (`noteLines`). As
 it parks on them, it also keeps the conversation those calls answered
-(`historyKey`, set in `park`). A request no run takes, whose last reply's
+(`historyKey`, set in `park`), by the ids of the calls the client was
+shown (`shown`): the interactive mode tells a reply's session lines after
+its stream, read from the file, so the run parks before it has them, and
+`noteLines` keeps that conversation when the line comes. Before 11-05 only
+lines already heard were given it, and a late one took the next park's
+conversation, so an interactive run's branch missed in the usual order:
+a fork's directive, or (as kay20475 on X saw it, by its shape) Claude
+Code's AgentSummary for a sub-agent, carrying the results the sub-agent's
+own next turn had taken, was told the whole conversation in a new Claude
+Code each time, pasted as one text, and read only the tools and system
+prompt from the cache (6% of 169k, twice 35s apart). A
+request no run takes, whose last reply's
 calls a live run of the same owner made, from the same conversation, goes
 on in a branch of that run's session. The branch's run copies the
 session's lines up to the reply's uuid into a session file of its own
