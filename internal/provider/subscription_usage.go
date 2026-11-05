@@ -97,6 +97,10 @@ type QuotaWindow struct {
 	// CapID is, beside Capped, how the window is known to a cap of its
 	// own (WindowCapID), for the GUI to set and show one.
 	CapID string `json:"capId,omitempty"`
+	// OwnCap is set beside Capped on a window set aside: only a cap the
+	// user set on it itself holds the account there (WindowCaps.own),
+	// never the account's, and the GUI offers none new.
+	OwnCap bool `json:"ownCap,omitempty"`
 	// Holds is what the whole window holds, reckoned from magpie's own
 	// calls through the account (usage.WithWindowHolds), for the GUI and,
 	// through ReckonHolds, magpie quota --json and /v1/magpie/quotas

@@ -94,8 +94,8 @@ func TestWithCappedMarksPerModelWindows(t *testing.T) {
 	if w[0].CapsSome || !w[1].CapsSome {
 		t.Error("the window one model's own is not told from the account's")
 	}
-	if w[2].Capped {
-		t.Error("on-demand spending is marked")
+	if w[2].Capped && !w[2].OwnCap {
+		t.Error("on-demand spending is marked for the account's cap, not only a cap of its own")
 	}
 	if w[3].Capped {
 		t.Error("an unlimited window is marked")
@@ -393,5 +393,47 @@ func TestSetWindowCaps(t *testing.T) {
 	}
 	if c := AccountCapsOf("codex", "me@example.com"); c.Windows != nil {
 		t.Fatalf("cleared, still %+v", c)
+	}
+}
+
+// A cap the user set on a window that a plugin later sets aside still
+// holds the account (ferock on Discord): WorkBuddy 0.2.24 sets "Credits"
+// aside and stops the account by "Total credits", plan and extra
+// together. Only the window's own cap does: the account's never reaches a
+// window set aside.
+func TestAsideWindowKeepsItsOwnCap(t *testing.T) {
+	now := time.Now()
+	month := now.Add(25 * 24 * time.Hour)
+	ws := []QuotaWindow{
+		{Name: "Credits", Used: 60, Amount: 300, Limit: 500, ResetsAt: &month, Aside: true},
+		{Name: "Extra credits", Used: 0, Amount: 0, Limit: 1300, Aside: true},
+		{Name: "Total credits", Used: 300.0 / 1800 * 100, Amount: 300, Limit: 1800, ResetsAt: &month},
+	}
+	a := allowanceOf(ws, now)
+	if used, _ := a.For("glm-5.1", now); used > 17 {
+		t.Fatalf("routing went by a window set aside: %v", used)
+	}
+	plan := WindowCaps{Windows: map[string]int{"credits": 50}}
+	if h := a.CapHeld("glm-5.1", plan, now); h == nil || h.Used != 60 || h.Cap != 50 || !h.Back.Equal(month) || h.Credits {
+		t.Fatalf("the user's 50%% cap on Credits, at 60%%, no longer held: %+v", h)
+	}
+	if !a.NearCap("glm-5.1", WindowCaps{Windows: map[string]int{"credits": 70}}, 15, now) {
+		t.Fatal("Credits at 60% is not near its own 70% cap")
+	}
+	if h := a.CapHeld("glm-5.1", WindowCaps{Windows: map[string]int{"credits": 70}}, now); h != nil {
+		t.Fatalf("held under its own 70%%: %+v", h)
+	}
+	if h := a.CapHeld("glm-5.1", WindowCaps{All: 50}, now); h != nil {
+		t.Fatalf("the account's 50%% held by a window set aside: %+v", h)
+	}
+	if h := a.CapHeld("glm-5.1", WindowCaps{Credits: true}, now); h != nil {
+		t.Fatalf("a Codex credits hold reached a window set aside: %+v", h)
+	}
+	got := WithCapped(map[string]SubscriptionQuota{"me@example.com": {Windows: ws}})["me@example.com"].Windows
+	if w := got[0]; !w.Capped || !w.OwnCap || w.CapsSome || w.CapID != "credits" {
+		t.Fatalf("Credits, set aside: capped %v, own %v, some %v, id %q", w.Capped, w.OwnCap, w.CapsSome, w.CapID)
+	}
+	if w := got[2]; !w.Capped || w.OwnCap || w.CapID != "total credits" {
+		t.Fatalf("Total credits: capped %v, own %v, id %q", w.Capped, w.OwnCap, w.CapID)
 	}
 }

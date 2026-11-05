@@ -311,6 +311,11 @@ type Limit struct {
 	// (Antigravity's "Gemini · 7 days"), which hold the account at its
 	// caps only (capLimits): routing goes on by the model's own window
 	pool []Limit
+	// aside is set on a window set aside for routing (QuotaWindow.Aside)
+	// that a cap the user set on it while it counted still holds the
+	// account at (WindowCaps.own); it rides in pool, never in the
+	// allowance itself
+	aside bool
 	// ResetRunsOut is when the reset the account spends by itself before
 	// it runs out does (resetRunsOut): spent then, it starts this window
 	// again — at Restarts, which routing takes for the window's renewal
@@ -1154,6 +1159,19 @@ func allowanceOf(ws []QuotaWindow, now time.Time) Allowance {
 			if i, ok := at[m.Model]; ok {
 				a[i].pool = append(a[i].pool, pl)
 			}
+		}
+	}
+	// a window set aside since the user capped it (WorkBuddy's "Credits"
+	// once the plan's and the extra credits are counted together, ferock
+	// on Discord) holds at that cap still: the user's value outlives the
+	// plugin's change of which window stops the account
+	for _, w := range ws {
+		if !w.Aside || w.Text || w.Model != "" || w.PoolWindow() {
+			continue
+		}
+		al := Limit{Used: w.Used, Span: w.Span, Name: w.Name, Resets: resets(w), aside: true}
+		for i := range a {
+			a[i].pool = append(a[i].pool, al)
 		}
 	}
 	return a

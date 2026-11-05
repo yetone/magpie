@@ -94,6 +94,16 @@ func (c WindowCaps) Of(name string) (share int, credits bool) {
 	return share, false
 }
 
+// own is the share at which a window set aside holds the account (Limit's
+// aside): only a cap the user set on that window itself, never the
+// account's or the credits', 0 for none.
+func (c WindowCaps) own(name string) int {
+	if v := c.Windows[WindowCapID(name)]; v >= MinCap && v <= MaxCap {
+		return v
+	}
+	return 0
+}
+
 // Holds says whether any window can hold the account before the vendor
 // does.
 func (c WindowCaps) Holds() bool {
@@ -303,6 +313,9 @@ func (a Allowance) CapHeld(model string, caps WindowCaps, now time.Time) *CapHol
 	unknown, byCap := false, false
 	for _, l := range a.capLimits(model) {
 		share, credits := caps.Of(l.Name)
+		if l.aside {
+			share, credits = caps.own(l.Name), false
+		}
 		if share <= 0 || l.Used < float64(share) {
 			continue
 		}
@@ -344,6 +357,9 @@ func (a Allowance) NearCap(model string, caps WindowCaps, points float64, now ti
 	model = strings.ToLower(model)
 	for _, l := range a.capLimits(model) {
 		share, _ := caps.Of(l.Name)
+		if l.aside {
+			share = caps.own(l.Name)
+		}
 		if share <= 0 || l.Used < float64(share)-points {
 			continue
 		}
@@ -387,6 +403,10 @@ func WithCapped(m map[string]SubscriptionQuota) map[string]SubscriptionQuota {
 			pool := w.PoolWindow() && len(PoolMembers(q.Windows, w)) > 0
 			w.Capped = (!w.Aside || pool) && !w.Unlimited
 			w.CapsSome = w.Capped && (w.Model != "" || w.matches != nil || pool)
+			// set aside, it still holds at a cap the user set on it
+			// before (allowanceOf), and at no other
+			w.OwnCap = w.Aside && !w.Unlimited && !w.Text && w.Model == "" && !pool
+			w.Capped = w.Capped || w.OwnCap
 			if w.Capped {
 				w.CapID = WindowCapID(w.Name)
 			}

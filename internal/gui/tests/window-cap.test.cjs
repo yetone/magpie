@@ -30,7 +30,9 @@ const fresh = () => ({
       ],
     },
     // the friend's five hours stop at 50%, its week at 40%; no account cap
-    accountWindowCaps: { "friend@example.com": { "5 hours": 50, weekly: 40 } },
+    // and its plan's credits at 50%, set before a plugin set that window
+    // aside (ferock on Discord)
+    accountWindowCaps: { "friend@example.com": { "5 hours": 50, weekly: 40, credits: 50 } },
   },
 });
 const win = (name, used, h) => ({ name, capId: name.toLowerCase(), used, resetsAt: inHours(h), capped: true });
@@ -44,6 +46,11 @@ const past = () => ({
   "me@example.com": under()["me@example.com"],
   "Friend@Example.com": { provider: "codex", windows: [win("5 hours", 60, 3), win("Weekly", 10, 100)] },
 });
+// a window set aside holds at its own cap only (ownCap): WorkBuddy's
+// plan's credits and the extra ones, the account stopped by their total
+const aside = (name, used) => ({ ...win(name, used, 600), ownCap: true });
+const credits = (plan) => ({ provider: "codex", windows: [aside("Credits", plan), aside("Extra credits", 0), win("Total credits", plan / 4, 600)] });
+const split = () => ({ "me@example.com": credits(60), "Friend@Example.com": credits(60) });
 
 function serve(lang, posts, use) {
   const ps = fresh();
@@ -167,6 +174,27 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const { page, errors } = await open(t, "under", under);
         assert.equal(await row(page, "Friend@Example.com").locator(".acap-held").count(), 0);
         assert.equal(await row(page, "Friend@Example.com").locator(".aq-cap").count(), 2);
+        assert.deepEqual(errors, []);
+      });
+
+      test(`${label}: a window set aside holds the account at the cap set on it before, and only that one`, async (t) => {
+        const { page, errors, posts } = await open(t, "aside", split);
+        // the friend's Credits at 60%, past the 50% set on it: held, marked
+        const held = row(page, "Friend@Example.com").locator(".acap-held");
+        if (w.held) assert.match(await held.textContent(), /^[^·]+·/);
+        assert.equal(await held.count(), 1);
+        assert.deepEqual(await row(page, "Friend@Example.com").locator(".aq-cap").evaluateAll((ms) => ms.map((m) => m.style.left)), ["50%"]);
+        // me has none on it: no note, no mark, and no new cap on a window set aside
+        assert.equal(await row(page, "me@example.com").locator(".acap-held, .aq-cap, .aq-own").count(), 0);
+        assert.equal(await row(page, "me@example.com").locator('.aq-set[role="button"]').count(), 0);
+        // the friend's is lifted from its meter
+        await still(page, "Friend@Example.com", meter(page, "Friend@Example.com", 0));
+        await menu(page).waitFor();
+        const n = posts.length;
+        await item(page, w.account).click();
+        assert.deepEqual(await posted(posts, n), { id: "codex", account: "Friend@Example.com", window: "credits", cap: 0 });
+        await page.waitForFunction(() => !document.querySelector('.editor .acc[data-account-id="Friend@Example.com"] .acap-held'));
+        assert.equal(await row(page, "Friend@Example.com").locator('.aq-set[role="button"]').count(), 0);
         assert.deepEqual(errors, []);
       });
 
