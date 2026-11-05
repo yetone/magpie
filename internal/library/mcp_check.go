@@ -45,7 +45,8 @@ type ServerHealth struct {
 	ToolList []Tool `json:"toolList,omitempty"`
 	// Why is the kind of error, for the page to put in its own words:
 	// notfound, start, exited, timeout, http, refused, unreachable,
-	// protocol, novar (a ${NAME} magpie's environment hasn't: Detail names
+	// protocol, home (exits in home, works in a project: Project),
+	// novar (a ${NAME} magpie's environment hasn't: Detail names
 	// them), wsldown (a command only agents in WSL start, whose distros,
 	// Detail, aren't running: it wasn't checked)
 	Why    string `json:"why,omitempty"`
@@ -73,7 +74,12 @@ type ServerHealth struct {
 	// for its agents there. A failure is the last one's; none for a
 	// command only this machine's agents start.
 	Checked []string `json:"checked,omitempty"`
-	At      int64    `json:"at"` // when it was checked, unix ms
+	// Project is a command that exited in home and listed its tools in a
+	// project folder, where the agents given it directly start it
+	// (inProject); Detail is what it said in home. Why "home" is that
+	// command run by magpie for its agents, in home (inHome).
+	Project bool  `json:"project,omitempty"`
+	At      int64 `json:"at"` // when it was checked, unix ms
 }
 
 // Each step of a check (initialize, notifications/initialized, tools/list)
@@ -120,9 +126,13 @@ func healthKey(s *Server, own ownSignIns) string {
 	b, _ := json.Marshal(c)
 	st := mcpauth.StatusOf(s.Name, s.URL)
 	// and where a command is started, which its agents decide
+	// and whether magpie runs it in home (inProject)
 	var sides []string
 	if s.Transport == "stdio" {
 		sides = checkSides(s)
+		if inHome(s) {
+			sides = append(sides, "hub")
+		}
 	}
 	// and the agents signed in to it themselves: one signed in since
 	// isn't left as "needs sign-in"
@@ -537,7 +547,7 @@ func withPath(env []string, dir string) []string {
 // MCP connection; what it writes to stderr is kept in errs; stop ends a
 // run in a distro (call it beside tree.Kill). The check starts it so, and
 // so does the hub (mcp_hub.go), on this machine.
-func startServer(ctx context.Context, s *Server, distro string) (tree *proc.Tree, stdin io.WriteCloser, stdout io.ReadCloser, errs *tail, stop func(), bad *ServerHealth) {
+func startServer(ctx context.Context, s *Server, distro, dir string) (tree *proc.Tree, stdin io.WriteCloser, stdout io.ReadCloser, errs *tail, stop func(), bad *ServerHealth) {
 	fail := func(h ServerHealth) (*proc.Tree, io.WriteCloser, io.ReadCloser, *tail, func(), *ServerHealth) {
 		return nil, nil, nil, nil, nil, &h
 	}
@@ -576,7 +586,11 @@ func startServer(ctx context.Context, s *Server, distro string) (tree *proc.Tree
 	// as its own cwd, which is not writable; inherit that and a server that
 	// writes into "." dies as "exited (1)" with no log. Pin the check to HOME.
 	cmd.Env = os.Environ()
-	if d := home(); d != "" {
+	d := dir
+	if d == "" || distro != "" {
+		d = home()
+	}
+	if d != "" {
 		cmd.Dir = d
 		// and PWD with it, as exec does itself only when Env is nil: a
 		// shell-script server that reads $PWD would otherwise see magpie's
@@ -626,7 +640,64 @@ func startServer(ctx context.Context, s *Server, distro string) (tree *proc.Tree
 // checkStdioAt starts the command on this machine, or in WSL distro, and
 // asks it for its tools.
 func checkStdioAt(ctx context.Context, s *Server, distro string) ServerHealth {
-	tree, stdin, stdout, errs, stop, bad := startServer(ctx, s, distro)
+	h := checkStdioIn(ctx, s, distro, "")
+	if distro == "" && h.Why == "exited" {
+		return inProject(ctx, s, h)
+	}
+	return h
+}
+
+// inProject is the health of a command that exited when started in home
+// (h): it is started again in an empty folder of its own, as an agent
+// starts it in its project. A server that indexes the folder it starts in
+// refuses home (fff-mcp: "Can not run certain FFF features in a file
+// system root or home directories", math_milian on Discord), and works
+// for every agent that starts it itself. Run by magpie, in home (the MCP
+// router, or Codex on magpie: mcp_run.go), it doesn't, and the page says
+// to keep it direct. A server that exits in the project folder too is h.
+func inProject(ctx context.Context, s *Server, h ServerHealth) ServerHealth {
+	dir, err := os.MkdirTemp("", "magpie-mcp-project-")
+	if err != nil {
+		return h
+	}
+	defer os.RemoveAll(dir)
+	stepTo(ctx, "initialize")
+	p := checkStdioIn(ctx, s, "", dir)
+	if p.State != "ok" {
+		return h
+	}
+	if inHome(s) {
+		h.Why = "home"
+		return h
+	}
+	p.Project = true
+	p.Detail = h.Detail
+	return p
+}
+
+// inHome is whether magpie runs s, in home, for agents given it: the MCP
+// router, or Codex on magpie (sync gives it a command as RunPath unless the
+// user keeps it direct), rather than each agent starting it itself.
+func inHome(s *Server) bool {
+	if s.Hub == HubDirect {
+		return false
+	}
+	mu.Lock()
+	l, err := load()
+	mu.Unlock()
+	if err == nil && l.MCPHub && inHub(s, "") {
+		return true
+	}
+	runs.Lock()
+	codex := runs.wired["codex"]
+	runs.Unlock()
+	return codex && slices.Contains(s.Agents, "codex")
+}
+
+// checkStdioIn is checkStdioAt with the command started in dir ("" for
+// home).
+func checkStdioIn(ctx context.Context, s *Server, distro, dir string) ServerHealth {
+	tree, stdin, stdout, errs, stop, bad := startServer(ctx, s, distro, dir)
 	if bad != nil {
 		return *bad
 	}

@@ -851,7 +851,7 @@ func (c *streamConn) close() {
 // dialStdio starts the command s runs, as the check starts it.
 func dialStdio(s *Server, changed func()) (*streamConn, error) {
 	// the hub's server lives until the hub ends it, not with a request
-	tree, stdin, stdout, errs, stop, bad := startServer(context.Background(), s, "")
+	tree, stdin, stdout, errs, stop, bad := startServer(context.Background(), s, "", "")
 	if bad != nil {
 		return nil, healthErr(*bad)
 	}

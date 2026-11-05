@@ -2232,9 +2232,12 @@ magpie.plugin("library", (ctx) => {
   const health = new Map(); // name → { key: the server as checked, h: what was found, null while checking }
   const toolsOpen = new Set(); // the servers whose tools are shown
   // a command is started where its agents run, this computer or a WSL
-  // distro (mcp_check_wsl.go): agents moved between them is a check anew
+  // distro (mcp_check_wsl.go): agents moved between them is a check anew,
+  // and so is the router taking it or leaving it to the agents, which
+  // start it in their project and the router in home (inProject)
   const healthKey = (s) => JSON.stringify([s.transport, s.command, s.args, s.env, s.url, s.headers, s.signIn,
-    s.transport === "stdio" ? [...new Set((s.agents || []).map((a) => a.split("@wsl:")[1] || ""))].sort() : null]);
+    s.transport === "stdio" ? [...new Set((s.agents || []).map((a) => a.split("@wsl:")[1] || ""))].sort() : null,
+    s.transport === "stdio" && !!lib.mcpHub && s.hub !== "direct"]);
   const toolList = (name) => { const h = health.get(name)?.h; return h?.state === "ok" ? h.toolList || [] : []; };
   // whether an agent the page shows gets the server, here or in a project
   // magpie keeps whose folder is there. The library keeps every agent it
@@ -2387,7 +2390,13 @@ magpie.plugin("library", (ctx) => {
     if (signIns) render();
   }
   function healthWords(h, s) {
-    if (h.state === "ok") return [h.tools === 1 ? t("1 tool") : t("{n} tools", { n: h.tools }), t("It started and listed its tools")];
+    const more = (x) => (h.detail ? x + "\n" + h.detail : x);
+    const count = (n) => (n === 1 ? t("1 tool") : t("{n} tools", { n }));
+    // it exits in home and lists its tools in a project folder, where an
+    // agent starts it (fff-mcp, math_milian on Discord): fine for agents
+    // that start it themselves, not those magpie runs it for, in home
+    if (h.state === "ok" && h.project) return [count(h.tools), more(t("It started in a project folder and listed its tools, as an agent starts it there. It exits when started in your home folder"))];
+    if (h.state === "ok") return [count(h.tools), t("It started and listed its tools")];
     // an agent signed in to it on its own (Claude Code's /mcp, in WSL too)
     // uses it, though magpie's check, without that sign-in, was asked for
     // one: the row says who, not "needs sign-in" (CyberCaius on Discord)
@@ -2402,8 +2411,8 @@ magpie.plugin("library", (ctx) => {
         : t("The server refused magpie (HTTP {code}) — a key in its headers may be missing or wrong", { code: h.code || 401 });
       return [t("needs sign-in"), h.detail ? why + "\n" + h.detail : why];
     }
-    const more = (x) => (h.detail ? x + "\n" + h.detail : x);
     switch (h.why) {
+      case "home": return [t("won't start in home"), more(t("It exits when started in your home folder, where magpie runs it for the agents given it, and works in a project folder. Turn off Through the MCP router in its editor, so each agent starts it in its own project"))];
       case "notfound": return [t("can't start: {cmd} not found", { cmd: h.detail }), t("Can't start it: there is no {cmd} on the PATH magpie has", { cmd: h.detail })];
       case "start": return [t("can't start"), more(t("Can't start it"))];
       case "exited": return [h.code ? t("exited ({code})", { code: h.code }) : t("exited"), more(h.code ? t("It exited with code {code} before listing its tools", { code: h.code }) : t("It exited before listing its tools"))];
@@ -2895,9 +2904,11 @@ magpie.plugin("library", (ctx) => {
     ed.append(...field(t("Sync to your other computers"), hereBox, t("Off keeps it on this computer: sync never carries it to your other computers, and a sync from them neither removes it nor puts theirs in its place")));
     // with the hub on, a server can stay each agent's own entry (#4382,
     // cuipengcx90): one that reads its project from the folder it starts
-    // in, or keeps a session's state. Shown only while the hub is on
+    // in, or keeps a session's state. Shown while the hub is on, and for a
+    // server the check found won't start in home, where magpie runs it for
+    // Codex too (inHome)
     d.hub = d.hub === "direct" ? "direct" : "";
-    if (lib.mcpHub) {
+    if (lib.mcpHub || (s && health.get(s.name)?.h?.why === "home")) {
       const hubBox = el("div", "lib-hubbox");
       const drawHub = () => hubBox.replaceChildren(toggle(d.hub !== "direct", t("Through the MCP router"), (on) => { d.hub = on ? "" : "direct"; drawHub(); }));
       drawHub();
