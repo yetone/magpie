@@ -53,7 +53,7 @@ func TestCodexAPIKeepsMagpieOnOwnModel(t *testing.T) {
 	// the picker offers Codex's own as they are set, under their names
 	found := false
 	for _, o := range model.Options(nil) {
-		if o.Group == "OpenAI" && o.Value == "codex/gpt-b" && o.Label == "gpt-b" {
+		if o.Group == "OpenAI" && o.Value == "codex/gpt-b" && o.Label == "B" {
 			found = true
 		}
 	}

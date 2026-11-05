@@ -16,7 +16,7 @@ func TestCodexProviderOwnModelSaysItsPath(t *testing.T) {
 	ownOf := func(a *Agent) []Option {
 		var out []Option
 		for _, o := range a.Fields[0].Options(nil) {
-			if o.Group == "OpenAI" && (o.Label == "gpt-a" || o.Value == "gpt-a") {
+			if o.Group == "OpenAI" && (o.Value == "gpt-a" || o.Value == "codex/gpt-a") {
 				out = append(out, o)
 			}
 		}
@@ -55,7 +55,7 @@ func TestCodexProviderOwnModelSaysItsPath(t *testing.T) {
 			t.Fatalf("magpie isn't Codex's provider:\n%s", cfg)
 		}
 		own := ownOf(codex(home))
-		if len(own) != 1 || own[0].Value != "codex/gpt-a" || !own[0].Via {
+		if len(own) != 1 || own[0].Value != "codex/gpt-a" || own[0].Label != "A" || !own[0].Via {
 			t.Fatalf("Codex's own gpt-a, served by magpie: %+v", own)
 		}
 		if err := codex(home).Fields[0].Set(own[0].Value); err != nil {

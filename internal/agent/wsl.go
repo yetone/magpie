@@ -441,9 +441,9 @@ var wslKinds = []wslKind{
 					// over several accounts magpie routes, so they are
 					// offered via magpie too, as on a live Codex (#1603)
 					if codexFailover() {
-						return withVia(group("OpenAI", options(ownCodex(), "")), "codex", "")
+						return withVia(group("OpenAI", codexNamed(ownCodex())), "codex", "")
 					}
-					own := codexInMagpie(group("OpenAI", options(ownCodex(), "")))
+					own := codexInMagpie(group("OpenAI", codexNamed(ownCodex())))
 					return append(own, codexViaMagpieFor(own)...)
 				}
 			case "effort":

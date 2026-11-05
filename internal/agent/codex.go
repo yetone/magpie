@@ -1419,9 +1419,9 @@ func codexIn(at place) *Agent {
 			return own
 		}
 		if p != "" && p != magpieID && !isCCSwitchMirror(p) {
-			own = say(group(p, options(catalog.Codex(), "")))
+			own = say(group(p, codexNamed(catalog.Codex())))
 		} else {
-			own = codexInMagpie(say(group("OpenAI", options(ownCodex(), ""))))
+			own = codexInMagpie(say(group("OpenAI", codexNamed(ownCodex()))))
 			// with magpie Codex's provider (magpie API, or a magpie model
 			// picked with no ChatGPT sign-in beside it), Codex's own models
 			// are reached through magpie on a ChatGPT account there: picked
@@ -1431,7 +1431,7 @@ func codexIn(at place) *Agent {
 			if api() || asProvider() {
 				for i, o := range own {
 					if id := codexOwnViaMagpie(o.Value); id != "" {
-						own[i].Label, own[i].Value, own[i].Ref = o.Value, id, id
+						own[i].Value, own[i].Ref = id, id
 					} else if !api() {
 						own[i].Via, own[i].Direct = false, "OpenAI"
 					}
@@ -2387,6 +2387,21 @@ func ownCodex() []catalog.Model {
 	}
 	if len(out) == 0 {
 		return ms
+	}
+	return out
+}
+
+// codexNamed is Codex's own models as its picker offers them, each under
+// its name, as every model of magpie's is (viaMagpie): the picker drew
+// the slug (gpt-6-astra) in front and the name after it in grey, the
+// only list in magpie that did (nb5p on Discord). The value stays the
+// slug Codex is set to.
+func codexNamed(ms []catalog.Model) []Option {
+	out := options(ms, "")
+	for i, m := range ms {
+		if m.Name != "" {
+			out[i].Label = m.Name
+		}
 	}
 	return out
 }
