@@ -1,9 +1,13 @@
 package agent
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	syncatomic "sync/atomic"
 	"testing"
 	"time"
 )
@@ -67,5 +71,47 @@ func TestRescanLooksAgain(t *testing.T) {
 	almaRead.Unlock()
 	if n != 0 {
 		t.Errorf("Alma's answers are kept: %d", n)
+	}
+}
+
+// The refresh asks where updates come from again, too: a version published
+// after magpie started stayed invisible to its own re-detect until a
+// restart, the newest kept for hours and nothing asking anew (#4980). An
+// ask that fails after the refresh keeps the newest known before it.
+func TestRescanAsksLatestAgain(t *testing.T) {
+	var asks syncatomic.Int32
+	var newest syncatomic.Value
+	newest.Store("1.4.0")
+	reg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asks.Add(1)
+		v := newest.Load().(string)
+		if v == "" {
+			http.Error(w, "down", http.StatusBadGateway)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"version": v})
+	}))
+	t.Cleanup(reg.Close)
+	oldReg := npmRegistry
+	npmRegistry = reg.URL + "/"
+	t.Cleanup(func() { npmRegistry = oldReg; latests = memo{} })
+	latests = memo{}
+
+	u := &updater{via: "npm", pkg: "@earendil-works/pi-coding-agent"}
+	if got := latestVersion(u); got != "1.4.0" {
+		t.Fatalf("latest %q", got)
+	}
+	newest.Store("1.5.0") // published after magpie asked
+	if got := latestVersion(u); got != "1.4.0" || asks.Load() != 1 {
+		t.Fatalf("latest %q, npm asked %d times for one kept answer", got, asks.Load())
+	}
+	Rescan()
+	if got := latestVersion(u); got != "1.5.0" || asks.Load() != 2 {
+		t.Fatalf("after the refresh: latest %q, npm asked %d times", got, asks.Load())
+	}
+	newest.Store("") // npm down at the next refresh
+	Rescan()
+	if got := latestVersion(u); got != "1.5.0" || asks.Load() != 3 {
+		t.Fatalf("a failed ask after the refresh: latest %q, npm asked %d times", got, asks.Load())
 	}
 }

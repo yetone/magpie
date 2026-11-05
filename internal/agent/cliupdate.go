@@ -641,6 +641,19 @@ func (m *memo) forget(key string) {
 	m.mu.Unlock()
 }
 
+// expireAll has every kept answer whose ask isn't running asked again on
+// its next read: the Agents page's re-detect. The answer stays as the one
+// before, which a failed ask keeps, as get does for an answer out of date.
+func (m *memo) expireAll() {
+	m.mu.Lock()
+	for _, e := range m.m {
+		if e.ready == nil {
+			e.until = time.Time{}
+		}
+	}
+	m.mu.Unlock()
+}
+
 var versions, latests memo
 
 // installedVersion is what the CLI at bin says its version is, asked again
