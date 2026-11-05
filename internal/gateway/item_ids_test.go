@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"maps"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -383,8 +385,8 @@ func TestPlainItemIDsBoundItemIDs(t *testing.T) {
 	  {"type":"message","role":"assistant","id":"` + long + `","status":"completed","content":[{"type":"output_text","text":"OK"}]},
 	  {"type":"reasoning","id":"` + rs + `","summary":[],"encrypted_content":"gAAAA"},
 	  {"type":"reasoning","id":"` + museReasoningID + `","summary":[],"encrypted_content":"muse-sealed"},
-	  {"type":"function_call","id":"` + like + `","call_id":"call_1","name":"shell","arguments":"{}"},
-	  {"type":"function_call","id":"` + other + `","call_id":"call_2","name":"shell","arguments":"{}"}]}`)
+	  {"type":"custom_tool_call","id":"` + like + `","call_id":"call_1","name":"apply_patch","input":"x"},
+	  {"type":"custom_tool_call","id":"` + other + `","call_id":"call_2","name":"apply_patch","input":"y"}]}`)
 	got := plainItemIDs(body)
 	var q struct {
 		Input []map[string]any `json:"input"`
@@ -408,20 +410,15 @@ func TestPlainItemIDsBoundItemIDs(t *testing.T) {
 			bound = id
 		}
 	}
-	if got := strings.Join(types, ","); got != "message,message,reasoning,function_call,function_call" {
+	if got := strings.Join(types, ","); got != "message,message,reasoning,custom_tool_call,custom_tool_call" {
 		t.Fatalf("items: %s", got)
 	}
 	if q.Input[0]["id"] != "msg_keep" {
 		t.Errorf("an id that fits was changed: %q", q.Input[0]["id"])
 	}
-	if bound == "" || !strings.HasPrefix(bound, "msg_") {
-		t.Errorf("the message's id not bound under its kind's prefix: %q", bound)
-	}
-	if bound == copilotLongMessageID {
-		t.Errorf("the message's id sent as it came: %q", bound)
-	}
-	if bound == copilotLongReasoningID {
-		t.Errorf("the reasoning's id sent as it came")
+	// a message may go without its id, and goes so when it was too long
+	if _, ok := q.Input[1]["id"]; ok {
+		t.Errorf("the message's overlong id sent: %q", bound)
 	}
 	boundRS, _ := q.Input[2]["id"].(string)
 	if boundRS == "" || !strings.HasPrefix(boundRS, "rs_") {
@@ -438,8 +435,11 @@ func TestPlainItemIDsBoundItemIDs(t *testing.T) {
 	// its first 440, so these two would land on one)
 	var callIDs []string
 	for _, it := range q.Input {
-		if it["type"] == "function_call" {
+		if it["type"] == "custom_tool_call" {
 			id, _ := it["id"].(string)
+			if !strings.HasPrefix(id, "ctc_") {
+				t.Errorf("a custom tool call's id not bound under its kind's prefix: %q", id)
+			}
 			callIDs = append(callIDs, id)
 		}
 	}
@@ -459,5 +459,187 @@ func TestPlainItemIDsBoundItemIDs(t *testing.T) {
 		if id != want {
 			t.Errorf("a cut id was cut again: %q then %q", want, id)
 		}
+	}
+}
+
+// copilotOpaqueCallID is a function call's id as Copilot hands it out on
+// the direct path: 452 characters of standard Base64, + and / in it and no
+// fc_ at the front (echo_ts, after Codex's native compaction).
+var copilotOpaqueCallID = func() string {
+	b := make([]byte, 339)
+	for i := range b {
+		b[i] = byte(i*131 + 7)
+	}
+	return base64.StdEncoding.EncodeToString(b)
+}()
+
+// opaqueCopilot plays Copilot's /responses as echo_ts and isnine found
+// it: an id it handed out goes back as it came; an item without its id
+// goes; any other id must be of at most 64 characters and begin with its
+// kind's prefix, or the whole request is turned away with Copilot's
+// empty 400, word for word.
+type opaqueCopilot struct {
+	mu     sync.Mutex
+	own    map[string]bool
+	bodies []map[string]any
+}
+
+func (u *opaqueCopilot) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(r.Body)
+	var q map[string]any
+	json.Unmarshal(body, &q)
+	u.mu.Lock()
+	u.bodies = append(u.bodies, q)
+	u.mu.Unlock()
+	input, _ := q["input"].([]any)
+	for _, raw := range input {
+		it, _ := raw.(map[string]any)
+		id, ok := it["id"].(string)
+		if !ok || u.own[id] {
+			continue
+		}
+		typ, _ := it["type"].(string)
+		prefix := map[string]string{"message": "msg_", "function_call": "fc_", "reasoning": "rs_"}[typ]
+		if len(id) > 64 || !openaiItemID.MatchString(id) || prefix != "" && !strings.HasPrefix(id, prefix) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			io.WriteString(w, `{"error":{"message":"","code":"invalid_request_body"}}`)
+			return
+		}
+	}
+	done := `{"type":"message","id":"msg_1","role":"assistant","content":[{"type":"output_text","text":"DONE"}]}`
+	if q["stream"] == true {
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, sse(
+			`data: {"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}`,
+			`data: {"type":"response.output_item.done","output_index":0,"item":`+done+`}`,
+			`data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[`+done+`],"usage":{"input_tokens":5,"output_tokens":1}}}`))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	io.WriteString(w, `{"id":"resp_1","object":"response","status":"completed","output":[`+done+`],"usage":{"input_tokens":5,"output_tokens":1}}`)
+}
+
+func (u *opaqueCopilot) asked() []map[string]any {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return append([]map[string]any(nil), u.bodies...)
+}
+
+// echo_ts, in Codex on GitHub Copilot: after Codex's native compaction,
+// the turn that carried Copilot's tool call back was turned away with an
+// empty 400 "invalid_request_body". The call's 452-character id had gone
+// as a bare sha256 digest, which Copilot refuses, where its own id, or
+// none, goes. The call goes without its id, paired with its output by
+// call_id, streamed or not.
+func TestCopilotTakesItsOwnOpaqueCallID(t *testing.T) {
+	if len(copilotOpaqueCallID) != 452 || !strings.ContainsAny(copilotOpaqueCallID, "+/") {
+		t.Fatalf("fixture not of Copilot's shape: %d %q", len(copilotOpaqueCallID), copilotOpaqueCallID[:20])
+	}
+	fresh(t)
+	cfg := os.Getenv("XDG_CONFIG_HOME")
+	os.MkdirAll(filepath.Join(cfg, "github-copilot"), 0o755)
+	os.WriteFile(filepath.Join(cfg, "github-copilot", "apps.json"), mustJSON(map[string]any{
+		"github.com:Iv1.x": map[string]any{"user": "echo", "oauth_token": "gho_echo"},
+	}), 0o600)
+	up := &opaqueCopilot{own: map[string]bool{copilotOpaqueCallID: true}}
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/models":
+			io.WriteString(w, `{"data":[{"id":"gpt-6.1","name":"GPT-6.1","model_picker_enabled":true,"policy":{"state":"enabled"},"supported_endpoints":["/responses"],"capabilities":{"type":"chat","supports":{"reasoning_effort":["low","medium","high"]}}}]}`)
+		case "/responses":
+			up.ServeHTTP(w, r)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer api.Close()
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/token") {
+			json.NewEncoder(w).Encode(map[string]any{"token": "sess", "expires_at": time.Now().Add(time.Hour).Unix(), "endpoints": map[string]string{"api": api.URL}})
+			return
+		}
+		io.WriteString(w, `{"copilot_plan":"individual"}`)
+	}))
+	defer gh.Close()
+	oldTok, oldUser := provider.CopilotTokenURL, provider.CopilotUserURL
+	provider.CopilotTokenURL, provider.CopilotUserURL = gh.URL+"/token", gh.URL+"/user"
+	defer func() { provider.CopilotTokenURL, provider.CopilotUserURL = oldTok, oldUser }()
+
+	input := `[{"type":"message","role":"user","content":[{"type":"input_text","text":"list the files"}]},
+	  {"type":"function_call","id":"` + copilotOpaqueCallID + `","call_id":"call_Xq7","name":"shell","arguments":"{\"cmd\":\"ls\"}"},
+	  {"type":"function_call_output","call_id":"call_Xq7","output":"main.go"}]`
+	s := New()
+	for _, stream := range []bool{true, false} {
+		body := `{"model":"copilot/gpt-6.1","stream":` + strconv.FormatBool(stream) + `,"store":false,"input":` + input + `}`
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/responses", strings.NewReader(body)))
+		if rec.Code != 200 || !strings.Contains(rec.Body.String(), "DONE") {
+			t.Fatalf("stream %v: %d %s", stream, rec.Code, rec.Body.String())
+		}
+	}
+	asked := up.asked()
+	if len(asked) != 2 {
+		t.Fatalf("asked Copilot %d times", len(asked))
+	}
+	for _, q := range asked {
+		items, _ := q["input"].([]any)
+		var call, out map[string]any
+		for _, raw := range items {
+			it, _ := raw.(map[string]any)
+			switch it["type"] {
+			case "function_call":
+				call = it
+			case "function_call_output":
+				out = it
+			}
+		}
+		if call == nil || out == nil {
+			t.Fatalf("call or its output not sent: %v", items)
+		}
+		if id, ok := call["id"]; ok && id != copilotOpaqueCallID {
+			t.Errorf("Copilot's call sent under an id it never gave: %v", id)
+		}
+		if call["call_id"] != "call_Xq7" || out["call_id"] != "call_Xq7" {
+			t.Errorf("the call and its output not paired as they were: %v %v", call["call_id"], out["call_id"])
+		}
+	}
+}
+
+// An overlong id of a kind that can't go without one, another vendor's on
+// a conversation switched to an upstream that checks ids, is still bound:
+// under its kind's prefix when its type says one, else under its own, and
+// another vendor's reasoning of other characters still goes.
+func TestPlainItemIDsBindsOtherKinds(t *testing.T) {
+	long := strings.Repeat("Z", 300)
+	body := []byte(`{"model":"gpt-6.1","store":false,"input":[
+	  {"type":"reasoning","id":"` + long + `","summary":[],"encrypted_content":"gAAAA"},
+	  {"type":"reasoning","id":"` + museReasoningID + `","summary":[],"encrypted_content":"muse-sealed"},
+	  {"type":"tool_search_call","id":"` + long + `","call_id":"ts_1","execution":"client","arguments":{}},
+	  {"type":"custom_tool_call","id":"fc_` + long + `","call_id":"cc_1","name":"apply_patch","input":"x"},
+	  {"type":"item_kind_x","id":"xk_` + long + `"},
+	  {"type":"item_kind_y","id":"` + long + `"}]}`)
+	var q struct {
+		Input []map[string]any `json:"input"`
+	}
+	if err := json.Unmarshal(plainItemIDs(body), &q); err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, it := range q.Input {
+		id, _ := it["id"].(string)
+		if len(id) != 64 || !openaiItemID.MatchString(id) {
+			t.Errorf("id %q not bound to 64 of the characters OpenAI takes", id)
+		}
+		ids = append(ids, it["type"].(string)+"="+id[:4])
+	}
+	got := strings.Join(ids, ",")
+	for _, w := range []string{"reasoning=rs_", "tool_search_call=tsc_", "custom_tool_call=ctc_", "item_kind_x=xk_"} {
+		if !strings.Contains(got, w) {
+			t.Errorf("ids %s lack %s", got, w)
+		}
+	}
+	if len(q.Input) != 5 {
+		t.Errorf("another vendor's reasoning of other characters not left out: %s", got)
 	}
 }

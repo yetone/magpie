@@ -608,12 +608,14 @@ func wasPlainItemIDs(body []byte) []byte {
 		if json.Unmarshal(it["type"], &typ) == nil && typ == "reasoning" && !safeIDChars.MatchString(id) {
 			continue
 		}
-		if len(id) > itemIDCap {
-			id = boundItemID(id)
-		} else {
-			id = unsafeToolID.ReplaceAllString(id, "_")
+		switch {
+		case len(id) > itemIDCap && idOptional[typ]:
+			delete(it, "id")
+		case len(id) > itemIDCap:
+			it["id"], _ = json.Marshal(boundItemID(id, typ))
+		default:
+			it["id"], _ = json.Marshal(unsafeToolID.ReplaceAllString(id, "_"))
 		}
-		it["id"], _ = json.Marshal(id)
 		b, err := wasMarshalPlain(it)
 		if err != nil {
 			return body
