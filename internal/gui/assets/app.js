@@ -16966,6 +16966,18 @@ function planSpan(q) {
 // move (panelArrange); panelPeek: the card a menu bar cell asked for, shown
 // though the tab hides it, until the panel is put away or the tab left.
 let panelArranging = false, panelPeek = "";
+// the Allowances tab's cards at 0 (quotaAtZero) in sight, as the reader chose
+let panelZeroOpen = kept("panelZeroOpen", false);
+// quotaAtZero: a fresh reading with nothing left: each window used up and
+// any balance 0 or less (runking on Discord); not a failed or old one, a
+// percent, a text or unlimited window, Codex's credits, resets or a check-in
+function quotaAtZero(q) {
+  if (q.error || q.asOf || q.resets?.count || q.checkins || creditsOn(q)) return false;
+  const ns = (q.balanceParts?.length ? q.balanceParts.map((p) => p.text) : q.balance ? [q.balance] : []).map((s) => String(s || "").match(/^(-?)[^\d-]*(-?)(\d[\d,]*(?:\.\d+)?)[^\d%]*$/));
+  const ws = q.windows || [];
+  return ws.length + ns.length > 0 && ns.every((m) => m && (m[1] || m[2] || !(+m[3].replace(/,/g, "") > 0)))
+    && ws.every((w) => w.heldBy || (w.balance != null ? !(w.balance > 0) : !w.unlimited && !quotaNoShare(w) && w.used >= 100));
+}
 if (mode === "panel") document.addEventListener("visibilitychange", () => {
   if (!document.hidden) return;
   // an account its eye showed is hidden again once the panel is put away
@@ -17356,7 +17368,7 @@ function renderPanelUse() {
 function renderPanelQuota(lazy) {
   const box = $("#panelQuota");
   if (mode !== "panel" || !box) return;
-  const drawn = JSON.stringify([quotas, quotaHistV, quotaLeft, quotaRange, [...panelOptsFolded], state?.settings, locale, panelTab, panelPeek, panelArranging, usageArranging, Math.floor(Date.now() / 60e3)]);
+  const drawn = JSON.stringify([quotas, quotaHistV, quotaLeft, quotaRange, [...panelOptsFolded], state?.settings, locale, panelTab, panelPeek, panelArranging, panelZeroOpen, usageArranging, Math.floor(Date.now() / 60e3)]);
   if (lazy && renderPanelQuota.drawn === drawn) return;
   renderPanelQuota.drawn = drawn;
   const subs = byUsageOrder(keyCards(quotas || []).filter((q) => q.balance || q.error || q.windows?.length));
@@ -17399,6 +17411,9 @@ function renderPanelQuota(lazy) {
   const hidden = new Set(state.settings?.panelUsageHidden || []);
   const peek = (q) => !!panelPeek && (trayCardID(q) === panelPeek || q.balanceCard === panelPeek || q.provider === panelPeek);
   const away = new Set(subs.filter((q) => hidden.has(q.provider) && !peek(q)).map((q) => q.provider));
+  // a balance, or a vendor's every account, at 0: behind the foot's button
+  const zero = new Set(subs.filter((q) => quotaAtZero(q) && !peek(q)));
+  let atZero = 0;
   // the sections in order: a vendor's accounts, or a run of balances
   const parts = [], groups = new Map();
   for (const q of subs) {
@@ -17406,6 +17421,7 @@ function renderPanelQuota(lazy) {
     // a balance with windows (Command Code's credits beside its 5-hour and
     // weekly windows) is the windows' card; a balance alone, a figure
     if (q.balance && !q.windows?.length) {
+      if (zero.has(q) && ++atZero && !panelZeroOpen) continue;
       const last = parts[parts.length - 1];
       if (last?.bals) last.bals.push(q);
       else parts.push({ bals: [q] });
@@ -17417,6 +17433,7 @@ function renderPanelQuota(lazy) {
   for (const part of parts) {
     if (part.bals) { box.append(panelBalances(part.bals)); continue; }
     const { name, qs } = part;
+    if (qs.every((q) => zero.has(q)) && (atZero += qs.length) && !panelZeroOpen) continue;
     const g = el("div", "pq-group");
     const head = el("div", "pq-gh");
     head.append(icon(qs[0].icon), el("span", "pq-gn", name));
@@ -17454,6 +17471,14 @@ function renderPanelQuota(lazy) {
   arrange.title = t("Choose which subscriptions this tab shows, and their order");
   arrange.onclick = () => { panelArranging = true; panelPeek = ""; renderPanelQuota(); $("#panelQuota .pq-arow .pq-ahandle")?.focus(NO_SCROLL); };
   foot.append(arrange);
+  if (atZero) {
+    const z = el("button", "pq-more pq-zero", panelZeroOpen ? t("Fold the ones at 0") : t("{n} at 0", { n: atZero }));
+    z.type = "button";
+    z.title = t("Nothing left here: every window used up, or a balance of 0");
+    z.setAttribute("aria-expanded", String(panelZeroOpen));
+    z.onclick = () => { panelZeroOpen = !panelZeroOpen; try { localStorage.setItem("magpie.panelZeroOpen", panelZeroOpen); } catch {} renderPanelQuota(); box.querySelector(".pq-zero")?.focus(NO_SCROLL); };
+    foot.append(z);
+  }
   if (away.size) foot.append(el("span", "pq-hidden", t("{n} hidden", { n: away.size })));
   box.append(foot);
   restoreFlash();
