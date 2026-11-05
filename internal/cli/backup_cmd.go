@@ -75,6 +75,9 @@ func backupCmd(args []string) error {
 		if l.Subagents != nil && len(*l.Subagents) > 0 {
 			fmt.Printf(", %d subagents", len(*l.Subagents))
 		}
+		if l.Hooks != nil && len(*l.Hooks) > 0 {
+			fmt.Printf(", %d hooks", len(*l.Hooks))
+		}
 	}
 	if s := b.SignIns; s != nil {
 		fmt.Printf("; %d sign-ins", len(s.Logins)+len(s.Plugins))

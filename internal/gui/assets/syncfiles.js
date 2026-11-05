@@ -33,7 +33,7 @@ window.davForm = function (v) {
   const phrase = input("", v.passphraseSet ? saved : t("the same on every computer"), "password");
   const [keysL, keys] = tick(t("Providers' API keys"), v.keys !== false);
   const [agentsL, agents] = tick(t("Agents' models"), v.agents !== false);
-  const [libL, lib] = tick(t("Library: instructions, MCP servers, skills and subagents"), v.library !== false);
+  const [libL, lib] = tick(t("Library: instructions, MCP servers, skills, hooks and subagents"), v.library !== false);
   // usage: off unless picked, each computer its own (#542)
   const [useL, use] = tick(t("Usage: this computer's calls, for the Usage page on the others"), !!v.usage);
   // sign-ins: off unless picked, sealed with the passphrase like the rest
@@ -116,7 +116,7 @@ window.exportForm = function () {
   const p1 = input("", t("passphrase"), "password");
   const p2 = input("", t("again"), "password");
   const [keysL, keys] = tick(t("With the providers' API keys"), true);
-  const [libL, lib] = tick(t("With the library: instructions, MCP servers, skills and subagents"), true);
+  const [libL, lib] = tick(t("With the library: instructions, MCP servers, skills, hooks and subagents"), true);
   // sign-ins: off unless picked (qianxunji, curtinp118 on Discord)
   const [siL, si] = tick(t("With the sign-ins: subscription accounts and plugin sign-ins"), false);
   const what = el("div", "stack");
@@ -179,7 +179,7 @@ window.importForm = function () {
   pf.append(name, pick, file);
   const pass = input("", t("passphrase"), "password");
   const [agentsL, agents] = tick(t("Set the agents' models too"), true);
-  const [libL, lib] = tick(t("Bring in the library too: instructions, MCP servers, skills and subagents"), true);
+  const [libL, lib] = tick(t("Bring in the library too: instructions, MCP servers, skills, hooks and subagents"), true);
   const [siL, si] = tick(t("Bring in the sign-ins too, when the file has them"), true);
   const what = el("div", "stack");
   what.append(agentsL, libL, siL);

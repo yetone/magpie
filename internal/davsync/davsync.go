@@ -866,6 +866,11 @@ func hashes(b backup.Bundle) map[string]string {
 		c.Subagents = nil
 		lib = &c
 	}
+	if lib != nil && lib.Hooks != nil && len(*lib.Hooks) == 0 { // as before them, without one
+		c := *lib
+		c.Hooks = nil
+		lib = &c
+	}
 	out := map[string]string{
 		"providers": h(providers),
 		"settings":  settingsHash,

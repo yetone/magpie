@@ -333,6 +333,12 @@ library with none hashes as it did before, so upgrading syncs nothing
 (`TestSyncSubagents`, `TestNoSubagentsHashAsBefore`,
 `TestBackupFileCarriesSubagents`).
 
+The hooks go the same way (`library.Bundle.Hooks`): each computer writes
+them into its agents beside the user's own hooks and records its own
+entries, an older bundle with no list keeps this computer's, and a library
+with none hashes as before (`TestSyncHooks`, `TestNoHooksHashAsBefore`,
+`TestBackupFileCarriesHooks`).
+
 ## Verification
 
 ```sh
