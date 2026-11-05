@@ -7,6 +7,9 @@
 //   with the system's switch;
 // - turned off in Settings, the rules are the system's again, and the
 //   Routing page's live dot pulses; turned on, it stops, with no reload;
+// - a spinner stands still while motion is reduced, and turns otherwise: an
+//   endless animation cut to .01ms restarted every frame at a random angle
+//   and spun faster than ever (_yukirock on X, 0.1.3036);
 // - the choice is saved as reduceMotion.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -44,8 +47,9 @@ function serve(st, posted) {
 }
 
 // how many of the stylesheets' reduced-motion rules apply now, of all of
-// them; and what a live dot, put in the page, does
-const looks = (page) => page.evaluate(() => {
+// them; what a live dot, put in the page, does; and whether a sign-in
+// spinner turns on and on (1) or ends (0)
+const looks = (page) => page.evaluate(async () => {
   let reduce = 0, all = 0;
   for (const sh of document.styleSheets) for (const r of sh.cssRules) {
     if (!r.media) continue;
@@ -57,7 +61,17 @@ const looks = (page) => page.evaluate(() => {
   document.body.append(dot);
   const anim = getComputedStyle(dot).animationName;
   dot.remove();
-  return { reduce, all, anim, calm: calm(), motion: document.documentElement.dataset.motion || "" };
+  const box = document.createElement("div");
+  box.className = "signing";
+  box.innerHTML = '<i class="spinner"></i>';
+  document.body.append(box);
+  const sp = box.firstChild;
+  // an endless turn never finishes; a single .01ms one finishes as soon
+  // as it starts, which in Chromium's compositor can take a few frames
+  const ends = Promise.all(sp.getAnimations().map((a) => a.finished)).then(() => true);
+  const spin = (await Promise.race([ends, new Promise((go) => setTimeout(go, 1000, false))])) ? 0 : 1;
+  box.remove();
+  return { reduce, all, anim, spin, calm: calm(), motion: document.documentElement.dataset.motion || "" };
 });
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -78,13 +92,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
     const first = await looks(page);
     assert(first.all > 20, `the reduced-motion rules must apply from the start (${JSON.stringify(first)})`);
-    assert.deepEqual({ ...first, all: 0 }, { reduce: 0, all: 0, anim: "none", calm: true, motion: "reduce" });
+    assert.deepEqual({ ...first, all: 0 }, { reduce: 0, all: 0, anim: "none", spin: 0, calm: true, motion: "reduce" });
     assert.match(await on.getAttribute("class"), /\bon\b/);
 
     await off.click();
     await page.waitForFunction(() => !document.documentElement.dataset.motion);
     const moving = await looks(page);
-    assert.deepEqual({ ...moving, reduce: 0 }, { reduce: 0, all: 0, anim: "rtlive", calm: false, motion: "" });
+    assert.deepEqual({ ...moving, reduce: 0 }, { reduce: 0, all: 0, anim: "rtlive", spin: 1, calm: false, motion: "" });
     assert.equal(moving.reduce, first.all, "every rule held must be the system's again");
     assert.equal(posted.at(-1).reduceMotion, false);
 

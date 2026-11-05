@@ -4119,7 +4119,12 @@ body.panel .modal { padding: 16px 12px; }
 @keyframes content-in { from { opacity: .5; transform: translateY(2px); } }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  /* one run only: an endless animation at .01ms restarts every few
+     microseconds, so each frame catches a spinner at a random angle and it
+     flickers faster than ever, rather than standing still (_yukirock on X,
+     0.1.3036). One run ends at once on the base style, as the spinners
+     that declare `animation: none` here already do. */
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   /* what declares no transition of its own keeps none: its default is
      `all 0s`, which the rule above made `all .01ms`, so a header tab's
      label took a frame to come to its new size, the header was fitted to
