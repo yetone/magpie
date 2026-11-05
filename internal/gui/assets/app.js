@@ -12000,16 +12000,15 @@ function renderVideomakers(p) {
   return field(t("Video models"), mediaChips("mchips videomakers", p.filmIds, "hiddenVideomakers", p), t("Only the ticked ones are offered when making a video. Agents don't chat with these, so they aren't among its models."));
 }
 
-// names: the name a chip shows for an id that has one (a ChatGPT account's
-// gpt-image-2 is its GPT Image); the id is then its tooltip
 function mediaChips(cls, ids, key, p, names) {
   const chips = el("div", cls);
   draft[key] ||= [...(p[key] || [])];
   for (const id of ids) {
     const c = el("button", "mchip pick");
     c.type = "button";
-    c.append(el("span", "", names?.[id] || id));
-    if (names?.[id]) c.title = id;
+    const n = names?.[id];
+    c.append(el("span", "", n || id));
+    if (n) c.title = id;
     const show = () => { const on = !draft[key].includes(id); c.classList.toggle("on", on); c.setAttribute("aria-pressed", on); };
     c.onclick = () => {
       draft[key] = draft[key].includes(id) ? draft[key].filter((x) => x !== id) : [...draft[key], id];
@@ -12023,11 +12022,8 @@ function mediaChips(cls, ids, key, p, names) {
 
 // renderRouting: how the gateway spreads requests over the keys or
 // accounts a provider has on, and how long a conversation stays with the
-// one that answered it. Both are staged in the editor's draft (routing,
-// affinity) and made with its Save, as the rest of the editor is: a click
-// shows the option and what it does, nothing is sent or redrawn, and
-// Cancel drops it (01huadalang on Discord: each click saved and redrew,
-// so looking through what each says lagged).
+// one that answered it. Both are staged in the draft and made with Save
+// (01huadalang on Discord: each click saved and redrew).
 const ROUTINGS = [
   ["", "Smart", "The first takes requests while it has quota to spare; when it runs low, the one with the most left takes over. One out of credit sits out half an hour, one out of quota until it resets, one rate limited as long as the vendor asks, and one that fails a minute, longer each time it fails again."],
   ["order", "In order", "Requests go to the first; the next takes over when the one before runs out of quota, hits a rate limit or fails."],
