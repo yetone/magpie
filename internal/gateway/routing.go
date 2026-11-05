@@ -2155,10 +2155,26 @@ type left struct {
 }
 
 // learns: c is a subscription whose allowance isn't known yet, of an agent
-// that tells it as it answers (Claude Code's rate_limit_event).
+// that tells it as it answers (Claude Code's rate_limit_event; a ChatGPT
+// account's x-codex-* headers, provider.NoteCodexLimits). A Codex account
+// only while it hasn't answered lately (codexAnswered): its reply makes it
+// known when it tells the week, and one that told nothing isn't sent
+// every request first. Not known and kept after those known, an account
+// whose usage can't be read was never sent one, under Use before expiry
+// (a whole week ahead of it) and Smart alike (peterpark8527 on Discord).
 func learns(c candidate, lefts map[allowanceKey]left) bool {
-	_, known := lefts[c.allowanceKey()]
-	return !known && c.p.Account != nil && c.p.Account.Agent == "claude"
+	if _, known := lefts[c.allowanceKey()]; known || c.p.Account == nil {
+		return false
+	}
+	switch c.p.Account.Agent {
+	case "claude":
+		return true
+	case "codex":
+		// only behind one known: of accounts none known, the order stands,
+		// and no week is started before it is needed
+		return len(lefts) > 0 && !codexAnsweredLately(c.p.Account.UsageAgent(), c.p.Account.User, time.Now())
+	}
+	return false
 }
 
 // weigh orders one provider's candidates as its routing says, and tells

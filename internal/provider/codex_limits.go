@@ -26,8 +26,9 @@ type CodexLimit struct {
 // NoteCodexLimits keeps what a reply said of agent's account user (agent
 // as its usage is read, Account.UsageAgent) in place of the windows of the
 // same span last read, for routing (Allowances) and the Usage page alike.
-// An account not read yet is left to its reading: a reply names only the
-// windows it counts, which isn't the whole of the account.
+// An account not read well yet is known from what the reply told, when it
+// told the week, until a reading tells the whole of it: a reply names
+// only the windows it counts.
 func NoteCodexLimits(agent, user string, heard []CodexLimit) {
 	if len(heard) == 0 || user == "" {
 		return
@@ -52,19 +53,63 @@ func NoteCodexLimits(agent, user string, heard []CodexLimit) {
 	u.Lock()
 	defer u.Unlock()
 	m := u.m[agent]
+	keep := func(name string, a Allowance) {
+		// new ones: what was handed out is read without the lock
+		kept := make(map[string]Allowance, len(m)+1)
+		for k, v := range m {
+			kept[k] = v
+		}
+		kept[name] = a
+		u.m[agent] = kept
+	}
 	for name, a := range m {
 		if !strings.EqualFold(name, user) {
 			continue
 		}
-		// new ones: what was handed out is read without the lock
-		kept := make(map[string]Allowance, len(m))
-		for k, v := range m {
-			kept[k] = v
+		a = heardAllowance(a, heard)
+		if h, ok := u.heard[key]; ok {
+			u.heard[key] = heardOnly{h.user, a}
 		}
-		kept[name] = heardAllowance(a, heard)
-		u.m[agent] = kept
+		keep(name, a)
 		return
 	}
+	// not read: its reading failed, was held, or named no window. What
+	// the reply told is the account's, until a reading tells it — when
+	// it tells a budget (the week): kept as not known, the account went
+	// behind every one known for good under Use before expiry and
+	// Smart, while the week magpie's own turns started ran out unspent
+	// (peterpark8527 on Discord)
+	a := toldAllowance(heard)
+	if a == nil {
+		return
+	}
+	if u.heard == nil {
+		u.heard = map[string]heardOnly{}
+	}
+	u.heard[key] = heardOnly{user, a}
+	if m != nil {
+		keep(user, a)
+	}
+}
+
+// heardOnly is an account's allowance as only its replies told it.
+type heardOnly struct {
+	user string
+	a    Allowance
+}
+
+// toldAllowance is the allowance heard tells, nil when it tells no
+// budget window (a day or longer): the five hours alone don't say what
+// the week has left.
+func toldAllowance(heard []CodexLimit) Allowance {
+	if !slices.ContainsFunc(heard, func(h CodexLimit) bool { return h.Span >= budgetSpan }) {
+		return nil
+	}
+	a := make(Allowance, 0, len(heard))
+	for _, h := range heard {
+		a = append(a, Limit{Used: h.Used, Span: h.Span, Resets: h.Resets})
+	}
+	return a
 }
 
 // heardWindows is ws, copied, with each window that counts every model

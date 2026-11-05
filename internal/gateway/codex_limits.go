@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
@@ -37,6 +38,7 @@ func heardCodexLimits(p provider.Provider, res *http.Response) {
 	}
 	agent, user := p.Account.UsageAgent(), p.Account.User
 	now := time.Now()
+	noteCodexAnswered(agent, user, now)
 	if ls := codexHeaderLimits(res.Header, now); len(ls) > 0 {
 		noteCodexLimits(agent, user, ls)
 	}
@@ -45,6 +47,32 @@ func heardCodexLimits(p provider.Provider, res *http.Response) {
 			noteCodexLimits(agent, user, ls)
 		}}
 	}
+}
+
+// codexLearnAgain is how long a Codex account not known that answered is
+// not put first again to be learned (learns): its reply told nothing of
+// the week, or the reading still fails.
+const codexLearnAgain = time.Hour
+
+// codexAnswered is when each Codex account last answered, by
+// agent/lower-cased user.
+var codexAnswered = struct {
+	sync.Mutex
+	m map[string]time.Time
+}{m: map[string]time.Time{}}
+
+func noteCodexAnswered(agent, user string, now time.Time) {
+	codexAnswered.Lock()
+	codexAnswered.m[agent+"/"+strings.ToLower(user)] = now
+	codexAnswered.Unlock()
+}
+
+// codexAnsweredLately: user answered within codexLearnAgain of now.
+func codexAnsweredLately(agent, user string, now time.Time) bool {
+	codexAnswered.Lock()
+	at, ok := codexAnswered.m[agent+"/"+strings.ToLower(user)]
+	codexAnswered.Unlock()
+	return ok && now.Sub(at) < codexLearnAgain
 }
 
 // codexHeaderLimits are the windows the x-codex-primary-* and

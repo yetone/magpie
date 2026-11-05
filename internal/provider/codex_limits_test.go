@@ -11,7 +11,7 @@ func resetUsed(t *testing.T) {
 	reset := func() {
 		usedCache.Lock()
 		usedCache.m, usedCache.at, usedCache.loading = map[string]map[string]Allowance{}, map[string]time.Time{}, map[string]chan struct{}{}
-		usedCache.stale, usedCache.seen = nil, nil
+		usedCache.stale, usedCache.seen, usedCache.heard = nil, nil, nil
 		usedCache.Unlock()
 	}
 	reset()
@@ -111,5 +111,78 @@ func TestNoteCodexLimitsHoldsTheCap(t *testing.T) {
 	}
 	if time.Since(e.at) < 29*time.Second {
 		t.Fatal("a reply was taken for a whole reading")
+	}
+}
+
+// An account whose reading fails, every minute, is known from what its
+// replies tell of its week, until a reading tells it: kept as not known,
+// Use before expiry counted it a whole week ahead and Smart put it after
+// every account known, so with ten others it was never sent a request
+// while the week magpie's own turns started ran out unspent
+// (peterpark8527 on Discord, 11 ChatGPT accounts). A reply telling the
+// five hours alone makes nothing up; a reading that comes back wins.
+func TestNoteCodexLimitsKnowsAnUnreadAccount(t *testing.T) {
+	signIn(t)
+	rememberLogins(true)
+	resetUsed(t)
+	now := time.Now()
+	failed := func() {
+		loginUsageCache.Lock()
+		loginUsageCache.m = map[string]loginUsageEntry{"codex/me@example.com": {at: time.Now(),
+			q: SubscriptionQuota{Provider: "codex", Windows: []QuotaWindow{}, Error: "usage: 403"}}}
+		loginUsageCache.Unlock()
+	}
+	readAgain := func() map[string]Allowance {
+		usedCache.Lock()
+		usedCache.at["codex"] = time.Time{}
+		usedCache.Unlock()
+		Allowances("codex")
+		for {
+			usedCache.Lock()
+			done := usedCache.loading["codex"]
+			usedCache.Unlock()
+			if done == nil {
+				break
+			}
+			<-done
+		}
+		return Allowances("codex")
+	}
+	failed()
+	if _, ok := readAgain()["me@example.com"]; ok {
+		t.Fatal("a failed reading is known")
+	}
+	NoteCodexLimits("codex", "me@example.com", []CodexLimit{{Used: 10, Span: 5 * time.Hour, Resets: now.Add(time.Hour)}})
+	if _, ok := Allowances("codex")["me@example.com"]; ok {
+		t.Fatal("the five hours alone made the account known")
+	}
+	week := now.Add(2 * 24 * time.Hour).Truncate(time.Second)
+	NoteCodexLimits("codex", "me@example.com", []CodexLimit{
+		{Used: 10, Span: 5 * time.Hour, Resets: now.Add(time.Hour)},
+		{Used: 20, Span: 7 * 24 * time.Hour, Resets: week}})
+	a, ok := Allowances("codex")["me@example.com"]
+	if !ok {
+		t.Fatal("a reply telling the week left the account not known")
+	}
+	if pc, due := a.Pace("gpt-5.5", now); !due.Equal(week) || pc < 80/48.0-0.01 || pc > 80/48.0+0.01 {
+		t.Fatalf("pace %v due %v, want 80%% over 48h, due %v", pc, due, week)
+	}
+	// its reading fails again: still known from the reply
+	failed()
+	if _, ok := readAgain()["me@example.com"]; !ok {
+		t.Fatal("the next failed reading forgot what the reply told")
+	}
+	// a reading comes back: it is the account's
+	read := now.Add(5 * 24 * time.Hour)
+	loginUsageCache.Lock()
+	loginUsageCache.m = map[string]loginUsageEntry{"codex/me@example.com": {at: time.Now(),
+		q: SubscriptionQuota{Provider: "codex", Windows: []QuotaWindow{{Name: "7 days", Used: 60, ResetsAt: &read, Span: 7 * 24 * time.Hour}}}}}
+	loginUsageCache.Unlock()
+	if u, _ := readAgain()["me@example.com"].For("gpt-5.5", now); u != 60 {
+		t.Fatalf("the reading said 60%%, routing has %v%%", u)
+	}
+	failed()
+	if _, ok := readAgain()["me@example.com"]; ok {
+		t.Fatal("what a reply told outlived the reading that replaced it")
 	}
 }

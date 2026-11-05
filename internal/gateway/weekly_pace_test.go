@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -108,9 +110,13 @@ func TestWeeklyPace(t *testing.T) {
 	if got := order(acct("b@x.com"), acct("a@x.com")); got != "ab" {
 		t.Fatalf("a Sonnet request goes by the general week: %s", got)
 	}
-	// one not known counts as a fresh week: ahead of one half through its,
-	// behind one about to lose what it has
+	// one not known counts as a fresh week once it has answered lately
+	// (a Codex account not known is asked first before, its reply to tell
+	// its week: TestUnknownCodexAccountIsAsked): ahead of one half
+	// through its, behind one about to lose what it has
 	delete(share, "c@x.com")
+	freshAnswered(t)
+	noteCodexAnswered("codex", "c@x.com", now)
 	share["a@x.com"] = week(40, 5*24*time.Hour)
 	share["b@x.com"] = week(80, time.Hour)
 	if got := order(acct("a@x.com"), acct("c@x.com"), acct("b@x.com")); got != "bca" {
@@ -160,6 +166,7 @@ func TestWeeklyPace(t *testing.T) {
 	share["b@x.com"] = provider.Allowance{{Used: 5, Resets: now.Add(time.Hour), Span: 5 * time.Hour}}  // 95 / 1 h
 	share["c@x.com"] = provider.Allowance{{Used: 0, Resets: now.Add(time.Hour), Span: 5 * time.Hour}}  // 100 / 1 h
 	delete(share, "d@x.com")
+	noteCodexAnswered("codex", "d@x.com", now) // answered lately: a fresh week, not asked first
 	if got := order(acct("a@x.com"), acct("d@x.com"), acct("c@x.com"), acct("b@x.com")); got != "cbad" {
 		t.Fatalf("five hours alone go by what they lose at their reset: %s", got)
 	}
@@ -230,4 +237,81 @@ func TestWeeklyPace(t *testing.T) {
 	if got := order(acct("b@x.com"), acct("a@x.com")); got != "ab" {
 		t.Fatalf("least used is most left first: %s", got)
 	}
+}
+
+// Eleven ChatGPT accounts under Use before expiry (and Smart), one of them
+// not known — its usage reading fails, or named no window: it was a whole
+// fresh week (provider.FreshPace) under Use before expiry and after every
+// account known under Smart, so with ten others with room it was never
+// sent a request, and never known (peterpark8527 on Discord: "有个账号始终
+// 没有被调用"). It goes first while it hasn't answered lately, as a Claude
+// account not known does, for its reply to tell its week
+// (provider.NoteCodexLimits); once it answered, it goes where its pace,
+// as not known, puts it, until it is known or an hour has gone by.
+func TestUnknownCodexAccountIsAsked(t *testing.T) {
+	old := allowances
+	defer func() { allowances = old }()
+	freshAnswered(t)
+	now := time.Now()
+	share := map[string]provider.Allowance{}
+	allowances = func(string) map[string]provider.Allowance { return share }
+	var cs []candidate
+	for i := range 11 {
+		user := fmt.Sprintf("u%02d@x.com", i)
+		cs = append(cs, candidate{p: provider.Provider{ID: "codex", Account: &provider.Account{Agent: "codex", User: user}}, model: "gpt-5.6-sol", rest: "codex#" + user})
+		if i == 7 {
+			continue // its reading never came back
+		}
+		share[user] = provider.Allowance{
+			{Used: 5, Resets: now.Add(3 * time.Hour), Span: 5 * time.Hour},
+			{Used: float64(10 + 5*i), Resets: now.Add(time.Duration(30+10*i) * time.Hour), Span: 7 * 24 * time.Hour},
+		}
+	}
+	for _, routing := range []string{provider.Pace, ""} {
+		p := provider.Provider{ID: "codex", Routing: routing}
+		got, _ := weigh(p, slices.Clone(cs), "gpt-5.6-sol", provider.Chat)
+		if u := got[0].p.Account.User; u != "u07@x.com" {
+			t.Fatalf("routing %q: %s first, the account not known is never asked", routing, u)
+		}
+	}
+	noteCodexAnswered("codex", "u07@x.com", now)
+	for _, routing := range []string{provider.Pace, ""} {
+		p := provider.Provider{ID: "codex", Routing: routing}
+		got, _ := weigh(p, slices.Clone(cs), "gpt-5.6-sol", provider.Chat)
+		if u := got[0].p.Account.User; u == "u07@x.com" {
+			t.Fatalf("routing %q: answered a moment ago and still first", routing)
+		}
+	}
+	noteCodexAnswered("codex", "u07@x.com", now.Add(-codexLearnAgain-time.Minute))
+	p := provider.Provider{ID: "codex", Routing: provider.Pace}
+	if got, _ := weigh(p, slices.Clone(cs), "gpt-5.6-sol", provider.Chat); got[0].p.Account.User != "u07@x.com" {
+		t.Fatalf("an hour on, not known still, it isn't asked again: %s", got[0].p.Account.User)
+	}
+	// none known (every reading held, or not back yet): the order stands,
+	// no week started before it is needed
+	for k := range share {
+		delete(share, k)
+	}
+	noteCodexAnswered("codex", "u00@x.com", now) // not to be asked behind the rest
+	for _, routing := range []string{provider.Pace, ""} {
+		p := provider.Provider{ID: "codex", Routing: routing}
+		got, _ := weigh(p, slices.Clone(cs), "gpt-5.6-sol", provider.Chat)
+		if u := got[0].p.Account.User; u != "u00@x.com" {
+			t.Fatalf("routing %q, none known: %s first, not the first listed", routing, u)
+		}
+	}
+}
+
+// freshAnswered has no Codex account answered lately, until t ends.
+func freshAnswered(t *testing.T) {
+	t.Helper()
+	codexAnswered.Lock()
+	was := codexAnswered.m
+	codexAnswered.m = map[string]time.Time{}
+	codexAnswered.Unlock()
+	t.Cleanup(func() {
+		codexAnswered.Lock()
+		codexAnswered.m = was
+		codexAnswered.Unlock()
+	})
 }

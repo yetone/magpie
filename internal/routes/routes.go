@@ -28,7 +28,8 @@ type Seat struct {
 	// Known: its allowance is known. Used, Soon and Pace are read from it
 	Known bool
 	// Learns: an account not known yet, of an agent that tells what it has
-	// left as it answers (Claude Code's rate_limit_event)
+	// left as it answers (Claude Code's rate_limit_event, Codex's x-codex-*
+	// headers)
 	Learns bool
 	// Used is the share of its allowance used that counts the model, 0–100
 	Used float64

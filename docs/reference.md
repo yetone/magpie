@@ -1883,9 +1883,12 @@ each of these groups ordered by the share used.
   renew in the same hours (WorkBuddy's free accounts all at the month's
   end) go by when their credits left run out after that: the one whose
   credits are lost first goes first, and one with none that run out
-  after those whose do. A Claude account
+  after those whose do. A Claude or ChatGPT account
   magpie knows nothing of yet goes first once, to learn what it has left
-  from the answer; any other unknown account goes after those known,
+  from the answer (a ChatGPT account, while another is known: one whose
+  usage can't be read is asked so again an hour after its last answer,
+  until its answers tell its week); any other unknown account goes after
+  those known,
   and is still tried when they fail, ahead of any at 90% or more.
   An account with a month beside its week (Factory) goes by its month:
   when the month holds less than its weeks add up to (Factory's, by
@@ -1920,8 +1923,11 @@ each of these groups ordered by the share used.
   counts. Accounts whose
   pace is within a tenth of the highest in their band count as alike, and
   among them the one magpie sent the fewest tokens lately goes first. A
-  Claude account not known goes first once, as in Smart; another unknown
-  account counts as a fresh week.
+  Claude or ChatGPT account not known goes first once, as in Smart (a
+  ChatGPT one while another is known); another unknown account counts as
+  a fresh week. A ChatGPT account whose usage
+  page can't be read is known from the week its answers tell, until a
+  reading works again.
 - **Speed first**: the account, key or group member that answered this
   model fastest lately first. magpie keeps, in memory, how long each one's
   streamed answers took to their first token and how many tokens a second
