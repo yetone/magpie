@@ -550,6 +550,8 @@ type Server struct {
 	// the requests out at each key or account with a MaxConcurrency, and
 	// those waiting their turn (concurrency.go)
 	lanes lanes
+	// each account's one turn at a time near its usage cap (cap_near.go)
+	nearCap nearCaps
 	// the requests each key or account with a MaxRPM sent in the last
 	// minute, and those about to go (rpm.go)
 	rpms          rpms
@@ -3162,10 +3164,23 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// handed the request on, written once the next try begins
 	var failedRow func()
 	walkBegan := time.Now() // the serial walk's start, for groupBudget (#5113)
+	// the turn near its cap the try before took, given back as the next
+	// begins or the request ends (cap_near.go)
+	var nearDone func()
+	defer func() {
+		if nearDone != nil {
+			nearDone()
+		}
+	}()
+	nearBehind := map[string]bool{} // accounts near their cap moved behind the rest once
 	for i := 0; i < len(cands); i++ {
 		if failedRow != nil {
 			failedRow()
 			failedRow = nil
+		}
+		if nearDone != nil {
+			nearDone()
+			nearDone = nil
 		}
 		c := cands[i]
 		if handed.release != nil && handed.who != c.who() {
@@ -3215,6 +3230,58 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			}
 			failTo(w, kept, from, call.Status, cmp.Or(msg, call.Error))
 			break
+		}
+		if used, near := nearCapOf(c, time.Now()); near && aff.Why != "strict" && capHeld(c.p, c.p, c.model, time.Now()) == nil {
+			// within nearCapPoints of its usage cap, the account takes one
+			// turn at a time (dyzdyz010 on Discord): busy, the turn goes to
+			// the next one first, this one kept behind them, else waits for
+			// the turn before it and is held by what that one left. A
+			// conversation kept strictly on it goes on past its cap, as
+			// strictKeep keeps it, and an account already held when its try
+			// begins was let in past its cap on purpose (a reset spent for
+			// it, its credits), so is not held again here.
+			done, ok := s.nearCap.tryTake(c.who())
+			if !ok && i < len(cands)-1 && !nearBehind[c.who()] {
+				nearBehind[c.who()] = true
+				cands = append(slices.Delete(slices.Clone(cands), i, i+1), c)
+				i--
+				continue
+			}
+			if !ok {
+				var err error
+				if done, err = s.nearCap.take(r.Context(), c.who()); err != nil {
+					// the agent went away while it waited: nothing was sent
+					call.Status, call.Error = canceled(r.Context())
+					break
+				}
+				nearCapAgain(r.Context(), c, used)
+			}
+			nearDone = done
+			if h := capHeld(c.p, c.p, c.model, time.Now()); h != nil {
+				nearDone()
+				nearDone = nil
+				c.capped = h
+				ws := barredOf([]candidate{c}, c.p, false, from, nil)
+				msg, back := cappedError(call.Model, ws, time.Now())
+				skipped = append(skipped, c.label()+": "+msg)
+				if i < len(cands)-1 {
+					continue
+				}
+				// held at its cap by the turn before it: the agent is told
+				// the failure of one asked before, else the cap
+				if other != nil {
+					call.Status, call.Error, call.Usage.ErrType = other.Status, other.Error, other.errType
+					s.trace.update(tr, func(t *Route) { t.Fail = toldFail(other) })
+					failTo(w, kept, from, call.Status, call.Error)
+					break
+				}
+				if d := time.Until(back); d > 0 && !kept.sent {
+					w.Header().Set("Retry-After", strconv.Itoa(int(d.Seconds())+1))
+				}
+				call.Status, call.Error = 429, cappedRecord(ws)
+				failTo(w, kept, from, 429, msg)
+				break
+			}
 		}
 		if !autoReset && c.onCredits() {
 			// going to the account on its credits, its week used up: a
