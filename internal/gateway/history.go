@@ -678,6 +678,9 @@ func foldTally(tallies map[string]*Tally, line []byte) {
 			if f == "" {
 				f = "other"
 			}
+			if f == failQuota && tr.Rest != nil && tr.Rest.Rate {
+				f = failRate // counted as the vendor called it
+			}
 			if a.Fails == nil {
 				a.Fails = map[string]int{}
 			}

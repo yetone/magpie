@@ -87,6 +87,9 @@ type KeyRest struct {
 	Model string `json:"model,omitempty"`
 	// Error: what the vendor said
 	Error string `json:"error,omitempty"`
+	// Rate: the vendor called it a rate limit and named when it lifts
+	// (gateway.Rest.Rate): the page says rate limited, not quota used up
+	Rate bool `json:"rate,omitempty"`
 }
 
 // RestKey is what the gateway rests the key k of a provider by: the

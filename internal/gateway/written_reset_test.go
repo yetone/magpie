@@ -33,6 +33,15 @@ const (
 }`
 )
 
+// wbTao is WorkBuddy's China build's refusal of deepseek-v4.1-flash as
+// taoxiaoxin's agent got it (magpie v0.1.2992, plugin 0.2.24, Discord
+// 11-06), its offset in brackets: the account had credits left, and the
+// Routing page read it as quota used up.
+const (
+	wbTaoSaid = "WorkBuddy: 您的使用量已超出频率限制，将在 2026-11-06 17:13:04 (UTC+8) 重置，您也可以切换其他模型继续使用。"
+	wbTao     = `{"error":{"code":null,"message":"` + wbTaoSaid + `","param":null,"type":"rate_limit_error"}}`
+)
+
 // arkAt is Ark's monthly refusal (arkCNife), saying it resets at t.
 func arkAt(t time.Time) string {
 	return strings.Replace(arkCNife, "2026-10-25 23:59:59", t.In(time.FixedZone("", 8*3600)).Format("2006-01-02 15:04:05"), 1)
@@ -120,6 +129,14 @@ func TestResetsWritten(t *testing.T) {
 		{"ark's form, not monthly, 9 days off", strings.Replace(arkWyx, "monthly ", "", 1), at("2026-10-22 12:00:00"), 0},
 		{"en 9 days off", wbEn, at("2026-10-02 12:00:00"), 0},
 		{"retry after, Ark's form", "Too many requests, retry after 2026-10-11 12:37:53 +0800 CST.", at("2026-10-11 10:00:00"), 0},
+		// WorkBuddy's China build since November, its offset in brackets,
+		// as taoxiaoxin's agent was given it on Discord
+		{"zh (UTC+8)", wbTao, at("2026-11-06 12:00:00"), 5*time.Hour + 13*time.Minute + 4*time.Second},
+		{"zh (UTC+8) escaped", escaped(wbTaoSaid, "null"), at("2026-11-06 12:00:00"), 5*time.Hour + 13*time.Minute + 4*time.Second},
+		{"zh （UTC+8）", strings.Replace(wbTao, "(UTC+8)", "（UTC+8）", 1), at("2026-11-06 12:00:00"), 5*time.Hour + 13*time.Minute + 4*time.Second},
+		{"zh (UTC+8) cut in the brackets", wbTao[:strings.Index(wbTao, "+8)")], at("2026-11-06 12:00:00"), 0},
+		{"zh (UTC+8) cut after them", wbTao[:strings.Index(wbTao, " 重置")], at("2026-11-06 12:00:00"), 0},
+		{"en (UTC+8)", strings.Replace(wbEn, "UTC+8,", "(UTC+8),", 1), at("2026-10-11 10:00:00"), 2*time.Hour + 37*time.Minute + 53*time.Second},
 	} {
 		if got := resetsWritten([]byte(c.body), c.now); got != c.want {
 			t.Errorf("%s: %v, want %v (%q)", c.name, got, c.want, c.body)
@@ -452,4 +469,59 @@ func TestRateLimitedModelListedUnderAccount(t *testing.T) {
 	if !seen[c.restID()] || !seen["workbuddy-ai@other@example.com"] || seen["workbuddy@max.lee@example.com/gpt-6-astra"] || seen["workbuddy-ai@max.lee@example.com/glm-5.3-flash"] {
 		t.Fatalf("the provider's accounts: %v", seen)
 	}
+}
+
+// WorkBuddy's refusal with its offset in brackets (taoxiaoxin on Discord:
+// "将在 2026-11-06 17:13:04 (UTC+8) 重置") rests the model it refused on
+// that account alone until the time it names, as the bare offset's did,
+// and says it is a rate limit, so the page doesn't read the account's
+// credits as gone. Unread, it rested the whole account a quarter of an
+// hour as quota used up. A quota's refusal that names its reset (Ark's
+// month) still reads as a quota.
+func TestBracketedResetRestsTheModelRateLimited(t *testing.T) {
+	old := allowances
+	defer func() { allowances = old }()
+	allowances = func(string) map[string]provider.Allowance { return nil }
+	s := &Server{}
+	near := func(d, want time.Duration) bool { return d > want-time.Minute && d <= want }
+	back := 5*time.Hour + 13*time.Minute
+	until := time.Now().Add(back).In(time.FixedZone("", 8*3600)).Format("2006-01-02 15:04:05")
+	for _, site := range []string{"workbuddy", "workbuddy-ai"} {
+		for name, body := range map[string]string{
+			"as said": strings.Replace(wbTao, "2026-11-06 17:13:04", until, 1),
+			"escaped": escaped(strings.Replace(wbTaoSaid, "2026-11-06 17:13:04", until, 1), "null"),
+			"en":      strings.Replace(wbAt("en", time.Now().Add(back)), "UTC+8,", "(UTC+8),", 1),
+		} {
+			user := site + "-" + strings.ReplaceAll(name, " ", "-") + "@x.com"
+			c := candidate{p: provider.Provider{ID: site, Account: &provider.Account{Agent: site, User: user}}, model: "deepseek-v4.1-flash", rest: site + "#" + user}
+			other := c
+			other.model = "glm-5.1"
+			clearRest(c.restKey())
+			clearRest(c.restID())
+			if f := failure(429, []byte(body)); f != failQuota {
+				t.Fatalf("%s %s: read as %s", site, name, f)
+			}
+			r := s.restAfter(c, 429, http.Header{}, []byte(body))
+			if r.By != "resets" || !near(time.Until(r.Until), back) {
+				t.Fatalf("%s %s: rests %v by %s (%s), want %v by resets", site, name, time.Until(r.Until), r.By, r.Why, back)
+			}
+			if r.Key != c.restID() || r.Model != c.model {
+				t.Fatalf("%s %s: rests %s (model %q), not the model alone", site, name, r.Key, r.Model)
+			}
+			if !resting(c) || resting(other) {
+				t.Fatalf("%s %s: the model rests %v, another of the account %v", site, name, resting(c), resting(other))
+			}
+			if !r.Rate {
+				t.Fatalf("%s %s: a frequency limit not marked a rate limit", site, name)
+			}
+			clearRest(c.restID())
+		}
+	}
+	// a month's quota names its reset too, and stays a quota
+	k := candidate{p: provider.Provider{ID: "ark-plan"}, model: "m", rest: "ark-plan#k"}
+	clearRest(k.restKey())
+	if r := s.restAfter(k, 429, http.Header{}, []byte(arkAt(time.Now().Add(3*24*time.Hour)))); r.By != "resets" || r.Rate {
+		t.Fatalf("Ark's month: by %s, rate %v", r.By, r.Rate)
+	}
+	clearRest(k.restKey())
 }

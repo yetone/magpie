@@ -388,8 +388,11 @@ var (
 	// there (重置, or a comma or full stop), so a refusal cut short after
 	// "UTC", "UTC+" or Ark's "+0800" isn't read as UTC: another vendor's
 	// date in passing ("deprecated on …"), or one with no offset, is not a
-	// reset time.
-	resetsWhen = regexp.MustCompile(`(?i)(?:\bresets? at|将在|将于)\s*(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2}):(\d{2})\s*(?:(?:UTC|GMT)([+-])(\d{1,2})(?::?(\d{2}))?|([+-])(\d{2})(\d{2}) (?-i:[A-Z]{2,5}))(?:\s*(?:重置|[,.;，。；]))`)
+	// reset time. The offset may sit in brackets, as WorkBuddy's China
+	// build writes it since November (taoxiaoxin on Discord: "将在
+	// 2026-11-06 17:13:04 (UTC+8) 重置"): unread, the refusal rested the
+	// whole account a quarter of an hour as out of quota.
+	resetsWhen = regexp.MustCompile(`(?i)(?:\bresets? at|将在|将于)\s*(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2}):(\d{2})\s*[(（]?\s*(?:(?:UTC|GMT)([+-])(\d{1,2})(?::?(\d{2}))?|([+-])(\d{2})(\d{2}) (?-i:[A-Z]{2,5}))\s*[)）]?(?:\s*(?:重置|[,.;，。；]))`)
 	// monthlyWords: a refusal that says the allowance it used up is a
 	// month's, as Ark's does ("You have exceeded the monthly usage quota")
 	// and Zhipu's 1310 ("Weekly/Monthly Limit Exhausted"): the reset time
@@ -759,6 +762,12 @@ type Rest struct {
 	// (GanHei37443 on X: three WorkBuddy accounts each "failed · back in
 	// 16s", and nothing on the row said why)
 	Error string `json:"error,omitempty"`
+	// Rate: the vendor called it a rate (frequency) limit and named when
+	// it lifts (rateUntilSaid). It rests as out of quota until then, and
+	// the app says rate limited, not quota used up: WorkBuddy's "您的使用
+	// 量已超出频率限制，将在 … 重置，您也可以切换其他模型继续使用" rests
+	// one model of an account with credits left (taoxiaoxin on Discord)
+	Rate bool `json:"rate,omitempty"`
 
 	// the subscription account resting, when it is one; agent "" and its
 	// provider.KeyAllowanceID for a key out of its own windows
@@ -1650,6 +1659,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	if id == c.restID() {
 		r.Model = c.model
 	}
+	r.Rate = rateUntilSaid(why, r.By, body)
 	r.Probed = probeable(c, r, header, now) && !probeMissed(id, now)
 	restingUntil.Lock()
 	if why == failQuota || why == failCredit {
@@ -1698,6 +1708,14 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		go narrowWhenRead(c, r)
 	}
 	return r
+}
+
+// rateUntilSaid says a refusal read as out of quota until the time it
+// names (by "resets") calls itself a rate or frequency limit (rateWords,
+// words in a link apart): the app words its rest as rate limited, with
+// that time. How long it rests, and what it rests, are a quota's.
+func rateUntilSaid(why, by string, body []byte) bool {
+	return why == failQuota && by == "resets" && rateWords.Match(urlWords.ReplaceAll(wordsOf(body), nil))
 }
 
 // vendorOverloaded says a failure is the vendor's servers too busy for

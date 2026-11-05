@@ -566,11 +566,15 @@ function routingPage(part) {
     : (w.limit > 0 ? quotaCount(w) + " · " : "") + t(quotaLeft ? left : used, { n: pct(share(w)), ...vars });
   const fill = (w) => Math.max(0, Math.min(100, share(w))) + "%";
   const FAIL = { rate: "rate limited", credit: "out of credit", quota: "quota used up", other: "failed", auth: "sign-in required", canceled: "canceled", foreign: "another account's reasoning", floor: "reply too short", verify: "needs verification", refused: "refused (safety filter)", shape: "request not understood", sight: "images not taken", proxy: "proxy not reachable", offline: "network down", overloaded: "servers overloaded", effort: "reasoning effort not in its plan", overflow: "too long for its model", room: "reply asked past the window left", slow: "slow to start", prompt: "agent's prompt turned away", restricted: "account restricted by the vendor" };
-  const failWord = (why) => t(FAIL[why] || "failed");
+  // a refusal the vendor called a rate limit, resting as out of quota
+  // until the time it named (Rest.Rate), says rate limited: WorkBuddy's
+  // per-model "频率限制" read as the account's quota used up, its credits
+  // left (taoxiaoxin on Discord)
+  const failWord = (why, rest) => t(why === "quota" && rest?.rate ? FAIL.rate : FAIL[why] || "failed");
   // a resting row: a failure that names no kind says the status it
   // answered, and the vendor's own words are over it (restTip), as
   // "failed · back in 16s" alone said nothing of why (GanHei37443 on X)
-  const restSay = (rest) => `${!FAIL[rest.why] || rest.why === "other" ? (rest.status ? rest.status + " · " : "") : ""}${failWord(rest.why)} · ${restWhen(rest)}`;
+  const restSay = (rest) => `${!FAIL[rest.why] || rest.why === "other" ? (rest.status ? rest.status + " · " : "") : ""}${failWord(rest.why, rest)} · ${restWhen(rest)}`;
   const restTip = (rest) => (typeof rest.error === "string" && rest.error) || "";
   // a try that answered: one whose reply broke off after it began (its 200
   // sent, then the vendor's error, #733) didn't, and has a fail
@@ -999,7 +1003,7 @@ function routingPage(part) {
         continue;
       }
       if (x.sunk && !x.rest) out.push(t("{who} was rate limited at {time} while it had quota left, so it went to the back: it comes round again once those ahead of it are rate limited in turn.", { who: who(x), time: clock(x.sunk) }));
-      else if (x.rest) out.push(t("{who} is resting — {why}, {when} — so it waits at the back.", { who: who(x), why: `${x.rest.status} · ${failWord(x.rest.why)}`, when: restWhen(x.rest, at(r.time)) }));
+      else if (x.rest) out.push(t("{who} is resting — {why}, {when} — so it waits at the back.", { who: who(x), why: `${x.rest.status} · ${failWord(x.rest.why, x.rest)}`, when: restWhen(x.rest, at(r.time)) }));
       else if (smart(x) && x.known && group(x) === "spent" && x.credits) out.push(t("{who} is at {n} of its allowance but goes on on its credits — ahead of those used up with nothing to go on with, after those with allowance left.", { who: who(x), n: pct(x.used) }));
       else if (smart(x) && x.known && group(x) === "spent" && weighedWith(r, x).length > 1) out.push(t("{who} is at {n} — all but used up, it answers only when nothing else can.", { who: who(x), n: pct(x.used) }));
       else if (smart(x) && x.known && group(x) === "low" && weighedWith(r, x).length > 1) out.push(t("{who} is at {n} — kept for when the others can't.", { who: who(x), n: pct(x.used) }));
@@ -1412,7 +1416,7 @@ function routingPage(part) {
     if (tr.status < 400 && tr.fail)
       return tr.rest
         ? t("{who} began answering, then broke off · {fail}. {agent} got what was said before the error; {how}, so {agent}'s next request goes to another first.",
-          { who: name, fail: failWord(tr.fail), how: restHow(tr.rest, at(tr.start) + (tr.ms || 0)), agent })
+          { who: name, fail: failWord(tr.fail, tr.rest), how: restHow(tr.rest, at(tr.start) + (tr.ms || 0)), agent })
         : t("{who} began answering, then broke off. {agent} got what was said before the error; the conversation isn't kept on {who} for its next request.", { who: name, agent });
     if (tr.status < 400) {
       const tk = (r.tokens ? " · " + t("{n} tokens", { n: tokens(r.tokens) }) : "") + firstNote(r, tr);
@@ -1479,17 +1483,17 @@ function routingPage(part) {
     // story ends there, not on a retry that never came
     if (tr.gone)
       return t("{who} answered {status} · {fail}, and was to be asked again in {d}, but {agent} canceled the request before then, so nobody is asked again.",
-        { who: name, status: tr.status, fail: failWord(tr.fail), d: took(tr.again), agent });
+        { who: name, status: tr.status, fail: failWord(tr.fail, tr.rest), d: took(tr.again), agent });
     if (tr.replan)
       return t("{who} answered {status} · {fail}, and every member had failed with an error that may pass, so after {d} the {n} of them are asked again, in turn, before any of the reply reaches {agent}. The group waits up to {p} for one to answer.",
-        { who: name, status: tr.status, fail: failWord(tr.fail), d: took(tr.again), n: tr.replan, p: took((tr.patience || 0) * 1000), agent });
+        { who: name, status: tr.status, fail: failWord(tr.fail, tr.rest), d: took(tr.again), n: tr.replan, p: took((tr.patience || 0) * 1000), agent });
     // kept on it for its cache, so asked once more before it moves (jiabubu)
     if (tr.again && tr.kept)
       return t("{who} answered {status} · {fail}, a failure that may pass. The conversation is kept on {who} for what its vendor cached of it, so it is asked once more in {d} before the request moves to another.",
-        { who: name, status: tr.status, fail: failWord(tr.fail), d: took(tr.again) });
+        { who: name, status: tr.status, fail: failWord(tr.fail, tr.rest), d: took(tr.again) });
     if (tr.again)
       return t("{who} answered {status} · {fail}, and nobody else is left to ask — a failure that may pass, so it is tried again in {d}, before any of the reply reaches {agent}.",
-        { who: name, status: tr.status, fail: failWord(tr.fail), d: took(tr.again), agent });
+        { who: name, status: tr.status, fail: failWord(tr.fail, tr.rest), d: took(tr.again), agent });
     // the last one left out of its allowance, after another failed
     // otherwise: the agent was told that one's error (Try.Earlier)
     if (tr.earlier && !next)
@@ -1500,12 +1504,12 @@ function routingPage(part) {
     if (next)
       return tr.rest
         ? t("{who} answered {status} · {fail}. {how}; the request goes on to {next} before any of the reply reaches {agent}.",
-          { who: name, status: tr.status, fail: failWord(tr.fail), how, next: nw ? who(nw) : t("the next"), agent })
+          { who: name, status: tr.status, fail: failWord(tr.fail, tr.rest), how, next: nw ? who(nw) : t("the next"), agent })
         : t("{who} answered {status}, and the request goes on to {next} before any of the reply reaches {agent}. {who} doesn't rest for it.",
           { who: name, status: tr.status, next: nw ? who(nw) : t("the next"), agent });
     if (tr.rest)
       return t("{who} answered {status} · {fail}. {how}; nobody is left to try, so {agent} gets the error.",
-        { who: name, status: tr.status, fail: failWord(tr.fail), how, agent });
+        { who: name, status: tr.status, fail: failWord(tr.fail, tr.rest), how, agent });
     // the gateway stopped here with accounts left in the order: one it
     // would not go on from (the same history refused on every account of
     // a vendor, with no other vendor left)
@@ -2759,8 +2763,8 @@ function routingPage(part) {
         named = titleOf(trying.get(id));
       }
       else if (answered.has(id)) { s = (agents.size > 1 ? t("answered {agent}", { agent: agentName(r.agent) }) : t("answered this request")) + (said && " · " + said); named = titleOf(r); }
-      else if (gave.has(id)) s = t("{status} · {fail} · passed to {agent}", { status: gave.get(id).status, fail: failWord(gave.get(id).fail), agent: agentName(r.agent) });
-      else if (went.has(id)) s = t("{status} · {fail} · went on to the next", { status: went.get(id).status, fail: failWord(went.get(id).fail) });
+      else if (gave.has(id)) s = t("{status} · {fail} · passed to {agent}", { status: gave.get(id).status, fail: failWord(gave.get(id).fail, gave.get(id).rest), agent: agentName(r.agent) });
+      else if (went.has(id)) s = t("{status} · {fail} · went on to the next", { status: went.get(id).status, fail: failWord(went.get(id).fail, went.get(id).rest) });
       else if (w.noURL) s = noURLWord(w);
       else if (w.reserve) s = t("in reserve · {n} at once", { n: w.reserve });
       else if (w.sunk && !lifted(sunkKey(w), at(w.sunk))) s = t("rate limited at {time} · at the back", { time: clock(w.sunk) });
@@ -3527,7 +3531,7 @@ function routingPage(part) {
   // last one's place, the route says that one's kind (fail): an
   // earlier 529 overload read "529 · quota used up" beside the last
   // account's usage limit (danzi002 on Discord)
-  const endWord = (r, last) => `${r.status} · ${failWord(last.gone ? "canceled" : r.fail || last.fail)}`;
+  const endWord = (r, last) => `${r.status} · ${failWord(last.gone ? "canceled" : r.fail || last.fail, (!r.fail || r.fail === last.fail) && last.rest)}`;
 
   // what a request not yet out at a vendor is doing: being masked
   // (Settings → Privacy, the gateway's "redact" phase), or being routed
@@ -4442,7 +4446,7 @@ function routingPage(part) {
         } else {
           a.tried++;
           if (tryOk(tr)) { a.ok++; a.last = Math.max(a.last, end); const m = tr.model || r.order.find((x) => x.id === tr.id)?.model; if (m) a.models.add(m); }
-          else a.fails[tr.fail || "other"] = (a.fails[tr.fail || "other"] || 0) + 1;
+          else { const k = tr.fail === "quota" && tr.rest?.rate ? "rate" : tr.fail || "other"; a.fails[k] = (a.fails[k] || 0) + 1; }
         }
         const rm = tr.rest ? restModel(tr.rest, tr.model || r.order.find((x) => x.id === tr.id)?.model) : "";
         if (rm) modelRest(a, rm, tr.rest, end);
@@ -4908,7 +4912,7 @@ function routingPage(part) {
         // of its 1.8s (yuancjun on Discord). A failure again on the row
         // starts the 1.8s over
         rerun(row.li, "hit", "rthit"); row.li.classList.add("tagged", "lift");
-        row.tg.textContent = `${tr.status} · ${failWord(tr.fail)}`;
+        row.tg.textContent = `${tr.status} · ${failWord(tr.fail, tr.rest)}`;
         clearTimeout(tagFor.get(row.li));
         tagFor.set(row.li, setTimeout(() => {
           row.li.classList.remove("tagged");
