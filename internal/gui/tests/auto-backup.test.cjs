@@ -8,8 +8,9 @@
 // hours 168; 14 posts keep 14; Default posts dir "". Restore… asks in the
 // app's own dialog, saying what is here is backed up first; Cancel posts
 // nothing, Restore posts the version's name, and the list then says what
-// was put back and which version undoes it. In all five languages, at 1100
-// and 420px, Chromium and WebKit, with nothing wider than the window. The
+// was put back and which version undoes it. The default folder, in
+// magpie's own, says a reinstalled system takes the backups too. In all
+// five languages, at 1100 and 420px, Chromium and WebKit, with nothing wider than the window. The
 // API is faked; nothing is backed up.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -62,7 +63,7 @@ function serve(lang, posts) {
         if (body.on !== undefined) view = { ...view, on: body.on };
         if (body.hours) view = { ...view, hours: body.hours };
         if (body.keep) view = { ...view, keep: body.keep };
-        if (body.dir === "") view = { ...view, custom: false, dir: "~/Library/Application Support/magpie/auto-backups" };
+        if (body.dir === "") view = { ...view, custom: false, inside: true, dir: "~/Library/Application Support/magpie/auto-backups" };
       }
       if (action === "restore") {
         const before = { name: "magpie-20261102-020000-restore.json", made: new Date().toISOString(), reason: "restore", providers: 3, size: 900 };
@@ -120,6 +121,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const folder = rowNamed(w("Backup folder"));
         assert.match(await sub(folder), /auto-backups-with-a-long/);
         for (const b of ["Change…", "Show", "Default"]) await folder.locator("button", { hasText: w(b) }).waitFor();
+        const insideSaid = w("In magpie's own folder: a reinstalled system or a lost disk takes these backups too. Pick a folder on another disk, or one a cloud drive syncs");
+        assert.equal(await list.locator(".auto-backup-inside").count(), 0, "a folder picked elsewhere says nothing of magpie's");
         const versions = rowNamed(w("Versions"));
         assert.ok((await sub(versions)).startsWith(w("{n} backups · newest {when}", { n: 2, when: "" }).trim().replace(/\s*$/, "")), await sub(versions));
         assert.equal(await list.locator(".auto-backup-version").count(), 2);
@@ -149,6 +152,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction(() => [...document.querySelectorAll("#syncList .auto-backup-dir")].some((s) => s.textContent.endsWith("/auto-backups")));
         assert.deepEqual(posts.at(-1), { action: "set", body: { dir: "" } });
         assert.equal(await rowNamed(w("Backup folder")).locator("button", { hasText: w("Default") }).count(), 0, "Default is gone with the default folder");
+        // the default folder is in magpie's own: said under its path
+        // (two_2025. on Discord, magpie on C: lost on a reinstall)
+        assert.deepEqual(await rowNamed(w("Backup folder")).locator(".auto-backup-inside").allTextContents(), [insideSaid]);
         await rowNamed(w("Back up by itself")).locator(".segs .opt", { hasText: w("Off") }).click();
         await page.waitForFunction((s) => [...document.querySelectorAll("#syncList .auto-backup .sub")].some((x) => x.textContent === s), w("Off: no backups are made by themselves"));
         assert.deepEqual(posts.at(-1), { action: "set", body: { on: false } });

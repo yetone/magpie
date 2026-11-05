@@ -88,7 +88,11 @@ function autoBackupRows(v) {
   if (on || v.backups?.length) {
     const tools = [btn(t("Change…"), (b) => autoBackupDo("choose", {}, b)), btn(t("Show"), () => api("autobackup/reveal", {}).catch(statusErr))];
     if (v.custom) tools.push(btn(t("Default"), (b) => autoBackupDo("set", { dir: "" }, b)));
-    row(t("Backup folder"), v.dir || "", ...tools).querySelector(".sub").classList.add("wraps", "auto-backup-dir");
+    const dir = row(t("Backup folder"), v.dir || "", ...tools).querySelector(".sub");
+    dir.classList.add("wraps", "auto-backup-dir");
+    // in magpie's own folder, the default: a reinstalled system takes the
+    // backups with it (two_2025. on Discord, magpie on C:)
+    if (v.inside) dir.after(el("div", "sub wraps auto-backup-inside", t("In magpie's own folder: a reinstalled system or a lost disk takes these backups too. Pick a folder on another disk, or one a cloud drive syncs")));
   }
   const list = v.backups || [];
   const sub = row(t("Versions"), list.length ? t("{n} backups · newest {when}", { n: list.length, when: syncWhen(list[0].made) }) : t("None yet"),

@@ -363,3 +363,37 @@ func TestAutoHalfWrittenNeverListed(t *testing.T) {
 		t.Fatalf("temporary files left: %v", tmps)
 	}
 }
+
+// Backups in magpie's own folder, the default, are said to be there: a
+// reinstalled system or a wiped disk takes them along with the setup
+// (two_2025. on Discord, whose magpie is on C:). One picked elsewhere
+// isn't, nor one in a folder whose name only starts like magpie's.
+func TestAutoInsideMagpiesFolder(t *testing.T) {
+	autoHome(t)
+	if v := AutoStatus(); !v.Inside || v.Custom {
+		t.Fatalf("default folder %q: inside %v, custom %v; want inside", v.Dir, v.Inside, v.Custom)
+	}
+	in := filepath.Join(settings.Dir(), "mine")
+	if err := SaveAuto(AutoConfig{Dir: in}); err != nil {
+		t.Fatal(err)
+	}
+	if v := AutoStatus(); !v.Inside {
+		t.Errorf("picked %q in magpie's folder: not said to be inside", v.Dir)
+	}
+	for _, out := range []string{t.TempDir(), settings.Dir() + "-backups"} {
+		if err := SaveAuto(AutoConfig{Dir: out}); err != nil {
+			t.Fatal(err)
+		}
+		if v := AutoStatus(); v.Inside {
+			t.Errorf("picked %q elsewhere: said to be inside %q", v.Dir, settings.Dir())
+		}
+	}
+	if runtime.GOOS != "linux" {
+		if err := SaveAuto(AutoConfig{Dir: strings.ToUpper(settings.Dir())}); err != nil {
+			t.Fatal(err)
+		}
+		if v := AutoStatus(); !v.Inside {
+			t.Errorf("magpie's folder in other letter case %q: not said to be inside", v.Dir)
+		}
+	}
+}

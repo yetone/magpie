@@ -188,6 +188,13 @@ clock.
   reveal,restore}`. `set` changes only the fields sent; `dir ""` is the
   default folder. Settings draws it under Sync's Export and Import from the
   lazy [`autobackup.js`](../../internal/gui/assets/autobackup.js).
+  The status's `inside` says the folder is `settings.Dir()` or in it (letter
+  case aside off Linux), the default included; Settings then says under the
+  folder that a reinstalled system or a lost disk takes the backups too, and
+  to pick one on another disk or a cloud drive's (two_2025. on Discord,
+  magpie on C:). Keeping everything elsewhere is portable mode
+  (`internal/appdir`); docs/start's `#data-folder` gives both
+  (`TestAutoInsideMagpiesFolder`, `auto-backup.test.cjs`).
 - **Sign-ins:** off unless picked (`SignIns`, with `Passphrase`); see
   [Sign-ins, when picked](#sign-ins-when-picked).
 

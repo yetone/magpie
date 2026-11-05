@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -540,11 +541,16 @@ func AutoRestore(name, app string) (Result, AutoBackup, error) {
 
 // AutoView is what Settings shows.
 type AutoView struct {
-	On      bool         `json:"on"`
-	Hours   int          `json:"hours"`
-	Keep    int          `json:"keep"`
-	Dir     string       `json:"dir"`
-	Custom  bool         `json:"custom"` // a folder the user picked
+	On     bool   `json:"on"`
+	Hours  int    `json:"hours"`
+	Keep   int    `json:"keep"`
+	Dir    string `json:"dir"`
+	Custom bool   `json:"custom"` // a folder the user picked
+	// Inside: the folder is in magpie's own, so a wiped disk or a
+	// reinstalled system takes the backups along with what they back up
+	// (two_2025. on Discord: everything is on C:, lost on a reinstall).
+	// Settings says so beside the folder, for one on another disk.
+	Inside  bool         `json:"inside,omitempty"`
 	Error   string       `json:"error,omitempty"`
 	Backups []AutoBackup `json:"backups"`
 	// SignIns: backups have the sign-ins in them, sealed with the
@@ -557,7 +563,7 @@ type AutoView struct {
 func AutoStatus() AutoView {
 	c, err := LoadAuto()
 	v := AutoView{On: !c.Off, Hours: int(c.every() / time.Hour), Keep: c.keep(), Dir: c.dir(), Custom: c.Dir != "", Backups: []AutoBackup{},
-		SignIns: c.SignIns, Passphrase: c.Passphrase != ""}
+		Inside: inside(c.dir(), settings.Dir()), SignIns: c.SignIns, Passphrase: c.Passphrase != ""}
 	if err != nil {
 		v.On, v.Error = false, err.Error()
 		return v
@@ -575,6 +581,20 @@ func AutoStatus() AutoView {
 		v.Backups = list
 	}
 	return v
+}
+
+// inside says whether dir is root or a folder in it, letter case aside on
+// Windows and a Mac, whose disks mostly ignore it.
+func inside(dir, root string) bool {
+	if dir == "" || root == "" {
+		return false
+	}
+	dir, root = filepath.Clean(dir), filepath.Clean(root)
+	if runtime.GOOS != "linux" {
+		dir, root = strings.ToLower(dir), strings.ToLower(root)
+	}
+	rel, err := filepath.Rel(root, dir)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
 // autoPoll is how often RunAuto looks whether a backup is due, and
