@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/agentenv"
 )
@@ -155,5 +156,98 @@ func TestBalanceProbeLeavesOthersAlone(t *testing.T) {
 	}
 	if got := strings.Join(probeOrigins(Provider{Chat: "https://R.example.com/v1", Responses: "https://r.example.com/v1", Anthropic: "https://r.example.com"}), ","); got != "https://r.example.com" {
 		t.Errorf("origins = %q", got)
+	}
+}
+
+// A query found is looked for again a day on: a relay that moved to other
+// software is read where it now tells the balance, not at the old query.
+func TestFoundBalanceLookedForAgain(t *testing.T) {
+	probeSandbox(t)
+	var moved atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/usage" && !moved.Load():
+			w.Write([]byte(`{"remaining":5}`))
+		case r.URL.Path == "/api/usage/token" && moved.Load():
+			w.Write([]byte(`{"data":{"total_available":1500000}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	p := Provider{ID: "mv", Name: "mv", Chat: srv.URL + "/v1", Key: "sk-m"}
+	if amount, ok, _ := Balance(context.Background(), p); !ok || amount != "$5.00" {
+		t.Fatalf("balance = %q %v, want $5.00", amount, ok)
+	}
+	if u, field, looked := BalanceFound(p); !looked || u != srv.URL+"/v1/usage" || field != "$remaining" {
+		t.Fatalf("found = %q %q %v", u, field, looked)
+	}
+	moved.Store(true)
+	// within the day the query found is kept
+	Balance(context.Background(), p)
+	if u, _, _ := BalanceFound(p); u != srv.URL+"/v1/usage" {
+		t.Fatalf("looked for again within the day: %q", u)
+	}
+	ageProbes(t, balanceProbeHit)
+	if amount, ok, _ := Balance(context.Background(), p); !ok || amount != "$3.00" {
+		t.Fatalf("balance after a day = %q %v, want $3.00", amount, ok)
+	}
+	if u, _, _ := BalanceFound(p); u != srv.URL+"/api/usage/token" {
+		t.Errorf("found = %q", u)
+	}
+}
+
+// A query found that turns the key away when looked for again stays the
+// query, so the card says the relay refused the key instead of going.
+func TestFoundBalanceKeptWhenTheKeyIsRefused(t *testing.T) {
+	probeSandbox(t)
+	var refuse atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/usage" {
+			http.NotFound(w, r)
+			return
+		}
+		if refuse.Load() {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"error":{"message":"invalid token"}}`))
+			return
+		}
+		w.Write([]byte(`{"remaining":5}`))
+	}))
+	defer srv.Close()
+	p := Provider{ID: "rf", Name: "rf", Chat: srv.URL + "/v1", Key: "sk-r"}
+	if _, ok, _ := Balance(context.Background(), p); !ok {
+		t.Fatal("not found")
+	}
+	refuse.Store(true)
+	ageProbes(t, balanceProbeHit)
+	_, ok, err := Balance(context.Background(), p)
+	if !ok || err == nil {
+		t.Fatalf("balance = %v %v, want the relay's refusal", ok, err)
+	}
+	if u, _, _ := BalanceFound(p); u != srv.URL+"/v1/usage" {
+		t.Errorf("found = %q, want the query kept", u)
+	}
+}
+
+// BalanceFound tells the editor nothing for a provider it never looks for.
+func TestBalanceFoundOnlyForRelaysByHand(t *testing.T) {
+	probeSandbox(t)
+	if _, _, looked := BalanceFound(Provider{Chat: "https://relay.example.com/v1", Key: "k", BalanceURL: "https://relay.example.com/x"}); looked {
+		t.Error("looked with a Balance URL")
+	}
+	if u, _, looked := BalanceFound(Provider{Chat: "https://relay.example.com/v1", Key: "k"}); !looked || u != "" {
+		t.Errorf("found = %q %v, want looked, none yet", u, looked)
+	}
+}
+
+// ageProbes moves every probe kept back by d, as if d had gone by.
+func ageProbes(t *testing.T, d time.Duration) {
+	t.Helper()
+	probed.Lock()
+	defer probed.Unlock()
+	for k, f := range probed.m {
+		f.until = f.until.Add(-d)
+		probed.m[k] = f
 	}
 }
