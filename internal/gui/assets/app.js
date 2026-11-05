@@ -19464,13 +19464,19 @@ function applyPrefs(s, rate) {
   const got = rate?.rate > 0 ? rate : s.fx?.rate > 0 ? s.fx : null;
   const moved = !!got && got.rate !== fx.rate;
   if (got) fx = got;
+  let costs = false;
   if (currency !== (s.currency || "usd") || (moved && currency === "cny")) {
     currency = s.currency || "usd";
-    if (applyPrefs.painted) magpie.call("usage", "costs");
+    costs = true;
   }
   if (chineseUnits !== !!s.chineseUnits) {
     chineseUnits = !!s.chineseUnits;
-    if (applyPrefs.painted) { magpie.call("usage", "costs"); if (mode === "panel" && panelTab === "stats") renderPanelUse(); }
+    costs = true;
+  }
+  // the panel's Usage tab too, whenever drawn: its read can beat the state (dLdgKyRd)
+  if (costs) {
+    if (applyPrefs.painted) magpie.call("usage", "costs");
+    if (mode === "panel" && panelTab === "stats" && panelUse) renderPanelUse();
   }
   applyPrefs.painted = true;
   if (!prefsBusy && (s.textSize || 100) !== textSize) { textSize = s.textSize || 100; newTextSize(); applyZoom(textSize); }

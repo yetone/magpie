@@ -134,3 +134,85 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     }
   });
 }
+
+// The currency alone (dLdgKyRd on Discord, v0.1.3025: the panel's Usage tab
+// ≈$12.36 while the Usage page said ≈¥82.61). The test above picks ¥ and
+// 万 / 亿 together, and the units' change redrew the panel while the
+// currency's alone didn't; nor was a panel drawn before the state came
+// ever redrawn. Each way the panel gets its currency: its first open, with
+// /api/state slower than its usage read; a reopen; a focus, as when
+// Settings changed while it was open; and its own tab picked afterwards.
+// At the panel's width and a narrower one.
+async function openPanel(browser, lang, store, width, tab) {
+  const ctx = await browser.newContext({ viewport: { width, height: 560 }, reducedMotion: "reduce" });
+  const p = await ctx.newPage();
+  const errors = [];
+  p.setDefaultTimeout(5000);
+  p.setDefaultNavigationTimeout(60000);
+  p.on("pageerror", (e) => errors.push(e.message));
+  const plain = serve(lang, store);
+  await p.route("**/*", async (route) => {
+    // the state answers after the panel's usage read
+    if (store.slowState && new URL(route.request().url()).pathname === "/api/state") await new Promise((r) => setTimeout(r, 400));
+    return plain(route);
+  });
+  await p.addInitScript((tab) => { try { localStorage.setItem("magpie.panelTab", tab); } catch {} }, tab);
+  await p.goto("http://magpie.test/?mode=panel");
+  return { ctx, p, errors };
+}
+const costShown = (p) => p.evaluate(() => document.querySelectorAll("#panelUsage .pu-tot .blk .v")[2]?.textContent.trim() || "");
+async function costBecomes(p, want, why) {
+  for (let i = 0; i < 100 && (await costShown(p)) !== want; i++) await p.waitForTimeout(20);
+  assert.equal(await costShown(p), want, why);
+}
+
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(engine + ": the tray panel's Usage tab follows Settings' currency picked alone", async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    for (const lang of LANGS) for (const width of [380, 300]) {
+      await t.test(lang + " " + width + "px", async () => {
+        const units = { lang, theme: "light", chineseUnits: false, tray: "panel" };
+
+        // first open: ¥ picked already, the state slower than the usage read
+        let store = { cur: { ...units, currency: "cny" }, stateReads: 0, slowState: true };
+        let o = await openPanel(browser, lang, store, width, "stats");
+        await o.p.locator("#panelUsage .pu-card .led-chart svg").waitFor();
+        for (let i = 0; i < 100 && store.stateReads === 0; i++) await o.p.waitForTimeout(20);
+        await o.p.waitForTimeout(500); // the state is in
+        await costBecomes(o.p, "≈¥185", lang + ": first open, the state after the usage");
+        assert.deepEqual(o.errors, []);
+        await o.ctx.close();
+
+        // reopened, then focused, after Settings picked the currency alone
+        store = { cur: { ...units, currency: "usd" }, stateReads: 0 };
+        o = await openPanel(browser, lang, store, width, "stats");
+        await o.p.locator("#panelUsage .pu-card .led-chart svg").waitFor();
+        await costBecomes(o.p, "≈$26.40", lang + ": $ at first");
+        store.cur = { ...store.cur, currency: "cny" };
+        await hideAndShow(o.p, store);
+        await costBecomes(o.p, "≈¥185", lang + ": reopened after ¥ was picked alone");
+        store.cur = { ...store.cur, currency: "usd" };
+        const before = store.stateReads;
+        await o.p.evaluate(() => window.dispatchEvent(new Event("focus")));
+        for (let i = 0; i < 100 && store.stateReads === before; i++) await o.p.waitForTimeout(20);
+        await costBecomes(o.p, "≈$26.40", lang + ": focused after $ was picked again");
+        assert.deepEqual(o.errors, []);
+        await o.ctx.close();
+
+        // open on another tab; ¥ picked; the Usage tab picked after
+        store = { cur: { ...units, currency: "usd" }, stateReads: 0 };
+        o = await openPanel(browser, lang, store, width, "agents");
+        for (let i = 0; i < 100 && store.stateReads === 0; i++) await o.p.waitForTimeout(20);
+        store.cur = { ...store.cur, currency: "cny" };
+        await hideAndShow(o.p, store);
+        await o.p.waitForTimeout(100);
+        await o.p.locator('[data-ptab="stats"]').click();
+        await o.p.locator("#panelUsage .pu-card .led-chart svg").waitFor();
+        await costBecomes(o.p, "≈¥185", lang + ": its Usage tab picked after ¥");
+        assert.deepEqual(o.errors, []);
+        await o.ctx.close();
+      });
+    }
+  });
+}
