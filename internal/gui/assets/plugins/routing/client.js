@@ -3691,7 +3691,9 @@ function routingPage(part) {
     let changed = false;
     for (const k of keys) {
       const name = typeof titles[k] === "string" ? titles[k] : "";
-      if ((otherTitles.get(k) || "") !== name) { if (name) otherTitles.set(k, name); else otherTitles.delete(k); changed = true; }
+      // an answer without a name is a read that failed or ran late, not a
+      // session that lost its name: the one the page has stays (#5365)
+      if (name && otherTitles.get(k) !== name) { otherTitles.set(k, name); changed = true; }
     }
     return changed;
   }
