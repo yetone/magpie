@@ -3095,8 +3095,8 @@ const itemIDCap = 64
 
 // boundItemID is id, of at most itemIDCap characters, as an upstream that
 // checks item ids takes it: one longer goes as its kind's prefix and the
-// sha256 of the whole of it, cut to fit. The kind comes from typ ("rs_" for
-// reasoning, openaiItemPrefix's for a call), and only an item of another
+// sha256 of the whole of it, cut to fit. The kind comes from typ
+// (itemKindPrefix, openaiItemPrefix's for a call), and only an item of another
 // kind takes a prefix from its id: Copilot's own ids can be opaque, + and
 // / in them and no prefix at the front, and a bare digest passed the
 // length and the characters and still had the whole request turned away
@@ -3107,8 +3107,8 @@ func boundItemID(id, typ string) string {
 	sum := sha256.Sum256([]byte(id))
 	digest := hex.EncodeToString(sum[:])
 	prefix := openaiItemPrefix[typ]
-	if typ == "reasoning" {
-		prefix = "rs_"
+	if prefix == "" {
+		prefix = itemKindPrefix[typ]
 	}
 	if prefix == "" {
 		if i := strings.IndexByte(id, '_'); i > 0 && i <= 4 && safeID([]byte(id[:i])) {
@@ -3119,13 +3119,46 @@ func boundItemID(id, typ string) string {
 }
 
 // idOptional are the kinds of input item whose id OpenAI's /responses
-// takes left out ("" is a message given with no type). One of these with an
+// takes left out ("" is a message given with no type), as OpenAI's own SDK
+// has them (openai-go v3.42.0's ResponseInputItemUnionParam: the id is
+// param.Opt on each of these, required on the rest). One of these with an
 // id too long goes without it, which every upstream that checks ids takes:
 // Copilot answered a message's and a call's overlong id left out with 200,
 // and the same id as a bare digest with an empty 400 "invalid_request_body"
-// (isnine on #4525, echo_ts after Codex's compaction). A call keeps its
-// call_id, which its output names it by.
-var idOptional = map[string]bool{"": true, "message": true, "function_call": true}
+// (isnine on #4525, echo_ts after Codex's compaction). A call and its
+// output keep their call_id, which pairs them.
+var idOptional = map[string]bool{
+	"": true, "message": true,
+	"function_call": true, "function_call_output": true,
+	"custom_tool_call": true, "custom_tool_call_output": true,
+	"tool_search_call": true, "tool_search_output": true,
+	"computer_call_output": true,
+	"shell_call":           true, "shell_call_output": true,
+	"apply_patch_call": true, "apply_patch_call_output": true,
+	"mcp_approval_response": true,
+	"additional_tools":      true,
+	"compaction":            true,
+}
+
+// itemKindPrefix is the prefix OpenAI gives the id of each kind of input
+// item that can't go without one (openai-go's id "required"), which
+// boundItemID binds an overlong id under. Copilot hands these out opaque
+// too: a web_search_call's id ~450 characters of Base64 with no ws_ at the
+// front, which as a bare digest had the whole request turned away with the
+// same empty 400 "invalid_request_body" (echo_ts, native web search on
+// Copilot). A kind not here (local_shell_call, item_reference, program)
+// keeps the prefix its own id has.
+var itemKindPrefix = map[string]string{
+	"reasoning":             "rs_",
+	"web_search_call":       "ws_",
+	"file_search_call":      "fs_",
+	"computer_call":         "cu_",
+	"image_generation_call": "ig_",
+	"code_interpreter_call": "ci_",
+	"mcp_call":              "mcp_",
+	"mcp_list_tools":        "mcpl_",
+	"mcp_approval_request":  "mcpr_",
+}
 
 // plainItemIDs is a Responses request whose input items' ids are of
 // [A-Za-z0-9_-] only and of itemIDCap characters at most, as OpenAI takes
