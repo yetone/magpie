@@ -198,6 +198,11 @@ func keyQueryOf(p Provider) Provider {
 // without its token (keyQueryOf).
 func BalanceQuery(p Provider) (balanceURL, field string) {
 	p = keyQueryOf(p)
+	if u := probedBalanceURL(p); u != "" {
+		// a relay added by hand, its query found (balance_probe.go)
+		p.BalanceURL = u
+		return u, balancePathOf(p)
+	}
 	return p.BalanceURL, p.BalancePath
 }
 
@@ -1316,6 +1321,11 @@ func balanceSegmentOf(raw, path string) (balanceSegment, error) {
 // its own has what its fullest window has left: what it can spend now.
 func Balance(ctx context.Context, p Provider) (amount string, ok bool, err error) {
 	amount, _, _, ws, _, ok, err := balanceRead(ctx, p)
+	if !ok && errors.Is(err, errNoBalance) {
+		// a relay added by hand whose balance was found nowhere: no
+		// balance to ask, as with no Balance URL
+		return "", false, nil
+	}
 	if err == nil && amount == "" && len(ws) > 0 {
 		left := ws[0].Limit - ws[0].Amount
 		for _, w := range ws[1:] {
@@ -1339,6 +1349,16 @@ func balanceRead(ctx context.Context, p Provider) (amount string, parts, split [
 	// id typed as a header's name among them (userIDHeader)
 	p.Headers = userIDHeader(p.Headers)
 	src, ok := balanceSourceOf(p)
+	if !ok && probesBalance(p) {
+		// a relay added by hand: its balance where relays tell it, or
+		// no card (balance_probe.go)
+		u, found := probeBalance(ctx, p)
+		if !found {
+			return "", nil, nil, nil, false, false, errNoBalance
+		}
+		p.BalanceURL = u
+		src, ok = balanceSourceOf(p)
+	}
 	if !ok && p.Account == nil && p.Key != "" && openCodeZen(p) {
 		// a balance the vendor keeps from the key: said so, not left out
 		return "", nil, nil, nil, false, true, errOpenCodeNoBalance
@@ -1600,7 +1620,7 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 		}
 		src, ok := balanceSourceOf(p)
 		zen := !ok && openCodeZen(p)
-		if !ok && !clineKeyCard(p) && !zen {
+		if !ok && !clineKeyCard(p) && !zen && !probesBalance(p) {
 			continue
 		}
 		others := 0

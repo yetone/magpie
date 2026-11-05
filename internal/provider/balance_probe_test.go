@@ -1,0 +1,159 @@
+package provider
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"testing"
+
+	"github.com/yetone/magpie/internal/agentenv"
+)
+
+func probeSandbox(t *testing.T) {
+	t.Helper()
+	isolate(t)
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
+	t.Setenv("PATH", h)
+	for _, v := range agentenv.Vars {
+		t.Setenv(v, "")
+	}
+	keyBalanceCache.data = nil
+	probeLocal = true
+	probed.Lock()
+	probed.m = nil
+	probed.Unlock()
+	t.Cleanup(func() {
+		keyBalanceCache.data = nil
+		probeLocal = false
+		probed.Lock()
+		probed.m = nil
+		probed.Unlock()
+	})
+}
+
+// A relay added by hand with no Balance URL (小鱼 of yylx.io, 11-05): its
+// balance is read where a sub2api relay tells a key it, its card shows it,
+// and the query is asked once, not on every read.
+func TestHandAddedRelayFindsItsBalance(t *testing.T) {
+	probeSandbox(t)
+	var asked atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/usage" {
+			asked.Add(1)
+			if r.Header.Get("Authorization") != "Bearer sk-relay" {
+				http.Error(w, `{"error":"invalid key"}`, http.StatusUnauthorized)
+				return
+			}
+			w.Write([]byte(`{"remaining":10472.14,"unit":"USD"}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	p := Provider{ID: "yylx", Name: "yylx", Chat: srv.URL + "/v1", Anthropic: srv.URL, Key: "sk-relay"}
+	if err := Save(p); err != nil {
+		t.Fatal(err)
+	}
+	amount, ok, err := Balance(context.Background(), p)
+	if err != nil || !ok || amount != "$10472.14" {
+		t.Fatalf("balance = %q %v %v, want $10472.14", amount, ok, err)
+	}
+	if u, field := BalanceQuery(p); u != srv.URL+"/v1/usage" || field != "$remaining" {
+		t.Errorf("query = %q %q", u, field)
+	}
+	cards := KeyBalances(context.Background())
+	if len(cards) != 1 || cards[0].Provider != "yylx" || cards[0].Balance != "$10472.14" {
+		t.Fatalf("cards = %+v", cards)
+	}
+	if n := asked.Load(); n != 3 {
+		t.Errorf("/v1/usage asked %d times, want 3 (the probe once, then each read)", n)
+	}
+	// the user's config is left as it was
+	if q, _ := Find("yylx"); q.BalanceURL != "" {
+		t.Errorf("Balance URL written: %q", q.BalanceURL)
+	}
+}
+
+// A new-api relay answers /v1/usage with 404: its key query is found next.
+func TestHandAddedNewAPIRelay(t *testing.T) {
+	probeSandbox(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/usage/token" && r.Header.Get("Authorization") == "Bearer sk-n" {
+			w.Write([]byte(`{"code":true,"data":{"total_available":1000000}}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	p := Provider{ID: "na", Name: "na", Chat: srv.URL + "/v1", Key: "sk-n"}
+	amount, ok, err := Balance(context.Background(), p)
+	if err != nil || !ok || amount != "$2.00" {
+		t.Fatalf("balance = %q %v %v, want $2.00", amount, ok, err)
+	}
+}
+
+// A relay that tells no balance at either query has no card, and is not
+// asked again on the next read.
+func TestHandAddedRelayWithNoBalance(t *testing.T) {
+	probeSandbox(t)
+	var asked atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked.Add(1)
+		// a page that answers 200 to anything is not a balance
+		w.Write([]byte(`<html>ok</html>`))
+	}))
+	defer srv.Close()
+	p := Provider{ID: "none", Name: "none", Chat: srv.URL + "/v1", Key: "sk-x"}
+	if err := Save(p); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if amount, ok, err := Balance(context.Background(), p); ok || err != nil || amount != "" {
+			t.Fatalf("balance = %q %v %v, want none", amount, ok, err)
+		}
+		if cards := KeyBalances(context.Background()); len(cards) != 0 {
+			t.Fatalf("cards = %+v, want none", cards)
+		}
+		keyBalanceCache.data = nil
+	}
+	if n := asked.Load(); n != 2 {
+		t.Errorf("asked %d times, want 2 (each query once)", n)
+	}
+}
+
+// What is never looked at: a provider with its own Balance URL or a
+// preset, a host magpie knows, a model vendor's own API, this computer.
+func TestBalanceProbeLeavesOthersAlone(t *testing.T) {
+	for _, p := range []Provider{
+		{Chat: "https://relay.example.com/v1", Key: "k", BalanceURL: "https://relay.example.com/x"},
+		{Chat: "https://relay.example.com/v1", Key: "k", Preset: "deepseek"},
+		{Chat: "https://opencode.ai/inference/custom/acme/v1", Key: "k"},
+		{Chat: "https://opencode.ai/zen/go/v1", Key: "k", Preset: "opencode-go"},
+		{Chat: "https://relay.example.com/v1"},
+		{Chat: "https://api.deepseek.com/v1", Key: "k"},
+		{Chat: "https://api.openai.com/v1", Key: "k"},
+		{Anthropic: "https://api.anthropic.com", Key: "k"},
+		{Chat: "http://127.0.0.1:11434/v1", Key: "k"},
+		{Chat: "http://localhost:1234/v1", Key: "k"},
+	} {
+		if probesBalance(p) {
+			t.Errorf("looked at: %+v", p)
+		}
+	}
+	if !probesBalance(Provider{Chat: "https://app.yylx.io/v1", Key: "k"}) {
+		t.Error("a relay added by hand is not looked at")
+	}
+	if !probesBalance(Provider{Chat: "https://app.yylx.io/v1", Key: "k", Preset: "yylx"}) {
+		t.Error("a relay's preset is not looked at")
+	}
+	if got := strings.Join(probeOrigins(Provider{Chat: "https://R.example.com/v1", Responses: "https://r.example.com/v1", Anthropic: "https://r.example.com"}), ","); got != "https://r.example.com" {
+		t.Errorf("origins = %q", got)
+	}
+}
