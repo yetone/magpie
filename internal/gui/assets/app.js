@@ -4320,7 +4320,24 @@ function fit(extra = 0, glide) {
   if (h === fit.last) return;
   fit.last = h;
   const still = !glide || calm();
-  api("window/fit?h=" + h + (still ? "" : "&ms=" + glide.ms + "&ease=" + glide.ease), {});
+  fitSend("window/fit?h=" + h + (still ? "" : "&ms=" + glide.ms + "&ease=" + glide.ease));
+}
+// fitSend asks for one height at a time. Wails serves each of the page's
+// requests on a goroutine of its own, so two fits asked together reached
+// the panel in either order (69 of 400 pairs the wrong way round in a real
+// WKWebView), and the older one landing last kept the panel at its height:
+// fit.last and the panel's own height then took the newer as done, and the
+// Allowances tab's card was cut off by the foot (robot_yz on X). A fit
+// asked while one is on its way waits for it, and only the latest goes.
+function fitSend(path) {
+  if (fitSend.busy) { fitSend.next = path; return; }
+  fitSend.busy = true;
+  api(path, {}).catch(() => {}).finally(() => {
+    fitSend.busy = false;
+    const next = fitSend.next;
+    fitSend.next = null;
+    if (next) fitSend(next);
+  });
 }
 
 // the panel brought up on its Allowances tab is the reader opening them
