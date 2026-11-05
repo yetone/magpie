@@ -53,8 +53,8 @@ const said = {
 };
 const strings = [
   "This magpie",
-  "This Remote magpie is this magpie itself. It is used anyway: its models are listed beside this magpie's own, and a request through it passes through this magpie twice.",
-  "This Remote magpie is this magpie itself: sync brought it from a computer that uses this one. It is left out, so its models aren't listed twice; a request for one of them is served here at once.",
+  "This is this magpie itself, used anyway: its models are listed twice, and a request through it passes here twice.",
+  "This is this magpie itself, brought by sync from a computer that uses it. It is left out, so its models aren't listed twice; a request for one is served here.",
   "Use it anyway",
   "{name} is used anyway",
   "{name} is left out: it is this magpie",

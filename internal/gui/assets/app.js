@@ -9257,7 +9257,6 @@ function drawEditor(p, presetID) {
     if (p) h.append(providerSwitch(p));
     ed.append(h);
     if (p?.off) ed.append(el("div", "hint off-note", t("Switched off: agents aren't given its models and no request goes to it. Its keys and settings are kept; switch it on to use it again.")));
-    // a Remote magpie that is this magpie, which sync brought here (hanslin1666)
     if (p?.self) {
       const [keep, cb] = tick(t("Use it anyway"), !!p.keepSelf);
       cb.onchange = () => accountAction("provider/keepself", { id: p.id, keepSelf: cb.checked }, t(cb.checked ? "{name} is used anyway" : "{name} is left out: it is this magpie", { name: p.name }));
@@ -20450,8 +20449,8 @@ function askLANNames(urls, then) {
 }
 
 function selfNote(p) {
-  return t(p.keepSelf ? "This Remote magpie is this magpie itself. It is used anyway: its models are listed beside this magpie's own, and a request through it passes through this magpie twice."
-    : "This Remote magpie is this magpie itself: sync brought it from a computer that uses this one. It is left out, so its models aren't listed twice; a request for one of them is served here at once.");
+  return t(p.keepSelf ? "This is this magpie itself, used anyway: its models are listed twice, and a request through it passes here twice."
+    : "This is this magpie itself, brought by sync from a computer that uses it. It is left out, so its models aren't listed twice; a request for one is served here.");
 }
 
 function tick(label, on) {
