@@ -1680,12 +1680,15 @@ var unsaidWords = regexp.MustCompile(`(?i)(^|"|\\"|: )invalid request error trac
 // 'messages[1].reasoning_content'", EDwinpzy) is one too: the client's
 // request is whole, and a group of Beam then another model stopped at
 // Beam before.
+// Google's word for a thought signature it didn't give (signatureRefused:
+// "Corrupted thought signature.", one Vertex AI gave replayed to AI Studio,
+// mimi001234) is one: the member that gave it may take it.
 // One that also says the account is out of quota or credit (quotaWords,
 // creditWords: "请充值") is that, and rests it (#4095).
 func shapeRefused(status int, body []byte) bool {
 	// the words are matched decoded, too (#1669)
 	body = wordsOf(body)
-	return (status == 400 || status == 422) && (shapeWords.Match(body) || unsaidWords.Match(body) || customToolRefusal.Match(body) || zhipuImageRefusal.Match(body) || wrongEndpoint(status, body) || upstreamFailedWords.Match(body) || reasoningBackRefused(body)) &&
+	return (status == 400 || status == 422) && (shapeWords.Match(body) || unsaidWords.Match(body) || customToolRefusal.Match(body) || zhipuImageRefusal.Match(body) || wrongEndpoint(status, body) || upstreamFailedWords.Match(body) || reasoningBackRefused(body) || signatureRefused.Match(body)) &&
 		!quotaWords.Match(body) && !creditWords.Match(body) && !unservedWords.Match(body) && !refusedWords.Match(body)
 }
 

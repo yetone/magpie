@@ -221,7 +221,7 @@ func TestGeminiCallsWithoutSignature(t *testing.T) {
 			} `json:"tool_calls"`
 		} `json:"messages"`
 	}
-	if err := json.Unmarshal(chatCallSignatures(body, true), &q); err != nil {
+	if err := json.Unmarshal(chatCallSignatures(body, true, "google", true), &q); err != nil {
 		t.Fatal(err)
 	}
 	sigOf := func(m, c int) string {
@@ -236,7 +236,7 @@ func TestGeminiCallsWithoutSignature(t *testing.T) {
 	if sigOf(3, 0) != "c2ln" || sigOf(3, 1) != "" || q.Messages[3].ToolCalls[0].ID != "call_a" || q.Messages[4].ToolCallID != "call_a" {
 		t.Errorf("a signed turn went as %+v", q.Messages[3:5])
 	}
-	other := string(chatCallSignatures(body, false))
+	other := string(chatCallSignatures(body, false, "google", true))
 	if strings.Contains(other, sigMark) || strings.Contains(other, "extra_content") || !strings.Contains(other, `"id":"call_a"`) {
 		t.Errorf("another upstream was sent %s", other)
 	}
@@ -357,7 +357,7 @@ func TestShortenedIDGoesUnsigned(t *testing.T) {
 			body := []byte(`{"messages":[{"role":"user","content":"list files"},
 				{"role":"assistant","tool_calls":[{"id":"` + cut + `","type":"function","function":{"name":"bash","arguments":"{}"}}]},
 				{"role":"tool","tool_call_id":"` + cut + `","content":"a.txt"}]}`)
-			if relayed := string(chatCallSignatures(body, true)); !strings.Contains(relayed, `"thought_signature":"`+skipSignature+`"`) {
+			if relayed := string(chatCallSignatures(body, true, "google", true)); !strings.Contains(relayed, `"thought_signature":"`+skipSignature+`"`) {
 				t.Fatalf("%q cut to %d: relayed as %s", c.id, n, relayed)
 			}
 			r := &Request{Messages: []Message{
@@ -469,7 +469,7 @@ func TestKeptSignatureGoneOrChanged(t *testing.T) {
 		t.Fatalf("a gone file read as %q, %d bytes", got, len(back))
 	}
 	body := []byte(`{"messages":[{"role":"assistant","tool_calls":[{"id":"` + id + `","type":"function","function":{"name":"bash","arguments":"{}"}}]}]}`)
-	if out := string(chatCallSignatures(body, true)); !strings.Contains(out, `"thought_signature":"`+skipSignature+`"`) {
+	if out := string(chatCallSignatures(body, true, "google", true)); !strings.Contains(out, `"thought_signature":"`+skipSignature+`"`) {
 		t.Fatalf("relayed as %s", out)
 	}
 	// written again, it is read again

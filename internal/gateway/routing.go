@@ -1328,6 +1328,13 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		// connection (regionFresh)
 		return Rest{Why: why, Status: status, By: "off", Until: now}
 	}
+	if status == http.StatusBadRequest && signatureRefused.Match(wordsOf(body)) {
+		// Google turned a thought signature away as one it didn't give
+		// (signatureRefused): the history's doing, not the account's. A
+		// group that moved from Vertex AI to AI Studio was refused on every
+		// account alike (mimi001234); none is set aside
+		return Rest{Why: why, Status: status, By: "off", Until: now}
+	}
 	if status == http.StatusBadGateway && bytes.Contains(body, []byte(openCodeBare)) {
 		// OpenCode's bare 400 (openCodeBareRefusal, #3740) is about the
 		// request, not the key: the key's other requests go through, so

@@ -5901,7 +5901,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		// Gemini's thought signatures, which came to the client in its
 		// calls' ids, go back where Gemini wants them; another upstream
 		// gets the calls' own ids (#687)
-		body = chatCallSignatures(body, compat)
+		body = chatCallSignatures(body, compat, p.ID, true)
 		if p.Preset == "mistral" || p.Host() == "api.mistral.ai" {
 			// an earlier turn's reasoning_content, which Mistral turns
 			// away, as the thinking part it takes (#494)
@@ -5930,6 +5930,8 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		// body has no such field, and Factory ignores it.
 		geminiWhole = !streamOf(body)
 		body = withoutFields(body, "stream")
+		// a signature another provider gave goes to none (ownSignatures)
+		body = geminiBodySignatures(body, p.ID, true)
 	case provider.Anthropic:
 		// what the client holds, taken before the upstream gets its own
 		// call ids back below, and those given back to it (tool_use_ids.go,
@@ -6083,6 +6085,25 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	res, err := s.forward(r.Context(), p, proto, path, p.Prepare(body), r.Header)
 	if err != nil {
 		return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
+	}
+	if res.StatusCode == http.StatusBadRequest && (proto == provider.Chat || proto == provider.Gemini) && signaturesReach(p, proto, upstream) {
+		// a signature Google won't take (signatureRefused), one given
+		// before magpie noted whose it was: asked again once without
+		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+		res.Body.Close()
+		res.Body = io.NopCloser(bytes.NewReader(b))
+		if signatureRefused.Match(b) {
+			bare := geminiBodySignatures(body, p.ID, false)
+			if proto == provider.Chat {
+				bare = chatCallSignatures(body, true, p.ID, false)
+			}
+			if !bytes.Equal(bare, body) {
+				body = bare
+				if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(body), r.Header); err != nil {
+					return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
+				}
+			}
+		}
 	}
 	if delta && badRequest(res.StatusCode) || delta && res.StatusCode == http.StatusNotFound {
 		// one it no longer holds: the conversation whole
@@ -6509,7 +6530,10 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	}
 	var sigs *sigTidy
 	if proto == provider.Chat && geminiCompat(p.Host(), model) {
-		sigs = &sigTidy{sse: sse}
+		sigs = &sigTidy{sse: sse, by: p.ID}
+	} else if proto == provider.Gemini {
+		// a Gemini client keeps the signatures itself: noted as p's
+		sigs = &sigTidy{sse: sse, by: p.ID, native: true}
 	}
 	var search *searchTidy
 	if searchFn && sse {
@@ -7032,6 +7056,8 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r.Effort, req = e, &r
 		}
 	}
+	// Gemini's signatures another provider gave go to none (ownSignatures)
+	req = ownSignatures(req, p.ID)
 	if p.IsVertex() && !provider.VertexPartner(model) && !provider.VertexClaude(model) {
 		// Gemini's levels; a partner model on chat completions, and
 		// Claude on Anthropic's Messages API, are sent their effort as
@@ -7495,9 +7521,9 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 				continue
 			}
 		}
-		if p.IsVertex() && res.StatusCode == http.StatusBadRequest && vertexSignatureRefused.Match(b) {
-			// a call's signature Vertex AI won't take (a client changed
-			// it, or another API gave it, the conversation having moved):
+		if res.StatusCode == http.StatusBadRequest && signaturesReach(p, to, model) && signatureRefused.Match(b) {
+			// a signature Google won't take (a client changed it, or
+			// another provider gave it before magpie noted whose it was):
 			// the calls waved through instead, for this request
 			if r, had := withoutSignatures(req); had {
 				req = r
@@ -8444,7 +8470,14 @@ func build(proto provider.Protocol, r *Request, model, host string, rejectTemp b
 // A ChatGPT account is given a declared tool whose name its backend
 // refuses under another (provider.CodexToolName); the model's call to it
 // comes back by the name the agent declared, from tools, the request's.
+//
+// Each Gemini thought signature the reply gives is noted as p's
+// (signersNoted), so it goes back to p alone (ownSignatures).
 func decoderFor(p provider.Provider, proto provider.Protocol, tools []Tool) func(data string, emit func(Event)) error {
+	return signersNoted(decoderOf(p, proto, tools), p.ID)
+}
+
+func decoderOf(p provider.Provider, proto provider.Protocol, tools []Tool) func(data string, emit func(Event)) error {
 	if proto == provider.Chat && p.IsPlugin() {
 		d := &chatDecoder{past: true}
 		return d.decode

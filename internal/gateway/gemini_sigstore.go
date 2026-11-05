@@ -107,3 +107,71 @@ func pruneSignatures(dir string) {
 		}
 	}
 }
+
+// Which provider gave a signature (a reply's tool call or text): a
+// signature goes back only to the provider that gave it (ownSignatures).
+// Vertex AI and AI Studio serve the same Gemini models, and a routing
+// group of both falls over from one to the other mid-conversation; the
+// other answers a signature it didn't give with 400 "Corrupted thought
+// signature" (mimi001234 on Discord). It is kept beside the signature,
+// <key>.by, the provider's id in it, keyed by the signature's hash, so
+// it reads the same whichever way the signature came back: in a call's
+// id, in extra_content, or in a Gemini client's own thoughtSignature.
+const signerExt = ".by"
+
+// noteSigner records that provider by gave sig. A record that couldn't
+// be written leaves the signature's giver unknown (signerOf).
+func noteSigner(sig, by string) {
+	if sig == "" || by == "" || sig == skipSignature {
+		return
+	}
+	dir := sigDir()
+	path := filepath.Join(dir, sigKey(sig)+signerExt)
+	if b, err := os.ReadFile(path); err == nil && string(b) == by {
+		now := time.Now()
+		os.Chtimes(path, now, now)
+		return
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return
+	}
+	tmp, err := os.CreateTemp(dir, ".tmp-*")
+	if err != nil {
+		return
+	}
+	_, werr := tmp.WriteString(by)
+	cerr := tmp.Close()
+	if werr != nil || cerr != nil || os.Rename(tmp.Name(), path) != nil {
+		os.Remove(tmp.Name())
+		return
+	}
+	pruneSignatures(dir)
+}
+
+// signerOf is the id of the provider that gave sig, or "" when magpie
+// doesn't know: a signature from before signers were kept, one whose
+// record couldn't be written or read, or one a client made up.
+func signerOf(sig string) string {
+	if sig == "" || sig == skipSignature {
+		return ""
+	}
+	path := filepath.Join(sigDir(), sigKey(sig)+signerExt)
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	now := time.Now()
+	os.Chtimes(path, now, now)
+	return string(b)
+}
+
+// foreignSignature says sig is known to come from a provider other than
+// by. A signature whose giver isn't known goes as it did before signers
+// were kept: dropping it would cost every conversation from before the
+// upgrade its signatures on the very provider that gave them, and the
+// one that can't read it says so (signatureRefused), which is answered
+// by asking again without.
+func foreignSignature(sig, by string) bool {
+	from := signerOf(sig)
+	return from != "" && from != by
+}
