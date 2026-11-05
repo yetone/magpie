@@ -7313,11 +7313,10 @@ function routingPage(part) {
       rAdd.hidden = rTip.hidden = d.members.length < 2;
       const none = d.members.length > 1 && d.routing !== "manual" && !d.rules.length;
       rTry.hidden = !none;
-      // only what holds the rules back is said in a line, and with no rule
-      // yet what one is for: how they work is under the ⓘ beside Add a rule
+      // only what holds the rules back is said in a line: how they work is
+      // under the ⓘ beside Add a rule
       rHint2.textContent = d.members.length < 2 ? t("With two models or more, a rule can send some turns to one of them first.")
-        : d.routing === "manual" ? t("The rules wait while you pick the model by hand.")
-        : none ? t("No rule yet: every turn goes by the routing. For one model to think and others to write code, put the coding models in a group of their own, add it here first and the thinking model after it, route In order, and add a rule sending planning and hard problems to the thinking model.") : "";
+        : d.routing === "manual" ? t("The rules wait while you pick the model by hand.") : "";
       rHint2.hidden = !rHint2.textContent;
       let focus = null;
       d.rules.forEach((r, i) => {

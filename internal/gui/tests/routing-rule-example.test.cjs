@@ -32,11 +32,11 @@ const groups = () => ({
 });
 
 const words = {
-  en: { edit: "Edit", save: "Save", hint: "No rule yet", intent: "planning, design, or a hard problem to think through" },
-  zh: { edit: "编辑", save: "保存", hint: "还没有规则", intent: "规划、设计，或需要深入思考的难题" },
-  "zh-TW": { edit: "編輯", save: "儲存", hint: "還沒有規則", intent: "規劃、設計，或需要深入思考的難題" },
-  ja: { edit: "編集", save: "保存", hint: "まだルールがありません", intent: "計画、設計、またはじっくり考える必要がある難問" },
-  de: { edit: "Bearbeiten", save: "Speichern", hint: "Noch keine Regel", intent: "Planung, Entwurf oder ein schwieriges Problem zum Durchdenken" },
+  en: { edit: "Edit", save: "Save", intent: "planning, design, or a hard problem to think through" },
+  zh: { edit: "编辑", save: "保存", intent: "规划、设计，或需要深入思考的难题" },
+  "zh-TW": { edit: "編輯", save: "儲存", intent: "規劃、設計，或需要深入思考的難題" },
+  ja: { edit: "編集", save: "保存", intent: "計画、設計、またはじっくり考える必要がある難問" },
+  de: { edit: "Bearbeiten", save: "Speichern", intent: "Planung, Entwurf oder ein schwieriges Problem zum Durchdenken" },
 };
 
 function serve(lang, posts) {
@@ -120,11 +120,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.goto("http://magpie.test/?view=routing");
 
         let ed = await openEditor(page, w);
-        const hint = ed.locator(".hint", { hasText: w.hint });
         const tryIt = ed.locator("button.rt-try");
-        await hint.waitFor();
+        await ed.locator(".rt-rules").waitFor({ state: "attached" });
         assert(await tryIt.isVisible(), "the example's button shows");
-        assert.match(await hint.textContent(), lang === "en" ? /In order/ : /./);
+        // the button alone: no line of text added under Rules
+        assert(await page.evaluate(() => {
+          const h = document.querySelector(".rt-gedit .rt-rules").previousElementSibling;
+          return h.classList.contains("hint") && h.hidden;
+        }), "no line under Rules");
         // nothing past the editor's side, nor a sideways scroll
         const past = await page.evaluate(() => {
           const e = document.querySelector(".rt-gedit").getBoundingClientRect();
@@ -139,7 +142,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await rows.count(), 1);
         assert.equal(await rows.first().locator(".rt-cond.in textarea").inputValue(), w.intent);
         assert.match(await rows.first().locator(".rt-model").textContent(), /opus/, "to the last member");
-        assert(!(await tryIt.isVisible()) && !(await hint.isVisible()), "gone once a rule is there");
+        assert(!(await tryIt.isVisible()), "gone once a rule is there");
         const body = await saved(page, ed, w, posts);
         assert.deepEqual(body.rules, [rule("a/opus", { useEffort: "", intent: w.intent })]);
         assert.equal(body.classifier, "typesafe/jev-latest");
@@ -152,7 +155,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           ed = await openEditor(page, w);
           await ed.locator(".rt-rules").waitFor({ state: "attached" });
           assert(!(await tryIt.isVisible()), `no example: ${JSON.stringify(s)}`);
-          assert.equal(await hint.count(), 0);
         }
       });
     }
