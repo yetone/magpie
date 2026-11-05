@@ -100,4 +100,16 @@ func TestAntigravityModelTest(t *testing.T) {
 	if r.OK || r.Status != 403 || !strings.Contains(r.Error, "does not have permission") {
 		t.Errorf("refused: %+v", r)
 	}
+
+	// an account Google wants verified: the test says Google's link whole
+	const link = "https://accounts.google.com/signin/continue?sarp=1&scc=1&continue=https://developers.google.com/gemini-code-assist/auth/auth_success_gemini&plt=AKgnsbvK-3x_Yq9Zt0lPq2vN7m8w&flowName=GlifWebSignIn&authuser=0"
+	say = func(w http.ResponseWriter) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		io.WriteString(w, `{"error":{"code":403,"message":"Verify your account to continue.","status":"PERMISSION_DENIED","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"VALIDATION_REQUIRED","domain":"cloudcode-pa.googleapis.com","metadata":{"validation_url":"`+strings.ReplaceAll(link, "&", `&`)+`"}}]}}`)
+	}
+	r = p.TestModels(t.Context(), []string{"gemini-3-flash"})[0]
+	if r.OK || r.Status != 403 || !strings.Contains(r.Error, " open "+link+" in a browser") {
+		t.Errorf("verify: %+v", r)
+	}
 }
