@@ -250,6 +250,11 @@ func fakeClaude(args []string) {
 		}
 		return
 	}
+	// FAKE_SLOW_START: nothing drawn for that long, as a loaded machine
+	// brings up the helper and Claude Code (#5079)
+	if d, err := time.ParseDuration(os.Getenv("FAKE_SLOW_START")); err == nil {
+		time.Sleep(d)
+	}
 	if os.Getenv("FAKE_FAIL") == "1" {
 		fmt.Print("something went wrong\n")
 		os.Exit(3)
@@ -1048,22 +1053,42 @@ func TestShimEndsAtItsCallersDeadline(t *testing.T) {
 		{"no /usage panel", `{"type":"command","command":"/usage"}`, "hadn't drawn /usage's panel in the", "", []string{"FAKE_USAGE=" + filepath.Join(t.TempDir(), "none")}},
 		// the banner drawn again and no panel after it: never told as one
 		{"banner, no /usage panel", `{"type":"command","command":"/usage"}`, "hadn't drawn /usage's panel in the", "magpie-claude-work-501", []string{"FAKE_USAGE_BANNER=never"}},
+		// Claude Code up only after the first deadline, as on a loaded
+		// machine: run again with more time, never failed for it
+		{"trust unanswered, slow to start", `{"type":"user","message":{"role":"user","content":"hello"}}`, "asked whether to trust " + wd + ", not answered in the", "trust this folder", []string{"FAKE_TRUST=deaf", TrustEnv + "=1", "FAKE_SLOW_START=3500ms"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			start := time.Now()
-			by := start.Add(3 * time.Second).UnixMilli()
-			out, stderr, err := runEndsTold(t, t.TempDir(), append(c.env, DeadlineEnv+"="+strconv.FormatInt(by, 10)), c.line)
-			d := time.Since(start)
-			if err == nil || strings.Contains(out, `"type":"result"`) {
-				t.Fatalf("ended %v, wrote %q", err, out)
-			}
-			if !strings.Contains(stderr, "claude-tui: Claude Code "+c.why) || !strings.Contains(stderr, c.screen) {
-				t.Fatalf("stderr %q", stderr)
-			}
-			// at the deadline, with room for a slow machine to start it,
-			// and well before the helper's own waits (20s, 45s)
-			if d < 2500*time.Millisecond || d > 15*time.Second {
-				t.Fatalf("ended after %s, the deadline 3s", d)
+			// The deadline counts from before the helper and Claude Code
+			// start, and a loaded machine can take longer than it to bring
+			// them up: "showed no prompt in the 2.8s" at load 13-20, and
+			// in other full runs (#5079). A run that ended at it with no
+			// prompt shown, before Claude Code drew what the case is about,
+			// says nothing of the case, and runs again with twice the time.
+			// One whose screen has it is told as it is: the helper misread it.
+			for wait := 3 * time.Second; ; wait *= 2 {
+				start := time.Now()
+				by := start.Add(wait).UnixMilli()
+				out, stderr, err := runEndsTold(t, t.TempDir(), append(c.env, DeadlineEnv+"="+strconv.FormatInt(by, 10)), c.line)
+				d := time.Since(start)
+				if err == nil || strings.Contains(out, `"type":"result"`) {
+					t.Fatalf("ended %v, wrote %q", err, out)
+				}
+				notUp := strings.Contains(stderr, "claude-tui: Claude Code showed no prompt in the ") &&
+					(c.screen == "" || !strings.Contains(stderr, c.screen))
+				if notUp && wait < 12*time.Second {
+					t.Logf("not up in %s, again with %s: %q", wait, 2*wait, stderr)
+					continue
+				}
+				if !strings.Contains(stderr, "claude-tui: Claude Code "+c.why) || !strings.Contains(stderr, c.screen) {
+					t.Fatalf("stderr %q", stderr)
+				}
+				// at the deadline, with room for a slow machine to end it;
+				// the helper's own waits (20s, 45s) say "in 20s", never "in
+				// the …s its caller waits for it" (c.why)
+				if d < wait-500*time.Millisecond || d > wait+12*time.Second {
+					t.Fatalf("ended after %s, the deadline %s", d, wait)
+				}
+				return
 			}
 		})
 	}
