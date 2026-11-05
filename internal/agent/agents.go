@@ -59,6 +59,8 @@ func init() {
 	// reopened on Windows, where its stdout was held open
 	provider.CodexAppOpen = codexAppOpen
 	provider.CodexAppReopen = codexAppReopen
+	provider.CodexAppCrashed = codexAppCrashed
+	provider.CodexAppRelaunch = codexAppRelaunch
 	// and what the Codex app holds is read while Codex takes magpie's
 	// models beside its sign-in, Codex switched off in magpie or not
 	// Claude Code's own sign-in is left where the user put it while its

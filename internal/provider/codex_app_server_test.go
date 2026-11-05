@@ -48,13 +48,22 @@ func stubCodexApp(t *testing.T) *codexAppStub {
 		codexApp.seen, codexApp.route, codexApp.stale, codexApp.stuck, codexApp.switched, codexApp.auto = false, "", nil, false, false, false
 		codexApp.ended, codexApp.backBy, codexApp.spent, codexApp.why = nil, time.Time{}, false, ""
 		codexApp.back, codexApp.backAt = nil, time.Time{}
+		codexApp.crashSince, codexApp.crashBy, codexApp.snag, codexApp.snagPids = time.Time{}, time.Time{}, false, nil
 		codexApp.Unlock()
 	}
+	oldCrashed, oldRelaunch := CodexAppCrashed, CodexAppRelaunch
 	t.Cleanup(func() {
 		CodexAppRoute, codexAppServersOn, endCodexAppServer, codexTurnRunning = oldOn, oldList, oldEnd, oldTurn
 		CodexAppOpen, CodexAppReopen, codexSessionsQuiet, codexRestartsApp = oldOpen, oldReopen, oldQuiet, oldRestarts
+		CodexAppCrashed, CodexAppRelaunch = oldCrashed, oldRelaunch
 		reset()
 	})
+	// the app's logs as tests find them: no error page, and never reopened
+	CodexAppCrashed = func(time.Time) (time.Time, bool, bool) { return time.Time{}, false, true }
+	CodexAppRelaunch = func(context.Context) error {
+		t.Error("the Codex app relaunched")
+		return errors.New("not in this test")
+	}
 	reset()
 	// the user asked magpie to restart the app for its own changes too
 	// (RestartApp); TestCodexAppLeftRunningForMagpiesOwnChanges is without
