@@ -419,6 +419,9 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 	}
 	var failed, failedCode string
 	var failedStatus int
+	// errNamed: the status the last try's error event named for itself,
+	// 0 when it named none or the try failed otherwise
+	var errNamed int
 	var cut, errSent bool
 	var empty bool // a reply in this protocol that says nothing fails (#667)
 	// counts: a reply in this protocol counts its tokens, and one that
@@ -470,9 +473,14 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 			if ev.Code == "" && cont.possible() && !inGroupTry(r.Context()) {
 				// held while the reply may yet go on; sent when it can't
 				failed, failedCode, failedStatus, cut = ev.Text, ev.Code, ev.Status, true
+				errNamed = ev.Status
 				return
 			}
 			failed, failedCode, failedStatus = ev.Text, ev.Code, ev.Status
+			if ev.Code == "" {
+				// a refusal's status is magpie's, told by its code
+				errNamed = ev.Status
+			}
 			errSent = true
 		case KStart:
 			// the tries are each billed, so their usages are summed into
@@ -514,6 +522,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 		// continuation's prefill away
 		cutBy, cutCode, cutErr := failed, failedCode, serr
 		failed, failedCode, failedStatus, cut, serr = "", "", 0, false, nil
+		errNamed = 0
 		var held func() // what a textCallSee of this try holds back
 		req := request
 		if cont.resume {
@@ -738,6 +747,13 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 			failed += " — " + hint
 		}
 		u.ErrType = turnedAwayErrType
+	} else if errNamed >= 400 && errNamed < 600 && serr == nil {
+		// the upstream's error event named its own status (Google's 400
+		// INVALID_ARGUMENT in a 200 stream): the failure is booked and
+		// rested as it, a request's fault as one, as a relayed stream's
+		// is (namedStatusHeader, #4855). Antigravity's turning a prompt
+		// away is its own, above
+		noteSaidStatus(w, errNamed)
 	}
 	if !errSent {
 		enc.event(Event{Kind: KError, Text: failed, Code: failedCode})

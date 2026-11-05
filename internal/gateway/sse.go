@@ -18,8 +18,13 @@ func readSSE(r io.Reader, fn func(event, data string) error) error {
 
 // readSSEAlive is readSSE that also calls alive, when not nil, after each
 // event and each comment: every sign that the stream is alive, a
-// keepalive (": keepalive") as much as an answer.
+// keepalive (": keepalive") as much as an answer. An error the upstream
+// wrote as a JSON line of its own is read as the data event it means
+// (bareErrors).
 func readSSEAlive(r io.Reader, fn func(event, data string) error, alive func()) error {
+	if _, ok := r.(*bareErrorReader); !ok {
+		r = bareErrors(r)
+	}
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64<<10), 32<<20)
 	var event string

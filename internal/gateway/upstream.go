@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"strings"
 
@@ -171,6 +172,10 @@ func carriedError(data string) (ev Event, ok bool) {
 		return Event{}, false
 	}
 	code, status, said := filterRefused(data)
+	if status == 0 {
+		// the status the error names for itself (#4855)
+		status = cmp.Or(namedStatusOf(r.Error), namedStatusOf(v.Error))
+	}
 	return Event{Kind: KError, Text: streamErrorText(data, r.Error, v.Error), Code: code, Status: status, Said: said}, true
 }
 

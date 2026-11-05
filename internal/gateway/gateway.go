@@ -4890,6 +4890,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				// refused one before any of it was said (#248): the account
 				// is at fault no more for it, and nobody rests
 				try.Fail = failRefused
+			} else if named := failedNamed(hw.header, namedStatus([]byte(call.Error))); named >= 400 && named < 500 && !retryable(named, []byte(call.Error)) {
+				// the error frame named a status that is the request's
+				// fault, as it would be before the stream: Antigravity's
+				// 400 INVALID_ARGUMENT after its thinking (zRain on
+				// Discord, sse_bare.go) fails the same on every account,
+				// and nobody rests, as for that 400 sent before the 200
 			} else if lateRests(call.Error) {
 				rest := s.restAfter(c, call.Status, hw.header, []byte(call.Error))
 				try.Fail, try.Rest = rest.Why, &rest
@@ -7150,14 +7156,17 @@ func streamFailure(proto provider.Protocol, msg string) []byte {
 // 0.0s"). A JSON or binary body never begins with a line of an event
 // stream.
 func eventStream(res *http.Response) (io.Reader, bool) {
+	// an error the upstream wrote as a JSON line of its own goes on as
+	// the data event it means (bareErrors): to a decoder, a sniffer and
+	// a client the stream is relayed to alike
 	if strings.HasPrefix(res.Header.Get("Content-Type"), "text/event-stream") {
-		return res.Body, true
+		return bareErrors(res.Body), true
 	}
 	br := bufio.NewReaderSize(res.Body, 4<<10)
 	head, _ := br.Peek(16)
 	if eventsStart(bytes.TrimLeft(head, " \t\r\n")) {
 		res.Header.Set("Content-Type", "text/event-stream")
-		return br, true
+		return bareErrors(br), true
 	}
 	return br, false
 }
