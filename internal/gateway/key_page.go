@@ -92,7 +92,7 @@ func (s *Server) keyInfo(w http.ResponseWriter, r *http.Request) {
 	if !who.ReadOnly {
 		// as /v1/models tells this key, for no agent in particular
 		shown, _ := provider.CatalogFor("")
-		shown = keyAllowed(r, shown)
+		shown = keyListed(r, shown, provider.ModelOff(""))
 		labels := provider.Labels(shown)
 		for i, e := range shown {
 			models = append(models, map[string]string{"id": e.ID, "label": labels[i]})

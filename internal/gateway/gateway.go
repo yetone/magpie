@@ -1494,8 +1494,9 @@ func viaOf(e provider.Entry) []string {
 
 // catalogFor is the catalog as the agent asking is shown it.
 func catalogFor(r *http.Request) []provider.Entry {
-	shown, _ := provider.CatalogFor(agentOf(r))
-	return keyAllowed(r, shown)
+	agent := agentOf(r)
+	shown, _ := provider.CatalogFor(agent)
+	return keyListed(r, shown, provider.ModelOff(agent))
 }
 
 // listKinds is which of magpie's models a /v1/models call lists: its chat
@@ -1673,7 +1674,7 @@ func (s *Server) model(w http.ResponseWriter, r *http.Request) {
 	// the catalog the agent asking is listed from (/v1/models): Codex's
 	// own ChatGPT models a group listing alone keeps out of Catalog are
 	// still in Codex's, and found here too
-	shown := keyAllowed(r, provider.CatalogOf(agentOf(r)))
+	shown := keyListed(r, provider.CatalogOf(agentOf(r)), nil)
 	for _, e := range shown {
 		if e.ID == id || e.Group != "" && provider.SameRef(e.ID, id) {
 			if agentOf(r) == ScienceID {

@@ -291,6 +291,53 @@ func keyAllowed(r *http.Request, es []provider.Entry) []provider.Entry {
 	return out
 }
 
+// keyListed is keyAllowed for a list given to a caller (shown, from
+// CatalogFor or CatalogOf): a model a routing group listing alone keeps
+// out of the lists (provider.GroupStandIns) is the group's there only for
+// a caller the group is given. A key that may use none of the groups
+// standing in for it is listed the model itself, when it may use it, as
+// nothing stands in for it for the key (luckymanjc on Discord, 11-05: a
+// key held to every Codex model and his three accounts, his Remote
+// magpie's, was listed GPT-6-Luna alone, the one Codex model no group of
+// his listed alone). off is the list's own picks (ModelOff), nil for
+// none; a model they leave out stays out.
+func keyListed(r *http.Request, shown []provider.Entry, off func(string) bool) []provider.Entry {
+	who, held := keyHolds(r)
+	if !held {
+		return shown
+	}
+	if ins := provider.GroupStandIns(); len(ins) > 0 {
+		find := provider.GroupFinder()
+		given := func(id string) bool {
+			g, ms, ok := find(id)
+			return ok && groupAllowed(who, g, ms)
+		}
+		in := make(map[string]bool, len(shown))
+		for _, e := range shown {
+			in[e.ID] = true
+		}
+		shown = slices.Clone(shown)
+		for _, s := range ins {
+			e := s.Entry
+			if in[e.ID] || off != nil && off(e.ID) || !modelAllowed(who, e.Provider, e.Model) || slices.ContainsFunc(s.Groups, given) {
+				continue
+			}
+			// beside its provider's other models, where it would be
+			// listed were no group listing alone
+			at := len(shown)
+			for i := len(shown) - 1; i >= 0; i-- {
+				if shown[i].Group == "" && shown[i].Provider.ID == e.Provider.ID {
+					at = i + 1
+					break
+				}
+			}
+			shown = slices.Insert(shown, at, e)
+			in[e.ID] = true
+		}
+	}
+	return keyAllowed(r, shown)
+}
+
 // allowedCandidates leaves out of a plan the providers' models the key
 // may not use — a model's fallbacks are other models — and the accounts
 // and keys it may not either, through a named group too: naming a group

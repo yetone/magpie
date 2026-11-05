@@ -54,7 +54,7 @@ func (s *Server) codexCatalog(w http.ResponseWriter, r *http.Request) {
 	// over: held, they are built once (#746)
 	defer provider.Hold()()
 	shown, _ := provider.CatalogFor("codex")
-	ms := provider.CodexCatalog(keyAllowed(r, shown))
+	ms := provider.CodexCatalog(keyListed(r, shown, provider.ModelOff("codex")))
 	head, tail := []byte(`{"models":[`), []byte("]}\n")
 	var b bytes.Buffer
 	b.Write(head)

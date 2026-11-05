@@ -80,6 +80,27 @@ func callerKeyRoutes(mux *http.ServeMux) {
 			}
 			out = append(out, keyModelJSON{ID: e.Provider.ID + "/" + e.Model, Name: cmp.Or(e.Name, e.Model), Provider: e.Provider.ID, ProviderName: cmp.Or(e.Provider.Name, e.Provider.ID)})
 		}
+		// the models a routing group listing alone keeps out of the lists,
+		// each after its provider's: a key not given the group is listed
+		// those it may use (the gateway's keyListed), so the picker offers
+		// them to pick one at a time too (luckymanjc on Discord: Codex
+		// offered GPT-6-Luna alone)
+		for _, s := range provider.GroupStandIns() {
+			e := s.Entry
+			id := e.Provider.ID + "/" + e.Model
+			if slices.ContainsFunc(out, func(m keyModelJSON) bool { return strings.EqualFold(m.ID, id) }) {
+				continue
+			}
+			m := keyModelJSON{ID: id, Name: cmp.Or(e.Name, e.Model), Provider: e.Provider.ID, ProviderName: cmp.Or(e.Provider.Name, e.Provider.ID)}
+			at := len(out)
+			for i := len(out) - 1; i >= 0; i-- {
+				if out[i].Provider == m.Provider {
+					at = i + 1
+					break
+				}
+			}
+			out = slices.Insert(out, at, m)
+		}
 		// the decision models the routing groups' pickers offer, each
 		// after its provider's chat models: the gateway holds a key to
 		// them as to any model (serveSystemOne, and another magpie's list

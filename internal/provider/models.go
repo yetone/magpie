@@ -2991,10 +2991,28 @@ func catalogKeeping(keep func(Entry) bool) []Entry {
 // that do: those it names, a member fixed at an effort counting as its
 // model, and those its patterns match.
 func unlistedByGroups(entries []Entry) map[string][]string {
+	by := groupsKeeping(entries)
+	if by == nil {
+		return nil
+	}
+	out := make(map[string][]string, len(by))
+	for id, gs := range by {
+		for _, g := range gs {
+			if n := cmp.Or(g.Name, g.ID); !slices.Contains(out[id], n) {
+				out[id] = append(out[id], n)
+			}
+		}
+	}
+	return out
+}
+
+// groupsKeeping is unlistedByGroups with the groups themselves, by the
+// models, "provider/model", they keep out of the lists.
+func groupsKeeping(entries []Entry) map[string][]Group {
 	if !slices.ContainsFunc(heldOf("file", load).Groups, func(g Group) bool { return g.Unlists }) {
 		return nil
 	}
-	out := map[string][]string{}
+	out := map[string][]Group{}
 	for _, g := range groupsIn(entries) {
 		if !g.Unlists || g.Hidden || g.Disabled {
 			continue
@@ -3004,10 +3022,46 @@ func unlistedByGroups(entries []Entry) map[string][]string {
 				continue
 			}
 			model, _ := memberEffortIn(entries, id)
-			if p, m, ok := resolveIn(entries, model); ok && !slices.Contains(out[p.ID+"/"+m], cmp.Or(g.Name, g.ID)) {
-				out[p.ID+"/"+m] = append(out[p.ID+"/"+m], cmp.Or(g.Name, g.ID))
+			if p, m, ok := resolveIn(entries, model); ok && !slices.ContainsFunc(out[p.ID+"/"+m], func(o Group) bool { return o.ID == g.ID }) {
+				out[p.ID+"/"+m] = append(out[p.ID+"/"+m], g)
 			}
 		}
+	}
+	return out
+}
+
+// GroupStandIn is a model a routing group listing alone (Group.Unlists)
+// keeps out of the lists, with the catalog ids ("group/<id>") of the
+// groups that stand in for it there.
+type GroupStandIn struct {
+	Entry  Entry
+	Groups []string
+}
+
+// GroupStandIns are the models groups listing alone keep out of the
+// lists, in the catalog's order: a caller the groups are not given (a
+// gateway key that doesn't name them) is listed these in their place,
+// those it may use, as no group stands in for them for it (luckymanjc on
+// Discord: a key held to every Codex model was listed only the one no
+// group of his listed alone). A provider kept for routing groups alone
+// (Provider.Unlisted) is not among them: the user kept all of it out.
+func GroupStandIns() []GroupStandIn {
+	entries := providerEntries()
+	by := groupsKeeping(entries)
+	if len(by) == 0 {
+		return nil
+	}
+	var out []GroupStandIn
+	for _, e := range entries {
+		gs := by[e.ID]
+		if len(gs) == 0 || e.Provider.Unlisted {
+			continue
+		}
+		ids := make([]string, len(gs))
+		for i, g := range gs {
+			ids[i] = GroupPrefix + g.ID
+		}
+		out = append(out, GroupStandIn{Entry: e, Groups: ids})
 	}
 	return out
 }

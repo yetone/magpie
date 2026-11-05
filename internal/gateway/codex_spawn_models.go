@@ -297,7 +297,7 @@ func spawnChoices(r *http.Request, lead string, codexPath bool) []spawnChoice {
 		return out
 	}
 	shown, _ := provider.CatalogFor("codex")
-	for _, m := range provider.CodexCatalog(keyAllowed(r, shown)) {
+	for _, m := range provider.CodexCatalog(keyListed(r, shown, provider.ModelOff("codex"))) {
 		if sealed && !provider.CodexAccountModel(m.ID) {
 			continue
 		}

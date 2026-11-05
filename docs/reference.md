@@ -1739,6 +1739,10 @@ models a group names, and those its patterns match, out of `magpie models`,
 `/v1/models` and every agent's list, so a client offers the group alone.
 A signed-in subscription's models leave the lists too. Codex alone keeps its
 ChatGPT sign-in's own models, which its app reaches on that sign-in.
+The group stands in for them only where it is given: a gateway key that
+may use none of the groups listing a model alone (a Remote magpie's key
+held to `codex/*`) is listed that model, when it may use it, and the
+Gateway page's key picker offers each one.
 They are still served: the group routes over them, and a request naming one
 as `provider/model` is answered. A group in it keeps its own setting, and a
 group switched off keeps nothing out. `listed=yes` lists them again. To keep
