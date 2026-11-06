@@ -4132,11 +4132,12 @@ $("#sessQ").onkeydown = (e) => { if (e.key === "Escape" && e.target.value) { e.s
 // the version, where magpie keeps its files, the gateway's address.
 
 // The Usage page reads its numbers again while it is looked at, as often as
-// the reader says — off, or every 5 s to a minute (a request through the gateway
-// shows within that; the subscriptions' windows each minute at most, the vendors'
-// answers being cached behind them, and the sessions each 15 s) — redrawn only
-// on a change. The button beside it reads them now.
-const USAGE_EVERY = [[0, "Off"], [5, "5 s"], [10, "10 s"], [30, "30 s"], [60, "1 min"]];
+// the reader says — off, or every 5 s to half an hour (a request through the
+// gateway shows within that; the subscriptions' windows each minute at most, the
+// vendors' answers being cached behind them, and the sessions each 15 s) —
+// redrawn only on a change. The button beside it reads them now. The longer
+// ones are for a page left open all day (114514 on Discord).
+const USAGE_EVERY = [[0, "Off"], [5, "5 s"], [10, "10 s"], [30, "30 s"], [60, "1 min"], [300, "5 min"], [900, "15 min"], [1800, "30 min"]];
 let usageEvery = 5; // seconds; 0 is off
 try {
   const v = localStorage.getItem("magpie.usageEvery");

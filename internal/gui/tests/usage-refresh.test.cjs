@@ -1,7 +1,8 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // The Usage page reads its numbers again while it is looked at, as often as
-// the reader says: every 5 s to begin with, or every 10 s, 30 s or a minute, or
-// never, from the picker beside the cost; the button beside it reads them now,
+// the reader says: every 5 s to begin with, or every 10 s, 30 s, a minute, 5, 15
+// or 30 minutes (114514 on Discord: a minute was the longest), or never, from
+// the picker beside the cost; the button beside it reads them now,
 // on the tab shown (Overview or Requests), and says when they were last read.
 // On the Overview it is the allowances' Refresh too, asking for them as
 // opening the page does (#486); there is no second Refresh beside them.
@@ -44,12 +45,15 @@ function server(lang, calls) {
 }
 
 const L = {
-  en: { label: "5 s", off: "Off", min: "1 min", options: ["Off", "5 s", "10 s", "30 s", "1 min"], now: "Refresh now" },
-  zh: { label: "5 秒", off: "关闭", min: "1 分钟", options: ["关闭", "5 秒", "10 秒", "30 秒", "1 分钟"], now: "立即刷新" },
+  en: { label: "5 s", off: "Off", min: "1 min", half: "30 min", options: ["Off", "5 s", "10 s", "30 s", "1 min", "5 min", "15 min", "30 min"], now: "Refresh now" },
+  zh: { label: "5 秒", off: "关闭", min: "1 分钟", half: "30 分钟", options: ["关闭", "5 秒", "10 秒", "30 秒", "1 分钟", "5 分钟", "15 分钟", "30 分钟"], now: "立即刷新" },
+  "zh-TW": { label: "5 秒", off: "關閉", min: "1 分鐘", half: "30 分鐘", options: ["關閉", "5 秒", "10 秒", "30 秒", "1 分鐘", "5 分鐘", "15 分鐘", "30 分鐘"], now: "立即重新整理" },
+  ja: { label: "5 秒", off: "オフ", min: "1 分", half: "30 分", options: ["オフ", "5 秒", "10 秒", "30 秒", "1 分", "5 分", "15 分", "30 分"], now: "今すぐ更新" },
+  de: { label: "5 s", off: "Aus", min: "1 Min.", half: "30 Min.", options: ["Aus", "5 s", "10 s", "30 s", "1 Min.", "5 Min.", "15 Min.", "30 Min."], now: "Jetzt aktualisieren" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
-  for (const lang of ["en", "zh"]) {
+  for (const lang of Object.keys(L)) {
     test(`${engine} ${lang}: the Usage page's refresh period`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       t.after(() => browser.close());
@@ -82,7 +86,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await pass(p, 4000);
       assert(calls.requests > n, "read again after 5 s");
 
-      // the picker offers the five; off reads no more
+      // the picker offers the eight; off reads no more
       await p.locator("#usageEvery").click();
       assert.deepEqual(await p.locator(".proto-menu .pm-item").allTextContents().then((a) => a.map((s) => s.trim())), w.options);
       await p.locator(".proto-menu .pm-item", { hasText: new RegExp("^\\s*" + w.off + "\\s*$") }).click();
@@ -93,7 +97,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       // a minute: not at half of it, once by the end
       await p.locator("#usageEvery").click();
-      await p.locator(".proto-menu .pm-item", { hasText: w.min }).click();
+      const pick = (name) => p.locator(".proto-menu .pm-item", { hasText: new RegExp("^\\s*" + name + "\\s*$") }).click();
+      await pick(w.min);
       n = calls.requests;
       await pass(p, 30e3);
       assert.equal(calls.requests, n, "not at half a minute");
@@ -126,12 +131,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const tip = await p.locator("#usageReload").getAttribute("title");
       assert(tip.startsWith(w.now) && tip.includes("/usage"), tip);
 
-      // remembered: another window opens on the minute
+      // half an hour: none for 29 minutes, once by 31
+      await p.locator("#usageEvery").click();
+      await pick(w.half);
+      assert.equal((await p.locator("#usageEvery").textContent()).trim(), w.half);
+      n = calls.overview;
+      await pass(p, 29 * 60e3);
+      assert.equal(calls.overview, n, "not before half an hour");
+      await pass(p, 2 * 60e3);
+      assert(calls.overview > n, "once by the end of it");
+
+      // remembered: another window opens on the half hour
       await p.locator('[data-view="usage"]').first().waitFor();
       const again = await open();
       await again.locator('[data-view="usage"]').first().click();
       await again.locator("#usageEvery").waitFor();
-      assert.equal((await again.locator("#usageEvery").textContent()).trim(), w.min);
+      assert.equal((await again.locator("#usageEvery").textContent()).trim(), w.half);
       assert.deepEqual(errors, []);
     });
   }
