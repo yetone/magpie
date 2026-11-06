@@ -113,7 +113,8 @@ func (c checkiner) checkinNow(ctx context.Context, soon bool) []WorkBuddyCheckin
 			// again every 30 minutes, ZCode's claim only answered 3007
 			// again, and the reporter's accounts went on to 3012
 			// (plugins#503). A press still asks.
-			waits := prev.Outcome == CheckinCaptcha || prev.Outcome == CheckinOwnApp
+			// A failure held to its until waits it out (heldUntil).
+			waits := prev.Outcome == CheckinCaptcha || prev.Outcome == CheckinOwnApp || now.Before(prev.heldUntil())
 			settled = settled && !soon && (waits || now.Sub(prev.At) < wbCheckinEvery)
 			if prev.Checked() && !prev.ValidUntil.IsZero() {
 				settled = settled && now.Before(prev.ValidUntil)
