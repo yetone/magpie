@@ -254,6 +254,16 @@ func fetch(ctx context.Context, url, path string, size int64, want string, done 
 	}
 	if size < 0 || have < size {
 		got, err := get(ctx, url, part, have, done)
+		if err != nil && ctx.Err() == nil && netproxy.BrokeOff(err) {
+			// once more over HTTP/1.1, from what is on disk: a proxy
+			// that cuts HTTP/2 streams part way carries HTTP/1.1 whole
+			// (netproxy.OverHTTP1)
+			have = 0
+			if fi, serr := os.Stat(part); serr == nil {
+				have = fi.Size()
+			}
+			got, err = get(netproxy.OverHTTP1(ctx), url, part, have, done)
+		}
 		if err != nil {
 			return err
 		}

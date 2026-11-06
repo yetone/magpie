@@ -29,6 +29,7 @@ import (
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/libc"
+	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
 )
 
@@ -265,7 +266,14 @@ func prune(kept string) {
 	}
 }
 
+// download fetches r to to, once more over HTTP/1.1 when the connection
+// broke off (netproxy.AgainOverHTTP1): a proxy that cuts HTTP/2 streams
+// part way carries HTTP/1.1 whole.
 func download(ctx context.Context, r Release, to string, progress func(int64)) error {
+	return netproxy.AgainOverHTTP1(ctx, func(ctx context.Context) error { return downloadOnce(ctx, r, to, progress) })
+}
+
+func downloadOnce(ctx context.Context, r Release, to string, progress func(int64)) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.URL, nil)
 	if err != nil {
 		return err

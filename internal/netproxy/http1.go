@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -124,4 +125,63 @@ func (b h2Watch) Read(p []byte) (int, error) {
 		markH2Broken(b.req)
 	}
 	return n, err
+}
+
+type overHTTP1Key struct{}
+
+// OverHTTP1 is ctx for requests that go over HTTP/1.1 to every host,
+// through a transport Dispatch made: a download whose HTTP/2 transfer
+// broke off part way tries again with it (AgainOverHTTP1). Some proxies
+// cut an HTTP/2 stream mid-file (unexpected EOF, a stream reset, GOAWAY)
+// while they carry HTTP/1.1 to the same host whole, and a download that
+// tried again over HTTP/2 broke the same way on every try (biubiu8802 on
+// X: the update said "download broke off" each time, while the proxy
+// served other downloads). It is kept through With.
+func OverHTTP1(ctx context.Context) context.Context {
+	return context.WithValue(ctx, overHTTP1Key{}, true)
+}
+
+func overHTTP1(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	on, _ := ctx.Value(overHTTP1Key{}).(bool)
+	return on
+}
+
+// BrokeOff says err is a transfer the connection broke off: the
+// connection failed or dropped (a net.Error, a reset, unexpected EOF), or
+// an HTTP/2 stream or connection was ended under it (a stream error such
+// as INTERNAL_ERROR, GOAWAY, a lost connection). A context that ended is
+// no such thing: the caller stopped it.
+func BrokeOff(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) || recordError(err) {
+		return true
+	}
+	var ne net.Error
+	if errors.As(err, &ne) {
+		return true
+	}
+	s := err.Error()
+	for _, w := range []string{"stream error", "GOAWAY", "http2:", "connection reset", "forcibly closed", "broken pipe", "unexpected EOF"} {
+		if strings.Contains(s, w) {
+			return true
+		}
+	}
+	return false
+}
+
+// AgainOverHTTP1 runs get, and once more with every request under its
+// context over HTTP/1.1 (OverHTTP1) when it failed with the connection
+// broken off (BrokeOff) while ctx is live. get starts over, or goes on from
+// what it kept, as its caller does.
+func AgainOverHTTP1(ctx context.Context, get func(context.Context) error) error {
+	err := get(ctx)
+	if err == nil || ctx.Err() != nil || overHTTP1(ctx) || !BrokeOff(err) {
+		return err
+	}
+	return get(OverHTTP1(ctx))
 }

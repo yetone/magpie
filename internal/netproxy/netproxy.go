@@ -169,8 +169,9 @@ var HTTP1 func(u *url.URL) bool
 // the idle connections the old one dialled, which a transport, pooling
 // by target host alone, would have carried over the switch (#4523). A
 // request HTTP1 names, one to a host its provider asked HTTP/1.1 of
-// (WithHTTP1), and one to a host whose HTTP/2 connection carried a TLS
-// record that didn't decrypt (recordError, for h2Broken after) go
+// (WithHTTP1), every request under OverHTTP1 (a download trying again
+// after its HTTP/2 transfer broke off), and one to a host whose HTTP/2
+// connection carried a TLS record that didn't decrypt (recordError, for h2Broken after) go
 // through a clone kept for HTTP/1.1 (http1Only), and one to a host whose certificate the provider's user
 // said not to check (WithUncheckedTLS) through a clone kept for that
 // host alone (uncheckTLS). A host whose IPv6 is taken but goes nowhere
@@ -203,7 +204,7 @@ func (d *dispatch) RoundTrip(req *http.Request) (*http.Response, error) {
 	if d.moved() {
 		d.CloseIdleConnections()
 	}
-	r := route{choice: choiceOf(req.Context()), h1: HTTP1 != nil && HTTP1(req.URL) || http1Asked(req) || h2BrokenFor(req), unchecked: uncheckedHost(req)}
+	r := route{choice: choiceOf(req.Context()), h1: HTTP1 != nil && HTTP1(req.URL) || http1Asked(req) || overHTTP1(req.Context()) || h2BrokenFor(req), unchecked: uncheckedHost(req)}
 	t := d.base
 	if r != (route{}) {
 		t = d.transport(r)

@@ -1077,8 +1077,8 @@ func WithProgress(ctx context.Context, f func(done, total int64)) context.Contex
 var retryWaits = []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second, 30 * time.Second}
 
 // download fetches a to path and checks its hash. A connection that drops
-// is tried again after each of retryWaits, asking with Range for what is
-// still missing; the hash is checked over the whole file, the bytes kept
+// is tried again after each of retryWaits, over HTTP/1.1 (OverHTTP1),
+// asking with Range for what is still missing; the hash is checked over the whole file, the bytes kept
 // from the tries before included.
 func download(ctx context.Context, a Asset, path string) error {
 	if a.SHA256 == "" {
@@ -1101,6 +1101,11 @@ func download(ctx context.Context, a Asset, path string) error {
 		if err = fetch(ctx, a, path); err == nil || ctx.Err() != nil || !Network(err) {
 			break
 		}
+		// the tries after a connection that broke go over HTTP/1.1: a
+		// proxy that cuts HTTP/2 streams part way cuts every try made
+		// over it the same way, while HTTP/1.1 through it holds
+		// (biubiu8802 on X: "unexpected EOF" on each try)
+		ctx = netproxy.OverHTTP1(ctx)
 	}
 	if err != nil {
 		if cerr := clearFile(path); cerr != nil {

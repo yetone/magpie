@@ -342,7 +342,19 @@ func getURLOfficial(ctx context.Context, url string, limit int64) ([]byte, error
 	return getURLFrom(ctx, url, limit, false)
 }
 
+// getURLFrom reads url, once more over HTTP/1.1 when the connection broke
+// off (netproxy.AgainOverHTTP1): Bun's zip is tens of MB, which a proxy
+// that cuts HTTP/2 streams part way breaks on each try over HTTP/2.
 func getURLFrom(ctx context.Context, url string, limit int64, mirror bool) ([]byte, error) {
+	var b []byte
+	err := netproxy.AgainOverHTTP1(ctx, func(ctx context.Context) (err error) {
+		b, err = getURLOnce(ctx, url, limit, mirror)
+		return err
+	})
+	return b, err
+}
+
+func getURLOnce(ctx context.Context, url string, limit int64, mirror bool) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err

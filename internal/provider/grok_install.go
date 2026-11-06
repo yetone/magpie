@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
 )
 
@@ -172,8 +173,14 @@ func grokOpen(ctx context.Context, u string) (*http.Response, error) {
 	return res, nil
 }
 
-// grokDownload writes what u has to path, unpacked when gzipped.
+// grokDownload writes what u has to path, unpacked when gzipped, once
+// more over HTTP/1.1 when the connection broke off
+// (netproxy.AgainOverHTTP1).
 func grokDownload(ctx context.Context, u, path string, gzipped bool) error {
+	return netproxy.AgainOverHTTP1(ctx, func(ctx context.Context) error { return grokDownloadOnce(ctx, u, path, gzipped) })
+}
+
+func grokDownloadOnce(ctx context.Context, u, path string, gzipped bool) error {
 	res, err := grokOpen(ctx, u)
 	if err != nil {
 		return err
