@@ -1,5 +1,13 @@
 # Dropdown browser regression
 
+`agent-details-ready.test.cjs` holds the first settings read and the lazy
+Long conversations module on the main window's Agents → Details path. It
+checks a complete first and warm opening without a final height jump in all
+five languages, wide and narrow, Chromium and WebKit. It also covers Claude
+Code and Grok Build, failed-read retry, a superseding agent click, navigation
+away and reduced motion. `MAGPIE_ASSETS` selects older assets for the failing
+regression comparison; `ARTIFACT_DIR` retains Chinese desktop screenshots.
+
 `modal-backdrop.test.cjs` checks the modal's computed backdrop filter using
 the real stylesheet and platform marker: Windows desktop windows and panels
 keep the dimming veil without filtering, while browser pages, macOS and Linux

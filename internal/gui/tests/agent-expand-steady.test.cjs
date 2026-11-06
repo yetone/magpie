@@ -61,13 +61,14 @@ const where = (page) => page.evaluate((r) => {
 // the animation on the opened part can
 const slide = (page, ms) => page.evaluate(([r, ms]) => new Promise((done) => {
   const hs = [], t0 = performance.now();
-  const f = () => { hs.push(Math.round(document.querySelector(r).getBoundingClientRect().height)); if (performance.now() - t0 < ms) requestAnimationFrame(f); else done({ hs, animated }); };
+  // the opened part carries a height animation (none comes when motion is
+  // reduced, and none is wanted there); a first opening reads the settings
+  // before it slides (#5360), so each frame looks
+  let animated = false;
+  const look = () => { const exp = document.querySelector(r + " > .ag-exp"); animated ||= !!exp && exp.getAnimations().some((a) => a.effect.getKeyframes().some((k) => "height" in k)); };
+  const f = () => { look(); hs.push(Math.round(document.querySelector(r).getBoundingClientRect().height)); if (performance.now() - t0 < ms) requestAnimationFrame(f); else done({ hs, animated }); };
   document.querySelector(r + " .ag-link").click();
-  // the click drove the slide before it returned: the opened part carries a
-  // height animation (none comes when motion is reduced, and none is wanted
-  // there)
-  const exp = document.querySelector(r + " > .ag-exp");
-  const animated = !!exp && exp.getAnimations().some((a) => a.effect.getKeyframes().some((k) => "height" in k));
+  look();
   requestAnimationFrame(f);
 }), [row, ms]);
 

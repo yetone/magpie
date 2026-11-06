@@ -41,6 +41,19 @@ three.
 
 ## Constraints and failure behavior
 
+### First opening of an agent's Details
+
+In the main window, `expandLink` in
+[`app.js`](../../internal/gui/assets/app.js) reads an agent's own settings
+and loads its Long conversations controls before drawing and measuring its
+opened row. While these are loading, Details shows Loading and is disabled.
+A failed read keeps the row closed, reports the error and allows retry.
+A later agent click or leaving Agents supersedes the pending opening.
+Once prepared, the row slides to its full height; reduced motion opens it
+at once. Later openings reuse the settings and controls already loaded.
+`agent-details-ready.test.cjs` holds both responses and checks the final
+animation frame against the natural height in both engines and five languages.
+
 ### Allowance card refreshes
 
 A card refresh applies only the requested account from the API's full

@@ -46,6 +46,7 @@ window.agentCompactFill = function (list, a) {
   above ? above.after(row) : list.append(row);
   // every agent's size, in its label, changes when the row above is drawn
   const seen = new MutationObserver(() => row.isConnected ? draw() : seen.disconnect());
-  const segsBox = document.getElementById("fullContextSegs");
+  // Details can build this list before attaching it to the page.
+  const segsBox = list.querySelector("#fullContextSegs");
   if (segsBox) seen.observe(segsBox, { childList: true });
 };
