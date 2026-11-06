@@ -342,7 +342,7 @@ func buildModels(agent string) []catalog.Model {
 	// a model magpie describes images to takes them (provider.Described)
 	seen := describedNow()
 	// the agent's own Long conversations, if it has one (ForAgent)
-	st, find := settings.Load().ForAgent(agent), provider.GroupFinder()
+	st, find := settings.Load().ForAgent(agent), provider.FoundOnce(provider.GroupFinder())
 	priceOf := provider.AgentPricer(st, find)
 	members := func(id string) []provider.Member {
 		_, ms, _ := find(id)

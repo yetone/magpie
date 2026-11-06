@@ -797,20 +797,38 @@ func store(f file) error {
 // item or a CLI's among them, and Codex's /models asked for it seven times
 // over, past the 5 s Codex waits for the list (#746).
 func All() []Provider {
+	shared := sharedAll()
+	out := make([]Provider, len(shared))
+	for i, p := range shared {
+		out[i] = p.clone() // callers change theirs, Keys[i] and Headers included
+	}
+	return out
+}
+
+// sharedAll is All without its copies, only for reading: the providers a
+// request holds, less the accounts discovery off leaves out. Find, a
+// model's price and a value resolved each copied every provider, every
+// account's keys and headers, to read one (~15 MB in 2 minutes of an
+// idle magpie with its window open).
+func sharedAll() []Provider {
 	held := heldOf("all", allProviders)
-	out := make([]Provider, 0, len(held))
 	// asked once, from the settings a held look has read already: asked for
 	// each account, settings.json was parsed for every account of every
 	// model's price (agent.magpieModels, the GUI's drift every 15s and dsh's
 	// round every 30s), most of an idle magpie's CPU (xsw on Discord)
 	off := sync.OnceValue(func() bool { return settings.AccountDiscoveryOffIn(heldSettings()) })
-	for _, p := range held {
+	for i, p := range held {
 		if p.Account != nil && off() && !p.publicAccount() {
-			continue
+			out := held[:i:i] // the first append copies
+			for _, p := range held[i+1:] {
+				if p.Account == nil || p.publicAccount() {
+					out = append(out, p)
+				}
+			}
+			return out
 		}
-		out = append(out, p.clone()) // callers change theirs, Keys[i] and Headers included
 	}
-	return out
+	return held
 }
 
 // clone is p with its settings unshared: slices, maps and pointers copied.
@@ -1006,7 +1024,12 @@ func find(ps []Provider, id string) (Provider, bool) {
 
 // Find looks a provider up by id (or name, case-insensitively).
 func Find(id string) (*Provider, error) {
-	return findIn(All(), id)
+	p, err := findIn(sharedAll(), id)
+	if p != nil {
+		c := p.clone() // the caller's to change, as All's are
+		p = &c
+	}
+	return p, err
 }
 
 func findIn(all []Provider, id string) (*Provider, error) {
