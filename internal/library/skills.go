@@ -125,6 +125,11 @@ type Source struct {
 	Ref  string `json:"ref,omitempty"`
 	Path string `json:"path,omitempty"` // in the repository
 	Dir  string `json:"dir,omitempty"`  // the folder, for kind folder
+	// Via is the app's own steady link a folder skill was linked through
+	// while that link leads nowhere and Dir is the version folder found in
+	// its place (skill_moved.go); the library goes back to it once it
+	// leads to the skill again
+	Via string `json:"via,omitempty"`
 }
 
 func (s *Source) String() string {

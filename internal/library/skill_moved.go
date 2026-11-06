@@ -11,6 +11,14 @@ package library
 // read or synced. Only a link is replaced, never a folder: a skill that is
 // a folder of the library's own, or a link that still leads somewhere
 // that isn't a version the app has moved on from, is left as it is.
+//
+// One brought in since links through the app's own steady link, and the
+// app may leave that pointing at the version it deleted (tjhhhh again,
+// 0.6.2.5 to 0.6.2.7: ego's active_version_dir still named 0.6.2.5). The
+// app's links are its own and never written to: the library's link goes
+// to the version found in the deleted one's place, the steady link is
+// kept as Source.Via, and the library goes back to it once the app
+// points it at a folder that has the skill.
 
 import (
 	"log"
@@ -39,14 +47,26 @@ func (l *Library) followMovedSkills() bool {
 			to = filepath.Join(filepath.Dir(p), to)
 		}
 		to = filepath.Clean(to)
-		next := ""
-		if _, err := os.Stat(p); err != nil {
-			if !absent(err) {
-				continue // can't be read: unknown, not gone
-			}
-			next = movedVersion(to)
-		} else {
+		next, via := "", s.Source.Via
+		_, err := os.Stat(p)
+		switch {
+		case via != "" && via != to && hasSkillMD(via):
+			// the app's steady link leads to the skill again
+			next, via = via, ""
+		case err == nil:
 			next = laterCurrent(to)
+		case !absent(err):
+			continue // can't be read: unknown, not gone
+		default:
+			next = movedVersion(to)
+			if next == "" {
+				// the app's own links lead into the version it deleted
+				if end := linkedEnd(to); end != to {
+					if next = movedVersion(end); next != "" && via == "" {
+						via = to
+					}
+				}
+			}
 		}
 		if next == "" || next == to {
 			continue
@@ -64,10 +84,46 @@ func (l *Library) followMovedSkills() bool {
 			continue
 		}
 		log.Printf("library: %s moved with its app, from %s to %s", s.Name, to, next)
-		s.Source.Dir = next
+		s.Source.Dir, s.Source.Via = next, via
 		changed = true
 	}
 	return changed
+}
+
+// linkedEnd is p with every link on the way followed, a part at a time,
+// as far as the parts are there: where p would be if the links' ends were
+// there. p as it is when the links go round.
+func linkedEnd(p string) string {
+	for range 40 {
+		vol := filepath.VolumeName(p)
+		cur := vol
+		if filepath.IsAbs(p) {
+			cur = vol + string(filepath.Separator)
+		}
+		parts := strings.FieldsFunc(p[len(vol):], func(r rune) bool { return r < 128 && os.IsPathSeparator(uint8(r)) })
+		next := ""
+		for i, part := range parts {
+			at := filepath.Join(cur, part)
+			e := lookPart(at)
+			if e.link {
+				to := e.to
+				if !filepath.IsAbs(to) {
+					to = filepath.Join(filepath.Dir(at), to)
+				}
+				next = filepath.Join(append([]string{to}, parts[i+1:]...)...)
+				break
+			}
+			if !e.there {
+				return filepath.Clean(p)
+			}
+			cur = at
+		}
+		if next == "" {
+			return filepath.Clean(p)
+		}
+		p = next
+	}
+	return p
 }
 
 // versionName is a folder named for a version: 0.6.0.12, v2.1, 1.4.2-beta.

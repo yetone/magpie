@@ -179,3 +179,87 @@ func TestVersionLess(t *testing.T) {
 		}
 	}
 }
+
+// tjhhhh on Discord (11-06): ego-browser brought in since dccfefdf7 links
+// to ego's own ~/.local/share/ego/ego-skills. ego's update to 0.6.2.7
+// deleted Versions/0.6.2.5 and left active_version_dir (and Current)
+// naming it, so the whole chain led nowhere. The library links to
+// 0.6.2.7's folder without writing ego's links, and goes back to ego's
+// link once the user (or ego) points active_version_dir at 0.6.2.7.
+func TestSteadyLinkLeftOnDeletedVersion(t *testing.T) {
+	h := sandbox(t)
+	versions := egoLite(t, h, "0.6.2.5")
+	steady := filepath.Join(h, ".local/share/ego/ego-skills")
+	agentLink(t, h, "ego-browser", steady)
+	if _, err := ImportSkill("ego-browser"); err != nil {
+		t.Fatal(err)
+	}
+	if to, _ := os.Readlink(skillDir("ego-browser")); filepath.Clean(to) != steady {
+		t.Fatalf("brought in linked to %s, want ego's %s", to, steady)
+	}
+	// the update: 0.6.2.7 in, 0.6.2.5 out, ego's links left as they were
+	skill(t, filepath.Join(versions, "0.6.2.7/Resources/ego-skills/ego-browser"), "ego-browser", "ego 0.6.2.7")
+	if err := os.RemoveAll(filepath.Join(versions, "0.6.2.5")); err != nil {
+		t.Fatal(err)
+	}
+	active := filepath.Join(h, ".local/share/ego/active_version_dir")
+	egoWas, _ := os.Readlink(active)
+	v, err := Read(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(v.Skills) != 1 || v.Skills[0].Missing {
+		t.Fatalf("skills %+v", v.Skills)
+	}
+	if m, ok := readMeta(skillDir("ego-browser")); !ok || m.Description != "ego 0.6.2.7" {
+		to, _ := os.Readlink(skillDir("ego-browser"))
+		t.Errorf("the library's ego-browser is %q (links to %s), want 0.6.2.7's", m.Description, to)
+	}
+	if now, _ := os.Readlink(active); now != egoWas {
+		t.Errorf("ego's active_version_dir was written: %s, was %s", now, egoWas)
+	}
+	l, _ := load()
+	if src := l.skill("ego-browser").Source; src.Via != steady {
+		t.Errorf("source %+v, want ego's link %s kept as Via", src, steady)
+	}
+	// ego's link put right: the library links through it again
+	os.Remove(active)
+	if err := os.Symlink(filepath.Join(versions, "0.6.2.7"), active); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if to, _ := os.Readlink(skillDir("ego-browser")); filepath.Clean(to) != steady {
+		t.Errorf("after ego's link is mended the library links to %s, want %s", to, steady)
+	}
+	l, _ = load()
+	if src := l.skill("ego-browser").Source; src.Dir != steady || src.Via != "" {
+		t.Errorf("source %+v, want Dir %s and no Via", src, steady)
+	}
+}
+
+// With no other version on disk the dangling skill stays linked as it was
+// and is shown missing.
+func TestSteadyLinkLeftOnDeletedVersionNoOther(t *testing.T) {
+	h := sandbox(t)
+	versions := egoLite(t, h, "0.6.2.5")
+	steady := filepath.Join(h, ".local/share/ego/ego-skills")
+	agentLink(t, h, "ego-browser", steady)
+	if _, err := ImportSkill("ego-browser"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(filepath.Join(versions, "0.6.2.5")); err != nil {
+		t.Fatal(err)
+	}
+	v, err := Read(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(v.Skills) != 1 || !v.Skills[0].Missing {
+		t.Errorf("skills %+v, want ego-browser shown missing", v.Skills)
+	}
+	if to, _ := os.Readlink(skillDir("ego-browser")); filepath.Clean(to) != steady {
+		t.Errorf("links to %s, want %s as it was", to, steady)
+	}
+}
