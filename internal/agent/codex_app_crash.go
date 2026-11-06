@@ -106,8 +106,15 @@ func codexLogFiles(root string, from time.Time) (files []string, ok bool) {
 			if e.IsDir() || !strings.HasSuffix(e.Name(), ".log") {
 				continue
 			}
-			if info, err := e.Info(); err == nil && !info.ModTime().Before(from) {
-				files = append(files, filepath.Join(d, e.Name()))
+			// the file's own time, never the folder listing's: Windows
+			// stamps a file in its folder only as it is closed, and the
+			// app keeps a day's file open (on the Windows box the
+			// listing said 10:27Z while the app wrote on at 15:22Z), so
+			// the file being written to read as older than from and its
+			// page was never seen (bitssly on X)
+			p := filepath.Join(d, e.Name())
+			if info, err := os.Lstat(p); err == nil && !info.ModTime().Before(from) {
+				files = append(files, p)
 			}
 		}
 	}

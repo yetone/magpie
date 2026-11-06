@@ -108,6 +108,46 @@ func TestCodexAppCrashedReadsItsOwnLogs(t *testing.T) {
 	}
 }
 
+// The app keeps a day's log file open and writes on to it, and Windows
+// stamps a file in its folder listing only as it is closed: the Codex
+// app's file on the Windows box listed 10:27Z while the app wrote to it at
+// 15:22Z. Read by the listing's time, the file the page was written to
+// counted as untouched since the end, the page was never seen, and the
+// app was left on it till the user quit and opened it (bitssly on X,
+// Store Codex 26.1029). The file is held open here as the app holds it,
+// its stamp set back and written to after, which on Windows leaves the
+// listing on the old stamp (red there on a listing's time).
+func TestCodexAppCrashedReadsAFileTheAppHoldsOpen(t *testing.T) {
+	home := restartSandbox(t)
+	restartOnMac = true
+	root := filepath.Join(home, "Library", "Logs", "com.openai.codex")
+	since := time.Now()
+	dir := filepath.Join(root, since.UTC().Format("2006"), since.UTC().Format("01"), since.UTC().Format("02"))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, "codex-desktop-a57d47b4-b287-48b4-9ecb-f9671478ca87-33908-t0-i1-000219-0.log")
+	f, err := os.Create(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString(exitedLine(since)); err != nil {
+		t.Fatal(err)
+	}
+	opened := since.Add(-5 * time.Hour)
+	if err := os.Chtimes(p, opened, opened); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(fatalLine(since.Add(time.Second))); err != nil {
+		t.Fatal(err)
+	}
+	at, crashed, known := codexAppCrashed(since)
+	if !crashed || !known || !at.Equal(since.Add(time.Second).UTC().Truncate(time.Millisecond)) {
+		t.Fatalf("the page in the file the app holds open: at %v, crashed %v, known %v", at, crashed, known)
+	}
+}
+
 // Windows and Linux keep the logs where the app's file logger puts them
 // there: %LOCALAPPDATA%\Codex\Logs, which the Store app writes under its
 // package's LocalCache, and $XDG_STATE_HOME/codex/logs (~/.local/state

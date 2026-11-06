@@ -652,7 +652,7 @@ func codexTurnOpen(home string, now, since time.Time) bool {
 		if d.IsDir() || !strings.HasSuffix(d.Name(), ".jsonl") {
 			return nil
 		}
-		info, err := d.Info()
+		info, err := sessionFileInfo(path)
 		if err != nil || now.Sub(info.ModTime()) > codexTurnWindow {
 			return nil
 		}
@@ -677,7 +677,10 @@ func codexSessionsQuietFor(home string, now time.Time, d time.Duration) bool {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
 			return nil
 		}
-		info, err := e.Info()
+		info, err := sessionFileInfo(path)
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
 		if err != nil {
 			return err
 		}
@@ -689,6 +692,16 @@ func codexSessionsQuietFor(home string, now time.Time, d time.Duration) bool {
 	})
 	return quiet && err == nil
 }
+
+// sessionFileInfo is the session file at path's own time and size, never
+// the folder listing's (a fs.DirEntry's Info): Windows stamps a file in
+// its folder only as it is closed, and Codex keeps a session's file open
+// while the app-server runs it, so the listing has the time it was
+// opened (os.ReadDir on the Windows box: a file held open and written
+// to an hour after its stamp still listed the stamp, at its old size).
+// A turn running in a thread opened more than codexTurnWindow before
+// then counted as no turn, and its app-server was ended under it.
+func sessionFileInfo(path string) (fs.FileInfo, error) { return os.Lstat(path) }
 
 // sessionTurnTail is how much of a session file's end sessionTurnOpen reads.
 const sessionTurnTail = 512 << 10

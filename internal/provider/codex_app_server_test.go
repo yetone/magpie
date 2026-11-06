@@ -1059,6 +1059,49 @@ func TestCodexHandSwitchOffAHeldAccountIsSpent(t *testing.T) {
 	}
 }
 
+// Codex keeps a session's file open while its app-server runs the
+// thread, and Windows stamps a file in its folder listing only as it is
+// closed. Read by the listing's time, a turn running in a thread opened
+// more than codexTurnWindow before counted as none, and the sessions as
+// quiet, so magpie ended the app-server under the turn (bitssly on X).
+// The file is held open here as Codex holds it, its stamp set back and
+// written to after, which on Windows leaves the listing on the old stamp
+// (red there on a listing's time).
+func TestCodexSessionHeldOpenReadAtItsOwnTime(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, "sessions", "2026", "11", "06")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, "rollout-2026-11-06T09-00-00-held.jsonl")
+	f, err := os.Create(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	started := `{"type":"event_msg","payload":{"type":"task_started","turn_id":"1"}}` + "\n"
+	done := `{"type":"event_msg","payload":{"type":"task_complete","turn_id":"1"}}` + "\n"
+	if _, err := f.WriteString(started + done); err != nil {
+		t.Fatal(err)
+	}
+	opened := time.Now().Add(-codexTurnWindow - time.Hour)
+	if err := os.Chtimes(p, opened, opened); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(started); err != nil {
+		t.Fatal(err)
+	}
+	// quiet first: reading the file, as codexTurnOpen does, closes a
+	// handle on it, and Windows brings the listing up to date then
+	now := time.Now()
+	if codexSessionsQuietFor(home, now, time.Minute) {
+		t.Fatal("a session Codex wrote to just now, held open: quiet")
+	}
+	if !codexTurnOpen(home, now, time.Time{}) {
+		t.Fatal("a turn running in a file Codex holds open: not open")
+	}
+}
+
 // codexSessionsQuietFor reads the sessions' write times: a file written
 // within d is not quiet, an older one or none is, and a sessions folder
 // that can't be read is not.
