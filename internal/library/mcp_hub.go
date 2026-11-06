@@ -221,8 +221,21 @@ func hubAbouts(ss []*Server) []gateway.HubServer {
 	return out
 }
 
+// hereOnly is whether s acts as this computer's user beyond what its
+// tools' arguments say (gateway.HubServer's HereOnly): Magpie Browser and
+// another magpie's router (keepsSession), and magpie's image server.
+func hereOnly(s *Server) bool { return keepsSession(s) || isSelf(s) }
+
+// visitorServers are ss without those the hub's caller of ctx isn't
+// given (gateway.HubVisitor): the gateway leaves them out too, and this
+// holds when it doesn't.
+func visitorServers(ctx context.Context, ss []*Server) []*Server {
+	v := gateway.HubVisitorOf(ctx)
+	return slices.DeleteFunc(ss, func(s *Server) bool { return !v.Gives(hubServerOf(s)) })
+}
+
 func (theHub) Tools(ctx context.Context, agentID string) []gateway.HubTool {
-	ss := hubServers(agentID)
+	ss := visitorServers(ctx, hubServers(agentID))
 	if gateway.FromRouter(ctx) {
 		// another magpie's router: not given a Remote magpie's back
 		ss = slices.DeleteFunc(ss, func(s *Server) bool { return s.Bridge != "" })
@@ -267,6 +280,9 @@ func (theHub) Tools(ctx context.Context, agentID string) []gateway.HubTool {
 func (theHub) Call(ctx context.Context, agentID, server, tool string, args json.RawMessage) (json.RawMessage, error) {
 	ss := hubServers(agentID)
 	i := slices.IndexFunc(ss, func(s *Server) bool { return s.Name == server })
+	if i >= 0 && !gateway.HubVisitorOf(ctx).Gives(hubServerOf(ss[i])) {
+		return nil, errors.New("it acts as this computer's user, so magpie runs it for this computer's agents only")
+	}
 	if i < 0 && agentID == "" {
 		return nil, errors.New("it isn't in magpie's Library")
 	}

@@ -626,11 +626,11 @@ func TestHubSaysWhatServersAreFor(t *testing.T) {
 	ok(t)(SetMCPHub(true))
 	m, _ := marketServer("deepwiki")
 	c, _ := marketServer("context7")
-	want := []gateway.HubServer{{Name: "context7", About: c.Description}, {Name: "notes"}, {Name: "wiki", About: m.Description}}
+	want := []gateway.HubServer{{Name: "context7", About: c.Description, Program: true}, {Name: "notes", Program: true}, {Name: "wiki", About: m.Description}}
 	if got := (theHub{}).Servers("pi"); !reflect.DeepEqual(got, want) || m.Description == "" || c.Description == "" {
 		t.Fatalf("pi's servers %+v, want %+v", got, want)
 	}
-	if got := (theHub{}).Servers("claude"); !reflect.DeepEqual(got, []gateway.HubServer{{Name: "notes"}}) {
+	if got := (theHub{}).Servers("claude"); !reflect.DeepEqual(got, []gateway.HubServer{{Name: "notes", Program: true}}) {
 		t.Fatalf("claude's servers %+v", got)
 	}
 }
@@ -773,6 +773,76 @@ func TestKeepsSession(t *testing.T) {
 	} {
 		if got := keepsSession(&c.s); got != c.want {
 			t.Errorf("%+v: %v, want %v", c.s, got, c.want)
+		}
+	}
+}
+
+// The hub runs Magpie Browser and magpie's image server for this
+// computer's callers only, and a program of this computer for no caller
+// from elsewhere by a held key; a call from elsewhere starts neither, and
+// neither is listed for it. The gateway leaves them out too
+// (TestHubKeepsThisComputersOwnServersHere); this holds when it doesn't.
+func TestHubKeepsThisComputersOwnServersHere(t *testing.T) {
+	h := hubSandbox(t)
+	write(t, filepath.Join(h, ".claude.json"), `{"mcpServers": {}}`)
+	br := fakeStdio(t, "ok", nil)
+	br.Name, br.Args, br.Agents = browserServerName, []string{"mcp", "browser"}, []string{"claude"}
+	ok(t)(SaveServer("", *br))
+	other := fakeStdio(t, "ok", nil)
+	other.Agents = []string{"claude"}
+	ok(t)(SaveServer("", *other))
+	ok(t)(SetMCPHub(true))
+	hub := theHub{}
+	here := context.Background()
+	away := gateway.WithHubVisitor(here, gateway.HubVisitor{Away: true})
+	held := gateway.WithHubVisitor(here, gateway.HubVisitor{Away: true, Held: true})
+
+	servers := func(ctx context.Context) []string {
+		var out []string
+		for _, t := range hub.Tools(ctx, "claude") {
+			if !slices.Contains(out, t.Server) {
+				out = append(out, t.Server)
+			}
+		}
+		slices.Sort(out)
+		return out
+	}
+	if got := servers(here); !slices.Equal(got, []string{"fake", browserServerName}) && !slices.Equal(got, []string{browserServerName, "fake"}) {
+		t.Errorf("listed here: %v", got)
+	}
+	if got := servers(away); !slices.Equal(got, []string{"fake"}) {
+		t.Errorf("listed from elsewhere: %v", got)
+	}
+	if got := servers(held); len(got) != 0 {
+		t.Errorf("listed for a held key from elsewhere: %v", got)
+	}
+	for _, c := range []struct {
+		ctx    context.Context
+		server string
+	}{{away, browserServerName}, {held, browserServerName}, {held, "fake"}} {
+		if _, err := hub.Call(c.ctx, "claude", c.server, "a", json.RawMessage(`{}`)); err == nil {
+			t.Errorf("%s ran for %+v", c.server, gateway.HubVisitorOf(c.ctx))
+		}
+	}
+	if _, err := hub.Call(away, "claude", "fake", "a", json.RawMessage(`{}`)); err != nil {
+		t.Errorf("a command server for a full key from elsewhere: %v", err)
+	}
+	if _, err := hub.Call(here, "claude", browserServerName, "a", json.RawMessage(`{}`)); err != nil {
+		t.Errorf("Magpie Browser here: %v", err)
+	}
+	for _, c := range []struct {
+		s             Server
+		here, program bool
+	}{
+		{Server{Transport: "stdio", Command: "magpie", Args: []string{"mcp", "browser"}}, true, true},
+		{Server{Transport: "stdio", Command: "magpie", Args: []string{"mcp", "image"}}, true, true},
+		{Server{Transport: "http", URL: "http://10.0.0.2:3425/mcp/magpie/hub"}, true, false},
+		{Server{Transport: "stdio", Command: "npx", Args: []string{"server-filesystem"}}, false, true},
+		{Server{Transport: "http", URL: "https://mcp.example.com/mcp"}, false, false},
+		{Server{Plugin: "notes", Transport: "http", URL: "http://127.0.0.1:1/x"}, false, true},
+	} {
+		if got := hubServerOf(&c.s); got.HereOnly != c.here || got.Program != c.program {
+			t.Errorf("%+v: here-only %v program %v, want %v %v", c.s, got.HereOnly, got.Program, c.here, c.program)
 		}
 	}
 }

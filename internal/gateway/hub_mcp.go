@@ -134,6 +134,53 @@ type HubServer struct {
 	// (RouterHeader) isn't given it, so two magpies that have each other
 	// never ask each other round.
 	Bridge bool
+	// HereOnly: the server acts as the user of this computer beyond what
+	// its tools' arguments say: Magpie Browser (every site the user's
+	// browser is signed in to), magpie's image server (it draws with this
+	// magpie's own token, past a gateway key's models, accounts and
+	// spend), and another magpie's router (which passes a call on to its
+	// own). It is given only to a caller on this computer (HubVisitor).
+	HereOnly bool
+	// Program: the server is a program run on this computer, with the
+	// user's rights (a command, or a tools plugin), not an HTTP server
+	// elsewhere. A gateway key held to some models, accounts or a spend
+	// limit isn't given it from another computer.
+	Program bool
+}
+
+// HubVisitor is who a hub request is from, for what it is given of the
+// servers behind it (HubServer's HereOnly and Program): Away, another
+// computer, a tunnel or a web page; Held, by a gateway key held to some
+// models, accounts or a spend limit. A caller on this computer is given
+// every server.
+type HubVisitor struct{ Away, Held bool }
+
+// Gives is whether v is given s.
+func (v HubVisitor) Gives(s HubServer) bool {
+	if !v.Away {
+		return true
+	}
+	return !s.HereOnly && !(v.Held && s.Program)
+}
+
+type hubVisitorKey struct{}
+
+// WithHubVisitor is ctx a hub request of v.
+func WithHubVisitor(ctx context.Context, v HubVisitor) context.Context {
+	return context.WithValue(ctx, hubVisitorKey{}, v)
+}
+
+// HubVisitorOf is who ctx's hub request is from; a ctx with none (the
+// gateway's own calls) is this computer's.
+func HubVisitorOf(ctx context.Context) HubVisitor {
+	v, _ := ctx.Value(hubVisitorKey{}).(HubVisitor)
+	return v
+}
+
+// hubVisitor is who r is from (HubVisitor).
+func hubVisitor(r *http.Request) HubVisitor {
+	away := !local(r) || fromBrowser(r)
+	return HubVisitor{Away: away, Held: away && nativeHeld(access.Caller(r.Context()))}
 }
 
 // RouterHeader marks a request of magpie's own router to another magpie's
@@ -158,11 +205,13 @@ func FromRouter(ctx context.Context) bool {
 // hubServersOf are the servers behind agent's tools, as the request of
 // ctx is given them.
 func hubServersOf(ctx context.Context, agent string) []HubServer {
-	ss := MCPHub.Servers(agent)
+	// a copy: the hub's own list isn't cut
+	ss := slices.Clone(MCPHub.Servers(agent))
 	if FromRouter(ctx) {
 		ss = slices.DeleteFunc(ss, func(s HubServer) bool { return s.Bridge })
 	}
-	return ss
+	v := HubVisitorOf(ctx)
+	return slices.DeleteFunc(ss, func(s HubServer) bool { return !v.Gives(s) })
 }
 
 // hubServes is whether the hub gives another magpie's router a server.
@@ -196,6 +245,7 @@ func (s *Server) hubMCP(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get(RouterHeader) != "" {
 		r = r.WithContext(WithRouter(r.Context()))
 	}
+	r = r.WithContext(WithHubVisitor(r.Context(), hubVisitor(r)))
 	serveMCP(w, r, "magpie's MCP hub", "magpie", hubBody, func(r *http.Request, m mcpMessage) (any, map[string]any) {
 		return s.hubMCPCall(r, agent, m)
 	})
@@ -232,9 +282,18 @@ func hubTools(ctx context.Context, agent string) []hubTool {
 	if MCPHub == nil || !MCPHub.On() {
 		return nil
 	}
+	// a server the caller isn't given (HubVisitor) is neither listed nor,
+	// as calls are found in this list (hubToolNamed), run
+	v, kept := HubVisitorOf(ctx), map[string]bool{}
+	for _, s := range MCPHub.Servers(agent) {
+		if !v.Gives(s) {
+			kept[s.Name] = true
+		}
+	}
 	ctx, cancel := context.WithTimeout(ctx, hubListWait)
 	defer cancel()
-	return hubNamed(MCPHub.Tools(ctx, agent))
+	ts := slices.DeleteFunc(slices.Clone(MCPHub.Tools(ctx, agent)), func(t HubTool) bool { return kept[t.Server] })
+	return hubNamed(ts)
 }
 
 // hubLineMax is how much of the instructions' first line an agent is sure
