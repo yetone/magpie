@@ -8,6 +8,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
+	"unsafe"
 
 	"github.com/tidwall/gjson"
 )
@@ -837,8 +840,7 @@ func cxFastPrompt(s *state, at time.Time, b []byte, main bool) bool {
 			return false
 		}
 		found = true
-		text := strAt(rest[:len(cxText)+strEnd(rest[len(cxText):])], cxText)
-		p := cxPrompt(text)
+		p := cxTextPrompt(rest[len(cxText)-1 : len(cxText)+strEnd(rest[len(cxText):])])
 		typed = typed || p != ""
 		if s.Title == "" {
 			s.Title = p
@@ -905,6 +907,136 @@ func cxFastCount(s *state, at time.Time, b []byte) bool {
 	last, _ := cxUsageIn(b, cxLast)
 	cxCounted(s, at, tot, last)
 	return true
+}
+
+// cxTextPrompt is cxPrompt of the JSON string q, its quotes included,
+// without the whole of a long one decoded: a prompt's title is its first
+// 160 runes, and decoding all of every pasted log or file made ~half a
+// GB on a cold read of a year of Codex history. Only a head is decoded
+// when that settles the title, the rest only checked to be what
+// json.Unmarshal takes; whatever it doesn't settle is decoded whole.
+func cxTextPrompt(q []byte) string {
+	const head = 1024
+	whole := func() string {
+		if len(q) >= 2 && q[len(q)-1] == '"' && plainJSON(q[1:len(q)-1]) {
+			// as json.Unmarshal reads it, and only read here: cxPrompt's
+			// title is a string of its own
+			return cxPrompt(unsafe.String(&q[1], len(q)-2))
+		}
+		var v string
+		if json.Unmarshal(q, &v) != nil {
+			return ""
+		}
+		return cxPrompt(v)
+	}
+	if len(q) <= 2*head || q[len(q)-1] != '"' {
+		return whole()
+	}
+	k := jsonCut(q, head)
+	if k < 0 || !jsonBodyValid(q[k:len(q)-1]) {
+		return whole()
+	}
+	var v string
+	if plainJSON(q[1:k]) {
+		v = unsafe.String(&q[1], k-1)
+	} else if json.Unmarshal(append(append(make([]byte, 0, k+1), q[:k]...), '"'), &v) != nil {
+		return whole()
+	}
+	t := strings.TrimLeftFunc(v, unicode.IsSpace)
+	p, cut := titleCut(t)
+	if !cut {
+		return whole() // the head doesn't hold the whole title
+	}
+	if strings.HasPrefix(t, "<") || strings.HasPrefix(t, "# AGENTS.md") {
+		return ""
+	}
+	return p
+}
+
+// plainJSON: b, a JSON string's body, is its own decoding: UTF-8 with no
+// escape or control byte.
+func plainJSON(b []byte) bool {
+	for _, c := range b {
+		if c < 0x20 || c == '\\' {
+			return false
+		}
+	}
+	return utf8.Valid(b)
+}
+
+// jsonCut is where the JSON string q can be cut at or after at with its
+// head decoded as the whole decodes it: before an ASCII byte, which ends
+// any UTF-8 sequence, outside an escape and not between a surrogate
+// pair's halves; -1 for none.
+func jsonCut(q []byte, at int) int {
+	high := false
+	for j := 1; j < len(q)-1; {
+		if j >= at && q[j] < 0x80 && !high {
+			return j
+		}
+		high = false
+		if q[j] != '\\' {
+			j++
+			continue
+		}
+		if j+6 <= len(q) && q[j+1] == 'u' {
+			r := 0
+			for _, h := range q[j+2 : j+6] {
+				r = r<<4 | hexVal(h)
+			}
+			high = r >= 0xD800 && r < 0xDC00
+			j += 6
+		} else {
+			j += 2
+		}
+	}
+	return -1
+}
+
+// jsonBodyValid: b, a JSON string's body without its quotes, is one
+// json.Unmarshal takes: no control byte, and each escape one it knows.
+func jsonBodyValid(b []byte) bool {
+	for j := 0; j < len(b); j++ {
+		c := b[j]
+		if c < 0x20 {
+			return false
+		}
+		if c != '\\' {
+			continue
+		}
+		if j++; j >= len(b) {
+			return false
+		}
+		switch b[j] {
+		case '"', '\\', '/', 'b', 'f', 'n', 'r', 't':
+		case 'u':
+			if j+5 > len(b) {
+				return false
+			}
+			for _, h := range b[j+1 : j+5] {
+				if hexVal(h) < 0 {
+					return false
+				}
+			}
+			j += 4
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// hexVal is a hex digit's value, or a large negative for another byte.
+func hexVal(h byte) int {
+	switch {
+	case '0' <= h && h <= '9':
+		return int(h - '0')
+	case 'a' <= h && h <= 'f':
+		return int(h-'a') + 10
+	case 'A' <= h && h <= 'F':
+		return int(h-'A') + 10
+	}
+	return -1 << 20
 }
 
 // cxPrompt is the words of a prompt, or "" for what Codex put in itself

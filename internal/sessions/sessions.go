@@ -2522,6 +2522,12 @@ func untagged(s string) string { return title(tag.ReplaceAllString(s, " ")) }
 // as far as it keeps, and one past: a pasted file as a prompt went through
 // a regexp and into runes whole, 0.45 GB of a cold start's first 2 minutes.
 func title(s string) string {
+	t, _ := titleCut(s)
+	return t
+}
+
+// titleCut is title(s), and whether words were left past what it kept.
+func titleCut(s string) (string, bool) {
 	const most = 160
 	s = strings.TrimLeftFunc(s, unicode.IsSpace)
 	b := make([]byte, 0, min(len(s), 4*most))
@@ -2539,10 +2545,10 @@ func title(s string) string {
 		}
 	}
 	if strings.IndexFunc(s[i:], func(r rune) bool { return !unicode.IsSpace(r) }) < 0 {
-		return strings.TrimRightFunc(string(b), unicode.IsSpace)
+		return strings.TrimRightFunc(string(b), unicode.IsSpace), false
 	}
 	// as []rune made it: each byte not UTF-8 one U+FFFD
-	return strings.TrimSpace(string([]rune(string(b)))) + "…"
+	return strings.TrimSpace(string([]rune(string(b)))) + "…", true
 }
 
 // ---- pricing ----------------------------------------------------------------
