@@ -1955,8 +1955,8 @@ func (s *Server) drawGemini(ctx context.Context, p provider.Provider, model stri
 		parts = append(parts, map[string]any{"inlineData": map[string]string{"mimeType": pic.Mime, "data": base64.StdEncoding.EncodeToString(pic.Data)}})
 	}
 	cfg := map[string]any{"responseModalities": []string{"TEXT", "IMAGE"}}
-	if r := aspectOf(d.Size); r != "" {
-		cfg["imageConfig"] = map[string]string{"aspectRatio": r}
+	if c := imageConfigOf(model, d.Size); c != nil {
+		cfg["imageConfig"] = c
 	}
 	body, _ := json.Marshal(map[string]any{"contents": []map[string]any{{"role": "user", "parts": parts}}, "generationConfig": cfg})
 	base := strings.TrimSuffix(strings.TrimRight(p.Base(provider.Chat), "/"), "/openai")
@@ -2032,6 +2032,13 @@ func (s *Server) drawCodeAssist(ctx context.Context, p provider.Provider, model 
 		parts = append(parts, Part{Kind: Image, MediaType: pic.Mime, Data: base64.StdEncoding.EncodeToString(pic.Data)})
 	}
 	req := &Request{Messages: []Message{{Role: "user", Parts: parts}}, draws: true}
+	if c := imageConfigOf(model, d.Size); c != nil {
+		// the size and shape the images API asked, in the field a Gemini
+		// client's own imageConfig arrives in, which buildCodeAssistSent
+		// puts in generationConfig
+		b, _ := json.Marshal(c)
+		req.ImageConfig = b
+	}
 	return s.eachDrawing(d.N, func() (drawn, int, error) {
 		// one each: the drawings are asked for at once
 		ask := s.askTranslated(p, provider.CodeAssist, model, http.Header{}, http.Header{})
@@ -2112,6 +2119,52 @@ func (s *Server) eachDrawing(n int, ask func() (drawn, int, error)) (drawn, int,
 // or "auto".
 func aspectOf(size string) string {
 	return aspectAmong(size, []string{"1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"})
+}
+
+// imageSizeOf is the Gemini imageSize bucket an images API size asks for:
+// the smallest whose long side covers the size asked, and "" when there is
+// nothing to ask. Only 2K and 4K go out: a size at or under the model's 1K
+// default is drawn at anyway, and imageSize isn't every image model's
+// (Vertex lists 1K, 2K, 4K), so the buckets under 1K aren't asked for what
+// the default already gives. A ratio given as one ("16:9") says nothing in
+// pixels, and is "" too.
+func imageSizeOf(size string) string {
+	w, h, ok := strings.Cut(strings.ToLower(strings.TrimSpace(size)), "x")
+	if !ok {
+		return ""
+	}
+	x, err1 := strconv.ParseFloat(w, 64)
+	y, err2 := strconv.ParseFloat(h, 64)
+	if err1 != nil || err2 != nil || x <= 0 || y <= 0 {
+		return ""
+	}
+	switch m := math.Max(x, y); {
+	case m > 2048:
+		return "4K"
+	case m > 1024:
+		return "2K"
+	}
+	return ""
+}
+
+// imageConfigOf is the imageConfig an images API size asks a Gemini image
+// model to draw at: the ratio the size is nearest, with the imageSize
+// beside it when the size asks past the model's 1K default. Gemini 2.x
+// image models draw at 1K only and Google documents imageSize for the
+// Gemini 3 image models, so a 2.x model is sent the ratio alone, as
+// before. nil for none.
+func imageConfigOf(model, size string) map[string]string {
+	c := map[string]string{}
+	if r := aspectOf(size); r != "" {
+		c["aspectRatio"] = r
+	}
+	if s := imageSizeOf(size); s != "" && !strings.HasPrefix(strings.ToLower(model), "gemini-2") {
+		c["imageSize"] = s
+	}
+	if len(c) == 0 {
+		return nil
+	}
+	return c
 }
 
 // grokAspects are the aspect ratios Grok's Imagine API takes.
