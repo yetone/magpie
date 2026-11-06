@@ -374,7 +374,7 @@ func targetOf(a *agent.Agent) *Target {
 		// type stdio, http or sse as Claude Code's (docs.factory.ai/cli/
 		// configuration/mcp); its personal instructions are ~/.factory/
 		// AGENTS.md, which project files override (cli/configuration/agents-md)
-		t.MCP = &mcpFile{Path: filepath.Join(a.Dir, "mcp.json"), Format: fmtClaude}
+		t.MCP = &mcpFile{Path: filepath.Join(a.Dir, "mcp.json"), Format: fmtClaude, NoCmdRefs: true}
 		t.Instructions = filepath.Join(a.Dir, "AGENTS.md")
 		t.Skills = filepath.Join(a.Dir, "skills")
 	case "qoder", "qoder-cn":

@@ -317,6 +317,7 @@ func (l *Library) syncMCP(t *Target, b *backups, res *Result) {
 				s, res.run[s.Name] = via, spec
 			}
 		}
+		s = t.MCP.withCmdVars(s)
 		s = wroteStartup(s, a.Startup[s.Name])
 		old := entries[s.Name]
 		if err := t.MCP.foreign(old); err != nil {

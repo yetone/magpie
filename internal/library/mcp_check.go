@@ -555,22 +555,23 @@ func startServer(ctx context.Context, s *Server, distro, dir string) (tree *proc
 	if len(unset) > 0 {
 		return fail(failed("novar", strings.Join(unset, ", ")))
 	}
+	command, args := launchCmd(s, distro)
 	var cmd *exec.Cmd
 	var t wslrun.Tool
 	stop = func() {}
 	found := ""
 	if distro == "" {
 		var prog string
-		prog, found = stdioProgram(s.Command)
-		cmd = proc.Command(prog, s.Args...)
+		prog, found = stdioProgram(command)
+		cmd = proc.Command(prog, args...)
 	} else {
 		var err error
-		t, err = wslrun.In(distro, s.Command)
+		t, err = wslrun.In(distro, command)
 		switch {
 		case errors.Is(err, wslrun.ErrDown):
 			return fail(failed("wsldown", distro))
 		case errors.Is(err, wslrun.ErrNotFound):
-			return fail(failed("notfound", s.Command))
+			return fail(failed("notfound", command))
 		case err != nil:
 			return fail(failed("start", "wsl.exe -d "+distro+": "+err.Error()))
 		}
@@ -579,7 +580,7 @@ func startServer(ctx context.Context, s *Server, distro, dir string) (tree *proc
 		// check's, whose timeout is told as one rather than as an exit
 		var rctx context.Context
 		rctx, stop = context.WithCancel(context.WithoutCancel(ctx))
-		cmd = wslCommand(rctx, t, s.Args...)
+		cmd = wslCommand(rctx, t, args...)
 	}
 	// Agents start MCP servers from a project or home directory. A magpie
 	// launched from a shortcut (Windows Start menu) often has C:\Windows\system32
@@ -629,7 +630,7 @@ func startServer(ctx context.Context, s *Server, distro, dir string) (tree *proc
 	if err != nil {
 		h := failed("start", err.Error())
 		if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) {
-			h = failed("notfound", s.Command)
+			h = failed("notfound", command)
 		}
 		stop()
 		return fail(h)

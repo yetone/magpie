@@ -68,7 +68,8 @@ func specOf(s *Server) (runSpec, bool) {
 	if len(unset) > 0 {
 		return runSpec{}, false
 	}
-	return runSpec{Command: s.Command, Args: slices.Clone(s.Args), Env: env}, true
+	cmd, args := launchCmd(s, "")
+	return runSpec{Command: cmd, Args: slices.Clone(args), Env: env}, true
 }
 
 var runs struct {

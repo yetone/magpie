@@ -263,6 +263,9 @@ type mcpFile struct {
 	// Literal: what reads the file reads no reference to a variable
 	// (pi-mcp-extension), whatever its format's syntax (refsOf)
 	Literal bool
+	// NoCmdRefs: the agent reads no reference in a command or its args,
+	// whatever its format's other agents do (Droid's, cmdRefs)
+	NoCmdRefs bool
 }
 
 // files are every file the servers are written into.
