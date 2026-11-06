@@ -22,7 +22,7 @@ func TestRenewLoginsKeepsSavedClaudeSignedIn(t *testing.T) {
 	claudeThree(t) // team@ and max@ saved, Claude Code on pro@
 	keepAliveClean(t)
 	var text atomic.Value
-	text.Store("Current week (all models): 1% used · resets Nov 6 at 11am (Asia/Dubai)")
+	text.Store(resetsAhead("Current week (all models): 1% used · resets Nov 6 at 11am (Asia/Dubai)"))
 	fakeClaudeUsage(t, &text, nil)
 	var mu sync.Mutex
 	var dirs []string
@@ -151,6 +151,17 @@ func TestRenewLoginsKeepsSavedClaudeSignedIn(t *testing.T) {
 	}
 }
 
+// resetsAhead moves a /usage text's "resets Nov 6 at 11am" three days past
+// now: these tests read at the real time, and once that hour went by the
+// week read as reset, Used 0 (#5481).
+func resetsAhead(text string) string {
+	dubai, err := time.LoadLocation("Asia/Dubai")
+	if err != nil {
+		panic(err)
+	}
+	return strings.ReplaceAll(text, "Nov 6 at 11am", time.Now().In(dubai).AddDate(0, 0, 3).Format("Jan 2 at 3pm"))
+}
+
 // keepAliveClean has the test start, and leave, with no renewal on record
 // as failed (renewWaiting) and no reading kept from another test.
 func keepAliveClean(t *testing.T) {
@@ -180,12 +191,12 @@ func TestRenewLoginsKeepsClaudeReading(t *testing.T) {
 	claudeThree(t)
 	keepAliveClean(t)
 	var text atomic.Value
-	text.Store(claudeWeeklyOnly)
+	text.Store(resetsAhead(claudeWeeklyOnly))
 	fakeClaudeUsage(t, &text, nil)
 	runs := atomic.Int32{}
 	UsageClaudeVia(func(_ context.Context, dir string) (string, error) {
 		runs.Add(1)
-		return strings.Replace(claudeWeeklyOnly, "(all models): 1%", "(all models): 37%", 1), nil
+		return strings.Replace(resetsAhead(claudeWeeklyOnly), "(all models): 1%", "(all models): 37%", 1), nil
 	})
 	max := "max@x.com"
 	var l Login
