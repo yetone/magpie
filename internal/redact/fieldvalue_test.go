@@ -76,6 +76,55 @@ func TestPathAndSkillAreNoSecret(t *testing.T) {
 	}
 }
 
+// A moment goes as written: dchaofei (#5002) saw a token's expiry masked
+// to the hour, the minutes after it left as written. The field's name has
+// token in it, its value is a time, and the head of it the SECRET rules'
+// characters hold is a date's, not a key's.
+func TestTimestampIsNoSecret(t *testing.T) {
+	for _, in := range []string{
+		`"access_token_expires_at": "2026-08-30T11:44:31.312645+08:00",`,
+		`"access_token": "2026-08-30T11:44:31Z"`,
+		`"token_expiry": "2026-08-30T11:44:31Z"`,
+		`"secret_updated_at": "2026-08-30T11:44:31.312645+08:00"`,
+		`"credential_expires": "2026-08-30T11:44:31Z"`,
+		"token_expiry: 2026-08-30T11:44:31",
+		"SERVER_KEY: 2026-08-30T11:44:31Z",
+		"DB_PASS: 2026-08-30T11:44:31Z",
+		"令牌是 2026-08-30T11:44:31",
+		"密钥为 2026-08-30T11:44:31+08:00",
+		"token 是 2026-08-30T11:44:31",
+		"apikey 为 2026-08-30t11:44:31z",
+	} {
+		if out, n := Mask(in, Options{Secrets: true}); n != 0 {
+			t.Errorf("%q: %d masked: %q", in, n, out)
+		}
+	}
+	// In a tool call's arguments a field named for a secret takes its
+	// value whatever it looks like (json.go); a moment it does not: the
+	// field says when the token ends, and an agent reads that. The token
+	// beside it still masks.
+	body := []byte(`{"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"tu_1","name":"get_status","input":` +
+		`{"access_token_expires_at":"2026-08-30T11:44:31.312645+08:00","access_token":"a1b2c3d4e5f6g7h8"}}]}]}`)
+	out, n := MaskJSON(body, Options{Secrets: true})
+	if n != 1 || !strings.Contains(string(out), "2026-08-30T11:44:31") || strings.Contains(unmarked(string(out)), "a1b2c3d4e5f6g7h8") {
+		t.Errorf("the tool call's expiry masked with its token: %d: %s", n, out)
+	}
+}
+
+// A value that only starts as a timestamp still masks: what follows the
+// hour is the key's, not the moment's.
+func TestTimestampHeadAndMoreIsASecret(t *testing.T) {
+	for in, v := range map[string]string{
+		`"token": "2026-08-30T11x9k2abc:def"`: "2026-08-30T11x9k2abc",
+		"token=a1b2c3d4-2026-08-30T11:44":     "a1b2c3d4-2026-08-30T11",
+		"token=2026-08-30T11-abc:def":         "2026-08-30T11-abc",
+	} {
+		if out, n := Mask(in, Options{Secrets: true}); n != 1 || strings.Contains(unmarked(out), v) {
+			t.Errorf("%q: %d masked: %q", in, n, out)
+		}
+	}
+}
+
 // A secret of the same shape still masks: a value of one word and digits,
 // a random one, one starting with L, a file of secrets' content, a key in
 // a header with no space, a password in a connection string.

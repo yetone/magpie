@@ -367,14 +367,16 @@ func jsonEscape(s string) string {
 // whatever the value looks like: the rules judge a value by its shape, the
 // name by what a field so called carries (#2946) — {"api_key": "…"} with a
 // value no rule knows, an AKIA under access_key_id, a bearer token under
-// "Authorization". A short value, and one that stands for a variable
-// (${PASS}, <token>, ****), are left alone. It is asked only of a tool
-// call's arguments and a tool's structured result (args), whose keys are
-// the tool's: a key the vendor's protocol names (Anthropic's
-// mcp_servers[].authorization_token, a tool's own settings) is the
-// vendor's to read, and masked by its name, it would no longer work.
+// "Authorization". A short value, one that stands for a variable (${PASS},
+// <token>, ****), and a moment (a token's expiry,
+// access_token_expires_at, dchaofei #5002) are left alone. It is asked
+// only of a tool call's arguments and a tool's structured result (args),
+// whose keys are the tool's: a key the vendor's protocol names
+// (Anthropic's mcp_servers[].authorization_token, a tool's own settings)
+// is the vendor's to read, and masked by its name, it would no longer
+// work.
 func namedSecret(key, s string) bool {
-	return key != "" && len(s) >= 8 && notAVariable(s) && SecretName(key)
+	return key != "" && len(s) >= 8 && notAVariable(s) && !timestampValue(s) && SecretName(key)
 }
 
 // MaskJSON masks the strings of a request body, and says how many values
