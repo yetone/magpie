@@ -368,3 +368,53 @@ func TestDshToldTheWindowSetForACustomProvider(t *testing.T) {
 		}
 	}
 }
+
+// dsh's own models are the ones dsh ships, named as dsh names them
+// (@deepseek-ai/dsh-llm-deepseek's DEFAULT_MODELS, 0.2.1 on):
+// deepseek-flash is DeepSeek-V4.1-Flash, and deepseek-v4-flash, gone from
+// dsh since 0.1.6, isn't offered (Kylin_Cloud on X). A profile that still
+// starts on it is read as it is and not rewritten.
+func TestDshOwnModelsAreDshs(t *testing.T) {
+	home := dshTempHome(t)
+	saveDeepseek(t)
+	dir := filepath.Join(home, ".dsh")
+	web := filepath.Join(dir, "profiles", "web", "cordis.patch.yml")
+	os.MkdirAll(filepath.Dir(web), 0o755)
+	os.WriteFile(web, []byte("# Your patch layer for this dsh profile.\n[]\n"), 0o644)
+	settings := filepath.Join(dir, "settings.yaml")
+	saved := "agent-default-model:\n  provider: deepseek-official\n  model: deepseek-v4-flash\n"
+	os.WriteFile(settings, []byte(saved), 0o644)
+
+	want := map[string]string{"deepseek-flash": "DeepSeek-V4.1-Flash", "deepseek-v4-pro": "DeepSeek-V4-Pro"}
+	own := func(name string, opts []Option) {
+		t.Helper()
+		got := map[string]string{}
+		for _, o := range opts {
+			if !strings.HasPrefix(o.Value, magpieID+"/") {
+				got[o.Value] = o.Label
+			}
+		}
+		if len(got) != len(want) {
+			t.Fatalf("%s: dsh's own models %v, want %v", name, got, want)
+		}
+		for v, l := range want {
+			if got[v] != l {
+				t.Fatalf("%s: %s is %q, want %q (all: %v)", name, v, got[v], l, got)
+			}
+		}
+	}
+
+	f := dsh(home).Field("model")
+	own("dsh", f.Options(nil))
+	if f.Get() != "deepseek-v4-flash" {
+		t.Fatalf("the saved start: %q", f.Get())
+	}
+	if b, _ := os.ReadFile(settings); string(b) != saved {
+		t.Fatalf("the saved start was rewritten:\n%s", b)
+	}
+
+	// a stopped distro's dsh lists the same
+	d := distro{Name: "Stopped", Root: t.TempDir(), Home: "/home/me", Gateway: "172.20.0.1"}
+	k := wslKindOf("dsh")
+	own("dsh in a stopped distro", asleep(wslAgent(k, d), k, d).Field("model").Options(nil))
+}

@@ -64,7 +64,7 @@ func TestAgentOwnModelsHidden(t *testing.T) {
 		}
 		return own, magpie
 	}
-	all := []string{"deepseek-flash", "deepseek-v4-pro", "deepseek-v4-flash"}
+	all := []string{"deepseek-flash", "deepseek-v4-pro"}
 
 	if got := call("GET", ""); !got.Own || got.OwnHidden {
 		t.Fatalf("dsh's list: %+v, want its own models there and shown", got)

@@ -75,10 +75,16 @@ const (
 // dshModels are the models dsh reaches on its own, as it ships them — under
 // its own name, not DeepSeek: magpie's DeepSeek provider is a group of that
 // name too, and two would read as one listed twice (#115).
+//
+// They are @deepseek-ai/dsh-llm-deepseek's DEFAULT_MODELS, ids and names as
+// dsh has them: deepseek-flash and deepseek-v4-pro since 0.1.6, with
+// deepseek-flash named "DeepSeek-V4.1-Flash" since 0.2.1 ("DeepSeek-V41-
+// Flash" from 0.1.5 to 0.2.0). deepseek-v4-flash was dsh's up to 0.1.5 only;
+// a dsh of today answers it "Select an available model" (Kylin_Cloud on X).
+// A profile that still names it keeps it: magpie doesn't rewrite it.
 var dshModels = []Option{
-	{Value: "deepseek-flash", Label: "DeepSeek-V41-Flash", Icon: "deepseek-color", Group: "DeepSeek Harness"},
+	{Value: "deepseek-flash", Label: "DeepSeek-V4.1-Flash", Icon: "deepseek-color", Group: "DeepSeek Harness"},
 	{Value: "deepseek-v4-pro", Label: "DeepSeek-V4-Pro", Icon: "deepseek-color", Group: "DeepSeek Harness"},
-	{Value: "deepseek-v4-flash", Label: "DeepSeek-V4-Flash", Icon: "deepseek-color", Group: "DeepSeek Harness"},
 }
 
 func dsh(home string) *Agent { return dshAt(here(home)) }

@@ -15,9 +15,9 @@ const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
 
-const own = ["deepseek-flash", "deepseek-v4-pro", "deepseek-v4-flash"].map((v) => ({
-  value: v, label: v.replace("deepseek", "DeepSeek").replace("-v4", "-V4").replace("-flash", "-Flash").replace("-pro", "-Pro"),
-  icon: "deepseek-color", group: "DeepSeek Harness", direct: "DeepSeek",
+// dsh's own as internal/agent's dshModels lists them
+const own = [["deepseek-flash", "DeepSeek-V4.1-Flash"], ["deepseek-v4-pro", "DeepSeek-V4-Pro"]].map(([value, label]) => ({
+  value, label, icon: "deepseek-color", group: "DeepSeek Harness", direct: "DeepSeek",
 }));
 const magpie = ["pro", "flash"].map((m) => ({ value: "magpie/deepseek/" + m, label: "deepseek-" + m, ref: "deepseek/" + m, note: "DeepSeek · via magpie", group: "DeepSeek", icon: "deepseek-color" }));
 const list = magpie.map((o, i) => ({ id: o.ref, name: o.label, group: "DeepSeek", icon: "deepseek-color", inUse: i === 0 }));
@@ -156,7 +156,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await sw.getAttribute("aria-checked"), "false");
         await close();
         let rows = await picked();
-        assert.doesNotMatch(rows, /DeepSeek-V4-Pro|DeepSeek-Flash/, "dsh's own still offered");
+        assert.doesNotMatch(rows, /DeepSeek-V4-Pro|DeepSeek-V4\.1-Flash/, "dsh's own still offered");
         assert.match(rows, /deepseek-flash/, "magpie's are offered");
         // and so in the state read again
         await page.waitForTimeout(1800);
