@@ -25,7 +25,8 @@ const (
 )
 
 // fakeOpenRouterLists serves orChatList and orDecisionsList for
-// openrouter.ai, and records the path and model of every other request.
+// openrouter.ai, and an empty image model list (/images/models), and
+// records the path and model of every other request.
 func fakeOpenRouterLists(t *testing.T) (asked func() []string) {
 	t.Helper()
 	var mu sync.Mutex
@@ -37,6 +38,10 @@ func fakeOpenRouterLists(t *testing.T) (asked func() []string) {
 			} else {
 				w.Write([]byte(orChatList))
 			}
+			return
+		}
+		if r.URL.Path == "/api/v1/images/models" {
+			w.Write([]byte(`{"data":[]}`))
 			return
 		}
 		var q struct{ Model string }

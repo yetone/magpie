@@ -244,10 +244,11 @@ func TestFetchDoesNotMergeOpenRoutersNamespacedList(t *testing.T) {
 	if n := asked(); n != 0 {
 		t.Errorf("asked the Anthropic base %d times, want none", n)
 	}
-	// the fetch is one request, where before this it asked the Anthropic
-	// base as well and merged a page of the catalog this one is
-	if n := urls(); n != 1 {
-		t.Errorf("asked %d URLs, want the Chat base's one", n)
+	// the fetch is the Chat base's list and the image models' list
+	// (/images/models, catalog.PublicCatalogs), where before this it asked
+	// the Anthropic base as well and merged a page of the catalog this one is
+	if n := urls(); n != 2 {
+		t.Errorf("asked %d URLs, want the Chat base's list and the image models'", n)
 	}
 	t.Logf("asked %d URLs, %d of them with the Anthropic header", urls(), asked())
 }

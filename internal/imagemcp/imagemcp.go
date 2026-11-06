@@ -798,6 +798,9 @@ func extOf(mt string) string {
 		return ".webp"
 	case "image/gif":
 		return ".gif"
+	case "image/svg+xml":
+		// Recraft's vector models at OpenRouter
+		return ".svg"
 	}
 	return ".png"
 }

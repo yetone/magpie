@@ -1129,7 +1129,7 @@ func viaFor(p provider.Provider, model string) drawVia {
 	case isGoogle(p) && strings.Contains(strings.ToLower(model), "gemini"):
 		return viaGemini
 	case isOpenRouter(p):
-		if catalog.ImagesAPI(model) {
+		if catalog.ImagesAPI(model) || answersInImages(p, model) {
 			return viaImages
 		}
 		return viaChat
@@ -1137,6 +1137,20 @@ func viaFor(p provider.Provider, model string) drawVia {
 		return viaImages
 	}
 	return viaChat
+}
+
+// answersInImages is whether p's fetched list says model answers with images
+// and no text: OpenRouter's Recraft, Riverflow, Krea and MAI Image, whose ids
+// name no images API, draw at its /images as FLUX and Seedream do, and only
+// its chat image models (Nano Banana, GPT-5 Image) answer in chat.
+func answersInImages(p provider.Provider, model string) bool {
+	// a drawing request's look, once, through the image models alone
+	for _, m := range catalog.LiveDrawers(p.ID) {
+		if m.ID == model && slices.Contains(m.OutputModalities, "image") && !slices.Contains(m.OutputModalities, "text") {
+			return true
+		}
+	}
+	return false
 }
 
 // drawOnAccounts is draw on a subscription's accounts in the order its
@@ -1670,11 +1684,12 @@ func (s *Server) drawOpenRouterImages(ctx context.Context, p provider.Provider, 
 		return drawn{}, http.StatusBadRequest, errors.New("OpenRouter's images API does not support a markup layer")
 	}
 	req := map[string]any{"model": model, "prompt": d.Prompt, "n": d.N}
-	for k, v := range map[string]string{"size": d.Size, "quality": d.Quality, "background": d.Background, "output_format": d.Format} {
+	for k, v := range map[string]string{"quality": d.Quality, "background": d.Background, "output_format": d.Format} {
 		if v != "" {
 			req[k] = v
 		}
 	}
+	openRouterSize(req, d.Size)
 	if len(d.Images) > 0 {
 		refs := make([]map[string]any, 0, len(d.Images))
 		for _, pic := range d.Images {
@@ -1689,6 +1704,33 @@ func (s *Server) drawOpenRouterImages(ctx context.Context, p provider.Provider, 
 		return drawn{}, code, err
 	}
 	return readImagesAnswer(p, url, b, code)
+}
+
+// openRouterSize puts an images API size into req as OpenRouter's Image API
+// takes it. Pixels ("1536x1024") go as aspect_ratio, and as resolution
+// when they ask for more than 1K: no endpoint of its /images/models lists
+// size among what it takes, and Sourceful's Riverflow V2 and xAI's answer
+// a pixel size with 400 "does not support explicit pixel sizes. Use
+// resolution and aspect_ratio instead." A ratio ("16:9") is an
+// aspect_ratio, and a tier ("2K", "auto") goes as the size it is.
+func openRouterSize(req map[string]any, size string) {
+	size = strings.TrimSpace(size)
+	if size == "" {
+		return
+	}
+	if strings.Contains(size, ":") {
+		req["aspect_ratio"] = size
+		return
+	}
+	r := aspectAmong(size, []string{"1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"})
+	if r == "" {
+		req["size"] = size
+		return
+	}
+	req["aspect_ratio"] = r
+	if t := imageSizeOf(size); t != "" {
+		req["resolution"] = t
+	}
 }
 
 // readImagesAnswer reads an images API's answer to url: its images, as bytes
@@ -1860,6 +1902,9 @@ func extOf(mimeType string) string {
 		return ".webp"
 	case "image/gif":
 		return ".gif"
+	case "image/svg+xml":
+		// Recraft's vector models at OpenRouter
+		return ".svg"
 	}
 	return ".png"
 }

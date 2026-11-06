@@ -297,6 +297,63 @@ func TestOpenRouterImagesAPIDrawsImageModels(t *testing.T) {
 	}
 }
 
+// An OpenRouter image model whose id names no images API (Riverflow,
+// Recraft) draws at its /images when its list says it answers with an
+// image alone, as /images/models lists it (iwinux on Discord); a chat image
+// model stays on chat completions. A size in pixels goes as aspect_ratio
+// and resolution: Riverflow V2 answered "1024x1024" with 400 "does not
+// support explicit pixel sizes" on 2026-11-06.
+func TestOpenRouterImageOnlyModelsDrawAtItsImageAPI(t *testing.T) {
+	fresh(t)
+	if err := provider.Save(provider.Provider{ID: "openrouter", Name: "OpenRouter", Chat: "https://openrouter.ai/api/v1", Key: "key"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.SaveLive("openrouter", "https://openrouter.ai/api/v1", []catalog.Model{
+		{ID: "sourceful/riverflow-v2-fast", Draws: true, OutputModalities: []string{"image"}},
+		{ID: "recraft/recraft-v4-vector", Draws: true, OutputModalities: []string{"image"}},
+		{ID: "google/gemini-2.5-flash-image", Draws: true, OutputModalities: []string{"image", "text"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	p, _ := provider.Find("openrouter")
+	for model, want := range map[string]drawVia{
+		"sourceful/riverflow-v2-fast":   viaImages,
+		"recraft/recraft-v4-vector":     viaImages,
+		"google/gemini-2.5-flash-image": viaChat,
+		"openai/gpt-5-image":            viaChat,
+	} {
+		if got := viaFor(*p, model); got != want {
+			t.Errorf("%s: %s, want %s", model, got, want)
+		}
+	}
+	var path string
+	var got map[string]any
+	s := New()
+	s.client = &http.Client{Transport: countTransport(func(r *http.Request) (*http.Response, error) {
+		path = r.URL.Path
+		json.NewDecoder(r.Body).Decode(&got)
+		response := `{"created":1,"data":[{"b64_json":"` + base64.StdEncoding.EncodeToString(pngBytes) + `","media_type":"image/png"}],"usage":{"prompt_tokens":0,"completion_tokens":1,"total_tokens":1,"cost":0.02}}`
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(response))}, nil
+	})}
+	for size, want := range map[string]map[string]any{
+		"1024x1024": {"aspect_ratio": "1:1"},
+		"1536x1024": {"aspect_ratio": "3:2", "resolution": "2K"},
+		"16:9":      {"aspect_ratio": "16:9"},
+		"auto":      {"size": "auto"},
+	} {
+		got, path = nil, ""
+		code, _, raw := postImages(t, s, "/v1/images/generations", "application/json", `{"model":"openrouter/sourceful/riverflow-v2-fast","prompt":"a magpie","size":"`+size+`"}`)
+		if code != http.StatusOK || path != "/api/v1/images" {
+			t.Fatalf("%s: %d at %q: %s", size, code, path, raw)
+		}
+		for _, k := range []string{"size", "aspect_ratio", "resolution"} {
+			if got[k] != want[k] {
+				t.Errorf("%s: %s = %v, want %v (%v)", size, k, got[k], want[k], got)
+			}
+		}
+	}
+}
+
 func TestOpenRouterImagesAPIFailureIsReturnedWithoutChatRetry(t *testing.T) {
 	fresh(t)
 	if err := provider.Save(provider.Provider{ID: "openrouter", Name: "OpenRouter", Chat: "https://openrouter.ai/api/v1", Key: "key", Models: []string{"openai/gpt-image-2"}}); err != nil {
