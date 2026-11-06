@@ -345,15 +345,9 @@ func ccReply(s *state, at time.Time, msg, b []byte, main bool) {
 	if i == len(b) || model == "<synthetic>" {
 		return
 	}
-	var u struct {
-		Input      int              `json:"input_tokens"`
-		Output     int              `json:"output_tokens"`
-		CacheRead  int              `json:"cache_read_input_tokens"`
-		CacheWrite int              `json:"cache_creation_input_tokens"`
-		Creation   *ccCacheCreation `json:"cache_creation"`
-	}
+	var u ccUsageFields
 	usage := b[i+len(ccUsage)-1:]
-	if end := objectEnd(usage); end < 0 || json.Unmarshal(usage[:end], &u) != nil {
+	if end := objectEnd(usage); end < 0 || ccDecodeUsage(usage[:end], &u) != nil {
 		return
 	}
 	ccCount(s, m, at, model, ccTokens(u.Input, u.Output, u.CacheRead, u.CacheWrite, u.Creation), main)
@@ -370,9 +364,15 @@ func claudeFull(s *state, b []byte, main bool) {
 	if !want {
 		return
 	}
+	// its content, a prompt's pasted text and images, is read where the
+	// line holds it, not copied for each line (#2278)
 	var l ccLine
-	if json.Unmarshal(b, &l) != nil {
+	content, err := ccDecodeLess(b, &l)
+	if err != nil {
 		return
+	}
+	if content != nil {
+		l.Message.Content = content
 	}
 	if s.Cwd == "" && l.Cwd != "" {
 		s.Cwd, s.Entry = l.Cwd, l.Entrypoint
