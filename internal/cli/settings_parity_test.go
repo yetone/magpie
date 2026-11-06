@@ -252,6 +252,7 @@ var notYet = map[string]string{
 	"POST /api/library/browser/drag":             L,  // browser.go
 	"POST /api/library/browser/extension":        L,  // browser.go
 	"GET /api/caller-keys/models":                P,  // caller_keys.go
+	"GET /api/caller-keys/mcp":                   L,  // caller_keys.go: the servers `magpie gateway-key mcp` takes
 	"POST /api/config/repair":                    A,  // config_repair.go
 	"GET /api/context":                           U,  // context.go
 	"GET /api/context/text":                      W,  // context.go

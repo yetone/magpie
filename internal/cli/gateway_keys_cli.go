@@ -43,6 +43,10 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		access.MigrateLegacyLANKeyBestEffort()
 		return gatewayKeyQuotas(out, args[1:])
 	}
+	if action == "mcp" {
+		access.MigrateLegacyLANKeyBestEffort()
+		return gatewayKeyMCP(out, args[1:])
+	}
 	if action == "access" {
 		access.MigrateLegacyLANKeyBestEffort()
 		return gatewayKeyAccess(out, args[1:])
@@ -92,7 +96,7 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		args = args[:2]
 	}
 	if (action == "list" && len(args) != 1) || (action != "list" && len(args) != 2) {
-		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] [--read-only] | rotate <id> [--key <value> | --key -] | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|<N>d|<N>h [--tokens N] [--cost USD] [--cache-reads] [--model <provider>/<model>|<provider>/* ...]] | models <id> [all | <provider>/<model>|<provider>/* ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off] | access <id> [read-only | full] | move <id> <place> | issue --ttl <duration> [--name <name>] [--models a,b] [--accounts a,b] [--tokens N] [--cost USD] [--read-only] [--from <id>] | issuer <id> [on | off] | oidc [list | add --key <id> --repo owner/name … | remove <rule id>]")
+		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] [--read-only] | rotate <id> [--key <value> | --key -] | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|<N>d|<N>h [--tokens N] [--cost USD] [--cache-reads] [--model <provider>/<model>|<provider>/* ...]] | models <id> [all | <provider>/<model>|<provider>/* ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off] | mcp <id> [all | none | <server>|<server>/<tool> ...] | access <id> [read-only | full] | move <id> <place> | issue --ttl <duration> [--name <name>] [--models a,b] [--accounts a,b] [--tokens N] [--cost USD] [--read-only] [--from <id>] | issuer <id> [on | off] | oidc [list | add --key <id> --repo owner/name … | remove <rule id>]")
 	}
 	switch action {
 	case "list", "add", "rotate", "remove":
@@ -472,6 +476,52 @@ func gatewayKeyModels(out io.Writer, args []string) error {
 		return err
 	}
 	_, err = fmt.Fprintf(out, "%s: only %s\n", k.Name, strings.Join(k.Models, ", "))
+	return err
+}
+
+// gatewayKeyMCP shows or sets the MCP servers and tools a key may use
+// (wakaka on Discord):
+//
+//	magpie gateway-key mcp <id>                        what it may use
+//	magpie gateway-key mcp <id> all                    every server
+//	magpie gateway-key mcp <id> none                   no server
+//	magpie gateway-key mcp <id> github fs/read_file    only these
+func gatewayKeyMCP(out io.Writer, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: magpie gateway-key mcp <id> [all | none | <server>|<server>/<tool> ...]")
+	}
+	id := args[0]
+	if len(args) > 1 {
+		l := args[1:]
+		switch {
+		case len(l) == 1 && l[0] == "all":
+			l = nil
+		case len(l) == 1 && l[0] == "none":
+			l = []string{access.NoMCP}
+		case slices.ContainsFunc(l, func(e string) bool { return strings.HasPrefix(e, "-") }):
+			return fmt.Errorf("usage: magpie gateway-key mcp <id> [all | none | <server>|<server>/<tool> ...]")
+		}
+		if _, err := access.Update("mcp-key", access.Change{Key: id, MCP: l}); err != nil {
+			return err
+		}
+	}
+	keys, err := access.List()
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(keys, func(k access.Key) bool { return k.ID == id })
+	if i < 0 {
+		return fmt.Errorf("Key not found")
+	}
+	k := keys[i]
+	switch {
+	case len(k.MCP) == 0:
+		_, err = fmt.Fprintf(out, "%s: every MCP server\n", k.Name)
+	case slices.Equal(k.MCP, []string{access.NoMCP}):
+		_, err = fmt.Fprintf(out, "%s: no MCP server\n", k.Name)
+	default:
+		_, err = fmt.Fprintf(out, "%s: only %s\n", k.Name, strings.Join(k.MCP, ", "))
+	}
 	return err
 }
 

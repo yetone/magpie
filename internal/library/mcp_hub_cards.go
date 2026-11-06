@@ -193,3 +193,20 @@ func hubServerOf(s *Server) gateway.HubServer {
 	}
 	return out
 }
+
+// KeyMCPServers are every MCP server in the library, by name, with its
+// tools but those turned off as it last listed them (none when it never
+// has), for the picker of the servers and tools a gateway key may use
+// (wakaka on Discord): the hub, /mcp/<name> and /mcp/run/<name> reach
+// each, whether or not the hub gives it.
+func KeyMCPServers() []gateway.HubServer {
+	mu.Lock()
+	l, err := load()
+	var ss []*Server
+	if err == nil {
+		ss = slices.Clone(l.MCP)
+	}
+	mu.Unlock()
+	slices.SortStableFunc(ss, func(a, b *Server) int { return strings.Compare(a.Name, b.Name) })
+	return hubAbouts(ss)
+}

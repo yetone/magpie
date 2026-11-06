@@ -51,6 +51,12 @@ func runMCP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "magpie runs no MCP server here", http.StatusNotFound)
 		return
 	}
+	// a gateway key held to some MCP servers or tools (access.Key.MCP)
+	w, r, done, ok := mcpKeyGuard(w, r, r.PathValue("name"))
+	if !ok {
+		return
+	}
+	defer done()
 	RunMCP(w, r, r.PathValue("name"))
 }
 
@@ -74,6 +80,12 @@ func (s *Server) mcpProxy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "magpie lends its MCP sign-ins to agents, not to web pages", http.StatusForbidden)
 		return
 	}
+	// a gateway key held to some MCP servers or tools (access.Key.MCP)
+	w, r, done, held := mcpKeyGuard(w, r, name)
+	if !held {
+		return
+	}
+	defer done()
 	rec, ok := mcpauth.Get(name)
 	if !ok {
 		http.Error(w, "magpie isn't signed in to an MCP server called "+name+": sign in to it in magpie's Library", http.StatusNotFound)

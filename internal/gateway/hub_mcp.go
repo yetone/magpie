@@ -227,8 +227,18 @@ func hubServersOf(ctx context.Context, agent string) []HubServer {
 	if FromRouter(ctx) {
 		ss = slices.DeleteFunc(ss, func(s HubServer) bool { return s.Bridge })
 	}
-	v := HubVisitorOf(ctx)
-	return slices.DeleteFunc(ss, func(s HubServer) bool { return !v.Gives(s) })
+	v, who := HubVisitorOf(ctx), access.Caller(ctx)
+	ss = slices.DeleteFunc(ss, func(s HubServer) bool {
+		ok, _ := who.MCPServer(s.Name)
+		return !v.Gives(s) || !ok
+	})
+	// a key held to some tools of a server is told of those only
+	for i, sv := range ss {
+		if _, every := who.MCPServer(sv.Name); !every {
+			ss[i].Tools = slices.DeleteFunc(slices.Clone(sv.Tools), func(n HubToolNote) bool { return !who.MCPAllows(sv.Name, n.Name) })
+		}
+	}
+	return ss
 }
 
 // hubServes is whether the hub gives another magpie's router a server.
@@ -309,7 +319,9 @@ func hubTools(ctx context.Context, agent string) []hubTool {
 	}
 	ctx, cancel := context.WithTimeout(ctx, hubListWait)
 	defer cancel()
-	ts := slices.DeleteFunc(slices.Clone(MCPHub.Tools(ctx, agent)), func(t HubTool) bool { return kept[t.Server] })
+	// nor is one the calling gateway key may not use (access.Key.MCP)
+	who := access.Caller(ctx)
+	ts := slices.DeleteFunc(slices.Clone(MCPHub.Tools(ctx, agent)), func(t HubTool) bool { return kept[t.Server] || !who.MCPAllows(t.Server, t.Tool) })
 	return hubNamed(ts)
 }
 
@@ -662,6 +674,9 @@ func hubToolNamed(ctx context.Context, ts []hubTool, agent, name string) (hubToo
 		if !ok || tool == "" {
 			continue
 		}
+		if !access.Caller(ctx).MCPAllows(sv.Name, tool) {
+			continue
+		}
 		t := hubTool{HubTool: HubTool{Server: sv.Name, Tool: tool}, name: name}
 		for _, l := range ts {
 			if l.Server == sv.Name {
@@ -702,6 +717,11 @@ func (s *Server) hubMCPRun(r *http.Request, agent string, t hubTool, args json.R
 	use.on(t.Server)
 	use.as(agent)
 	use.named(t.name)
+	// every hub call comes here: a tool the gateway key may not use is
+	// refused whichever way it was found
+	if who := access.Caller(r.Context()); !who.MCPAllows(t.Server, t.Tool) {
+		return toolResult(keyMCPToolRefused(who, t.Server, t.Tool), true)
+	}
 	release, err := reserveFor(access.Caller(r.Context()), int64(len(args)), "", limitClock())
 	if err != nil {
 		return toolResult(err.Error(), true)

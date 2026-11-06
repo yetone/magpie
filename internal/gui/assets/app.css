@@ -3004,6 +3004,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
    and gives way before the row runs past a narrow window */
 #gatewayKeys .amodels.key-quotas { display: inline-block; flex: 0 1 auto; min-width: 0; line-height: 20px; overflow: hidden; text-overflow: ellipsis; }
 #gatewayKeys .acc:not(:hover) > .key-quotas:not(.set):not(:focus) { max-width: 0; padding: 0; margin-left: -9px; box-shadow: none; }
+/* the MCP servers a key held to some may use: cut, and gives way first */
+#gatewayKeys .amodels.key-mcp { display: inline-block; flex: 0 1 auto; min-width: 24px; max-width: 180px; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* a read-only key's tag, always shown, never a button */
 #gatewayKeys .amodels.key-readonly { display: inline-block; flex: 0 1 auto; min-width: 0; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
 #gatewayKeys .amodels.key-readonly:hover { color: var(--accent); background: var(--accent-soft); }

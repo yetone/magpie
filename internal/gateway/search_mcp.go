@@ -110,6 +110,10 @@ func serveMCP(w http.ResponseWriter, r *http.Request, what, server string, limit
 		http.Error(w, what+" MCP server answers agents, not web pages", http.StatusForbidden)
 		return
 	}
+	// a gateway key held to some MCP servers (access.Key.MCP)
+	if !mcpKeyServe(w, r, server) {
+		return
+	}
 	if r.Method != http.MethodPost {
 		// no stream of the server's own (GET) and no session to end (DELETE)
 		w.Header().Set("Allow", "POST")
@@ -159,9 +163,16 @@ func serveMCP(w http.ResponseWriter, r *http.Request, what, server string, limit
 		}
 		var result any
 		var rpcErr map[string]any
-		if m.Method == "tools/call" {
-			result, rpcErr = callMCPTool(r, server, m, call)
-		} else {
+		switch {
+		case m.Method == "tools/call":
+			if rpcErr = mcpKeyCall(r, server, m); rpcErr == nil {
+				result, rpcErr = callMCPTool(r, server, m, call)
+			}
+		case m.Method == "tools/list":
+			if result, rpcErr = call(r, m); rpcErr == nil {
+				result = mcpKeyList(r, server, result)
+			}
+		default:
 			result, rpcErr = call(r, m)
 		}
 		reply := map[string]any{"jsonrpc": "2.0", "id": m.ID}

@@ -548,3 +548,51 @@ func TestGatewayKeyScopedLimitCLI(t *testing.T) {
 		t.Fatalf("a refused command left %d limits", len(ls))
 	}
 }
+
+// magpie gateway-key mcp sets, shows and takes off the MCP servers and
+// tools a key may use (wakaka on Discord), and refuses a flag or a bad
+// entry as one.
+func TestGatewayKeyMCPCLI(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := settings.Save(settings.Settings{LAN: true}); err != nil {
+		t.Fatal(err)
+	}
+	call := func(args ...string) (string, error) {
+		var out bytes.Buffer
+		err := gatewayKeysTo(&out, append([]string{"gateway-key"}, args...))
+		return out.String(), err
+	}
+	if _, err := call("add", "Phone"); err != nil {
+		t.Fatal(err)
+	}
+	keys, _ := access.List()
+	id := keys[0].ID
+	if got, err := call("mcp", id); err != nil || got != "Phone: every MCP server\n" {
+		t.Fatal(got, err)
+	}
+	if got, err := call("mcp", id, "github", "fs/read_file"); err != nil || got != "Phone: only github, fs/read_file\n" {
+		t.Fatal(got, err)
+	}
+	if keys, _ = access.List(); !slices.Equal(keys[0].MCP, []string{"github", "fs/read_file"}) {
+		t.Fatal("kept", keys[0].MCP)
+	}
+	for _, args := range [][]string{{"mcp"}, {"mcp", id, "fs/"}, {"mcp", id, "--help"}, {"mcp", id, "-"}, {"mcp", "missing", "fs"}, {"mcp", "missing"}} {
+		if _, err := call(args...); err == nil {
+			t.Error("accepted", args)
+		}
+	}
+	if keys, _ = access.List(); !slices.Equal(keys[0].MCP, []string{"github", "fs/read_file"}) {
+		t.Fatal("a refused change was kept", keys[0].MCP)
+	}
+	if got, err := call("mcp", id, "none"); err != nil || got != "Phone: no MCP server\n" {
+		t.Fatal(got, err)
+	}
+	if got, err := call("mcp", id, "all"); err != nil || got != "Phone: every MCP server\n" {
+		t.Fatal(got, err)
+	}
+	if keys, _ = access.List(); keys[0].MCP != nil {
+		t.Fatal("all kept", keys[0].MCP)
+	}
+}

@@ -226,7 +226,7 @@ function renderGatewayKeys() {
     tick.onclick = () => gatewayKeyAction(k.off ? "on-key" : "off-key", { key: k.id });
     // the copy sits by the key it copies (the owner: stranded among the
     // badges it read as nobody's); Rotate and Remove wait in the row's menu
-    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), copyCallerKeyBtn(k), el("span", "grow"), ...(k.browser ? [gatewayBrowserTag()] : k.readOnly ? [gatewayReadOnlyTag()] : []), gatewayModelsBadge(k), gatewayQuotasBadge(k), gatewayLimitBadge(k), gatewayKeyMore(k));
+    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), copyCallerKeyBtn(k), el("span", "grow"), ...(k.browser ? [gatewayBrowserTag()] : k.readOnly ? [gatewayReadOnlyTag()] : []), gatewayModelsBadge(k), ...gatewayMCPBadge(k), gatewayQuotasBadge(k), gatewayLimitBadge(k), gatewayKeyMore(k));
     const under = gatewayLimit?.id === k.id ? [gatewayLimitEditor(k)] : keyUsed(k).map((u) => gatewayLimitLine(k, u));
     if (under.length) row.classList.add("with-limit"), row.append(...under);
     list.append(row);
@@ -308,6 +308,7 @@ function gatewayKeyPage() {
 
 const ROTATE_GLYPH = "M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3.25h-3.25";
 const REMOVE_GLYPH = "M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5M7 7v4M9 7v4";
+const MCP_GLYPH = "M6 2.5v3M10 2.5v3M4.5 5.5h7V8a3.5 3.5 0 0 1-7 0zM8 11.5v2";
 const POWER_GLYPH = "M8 2.5v5M4.8 4.6a4.75 4.75 0 1 0 6.4 0";
 function gatewayKeyMore(k) {
   const more = el("button", "copy gw-key-more");
@@ -331,6 +332,9 @@ function gatewayKeyMore(k) {
       ...(k.browser ? [] : [k.readOnly
         ? { name: "Give full access", icon: EYE_GLYPH, run: () => gatewayKeyAccess(k, false) }
         : { name: "Make read-only", icon: EYE_GLYPH, run: () => gatewayKeyAccess(k, true), off: k.lan, why: k.lan ? t("The sharing key is given to agents, so it can't be read-only") : "" }]),
+      // the MCP servers and tools it may use (wakaka on Discord); the
+      // Browser key connects the extension alone
+      ...(k.browser ? [] : [{ name: "MCP servers", icon: MCP_GLYPH, run: () => gatewayMCPPick(k, more) }]),
       { name: "Rotate key", icon: ROTATE_GLYPH, run: () => askGatewayKey(k, true) },
       { name: "Remove", icon: REMOVE_GLYPH, sep: true, run: () => askGatewayKey(k, false) },
     ]);
@@ -538,6 +542,56 @@ function gatewayModelsBadge(k) {
   };
   if (keyModelsLoading?.id === k.id) keyModelsLoading.open = open;
   return b;
+}
+
+// gatewayMCPPick picks the MCP servers and tools a key may use (wakaka
+// on Discord), as gatewayModelsBadge picks its models: a server whole, or
+// some of its tools, or none. It opens from the row's menu, and from the
+// key's MCP badge once it holds some.
+async function gatewayMCPPick(k, anchor) {
+  const ms = k.mcp || [];
+  let list = [];
+  try { ({ servers: list } = await api("caller-keys/mcp")); } catch (err) { status(t(err.message), "err"); return; }
+  if (!anchor.isConnected) return;
+  const opts = [{ v: "", name: "All MCP servers", note: "" }, { v: "-", name: "No MCP server", note: "" }];
+  for (const sv of list || []) {
+    opts.push({ v: sv.name, name: sv.title || sv.name, note: sv.title && sv.title !== sv.name ? sv.name : "", literalName: true });
+    for (const tool of sv.tools || []) opts.push({ v: sv.name + "/" + tool, name: tool, note: sv.name + "/" + tool, literalName: true });
+  }
+  // what the CLI kept that the list hasn't: a server gone, or a tool it
+  // no longer lists
+  for (const v of ms) if (!opts.some((o) => o.v === v)) opts.push({ v, name: v, note: "Not served now", literalName: true });
+  openProtoMenu(anchor, opts, [...ms], (picked) => {
+    // "No MCP server" just ticked is none; left ticked beside a server
+    // ticked since, the server
+    const mcp = picked.includes("-") && !ms.includes("-") ? ["-"] : picked.length > 1 ? picked.filter((v) => v !== "-") : picked;
+    (async () => {
+      const out = await gatewayKeyAction("mcp-key", { key: k.id, mcp });
+      if (out) status(t(!mcp.length ? "{name} may use every MCP server" : mcp[0] === "-" ? "{name} may use no MCP server" : "{name} may use only the MCP servers and tools picked", { name: k.name }), "ok");
+    })();
+  }, "MCP servers this key may use", "sess-menu", "right");
+}
+
+// gatewayMCPBadge says which MCP servers a key held to some may use; a
+// key that may use any has none (the row's menu sets it)
+function gatewayMCPBadge(k) {
+  const ms = k.mcp || [];
+  if (!ms.length) return [];
+  const b = el("button", "amodels key-mcp set");
+  b.type = "button";
+  const servers = new Set(ms.map((v) => v.split("/")[0]));
+  b.textContent = ms[0] === "-" ? t("No MCP server") : ms.length === 1 ? ms[0] : t("{n} MCP servers", { n: servers.size });
+  b.title = ms[0] === "-" ? t("No MCP server") : t("Only these MCP servers and tools: {list}", { list: ms.join(", ") });
+  b.setAttribute("aria-label", t("MCP servers this key may use"));
+  b.setAttribute("aria-haspopup", "menu");
+  b.setAttribute("aria-expanded", "false");
+  b.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    gatewayMCPPick(k, b);
+  };
+  return [b];
 }
 
 // ---- the quotas a gateway key is told (#2216) ----

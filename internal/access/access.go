@@ -149,6 +149,10 @@ type Key struct {
 	// "<provider>/<account>": a signed-in account by its stable id, a
 	// key by its fingerprint; none for every account, as keys always did.
 	Accounts []string `json:"accounts,omitempty"`
+	// MCP are the MCP servers and tools the key may use (mcp.go):
+	// "<server>", "<server>/<tool>", or NoMCP alone for none; none
+	// listed for every server and tool.
+	MCP []string `json:"mcp,omitempty"`
 	// Quotas lets a key held to a budget, models or accounts be told the
 	// quotas of what it may use (#2216): the cards of the providers whose
 	// every model it may use, of the accounts and keys it may use, names
@@ -195,8 +199,11 @@ type Identity struct {
 	// on Discord).
 	AccountModels bool
 	Accounts      []string
-	Quotas        bool
-	ReadOnly      bool
+	// MCP are the MCP servers and tools the key may use (Key.MCP); an
+	// issued key is held to its issuer's too (Issuer.MCP)
+	MCP      []string
+	Quotas   bool
+	ReadOnly bool
 	// Browser: the key may connect the Magpie Browser extension and do
 	// nothing else (Key.Browser).
 	Browser bool
@@ -401,6 +408,9 @@ type Change struct {
 	// Accounts is what "accounts-key" sets (#905); none lets the key use
 	// every account and key.
 	Accounts []string `json:"accounts,omitempty"`
+	// MCP is what "mcp-key" sets: none lets the key use every MCP server
+	// and tool, NoMCP alone none of them.
+	MCP []string `json:"mcp,omitempty"`
 	// Quotas is what "quotas-key" sets (#2216).
 	Quotas bool `json:"quotas,omitempty"`
 	// ReadOnly is what "access-key" sets, and "add-key" gives the new key:
@@ -563,6 +573,12 @@ func Update(action string, in Change) (string, error) {
 				return "", err
 			}
 			keys[i].Accounts = as
+		case "mcp-key":
+			mcp, err := CleanMCP(in.MCP)
+			if err != nil {
+				return "", err
+			}
+			keys[i].MCP = mcp
 		case "quotas-key":
 			keys[i].Quotas = in.Quotas
 		case "issuer-key":
@@ -610,7 +626,7 @@ func Update(action string, in Change) (string, error) {
 		default:
 			return "", fmt.Errorf("unknown key action %q", action)
 		}
-		if defaultKey && action != "remove-key" && action != "rename-key" && action != "limit-key" && action != "reset-limit-key" && action != "models-key" && action != "accounts-key" && action != "quotas-key" && action != "access-key" && action != "issuer-key" && action != "move-key" {
+		if defaultKey && action != "remove-key" && action != "rename-key" && action != "limit-key" && action != "reset-limit-key" && action != "models-key" && action != "accounts-key" && action != "mcp-key" && action != "quotas-key" && action != "access-key" && action != "issuer-key" && action != "move-key" {
 			mirror = &keys[i]
 		}
 	}

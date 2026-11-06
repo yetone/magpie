@@ -170,6 +170,8 @@ func protoOfPath(path string) provider.Protocol {
 // quota, with "quotaProviders" the providers it is told those of
 // (scopeQuotas). An account is not named: a key its owner tells no quota
 // is told no account either. A key held to nothing has none of these.
+// "mcp" is the MCP servers and tools a key may use, when its owner chose
+// some.
 func (s *Server) keyLimit(w http.ResponseWriter, r *http.Request) {
 	who := access.Caller(r.Context())
 	out := map[string]any{"limited": false, "key": who.KeyName}
@@ -203,6 +205,10 @@ func (s *Server) keyLimit(w http.ResponseWriter, r *http.Request) {
 	// too, which count every key issued under it: "issuerLimits"
 	if who.KeyID != "" && who.Issuer != nil && len(who.Issuer.Limits()) > 0 {
 		out["issuerLimits"] = budget.All(access.Key{ID: who.Issuer.KeyID, Name: who.Issuer.KeyName, Limit: who.Issuer.Limit, More: who.Issuer.More}, limitClock())
+	}
+	// "mcp", the MCP servers and tools a key is held to (access.Key.MCP)
+	if who.KeyID != "" && len(who.MCP) > 0 {
+		out["mcp"] = who.MCP
 	}
 	if !who.Expires.IsZero() {
 		out["expires"] = who.Expires
