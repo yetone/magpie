@@ -28,6 +28,11 @@ func TestMain(m *testing.M) {
 	// whether Codex's ChatGPT account is out of its allowance is asked of
 	// OpenAI; never from here
 	codexUsedUp = func() bool { return false }
+	// a thread a Codex holds open is looked at again later, on its own
+	// goroutine, which would outlive its test; the tests about it set
+	// their own wait
+	codexThreadsAgain = func() {}
+	codexThreadsFor.Store(0)
 	// Sandboxed config writes must never write into the real OS keychain.
 	zedCredential = func(string) error { return nil }
 	// Pi's and omp's model registries are read from their installs; never
