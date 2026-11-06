@@ -6643,7 +6643,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		if codexOutRefusal(p, proto, res.StatusCode, b) {
 			return writeCodexOut(w, res.Header, res.StatusCode, msg, b), msg, true
 		}
-		return writeVendorError(w, proto, res.StatusCode, msg, b), msg, true
+		return writeVendorErrorFrom(w, proto, proto, p, res, msg, b), msg, true
 	}
 	if remote != nil && res.Header.Get(KeptTurnHeader) != "" {
 		// the other magpie kept the turn: what it answered is kept here
@@ -8425,7 +8425,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		if turnedAway {
 			u.ErrType = turnedAwayErrType
 		}
-		return writeVendorError(w, from, res.StatusCode, msg, b), msg
+		return writeVendorErrorFrom(w, from, actual, p, res, msg, b), msg
 	}
 	dec := carryReasoning(decoderFor(p, actual, request.Tools), from, actual)
 	rd, sse := eventStream(res)
@@ -10033,6 +10033,9 @@ func writeVendorError(w http.ResponseWriter, proto provider.Protocol, status int
 	return writeErrorSaid(w, proto, status, msg, code, param)
 }
 
+// requestBytesHint is what a 413 is told: a cap on the request's bytes.
+const requestBytesHint = "This is a request-body byte limit, not the model's context: compact the conversation (/compact in Codex or Claude Code), or start a new one with a short summary; fewer images or smaller tool results also help."
+
 // writeErrorSaid is writeError with the code and param an OpenAI-shaped
 // answer names, nil for none.
 func writeErrorSaid(w http.ResponseWriter, proto provider.Protocol, status int, msg string, code, param any) int {
@@ -10067,9 +10070,8 @@ func writeErrorSaid(w http.ResponseWriter, proto provider.Protocol, status int, 
 		}
 	}
 	if h, held := w.(*holdWriter); status == http.StatusRequestEntityTooLarge && (!held || !h.hold) {
-		const hint = "This is a request-body byte limit, not the model's context: compact the conversation (/compact in Codex or Claude Code), or start a new one with a short summary; fewer images or smaller tool results also help."
-		if !strings.Contains(msg, hint) {
-			msg += " — " + hint
+		if !strings.Contains(msg, requestBytesHint) {
+			msg += " — " + requestBytesHint
 		}
 	}
 	var v any
