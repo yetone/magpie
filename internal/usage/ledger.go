@@ -520,11 +520,16 @@ var ownPrice catalog.Price
 // A model no price is known for is priced as the model the vendor's reply
 // said answered (Served), at the same provider, when that one has a price:
 // a relay that sells kimi-k3 as moonshot-kimi-k3 answers as kimi-k3, which
-// is listed (#1498). The model asked for keeps its own price whenever it
-// has one, a zero set by the user included, so a ledger that matched the
-// vendor's bill still does. A record inside one of its provider's rate
-// windows (#2463) is priced at that window's rate, its own time read
-// against the windows, so calls either side of a boundary price apart.
+// is listed (#1498). So is a call the vendor genuinely answered with
+// another model than the one asked for — the swap the ledger marks, no
+// rename in either name (#5340): the vendor billed for the one that ran,
+// and the asked-for model's rate describes nothing that happened. A price
+// the user set for the model asked for keeps its say either way, a zero
+// included, so a ledger that matched the vendor's bill still does, and a
+// served model with no price leaves the asked-for one's standing. A record
+// inside one of its provider's rate windows (#2463) is priced at that
+// window's rate, its own time read against the windows, so calls either
+// side of a boundary price apart.
 //
 // A local session's call has no provider of ours to price at (its billing
 // provider is the unknown one) but its file names the route it went
@@ -533,13 +538,14 @@ var ownPrice catalog.Price
 // one whose other models alone would stand for this call's, prices
 // nothing (#4278).
 func Pricer() func(Record) *catalog.Price {
-	prices := map[[4]string]*catalog.Price{}
+	prices := map[[5]string]*catalog.Price{}
 	// each provider's rate windows as the same read of the prices saw
 	// them: the windows are held once (BasePriceIn), each record's rate
 	// read at its own time (provider.RateAt), so a window that opens
 	// mid-page prices only the calls inside it (#2463)
 	windows := map[string][]provider.RateWindow{}
 	s := settings.Load()
+	wires := s.Wires()
 	return func(r Record) *catalog.Price {
 		if r.OwnCost != nil {
 			return &ownPrice // CostAt answers its own cost (#1874)
@@ -549,12 +555,29 @@ func Pricer() func(Record) *catalog.Price {
 			served = ""
 		}
 		id := r.priceID()
-		k := [4]string{id, r.Model, served, r.SessionProvider}
+		k := [5]string{id, r.Model, served, r.SessionProvider, r.Effort}
 		if pr, ok := prices[k]; ok {
 			return atWindow(pr, windows[id], r.Time)
 		}
 		var pr *catalog.Price
-		v, ok, ws := provider.BasePriceIn(s, id, r.Model)
+		var v catalog.Price
+		var ws []provider.RateWindow
+		var ok bool
+		// the swap the ledger marks: the reply named another model than
+		// asked, no rename of it (#5340)
+		if servedInstead(wires, id, r.Model, r.Effort, served) {
+			// a price the user set for the model asked for still says what
+			// that model costs them, a zero included
+			if v, ok, ws = provider.UserBasePriceIn(s, id, r.Model); !ok {
+				// the model that ran is priced as itself, what the vendor
+				// billed; with none, the asked-for one's price stands
+				if v, ok, ws = provider.BasePriceIn(s, id, served); !ok {
+					v, ok, ws = provider.BasePriceIn(s, id, r.Model)
+				}
+			}
+		} else {
+			v, ok, ws = provider.BasePriceIn(s, id, r.Model)
+		}
 		if !ok && served != "" {
 			v, ok, ws = provider.BasePriceIn(s, id, served)
 		}
@@ -585,6 +608,20 @@ func Pricer() func(Record) *catalog.Price {
 		prices[k] = pr
 		return atWindow(pr, ws, r.Time)
 	}
+}
+
+// servedInstead reports whether the vendor answered a call on model with
+// another model, served, and not the same one under a name of its own: the
+// swap the ledger marks (#5340). It is judged on the model the record is
+// priced by and on the name that went out (a provider's wires can send the
+// model under another id), and holds only when both read as another model,
+// so a row the ledger does not mark swapped is never priced as one.
+func servedInstead(wires map[string]string, providerID, model, effort, served string) bool {
+	if served == "" || !Swapped(model, served) || ListedAs(providerID, model, served) {
+		return false
+	}
+	sent := provider.SentNameIn(wires, providerID, model, effort)
+	return sent == model || Swapped(sent, served)
 }
 
 // atWindow prices one record: the base price at the rate of the window

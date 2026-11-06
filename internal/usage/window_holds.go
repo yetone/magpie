@@ -314,10 +314,13 @@ func windowHolds(qs []provider.SubscriptionQuota, now, first time.Time, priceOf 
 // is the same as (provider.SamePriceIn), never a price the user set for the
 // subscription (which may well be nothing) nor a rate it bills at. A model
 // none of those prices is priced as the model the reply named (Served), as
-// the ledger is (#1498). A price of nothing at all is no API price.
+// the ledger is (#1498), and so is a call the vendor answered with another
+// model (servedInstead, #5340) when that one has a price. A price of
+// nothing at all is no API price.
 func apiPricer() func(Record) *catalog.Price {
 	st := settings.Load()
-	prices := map[[3]string]*catalog.Price{}
+	wires := st.Wires()
+	prices := map[[4]string]*catalog.Price{}
 	one := func(providerID, model string) *catalog.Price {
 		v, ok := provider.MakerPrice(model)
 		if !ok || v.Cost(1e6, 1e6, 0, 0) == 0 {
@@ -341,11 +344,20 @@ func apiPricer() func(Record) *catalog.Price {
 			served = ""
 		}
 		id := r.priceID()
-		k := [3]string{id, r.Model, served}
+		k := [4]string{id, r.Model, served, r.Effort}
 		if pr, ok := prices[k]; ok {
 			return pr
 		}
-		pr := one(id, r.Model)
+		// a call the vendor answered with another model is priced as the
+		// model that ran (#5340), the asked-for one's price standing when
+		// that one has none
+		var pr *catalog.Price
+		if servedInstead(wires, id, r.Model, r.Effort, served) {
+			pr = one(id, served)
+		}
+		if pr == nil {
+			pr = one(id, r.Model)
+		}
 		if pr == nil && served != "" {
 			pr = one(id, served)
 		}

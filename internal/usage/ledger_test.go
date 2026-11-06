@@ -721,7 +721,10 @@ func TestLedgerPricesARenamedModelAsTheOneServed(t *testing.T) {
 	// the reporter's record, as the gateway wrote it
 	Append(Record{Time: now, Provider: "relay-a", Model: "moonshot-kimi-k3", Requested: "relay-a/moonshot-kimi-k3",
 		Served: "kimi-k3", Input: 74, Output: 227, CacheRead: 288256, CacheWrite: 512, Status: 200})
-	// priced by its own name, answered as kimi-k3 all the same
+	// priced by its own name, answered as kimi-k3 all the same: the vendor
+	// really served another model than the one asked for (no relay's rename
+	// reads in either name), so the call is priced as kimi-k3, what the
+	// vendor billed (#5340)
 	Append(Record{Time: now.Add(-time.Second), Provider: "relay-a", Model: "sol", Served: "kimi-k3", Input: 1000000, Status: 200})
 	// set free by the user
 	Append(Record{Time: now.Add(-2 * time.Second), Provider: "relay-a", Model: "house-free", Served: "kimi-k3", Input: 1000000, Status: 200})
@@ -743,8 +746,8 @@ func TestLedgerPricesARenamedModelAsTheOneServed(t *testing.T) {
 		if want := 0.0916398; !priced["moonshot-kimi-k3"] || math.Abs(cost["moonshot-kimi-k3"]-want) > 1e-9 {
 			t.Fatalf("renamed: priced=%v cost=%v, want %v", priced["moonshot-kimi-k3"], cost["moonshot-kimi-k3"], want)
 		}
-		if !priced["sol"] || cost["sol"] != 2 {
-			t.Fatalf("sol: priced=%v cost=%v, want its own 2", priced["sol"], cost["sol"])
+		if !priced["sol"] || cost["sol"] != 3 {
+			t.Fatalf("sol: priced=%v cost=%v, want the model that served it (kimi-k3) at 3", priced["sol"], cost["sol"])
 		}
 		if !priced["house-free"] || cost["house-free"] != 0 {
 			t.Fatalf("house-free: priced=%v cost=%v, want the user's 0", priced["house-free"], cost["house-free"])
@@ -753,6 +756,91 @@ func TestLedgerPricesARenamedModelAsTheOneServed(t *testing.T) {
 			t.Fatalf("mystery priced at %v", cost["mystery"])
 		}
 	}
+}
+
+// A call the vendor genuinely answered with another model than the one
+// asked for — the swap the ledger marks, no relay's rename in either name
+// (#5340) — is priced as the model that served it: the vendor billed for
+// the one that ran, a provider-side downgrade included (claude-opus-5-5
+// asked, claude-opus-5 served). A price the user set for the model that
+// served it says what that call cost, and one set for the model asked for,
+// 0 included, still wins over both; a served model with no price leaves
+// the asked-for one's standing, and a renamed one keeps pricing as before.
+func TestLedgerPricesASwappedCallAsTheModelThatServed(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
+	os.WriteFile(catalog.CachePath(), []byte(`{"anthropic":{"id":"anthropic","models":{"luna":{"id":"luna",`+
+		`"cost":{"input":3,"output":30}}}},`+
+		`"openai":{"id":"openai","models":{"sol":{"id":"sol","cost":{"input":2,"output":8}}}},`+
+		`"moonshotai":{"id":"moonshotai","models":{"moonshot-kimi-k3":{"id":"moonshot-kimi-k3",`+
+		`"cost":{"input":5,"output":50}},"kimi-k3":{"id":"kimi-k3","cost":{"input":9,"output":90}}}}}`), 0o644)
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k", Chat: "https://relay.example/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	os.MkdirAll(filepath.Dir(Path()), 0o755)
+	now := time.Now()
+	// asked for sol, the vendor ran luna and said so
+	Append(Record{Time: now, Provider: "relay", Model: "sol", Requested: "sol", Served: "luna",
+		Input: 1000000, Output: 1000000, Status: 200})
+	// a served model no catalog prices: the asked-for one's price stands
+	Append(Record{Time: now.Add(-time.Second), Provider: "relay", Model: "sol", Requested: "sol", Served: "nobody",
+		Input: 1000000, Status: 200})
+	// a relay's rename: moonshot-kimi-k3 answered as kimi-k3 is the model
+	// asked for, whose own price stands though the served one is priced too
+	Append(Record{Time: now.Add(-2 * time.Second), Provider: "relay", Model: "moonshot-kimi-k3", Requested: "moonshot-kimi-k3", Served: "kimi-k3",
+		Input: 1000000, Status: 200})
+	check := func(want map[string]float64) {
+		t.Helper()
+		rows, _, _ := Ledger(Month, Filter{})
+		page := QueryPage(Month, Filter{}, 0, 20)
+		for _, got := range [][]Row{rows, page.Rows} {
+			if len(got) != 3 {
+				t.Fatalf("rows: %+v", got)
+			}
+			cost := map[string]float64{}
+			priced := map[string]bool{}
+			for _, r := range got {
+				cost[r.Served], priced[r.Served] = r.Cost, r.Priced
+			}
+			for served, w := range want {
+				if !priced[served] || math.Abs(cost[served]-w) > 1e-9 {
+					t.Fatalf("served %s: priced=%v cost=%v, want %v", served, priced[served], cost[served], w)
+				}
+			}
+		}
+	}
+	at := func(v float64) *float64 { return &v }
+	// luna's own list price: 1M in and 1M out at $3 and $30; the served
+	// model with none at sol's; the renamed one at its own
+	check(map[string]float64{"luna": 33, "nobody": 2, "kimi-k3": 5})
+	// the price the user set for the model that served it is what it costs
+	if err := settings.Save(settings.Settings{ModelPrices: map[string]settings.ModelPrice{
+		"relay/luna": {Input: at(7), Output: at(7), CacheRead: at(7), CacheWrite: at(7)},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	check(map[string]float64{"luna": 14, "nobody": 2, "kimi-k3": 5})
+	// and the price the user set for the model asked for, 0 included, wins
+	// over everything the reply named
+	if err := settings.Save(settings.Settings{ModelPrices: map[string]settings.ModelPrice{
+		"relay/luna": {Input: at(7), Output: at(7), CacheRead: at(7), CacheWrite: at(7)},
+		"relay/sol":  {Input: at(0), Output: at(0), CacheRead: at(0), CacheWrite: at(0)},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	check(map[string]float64{"luna": 0, "nobody": 0, "kimi-k3": 5})
+	// a model the user sends under the served one's name (ModelWires) was
+	// answered as asked, not swapped: it keeps its own price, $2 and $8
+	if err := settings.Save(settings.Settings{ModelWires: map[string]string{"relay/sol": "luna"}}); err != nil {
+		t.Fatal(err)
+	}
+	check(map[string]float64{"luna": 10, "nobody": 2, "kimi-k3": 5})
 }
 
 // A model models.dev lists only under another id is priced as that entry,

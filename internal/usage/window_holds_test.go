@@ -524,7 +524,13 @@ func TestHoldsPriceTheModelTheReplyNamed(t *testing.T) {
 	if pr := priceOf(same); pr != nil {
 		t.Fatalf("a reply that names the same unpriced id was priced: %+v", pr)
 	}
-	own := Record{Provider: "relay", Model: "claude-opus-4-7", Served: "gpt-5.5"}
+	// the vendor ran another priced model: that one's price (#5340)
+	swapped := Record{Provider: "relay", Model: "claude-opus-4-7", Served: "gpt-5.5"}
+	if pr := priceOf(swapped); pr == nil || pr.Input != 1.25 {
+		t.Fatalf("a call answered by another model wasn't priced as that one: %+v", pr)
+	}
+	// one with no price leaves the asked model's own standing
+	own := Record{Provider: "relay", Model: "claude-opus-4-7", Served: "house-model-x"}
 	if pr := priceOf(own); pr == nil || pr.Input != 5 {
 		t.Fatalf("the asked model's own price lost: %+v", pr)
 	}
