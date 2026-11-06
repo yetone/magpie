@@ -153,6 +153,23 @@ func geminiRequest(r *Request, model, agent string) (map[string]any, error) {
 		delete(si, "role")
 	}
 	delete(wrap.Request, "stream")
+	// the rest of what a Gemini client asked, as it sent it (#3937): the
+	// Gemini API and Vertex AI speak the request's own shape, so their
+	// generationConfig carries what magpie doesn't read beside what it
+	// rebuilt — magpie's word for a field it sets stands (a draw model's
+	// responseModalities).
+	if len(r.GenConfig) > 0 {
+		gen, ok := wrap.Request["generationConfig"].(map[string]any)
+		if !ok {
+			gen = map[string]any{}
+			wrap.Request["generationConfig"] = gen
+		}
+		for k, v := range r.GenConfig {
+			if _, set := gen[k]; !set {
+				gen[k] = json.RawMessage(v)
+			}
+		}
+	}
 	return wrap.Request, nil
 }
 
@@ -229,6 +246,18 @@ func snakeToCamel(s string) string {
 	return strings.Join(parts, "")
 }
 
+// genReadOrBuilt are generationConfig's keys magpie reads itself or writes
+// its own of: they are rebuilt from the request when it is sent on
+// (buildCodeAssistSent), not carried as they came (#3937). candidateCount
+// is one too: magpie reads a reply as one answer (codeAssistDecoder runs every
+// candidate's parts into it), so a second candidate would be mixed into
+// the first.
+var genReadOrBuilt = map[string]bool{
+	"maxOutputTokens": true, "temperature": true, "topP": true, "stopSequences": true,
+	"responseMimeType": true, "responseSchema": true, "responseJsonSchema": true,
+	"thinkingConfig": true, "imageConfig": true, "candidateCount": true,
+}
+
 func parseGemini(body []byte) (*Request, error) {
 	body = geminiCamel(body)
 	var g gRequest
@@ -262,6 +291,22 @@ func parseGemini(body []byte) (*Request, error) {
 				r.System += "\n\n"
 			}
 			r.System += ask + "."
+		}
+		// the rest of what the client asked, carried for a Gemini upstream
+		// as it was sent (#3937). The body was spelled in camelCase on its
+		// way in (geminiCamel).
+		var raw struct {
+			GenerationConfig map[string]json.RawMessage `json:"generationConfig"`
+		}
+		if json.Unmarshal(body, &raw) == nil {
+			for k, v := range raw.GenerationConfig {
+				if !genReadOrBuilt[k] && len(v) > 0 && string(v) != "null" {
+					if r.GenConfig == nil {
+						r.GenConfig = make(map[string]json.RawMessage, len(raw.GenerationConfig))
+					}
+					r.GenConfig[k] = v
+				}
+			}
 		}
 	}
 	// function results carry the call's id when the client kept it; older

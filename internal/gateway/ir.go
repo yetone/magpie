@@ -326,6 +326,15 @@ type Request struct {
 	// (buildCodeAssistSent). Left out, the picture came back at the
 	// model's default size (#3820). No other API is known to take it.
 	ImageConfig json.RawMessage
+	// GenConfig holds a Gemini client's generationConfig keys magpie
+	// doesn't read or write itself — topK, seed, the penalties, responseModalities, mediaResolution, speechConfig,
+	// responseFormat — which go on as they were sent when the request is
+	// built again for an upstream that speaks Gemini's own API (the Gemini
+	// one and Vertex AI, geminiRequest): left out, everything else the
+	// client asked was dropped (#3937). Code Assist's and Antigravity's
+	// envelope has no documented spelling of them, so they are not passed
+	// there.
+	GenConfig map[string]json.RawMessage
 	// Safeguards are the caller's safety context, opaque to the gateway.
 	Safeguards    json.RawMessage
 	SafeguardBeta string
