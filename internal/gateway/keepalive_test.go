@@ -388,3 +388,109 @@ func TestAnthropicKeepaliveBeforeStartIsAComment(t *testing.T) {
 		t.Fatalf("%d pings within one pingEvery after message_start: %q", n, body)
 	}
 }
+
+// TestQueuedUpstreamKeepsResponsesClientAlive: a Chat provider that sends
+// its 200 and then only SSE comments, no event of its reply, for far
+// longer than agentQuietMost, keepaliveLongest and translatedQuietLongest
+// before it answers. The Qoder plugin does this while Qoder's queue (code
+// 10605) holds a request, for up to the hour Qoder's own client waits
+// (plugins#807). A Responses client, whose idle timeout counts events and
+// never a comment (Codex, 300s), must hear an event within its timeout
+// all along: the held stream flows at agentQuietMost, and each comment
+// after is response.in_progress, the provider's comments renewing
+// translatedQuietLongest. Times are scaled: Codex's 300s is idleFor,
+// agentQuietMost's 4 minutes is 200ms.
+func TestQueuedUpstreamKeepsResponsesClientAlive(t *testing.T) {
+	keepFast(t, 10*time.Millisecond, 20*time.Millisecond, 100*time.Millisecond)
+	k, w, q, l := keepHeldAfter, watchEvery, agentQuietMost, translatedQuietLongest
+	keepHeldAfter, watchEvery, agentQuietMost, translatedQuietLongest = 30*time.Millisecond, 10*time.Millisecond, 200*time.Millisecond, 300*time.Millisecond
+	t.Cleanup(func() { keepHeldAfter, watchEvery, agentQuietMost, translatedQuietLongest = k, w, q, l })
+	const idleFor = 600 * time.Millisecond
+	fresh(t)
+	release := make(chan struct{})
+	var comments atomic.Int32
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		f := w.(http.Flusher)
+		f.Flush()
+		tick := time.NewTicker(20 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-tick.C:
+				if _, err := io.WriteString(w, ": queued in Qoder\n\n"); err != nil {
+					return
+				}
+				comments.Add(1)
+				f.Flush()
+			case <-release:
+				io.WriteString(w, "data: "+`{"id":"c1","model":"m1","choices":[{"index":0,"delta":{"content":"hello"},"finish_reason":null}]}`+"\n\n")
+				io.WriteString(w, "data: "+`{"id":"c1","model":"m1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`+"\n\ndata: [DONE]\n\n")
+				f.Flush()
+				return
+			}
+		}
+	}))
+	defer up.Close()
+	if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Key: "fixture", Models: []string{"m1"}, Chat: up.URL + "/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(New().Handler())
+	defer server.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "POST", server.URL+"/v1/responses", strings.NewReader(`{"model":"fake/m1","stream":true,"input":"hi"}`))
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	lines := make(chan string, 4096)
+	go func() {
+		defer close(lines)
+		sc := bufio.NewScanner(res.Body)
+		for sc.Scan() {
+			lines <- sc.Text()
+		}
+	}()
+	// the queue holds the request until the client has heard 40 events of
+	// its own (40 x 20ms, several times every bound above); each must come
+	// within idleFor of the one before
+	idle := time.NewTimer(idleFor)
+	defer idle.Stop()
+	events, released, completed, text := 0, false, false, false
+	for !completed {
+		select {
+		case line, ok := <-lines:
+			if !ok {
+				t.Fatalf("the stream ended after %d events, completed=%v", events, completed)
+			}
+			if !strings.HasPrefix(line, "data:") {
+				continue
+			}
+			idle.Reset(idleFor)
+			events++
+			if strings.Contains(line, `"delta":"hello"`) {
+				text = true
+			}
+			if strings.Contains(line, `"type":"response.completed"`) {
+				completed = true
+			}
+			if events >= 40 && !released {
+				released = true
+				close(release)
+			}
+		case <-idle.C:
+			t.Fatalf("the client heard no event for %v after %d (upstream comments %d)", idleFor, events, comments.Load())
+		}
+	}
+	if !released || !text {
+		t.Fatalf("released=%v text=%v after %d events", released, text, events)
+	}
+	t.Logf("events=%d upstream_comments=%d", events, comments.Load())
+}
