@@ -4,6 +4,8 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "At least: {n} answer tokens in {ms} after the first token, the {r} reasoning tokens left out. No first text was recorded, so reasoning after the first token is counted too": "下限：首字后 {ms} 输出 {n} 个正文 token，{r} 个推理 token 不计。没有记录首个正文的时间，首字后的推理时间也算在里面",
+    "At least: {n} output tokens in {ms}, from the request to its last token, the wait for the first one counted too": "下限：从收到请求到最后一个 token，{ms} 输出 {n} 个 token，等首字的时间也算在里面",
     "Collapse all": "全部收起",
     "Expand all": "全部展开",
     "Found by magpie: {url}": "magpie 自动找到：{url}",
@@ -4641,6 +4643,8 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "这份报告已经不在了：magpie 只保留最近 5 份。",
   },
   "zh-TW": {
+    "At least: {n} answer tokens in {ms} after the first token, the {r} reasoning tokens left out. No first text was recorded, so reasoning after the first token is counted too": "下限：首字後 {ms} 輸出 {n} 個正文 token，{r} 個推理 token 不計。沒有記錄首個正文的時間，首字後的推理時間也算在裡面",
+    "At least: {n} output tokens in {ms}, from the request to its last token, the wait for the first one counted too": "下限：從收到請求到最後一個 token，{ms} 輸出 {n} 個 token，等首字的時間也算在裡面",
     "Collapse all": "全部收起",
     "Expand all": "全部展開",
     "Found by magpie: {url}": "magpie 自動找到：{url}",
@@ -9263,6 +9267,8 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "這份報告已經不在了：magpie 只保留最近 5 份。",
   },
   ja: {
+    "At least: {n} answer tokens in {ms} after the first token, the {r} reasoning tokens left out. No first text was recorded, so reasoning after the first token is counted too": "下限：最初のトークン後 {ms} で回答 {n} トークン（推論 {r} トークンは含めず）。最初の本文の時刻が記録されていないため、最初のトークン後の推論の時間も含まれます",
+    "At least: {n} output tokens in {ms}, from the request to its last token, the wait for the first one counted too": "下限：リクエストを受けてから最後のトークンまで {ms} で {n} トークンを出力。最初のトークンを待つ時間も含まれます",
     "Collapse all": "すべて折りたたむ",
     "Expand all": "すべて展開",
     "Found by magpie: {url}": "magpie が自動で見つけました：{url}",
@@ -13887,6 +13893,8 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "このレポートはもう残っていません。magpie は最新の 5 件だけを保存します。",
   },
   de: {
+    "At least: {n} answer tokens in {ms} after the first token, the {r} reasoning tokens left out. No first text was recorded, so reasoning after the first token is counted too": "Mindestens: {n} Antwort-Token in {ms} nach dem ersten Token, ohne die {r} Reasoning-Token. Kein erster Text aufgezeichnet, also zählt Reasoning nach dem ersten Token mit",
+    "At least: {n} output tokens in {ms}, from the request to its last token, the wait for the first one counted too": "Mindestens: {n} Ausgabe-Token in {ms}, von der Anfrage bis zu ihrem letzten Token, das Warten auf das erste mitgezählt",
     "Collapse all": "Alle einklappen",
     "Expand all": "Alle ausklappen",
     "Found by magpie: {url}": "Von magpie gefunden: {url}",

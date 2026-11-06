@@ -89,7 +89,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await rows.nth(1).locator(".cost").textContent(), "≈$0.000", "known zero cost remains visible");
         assert.equal(await rows.nth(3).locator(".cache-hit").count(), 0, "legacy totals cannot establish a cache rate");
         assert.equal(await rows.nth(4).locator(".cache-hit").count(), 0, "output is not part of the prompt");
-        for (const i of [5, 6, 7, 9, 10, 11]) assert.equal(await rows.nth(i).locator(".speed").count(), 0, `row ${i} has no measured output speed`);
+        for (const i of [5, 9, 10, 11]) assert.equal(await rows.nth(i).locator(".speed").count(), 0, `row ${i} has no output speed`);
+        // 8,264 tokens that came in a burst tell no measured speed, but the
+        // least they were written at over the whole request, as the Usage
+        // page's Requests tab says it (zzzkl3994 on Discord)
+        assert.match(await rows.nth(6).locator(".speed .v").textContent(), /^≥339 /);
+        assert.match(await rows.nth(7).locator(".speed .v").textContent(), /^≥5,?509 /);
         assert.match(await rows.nth(8).locator(".cache-hit").textContent(), /60%$/, "sum the billable prompt tiers across retries");
         assert.match(await rows.nth(8).locator(".speed .v").textContent(), /^100 /, "retry wait and earlier output do not change decode speed");
         assert.equal(await rows.nth(9).locator(".cache-hit").count(), 0, "a request still underway has no final rate");
