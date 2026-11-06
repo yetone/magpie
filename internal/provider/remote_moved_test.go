@@ -153,3 +153,17 @@ func TestDialable(t *testing.T) {
 		t.Errorf("dialable = %v, want [%s]", got, up)
 	}
 }
+
+// Nothing is looked for on this computer's networks: a look sends the
+// provider's key to whatever takes the connection, so until an address
+// proves it holds the key first, no address is given to it.
+func TestRemoteMagpieKeyGoesToNoNeighbour(t *testing.T) {
+	seekMu.Lock()
+	look := seekAt
+	seekMu.Unlock()
+	for _, host := range []string{"192.168.77.20", "10.0.0.5", "172.16.3.4"} {
+		if got := look(host, "3425"); len(got) != 0 {
+			t.Errorf("%s: looked at %d addresses (%v ...), want none", host, len(got), got[0])
+		}
+	}
+}

@@ -57,7 +57,13 @@ var seekLast = map[string]time.Time{}
 
 // seekAt is the addresses (host:port) a Remote magpie last at host:port
 // may be at now, nearest first. Tests give their own.
-var seekAt = lanNeighbours
+// Nowhere, for now: a look sent the provider's gateway key to every
+// address on the network that took a connection at the port, and saved
+// the first that listed 200 for it, so anyone on a café's network
+// listening there got the key, and became the provider by answering.
+// lanNeighbours comes back once an address proves it holds the key
+// before the key is sent to it. Tests look where they say (SeekHere).
+var seekAt = func(host, port string) []string { return nil }
 
 // SeekHere has every look made at ats alone, as if any look made before
 // were long ago, until restore: for the gateway's tests, whose Remote
