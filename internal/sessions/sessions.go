@@ -711,7 +711,8 @@ func allFilesWith(zcode func() []file) []file {
 	lists := callFileLists(codexFiles())
 	lists = append(lists, openCodeFiles(), piFiles(), raftFiles(), cindyFiles(), wslFiles("pi", "raft", "omp", "kimi"), zcode())
 	lists = append(lists, dshFiles(), clineFiles(), ccFiles("qoder", QoderDir("qoder")), ccFiles("qoder-cn", QoderDir("qoder-cn")),
-		grokFiles(), workbuddyFiles(), workbuddyAIFiles(), codebuddyFiles(), droidFiles(), ompFiles(), cursorFiles(), hermesFiles(), almaFiles(), kimiFiles(), agyFiles())
+		grokFiles(), workbuddyFiles(), workbuddyAIFiles(), codebuddyFiles(), droidFiles(), ompFiles(), cursorFiles(), hermesFiles(), almaFiles(), kimiFiles(), agyFiles(),
+		antigravityFiles()) // #2190
 	// each lister asked Reads already; a file listed under another
 	// agent's name is held to that agent too
 	return allowed(distinctOf(lists...))
@@ -1943,6 +1944,8 @@ func parserFor(agent string) sessionParser {
 		return sessionParser{grow: parseDroid}
 	case "agy":
 		return sessionParser{grow: parseAgy}
+	case "antigravity":
+		return sessionParser{whole: parseAntigravity} // #2190
 	case "cursor":
 		return sessionParser{whole: parseCursor}
 	case "codex":

@@ -65,3 +65,27 @@ func TestAgyStepThroughTheAppsGatewayCountedOnce(t *testing.T) {
 		t.Error("an app record naming its own session was taken for an agy step")
 	}
 }
+
+// #2190: the Antigravity app's own conversation database counts every
+// call the app made, the ones it sent through magpie too, and names the
+// conversation's id, never a session the gateway was sent. A call that
+// went through magpie is the gateway's record, matched by its tokens and
+// a time after the step began (step 11 of yygutn's rows on #2190: 4254 in,
+// 18561 read from the cache, 276 out); one made straight to Google is the
+// app's own.
+func TestAntigravityAppCallThroughMagpieCountedOnce(t *testing.T) {
+	began := time.Unix(1791860353, 992204000)
+	rec := Record{Time: began.Add(11 * time.Second), Agent: "antigravity", Provider: "antigravity", Model: "gemini-3.8-flash",
+		Input: 4254, CacheRead: 18561, Output: 276, Millis: 10_500, Status: 200}
+	step := sessions.Call{Time: began, Agent: "antigravity", Session: "37c3c786-9a11-44be-97df-b8fc1ccebc78",
+		Model: "gemini-3.8-flash-n", Tokens: sessions.Tokens{Input: 4254, CacheRead: 18561, Output: 276}}
+	direct := sessions.Call{Time: began.Add(-35 * time.Second), Agent: "antigravity", Session: step.Session,
+		Model: "gemini-3.8-flash-n", Tokens: sessions.Tokens{Input: 13317, Output: 621}}
+	m := gatewayMatches([]Record{rec}, []sessions.Call{step, direct})
+	if !m[0] {
+		t.Error("an app call the gateway logged is counted again as the app's own")
+	}
+	if m[1] {
+		t.Error("an app call made straight to Google was taken for the gateway's")
+	}
+}

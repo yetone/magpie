@@ -341,6 +341,7 @@ func callSourcesInto(out []file, codex []file) []file {
 	lists := append(callFileLists(codex), openCodeCallFiles(), zcodeCallFiles(), dshCallFiles(),
 		minimaxCallFiles(), kimiCallFiles(), wslFiles("kimi"), piCallFiles(), codebuddyCallFiles(), workbuddyAIFiles(),
 		agyCallFiles(),                        // #2097
+		antigravityCallFiles(),                // #2190
 		workbuddyCallFiles(), grokCallFiles()) // #4423
 	if out == nil {
 		return allowed(distinctOf(lists...))

@@ -48,6 +48,7 @@ var skillsCounted = map[string]struct {
 	"hermes":       {none: "its skill_view tool is not read; hermes is not run in a sandbox (it rewrites the live launcher)"},
 	"cursor":       {none: "selected skills live in selectedContext; needs a signed-in Cursor for a real session"},
 	"agy":          {none: "skill_lookup's keys are not known from a real session"},
+	"antigravity":  {none: "its steps' payloads are encrypted at rest; only the usage in steps.metadata is read"},
 	"minimax-code": {none: "calls only: no Sessions summaries"},
 	"gemini":       {none: "calls only: no Sessions summaries"},
 }

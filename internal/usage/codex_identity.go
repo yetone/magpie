@@ -710,7 +710,7 @@ func matchingRecords(since time.Time, logs []sessions.Call) []Record {
 		responses[c.ResponseID] = true
 		requests[c.RequestID] = true
 		sessionIDs[c.Session] = true
-		agy = agy || c.Agent == "agy"
+		agy = agy || agyLocal(c.Agent)
 	}
 	delete(responses, "")
 	delete(requests, "")

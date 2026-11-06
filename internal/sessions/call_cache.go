@@ -256,7 +256,8 @@ var wholeCallReaders = map[string]func(file) (*callFile, bool){
 	"codebuddy":    readWorkBuddyCalls, // #1779
 	// #1605
 	"minimax-code": readMiniMaxCalls,
-	"agy":          readAgyCalls, // #2097
+	"agy":          readAgyCalls,         // #2097
+	"antigravity":  readAntigravityCalls, // #2190
 }
 
 // resumeCallReaders read an agent's calls from a file only appended to that

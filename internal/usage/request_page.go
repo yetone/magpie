@@ -1976,6 +1976,13 @@ const agyMatchSession = "\x00agy"
 // app's, and its transcript counted them a second time (Chamberlain_zyz on X).
 func agyGateway(a string) bool { return a == "agy" || a == "antigravity" }
 
+// agyLocal says a session file's call of agent a is matched as an agy
+// step is, by its tokens and a time when the step began: agy's
+// transcript's, or the Antigravity app's conversation database's
+// (#2190), whose calls name its own conversation id, never one the
+// gateway was sent.
+func agyLocal(a string) bool { return a == "agy" || a == "antigravity" }
+
 // agyStepLongest is how long after an agy step began its gateway call may
 // have ended: a transcript's created_at is when the step began, to the
 // second, where every other session file's time is when its call ended.
@@ -2210,7 +2217,7 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip refSet, respon
 			}
 			key := matchKey{session: c.Strings[c.text(p, 13)], tokens: matchTokens(p.Tokens), failed: failed}
 			from, to := p.Time().Add(-2*time.Second), p.Time().Add(2*time.Second)
-			if c.Strings[c.text(p, 0)] == "agy" {
+			if agyLocal(c.Strings[c.text(p, 0)]) {
 				key.session, to = agyMatchSession, p.Time().Add(agyStepLongest)
 			}
 			count, at := 0, int32(0)
