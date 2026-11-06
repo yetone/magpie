@@ -132,7 +132,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const top = await page.locator("#view-settings").evaluate((v) => v.scrollTop);
         await pick.click();
         const items = page.locator(".proto-menu .pm-item");
-        assert.equal(await items.count(), 8, "15 min to 24 h");
+        assert.equal(await items.count(), 10, "5 min to 24 h");
         assert.equal(await page.locator(".proto-menu .pm-item.on .pm-name").textContent(), await say(page, lang, 30));
         await page.locator(".proto-menu .pm-item", { hasText: await say(page, lang, 180) }).click();
         for (let i = 0; i < 100 && !posts.length; i++) await page.waitForTimeout(20);
@@ -141,6 +141,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const title = await page.locator(".ar-own").first().locator('.ar-own-case[data-case="expiring"] .ar-own-say').getAttribute("title");
         const hours = await page.evaluate((lang) => (I18N[lang]?.["{n} h"] || "{n} h").replace("{n}", 3), lang);
         assert(title.includes(hours), `the title says 3 h: ${title}`);
+        assert.equal(await page.locator("#view-settings").evaluate((v) => v.scrollTop), top, "no click moved the page");
+        // the shortest, five minutes (shangyuan0818 on Discord asked for less than 15)
+        await pick.click();
+        await page.locator(`.proto-menu .pm-item .pm-name:text-is(${JSON.stringify(await say(page, lang, 5))})`).click(); // not "15 min before"
+        for (let i = 0; i < 100 && posts.length < 2; i++) await page.waitForTimeout(20);
+        assert.deepEqual(posts, [{ minutes: 180 }, { minutes: 5 }]);
+        await page.waitForFunction((want) => document.querySelector("#codexResetLeadRow button.reset-lead .rl-say > .on")?.textContent.trim() === want, await say(page, lang, 5));
         assert.equal(await page.locator("#view-settings").evaluate((v) => v.scrollTop), top, "no click moved the page");
 
         // fits, no sideways scroll, no native select, no left border
@@ -165,12 +172,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const pick = page.locator("#codexResetLeadRow button.reset-lead");
     assert.equal((await pick.locator(".rl-say > .on").textContent()).trim(), "45 min before");
     await pick.click();
-    assert.equal(await page.locator(".proto-menu .pm-item").count(), 9);
+    assert.equal(await page.locator(".proto-menu .pm-item").count(), 11);
     assert.equal(await page.locator(".proto-menu .pm-item.on .pm-name").textContent(), "45 min before");
     await page.keyboard.press("Escape");
     assert.deepEqual(posts, [], "nothing written by looking");
     assert.deepEqual(errors, []);
-    const bad = await open(t, engine, "en", 900, 5, []);
+    const bad = await open(t, engine, "en", 900, 4, []);
     assert.equal((await bad.page.locator("#codexResetLeadRow button.reset-lead .rl-say > .on").textContent()).trim(), "30 min before");
     assert.deepEqual(bad.errors, []);
   });

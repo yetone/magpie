@@ -124,7 +124,7 @@ func TestResetLeadLooksInsideLongLead(t *testing.T) {
 // only as it runs out.
 func TestResetLeadUnreadIsDefault(t *testing.T) {
 	signIn(t)
-	for _, m := range []int{-5, 1, 14, 24*60 + 1, 1 << 30} {
+	for _, m := range []int{-5, 1, 4, 24*60 + 1, 1 << 30} {
 		setResetLead(t, m)
 		if got := resetLead(); got != 30*time.Minute {
 			t.Errorf("%d minutes: lead %v", m, got)
@@ -146,5 +146,136 @@ func TestResetLeadUnreadIsDefault(t *testing.T) {
 	}
 	if got := resetLead(); got != 30*time.Minute && got != 15*time.Minute {
 		t.Fatalf("not a number: lead %v", got)
+	}
+}
+
+// runLoop drives check as KeepResetsFromRunningOut does, from start until
+// the reset runs out: a pass at now, which takes the time spend says (a
+// pass hung on ChatGPT ends at its two-minute bound), then wake's sleep.
+// It returns when the reset was spent (zero: never) and the tries.
+func runLoop(t *testing.T, start, until time.Time, spend func(try int, now time.Time) (ResetOutcome, error, time.Duration)) (spent time.Time, tries []time.Time) {
+	t.Helper()
+	used := []QuotaWindow{{Span: 7 * 24 * time.Hour, Used: 40}}
+	e := expiringResets{next: map[string]time.Time{}}
+	for now := start; now.Before(until); {
+		took := 3 * time.Second
+		e.check("me@example.com", now, func() ([]QuotaWindow, *ResetCredits, error) {
+			if !spent.IsZero() {
+				return used, nil, nil
+			}
+			return used, &ResetCredits{Count: 1, Until: &until}, nil
+		}, func() (ResetOutcome, error) {
+			tries = append(tries, now)
+			out, err, d := spend(len(tries), now)
+			took += d
+			if err == nil && out.Code == "reset" {
+				spent = now.Add(d)
+			}
+			return out, err
+		})
+		now = now.Add(took)
+		now = now.Add(e.wake(now))
+	}
+	return spent, tries
+}
+
+// The shortest lead, five minutes (shangyuan0818 on Discord: less than 15,
+// to use more of the windows first), is spent at its start, not at the
+// next five-minute pass, whatever the loop's phase; a failed try is made
+// again a minute on, so a try hung to the pass's two-minute bound still
+// leaves another before the reset runs out.
+func TestShortLeadSpentInTime(t *testing.T) {
+	signIn(t)
+	setResetLead(t, 5)
+	until := time.Date(2026, 11, 7, 18, 0, 0, 0, time.Local)
+	due := until.Add(-5 * time.Minute)
+	for _, phase := range []time.Duration{0, 17 * time.Second, 2*time.Minute + 41*time.Second, 4*time.Minute + 59*time.Second} {
+		start := until.Add(-3*time.Hour + phase)
+		// answers at once: spent at the lead's start
+		spent, tries := runLoop(t, start, until, func(int, time.Time) (ResetOutcome, error, time.Duration) {
+			return ResetOutcome{Code: "reset"}, nil, time.Second
+		})
+		if spent.Before(due) || spent.After(due.Add(5*time.Second)) || len(tries) != 1 {
+			t.Errorf("phase %v: spent %v before it runs out, want 5m; tries at %v", phase, until.Sub(spent), tries)
+		}
+		// the first try hangs two minutes and fails: tried again, in time
+		spent, tries = runLoop(t, start, until, func(n int, _ time.Time) (ResetOutcome, error, time.Duration) {
+			if n == 1 {
+				return ResetOutcome{}, http.ErrHandlerTimeout, 2 * time.Minute
+			}
+			return ResetOutcome{Code: "reset"}, nil, time.Second
+		})
+		if spent.IsZero() || !spent.Before(until.Add(-time.Minute)) || len(tries) != 2 {
+			t.Errorf("phase %v, a hung try: spent %v before it runs out; tries at %v", phase, until.Sub(spent), tries)
+		}
+		// ChatGPT refusing at once: a try every minute, four before it runs out
+		spent, tries = runLoop(t, start, until, func(n int, _ time.Time) (ResetOutcome, error, time.Duration) {
+			if n < 4 {
+				return ResetOutcome{}, http.ErrHandlerTimeout, time.Second
+			}
+			return ResetOutcome{Code: "reset"}, nil, time.Second
+		})
+		if spent.IsZero() || !spent.Before(until) || len(tries) != 4 {
+			t.Errorf("phase %v, failing tries: spent %v before it runs out; tries at %v", phase, until.Sub(spent), tries)
+		}
+	}
+	// a lead the CLI set off the five-minute marks (7m): the look lands on
+	// its start too, not at the pass after
+	setResetLead(t, 7)
+	for _, phase := range []time.Duration{0, 17 * time.Second, 4*time.Minute + 59*time.Second} {
+		spent, _ := runLoop(t, until.Add(-3*time.Hour+phase), until, func(int, time.Time) (ResetOutcome, error, time.Duration) {
+			return ResetOutcome{Code: "reset"}, nil, time.Second
+		})
+		if want := until.Add(-7 * time.Minute); spent.Before(want) || spent.After(want.Add(5*time.Second)) {
+			t.Errorf("7m lead, phase %v: spent %v before it runs out", phase, until.Sub(spent))
+		}
+	}
+	// a long lead failing all along is tried every five minutes until the
+	// last quarter hour, not every minute for hours
+	setResetLead(t, 6*60)
+	_, tries := runLoop(t, until.Add(-7*time.Hour), until, func(int, time.Time) (ResetOutcome, error, time.Duration) {
+		return ResetOutcome{}, http.ErrHandlerTimeout, time.Second
+	})
+	if n := len(tries); n < 70 || n > 90 {
+		t.Errorf("a six-hour lead failing: %d tries, want about 6h/5m + 15", n)
+	}
+}
+
+// The loop sleeps until the soonest look due of the accounts its pass went
+// over, five minutes at most, a second at least: one due while the pass
+// still ran is looked at once; an account the pass skipped (auto-use
+// turned off) doesn't wake it.
+func TestResetLoopWakesForTheSoonestLook(t *testing.T) {
+	now := time.Now().Round(0)
+	e := expiringResets{next: map[string]time.Time{}}
+	if got := e.wake(now); got != resetExpiryClose {
+		t.Fatalf("none due: %v", got)
+	}
+	passed := func(keys ...string) {
+		for _, k := range keys {
+			e.check(k, now.Add(-time.Hour), func() ([]QuotaWindow, *ResetCredits, error) { t.Fatal("looked"); return nil, nil, nil },
+				func() (ResetOutcome, error) { t.Fatal("spent"); return ResetOutcome{}, nil })
+		}
+	}
+	e.next["skipped"] = now.Add(-time.Hour)
+	e.next["far"] = now.Add(time.Hour)
+	passed("far")
+	if got := e.wake(now); got != resetExpiryClose {
+		t.Fatalf("skipped and far: %v", got)
+	}
+	e.next["soon"] = now.Add(97 * time.Second)
+	passed("far", "soon")
+	if got := e.wake(now); got != 97*time.Second {
+		t.Fatalf("one in 97s: %v", got)
+	}
+	// each pass names its own accounts: soon isn't waited for unless asked about again
+	passed("far")
+	if got := e.wake(now); got != resetExpiryClose {
+		t.Fatalf("soon not in the pass: %v", got)
+	}
+	e.next["overdue"] = now.Add(-30 * time.Second)
+	passed("far", "overdue")
+	if got := e.wake(now); got != time.Second {
+		t.Fatalf("one due while the pass ran: %v", got)
 	}
 }

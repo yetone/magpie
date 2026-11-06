@@ -1178,14 +1178,18 @@ func (s Settings) ImageWait() time.Duration {
 
 // CodexResetLeadDefault is CodexResetLead's minutes when it is unset, and
 // CodexResetLeadLeast and CodexResetLeadMost the range it can be set in;
-// CodexResetLeads the choices the app and the CLI's words offer.
+// CodexResetLeads the choices the app and the CLI's words offer. Five
+// minutes is the least (shangyuan0818 on Discord asked for less than 15):
+// the look lands on the lead's start, and a failure is tried again each
+// minute, so a pass that hangs to its two-minute bound still leaves a
+// second try before the reset runs out; at three a hung pass leaves none.
 const (
 	CodexResetLeadDefault = 30
-	CodexResetLeadLeast   = 15
+	CodexResetLeadLeast   = 5
 	CodexResetLeadMost    = 24 * 60
 )
 
-var CodexResetLeads = []int{15, 30, 60, 120, 180, 360, 720, 1440}
+var CodexResetLeads = []int{5, 10, 15, 30, 60, 120, 180, 360, 720, 1440}
 
 // ResetLead is how long before a Codex reset about to run out unused it
 // is spent by itself: CodexResetLead's minutes, CodexResetLeadDefault's

@@ -18,7 +18,7 @@ func TestQuotaResetLeadCmd(t *testing.T) {
 	for _, c := range []struct {
 		arg  string
 		want int
-	}{{"2h", 120}, {"15m", 15}, {"24h", 1440}, {"90", 90}, {"1h30m", 90}} {
+	}{{"2h", 120}, {"15m", 15}, {"5m", 5}, {"10m", 10}, {"24h", 1440}, {"90", 90}, {"1h30m", 90}} {
 		arg, want := c.arg, c.want
 		if out, err := runOut(t, "quota", "auto-reset", "lead", arg); err != nil || settings.Load().CodexResetLead != want {
 			t.Fatalf("%s: %q %v, set %d", arg, out, err, settings.Load().CodexResetLead)
@@ -27,7 +27,7 @@ func TestQuotaResetLeadCmd(t *testing.T) {
 	if out, err := runOut(t, "quota", "auto-reset", "lead"); err != nil || !strings.Contains(out, "used 1h30m before it expires") || strings.Contains(out, "default") {
 		t.Fatalf("set: %q %v", out, err)
 	}
-	for _, bad := range []string{"10m", "25h", "-1h", "30s", "90s", "soon", "--help"} {
+	for _, bad := range []string{"4m", "1m", "25h", "-1h", "30s", "90s", "soon", "--help"} {
 		if bad == "--help" {
 			if out, err := runOut(t, "quota", "auto-reset", "lead", bad); err != nil || !strings.Contains(out, "usage:") {
 				t.Fatalf("--help: %q %v", out, err)
