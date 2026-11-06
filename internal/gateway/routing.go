@@ -343,8 +343,13 @@ var (
 	// WorkBuddy's 429 14018 "Credits exhausted. Please visit the link
 	// below to purchase add-on packs…" too (Creat.wu on Discord)
 	brokeWords = regexp.MustCompile(`(?i)insufficient.?(balance|credit|fund)|\bcredits? (are )?exhausted\b|余额不足|欠费|请充值`)
-	// quotaWords: it has used up what its plan allows for now.
-	usedUpWords = regexp.MustCompile(`(?i)quota|usage.?limit|out of budget|budget (exceeded|exhausted)|limit.?reached|hit your .*limit|limit.{0,24}resets|exceeded.*(plan|limit)|额度|用量|套餐|上限`)
+	// quotaWords: it has used up what its plan allows for now. The budget's
+	// words needn't sit beside each other: LiteLLM's spent key answers 429
+	// "Budget has been exceeded! Key=… (sk-…), Current cost: …, Max budget:
+	// …" (#5111, wuxiaoqiang12) — its "has been" broke the pair, and read
+	// as a plain rate limit the key was asked again every half an hour, the
+	// user's quota-rest never read
+	usedUpWords = regexp.MustCompile(`(?i)quota|usage.?limit|out of budget|budget.{0,32}(exceeded|exhausted)|limit.?reached|hit your .*limit|limit.{0,24}resets|exceeded.*(plan|limit)|额度|用量|套餐|上限`)
 	// rateWords: a 429 that is a short rate limit — requests or tokens per
 	// minute — which usedUpWords took for a used-up plan ("Rate limit
 	// exceeded", "reached"): as magpie words an upstream error, with
