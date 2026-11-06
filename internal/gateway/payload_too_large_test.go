@@ -33,7 +33,14 @@ func TestPayloadTooLargeIsNotContextOverflow(t *testing.T) {
 		if inferred, ok := tooLongUnsaid(p, "m", tokens, 0, 413, []byte(msg)); ok {
 			t.Errorf("byte limit inferred as token limit: %s", inferred)
 		}
-		if inferred, ok := tooLongUnsaid(p, "m", 1000, 0, 413, []byte(msg)); !ok || !strings.Contains(inferred, "prompt is too long") {
+		// a 413 is read as an overflow only for Factory (#711), whose
+		// plugin serves it; any other vendor's byte cap is its own
+		if inferred, ok := tooLongUnsaid(p, "m", 1000, 0, 413, []byte(msg)); ok {
+			t.Errorf("another vendor's byte cap inferred as a token limit: %s", inferred)
+		}
+		factory := provider.PluginForTest("factory", "factory")
+		factory.Name, factory.Contexts = "Factory", map[string]int{"m": 100}
+		if inferred, ok := tooLongUnsaid(factory, "m", 1000, 0, 413, []byte(msg)); !ok || !strings.Contains(inferred, "prompt is too long") {
 			t.Errorf("text estimate past the window lost compaction: %s", inferred)
 		}
 		if retryable(413, []byte(msg)) {

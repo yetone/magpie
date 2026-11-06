@@ -12,9 +12,9 @@ import (
 // window) with a 502 "capacity issues", WorkBuddy one for glm-5.1 with a
 // 400 "Invalid request parameters", Qoder one of 2M for qmodel with a 400
 // "Error in upstream response" — each answered at a size the model holds.
-// Asked again in place three times, the agent was then handed a 502 and
-// never compacted. A request well past the model's window that fails so
-// is told as one too long, at once.
+// Those vendors' are still told as too long (TestUnsaidVendorsStillOverflow).
+// The same failures from any other provider, past the window or not, reach
+// the agent with the vendor's own status and words (#5486, NEKO-CwC).
 func TestOverflowTheVendorDidntSay(t *testing.T) {
 	big := strings.Repeat("word ", 2400)  // about 3000 tokens as estimated
 	small := strings.Repeat("word ", 100) // about 125
@@ -30,10 +30,12 @@ func TestOverflowTheVendorDidntSay(t *testing.T) {
 		// (TestDevinBusyOverflowStillTooLong): a plain provider's is its
 		// busy moment, asked again (ne9ko9 on Discord)
 		{"502 plain", "/v1/messages", big, 502, `{"error":{"message":"We are experiencing capacity issues"}}`, 502, 1 + lastRetries + replanRounds, "capacity issues"},
-		{"400 chat", "/v1/chat/completions", big, 400, `{"error":{"message":"Invalid request parameters"}}`, 400, 1, "context_length_exceeded"},
-		// Text alone well past the window is enough to ask for compaction.
-		{"413 bytes", "/v1/messages", big, 413, `{"error":{"message":"Request Entity Too Large"}}`, 400, 1, "prompt is too long"},
-		{"413 request_too_large", "/v1/messages", big, 413, `{"error":{"type":"request_too_large","message":"Request exceeds the maximum size"}}`, 400, 1, "prompt is too long"},
+		// nor a 400 or 413 that says nothing of length: only the vendors
+		// seen to answer an overflow so (TestUnsaidVendorsStillOverflow)
+		// have it read as one (#5486, NEKO-CwC)
+		{"400 chat", "/v1/chat/completions", big, 400, `{"error":{"message":"Invalid request parameters"}}`, 400, 1, "Invalid request parameters"},
+		{"413 bytes", "/v1/messages", big, 413, `{"error":{"message":"Request Entity Too Large"}}`, 413, 1, "Request Entity Too Large"},
+		{"413 request_too_large", "/v1/messages", big, 413, `{"error":{"type":"request_too_large","message":"Request exceeds the maximum size"}}`, 413, 1, "Request exceeds the maximum size"},
 		// not the conversation's length: a plain provider's busy reply is
 		// asked again past the same-one retries, within its patience,
 		// until replan's rounds run out
@@ -64,10 +66,8 @@ func TestOverflowTheVendorDidntSay(t *testing.T) {
 			if code != tc.wantCode || !strings.Contains(body, tc.want) || f.calls != tc.calls {
 				t.Fatalf("status %d after %d calls (want %d after %d): %s", code, f.calls, tc.wantCode, tc.calls, body)
 			}
-			if tc.wantCode != 400 || tc.name == "quota" {
-				if strings.Contains(body, "prompt is too long") || strings.Contains(body, "context_length_exceeded") {
-					t.Fatalf("told as an overflow: %s", body)
-				}
+			if overflowTold(body) {
+				t.Fatalf("told as an overflow: %s", body)
 			}
 		})
 	}

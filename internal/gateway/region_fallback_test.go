@@ -42,7 +42,8 @@ func TestRegionRefusalIsRetryable(t *testing.T) {
 // A conversation past the model's window that is refused for its region
 // is told as the region refusal, not as a prompt too long to compact.
 func TestRegionRefusalIsNotTooLong(t *testing.T) {
-	p := provider.Provider{ID: "fake", Name: "Fake", Contexts: map[string]int{"m": 100}}
+	p := provider.PluginForTest("workbuddy-ai", "workbuddy-ai")
+	p.Name, p.Contexts = "WorkBuddy AI", map[string]int{"m": 100}
 	for _, body := range []string{antigravityRegion400, googleRegion400} {
 		if said, ok := tooLongUnsaid(p, "m", 1000, 0, 400, []byte(body)); ok {
 			t.Errorf("region refusal read as too long: %s", said)

@@ -123,30 +123,31 @@ func TestUnreachableIsNotTooLong(t *testing.T) {
 
 // A model that has answered a prompt holds one of that size, whatever its
 // window is said to be: gpt-6-astra, said at 272K, answered 454K and 474K
-// in the reporter's session. A failure that doesn't say why, of a request
-// no larger, is the vendor's error, not an overflow; one well past what
-// was answered still is.
+// in the reporter's session. A refusal that says the request is too long
+// (saysLength, the one any vendor's is read by), of a request no larger,
+// is the vendor's error, not an overflow; one well past what was answered
+// still is.
 func TestWindowNotBelowWhatWasAnswered(t *testing.T) {
 	fresh(t)
-	invalid := `{"error":{"message":"Invalid request parameters"}}`
+	long := `{"error":{"message":"Request too large. Please shorten it and try again."}}`
 	answered := `{"id":"ok","choices":[{"index":0,"message":{"role":"assistant","content":"hello"},"finish_reason":"stop"}],"usage":{"prompt_tokens":5000,"completion_tokens":1,"total_tokens":5001}}`
-	s := &scripted{replies: []reply{{400, "", invalid}, {200, "", answered}, {400, "", invalid}, {400, "", invalid}}}
+	s := &scripted{replies: []reply{{400, "", long}, {200, "", answered}, {400, "", long}, {400, "", long}}}
 	roomyMember(t, "relay", 2000, s)
 	srv := New()
 	ask := func(words int) (int, string) {
 		return postAs(t, srv, "", `{"model":"relay/m","messages":[{"role":"user","content":"`+strings.Repeat("word ", words)+`"}]}`)
 	}
-	// nothing answered yet: past the window, it overflowed
-	if code, body := ask(2400); code != 400 || !overflowTold(body) {
+	// nothing answered yet: about 2000, past half the window of 2000
+	if code, body := ask(1600); code != 400 || !overflowTold(body) {
 		t.Fatalf("before an answer: %d %s", code, body)
 	}
 	if code, body := ask(10); code != 200 {
 		t.Fatalf("the answer of 5000: %d %s", code, body)
 	}
-	if code, body := ask(2400); code != 400 || overflowTold(body) || !strings.Contains(body, "Invalid request parameters") {
-		t.Fatalf("after an answer of 5000, at about 3000: %d %s", code, body)
+	if code, body := ask(1600); code != 400 || overflowTold(body) || !strings.Contains(body, "Request too large") {
+		t.Fatalf("after an answer of 5000, at about 2000: %d %s", code, body)
 	}
-	// about 7500, past 5000 by more than the margin
+	// about 7500, past half of 5000
 	if code, body := ask(6000); code != 400 || !overflowTold(body) {
 		t.Fatalf("well past what was answered: %d %s", code, body)
 	}
@@ -157,8 +158,8 @@ func TestWindowNotBelowWhatWasAnswered(t *testing.T) {
 // max_context_window of 872K above its 272K context_window, which Codex
 // is handed and works to (ne9ko9 on Discord: Codex's window 828,400).
 func TestWindowNotBelowListedMax(t *testing.T) {
-	invalid := `{"error":{"message":"Invalid request parameters"}}`
-	f := &fake{code: 400, ctype: "application/json", reply: invalid}
+	long := `{"error":{"message":"Request too large. Please shorten it and try again."}}`
+	f := &fake{code: 400, ctype: "application/json", reply: long}
 	up := setup(t, provider.Chat, f)
 	if err := catalog.SaveLive("fake", up.URL+"/v1", []catalog.Model{{ID: "m1", Context: 2000, MaxContext: 8000}}); err != nil {
 		t.Fatal(err)
@@ -178,10 +179,11 @@ func TestWindowNotBelowListedMax(t *testing.T) {
 	ask := func(words int) (int, string) {
 		return post(t, "/v1/chat/completions", `{"model":"fake/m1","messages":[{"role":"user","content":"`+strings.Repeat("word ", words)+`"}]}`)
 	}
+	// about 3000: past half of 2000, under half of 8000
 	if code, body := ask(2400); code != 400 || overflowTold(body) {
 		t.Fatalf("about 3000, within the max: %d %s", code, body)
 	}
-	// about 10000, past the max by more than the margin
+	// about 10000, past half the max
 	if code, body := ask(8000); code != 400 || !overflowTold(body) || !strings.Contains(body, "8000") {
 		t.Fatalf("past the max: %d %s", code, body)
 	}

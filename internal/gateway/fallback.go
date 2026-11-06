@@ -1947,43 +1947,45 @@ func saysLength(status int, body []byte) bool {
 }
 
 // tooLongUnsaid says a failure that doesn't say why was the request being too
-// long for the model, as some vendors put it: Devin's 502 "capacity
-// issues", WorkBuddy's 400 "Invalid request parameters", Qoder's 400
-// "Error in upstream response" — each for a conversation well past the
-// model's window, and answered at a size it holds. Retried, or asked of
-// another account of the model, it fails the same, and the agent, told it
-// as a vendor's error, never compacts. The message it is told instead
-// says the prompt is too long. Not for a rate limit, an account's
-// trouble, a model it doesn't serve, a region it doesn't serve, or one
-// already saying it overflowed. A request error that speaks of length
-// (saysLength) needs only lengthMargin of the window.
+// long for the model, as a few vendors put it (unsaidOverflows): Devin's
+// 502 "capacity issues", WorkBuddy's 400 "Invalid request parameters",
+// Qoder's 400 "Error in upstream response" — each for a conversation well
+// past the model's window, and answered at a size it holds (b3ab3e42e) —
+// and Factory's 413 "Request Entity Too Large" for one whose text alone is
+// past it (#711). Retried, or asked of another account of the model, it
+// fails the same, and the agent, told it as a vendor's error, never
+// compacts. The message it is told instead says the prompt is too long.
+// Not for a rate limit, an account's trouble, a model it doesn't serve, a
+// region it doesn't serve, or one already saying it overflowed.
 //
-// A 5xx is a vendor's busy or broken moment, which a client asks again,
-// and is read so only for a vendor seen to answer an overflow with one
-// (busyOverflows): a custom Responses relay's plain 502 "Upstream service
-// temporarily unavailable", at 385K tokens of a conversation it had just
-// answered at 454K, was told as more than gpt-6-astra's 272K, and Codex
-// ended the turn instead of asking again (ne9ko9 on Discord). Nor is a
-// failure that is no answer at all (transportFailed): a dial or read
-// that timed out, a connection reset, a stream cut short, each in
-// magpie's own words. held is the most the model was seen to answer for
-// this provider (Server.heldOf), and the window is never less than it,
-// nor than the most the provider's list says the model may be asked for
-// (windowMost).
+// Every other provider's failure reaches the agent as the vendor said it,
+// its status, code and body, however long the request: a custom
+// Responses relay's plain 502, and the 400 or 413 any relay, OpenAI or
+// Anthropic may give for something else entirely, aren't magpie's to
+// read as an overflow (#5486, NEKO-CwC: ne9ko9's relay had a 502 at 385K
+// told to Codex as more than gpt-6-astra's 272K, and Codex ended the
+// turn). The one exception is a request error whose own words say the
+// request is too long (saysLength), from any vendor: the vendor named
+// the cause, and lengthMargin of the window rules out the other things
+// such words are said of. Nor is a failure that is no answer at all
+// (transportFailed): a dial or read that timed out, a connection reset, a
+// stream cut short, each in magpie's own words. held is the most the
+// model was seen to answer for this provider (Server.heldOf), and the
+// window is never less than it, nor than the most the provider's list
+// says the model may be asked for (windowMost).
 func tooLongUnsaid(p provider.Provider, model string, tokens, held, status int, body []byte) (string, bool) {
-	switch status {
-	case 400, 413, 422:
-	case 500, 502, 503, 504:
-		if !busyOverflows(p) {
-			return "", false
-		}
-	default:
+	unsaid := unsaidOverflows(p, status)
+	if !unsaid && status != 400 && status != 422 {
 		return "", false
 	}
 	raw := body
 	// the words are matched decoded, too (#1669)
 	body = wordsOf(body)
 	if transportFailed(raw) || transportFailed(body) {
+		return "", false
+	}
+	length := saysLength(status, raw)
+	if !unsaid && !length {
 		return "", false
 	}
 	if overflowed(status, body) || failure(status, body) != failOther || quotaWords.Match(body) ||
@@ -1996,7 +1998,7 @@ func tooLongUnsaid(p provider.Provider, model string, tokens, held, status int, 
 	}
 	window = max(window, windowMost(p, model), held)
 	margin := unsaidMargin
-	if saysLength(status, raw) {
+	if length {
 		margin = lengthMargin
 	}
 	if float64(tokens) < float64(window)*margin {
@@ -2017,13 +2019,30 @@ func tooLongUnsaid(p provider.Provider, model string, tokens, held, status int, 
 	return fmt.Sprintf("%s (%s answered %d)", msg, p.Name, status), true
 }
 
-// busyOverflows says p's vendor answers a request past its model's window
-// with a 5xx that says nothing of length: Devin's 502 "We are currently
-// experiencing capacity issues" for a conversation of about 300K tokens
-// on swe-1.7-lightning (202,752), answered at a size it holds (b3ab3e42e).
-// Devin is served by its plugin now, under its own id or another.
-func busyOverflows(p provider.Provider) bool {
-	return p.ID == "devin" || buildHost(p) == "devin"
+// unsaidStatus are the statuses a vendor was seen to answer a request
+// past its model's window with, saying nothing of length, by the id of
+// the plugin that serves it now (each is retired as a built-in, so only
+// its plugin serves it): Devin's 502 "We are currently experiencing
+// capacity issues" for about 300K tokens on swe-1.7-lightning (202,752),
+// Qoder's 400 "Error in upstream response" for 1.8M on qmodel (1M) and
+// WorkBuddy's 400 "Invalid request parameters" on glm-5.1, each answered
+// at a size it holds (b3ab3e42e, v0.1.735), and Factory's 413 for a
+// request whose text alone is past the window (#711, v0.1.808). Keyed by
+// the plugin, never by the provider's id, which a user's own provider
+// may share.
+var unsaidStatus = map[string][]int{
+	"devin":        {500, 502, 503, 504},
+	"qoder":        {400, 413, 422},
+	"qoder-cn":     {400, 413, 422},
+	"workbuddy":    {400, 413, 422},
+	"workbuddy-ai": {400, 413, 422},
+	"factory":      {413},
+}
+
+// unsaidOverflows says p's vendor answers a request past its model's
+// window with status, saying nothing of length (unsaidStatus).
+func unsaidOverflows(p provider.Provider, status int) bool {
+	return slices.Contains(unsaidStatus[p.PluginProvider()], status)
 }
 
 // transportWords are a failure that never reached a vendor's answer, as Go,
