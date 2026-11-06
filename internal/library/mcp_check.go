@@ -814,6 +814,11 @@ func remoteHeaders(ctx context.Context, s *Server) (http.Header, *ServerHealth) 
 	for k, v := range headers {
 		h.Set(k, v)
 	}
+	// another magpie's router is told the call is a router's, for it not
+	// to ask this one's back (bridge_mcp.go)
+	if u, err := url.Parse(s.URL); err == nil && strings.HasPrefix(u.Path, gateway.HubMCPAll) {
+		h.Set(gateway.RouterHeader, "1")
+	}
 	if s.Transport == "http" && mcpauth.SignedIn(s.Name, s.URL) {
 		tok, err := mcpauth.Token(ctx, s.Name)
 		if err != nil {

@@ -1089,6 +1089,12 @@ func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 	if local(r) {
 		out["pid"], out["serves"] = os.Getpid(), Serves
 	}
+	// its MCP router has a server to give, for another magpie that has
+	// this one as a Remote magpie to give it a server of its own
+	// (provider/remote_hub.go); told to whoever the router answers
+	if (local(r) || sharedWith(r)) && hubServes() {
+		out["mcp_hub"] = true
+	}
 	writeJSON(w, 200, out)
 }
 

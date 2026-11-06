@@ -63,6 +63,10 @@ type Library struct {
 	// PluginsOffered are the plugins (plugin.Name) given a server of their
 	// tools, for one the user removed not to come back (plugin_tools.go)
 	PluginsOffered []string `json:"pluginsOffered,omitempty"`
+	// BridgesOffered are the Remote magpies (provider ids) whose MCP
+	// router was given a server, for one the user removed not to come
+	// back (bridge_mcp.go)
+	BridgesOffered []string `json:"bridgesOffered,omitempty"`
 	// SeenSkills are, by repository and ref ("owner/repo@ref"), the
 	// folders of skills there the page has offered: picked or not at
 	// install, or set aside after a check. A check offers only the others

@@ -424,11 +424,15 @@ func relistPicks(q *Provider, now map[string]bool) bool {
 }
 
 // fetch is Fetch without the picks looked after. A Remote magpie's list
-// also tells whether it is this magpie (noteSelf).
+// also tells whether it is this magpie (noteSelf), and that magpie is
+// asked whether it serves its MCP router (noteRemoteHub).
 func (p Provider) fetch(ctx context.Context) ([]catalog.Model, error) {
 	ms, err := p.fetchList(ctx)
 	if err == nil {
 		noteSelf(p, ms)
+		if len(ms) > 0 {
+			noteRemoteHub(ctx, p)
+		}
 	}
 	return ms, err
 }

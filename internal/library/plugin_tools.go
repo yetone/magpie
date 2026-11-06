@@ -75,7 +75,8 @@ func adoptPluginTools() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if !l.adoptPlugins() {
+	// and each Remote magpie's router's (bridge_mcp.go)
+	if plugins, bridges := l.adoptPlugins(), l.adoptBridges(); !plugins && !bridges {
 		return false, nil
 	}
 	return true, l.save()

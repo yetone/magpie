@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"net/http"
 	"slices"
@@ -295,8 +296,8 @@ func hubCallArgs(args json.RawMessage) (name string, inner json.RawMessage, err 
 // hubCallNamed is the tool call_tool names: as tools/call finds it
 // (hubToolNamed), else the one tool of that name on its server, in any
 // case.
-func hubCallNamed(ts []hubTool, agent, name string) (hubTool, bool) {
-	if t, ok := hubToolNamed(ts, agent, name); ok {
+func hubCallNamed(ctx context.Context, ts []hubTool, agent, name string) (hubTool, bool) {
+	if t, ok := hubToolNamed(ctx, ts, agent, name); ok {
 		return t, true
 	}
 	var found []hubTool
@@ -321,7 +322,7 @@ func (s *Server) hubCallByName(r *http.Request, agent string, ts []hubTool, args
 	if name == "" {
 		return toolResult(hubCallTool+" needs the name of the tool to run; "+hubFindTool+" gives the tools' names.", true)
 	}
-	t, ok := hubCallNamed(ts, agent, name)
+	t, ok := hubCallNamed(r.Context(), ts, agent, name)
 	if !ok {
 		why := "No tool is called " + name + "."
 		if ms := hubMatches(ts, name); len(ms) > 0 {

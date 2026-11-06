@@ -51,6 +51,7 @@ func (l *Library) putServers(in []*Server) {
 	for _, s := range in {
 		c := *s
 		c.Local = false // only this computer says what is its own
+		c.Bridge = ""   // and which of its providers a server is
 		c.Agents = slices.Sorted(slices.Values(orNone(s.Agents)))
 		if own[c.Name] {
 			l.Away = append(l.Away, &c)

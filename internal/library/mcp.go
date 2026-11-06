@@ -62,6 +62,9 @@ type Server struct {
 	// gateway serves them at its URL, and the hub calls the plugin itself
 	// (plugin_tools.go)
 	Plugin string `json:"plugin,omitempty"`
+	// Bridge is the Remote magpie (its provider id) whose MCP router the
+	// server is, given a server of its own (bridge_mcp.go)
+	Bridge string `json:"bridge,omitempty"`
 	// Hub is how the MCP hub (Library.MCPHub) gives the server: "" shares
 	// it through the hub's one entry, as every server was before;
 	// HubDirect keeps it the agents' own entry, written as with the hub

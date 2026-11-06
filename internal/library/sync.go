@@ -567,9 +567,10 @@ func readView(problems []Problem, glance bool) (*View, error) {
 			return nil, err
 		}
 	}
-	// a plugin's tools, a server of their own (plugin_tools.go): saved,
-	// and given to the agents by a sync of their own
-	if l.adoptPlugins() {
+	// a plugin's tools, a server of their own (plugin_tools.go), and a
+	// Remote magpie's router (bridge_mcp.go): saved, and given to the
+	// agents by a sync of their own
+	if plugins, bridges := l.adoptPlugins(), l.adoptBridges(); plugins || bridges {
 		if err := l.save(); err != nil {
 			return nil, err
 		}
@@ -775,6 +776,9 @@ func SaveServer(old string, s Server) (*Result, error) {
 			if p := l.MCP[i].Plugin; p != "" && s.Plugin == "" {
 				s.Plugin, s.Local = p, true
 			}
+			// a Remote magpie's router stays its own while it is at the
+			// provider's address and key (bridge_mcp.go)
+			keptBridge(l.MCP[i], &s)
 			l.MCP = slices.Delete(l.MCP, i, i+1)
 			if old != s.Name {
 				l.renameProjectServers(old, s.Name)

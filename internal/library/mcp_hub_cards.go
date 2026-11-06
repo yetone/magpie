@@ -176,7 +176,7 @@ func writeCards(m map[string]hubCard) {
 // for, else what it says of itself; its title; and its tools but those
 // turned off, as it last listed them.
 func hubServerOf(s *Server) gateway.HubServer {
-	out := gateway.HubServer{Name: s.Name, About: serverAbout(s)}
+	out := gateway.HubServer{Name: s.Name, About: serverAbout(s), Bridge: s.Bridge != ""}
 	c := cardOf(s)
 	if c == nil {
 		return out
