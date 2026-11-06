@@ -6,7 +6,7 @@ const mode = params.get("mode") || "window";
 // focus without a scroll, as every focus call here asks
 const NO_SCROLL = { preventScroll: true };
 // a Mac window hidden by orderOut leaves its page drawing: the app says so (#4293)
-let outOfSight = false;
+let outOfSight = false, asleep;
 for (const [k, off] of [["hidden", true], ["visibilityState", "hidden"]]) {
   const own = Object.getOwnPropertyDescriptor(Document.prototype, k)?.get;
   try { own && Object.defineProperty(Document.prototype, k, { configurable: true, get() { return outOfSight ? off : own.call(this); } }); } catch {}
@@ -14,33 +14,33 @@ for (const [k, off] of [["hidden", true], ["visibilityState", "hidden"]]) {
 window.magpieWindowVisibility = (v) => {
   if (outOfSight !== v) return;
   outOfSight = !v;
-  document.documentElement.classList.toggle("magpie-out-of-sight", outOfSight);
+  const c = document.documentElement.classList;
+  c.toggle("magpie-out-of-sight", outOfSight);
+  // out of sight 30s: let go of layers, laid out now since a hidden page
+  // never draws (#5530)
+  clearTimeout(asleep); c.remove("magpie-asleep");
+  if (outOfSight && mode == "window") asleep = setTimeout(() => { c.add("magpie-asleep"); document.body.offsetWidth; }, 3e4);
   document.dispatchEvent(new Event("visibilitychange"));
 };
 addEventListener("focus", () => magpieWindowVisibility(true)); // focused is on screen
-// kept: magpie.<k> in localStorage, read as JSON; d when it holds none, or
-// not d's kind, or can't be read. keep writes one, for this time only if
-// it can't be kept
+// kept: magpie.<k> in localStorage as JSON; d when none, not d's kind or
+// unreadable. keep writes one, for this time only if it can't be kept
 function kept(k, d) { try { const v = JSON.parse(localStorage.getItem("magpie." + k)); return v && typeof v == typeof d && Array.isArray(v) == Array.isArray(d) ? v : d; } catch { return d; } }
 function keep(k, v) { try { localStorage.setItem("magpie." + k, JSON.stringify(v)); } catch {} }
-// The panel loads Wails for ExecJS readiness, but stays attached to the tray.
-// On Linux it is dragged by its header like the window: a Wayland window
-// can't be put by the icon, so KWin places it, and since it has no KWin
-// title bar (#1283) the header is the only handle it has (#1430).
+// The panel stays attached to the tray; on Linux it is dragged by its
+// header, as KWin places a Wayland window with no title bar (#1283, #1430).
 if (mode === "panel" && !document.body.classList.contains("linux")) $("header.top").style.setProperty("--wails-draggable", "no-drag");
 // `magpie web`: the page in a browser tab, with no window of the app's
 // around it — it opens links itself, and what is the desktop's is left out
 const web = !!window.bootPrefs?.web;
-// the version that served this page, which servedAnew compares the one
-// answering now with
+// the version that served this page, for servedAnew
 const pageVersion = window.bootPrefs?.version || "";
 // magpie web seen from another computer: localhost is the viewer's (curtinp118)
 const remotePage = web && !/^(localhost|127(\.\d+){3}|\[::1\]|::1)$/i.test(location.hostname);
 // layout.js applies the mode and platform before the header can paint.
-// Gateway mode (gatewaymode.go): magpie web on a server that is only the
-// gateway for other computers' agents leaves out this computer's agents'
-// pages — Agents, the Library but its MCP tab — and their settings;
-// Settings › General turns it off, and they are back.
+// Gateway mode (gatewaymode.go): magpie web serving only other computers'
+// agents leaves out this one's agents' pages (Agents, the Library but MCP)
+// and settings, until Settings › General turns it off.
 let gatewayMode = web && !!window.bootPrefs?.gateway;
 const GATEWAY_HIDES = ["agents"];
 // Plugins › Built-in (builtins.go, Lxxyx): the window's parts switched off,

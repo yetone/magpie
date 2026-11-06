@@ -122,6 +122,9 @@ html.magpie-out-of-sight,
 html.magpie-out-of-sight *,
 html.magpie-out-of-sight *::before,
 html.magpie-out-of-sight *::after { animation-play-state: paused !important; }
+/* out of sight a while: nothing is drawn, so WebKit lets go of every
+   layer's buffers, which it keeps for a hidden window (#5530) */
+html.magpie-asleep body { content-visibility: hidden; }
 body {
   font: var(--ui-style, normal) var(--ui-weight, 400) 13px/1.4 var(--ui-font, var(--font)); font-stretch: var(--ui-stretch, 100%);
   color: var(--fg);
