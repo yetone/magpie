@@ -813,7 +813,7 @@ var effortInOutputConfig = regexp.MustCompile(`(?i)glm-5\.[23](?:$|[-.:/\[])|min
 
 // deepseekHost is DeepSeek's own API, whose Anthropic endpoint
 // (api.deepseek.com/anthropic) takes the effort in output_config.
-const deepseekHost = "api.deepseek.com"
+const deepseekHost = provider.DeepSeekHost
 
 // deepseekEfforts are the levels DeepSeek's models think at: its thinking
 // guide maps minimal to low, medium and xhigh to high, and ultra to max.

@@ -78,13 +78,7 @@ const (
 // key, a model that sees images, a request that asks a reply, and the
 // provider not set image-files=off.
 func dsFilesOn(p provider.Provider, to provider.Protocol, path string, body []byte) bool {
-	if p.ImageFilesOff || p.Key == "" || p.Account != nil || p.IsPlugin() || countsTokens(path) {
-		return false
-	}
-	if to != provider.Chat && to != provider.Responses && to != provider.Anthropic {
-		return false
-	}
-	if provider.HostOf(p.Base(to)) != deepseekHost {
+	if p.ImageFilesOff || p.Key == "" || countsTokens(path) || !p.ImageFilesAt(to) {
 		return false
 	}
 	// deepseek-flash sees images; deepseek-v4-pro reads each as the text
