@@ -1406,11 +1406,22 @@ type aUsage struct {
 	// Kiro caches but tells only credits, never tokens (zeewell on X).
 	// It is read, never told: anthropic() leaves it false.
 	CacheUnknown bool `json:"magpie_cache_unknown,omitempty"`
+	// OutputTokensDetails says how many of the output tokens were
+	// thinking, as Copilot counts them on a message_delta: the reasoning
+	// count the other protocols' usage carries (completion_tokens_details,
+	// Gemini's thoughtsTokenCount) and the Claude subscription's cliUsage
+	// reads from Claude Code. A vendor that leaves it out is told by its
+	// stream (hidesReasoning, #4545)
+	OutputTokensDetails *aOutputDetails `json:"output_tokens_details,omitempty"`
 }
 
 type aCacheCreation struct {
 	Ephemeral5m int `json:"ephemeral_5m_input_tokens"`
 	Ephemeral1h int `json:"ephemeral_1h_input_tokens"`
+}
+
+type aOutputDetails struct {
+	ThinkingTokens int `json:"thinking_tokens"`
 }
 
 func (u aUsage) usage() Usage {
@@ -1421,15 +1432,23 @@ func (u aUsage) usage() Usage {
 		out.CacheWrite = max(out.CacheWrite, c.Ephemeral5m+c.Ephemeral1h)
 		out.CacheWrite1h = c.Ephemeral1h
 	}
+	if d := u.OutputTokensDetails; d != nil {
+		out.Reasoning = d.ThinkingTokens
+	}
 	return out
 }
 
 // anthropic is the usage as Anthropic says it, the cache writes split by
-// how long they are kept when upstream reported TTLs or some were for an hour.
+// how long they are kept when upstream reported TTLs or some were for an
+// hour, and the thinking among the output tokens when the upstream counted
+// its reasoning.
 func (u Usage) anthropic() aUsage {
 	out := aUsage{InputTokens: u.Input, OutputTokens: u.Output, CacheReadInputTokens: u.CacheRead, CacheCreationInputTokens: u.CacheWrite}
 	if h := min(u.CacheWrite1h, u.CacheWrite); u.cacheCreationReported || h > 0 {
 		out.CacheCreation = &aCacheCreation{Ephemeral5m: u.CacheWrite - h, Ephemeral1h: h}
+	}
+	if u.Reasoning > 0 {
+		out.OutputTokensDetails = &aOutputDetails{ThinkingTokens: u.Reasoning}
 	}
 	return out
 }
