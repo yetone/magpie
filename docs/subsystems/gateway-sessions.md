@@ -418,7 +418,9 @@ affinity see the request as the client sent it. The existing protocol
 readers handle Chat, Anthropic, Responses and Gemini; streaming replies use the
 existing decoders, with completed Responses items retaining custom tool calls.
 Only content actually sent through the gateway is available. Images are shown
-as placeholders; hidden reasoning, client-only operations and unsupported wire
+as placeholders, their base64 taken out before the 8 MiB input cap
+(`leanImages`), so a turn of pictures keeps its text (matrix0487 on Discord;
+`TestFileIDConversationStillShows`); hidden reasoning, client-only operations and unsupported wire
 items cannot be reconstructed. This is not a raw request archive or remote
 session synchronization, and existing S3 archives are not imported.
 

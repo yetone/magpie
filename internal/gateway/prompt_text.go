@@ -47,6 +47,9 @@ type keptBody struct {
 // keepBody keeps a request's masked body for its prompt's text, dropping
 // the oldest past promptBodies or promptBodiesMax.
 func (t *trace) keepBody(id int64, from provider.Protocol, body []byte, plain bool) {
+	// its pictures kept apart, so a conversation of pictures keeps its
+	// text (leanImages)
+	body = leanImages(body, true)
 	if len(body) == 0 || len(body) > promptBodyMax {
 		return
 	}
@@ -175,7 +178,7 @@ var lastArchived struct {
 }
 
 func archivedMasked(id int64, body []byte) ([]byte, bool) {
-	if len(body) == 0 || len(body) > promptBodyMax {
+	if len(body) == 0 {
 		return nil, false
 	}
 	sum := sha256.Sum256(body)
@@ -186,6 +189,9 @@ func archivedMasked(id int64, body []byte) ([]byte, bool) {
 		return b, true
 	}
 	lastArchived.Unlock()
+	if body = leanImages(body, true); len(body) > promptBodyMax {
+		return nil, false
+	}
 	masked := maskedCopy(context.Background(), body)
 	if masked == nil {
 		return nil, false
@@ -323,6 +329,13 @@ func dataImage(u string) string {
 	head, data, ok := strings.Cut(u, ",")
 	if !ok || data == "" {
 		return ""
+	}
+	if ref, isRef := strings.CutPrefix(data, imageRef); isRef {
+		// a picture a lean body kept apart (leanImages)
+		if data, ok = keptImageOf(ref); !ok {
+			return ""
+		}
+		u = head + "," + data
 	}
 	switch strings.ToLower(head) {
 	case "data:image/png;base64", "data:image/jpeg;base64", "data:image/jpg;base64",
