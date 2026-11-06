@@ -47,6 +47,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -290,18 +291,36 @@ func nativeQuery(raw string) string {
 // nativeDropped are the caller's headers that never go to the vendor:
 // its auth (a gateway key in any place callerKeys reads one, and any
 // other credential), the browser's and a proxy's, the hop's own, and
-// magpie's. The rest go as they came.
+// magpie's; and what a proxy says of the caller (proxyIdentity). The rest
+// go as they came.
 var nativeDropped = map[string]bool{
 	"Authorization": true, "Proxy-Authorization": true, "X-Api-Key": true, "Api-Key": true, "X-Goog-Api-Key": true, "Cookie": true,
-	"Host": true, "Origin": true, "Referer": true, "Forwarded": true, "X-Real-Ip": true, "Via": true,
+	"Host": true, "Origin": true, "Referer": true,
 	"Connection": true, "Proxy-Connection": true, "Keep-Alive": true, "Te": true, "Trailer": true, "Transfer-Encoding": true, "Upgrade": true,
 	"Content-Length": true, "Accept-Encoding": true, "User-Agent": true,
 }
 
 func nativeHeaderDropped(k string) bool {
 	k = http.CanonicalHeaderKey(k)
-	return nativeDropped[k] || strings.HasPrefix(k, "X-Forwarded-") || strings.HasPrefix(k, "X-Magpie-") ||
-		strings.HasPrefix(k, "Sec-") || strings.HasPrefix(k, "Cf-")
+	return nativeDropped[k] || proxyIdentity(k) || strings.HasPrefix(k, "X-Magpie-") || strings.HasPrefix(k, "Sec-")
+}
+
+// proxyIdentity says k is what a proxy or tunnel in front of magpie says
+// of the caller: its address (every forwardHeaders entry, X-Forwarded-*,
+// Cloudflare's Cf-*) or who it is (Tailscale Serve's Tailscale-User-Login,
+// the user's email, -Name and -Profile-Pic). It is for magpie to judge a
+// request by (proxied), never for a vendor or a server magpie passes the
+// request on to.
+func proxyIdentity(k string) bool {
+	k = http.CanonicalHeaderKey(k)
+	if slices.ContainsFunc(forwardHeaders, func(h string) bool { return http.CanonicalHeaderKey(h) == k }) {
+		return true
+	}
+	switch k {
+	case "Forwarded", "Via", "X-Real-Ip", "True-Client-Ip", "X-Client-Ip", "X-Original-Forwarded-For":
+		return true
+	}
+	return strings.HasPrefix(k, "X-Forwarded-") || strings.HasPrefix(k, "Cf-") || strings.HasPrefix(k, "Tailscale-")
 }
 
 // nativeAnswerDropped are the vendor's answer headers that don't come

@@ -107,7 +107,8 @@ func (s *Server) mcpProxy(w http.ResponseWriter, r *http.Request) {
 			return nil, err
 		}
 		for k, v := range r.Header {
-			if mcpHop[http.CanonicalHeaderKey(k)] {
+			// nor what a proxy in front of magpie says of the caller
+			if mcpHop[http.CanonicalHeaderKey(k)] || proxyIdentity(k) {
 				continue
 			}
 			// the gateway's own key, which the caller check put there

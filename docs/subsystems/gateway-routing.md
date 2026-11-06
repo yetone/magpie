@@ -834,9 +834,17 @@ OpenAI shape can't carry. GET, POST, PUT, PATCH and DELETE
   base's. The mux redirects an unencoded `..` before the route sees it.
 - **Headers.** The caller's auth (`Authorization`, `Proxy-Authorization`,
   `x-api-key`, `api-key`, `x-goog-api-key`, `Cookie`), the browser's and
-  a proxy's (`Origin`, `Referer`, `Sec-*`, `X-Forwarded-*`, `Forwarded`,
-  `Cf-*`), the hop's own and `X-Magpie-*` are dropped (`nativeDropped`),
-  the gateway key's `?key=` too (`nativeQuery`); the rest go as they came.
+  a proxy's, the hop's own and `X-Magpie-*` are dropped
+  (`nativeHeaderDropped`), the gateway key's `?key=` too (`nativeQuery`);
+  the rest go as they came. What a proxy says of the caller is
+  `proxyIdentity`: every name lanGuard reads as forwarded
+  (`forwardHeaders`: `Forwarded`, `X-Forwarded-For`, `X-Real-IP`,
+  `Cf-Connecting-IP`, `True-Client-IP`, `Tailscale-User-Login`), any
+  `X-Forwarded-*`, `Cf-*` and `Tailscale-*` (Tailscale Serve's user
+  login, name and picture), `Via`, `X-Client-IP` and
+  `X-Original-Forwarded-For`. The Codex passthrough and relay to the
+  ChatGPT backend (`copyHeaders`) and the MCP proxy drop the same; see
+  `TestNativeAnyDropsProxyIdentity` and `TestPassthroughDropsProxyIdentity`.
   `Sign` puts in the provider's key as it takes one, and magpie's
   User-Agent goes in (`stampUA`). The answer's hop headers, `Set-Cookie`,
   `Alt-Svc` and HSTS don't come back (`nativeAnswerDropped`).
