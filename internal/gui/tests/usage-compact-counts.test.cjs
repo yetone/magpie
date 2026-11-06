@@ -4,7 +4,9 @@
 // in full (52,345,678), and the Requests total, the line over the list, the
 // ranking and the Routing page's counts said requests in full. Each says
 // fmtN's short form now (52M, 123K, or 5234.6 万 with Settings' 万 / 亿), and
-// its exact value on hover. In every language, both engines, at 1100 and
+// its exact value on hover. The chart's tooltip said a column's tokens in full
+// too (31,846,455 of 32,292,989, skyhuang1994 again) and says them short now,
+// as its axis does. In every language, both engines, at 1100 and
 // 420 wide; the API is faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -16,6 +18,12 @@ const assets = path.resolve(__dirname, "../assets");
 const now = Date.now();
 const IN = 1234567, OUT = 98765, READ = 52345678, WRITE = 400, CALLS = 123456;
 const ALL = IN + OUT + READ + WRITE;
+// the reporter's column: one model's tokens of the hour's total
+const COL = 31846455, COL_ALL = 32292989;
+const POINT = {
+  time: new Date(now - 60e3).toISOString(), calls: CALLS, errors: 0, input: COL_ALL, output: 0, cache_read: 0, cache_write: 0, cost: 2,
+  by: { model: { "claude-opus-5": { calls: CALLS, tokens: COL, cost: 2 } }, provider: { claude: { calls: CALLS, tokens: COL, cost: 2 } }, agent: { claude: { calls: CALLS, tokens: COL, cost: 2 } } },
+};
 const ROWS = [{
   t: new Date(now - 60e3).toISOString(), agent: "claude", agentName: "Claude Code", icon: "claudecode-color",
   provider: "claude", providerName: "Claude", providerAccount: "a@example.com", req: "claude-opus-5", model: "claude-opus-5", served: "claude-opus-5",
@@ -23,7 +31,7 @@ const ROWS = [{
 }];
 const tot = { calls: CALLS, errors: 0, input: IN, output: OUT, cache_read: READ, cache_write: WRITE, reasoning: 0, cost: 2, unpriced: 0 };
 const ledger = {
-  period: "today", rows: ROWS, offset: 0, total: CALLS, ...tot, bucket: "hour", series: [],
+  period: "today", rows: ROWS, offset: 0, total: CALLS, ...tot, bucket: "hour", series: [POINT],
   by: { provider: [{ id: "claude", name: "Claude", icon: "claude-color", ...tot }], agent: [{ id: "claude", name: "Claude Code", icon: "claudecode-color", ...tot }], model: [{ id: "claude-opus-5", name: "claude-opus-5", ...tot }] },
   agents: [{ id: "claude", name: "Claude Code", icon: "claudecode-color" }], providers: [{ id: "claude", name: "Claude", icon: "claude-color" }],
 };
@@ -58,8 +66,8 @@ function serve(lang, units) {
 
 const LOCALE = { en: "en", zh: "zh-CN", "zh-TW": "zh-TW", ja: "ja-JP", de: "de-DE" };
 // the short forms: K / M by default, 万 / 亿 in Chinese with Settings' units
-const KMB = { [IN]: "1.2M", [OUT]: "98.8K", [READ]: "52M", [CALLS]: "123K", [ALL]: "54M", 1234: "1.2K", 23456: "23.5K" };
-const WAN = { [IN]: "123.5 万", [OUT]: "9.9 万", [READ]: "5234.6 万", [CALLS]: "12.3 万", [ALL]: "5367.9 万", 1234: "1234", 23456: "2.3 万" };
+const KMB = { [COL]: "32M", [COL_ALL]: "32M", [COL_ALL - COL]: "447K", [IN]: "1.2M", [OUT]: "98.8K", [READ]: "52M", [CALLS]: "123K", [ALL]: "54M", 1234: "1.2K", 23456: "23.5K" };
+const WAN = { [COL]: "3184.6 万", [COL_ALL]: "3229.3 万", [COL_ALL - COL]: "44.7 万", [IN]: "123.5 万", [OUT]: "9.9 万", [READ]: "5234.6 万", [CALLS]: "12.3 万", [ALL]: "5367.9 万", 1234: "1234", 23456: "2.3 万" };
 const CASES = [...Object.keys(LOCALE).map((lang) => [lang, false]), ["zh", true], ["zh-TW", true]];
 const short = (lang, units, n) => units ? WAN[n].replace("万", lang === "zh-TW" ? "萬" : "万") : KMB[n];
 
@@ -101,6 +109,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             assert.equal((await val.textContent()).trim(), s(ALL), `${at}: the ranking's tokens`);
             assert.equal(await val.getAttribute("title"), x(ALL), `${at}: the ranking's tooltip`);
             assert.ok(!(await rank.textContent()).includes(x(CALLS)), `${at}: the ranking says requests in full`);
+            // the chart's tooltip over the column: the model, the rest, the total and its requests
+            await page.locator("#ledChart svg").hover();
+            const tip = page.locator("#ledChart .tip");
+            await tip.waitFor();
+            const said = await tip.locator("em").allTextContents();
+            const tipText = await tip.innerText();
+            assert.deepEqual(said.slice(0, 2), [s(COL), s(COL_ALL - COL)], `${at}: the tooltip says ${JSON.stringify(said)}`);
+            assert.ok(said[2]?.startsWith(s(COL_ALL) + " · ") && said[2].includes(s(CALLS)), `${at}: the tooltip's total says ${said[2]}`);
+            for (const n of [COL, COL_ALL, CALLS]) assert.ok(!tipText.includes(x(n)), `${at}: the tooltip says ${x(n)} in full: ${tipText}`);
+            await page.mouse.move(1, 1);
             let over = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
             assert.ok(over <= 1, `${at}: the Usage page is ${over}px past`);
 
