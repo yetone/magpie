@@ -3539,7 +3539,9 @@ var compactWithin = 4 * time.Minute
 //
 // A provider that answers the summary 404 — a relay that serves the
 // conversation turn by turn but not the summary of it, "Upstream request
-// failed" (#866) — or 405 or 501 (lacksEndpoint), or 400 for an item of it it doesn't have (#1008) is
+// failed" (#866) — or 405 or 501 (lacksEndpoint), or 400 for an item of it it doesn't have (#1008),
+// or a kind of item it doesn't take (inputKindRefused: Command Code's
+// "unsupported_input_item", #5181, #5259) is
 // asked once more with the conversation as plain text, none of its items'
 // ids or sealed reasoning in it; when that fails too the summary is
 // magpie's own, the conversation's user messages and last reply,
@@ -3615,7 +3617,7 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 	if late() {
 		local = lateSummary()
 		rec, res, err = &recorder{header: http.Header{}, status: 200}, compactResult{}, nil
-	} else if first := rec.status; lacksEndpoint(first) || itemNotFound(rec) || upstreamFailed(rec) || protectionRefused(first, rec.body.Bytes()) ||
+	} else if first := rec.status; lacksEndpoint(first) || itemNotFound(rec) || inputKindRefused(rec, err) || upstreamFailed(rec) || protectionRefused(first, rec.body.Bytes()) ||
 		summaryTooLarge(rec) || err != nil && protectionWords.MatchString(err.Error()) {
 		who, msg := compactFailure(body, rec)
 		if err != nil {
@@ -3858,6 +3860,30 @@ func itemNotFound(rec *recorder) bool {
 	return rec.status == http.StatusBadRequest && unreadableItem.Match(b) && bytes.Contains(bytes.ToLower(b), []byte("not found"))
 }
 
+// inputKindRefused is a summary request turned away for a kind of item in
+// its input the provider doesn't take, whatever else the conversation
+// holds: Command Code's /responses takes messages, function calls, their
+// outputs and reasoning, and answers anything else 400
+// "unsupported_input_item" with param "input" (#5181, Edward4226; #5259,
+// Mmx233, a Codex subagent's history), and Grok's backend an
+// agent_message 422 "unknown item type". It comes as that status, as
+// another magpie's message in front of it ("Remote magpie: Command Code:
+// {…}", a 400 or its 502), or as an error event in the summary's stream.
+// The conversation as text is messages alone, which it takes. A refusal
+// of the key or account (401, 403, 429) is no such answer.
+func inputKindRefused(rec *recorder, err error) bool {
+	switch rec.status {
+	case http.StatusBadRequest, http.StatusUnprocessableEntity, http.StatusBadGateway:
+	default:
+		if err == nil || rec.status >= 400 {
+			return false
+		}
+	}
+	return inputKindWords.Match(rec.body.Bytes())
+}
+
+var inputKindWords = regexp.MustCompile(`(?i)unsupported_input_item|unknown item type`)
+
 // compactFailure names who answered a summary request with a failure — the
 // provider, the model and the provider's base URL — and what it said.
 func compactFailure(body []byte, rec *recorder) (who, msg string) {
@@ -3904,6 +3930,11 @@ func itemText(it map[string]any) (role, text string) {
 	switch str(it["type"]) {
 	case "message", "":
 		return cmp.Or(str(it["role"]), "user"), parts(it["content"])
+	case "agent_message":
+		// a Codex subagent's task, or a message between agents: the
+		// user's turn for the agent that receives it, as a translated
+		// request reads it (#5259)
+		return "user", parts(it["content"])
 	case "function_call", "custom_tool_call":
 		return "tool call", str(it["name"]) + " " + cmp.Or(str(it["arguments"]), str(it["input"]))
 	case "function_call_output", "custom_tool_call_output":
