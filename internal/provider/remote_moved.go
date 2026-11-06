@@ -6,12 +6,23 @@ package provider
 // one, reached nothing until the user typed the new one in. So when B
 // can't connect to it at all, B looks for it on the networks it shares
 // with it: every address of the old one's /24 and of each of B's own
-// private IPv4 networks, at the port A served on. An address that takes
-// the connection is A when it answers the model list 200 for the
-// provider's own key: a gateway key is A's secret, and another magpie,
-// or anything else, answers 401 or isn't a magpie at all. One whose list
-// this magpie made (its magpie_via ends with catalog.Self, remote_self.go)
-// is this magpie and is passed over. The address found is saved as the
+// private IPv4 networks, at the port A served on.
+//
+// Whatever takes the connection there may be anyone's: on a café's or a
+// hotel's network, or with A simply off, any host listening on that port
+// would have been handed the provider's key in clear and, answering a
+// list, become the provider, given the user's prompts and files. So the
+// key, and the provider's own headers, go to no address that hasn't
+// proved first that it holds the key (proves): B sends a nonce of its
+// own and the key's id (sha256 of the key, RemoteKeyID) to
+// RemoteProvePath, which needs no key, and only a magpie with an enabled
+// gateway key of that id answers the HMAC of the nonce and the address
+// it was reached at (RemoteProof) under the key. Another magpie, an older
+// one without the route, and anything else answer nothing B can check,
+// and are passed over without a keyed request. An address that proved
+// is then asked its model list with the key; one whose list this magpie
+// made (its magpie_via ends with catalog.Self, remote_self.go) is this
+// magpie and is passed over. The address found is saved as the
 // provider's, as if the user had typed it, and the request or list that
 // failed is asked there.
 //
@@ -20,10 +31,17 @@ package provider
 // looked for. A look is made at most once a minute for each provider.
 
 import (
+	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"io"
 	"log"
 	"net"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
@@ -56,14 +74,10 @@ var seekMu sync.Mutex
 var seekLast = map[string]time.Time{}
 
 // seekAt is the addresses (host:port) a Remote magpie last at host:port
-// may be at now, nearest first. Tests give their own.
-// Nowhere, for now: a look sent the provider's gateway key to every
-// address on the network that took a connection at the port, and saved
-// the first that listed 200 for it, so anyone on a café's network
-// listening there got the key, and became the provider by answering.
-// lanNeighbours comes back once an address proves it holds the key
-// before the key is sent to it. Tests look where they say (SeekHere).
-var seekAt = func(host, port string) []string { return nil }
+// may be at now, nearest first. Tests give their own. Whatever takes the
+// connection at one is sent nothing keyed until it proves it holds the
+// key (isRemote, proves).
+var seekAt = lanNeighbours
 
 // SeekHere has every look made at ats alone, as if any look made before
 // were long ago, until restore: for the gateway's tests, whose Remote
@@ -167,7 +181,7 @@ func seekMoved(ctx context.Context, id string) (*Provider, bool) {
 		if ctx.Err() != nil {
 			return nil, false
 		}
-		if !isRemote(ctx, *p, u.Scheme+"://"+at) {
+		if !isRemote(ctx, *p, u.Scheme, at) {
 			continue
 		}
 		q, err := Find(id)
@@ -187,10 +201,14 @@ func seekMoved(ctx context.Context, id string) (*Provider, bool) {
 	return nil, false
 }
 
-// isRemote says the magpie at root is p's: it lists for p's key, and
-// isn't this magpie.
-func isRemote(ctx context.Context, p Provider, root string) bool {
-	p.Chat, p.Responses, p.Anthropic, p.Decide = root, "", "", ""
+// isRemote says the magpie at at is p's: it proves it holds p's key, then
+// lists for it, and isn't this magpie. The key goes out only after the
+// proof.
+func isRemote(ctx context.Context, p Provider, scheme, at string) bool {
+	if !proves(ctx, scheme, at, p.Key) {
+		return false
+	}
+	p.Chat, p.Responses, p.Anthropic, p.Decide = scheme+"://"+at, "", "", ""
 	p.remoteMagpieEndpoints()
 	b, err := remoteBody(ctx, p, "GET", "/v1/models", seekAnswer)
 	if err != nil {
@@ -211,6 +229,92 @@ func isRemote(ctx context.Context, p Provider, root string) bool {
 		}
 	}
 	return true
+}
+
+// RemoteProvePath is where a magpie proves, with no key sent to it, that
+// it holds a gateway key: POST {"nonce": hex, "key_id": RemoteKeyID(key)}
+// is answered {"proof": hex of RemoteProof(key, nonce, the address it was
+// reached at)}, or 404 when no enabled gateway key there has that id
+// (the gateway's remote_prove.go).
+const RemoteProvePath = "/v1/magpie/prove"
+
+// RemoteKeyID is the id a proof names key by: its sha256, in hex.
+func RemoteKeyID(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:])
+}
+
+// RemoteProof is what a magpie holding key, reached at at (host:port),
+// answers nonce with: HMAC-SHA256 under key of the nonce and the address.
+// The address is in it so that a host passing B's nonce on to the real
+// magpie elsewhere gets a proof for that magpie's address, not its own.
+func RemoteProof(key, nonce, at string) []byte {
+	m := hmac.New(sha256.New, []byte(key))
+	io.WriteString(m, "magpie-prove-v1\n"+nonce+"\n"+proofAt(at))
+	return m.Sum(nil)
+}
+
+// proofAt is at with its IP written one way (an IPv4 address mapped into
+// IPv6 as plain IPv4), as both sides of a proof write it.
+func proofAt(at string) string {
+	host, port, err := net.SplitHostPort(at)
+	if err != nil {
+		return at
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if v4 := ip.To4(); v4 != nil {
+			ip = v4
+		}
+		host = ip.String()
+	}
+	return net.JoinHostPort(host, port)
+}
+
+// proveClient asks for a proof straight at the address dialled, as
+// dialable dialled it (no proxy), and follows no redirect.
+var proveClient = func() *http.Client {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.Proxy = nil
+	return &http.Client{Transport: t, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+}()
+
+// proves says the magpie at at holds key: it answered a nonce of ours with
+// the proof only key's holder, reached at at, can make. Neither key nor
+// any header of the provider's own goes with the ask.
+func proves(ctx context.Context, scheme, at, key string) bool {
+	if key == "" {
+		return false
+	}
+	n := make([]byte, 32)
+	if _, err := rand.Read(n); err != nil {
+		return false
+	}
+	nonce := hex.EncodeToString(n)
+	body, _ := json.Marshal(map[string]string{"nonce": nonce, "key_id": RemoteKeyID(key)})
+	ctx, cancel := context.WithTimeout(ctx, seekAnswer)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, scheme+"://"+at+RemoteProvePath, bytes.NewReader(body))
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	res, err := proveClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return false
+	}
+	var out struct {
+		Proof string `json:"proof"`
+	}
+	if json.NewDecoder(io.LimitReader(res.Body, 4<<10)).Decode(&out) != nil {
+		return false
+	}
+	got, err := hex.DecodeString(out.Proof)
+	return err == nil && hmac.Equal(got, RemoteProof(key, nonce, at))
 }
 
 // dialable is the addresses of ats that take a connection, in ats' order.

@@ -43,6 +43,8 @@ var readOnlyRoutes = map[string]bool{
 	"GET " + OwnMCPPath:               true,
 	"GET " + KeyPagePath:              true,
 	"GET " + keyPageData:              true,
+	// a proof carries no key, and answers none (remote_prove.go)
+	"POST " + provider.RemoteProvePath: true,
 }
 
 // ReadOnlyCode is the error code a read-only key is refused a route with.

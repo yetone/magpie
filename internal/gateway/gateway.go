@@ -988,6 +988,9 @@ func (s *Server) routes() *routeMux {
 	// and one traded for an OIDC token, by a rule the user wrote
 	// (oidc_keys.go)
 	mux.HandleFunc("POST "+OIDCKeysPath, s.oidcIssueKey)
+	// a magpie's proof that it holds a gateway key, asked with no key by
+	// another magpie looking for it at a new address (remote_prove.go)
+	mux.HandleFunc("POST "+provider.RemoteProvePath, s.prove)
 	mux.HandleFunc("GET "+KeyPagePath, s.keyPage)
 	mux.HandleFunc("GET "+keyPageData, s.keyInfo)
 	// the Claude Code processes the Claude subscription runs, for magpie

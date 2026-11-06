@@ -626,6 +626,49 @@ func Authenticate(secret string) (Identity, bool) {
 	return who, err == nil
 }
 
+// ProveSecret is the enabled gateway key whose sha256 is id (hex), for a
+// magpie's proof that it holds the key (provider.RemoteProvePath): one
+// Authenticate takes, found by constant-time compares over every key, so
+// which one matched, or whether any did, takes no different time. A key
+// turned off, expired or whose issuer no longer lets it in, and a store
+// that can't be read, have none.
+func ProveSecret(id string) (string, bool) {
+	want, err := hex.DecodeString(id)
+	if err != nil || len(want) != sha256.Size {
+		return "", false
+	}
+	mu.Lock()
+	keys, err := load()
+	s := settings.Load()
+	mu.Unlock()
+	if err != nil {
+		return "", false
+	}
+	secrets := make([]string, 0, len(keys)+1)
+	for _, k := range keys {
+		secrets = append(secrets, k.Secret)
+	}
+	// the sharing key an older magpie kept in the settings alone, which
+	// Check takes while the store has none marked
+	if s.LANKey != "" {
+		secrets = append(secrets, s.LANKey)
+	}
+	found := ""
+	for _, secret := range secrets {
+		sum := sha256.Sum256([]byte(secret))
+		if subtle.ConstantTimeCompare(sum[:], want) == 1 && secret != "" && found == "" {
+			found = secret
+		}
+	}
+	if found == "" {
+		return "", false
+	}
+	if _, err := Check(found); err != nil {
+		return "", false
+	}
+	return found, true
+}
+
 // On: the key with this id is one Authenticate takes, in the store and not
 // turned off, or the legacy sharing key not yet written there; false when
 // the store can't be read.

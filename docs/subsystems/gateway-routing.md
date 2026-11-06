@@ -1059,8 +1059,9 @@ the rule's key, named `repo@ref (run N)`, living no longer than the rule,
 so everything above about issued keys holds: bounded by its issuer, its
 spend counts against it, turning the issuer off stops both.
 
-The route is the one exemption from `remoteKeyed` in `lanGuard`
-(`oidcExchange`: that exact path, POST, no gateway key). It is answered
+The route is one of two keyless exemptions from the key check in `lanGuard`
+(`oidcExchange`: that exact path, POST, no gateway key); the other is a
+magpie's proof, below. It is answered
 only while magpie is shared and past the allow list, and a refused token
 counts against `tooManyAuthFails` as a wrong key does. A read-only key is
 refused it. Covered by `TestOIDCTokenTradedForKey`
@@ -1068,6 +1069,24 @@ refused it. Covered by `TestOIDCTokenTradedForKey`
 `TestMatchEachCheck`, `TestKeysCachedAndKept`, `TestUnreadKeysLetNothingIn`
 and `TestAddRefuses` ([`oidc_test.go`](../../internal/oidc/oidc_test.go)).
 Not tried: a real GitHub Actions run against a shared magpie.
+
+`POST /v1/magpie/prove` (`provider.RemoteProvePath`,
+[`remote_prove.go`](../../internal/gateway/remote_prove.go)) is how another
+magpie looking for this one at a new address (providers-accounts, "A remote
+magpie that moved") learns it holds that magpie's gateway key before
+sending it: `{"nonce", "key_id"}` with `key_id` the key's sha256 in hex,
+answered `{"proof"}`, HMAC-SHA256 under the key of the nonce and the
+address the connection reached (`provider.RemoteProof`), or 404 when no
+enabled key has that id (`access.ProveSecret`). It carries no key, so
+`lanGuard` lets it by (`proveAsked`: that exact path, POST, no gateway key)
+only while magpie is shared and past the allow list, the rebinding check
+and the not-shared refusal still first; `corsGuard` still judges its
+Origin, and the handler refuses anything from a browser (`fromBrowser`). An
+unknown id from another machine counts against `tooManyAuthFails`. Only a
+caller that already has the key's sha256 gets a proof, for a nonce and
+address of its own choosing under a key it doesn't hold. Covered by
+`TestRemoteProveAnswersOnlyTheKeysHolder`
+([`remote_moved_test.go`](../../internal/gateway/remote_moved_test.go)).
 
 ### The stats and management API
 

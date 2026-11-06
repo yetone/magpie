@@ -490,6 +490,13 @@ func lanGuard(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		// a magpie's proof that it holds a key is asked with none: the
+		// handler answers only a key's holder, refuses a browser, and
+		// counts an unknown key against tooManyAuthFails (remote_prove.go)
+		if remote && proveAsked(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		if remote || managedKey(r) {
 			var ok bool
 			r, ok = identifyCaller(w, r)
