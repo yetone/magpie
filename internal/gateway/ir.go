@@ -445,6 +445,10 @@ type Event struct {
 	// StopDetails: Anthropic's stop_details, what its classifier said of
 	// a refusal (#1768), carried to the client as it came
 	StopDetails json.RawMessage
+	// Estimated: the vendor's estimated_tokens on an empty thinking_delta,
+	// its live progress beat during a long think (#5390); nil when the
+	// delta carried none
+	Estimated *int
 
 	// Wait: for KError, how long the vendor said to wait before asking
 	// again, when it said; sent on as Retry-After

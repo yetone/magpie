@@ -1310,12 +1310,13 @@ func decodeAnthropic(data string, emit func(Event)) error {
 			Signature string `json:"signature"`
 		} `json:"content_block"`
 		Delta struct {
-			Type        string `json:"type"`
-			Text        string `json:"text"`
-			PartialJSON string `json:"partial_json"`
-			Thinking    string `json:"thinking"`
-			Signature   string `json:"signature"`
-			StopReason  string `json:"stop_reason"`
+			Type            string `json:"type"`
+			Text            string `json:"text"`
+			PartialJSON     string `json:"partial_json"`
+			Thinking        string `json:"thinking"`
+			EstimatedTokens *int   `json:"estimated_tokens"`
+			Signature       string `json:"signature"`
+			StopReason      string `json:"stop_reason"`
 			// auto mode's review of the reply's calls (automode.go)
 			SafeguardResults json.RawMessage `json:"safeguard_results"`
 			StopDetails      json.RawMessage `json:"stop_details"`
@@ -1371,7 +1372,7 @@ func decodeAnthropic(data string, emit func(Event)) error {
 		case "input_json_delta":
 			emit(Event{Kind: KToolArgs, Text: ev.Delta.PartialJSON})
 		case "thinking_delta":
-			emit(Event{Kind: KThink, Text: ev.Delta.Thinking})
+			emit(Event{Kind: KThink, Text: ev.Delta.Thinking, Estimated: ev.Delta.EstimatedTokens})
 		case "signature_delta":
 			emit(Event{Kind: KSig, Name: sealAnthropic, Text: ev.Delta.Signature})
 		}
@@ -1666,10 +1667,22 @@ func (e *anthropicEncoder) event(ev Event) {
 		return
 	case KThink:
 		if ev.Text == "" {
+			if ev.Estimated == nil {
+				return
+			}
+			// an empty thinking delta that carries the vendor's progress
+			// count goes to the client as it came: the live beat that says
+			// the think is moving, not silence (#5390)
+			e.thinking()
+			e.delta(map[string]any{"type": "thinking_delta", "thinking": "", "estimated_tokens": *ev.Estimated})
 			return
 		}
 		e.thinking()
-		e.delta(map[string]any{"type": "thinking_delta", "thinking": ev.Text})
+		d := map[string]any{"type": "thinking_delta", "thinking": ev.Text}
+		if ev.Estimated != nil {
+			d["estimated_tokens"] = *ev.Estimated
+		}
+		e.delta(d)
 	case KSig:
 		// a block signed with no text goes as it came, signed (#1445)
 		if e.open == Thinking || e.fresh {
