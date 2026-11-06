@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"maps"
 	"slices"
 
 	"github.com/yetone/magpie/internal/edit"
@@ -37,6 +38,17 @@ func openCodeNative(block any) any {
 		out["package"] = "aisdk:" + npm
 	}
 	if o, ok := b["options"]; ok {
+		// setCacheKey is no setting of the package's but OpenCode 2's
+		// supportsPromptCacheKey, for the whole provider (migrate.ts,
+		// migrateStandardProvider; #5468)
+		if om, ok := o.(map[string]any); ok {
+			if ck, has := om["setCacheKey"]; has {
+				out["compatibility"] = map[string]any{"supportsPromptCacheKey": ck}
+				om = maps.Clone(om)
+				delete(om, "setCacheKey")
+				o = om
+			}
+		}
 		out["settings"] = o
 	}
 	// in the order magpie lists them (#4575): OpenCode lists a provider's
@@ -107,6 +119,11 @@ func openCodeNativeVariant(id string, opts any) orderedJSON {
 func openCodeNativeKept(path string, block func() any) func() any {
 	return theirsKept(path, openCodeNativeKey, func() any {
 		v := openCodeNative(block())
+		// a supportsPromptCacheKey the file has already is the user's
+		// (#5468)
+		if _, set := edit.GetJSON(path, openCodeNativeKey+".compatibility.supportsPromptCacheKey"); set {
+			v = withoutOption(v, "compatibility", "supportsPromptCacheKey")
+		}
 		raw, ok := edit.GetJSON(path, openCodeNativeKey+".models")
 		if !ok {
 			return v

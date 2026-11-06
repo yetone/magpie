@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -585,8 +586,15 @@ func magpieProviderJSONAt(shape, catalog, gw string) any {
 			}
 			ms = append(ms, jsonPair{m.ID, e})
 		}
+		// setCacheKey: without it OpenCode sends no prompt_cache_key, and an
+		// upstream that caches by it misses every turn (#5468): OpenCode
+		// 2.1.4 and later read it as compatibility.supportsPromptCacheKey
+		// (v1/config/migrate.ts) and send the session's prompt_cache_key,
+		// OpenCode 1 its camelCase promptCacheKey (the gateway's
+		// cacheKeyCamel), and 2.0.25 leaves it be. A setCacheKey of the
+		// user's own stays (openCodeKept)
 		return map[string]any{"npm": "@ai-sdk/openai-compatible", "name": "magpie",
-			"options": map[string]any{"baseURL": gw + "/v1", "apiKey": openCodeKeyAt(catalog, gw)}, "models": ms}
+			"options": map[string]any{"baseURL": gw + "/v1", "apiKey": openCodeKeyAt(catalog, gw), "setCacheKey": true}, "models": ms}
 	case "crush":
 		var ms []map[string]any
 		for _, m := range models {
@@ -664,9 +672,14 @@ func piBlockKept(path string, value func() any) func() any {
 // they wrote over under a name of magpie's stays theirs. A variant as magpie
 // writes it under its name is magpie's: one the model has no longer, a
 // level gone or a fast mode lost, goes.
+//
+// A setCacheKey the file has already is the user's, false too (#5468).
 func openCodeKept(path string, value func() any) func() any {
 	return theirsKept(path, "provider."+magpieID, func() any {
 		v := value()
+		if _, set := edit.GetJSON(path, "provider."+magpieID+".options.setCacheKey"); set {
+			v = withoutOption(v, "options", "setCacheKey")
+		}
 		raw, ok := edit.GetJSON(path, "provider."+magpieID+".models")
 		if !ok {
 			return v
@@ -704,6 +717,29 @@ func openCodeKept(path string, value func() any) func() any {
 		}
 		return v
 	}, "models")
+}
+
+// withoutOption is magpie's provider block v without key in its object
+// under in, for a value the user set there themselves: a copy, so a block
+// another writer holds is left as it was; in goes when nothing else is in it.
+func withoutOption(v any, in, key string) any {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return v
+	}
+	o, ok := m[in].(map[string]any)
+	if !ok {
+		return v
+	}
+	out := maps.Clone(m)
+	o = maps.Clone(o)
+	delete(o, key)
+	if len(o) == 0 {
+		delete(out, in)
+	} else {
+		out[in] = o
+	}
+	return out
 }
 
 // objectPairs are a JSON object's keys and values in the order it lists

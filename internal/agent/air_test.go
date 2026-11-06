@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -228,7 +229,8 @@ func TestAirProviderWritesKeepCustomFields(t *testing.T) {
 				}
 				want := magpieProviderJSONFor("opencode", "air").(map[string]any)
 				for k, v := range want["options"].(map[string]any) {
-					if got, _ := edit.GetJSON(cfg, "provider.magpie.options."+k); got != v {
+					// a string as it is, any other value as its JSON
+					if got, _ := edit.GetJSON(cfg, "provider.magpie.options."+k); got != fmt.Sprint(v) {
 						t.Errorf("options.%s = %q, want %v", k, got, v)
 					}
 				}
