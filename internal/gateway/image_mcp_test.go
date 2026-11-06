@@ -124,7 +124,7 @@ func TestImageMCPDrawsAndServesTheImage(t *testing.T) {
 	if strings.Join(names, ",") != "generate_image,generate_video,generation_result" || len(list.Result.Tools[0].InputSchema.Properties) != len(ImageToolProps(""))+1 {
 		t.Fatalf("tools: %s", w.Body.String())
 	}
-	m := readImageReply(t, imagePost(h, "127.0.0.1:5000", imageToolCall(GenerateImageTool, map[string]any{"prompt": "a magpie", "size": "1024x1024"})))
+	m := readImageReply(t, imagePost(h, "127.0.0.1:5000", imageToolCall(GenerateImageTool, map[string]any{"prompt": "a magpie", "size": "1024x1024", "complexity": "low"})))
 	if m.Result.IsError || len(m.Result.Content) != 2 {
 		t.Fatalf("drawn: %+v", m)
 	}
@@ -133,7 +133,7 @@ func TestImageMCPDrawsAndServesTheImage(t *testing.T) {
 		t.Fatalf("image content %+v", img)
 	}
 	sent := e.got("/v1/images/generations")
-	if len(sent) != 1 || !strings.Contains(sent[0], `"prompt":"a magpie"`) || !strings.Contains(sent[0], `"size":"1024x1024"`) {
+	if len(sent) != 1 || !strings.Contains(sent[0], `"prompt":"a magpie"`) || !strings.Contains(sent[0], `"size":"1024x1024"`) || !strings.Contains(sent[0], `"complexity":"low"`) {
 		t.Fatalf("vendor was sent %v", sent)
 	}
 	urls := urlsIn(m.Result.Content[0].Text)

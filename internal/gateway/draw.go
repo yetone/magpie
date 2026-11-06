@@ -591,6 +591,10 @@ func (p picture) dataURL() string {
 // drawing is one images request, whichever shape it came in.
 type drawing struct {
 	Model, Prompt, Size, Quality, Background, Format string
+	// Complexity is GPT Image 2.6's complexity (low, medium, high): sent
+	// as given to an images API that takes OpenAI's fields, never to a
+	// ChatGPT account's, whose backend ignores it
+	Complexity string
 	// Want is the response_format the caller asked for: with "b64_json"
 	// an image a vendor gave only a URL for is fetched (inline)
 	Want   string
@@ -610,7 +614,7 @@ type drawing struct {
 }
 
 // drawingRead are the fields of an images request magpie reads itself.
-var drawingRead = []string{"model", "prompt", "size", "quality", "background", "output_format", "response_format", "n", "image", "image[]", "images", "mask", "markup", "user"}
+var drawingRead = []string{"model", "prompt", "size", "quality", "complexity", "background", "output_format", "response_format", "n", "image", "image[]", "images", "mask", "markup", "user"}
 
 // extraOf keeps v as one of d's Extra under k, unless magpie reads k.
 func (d *drawing) extraOf(k string, v any) {
@@ -932,6 +936,7 @@ func readDrawing(r *http.Request) (drawing, error) {
 		}
 		d.Model, d.Prompt, d.Size, d.Quality, d.Background, d.Format, d.Want = get("model"), get("prompt"), get("size"), get("quality"), get("background"), get("output_format"), get("response_format")
 		d.N, _ = strconv.Atoi(get("n"))
+		d.Complexity = get("complexity")
 		d.Form = true
 		for k := range f.Value {
 			d.extraOf(k, get(k))
@@ -969,6 +974,7 @@ func readDrawing(r *http.Request) (drawing, error) {
 			Prompt         string          `json:"prompt"`
 			Size           string          `json:"size"`
 			Quality        string          `json:"quality"`
+			Complexity     string          `json:"complexity"`
 			Background     string          `json:"background"`
 			Format         string          `json:"output_format"`
 			N              int             `json:"n"`
@@ -981,7 +987,7 @@ func readDrawing(r *http.Request) (drawing, error) {
 		if err := json.Unmarshal(body, &in); err != nil {
 			return d, fmt.Errorf("the request isn't JSON: %v", err)
 		}
-		d = drawing{Model: in.Model, Prompt: in.Prompt, Size: in.Size, Quality: in.Quality, Background: in.Background, Format: in.Format, Want: strings.TrimSpace(in.ResponseFormat), N: in.N}
+		d = drawing{Model: in.Model, Prompt: in.Prompt, Size: in.Size, Quality: in.Quality, Complexity: strings.TrimSpace(in.Complexity), Background: in.Background, Format: in.Format, Want: strings.TrimSpace(in.ResponseFormat), N: in.N}
 		var all map[string]any
 		json.Unmarshal(body, &all)
 		for k, v := range all {
@@ -1577,6 +1583,8 @@ func (s *Server) drawImages(ctx context.Context, p provider.Provider, model stri
 		if drawsCopilot(p) {
 			// Copilot CLI sends model, prompt, size and quality
 			fields = map[string]string{"size": d.Size, "quality": d.Quality}
+		} else if !drawsCodex(p) {
+			fields["complexity"] = d.Complexity
 		}
 		for k, v := range fields {
 			if v != "" {
@@ -1618,7 +1626,7 @@ func (s *Server) drawImages(ctx context.Context, p provider.Provider, model stri
 	} else {
 		var buf bytes.Buffer
 		mw := multipart.NewWriter(&buf)
-		for k, v := range map[string]string{"model": model, "prompt": d.Prompt, "n": strconv.Itoa(d.N), "size": d.Size, "quality": d.Quality, "background": d.Background, "output_format": d.Format} {
+		for k, v := range map[string]string{"model": model, "prompt": d.Prompt, "n": strconv.Itoa(d.N), "size": d.Size, "quality": d.Quality, "complexity": d.Complexity, "background": d.Background, "output_format": d.Format} {
 			if v != "" {
 				mw.WriteField(k, v)
 			}

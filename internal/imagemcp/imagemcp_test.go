@@ -536,8 +536,8 @@ func TestGenerateTakesTheModel(t *testing.T) {
 	project := t.TempDir()
 	c := start(t, g, project)
 	c.call("initialize", map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{"roots": map[string]any{}}, "clientInfo": map[string]any{"name": "claude-code", "version": "2.1.0"}})
-	r := c.call("tools/call", map[string]any{"name": "generate_image", "arguments": map[string]any{"prompt": "a magpie", "model": "painter"}})
-	if r["isError"] == true || len(g.body) != 1 || !strings.Contains(g.body[0], `"model":"art/painter"`) {
+	r := c.call("tools/call", map[string]any{"name": "generate_image", "arguments": map[string]any{"prompt": "a magpie", "model": "painter", "complexity": "low"}})
+	if r["isError"] == true || len(g.body) != 1 || !strings.Contains(g.body[0], `"model":"art/painter"`) || !strings.Contains(g.body[0], `"complexity":"low"`) {
 		t.Fatalf("%v: asked %v", r, g.body)
 	}
 	r = c.call("tools/call", map[string]any{"name": "generate_image", "arguments": map[string]any{"prompt": "a magpie", "model": "art/nope"}})

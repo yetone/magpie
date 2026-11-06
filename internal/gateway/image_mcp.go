@@ -81,7 +81,8 @@ func ImageToolProps(images string) map[string]any {
 		"size":             map[string]any{"type": "string", "description": "WIDTHxHEIGHT (1024x1024, 1536x1024, 1024x1536) or an aspect ratio (16:9). Default: the model's."},
 		"n":                map[string]any{"type": "integer", "minimum": 1, "maximum": 4, "description": "How many images (default 1)."},
 		"reference_images": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Images to edit or draw from: " + images + "."},
-		"quality":          map[string]any{"type": "string", "description": "low, medium, high or auto, for models that take it."},
+		"quality":          map[string]any{"type": "string", "description": "low, medium, high, xhigh, max or auto, for models that take it (xhigh and max: GPT Image 2.5 and later)."},
+		"complexity":       map[string]any{"type": "string", "description": "low, medium or high: how much detail GPT Image 2.6 and later put in (default high)."},
 		"background":       map[string]any{"type": "string", "description": "transparent, opaque or auto, for models that take it."},
 	}
 }
@@ -280,6 +281,7 @@ func (s *Server) imageMCPDraw(r *http.Request, raw json.RawMessage) map[string]a
 		N          int      `json:"n"`
 		References []string `json:"reference_images"`
 		Quality    string   `json:"quality"`
+		Complexity string   `json:"complexity"`
 		Background string   `json:"background"`
 	}
 	if err := json.Unmarshal(raw, &a); err != nil {
@@ -298,7 +300,7 @@ func (s *Server) imageMCPDraw(r *http.Request, raw json.RawMessage) map[string]a
 		}
 		req["model"] = ref
 	}
-	for k, v := range map[string]string{"size": a.Size, "quality": a.Quality, "background": a.Background} {
+	for k, v := range map[string]string{"size": a.Size, "quality": a.Quality, "complexity": a.Complexity, "background": a.Background} {
 		if v != "" {
 			req[k] = v
 		}
