@@ -6457,7 +6457,16 @@ function routingPage(part) {
     const edit = el("button", "text", t("Edit"));
     edit.onclick = (e) => { e.stopPropagation(); open(); };
     const open = () => openGroupEditor(g);
-    row.onclick = open;
+    // words dragged across on the card are being selected to copy
+    // (jiabubu on Discord), not a click that opens the editor; a click
+    // with something else selected still opens it
+    let selAtDown = "";
+    row.onpointerdown = () => { selAtDown = String(getSelection() || ""); };
+    row.onclick = () => {
+      const s = getSelection();
+      if (s && !s.isCollapsed && row.contains(s.focusNode) && String(s) !== selAtDown) return;
+      open();
+    };
     row.oncontextmenu = (e) => { e.preventDefault(); groupMenu(ics, g); };
     row.append(ics, main, tags, edit);
     // a group of the user's switches off as a whole, kept as it is (PAMI
