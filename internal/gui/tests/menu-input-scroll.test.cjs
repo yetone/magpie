@@ -70,7 +70,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       const group = page.locator(".rt-group").first();
       await group.waitFor();
       await press(page, group.locator("button", { hasText: words[lang].edit }));

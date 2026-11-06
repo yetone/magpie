@@ -55,6 +55,9 @@ func TestUnlistedModelsSaid(t *testing.T) {
 	if v := mainView(url.Values{"view": {"routing"}, "newgroup": {"hunyuan/hy4"}}); v != "routing&newgroup=hunyuan%2Fhy4" {
 		t.Fatalf("window view %q", v)
 	}
+	if v := mainView(url.Values{"view": {"groups"}, "newgroup": {"hunyuan/hy4"}}); v != "groups&newgroup=hunyuan%2Fhy4" {
+		t.Fatalf("window view %q", v)
+	}
 	if v := mainView(url.Values{"view": {"settings"}, "newgroup": {"x/y"}}); v != "settings" {
 		t.Fatalf("window view %q", v)
 	}

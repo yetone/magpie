@@ -61,7 +61,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator(".top #nav").count(), 0, "and not in the header");
       assert.deepEqual(await page.locator("#nav .nav-gl:visible").allTextContents(), w.groups);
       assert.deepEqual(await page.locator("#nav button[data-view]").evaluateAll((bs) => bs.map((b) => b.dataset.view)),
-        ["agents", "sessions", "library", "providers", "routing", "gateway", "usage", "masking", "plugins"]);
+        ["agents", "sessions", "library", "providers", "routing", "groups", "gateway", "usage", "masking", "plugins"]);
       assert.ok(await page.locator("#side .side-foot #prefs").isVisible(), "Settings at the sidebar's foot");
       assert.equal((await page.locator("#prefs .side-l").textContent()).trim(), w.settings);
       // no page's name or group cut, and nothing scrolls sideways

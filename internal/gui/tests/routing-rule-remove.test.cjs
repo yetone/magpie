@@ -122,13 +122,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       test(`${engine} ${lang} ${width}: a rule's ⋯ is there to remove it, and a rule with no condition says how`, async (t) => {
         const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
         t.after(() => browser.close());
-        const page = await (await browser.newContext({ viewport: { width, height: 1400 } })).newPage();
+        const page = await (await browser.newContext({ viewport: { width, height: 1400 }, reducedMotion: "reduce" })).newPage();
         page.setDefaultTimeout(5000);
         page.setDefaultNavigationTimeout(60000);
         const errors = [], posts = [];
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", serve(lang, posts));
-        await page.goto("http://magpie.test/?view=routing");
+        await page.goto("http://magpie.test/?view=groups");
 
         // the ⋯ is drawn with the pointer off the rule, and Remove rule
         // under it takes the rule out

@@ -270,20 +270,18 @@
 .rt-accts:where(.max460, .max560) li > em { text-align: left; }
 :where(.rt.max560) .rt-stats { gap: 14px; }
 /* the Routing view */
-#view-routing .row-head { margin: 14px 0 6px; padding: 0 2px; gap: 0; }
-#view-routing .row-head .note { font-size: 11px; color: var(--faint); margin-left: 8px; }
+/* the Routing view, and the Routing groups view beside it */
+:is(#view-routing, #view-groups) .row-head { margin: 14px 0 6px; padding: 0 2px; gap: 0; }
+:is(#view-routing, #view-groups) .row-head .note { font-size: 11px; color: var(--faint); margin-left: 8px; }
 #view-routing .row-head .rt-livedot + .note { margin-left: 8px; }
-.rt-newgroup, .rt-gogroups { display: inline-flex; align-items: center; gap: 5px; }
-.rt-newgroup svg, .rt-gogroups svg { width: 13px; height: 13px; flex: none; }
-/* the routing groups, far below with many models: the head goes to them */
-.rt-gogroups { margin-right: 6px; flex: none; }
-.rt-gogroups[data-fit="icon"] > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.rt-gogroups[data-fit="none"] { display: none; }
-.rt-gsec:focus { outline: none; }
-/* the routing groups' New group, at the top too: the groups sit below the
-   requests, out of sight on a first look (#944) */
-.rt-newgroup { margin-right: 6px; }
 .rt-gnew { display: inline-flex; align-items: center; gap: 4px; }
+/* the groups page's toolbar: the filter first, then how many */
+.rt-gsec > .row-head:first-child .rt-gfilter { flex: 0 1 300px; width: auto; margin: 0; }
+.rt-gsec > .row-head:first-child .rt-gcount { margin-left: 10px; white-space: nowrap; }
+.rt-gsec > .row-head:first-child .rt-gfilter + .rt-gcount { margin-left: 10px; }
+/* the settings for every group, a card under the list */
+.rt-gset > :is(.rt-gfound, .rt-gnames) { padding: 12px 14px; }
+.rt-gset > .rt-gnames { border-top: 1px solid var(--line-2); }
 /* an email, hidden: stand-in letters of its shape, softly blurred —
    coming in out of focus when asked for */
 .pii { filter: blur(2.2px); opacity: .5; user-select: none; }
@@ -549,7 +547,7 @@ button.rt-session { cursor: pointer; }
 /* it pulses while a request is under way only (#2827) */
 @media (prefers-reduced-motion: reduce) { .rt-livedot.on::after { animation: none; } }
 /* routing groups, and the providers routing over several of their own */
-.rt-gsec { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin-top: 16px; }
+.rt-gsec { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
 .rt-gsec .row-head .note { margin-right: 6px; }
 /* the groups filtered by name and model, beside Select and New group */
 .rt-gsec .rt-gfilter { width: 190px; min-width: 0; flex: 0 1 190px; height: 24px; margin: 0 6px 0 4px; }
@@ -741,11 +739,11 @@ body.window .rt-gedit > .bar { --vfoot: 8px; }
 }
 .rt-gsec .segs .opt { white-space: nowrap; }
 /* the groups, in a page 520px wide or less */
-:where(.rt-more.max520) .rt-gsec .row-head .note { display: none; }
-:where(.rt-more.max520) .rt-gsec .rt-gfilter { flex: 1 1 auto; width: auto; }
-:where(.rt-more.max520) .rt-gedit { grid-template-columns: minmax(0, 1fr); gap: 4px; }
-:where(.rt-more.max520) .rt-gedit label { text-align: left; padding-top: 8px; }
-:where(.rt-more.max520) .rt-gedit .segs .opt { padding-left: 9px; padding-right: 9px; }
+:where(.rt-gpage.max520) .rt-gsec .row-head .note { display: none; }
+:where(.rt-gpage.max520) .rt-gsec .rt-gfilter { flex: 1 1 auto; width: auto; }
+:where(.rt-gpage.max520) .rt-gedit { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+:where(.rt-gpage.max520) .rt-gedit label { text-align: left; padding-top: 8px; }
+:where(.rt-gpage.max520) .rt-gedit .segs .opt { padding-left: 9px; padding-right: 9px; }
 /* the models and patterns take the column's width and no more: a grid's
    auto track grows to its widest row's content, so a long model name with
    its chips pushed the rows past the editor's edge, cut off there, and

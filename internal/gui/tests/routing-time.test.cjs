@@ -84,12 +84,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.route("**/*", serve(lang, posts));
       await page.goto("http://magpie.test/?view=routing");
       const group = page.locator(".rt-group").first();
-      await group.waitFor();
+      await group.waitFor({ state: "attached" });
 
       // the trace: the rule that matched, told by its hours
       await page.waitForFunction((s) => document.documentElement.innerText.includes(s), w.cond);
       const said = await page.evaluate(() => document.documentElement.innerText);
       assert(said.includes(w.story), `the rule that matched is told: ${said.slice(0, 400)}`);
+      await page.evaluate(() => window.show("groups"));
+      await group.waitFor();
 
       // the group's rule, in words
       const title = await group.evaluate((g) => [...g.querySelectorAll("[title]")].map((e) => e.title).join("\n"));
@@ -111,7 +113,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // reader wheels Add a rule into view first: the editor runs past the
       // fold since the hints under Routing (a click's scroll is put back)
       const wheelTo = async (x) => {
-        const d = await x.evaluate((e) => { const v = document.querySelector("#view-routing");
+        const d = await x.evaluate((e) => { const v = document.querySelector("#view-groups");
           return Math.round(e.getBoundingClientRect().top - v.getBoundingClientRect().top - v.clientHeight / 2); });
         await page.mouse.move(550, 400);
         await page.mouse.wheel(0, d);

@@ -74,7 +74,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const errors = [], posts = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang, posts));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       const card = page.locator(".rt-group", { hasText: "Sol" });
       const ed = page.locator(".rt-gedit"), head = ed.locator(".ehead");
       const closed = () => page.waitForFunction(() => !document.querySelector(".rt-gedit") && document.querySelector(".rt-group"));

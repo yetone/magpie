@@ -152,7 +152,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator("#quotaMode .opt").nth(0).click();
 
         // a routing group's row
-        await page.goto("http://magpie.test/?view=routing");
+        await page.goto("http://magpie.test/?view=groups");
         const line = page.locator('.rt-groups > .rt-group[data-id="glm"] .rt-gquota');
         await line.waitFor();
         const said = await line.textContent();

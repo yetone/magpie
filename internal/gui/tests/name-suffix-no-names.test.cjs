@@ -92,7 +92,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await sub.waitFor();
         assert.equal(await sub.textContent(), said[lang]);
         assert.equal(await overflows(page), false, "the page scrolls sideways");
-        await page.goto("http://magpie.test/?view=routing");
+        await page.goto("http://magpie.test/?view=groups");
         const note = page.locator(".rt-gnames .no-names");
         await note.waitFor();
         assert.equal(await note.textContent(), said[lang]);
@@ -123,7 +123,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const note = page.locator(".mnames:not([hidden]) .msuffix .no-names");
     await note.waitFor();
     assert.equal(await note.textContent(), said.en);
-    for (const [view, sel] of [["routing", ".rt-gnames .no-names"], ["settings", ".row.pref .sub.no-names"]]) {
+    for (const [view, sel] of [["groups", ".rt-gnames .no-names"], ["settings", ".row.pref .sub.no-names"]]) {
       await page.goto(`http://magpie.test/?view=${view}`);
       await page.locator(sel).waitFor();
       assert.equal(await page.locator(sel).textContent(), said.en);
@@ -135,7 +135,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await page.goto("http://magpie.test/?view=settings");
     await page.locator("#plainNamesSegs .opt").first().waitFor();
     assert.equal(await page.locator(".row.pref", { has: page.locator("#plainNamesSegs") }).locator(".sub").count(), 0);
-    await page.goto("http://magpie.test/?view=routing");
+    await page.goto("http://magpie.test/?view=groups");
     await page.locator(".rt-gnames .segs").waitFor();
     assert.equal(await page.locator(".rt-gnames .no-names:visible").count(), 0);
     assert.deepEqual(errors, []);

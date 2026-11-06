@@ -77,7 +77,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const errors = [], posts = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang, posts));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       const tr = (k, v = {}) => page.evaluate(([lang, k, v]) => (lang === "en" ? k : I18N[lang][k] || k).replace(/\{(\w+)\}/g, (_, n) => v[n]), [lang, k, v]);
       const card = page.locator(".rt-group", { hasText: "Sol" });
       await card.waitFor();

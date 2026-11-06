@@ -95,7 +95,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const errors = [], posts = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang, posts));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       await page.locator(".rt-groups > .rt-group").nth(2).waitFor();
       assert.deepEqual(await listed(page), ["one", "two", "auto-m"]);
       // a stack of logos is held whole in its handle, in its card, clear of

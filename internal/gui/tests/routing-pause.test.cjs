@@ -86,7 +86,7 @@ async function open(engine, lang, width, t) {
   await page.route("**/*", serve(lang, posts));
   await page.goto("http://magpie.test/?view=routing");
   const group = page.locator(".rt-group").first();
-  await group.waitFor();
+  await group.waitFor({ state: "attached" });
   return { page, group, errors, posts };
 }
 // a click as the reader's: wheeled into the middle of the view first (a
@@ -96,11 +96,11 @@ async function press(page, x) {
   // a group opening into its editor moves its height and parts for ~700ms
   // (91b0be836): where x will be is read once that has stopped
   await page.waitForFunction(() => !document.getAnimations().some((a) => a.playState === "running" && Number.isFinite(a.effect?.getComputedTiming().endTime)));
-  const d = await x.evaluate((e) => { const v = document.querySelector("#view-routing");
+  const d = await x.evaluate((e) => { const v = document.querySelector("#view-groups");
     return Math.round(e.getBoundingClientRect().top - v.getBoundingClientRect().top - v.clientHeight / 2); });
   if (Math.abs(d) > 100) {
     // over the view, not the sidebar beside it
-    const v = await page.locator("#view-routing").boundingBox();
+    const v = await page.locator("#view-groups").boundingBox();
     await page.mouse.move(v.x + 10, 300);
     await page.mouse.wheel(0, d);
     await page.waitForTimeout(400);
@@ -123,6 +123,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       // the trace: the model paused, by which rule and when
       await page.waitForFunction((s) => document.documentElement.innerText.includes(s), w.aside);
+      await page.evaluate(() => window.show("groups"));
+      await group.waitFor();
 
       // the group's rule, in words
       const title = await group.evaluate((g) => [...g.querySelectorAll("[title]")].map((e) => e.title).join("\n"));
@@ -192,6 +194,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
   for (const lang of Object.keys(words)) {
     test(`${engine} ${lang}: a pause rule at a narrow width`, async (t) => {
       const { page, group, errors } = await open(engine, lang, 420, t);
+      await page.evaluate(() => window.show("groups"));
+      await group.waitFor();
       await press(page, group.locator("button", { hasText: EDIT[lang] }));
       const row = page.locator(".rt-gedit .rt-rule").first();
       await row.waitFor();

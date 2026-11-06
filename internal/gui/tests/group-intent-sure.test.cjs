@@ -62,7 +62,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const errors = [], posts = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang, posts));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       const last = () => posts.filter((p) => p.path === "/api/groups/save").at(-1)?.body;
 
       const save = async (id) => {

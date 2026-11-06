@@ -79,7 +79,7 @@ async function open(t, engine, lang, clock, width) {
   const errors = [], posts = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.route("**/*", serve(lang, clock, posts));
-  await page.goto("http://magpie.test/?view=routing");
+  await page.goto("http://magpie.test/?view=groups");
   const group = page.locator(".rt-group").first();
   await group.waitFor();
   const titles = () => group.evaluate((g) => [...g.querySelectorAll("[title]")].map((e) => e.title).join("\n"));

@@ -84,7 +84,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const errors = [], posts = [];
         page.on("pageerror", (e) => { if (!/^ResizeObserver loop completed with undelivered notifications/.test(e.message)) errors.push(e.message); });
         await page.route("**/*", serve(lang, posts));
-        await page.goto("http://magpie.test/?view=routing");
+        await page.goto("http://magpie.test/?view=groups");
         await page.locator(".rt-groups > .rt-group").nth(1).waitFor();
         await page.waitForTimeout(500);
         await page.locator(".rt-gimportbtn").click();

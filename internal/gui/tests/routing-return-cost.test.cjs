@@ -70,7 +70,7 @@ const watch = () => {
   new MutationObserver((ms) => { for (const m of ms) if (set(m.oldValue) !== set(m.target.getAttribute("class"))) w.flips.push(m.target.className); })
     .observe(document.querySelector("#view-routing"), { subtree: true, attributes: true, attributeFilter: ["class"], attributeOldValue: true });
   new MutationObserver((ms) => { w.providers += ms.length; }).observe(document.querySelector("#view-providers"), { subtree: true, childList: true });
-  new MutationObserver((ms) => { w.groups += ms.length; }).observe(document.querySelector("#view-routing .rt-groups"), { subtree: true, childList: true });
+  new MutationObserver((ms) => { w.groups += ms.length; }).observe(document.querySelector("#view-groups .rt-groups"), { subtree: true, childList: true });
   // the picked request's story: its head, its steps and its context card
   for (const s of [".rt-log-head", ".rt-steps", ".ctx-card"]) new MutationObserver((ms) => { w.story += ms.length; }).observe(document.querySelector("#view-routing " + s), { subtree: true, childList: true, characterData: true });
   // the stage's nodes as they are now

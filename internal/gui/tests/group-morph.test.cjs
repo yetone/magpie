@@ -48,7 +48,7 @@ function serve(lang, saved) {
 // the height animation running on group b's slot, if any: its first and last
 // heights, and the slot's height now
 const slotMotion = (page) => page.evaluate(() => {
-  const n = document.querySelector('#view-routing [data-gslot="b"]');
+  const n = document.querySelector('#view-groups [data-gslot="b"]');
   const a = n?.getAnimations().find((x) => x.effect.getKeyframes().some((k) => k.height));
   const ks = a?.effect.getKeyframes();
   return {
@@ -63,7 +63,7 @@ const slotMotion = (page) => page.evaluate(() => {
 // magpie moves the page only for the reader, so what is out of the window
 // is wheeled to as a reader would, then clicked
 async function reach(page, loc) {
-  const vb = await page.locator("#view-routing").boundingBox();
+  const vb = await page.locator("#view-groups").boundingBox();
   await page.mouse.move(vb.x + vb.width / 2, vb.y + vb.height / 2);
   for (let i = 0; i < 150; i++) {
     const b = await loc.boundingBox();
@@ -77,7 +77,7 @@ async function reach(page, loc) {
 
 const inSight = (page) => page.evaluate(() => {
   const r = document.querySelector('.rt-group[data-id="b"]').getBoundingClientRect();
-  const v = document.querySelector("#view-routing").getBoundingClientRect();
+  const v = document.querySelector("#view-groups").getBoundingClientRect();
   return r.top >= v.top - 1 && r.bottom <= v.bottom + 1;
 });
 
@@ -93,7 +93,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       page.on("pageerror", (e) => errors.push(e.message));
       let release;
       await page.route("**/*", serve(lang, new Promise((r) => { release = r; })));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       const row = page.locator(".rt-group[data-id=b]");
       await row.waitFor();
       const rowH = (await row.boundingBox()).height;
@@ -155,7 +155,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     page.setDefaultTimeout(5000);
     page.setDefaultNavigationTimeout(60000);
     await page.route("**/*", serve("en", Promise.resolve()));
-    await page.goto("http://magpie.test/?view=routing");
+    await page.goto("http://magpie.test/?view=groups");
     await page.locator(".rt-group[data-id=b]").click();
     await page.locator(".rt-gedit").waitFor();
     assert.equal((await slotMotion(page)).from, null, "no height animation opening");

@@ -1838,13 +1838,13 @@ function guideCard(g) {
       add.onclick = (e) => { e.stopPropagation(); guideTemplate(tp, name); };
       acts.append(add);
     }
-    const open = el("button", "text guide-open", t("Open Routing"));
+    const open = el("button", "text guide-open", t("Open routing groups"));
     open.type = "button";
     open.dataset.feature = "routing";
     open.onclick = (e) => {
       e.stopPropagation();
-      if (mode === "window") show("routing");
-      else api("window/main?view=routing", {}).catch(statusErr);
+      if (mode === "window") show("groups");
+      else api("window/main?view=groups", {}).catch(statusErr);
     };
     acts.append(open);
     three.body.append(acts);
@@ -5652,7 +5652,7 @@ function keptNote(m) {
     act.onclick = (ev) => {
       ev.stopPropagation();
       closePicker();
-      if (mode !== "window") api("window/main?view=routing&newgroup=" + encodeURIComponent(m.id), {}).catch(statusErr);
+      if (mode !== "window") api("window/main?view=groups&newgroup=" + encodeURIComponent(m.id), {}).catch(statusErr);
       else window.newGroupWith?.(m.id, m.name, ev);
     };
   }
@@ -6001,6 +6001,7 @@ function loadProviders() {
   return p;
 }
 
+const rtView = (v) => v === "routing" || v === "groups";
 async function loadProvidersNow() {
   // The page's first opening (#1519, fatkun): a list is drawn at once, as
   // the Agents page draws the last state, and the fresh one replaces it
@@ -6053,7 +6054,7 @@ async function loadProvidersNow() {
     magpie.call(view, "render", was);
     backAfterLoad($("#view-" + view));
   // under Routing: drawn when opened (#4652)
-  } else if (view === "routing") { providersBehind = true; markNewPartners(); }
+  } else if (rtView(view)) { providersBehind = true; markNewPartners(); }
   else renderProviders();
   renderArchive();
   providersWhileFetching();
@@ -6070,7 +6071,7 @@ function providersWhileFetching() {
   clearTimeout(providersWhileFetching.timer);
   if (!providers?.fetching) return;
   providersWhileFetching.timer = setTimeout(async () => {
-    if (!(["providers", "routing"].includes(view) || providersPage(view)) || editing !== null || adding || document.hidden) return;
+    if (!(view === "providers" || rtView(view) || providersPage(view)) || editing !== null || adding || document.hidden) return;
     let next;
     try { next = await api("providers"); } catch { providersWhileFetching(); return; }
     const json = (p) => JSON.stringify({ ...p, fetching: false, gateway: { ...p.gateway, calls: 0 } });
@@ -11429,11 +11430,11 @@ function renderModels(p) {
     lost.hidden = !none.length;
     if (!none.length) return;
     lost.append(t("In no routing group, so no agent can use them now: {models}.", { models: none.slice(0, 8).join(", ") + (none.length > 8 ? " …" : "") }));
-    if (!p.unlisted) { lost.append(" " + t("Once saved, make a group of them in Routing.")); return; }
+    if (!p.unlisted) { lost.append(" " + t("Once saved, make a group of them in Routing groups.")); return; }
     for (const id of none.slice(0, 4)) {
       const b = el("button", "text action", t("Make a routing group of {model}", { model: id }));
       b.dataset.feature = "routing"; // made on the Routing page
-      b.onclick = (ev) => { if (mode !== "window") api("window/main?view=routing&newgroup=" + encodeURIComponent(p.id + "/" + id), {}); else window.newGroupWith?.(p.id + "/" + id, "", ev); };
+      b.onclick = (ev) => { if (mode !== "window") api("window/main?view=groups&newgroup=" + encodeURIComponent(p.id + "/" + id), {}); else window.newGroupWith?.(p.id + "/" + id, "", ev); };
       lost.append(b);
     }
   };
@@ -22877,7 +22878,7 @@ const readerAt = new WeakMap();
 // took it out of sight, and it isn't brought back (backToReader)
 const scrolledFrom = new WeakMap();
 // Where the reader is is the view's scrollTop, unless the view names a part
-// to keep in place (keepInView, the Routing page's groups under parts that
+// to keep in place (keepInView, the Routing page's lists under parts that
 // redraw on their own): then it is where that part is on screen as the
 // reader leaves it, and the view follows it (scroll anchoring WebKit lacked).
 const pinOf = new Map(), pinAt = new WeakMap();
@@ -23156,7 +23157,7 @@ async function show(v) {
       if (view === "library" && modalFormDirty() && !(await confirmDiscard())) return false;
       if (view === "library") magpie.call("library", "close"); else closeModal();
     }
-    if (view === "routing" && magpie.call("routing", "dirty")) {
+    if (rtView(view) && magpie.call("routing", "dirty")) {
       if (!(await confirmDiscard())) return false;
       magpie.call("routing", "discard");
     }
@@ -23164,8 +23165,7 @@ async function show(v) {
       if (!(await confirmDiscard())) return false;
       magpie.call("library", "discard");
     }
-    // the page left lets go of what was only for this visit (the Usage
-    // page's Requests, what a click filtered them by)
+    // the page left lets go of what was only for this visit
     magpie.call(view, "leave");
   }
   view = v;
@@ -23176,11 +23176,7 @@ async function show(v) {
   $("#pageTitle").dataset.en = title;
   $("#pageTitle").textContent = t(title);
   if (mode === "window") {
-    for (const b of $("#nav").querySelectorAll("button[data-view]")) {
-      const on = b.dataset.view === v;
-      b.classList.toggle("on", on);
-      if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
-    }
+    markNav(v);
     if (!sideNav()) { slide($("#nav"), "nav"); navInSight(); }
     else navTopGo($("#nav").querySelector("button[data-view].on"), true);
   }
@@ -23197,10 +23193,9 @@ async function show(v) {
   // a plugin's page loads what it shows; back once it has
   magpie.call(v, "open")?.then?.(back);
   if (v === "providers" && providersBehind) renderProviders();
-  if (v === "providers" || v === "routing" || providersPage(v)) loadProviders().then(back, statusErr);
-  // Routing's accounts show their windows as the Usage page read them
-  // (#1833): what is kept, read in an ordinary way, never an asked read
-  if (v === "routing" && (!quotas || Date.now() - quotasAt > 60e3)) loadQuotas();
+  if (v === "providers" || rtView(v) || providersPage(v)) loadProviders().then(back, statusErr);
+  // Routing's accounts' windows as Usage read them (#1833), never an asked read
+  if (rtView(v) && (!quotas || Date.now() - quotasAt > 60e3)) loadQuotas();
   if (v === "settings") (settingsLoad = loadSettings()).then(back, statusErr);
   if (v === "plugins") window.loadPlugins?.()?.then(back);
   syncTitle();
@@ -23229,8 +23224,7 @@ if (mode === "window") for (const b of $("#nav").querySelectorAll("button[data-v
   b.onpointerleave = (e) => { if (e.buttons & 1) navTopGo(navTopOn(), true); };
   b.onclick = () => { show(b.dataset.view).then((went) => { if (!went) navTopGo(navTopOn(), true); }); b.blur(); };
 }
-// setGatewayMode shows or leaves out gateway mode's pages' tabs; the page
-// open, one of them, gives way to Providers
+// gateway mode's pages' tabs; the page open, one of them, gives way to Providers
 function setGatewayMode(on) {
   gatewayMode = on;
   document.body.classList.toggle("gateway-mode", on);
@@ -23509,6 +23503,17 @@ document.fonts?.ready.then(fitTop);
 // a font picked later (Settings' Font) can still be loading when it's applied
 document.fonts?.addEventListener("loadingdone", fitTop);
 
+// the shown page's tab; Routing's for its groups in the header's row,
+// which has no room for theirs (app.css)
+function markNav(v) {
+  const tab = v === "groups" && !sideNav() ? "routing" : v;
+  for (const b of $("#nav").querySelectorAll("button[data-view]")) {
+    const on = b.dataset.view === tab;
+    b.classList.toggle("on", on);
+    if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+  }
+}
+
 // ---- the sidebar ----------------------------------------------------------
 // A window wide enough has its pages down a sidebar, as a Mac app's: in
 // groups, the open page's own tabs under it, Settings at its foot and the
@@ -23554,6 +23559,7 @@ function layoutNav() {
     $("#crumb").after(nav);
     $(".actions").insertBefore(prefs, $("#winclose"));
   }
+  markNav(view);
   navSubsAt = "";
   // the sidebar coming or going isn't a list opening
   navSubs.quiet = true;

@@ -71,7 +71,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const errors = [], posts = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang, posts));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       const card = page.locator(".rt-group").first();
       await card.waitFor();
       await card.locator("button", { hasText: w.edit }).click();
@@ -93,7 +93,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       // wheeled to the rules, as the reader would (a scroll no reader asked
       // for is put back)
-      const v = await page.locator("#view-routing").boundingBox();
+      const v = await page.locator("#view-groups").boundingBox();
       await page.mouse.move(v.x + 10, 300);
       for (let n = 0; n < 40; n++) {
         const b = await ed.locator(".rt-rules").boundingBox();

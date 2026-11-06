@@ -81,13 +81,13 @@ function serve(lang, posts, asked) {
 async function open(t, engine, lang, width) {
   const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
   t.after(() => browser.close());
-  const page = await (await browser.newContext({ viewport: { width, height: 1400 } })).newPage();
+  const page = await (await browser.newContext({ viewport: { width, height: 1400 }, reducedMotion: "reduce" })).newPage();
   page.setDefaultTimeout(5000);
   page.setDefaultNavigationTimeout(60000);
   const errors = [], posts = [], asked = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.route("**/*", serve(lang, posts, asked));
-  await page.goto("http://magpie.test/?view=routing");
+  await page.goto("http://magpie.test/?view=groups");
   const group = page.locator(".rt-group").first();
   await group.waitFor();
   return { page, group, errors, posts, asked };

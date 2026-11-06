@@ -86,7 +86,7 @@ async function open(t, engine, { lang, theme = "light", web = true, width = 1100
   const errors = [], posts = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.route("**/*", serve(lang, theme, web, posts));
-  await page.goto("http://magpie.test/?view=routing");
+  await page.goto("http://magpie.test/?view=groups");
   await page.locator(".rt-group", { hasText: "Auto" }).waitFor();
   return { page, errors, posts };
 }
@@ -94,7 +94,7 @@ async function open(t, engine, { lang, theme = "light", web = true, width = 1100
 // the reader wheels the row into the middle of the view (code that scrolls
 // is put back: only the reader moves the view)
 async function wheelTo(page, row, width) {
-  const dy = await row.evaluate((g) => { const v = document.querySelector("#view-routing");
+  const dy = await row.evaluate((g) => { const v = document.querySelector("#view-groups");
     return Math.round(g.getBoundingClientRect().top - v.getBoundingClientRect().top - v.clientHeight / 2); });
   await page.mouse.move(width / 2, 400);
   await page.mouse.wheel(0, dy);
@@ -124,8 +124,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await page.locator(".rt-group select, select").count(), 0, "no native select");
 
         // the reader scrolls the card to the middle, then opens its routing
-        const view = page.locator("#view-routing");
-        const dy = await card().evaluate((g) => { const v = document.querySelector("#view-routing");
+        const view = page.locator("#view-groups");
+        const dy = await card().evaluate((g) => { const v = document.querySelector("#view-groups");
           return Math.round(g.getBoundingClientRect().top - v.getBoundingClientRect().top - v.clientHeight / 2); });
         await page.mouse.move(550, 400);
         await page.mouse.wheel(0, dy);

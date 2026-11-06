@@ -86,7 +86,7 @@ async function open(t, engine, lang, width, kept) {
   page.on("pageerror", (e) => errors.push(e.message));
   await page.route("**/*", serve(lang, routeOf(kept)));
   await page.goto("http://magpie.test/?view=routing");
-  await page.locator(".rt-group").first().waitFor();
+  await page.locator(".rt-group").first().waitFor({ state: "attached" });
   return { page, errors };
 }
 

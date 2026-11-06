@@ -3,7 +3,7 @@
 // the editor runs on below it (Jiabubu on Discord): the Scroll to top and
 // Scroll to bottom capsule (scrollends.js) sat over Add, and under the bar's
 // ground the view's own foot padding showed as a gap above the window's
-// edge. Here a New group editor on a long Routing page is scrolled so its
+// edge. Here the editor of a group far down the Routing groups page is scrolled so its
 // bar is held: the bar's ground reaches the window's edge, and the capsule,
 // once in, is above the bar and over none of its buttons. Chromium and
 // WebKit, the desktop window and the browser page, wide and narrow,
@@ -20,7 +20,7 @@ const ids = models.map((m) => m.id);
 // enough groups above for the page to be scrolled a screen down
 const groups = {
   models, pools: [],
-  groups: Array.from({ length: 16 }, (_, i) => ({ id: `g${i}`, name: `group ${i}`, routing: "order", members: ids, ready: true, memberInfo: ids.map((id) => ({ id, ready: true })), offers: [], shared: [] })),
+  groups: Array.from({ length: 40 }, (_, i) => ({ id: `g${i}`, name: `group ${i}`, routing: "order", members: ids, ready: true, memberInfo: ids.map((id) => ({ id, ready: true })), offers: [], shared: [] })),
 };
 
 function serve(lang, web) {
@@ -61,25 +61,32 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const errors = [];
           page.on("pageerror", (e) => errors.push(e.message));
           await page.route("**/*", serve(lang, web));
-          await page.goto("http://magpie.test/?view=routing");
+          await page.goto("http://magpie.test/?view=groups");
           await page.locator(".rt-group").nth(15).waitFor();
-          await page.locator(".rt-newgroup:visible").first().click();
+          // a group far down the list, its editor opened in its place
+          await page.evaluate(() => [...document.querySelectorAll(".rt-group")[20].querySelectorAll("button")].find((b) => b.textContent === t("Edit")).click());
           await page.locator(".rt-gedit").waitFor();
           // the editor's top just under the window's: the page a screen
-          // down, the editor running on below, its bar held at the foot
-          await page.evaluate(() => {
-            const v = document.querySelector("#view-routing"), e = document.querySelector(".rt-gedit");
-            v.scrollTop += e.getBoundingClientRect().top - v.getBoundingClientRect().top - 20;
-            if (v.scrollTop <= v.clientHeight) { // the editor near the top: groups go above it
-              v.scrollTop = v.clientHeight + 40;
-            }
+          // down, the editor running on below, its bar held at the foot;
+          // by the wheel, as a reader scrolls (a scroll by code is put back)
+          const want = await page.evaluate(() => {
+            const v = document.querySelector("#view-groups"), e = document.querySelector(".rt-gedit");
+            return Math.max(v.scrollTop + e.getBoundingClientRect().top - v.getBoundingClientRect().top - 20, v.clientHeight + 40);
           });
+          const vb = await page.locator("#view-groups").boundingBox();
+          await page.mouse.move(vb.x + vb.width / 2, vb.y + vb.height / 2);
+          for (let i = 0; i < 40; i++) {
+            const now = await page.evaluate(() => document.querySelector("#view-groups").scrollTop);
+            if (Math.abs(now - want) < 2) break;
+            await page.mouse.wheel(0, want - now);
+            await page.waitForTimeout(60);
+          }
           // the capsule comes on the window's scroll, a frame later
           await page.waitForFunction(() => document.querySelector(".view-ends.on"));
           await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 250)))));
           const m = await page.evaluate(() => {
             const box = (e) => { const b = e.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right }; };
-            const v = document.querySelector("#view-routing"), e = document.querySelector(".rt-gedit"), bar = e.querySelector(":scope > .bar");
+            const v = document.querySelector("#view-groups"), e = document.querySelector(".rt-gedit"), bar = e.querySelector(":scope > .bar");
             return { view: box(v), ed: box(e), bar: box(bar), ends: box(document.querySelector(".view-ends")), buttons: [...bar.querySelectorAll("button")].map((b) => ({ text: b.textContent, ...box(b) })), scrolled: v.scrollTop > v.clientHeight };
           });
           assert(m.scrolled && m.ed.bottom > m.view.bottom + 40, `${at}: the page a screen down and the editor running on below the window: ${JSON.stringify([m.ed, m.view])}`);

@@ -49,7 +49,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       const row = page.locator(".rt-pool");
       await row.waitFor();
       assert.equal(await row.getAttribute("title"), null, "the row itself carries no tooltip");

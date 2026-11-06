@@ -59,7 +59,7 @@ function serve(lang) {
 // What the reader sees: whether any group row is in the view's own box, and how
 // much of the view's foot is the room kept for a click.
 const seen = (page) => page.evaluate(() => {
-  const v = document.querySelector("#view-routing");
+  const v = document.querySelector("#view-groups");
   const vr = v.getBoundingClientRect();
   const rows = [...v.querySelectorAll(".rt-group")];
   const inSight = rows.filter((r) => { const b = r.getBoundingClientRect(); return b.bottom > vr.top && b.top < vr.bottom; }).length;
@@ -92,14 +92,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       await page.locator(".rt-group[data-id=big]").waitFor();
 
       // the editor, from the row
       await page.locator(".rt-group[data-id=big]").click();
       const save = page.locator(".rt-gedit button", { hasText: new RegExp(`^${w.save}$`) });
       await save.waitFor();
-      const view = page.locator("#view-routing");
+      const view = page.locator("#view-groups");
       const box = await view.boundingBox();
       // the reader scrolls down to the editor's foot: the editor is taller
       // than the window (its Save stays in sight on the way, held at the

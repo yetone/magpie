@@ -123,10 +123,10 @@ const rows = (page) => page.locator(".rt-gedit .fbrow").evaluateAll((rs) => rs.m
 // would: a scroll the reader didn't make (Playwright's own, before its
 // click) is put back (#1554), and the click lands on the window's foot
 async function reach(page, target) {
-  const view = await page.locator("#view-routing").boundingBox();
+  const view = await page.locator("#view-groups").boundingBox();
   await page.mouse.move(view.x + view.width / 2, view.y + view.height / 2);
   const rest = () => page.evaluate(() => new Promise((done) => {
-    const v = document.querySelector("#view-routing");
+    const v = document.querySelector("#view-groups");
     let last = -1;
     const look = () => { if (v.scrollTop === last) done(); else { last = v.scrollTop; setTimeout(look, 100); } };
     look();
@@ -158,7 +158,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       await page.locator(".rt-group[data-id=g]").waitFor();
       await page.locator(".rt-group[data-id=g]").click();
       await page.locator(".rt-gedit .fbrow").first().waitFor();
@@ -210,7 +210,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       await page.locator(".rt-group[data-id=g3]").waitFor();
       await page.locator(".rt-group[data-id=g3]").click();
       await page.locator(".rt-gedit .fbrow").first().waitFor();

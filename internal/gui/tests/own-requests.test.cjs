@@ -231,7 +231,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await page.route("**/*", serveRouting(lang));
           try {
             const open = async (i) => {
-              await page.goto("http://magpie.test/?view=routing");
+              await page.goto("http://magpie.test/?view=groups");
               const g = page.locator(".rt-group").nth(i);
               await g.waitFor();
               const edit = g.locator("button", { hasText: await page.evaluate(() => t("Edit")) });

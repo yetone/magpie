@@ -648,16 +648,28 @@ confirmations and menus interactive through redraws. `closeModal` releases
 that background as soon as the close animation starts, so clicks reach the
 page while the editor fades away. Opening an editor during that animation
 protects the background again. `ux-safety.test.cjs` checks these transitions.
-Routing's New group buttons share `newGroup`, which asks before replacing a
+Routing groups have a page of their own, `#view-groups`, beside Routing
+under Models (11-06; below every request on the Routing page they were a
+long scroll down). The routing plugin adds both pages, and `routingPage`
+draws the groups' section (`.rt-gsec`) into the second one's `#rtGroups`
+(`window.routingGroupsHome`, again after its Try again), so one draft and
+one `dirty` hook (`magpie.call("routing", "dirty")`) serve both; `rtView`
+in app.js asks it on leaving either. Its toolbar is the filter, how many
+groups there are and how many are on, then Templates, Import, Select and
+New group (`text primary`); the list follows, then Settings (found groups,
+the names agents' lists show), then the providers routing over several
+keys. A request's group or pool link (`goRouting`) opens the page first,
+then brings the row into sight when the reader's click asked for it.
+The window opened with `view=groups&newgroup=<model>` (`mainView` keeps
+`view=routing&newgroup=` too) opens a new group of that model
+(`routing-groups-page.test.cjs`). Its tab sits in the sidebar only: the
+header's row has no room for it (at 860px it pushed the logo out,
+`brand.test.cjs`), so there app.css hides it, `markNav` lights Routing's
+tab for both pages, and Routing's head shows `#rtToGroups` instead.
+The page's New group goes through `newGroup`, which asks before replacing a
 dirty group draft; Cancel retains the draft and Discard opens the new editor.
 `newGroupWith` applies the same guard when creating a group from a model and
-waits for `show` to accept navigation before creating its draft.
-The Routing page's head also has Routing groups (`#rtGoGroups`), since the
-groups sit below every request. Its click goes through `scrollOnPurpose`,
-brings `.rt-gsec` to the top of the view and focuses it; the page's layout is
-unchanged. `fitGo` gives it only the head's spare room: named, its arrow
-alone, or left out, so nothing else in the head moves or wraps for it
-(`routing-groups-jump.test.cjs`).
+waits for `show("groups")` to accept navigation before creating its draft.
 Live, the Routing page's card (its head, story and context window) tells of
 one request, `cur`, chosen by `told()` in `plugins/routing/client.js`: it
 stays on the request it tells of until that one is done, then goes to the

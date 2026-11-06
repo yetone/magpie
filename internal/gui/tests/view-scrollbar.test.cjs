@@ -48,7 +48,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.route("**/*", serve());
-    await page.goto("http://magpie.test/?view=routing");
+    await page.goto("http://magpie.test/?view=groups");
     await page.locator(".rt-group").nth(30).waitFor();
     const bar = () => page.evaluate(() => {
       const v = [...document.querySelectorAll(".view")].find((x) => x.offsetParent && x.scrollHeight > x.clientHeight);
@@ -66,7 +66,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     // its foot (#1623, fanbuz: Usage's was the engine's 15-17px one, twice
     // the side's, as only the side's width was set)
     const foot = await page.evaluate(() => {
-      const v = document.querySelector("#view-routing"), wide = document.createElement("div");
+      const v = document.querySelector("#view-groups"), wide = document.createElement("div");
       wide.style.cssText = "width: 3000px; height: 1px";
       v.append(wide);
       v.style.display = "none"; v.offsetWidth; v.style.display = "";
@@ -76,7 +76,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       return h;
     });
     assert.equal(foot, 8, "a wide page's bar across its foot is as thin as the one at its side");
-    const thumb = await page.evaluate(() => getComputedStyle(document.querySelector("#view-routing"), "::-webkit-scrollbar-thumb").backgroundColor);
+    const thumb = await page.evaluate(() => getComputedStyle(document.querySelector("#view-groups"), "::-webkit-scrollbar-thumb").backgroundColor);
     assert.notEqual(thumb, "rgba(0, 0, 0, 0)", "the thumb is drawn in no colour");
     assert.deepEqual(errors, []);
   });

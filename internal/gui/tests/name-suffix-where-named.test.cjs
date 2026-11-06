@@ -21,9 +21,9 @@ const { chromium, webkit } = require("playwright");
 const assets = path.resolve(__dirname, "../assets");
 const words = {
   en: { names: "Names, prices & levels", edit: "Edit", general: "General", global: "“Provider in model names” is one setting for every provider", change: "Change in Settings", own: "Not on names I set", on: "On", off: "Off", label: "In agents’ lists",
-    shows: (l) => `Agents’ lists show “${l}”`, above: " · “· routing group” is set for every group above", setting: "Names in agents’ lists" },
+    shows: (l) => `Agents’ lists show “${l}”`, above: " · “· routing group” is set for every group, under the list", setting: "Names in agents’ lists" },
   zh: { names: "名称、价格与推理档位", edit: "编辑", general: "常规", global: "「模型名带供应商」是全局设置，对所有供应商生效", change: "在设置中修改", own: "自定义名称不带供应商", on: "开启", off: "关闭", label: "Agent 列表里的名称",
-    shows: (l) => `Agent 的模型列表里显示为「${l}」`, above: " · 是否带「· routing group」在上方统一设置，对所有路由组生效", setting: "Agent 列表里的名称" },
+    shows: (l) => `Agent 的模型列表里显示为「${l}」`, above: " · 是否带「· routing group」在列表下方统一设置，对所有路由组生效", setting: "Agent 列表里的名称" },
 };
 
 function serve(lang, posts) {
@@ -135,16 +135,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     test(`${engine} ${lang}: "· routing group" is set over the groups, for all of them, and a group's editor says what it shows`, async (t) => {
       const posts = [];
       const { page, errors } = await launch(t, engine, lang, posts);
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       const card = page.locator(".rt-group", { hasText: "Fast" });
       await card.waitFor();
-      // the setting is over the groups, before the first card
+      // the setting is under the groups, in the page's Settings (11-06)
       const set = page.locator(".rt-gnames");
       await set.waitFor();
       assert.equal((await set.locator("b").textContent()).trim(), w.setting);
       assert.deepEqual((await set.locator(".segs .opt").allTextContents()).map((s) => s.trim()), [w.off, w.own, w.on]);
       assert.equal((await set.locator(".opt.on").textContent()).trim(), w.on);
-      assert.ok(await set.evaluate((s) => !!(s.compareDocumentPosition(document.querySelector(".rt-group")) & Node.DOCUMENT_POSITION_FOLLOWING)), "the setting is over the groups");
+      assert.ok(await set.evaluate((s) => !!(s.compareDocumentPosition(document.querySelector(".rt-group")) & Node.DOCUMENT_POSITION_PRECEDING)), "the setting is under the groups");
       await card.locator("button", { hasText: w.edit }).click();
       const ed = page.locator(".rt-gedit");
       const row = ed.locator("label", { hasText: new RegExp(`^${w.label}$`) }).locator("xpath=following-sibling::div[1]");
@@ -155,6 +155,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // the name typed is the name shown
       await ed.locator("input").first().fill("Fast lane");
       assert.equal(await row.locator(".hint").textContent(), w.shows("Fast lane · routing group") + w.above);
+      // the setting, under the open editor, brought into sight by the wheel
+      // first, as a reader would: what is measured is the click alone
+      const vp = page.viewportSize();
+      await page.mouse.move(vp.width / 2, vp.height / 2);
+      for (let i = 0; i < 40; i++) {
+        const r = await set.boundingBox();
+        if (r.y >= 0 && r.y + r.height <= vp.height) break;
+        await page.mouse.wheel(0, r.y + r.height - vp.height + 40);
+        await page.waitForTimeout(60);
+      }
       const before = await scrolls(page);
       await set.locator(".opt", { hasText: w.own }).click();
       await page.locator(".rt-gnames .opt.on", { hasText: w.own }).waitFor();
@@ -164,12 +174,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(posts, [{ mode: "own" }]);
       assert.deepEqual(await scrolls(page), before, "the click scrolled the page");
       // nothing native, no stripe down the side
-      assert.equal(await page.locator("#view-routing select").count(), 0);
+      assert.equal(await page.locator("#view-groups select").count(), 0);
       assert.equal(await set.evaluate((e) => getComputedStyle(e).borderLeftWidth), "0px");
       assert.equal(await row2.evaluate((e) => getComputedStyle(e).borderLeftWidth), "0px");
       const missing = await page.evaluate(() => ["Agents’ lists show “{label}”", "In agents’ lists",
         "“Provider in model names” is one setting for every provider", "Change in Settings", "Not on names I set", "Provider in model names",
-        "Names in agents’ lists", "“· routing group” is set for every group above",
+        "Names in agents’ lists", "“· routing group” is set for every group, under the list",
         "Whether “· routing group” follows a group’s name in the agents’ lists: one setting for every group, and for the provider after each model’s name, as on Settings."]
         .filter((k) => !I18N.zh[k] || !I18N.ja[k] || !I18N.de[k]));
       assert.deepEqual(missing, [], "every string has its Chinese, Japanese and German");

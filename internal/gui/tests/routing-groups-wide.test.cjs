@@ -62,7 +62,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const errors = [];
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", serve(lang, web));
-        await page.goto("http://magpie.test/?view=routing");
+        await page.goto("http://magpie.test/?view=groups");
         await page.locator(".rt-group").nth(2).waitFor();
         const settle = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 100)))));
         for (const width of web ? [1440, 1100, 700, 440, 360] : [1440, 1100, 900, 700, 560]) {
@@ -70,7 +70,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await page.setViewportSize({ width, height: 900 });
           await settle();
           const m = await page.evaluate(() => {
-            const v = document.querySelector("#view-routing"), de = document.documentElement;
+            const v = document.querySelector("#view-groups"), de = document.documentElement;
             const rows = [...document.querySelectorAll(".rt-groups > .rt-group")].map((g) => {
               const b = g.getBoundingClientRect(), list = g.parentElement.getBoundingClientRect();
               const kids = [...g.querySelectorAll(".mem, .tags, .switch, button")].map((e) => e.getBoundingClientRect()).filter((k) => k.width > 0);

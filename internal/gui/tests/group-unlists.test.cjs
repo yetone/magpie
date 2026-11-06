@@ -70,7 +70,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const errors = [], posts = [];
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", serve(lang, posts));
-        await page.goto("http://magpie.test/?view=routing");
+        await page.goto("http://magpie.test/?view=groups");
         const card = page.locator(".rt-group", { hasText: "Glim" });
         await card.waitFor();
         const w = await page.evaluate(([keys, lang]) => Object.fromEntries(keys.map((k) => [k, lang === "en" ? k : I18N[lang][k]])), [KEYS, lang]);

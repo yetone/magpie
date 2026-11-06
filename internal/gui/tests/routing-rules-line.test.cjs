@@ -118,13 +118,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       test(`${engine} ${lang} ${width}: a rule reads as one line, its conditions added from a menu`, async (t) => {
         const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
         t.after(() => browser.close());
-        const page = await (await browser.newContext({ viewport: { width, height: 1400 } })).newPage();
+        const page = await (await browser.newContext({ viewport: { width, height: 1400 }, reducedMotion: "reduce" })).newPage();
         page.setDefaultTimeout(5000);
         page.setDefaultNavigationTimeout(60000);
         const errors = [], posts = [];
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", serve(lang, posts));
-        await page.goto("http://magpie.test/?view=routing");
+        await page.goto("http://magpie.test/?view=groups");
 
         // saved untouched: the rules as loaded, field for field
         let ed = await openEditor(page, w);

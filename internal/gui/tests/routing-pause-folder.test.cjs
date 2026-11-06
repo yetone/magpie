@@ -88,7 +88,7 @@ function serve(lang, posts, route) {
 async function open(t, engine, lang, width, folder) {
   const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
   t.after(() => browser.close());
-  const page = await (await browser.newContext({ viewport: { width, height: 1400 } })).newPage();
+  const page = await (await browser.newContext({ viewport: { width, height: 1400 }, reducedMotion: "reduce" })).newPage();
   page.setDefaultTimeout(5000);
   page.setDefaultNavigationTimeout(60000);
   const errors = [], posts = [];
@@ -96,7 +96,7 @@ async function open(t, engine, lang, width, folder) {
   await page.route("**/*", serve(lang, posts, routeFrom(folder)));
   await page.goto("http://magpie.test/?view=routing");
   const group = page.locator(".rt-group").first();
-  await group.waitFor();
+  await group.waitFor({ state: "attached" });
   return { page, group, errors, posts };
 }
 
@@ -125,6 +125,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const said = await page.evaluate(() => document.documentElement.innerText);
       assert(said.includes(w.cond), `the pause's folders are told: ${said.slice(0, 2000)}`);
       if (w.aside) assert(said.includes(w.aside), `the paused reason: ${said.slice(0, 2000)}`);
+      await page.evaluate(() => window.show("groups"));
+      await group.waitFor();
 
       // the group's rule, in words
       const title = await group.evaluate((g) => [...g.querySelectorAll("[title]")].map((e) => e.title).join("\n"));
@@ -189,6 +191,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     test(`${engine} ${lang}: a pause outside a folder at a phone's width, the agent saying none`, async (t) => {
       const { page, group, errors } = await open(t, engine, lang, 390, "");
       await page.waitForFunction((s) => document.documentElement.innerText.includes(s), w.none);
+      await page.evaluate(() => window.show("groups"));
+      await group.waitFor();
       await press(page, group.locator("button", { hasText: w.edit })); // the group is below the fold here
       const row = page.locator(".rt-gedit .rt-rule").first();
       const xf = row.locator(".rt-cond.xf");

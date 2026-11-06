@@ -73,7 +73,7 @@ function serve(lang, posts) {
 async function open(t, engine, lang, width) {
   const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
   t.after(() => browser.close());
-  const page = await (await browser.newContext({ viewport: { width, height: 1400 } })).newPage();
+  const page = await (await browser.newContext({ viewport: { width, height: 1400 }, reducedMotion: "reduce" })).newPage();
   page.setDefaultTimeout(5000);
   page.setDefaultNavigationTimeout(60000);
   const errors = [], posts = [];
@@ -81,7 +81,7 @@ async function open(t, engine, lang, width) {
   await page.route("**/*", serve(lang, posts));
   await page.goto("http://magpie.test/?view=routing");
   const group = page.locator(".rt-group").first();
-  await group.waitFor();
+  await group.waitFor({ state: "attached" });
   return { page, group, errors, posts };
 }
 
@@ -115,6 +115,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForFunction((s) => document.documentElement.innerText.includes(s), w.dir);
       const said = await page.evaluate(() => document.documentElement.innerText);
       assert(said.includes(w.cond), `the rule's folders are told: ${said.slice(0, 2000)}`);
+      await page.evaluate(() => window.show("groups"));
+      await group.waitFor();
 
       // the group's rule, in words
       const title = await group.evaluate((g) => [...g.querySelectorAll("[title]")].map((e) => e.title).join("\n"));
@@ -154,6 +156,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
     test(`${engine} ${lang}: a rule by folder at a phone's width`, async (t) => {
       const { page, group, errors } = await open(t, engine, lang, 390);
+      await page.evaluate(() => window.show("groups"));
       await press(page, group.locator("button", { hasText: w.edit })); // the group is below the fold here
       const fd = page.locator(".rt-gedit .rt-rule").first().locator(".rt-cond.fd");
       await fd.waitFor();

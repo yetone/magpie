@@ -95,7 +95,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // WebKit's notice when a layout outruns its observers, not a fault
       page.on("pageerror", (e) => { if (!/^ResizeObserver loop completed with undelivered notifications/.test(e.message)) errors.push(e.message); });
       await page.route("**/*", serve(lang, posts));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       const cards = page.locator(".rt-gtpl-card");
       await cards.nth(2).waitFor();
       await page.waitForTimeout(500);
@@ -159,7 +159,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // enough groups of the user's that the editor, last in the list,
       // opens below the window
       await page.route("**/*", serve(lang, posts, 12));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       const btn = page.locator(".rt-gtplbtn");
       await btn.waitFor();
       await page.waitForTimeout(500);
@@ -191,7 +191,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // WebKit's notice when a layout outruns its observers, not a fault
       page.on("pageerror", (e) => { if (!/^ResizeObserver loop completed with undelivered notifications/.test(e.message)) errors.push(e.message); });
       await page.route("**/*", serve(lang, []));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       const smart = page.locator(".rt-gtpl-card[data-kind=smart]");
       await smart.waitFor();
       if (process.env.ARTIFACT_DIR) await page.locator(".rt-gtpl").screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-group-template-cards.png`) });

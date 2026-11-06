@@ -80,7 +80,7 @@ async function open(t, engine, lang, width, said) {
   page.on("pageerror", (e) => errors.push(e.message));
   await page.route("**/*", serve(lang, routeOf(said)));
   await page.goto("http://magpie.test/?view=routing");
-  await page.locator(".rt-group").first().waitFor();
+  await page.locator("#view-routing .rt-stage").waitFor();
   return { page, errors };
 }
 

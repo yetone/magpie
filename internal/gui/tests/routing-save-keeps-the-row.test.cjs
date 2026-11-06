@@ -56,7 +56,7 @@ function serve(lang) {
 // What the reader sees: whether the row saved is in the view's own box, how many
 // rows are at all, and how much of the view's foot is the room kept for a click.
 const seen = (page) => page.evaluate(() => {
-  const v = document.querySelector("#view-routing");
+  const v = document.querySelector("#view-groups");
   const vr = v.getBoundingClientRect();
   const rows = [...v.querySelectorAll(".rt-group")];
   const inBox = (r) => { const b = r.getBoundingClientRect(); return b.bottom > vr.top && b.top < vr.bottom; };
@@ -89,13 +89,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       await page.locator(".rt-group[data-id=big]").waitFor();
 
       // narrow, the row is below the window's foot; magpie moves the page
       // only for the reader, so it is wheeled to as a reader would
       const row = page.locator(".rt-group[data-id=big]");
-      const vb = await page.locator("#view-routing").boundingBox();
+      const vb = await page.locator("#view-groups").boundingBox();
       await page.mouse.move(vb.x + vb.width / 2, vb.y + vb.height / 2);
       for (let i = 0; i < 100; i++) {
         const b = await row.boundingBox();
@@ -108,7 +108,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const saveText = await page.evaluate(() => t("Save"));
       const save = page.locator(".rt-gedit button", { hasText: new RegExp(`^${saveText}$`) });
       await save.waitFor();
-      const view = page.locator("#view-routing");
+      const view = page.locator("#view-groups");
       const box = await view.boundingBox();
       // the reader scrolls down to the editor's foot: the editor is taller
       // than the window (its Save stays in sight on the way, held at the

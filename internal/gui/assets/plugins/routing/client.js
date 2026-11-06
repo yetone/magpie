@@ -21,8 +21,7 @@ magpie.plugin("routing", (ctx) => {
     title: "Routing",
     html: `
     <div class="row-head"><span class="label" data-t>Routing</span><span class="rt-livedot" aria-hidden="true"></span><span class="note" data-t>live, as the gateway decides</span><span class="grow"></span>
-      <button class="text rt-gogroups" id="rtGoGroups" type="button" data-tt="Go to the routing groups, below the requests"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v9.5M4 8.5l4 4 4-4"/></svg><span data-t>Routing groups</span></button>
-      <button class="text rt-newgroup" id="rtNewGroup" type="button" data-feature="groups" data-tt="Make a routing group of any models you like — agents pick it as one model"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"/></svg><span data-t>New group</span></button>
+      <button class="text rt-togroups" type="button" id="rtToGroups"><span data-t>Routing groups</span> ›</button>
       <button class="text rt-mask" id="rtMask" aria-pressed="false" data-tt="Mask the accounts on every page — email addresses and account names — for a screenshot to share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.2A10.4 10.4 0 0 1 12 4c6.5 0 10 8 10 8a17.6 17.6 0 0 1-2.2 3.2M6.6 6.6C3.9 8.4 2 12 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20"/></svg><span data-t>Hide accounts</span></button></div>
     <section class="rt" id="rt"></section>
     <div class="rt-more" id="rtMore"></div>
@@ -36,6 +35,16 @@ magpie.plugin("routing", (ctx) => {
       return ready.then(() => routingPage(this));
     },
   });
+  // Routing groups, a page of their own beside Routing (11-06): under the
+  // stage and every request they were a long scroll down, and New group
+  // with them. The same script draws them (routingPage), into this page.
+  ctx.slots.add("page", {
+    key: "groups",
+    title: "Routing groups",
+    html: `<div class="rt-gpage" id="rtGroups"></div>`,
+    // Try again filled the page with its markup anew: the groups go back in
+    mount(main) { window.routingGroupsHome?.(main); },
+  });
 });
 
 // The page, drawn once app.js is set up; part is its part, given the hooks
@@ -43,14 +52,20 @@ magpie.plugin("routing", (ctx) => {
 function routingPage(part) {
   const box = $("#rt");
   if (!box) return;
+  // the groups' way in where the header's row has no tab for them (markNav)
+  const toGroups = $("#rtToGroups");
+  if (toGroups) toGroups.onclick = () => window.show("groups");
   const NS = "http://www.w3.org/2000/svg";
   const still = calm;
   const shown = () => !$("#view-routing").hidden && !document.hidden;
+  // the Routing groups page, which this script draws too (gsec)
+  const gView = () => $("#view-groups");
+  const gShown = () => !gView().hidden && !document.hidden;
   // steady redraws a part of the page where the reader is: WebKit has no
   // scroll anchoring, and a part emptied and filled again, measured between,
   // pulls the page up to what was left of it for that moment
-  function steady(fn) {
-    const v = $("#view-routing"), top = v.scrollTop;
+  function steady(fn, v = $("#view-routing")) {
+    const top = v.scrollTop;
     try { return fn(); } finally { if (v.scrollTop !== top) v.scrollTop = top; }
   }
 
@@ -2702,26 +2717,40 @@ function routingPage(part) {
       if (e.title !== title) e.title = title;
     } else for (const a of ["data-go", "tabindex", "role", "title"]) e.removeAttribute(a);
   }
-  function goRouting(e, go) {
+  async function goRouting(e, go) {
     const i = go.indexOf(":"), kind = go.slice(0, i), id = CSS.escape(go.slice(i + 1));
     const row = kind === "group" ? gList.querySelector(`.rt-group[data-id="${id}"]`) : pList.querySelector(`.rt-pool[data-provider="${id}"]`);
     if (!row) return;
-    if (window.scrollOnPurpose?.(e)) row.scrollIntoView({ block: "center", behavior: still() ? "auto" : "smooth" });
+    // they are on the Routing groups page: it opens, and the row comes
+    // into sight as the reader's click asked. A page just opened is at the
+    // row at once, and that is where the reader is in it (arrived): else
+    // the page put itself back where the reader last left it
+    const asked = window.scrollOnPurpose?.(e), opens = gView().hidden;
+    if (opens && !(await window.show("groups"))) return;
+    if (asked) {
+      readerScrolls(1000);
+      row.scrollIntoView({ block: "center", behavior: opens || still() ? "auto" : "smooth" });
+      if (opens) window.arrived?.(gView());
+    }
     row.classList.remove("rt-found");
     void row.offsetWidth;
     row.classList.add("rt-found");
     row.querySelector(".segs .opt.on")?.focus({ preventScroll: true });
   }
-  $("#view-routing").addEventListener("click", (e) => {
-    const g = e.target.closest(".rt-go[data-go]");
-    if (g) goRouting(e, g.dataset.go);
-  });
-  $("#view-routing").addEventListener("keydown", (e) => {
-    const g = (e.key === "Enter" || e.key === " ") && e.target.closest?.(".rt-go[data-go]");
-    if (!g) return;
-    e.preventDefault();
-    goRouting(e, g.dataset.go);
-  });
+  // on both pages: a request's group, and a group or provider named in
+  // another group's card
+  for (const v of [$("#view-routing"), gView()]) {
+    v?.addEventListener("click", (e) => {
+      const g = e.target.closest(".rt-go[data-go]");
+      if (g) goRouting(e, g.dataset.go);
+    });
+    v?.addEventListener("keydown", (e) => {
+      const g = (e.key === "Enter" || e.key === " ") && e.target.closest?.(".rt-go[data-go]");
+      if (!g) return;
+      e.preventDefault();
+      goRouting(e, g.dataset.go);
+    });
+  }
 
   // lightRow lights a row and its wire: on for the one answering or that
   // answered the request shown, now and a flowing wire only while a
@@ -5531,11 +5560,21 @@ function routingPage(part) {
   };
   const gOffBox = el("div", "list rt-goffbox");
   gOffBox.append(el("div", "rt-goffwhy", t("Routing groups are off in Plugins › Built-in: the groups magpie finds, one model several providers serve, still route, but your own can't be made or changed here.")), gOn);
-  gOff.append(el("div", "row-head", el("span", "label", t("Routing groups"))), gOffBox);
-  gsec.append(gHead, gFound, gNames, gList, gOff, pHead, pList);
-  // after the requests: a request picked in the list plays on the stage,
-  // so the list sits right under it
-  more.append(gsec);
+  gOff.append(gOffBox);
+  // the settings that hold for every group, under the list (11-06)
+  const sHead = el("div", "row-head rt-gset-head");
+  sHead.dataset.feature = "groups";
+  sHead.append(el("span", "label", t("Settings")));
+  const gSet = el("div", "list rt-gset");
+  gSet.dataset.feature = "groups";
+  gSet.append(gFound, gNames);
+  gsec.append(gHead, gList, gOff, sHead, gSet, pHead, pList);
+  // on the Routing groups page, a page of their own; Try again on it puts
+  // them back in its markup made anew
+  const gHome = () => $("#rtGroups");
+  window.routingGroupsHome = (main) => (main?.querySelector("#rtGroups") || gHome())?.append(gsec);
+  window.routingGroupsHome();
+  if (gHome()) byWidth(gHome(), { max520: (w) => w <= 520 });
   const ROUTE_OPTS = [["", "Smart"], ["order", "In order"], ["drain", "Until used up"], ["rotate", "In turn"], ["usage", "Least used"], ["pace", "Use before expiry"], ["free", "Free first"], ["fast", "Speed first"]];
   // a group may also be routed by hand: every request to the member the
   // user picks on its card (provider.Manual, #317) — a provider's keys can't
@@ -5675,8 +5714,8 @@ function routingPage(part) {
       // calling it on a row already in view would drop the hold the next editor
       // opens under (backToReader, app.js, guards the same way).
       const saved = body.id || body.from || "";
-      const row = saved && document.querySelector(`#view-routing .rt-group[data-id="${CSS.escape(saved)}"]`);
-      const view = row && gFolded !== saved && document.getElementById("view-routing");
+      const row = saved && gList.querySelector(`.rt-group[data-id="${CSS.escape(saved)}"]`);
+      const view = row && gFolded !== saved && gView();
       if (view) {
         const rr = row.getBoundingClientRect(), vb = view.getBoundingClientRect();
         if (rr.bottom > vb.bottom || rr.top < vb.top) { readerScrolls(1000); row.scrollIntoView({ block: "nearest" }); }
@@ -5808,7 +5847,7 @@ function routingPage(part) {
     if (!groups) return;
     // not under a row being dragged: it is drawn when let go
     if (groupArranging) { groupRenderPending = true; return; }
-    steady(drawGroups);
+    steady(drawGroups, gView());
   }
   // gSel: the groups picked to be removed together, while picking (lc on
   // Discord: they could only be removed one at a time); null otherwise
@@ -5900,16 +5939,23 @@ function routingPage(part) {
     const shown = words.length ? all.filter((g) => gEdit?.id === g.id || groupMatches(g, words)) : all;
     if (gSel) gSel = new Set([...gSel].filter((id) => shown.some((g) => g.id === id)));
     if (gSel && !all.length) gSel = null;
-    const newBtn = el("button", "text rt-gnew");
+    // the page's toolbar (11-06): the filter and how many there are on the
+    // left, what makes or picks groups on the right, New group the one
+    // filled button
+    const newBtn = el("button", "text primary rt-gnew");
     newBtn.type = "button";
+    newBtn.dataset.feature = "groups"; // off with them, as the note says
     newBtn.append(svg(PLUS, 11, 1.8), el("span", "", t("New group")));
+    newBtn.title = t("Make a routing group of any models you like — agents pick it as one model");
     newBtn.onclick = () => newGroup();
-    const head = [el("span", "label", t("Routing groups")), el("span", "grow"), el("span", "note", t("models agents pick as one"))];
+    const head = [];
     if (all.length > 1 || gQ.value) {
       gQ.placeholder = t("Filter groups and models");
       gQ.setAttribute("aria-label", gQ.placeholder);
       head.push(gQ);
     }
+    if (all.length) head.push(el("span", "note rt-gcount", t("{n} groups · {m} on", { n: all.length, m: all.filter((g) => !g.disabled).length })));
+    head.push(el("span", "grow"));
     // templates: a group for a common need made of the user's own models
     // in a click (provider.Templates). Cards while the user has no group of
     // their own, a menu by New group after
@@ -5989,7 +6035,7 @@ function routingPage(part) {
   let gMorph = null, gSaved = null, gFolded = null;
   const slotKey = (n) => n.dataset?.gslot;
   function slotsOf() {
-    const m = new Map(), vt = document.getElementById("view-routing").getBoundingClientRect().top;
+    const m = new Map(), vt = gView().getBoundingClientRect().top;
     for (const n of gList.children) {
       const k = slotKey(n);
       if (k === undefined) continue;
@@ -6001,7 +6047,7 @@ function routingPage(part) {
   function morphSlots(was) {
     const alias = gMorph, saved = gSaved;
     gMorph = gSaved = gFolded = null;
-    if (still() || !shown()) return;
+    if (still() || !gShown()) return;
     for (const n of gList.children) {
       const k = slotKey(n);
       if (k === undefined) continue;
@@ -6043,7 +6089,7 @@ function routingPage(part) {
   // was above the window's; the page's scroll is read once the redraw
   // has put it back (steady).
   function foldInSight(n, grow, from, to, top) {
-    const view = document.getElementById("view-routing");
+    const view = gView();
     readerScrolls(1000);
     let s0, target;
     const step = () => {
@@ -6712,7 +6758,7 @@ function routingPage(part) {
     const sfxSaid = el("span", "hint");
     const sayLabel = () => {
       sfxSaid.textContent = t("Agents’ lists show “{label}”", { label: (d.name.trim() || t("New group")) + (suffixMode() === "on" ? " · routing group" : "") }) +
-        " · " + t("“· routing group” is set for every group above");
+        " · " + t("“· routing group” is set for every group, under the list");
     };
     name.oninput = () => { d.name = name.value; showId(); sayLabel(); };
     const nw = el("div");
@@ -8001,15 +8047,26 @@ function routingPage(part) {
   }
   // loaded when the view is shown, and again when the window comes back
   // back on the page, the same groups aren't drawn again either (#4652)
-  new MutationObserver(() => { if (!$("#view-routing").hidden) loadGroups(true); }).observe($("#view-routing"), { attributes: true, attributeFilter: ["hidden"] });
-  window.addEventListener("focus", () => { if (shown()) loadGroups(true); });
+  // on either page: Routing names the groups too (its stage, the story)
+  for (const v of [$("#view-routing"), gView()]) new MutationObserver(() => { if (!v.hidden) loadGroups(true); }).observe(v, { attributes: true, attributeFilter: ["hidden"] });
+  window.addEventListener("focus", () => { if (shown() || gShown()) loadGroups(true); });
+  // the groups' rows say what is left of their accounts, drawn again when
+  // the Usage page's readings come while the page is open (Routing's own
+  // second does it there); the page may be open already, from ?view=groups
+  let gTick = 0;
+  const gTicks = () => {
+    clearInterval(gTick);
+    gTick = gView().hidden ? 0 : setInterval(() => { if (gShown()) groupsReadAgain(); }, 1000);
+  };
+  gTicks();
+  new MutationObserver(gTicks).observe(gView(), { attributes: true, attributeFilter: ["hidden"] });
   // newGroupWith: a new group's editor, opened with the model in it — a
   // model of a provider kept for routing groups that no group has, which
   // agents can reach no other way. The picker and the provider's editor
   // ask it (and the tray panel, by ?newgroup= on the window it opens).
   window.newGroupWith = async (id, name, ev) => {
     // app.js's show, the page's: this one's own show is the stage's caption
-    if (document.body.classList.contains("window") && $("#view-routing").hidden && !(await window.show("routing"))) return;
+    if (document.body.classList.contains("window") && gView().hidden && !(await window.show("groups"))) return;
     if (!groups) await loadGroups();
     if (!groups) return;
     if (groupDirty() && !(await confirmDiscard())) return;
@@ -8019,9 +8076,7 @@ function routingPage(part) {
     if (ed && window.scrollOnPurpose?.(ev)) ed.scrollIntoView({ block: "center", behavior: "smooth" });
     ed?.querySelector("input")?.focus({ preventScroll: true });
   };
-  // newGroup: an empty new group's editor. The groups sit below the
-  // requests, out of sight on a first look, so the page's head has a New
-  // group too (mintonight, #944), which brings the editor into view.
+  // newGroup: an empty new group's editor, at the list's top
   async function newGroup(ev) {
     if (groupDirty() && !(await confirmDiscard())) return;
     gSel = null;
@@ -8032,71 +8087,21 @@ function routingPage(part) {
     if (ed && window.scrollOnPurpose?.(ev)) ed.scrollIntoView({ block: "center", behavior: "smooth" });
     ed?.querySelector("input")?.focus({ preventScroll: true });
   }
-  const headNew = $("#rtNewGroup");
-  if (headNew) headNew.onclick = async (ev) => {
-    if (!groups) await loadGroups();
-    if (groups) newGroup(ev);
-  };
-  // the head's Routing groups: the groups sit below the stage, the story
-  // and every request, a long scroll down with many models (shihh on
-  // Discord). Its click brings them to the top of the view, and the focus
-  // with them, so Tab goes on from there; the page is laid out as before
-  gsec.tabIndex = -1;
-  const headGo = $("#rtGoGroups");
-  if (headGo) headGo.onclick = (ev) => {
-    if (!window.scrollOnPurpose?.(ev)) return;
-    gsec.scrollIntoView({ block: "start", behavior: still() ? "auto" : "smooth" });
-    gsec.focus({ preventScroll: true });
-  };
-  // fitGo: it takes only room the head has spare, so nothing else in the
-  // head moves or wraps for it: named where its name fits, its arrow alone
-  // where only that does, and left out of a head with no room (a phone's)
-  const goHead = headGo?.parentElement, goGrow = goHead?.querySelector(".grow");
-  function fitGo() {
-    if (!goGrow || !goHead.offsetParent) return;
-    headGo.dataset.fit = "none";
-    const room = goGrow.getBoundingClientRect().width, gap = parseFloat(getComputedStyle(goHead).columnGap) || 0;
-    for (const fit of ["full", "icon"]) {
-      headGo.dataset.fit = fit;
-      if (room >= headGo.getBoundingClientRect().width + 6 + gap) return;
-    }
-    headGo.dataset.fit = "none";
-  }
-  let goFitting = 0;
-  const fitGoSoon = () => { if (!goFitting) goFitting = requestAnimationFrame(() => { goFitting = 0; fitGo(); }); };
-  if (goHead) {
-    const ro = new ResizeObserver(fitGoSoon);
-    for (const n of [goHead, ...goHead.querySelectorAll(".label, .note")]) ro.observe(n);
-    new MutationObserver(fitGoSoon).observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
-  }
   const askedGroup = document.body.classList.contains("window") && params.get("newgroup");
   if (askedGroup) loadGroups().then(() => window.newGroupWith(askedGroup, ""));
   else loadGroups();
 
   // ---------- where the reader is, as requests come ----------
-  // Every request redraws what is above the routing groups: the stage gains
-  // or loses a row, the story a line, the lists theirs. The view kept its
-  // scrollTop, so all of it pushed the groups down or pulled them up under
-  // the reader, a group being edited too (Jerell.OvO on Discord). The view
-  // keeps a part of itself where it is on the screen instead (keepInView in
-  // app.js): the groups, while they are in the upper half of the view or a
-  // field in them has the focus, else the lists, while they are; with
-  // neither (the stage in sight at the top), the view stays as it is.
-  // The groups too while the pointer is on them, low in the view as they
-  // are at the page's foot: a manual group's card, its pick a click away,
-  // slid down from under the pointer as the requests list above it grew
-  // (cwfox67 on X).
+  // Every request redraws what is above the lists: the stage gains or
+  // loses a row, the story a line. The view keeps the lists where they are
+  // on the screen while they are in its upper half (keepInView in app.js);
+  // with the stage in sight at the top, the view stays as it is. The
+  // routing groups sat below them until they had a page of their own.
   const rv = $("#view-routing");
   keepInView(rv, () => {
     const mid = rv.getBoundingClientRect().top + rv.clientHeight / 2;
-    if ((gsec.contains(document.activeElement) || gsec.matches(":hover")) && gsec.offsetParent) return gsec;
-    return [gsec, hist].find((p) => p.offsetParent && p.getBoundingClientRect().top <= mid) || null;
+    return hist.offsetParent && hist.getBoundingClientRect().top <= mid ? hist : null;
   });
-  // the pointer coming onto the groups or off them changes the part kept,
-  // so where the reader is is taken again, as their scroll would
-  const repin = () => { if (held?.v !== rv && !rv.hidden) readerLeaves(rv); };
-  gsec.addEventListener("pointerenter", repin);
-  gsec.addEventListener("pointerleave", repin);
 
   // ---------- the tray panel's Routing tab ----------
   // The gateway's latest requests, as they come, from the same trace the

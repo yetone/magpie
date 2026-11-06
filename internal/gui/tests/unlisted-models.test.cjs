@@ -127,7 +127,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // the list's own choices are still the ones the keys move over
       assert.equal(await page.locator("#list li[data-i]").count(), 1, "only “use as typed” is a choice");
       await kept.getByRole("button", { name: w.make }).click();
-      const ed = page.locator("#view-routing:not([hidden]) .rt-gedit");
+      const ed = page.locator("#view-groups:not([hidden]) .rt-gedit");
       await ed.waitFor();
       assert.equal(await ed.locator("input").first().inputValue(), "hy4", "named after the model");
       await ed.getByRole("button", { name: w.save, exact: true }).click();
@@ -149,12 +149,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert(await lost.isHidden(), "said only while kept for groups");
       await page.locator(".editor label", { hasText: lang === "zh" ? "只通过路由分组使用" : "Only through routing groups" }).locator("input").check();
       await lost.getByRole("button", { name: w.makeOf }).click();
-      const ed2 = page.locator("#view-routing:not([hidden]) .rt-gedit");
+      const ed2 = page.locator("#view-groups:not([hidden]) .rt-gedit");
       await ed2.waitFor();
       assert.equal(await ed2.locator("input").first().inputValue(), "hy4");
 
       // opened with ?newgroup=, as the tray panel asks the window
-      page = await open("http://magpie.test/?view=routing&newgroup=hunyuan%2Fhy4", posts);
+      page = await open("http://magpie.test/?view=groups&newgroup=hunyuan%2Fhy4", posts);
       await page.locator(".rt-gedit").waitFor();
       assert.equal(await page.locator(".rt-gedit input").first().inputValue(), "hy4");
 
@@ -166,10 +166,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await filterFor(page, page.locator(`${row} .ag-open .field[data-key="model"]`), "hy4");
       await page.locator("#list li.kept").getByRole("button", { name: w.make }).click();
       for (let i = 0; i < 40 && !posts.some((p) => p.path.startsWith("/api/window/main")); i++) await page.waitForTimeout(50);
-      assert.equal(posts.find((p) => p.path.startsWith("/api/window/main"))?.path, "/api/window/main?view=routing&newgroup=hunyuan%2Fhy4");
+      assert.equal(posts.find((p) => p.path.startsWith("/api/window/main"))?.path, "/api/window/main?view=groups&newgroup=hunyuan%2Fhy4");
 
       const missing = await page.evaluate((ks) => ks.filter((k) => !I18N.zh[k]), [
-        "In no routing group, so no agent can use them now: {models}.", "Once saved, make a group of them in Routing.",
+        "In no routing group, so no agent can use them now: {models}.", "Once saved, make a group of them in Routing groups.",
         "Make a routing group of {model}", "Make a routing group of it", "Pick {group}",
         "{provider} is used only through routing groups: agents reach {model} by picking {group}.",
         "{provider} is used only through routing groups, and {model} is in none, so no agent can use it. Make a group of it, or untick “Only through routing groups” in {provider}'s models.",

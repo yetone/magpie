@@ -111,9 +111,9 @@ const kinds = [
   { name: "Agents", mode: "window", view: "agents", row: '#agents > .row.agent[data-id="beta"]', grip: ".ag-handle" },
   { name: "Providers", mode: "window", view: "providers", row: "#providers > .row.provider", grip: ".pv-handle" },
   { name: "Usage", mode: "window", view: "usage", row: ".subscription-card", grip: ".us-handle" },
-  { name: "Routing groups", mode: "window", view: "routing", row: '.rt-groups > .rt-group[data-id="g"]', grip: ".rt-ghandle" },
+  { name: "Routing groups", mode: "window", view: "groups", row: '.rt-groups > .rt-group[data-id="g"]', grip: ".rt-ghandle" },
   {
-    name: "a group's members", mode: "window", view: "routing", row: ".rt-gedit .fbrow:has(.rt-mhandle)", grip: ".rt-mhandle",
+    name: "a group's members", mode: "window", view: "groups", row: ".rt-gedit .fbrow:has(.rt-mhandle)", grip: ".rt-mhandle",
     open: async (page) => {
       await page.locator('.rt-groups > .rt-group[data-id="g"]').waitFor();
       await page.evaluate(() => document.querySelector('.rt-groups > .rt-group[data-id="g"]').click());

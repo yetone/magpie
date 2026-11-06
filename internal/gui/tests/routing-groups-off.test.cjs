@@ -82,7 +82,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const errors = [], posts = [];
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", serve(lang, false, posts));
-        await page.goto("http://magpie.test/?view=routing");
+        await page.goto("http://magpie.test/?view=groups");
 
         const note = page.locator(".rt-gsec .rt-goff");
         await note.waitFor();
@@ -90,7 +90,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert(text.includes(w.why), text);
         const btn = note.locator("button", { hasText: w.on });
         assert(await btn.isVisible());
-        assert.equal(await page.locator("#rtNewGroup").isVisible(), false, "New group is off with them");
+        assert.equal(await page.locator(".rt-gnew").isVisible(), false, "New group is off with them");
         assert.equal(await page.locator(".rt-group", { hasText: "Mine" }).isVisible(), false);
         assert(await note.evaluate((n) => n.getBoundingClientRect().right <= innerWidth + 1), "the note fits the window");
         assert(await btn.evaluate((b) => b.getBoundingClientRect().right <= innerWidth + 1), "so does its button");
@@ -99,7 +99,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await note.waitFor({ state: "hidden" });
         assert.deepEqual(posts, [{ id: "groups", on: true }]);
         await page.locator(".rt-group", { hasText: "Mine" }).waitFor({ state: "visible" });
-        await page.locator("#rtNewGroup").waitFor({ state: "visible" });
+        await page.locator(".rt-gnew").waitFor({ state: "visible" });
         await page.waitForFunction((m) => document.querySelector("#status").textContent.includes(m), w.done);
         assert.deepEqual(errors, []);
       });
@@ -110,10 +110,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang, true, []));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       await page.locator(".rt-group", { hasText: "Mine" }).waitFor({ state: "visible" });
       assert.equal(await page.locator(".rt-goff").isVisible(), false);
-      assert(await page.locator("#rtNewGroup").isVisible());
+      assert(await page.locator(".rt-gnew").isVisible());
       assert.deepEqual(errors, []);
     });
   }
@@ -121,7 +121,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
   test(`${engine}: the note's strings are in every language`, async (t) => {
     const page = await open(engine, 900, t, `${engine}-routing-groups-off-i18n.png`);
     await page.route("**/*", serve("en", false, []));
-    await page.goto("http://magpie.test/?view=routing");
+    await page.goto("http://magpie.test/?view=groups");
     await page.locator(".rt-goff").waitFor();
     const missing = await page.evaluate((ks) => ["zh", "zh-TW", "ja", "de"].flatMap((l) => ks.filter((k) => !I18N[l]?.[k]).map((k) => `${l}: ${k}`)), keys);
     assert.deepEqual(missing, []);

@@ -135,10 +135,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       ]);
       await page.keyboard.press("Escape");
 
-      // the Routing page's card of a group of two alike says each one's source
+      // the groups page's card of a group of two alike says each one's source
       await page.evaluate(() => document.querySelector("#tellAnchor")?.remove());
-      await page.goto("http://magpie.test/?view=routing");
-      const mem = page.locator("#view-routing .mem", { hasText: "DeepSeek-V4.1-Flash" }).first();
+      await page.goto("http://magpie.test/?view=groups");
+      const mem = page.locator("#view-groups .mem", { hasText: "DeepSeek-V4.1-Flash" }).first();
       await mem.waitFor();
       const said = await mem.textContent();
       assert.ok(said.includes("DeepSeek-V4.1-Flash · buddy") && said.includes("DeepSeek-V4.1-Flash · cline"), said);

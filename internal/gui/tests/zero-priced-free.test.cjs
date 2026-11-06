@@ -128,7 +128,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator("#modal").waitFor({ state: "hidden" });
 
         // a routing group's Add a model picker
-        await page.goto("http://magpie.test/?view=routing");
+        await page.goto("http://magpie.test/?view=groups");
         const card = page.locator('.rt-group[data-id="g"]');
         await card.waitFor();
         await card.locator("button", { hasText: w.edit }).click();

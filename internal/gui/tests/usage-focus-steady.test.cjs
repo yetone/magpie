@@ -176,9 +176,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(await flashes(panel), [], "the panel's chart isn't dimmed or blanked");
       assert.deepEqual(await kept(panel, PCOL), Array.from({ length: pcols }, (_, i) => i + 1), "the same columns stay");
 
-      // the Routing page's groups: the same cards stay
-      await p.locator('[data-view="routing"]').first().click();
-      const GRP = "#view-routing .rt-group";
+      // the Routing groups page: the same cards stay
+      await p.locator('[data-view="groups"]').first().click();
+      const GRP = "#view-groups .rt-group";
       await p.locator(GRP).first().waitFor();
       await p.waitForTimeout(300);
       await watch(p, GRP);

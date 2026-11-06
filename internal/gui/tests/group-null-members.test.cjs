@@ -83,7 +83,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const errors = [];
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", serve(lang));
-        await page.goto("http://magpie.test/?view=routing");
+        await page.goto("http://magpie.test/?view=groups");
         const row = (name) => page.locator(".rt-group", { has: page.locator(".nm b", { hasText: new RegExp("^" + name + "$") }) });
         await row("Fast").waitFor();
         assert.deepEqual(await page.locator(".rt-group .nm b").allTextContents(), ["Fast", "Plugin", "Odd", "Slow"], "every group is listed");

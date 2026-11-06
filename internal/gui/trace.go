@@ -325,8 +325,9 @@ func mainView(q url.Values) string {
 		}
 	}
 	// the panel's picker making a routing group of a model kept for groups
-	// and in none: the window opens on a new group of it
-	if m := q.Get("newgroup"); view == "routing" && m != "" {
+	// and in none: the window opens on a new group of it, on the Routing
+	// groups page (routing, from a build before it, still does)
+	if m := q.Get("newgroup"); (view == "routing" || view == "groups") && m != "" {
 		view += "&newgroup=" + url.QueryEscape(m)
 	}
 	return view

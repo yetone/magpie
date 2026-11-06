@@ -81,7 +81,7 @@ async function open(engine, lang, width, members, held, t) {
   const errors = [], posts = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.route("**/*", serve(lang, posts, members, held));
-  await page.goto("http://magpie.test/?view=routing");
+  await page.goto("http://magpie.test/?view=groups");
   const card = page.locator(".rt-group", { hasText: "Work" });
   await card.waitFor();
   return { page, card, errors, posts };

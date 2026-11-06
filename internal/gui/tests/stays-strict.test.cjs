@@ -114,7 +114,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const errors = [], posts = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang, posts));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       const pool = page.locator(".rt-pool", { hasText: "Codex" });
       await pool.waitFor();
       const strict = pool.locator(".segs .opt", { hasText: new RegExp(`^${await tr(page, "Strict")}$`) });

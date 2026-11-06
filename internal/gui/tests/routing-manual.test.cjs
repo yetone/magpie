@@ -82,7 +82,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const errors = [], posts = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang, posts));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       const card = page.locator(".rt-group", { hasText: "Hand" });
       await card.waitFor();
 
@@ -99,8 +99,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // the reader scrolls the card to the middle, then picks luna: saved
       // with the group's other fields as they were, nothing moves, the
       // editor stays shut
-      const view = page.locator("#view-routing");
-      const dy = await card.evaluate((g) => { const v = document.querySelector("#view-routing");
+      const view = page.locator("#view-groups");
+      const dy = await card.evaluate((g) => { const v = document.querySelector("#view-groups");
         return Math.round(g.getBoundingClientRect().top - v.getBoundingClientRect().top - v.clientHeight / 2); });
       await page.mouse.move(550, 400);
       await page.mouse.wheel(0, dy);
@@ -133,7 +133,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const wheelTo = async (x) => {
         // the distance is read once the editor has stopped moving
         await settled(page);
-        const d = await x.evaluate((e) => { const v = document.querySelector("#view-routing");
+        const d = await x.evaluate((e) => { const v = document.querySelector("#view-groups");
           return Math.round(e.getBoundingClientRect().top - v.getBoundingClientRect().top - v.clientHeight / 2); });
         await page.mouse.move(550, 400);
         await page.mouse.wheel(0, d);

@@ -90,7 +90,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // round is delivered on the next frame and nothing is painted wrong.
       page.on("pageerror", (e) => { if (!/^ResizeObserver loop completed with undelivered notifications/.test(e.message)) errors.push(e.message); });
       await page.route("**/*", serve(lang, posts));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       await page.locator(".rt-groups > .rt-group").nth(1).waitFor();
       // tall enough that the rows are in view unscrolled (1400: German
       // with the found groups' "leave out" line needs more than 1200): a scroll closes

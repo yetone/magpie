@@ -96,7 +96,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const { page, errors } = await open(engine, lang, "lone", width, t);
         await page.waitForFunction((s) => document.querySelector(".rt-mode")?.textContent.trim() === s, lone[lang]);
         // the groups are in, and the chip still names no routing
-        await page.locator(".rt-group").first().waitFor();
+        await page.locator("#view-groups .rt-group").first().waitFor({ state: "attached" });
         await page.waitForTimeout(150);
         assert.equal(await page.locator(".rt-hub i").isHidden(), true, "the chip names no routing");
         assert.equal((await page.locator(".rt-mode").textContent()).trim(), lone[lang]);
@@ -120,18 +120,24 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal((await head.textContent()).trim(), smart[lang]);
         assert.equal(await head.getAttribute("data-go"), "pool:relay");
 
-        const view = page.locator("#view-routing");
+        // the pools are on the Routing groups page: the chip opens it, with
+        // the pool in sight
+        const groups = page.locator("#view-groups");
         const pool = page.locator('.rt-pool[data-provider="relay"]');
         await pool.waitFor({ state: "attached" });
-        const inView = () => pool.evaluate((p) => { const v = document.querySelector("#view-routing").getBoundingClientRect(), r = p.getBoundingClientRect();
-          return r.top >= v.top && r.bottom <= v.bottom; });
+        const inView = () => pool.evaluate((p) => { const v = document.querySelector("#view-groups"), b = v.getBoundingClientRect(), r = p.getBoundingClientRect();
+          return !v.hidden && r.height > 0 && r.top >= b.top && r.bottom <= b.bottom; });
         assert.equal(await inView(), false, "the pool starts out of view");
-        const top = await view.evaluate((v) => v.scrollTop);
+        const back = async () => {
+          await page.evaluate(() => window.show("routing"));
+          await page.waitForFunction(() => !document.querySelector("#view-routing").hidden);
+          await pool.evaluate((p) => p.classList.remove("rt-found"));
+        };
 
         // a click takes the reader there: in view, marked, its routing focused
         await chip.click();
         await page.waitForFunction(() => document.querySelector('.rt-pool[data-provider="relay"]')?.classList.contains("rt-found"));
-        assert.ok(await view.evaluate((v) => v.scrollTop) > top, "the view went down to it");
+        assert.equal(await groups.isVisible(), true, "the groups page opened");
         assert.equal(await inView(), true);
         assert.equal(await page.evaluate(() => document.activeElement?.closest(".rt-pool")?.dataset.provider), "relay");
         assert.equal(await page.evaluate(() => document.activeElement?.classList.contains("on")), true);
@@ -140,8 +146,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // a press held over the head's redraw is still a click (#2151): the
         // chip is not written over under the pointer, which WebKit takes
         // for a press that never ends where it began
-        await view.evaluate((v) => { v.scrollTop = 0; });
-        await pool.evaluate((p) => p.classList.remove("rt-found"));
+        await back();
         const box = await chip.boundingBox();
         await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
         await page.mouse.down();
@@ -151,11 +156,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction(() => document.querySelector('.rt-pool[data-provider="relay"]')?.classList.contains("rt-found"));
         assert.equal(await inView(), true);
 
-        // the keyboard does the same from the top
-        await view.evaluate((v) => { v.scrollTop = 0; });
+        // the keyboard does the same
+        await back();
         await chip.focus();
         await page.keyboard.press("Enter");
-        await page.waitForFunction(() => document.querySelector("#view-routing").scrollTop > 0);
+        await page.waitForFunction(() => document.querySelector('.rt-pool[data-provider="relay"]')?.classList.contains("rt-found"));
         assert.equal(await inView(), true);
         // nothing is drawn wider than the window
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);

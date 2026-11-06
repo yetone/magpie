@@ -134,7 +134,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const errors = [], posts = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang, posts));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       const ed = await openEditor(page, lang);
       for (const width of [1100, 900, 700]) {
         await page.setViewportSize({ width, height: 1400 });

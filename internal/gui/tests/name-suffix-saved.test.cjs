@@ -96,7 +96,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       test(`${engine} ${lang} ${width}px: Routing opened first shows the saved Off, and Settings and back keep it`, async (t) => {
         const posts = [];
         const { page, errors, tr } = await launch(t, engine, lang, width, OFF, {}, posts);
-        await page.goto("http://magpie.test/?view=routing");
+        await page.goto("http://magpie.test/?view=groups");
         await page.locator(".rt-group", { hasText: "Fast" }).waitFor();
         const set = page.locator(".rt-gnames");
         await set.locator(".segs").waitFor();
@@ -105,12 +105,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // a group's editor says what its group is called there: no suffix
         await page.locator(".rt-group", { hasText: "Fast" }).locator("button", { hasText: await tr("Edit") }).click();
         const row = page.locator(".rt-gedit label", { hasText: new RegExp(`^${await tr("In agents’ lists")}$`) }).locator("xpath=following-sibling::div[1]");
-        await says(row.locator(".hint"), (await tr("Agents’ lists show “{label}”", { label: "Fast" })) + " · " + (await tr("“· routing group” is set for every group above")));
+        await says(row.locator(".hint"), (await tr("Agents’ lists show “{label}”", { label: "Fast" })) + " · " + (await tr("“· routing group” is set for every group, under the list")));
         // Settings says the same, and coming back still does
         await page.locator("#prefs").click();
         await page.locator("#plainNamesSegs .opt.on").waitFor();
         await picked(page.locator("#plainNamesSegs .opt.on"), await tr("Off"));
-        await page.locator('#nav button[data-view="routing"]').click();
+        // the groups tab is the sidebar's; the header's row reaches them from Routing
+        const tab = page.locator('#nav button[data-view="groups"]');
+        if (await tab.isVisible()) await tab.click();
+        else { await page.locator('#nav button[data-view="routing"]').click(); await page.locator("#rtToGroups").click(); }
         await picked(page.locator(".rt-gnames .opt.on"), await tr("Off"));
         assert.deepEqual(posts, [], "nothing is written");
         assert.deepEqual(errors, []);
@@ -119,7 +122,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       test(`${engine} ${lang} ${width}px: Routing drawn before the state comes in follows the saved "Not on names I set"`, async (t) => {
         const posts = [];
         const { page, errors, tr } = await launch(t, engine, lang, width, OWN, { stateDelay: 600 }, posts);
-        await page.goto("http://magpie.test/?view=routing");
+        await page.goto("http://magpie.test/?view=groups");
         const set = page.locator(".rt-gnames");
         await set.locator(".segs").waitFor();
         await picked(set.locator(".opt.on"), await tr("Not on names I set"));

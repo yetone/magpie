@@ -144,7 +144,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.match(await stage.textContent(), new RegExp(w.row));
       await page.waitForFunction((s) => document.body.innerText.includes(s), zh ? "已排到最后" : "so it went to the back");
 
-      // the providers with several accounts: set at once
+      // the providers with several accounts, on the Routing groups page:
+      // set at once
+      await page.evaluate(() => window.show("groups"));
       const pool = page.locator(".rt-pool", { hasText: "WorkBuddy AI" });
       await pool.waitFor();
       // the pool sits under the window's foot: wheeled to, as the reader

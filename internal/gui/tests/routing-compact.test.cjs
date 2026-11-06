@@ -73,7 +73,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     test(`${engine} ${lang}: a rule for compacting`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       t.after(() => browser.close());
-      const page = await (await browser.newContext({ viewport: { width: 1100, height: 1400 } })).newPage();
+      const page = await (await browser.newContext({ viewport: { width: 1100, height: 1400 }, reducedMotion: "reduce" })).newPage();
       page.setDefaultTimeout(5000);
       page.setDefaultNavigationTimeout(60000);
       const errors = [], posts = [];
@@ -81,14 +81,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.route("**/*", serve(lang, posts));
       await page.goto("http://magpie.test/?view=routing");
       const group = page.locator(".rt-group").first();
-      await group.waitFor();
+      await group.waitFor({ state: "attached" });
 
       // the compaction in the trace, told as one
       await page.waitForFunction((s) => document.documentElement.innerText.includes(s), w.story);
       const said = await page.evaluate(() => document.documentElement.innerText);
       assert(said.includes(w.small), "the model passed over is named");
 
-      // the group's rule, in words
+      // the group's rule, in words, on the groups page
+      await page.evaluate(() => window.show("groups"));
+      await group.waitFor();
       const title = await group.evaluate((g) => [...g.querySelectorAll("[title]")].map((e) => e.title).join("\n"));
       assert(title.includes(`1. ${w.cond} →`), `the rule reads as compacting: ${title}`);
 

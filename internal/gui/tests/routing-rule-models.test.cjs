@@ -109,7 +109,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       test(`${engine} ${lang} ${width}: a rule names several models`, async (t) => {
         const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
         t.after(() => browser.close());
-        const page = await (await browser.newContext({ viewport: { width, height: 1400 } })).newPage();
+        const page = await (await browser.newContext({ viewport: { width, height: 1400 }, reducedMotion: "reduce" })).newPage();
         page.setDefaultTimeout(5000);
         page.setDefaultNavigationTimeout(60000);
         const errors = [], posts = [];
@@ -117,10 +117,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.route("**/*", serve(lang, posts));
         await page.goto("http://magpie.test/?view=routing");
         const group = page.locator(".rt-group").first();
-        await group.waitFor();
+        await group.waitFor({ state: "attached" });
 
         // the trace: the rule's next went first
         await page.waitForFunction((s) => document.documentElement.innerText.includes(s), w.why);
+        await page.evaluate(() => window.show("groups"));
+        await group.waitFor();
 
         await press(page, group.locator("button", { hasText: w.edit }));
         const ed = page.locator(".rt-gedit");

@@ -105,7 +105,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // page error; see group-duplicate.test.cjs
       page.on("pageerror", (e) => { if (!/^ResizeObserver loop completed with undelivered notifications/.test(e.message)) errors.push(e.message); });
       await page.route("**/*", serve(lang, posts));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       await page.locator(".rt-groups > .rt-group").nth(1).waitFor();
       // tall enough that the import box is in view unscrolled in every
       // language: a scroll closes the menu, and the page settles its own

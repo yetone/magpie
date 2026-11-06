@@ -126,7 +126,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const typeIn = (page, text) => engine === "chromium" ? ime(page, text) : page.keyboard.type(text);
 
       test(`${engine} ${lang} ${width}px: the routing group filter takes one character a key`, async (t) => {
-        const { page, errors } = await open(t, "routing");
+        const { page, errors } = await open(t, "groups");
         const q = page.locator("input.rt-gfilter");
         await q.waitFor();
         await watch(page, "input.rt-gfilter");
@@ -135,7 +135,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(await field(page), { out: 0, same: true, value: "12", caret: [2, 2], connected: true }, "the filter after 1, 2");
         // the groups follow it: only v12 has a 12 in it
         await page.waitForFunction(() => [...document.querySelectorAll(".rt-groups .rt-group")].map((r) => r.dataset.id).join() === "v12");
-        assert.equal(await page.locator(".rt-gsec .row-head").first().locator(".label").textContent(), w.label);
         // a key in the middle goes where the caret is
         await page.keyboard.press("ArrowLeft");
         await typeIn(page, "5");
@@ -147,8 +146,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // the row around it is still drawn again: in the other language
         // its words change, and the filter stays where it was
         await page.evaluate((l) => setLocale(l), w.other[0]);
-        await page.waitForFunction((s) => document.querySelector(".rt-gsec .row-head .label")?.textContent === s, w.other[1]);
-        assert.equal(await q.getAttribute("placeholder"), w.other[2]);
+        await page.waitForFunction((s) => document.querySelector("input.rt-gfilter")?.placeholder === s, w.other[2]);
         const f = await field(page);
         assert.equal(f.out, 0, "switching the language took the filter out");
         assert.equal(f.value, "1");

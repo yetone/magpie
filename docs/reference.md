@@ -2049,7 +2049,7 @@ provider or group still set to one of them is tried in its listed order.
 Your own routing groups are the built-in plugin `groups` (Routing groups in
 Plugins › Built-in), which stays on while you have one. The groups magpie
 finds for a model two providers serve don't need it. Turned off, the gateway
-doesn't list or serve a group of your own, and the Routing page has no New
+doesn't list or serve a group of your own, and the Routing groups page has no New
 group button; `magpie groups` still lists them.
 
 **Make first** sets the accounts' order. How much that order counts

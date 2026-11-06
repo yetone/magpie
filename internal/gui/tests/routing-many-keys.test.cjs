@@ -168,10 +168,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert(rows.wires >= 800, `${rows.wires} wires: each key has one, in the list or not`);
       assert.deepEqual(rows.unwired, [], "a wire ends at each key in sight");
       // scrolled to the foot, the last key is there, drawn, with its wire
-      await page.mouse.move(700, 500);
       // by the wheel, as a reader would: on until the last key is in the
-      // list, then to it
+      // list, then to it. The wheel turns over the keys: at the page's foot
+      // the requests list sits below them, and a wheel over it scrolls it
+      // and stops there (overscroll-behavior: contain), as it should
+      const overKeys = () => page.evaluate(() => { const r = document.querySelector("#view-routing .rt-accts").getBoundingClientRect(); return [r.left + Math.min(40, r.width / 2), (Math.max(60, r.top) + Math.min(innerHeight - 20, r.bottom)) / 2]; }).then(([x, y]) => page.mouse.move(x, y));
       for (let k = 0; k < 80; k++) {
+        await overKeys();
         const at = await page.evaluate(() => [...document.querySelectorAll("#view-routing .rt-accts > li")].find((li) => li.title === "solpool2#k299")?.getBoundingClientRect().top);
         if (at !== undefined && Math.abs(at - 400) < 150) break;
         await page.mouse.wheel(0, at === undefined ? 3000 : Math.max(-3000, Math.min(3000, at - 400)));
@@ -189,6 +192,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       for (let k = 0; k < 80; k++) {
         const f = await fold2();
         if (f && Math.abs(f.top - 300) < 150) break;
+        await overKeys();
         await page.mouse.wheel(0, !f ? -3000 : Math.max(-3000, Math.min(3000, f.top - 300)));
         await page.waitForTimeout(!f ? 50 : 300);
       }

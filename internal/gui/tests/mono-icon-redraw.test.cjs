@@ -94,7 +94,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         } });
       });
       await page.route("**/*", serve(lang, asked));
-      await page.goto("http://magpie.test/?view=routing");
+      await page.goto("http://magpie.test/?view=groups");
       const card = page.locator(".rt-group", { hasText: "DeepSeek V4" });
       await card.waitFor();
       await card.locator("button", { hasText: words[lang].edit }).click();
