@@ -128,7 +128,7 @@ static void mpMasked(NSImage *im, NSRect r) {
 	size_t stride = n * 4;
 	unsigned char *px = calloc(n * stride, 1);
 	CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
-	CGContextRef bm = CGBitmapContextCreate(px, n, n, 8, stride, cs, kCGImageAlphaPremultipliedLast);
+	CGContextRef bm = CGBitmapContextCreate(px, n, n, 8, stride, cs, (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
 	CGColorSpaceRelease(cs);
 	if (bm == NULL) {
 		free(px);

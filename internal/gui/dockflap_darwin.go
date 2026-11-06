@@ -39,7 +39,7 @@ static CGPathRef mpDockPath(const char *ops, int nops, const double *pts) {
 
 static CGContextRef mpDockContext(void) {
 	CGColorSpaceRef cs = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
-	CGContextRef c = CGBitmapContextCreate(NULL, mpDockPx, mpDockPx, 8, 0, cs, kCGImageAlphaPremultipliedLast);
+	CGContextRef c = CGBitmapContextCreate(NULL, mpDockPx, mpDockPx, 8, 0, cs, (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
 	CGColorSpaceRelease(cs);
 	return c;
 }
@@ -65,7 +65,7 @@ static const CGFloat mpDockSeam = 1;
 // even-odd and stroked out by edge pixels, within the mask within if any.
 static CGImageRef mpDockFill(CGPathRef path, CGFloat edge, CGImageRef within) {
 	CGColorSpaceRef g = CGColorSpaceCreateDeviceGray();
-	CGContextRef c = CGBitmapContextCreate(NULL, mpDockPx, mpDockPx, 8, 0, g, kCGImageAlphaNone);
+	CGContextRef c = CGBitmapContextCreate(NULL, mpDockPx, mpDockPx, 8, 0, g, (CGBitmapInfo)kCGImageAlphaNone);
 	CGColorSpaceRelease(g);
 	CGContextSetGrayFillColor(c, 0, 1);
 	CGContextFillRect(c, CGRectMake(0, 0, mpDockPx, mpDockPx));
