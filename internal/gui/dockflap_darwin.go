@@ -6,6 +6,7 @@ package gui
 #cgo CFLAGS: -x objective-c
 #cgo LDFLAGS: -framework AppKit
 #import <Cocoa/Cocoa.h>
+#import <objc/runtime.h>
 #include <stdlib.h>
 
 // The Dock tile flaps as the header logo does: the icon the system draws
@@ -211,10 +212,49 @@ static int mpDockPNG(const char *file, double bob, double tail, double wing, con
 	}
 }
 
+// mpDockFrameNS is a frame as an NSImage, retained. It is made on a Go
+// thread, which has no autorelease pool: without one of its own, what
+// AppKit autoreleases in making it (its NSCGImageSnapshotRep, holding the
+// frame's 1 MB of pixels) was never let go, 29 frames a flap, for as long
+// as magpie ran (#4162).
+static NSImage *mpDockFrameNS(CGImageRef im) {
+	@autoreleasepool {
+		return [[NSImage alloc] initWithCGImage:im size:NSMakeSize(mpDockPx, mpDockPx)];
+	}
+}
+
+// mpDockFrameFreed makes a frame's NSImage as mpDockShow does, on the
+// calling thread, lets it go, and says whether its pixels went with it:
+// 1 when nothing of it is left, for tests.
+static int mpDockFrameFreed(void) {
+	CGContextRef c = mpDockContext();
+	if (!c) return -1;
+	CGImageRef im = CGBitmapContextCreateImage(c);
+	CGContextRelease(c);
+	if (!im) return -1;
+	NSImage *ns = mpDockFrameNS(im);
+	CGImageRelease(im);
+	// a weak reference to its pixels' rep; each look at it in a pool of
+	// its own, since objc_loadWeak autoreleases what it gives
+	id rep = nil;
+	int seen, freed;
+	@autoreleasepool {
+		objc_storeWeak(&rep, ns.representations.firstObject);
+		seen = objc_loadWeak(&rep) != nil;
+	}
+	[ns release];
+	@autoreleasepool {
+		freed = objc_loadWeak(&rep) == nil;
+		objc_storeWeak(&rep, nil);
+	}
+	if (!seen) return -1; // nothing to watch
+	return freed;
+}
+
 static void mpDockShow(double bob, double tail, double wing, const double *at) {
 	CGImageRef im = mpDockFrameImage(bob, tail, wing, at);
 	if (!im) return;
-	NSImage *ns = [[NSImage alloc] initWithCGImage:im size:NSMakeSize(mpDockPx, mpDockPx)];
+	NSImage *ns = mpDockFrameNS(im);
 	CGImageRelease(im);
 	dispatch_async(dispatch_get_main_queue(), ^{
 		NSDockTile *tile = NSApp.dockTile;
@@ -234,6 +274,7 @@ static void mpDockStill(void) {
 	dispatch_async(dispatch_get_main_queue(), ^{
 		NSDockTile *tile = NSApp.dockTile;
 		tile.contentView = nil;
+		mpDockView.image = nil; // the last frame's pixels, until the next flap
 		[tile display];
 	});
 }
@@ -367,4 +408,12 @@ func dockFramePNG(app, file string, t float64) bool {
 	defer C.free(unsafe.Pointer(cf))
 	bob, tail, wing := flapAt(t)
 	return C.mpDockPNG(cf, C.double(bob), C.double(tail), C.double(wing), at) != 0
+}
+
+// dockFrameFreed makes a Dock frame's image on this goroutine's thread, as
+// dockFlap does, lets it go, and says whether its pixels went with it; ok
+// is false when there was nothing to watch.
+func dockFrameFreed() (freed, ok bool) {
+	r := C.mpDockFrameFreed()
+	return r == 1, r >= 0
 }

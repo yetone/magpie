@@ -97,17 +97,22 @@ static NSString *mpPlaceKey(const char *name) {
 }
 
 // Where AppKit keeps the item named name, -1 for nowhere.
+// Both run on Go threads, which have no autorelease pool of their own.
 static double mpTrayPlace(const char *name) {
-	NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
-	[d synchronize];
-	id v = [[d persistentDomainForName:[[NSBundle mainBundle] bundleIdentifier] ?: [[NSProcessInfo processInfo] processName]] objectForKey:mpPlaceKey(name)];
-	return [v respondsToSelector:@selector(doubleValue)] ? [v doubleValue] : -1;
+	@autoreleasepool {
+		NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
+		[d synchronize];
+		id v = [[d persistentDomainForName:[[NSBundle mainBundle] bundleIdentifier] ?: [[NSProcessInfo processInfo] processName]] objectForKey:mpPlaceKey(name)];
+		return [v respondsToSelector:@selector(doubleValue)] ? [v doubleValue] : -1;
+	}
 }
 
 static void mpSetTrayPlace(const char *name, double x) {
-	NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
-	[d setDouble:x forKey:mpPlaceKey(name)];
-	[d synchronize];
+	@autoreleasepool {
+		NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
+		[d setDouble:x forKey:mpPlaceKey(name)];
+		[d synchronize];
+	}
 }
 
 // Waits, off the main thread, for what is queued on it to have run.
