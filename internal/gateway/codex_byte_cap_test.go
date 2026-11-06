@@ -134,6 +134,9 @@ func TestCodexByteCapBeforeStreamCompacts(t *testing.T) {
 	}{
 		{"nginx 413", reply{413, "text/html", nginx413}},
 		{"overflow 400", reply{400, "application/json", `{"error":{"message":"This model's maximum context length is 131072 tokens. However, you requested 140000 tokens.","type":"invalid_request_error","code":"invalid_request_error"}}`}},
+		// the reporter's vendor (#4040), whose words carry no 's on the
+		// model and only the code names the context
+		{"overflow 400 without the model's", reply{400, "application/json", `{"error":{"code":"context_length_exceeded","message":"The message is longer than the model context length","type":"invalid_request_error"}}`}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			fresh(t)

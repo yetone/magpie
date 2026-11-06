@@ -71,6 +71,8 @@ func TestEveryVendorsOverflow(t *testing.T) {
 		{400, "Please reduce the length of the messages or completion"},
 		{400, "Input length 2000 exceeds the maximum allowed input length of 1000 tokens."},
 		{400, "The input (2000 tokens) is longer than the model's context length (1000 tokens)."},
+		// the reporter's vendor (#4040): no 's on the model
+		{400, "The message is longer than the model context length"},
 		{400, "the request exceeds the available context size, try increasing it"},
 		{400, "tokens to keep from the initial prompt is greater than the context length"},
 		{400, "prompt token count of 2000 exceeds the limit of 1000"},
