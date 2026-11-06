@@ -901,3 +901,62 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.deepEqual(errors, []);
   });
 }
+
+// a setting tune put in stays on the card with its Undo when the range has
+// too few calls to advise on, or none (linkaww on Discord: Claude Code's
+// cache put at 1 hour, and Today showed no way back to 5 minutes)
+const few = { en: "Not enough calls in this range to tune on", zh: "这段时间的调用太少，还算不出建议", "zh-TW": "這段時間的呼叫太少，還算不出建議", ja: "この期間は呼び出しが少なく、まだ調整できません", de: "Zu wenige Aufrufe in diesem Zeitraum zum Abstimmen" };
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(`${engine}: a setting put in keeps its Undo with too few calls`, async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    const errors = [];
+    t.after(async () => {
+      if (errors.length) console.log(errors);
+      await browser.close();
+    });
+    for (const lang of Object.keys(few)) for (const [width, height] of [[360, 760], [1100, 760]]) {
+      await t.test(`${lang}, ${width}x${height}`, async () => {
+        const ctx = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
+        await ctx.addInitScript(() => { try { localStorage.setItem("magpie.usageTab", "context"); } catch {} });
+        const page = await ctx.newPage();
+        page.setDefaultTimeout(5000);
+        page.setDefaultNavigationTimeout(60000);
+        page.on("pageerror", (e) => errors.push(e.message));
+        const posts = [];
+        const base = serve(lang, posts);
+        let put = true;
+        await page.route("**/*", async (r) => {
+          const p = new URL(r.request().url()).pathname;
+          if (p === "/api/tune/undo") put = false;
+          if (p !== "/api/tune") return base(r);
+          const advice = put ? [
+            { knob: "cache_ttl", setting: { value: "1h", source: "settings", ours: true }, few: true },
+            { knob: "compact", model: "claude-opus-5-5", setting: { value: "300000", source: "model", ours: true }, few: true },
+          ] : [];
+          return r.fulfill({ json: { days: 1, agents: put ? [{ agent: "claude", calls: 3, advice }] : [] } });
+        });
+        await page.goto("http://magpie.test/?view=usage");
+        const rows = page.locator(".ctx-tune-row");
+        await rows.first().waitFor();
+        assert.equal(await rows.count(), 2);
+        for (const i of [0, 1]) {
+          assert.equal(await rows.nth(i).locator(".ctx-tune-why").innerText(), few[lang]);
+          assert.equal(await rows.nth(i).locator("button").count(), 1, `row ${i}: Undo only`);
+          assert.equal(await rows.nth(i).locator(".ctx-tune-chart svg").count(), 0, `row ${i}: no curve`);
+          assert.doesNotMatch(await rows.nth(i).innerText(), /NaN|undefined/);
+        }
+        assert.match(await rows.nth(0).innerText(), { en: /1 hour/i, zh: /1 小时/, "zh-TW": /1 小時/, ja: /1 時間/, de: /1 Stunde/ }[lang]);
+        const over = await page.evaluate(() => {
+          const view = document.querySelector("#view-usage");
+          return view.scrollWidth > view.clientWidth + 1 ? view.scrollWidth + ">" + view.clientWidth : "";
+        });
+        assert.equal(over, "");
+        await rows.nth(0).locator("button").evaluate((b) => b.click());
+        await page.waitForFunction(() => document.querySelectorAll(".ctx-tune-row").length == 0);
+        assert.deepEqual(posts.map((p) => [p.path, p.knob]), [["/api/tune/undo", "cache_ttl"]]);
+        await ctx.close();
+      });
+    }
+    assert.deepEqual(errors, []);
+  });
+}

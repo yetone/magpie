@@ -17,10 +17,12 @@ package agent
 // its own (settings.AgentCompacts) has tune read and set that one.
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -405,6 +407,53 @@ func TuneApply(home, agent, knob, model, value string) error {
 		return edit.SetTOMLTop(p.path, edit.KV{Path: p.key, Value: v})
 	}
 	return edit.SetJSON(p.path, edit.KV{Path: p.key, Value: v})
+}
+
+// TuneKnob is one setting of an agent's, the model a window is for, and
+// how the agent has it now.
+type TuneKnob struct {
+	Knob    string
+	Model   string
+	Setting TuneSetting
+}
+
+// TuneKept are the settings in agent's own config that tune put in and
+// that still hold its value (Ours), so Undo can put back what was there:
+// Claude Code's cache lifetimes and per-model windows. The Usage page's
+// card is the one place they are changed, and it keeps them there when
+// a range has too few calls to advise on (linkaww on Discord: a 1-hour
+// cache put in, with no way back to 5 minutes). One in magpie's Long
+// conversations or Codex's background compaction is left out: Settings
+// shows and changes those.
+func TuneKept(home, agent string) []TuneKnob {
+	prefix := "tune." + agent + "."
+	var out []TuneKnob
+	for k := range stashShared() {
+		rest, ok := strings.CutPrefix(k, prefix)
+		if !ok {
+			continue
+		}
+		knob, model, _ := strings.Cut(rest, ".")
+		if knob != TuneCompact && knob != TuneCache && knob != TuneSubCache {
+			continue
+		}
+		s, err := TuneRead(home, agent, knob, model)
+		if err != nil || !s.Ours || s.Source == TuneLong {
+			continue
+		}
+		out = append(out, TuneKnob{Knob: knob, Model: model, Setting: s})
+	}
+	// the same order in every read: the cache rows, then the windows by model
+	slices.SortFunc(out, func(a, b TuneKnob) int {
+		window := func(k TuneKnob) int {
+			if k.Knob == TuneCompact {
+				return 1
+			}
+			return 0
+		}
+		return cmp.Or(window(a)-window(b), cmp.Compare(a.Knob, b.Knob), cmp.Compare(a.Model, b.Model))
+	})
+	return out
 }
 
 // TuneUndo puts back what a setting was before tune put one in, unless
