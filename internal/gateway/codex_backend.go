@@ -1237,7 +1237,9 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 			sent = provider.CodexCompressed(req, body)
 			// counted for the request's ledger row, as forwardOnce's are (#4456)
 			sentUp(r.Context(), sent, len(body))
-			if res, err = s.client.Do(req); err != nil {
+			res, err = s.client.Do(req)
+			res = gotDown(r.Context(), res)
+			if err != nil {
 				msg := "OpenAI: " + err.Error()
 				if overload && busyAgain < lastRetries && droppedUnanswered(r.Context(), err) {
 					// the connection closed with nothing of a reply (a
@@ -1588,6 +1590,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	failedWith(&rec, call.Status, call.Error, errType)
 	if up := upBytesOf(r.Context()); up != nil {
 		rec.UpBytes, rec.PlainBytes = up.wire, up.plain
+		rec.DownBytes = up.downOf()
 	}
 	appendUsage(r, rec)
 }

@@ -207,6 +207,18 @@ type Record struct {
 	// it, a compressed turn's discount and a retried request's re-sends
 	// both read off the row. None when no try went out.
 	PlainBytes int `json:"plain_bytes,omitempty"`
+	// DownBytes is how many bytes of the vendor's replies to this call's
+	// tries magpie read, tries summed as UpBytes is: a reply's body as it
+	// came, after the HTTP client undid a gzip the vendor sent it in, so
+	// more than the wire's for a gzipped reply. A record from before it was
+	// kept has none.
+	DownBytes int `json:"down_bytes,omitempty"`
+	// ImageFilesSaved is how many fewer bytes went up because DeepSeek's
+	// image files named the request's inline images by file id (#5407):
+	// the inline base64 its tries left out, less the images this request
+	// uploaded for it. Below 0 when an upload cost more than it saved this
+	// time. None where no image went by file.
+	ImageFilesSaved int `json:"image_files_saved,omitempty"`
 	// Kind is what the agent made the call for when it isn't a turn of
 	// the conversation: a Codex subagent's (review, compact, guardian…)
 	Kind string `json:"kind,omitempty"`
@@ -570,6 +582,19 @@ type Totals struct {
 	FloorOut int   `json:"floor_out,omitempty"`
 	FloorMs  int64 `json:"floor_ms,omitempty"`
 	FloorN   int   `json:"floor_n,omitempty"`
+	// UpBytes, DownBytes and ImageFilesSaved are the rows' own summed
+	// (Record.UpBytes …): what went up to the vendors and came back, of
+	// the rows that kept it; none when no row did
+	UpBytes         int64 `json:"up_bytes,omitempty"`
+	DownBytes       int64 `json:"down_bytes,omitempty"`
+	ImageFilesSaved int64 `json:"image_files_saved,omitempty"`
+}
+
+// addBytes adds r's bytes on the wire (Totals.UpBytes …).
+func (t *Totals) addBytes(r *Record) {
+	t.UpBytes += int64(r.UpBytes)
+	t.DownBytes += int64(r.DownBytes)
+	t.ImageFilesSaved += int64(r.ImageFilesSaved)
 }
 
 // Tokens is what went in and out, excluding cache traffic.
@@ -814,6 +839,7 @@ func (t *Totals) addFrom(row Row, price *catalog.Price) {
 	t.CacheWrite1h += r.CacheWrite1h
 	t.countCache(r)
 	t.Reasoning += r.Reasoning
+	t.addBytes(&r)
 	if r.TTFT > 0 && !r.Failed() {
 		t.Timed++
 		t.TTFT += r.TTFT

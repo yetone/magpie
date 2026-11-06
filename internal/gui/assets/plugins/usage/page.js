@@ -1403,6 +1403,12 @@ function ledDetail(r, cols) {
   if (r.credits != null) add("Credits", ledCredits({ credits: r.credits, credited: 1 }).textContent);
   if (ledRowSpeed(r)) add("Speed", t("{n} tok/s", { n: ledNum(Math.round(ledRowSpeed(r))) }));
   else if (ledFloorSpeed(r)) add("Speed", "≥" + t("{n} tok/s", { n: ledNum(Math.round(ledFloorSpeed(r))) }));
+  // what went up to the vendor and came back, its tries summed, and what
+  // DeepSeek's image files kept out of it (#5407); a row from before has
+  // none of them, and says nothing
+  if (r.up_bytes > 0) add("Sent upstream", fmtBytes(r.up_bytes));
+  if (r.down_bytes > 0) add("Received", fmtBytes(r.down_bytes));
+  if (r.image_files_saved > 0) add("Saved by image files", fmtBytes(r.image_files_saved));
   add("Request ID", r.rid);
   add("Endpoint", r.ep);
   const protos = ledProtos(r);
@@ -1632,6 +1638,14 @@ function renderLedgerDash(l) {
     ? jumps(jump(t("{n} failed", { n: fmtN(l.errors) }), "failed", t("Show only the failed requests")), " · " + t("{p} succeeded", { p: (100 * (1 - l.errors / l.calls)).toFixed(1) + "%" }))
     : line(t("none failed")), "", exactN(l.calls));
   if (l.retried) strip.lastChild.append(jumps(jump(t("{n} answered on a retry", { n: fmtN(l.retried) }), "retried", t("Show only the requests answered on a retry"))));
+  // the period's traffic, of the requests that kept it: up and down, and
+  // what DeepSeek's image files saved on the way up
+  if (l.up_bytes > 0 || l.down_bytes > 0) {
+    const io = line("↑ " + fmtBytes(l.up_bytes || 0) + " · ↓ " + fmtBytes(l.down_bytes || 0) + (l.image_files_saved > 0 ? " · " + t("{n} saved by image files", { n: fmtBytes(l.image_files_saved) }) : ""));
+    io.classList.add("led-io");
+    io.title = t("Sent upstream") + ": " + ledNum(l.up_bytes || 0) + " B\n" + t("Received") + ": " + ledNum(l.down_bytes || 0) + " B";
+    strip.lastChild.append(io);
+  }
   const c = fmtCost(l);
   block("Cost", c ? "≈" + c : "—", line(l.unpriced ? t(l.unpriced === 1 ? "{n} call had no known price and is not counted" : "{n} calls had no known price and are not counted", { n: l.unpriced }) : t("effective prices")), c ? "cost" : "");
   const hit = block("Cache hit rate", rate === null ? "—" : (100 * rate).toFixed(1) + "%", cacheLeftOut(l) ? line(cacheLeftOut(l)) : null, "", t("The share of the prompt read from the cache"));

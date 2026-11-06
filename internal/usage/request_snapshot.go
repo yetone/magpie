@@ -97,6 +97,9 @@ func (c *rowChunk) encode(keep func([]byte) bool) ([]byte, []*time.Location) {
 		put(uint64(p.Flags))
 		put(uint64(p.Tries))
 		put(uint64(p.Masking))
+		put(uint64(p.UpBytes))
+		put(uint64(p.DownBytes))
+		put(uint64(int64(p.FilesSaved)))
 		if p.Flags&rowCredits != 0 {
 			put(math.Float64bits(p.Credits))
 		}
@@ -300,6 +303,7 @@ func (c *rowChunk) unpackReusing(dst *rowChunk, into []packedRow, strs []string,
 		p.Cost, p.Status, p.Flags = math.Float64frombits(take()), int32(take()), uint16(take())
 		p.Tries = int32(take())
 		p.Masking = int32(take())
+		p.UpBytes, p.DownBytes, p.FilesSaved = int32(take()), int32(take()), int32(take())
 		p.Credits = 0
 		if p.Flags&rowCredits != 0 {
 			p.Credits = math.Float64frombits(take())

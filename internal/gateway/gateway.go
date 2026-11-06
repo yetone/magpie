@@ -5052,6 +5052,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		if up := upBytesOf(r.Context()); up != nil {
 			rec.UpBytes, rec.PlainBytes = up.wire, up.plain
+			rec.DownBytes, rec.ImageFilesSaved = up.downOf(), up.saved
 		}
 		failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
 		withBodies(&rec, &call)
@@ -5728,9 +5729,12 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 			n = int(r.ContentLength)
 		}
 		sentUp(ctx, n, len(body))
-		return p.Do(s.client, r)
+		res, err := p.Do(s.client, r)
+		return gotDown(ctx, res), err
 	}
 	res, err := p.Do(s.client, req)
+	// what comes back is counted as it is read, as what went is (#4456)
+	res = gotDown(ctx, res)
 	if err == nil && res.StatusCode >= 400 && provider.OpenCodeURL(req.URL.String()) {
 		logOpenCodeRefusal(p, req, res.StatusCode)
 	}

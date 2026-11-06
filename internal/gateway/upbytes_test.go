@@ -1,10 +1,12 @@
 package gateway
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -93,7 +95,7 @@ func TestLedgerKeepsUpBytes(t *testing.T) {
 func TestCodexOwnTurnKeepsUpBytes(t *testing.T) {
 	setup(t, provider.Chat, &fake{t: t})
 	zstdTurns(t)
-	var wire, plain int
+	var wire, plain, down int
 	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 		wire = len(b)
@@ -108,7 +110,8 @@ func TestCodexOwnTurnKeepsUpBytes(t *testing.T) {
 		}
 		plain = len(p)
 		w.Header().Set("Content-Type", "text/event-stream")
-		io.WriteString(w, sse(`data: {"type":"response.completed","response":{"id":"r1","usage":{"input_tokens":9,"output_tokens":2}}}`))
+		n, _ := io.WriteString(w, sse(`data: {"type":"response.completed","response":{"id":"r1","usage":{"input_tokens":9,"output_tokens":2}}}`))
+		down = n
 	})
 	codexChatGPTAuth(t, "me@example.com")
 	rec := httptest.NewRecorder()
@@ -128,6 +131,9 @@ func TestCodexOwnTurnKeepsUpBytes(t *testing.T) {
 	}
 	if u[0].UpBytes != wire || u[0].PlainBytes != plain {
 		t.Fatalf("row says up %d plain %d; the backend got %d of %d", u[0].UpBytes, u[0].PlainBytes, wire, plain)
+	}
+	if u[0].DownBytes != down {
+		t.Fatalf("row says down %d; the backend answered %d bytes", u[0].DownBytes, down)
 	}
 }
 
@@ -178,5 +184,89 @@ func TestLedgerCountsATrysSecondAsk(t *testing.T) {
 	}
 	if rows[0].UpBytes != sizes[0]+sizes[1] || rows[0].PlainBytes != sizes[1] {
 		t.Fatalf("row says up %d plain %d; the relay got %v", rows[0].UpBytes, rows[0].PlainBytes, sizes)
+	}
+}
+
+// rowOf is the row a request ended with (not a try that handed it on),
+// once it is in the ledger.
+func rowOf(t *testing.T, of func(usage.Record) bool) usage.Record {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var rows []usage.Record
+		for _, u := range usage.Load(time.Time{}) {
+			if of(u) && !u.HandedOn {
+				rows = append(rows, u)
+			}
+		}
+		if len(rows) == 1 {
+			return rows[0]
+		}
+		if len(rows) > 1 || time.Now().After(deadline) {
+			t.Fatalf("the request's rows: %+v", rows)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// A request's row says what came back down as well as what went up:
+// DownBytes the bytes of the vendors' replies magpie read, its tries
+// summed, the overloaded member's refusal too, whole or streamed
+// (faithleysath, matrix0487 on Discord). Before, a row had none.
+func TestLedgerKeepsDownBytes(t *testing.T) {
+	for _, stream := range []bool{false, true} {
+		t.Run(map[bool]string{false: "whole", true: "stream"}[stream], func(t *testing.T) {
+			fresh(t)
+			var mu sync.Mutex
+			served := 0
+			serve := func(w http.ResponseWriter, s string) {
+				n, _ := io.WriteString(w, s)
+				mu.Lock()
+				served += n
+				mu.Unlock()
+			}
+			overloaded := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				io.Copy(io.Discard, r.Body)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				serve(w, `{"error":{"message":"overloaded"}}`)
+			}))
+			t.Cleanup(overloaded.Close)
+			ok := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				io.Copy(io.Discard, r.Body)
+				if stream {
+					w.Header().Set("Content-Type", "text/event-stream")
+					serve(w, sse(`data: {"id":"c1","choices":[{"index":0,"delta":{"role":"assistant","content":"hello"}}]}`, `data: {"id":"c1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":1}}`, `data: [DONE]`))
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				serve(w, chatOK)
+			}))
+			t.Cleanup(ok.Close)
+			for _, p := range []provider.Provider{
+				{ID: "a", Name: "A", Key: "k", Models: []string{"m"}, Chat: overloaded.URL + "/v1"},
+				{ID: "b", Name: "B", Key: "k", Models: []string{"m"}, Chat: ok.URL + "/v1"},
+			} {
+				if err := provider.Save(p); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := provider.SaveGroup(provider.Group{Name: "G", Members: []string{"a/m", "b/m"}, Routing: provider.Ordered}); err != nil {
+				t.Fatal(err)
+			}
+			s := New()
+			code, body := postAs(t, s, "", fmt.Sprintf(`{"model":"group/g","stream":%v,"messages":[{"role":"user","content":"hi"}]}`, stream))
+			if code != 200 || !strings.Contains(body, "hello") {
+				t.Fatalf("%d %s", code, body)
+			}
+			route := lastRoute(s).ID
+			row := rowOf(t, func(u usage.Record) bool { return u.RouteID == route })
+			mu.Lock()
+			want := served
+			mu.Unlock()
+			if row.Tries != 2 || row.DownBytes != want {
+				t.Fatalf("row: tries %d, down %d; the vendors answered %d bytes", row.Tries, row.DownBytes, want)
+			}
+		})
 	}
 }

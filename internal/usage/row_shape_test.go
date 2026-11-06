@@ -90,3 +90,43 @@ func TestRowTokensAndZoneKept(t *testing.T) {
 		}
 	}
 }
+
+// A row keeps what its request sent up and got back, and what DeepSeek's
+// image files saved it (below 0 when an upload cost more), as the row
+// was and packed and read back; a row from before has none. The totals
+// of a period sum them, from records and from rows.
+func TestRowBytesKept(t *testing.T) {
+	at := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
+	c := &rowChunk{}
+	c.add(Row{Record: Record{Time: at, UpBytes: 120_000, PlainBytes: 400_000, DownBytes: 3_000, ImageFilesSaved: -40}}, "", 0, false)
+	c.add(Row{Record: Record{Time: at, UpBytes: 5_000_000_000, DownBytes: 900, ImageFilesSaved: 72_000}}, "", 1, false)
+	c.add(Row{Record: Record{Time: at, Input: 1}}, "", 2, false)
+	for _, c := range []*rowChunk{c, c.pack().unpack()} {
+		a, b, old := c.row(0), c.row(1), c.row(2)
+		if a.UpBytes != 120_000 || a.DownBytes != 3_000 || a.ImageFilesSaved != -40 {
+			t.Fatalf("read back up %d, down %d, saved %d", a.UpBytes, a.DownBytes, a.ImageFilesSaved)
+		}
+		if b.UpBytes != math.MaxInt32 || b.DownBytes != 900 || b.ImageFilesSaved != 72_000 {
+			t.Fatalf("read back up %d, down %d, saved %d", b.UpBytes, b.DownBytes, b.ImageFilesSaved)
+		}
+		if old.UpBytes != 0 || old.DownBytes != 0 || old.ImageFilesSaved != 0 {
+			t.Fatalf("a row from before reads back %+v", old.Record)
+		}
+		var rows, sum Totals
+		rows.addRow(a)
+		rows.addRow(b)
+		rows.addRow(old)
+		sum.plus(&rows)
+		var recs Totals
+		recs.add(a.Record, nil)
+		recs.add(old.Record, nil)
+		for _, got := range []Totals{rows, sum} {
+			if got.UpBytes != 120_000+math.MaxInt32 || got.DownBytes != 3_900 || got.ImageFilesSaved != 71_960 {
+				t.Fatalf("totals up %d, down %d, saved %d", got.UpBytes, got.DownBytes, got.ImageFilesSaved)
+			}
+		}
+		if recs.UpBytes != 120_000 || recs.DownBytes != 3_000 || recs.ImageFilesSaved != -40 {
+			t.Fatalf("records' totals up %d, down %d, saved %d", recs.UpBytes, recs.DownBytes, recs.ImageFilesSaved)
+		}
+	}
+}

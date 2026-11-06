@@ -796,6 +796,7 @@ func (t *Totals) addRow(r Row) {
 	t.CacheWrite1h += r.CacheWrite1h
 	t.countCache(r.Record)
 	t.Reasoning += r.Reasoning
+	t.addBytes(&r.Record)
 	switch {
 	case r.Priced:
 		t.Cost += r.Cost
@@ -832,6 +833,9 @@ func (t *Totals) plus(d *Totals) {
 	t.FloorOut += d.FloorOut
 	t.FloorMs += d.FloorMs
 	t.FloorN += d.FloorN
+	t.UpBytes += d.UpBytes
+	t.DownBytes += d.DownBytes
+	t.ImageFilesSaved += d.ImageFilesSaved
 }
 
 // FloorAgents are the agents whose session files time a call from what

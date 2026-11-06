@@ -30,7 +30,7 @@ import (
 // history again on its first start, the cold start's peak (#2278). Raise
 // it with any change to what a row counts as; TestSettledCountedAsVersioned
 // fails until it is raised.
-const settledCountVersion = "1"
+const settledCountVersion = "2"
 
 func heatDiskPath() string {
 	return filepath.Join(filepath.Dir(sessions.CachePath()), "heat-v1.json")
@@ -179,7 +179,7 @@ func hashRows(h hash.Hash, c *rowChunk) {
 		b = binary.AppendVarint(b, p.RouteID)
 		b = binary.AppendUvarint(b, math.Float64bits(p.Cost))
 		b = binary.AppendUvarint(b, math.Float64bits(p.Credits))
-		for _, v := range [...]int32{p.Millis, p.TTFT, p.FirstText, p.Sent, p.Flow, p.FirstReasoning, p.Own, p.Retried, p.Queued, p.Masking, p.Status, p.Tries} {
+		for _, v := range [...]int32{p.Millis, p.TTFT, p.FirstText, p.Sent, p.Flow, p.FirstReasoning, p.Own, p.Retried, p.Queued, p.Masking, p.Status, p.Tries, p.UpBytes, p.DownBytes, p.FilesSaved} {
 			b = binary.AppendVarint(b, int64(v))
 		}
 		b = binary.AppendUvarint(b, uint64(p.Flags))

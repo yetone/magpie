@@ -329,6 +329,10 @@ func (s *Server) withDeepSeekFiles(ctx context.Context, p provider.Provider, to 
 			sent.keys = append(sent.keys, k)
 		}
 	}
+	if u := upBytesOf(ctx); u != nil {
+		// the inline images this try left out, for the request's row
+		u.saved += len(body) - len(out)
+	}
 	return out, true
 }
 
@@ -445,6 +449,7 @@ func (s *Server) dsResolve(ctx context.Context, p provider.Provider, to provider
 		}
 		if u := upBytesOf(ctx); u != nil {
 			u.wire += up
+			u.saved -= up // and are what the files cost it
 		}
 	}
 	return ids

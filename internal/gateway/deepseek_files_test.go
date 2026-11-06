@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 const responsesWholeOK = `{"id":"resp_1","object":"response","status":"completed","model":"m1","output":[{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"ok","annotations":[]}]}],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`
@@ -449,4 +450,54 @@ func dsWaitingFlights() map[string]*dsFlight {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return maps.Clone(st.flights)
+}
+
+// A row says what DeepSeek's image files saved the request: the inline
+// image its body left out, less the upload that put it up. The turn that
+// uploads keeps the image's base64 out and pays for the upload; the next
+// turn only keeps it out. Each row's bytes up and saved add up to what
+// the turn would have sent inline (faithleysath, matrix0487 on Discord).
+func TestDeepSeekImageFilesSavedInRow(t *testing.T) {
+	s, u := dsSetup(t)
+	img := base64.StdEncoding.EncodeToString([]byte("\x89PNG\r\n\x1a\n" + strings.Repeat("an image's pixels ", 3000)))
+	path, upPath, body := dsBody("chat", "deepseek/deepseek-flash", img)
+	var rows []usage.Record
+	for turn := range 2 {
+		if code, reply := postTo(t, s, path, body); code != 200 {
+			t.Fatalf("turn %d: %d %s", turn, code, reply)
+		}
+		if strings.Contains(u.last(upPath), img) {
+			t.Fatalf("turn %d went inline", turn)
+		}
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			rows = rows[:0]
+			for _, r := range usage.Load(time.Time{}) {
+				if r.Provider == "deepseek" && !r.HandedOn {
+					rows = append(rows, r)
+				}
+			}
+			if len(rows) == turn+1 || time.Now().After(deadline) {
+				break
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		if len(rows) != turn+1 {
+			t.Fatalf("turn %d: rows %+v", turn, rows)
+		}
+	}
+	if len(u.uploaded()) != 1 {
+		t.Fatalf("uploads %v", u.uploaded())
+	}
+	upload := len(img) / 4 * 3
+	first, second := rows[0], rows[1]
+	if second.ImageFilesSaved < len(img)*9/10 || second.ImageFilesSaved > len(img)+200 { // the base64, its data: URL and block, less the file block
+		t.Fatalf("the second turn saved %d of an image of %d base64 bytes", second.ImageFilesSaved, len(img))
+	}
+	if first.ImageFilesSaved != second.ImageFilesSaved-upload {
+		t.Fatalf("the first turn saved %d; the second %d, less the upload's %d", first.ImageFilesSaved, second.ImageFilesSaved, upload)
+	}
+	if a, b := first.UpBytes+first.ImageFilesSaved, second.UpBytes+second.ImageFilesSaved; a != b || a <= len(img) {
+		t.Fatalf("up and saved come to %d and %d, the inline turn's bytes (image %d)", a, b, len(img))
+	}
 }
