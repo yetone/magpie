@@ -1162,7 +1162,10 @@ const cacheVersion = 29
 //
 // dsh 1: the ids of the replies its own requests got (ResponseIDs), for
 // the routes that carry no session id and an opening a fork copies.
-var parseVersions = map[string]int{"codex": 3, "zcode": 1, "dsh": 1}
+//
+// antigravity 1: a Gemini deployment's name with any one letter after it
+// (gemini-4-argon-d) is its model's (GeminiDeployment), not -n alone.
+var parseVersions = map[string]int{"codex": 3, "zcode": 1, "dsh": 1, "antigravity": 1}
 
 type cacheFile struct {
 	Version int    `json:"version"`

@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/sessions"
 )
 
 // Which model answered: a vendor may serve a request with another model
@@ -270,15 +271,17 @@ var grokBuild = regexp.MustCompile(`^grok-[0-9][0-9.]*(-build)(?:-|$)`)
 
 // GeminiServing reports whether served is the name Google's backend gives
 // the deployment that serves the Gemini model sent: the model's own name
-// with "-n" after it. Antigravity answers every level of gemini-3.8-flash
-// (-low, -medium, -high) with modelVersion gemini-3.8-flash-n, an id no
-// request can ask for (404) and fetchAvailableModels never lists, so it is
-// that model, not another one swapped in (dumplings on Discord). It holds
-// for Gemini models only: gpt-5 answered as gpt-5-n is still a swap, as is
-// gemini-3.8-flash answered as gemini-3.8-flash-lite or gemini-3.7-flash-n.
+// with one letter after it (sessions.GeminiDeployment). Antigravity
+// answers every level of gemini-3.8-flash (-low, -medium, -high) with
+// modelVersion gemini-3.8-flash-n, an id no request can ask for (404) and
+// fetchAvailableModels never lists, so it is that model, not another one
+// swapped in (dumplings on Discord); gemini-4-argon's is gemini-4-argon-d
+// (oioio on Discord). It holds for Gemini models only: gpt-5 answered as
+// gpt-5-n is still a swap, as is gemini-3.8-flash answered as
+// gemini-3.8-flash-lite or gemini-3.7-flash-n.
 func GeminiServing(sent, served string) bool {
 	a := squash(bareModel(provider.EffortFamily(bareModel(sent))))
-	b, ok := strings.CutSuffix(bareModel(served), "-n")
+	b, ok := sessions.GeminiDeployment(bareModel(served))
 	return ok && strings.HasPrefix(a, "gemini") && squash(b) == a
 }
 

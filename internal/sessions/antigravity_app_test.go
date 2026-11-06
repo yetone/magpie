@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"database/sql"
+	"encoding/binary"
 	"encoding/hex"
 	"os"
 	"path/filepath"
@@ -182,5 +183,35 @@ func TestAntigravityAppCutRow(t *testing.T) {
 	b, _ := hex.DecodeString("0A0C08E8BCB6D60610F09EC7EF021802320C08EDBCB6D60610E08CA0A2023A0C08EDBCB6D60610A09BAAA402420C08EDBCB6D60610A09BAAA4024A7508A60A")
 	if _, _, ok := agAppStep(b); ok {
 		t.Error("a row cut inside its model call read as a call")
+	}
+}
+
+// oioio's Antigravity database (#help, 11-06) names gemini-4-argon's
+// generator "gemini-4-argon-d": Google's deployment of that model, as
+// gemini-3.8-flash-n is 3.8 Flash's. It counts as gemini-4-argon, so Usage
+// shows one model at its price. A lone letter after another maker's id, or
+// a Gemini id whose last word is longer, stays as written.
+func TestAntigravityAppDeploymentName(t *testing.T) {
+	gen := func(field int, m string) []byte {
+		inner := append(binary.AppendUvarint(nil, uint64(field)<<3|2), byte(len(m)))
+		inner = append(inner, m...)
+		return append([]byte{1<<3 | 2, byte(len(inner))}, inner...)
+	}
+	for in, want := range map[string]string{
+		"gemini-4-argon-d":      "gemini-4-argon",
+		"gemini-3.8-flash-n":    "gemini-3.8-flash",
+		"gemini-3.8-flash-lite": "gemini-3.8-flash-lite",
+		"gemini-3.8-flash-nano": "gemini-3.8-flash-nano",
+		"gemini-4-argon":        "gemini-4-argon",
+		"gemini-d":              "gemini-d",
+		"gpt-5-d":               "gpt-5-d",
+		"claude-sonnet-4-5-n":   "claude-sonnet-4-5-n",
+		"gemini-4-argon-D":      "gemini-4-argon-D",
+	} {
+		for _, field := range []int{19, 21, 22} {
+			if got := agAppModel(gen(field, in)); got != want {
+				t.Errorf("field %d %q: %q, want %q", field, in, got, want)
+			}
+		}
 	}
 }

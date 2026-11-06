@@ -23,6 +23,9 @@ func TestSwappedGeminiServingName(t *testing.T) {
 		{"gemini-3.8-flash-medium", "gemini-3.8-flash-n"},
 		{"gemini-3.8-flash-high", "gemini-3.8-flash-n"},
 		{"gemini-3.8-flash", "models/gemini-3.8-flash-n"},
+		// oioio on Discord (11-06): Antigravity's name for gemini-4-argon
+		{"gemini-4-argon", "gemini-4-argon-d"},
+		{"antigravity/gemini-4-argon-high", "gemini-4-argon-d"},
 	} {
 		if Swapped(c[0], c[1]) {
 			t.Errorf("%s answered as %s is the model asked for", c[0], c[1])
@@ -38,6 +41,9 @@ func TestSwappedGeminiServingName(t *testing.T) {
 		{"gemini-3.8-flash", "gemini-3.7-flash-n"},
 		{"gemini-3.8-flash", "gemini-3.8-flash-nano"},
 		{"gemini-3.8-flash-high", "gemini-3.8-flash-low"},
+		{"gpt-5", "gpt-5-d"},
+		{"gemini-4-argon", "gemini-3.8-flash-d"},
+		{"gemini-4-argon", "gemini-4-argon-dx"},
 	} {
 		if !Swapped(c[0], c[1]) {
 			t.Errorf("%s answered as %s is another model", c[0], c[1])

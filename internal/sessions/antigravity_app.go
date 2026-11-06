@@ -235,17 +235,34 @@ func agAppModel(b []byte) string {
 	})
 	for _, m := range named {
 		if m != "" && len(m) <= 200 {
-			// Google names the deployment serving gemini-3.8-flash
-			// "gemini-3.8-flash-n", an id no request can ask for (the
-			// owner's real Antigravity account, b2432754e): it is that
-			// model, at its price
-			if base, ok := strings.CutSuffix(m, "-n"); ok && strings.HasPrefix(base, "gemini-") {
+			if base, ok := GeminiDeployment(m); ok {
 				return base
 			}
 			return m
 		}
 	}
 	return ""
+}
+
+// GeminiDeployment is the Gemini model a Google deployment's name stands
+// for, and whether m is such a name: a gemini-* id with one letter after
+// its last hyphen. Google names the deployment serving gemini-3.8-flash
+// "gemini-3.8-flash-n" (the owner's real Antigravity account, b2432754e)
+// and the one serving gemini-4-argon "gemini-4-argon-d" (oioio's
+// Antigravity database, 11-06): ids no request can ask for, which are that
+// model, at its price. No Gemini model's own id ends in a lone letter
+// (-lite, -nano, -pro, -001 and -exp are longer), and other makers' ids
+// are left as written.
+func GeminiDeployment(m string) (string, bool) {
+	i := strings.LastIndexByte(m, '-')
+	if i < 0 || len(m)-i != 2 || m[i+1] < 'a' || m[i+1] > 'z' {
+		return m, false
+	}
+	base := m[:i]
+	if !strings.HasPrefix(base, "gemini-") || len(base) == len("gemini-") {
+		return m, false
+	}
+	return base, true
 }
 
 // pbTime is a google.protobuf.Timestamp, zero when it has no seconds.
