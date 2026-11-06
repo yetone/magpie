@@ -43,10 +43,20 @@ type version struct {
 	// refused): another computer's write in the moment between may have
 	// gone over it (#1776)
 	Blind bool `json:"-"`
+	// NoCondRead: the server breaks on conditional reads — 123pan answers
+	// a GET sent with If-None-Match 500 (#4993) — so no read asks it with
+	// one again; the ETag stays, for the write to go over
+	NoCondRead bool `json:"noCondRead,omitempty"`
 }
 
 // conditions are the headers that ask for the file only when it isn't v.
+// None for a server that breaks on conditional reads: it was asked with
+// one once and said 500 (123pan, #4993), so it never is again — the ETag
+// stays, for the write to go over.
 func (v version) conditions() map[string]string {
+	if v.NoCondRead {
+		return nil
+	}
 	switch {
 	case v.ETag != "":
 		return map[string]string{"If-None-Match": v.ETag}
@@ -139,6 +149,10 @@ type dav struct {
 	base       *url.URL
 	user, pass string
 	client     *http.Client
+	// noCondRead: this server was asked with a condition once and broke
+	// on it (#4993), so no read of it is sent with one again, this run —
+	// and the version says so, for the runs after
+	noCondRead bool
 }
 
 func newDAV(c Config) (*dav, error) {
@@ -269,6 +283,9 @@ func (d *dav) there(ctx context.Context, u string) bool {
 // W/"…"; either never matches the file in an If-Match, so every write after
 // such a read was refused as changed meanwhile (#1362).
 func (d *dav) get(ctx context.Context, have version) (data []byte, v version, err error) {
+	if have.NoCondRead {
+		d.noCondRead = true
+	}
 	cond := have.conditions()
 	h := map[string]string{"Accept-Encoding": "identity"}
 	for k, v := range cond {
@@ -277,6 +294,18 @@ func (d *dav) get(ctx context.Context, have version) (data []byte, v version, er
 	res, err := d.send(ctx, http.MethodGet, d.url(folder, file), nil, h)
 	if err != nil {
 		return nil, version{}, err
+	}
+	// A server that breaks on a conditional read — 123pan answers a GET
+	// sent with If-None-Match 500, half a minute later, where a file
+	// unchanged was to be answered 304 (#4993) — is asked again without
+	// the conditions: the file comes as it always did, costing a
+	// download, and the version is marked, so no read of this server is
+	// sent with a condition again. A read without conditions that fails
+	// all the same is a server trouble of its own, said as it is.
+	if cond != nil && res.StatusCode >= 500 {
+		res.Body.Close()
+		d.noCondRead = true
+		return d.get(ctx, version{ETag: have.ETag, Modified: have.Modified, NoCondRead: true})
 	}
 	defer res.Body.Close()
 	if res.StatusCode == http.StatusNotModified && cond != nil {
@@ -318,7 +347,11 @@ func (d *dav) get(ctx context.Context, have version) (data []byte, v version, er
 			return nil, version{}, &notBackup{f: f, where: "the file " + folder + "/" + file + " on the WebDAV server", cmd: "webdav", err: backup.ErrNotBackup}
 		}
 	}
-	return data, versionOf(res.Header), nil
+	// the marking rides on every version read here, so the next sync
+	// doesn't ask this server with a condition again
+	v = versionOf(res.Header)
+	v.NoCondRead = d.noCondRead
+	return data, v, nil
 }
 
 // put writes the backup, only over the version read (etag) when there was
@@ -359,8 +392,10 @@ func (d *dav) put(ctx context.Context, data []byte, etag string) (version, error
 				return version{}, cerr
 			}
 			// an ETag said here is the version written; with none, the
-			// next sync reads the file in full, as before
-			return version{ETag: res.Header.Get("ETag")}, nil
+			// next sync reads the file in full, as before. noCondRead
+			// rides along: it is the server's, not the version's, and the
+			// write's version is the one the next sync reads with
+			return version{ETag: res.Header.Get("ETag"), NoCondRead: d.noCondRead}, nil
 		case res.StatusCode == http.StatusPreconditionFailed:
 			return version{}, errChanged
 		case res.StatusCode == http.StatusForbidden && (try > 0 || d.there(ctx, d.url(folder)+"/")):
