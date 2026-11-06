@@ -173,4 +173,43 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.deepEqual((await blocks(page)).map((b) => b.name), ["docs", SESS.a.title]);
     assert.deepEqual(errors, []);
   });
+  // tz_188 on Discord: ZCode's sessions are named by their first prompt,
+  // a long Chinese one of several lines. WebKit breaks a line at U+2028
+  // and U+2029 even where a name is kept to one, so each block stacked
+  // the prompt's lines. Its bar took context.css's flex: 1 1 0, so in a
+  // block as tall as its lines it was 0px high, and in a shorter block
+  // beside a taller one it stretched to fill it. Each name is one line in
+  // every block, at every width, in every language, and every bar is 4px.
+  test(`${engine}: a session named by a prompt of many lines is one line in its block`, async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    const prompt = "你的唯一任务是采集并分析用户提供的所有网页内容，逐条提取关键信息。\u2028要求：\u2029一、严格按照格式输出；\r\n二、保留原文中的数字与链接；\u0085三、不要遗漏任何一条。\n\n";
+    const titles = { a: SESS.a.title, b: SESS.b.title };
+    t.after(() => { SESS.a.title = titles.a; SESS.b.title = titles.b; });
+    SESS.a.title = prompt.repeat(40);
+    SESS.b.title = prompt;
+    for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
+      for (const width of [1100, 700, 390]) {
+        await t.test(`${lang} ${width}px`, async () => {
+          const { context, page, errors } = await open(browser, lang, width, [req(101, "a"), req(102, "b"), req(103, "a")]);
+          t.after(() => context.close());
+          await page.locator(".rt-ctx-sess:not([hidden]) .rt-ctx-s").nth(1).waitFor();
+          const got = await page.$$eval(".rt-ctx-s", (bs) => bs.map((b) => {
+            const h = (q) => b.querySelector(q).getBoundingClientRect().height;
+            return { name: b.querySelector(".nm").textContent, nm: h(".nm"), sub: h(".sub"), bar: h(".ctx-stack") };
+          }));
+          assert.equal(got.length, 2);
+          for (const g of got) {
+            assert.ok(!/[\n\r\u2028\u2029\u0085]/.test(g.name), `the name is one line of text: ${JSON.stringify(g.name.slice(0, 80))}`);
+            assert.ok(g.name.startsWith("你的唯一任务是采集并分析用户提供的所有网页内容，逐条提取关键信息。 要求： 一、"), g.name.slice(0, 80));
+            assert.ok(g.nm < 2 * g.sub, `the name is drawn on one line: ${g.nm}px against the sub-line's ${g.sub}px`);
+            assert.equal(Math.round(g.bar), 4, `the bar keeps its 4px: ${g.bar}`);
+          }
+          const crumbs = await page.locator(".rt-ctx .ctx-crumbs").textContent();
+          assert.ok(!/[\n\r\u2028\u2029\u0085]/.test(crumbs), "the card's crumbs name it on one line too");
+          assert.deepEqual(errors, []);
+        });
+      }
+    }
+  });
 }

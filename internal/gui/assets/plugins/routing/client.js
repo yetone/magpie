@@ -1548,11 +1548,16 @@ function routingPage(part) {
   // the title of the session a request is of, as its agent named it, or
   // nothing: never one matched to it by its prompt (parentMatched), which
   // the list's head says is a guess (connor_yang on Discord)
-  const titleOf = (r) => !r || r.parentMatched ? "" : r.agent === "codex" ? codexNames.get(groupSession(r)) || "" : otherTitles.get(ownKey(r)) || "";
+  const titleOf = (r) => oneLine(!r || r.parentMatched ? "" : r.agent === "codex" ? codexNames.get(groupSession(r)) || "" : otherTitles.get(ownKey(r)) || "");
   // sessionName is what a request's session is called where it has a
   // name: its agent's title for it (the trace's, or one read since), else
   // nothing
-  const sessionName = (r) => r.sessionTitle || titleOf(r) || "";
+  const sessionName = (r) => oneLine(r.sessionTitle) || titleOf(r);
+  // oneLine is a title as one line. A title is often its session's first
+  // prompt, and WebKit breaks a line at U+2028/U+2029 even under nowrap, so
+  // a session's block meant for one line of it stacked every line of the
+  // prompt (tz_188 on Discord)
+  function oneLine(s) { return s ? String(s).replace(/[\s\u0085]+/g, " ").trim() : ""; }
   const subs = new Map();   // a group in the group's way down → its heading { li, wire, key, up }
   // A provider's keys serving one model, FOLD_AT or more of them side by
   // side, fold into one row that tells of them all (#1319: 53 keys for one

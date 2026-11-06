@@ -180,7 +180,7 @@
 .rt-ctx-s[aria-pressed="true"] { background: var(--card-2); color: var(--fg); }
 .rt-ctx-s .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .rt-ctx-s .sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.rt-ctx-s .ctx-stack { display: flex; max-width: none; width: 100%; height: 4px; border-radius: 2px; }
+.rt-ctx-s .ctx-stack { flex: none; display: flex; max-width: none; width: 100%; height: 4px; border-radius: 2px; }
 .rt-log-head { display: flex; flex-wrap: wrap; align-items: center; row-gap: 2px; font-size: 12px; font-weight: 600; color: var(--fg); }
 .rt-log-head .grow { flex: 1; }
 /* a request's request and response, opened from the story's head */
