@@ -1827,9 +1827,13 @@ func elsewhere(left []candidate, c candidate) []candidate {
 // request as well as the account, so the same request sent on to another
 // of its accounts trips it there too. Another computer's magpie that
 // says so (remoteModelRest) speaks for one account of its own, and its
-// other models may be other vendors: it walls off nothing here.
+// other models may be other vendors: it walls off nothing here. Nor does
+// Google's suspension of an account for its terms (googleSuspended): it
+// says the service was disabled in this account before the request came,
+// a ruling on the account, not on what was sent, so the provider's other
+// accounts are asked (bestony on Discord).
 func riskRefused(c candidate, status int, header http.Header, body []byte) bool {
-	return failureOf(c, status, body) == failRestricted && !remoteModelRest(c, failRestricted, header)
+	return failureOf(c, status, body) == failRestricted && !remoteModelRest(c, failRestricted, header) && !googleSuspended(c.p, carriedStatus(status, body), body)
 }
 
 // elsewhereWeighed is elsewhere on a list of candidates beside their
