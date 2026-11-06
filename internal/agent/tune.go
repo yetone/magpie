@@ -420,9 +420,10 @@ type TuneKnob struct {
 // TuneKept are the settings in agent's own config that tune put in and
 // that still hold its value (Ours), so Undo can put back what was there:
 // Claude Code's cache lifetimes and per-model windows. The Usage page's
-// card is the one place they are changed, and it keeps them there when
-// a range has too few calls to advise on (linkaww on Discord: a 1-hour
-// cache put in, with no way back to 5 minutes). One in magpie's Long
+// card keeps them there when a range has too few calls to advise on
+// (linkaww on Discord: a 1-hour cache put in, with no way back to 5
+// minutes). The cache lifetimes are also picked in Claude Code's own
+// settings (ClaudeCacheSet), which makes them the user's. One in magpie's Long
 // conversations or Codex's background compaction is left out: Settings
 // shows and changes those.
 func TuneKept(home, agent string) []TuneKnob {
@@ -635,4 +636,39 @@ func asyncUndo() error {
 		return nil
 	}
 	return provider.SetCodexAsyncCompact(st.On, st.Percent)
+}
+
+// ClaudeCacheSet is one of Claude Code's prompt-cache lifetimes as the
+// user picks it in Claude Code's settings, beside its compaction (Linka on
+// Discord: the card offers no way to change a lifetime that is already
+// the cheapest): "5m" or "1h", written where the card writes it
+// (promptCacheTtl, subagentPromptCacheTtl in settings.json), or "" taking
+// the key out, so Claude Code's own default holds. Claude Code reads the
+// variables before the setting (FORCE_PROMPT_CACHING_5M, then
+// CLAUDE_CODE_PROMPT_CACHE_TTL or CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL),
+// so with one set nothing is written. The pick is the user's own: a value
+// the card stashed is forgotten, so its Undo never puts an older one back
+// over it.
+func ClaudeCacheSet(home, knob, value string) error {
+	if knob != TuneCache && knob != TuneSubCache {
+		return fmt.Errorf("Claude Code has no prompt cache %q", knob)
+	}
+	if value != "" && value != "5m" && value != "1h" {
+		return fmt.Errorf("the cache is kept 5m or 1h, not %q", value)
+	}
+	p, err := tuneWhere(home, "claude", knob, "")
+	if err != nil {
+		return err
+	}
+	if cur, _ := TuneRead(home, "claude", knob, ""); cur.Locked != "" {
+		return fmt.Errorf("%s=%s is set and comes before the setting: take it out first", cur.Locked, cur.Value)
+	}
+	forget(tuneKey("claude", knob, ""))
+	if value == "" {
+		if _, ok := p.get(); !ok {
+			return nil
+		}
+		return edit.DelJSON(p.path, p.key)
+	}
+	return edit.SetJSON(p.path, edit.KV{Path: p.key, Value: value})
 }

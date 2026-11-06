@@ -42,11 +42,63 @@ window.agentCompactFill = function (list, a) {
   };
   draw();
   list.querySelector(".agent-compact")?.remove();
+  list.querySelectorAll(".claude-cache").forEach((r) => r.remove());
   const above = list.querySelector("#fullContextRow");
   above ? above.after(row) : list.append(row);
+  if (kind === "claude") row.after(...claudeCacheRows(list));
   // every agent's size, in its label, changes when the row above is drawn
   const seen = new MutationObserver(() => row.isConnected ? draw() : seen.disconnect());
   // Details can build this list before attaching it to the page.
   const segsBox = list.querySelector("#fullContextSegs");
   if (segsBox) seen.observe(segsBox, { childList: true });
 };
+
+// Claude Code's prompt cache, beside its compaction (Linka on Discord: the
+// Usage card offers no way to change one that is already the cheapest):
+// the main conversation's and the subagents', each 5 min, 1 hour or
+// Claude Code's own default, which takes the key out of its settings.json
+// (agent.ClaudeCacheSet). One a variable sets shows it, unchangeable here.
+function claudeCacheRows(list) {
+  const KNOBS = [["cache_ttl", "Prompt cache · main conversation"], ["subagent_cache_ttl", "Prompt cache · subagents"]];
+  const OPTS = [["", "Claude Code's default"], ["5m", "5 min"], ["1h", "1 hour"]];
+  return KNOBS.map(([knob, label]) => {
+    const row = el("div", "row pref claude-cache");
+    row.dataset.knob = knob;
+    const who = el("div", "who"), val = el("div", "val");
+    who.append(el("div", "name", t(label)));
+    row.append(who, val);
+    let drawn;
+    const draw = () => {
+      const c = ((prefs || {}).claudeCache || []).find((x) => x.knob === knob) || {};
+      const key = JSON.stringify(c);
+      if (key === drawn) return;
+      drawn = key;
+      const cur = c.value || "", known = OPTS.find(([v]) => v === cur);
+      const b = el("button", "sess-pick");
+      b.type = "button";
+      b.setAttribute("aria-label", t(label));
+      b.setAttribute("aria-haspopup", "menu");
+      b.setAttribute("aria-expanded", "false");
+      b.append(el("span", "", known ? t(known[1]) : cur), svg(CHEV, 11, 1.6));
+      b.disabled = !!c.locked;
+      b.onclick = (e) => {
+        e.stopPropagation();
+        if (b.classList.contains("open")) return closeProtoMenu();
+        openProtoMenu(b, OPTS.map(([v, name]) => ({ v, name, note: "" })), cur, (v) => {
+          if (v === cur) return;
+          writingPrefs(api("settings/claude-cache", { knob, value: v }))
+            .then((ns) => { prefs = ns; renderSettings(); if (row.isConnected) draw(); }).catch(settingsErr);
+        }, label, "sess-menu", "right");
+      };
+      val.replaceChildren(b);
+      who.querySelector(".sub")?.remove();
+      if (c.locked) who.append(el("div", "sub", t("{name} is set and comes first", { name: c.locked })));
+    };
+    draw();
+    // drawn again when the settings are read again
+    const seen = new MutationObserver(() => row.isConnected ? draw() : seen.disconnect());
+    const box = list.querySelector("#fullContextSegs");
+    if (box) seen.observe(box, { childList: true });
+    return row;
+  });
+}

@@ -175,9 +175,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await page.goto("http://magpie.test/?view=agents");
     await openAgentSettings(page, "claude");
     await page.locator('.row.agent[data-id="claude"] .ag-prefs #fullContextRow').waitFor();
-    // Long conversations, and Claude Code's own size under it
+    // Long conversations, Claude Code's own size and its prompt cache under it
     await page.locator('.row.agent[data-id="claude"] .ag-prefs .agent-compact').waitFor();
-    assert.equal(await page.locator(".ag-prefs .row.pref:not(.agent-compact)").count(), 1, "Claude Code's settings are Long conversations alone");
+    assert.equal(await page.locator(".ag-prefs .row.pref:not(.agent-compact):not(.claude-cache)").count(), 1, "Claude Code's settings are Long conversations and its own");
+    assert.equal(await page.locator(".ag-prefs .row.pref.claude-cache").count(), 2);
     assert.equal(await page.locator("#codexMemoriesRow").isHidden(), true);
     assert.deepEqual(errors, []);
   });

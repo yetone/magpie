@@ -544,6 +544,9 @@ type settingsJSON struct {
 	// model_auto_compact_token_limit; agent.CodexCompactHeld), written
 	// as the row names them: "[profiles.p] key = value, ..."
 	CodexCompactKeys string `json:"codexCompactKeys,omitempty"`
+	// Claude Code's two prompt-cache lifetimes as it reads them
+	// (agent.TuneRead): the rows beside its compaction in its settings
+	ClaudeCache []claudeCacheJSON `json:"claudeCache,omitempty"`
 	// the magpie model Codex's config runs, when its own window is no
 	// larger than Long conversations' threshold: Codex compacts it at 90%
 	// of that window (codexWindowUnder)
@@ -810,6 +813,7 @@ func settingsState() settingsJSON {
 	s.CodexUsers, s.ClaudeUsers = loginUsers("codex"), loginUsers("claude")
 	s.CodexAsyncHeld = agent.CodexAsyncHeld()
 	s.CodexCompactKeys = codexKeysText(agent.CodexCompactHeld(""))
+	s.ClaudeCache = claudeCacheState()
 	s.CodexWindow = codexWindowUnder(s.Settings.ForAgent("codex"), agent.CodexModel(""))
 	s.WorkBuddy, s.WorkBuddyCheckins = provider.HasWorkBuddy(), provider.WorkBuddyCheckins()
 	s.Trae, s.TraeCheckins = provider.HasTrae(), provider.TraeCheckins()

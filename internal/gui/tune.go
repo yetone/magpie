@@ -350,6 +350,21 @@ func tuneRoutes(mux *http.ServeMux) {
 		s, _ := agent.TuneRead("", in.Agent, in.Knob, in.Model)
 		writeJSON(rw, s)
 	})
+	// Claude Code's prompt cache picked in its settings: "5m", "1h", or ""
+	// for Claude Code's own default (agent.ClaudeCacheSet)
+	mux.HandleFunc("POST /api/settings/claude-cache", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Knob, Value string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := agent.ClaudeCacheSet("", in.Knob, in.Value); err != nil {
+			fail(rw, err)
+			return
+		}
+		tuneForget()
+		writeJSON(rw, settingsState())
+	})
 	mux.HandleFunc("POST /api/tune/undo", func(rw http.ResponseWriter, r *http.Request) {
 		var in change
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -495,4 +510,25 @@ func tuneCallsSince(since time.Time) map[string][]tune.Call {
 		slices.SortStableFunc(cs, func(a, b tune.Call) int { return b.Time.Compare(a.Time) })
 	}
 	return by
+}
+
+// claudeCacheJSON is one of Claude Code's prompt-cache lifetimes: its
+// knob (agent.TuneCache, agent.TuneSubCache), the value it runs at ("" for
+// Claude Code's own default), and the variable that sets it, when one does.
+type claudeCacheJSON struct {
+	Knob   string `json:"knob"`
+	Value  string `json:"value,omitempty"`
+	Locked string `json:"locked,omitempty"`
+}
+
+func claudeCacheState() []claudeCacheJSON {
+	var out []claudeCacheJSON
+	for _, knob := range []string{agent.TuneCache, agent.TuneSubCache} {
+		s, err := agent.TuneRead("", "claude", knob, "")
+		if err != nil {
+			continue
+		}
+		out = append(out, claudeCacheJSON{Knob: knob, Value: s.Value, Locked: s.Locked})
+	}
+	return out
 }
