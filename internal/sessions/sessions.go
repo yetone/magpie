@@ -166,6 +166,13 @@ type Session struct {
 	// so a reply id that names the fork is taken over the opening only for
 	// a fork of the opening's session (gui's ownerOf)
 	ForkOf string `json:"-"`
+	// SeedConvs are the conversation ids the fork's copied events opened
+	// (dshConvs), which its seed's end takes off Convs: the source's
+	// opening is what a fork and its source share, and dsh's current
+	// forks write no parentSession to say so, so this is how the fork's
+	// own replies are known to belong to a fork of that opening
+	// (gui's ownerOf)
+	SeedConvs []string `json:"-"`
 	// Copies are the ids of the sessions that are copies of its
 	// conversation, not listed apart from it (ccCopies)
 	Copies []string `json:"-"`
@@ -229,10 +236,15 @@ type state struct {
 	// gateway wrote them on its routes and the agent kept them with the
 	// reply (dsh's replay state): they name a request after the fact, where
 	// a conversation id is only its opening (Route.ResponseID)
-	ResponseIDs []string      `json:"response_ids,omitempty"`
-	Start       time.Time     `json:"start"`
-	Last        time.Time     `json:"last"`
-	Models      named[Tokens] `json:"models,omitempty"`
+	ResponseIDs []string `json:"response_ids,omitempty"`
+	// SeedConvs are the conversation ids a fork's copied events opened
+	// (dshConvs), kept when its seed's end takes them off Convs: the
+	// opening a fork and its source share is the source's, and this is
+	// the fork's own record that it came from that opening (ownerSeed)
+	SeedConvs []string      `json:"seed_convs,omitempty"`
+	Start     time.Time     `json:"start"`
+	Last      time.Time     `json:"last"`
+	Models    named[Tokens] `json:"models,omitempty"`
 	// Days is Models again, split by the local date each message was
 	// written on: a session that runs past midnight counts on both days.
 	Days named[*day] `json:"days,omitempty"`
@@ -394,6 +406,7 @@ func (s *state) clone() *state {
 	}
 	c.Convs = slices.Clone(s.Convs)
 	c.ResponseIDs = slices.Clone(s.ResponseIDs)
+	c.SeedConvs = slices.Clone(s.SeedConvs)
 	c.CodexSpawnNames = maps.Clone(s.CodexSpawnNames)
 	c.CodexSpawnConflicts = maps.Clone(s.CodexSpawnConflicts)
 	c.CodexAgentIDs = maps.Clone(s.CodexAgentIDs)
@@ -1163,11 +1176,15 @@ const cacheVersion = 29
 // dsh 1: the ids of the replies its own requests got (ResponseIDs), for
 // the routes that carry no session id and an opening a fork copies.
 //
+// dsh 2: the openings a fork's seed opened (SeedConvs), which its end
+// takes off Convs: a fork dsh writes today names no parentSession, so its
+// own replies are told from its source's by them.
+//
 // antigravity 1: a Gemini deployment's name with any one letter after it
 // (gemini-4-argon-d) is its model's (GeminiDeployment), not -n alone.
 // antigravity 2: a conversation's folder is its summary row's workspace
 // (a parse kept from before has none, under the same row revision).
-var parseVersions = map[string]int{"codex": 3, "zcode": 1, "dsh": 1, "antigravity": 2}
+var parseVersions = map[string]int{"codex": 3, "zcode": 1, "dsh": 2, "antigravity": 2}
 
 type cacheFile struct {
 	Version int    `json:"version"`
@@ -1878,6 +1895,7 @@ func assembleListed(fs []file, price func(string) *catalog.Price, codexTitle fun
 			}
 			s.Convs = append(s.Convs, st.Convs...)
 			s.ResponseIDs = append(s.ResponseIDs, st.ResponseIDs...)
+			s.SeedConvs = append(s.SeedConvs, st.SeedConvs...)
 			if d := st.Dsh; d != nil && d.Head.IsSeeded && d.Head.DelegationDepth == 0 {
 				s.ForkOf = d.Head.ParentSession
 			}

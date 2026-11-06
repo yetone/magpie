@@ -368,8 +368,12 @@ func dshCount(s *state, h *dshHead, b []byte, main bool) {
 	case "session/end-seed":
 		if h.Version >= 2 && h.IsSeeded && e.Data.Inherited {
 			// the events a fork was seeded with end here: what was
-			// counted of them is its source's
-			n := &state{ID: s.ID, Cwd: s.Cwd, Title: s.Title, First: s.First, Named: s.Named, Size: s.Size, Mod: s.Mod}
+			// counted of them is its source's. What they opened is
+			// kept: dsh writes no parentSession for a fork, so the
+			// openings its seed carried are all that says the fork
+			// came from them (SeedConvs)
+			n := &state{ID: s.ID, Cwd: s.Cwd, Title: s.Title, First: s.First, Named: s.Named, Size: s.Size, Mod: s.Mod,
+				SeedConvs: append(append([]string(nil), s.SeedConvs...), s.Convs...)}
 			n.saw(ms(h.CreatedAt), main)
 			*s = *n
 			return

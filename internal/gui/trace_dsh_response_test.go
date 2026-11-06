@@ -52,7 +52,7 @@ func TestRoutingTellsAForkByItsReply(t *testing.T) {
 	}
 	write("session-source", `{"type":"session","version":4,"id":"session-source","cwd":"/w","createdAt":1000,"delegationDepth":0,"isSeeded":false}`,
 		opening, reply(2, "reply-source"))
-	write("session-fork", `{"type":"session","version":4,"id":"session-fork","cwd":"/w","createdAt":1000,"delegationDepth":0,"parentSession":"session-source","isSeeded":true}`,
+	write("session-fork", `{"type":"session","version":4,"id":"session-fork","cwd":"/w","createdAt":1000,"delegationDepth":0,"isSeeded":true}`,
 		opening, reply(2, "reply-source"), endSeed, reply(4, "reply-fork"))
 
 	var openingHash string

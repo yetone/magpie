@@ -304,25 +304,31 @@ func joinConvs(routes []ctxRec, list func() []sessions.Session) {
 // which some give out again (Ollama's chatcmpl-<0-998>), so it names a
 // session over the opening only where the two agree: the opening is no
 // one's, or two sessions', or the reply's session's own, or one it was
-// forked from (sessions' ForkOf). Another session's opening goes by the
-// opening, as it did before reply ids were read.
+// forked from (sessions' ForkOf, or the opening its seed carried when the
+// fork names no parent). Another session's opening goes by the opening, as
+// it did before reply ids were read.
 func ownerOf(agent, responseID, conv string, of map[string]string) string {
 	opened := ""
 	if conv != "" {
 		opened = of[ownerKey(agent, ownerConv, conv)]
 	}
 	if responseID != "" {
-		if id := of[ownerKey(agent, ownerResponse, responseID)]; id != "" && (opened == "" || forkedFrom(agent, id, opened, of)) {
+		if id := of[ownerKey(agent, ownerResponse, responseID)]; id != "" && (opened == "" || forkedFrom(agent, id, opened, conv, of)) {
 			return id
 		}
 	}
 	return opened
 }
 
-// forkedFrom says session id is from, or a fork of it, or of a fork of it.
-func forkedFrom(agent, id, from string, of map[string]string) bool {
+// forkedFrom says session id is from, or a fork of it, or of a fork of it:
+// by the source its header names (ForkOf), or, for a fork dsh wrote with
+// none, by the opening conv its seed carried (sessions' SeedConvs).
+func forkedFrom(agent, id, from, conv string, of map[string]string) bool {
 	for n := 0; id != "" && n < 64; n++ {
 		if id == from {
+			return true
+		}
+		if conv != "" && of[ownerKey(agent, ownerSeed, id+"\x00"+conv)] != "" {
 			return true
 		}
 		id = of[ownerKey(agent, ownerFork, id)]
@@ -332,11 +338,13 @@ func forkedFrom(agent, id, from string, of map[string]string) bool {
 
 // The kinds of id a route without a session id is named by: the reply it
 // got, and the conversation it opens; and a session's source, for the
-// session a fork's reply names (ForkOf).
+// session a fork's reply names (ForkOf), and the opening a fork's seed
+// carried, kept on the fork itself (SeedConvs).
 const (
 	ownerResponse = "response"
 	ownerConv     = "conv"
 	ownerFork     = "fork"
+	ownerSeed     = "seed"
 )
 
 func ownerKey(agent, kind, id string) string { return agent + "\x00" + kind + "\x00" + id }
@@ -364,6 +372,11 @@ func routeOwners(list []sessions.Session) map[string]string {
 		}
 		if s.ForkOf != "" {
 			of[ownerKey(s.Agent, ownerFork, s.ID)] = s.ForkOf
+		}
+		for _, c := range s.SeedConvs {
+			// the fork's own record that its seed opened c, the opening
+			// it shares with the session it was copied from
+			of[ownerKey(s.Agent, ownerSeed, s.ID+"\x00"+c)] = s.ID
 		}
 	}
 	return of

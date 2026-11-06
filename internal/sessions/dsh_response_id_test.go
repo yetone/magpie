@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -185,5 +186,31 @@ func TestDshForkOfARealSessionListsItsOwnReplies(t *testing.T) {
 	}
 	if byID[source].ForkOf != "" {
 		t.Errorf("the source is forked from %q", byID[source].ForkOf)
+	}
+}
+
+// dsh writes no parentSession for a fork it makes today (0.2.2): the
+// openings its seed carried are the only record that it came from the
+// session it copied, and are kept when the seed's end takes them off Convs.
+func TestDshForkWithoutAParentKeepsItsSeedOpenings(t *testing.T) {
+	head := `{"type":"session","version":4,"id":"session-child","cwd":"/w","createdAt":1000,"delegationDepth":0,"isSeeded":true}`
+	s := dshSessionFile(t, []string{
+		head,
+		`{"type":"user/message","seq":1,"time":1000,"data":{"source":{"kind":"user"},"content":[{"type":"text","text":"same first prompt"}]}}`,
+		`{"type":"session/end-seed","seq":2,"time":1000,"data":{"inherited":true}}`,
+		dshReplyWithID(3, "own"),
+	})
+	want := dshConvs(json.RawMessage(`[{"type":"text","text":"same first prompt"}]`))
+	if len(want) == 0 {
+		t.Fatal("the fixture opens no conversation")
+	}
+	if !slices.Equal(s.SeedConvs, want) {
+		t.Fatalf("seed openings %v, want %v", s.SeedConvs, want)
+	}
+	if len(s.Convs) != 0 {
+		t.Fatalf("the fork keeps its source's opening as its own: %v", s.Convs)
+	}
+	if !slices.Equal(s.ResponseIDs, []string{"own"}) {
+		t.Fatalf("replies %v, want [own]", s.ResponseIDs)
 	}
 }
