@@ -87,7 +87,7 @@ func TestCacheTTLPausesWantAnHour(t *testing.T) {
 	cs := many(4, func(id string, t0 time.Time) []Call {
 		return session(id, t0, 40, 30000, 3000, 0, 0, 20*time.Minute, false)
 	})
-	r := CacheTTL(cs, "")
+	r := CacheTTL(cs, "", nil)
 	if r == nil || r.Current != "5m" || r.Best != "1h" || r.Low >= r.Cost {
 		t.Fatalf("got %+v, want 5m → 1h", r)
 	}
@@ -102,7 +102,7 @@ func TestCacheTTLQuickWantsFiveMinutes(t *testing.T) {
 	cs := many(4, func(id string, t0 time.Time) []Call {
 		return session(id, t0, 40, 30000, 3000, 0, 0, 20*time.Second, true)
 	})
-	r := CacheTTL(cs, "")
+	r := CacheTTL(cs, "", nil)
 	if r == nil || r.Current != "1h" || r.Best != "5m" {
 		t.Fatalf("got %+v, want 1h (read from the writes) → 5m", r)
 	}
@@ -281,5 +281,23 @@ func TestCompactUnknownWindowCapsNothing(t *testing.T) {
 	}
 	if last := r.Curve[len(r.Curve)-1].Value; last != 1000000 || r.Current != 1000000 || r.Window != 0 {
 		t.Fatalf("curve to %d, now %d, window %d; want 1000000, 1000000, 0", last, r.Current, r.Window)
+	}
+}
+
+// Calls are weighed at what Weigh says their model costs: on a provider
+// that bills an hour's cache write as a 5-minute one (Copilot, #3435) the
+// hour costs no more, so calls seconds apart are left on it, where at the
+// maker's weights (nil) they are moved to 5 minutes.
+func TestCacheTTLWeighedAtTheProvidersPrice(t *testing.T) {
+	cs := many(4, func(id string, t0 time.Time) []Call {
+		return session(id, t0, 40, 30000, 3000, 0, 0, 20*time.Second, true)
+	})
+	if r := CacheTTL(cs, "", nil); r == nil || r.Best != "5m" {
+		t.Fatalf("at the maker's weights got %+v, want 1h → 5m", r)
+	}
+	copilot := func(string) Weights { return Weights{Read: 0.05, Write: 1.25, Write1h: 1.25, Out: 5} }
+	r := CacheTTL(cs, "", copilot)
+	if r == nil || r.Current != "1h" || r.Best != "1h" || r.Hour > r.Short {
+		t.Fatalf("at an hour priced as 5 minutes got %+v, want it left on 1h", r)
 	}
 }

@@ -112,6 +112,7 @@ func tuneOf(cs []sessions.Call, days int, home string) tuneState {
 // adviseOf is tuneOf from each agent's calls made tune's already.
 func adviseOf(by map[string][]tune.Call, days int, home string) tuneState {
 	out := tuneState{Days: days, Agents: []tuneAgent{}}
+	weigh := pricedWeights(settings.Load())
 	for _, name := range []string{"claude", "codex"} {
 		calls := by[name]
 		kept := agent.TuneKept(home, name)
@@ -157,7 +158,7 @@ func adviseOf(by map[string][]tune.Call, days int, home string) tuneState {
 					}
 				}
 				cur, _ := strconv.Atoi(s.Value)
-				o := tune.CompactOpts{Min: 100000, Max: 1000000, Step: 10000, Reserve: 33000, Window: window, Current: cur}
+				o := tune.CompactOpts{Min: 100000, Max: 1000000, Step: 10000, Reserve: 33000, Window: window, Current: cur, Weigh: weigh}
 				if r := tune.Compact(mc, o); r != nil {
 					ta.Advice = append(ta.Advice, tuneAdvice{Knob: agent.TuneCompact, Model: m, Setting: s, Compact: r})
 				}
@@ -173,7 +174,7 @@ func adviseOf(by map[string][]tune.Call, days int, home string) tuneState {
 				if err != nil {
 					continue
 				}
-				if r := tune.CacheTTL(k.calls, s.Value); r != nil {
+				if r := tune.CacheTTL(k.calls, s.Value, weigh); r != nil {
 					ta.Advice = append(ta.Advice, tuneAdvice{Knob: k.knob, Setting: s, TTL: r})
 				}
 			}
@@ -192,7 +193,7 @@ func adviseOf(by map[string][]tune.Call, days int, home string) tuneState {
 				cur = told
 			}
 			// a value the user chose is never past the last one offered
-			o := tune.CompactOpts{Min: 50000, Max: max(1000000, window, cur, st.CompactAt), Step: 10000, Window: window, Current: cur}
+			o := tune.CompactOpts{Min: 50000, Max: max(1000000, window, cur, st.CompactAt), Step: 10000, Window: window, Current: cur, Weigh: weigh}
 			if r := tune.Compact(calls, o); r != nil {
 				ad := tuneAdvice{Knob: agent.TuneCompact, Setting: s, Compact: r}
 				if own != "" && s.Source == agent.TuneLong && r.Current == told {
@@ -219,6 +220,35 @@ func adviseOf(by map[string][]tune.Call, days int, home string) tuneState {
 		out.Agents = append(out.Agents, ta)
 	}
 	return out
+}
+
+// pricedWeights weighs a model's calls at what magpie bills them where the
+// agent asked for a model magpie wrote into its config (provider/model, as
+// Claude Code is given it, dashed): the price of the provider it resolves
+// to, as the usage pages count it, so a Claude model on Copilot has its
+// hour at the 5-minute write Copilot bills and one on Anthropic at 2× input
+// (#3435). By its name alone a provider/model id was weighed as no Claude
+// model, its hour costing what a 5-minute write does. A model the agent
+// named itself never went through magpie and is weighed at its maker's list
+// (tune.WeightsFor), as is one magpie has no cache price for.
+func pricedWeights(st settings.Settings) tune.Weigh {
+	memo := map[string]tune.Weights{}
+	return func(model string) tune.Weights {
+		if w, ok := memo[model]; ok {
+			return w
+		}
+		w := tune.WeightsFor(model)
+		if strings.Contains(model, "/") {
+			if p, m, ok := provider.Resolve(provider.ClaudeRead(model)); ok {
+				if pr, ok := provider.EffectivePriceIn(st, p.ID, m); ok && pr.Input > 0 && pr.Output > 0 && pr.CacheRead > 0 && pr.CacheWrite > 0 {
+					w = tune.Weights{Read: pr.CacheRead / pr.Input, Write: pr.CacheWrite / pr.Input,
+						Write1h: pr.OneHour() / pr.Input, Out: pr.Output / pr.Input}
+				}
+			}
+		}
+		memo[model] = w
+		return w
+	}
 }
 
 // codexWindow is the window Codex runs the calls' models to, and where

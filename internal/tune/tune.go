@@ -85,6 +85,18 @@ func WeightsFor(model string) Weights {
 	return Weights{Read: 0.1, Write: 1, Write1h: 1, Out: 8}
 }
 
+// Weigh gives the weights a model's calls are replayed at: what magpie
+// bills the provider that served them, where the caller knows it (#3435:
+// Copilot bills an hour's cache write as a 5-minute one), else WeightsFor.
+type Weigh func(model string) Weights
+
+func (w Weigh) of(model string) Weights {
+	if w == nil {
+		return WeightsFor(model)
+	}
+	return w(model)
+}
+
 // Point is one setting tried and what the period would have cost with it,
 // and how many compactions it would have made there: what a window over
 // the leanest buys, said beside what it costs (#1860). Wait is the seconds
@@ -156,6 +168,8 @@ type CompactOpts struct {
 	// (zhemu on Discord: a 1M model magpie had no window for was offered
 	// no more than the largest prompt it had been sent, 412K)
 	Window int
+	// Weigh prices the calls; nil weighs them at WeightsFor
+	Weigh Weigh
 }
 
 const (
@@ -323,7 +337,7 @@ func Compact(cs []Call, o CompactOpts) *Compaction {
 		return nil
 	}
 	model := cs[0].Model
-	w := WeightsFor(model)
+	w := o.Weigh.of(model)
 	write := w.Write
 	var wrote, wrote1 int
 	for _, c := range cs {
@@ -472,13 +486,18 @@ type TTL struct {
 }
 
 // replayTTL is what the streams would have cost with the cache kept for
-// ttl at write per token: a call within it of the one before reads what
-// that one sent and writes what it adds; one after it, or after a
-// compaction, writes its whole prompt again.
-func replayTTL(ss [][]Call, ttl time.Duration, write float64) float64 {
+// ttl, each stream at its own model's weights (an hour's writes at Write1h):
+// a call within it of the one before reads what that one sent and writes
+// what it adds; one after it, or after a compaction, writes its whole
+// prompt again.
+func replayTTL(ss [][]Call, ttl time.Duration, hour bool, weigh Weigh) float64 {
 	cost := 0.0
 	for _, s := range ss {
-		w := WeightsFor(s[0].Model)
+		w := weigh.of(s[0].Model)
+		write := w.Write
+		if hour {
+			write = w.Write1h
+		}
 		cost += float64(s[0].Prompt) * write
 		for i := 1; i < len(s); i++ {
 			p, c := s[i-1].Prompt, s[i].Prompt
@@ -498,8 +517,9 @@ func replayTTL(ss [][]Call, ttl time.Duration, write float64) float64 {
 // CacheTTL advises Claude Code's cache lifetime for calls, all of the
 // main conversation or all beside it; nil when there is too little to go
 // on. current is the one set, "" when nothing sets one, and tune takes
-// it from what the calls' cache writes were kept for.
-func CacheTTL(cs []Call, current string) *TTL {
+// it from what the calls' cache writes were kept for. weigh prices the
+// calls; nil weighs them at WeightsFor.
+func CacheTTL(cs []Call, current string, weigh Weigh) *TTL {
 	ss := streams(cs)
 	f := observe(ss)
 	if f.Calls < 50 {
@@ -536,10 +556,9 @@ func CacheTTL(cs []Call, current string) *TTL {
 			current = "1h"
 		}
 	}
-	w := WeightsFor(cs[0].Model)
 	r := &TTL{Current: current, Facts: f}
-	r.Short = replayTTL(ss, 5*time.Minute, w.Write)
-	r.Hour = replayTTL(ss, time.Hour, w.Write1h)
+	r.Short = replayTTL(ss, 5*time.Minute, false, weigh)
+	r.Hour = replayTTL(ss, time.Hour, true, weigh)
 	r.Cost, r.Best, r.Low = r.Short, "5m", r.Short
 	if current == "1h" {
 		r.Cost = r.Hour
