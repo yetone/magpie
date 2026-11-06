@@ -13,7 +13,7 @@ import (
 // mistralRefuse answers as Mistral's chat completions do a body with a
 // field it doesn't know: 422 extra_forbidden, every such field listed.
 func mistralRefuse(body []byte) (int, string) {
-	known := []string{"model", "messages", "stream", "max_tokens", "temperature", "top_p", "tools", "tool_choice",
+	known := []string{"model", "messages", "stream", "stream_options", "max_tokens", "temperature", "top_p", "tools", "tool_choice",
 		"parallel_tool_calls", "response_format", "stop", "random_seed", "presence_penalty", "frequency_penalty", "n"}
 	var m map[string]json.RawMessage
 	json.Unmarshal(body, &m)

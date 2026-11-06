@@ -134,3 +134,103 @@ func TestMessageReasoningRefused(t *testing.T) {
 		sameJSON(t, ms[1], `{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"read","arguments":"{}"}}]}`)
 	}
 }
+
+// The Responses route through the same provider, with a model whose name
+// says DeepSeek served at Mistral (#4906): the Chat build replays the
+// turn's reasoning in reasoning_content wherever the model is served
+// (chatReplaysReasoning keys on the name), and Mistral turns that field
+// away — 422 extra_forbidden on every follow-up of a tool loop, where the
+// direct Chat route converts it (above). The translated body is converted
+// the same way.
+func TestTranslatedReasoningAsThinkingForMistral(t *testing.T) {
+	f := &fake{t: t, refuse: mistralRefuseMessages, reply: sse(
+		`data: {"id":"c1","object":"chat.completion.chunk","model":"m1","choices":[{"index":0,"delta":{"role":"assistant","content":"pelican"},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":2}}`,
+		`data: [DONE]`)}
+	up := setup(t, provider.Chat, f)
+	if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Key: "k", Models: []string{"deepseek-v4-1-flash-1017"},
+		Preset: "mistral", Chat: up.URL + "/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	// the issue's request: a reasoning item before the call its thinking
+	// was of, the call answered
+	code, body := postTo(t, New(), "/v1/responses", `{"model":"fake/deepseek-v4-1-flash-1017","stream":false,"max_output_tokens":40,
+		"tools":[{"type":"function","name":"read_file","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}],
+		"input":[
+			{"type":"message","role":"user","content":[{"type":"input_text","text":"Read note.txt and tell me the word."}]},
+			{"type":"reasoning","summary":[{"type":"summary_text","text":"I should read note.txt with the tool."}]},
+			{"type":"function_call","call_id":"call_1","name":"read_file","arguments":"{\"path\":\"note.txt\"}"},
+			{"type":"function_call_output","call_id":"call_1","output":"pelican"}]}`)
+	if code != 200 || f.calls != 1 {
+		t.Fatalf("%d after %d calls: %s", code, f.calls, body)
+	}
+	for _, m := range sentMessages(t, f.got) {
+		if strings.Contains(string(m), "reasoning_content") {
+			t.Fatalf("a message still carries reasoning_content: %s", f.got)
+		}
+	}
+	var think string
+	for _, m := range sentMessages(t, f.got) {
+		var msg struct {
+			ToolCalls []any `json:"tool_calls"`
+			Content   []struct {
+				Type     string `json:"type"`
+				Thinking []struct {
+					Text string `json:"text"`
+				} `json:"thinking"`
+			} `json:"content"`
+		}
+		if json.Unmarshal(m, &msg) != nil || len(msg.ToolCalls) == 0 {
+			continue
+		}
+		if len(msg.Content) != 1 || msg.Content[0].Type != "thinking" {
+			t.Fatalf("the turn's thinking is not the part Mistral takes: %s", m)
+		}
+		think = msg.Content[0].Thinking[0].Text
+	}
+	if think != "I should read note.txt with the tool." {
+		t.Fatalf("the reasoning item's summary is not the thinking: %q", think)
+	}
+}
+
+// A tool turn with no reasoning item, translated for a DeepSeek-named
+// model at Mistral (#4906): the build's " " placeholder in
+// reasoning_content is dropped, not sent as a blank thinking part, and
+// the call goes as the client made it.
+func TestTranslatedToolTurnWithoutReasoningForMistral(t *testing.T) {
+	f := &fake{t: t, refuse: mistralRefuseMessages, reply: sse(
+		`data: {"id":"c1","object":"chat.completion.chunk","model":"m1","choices":[{"index":0,"delta":{"role":"assistant","content":"pelican"},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":2}}`,
+		`data: [DONE]`)}
+	up := setup(t, provider.Chat, f)
+	if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Key: "k", Models: []string{"deepseek-v4-1-flash-1017"},
+		Preset: "mistral", Chat: up.URL + "/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	code, body := postTo(t, New(), "/v1/responses", `{"model":"fake/deepseek-v4-1-flash-1017","stream":false,"max_output_tokens":40,
+		"tools":[{"type":"function","name":"read_file","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}],
+		"input":[
+			{"type":"message","role":"user","content":[{"type":"input_text","text":"Read note.txt and tell me the word."}]},
+			{"type":"function_call","call_id":"call_1","name":"read_file","arguments":"{\"path\":\"note.txt\"}"},
+			{"type":"function_call_output","call_id":"call_1","output":"pelican"}]}`)
+	if code != 200 || f.calls != 1 {
+		t.Fatalf("%d after %d calls: %s", code, f.calls, body)
+	}
+	calls := 0
+	for _, m := range sentMessages(t, f.got) {
+		var msg map[string]json.RawMessage
+		if json.Unmarshal(m, &msg) != nil || msg["tool_calls"] == nil {
+			continue
+		}
+		calls++
+		for _, k := range messageReasoning {
+			if _, ok := msg[k]; ok {
+				t.Fatalf("the call carries %s: %s", k, m)
+			}
+		}
+		if strings.Contains(string(msg["content"]), "thinking") {
+			t.Fatalf("the call was given a blank thinking part: %s", m)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("%d calls sent: %s", calls, f.got)
+	}
+}

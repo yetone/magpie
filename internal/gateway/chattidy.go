@@ -1044,7 +1044,10 @@ func mistralThinking(body []byte) []byte {
 		}
 		var role string
 		decodeJSON(m["role"], &role)
-		if think == "" || role != "assistant" {
+		// a whitespace-only thinking is the placeholder a DeepSeek
+		// replay puts on a tool turn that had none (#1462): dropped, not
+		// sent as a blank thinking part (#4906)
+		if strings.TrimSpace(think) == "" || role != "assistant" {
 			return true
 		}
 		thinking, _ := marshalPlain(map[string]any{"type": "thinking",
