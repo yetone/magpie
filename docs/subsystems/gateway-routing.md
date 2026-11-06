@@ -1518,7 +1518,9 @@ doesn't follow one. The 3xx is the error, and it names where the search
 was sent. Every request sent with a provider's credential has the
 same rule: the gateway's client, `Provider.Do` through whichever client
 it is given (`provider.Keyed`), the provider package's own reads (usage,
-balance, models, sign-in refreshes) and the Codex relay follow a redirect
+balance, models, sign-in refreshes), the Codex relay and a plugin's
+fetch in the plugin host (`followed` in `host.js`, see
+[provider plugins](provider-plugins.md)) follow a redirect
 only to the request's origin, or from http to https on its host
 (`provider.KeepsCredentials` in
 [`redirect.go`](../../internal/provider/redirect.go)). Go would follow one
