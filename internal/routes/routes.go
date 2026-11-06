@@ -75,6 +75,10 @@ type Seat struct {
 	// out never put it behind the others (seatTier), so it keeps the
 	// place an account with room has.
 	First bool
+	// Lead: its provider is set to be used first (provider.Provider.
+	// UseFirst). Smart puts such seats ahead of the others while they have
+	// quota (seatTier below 2), in Smart's own order among themselves.
+	Lead bool
 	// TTFT is how long it took lately to the first of its reply, in ms,
 	// for the model this seat would be asked for: a decayed average of its
 	// recent streamed answers, 0 when it hasn't answered one lately.

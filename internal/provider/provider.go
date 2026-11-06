@@ -142,6 +142,16 @@ type Provider struct {
 	// goes round already. See gateway.sink.
 	Sink bool `json:"sink,omitempty"`
 
+	// UseFirst puts its keys or accounts ahead of the other providers'
+	// where Smart weighs them together: a group of several providers'
+	// models (hzh_1119 on Discord: an OpenAI API key's monthly credit
+	// spent before the ChatGPT subscription serving the same models). One
+	// resting after a failure, out of credit or out of quota (a 429
+	// insufficient_quota) is passed over as ever, and one all but used up
+	// goes with the others that are. Off, the default, Smart goes as it
+	// always has (routes.Seat.Lead).
+	UseFirst bool `json:"useFirst,omitempty"`
+
 	// Affinity is how long a conversation stays with the key or account
 	// that answered it, so the vendor's prompt cache it filled is read
 	// again rather than lost (see Affinities): "" auto, "session",
@@ -984,6 +994,7 @@ func accountSettings(a, pk Provider) Provider {
 	a.Proxy, a.AccountProxies, a.AccountModels, a.AccountModelsAll = pk.Proxy, pk.AccountProxies, pk.AccountModels, pk.AccountModelsAll
 	a.AccountCaps, a.AccountWindowCaps = pk.AccountCaps, pk.AccountWindowCaps
 	a.CapStop, a.CapCareful = pk.CapStop, pk.CapCareful
+	a.UseFirst = pk.UseFirst
 	a.AccountNames = pk.AccountNames
 	a.MaxConcurrency, a.PinUpstream = pk.MaxConcurrency, pk.PinUpstream
 	a.MaxAccounts = pk.MaxAccounts

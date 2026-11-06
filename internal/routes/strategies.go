@@ -184,8 +184,28 @@ var Smart = Strategy{Order: func(_ string, seats []Seat) []int {
 	})
 	sort.SliceStable(low, func(i, j int) bool { return seats[low[i]].Used < seats[low[j]].Used })
 	sort.SliceStable(spent, func(i, j int) bool { return spentBefore(seats[spent[i]], seats[spent[j]]) })
-	return append(append(fine, low...), spent...)
+	return leadFirst(seats, append(append(fine, low...), spent...))
 }}
+
+// leadFirst is order with the seats of a provider set to be used first
+// (Seat.Lead) ahead of the rest, each side in order's own order: a key's
+// monthly credit spent before a subscription that serves the same model
+// (hzh_1119 on Discord). One all but used up stays with the others that
+// are, and one resting is passed over by the gateway as any is.
+func leadFirst(seats []Seat, order []int) []int {
+	var lead, rest []int
+	for _, i := range order {
+		if seats[i].Lead && seatTier(seats[i]) < 2 {
+			lead = append(lead, i)
+		} else {
+			rest = append(rest, i)
+		}
+	}
+	if len(lead) == 0 {
+		return order
+	}
+	return append(lead, rest...)
+}
 
 // spentBefore orders two seats all but used up: one that goes on on its
 // credits first (a Codex account holding them answers past its allowance;

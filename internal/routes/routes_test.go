@@ -237,3 +237,30 @@ func TestCreditsFirstOfTheSpent(t *testing.T) {
 		}
 	}
 }
+
+// A seat whose provider is set to be used first (Seat.Lead) goes ahead of
+// the others Smart weighs it with: an API key's monthly credit before a
+// subscription with room, which renews soonest (hzh_1119 on Discord). One
+// all but used up goes with the others that are, and with none set to
+// lead, Smart goes as it did.
+func TestSmartLeadFirst(t *testing.T) {
+	now := time.Now()
+	s := []Seat{
+		{Key: "plus", Used: 10, Soon: []time.Time{now.Add(2 * time.Hour)}},
+		{Key: "pro", Used: 40, Soon: []time.Time{now.Add(24 * time.Hour)}},
+		{Key: "api", Lead: true},
+		{Key: "api-spent", Lead: true, Used: 99},
+		{Key: "spent", Used: 98},
+	}
+	got := keys(s, Apply(Smart, "p", s))
+	if want := []string{"api", "plus", "pro", "spent", "api-spent"}; !slices.Equal(got, want) {
+		t.Fatalf("Smart with a lead: %v, want %v", got, want)
+	}
+	for i := range s {
+		s[i].Lead = false
+	}
+	got = keys(s, Apply(Smart, "p", s))
+	if want := []string{"plus", "pro", "api", "spent", "api-spent"}; !slices.Equal(got, want) {
+		t.Fatalf("Smart with none set: %v, want %v", got, want)
+	}
+}

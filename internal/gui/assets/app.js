@@ -6339,11 +6339,8 @@ function providerHandle(p, row) {
   return b;
 }
 
-// The ids of the providers that are on, in their order, and of those a
-// search shows. While searching, a provider moves among the ones shown:
-// Alt+↑ puts it just above the one shown above it, a drop puts it where the
-// row dropped on was; the ones hidden keep their order among themselves.
-// Move to Top and Move to Bottom go to the top or the bottom of them all.
+// The providers on, in order, and those a search shows: while searching, one
+// moves among those shown; the hidden keep their order.
 const onProviderIds = () => providers.providers.filter((x) => !x.off).map((x) => x.id);
 const shownProviderIds = () => [...$("#providers").children].filter((r) => r.classList.contains("provider") && !r.hidden).map((r) => r.dataset.id);
 const shownToOn = (id) => (id ? onProviderIds().indexOf(id) : -1);
@@ -6353,9 +6350,8 @@ function stepProvider(id, by, keyboard) {
   arrangeProvider(id, shownToOn(shown[i + by]), keyboard);
 }
 
-// openProviderMenu: a provider row's right-click, the quick way through a
-// long list (#1614): Move to Top and Move to Bottom beside one step up or
-// down, each with its keys.
+// openProviderMenu: a row's right-click (#1614), and Use first, which Smart
+// tries first (hzh_1119 on Discord)
 function openProviderMenu(anchor, p) {
   if (!anchor) return;
   const again = agentMenu?.anchor === anchor;
@@ -6369,18 +6365,14 @@ function openProviderMenu(anchor, p) {
     { name: "Move up", icon: MOVE_UP, key: ALT + "↑", off: k <= 0, run: () => stepProvider(p.id, -1) },
     { name: "Move down", icon: MOVE_DOWN, key: ALT + "↓", off: k < 0 || k >= shown.length - 1, run: () => stepProvider(p.id, 1) },
     { name: "Move to bottom", icon: MOVE_BOTTOM, key: ALT + SHIFT + "↓", off: i === on.length - 1, run: () => arrangeProvider(p.id, on.length - 1) },
+    { name: "Use first", icon: p.useFirst ? CHECK : "", sep: !0, run: () => accountAction("provider/usefirst", { id: p.id, useFirst: !p.useFirst }, t(p.useFirst ? "{name} takes its turn with the others" : "{name} is used first", { name: p.name })) },
     ...magpie.actions?.("provider", { provider: { id: p.id, name: p.name } }) || [],
   ]);
 }
 
-// Providers' search (#1614, ququdu: "供应商很多，然后经常需要翻找"): the
-// words typed keep the rows that say them all, on and off alike, matched on
-// the row's own text and on what it doesn't show: its id, preset, addresses,
-// each account's user and plan, and the keys' names. The words it doesn't
-// say are one model's it serves, separators aside ("opus 5.5" finds
-// claude-opus-5-5), named under the row (frankdeng, Neo). The ones turned
-// off show unfolded while searching. Escape or clearing the box brings back
-// every row, the fold as it was.
+// Providers' search (#1614): the rows saying every word, on and off, by their
+// text, ids, addresses, users and keys; a word they don't say is a model's
+// they serve, named under the row (frankdeng, Neo).
 let pvQuery = "";
 function providerText(p, row) {
   const a = p.account;

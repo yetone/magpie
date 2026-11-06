@@ -911,6 +911,11 @@ function routingPage(part) {
         if (f.kind === "key" && !someKnown) return t("Use before expiry: {who} served the fewest tokens lately — {n}.", { who: w, n: tokens(f.tokens || 0) });
         return t("Use before expiry: {who} goes first.", { who: w });
     }
+    // its provider set to be used first (Provider.UseFirst, routes.Seat.Lead):
+    // Smart puts it ahead of the others it weighs it with, whatever they
+    // have left (hzh_1119 on Discord)
+    if (f.useFirst && peers.some((p) => !p.useFirst)) return restedTo(t("its provider is set to be used first."))
+      || t("{who} goes first: its provider is set to be used first.", { who: w });
     // keys that read their own windows (a sub2api key's limits) are
     // weighed by them, as accounts are, and one not read yet beside them
     // too: told below as one
@@ -950,7 +955,7 @@ function routingPage(part) {
     if (!f || !x || x === f || f.rest || f.fallback || x.fallback || x.routing || !x.known || group(x) !== "fine") return null;
     if (!weighedWith(r, x).includes(f) || memberSplit(r, f, x)) return null;
     if (["session", "turn", "cache"].includes(r.affinity?.why)) return "kept";
-    if (r.sealedTask || ruleWhy(r, true) || f.learns || !f.known || group(f) !== "fine") return null;
+    if (r.sealedTask || ruleWhy(r, true) || f.learns || !f.known || group(f) !== "fine" || f.useFirst && !x.useFirst) return null;
     return cmpRenews(f, x).c < 0 ? "sooner" : null;
   }
 

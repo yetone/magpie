@@ -105,6 +105,18 @@ func SetSink(id string, sink bool) error {
 	return Save(*p)
 }
 
+// SetUseFirst puts a provider's keys or accounts ahead of the other
+// providers' where Smart weighs them together, or back in Smart's own
+// order (Provider.UseFirst).
+func SetUseFirst(id string, on bool) error {
+	p, err := Find(id)
+	if err != nil {
+		return err
+	}
+	p.UseFirst = on
+	return Save(*p)
+}
+
 // SetCapStop has a subscription answer 429 while every account is held at
 // its usage cap, rather than go on to its fallbacks (Provider.CapStop), or
 // go on to them again.
