@@ -275,7 +275,7 @@ func (t codexSocket) socket(req *http.Request, msg []byte) (*http.Response, erro
 	timer := time.AfterFunc(codexSocketDial, cancel)
 	u := *req.URL
 	c, hs, err := websocket.Dial(ctx, u.String(), &websocket.DialOptions{
-		HTTPClient:      &http.Client{Transport: t.next},
+		HTTPClient:      &http.Client{Transport: t.next, CheckRedirect: provider.KeepsCredentials},
 		HTTPHeader:      codexSocketHeaders(req),
 		CompressionMode: websocket.CompressionNoContextTakeover,
 	})

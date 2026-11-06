@@ -25,7 +25,8 @@ import (
 // Privacy) that would have masked it. Its answer at "/" never says it is
 // magpie (ServedBy), so the next magpie starting asks it to leave.
 func CodexRelay() http.Handler {
-	client := &http.Client{Transport: upstreamTransport()}
+	// the caller's sign-in goes to the ChatGPT backend's origin only
+	client := &http.Client{Transport: upstreamTransport(), CheckRedirect: provider.KeepsCredentials}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !loopbackHost(r.Host) || r.Header.Get("Origin") != "" {
 			// as the gateway's corsGuard: a rebound or foreign page, or

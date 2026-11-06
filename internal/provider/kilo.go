@@ -109,7 +109,7 @@ func (p Provider) kiloModelsPage(ctx context.Context, at string) ([]catalog.Mode
 	for k, v := range p.SentHeaders(ctx) {
 		catalog.PutUserHeader(req.Header, k, v)
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return nil, false, "", err
 	}

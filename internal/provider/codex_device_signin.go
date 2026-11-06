@@ -52,7 +52,7 @@ func codexDevicePost(ctx context.Context, u string, body any) (int, []byte, erro
 	}
 	codexClientHeaders(req.Header, codexVersion())
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return 0, nil, err
 	}

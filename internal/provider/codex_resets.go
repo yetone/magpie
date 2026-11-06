@@ -374,7 +374,7 @@ func consumeCodexReset(ctx context.Context, base, token, accountID, credit, id s
 			req.Header.Set(k, v)
 		}
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return out, err
 	}

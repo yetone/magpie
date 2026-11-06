@@ -252,7 +252,7 @@ func volcOpenAPICall(ctx context.Context, ak, sk, region, action string, now tim
 	req.Header.Set("X-Content-Sha256", contentSHA)
 	req.Header.Set("Authorization", auth)
 	req.Header.Set("Accept", "application/json")
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return nil, err
 	}

@@ -395,7 +395,7 @@ func tencentAPICall(ctx context.Context, secretID, secretKey, region, action str
 	req.Header.Set("X-TC-Region", region)
 	req.Header.Set("X-TC-Timestamp", strconv.FormatInt(now.Unix(), 10))
 	req.Header.Set("Authorization", tc3Sign(secretID, secretKey, tcAPIService, tcAPIHost, action, body, now))
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return nil, err
 	}

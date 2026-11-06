@@ -379,7 +379,7 @@ func zcodeCallH(ctx context.Context, method, u, auth string, hdr map[string]stri
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return err
 	}

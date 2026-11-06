@@ -616,7 +616,7 @@ func accountJSON(ctx context.Context, url, token string, headers map[string]stri
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return err
 	}
@@ -1301,7 +1301,7 @@ func copilotSubscriptionUsage(ctx context.Context, githubToken, host string) Sub
 			req.Header.Set(k, v)
 		}
 		var res *http.Response
-		res, err = http.DefaultClient.Do(req)
+		res, err = Keyed(http.DefaultClient).Do(req)
 		if err == nil {
 			defer res.Body.Close()
 			b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))

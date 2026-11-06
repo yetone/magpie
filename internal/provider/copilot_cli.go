@@ -226,7 +226,7 @@ func copilotDirect(ctx context.Context, app copilotApp) (copilotSession, error) 
 	}
 	req.Header.Set("Authorization", "token "+github)
 	req.Header.Set("Accept", "application/json")
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return copilotSession{}, errors.New("Copilot sign-in: " + err.Error())
 	}

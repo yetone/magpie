@@ -153,7 +153,7 @@ func clineGet(ctx context.Context, key, path string, out any) error {
 	ClineClient(req.Header)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+key)
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return err
 	}

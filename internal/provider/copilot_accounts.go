@@ -357,7 +357,7 @@ func copilotUser(ctx context.Context, token, host string) (user, plan string, er
 		}
 		req.Header.Set("Authorization", "token "+token)
 		req.Header.Set("Accept", "application/json")
-		res, err := http.DefaultClient.Do(req)
+		res, err := Keyed(http.DefaultClient).Do(req)
 		if err != nil {
 			return 0, err
 		}

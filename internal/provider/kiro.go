@@ -480,7 +480,7 @@ func kiroPost(ctx context.Context, u, contentType string, body []byte, headers m
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return fmt.Errorf("refreshing Kiro's sign-in: %w", err)
 	}
@@ -521,7 +521,7 @@ func kiroManagement(ctx context.Context, region, token, tokenType, method string
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return err
 	}
@@ -569,7 +569,7 @@ func kiroProfile(ctx context.Context, c kiroCred) (string, error) {
 		KiroAuth{Token: c.access, TokenType: "API_KEY"}.Header(req.Header)
 		req.Header.Set("Content-Type", "application/x-amz-json-1.0")
 		req.Header.Set("X-Amz-Target", "AmazonCodeWhispererService.GetProfile")
-		res, err := http.DefaultClient.Do(req)
+		res, err := Keyed(http.DefaultClient).Do(req)
 		if err != nil {
 			return "", err
 		}

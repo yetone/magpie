@@ -932,7 +932,8 @@ func firstOf(ss ...string) string {
 
 // Do sends req, through the account's own transport when it has one (a
 // plugin's), the client the account asks for this request when it asks
-// for one (ZCode's Start Plan: zcodeStartClient), and client otherwise.
+// for one (ZCode's Start Plan: zcodeStartClient), and client otherwise,
+// following a redirect only to the request's own origin (Keyed).
 //
 // A request sent for magpie's own test (probelog.With) is written into the
 // request log here, whichever way it goes: a plugin's fetch and a client
@@ -974,7 +975,8 @@ func (p Provider) do(client *http.Client, req *http.Request) (*http.Response, er
 		}
 	}
 	req.Header.Del(ConversationHeader)
-	return client.Do(req)
+	// the account's credential goes to its own origin only (redirect.go)
+	return Keyed(client).Do(req)
 }
 
 // pluginsOff is the plugins' own ids of the plugin providers switched off

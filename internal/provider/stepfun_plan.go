@@ -384,7 +384,7 @@ func stepfunCall(ctx context.Context, site string, s stepfunSession, path string
 	req.Header.Set("Oasis-Appid", st.app)
 	req.Header.Set("Oasis-Platform", "web")
 	req.Header.Set("Oasis-Webid", s.WebID)
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return err
 	}

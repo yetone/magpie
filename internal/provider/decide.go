@@ -601,7 +601,7 @@ func (p Provider) cloudflareAccount(ctx context.Context) (string, error) {
 	if err := p.Sign(ctx, req, Chat, nil); err != nil {
 		return "", err
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return "", fmt.Errorf("%s: %v", p.Name, err)
 	}
@@ -919,7 +919,7 @@ func (p Provider) fetchDecide(ctx context.Context) ([]catalog.Model, error) {
 	if err := p.Sign(ctx, req, Chat, nil); err != nil {
 		return nil, err
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -1131,7 +1131,7 @@ func (p Provider) checkKey(ctx context.Context, u string) error {
 	if err := p.Sign(ctx, req, Chat, nil); err != nil {
 		return err
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return fmt.Errorf("%s: %v", p.Name, err)
 	}

@@ -512,7 +512,7 @@ func warmCodex(ctx context.Context, sign func(context.Context, *http.Request, []
 		return err
 	}
 	CodexCompressed(req, body) // as Codex sends a turn
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return err
 	}

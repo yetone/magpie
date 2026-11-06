@@ -610,7 +610,7 @@ func planBody(ctx context.Context, src planQuotaSource, key string) ([]byte, err
 	// Go's usage is asked at its gateway, which routes nothing that names
 	// no session
 	OpenCodeSession(req.Header, src.url)
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -938,7 +938,7 @@ func zhipuKeyTeamAt(ctx context.Context, root, quotaURL, key string, team *Zhipu
 			req.Header.Set(k, v)
 		}
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return "", nil, err
 	}

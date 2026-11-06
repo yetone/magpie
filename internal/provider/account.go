@@ -1247,7 +1247,7 @@ func codexRefresh(ctx context.Context, raw map[string]any, reason string) (strin
 	}
 	req.Header.Set("Content-Type", "application/json")
 	codexClientHeaders(req.Header, codexVersion())
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return "", errors.New("Codex token refresh: " + err.Error())
 	}
@@ -1635,7 +1635,7 @@ func copilotToken(ctx context.Context, app copilotApp) (copilotSession, error) {
 	for k, v := range copilotHeaders {
 		req.Header.Set(k, v)
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return copilotSession{}, errors.New("Copilot sign-in: " + err.Error())
 	}
@@ -1713,7 +1713,7 @@ func copilotAccept(ctx context.Context, app copilotApp, s copilotSession, model 
 	for k, v := range s.headers() {
 		req.Header.Set(k, v)
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return
 	}
@@ -1744,7 +1744,7 @@ func copilotModels(ctx context.Context, app copilotApp) ([]catalog.Model, error)
 	for k, v := range s.headers() {
 		req.Header.Set(k, v)
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return nil, err
 	}

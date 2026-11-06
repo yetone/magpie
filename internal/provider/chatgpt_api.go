@@ -70,7 +70,7 @@ const (
 	SIWCUsageURL = "https://chatgpt.com/settings/usage"
 )
 
-var siwcClient = &http.Client{Timeout: 30 * time.Second}
+var siwcClient = &http.Client{Timeout: 30 * time.Second, CheckRedirect: KeepsCredentials}
 
 // siwcNoUsage is what a ChatGPT API account's usage line says: OpenAI's
 // API tells no plan usage, and the account added as ChatGPT (Codex's

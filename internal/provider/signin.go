@@ -776,7 +776,7 @@ func postTokenWith(ctx context.Context, tokenURL, ctype, bearer string, h http.H
 	if bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+bearer)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return err
 	}

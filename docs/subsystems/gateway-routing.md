@@ -840,6 +840,10 @@ OpenAI shape can't carry. GET, POST, PUT, PATCH and DELETE
   `Sign` puts in the provider's key as it takes one, and magpie's
   User-Agent goes in (`stampUA`). The answer's hop headers, `Set-Cookie`,
   `Alt-Svc` and HSTS don't come back (`nativeAnswerDropped`).
+- **Redirects.** A redirect on the vendor's own origin (scheme, host and
+  port, or http to https on the same host) is followed, signed; any other
+  comes back to the caller as it came, `Location` included, and the host
+  it names is sent nothing (`provider.KeepsCredentials`, below).
 - **Keys.** It is behind the gateway's guards as every route is (a key
   beyond loopback, lanGuard's Host check against a rebound page,
   corsGuard: a foreign Origin, `null` and `*.localhost` without a key,
@@ -1503,7 +1507,21 @@ magpie's proxy settings as the vendor's own address does
 The key is sent only to that URL. Go keeps Brave's `X-Subscription-Token`
 and Exa's `x-api-key` across a redirect to another host, so `askSearchAPI`
 doesn't follow one. The 3xx is the error, and it names where the search
-was sent. magpie ships and lists no third-party search endpoint; the URL
+was sent. Every request sent with a provider's credential has the
+same rule: the gateway's client, `Provider.Do` through whichever client
+it is given (`provider.Keyed`), the provider package's own reads (usage,
+balance, models, sign-in refreshes) and the Codex relay follow a redirect
+only to the request's origin, or from http to https on its host
+(`provider.KeepsCredentials` in
+[`redirect.go`](../../internal/provider/redirect.go)). Go would follow one
+anywhere, https to http included, and keep `x-api-key`, `x-goog-api-key`,
+`api-key` and a provider's own headers on it, and `Authorization` too
+when only the port differs. A redirect elsewhere is the answer, a 3xx
+the route reports as the vendor's failure. No vendor magpie speaks to
+redirects its API to another origin; a file a vendor answers by URL is
+fetched unsigned, by `vendorClient`. `TestRedirectKeepsTheKeyAtItsOrigin`,
+`TestRedirectNeverDowngrades`, `TestNativeRedirectKeepsTheKey`,
+`TestChatRedirectKeepsTheKey`. magpie ships and lists no third-party search endpoint; the URL
 is only ever the user's.
 
 A value the user set is never replaced by the vendor's default. In

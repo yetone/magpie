@@ -43,7 +43,7 @@ func codexModels(ctx context.Context, sign func(context.Context, *http.Request, 
 	if err := sign(ctx, req, nil); err != nil {
 		return nil, err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func CodexLiveList(ctx context.Context) ([]byte, error) {
 	if err := p.Account.sign(ctx, req, nil); err != nil {
 		return nil, err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return nil, err
 	}

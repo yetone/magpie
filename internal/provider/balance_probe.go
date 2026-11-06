@@ -239,7 +239,7 @@ func askProbe(ctx context.Context, p Provider, raw string) (ok bool, code int) {
 		req.Header.Set(k, withBalanceKey(v, p.Key, false))
 	}
 	req.Header.Set("Accept", "application/json")
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return false, 0
 	}

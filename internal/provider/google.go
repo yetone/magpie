@@ -517,7 +517,7 @@ func (g googleAccount) call(ctx context.Context, base, method string, body, out 
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return err
 	}
@@ -1716,7 +1716,7 @@ func googleWho(ctx context.Context, access string) (string, error) {
 		return "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+access)
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return "", err
 	}

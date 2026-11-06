@@ -1434,7 +1434,7 @@ func balanceRead(ctx context.Context, p Provider) (amount string, parts, split [
 		}
 	}
 	req.Header.Set("Accept", "application/json")
-	res, err := http.DefaultClient.Do(req)
+	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		if k := url.QueryEscape(p.Key); k != "" && strings.Contains(err.Error(), k) {
 			// the URL in the error has the key in it: not shown on a card
