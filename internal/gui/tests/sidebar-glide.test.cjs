@@ -2,9 +2,10 @@
 // Beside the sidebar the open page's row is marked by one shape (app.js
 // navTopGo) that moves to the row picked on a spring, as iOS moves a
 // selection, the way the sub-rows' selection slides: it sets off as the row
-// is pressed, goes back when the press is let go off the row, follows its
-// row while the list of the page left folds away above it, and lands on
-// it. The rows have no ground of their own under it, hovered or not.
+// is pressed, goes back when the press is let go off the row, and lands on
+// it. Down from the Library, whose list folds away above the row picked, it
+// goes to where that row comes to rest and stays there, never past it and
+// back up (小李 on Discord: a white block bounced up). The rows have no ground of their own under it, hovered or not.
 // Settings, at the foot, has its own; the shape is away while it is open.
 // With reduced motion it is put there at once. In the header's tabs it
 // isn't drawn. Both engines, two languages, two widths.
@@ -15,6 +16,14 @@ const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
+const HOME = "/Users/aimer";
+const library = {
+  dir: `${HOME}/.magpie/library`, backups: `${HOME}/.magpie/backups`, home: HOME,
+  agents: [{ id: "codex", name: "Codex", icon: "", skills: `${HOME}/.codex/skills`, mcp: `${HOME}/.codex/config.toml` }],
+  instructions: { agents: [], sets: [] }, foundServers: [], projects: [], foundSkills: [],
+  skills: [{ name: "grilling", description: "Grill a plan", kind: "folder", agents: ["codex"], source: `${HOME}/skills/grilling` }],
+  servers: [{ name: "fs", transport: "stdio", command: "npx", args: ["fs-mcp"], agents: ["codex"] }],
+};
 
 function serve(lang) {
   return async (route) => {
@@ -25,6 +34,7 @@ function serve(lang) {
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme: "light" } });
     if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { url: "http://127.0.0.1:3425", running: true, window: true }, plugins: [] });
     if (url.pathname === "/api/groups") return json({ groups: [], pools: [] });
+    if (url.pathname === "/api/library") return json(library);
     if (url.pathname.startsWith("/api/")) return json({});
     if (!/^\/[\w./-]*$/.test(url.pathname) || url.host !== "magpie.test") return route.fulfill({ status: 404, body: "" });
     const file = path.join(assets, url.pathname === "/" ? "index.html" : url.pathname);
@@ -93,9 +103,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator("#nav button.on").getAttribute("data-view"), "providers");
       await on(page, "providers");
 
-      // to Usage, then up to Agents while Usage's tabs fold away under it:
-      // it moves by frames, never at once, and lands on its row
-      for (const v of ["usage", "agents"]) {
+      // to Usage, then up to Agents while Usage's tabs fold away under it,
+      // then the Library and down to Providers while the Library's fold away
+      // above it: it moves by frames, never at once, and lands on its row
+      for (const v of ["usage", "agents", "library", "providers"]) {
+        if (v === "providers") assert(await page.locator("#nav .nav-sub:not(.leaving)").count(), "the Library's list is open above Providers");
         const from = (await shape(page)).top, to = (await rowOf(page, v)).top;
         await watch(page);
         await page.locator(`#nav button[data-view="${v}"]`).click();

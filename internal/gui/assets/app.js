@@ -23838,13 +23838,8 @@ function navSubGlide(box, row) {
   hl.style.transform = `translateY(${row.offsetTop}px)`;
   hl.style.height = row.offsetHeight + "px";
 }
-// The open page's row beside the sidebar is marked by one shape too
-// (.nav-top-hl), which moves to the row picked on a spring, as iOS moves a
-// selection: quick off the mark, settling softly with the least overshoot.
-// Being physics, not a timed curve, it is never thrown: a press that
-// changes its mind turns it with the speed it has, and it follows its row
-// while a list above folds away, landing where the row ends up rather
-// than where it was when the press came.
+// the open page's row is marked by one shape too (.nav-top-hl), sent on a
+// spring; a press that changes its mind turns it with the speed it has
 var NAV_SPRING = { response: 0.42, damping: 0.84 }; // seconds, fraction: SwiftUI's terms
 var navTop = { row: null, y: 0, h: 0, vy: 0, vh: 0, at: 0, raf: 0, seen: false };
 const navTopOn = () => $("#nav")?.querySelector("button[data-view].on") || null;
@@ -23855,8 +23850,7 @@ function navTopHl() {
     hl = el("i", "nav-top-hl");
     hl.hidden = true;
     nav.append(hl);
-    // the rows moved at rest (the window, the language, a page left out):
-    // the shape stays on its row
+    // the rows moved at rest: the shape stays on its row
     new ResizeObserver(() => { if (!navTop.raf && navTop.row && !hl.hidden) navTopPut(hl, navTop.row); }).observe(nav);
   }
   return hl;
@@ -23875,9 +23869,7 @@ function navTopGo(row, glide) {
   const nav = $("#nav"), hl = navTopHl();
   const to = sideNav() && row && !row.hidden && row.offsetParent ? row : null;
   nav.classList.toggle("hl-on", !!to);
-  // the same row, the shape still: the rows moved under it, not a pick, so
-  // it stays on its row. And one not on screen yet (the window opening on
-  // the page it was left on) is put there, not sent
+  // the same row at rest, or the window opening: put there, not sent
   if (to && ((to === navTop.row && !navTop.raf) || !navTop.seen)) glide = false;
   navTop.row = to;
   if (!to) { cancelAnimationFrame(navTop.raf); navTop.raf = 0; hl.hidden = true; return; }
@@ -23894,13 +23886,23 @@ function navTopGo(row, glide) {
   }
   if (!navTop.raf) { navTop.at = performance.now(); navTop.raf = requestAnimationFrame(navTopStep); }
 }
+// where row comes to rest once a list above it has folded (小李 on Discord)
+function navTopLands(row) {
+  let y = row.offsetTop;
+  for (const b of row.parentElement.querySelectorAll(":scope > .nav-sub.leaving")) {
+    if (!(b.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+    const cs = getComputedStyle(b);
+    y -= b.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom);
+  }
+  return y;
+}
 function navTopStep(now) {
   const nav = $("#nav"), hl = nav?.querySelector(":scope > .nav-top-hl"), row = navTop.row;
   if (!hl || !row?.isConnected) { navTop.raf = 0; return; }
   const dt = Math.min(1 / 30, Math.max(0, (now - navTop.at) / 1000));
   navTop.at = now;
   const k = (2 * Math.PI / NAV_SPRING.response) ** 2, c = 4 * Math.PI * NAV_SPRING.damping / NAV_SPRING.response;
-  const ty = row.offsetTop, th = row.offsetHeight;
+  const ty = navTopLands(row), th = row.offsetHeight;
   // a few small steps a frame keep the spring true at any frame rate
   for (let i = 0, d = dt / 4; i < 4; i++) {
     navTop.vy += (k * (ty - navTop.y) - c * navTop.vy) * d;
