@@ -212,4 +212,13 @@ func TestAfterThoughtCloseInCode(t *testing.T) {
 	if got := afterThought("\r\n<think>a</think>\r\nb"); got != "b" {
 		t.Errorf("afterThought after a line end = %q", got)
 	}
+	// the other tags a streamed reply's thinking is read between (#5106)
+	for _, c := range []string{"<thinking>a</thinking>\nb", "<thought>a</thought>b", " <thinking>\na\n</thinking>\n\nb"} {
+		if got := afterThought(c); got != "b" {
+			t.Errorf("afterThought(%q) = %q, want b", c, got)
+		}
+	}
+	if got := afterThought("<thinking>never closed"); got != "<thinking>never closed" {
+		t.Errorf("an unclosed <thinking> = %q, want it as it was", got)
+	}
 }

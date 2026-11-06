@@ -103,6 +103,10 @@ func TestChatThoughtTags(t *testing.T) {
 		think, text string
 	}{
 		{"whole", []string{"<thought>Greeting.</thought>Hello"}, "Greeting.", "Hello"},
+		{"<thinking> whole", []string{"<thinking>Let me think</thinking>Hi"}, "Let me think", "Hi"},
+		{"<thinking> split tags", []string{"<thin", "king>Let me", " think</thin", "king>Hi"}, "Let me think", "Hi"},
+		{"<thinking> the open tag a chunk alone", []string{"<thinking>", "Let me think", "</thinking>", "Hi"}, "Let me think", "Hi"},
+		{"<thinking> never closed", []string{"<thinking>half", " a thought</thi"}, "half a thought</thi", ""},
 		{"split tags", []string{"<tho", "ught>Let me", " think</tho", "ught>\n\nHello", " there"}, "Let me think", "Hello there"},
 		{"one byte a chunk", strings.Split("<thought>ab</thought>cd", ""), "ab", "cd"},
 		{"leading newline", []string{"\n", "<thought>x</thought>", "y"}, "x", "y"},
