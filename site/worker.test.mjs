@@ -574,7 +574,8 @@ test("sponsors: the home page and the READMEs link every sponsor through /go", a
         if (s[where]) assert.equal(text.includes(s[where]), false, `${f.pathname} links ${s.id} directly`);
         // the home page links its own /go; a README, on GitHub, the site's
         const go = (where === "home" ? "" : "https://usemagpie.ai") + `/go/${s.id}/${where}`;
-        if (text.includes(`/go/${s.id}/`)) assert.ok(s[where] && text.includes(`href="${go}"`), `${f.pathname}: ${go}`);
+        // as an <a href> or a Markdown link (Kimi's thanks line, e6b9d1199)
+        if (text.includes(`/go/${s.id}/`)) assert.ok(s[where] && (text.includes(`href="${go}"`) || text.includes(`](${go})`)), `${f.pathname}: ${go}`);
       }
     }
   const home = readFileSync(pages.home[0], "utf8");
