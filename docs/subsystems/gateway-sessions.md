@@ -897,7 +897,8 @@ for: `provider_test`, `api_detect` or `model_list`
   all leaves them out.
 - **A model list answered is no row:** magpie fetches lists by itself
   (start-up's `FetchNew`, the panel's and the Providers page's, and
-  `KeepListsFresh`, which asks a Remote magpie every 10 minutes), so a
+  `KeepListsFresh`, which asks a Remote magpie every 10 minutes, and
+  `KeepRemoteListsFollowed`, as soon as its list changes there), so a
   `model_list` row with a 2xx/3xx status and no error is neither written
   (`usage`'s `probelog.Sink`) nor read back from an older log
   (`quietProbe`, in the index's parse): ferock on Discord, a Requests page

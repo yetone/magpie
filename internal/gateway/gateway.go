@@ -844,6 +844,8 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	go provider.KeepAccountsListed(ctx)
 	// and fetches the lists of the providers the user asked to keep fresh (#2135)
 	go provider.KeepListsFresh(ctx)
+	// and follows a Remote magpie's list as it changes there (KaCli)
+	go provider.KeepRemoteListsFollowed(ctx)
 	// and keeps the community's plugins up to date, noting others' updates, and the Bun they run on
 	go plugin.KeepUpdated(ctx)
 	go plugin.KeepBunUpdated(ctx)
@@ -1545,6 +1547,15 @@ func listKinds(r *http.Request) (chat, image, video bool, err error) {
 }
 
 func (s *Server) models(w http.ResponseWriter, r *http.Request) {
+	if waitsForList(r) {
+		// another magpie waiting for the list to change (models_wait.go)
+		s.modelsOnceChanged(w, r)
+		return
+	}
+	s.listModels(w, r)
+}
+
+func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 	data := []map[string]any{}
 	chat, images, videos, err := listKinds(r)
 	if err != nil {

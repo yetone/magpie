@@ -534,6 +534,21 @@ request alone. `Server.gatewayTrace` in
 `TestHeldKeyToldNoAccounts` in
 [`quotas_held_key_test.go`](../../internal/gateway/quotas_held_key_test.go).
 
+`GET /v1/models` with `X-Magpie-List-Wait: <seconds>` is another magpie
+waiting for this one's list to change (KaCli on Discord). It is answered
+with an `ETag` once the list it would be answered is other than the one
+`If-None-Match` names, and 304 at the end of the wait (at most 50s,
+`listWaitMost`) or as the gateway stops (`streamsEnding`). The list is
+looked at again on each of magpie's writes and on each change another
+process makes to its files (`filememo.Written`), each look holding the
+catalog for itself, so the wait is exempt from `holdCatalog`. It is the
+list's own route, so the key, `lanGuard`, `corsGuard` and a key's models
+judge it exactly as the list. A list asked without the header is answered
+as before, with no ETag. `modelsOnceChanged` in
+[`models_wait.go`](../../internal/gateway/models_wait.go), and
+`TestModelsWaitGuardedAsTheList` in
+[`models_wait_test.go`](../../internal/gateway/models_wait_test.go).
+
 A read-only gateway key (`access.Key.ReadOnly`, set by `add-key` or
 `access-key`; `magpie gateway-key add <name> --read-only`, `gateway-key
 access <id> read-only|full`, or the key's menu in Gateway → Gateway keys)
