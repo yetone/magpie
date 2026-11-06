@@ -15961,15 +15961,13 @@ function renderQuotas(lazy) {
     if (!first.user && first.balanceCard) card.dataset.balCard = first.balanceCard;
     const head = el("div", "subscription-head");
     head.append(groups.length > 1 ? usageHandle(first, card) : icon(first.icon), el("b", "", quotaName(first)));
-    // a card with no account's name to it (a plugin's ZCode) is named in
-    // its head, as the user named it or for the key plan it stands in for
+    // a card with no account's name (a plugin's ZCode): named in its head
     if (!first.user && first.alias) head.append(...quotaWho(first));
     if (!first.user && (first.plan || first.until)) head.append(planSpan(first));
     card.append(head);
     quotaCardMenus(card, subs); // the card's hide menu (page.js)
-    // a provider's keys, each its balance: past a few, the rest folded
-    // behind a button at the card's foot, and the sum in its head (361 on
-    // Discord: an OpenRouter card listed every key's balance, very long)
+    // a provider's keys: past a few, the rest folded behind the foot's
+    // button, the sum in its head (361 on Discord: OpenRouter's, very long)
     const keys = several && subs.every((q) => !q.windows?.length && !q.plan) && subs.some((q) => q.balance);
     const sum = keys && keysSum(subs);
     if (sum) {
@@ -15979,10 +15977,10 @@ function renderQuotas(lazy) {
     }
     const all = !keys && several && quotaAllOf(subs);
     if (all) card.append(all);
-    // many accounts (Linx on X: twenty-odd on one plugin, 顶成擎天柱):
-    // the same, each still a row of its own
-    const accts = !keys && several && subs.length > ACCTS_FOLD;
-    const folded = keys ? keysFolded(subs) : accts ? acctsFolded(subs) : new Set();
+    const shut = all && quotaAllFolded(first.provider); // quotaall.js
+    // many accounts (Linx on X: twenty-odd): the same, each a row
+    const accts = !shut && !keys && several && subs.length > ACCTS_FOLD;
+    const folded = shut ? new Set(subs) : keys ? keysFolded(subs) : accts ? acctsFolded(subs) : new Set();
     for (const sub of subs) {
       if (folded.has(sub)) continue;
       // "Every model" by the account, or the card's name: where the click
@@ -16059,9 +16057,12 @@ function renderQuotas(lazy) {
       const credits = !brief && !history && creditsRow(sub, "quota-credits");
       if (credits) card.append(credits);
     }
-    // in the card's head, beside its name, of the keys in sight (the
-    // folded ones are the foot's button's)
-    if (several) head.append(usageMore(folded.size ? subs.filter((q) => !folded.has(q)) : subs, "text quota-more"));
+    // in the head, of the keys in sight (the foot's has the folded)
+    if (several) {
+      const m = head.appendChild(usageMore(folded.size && !shut ? subs.filter((q) => !folded.has(q)) : subs, "text quota-more"));
+      // kept in its room: the strip stays put
+      if (shut) { m.inert = true; m.style.visibility = "hidden"; }
+    }
     if (keys && (folded.size || usageKeysAll.has(first.provider))) card.append(keysMore(first.provider, folded.size));
     if (accts && (folded.size || usageAcctsAll.has(first.provider))) card.append(acctsMore(first.provider, folded.size));
     subscriptions.append(card);
@@ -16073,11 +16074,10 @@ function renderQuotas(lazy) {
   requestAnimationFrame(focusQuotaCard);
 }
 
-// A subscription's accounts: one in full (the last to answer, else the
-// first), the others in brief, a click opening one (whqtian, ARNO on
-// Discord); the panel leaves the brief out. Remembered per account
-// (magpie.usageAccounts; magpie.usageOpen before it), and what the card's
-// button opened (magpie.usageAcctsOpened) so its fold folds only those.
+// A subscription's accounts: one in full (the last to answer), the others
+// in brief (whqtian, ARNO); the panel leaves those out. Remembered per
+// account (magpie.usageAccounts), and what the card's button opened
+// (magpie.usageAcctsOpened) so its fold folds only those.
 let usageOpen, usageAccts, usageByMore;
 const usageFolds = () => { usageOpen = new Set(kept("usageOpen", [])); usageAccts = kept("usageAccounts", {}); usageByMore = new Set(kept("usageAcctsOpened", [])); };
 usageFolds();
@@ -17136,9 +17136,9 @@ function focusQuotaCard() {
   const id = CSS.escape(quotaFocus);
   // a key's balance shown on its plan's card (keyCards): that card
   const target = box.querySelector(`[data-card="${id}"]`) || box.querySelector(`[data-bal-card="${id}"]`) || box.querySelector(`[data-provider="${id}"]`);
-  // The panel omits accounts in brief; the main window draws them short.
-  // The one asked for is opened in full.
+  // The one asked for is unfolded and opened in full.
   const quota = quotas?.find((q) => trayCardID(q) === quotaFocus);
+  if (quota?.user && window.setQuotaAllFolded?.(quota.provider, false)) return;
   if (quota?.user && !usageAcctOpen(quota, quotas.filter((q) => q.user && q.provider === quota.provider))) {
     setUsageAccts([quota], true);
     return; // the redraw queues focus once the account is visible
@@ -17493,10 +17493,11 @@ function renderPanelQuota(lazy) {
     g.append(head);
     const all = qs.length > 1 && quotaAllOf(qs, "pq-all", 3);
     if (all) g.append(all);
-    // the accounts in full; none of them, the one in sight
+    // the accounts in full; none of them, the one in sight; folded, none
+    const shut = all && quotaAllFolded(qs[0].provider);
     const full = qs.length > 1 ? qs.filter((q) => usageAcctOpen(q, qs)) : qs;
-    for (const q of full.length ? full : [usageShown(qs)]) g.append(panelQuotaCard(q));
-    if (qs.length > 1) g.append(usageMore(qs, "pq-more"));
+    if (!shut) for (const q of full.length ? full : [usageShown(qs)]) g.append(panelQuotaCard(q));
+    if (qs.length > 1 && !shut) g.append(usageMore(qs, "pq-more"));
     box.append(g);
   }
   // the way to hide some and move them, and how many are hidden

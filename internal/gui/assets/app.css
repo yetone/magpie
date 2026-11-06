@@ -1026,7 +1026,7 @@ body.window .field.solo { grid-column: auto; }
    the card's head, each window's figure over a thin bar, side by side
    while they fit, the accounts as they were below it */
 .quota-all { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 10px; padding: 8px 10px 9px; border-radius: 8px; background: color-mix(in srgb, var(--fg) 4%, transparent); font-size: 10.5px; color: var(--muted); }
-.quota-all-head { flex-basis: 100%; color: var(--muted); font-weight: 600; cursor: help; }
+.quota-all-head { flex: 1 1 calc(100% - 40px); color: var(--muted); font-weight: 600; cursor: help; }
 .quota-all-w { flex: 1 1 130px; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 6px; min-width: 0; cursor: help; }
 .quota-all-name { min-width: 0; overflow-wrap: anywhere; }
 .quota-all-n { min-width: 0; color: var(--fg-2); font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
@@ -1034,6 +1034,8 @@ body.window .field.solo { grid-column: auto; }
 .quota-all-bar i { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 .quota-all-bar.full i { background: var(--amber); }
 .quota-all-unknown { flex-basis: 100%; color: var(--muted); cursor: help; }
+.quota-all .quota-all-fold { margin: -2px -5px -2px 0; }
+.quota-all:last-child { margin-bottom: 0; }
 /* in the panel, between the vendor's head and its accounts' cards */
 .quota-all.pq-all { margin: 0; padding: 7px 12px 8px; border-radius: 10px; font-size: 11px; }
 .subscription-error { font-size: 11px; color: var(--muted); }

@@ -25,7 +25,10 @@
 // quotaAll: the strip of them under a Usage card's or the tray panel's
 // head: "All 3 accounts", each window's figure and a thin bar, and how many
 // couldn't be read. Nothing when fewer than two accounts read, or nothing
-// of theirs adds up. No account is named in it (Hide accounts).
+// of theirs adds up. No account is named in it (Hide accounts). A click on
+// it, or its chevron, folds the accounts under it away (justfreefall on X),
+// remembered by provider for the window and the panel alike
+// (magpie.usageAllFolded): quotaAllFolded says whether a provider's are.
 function mergeQuotas(subs, now = Date.now()) {
   const read = subs.filter((q) => !q.error && (q.windows?.length || q.balance));
   const unknown = subs.length - read.length;
@@ -76,7 +79,22 @@ function quotaAll(subs, cls = "", max = Infinity) {
   const box = el("div", "quota-all" + (cls ? " " + cls : ""));
   const lead = el("span", "quota-all-head", t("All {n} accounts", { n: subs.length }));
   lead.title = t("These accounts' windows together: amounts of one unit are added up; a window said only as a share is the mean of the accounts on one plan, which have the same allowance. Each account is below.");
-  box.append(lead);
+  const p = subs[0].provider, open = !quotaAllFolded(p);
+  const fold = el("button", "quota-acct-fold quota-all-fold");
+  fold.type = "button";
+  fold.append(svg(CHEV, 11, 1.6));
+  fold.setAttribute("aria-expanded", String(open));
+  fold.title = t(open ? "Fold" : "Unfold");
+  box.dataset.fold = p;
+  box.append(lead, fold);
+  box.onclick = () => {
+    // text being selected in it is not a click on it
+    if (String(getSelection()).trim() && box.contains(getSelection().anchorNode)) return;
+    const had = document.activeElement === fold;
+    setQuotaAllFolded(p, open);
+    if (had) document.querySelector(`.quota-all[data-fold="${CSS.escape(p)}"] .quota-all-fold`)?.focus(NO_SCROLL);
+    if (mode !== "panel") backToReader($("#view-usage"));
+  };
   const ws = familyWindows(all.windows);
   for (const w of ws.slice(0, max)) {
     const item = el("span", "quota-all-w");
@@ -105,5 +123,20 @@ function quotaAll(subs, cls = "", max = Infinity) {
   }
   return box;
 }
+// read on first use: loading this file touches nothing of app.js's
+let allFolded;
+const allFolds = () => (allFolded ||= new Set(kept("usageAllFolded", [])));
+globalThis.addEventListener?.("storage", (e) => { if (e.key === "magpie.usageAllFolded") { allFolded = null; renderQuotas(); } });
+const quotaAllFolded = (p) => allFolds().has(p);
+// setQuotaAllFolded: true when it changed
+function setQuotaAllFolded(p, fold) {
+  if (fold === allFolds().has(p)) return false;
+  if (fold) allFolded.add(p); else allFolded.delete(p);
+  keep("usageAllFolded", [...allFolded]);
+  renderQuotas();
+  return true;
+}
 window.mergeQuotas = mergeQuotas;
+window.quotaAllFolded = quotaAllFolded;
+window.setQuotaAllFolded = setQuotaAllFolded;
 window.quotaAll = quotaAll;

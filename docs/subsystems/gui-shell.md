@@ -329,6 +329,15 @@ There is no switch: it is additive, and the figure follows used or left
 with the rest. See `usage-merge.test.cjs` (the merge) and
 `usage-all-accounts.test.cjs` (the three places).
 
+On the Usage card and in the panel, a click on the strip or its chevron
+(`.quota-all-fold`, the accounts' own ⌄ with `aria-expanded`) folds that
+provider's accounts away under it, open by default (justfreefall on X).
+It is remembered by provider for the window and the panel alike
+(`magpie.usageAllFolded`, `quotaAllFolded` in `quotaall.js`). Folded, the
+card's "Show … accounts" button keeps its room but is hidden and inert, so
+the strip stays where it was. A menu bar cell asking for one of the
+accounts unfolds them (`focusQuotaCard`). See `usage-all-fold.test.cjs`.
+
 ### The Sessions page's folders
 
 The Sessions page lists an agent's project folders as one list, newest
