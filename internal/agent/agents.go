@@ -270,6 +270,7 @@ func onMachine(home, cfg string) []*Agent {
 		copilot(home),
 		crush(home, cfg),
 		dsh(home),
+		dsbot(home),
 		reasonix(home),
 		commandCode(home),
 		fx(home),

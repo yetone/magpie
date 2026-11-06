@@ -666,7 +666,7 @@ var wslKinds = []wslKind{
 			}
 			return func(cur map[string]string) []Option {
 				if ref, ok := strings.CutPrefix(cur["model"], magpieID+"/"); ok {
-					return static(dshLevels(ref)...)
+					return static(dshLevels("dsh", ref)...)
 				}
 				return static(dshEfforts...)
 			}

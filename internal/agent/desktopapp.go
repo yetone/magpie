@@ -64,6 +64,13 @@ var desktopApps = map[string]desktopApp{
 	// registers it under HKCU\Software\1bf39983-… (#2279, read from
 	// 0.2.0-rc.2's dsh-latest-windows-x64.exe installer script).
 	"dsh": {id: "com.deepseek.dsh", names: []string{"DeepSeek Harness.app"}, win: filepath.Join("DeepSeek Harness", "DeepSeek Harness.exe"), guid: "1bf39983-50d0-5fe0-9ef4-cece76f67c5e"},
+	// DS Bot's desktop app (app/electron-builder.yml, 0.3.0: appId
+	// io.github.fei2411.dsbot, productName DS Bot, DS Bot.app; DeepSeek
+	// Bot, its name before) runs a DSH of its own on its data folder
+	// (dsbot.go) and needs no CLI. On Windows its per-user NSIS installer
+	// puts it under %LOCALAPPDATA%\Programs by default, lets the folder be
+	// changed, and registers it under the guid its config names.
+	"ds-bot": {id: "io.github.fei2411.dsbot", names: []string{"DS Bot.app", "DeepSeek Bot.app"}, win: filepath.Join("DS Bot", "DS Bot.exe"), guid: "32c46dfc-ed78-5d41-85a4-a3c7f083f2e0"},
 	// PenguinHarness's desktop app (packages/desktop's electron-builder.yml,
 	// desktop 0.2.17: appId com.prismshadow.penguinharness, productName
 	// PenguinHarness) runs its own server on the CLI's data root,
