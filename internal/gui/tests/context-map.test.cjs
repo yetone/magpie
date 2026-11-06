@@ -300,6 +300,51 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     });
   }
 
+  // two small parts beside a large one are laid as slim tiles, and every
+  // tile keeps the map's gap to its neighbours at every width: a tile's
+  // padding made one too slim for it wider than its place, so it touched
+  // or ran over the next (noahhrreion on Discord, 11-06: the system
+  // prompt and tools leaning on "N more" beside them)
+  for (const lang of Object.keys(words)) {
+    test(`${engine} ${lang}: slim tiles keep their gap at every width`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const page = await (await browser.newContext({ viewport: { width: 1100, height: 900 }, reducedMotion: "reduce" })).newPage();
+      page.setDefaultTimeout(5000);
+      page.setDefaultNavigationTimeout(60000);
+      const turns = Array.from({ length: 110 }, (_, i) => ({ name: String(i + 1), tag: "turn", tokens: 1300 + (i % 7) * 40 }));
+      const chat = turns.reduce((s, it) => s + it.tokens, 0);
+      const { errors, card } = await open(page, lang, 1100, {
+        window: 200000, tokens: 2300 + 2800 + chat, counted: true, turns: turns.length,
+        parts: [
+          { kind: "system", tokens: 2300, items: [{ name: "prompt", tokens: 2300 }] },
+          { kind: "tools", tokens: 2800, items: [{ name: "bash", tokens: 1500 }, { name: "read", tokens: 1300 }] },
+          { kind: "chat", tokens: chat, items: turns },
+        ],
+      });
+      const map = card.locator(".ctx-map");
+      await map.locator(".ctx-tile.k-system").waitFor();
+      let slim = 0;
+      for (const width of [1100, 980, 860, 760, 680, 600, 560, 520, 480, 440, 420, 390, 360]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.waitForFunction(() => { const m = document.querySelector(".ctx-sess.open .ctx-map"); return m && m.dataset.size === m.clientWidth + "x" + m.clientHeight; });
+        const rects = await map.evaluate((m) => [...m.querySelectorAll(".ctx-tile:not(.gone)")].map((n) => {
+          const r = n.getBoundingClientRect();
+          return { k: n.className, l: r.left, t: r.top, r: r.right, b: r.bottom };
+        }));
+        for (const [i, a] of rects.entries()) {
+          if (a.r - a.l < 24) slim++;
+          for (const b of rects.slice(i + 1)) {
+            const gap = Math.max(b.l - a.r, a.l - b.r, b.t - a.b, a.t - b.b);
+            assert.ok(gap >= 2.5, `${width}px: "${a.k}" and "${b.k}" are ${gap.toFixed(2)}px apart: ${JSON.stringify([a, b])}`);
+          }
+        }
+      }
+      assert.ok(slim > 0, "no width laid a slim tile, so the gap beside one was never looked at");
+      assert.deepEqual(errors, []);
+    });
+  }
+
   // with motion reduced the tiles are simply there
   test(`${engine}: the map holds still with motion reduced`, async (t) => {
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));

@@ -392,6 +392,9 @@ i.dot.free { background: var(--k-free); box-shadow: inset 0 0 0 1px color-mix(in
 .ctx-tile.low { padding-top: 5px; padding-bottom: 5px; }
 .ctx-tile.low .v { display: none; }
 .ctx-tile.bare > * { visibility: hidden; }
+/* a bare tile can be slimmer than its padding: none, so it keeps to its place
+   and the gap beside it (noahhrreion on Discord) */
+.ctx-tile.bare { padding: 0; }
 .ctx-tile:hover, .ctx-tile.on {
   background: color-mix(in srgb, var(--k) 19%, var(--card));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--k) 48%, transparent);
