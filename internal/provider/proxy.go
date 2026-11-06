@@ -15,11 +15,15 @@ import (
 // Via is ctx for requests made on the provider's behalf: they go through
 // its own proxy (ProxyChoice), or the global one when it has none. A
 // provider the user added and asked not to have its certificate checked
-// (InsecureTLS) has its own hosts' taken as they are, no other host's.
+// (InsecureTLS) has its own hosts' taken as they are, no other host's;
+// one asked to be spoken HTTP/1.1 to (HTTP1) is, at its own hosts alone.
 func (p Provider) Via(ctx context.Context) context.Context {
 	ctx = netproxy.With(ctx, p.ProxyChoice())
 	if p.InsecureTLS && p.TakesInsecureTLS() {
 		ctx = netproxy.WithUncheckedTLS(ctx, p.UncheckedHosts()...)
+	}
+	if p.HTTP1 && p.TakesInsecureTLS() {
+		ctx = netproxy.WithHTTP1(ctx, p.UncheckedHosts()...)
 	}
 	return ctx
 }
