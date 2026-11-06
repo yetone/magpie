@@ -456,6 +456,32 @@ func TuneKept(home, agent string) []TuneKnob {
 	return out
 }
 
+// TuneCacheHere is Claude Code's two prompt-cache lifetimes as this
+// computer's Claude Code reads them, whoever set them, when its folder is
+// here: the main conversation's always, the subagents' when something
+// sets it. They change what this computer's Claude Code sends, whichever
+// magpie its requests go on to (linkaww on Discord: Claude Code through a
+// Remote magpie, too few calls read here to advise on, and the card had
+// no row to tell the cache it keeps, or a way back to 5 minutes).
+func TuneCacheHere(home string) []TuneKnob {
+	p, err := tuneWhere(home, "claude", TuneCache, "")
+	if err != nil {
+		return nil
+	}
+	if fi, err := os.Stat(filepath.Dir(p.path)); err != nil || !fi.IsDir() {
+		return nil
+	}
+	var out []TuneKnob
+	for _, knob := range []string{TuneCache, TuneSubCache} {
+		s, err := TuneRead(home, "claude", knob, "")
+		if err != nil || knob == TuneSubCache && s.Value == "" {
+			continue
+		}
+		out = append(out, TuneKnob{Knob: knob, Setting: s})
+	}
+	return out
+}
+
 // TuneUndo puts back what a setting was before tune put one in, unless
 // the user has changed it since: then it is theirs, and only forgotten.
 func TuneUndo(home, agent, knob, model string) error {

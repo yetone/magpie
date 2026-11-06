@@ -78,21 +78,63 @@ func TestTuneKeepsWhatItPutIn(t *testing.T) {
 	if err := agent.TuneUndo(home, "claude", agent.TuneCompact, "claude-opus-4-5"); err != nil {
 		t.Fatal(err)
 	}
-	if got := kept(nil); len(got) != 0 {
-		t.Fatalf("put back, yet kept: %+v", got)
+	// put back, Claude Code's cache is its default again, still told
+	if got := kept(nil); len(got) != 1 || got[0].Knob != agent.TuneCache || got[0].Setting.Value != "" || got[0].Setting.Ours {
+		t.Fatalf("put back: kept %+v; want the cache at Claude Code's default alone", got)
+	}
+}
+
+// linkaww on Discord (11-06), again: Claude Code here, through a Remote
+// magpie, with too few calls read on this computer, and "这里什么都没有".
+// The cache this computer's Claude Code keeps is on the card whoever set
+// it, with no calls at all: the user's own 1h too, which Use 5 min puts
+// at 5m and Undo puts back. No Claude Code folder here, no card.
+func TestTuneTellsTheCacheHere(t *testing.T) {
+	sandboxHome(t)
+	home := t.TempDir()
+	rows := func() []tuneAdvice {
+		t.Helper()
+		for _, a := range tuneOf(nil, 1, home).Agents {
+			if a.Agent == "claude" {
+				return a.Advice
+			}
+		}
+		return nil
 	}
 	if st := tuneOf(nil, 1, home); len(st.Agents) != 0 {
-		t.Errorf("no calls and nothing put in, yet agents: %+v", st.Agents)
+		t.Fatalf("no Claude Code here, yet agents: %+v", st.Agents)
 	}
-
-	// the user's own 1h is theirs to change in their file: no kept row
-	if err := edit.SetJSON(filepath.Join(home, ".claude", "settings.json"), edit.KV{Path: "promptCacheTtl", Value: "1h"}); err != nil {
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	if err := edit.SetJSON(settingsPath, edit.KV{Path: "promptCacheTtl", Value: "1h"}); err != nil {
 		t.Fatal(err)
 	}
-	if s, _ := agent.TuneRead(home, "claude", agent.TuneCache, ""); s.Value != "1h" {
-		t.Fatalf("the user's own 1h reads %+v", s)
+	got := rows()
+	if len(got) != 1 || got[0].Knob != agent.TuneCache || !got[0].Few || got[0].Setting.Value != "1h" || got[0].Setting.Ours || got[0].Setting.Source != "settings" {
+		t.Fatalf("the user's own 1h, no calls: rows %+v; want the main cache at 1h, theirs", got)
 	}
-	if got := kept(few); len(got) != 0 {
-		t.Errorf("the user's own 1h: kept %+v; want none", got)
+	// Use 5 min, then Undo: their 1h back
+	if err := agent.TuneApply(home, "claude", agent.TuneCache, "", "5m"); err != nil {
+		t.Fatal(err)
+	}
+	if got := rows(); len(got) != 1 || got[0].Setting.Value != "5m" || !got[0].Setting.Ours {
+		t.Fatalf("after 5m: rows %+v; want 5m, magpie's", got)
+	}
+	if err := agent.TuneUndo(home, "claude", agent.TuneCache, ""); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := edit.GetJSON(settingsPath, "promptCacheTtl"); v != `"1h"` && v != "1h" {
+		t.Fatalf("undone: promptCacheTtl %q; want their 1h back", v)
+	}
+	// the subagents' cache is told when something sets it
+	if err := edit.SetJSON(settingsPath, edit.KV{Path: "subagentPromptCacheTtl", Value: "1h"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := rows(); len(got) != 2 || got[1].Knob != agent.TuneSubCache || got[1].Setting.Value != "1h" {
+		t.Fatalf("subagents at 1h: rows %+v; want both caches", got)
+	}
+	// a variable before the setting is told, locked
+	t.Setenv("CLAUDE_CODE_PROMPT_CACHE_TTL", "1h")
+	if got := rows(); len(got) == 0 || got[0].Setting.Locked != "CLAUDE_CODE_PROMPT_CACHE_TTL" {
+		t.Fatalf("env 1h: rows %+v; want the main cache locked by it", got)
 	}
 }

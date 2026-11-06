@@ -960,3 +960,70 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.deepEqual(errors, []);
   });
 }
+
+// Claude Code's cache as this computer has it is on the card with no calls
+// read here, whoever set it (linkaww on Discord: through a Remote magpie,
+// "这里什么都没有"): the user's own 1 hour has Use 5 min, which puts in 5m;
+// nothing set reads Default, with nothing to press and no verdict
+const def = { en: "Default", zh: "默认", "zh-TW": "預設", ja: "デフォルト", de: "Standard" };
+const five = { en: /5 min/, zh: /5 分钟/, "zh-TW": /5 分鐘/, ja: /5 分/, de: /5 Min/ };
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(`${engine}: the cache here is told with no calls, and a 1 hour of the user's goes back to 5 min`, async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    const errors = [];
+    t.after(async () => {
+      if (errors.length) console.log(errors);
+      await browser.close();
+    });
+    for (const lang of Object.keys(def)) for (const [width, height] of [[360, 760], [1100, 760]]) {
+      await t.test(`${lang}, ${width}x${height}`, async () => {
+        const ctx = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
+        await ctx.addInitScript(() => { try { localStorage.setItem("magpie.usageTab", "context"); } catch {} });
+        const page = await ctx.newPage();
+        page.setDefaultTimeout(5000);
+        page.setDefaultNavigationTimeout(60000);
+        page.on("pageerror", (e) => errors.push(e.message));
+        const posts = [];
+        const base = serve(lang, posts);
+        let main = { value: "1h", source: "settings" };
+        await page.route("**/*", async (r) => {
+          const p = new URL(r.request().url()).pathname;
+          if (p === "/api/tune/apply") main = { value: "5m", source: "settings", ours: true };
+          if (p !== "/api/tune") return base(r);
+          return r.fulfill({ json: { days: 1, agents: [{ agent: "claude", calls: 0, advice: [
+            { knob: "cache_ttl", setting: main, few: true },
+            { knob: "subagent_cache_ttl", setting: {}, few: true },
+          ] }] } });
+        });
+        await page.goto("http://magpie.test/?view=usage");
+        const rows = page.locator(".ctx-tune-row");
+        await rows.first().waitFor();
+        assert.equal(await rows.count(), 2);
+        // nothing set: Default, nothing to press, no verdict
+        const sub = rows.nth(1);
+        assert.equal(await sub.locator(".ctx-tune-val.now b").innerText(), def[lang]);
+        assert.equal(await sub.locator("button").count(), 0);
+        assert.equal(await sub.locator(".ctx-chip:visible").count(), 0);
+        assert.equal(await sub.locator(".ctx-tune-why").innerText(), few[lang]);
+        // the user's own hour: Use 5 min, no verdict
+        const one = rows.nth(0);
+        assert.match(await one.locator(".ctx-tune-val.now b").innerText(), { en: /1 hour/i, zh: /1 小时/, "zh-TW": /1 小時/, ja: /1 時間/, de: /1 Stunde/ }[lang]);
+        assert.equal(await one.locator(".ctx-chip:visible").count(), 0);
+        const go = one.locator("button");
+        assert.equal(await go.count(), 1);
+        assert.match(await go.innerText(), five[lang]);
+        for (const r of [one, sub]) assert.doesNotMatch(await r.innerText(), /NaN|undefined|—/);
+        const over = await page.evaluate(() => {
+          const view = document.querySelector("#view-usage");
+          return view.scrollWidth > view.clientWidth + 1 ? view.scrollWidth + ">" + view.clientWidth : "";
+        });
+        assert.equal(over, "");
+        await go.evaluate((b) => b.click());
+        await page.waitForFunction(() => /undo|撤销|復原|取り消す|Rückgängig/i.test(document.querySelector(".ctx-tune-row button")?.textContent || ""));
+        assert.deepEqual(posts.map((p) => [p.path, p.knob, p.value]), [["/api/tune/apply", "cache_ttl", "5m"]]);
+        await ctx.close();
+      });
+    }
+    assert.deepEqual(errors, []);
+  });
+}

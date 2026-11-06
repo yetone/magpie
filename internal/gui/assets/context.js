@@ -1275,7 +1275,7 @@
     // few: put in by tune, too few calls to advise on; kept for Undo (linkaww)
     const r = a.compact || a.ttl || { current: a.setting.value, best: a.setting.value, cost: 0, low: 0 };
     const ttl = a.knob != "compact";
-    const show = (v) => ttl ? ttlName(v) : fmtK(+v);
+    const show = (v) => ttl ? (v ? ttlName(v) : t("Default")) : fmtK(+v);
     const cur = ttl ? r.current : r.current, best = r.best;
     const same = String(cur) === String(best);
     const saves = r.cost > 0 ? (r.cost - r.low) / r.cost : 0;
@@ -1360,6 +1360,7 @@
       : el("span", "ctx-chip info", "");
     verdict.append(el("i"), lean ? t("Not the leanest: {range} spends the fewest tokens", { range: bandName })
       : applied ? t("In use") : same ? t("Already the leanest for how you work") : t("{pct} fewer tokens · {tokens} over the range", { pct: pct(saves), tokens: fmtK(Math.round(r.cost - r.low)) }));
+    verdict.hidden = !!a.few && !applied;
     foot.append(verdict, el("span", "grow"));
     const note = el("div", "ctx-tune-src");
     title.after(note);
@@ -1390,24 +1391,19 @@
       undo.onclick = () => send("undo");
       foot.append(undo);
     }
-    if (!same && !applied && !held) {
-      const go = el("button", "text primary", t("Use {value}", { value: show(best) }));
+    const use = (v, tt) => {
+      const go = el("button", "text primary", t("Use {value}", { value: show(v) }));
       go.type = "button";
       go.disabled = tuneBusy === key;
-      if (set.value && !set.ours) go.dataset.tt = t("Replaces your {value}; Undo puts it back", { value: show(set.value) });
-      go.onclick = () => send("apply", best);
+      if (tt) go.dataset.tt = tt;
+      go.onclick = () => send("apply", v);
       foot.append(go);
-    }
-    if (lean && !held) {
-      const go = el("button", "text primary", t("Use {value}", { value: show(lean.value) }));
-      go.type = "button";
-      go.disabled = tuneBusy === key;
-      go.dataset.tt = set.value && !set.ours
-        ? t("Replaces your {value}; Undo puts it back", { value: show(set.value) })
-        : t("Fewer tokens, but more compactions to wait on");
-      go.onclick = () => send("apply", lean.value);
-      foot.append(go);
-    }
+    };
+    const yours = set.value && !set.ours && t("Replaces your {value}; Undo puts it back", { value: show(set.value) });
+    if (!same && !applied && !held) use(best, yours);
+    // an hour no Undo puts back, too few calls to weigh (linkaww)
+    if (a.few && ttl && cur === "1h" && !held && !set.ours) use("5m", yours);
+    if (lean && !held) use(lean.value, yours || t("Fewer tokens, but more compactions to wait on"));
     // a window of the reader's own (#1860), from the same replay: each
     // value's tokens against the setting now, which the reader picks away
     // from (hayden4608 on Discord: against the leanest, every line read as

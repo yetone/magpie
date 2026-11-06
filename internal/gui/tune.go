@@ -41,8 +41,9 @@ type tuneAdvice struct {
 	// Async is Codex's background compaction at the advice, its foreground
 	// limit kept as the backstop; nil where it can't help
 	Async *tuneAsync `json:"async,omitempty"`
-	// Few: a setting tune put in, kept on the card with nothing to advise
-	// (too few calls in the range), so its Undo is still there
+	// Few: a setting tune put in, or Claude Code's cache as it is here,
+	// kept on the card with nothing to advise (too few calls in the
+	// range), so its Undo, or its way back to 5 minutes, is still there
 	Few bool `json:"few,omitempty"`
 }
 
@@ -114,6 +115,17 @@ func adviseOf(by map[string][]tune.Call, days int, home string) tuneState {
 	for _, name := range []string{"claude", "codex"} {
 		calls := by[name]
 		kept := agent.TuneKept(home, name)
+		if name == "claude" {
+			// the cache this computer's Claude Code keeps, with or without
+			// calls read here, its way back to 5 minutes with it
+			here := agent.TuneCacheHere(home)
+			for _, k := range kept {
+				if !slices.ContainsFunc(here, func(o agent.TuneKnob) bool { return o.Knob == k.Knob && o.Model == k.Model }) {
+					here = append(here, k)
+				}
+			}
+			kept = here
+		}
 		if len(calls) == 0 && len(kept) == 0 {
 			continue
 		}
@@ -197,7 +209,8 @@ func adviseOf(by map[string][]tune.Call, days int, home string) tuneState {
 			}
 		}
 		// what tune put in stays on the card, Undo with it, when the range
-		// has too few calls to advise on it (linkaww on Discord)
+		// has too few calls to advise on it (linkaww on Discord), and so
+		// does Claude Code's cache as it is here
 		for _, k := range kept {
 			if !slices.ContainsFunc(ta.Advice, func(a tuneAdvice) bool { return a.Knob == k.Knob && a.Model == k.Model }) {
 				ta.Advice = append(ta.Advice, tuneAdvice{Knob: k.Knob, Model: k.Model, Setting: k.Setting, Few: true})
