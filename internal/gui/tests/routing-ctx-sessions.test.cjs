@@ -212,4 +212,49 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       }
     }
   });
+  // tz_188 on Discord again, on v0.1.3122: three ZCode sessions at once,
+  // each named by a long first prompt of one line. Every name ran past its
+  // block and over the next blocks' names, so the three read as one smear.
+  // WebKit up to Safari 17 (macOS 14) puts a flex <button>'s children in
+  // a box of its own, and in a column that box was as wide as the name's
+  // whole line; today's engines don't, so the block is held to a grid here
+  // too. Each name ends in its ellipsis inside its own block: CJK, a
+  // commit hash and a path alike, with the whole title on hover. Run with
+  // Playwright 1.36's WebKit 17.0 on the module path, the old flex block
+  // is red on "stays inside its block".
+  test(`${engine}: a long session name is cut short inside its own block`, async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    const names = {
+      a: "这个commit 中的内容帮我再核对一下 51538fc170c6deb069c2aaee7b49e004408d，项目在 /Users/lbx_16/work/b2b/b2b-platform。 ...",
+      b: "只读，不要修改任何文件：对比 51538fc170c6deb069c2aaee7b49e004408d 和上一个提交，/Users/lbx_16/work/b2b/b2b-platform/src/main/java/com/example/order/OrderService.java",
+      c: "/Users/lbx_16/work/b2b/b2b-platform/src/main/resources/mapper/order/OrderDetailMapperExtension.xml51538fc170c6deb069c2aaee7b49e004408d51538fc170c6deb069c2aaee7b49e004408d",
+    };
+    const was = { a: SESS.a.title, b: SESS.b.title };
+    SESS.c = { id: "019a7c2e-cccc-7000-8000-000000000003", folder: "/Users/lbx_16/work/b2b/b2b-platform", base: 233000, window: 1000000 };
+    t.after(() => { SESS.a.title = was.a; SESS.b.title = was.b; delete SESS.c; });
+    for (const k of ["a", "b", "c"]) SESS[k].title = names[k];
+    for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
+      for (const width of [1600, 1100, 700, 390]) {
+        await t.test(`${lang} ${width}px`, async () => {
+          const { context, page, errors } = await open(browser, lang, width, [req(101, "a"), req(102, "b"), req(103, "c")]);
+          t.after(() => context.close());
+          await page.locator(".rt-ctx-sess:not([hidden]) .rt-ctx-s").nth(2).waitFor();
+          const got = await page.$$eval(".rt-ctx-s", (bs) => bs.map((b) => {
+            const nm = b.querySelector(".nm"), box = b.getBoundingClientRect(), r = nm.getBoundingClientRect(), cs = getComputedStyle(b);
+            return { name: nm.textContent, title: b.title, left: r.left, right: r.right, inLeft: box.left + parseFloat(cs.borderLeftWidth) + parseFloat(cs.paddingLeft), inRight: box.right - parseFloat(cs.borderRightWidth) - parseFloat(cs.paddingRight), cut: nm.scrollWidth > nm.clientWidth, flex: cs.display.endsWith("flex") && cs.flexDirection.startsWith("column") };
+          }));
+          assert.deepEqual(got.map((g) => g.name).sort(), Object.values(names).sort());
+          for (const g of got) {
+            assert.ok(g.left >= g.inLeft - 0.5 && g.right <= g.inRight + 0.5, `the name ${JSON.stringify(g.name.slice(0, 12))} stays inside its block: ${g.left}..${g.right} in ${g.inLeft}..${g.inRight}`);
+            assert.equal(g.flex, false, "a block is no column flex <button>, whose names WebKit 17 lets run out of it");
+            assert.ok(g.cut, `the name ${JSON.stringify(g.name.slice(0, 12))} is cut short, to end in its ellipsis`);
+            assert.ok(g.title.startsWith(g.name + "\n"), "the whole name shows on hover");
+          }
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, "nothing widens the page");
+          assert.deepEqual(errors, []);
+        });
+      }
+    }
+  });
 }
