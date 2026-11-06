@@ -33,6 +33,8 @@ func TestBalanceReaders(t *testing.T) {
 		{"siliconflow", readSiliconFlow("¥"), `{"code":20000,"data":{"balance":"0.88","totalBalance":"88.88"}}`, "¥88.88"},
 		{"stepfun", readStepFun("¥"), `{"object":"account","type":"prepaid","balance":26.00,"total_cash_balance":0.00,"total_voucher_balance":26.00}`, "¥26.00"},
 		{"stepfun intl", readStepFun("$"), `{"object":"account","type":"prepaid","balance":0.00,"total_cash_balance":0.00,"total_voucher_balance":0.00}`, "$0.00"},
+		{"modelscope", readModelScope, `{"success":true,"data":{"total_balance":1500,"available_balance":1300,"frozen_amount":200},"request_id":"r1"}`, "1300 魔粒"},
+		{"modelscope half", readModelScope, `{"success":true,"data":{"total_balance":249.5,"available_balance":249.5,"frozen_amount":0}}`, "249.5 魔粒"},
 	} {
 		got, err := c.read([]byte(c.body))
 		if err != nil || got != c.want {
@@ -174,6 +176,7 @@ func TestBalanceSourceByHost(t *testing.T) {
 		"https://api.stepfun.com/step_plan/v1":   "https://api.stepfun.com/v1/accounts",
 		"https://api.stepfun.ai/v1":              "https://api.stepfun.ai/v1/accounts",
 		"https://ollama.com/v1":                  "https://ollama.com/api/balance",
+		"https://api-inference.modelscope.cn/v1": "https://modelscope.cn/openapi/v1/magicubes/balance",
 		"http://localhost:11434/v1":              "",
 		"https://relay.example.com/v1":           "",
 		"https://api.deepseek.com.evil/":         "",
@@ -614,6 +617,53 @@ func TestKnownBalanceFieldLeftEmpty(t *testing.T) {
 	p = Provider{ID: "relay", Chat: srv.URL + "/v1", Key: "sk-one", BalanceURL: srv.URL + "/other"}
 	if _, _, err := Balance(context.Background(), p); err == nil || !strings.Contains(err.Error(), "no balance path") {
 		t.Errorf("unknown query: %v", err)
+	}
+}
+
+// ModelScope's 魔粒 (jiabubu on Discord): the API-Inference token is
+// asked of the OpenAPI's /magicubes/balance as a Bearer, the card tells
+// what can be spent (not what running tasks hold), and a token refused
+// says what ModelScope said.
+func TestModelScopeBalance(t *testing.T) {
+	var auth, host string
+	var status int
+	var body string
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/openapi/v1/magicubes/balance" {
+			http.NotFound(w, r)
+			return
+		}
+		auth, host = r.Header.Get("Authorization"), r.Host
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	addr := srv.Listener.Addr().String()
+	old := http.DefaultClient.Transport
+	http.DefaultClient.Transport = &http.Transport{
+		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, network, addr)
+		},
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	t.Cleanup(func() { http.DefaultClient.Transport = old })
+
+	p := Provider{ID: "modelscope", Chat: "https://api-inference.modelscope.cn/v1", Responses: "https://api-inference.modelscope.cn/v1", Key: "ms-test"}
+	status, body = http.StatusOK, `{"success":true,"data":{"total_balance":450,"available_balance":250,"frozen_amount":200},"request_id":"r1"}`
+	got, ok, err := Balance(context.Background(), p)
+	if !ok || err != nil || got != "250 魔粒" {
+		t.Fatalf("balance: %q %v %v, want 250 魔粒", got, ok, err)
+	}
+	if auth != "Bearer ms-test" || host != "modelscope.cn" {
+		t.Errorf("asked %s with %q, want modelscope.cn with the token as a Bearer", host, auth)
+	}
+	if n, ok := BalanceNumber(got); !ok || n != 250 {
+		t.Errorf("BalanceNumber(%q) = %v %v, want 250 for its trend", got, n, ok)
+	}
+	status, body = http.StatusUnauthorized, `{"success":false,"code":"InvalidAuthentication","message":"Invalid authentication: authentication required"}`
+	if _, ok, err := Balance(context.Background(), p); !ok || err == nil || !strings.Contains(err.Error(), "Invalid authentication") {
+		t.Errorf("refused: %v %v, want ModelScope's message", ok, err)
 	}
 }
 

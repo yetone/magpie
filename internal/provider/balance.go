@@ -79,6 +79,8 @@ func balanceSourceOf(p Provider) (balanceSource, bool) {
 			return balanceSource{"https://api.stepfun.ai/v1/accounts", readStepFun("$"), "", nil, nil}, true
 		case "api.commandcode.ai":
 			return balanceSource{"https://api.commandcode.ai/alpha/billing/credits", readCommandCode, "", nil, nil}, true
+		case "api-inference.modelscope.cn":
+			return balanceSource{modelScopeBalanceURL, readModelScope, "", nil, nil}, true
 		case "ollama.com":
 			// the credits bought past the plan's allowance (#1888)
 			return balanceSource{ollamaBalanceURL, readOllamaCredits, "", nil, nil}, true
@@ -632,6 +634,34 @@ func readStepFun(sign string) func([]byte) (string, error) {
 		}
 		return money(sign, v), nil
 	}
+}
+
+// modelScopeBalanceURL is ModelScope's 魔粒 balance in its OpenAPI
+// (modelscope.cn/.well-known/openapi.json, GET /magicubes/balance), asked
+// with the same API token API-Inference takes, as a Bearer (jiabubu on
+// Discord). The page's daily list (/magicubes/transactions) is not in the
+// OpenAPI, so what is spent a day is the card's own trend.
+const modelScopeBalanceURL = "https://modelscope.cn/openapi/v1/magicubes/balance"
+
+// readModelScope: {"success":true,"data":{"total_balance":1500,
+// "available_balance":1300,"frozen_amount":200},"request_id":"…"}, in 魔粒.
+// What can be spent is available_balance: the total holds what running
+// tasks have frozen. A refusal ({"success":false,"message":…}) is told
+// by balanceRefusal before this.
+func readModelScope(b []byte) (string, error) {
+	var r struct {
+		Data struct {
+			Available any `json:"available_balance"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(b, &r); err != nil {
+		return "", err
+	}
+	v, ok := number(r.Data.Available)
+	if !ok {
+		return "", errors.New("no balance in the reply")
+	}
+	return strconv.FormatFloat(v, 'f', -1, 64) + " 魔粒", nil
 }
 
 // readAiHubMix: {"object":"list","total_usage":12.5}, what is left on the
