@@ -2403,7 +2403,7 @@ function routingPage(part) {
     b.append(icon(w.icon || (w.preset ? w.preset : "generic")));
     const name = el("span", "who", who(w));
     // the provider's name heads the card; a row names what differs
-    const sub = el("span", "", w.fallback ? w.name : w.kind === "provider" ? "" : w.plan || "");
+    const sub = el("span", "", rowSub(w, false));
     b.append(name, " ", sub, el("code", "mdl", w.fixed ? `${w.model}:${w.fixed}` : w.model));
     if (w.fixed) b.title = t("{level} reasoning, fixed on this model in the group", { level: w.fixed });
     if (w.fast) {
@@ -2426,8 +2426,13 @@ function routingPage(part) {
     st.onpointerleave = () => delete st.dataset.cut;
     li.append(el("i", "dot"), b, st, bar, tg);
     li.title = w.id;
-    return { li, wire: path(), st, bi, tg, w };
+    return { li, wire: path(), st, bi, tg, w, subEl: sub };
   }
+  // rowSub is what a row says after the name: a fallback's provider, an
+  // account's plan; and the provider of a key or account named as one of
+  // another provider's on the stage is (twin), so two providers' Key-01
+  // rows, each of the same model, are told apart (iamleehom on Discord)
+  const rowSub = (w, twin) => w.fallback ? w.name : w.kind === "provider" ? "" : twin ? [w.name || w.provider, w.plan].filter(Boolean).join(" · ") : w.plan || "";
 
   // sync puts the staged routes on the stage: each agent on the left, and
   // the accounts they weighed, each route's in the order it weighed them —
@@ -2528,6 +2533,13 @@ function routingPage(part) {
       // its way down: its route's heading, then the groups in the group
       row.path = ways ? [wayAt.get(id), ...(row.w.via || [])] : row.w.via || [];
     }
+    // a name more than one provider's rows go by says the provider too
+    const provsOf = new Map();
+    for (const id of ids) {
+      const w = rows.get(id).w;
+      if (w.kind !== "provider") { const n = who(w); provsOf.set(n, (provsOf.get(n) || new Set()).add(w.provider)); }
+    }
+    for (const id of ids) { const row = rows.get(id); setText(row.subEl, rowSub(row.w, provsOf.get(who(row.w))?.size > 1)); }
     // a group in the group heads its models, which it routes by its own
     // routing, set in under it
     // keys or accounts side by side that fold together, FOLD_AT or more
