@@ -5394,6 +5394,14 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 		ctx = context.WithValue(ctx, dsSentKey{}, &dsSent{})
 	}
 	res, err = s.forwardOnce(ctx, p, to, path, body, in)
+	if err != nil {
+		// a Remote magpie whose computer came back at another address
+		// is asked there (provider's remote_moved.go)
+		if q, ok := provider.SeekMoved(ctx, p, err); ok {
+			p = q
+			res, err = s.forwardOnce(ctx, p, to, path, body, in)
+		}
+	}
 	if err == nil && res.StatusCode >= 400 {
 		// a file DeepSeek no longer holds: uploaded again, or the
 		// images sent inline (deepseek_files.go)

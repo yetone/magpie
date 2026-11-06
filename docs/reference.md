@@ -542,6 +542,13 @@ id to avoid a 403. Embeddings, rerank and speech-to-text requests use the remote
 APIs, and its exposed retrieval models are kept when fetching its list.
 These remain in agent model lists as on the remote; being listed does not
 mean an embedding or rerank model can hold a conversation.
+When the shared magpie's computer comes back at another address on the same
+network (a router handing it a new IP after a restart), the other computers
+find it by themselves: one that can't connect looks on its own networks for
+the magpie that answers its key, saves the new address and goes on. This
+needs an IP address on a private network; a name (`a-pc.local`) or a
+Tailscale address is followed as it is. Over the internet, use Tailscale's
+stable address or name, or a public URL in front of the shared magpie.
 The remote must serve the requested API and model, and allow the supplied
 key to use them. Responses uses HTTP, including SSE, rather than WebSocket.
 An older remote without decision-model discovery still serves its existing

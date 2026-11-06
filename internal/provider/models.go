@@ -428,6 +428,16 @@ func relistPicks(q *Provider, now map[string]bool) bool {
 // asked whether it serves its MCP router (noteRemoteHub).
 func (p Provider) fetch(ctx context.Context) ([]catalog.Model, error) {
 	ms, err := p.fetchList(ctx)
+	if err != nil && p.IsRemoteMagpie() {
+		// one that took another address on its network is asked there
+		// (remote_moved.go)
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), seekFor)
+		defer cancel()
+		if q, ok := SeekMoved(sctx, p, err); ok {
+			p, ctx = q, sctx
+			ms, err = p.fetchList(ctx)
+		}
+	}
 	if err == nil {
 		noteSelf(p, ms)
 		if len(ms) > 0 {
