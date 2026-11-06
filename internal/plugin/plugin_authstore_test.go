@@ -41,11 +41,14 @@ func TestStopLetsARenewalEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// a call starts the renewal and is given up on: the host answers
-	// nothing, and only the renewal goes on
-	short, stop := context.WithTimeout(ctx, 300*time.Millisecond)
-	Call(short, "load", map[string]any{"provider": "renewco", "account": key}, nil)
-	stop()
+	// a call starts the renewal and is given up on once it has: the host
+	// answers nothing, and only the renewal goes on. Given up on after a
+	// set time instead, a call not yet sent then never started it (#2743).
+	callCtx, giveUp := context.WithCancel(ctx)
+	called := make(chan error, 1)
+	go func() {
+		called <- Call(callCtx, "load", map[string]any{"provider": "renewco", "account": key}, nil)
+	}()
 	for {
 		if b, _ := os.ReadFile(logf); strings.Contains(string(b), "r-slow") {
 			break
@@ -55,8 +58,36 @@ func TestStopLetsARenewalEnd(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+	giveUp()
+	select {
+	case <-called:
+	case <-ctx.Done():
+		t.Fatal("the given-up call never returned")
+	}
+	hostMu.Lock()
+	h := current
+	hostMu.Unlock()
+	if h == nil {
+		t.Fatal("no host runs")
+	}
+	// the plugin has started renewing; magpie hears it from the host's
+	// output, which a busy machine reads late
+	for h.renewing.Load() == 0 {
+		if ctx.Err() != nil {
+			t.Fatal("magpie never heard the host is renewing")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	start := time.Now()
 	Restart()
+	// a host still holding the given-up call's slot (its abort not yet
+	// written) is stopped in the background once it lets go: the test
+	// waits for it to end, not for Restart to return
+	select {
+	case <-h.dead:
+	case <-ctx.Done():
+		t.Fatal("the stopped host never ended")
+	}
 	if a := authFile(t)[key]; a["refresh"] != "r-slow+" || a["access"] != "a-1" {
 		t.Fatalf("after stopping %v in, kept %v, not the renewed token", time.Since(start).Round(time.Millisecond), a)
 	}
