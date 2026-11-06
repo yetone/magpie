@@ -1135,6 +1135,22 @@ func listedEntry(m catalog.Model, priority int, work settings.Settings, autoRevi
 			}
 		}
 	}
+	// every level says its description: Codex 0.166 fails the whole
+	// catalog on one without the field (#5024), so a level the vendor
+	// listed without one — kept as it wrote it, or made for an effort of
+	// the user's the vendor doesn't — says the effort's display name
+	levels, _ := e["supported_reasoning_levels"].([]any)
+	for _, l := range levels {
+		o, _ := l.(map[string]any)
+		if o == nil {
+			continue
+		}
+		if _, ok := o["description"].(string); ok {
+			continue
+		}
+		ef, _ := o["effort"].(string)
+		o["description"] = effortLabel(ef)
+	}
 	// images, where the user's say (or magpie describing them) differs
 	if in, ok := e["input_modalities"].([]any); ok {
 		has := slices.Contains(in, any("image"))
@@ -1154,6 +1170,19 @@ func listedEntry(m catalog.Model, priority int, work settings.Settings, autoRevi
 		e["auto_review_model_override"] = m.ID
 	}
 	return e, true
+}
+
+// effortLabels are the reasoning efforts' display names, as the pickers say
+// them (T3 Code's labels, internal/agent/t3code.go).
+var effortLabels = map[string]string{"none": "None", "minimal": "Minimal", "low": "Low", "medium": "Medium", "high": "High", "xhigh": "Extra High", "max": "Max", "ultra": "Ultra"}
+
+// effortLabel is the display name of an effort, the effort itself when it
+// has none.
+func effortLabel(ef string) string {
+	if l, ok := effortLabels[ef]; ok {
+		return l
+	}
+	return ef
 }
 
 // Window has one of Codex's own entries say a context window of n tokens
