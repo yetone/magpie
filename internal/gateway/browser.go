@@ -415,10 +415,14 @@ func browserExtensionKey(r *http.Request) (access.Identity, bool) {
 var browserKeyCheck = 5 * time.Second
 
 // watchKey closes c's connection once the key it connected with is no
-// longer Current: turned off, removed, expired or rotated. A browser
-// call looks too (call), so none is handed to it in between.
-func (c *browserConn) watchKey(ctx context.Context) {
-	t := time.NewTicker(browserKeyCheck)
+// longer Current: turned off, removed, expired or rotated, looking every
+// each. A browser call looks too (call), so none is handed to it in
+// between. each is browserKeyCheck as the connection was taken, read
+// there and not on this goroutine: a test that sets browserKeyCheck once
+// a browser has connected is ordered after that read, never beside it
+// (#5569).
+func (c *browserConn) watchKey(ctx context.Context, each time.Duration) {
+	t := time.NewTicker(each)
 	defer t.Stop()
 	for {
 		select {
@@ -459,7 +463,7 @@ func (s *Server) browserExtension(w http.ResponseWriter, r *http.Request) {
 	if key != "" {
 		watch, stop := context.WithCancel(ctx)
 		defer stop()
-		go c.watchKey(watch)
+		go c.watchKey(watch, browserKeyCheck)
 	}
 	added := false
 	defer func() {
