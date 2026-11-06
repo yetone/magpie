@@ -67,7 +67,7 @@ func TestAgentOpenRunsOnlyTheAgent(t *testing.T) {
 	if row == nil {
 		t.Fatalf("claude not detected on PATH %q", os.Getenv("PATH"))
 	}
-	if row.Terminal != (runtime.GOOS == "darwin") {
+	if !row.Terminal || row.Command == "" {
 		t.Fatalf("the row's terminal is %v on %s", row.Terminal, runtime.GOOS)
 	}
 
@@ -75,14 +75,12 @@ func TestAgentOpenRunsOnlyTheAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run := agentCommand(a)
-	if runtime.GOOS == "darwin" {
-		if code := post("claude"); code != http.StatusNoContent || len(opened) != 1 {
-			t.Fatalf("claude: %d, opened %q", code, opened)
-		}
-		run = opened[0]
-	} else if code := post("claude"); code == http.StatusNoContent || len(opened) != 0 {
-		t.Fatalf("off a Mac: %d, opened %q", code, opened)
+	if code := post("claude"); code != http.StatusNoContent || len(opened) != 1 {
+		t.Fatalf("claude on %s: %d, opened %q", runtime.GOOS, code, opened)
+	}
+	run := opened[0]
+	if run != agentCommand(a) || run != row.Command {
+		t.Fatalf("opened %q, the row copies %q", run, row.Command)
 	}
 
 	// the line run as the .command file runs it, in a folder of its own
@@ -101,18 +99,23 @@ func TestAgentOpenRunsOnlyTheAgent(t *testing.T) {
 }
 
 // A desktop app's row has no command to open, and neither has an agent in
-// a WSL distro: no Open in terminal.
+// a WSL distro off Windows: no Open in terminal.
 func TestAgentCommandNeedsAProgram(t *testing.T) {
 	sandboxHome(t)
 	proc.Forget()
 	t.Cleanup(proc.Forget)
-	for _, a := range []*agent.Agent{
-		{ID: "app", Name: "An app"},
-		{ID: "claude@wsl:Ubuntu", Bin: "sh", WSL: "Ubuntu", Launch: func() string { return "claude" }},
-	} {
-		if run := agentCommand(a); run != "" {
-			t.Errorf("%s: %q", a.ID, run)
+	wsl := &agent.Agent{ID: "claude@wsl:Ubuntu", Bin: "claude", WSL: "Ubuntu"}
+	for _, goos := range []string{"darwin", "linux", "windows"} {
+		if run := agentLine(&agent.Agent{ID: "app", Name: "An app"}, "", goos); run != "" {
+			t.Errorf("app on %s: %q", goos, run)
 		}
+		if run := agentLine(wsl, "", goos); (run != "") != (goos == "windows") {
+			t.Errorf("wsl on %s: %q", goos, run)
+		}
+	}
+	// a program name a shell would read more into is not sent into a distro
+	if run := agentLine(&agent.Agent{ID: "x@wsl:U", Bin: "claude;rm", WSL: "U"}, "", "windows"); run != "" {
+		t.Errorf("wsl with a bad name: %q", run)
 	}
 	// one that starts on magpie by its environment (agy) opens on that
 	if run := agentCommand(&agent.Agent{ID: "agy", Bin: "agy", Launch: func() string { return "X=1 agy" }}); run != "X=1 agy" {

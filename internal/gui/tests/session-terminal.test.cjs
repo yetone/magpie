@@ -1,5 +1,7 @@
 // The Mac settings page lists registered terminal apps and keeps the choice
-// when another preference is saved. The API is faked; no terminal is opened.
+// when another preference is saved. On Windows and Linux (lileo0668 on
+// Discord) it lists the terminals the server found, and no row when it
+// found none. The API is faked; no terminal is opened.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -12,9 +14,9 @@ const terminalApps = [
   { id: "com.mitchellh.ghostty", name: "Ghostty" },
 ];
 
-function serve(lang, posts, terminalDefault = "com.apple.Terminal") {
+function serve(lang, posts, terminalDefault = "com.apple.Terminal", apps = terminalApps) {
   let settings = {
-    theme: "light", lang, tray: "panel", sessionTerminal: "", terminalApps,
+    theme: "light", lang, tray: "panel", sessionTerminal: "", terminalApps: apps,
     terminalDefault, version: "test", dir: "/tmp/magpie",
     gateway: "http://127.0.0.1:3425", visionModels: [], imageGenModels: [],
     fx: { rate: 7.2, stale: false },
@@ -157,6 +159,53 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator("#sessionTerminalSelect").click();
       assert.deepEqual((await page.locator(".proto-menu .pm-item .pm-name").allTextContents()).map((s) => s.trim()),
         lang === "zh" ? ["系统默认（Terminal）", "Ghostty"] : ["System default (Terminal)", "Ghostty"]);
+    });
+  }
+
+  // Windows and Linux: the terminals found, the system's named; no Terminal.app
+  const own = {
+    Win32: { apps: [{ id: "wt", name: "Windows Terminal" }, { id: "pwsh", name: "PowerShell" }, { id: "powershell", name: "Windows PowerShell" }], def: "powershell", pick: "wt", zh: ["系统默认（Windows PowerShell）", "Windows Terminal", "PowerShell"], en: ["System default (Windows PowerShell)", "Windows Terminal", "PowerShell"] },
+    "Linux x86_64": { apps: [{ id: "xfce4-terminal", name: "Xfce Terminal" }, { id: "kitty", name: "kitty" }], def: "xfce4-terminal", pick: "kitty", zh: ["系统默认（Xfce Terminal）", "kitty"], en: ["System default (Xfce Terminal)", "kitty"] },
+  };
+  for (const [platform, o] of Object.entries(own)) {
+    for (const lang of ["en", "zh"]) {
+      test(`${engine} ${lang} ${platform}: the terminals found here`, async (t) => {
+        const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+        t.after(() => browser.close());
+        const context = await browser.newContext({ viewport: { width: 420, height: 700 }, reducedMotion: "reduce" });
+        await context.addInitScript((p) => Object.defineProperty(navigator, "platform", { get: () => p }), platform);
+        const page = await context.newPage();
+        const errors = [], posts = [];
+        page.on("pageerror", (error) => errors.push(error.message));
+        await page.route("**/*", serve(lang, posts, o.def, o.apps));
+        await page.goto("http://magpie.test/");
+        await page.locator("#prefs").click();
+        const row = page.locator("#sessionTerminalRow");
+        await row.waitFor({ state: "visible" });
+        await reach(page);
+        const select = page.locator("#sessionTerminalSelect");
+        await select.click();
+        await page.locator(".proto-menu").waitFor();
+        assert.deepEqual((await page.locator(".proto-menu .pm-item .pm-name").allTextContents()).map((s) => s.trim()), o[lang]);
+        const saved = page.waitForResponse((r) => r.url().endsWith("/api/settings") && r.request().method() === "POST");
+        await page.locator(".proto-menu .pm-item").nth(1).click();
+        await saved;
+        assert.equal(posts.at(-1).sessionTerminal, o.pick);
+        assert.equal(await row.evaluate((element) => element.scrollWidth > element.clientWidth), false, "fits 420px");
+        assert.deepEqual(errors, []);
+      });
+    }
+    test(`${engine} ${platform}: no terminal found, no row`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const context = await browser.newContext({ viewport: { width: 900, height: 700 }, reducedMotion: "reduce" });
+      await context.addInitScript((p) => Object.defineProperty(navigator, "platform", { get: () => p }), platform);
+      const page = await context.newPage();
+      await page.route("**/*", serve("en", [], "", []));
+      await page.goto("http://magpie.test/");
+      await page.locator("#prefs").click();
+      await page.locator("#themeSegs").waitFor();
+      assert.equal(await page.locator("#sessionTerminalRow").isHidden(), true);
     });
   }
 }

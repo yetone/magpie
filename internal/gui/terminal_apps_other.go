@@ -2,8 +2,7 @@
 
 package gui
 
-import "errors"
+import "runtime"
 
-func discoverTerminals() (terminalDiscovery, error) {
-	return terminalDiscovery{}, errors.New("session terminals are only available in the Mac app")
-}
+// discoverTerminals off a Mac: the terminals on PATH (terminal_open.go).
+func discoverTerminals() (terminalDiscovery, error) { return discoverOwnTerminals(runtime.GOOS) }

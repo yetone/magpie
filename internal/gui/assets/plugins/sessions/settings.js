@@ -6,14 +6,16 @@
 
 function renderSessionTerminal(s, keep) {
   const row = $("#sessionTerminalRow");
-  row.hidden = !document.body.classList.contains("mac");
+  // a Mac's, and Windows' and Linux's when a terminal is found there
+  const mac = document.body.classList.contains("mac");
+  const apps = [...(s.terminalApps || [])];
+  row.hidden = web || !mac && !apps.length;
   if (row.hidden) return;
   const select = $("#sessionTerminalSelect");
-  const apps = [...(s.terminalApps || [])];
-  if (!apps.some((app) => app.id === "com.apple.Terminal")) apps.unshift({ id: "com.apple.Terminal", name: "Terminal" });
+  if (mac && !apps.some((app) => app.id === "com.apple.Terminal")) apps.unshift({ id: "com.apple.Terminal", name: "Terminal" });
   const chosen = s.sessionTerminal || "system";
   // a default that is not a terminal opens Terminal, as the server does
-  const defaultApp = apps.find((app) => app.id === s.terminalDefault) || apps.find((app) => app.id === "com.apple.Terminal");
+  const defaultApp = apps.find((app) => app.id === s.terminalDefault) || apps.find((app) => app.id === "com.apple.Terminal") || apps[0];
   const options = [{ id: "system", name: t("System default ({name})", { name: defaultApp.name }) }];
   for (const app of apps) {
     if (app.id === defaultApp.id && app.id !== chosen) continue;

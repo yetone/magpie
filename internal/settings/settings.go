@@ -67,9 +67,11 @@ type Settings struct {
 	// the user records one. This computer's own (KeepOwn): a Mac's Cmd is
 	// another keyboard's Win key, and what is free differs per computer.
 	PanelShortcut string `json:"panelShortcut,omitempty"`
-	// SessionTerminal is the Mac app that opens a resumed session, by bundle
-	// id. "" and "system" follow the .command file association. This
-	// computer's own (KeepOwn): another Mac may not have that app.
+	// SessionTerminal is the terminal that opens a resumed session or an
+	// agent: a Mac app by bundle id, on Windows wt, pwsh or powershell, on
+	// Linux the terminal's program. "" and "system" are the system's (a
+	// Mac's .command file association). This computer's own (KeepOwn):
+	// another computer may not have that terminal.
 	SessionTerminal string `json:"sessionTerminal,omitempty"`
 	// Currency is what a cost — the Usage page's, the tray panel's, the
 	// TUI's and the CLI's — is shown converted to: usd (its native

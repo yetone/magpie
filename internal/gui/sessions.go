@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"regexp"
 	"runtime"
 	"runtime/debug"
 	"runtime/metrics"
@@ -132,7 +133,7 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			agents[a.ID] = a
 			drawn.WriteString(a.ID + "\x00" + a.SharedName() + "\x00" + a.Icon + "\x00")
 		}
-		out := sessionsJSON{Sessions: []sessionJSON{}, Terminal: runtime.GOOS == "darwin" && !isWeb(w),
+		out := sessionsJSON{Sessions: []sessionJSON{}, Terminal: terminalHere() && !isWeb(w),
 			Dirs: []string{}}
 		for _, d := range sessions.Dirs() {
 			out.Dirs = append(out.Dirs, tilde(d))
@@ -408,8 +409,8 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, err)
 			return
 		}
-		if runtime.GOOS != "darwin" || isWeb(w) {
-			fail(rw, errors.New("opening Terminal is only for the Mac app"))
+		if !terminalHere() || isWeb(w) {
+			fail(rw, errors.New("opening a terminal is only for the desktop app"))
 			return
 		}
 		s, ok := sessions.Find(in.Agent, in.ID)
@@ -444,8 +445,8 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, err)
 			return
 		}
-		if runtime.GOOS != "darwin" || isWeb(w) {
-			fail(rw, errors.New("opening Terminal is only for the Mac app"))
+		if !terminalHere() || isWeb(w) {
+			fail(rw, errors.New("opening a terminal is only for the desktop app"))
 			return
 		}
 		run, name := "", ""
@@ -478,8 +479,8 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, err)
 			return
 		}
-		if in.Open && (runtime.GOOS != "darwin" || isWeb(w)) {
-			fail(rw, errors.New("opening Terminal is only for the Mac app"))
+		if in.Open && (!terminalHere() || isWeb(w)) {
+			fail(rw, errors.New("opening a terminal is only for the desktop app"))
 			return
 		}
 		s, ok := sessions.Find(in.Agent, in.ID)
@@ -1018,33 +1019,65 @@ func afterNextGC(fn func()) {
 
 // agentCommand is the shell line that starts a: its Launch where it has
 // one (agy, Claude Science, Cursor Private Inference), else its own
-// program, quoted; "" for one in a WSL distro or with no program here (a
-// desktop app). Nothing of the page's goes into it.
+// program, quoted; on Windows a PowerShell line, one in a WSL distro
+// through wsl.exe; "" for one in a WSL distro elsewhere or with no
+// program here (a desktop app). Nothing of the page's goes into it.
 func agentCommand(a *agent.Agent) string {
-	if a.WSL != "" {
-		return ""
-	}
+	launch := ""
 	if a.Launch != nil {
-		if run := a.Launch(); run != "" {
-			return run
+		launch = a.Launch()
+	}
+	return agentLine(a, launch, runtime.GOOS)
+}
+
+// agentLine is agentCommand with a's Launch already asked, for goos.
+func agentLine(a *agent.Agent, launch, goos string) string {
+	if a.WSL != "" {
+		if goos != "windows" || !plainBin.MatchString(a.Bin) {
+			return ""
 		}
+		if launch == "" {
+			launch = a.Bin
+		}
+		ps := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
+		return "wsl.exe -d " + ps(a.WSL) + " -e sh -lc " + ps(`exec "${SHELL:-sh}" -lic `+shellQuote(launch))
+	}
+	if launch != "" {
+		return launch
 	}
 	if bin := a.BinPath(); bin != "" {
+		if goos == "windows" {
+			return "& '" + strings.ReplaceAll(bin, "'", "''") + "'"
+		}
 		return shellQuote(bin)
 	}
 	return ""
 }
+
+// plainBin is a program name a distro's shell takes as it is.
+var plainBin = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]*$`)
 
 // agentTerminal is openTerminal, a var so a test opens no terminal.
 var agentTerminal = openTerminal
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
-// openTerminal runs a command in the chosen Mac terminal through a .command
-// file, as it would open from Finder: no Automation consent; in Rex,
-// through its CLI, in a tab labelled label (terminal_rex.go).
-// The shell is left open when the agent quits.
+// openTerminal runs a command in the chosen terminal, the shell left open
+// when the agent quits: on Windows and Linux as terminal_open.go says.
 func openTerminal(command, label, choice string) error {
+	switch runtime.GOOS {
+	case "windows":
+		return openWinTerminal(command, choice)
+	case "linux":
+		return openLinuxTerminal(command, choice)
+	}
+	return openMacTerminal(command, label, choice)
+}
+
+// openMacTerminal runs a command in the chosen Mac terminal through a
+// .command file, as it would open from Finder: no Automation consent; in
+// Rex, through its CLI, in a tab labelled label (terminal_rex.go).
+func openMacTerminal(command, label, choice string) error {
 	var found terminalDiscovery
 	if choice != terminalBundleID {
 		var err error
