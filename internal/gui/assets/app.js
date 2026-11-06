@@ -17945,10 +17945,10 @@ function autoResetTitle(on) {
 
 // How long before a reset runs out it is used (codexResetLead; the owner, 10-30):
 // half an hour unless set or out of range, as the gateway reads it. RESET_LEADS in minutes.
-const RESET_LEADS = [5, 10, 15, 30, 60, 120, 180, 360, 720, 1440];
+const RESET_LEADS = [3, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440];
 function resetLeadMinutes(s = state?.settings) {
   const m = s?.codexResetLead;
-  return Number.isInteger(m) && m >= 5 && m <= 1440 ? m : 30;
+  return Number.isInteger(m) && m >= 3 && m <= 1440 ? m : 30;
 }
 function resetLeadWords(m) {
   return m < 60 || m % 60 ? t("{n} min", { n: m }) : t("{n} h", { n: m / 60 });

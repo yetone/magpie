@@ -6,7 +6,10 @@
 // posts settings/codex-reset-lead with its minutes and the row, and the
 // "before one expires" titles, say the new lead. A value set outside the
 // choices (the CLI's 45m) is shown and kept; one out of range (written by
-// hand) reads as the half hour, as the gateway reads it. Five languages,
+// hand) reads as the half hour, as the gateway reads it. Custom… after the
+// choices opens a field of minutes in the row (shangyuan0818 on Discord):
+// Enter or leaving it posts the number, Escape posts nothing, and one out
+// of range is said and not posted. Five languages,
 // 1100 and 420 wide, both engines; the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -132,7 +135,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const top = await page.locator("#view-settings").evaluate((v) => v.scrollTop);
         await pick.click();
         const items = page.locator(".proto-menu .pm-item");
-        assert.equal(await items.count(), 10, "5 min to 24 h");
+        assert.equal(await items.count(), 12, "3 min to 24 h, then Custom…");
         assert.equal(await page.locator(".proto-menu .pm-item.on .pm-name").textContent(), await say(page, lang, 30));
         await page.locator(".proto-menu .pm-item", { hasText: await say(page, lang, 180) }).click();
         for (let i = 0; i < 100 && !posts.length; i++) await page.waitForTimeout(20);
@@ -142,12 +145,58 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const hours = await page.evaluate((lang) => (I18N[lang]?.["{n} h"] || "{n} h").replace("{n}", 3), lang);
         assert(title.includes(hours), `the title says 3 h: ${title}`);
         assert.equal(await page.locator("#view-settings").evaluate((v) => v.scrollTop), top, "no click moved the page");
-        // the shortest, five minutes (shangyuan0818 on Discord asked for less than 15)
+        // the shortest, three minutes (shangyuan0818 on Discord asked for less than 15)
         await pick.click();
-        await page.locator(`.proto-menu .pm-item .pm-name:text-is(${JSON.stringify(await say(page, lang, 5))})`).click(); // not "15 min before"
+        await page.locator(`.proto-menu .pm-item .pm-name:text-is(${JSON.stringify(await say(page, lang, 3))})`).click(); // not "3 h before"
         for (let i = 0; i < 100 && posts.length < 2; i++) await page.waitForTimeout(20);
-        assert.deepEqual(posts, [{ minutes: 180 }, { minutes: 5 }]);
-        await page.waitForFunction((want) => document.querySelector("#codexResetLeadRow button.reset-lead .rl-say > .on")?.textContent.trim() === want, await say(page, lang, 5));
+        assert.deepEqual(posts, [{ minutes: 180 }, { minutes: 3 }]);
+        await page.waitForFunction((want) => document.querySelector("#codexResetLeadRow button.reset-lead .rl-say > .on")?.textContent.trim() === want, await say(page, lang, 3));
+        assert.equal(await page.locator("#view-settings").evaluate((v) => v.scrollTop), top, "no click moved the page");
+
+        // Custom…: the last item, a field of minutes in the row, focused
+        const custom = await page.evaluate((lang) => I18N[lang]?.["Custom…"] || "Custom…", lang);
+        const own = page.locator("#codexResetLeadRow input.reset-lead-own");
+        const ownField = async () => {
+          await page.locator("#codexResetLeadRow button.reset-lead").click();
+          const last = page.locator(".proto-menu .pm-item").last();
+          assert.equal((await last.locator(".pm-name").textContent()).trim(), custom);
+          await last.click();
+          await own.waitFor();
+          assert.equal(await own.evaluate((i) => i === document.activeElement), true, "the field has the keys");
+        };
+        await ownField();
+        assert.equal(await own.inputValue(), "3", "it starts at the lead");
+        assert.equal(await own.getAttribute("inputmode"), "numeric");
+        const r = await own.boundingBox(), v = await page.locator("#view-settings").boundingBox();
+        assert(r.x >= v.x && r.x + r.width <= v.x + v.width + 1, "the field fits");
+        assert.equal(await page.locator("#view-settings").evaluate((v) => v.scrollTop), top, "opening the field moved nothing");
+        await own.fill("7");
+        await own.press("Enter");
+        for (let i = 0; i < 100 && posts.length < 3; i++) await page.waitForTimeout(20);
+        assert.deepEqual(posts.at(-1), { minutes: 7 });
+        await page.waitForFunction((want) => document.querySelector("#codexResetLeadRow button.reset-lead .rl-say > .on")?.textContent.trim() === want, await say(page, lang, 7));
+        // under the least: said, nothing posted, the lead kept
+        await ownField();
+        await own.fill("2");
+        await own.press("Enter");
+        await page.locator("#codexResetLeadRow button.reset-lead").waitFor();
+        assert.equal(posts.length, 3, "2 isn't posted");
+        assert.equal(await page.locator("#status.err").textContent(), await page.evaluate((lang) => I18N[lang]?.["Minutes is a whole number from 3 to 1440"] || "Minutes is a whole number from 3 to 1440", lang));
+        assert.equal((await page.locator("#codexResetLeadRow .rl-say > .on").textContent()).trim(), await say(page, lang, 7));
+        assert(await page.evaluate(() => RESET_LEADS[0] === 3 && RESET_LEADS.at(-1) === 1440), "the words say the range RESET_LEADS has");
+        // Escape: nothing posted
+        await ownField();
+        await own.fill("9");
+        await own.press("Escape");
+        await page.locator("#codexResetLeadRow button.reset-lead").waitFor();
+        assert.equal(posts.length, 3, "Escape posts nothing");
+        // leaving the field saves it
+        await ownField();
+        await own.fill("12");
+        await page.locator("#codexResetLeadRow .name").click();
+        for (let i = 0; i < 100 && posts.length < 4; i++) await page.waitForTimeout(20);
+        assert.deepEqual(posts.at(-1), { minutes: 12 });
+        await page.waitForFunction((want) => document.querySelector("#codexResetLeadRow button.reset-lead .rl-say > .on")?.textContent.trim() === want, await say(page, lang, 12));
         assert.equal(await page.locator("#view-settings").evaluate((v) => v.scrollTop), top, "no click moved the page");
 
         // fits, no sideways scroll, no native select, no left border
@@ -172,12 +221,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const pick = page.locator("#codexResetLeadRow button.reset-lead");
     assert.equal((await pick.locator(".rl-say > .on").textContent()).trim(), "45 min before");
     await pick.click();
-    assert.equal(await page.locator(".proto-menu .pm-item").count(), 11);
+    assert.equal(await page.locator(".proto-menu .pm-item").count(), 13);
     assert.equal(await page.locator(".proto-menu .pm-item.on .pm-name").textContent(), "45 min before");
     await page.keyboard.press("Escape");
     assert.deepEqual(posts, [], "nothing written by looking");
     assert.deepEqual(errors, []);
-    const bad = await open(t, engine, "en", 900, 4, []);
+    const bad = await open(t, engine, "en", 900, 2, []);
     assert.equal((await bad.page.locator("#codexResetLeadRow button.reset-lead .rl-say > .on").textContent()).trim(), "30 min before");
     assert.deepEqual(bad.errors, []);
   });

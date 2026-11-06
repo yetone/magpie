@@ -124,7 +124,7 @@ func TestResetLeadLooksInsideLongLead(t *testing.T) {
 // only as it runs out.
 func TestResetLeadUnreadIsDefault(t *testing.T) {
 	signIn(t)
-	for _, m := range []int{-5, 1, 4, 24*60 + 1, 1 << 30} {
+	for _, m := range []int{-5, 1, 2, 24*60 + 1, 1 << 30} {
 		setResetLead(t, m)
 		if got := resetLead(); got != 30*time.Minute {
 			t.Errorf("%d minutes: lead %v", m, got)
@@ -228,6 +228,28 @@ func TestShortLeadSpentInTime(t *testing.T) {
 		})
 		if want := until.Add(-7 * time.Minute); spent.Before(want) || spent.After(want.Add(5*time.Second)) {
 			t.Errorf("7m lead, phase %v: spent %v before it runs out", phase, until.Sub(spent))
+		}
+	}
+	// the least lead (3m): spent at its start, and a try hung to the pass's
+	// two-minute bound still leaves a retry that is spent before it runs out
+	setResetLead(t, settings.CodexResetLeadLeast)
+	least := time.Duration(settings.CodexResetLeadLeast) * time.Minute
+	for _, phase := range []time.Duration{0, 17 * time.Second, 2*time.Minute + 41*time.Second, 4*time.Minute + 59*time.Second} {
+		start := until.Add(-3*time.Hour + phase)
+		spent, tries := runLoop(t, start, until, func(int, time.Time) (ResetOutcome, error, time.Duration) {
+			return ResetOutcome{Code: "reset"}, nil, time.Second
+		})
+		if want := until.Add(-least); spent.Before(want) || spent.After(want.Add(5*time.Second)) || len(tries) != 1 {
+			t.Errorf("least lead, phase %v: spent %v before it runs out; tries at %v", phase, until.Sub(spent), tries)
+		}
+		spent, tries = runLoop(t, start, until, func(n int, _ time.Time) (ResetOutcome, error, time.Duration) {
+			if n == 1 {
+				return ResetOutcome{}, http.ErrHandlerTimeout, 2 * time.Minute
+			}
+			return ResetOutcome{Code: "reset"}, nil, 30 * time.Second
+		})
+		if spent.IsZero() || !spent.Before(until) || len(tries) != 2 {
+			t.Errorf("least lead, phase %v, a hung try: spent %v before it runs out; tries at %v", phase, until.Sub(spent), tries)
 		}
 	}
 	// a long lead failing all along is tried every five minutes until the
