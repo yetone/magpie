@@ -204,7 +204,35 @@ type Identity struct {
 	// Group is the routing group, by name, whose own accounts hold the
 	// request as well (HeldToGroup); "" when none does.
 	Group string
+	// Spent are the key's limits of some models (Limit.Models) with
+	// nothing left, as the gateway found them for this request: their
+	// models are left out of its candidates, a routing group's members
+	// too, and a request naming one is refused with Why.
+	Spent []SpentScope
 }
+
+// SpentScope is a limit of some models with nothing left until Reset.
+type SpentScope struct {
+	// Models are the limit's models, with the other ids each goes by
+	Models []string
+	Reset  time.Time
+	// Why is what a request for one of them is told
+	Why string
+}
+
+// SpentOn is the spent limit that counts model ("<provider>/<model>"),
+// the one that resets last when several do.
+func (who Identity) SpentOn(model string) (SpentScope, bool) {
+	var out SpentScope
+	found := false
+	for _, s := range who.Spent {
+		if ModelAllowed(s.Models, model) && (!found || s.Reset.After(out.Reset)) {
+			out, found = s, true
+		}
+	}
+	return out, found
+}
+
 type contextKey struct{}
 
 func WithIdentity(ctx context.Context, who Identity) context.Context {
@@ -474,7 +502,10 @@ func Update(action string, in Change) (string, error) {
 			}
 			for a := range ls {
 				for b := a + 1; b < len(ls); b++ {
-					if ls[a].sameWindow(&ls[b]) {
+					if ls[a].sameLimit(&ls[b]) {
+						if ls[a].Scoped() {
+							return "", fmt.Errorf("This key already has a limit %s for %s: change that one instead", ls[a].Per(), strings.Join(ls[a].Models, ", "))
+						}
 						return "", fmt.Errorf("This key already has a limit %s: change that one instead", ls[a].Per())
 					}
 				}

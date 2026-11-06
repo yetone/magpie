@@ -34,6 +34,13 @@ type Limiter interface {
 	Reserve(who access.Identity, body int64, model string, now time.Time) (release func(), refused Refusal)
 }
 
+// Spender is a Limiter that can tell which of a key's limits of some
+// models (access.Limit.Models) have nothing left: the gateway leaves
+// their models out of the request's candidates (access.Identity.Spent).
+type Spender interface {
+	Spent(who access.Identity, now time.Time) []access.SpentScope
+}
+
 var (
 	mu       sync.Mutex
 	limiters []*Limiter

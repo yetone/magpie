@@ -124,6 +124,13 @@ func (s *Server) serveDecisionGroup(w http.ResponseWriter, r *http.Request, body
 			writeError(w, provider.Chat, http.StatusForbidden, keyAccountsError(who, asked))
 			return
 		}
+		// every member left is one a spent limit of the key's counts
+		if len(cs) == 0 && keyHeld && len(members) == 0 {
+			if st, msg := keyGroupRefusal(w, keyWho, asked, ms); st == http.StatusTooManyRequests {
+				writeError(w, provider.Chat, st, msg)
+				return
+			}
+		}
 	}
 	cs = probeOne(cs) // of those resting, only the one back soonest (#1799)
 	if len(cs) == 0 {

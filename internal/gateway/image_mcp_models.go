@@ -106,7 +106,7 @@ func ImageModels() []ImageModel {
 // mediaModelsFor is mediaModels less those r's gateway key may not use.
 func mediaModelsFor(r *http.Request, video bool) (all, shown []string, def string) {
 	all, def = mediaModels(video)
-	who, held := keyHolds(r)
+	who, held := keyListHolds(r)
 	if !held {
 		return all, all, def
 	}

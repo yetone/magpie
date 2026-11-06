@@ -611,7 +611,8 @@ func (s *Server) serveSystemOne(w http.ResponseWriter, r *http.Request) {
 	// a gateway key held to some models (#882) is refused another; a
 	// decision model is a model, and System One asks one directly
 	if keyWho, held := keyHolds(r); held && !modelAllowed(keyWho, p, model) {
-		writeError(w, provider.Chat, http.StatusForbidden, keyModelError(keyWho, asked))
+		st, msg := keyModelRefusal(w, keyWho, p.ID+"/"+model)
+		writeError(w, provider.Chat, st, msg)
 		return
 	}
 	// its keys or accounts in its routing's order, each asked until one

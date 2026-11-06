@@ -656,6 +656,7 @@ magpie gateway-key limit <id> list     # each limit, used, left and reset
 magpie gateway-key limit <id> 10d --tokens 5m   # every 10 days, from now
 magpie gateway-key limit <id> 5h --tokens 200k  # every 5 hours, from now
 magpie gateway-key limit <id> add week --cost 20   # one more limit; all must pass
+magpie gateway-key limit <id> add month --cost 20 --model openai/*   # a limit of only OpenAI's models
 magpie gateway-key limit <id> remove 2 # take off the 2nd limit
 magpie gateway-key limit <id> reset    # count its usage from 0 again (reset 2: only the 2nd)
 magpie gateway-key limit <id> off      # no limit
@@ -719,6 +720,25 @@ one as a Remote magpie provider shows each of its keys' limits on its
 Usage page this way (#1547). Requests from
 this computer that send no gateway key are not limited; a gateway key used
 from this computer is.
+
+A limit can count **only some models** (zola_xynb on X): pick them under
+**Models** in the limit's editor, or `--model` (again, or a comma list) on
+`magpie gateway-key limit`, as `<provider>/<model>` or `<provider>/*`, such
+as $20 a month on `openai/*` beside $50 a month on the whole key. Such a
+limit counts only the calls those models answered, by the provider and
+model in the usage log. Once it is spent, a request naming one of them is
+refused with the same 429 (it names the models, and sets no
+`X-Magpie-Limit-Reset`, so a magpie using this one as a remote rests only
+the model), and a routing group, a model's fallbacks, `count_tokens`,
+embeddings, images, videos, the decision groups and magpie's own calls for
+the key leave its models out and go on to the others, from the next
+request on, midway through a conversation too. Its spent models stay in
+the key's model lists. A limit without models is the whole key's, as every
+limit before this was; two limits of the same window can share it only
+when they count different models. A request through a group holds no
+reservation in a model's limit, so requests sent at once through groups
+can go over it by about a call each. A magpie from before this reads such
+a limit, if it is a key's first, as the whole key's.
 
 A key's holder can also open **`/me`** in a browser at the address they
 reach the gateway at (for example `http://192.168.1.10:3999/me`), type

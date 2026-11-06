@@ -2979,9 +2979,11 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 #gatewayKeys .klf input { width: 100%; min-width: 0; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--card); color: var(--fg); font: inherit; font-size: 12px; }
 #gatewayKeys .klf-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-2); }
 #gatewayKeys .klf-err { color: var(--red); }
-#gatewayKeys .klf .klf-period { width: 100%; max-width: none; height: 28px; justify-content: space-between; color: var(--fg); }
+#gatewayKeys .klf .klf-period, #gatewayKeys .klf .klf-pick { width: 100%; max-width: none; height: 28px; justify-content: space-between; color: var(--fg); }
 #gatewayKeys .klf.with-days { grid-template-columns: minmax(0, 1fr) minmax(0, 0.6fr) minmax(0, 1fr) minmax(0, 1fr); }
 #gatewayKeys .klf-days[hidden] { display: none; }
+#gatewayKeys .klf-models { grid-column: 1 / -1; }
+#gatewayKeys .klf .klf-pick > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #gatewayKeys .klf-used { display: flex; align-items: center; gap: 8px; min-width: 0; }
 #gatewayKeys .klf-used .key-limit { flex: 1 1 auto; }
 #gatewayKeys .klf-used .klf-reset { flex: none; }

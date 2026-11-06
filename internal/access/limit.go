@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -33,10 +34,38 @@ type Limit struct {
 	// the same window doesn't count. Zero for a calendar limit never
 	// reset, as every limit from before #1509 is.
 	Since time.Time `json:"since,omitzero"`
+	// Models scope the limit to some models (zola_xynb on X: a cap for
+	// one model or one provider under one key): "<provider>/<model>" or
+	// "<provider>/*", as a key's models are written. The limit counts
+	// only the key's calls a model of them answered, and holds only
+	// requests that would go to one: a routing group goes on to its
+	// members outside it. None, the whole key, as every limit from
+	// before this.
+	Models []string `json:"models,omitempty"`
+}
+
+// Scoped: l counts only some models' calls (Limit.Models).
+func (l *Limit) Scoped() bool { return l != nil && len(l.Models) > 0 }
+
+// Scope is l's models as one string, the same for the same models in any
+// order or letter case; "" for the whole key.
+func (l *Limit) Scope() string {
+	if !l.Scoped() {
+		return ""
+	}
+	ms := make([]string, len(l.Models))
+	for i, m := range l.Models {
+		ms[i] = strings.ToLower(m)
+	}
+	slices.Sort(ms)
+	return strings.Join(ms, ",")
 }
 
 // MaxLimits is how many limits one key can have (#2227).
 const MaxLimits = 5
+
+// MaxLimitModels is how many models one limit can count.
+const MaxLimitModels = 50
 
 // Limits are k's limits, its Limit first; none for a key with no limit.
 // Each holds the key on its own: a request passes only while all of them
@@ -86,6 +115,13 @@ func (k *Key) setLimits(ls []Limit) {
 // that do are one limit with two caps.
 func (l *Limit) sameWindow(o *Limit) bool {
 	return l.Period == o.Period && l.Days == o.Days && l.Hours == o.Hours
+}
+
+// sameLimit: l and o count the same calls in the same window, so a key
+// with both would have one limit twice. Limits of other models in one
+// window are each their own.
+func (l *Limit) sameLimit(o *Limit) bool {
+	return l.sameWindow(o) && l.Scope() == o.Scope()
 }
 
 // Periods are the windows a limit can be set for.
@@ -145,6 +181,19 @@ func (l *Limit) Valid() (*Limit, error) {
 		return nil, errors.New("A limit's period is day, week, month, every N days or every N hours")
 	}
 	v.Cost = math.Round(v.Cost*1e4) / 1e4
+	ms, err := CleanModels(v.Models)
+	if err != nil {
+		return nil, err
+	}
+	for _, m := range ms {
+		if strings.HasPrefix(strings.ToLower(m), "group/") || strings.HasPrefix(strings.ToLower(m), "auto/") {
+			return nil, errors.New("A limit counts models or providers, like openai/* or openai/gpt-5, not a routing group: " + m)
+		}
+	}
+	if len(ms) > MaxLimitModels {
+		return nil, fmt.Errorf("A limit can count at most %d models", MaxLimitModels)
+	}
+	v.Models = ms
 	return &v, nil
 }
 
@@ -158,6 +207,12 @@ func (l *Limit) Per() string {
 		return fmt.Sprintf("%d-hour cycle", l.Hours)
 	}
 	return l.Period
+}
+
+// Counts says a call model answered ("<provider>/<model>") counts toward
+// l: every call for a limit of the whole key.
+func (l *Limit) Counts(model string) bool {
+	return !l.Scoped() || ModelAllowed(l.Models, model)
 }
 
 // sinceOf is the Since a limit set as next keeps, with prev the key's

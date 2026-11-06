@@ -82,6 +82,8 @@ type remoteKeyLimit struct {
 	TokensLeft int64     `json:"tokensLeft"`
 	CostLeft   float64   `json:"costLeft"`
 	Spent      bool      `json:"spent"`
+	// Models are the models a limit counts, none for the whole key
+	Models []string `json:"models"`
 }
 
 type remoteKeyRead struct {
@@ -192,6 +194,13 @@ func keyLimitCard(a *remoteKeyAnswer) (*GatewayKeyLimit, []QuotaWindow) {
 	var ws []QuotaWindow
 	share := func(used, limit float64) float64 { return math.Min(100, math.Round(used/limit*1000)/10) }
 	for _, x := range all {
+		if len(x.Models) > 0 {
+			// a limit of some models: a request for one of them is
+			// refused with a 429 that rests that model here, and the
+			// key's others are served; as a window it would read as the
+			// key's
+			continue
+		}
 		reset := x.Reset
 		if x.TokenLimit > 0 {
 			ws = append(ws, QuotaWindow{Name: keyWindowName("Tokens", x.Period), Used: share(float64(x.Tokens), float64(x.TokenLimit)), ResetsAt: &reset,

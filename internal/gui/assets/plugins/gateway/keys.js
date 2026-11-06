@@ -594,6 +594,10 @@ function limitCost(v) {
   return /^\d+(\.\d+)?$/.test(s) ? parseFloat(s) : NaN;
 }
 const usd = (n) => "$" + (n >= 100 ? n.toFixed(0) : n.toFixed(2));
+// limitModels names the models a limit counts (zola_xynb on X), "" when
+// it counts every call of the key
+const limitModels = (ms) => !ms?.length ? "" : ms.length === 1 ? ms[0] : t("{n} models", { n: ms.length });
+const sameModels = (a, b) => (a || []).length === (b || []).length && (a || []).every((m) => (b || []).includes(m));
 
 // keyLimits are a key's limits, its first and the rest (#2227), and
 // keyUsed what it has used of each, in the same order.
@@ -606,7 +610,7 @@ function limitDraft(k, n) {
   const taken = keyLimits(k).map((x) => x.period);
   // a new one in a window the key has no limit in yet: a week beside 5 hours
   const period = l.period || (n ? ["week", "hours", "day", "month"].find((p) => !taken.includes(p)) || "days" : "day");
-  return { id: k.id, n, period, days: l.days ? String(l.days) : "", hours: l.hours ? String(l.hours) : (n && period === "hours" ? "5" : ""), tokens: l.tokens ? String(l.tokens) : "", cost: l.cost ? String(l.cost) : "", cacheReads: !!l.cacheReads };
+  return { id: k.id, n, period, days: l.days ? String(l.days) : "", hours: l.hours ? String(l.hours) : (n && period === "hours" ? "5" : ""), tokens: l.tokens ? String(l.tokens) : "", cost: l.cost ? String(l.cost) : "", cacheReads: !!l.cacheReads, models: [...(l.models || [])] };
 }
 // bindingUsed is the limit holding a key most: of those spent, the one
 // that resets last, as it is refused until then; else the first
@@ -628,6 +632,7 @@ function gatewayLimitBadge(k) {
     if (u.tokenLimit) parts.push(fmtN(u.tokens) + " / " + fmtN(u.tokenLimit));
     if (u.costLimit) parts.push(usd(u.cost) + " / " + usd(u.costLimit));
     b.textContent = (u.spent ? t("Spent") + " · " : "") + parts.join(" · ") + " · " + perWords(u.period, u.days, u.hours)
+      + (u.models?.length ? " · " + limitModels(u.models) : "")
       + (more > 0 ? " · " + t(more === 1 ? "+1 limit" : "+{n} limits", { n: more }) : "");
   }
   b.title = t(u ? "Change this key's limit" : "Set a limit for this key");
@@ -649,13 +654,15 @@ function gatewayLimitLine(k, u) {
   const line = el("div", "key-limit" + (u.spent ? " spent" : ""));
   const parts = [];
   if (keyUsed(k).length > 1) parts.push(perWords(u.period, u.days, u.hours));
+  if (u.models?.length) parts.push(limitModels(u.models));
   if (u.tokenLimit) parts.push(t("{used} of {limit} tokens · {left} left", { used: fmtN(u.tokens), limit: fmtN(u.tokenLimit), left: fmtN(u.tokensLeft) }));
   if (u.costLimit) parts.push(t("{used} of {limit} estimated · {left} left", { used: usd(u.cost), limit: usd(u.costLimit), left: usd(u.costLeft) }));
   const at = new Date(u.reset);
   parts.push(t(u.spent ? "refused until {when}" : "resets {when}", { when: resetClock(at) }));
   if (u.inFlight) parts.push(t(u.inFlight === 1 ? "1 in flight" : "{n} in flight", { n: u.inFlight }));
   line.textContent = parts.join(" · ");
-  line.title = t("Counted from {start}; resets {when}", { start: new Date(u.start).toLocaleString(intlLang()), when: at.toLocaleString(intlLang()) })
+  line.title = (u.models?.length ? u.models.join(", ") + "\n" : "")
+    + t("Counted from {start}; resets {when}", { start: new Date(u.start).toLocaleString(intlLang()), when: at.toLocaleString(intlLang()) })
     + (u.unpriced ? "\n" + t("{n} calls without a known price aren't in the cost", { n: u.unpriced }) : "");
   return line;
 }
@@ -670,7 +677,8 @@ function gatewayLimitEditor(k) {
   const changed = () => d.period !== (kept.period || "day") || limitTokens(d.tokens) !== (kept.tokens || 0)
     || limitCost(d.cost) !== (kept.cost || 0) || d.cacheReads !== !!kept.cacheReads
     || (d.period === "days" && limitDays(d.days) !== kept.days)
-    || (d.period === "hours" && limitHours(d.hours) !== kept.hours);
+    || (d.period === "hours" && limitHours(d.hours) !== kept.hours)
+    || !sameModels(d.models, kept.models);
   const fields = el("div", "klf");
   // the app's own menu, not a native select
   const period = el("button", "sess-pick klf-period");
@@ -710,7 +718,21 @@ function gatewayLimitEditor(k) {
   cl.append(el("span", "klf-name", t("Estimated cost, US$")), cost);
   const pl = el("label", "klf-field");
   pl.append(el("span", "klf-name", t("Window")), period);
-  fields.append(pl, dl, hl, tl, cl);
+  // the models the limit counts (zola_xynb on X): none picked is every
+  // call of the key, as a limit set before there was a pick
+  const models = el("button", "sess-pick klf-pick klf-models-pick");
+  models.type = "button";
+  models.setAttribute("aria-label", t("Models this limit counts"));
+  models.setAttribute("aria-haspopup", "menu");
+  models.setAttribute("aria-expanded", "false");
+  const paintModels = () => {
+    models.title = d.models.join(", ");
+    models.replaceChildren(el("span", "", limitModels(d.models) || t("All models")), svg(CHEV, 11, 1.6));
+  };
+  paintModels();
+  const ml = el("label", "klf-field klf-models");
+  ml.append(el("span", "klf-name", t("Models")), models);
+  fields.append(pl, dl, hl, tl, cl, ml);
   // a key's limits (#2227), each a tab, when it has more than one or one
   // is being added: the editor is of one at a time
   let which = null;
@@ -718,7 +740,7 @@ function gatewayLimitEditor(k) {
     which = el("div", "klf-which");
     which.setAttribute("role", "tablist");
     which.setAttribute("aria-label", t("This key's limits"));
-    const tabs = limits.map((l, i) => ({ i, name: perWords(l.period, l.days, l.hours) }));
+    const tabs = limits.map((l, i) => ({ i, name: perWords(l.period, l.days, l.hours) + (l.models?.length ? " · " + limitModels(l.models) : "") }));
     if (n >= limits.length) tabs.push({ i: n, name: t("New limit") });
     for (const x of tabs) {
       const tab = el("button", "klf-tab" + (x.i === n ? " on" : ""), x.name);
@@ -767,6 +789,32 @@ function gatewayLimitEditor(k) {
       if (v === "hours") hours.focus({ preventScroll: true });
     }, "Limit window", "sess-menu");
   };
+  models.onclick = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (models.classList.contains("open")) return closeProtoMenu();
+    let list = [];
+    try { ({ models: list } = await api("caller-keys/models")); } catch (err) { status(t(err.message), "err"); return; }
+    if (!models.isConnected || gatewayLimit !== d) return;
+    const opts = [{ v: "", name: "All models", note: "" }];
+    const seen = new Set();
+    // a routing group isn't one: what it picks is counted by the model
+    // that served the call
+    for (const m of list || []) {
+      if (m.group) continue;
+      if (!seen.has(m.provider)) {
+        seen.add(m.provider);
+        opts.push({ v: m.provider + "/*", name: t("Every {provider} model", { provider: m.providerName }), note: m.provider + "/*", literalName: true });
+      }
+      opts.push({ v: m.id, name: m.name, note: m.id, literalName: true });
+    }
+    for (const v of d.models) if (!opts.some((o) => o.v === v)) opts.push({ v, name: v, note: "Not served now", literalName: true });
+    openProtoMenu(models, opts, [...d.models], (picked) => {
+      d.models = picked;
+      paintModels();
+      update();
+    }, "Models this limit counts", "sess-menu");
+  };
   days.oninput = () => { d.days = days.value; update(); };
   hours.oninput = () => { d.hours = hours.value; update(); };
   tokens.oninput = () => { d.tokens = tokens.value; update(); };
@@ -785,6 +833,7 @@ function gatewayLimitEditor(k) {
     save.disabled = true;
     const tk = limitTokens(d.tokens), c = limitCost(d.cost);
     const limit = tk || c ? { period: d.period, tokens: tk, cost: c, cacheReads: d.cacheReads } : null;
+    if (limit && d.models.length) limit.models = d.models;
     if (limit && d.period === "days") limit.days = limitDays(d.days);
     if (limit && d.period === "hours") limit.hours = limitHours(d.hours);
     // which one only when there are several: one is the key's only limit

@@ -121,10 +121,11 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 	if isGroup {
 		r = heldByGroup(r, g) // held to the group's accounts, if it is
 	}
-	if keyWho, held := keyHolds(r); held && (isGroup && !groupAllowed(keyWho, g, ms) || !isGroup && !modelAllowed(keyWho, p, model)) {
-		msg := keyModelError(keyWho, asked)
-		call.Status, call.Error = 403, msg
-		writeError(w, provider.Chat, 403, msg)
+	keyWho, keyHeld := keyHolds(r)
+	if keyHeld && (isGroup && !groupAllowed(keyWho, g, ms) || !isGroup && !modelAllowed(keyWho, p, model)) {
+		st, msg := keyModelRefusal(w, keyWho, asked)
+		call.Status, call.Error = st, msg
+		writeError(w, provider.Chat, st, msg)
 		s.record(call)
 		return
 	}
@@ -171,6 +172,19 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 			return
 		}
 		tries = cs
+	}
+	// a group's members the key may not go to through it are left out
+	// (groupKeeps): those a spent limit of the key's counts
+	if keyHeld && isGroup {
+		keeps := groupKeeps(keyWho, g, ms)
+		tries = slices.DeleteFunc(tries, func(c candidate) bool { return !keeps[c.p.ID+"/"+c.model] })
+		if len(tries) == 0 {
+			st, msg := keyGroupRefusal(w, keyWho, asked, ms)
+			call.Status, call.Error = st, msg
+			writeError(w, provider.Chat, st, msg)
+			s.record(call)
+			return
+		}
 	}
 	// the accounts or keys the calling key may not use are left out of
 	// the tries too (#905): a group's members through it no less

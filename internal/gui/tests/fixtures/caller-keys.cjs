@@ -154,7 +154,8 @@ function fixture(lang, theme, events, options = {}) {
         const usedOf = (l) => {
           const span = l.period === "hours" ? l.hours * 36e5 : (l.days || 1) * 864e5;
           return { period: l.period, days: l.days, hours: l.hours, start: new Date().toISOString(), reset: new Date(Date.now() + span).toISOString(),
-            calls: 0, tokens: 0, cost: 0, tokenLimit: l.tokens, costLimit: l.cost, tokensLeft: l.tokens, costLeft: l.cost, spent: false };
+            calls: 0, tokens: 0, cost: 0, tokenLimit: l.tokens, costLimit: l.cost, tokensLeft: l.tokens, costLeft: l.cost, spent: false,
+            ...(l.models ? { models: l.models } : {}) };
         };
         // one of several by its index (#2227), as access.Update keeps them;
         // without one, the key's only limit

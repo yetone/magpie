@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/yetone/magpie/internal/access"
@@ -36,9 +37,28 @@ func magpieChose(ctx context.Context) context.Context {
 	return context.WithValue(ctx, magpieChoseKey{}, true)
 }
 
-// keyHolds is the calling key's models, when they hold this request.
+// keyHolds is the calling key's models, when they hold this request: the
+// models it lists, and those a limit of some models it has spent counts
+// (access.Identity.Spent, zola_xynb on X), which hold magpie's own calls
+// for the key too, as their spend counts in it.
 func keyHolds(r *http.Request) (access.Identity, bool) {
 	who := access.Caller(r.Context())
+	if chose, _ := r.Context().Value(magpieChoseKey{}).(bool); chose {
+		if len(who.Spent) == 0 {
+			return who, false
+		}
+		who.Models, who.AccountModels = nil, false
+		return who, true
+	}
+	return who, who.Restricted() || len(who.Spent) > 0
+}
+
+// keyListHolds is keyHolds for a list of models shown to the key: a
+// spent limit leaves its models listed, as a spent limit of the whole key
+// does, and a request for one is told why it is refused.
+func keyListHolds(r *http.Request) (access.Identity, bool) {
+	who := access.Caller(r.Context())
+	who.Spent = nil
 	if !who.Restricted() {
 		return who, false
 	}
@@ -46,6 +66,109 @@ func keyHolds(r *http.Request) (access.Identity, bool) {
 		return who, false
 	}
 	return who, true
+}
+
+// spentFor is the key's spent limit that counts provider p's model, by
+// any id the model goes by, the one that resets last when several do.
+func spentFor(who access.Identity, p provider.Provider, model string) (access.SpentScope, bool) {
+	if len(who.Spent) == 0 {
+		return access.SpentScope{}, false
+	}
+	ids := []string{p.ID + "/" + model}
+	if own := p.OwnModelID(model); own != model {
+		ids = append(ids, p.ID+"/"+own)
+	}
+	if local := p.ListedModelID(model); local != model {
+		ids = append(ids, p.ID+"/"+local)
+	}
+	var out access.SpentScope
+	found := false
+	for _, id := range ids {
+		if s, ok := who.SpentOn(id); ok && (!found || s.Reset.After(out.Reset)) {
+			out, found = s, true
+		}
+	}
+	return out, found
+}
+
+// spentRef is the spent limit a request for ref is refused by: a model's
+// that counts it, or for a routing group the key may use, the one of its
+// members' that resets last, when each member is spent or not the key's.
+func spentRef(who access.Identity, ref string) (access.SpentScope, bool) {
+	if len(who.Spent) == 0 {
+		return access.SpentScope{}, false
+	}
+	if g, ms, isGroup := provider.FindGroup(ref); isGroup {
+		if !groupAllowed(who, g, ms) {
+			return access.SpentScope{}, false
+		}
+		return spentOfMembers(who, ms)
+	}
+	if sid, ok := provider.AutoStandIn(ref); ok {
+		ref = sid
+	}
+	p, model, ok := provider.Resolve(ref)
+	if !ok {
+		return access.SpentScope{}, false
+	}
+	return spentFor(who, p, model)
+}
+
+// spentOfMembers is the spent limit of the key's that counts one of a
+// routing group's members ms, the one that resets last when several do.
+func spentOfMembers(who access.Identity, ms []provider.Member) (access.SpentScope, bool) {
+	var out access.SpentScope
+	found := false
+	for _, m := range ms {
+		if s, ok := spentFor(who, m.Provider, m.Model); ok && (!found || s.Reset.After(out.Reset)) {
+			out, found = s, true
+		}
+	}
+	return out, found
+}
+
+// keyGroupRefusal is keyModelRefusal for a routing group whose members ms
+// a route found itself (an embedding, image or video group's, which
+// provider.FindGroup's chat members leave out): its 429 when a spent limit
+// counts one of them.
+func keyGroupRefusal(w http.ResponseWriter, who access.Identity, ref string, ms []provider.Member) (int, string) {
+	if s, ok := spentOfMembers(who, ms); ok {
+		return spentRefusal(w, s)
+	}
+	return keyModelRefusal(w, who, ref)
+}
+
+// keyModelRefusal is the status and message a request for ref its key may not
+// use is answered with: a 429 saying the limit and when it resets, with
+// Retry-After, when a limit of the key's spent on it is why, else
+// keyModelError's 403. It names no reset in remoteKeyLimitHeader: a
+// magpie using this one as a remote rests only the model on it, as the
+// key's other models are still served.
+func keyModelRefusal(w http.ResponseWriter, who access.Identity, ref string) (int, string) {
+	if s, ok := spentRef(who, ref); ok {
+		return spentRefusal(w, s)
+	}
+	return http.StatusForbidden, keyModelError(who, ref)
+}
+
+// spentRefusal is keyModelRefusal's 429 for the spent limit s.
+func spentRefusal(w http.ResponseWriter, s access.SpentScope) (int, string) {
+	w.Header().Set("Retry-After", strconv.Itoa(max(1, int(s.Reset.Sub(limitClock()).Seconds()+0.999))))
+	w.Header().Set("X-Should-Retry", "false")
+	return http.StatusTooManyRequests, s.Why
+}
+
+// spentAmong is the spent limit of the key's that counts one of cs, the
+// one that resets last when several do.
+func spentAmong(who access.Identity, cs []candidate) (access.SpentScope, bool) {
+	var out access.SpentScope
+	found := false
+	for _, c := range cs {
+		if s, ok := spentFor(who, c.p, c.model); ok && (!found || s.Reset.After(out.Reset)) {
+			out, found = s, true
+		}
+	}
+	return out, found
 }
 
 // accountHolds is the calling key's accounts, when they hold this
@@ -89,6 +212,14 @@ func allows(who access.Identity, ids ...string) bool {
 // one written before the id was given, or an agent's old ref to the
 // provider's own id.
 func modelAllowed(who access.Identity, p provider.Provider, model string) bool {
+	if _, spent := spentFor(who, p, model); spent {
+		return false // a limit of the key's that counts it is spent
+	}
+	return modelListed(who, p, model)
+}
+
+// modelListed is modelAllowed by the key's models alone.
+func modelListed(who access.Identity, p provider.Provider, model string) bool {
 	if allows(who, p.ID+"/"+model) {
 		return true
 	}
@@ -122,7 +253,10 @@ func groupNamed(who access.Identity, g provider.Group) bool {
 // Every route asks this: the model lists (entryAllowed), a request on
 // each API, count_tokens, embeddings, images, videos, the decision
 // groups, a subagent's and masking's route.
+// A member a spent limit counts doesn't take the group away from the key:
+// the request goes on to the others (groupKeeps).
 func groupAllowed(who access.Identity, g provider.Group, ms []provider.Member) bool {
+	who.Spent = nil
 	return groupNamed(who, g) || (foundGroup(g) || who.AccountModels) && membersAllowed(who, ms)
 }
 
@@ -157,11 +291,16 @@ func keyGroupFor(r *http.Request, id string) (string, bool) {
 }
 
 // groupKeeps is the members of g a request through it may go to for the
-// key: every one when it names g, else those it may use.
+// key: every one when it names g, else those it may use; neither one a
+// spent limit of the key's counts (zola_xynb: a group goes on to the
+// models left, midway too, as the next request finds the limit spent).
 func groupKeeps(who access.Identity, g provider.Group, ms []provider.Member) map[string]bool {
 	out := map[string]bool{}
 	named := groupNamed(who, g)
 	for _, m := range ms {
+		if _, spent := spentFor(who, m.Provider, m.Model); spent {
+			continue
+		}
 		if named || memberAllowed(who, m) {
 			out[m.Provider.ID+"/"+m.Model] = true
 		}
@@ -277,7 +416,7 @@ func accountServesOn(who access.Identity, p provider.Provider, model string, ref
 
 // keyAllowed filters the catalog to what the calling key may use.
 func keyAllowed(r *http.Request, es []provider.Entry) []provider.Entry {
-	who, held := keyHolds(r)
+	who, held := keyListHolds(r)
 	if !held {
 		return es
 	}
@@ -302,7 +441,7 @@ func keyAllowed(r *http.Request, es []provider.Entry) []provider.Entry {
 // his listed alone). off is the list's own picks (ModelOff), nil for
 // none; a model they leave out stays out.
 func keyListed(r *http.Request, shown []provider.Entry, off func(string) bool) []provider.Entry {
-	who, held := keyHolds(r)
+	who, held := keyListHolds(r)
 	if !held {
 		return shown
 	}
@@ -575,7 +714,8 @@ func countHeld(w http.ResponseWriter, r *http.Request, proto provider.Protocol, 
 	}
 	g, ms, isGroup := provider.FindGroup(id)
 	if isGroup && !groupAllowed(keyWho, g, ms) || !isGroup && !modelAllowed(keyWho, p, model) {
-		writeError(w, proto, http.StatusForbidden, keyModelError(keyWho, id))
+		st, msg := keyModelRefusal(w, keyWho, id)
+		writeError(w, proto, st, msg)
 		return true
 	}
 	return false

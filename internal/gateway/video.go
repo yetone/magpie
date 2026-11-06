@@ -1050,7 +1050,7 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	keyWho, keyHeld := keyHolds(r)
 	if keyHeld && named && (isGroup && !groupAllowed(keyWho, g, ms) || !isGroup && !modelAllowed(keyWho, p, model)) {
-		fail(403, keyModelError(keyWho, f.Model))
+		fail(keyModelRefusal(w, keyWho, f.Model))
 		return
 	}
 	if msg, off := modelOff(p, model, f.Model); off { // disabled by the user (#1867)
@@ -1073,7 +1073,7 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 		}
 		t := s.drawingTries(g, ms, keeps, servesKind(provider.KindVideo))
 		if len(t) == 0 && keeps != nil {
-			fail(403, keyModelError(keyWho, f.Model))
+			fail(keyGroupRefusal(w, keyWho, f.Model, ms))
 			return
 		}
 		if len(t) > 0 {

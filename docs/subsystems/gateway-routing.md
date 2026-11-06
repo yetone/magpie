@@ -606,7 +606,29 @@ the spent limit that resets last). The saved key keeps the first limit in
 clients read, and `limits` is each of them (`budget.All`). Holding a
 key to its limits is the Key limits plugin's, on the gateway's budget
 point ([Plugin runtime](plugin-runtime.md#gateway-extension-points-p3-budget)):
-with it off, a key held to a limit gets 503 and nothing is sent. A local magpie
+with it off, a key held to a limit gets 503 and nothing is sent. A limit can count
+only some models (`access.Limit.Models`, zola_xynb on X), `<provider>/<model>`
+or `<provider>/*`: its sums are kept per window and scope (`sums.scope`,
+`window.scope`), and count a call only when the provider and model in the
+usage log match (`scopeModels` adds a model's other ids). `budget.reserve`
+holds a request to it only when the model it names resolves to one of them
+(`servedAs`; a group, `auto/` or unknown name holds nothing there). Before
+the reservation, `keyLimited` puts the key's spent ones on the caller
+(`withSpent`, `budget.Spent` through `gwbudget.Spender`, its issuer's too,
+`access.Identity.Spent`), `count_tokens` included. Then `keyHolds` holds the
+request, magpie's own calls for the key too; `modelAllowed` refuses a spent
+model by any of its ids (`spentFor`); `groupAllowed` ignores them, so a group
+stays the key's; `groupKeeps` and so `allowedCandidates`, `drawingTries`,
+the decision groups and embeddings' group tries leave them out, so a group
+goes on to the members left from the next request on, midway through a
+conversation too. Where nothing is left, `keyModelRefusal` (`keyGroupRefusal`
+with a media group's own members, `spentAmong` on the chat route) answers 429 with the limit's message and
+`Retry-After`, not 403, and no `X-Magpie-Limit-Reset`, so a remote magpie
+rests the model only; `keyLimited`'s own scoped refusal skips that header
+too. The model lists (`keyListHolds`) don't change, `budget.Binding`
+prefers a whole-key limit, and a remote's key card leaves such limits out
+(`keyLimitCard`). Tests: `TestKeyModelLimit*` in `key_model_limit_test.go`,
+`TestScoped*` in `internal/budget`. A local magpie
 asks it with each of its remote-magpie keys for that key's card on its
 Usage page (#1547), a window per limit's cap.
 

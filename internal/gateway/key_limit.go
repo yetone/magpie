@@ -33,6 +33,12 @@ const remoteKeyLimitHeader = "X-Magpie-Limit-Reset"
 // resets; one let in holds a reservation until it ends. A key with a limit
 // while plugins/budget is off is refused with a 503, and nothing is sent. Reads, the
 // bridge's tool callbacks and counting tokens cost nothing and pass.
+//
+// A limit of some models (access.Limit.Models) holds a request that names
+// one of them here, and its spent ones are put on the request's caller
+// (access.Identity.Spent), for every route to leave their models out of
+// its candidates: a routing group's request goes on to the others, and
+// counting tokens on a spent one is refused as serving it would be.
 func keyLimited(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		who := access.Caller(r.Context())
@@ -40,14 +46,22 @@ func keyLimited(next http.Handler) http.Handler {
 		if who.Issuer != nil {
 			limits = append(slices.Clone(limits), who.Issuer.Limits()...)
 		}
-		if !who.Limited() || r.Method != http.MethodPost || strings.HasPrefix(r.URL.Path, "/_magpie/") || strings.HasPrefix(r.URL.Path, "/mcp/") || strings.HasSuffix(r.URL.Path, "/count_tokens") || r.URL.Path == KeysPath {
+		if !who.Limited() || r.Method != http.MethodPost || strings.HasPrefix(r.URL.Path, "/_magpie/") || strings.HasPrefix(r.URL.Path, "/mcp/") || r.URL.Path == KeysPath {
+			next.ServeHTTP(w, r)
+			return
+		}
+		scoped := slices.ContainsFunc(limits, (*access.Limit).Scoped)
+		if strings.HasSuffix(r.URL.Path, "/count_tokens") {
+			if scoped {
+				r = withSpent(r, who, limitClock())
+			}
 			next.ServeHTTP(w, r)
 			return
 		}
 		size, model := r.ContentLength, ""
 		// a compressed body (#1223) is reserved at its decoded size and model
 		costCap := slices.ContainsFunc(limits, func(l *access.Limit) bool { return l.Cost > 0 })
-		if enc := r.Header.Get("Content-Encoding"); costCap || size < 0 || (enc != "" && !strings.EqualFold(enc, "identity")) {
+		if enc := r.Header.Get("Content-Encoding"); costCap || scoped || size < 0 || (enc != "" && !strings.EqualFold(enc, "identity")) {
 			// a turn on Codex's own path reads to its own limit (codexBackend)
 			var most int64
 			if strings.HasPrefix(r.URL.Path, CodexPath+"/") {
@@ -62,6 +76,11 @@ func keyLimited(next http.Handler) http.Handler {
 			size, model = int64(len(b)), budget.ModelOf(b)
 		}
 		now := limitClock()
+		if scoped {
+			// before the request's own reservation, which would count it
+			// spent on the model it holds
+			r = withSpent(r, who, now)
+		}
 		release, err := reserveFor(who, size, model, now)
 		if err != nil {
 			status, errType := http.StatusServiceUnavailable, "gateway_key_limit_off"
@@ -69,7 +88,10 @@ func keyLimited(next http.Handler) http.Handler {
 			if errors.As(err, &refused) {
 				status, errType = http.StatusTooManyRequests, "gateway_key_limit"
 				w.Header().Set("Retry-After", strconv.Itoa(refused.RetryAfter(now)))
-				w.Header().Set(remoteKeyLimitHeader, refused.ResetAt().Format(time.RFC3339))
+				// a limit of some models rests a remote's model, not its key
+				if b, ok := refused.(*budget.Refusal); !ok || len(b.Models) == 0 {
+					w.Header().Set(remoteKeyLimitHeader, refused.ResetAt().Format(time.RFC3339))
+				}
 			}
 			// the Anthropic and OpenAI SDKs would otherwise retry a 429 or 503
 			w.Header().Set("X-Should-Retry", "false")
@@ -82,6 +104,24 @@ func keyLimited(next http.Handler) http.Handler {
 		defer release()
 		next.ServeHTTP(w, r)
 	})
+}
+
+// withSpent is r with its caller's spent limits of some models on it
+// (access.Identity.Spent), as the limiter serving who tells them; r as it
+// is when none serves (a request it holds is refused by reserveFor).
+func withSpent(r *http.Request, who access.Identity, now time.Time) *http.Request {
+	l, err := gwbudget.Limiting(who)
+	if err != nil || l == nil {
+		return r
+	}
+	sp, ok := l.(gwbudget.Spender)
+	if !ok {
+		return r
+	}
+	if who.Spent = sp.Spent(who, now); len(who.Spent) == 0 {
+		return r
+	}
+	return r.WithContext(access.WithIdentity(r.Context(), who))
 }
 
 // reserveFor holds a request of who's to its key's limits through the
