@@ -95,7 +95,7 @@
 
     <div class="table-wrap"><table>
       <tr><td><b>Image</b></td><td><code>ghcr.io/yetone/magpie</code>, for <code>linux/amd64</code> and <code>linux/arm64</code></td></tr>
-      <tr><td><b>Tags</b></td><td><code>latest</code> (the newest release), <code>stable</code> (the desktop app's Stable channel: a release a week, out three days first, or an urgent one at once), <code>0.1.1150</code> (one release), <code>0.1</code>, <code>edge</code> (every change on <code>main</code>)</td></tr>
+      <tr><td><b>Tags</b></td><td><code>latest</code> (the newest release), <code>daily</code> (the newest release as of 20:00 UTC, moved once a day), <code>stable</code> (the desktop app's Stable channel: a release a week, out three days first, or an urgent one at once), <code>0.1.1150</code> (one release), <code>0.1</code>, <code>edge</code> (every change on <code>main</code>)</td></tr>
       <tr><td><b>Ports</b></td><td><code>3425</code> the gateway agents call; <code>3430</code> the browser UI, when the container runs <code>magpie web</code>; it answers the gateway’s <code>/v1</code> routes too, so a reverse proxy needs only this port</td></tr>
       <tr><td><b>Volume</b></td><td><code>/config</code>: providers, keys, sign-ins, plugins and usage</td></tr>
       <tr><td><b>User</b></td><td>nonroot (uid 65532)</td></tr>
@@ -216,7 +216,7 @@ docker logs magpie</pre>
     <ul>
       <li><b>Health.</b> The image has a <code>HEALTHCHECK</code>: <code>magpie healthcheck</code> exits 0 while the gateway answers, under <code>serve</code> and <code>web</code> alike, so <code>docker ps</code> shows the container as healthy and Compose can wait for it with <code>depends_on: condition: service_healthy</code>.</li>
       <li><b>Terminal.</b> <code>docker exec -it magpie bash</code>, or a NAS panel’s terminal, opens a shell with <code>magpie</code> on its PATH: <code>magpie providers</code>, <code>magpie models</code>, <code>magpie usage</code>, <code>magpie quota</code> and the rest of the <a href="https://github.com/yetone/magpie/blob/main/docs/reference.md">CLI</a>.</li>
-      <li><b>Updates.</b> Pull the new image and recreate the container on the same volume: <code>docker pull ghcr.io/yetone/magpie:latest</code>, then <code>docker rm -f magpie</code> and the same <code>docker run</code>, or <code>docker compose pull &amp;&amp; docker compose up -d</code>.</li>
+      <li><b>Updates.</b> Pull the new image and recreate the container on the same volume: <code>docker pull ghcr.io/yetone/magpie:latest</code>, then <code>docker rm -f magpie</code> and the same <code>docker run</code>, or <code>docker compose pull &amp;&amp; docker compose up -d</code>. magpie releases several times a day; for one update a day with Renovate or Watchtower, follow <code>daily</code> (with Renovate, pin its digest), or <code>stable</code> for one a week.</li>
       <li><b>Build it yourself.</b> <code>docker build -t magpie .</code> in a checkout of <a href="https://github.com/yetone/magpie">the repository</a> makes the same image.</li>
     </ul>
 

@@ -1,0 +1,53 @@
+name: Docker daily
+
+# ghcr.io/yetone/magpie:daily is the newest release's image, moved once a
+# day: magpie releases many times a day, and Renovate opened a PR for each
+# one (YaoFur on X, "改成每天凌晨更新一次"). At 20:00 UTC (04:00 in
+# China) it points :daily at whatever :latest is then, by digest; it never
+# builds, and never touches latest, stable, edge or a version's tags.
+# Releases themselves go out as fast as ever.
+
+on:
+  schedule:
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: docker-daily
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/magpie
+
+jobs:
+  daily:
+    if: github.repository == 'yetone/magpie'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Point daily at the newest release's image
+        run: |
+          set -euo pipefail
+          # an image is the platforms' manifests in it, however its index
+          # is written
+          digest() { docker buildx imagetools inspect "$1" --format '{{json .}}' | jq -er '[.manifest.manifests[]?.digest] | sort | join(",") | select(. != "")'; }
+          WANT=$(digest "$IMAGE:latest") # no latest image is a red run
+          HAVE=$(digest "$IMAGE:daily" 2>/dev/null || true)
+          if [[ "$HAVE" == "$WANT" ]]; then
+            echo "$IMAGE:daily is latest already ($WANT)"
+            exit 0
+          fi
+          docker buildx imagetools create -t "$IMAGE:daily" "$IMAGE:latest"
+          GOT=$(digest "$IMAGE:daily")
+          echo "$IMAGE:daily is now latest ($GOT, was ${HAVE:-none})"
+          test "$GOT" == "$WANT"

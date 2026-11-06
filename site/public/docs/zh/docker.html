@@ -95,7 +95,7 @@
 
     <div class="table-wrap"><table>
       <tr><td><b>镜像</b></td><td><code>ghcr.io/yetone/magpie</code>，支持 <code>linux/amd64</code> 和 <code>linux/arm64</code></td></tr>
-      <tr><td><b>标签</b></td><td><code>latest</code>（最新正式版）、<code>stable</code>（与桌面版的稳定版通道一致：每周一个已发布满三天的版本，紧急修复版立即跟上）、<code>0.1.1150</code>（某个版本）、<code>0.1</code>、<code>edge</code>（<code>main</code> 上的每次改动）</td></tr>
+      <tr><td><b>标签</b></td><td><code>latest</code>（最新正式版）、<code>daily</code>（每天北京时间 04:00 指向当时的最新正式版，一天只变一次）、<code>stable</code>（与桌面版的稳定版通道一致：每周一个已发布满三天的版本，紧急修复版立即跟上）、<code>0.1.1150</code>（某个版本）、<code>0.1</code>、<code>edge</code>（<code>main</code> 上的每次改动）</td></tr>
       <tr><td><b>端口</b></td><td><code>3425</code> 是 Agent 调用的网关；<code>3430</code> 是容器运行 <code>magpie web</code> 时的 Web 界面；它也响应网关的 <code>/v1</code> 路由，所以反向代理只需转发这一个端口</td></tr>
       <tr><td><b>数据卷</b></td><td><code>/config</code>：供应商、密钥、登录、插件和用量</td></tr>
       <tr><td><b>用户</b></td><td>nonroot（uid 65532）</td></tr>
@@ -216,7 +216,7 @@ docker logs magpie</pre>
     <ul>
       <li><b>健康检查。</b>镜像带 <code>HEALTHCHECK</code>：网关能应答时 <code>magpie healthcheck</code> 返回 0，<code>serve</code> 和 <code>web</code> 都一样，所以 <code>docker ps</code> 会显示 healthy，Compose 可以用 <code>depends_on: condition: service_healthy</code> 等它。</li>
       <li><b>终端。</b><code>docker exec -it magpie bash</code> 或 NAS 面板里的终端会打开一个 shell，<code>magpie</code> 在 PATH 里：<code>magpie providers</code>、<code>magpie models</code>、<code>magpie usage</code>、<code>magpie quota</code> 以及其他 <a href="https://github.com/yetone/magpie/blob/main/docs/reference.md">CLI 命令</a>。</li>
-      <li><b>更新。</b>拉取新镜像，在同一个数据卷上重新创建容器：<code>docker pull ghcr.io/yetone/magpie:latest</code>，然后 <code>docker rm -f magpie</code> 再执行同样的 <code>docker run</code>；或 <code>docker compose pull &amp;&amp; docker compose up -d</code>。</li>
+      <li><b>更新。</b>拉取新镜像，在同一个数据卷上重新创建容器：<code>docker pull ghcr.io/yetone/magpie:latest</code>，然后 <code>docker rm -f magpie</code> 再执行同样的 <code>docker run</code>；或 <code>docker compose pull &amp;&amp; docker compose up -d</code>。magpie 一天会发好几个版本；用 Renovate 或 Watchtower 想一天只更新一次，就跟 <code>daily</code>（Renovate 请固定它的 digest），想一周一次就跟 <code>stable</code>。</li>
       <li><b>自己构建。</b>在<a href="https://github.com/yetone/magpie">仓库</a>的检出目录里 <code>docker build -t magpie .</code> 得到同样的镜像。</li>
     </ul>
 

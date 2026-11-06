@@ -3295,6 +3295,13 @@ container. For Internet access, prefer a
 VPN such as Tailscale or WireGuard; a reverse proxy or tunnel forwarding to
 Magpie over loopback needs a gateway key from its clients, as the network does.
 
+The image's tags: `latest` is the newest release, and magpie releases
+several times a day. `daily` is the newest release as of 20:00 UTC, moved
+once a day (`.github/workflows/docker-daily.yml`), for Renovate or
+Watchtower to update at most daily (with Renovate, pin its digest);
+`stable` is the desktop app's Stable channel, one a week. `0.1.N` is one
+release, `0.1` the newest of its line, and `edge` every change on `main`.
+
 ### Developing
 
 ```sh
