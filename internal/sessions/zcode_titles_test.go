@@ -71,6 +71,46 @@ func TestZCodeSubagentTitlesByRequestID(t *testing.T) {
 	}
 }
 
+// A ZCode fork is a child session with a normal sess_<id>, which ocRoots
+// files under its parent's key. A request names it by that id, so its own
+// title is read from its file, not the parent's title and not the folder.
+func TestZCodeForkTitlesByRequestID(t *testing.T) {
+	home := setupAgents(t)
+	const parent = "af74e6e0-c3c4-4535-82b5-3aba9a1db963"
+	const fork = "8588528f-76cd-4810-9d01-9fcc2b02e22c"
+	const parentName = "The parent session's title"
+	const forkName = "Fork of The parent session's title"
+	db, err := sql.Open("sqlite", filepath.Join(home, ".zcode", "cli", "db", "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	for _, s := range []struct {
+		id, parent, title, source string
+	}{
+		{"sess_" + parent, "", parentName, "generated"},
+		{"sess_" + fork, "sess_" + parent, forkName, "generated"},
+	} {
+		var par any
+		if s.parent != "" {
+			par = s.parent
+		}
+		if _, err := db.Exec(`INSERT INTO session (id, project_id, parent_id, slug, directory, title, title_source, version, time_created, time_updated) VALUES (?, 'p', ?, 's', '/work/zc', ?, ?, '0.16.9', 1790496400000, 1790496400000)`, s.id, par, s.title, s.source); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := Titles([]string{"zcode:" + fork, "zcode:sess_" + fork, "zcode:" + parent})
+	if got["zcode:"+fork] != forkName {
+		t.Fatalf("fork by request id: %q, want %q (all %v)", got["zcode:"+fork], forkName, got)
+	}
+	if got["zcode:sess_"+fork] != forkName {
+		t.Fatalf("fork by database id: %q, want %q (all %v)", got["zcode:sess_"+fork], forkName, got)
+	}
+	if got["zcode:"+parent] != parentName {
+		t.Fatalf("parent: %q, want %q (all %v)", got["zcode:"+parent], parentName, got)
+	}
+}
+
 // A name poll for ZCode reads its session rows, not the message join
 // zcodeFiles makes for a session's size: that join over a large database
 // took ~20s on the Routing page's 15s refresh. A database without its

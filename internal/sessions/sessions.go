@@ -2754,24 +2754,29 @@ func Titles(keys []string) map[string]string {
 	loadCache()
 	defer useDBs()()
 	files := allFilesForTitles()
-	// ZCode files a subagent under sess_subagent_agent_<id>, with its
-	// conversation under the parent session's key (ocRoots). A request
-	// names it by the bare id, so its title is read from its own file
-	// when no group carries the key asked for.
-	subFiles := map[string]*file{}
+	// ZCode files a subagent as sess_subagent_agent_<id> and a fork as
+	// sess_<id> with the parent's id in parent_id; ocRoots files both under
+	// the parent session's key. A request names either by its own id, so its
+	// title is read from its own file when no group carries the key asked
+	// for.
+	// A top-level session is named by its own group, so only child
+	// sessions are indexed.
+	subFiles := map[string]*file{} // a ZCode child session's own id → its file
 	for i := range files {
 		f := &files[i]
-		if id, ok := strings.CutPrefix(f.m().sid, "sess_subagent_agent_"); ok && f.agent == "zcode" {
-			subFiles[id] = f
+		if f.agent != "zcode" || f.m().sid == "" || f.m().parent == "" {
+			continue
 		}
+		subFiles[f.m().sid] = f
+		subFiles[zcodeBareID(f.m().sid)] = f
 	}
-	subAsked := map[string]string{} // the key asked for → the subagent's file
+	subAsked := map[string]string{} // the key asked for → the child's file
 	for _, k := range keys {
 		agent, id, ok := strings.Cut(k, ":")
 		if !ok || agent != "zcode" {
 			continue
 		}
-		if f := subFiles[strings.TrimPrefix(id, "sess_subagent_agent_")]; f != nil {
+		if f := subFiles[zcodeBareID(id)]; f != nil {
 			want[f.key] = true
 			subAsked[k] = f.path
 		}
@@ -2820,6 +2825,16 @@ func Titles(keys []string) map[string]string {
 		}
 	}
 	return out
+}
+
+// zcodeBareID is a ZCode session id without the prefix its database gives
+// it: a subagent's sess_subagent_agent_, any other session's sess_. A
+// request names a session by the bare id.
+func zcodeBareID(id string) string {
+	if bare, ok := strings.CutPrefix(id, "sess_subagent_agent_"); ok {
+		return bare
+	}
+	return strings.TrimPrefix(id, "sess_")
 }
 
 // Get is the session whose files are grouped under key (a Summary's Key),
