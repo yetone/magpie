@@ -109,7 +109,7 @@ var readQuotaHist = func() quotaHist {
 }
 
 func writeQuotaHist(h quotaHist) {
-	b, err := json.Marshal(h)
+	b, err := marshalQuotaHist(h)
 	if err != nil {
 		return
 	}
