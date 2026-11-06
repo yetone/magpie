@@ -144,3 +144,35 @@ func TestCodexMemoryOnACollidingBareNameFollowsTheSession(t *testing.T) {
 		t.Fatalf("the provider with the name got %d requests, the turn among them", len(reqs))
 	}
 }
+
+// #5413 (MariaMatrix; mahiro233 on Discord): Codex's config, on another
+// computer, named sub2api/gpt-6.1-terra for its memories while the
+// conversation ran on sub2api/gpt-6.1-sol, and the Remote magpie the call
+// reached, with no Codex config of its own to read, put the memory on the
+// conversation's model. A "provider/model" id is never one of Codex's bare
+// defaults: it is the user's pick, and goes as it came, with no move.
+func TestCodexMemoryOnAQualifiedModelKeepsIt(t *testing.T) {
+	fresh(t)
+	session, picked := relayOn(t, "third"), relayOn(t, "fourth")
+	was := CodexSideSet
+	CodexSideSet = func(string) bool { return false }
+	t.Cleanup(func() { CodexSideSet = was })
+	s := New()
+	if rec := codexCall(t, s, "third/gpt-6-astra", ""); rec.Code != 200 {
+		t.Fatalf("the turn: %d %s", rec.Code, rec.Body.String())
+	}
+	for _, kind := range []string{"memory_consolidation", "memgen"} {
+		if rec := codexCall(t, s, "fourth/gpt-6-astra", kind); rec.Code != 200 {
+			t.Fatalf("%s: %d %s", kind, rec.Code, rec.Body.String())
+		}
+		if r := lastRoute(s); r.Moved != nil {
+			t.Fatalf("%s moved to %q (%s)", kind, r.Moved.To, r.Moved.Why)
+		}
+	}
+	if reqs := session.requests(); len(reqs) != 1 {
+		t.Fatalf("the conversation's provider got %d requests, want the turn alone", len(reqs))
+	}
+	if reqs := picked.requests(); len(reqs) != 2 {
+		t.Fatalf("the provider picked for the memories got %d requests", len(reqs))
+	}
+}

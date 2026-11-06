@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/yetone/magpie/internal/access"
@@ -85,7 +86,14 @@ func (s *Server) codexMemoryStandIn(r *http.Request, who, agent, kind, asked str
 		// (codexFollowTo). "" keeps it where the name resolves: any
 		// other call, the config's own pick, a call whose config magpie
 		// can't read, or no conversation of magpie's to follow.
-		if !isMemoryKind(kind) || CodexSideSet == nil || CodexSideSet("memories") {
+		//
+		// A "provider/model" id is never one of Codex's defaults, which
+		// are bare: it is the user's pick in memories.extract_model or
+		// consolidation_model, and goes as it came, whatever the config
+		// here says — a Remote magpie can't read the Codex config on the
+		// computer the call came from, and a Codex on a profile or a
+		// CODEX_HOME of its own has its config elsewhere too (#5413).
+		if !isMemoryKind(kind) || strings.Contains(asked, "/") || CodexSideSet == nil || CodexSideSet("memories") {
 			return ""
 		}
 		to := s.codexMemorySession(r, body)
