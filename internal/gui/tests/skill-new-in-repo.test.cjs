@@ -94,7 +94,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const v = page.locator("#view-library");
         assert.equal(await v.locator(".lib-newskill").count(), 0, "nothing offered before a check");
 
-        await v.locator(".row-head button.lib-updall", { hasText: w.check }).click();
+        // Check for updates waits under the heading's ⋯ (library-bar-more)
+        await v.locator(".lib-skillshead .lib-barmore").click();
+        await page.locator(".row-menu .rm-item.lib-check", { hasText: w.check }).click();
         await v.locator(".lib-newskill").first().waitFor();
         assert.equal((await page.locator("#status").textContent()).trim(), w.said);
         assert.equal((await v.locator(".lib-newhead .label").textContent()).trim(), w.head);
@@ -168,7 +170,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator('button[data-view="library"]').click();
         await page.locator("#view-library .lib-body:not(.lib-skel) .lib-row").first().waitFor();
         const v = page.locator("#view-library");
-        const check = v.locator(".row-head button.lib-updall", { hasText: w.check });
+        await v.locator(".lib-skillshead .lib-barmore").click();
+        const check = page.locator(".row-menu .rm-item.lib-check", { hasText: w.check });
         assert.equal(await check.getAttribute("title"), w.tip);
         await check.click();
         await v.locator(".lib-newskill").first().waitFor();

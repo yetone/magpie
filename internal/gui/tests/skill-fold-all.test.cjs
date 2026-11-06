@@ -1,13 +1,13 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// #1862 (WardLu): Library › Skills has Collapse all / Expand all beside the
-// sort, for a library of many groups. Collapse all folds every group the
+// #1862 (WardLu): Library › Skills has Collapse all / Expand all in its
+// heading's ⋯ menu (library-bar-more), for a library of many groups. Collapse all folds every group the
 // list shows and keeps it, as a click on each heading would; the button
 // then says Expand all, which opens them again. While filtering it folds
 // or opens only the groups the filter shows, till the filter changes, and
 // leaves the kept folds alone. It changes nothing an agent has, so it
 // sends nothing, and a click on it doesn't move the page. With one group
 // (A→Z, or a filter that one group matches) there is nothing to fold all,
-// and it isn't shown. Five languages, narrow and wide; the API is faked.
+// and it isn't in the menu. Five languages, narrow and wide; the API is faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -84,7 +84,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator('button[data-view="library"]').click();
         const heads = page.locator("#view-library .lib-grouphead");
         await heads.first().waitFor();
-        const btn = page.locator("#view-library .lib-skillshead .lib-foldall");
+        // the item in the heading's ⋯ menu, opened for each look and click
+        const more = page.locator("#view-library .lib-skillshead .lib-barmore");
+        const menu = page.locator(".row-menu");
+        const shut = async () => { if (await menu.count()) { await page.keyboard.press("Escape"); await menu.waitFor({ state: "detached" }); } };
+        const item = async () => { await shut(); await more.click(); await menu.waitFor(); return menu.locator(".rm-item.lib-foldall"); };
+        const btn = {
+          isVisible: async () => { const n = await (await item()).count(); await shut(); return n > 0; },
+          textContent: async () => { const v = await (await item()).textContent(); await shut(); return v; },
+          click: async () => (await item()).click(),
+          boundingBox: async () => { const b = await (await item()).boundingBox(); await shut(); return b; },
+        };
         const openOf = () => heads.evaluateAll((hs) => hs.map((h) => [h.querySelector(".name").textContent, h.classList.contains("open")]));
         const rows = () => page.locator("#view-library .lib-row.lib-skill").count();
         // how far anything on the page is scrolled down
@@ -97,7 +107,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await btn.isVisible(), true);
         assert.equal((await btn.textContent()).trim(), collapse);
         const box = await btn.boundingBox();
-        assert.ok(box.x >= 0 && box.x + box.width <= width, "the button is inside the window");
+        assert.ok(box.x >= 0 && box.x + box.width <= width, "the item is inside the window");
 
         // Collapse all: every group folded, kept, and the button turns over
         assert.equal(await scrolled(), 0);

@@ -3,8 +3,8 @@
 // order, each under an "In the library" heading of its own, so with both
 // the page showed the heading twice; turning every server on or off, or
 // removing them, was a chip or a row at a time. It now has the skills
-// page's: one heading holding the order, Select, Turn all on, Turn all off,
-// By agent and Remove all. Turn all on posts every agent shown (not a
+// page's: one heading holding the order, Select and a ⋯ menu with Turn all
+// on, Turn all off, By agent and Remove all (library-bar-more). Turn all on posts every agent shown (not a
 // hidden one) to servers/agents-all; Turn all off asks first, in the page,
 // and Cancel posts nothing. Select puts a box on each row, a row's click
 // ticks it rather than opening the editor, and the bar's chips post the
@@ -138,8 +138,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await v.locator(".lib-server").first().waitFor();
         // the state can come after the list: the hidden Copilot CLI is then
         // left out once it has, from the count and from Turn all on
-        await page.waitForFunction((tip) => document.querySelector("#view-library .lib-serverhead .lib-everyon")?.title === tip,
-          w("Give every server to all {n} agents, each the ones it can reach", { n: 3 }));
+        // the heading's ⋯ menu, opened afresh for each look: its item
+        const menu = page.locator(".row-menu");
+        const shut = async () => { if (await menu.count()) { await page.keyboard.press("Escape"); await menu.waitFor({ state: "detached" }); } };
+        const item = async (cls) => {
+          await shut();
+          await press(page, v.locator(".lib-serverhead .lib-barmore"));
+          const it = menu.locator(".rm-item." + cls);
+          await it.waitFor();
+          return it;
+        };
+        const tipNow = w("Give every server to all {n} agents, each the ones it can reach", { n: 3 });
+        for (let i = 0; i < 40 && await (await item("lib-everyon")).getAttribute("title") !== tipNow; i++) await page.waitForTimeout(100);
+        await shut();
         const row = (name) => v.locator(".lib-server").filter({ has: page.locator(".name", { hasText: new RegExp("^" + name) }) });
         const agentsOf = (name) => state.servers.find((s) => s.name === name)?.agents;
 
@@ -148,23 +159,25 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(heads.filter((x) => x === w("In the library")), [w("In the library")], "one In the library heading: " + heads);
         const head = v.locator(".row-head.lib-serverhead");
         assert.equal((await head.locator(".lib-select").textContent()).trim(), w("Select"));
-        assert.equal((await head.locator(".lib-everyon").textContent()).trim(), w("Turn all on"));
-        assert.equal((await head.locator(".lib-everyoff").textContent()).trim(), w("Turn all off"));
-        assert.equal((await head.locator(".lib-byagent").textContent()).trim(), w("By agent"));
-        assert.equal((await head.locator(".lib-everyrm").textContent()).trim(), w("Remove all"));
-        assert.equal(await head.locator(".lib-everyon").getAttribute("title"), w("Give every server to all {n} agents, each the ones it can reach", { n: 3 }));
-        assert.equal(await head.locator(".lib-everyrm").getAttribute("title"), w("Take all {n} servers out of the library", { n: 3 }));
+        assert.equal((await (await item("lib-everyon")).textContent()).trim(), w("Turn all on"));
+        assert.equal((await menu.locator(".lib-everyoff").textContent()).trim(), w("Turn all off"));
+        assert.equal((await menu.locator(".lib-byagent").textContent()).trim(), w("By agent"));
+        assert.equal((await menu.locator(".lib-everyrm").textContent()).trim(), w("Remove all"));
+        assert.equal(await menu.locator(".lib-everyon").getAttribute("title"), tipNow);
+        assert.equal(await menu.locator(".lib-everyrm").getAttribute("title"), w("Take all {n} servers out of the library", { n: 3 }));
+        await shut();
         assert.deepEqual(await sideways(page), [], "sideways scroll with the heading");
 
         // Turn all on: every agent shown, the hidden Copilot CLI left alone
-        await press(page, head.locator(".lib-everyon"));
+        await press(page, await item("lib-everyon"));
         await page.locator("#status").filter({ hasText: w("{n} servers are on for all {m} agents", { n: 3, m: 3 }) }).waitFor();
         assert.deepEqual(posts.shift(), { what: "servers/agents-all", body: { agents: ["claude", "codex", "gemini"], on: true } });
         assert.deepEqual(agentsOf("web"), ["claude", "gemini"], "SSE is no server for Codex");
-        await page.waitForFunction(() => document.querySelector("#view-library .lib-serverhead .lib-everyon")?.disabled);
+        assert.equal(await (await item("lib-everyon")).isDisabled(), true);
+        await shut();
 
         // Turn all off asks first; Cancel posts nothing
-        await press(page, v.locator(".lib-serverhead .lib-everyoff"));
+        await press(page, await item("lib-everyoff"));
         const sheet = page.locator("#modal .lib-editor");
         await sheet.waitFor();
         await settled(page);
@@ -174,7 +187,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await sheet.waitFor({ state: "detached" });
         await page.waitForTimeout(150);
         assert.deepEqual(posts, [], "Cancel posts nothing");
-        await press(page, v.locator(".lib-serverhead .lib-everyoff"));
+        await press(page, await item("lib-everyoff"));
         await sheet.waitFor();
         await settled(page);
         await sheet.locator(".bar button.danger-fill").click();
@@ -239,7 +252,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal((await v.locator(".lib-serverhead .lib-select").textContent()).trim(), w("Select"));
 
         // Remove all asks first, saying what goes; Cancel posts nothing
-        await press(page, v.locator(".lib-serverhead .lib-everyrm"));
+        await press(page, await item("lib-everyrm"));
         await sheet.waitFor();
         await settled(page);
         assert.equal((await sheet.locator(".ehead b").textContent()).trim(), w("Remove all {n} servers?", { n: 3 }));
@@ -256,7 +269,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(posts, [], "Cancel posts nothing");
         assert.equal(await v.locator(".lib-server").count(), 3);
 
-        await press(page, v.locator(".lib-serverhead .lib-everyrm"));
+        await press(page, await item("lib-everyrm"));
         await sheet.waitFor();
         await settled(page);
         const go = sheet.locator(".bar button.danger-fill");

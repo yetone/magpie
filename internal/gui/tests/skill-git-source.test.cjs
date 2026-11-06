@@ -92,8 +92,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal((await ssh.textContent()).trim(), SSH);
         assert.equal(await row("pdf").locator(".lib-rowacts button.lib-icon").first().getAttribute("title"), w.upd);
         assert.equal((await row("review").locator(".lib-rowacts button.lib-icon").first().getAttribute("title")).split("\n")[0], w.updSSH);
-        const check = v.locator(".row-head button.lib-updall", { hasText: w.check });
+        // under the heading's ⋯ (library-bar-more)
+        await v.locator(".lib-skillshead .lib-barmore").click();
+        const check = page.locator(".row-menu .rm-item.lib-check", { hasText: w.check });
         assert.equal(await check.count(), 1, "Check for updates is offered");
+        await page.keyboard.press("Escape");
+        await page.locator(".row-menu").waitFor({ state: "detached" });
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, "no sideways scroll");
 
         await row("pdf").locator(".lib-rowacts button.lib-icon").first().click();

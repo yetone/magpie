@@ -841,3 +841,8 @@ body.window .lib-list .lib-row { --lib-indent: 38px; }
 @media (max-width: 760px), (pointer: coarse) and (max-width: 1024px) {
   body.web .lib-editor :is(.lib-cmd, .lib-notein) { min-height: 44px; font-size: 16px; line-height: 22px; padding: 10px 9px; }
 }
+
+/* the ⋯ at a list's heading (ryanpascal on Discord), and its Remove all red as the bar's was */
+#view-library .row-head .lib-barmore { display: inline-flex; align-items: center; justify-content: center; padding: 0 7px; }
+.row-menu .rm-item.lib-everyrm, .row-menu .rm-item.lib-everyrm svg { color: var(--red); }
+.row-menu .rm-item.lib-everyrm:not(:disabled):is(:hover, :focus) { background: var(--red-soft); }

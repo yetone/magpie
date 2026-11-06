@@ -118,7 +118,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // By agent: WorkBuddy as Not installed, nothing to turn on, its one
         // skill to take out
         const sheet = page.locator("#modal .lib-editor");
-        await v.locator(".lib-byagent").first().click();
+        await v.locator(".lib-skillshead .lib-barmore").click(); // By agent waits under ⋯ (library-bar-more)
+        await page.locator(".row-menu .rm-item.lib-byagent").click();
         await sheet.waitFor();
         const ids = await sheet.locator(".lib-byagent-row").evaluateAll((rs) => rs.map((r) => r.dataset.agent));
         assert.deepEqual(ids, ["claude", "codex", "workbuddy"]);

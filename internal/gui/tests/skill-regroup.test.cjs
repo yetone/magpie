@@ -1,10 +1,11 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Group again (White Immortal on Discord: of mattpocock/skills added a while
 // ago only 20 were grouped, the rest under On this computer, and nothing
-// to group them again by). The Skills head has Group again, which asks
+// to group them again by). The Skills head's ⋯ menu has Group again
+// (library-bar-more), which asks
 // magpie to trace the skills to their repositories once more and draws
 // the page it answers with: the 18 join the 20, and the status says how
-// many did. Every language, at a narrow width too, in Chromium and WebKit;
+// many did. While it works, the bar shows Grouping… in its place. Every language, at a narrow width too, in Chromium and WebKit;
 // the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -90,18 +91,25 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.match((await heads())[0], /20/);
           assert.match((await heads())[1], /18/);
 
-          const b = v.locator(".lib-skillshead .lib-regroup");
+          // under the heading's ⋯
+          const item = async () => {
+            await v.locator(".lib-skillshead .lib-barmore").click();
+            const it = page.locator(".row-menu .rm-item.lib-regroup");
+            await it.waitFor();
+            return it;
+          };
+          const b = await item();
           assert.equal((await b.textContent()).trim(), w.button);
           assert.ok((await b.getAttribute("title")).length > 0);
-          // the button is on the page at a narrow width, nothing wider than it
+          // the item is on the page at a narrow width, nothing wider than it
           const box = await b.boundingBox();
-          assert.ok(box && box.x >= 0 && box.x + box.width <= width, `button at ${JSON.stringify(box)} in ${width}`);
+          assert.ok(box && box.x >= 0 && box.x + box.width <= width, `item at ${JSON.stringify(box)} in ${width}`);
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true);
 
           await b.click();
-          // busy while magpie fetches the repositories
-          await page.waitForFunction(() => document.querySelector(".lib-regroup")?.disabled);
-          assert.equal((await v.locator(".lib-regroup").textContent()).trim(), w.busy);
+          // busy on the bar while magpie fetches the repositories
+          await page.waitForFunction(() => document.querySelector("#view-library .lib-skillshead .lib-regroup")?.disabled);
+          assert.equal((await v.locator(".lib-skillshead .lib-regroup").textContent()).trim(), w.busy);
           state.answer();
           await page.waitForFunction((text) => document.querySelector("#status").textContent.trim() === text, w.done).catch(async () => {
             assert.equal((await page.locator("#status").textContent()).trim(), w.done);
@@ -109,8 +117,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           // one group now, all 38 of it
           await page.waitForFunction(() => document.querySelectorAll("#view-library .lib-grouphead").length === 0);
           await page.waitForFunction(() => document.querySelectorAll("#view-library .lib-skill").length === 38);
-          assert.equal((await v.locator(".lib-regroup").textContent()).trim(), w.button);
-          assert.equal(await v.locator(".lib-regroup").isDisabled(), false);
+          assert.equal(await v.locator(".lib-skillshead .lib-regroup").count(), 0, "done, it is back under ⋯");
+          const again = await item();
+          assert.equal((await again.textContent()).trim(), w.button);
+          assert.equal(await again.isDisabled(), false);
           assert.deepEqual(posts, ["POST"]);
           assert.deepEqual(errors, []);
           await ctx.close();

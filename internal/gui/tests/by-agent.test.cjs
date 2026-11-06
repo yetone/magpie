@@ -1,8 +1,8 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // #475: one agent's skills, or MCP servers, were a chip on every row to turn
 // off, and an agent hidden on the Agents page had no chips at all, so what it
-// was given couldn't be taken out of it. "By agent", beside "In the library",
-// opens a sheet listing each agent with how many it has, a "Turn all on" and
+// was given couldn't be taken out of it. "By agent", under the ⋯ beside "In
+// the library" (library-bar-more), opens a sheet listing each agent with how many it has, a "Turn all on" and
 // a "Turn all off": each posts that one agent to …/agents-all, and the
 // page's chips follow. A hidden agent is listed while it has any (tagged
 // Hidden, with no Turn all on), and stays listed once emptied; turning a
@@ -106,13 +106,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator("#view-library .lib-body:not(.lib-skel) .lib-row").first().waitFor();
       return page;
     };
+    // By agent waits under the heading's ⋯: the menu opened, its item
+    const byAgent = async (page, head) => {
+      await press(page, page.locator(`#view-library ${head} .lib-barmore`));
+      const it = page.locator(".row-menu .rm-item.lib-byagent");
+      await it.waitFor();
+      return it;
+    };
     const row = (sheet, id) => sheet.locator(`.lib-byagent-row[data-agent="${id}"]`);
 
     for (const lang of ["en", "zh"]) {
       await t.test(lang + ": skills", async () => {
         const w = words[lang], posts = [];
         const page = await open(lang, posts, "skills");
-        const by = page.locator("#view-library .row-head button.lib-byagent");
+        const by = await byAgent(page, ".lib-skillshead");
         assert.equal((await by.textContent()).trim(), w.by);
         assert.equal(await lit(page, "copilot"), 0, "the hidden agent has no chips");
         const before = await scrolled(page);
@@ -154,8 +161,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await t.test(lang + ": servers", async () => {
         const w = words[lang], posts = [];
         const page = await open(lang, posts, "mcp");
-        const by = page.locator("#view-library .row-head button.lib-byagent");
         const before = await scrolled(page);
+        const by = await byAgent(page, ".lib-serverhead");
         await press(page, by);
         const sheet = page.locator("#modal .lib-byagent-sheet");
         await sheet.waitFor();

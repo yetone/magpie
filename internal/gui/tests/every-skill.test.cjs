@@ -1,6 +1,6 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // emo172 (#443): with 30+ skills, turning them all on or off was a row's All
-// at a time. "Turn all on" beside "In the library" posts every agent shown
+// at a time. "Turn all on", under the ⋯ beside "In the library", posts every agent shown
 // that can take skills, with on, at once; "Turn all off" asks first in the
 // page (no window.confirm), and Cancel posts nothing; each is greyed when
 // there's nothing for it to do; the clicks scroll nothing; in English and
@@ -53,6 +53,15 @@ const press = async (page, loc) => {
   const b = await loc.boundingBox();
   await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
 };
+// the bar's Turn all on and off wait under its ⋯ (library-bar-more): the
+// menu opened, the item; the item is read again each time it is opened
+const item = async (page, cls) => {
+  if (!(await page.locator(".row-menu").count())) await press(page, page.locator("#view-library .lib-skillshead .lib-barmore"));
+  const it = page.locator(".row-menu .rm-item." + cls);
+  await it.waitFor();
+  return it;
+};
+const shut = async (page) => { if (await page.locator(".row-menu").count()) { await page.keyboard.press("Escape"); await page.locator(".row-menu").waitFor({ state: "detached" }); } };
 const lit = (page) => page.locator("#view-library .lib-ag.on[data-agent]").count();
 
 const words = {
@@ -88,24 +97,26 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await t.test(lang, async () => {
         const w = words[lang], posts = [];
         const page = await open(lang, posts);
-        const on = page.locator("#view-library .row-head button.lib-everyon");
-        const off = page.locator("#view-library .row-head button.lib-everyoff");
-        assert.equal((await on.textContent()).trim(), w.on);
-        assert.equal((await off.textContent()).trim(), w.off);
-        assert.equal(await on.getAttribute("title"), w.tip);
+        const on = () => item(page, "lib-everyon");
+        const off = () => item(page, "lib-everyoff");
+        assert.equal((await (await on()).textContent()).trim(), w.on);
+        assert.equal((await (await off()).textContent()).trim(), w.off);
+        assert.equal(await (await on()).getAttribute("title"), w.tip);
+        await shut(page);
         assert.equal(await lit(page), 3);
         const before = await scrolled(page);
 
-        await press(page, on);
+        await press(page, await on());
         await page.waitForTimeout(300);
         assert.deepEqual(posts, [{ agents: ["claude", "codex", "pi"], on: true }], "one post, for the agents that take skills");
         assert.equal(await lit(page), 9, "every chip of every row is lit");
         assert.equal((await page.locator("#status").textContent()).trim(), w.onDone);
-        assert.equal(await on.isDisabled(), true, "nothing left to turn on");
+        assert.equal(await (await on()).isDisabled(), true, "nothing left to turn on");
+        await shut(page);
         assert.equal(await scrolled(page), before, "the click scrolls nothing");
 
         // off asks in the page first; Cancel leaves everything
-        await press(page, off);
+        await press(page, await off());
         const sheet = page.locator("#modal .lib-editor");
         await sheet.waitFor();
         assert.equal((await sheet.locator(".ehead b").textContent()).trim(), w.ask);
@@ -115,15 +126,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(posts.length, 1, "Cancel posts nothing");
         assert.equal(await lit(page), 9);
 
-        await press(page, off);
+        await press(page, await off());
         await sheet.waitFor();
         await sheet.locator(".bar button.danger-fill").click();
         await sheet.waitFor({ state: "detached" });
         assert.deepEqual(posts[1], { agents: ["claude", "codex", "pi"], on: false });
         assert.equal(await lit(page), 0, "no chip is lit");
         assert.equal((await page.locator("#status").textContent()).trim(), w.offDone);
-        assert.equal(await off.isDisabled(), true, "nothing left to turn off");
-        assert.equal(await on.isDisabled(), false);
+        assert.equal(await (await off()).isDisabled(), true, "nothing left to turn off");
+        assert.equal(await (await on()).isDisabled(), false);
+        await shut(page);
         assert.equal(await scrolled(page), before, "the clicks scroll nothing");
       });
     }
