@@ -7,6 +7,9 @@
 // Add all and Ignore all are there for more than one. The row's buttons fit
 // at narrow widths. In English and Chinese, in Chromium and WebKit. No
 // backend: the API is faked here.
+// refeccd (Discord): skills added from a folder never got the ones put
+// there later. With only those, Check for updates is there, says it
+// looks in folders too, and a find shows the folder it is in.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -24,6 +27,7 @@ const lib = (st) => ({
   agents: [agent("claude", "Claude Code"), agent("codex", "Codex"), agent("pi", "Pi")],
   instructions: { agents: [] }, servers: [], skills: st.skills, foundServers: [], projects: [], foundSkills: [],
   newSkills: st.checked ? st.newSkills : [],
+  checkFolders: !!st.checkFolders,
 });
 
 function server(lang, posts, st) {
@@ -126,6 +130,58 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForTimeout(300);
         assert.equal(await v.locator(".lib-newskill").count(), 0);
         assert.equal(await v.locator(".lib-newhead").count(), 0, "the heading goes with the last one");
+        await ctx.close();
+      });
+    }
+    assert.deepEqual(errors, []);
+  });
+}
+
+const ROOT = `${HOME}/src/skills`;
+const linked = (name) => ({ name, description: name + " skill", kind: "folder", source: `${ROOT}/${name}`, agents: ["claude"] });
+const inFolder = (name) => ({ id: `${ROOT}/${name}`, name, description: name, kind: "folder", repo: ROOT, path: name, from: ROOT, agents: ["claude"] });
+const folderWords = {
+  en: { check: "Check for updates", tip: "Look in the repositories and folders your skills came from for changes and new skills", said: "Every skill is up to date · 1 more skill in their repositories", add: "Add", added: "slides is in the library now" },
+  zh: { check: "检查更新", tip: "在你的技能来自的仓库和文件夹里查找更新和新技能", said: "所有技能都是最新的 · 同一仓库里还有 1 个技能", add: "添加", added: "slides 已加入资源库" },
+};
+
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(engine + ": a check offers the skills a folder has added since", async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    const errors = [];
+    t.after(async () => {
+      if (errors.length) console.log(errors);
+      await browser.close();
+    });
+    for (const width of [860, 440]) for (const lang of ["en", "zh"]) {
+      await t.test(`${lang} at ${width}px`, async () => {
+        const w = folderWords[lang], posts = [];
+        const st = { checked: false, checkFolders: true, skills: [linked("pdf")], newSkills: [inFolder("slides")] };
+        const ctx = await browser.newContext({ viewport: { width, height: 1300 } });
+        await ctx.addInitScript(() => { try { localStorage.setItem("magpie.libTab", "skills"); } catch {} });
+        const page = await ctx.newPage();
+        page.setDefaultTimeout(5000);
+        page.setDefaultNavigationTimeout(60000);
+        page.on("pageerror", (e) => errors.push(e.message));
+        await page.route("**/*", server(lang, posts, st));
+        await page.goto("http://magpie.test/");
+        await page.locator('button[data-view="library"]').click();
+        await page.locator("#view-library .lib-body:not(.lib-skel) .lib-row").first().waitFor();
+        const v = page.locator("#view-library");
+        const check = v.locator(".row-head button.lib-updall", { hasText: w.check });
+        assert.equal(await check.getAttribute("title"), w.tip);
+        await check.click();
+        await v.locator(".lib-newskill").first().waitFor();
+        assert.equal((await page.locator("#status").textContent()).trim(), w.said);
+        const row = v.locator(".lib-newskill");
+        assert.equal((await row.locator(".lib-path").textContent()).trim(), "~/src/skills/slides");
+        assert.equal(await row.locator("a").count(), 0, "a folder is no web link");
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, "no sideways scroll");
+        await press(page, row.locator("button.action", { hasText: w.add }));
+        await page.waitForTimeout(300);
+        assert.deepEqual(posts, [{ what: "add-new", names: [`${ROOT}/slides`] }]);
+        assert.equal((await page.locator("#status").textContent()).trim(), w.added);
+        assert.equal(await v.locator(".lib-newskill").count(), 0);
         await ctx.close();
       });
     }

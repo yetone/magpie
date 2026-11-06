@@ -95,10 +95,10 @@ var checkedAt atomic.Int64
 const checkEvery = 12 * time.Hour
 
 // checkDue is whether the page should check the library's skills from
-// GitHub for updates: none checked since magpie started, or not for
-// checkEvery.
+// GitHub or git for updates, and the folders the user added skills from
+// for new ones: none checked since magpie started, or not for checkEvery.
 func checkDue(l *Library) bool {
-	if !slices.ContainsFunc(l.Skills, func(s *Skill) bool { return s.Source.remote() }) {
+	if !slices.ContainsFunc(l.Skills, func(s *Skill) bool { return s.Source.remote() }) && !l.addedFromFolders() {
 		return false
 	}
 	at := checkedAt.Load()
@@ -314,6 +314,22 @@ func firstLine(s string) string {
 	return s
 }
 
+// gitLooked is, by repoKey, the commit a git repository was last read at
+// for new skills: one at the same commit has none since, and isn't
+// fetched again for them.
+var gitLooked sync.Map
+
+func gitLookedAt(repo, ref, head string) bool {
+	h, ok := gitLooked.Load(repoKey(repo, ref))
+	if !ok {
+		return false
+	}
+	newFound.Lock()
+	_, kept := newFound.m[repoKey(repo, ref)]
+	newFound.Unlock()
+	return kept && strings.EqualFold(h.(string), head)
+}
+
 // CheckSkills asks GitHub, for every skill installed from there, for the
 // last commit to touch its folder, and tells whether it's newer than what
 // the library has: by the commit a skill is known to be at, or, while
@@ -321,7 +337,9 @@ func firstLine(s string) string {
 // folder's files with the skill's. A skill GitHub couldn't be asked about
 // is unknown, and the others are checked all the same; once GitHub limits
 // requests, the rest aren't asked about. A skill from another git
-// repository is checked with the user's git (checkGitSkill).
+// repository is checked with the user's git (checkGitSkill). Each
+// repository, and each folder the user added skills from, is also looked
+// in for skills added beside them since (skillnew.go).
 func CheckSkills() ([]SkillCheck, error) {
 	mu.Lock()
 	l, err := load()
@@ -373,19 +391,30 @@ func CheckSkills() ([]SkillCheck, error) {
 				}
 			}
 			// and what the repository has added beside them since: GitHub's
-			// list of its files says, which another host has no API for
+			// list of its files says; another host's repository is read
+			// from its fetch, once for each commit its ref is at
 			for _, ref := range refs {
-				if skills[0].Source.Kind != "github" {
-					break
+				repo := skills[0].Source.Repo
+				var found []NewSkill
+				var ok bool
+				switch head := heads[ref]; {
+				case skills[0].Source.Kind == "github":
+					found, ok = findNew(l, repo, ref, f, &limited)
+				case head != "" && !gitLookedAt(repo, ref, head):
+					if found, ok = findNewGit(l, repo, ref, f); ok {
+						gitLooked.Store(repoKey(repo, ref), head)
+					}
 				}
-				if found, ok := findNew(l, skills[0].Source.Repo, ref, f, &limited); ok {
+				if ok {
 					newFound.Lock()
-					newFound.m[repoKey(skills[0].Source.Repo, ref)] = found
+					newFound.m[repoKey(repo, ref)] = found
 					newFound.Unlock()
 				}
 			}
 		}()
 	}
+	// the folders the user added skills from, for ones put there since
+	lookInFolders(l)
 	wg.Wait()
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	if len(known) > 0 {

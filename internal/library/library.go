@@ -70,8 +70,9 @@ type Library struct {
 	// BridgesOn are the Remote magpies (provider ids) the user asked to
 	// give their router a server, in the editor's switch (bridge_mcp.go)
 	BridgesOn []string `json:"bridgesOn,omitempty"`
-	// SeenSkills are, by repository and ref ("owner/repo@ref"), the
-	// folders of skills there the page has offered: picked or not at
+	// SeenSkills are, by repository and ref ("owner/repo@ref", or a git
+	// address and ref), or by a folder the user added ("folder:<path>"),
+	// the folders of skills there the page has offered: picked or not at
 	// install, or set aside after a check. A check offers only the others
 	// as new (skillnew.go).
 	SeenSkills map[string][]string `json:"seenSkills,omitempty"`

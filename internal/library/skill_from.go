@@ -406,7 +406,7 @@ func noteFrom(src Source, root string, cands []Candidate) int {
 			if dir := skillDir(s.Name); s.Source == nil && !linked(dir) && sameTree(dir, filepath.Join(root, filepath.FromSlash(c.Path))) {
 				s.Source = &Source{Kind: "github", Repo: src.Repo, Ref: src.Ref, Path: c.Path}
 				s.Hash, s.Own, s.Commit, s.From = hashDir(dir), ownHash(dir), "", ""
-				l.seenAt(src.Repo, src.Ref, c.Path)
+				l.seenAt(repoKey(src.Repo, src.Ref), c.Path)
 				forgetCheck(s.Name)
 				bound++
 			}

@@ -3614,9 +3614,11 @@ magpie.plugin("library", (ctx) => {
       const kept = lib.skills.filter((s) => s.shared);
       if (kept.length > 1) rh.append(handOverButton(kept));
       if (lib.skills.length > 1) rh.append(removeEveryButton("skills"));
-      if (lib.skills.some((s) => s.kind === "github" || s.kind === "git")) {
+      if (lib.checkFolders || lib.skills.some((s) => s.kind === "github" || s.kind === "git")) {
         const c = button(checking ? t("Checking…") : t("Check for updates"), "lib-updall", () => checkSkills());
-        c.title = lib.skills.some((s) => s.kind === "git")
+        c.title = lib.checkFolders
+          ? t("Look in the repositories and folders your skills came from for changes and new skills")
+          : lib.skills.some((s) => s.kind === "git")
           ? t("Ask the repositories your skills came from which skills changed since they were installed")
           : t("Ask GitHub which skills changed since they were installed");
         c.disabled = checking;
@@ -3718,7 +3720,7 @@ magpie.plugin("library", (ctx) => {
   function renderNewSkills(body) {
     const list = lib.newSkills;
     const rh = el("div", "row-head lib-newhead");
-    rh.append(el("span", "label", t("Also in their repositories")), el("span", "grow"), el("span", "note", t("on GitHub beside skills you have, not in the library yet")));
+    rh.append(el("span", "label", t("Also in their repositories")), el("span", "grow"));
     if (list.length > 1) {
       const ids = list.map((n) => n.id);
       const ign = button(t("Ignore all"), "lib-updall", () => change("skills/ignore-new", { names: ids }, t("{n} skills set aside", { n: ids.length })));
@@ -3747,10 +3749,20 @@ magpie.plugin("library", (ctx) => {
     sub.title = n.description || "";
     who.append(sub);
     const src = el("div", "lib-src");
-    const a = el("a", "lib-srclink", n.repo + "/" + n.path);
-    a.href = n.id;
-    a.onclick = (e) => { e.preventDefault(); e.stopPropagation(); browse(n.id); };
-    src.append(a);
+    if (n.kind === "folder") {
+      // a folder the user added skills from: shown where it is
+      src.append(pathLink(n.id));
+    } else if (n.kind === "git" && !/^https?:\/\//.test(n.id)) {
+      // an SSH address (git@host:path) or a file:// one: no page to open
+      const a = el("span", "lib-srclink", n.id);
+      a.title = n.id;
+      src.append(a);
+    } else {
+      const a = el("a", "lib-srclink", n.kind === "git" ? n.id.replace(/^https?:\/\//, "") : n.repo + "/" + n.path);
+      a.href = n.id;
+      a.onclick = (e) => { e.preventDefault(); e.stopPropagation(); browse(n.id); };
+      src.append(a);
+    }
     who.append(src);
     const have = el("div", "lib-have");
     // one find without its list of agents doesn't take the page down (#1217)

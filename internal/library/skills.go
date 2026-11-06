@@ -1557,6 +1557,7 @@ func installFrom(l *Library, p *Probe, paths, agents []string, shown bool, in *i
 		// own (skill_beside.go)
 		if s := l.hadSkill(src, c, from); s != nil {
 			in.had = append(in.had, s.Name)
+			l.offered(p, c.Path, shown)
 			continue
 		}
 		name := c.Name
@@ -1646,19 +1647,34 @@ func installFrom(l *Library, p *Probe, paths, agents []string, shown bool, in *i
 		}
 		if src.Kind == "github" {
 			sk.Hash, sk.Own = hashDir(dir), ownHash(dir)
-			// every skill the picker showed was offered: a check
-			// offers only those the repository adds later
-			l.seenAt(src.Repo, src.Ref, c.Path)
-			if shown {
-				for _, c := range p.Candidates {
-					l.seenAt(src.Repo, src.Ref, c.Path)
-				}
-			}
 		}
+		l.offered(p, c.Path, shown)
 		forgetCheck(name)
 		l.Skills = append(l.Skills, sk)
 	}
 	return nil
+}
+
+// offered records that the skill at path of a probe's source was offered,
+// and with shown every skill the picker listed: a check offers only those
+// the repository or folder adds later. A folder's key is also how the
+// library remembers which folder its linked skills were added from.
+func (l *Library) offered(p *Probe, path string, shown bool) {
+	var k string
+	switch p.src.Kind {
+	case "github", "git":
+		k = repoKey(p.src.Repo, p.src.Ref)
+	case "folder":
+		k = folderKey(p.root)
+	default:
+		return
+	}
+	l.seenAt(k, path)
+	if shown {
+		for _, c := range p.Candidates {
+			l.seenAt(k, c.Path)
+		}
+	}
 }
 
 // UpdateSkill fetches a skill from GitHub again, in place: the agents'
