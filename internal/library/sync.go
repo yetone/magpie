@@ -478,6 +478,8 @@ type SkillView struct {
 	OffHere bool `json:"offHere,omitempty"`
 	// Note is the user's own note on it (Skill.Note)
 	Note string `json:"note,omitempty"`
+	// Manual: its SKILL.md sets disable-model-invocation (meta.Manual)
+	Manual bool `json:"manual,omitempty"`
 }
 
 // View is the Library page.
@@ -715,7 +717,7 @@ func readView(problems []Problem, glance bool) (*View, error) {
 			sv.Origin = o.String()
 		}
 		if m, ok := readMeta(skillDir(s.Name)); ok {
-			sv.Description = m.Description
+			sv.Description, sv.Manual = m.Description, m.Manual
 		} else {
 			sv.Missing = true
 		}

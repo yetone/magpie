@@ -5561,6 +5561,7 @@ magpie.plugin("library", (ctx) => {
       };
       nm.append(b);
     }
+    if (s.manual) nm.append(manualTag(s.name));
     // turned off on this computer alone: no agent here gets it, the ticks
     // stay what a sync carries to the others, and a sync doesn't turn it
     // on here again. A line of its own: a narrow row's name has no room
@@ -5938,10 +5939,18 @@ magpie.plugin("library", (ctx) => {
   }
 
 
+  // its SKILL.md sets disable-model-invocation (sunset3279 on Discord):
+  // the model doesn't use it on its own, only a /name the user types
+  function manualTag(name) {
+    return tag(t("Manual only"), "lib-manual", t("Its SKILL.md sets disable-model-invocation: Claude Code runs it only when you type /{name}, never on its own.", { name }));
+  }
+
   function foundSkillRow(f) {
     const row = el("div", "row lib-row lib-found");
     const who = el("div", "who");
-    who.append(el("div", "name", f.name));
+    const nm = el("div", "name", f.name);
+    if (f.manual) nm.append(manualTag(f.name));
+    who.append(nm);
     const sub = el("div", "sub", f.description || "");
     sub.title = f.description || "";
     who.append(sub);

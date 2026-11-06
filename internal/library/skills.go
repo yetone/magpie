@@ -164,6 +164,11 @@ func skillDir(name string) string { return filepath.Join(skillsDir(), name) }
 type meta struct {
 	Name        string `yaml:"name" json:"name"`
 	Description string `yaml:"description" json:"description"`
+	// Manual is its disable-model-invocation: Claude Code runs it only
+	// when the user types /name, never on the model's own (sunset3279 on
+	// Discord). False when the front matter doesn't parse, or the value
+	// isn't a bool: not known.
+	Manual bool `yaml:"disable-model-invocation" json:"-"`
 }
 
 func readMeta(dir string) (meta, bool) {
@@ -2266,6 +2271,8 @@ type FoundSkill struct {
 	// in, they get the library's in its place
 	Copies []string `json:"copies,omitempty"`
 	Link   string   `json:"link,omitempty"` // where it really is, when it's a link
+	// Manual: its SKILL.md sets disable-model-invocation (meta.Manual)
+	Manual bool `json:"manual,omitempty"`
 	// Shared is its entry in the user-wide ~/.agents/skills, when it is
 	// there; the agents that have it are those whose entry is a link (or a
 	// junction) to the very same folder
@@ -2321,7 +2328,7 @@ func foundSkills(l *Library) []FoundSkill {
 			r := realDir(p)
 			switch {
 			case f == nil:
-				f = &FoundSkill{Name: name, Description: m.Description, Agents: []string{}, real: r, at: p}
+				f = &FoundSkill{Name: name, Description: m.Description, Manual: m.Manual, Agents: []string{}, real: r, at: p}
 				switch {
 				case pl.lib:
 					f.Library = p
