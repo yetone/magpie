@@ -341,8 +341,12 @@ var (
 	// answers a GLM Coding Plan's key at the pay-as-you-go endpoint (1113
 	// "余额不足或无可用资源包，请充值") — out of credit, not a rate limit;
 	// WorkBuddy's 429 14018 "Credits exhausted. Please visit the link
-	// below to purchase add-on packs…" too (Creat.wu on Discord)
-	brokeWords = regexp.MustCompile(`(?i)insufficient.?(balance|credit|fund)|\bcredits? (are )?exhausted\b|余额不足|欠费|请充值`)
+	// below to purchase add-on packs…" too (Creat.wu on Discord), and
+	// OpenAI's 429 credit_balance_exhausted for an organization whose
+	// prepaid API credits are spent: its underscores kept "credits
+	// exhausted" from matching, so it read as a rate limit and the same
+	// key was asked again rather than the next account
+	brokeWords = regexp.MustCompile(`(?i)insufficient.?(balance|credit|fund)|\bcredits? (are )?exhausted\b|credit.?balance.?exhausted|余额不足|欠费|请充值`)
 	// quotaWords: it has used up what its plan allows for now. The budget's
 	// words needn't sit beside each other: LiteLLM's spent key answers 429
 	// "Budget has been exceeded! Key=… (sk-…), Current cost: …, Max budget:
