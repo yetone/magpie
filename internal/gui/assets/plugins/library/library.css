@@ -329,6 +329,7 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-ag.asleep .ic, .lib-row.asleep > .ic { opacity: .55; filter: grayscale(1); }
 .lib-row.asleep .lib-path:hover { color: var(--muted); text-decoration: none; }
 .lib-row.asleep .lib-switch[aria-disabled="true"] { opacity: .35; cursor: default; }
+.lib-localbox .lib-switch[aria-disabled="true"] { opacity: .35; cursor: default; }
 .lib-ag:active:not(.blocked) { transform: scale(.92); }
 .editor .lib-agents { max-width: none; justify-content: flex-start; gap: 5px; }
 .editor .lib-ag { padding: 0 9px 0 6px; border-color: var(--line); }

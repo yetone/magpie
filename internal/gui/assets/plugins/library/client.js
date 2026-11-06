@@ -139,6 +139,8 @@ magpie.plugin("library", (ctx) => {
   function browse(u) { api("open", { url: u }).catch((e) => status(e.message, "err")); }
   function reveal(p) { api("library/reveal", { path: p }).catch((e) => status(e.message, "err")); }
 
+  const bridgedWhy = () => t("Added from a Remote magpie with this computer's key for it, so it stays on this computer");
+
   // A switch: on or off, nothing between.
   function toggle(on, label, onChange) {
     const s = el("button", "lib-switch" + (on ? " on" : ""));
@@ -2130,7 +2132,7 @@ magpie.plugin("library", (ctx) => {
     if (s.signIn?.dead) nm.append(tag(t("Sign-in ran out"), "warn", t("Open it to sign in again")));
     else if (s.signIn?.signedIn) nm.append(tag(t("Signed in"), "lib-signed", t("The agents given it use magpie's sign-in")));
     // kept to this computer: sync carries it nowhere (huhuy72219405 on X)
-    if (s.local) nm.append(tag(t("Not synced"), "lib-local", t("Sync never carries it to your other computers")));
+    if (s.local) nm.append(tag(t("Not synced"), "lib-local", s.bridge ? bridgedWhy() : t("Sync never carries it to your other computers")));
     // out of the hub, each agent's own entry (#4382): said only while the hub is on
     if (lib.mcpHub && s.hub === "direct") nm.append(tag(t("Not through the router"), "lib-direct", t("Each agent is given its own entry for it, as with the MCP router off")));
     // its status beside the name, not in it: the name is still the name
@@ -2919,7 +2921,16 @@ magpie.plugin("library", (ctx) => {
     // kept here, so the switch shows and saves its opposite.
     const drawHere = () => hereBox.replaceChildren(toggle(!d.local, t("Sync to your other computers"), (on) => { d.local = !on; drawHere(); }));
     drawHere();
-    ed.append(...field(t("Sync to your other computers"), hereBox, t("Off keeps it on this computer: sync never carries it to your other computers, and a sync from them neither removes it nor puts theirs in its place")));
+    // a Remote magpie's server holds this computer's key for it and goes
+    // with it, so it is never synced: the switch says so, off and held,
+    // where it showed on and went back off once saved (treeman_26897)
+    const bridged = !!d.bridge;
+    if (bridged) {
+      const sw = hereBox.firstChild;
+      sw.setAttribute("aria-disabled", "true");
+      sw.onclick = (e) => e.stopPropagation();
+    }
+    ed.append(...field(t("Sync to your other computers"), hereBox, bridged ? bridgedWhy() : t("Off keeps it on this computer: sync never carries it to your other computers, and a sync from them neither removes it nor puts theirs in its place")));
     // with the hub on, a server can stay each agent's own entry (#4382,
     // cuipengcx90): one that reads its project from the folder it starts
     // in, or keeps a session's state. Shown while the hub is on, and for a
