@@ -349,7 +349,55 @@ func webServed(port, key string, keep time.Duration, page http.Handler) http.Han
 // webHandler is what `magpie web` on port serves: the page and its API
 // behind the key, compressed for the browser.
 func webHandler(port, key string, keep time.Duration, page http.Handler) http.Handler {
-	return webCompressed(webGuard("magpie_web_"+port, key, keep, page))
+	return webCompressed(webGuard("magpie_web_"+port, key, keep, webOwnPage(page)))
+}
+
+// webOwnPage turns away a request for /api that another page sent with
+// the page's cookie. The cookie is SameSite=Lax, so a browser sends it
+// with any request one site sends another, and a site is the registrable
+// domain without the port: a page on another port of 127.0.0.1 or of the
+// LAN address, or on a sibling name behind the same reverse proxy, could
+// POST a stdio MCP server to /api/library/servers/save as text/plain in
+// no-cors mode and start it with /api/library/mcp/check, which is code run
+// as the user. Only the page itself may write: a write (any method but
+// GET, HEAD and OPTIONS) is judged by net/http's CrossOriginProtection,
+// which takes the browser's Sec-Fetch-Site (same-origin, or none for what
+// the user did) and, from a browser too old to send it, an Origin that is
+// absent or names the request's own Host or MAGPIE_PUBLIC_URL. A read is
+// turned away too when the browser says another origin sent it, so that
+// no GET route that does something (an import read once, a sign-in
+// started) is any page's to call, whether or not it answers.
+//
+// The desktop window's /api is served in the process, over no port, and
+// has no cookie for another page to borrow, so this is for the browser's
+// page alone.
+func webOwnPage(next http.Handler) http.Handler {
+	cop := http.NewCrossOriginProtection()
+	if u, err := url.Parse(gateway.PublicURL()); err == nil && u.Host != "" && (u.Scheme == "http" || u.Scheme == "https") {
+		// behind a proxy that passes on a Host of its own, the page's
+		// address is the one the user named
+		if err := cop.AddTrustedOrigin(u.Scheme + "://" + u.Host); err != nil {
+			log.Printf("magpie web: MAGPIE_PUBLIC_URL %s is no origin: %v", u, err)
+		}
+	}
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/api/") {
+			next.ServeHTTP(rw, r)
+			return
+		}
+		err := cop.Check(r)
+		if err == nil {
+			if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+				err = errors.New("Sec-Fetch-Site " + site)
+			}
+		}
+		if err != nil {
+			log.Printf("magpie web: turned away %s %s from another page (Origin %q): %v", r.Method, r.URL.Path, r.Header.Get("Origin"), err)
+			http.Error(rw, "magpie's API answers magpie's own page only", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(rw, r)
+	})
 }
 
 // webCompressed gzips what `magpie web` sends a browser that takes it: the
