@@ -182,12 +182,17 @@ func TestWSLAgentsElsewhere(t *testing.T) {
 // whose files were opened.
 func fakeWSL(t *testing.T, installed, running string, probes, roots map[string]string) (asked, opened *[]string) {
 	t.Helper()
+	// the fake stands in for wsl.exe, so there is WSL to look in: the
+	// stand-in and classifier paths of a request are gated on wslLooks
+	// (#4872) and must run here as they do on Windows
+	on := wslOn
+	wslOn = true
 	run, root := wslRun, wslRoot
 	reset := func() {
 		wsl.seen, wsl.at, wsl.runAt, wsl.names, wsl.running, wsl.dirty = nil, time.Time{}, time.Time{}, nil, nil, false
 		wsl.runOK = false
 	}
-	t.Cleanup(func() { wslRun, wslRoot = run, root; reset() })
+	t.Cleanup(func() { wslRun, wslRoot, wslOn = run, root, on; reset() })
 	reset()
 	asked, opened = &[]string{}, &[]string{}
 	wslRun = func(_ time.Duration, args ...string) ([]byte, error) {

@@ -1,12 +1,15 @@
 package wslrun
 
 import (
+	"context"
 	"errors"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf16"
 
+	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -344,5 +347,25 @@ func TestFindWithDetectionOff(t *testing.T) {
 	}
 	if tool, ok := Find("claude"); !ok || tool.Distro != "Ubuntu" {
 		t.Fatalf("Find with detection on = %+v %v", tool, ok)
+	}
+}
+
+// #4872: Run, and a Tool's commands (Claude Code in a distro, its
+// pseudo-console helper's line), are refused at proc with detection off.
+func TestRunRefusedWhenOff(t *testing.T) {
+	t.Cleanup(func() { settings.Save(settings.Settings{}) })
+	if err := settings.Save(settings.Settings{NoWSLAgents: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(5*time.Second, "-l", "--running", "-q"); !errors.Is(err, proc.ErrWSLOff) {
+		t.Fatalf("detection off, Run ran wsl.exe: %v", err)
+	}
+	tool := Tool{Distro: "Ubuntu", Path: "/home/me/.local/bin/claude", Mount: "/mnt/"}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for _, c := range []*exec.Cmd{tool.Command(ctx, "-v"), tool.Probe(ctx, "-v")} {
+		if !errors.Is(c.Err, proc.ErrWSLOff) {
+			t.Fatalf("detection off, %q not refused: %v", c.Args, c.Err)
+		}
 	}
 }

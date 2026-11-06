@@ -1533,7 +1533,13 @@ func wslLastSeen(name, key string) string {
 // with its mirrored networking settled, ready for a read of its files.
 // Only magpie's memory of them and which run (wslRunningLocked) are
 // asked — nothing is probed, and a stopped distro is never opened.
+// Detection off (wslLooks) reads none: a request's stand-in asks wsl.exe
+// nothing, which on a machine without WSL would answer with a console
+// window asking to install it (#4872).
 func wslReady(kind string) []distro {
+	if !wslLooks() {
+		return nil
+	}
 	wsl.Lock()
 	wslRunningLocked()
 	var ds []distro
@@ -1564,8 +1570,11 @@ func wslClaudeStandIn(model string) string {
 }
 
 // wslClaudeClassifier is ClassifierStandIn for a Claude Code in a running
-// distro, known by the same User-Agent.
+// distro, known by the same User-Agent. Detection off reads none (#4872).
 func wslClaudeClassifier(model string) string {
+	if !wslLooks() {
+		return ""
+	}
 	wsl.Lock()
 	wslRunningLocked()
 	var ds []distro

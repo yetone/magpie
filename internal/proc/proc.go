@@ -23,6 +23,7 @@ import (
 // Command is exec.Command, with no window of its own on Windows.
 func Command(name string, args ...string) *exec.Cmd {
 	cmd := exec.Command(name, args...)
+	wslOff(cmd, name)
 	batch(cmd)
 	hide(cmd)
 	return cmd
@@ -32,6 +33,7 @@ func Command(name string, args ...string) *exec.Cmd {
 // Windows.
 func CommandContext(ctx context.Context, name string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, name, args...)
+	wslOff(cmd, name)
 	// the context ending kills the command, but not what it started: a CLI
 	// that is a script running node leaves node holding the output, and
 	// Output waited for it however long it took (#123) — its pipes are
