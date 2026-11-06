@@ -3,6 +3,8 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -196,23 +198,17 @@ func mcpKeyGuard(w http.ResponseWriter, r *http.Request, server string) (_ http.
 		if !ok {
 			return nil, nil, nil, false
 		}
-		t := bytes.TrimSpace(body)
-		var msgs []mcpMessage
-		var err error
-		if len(t) > 0 && t[0] == '[' {
-			err = json.Unmarshal(t, &msgs)
-		} else {
-			var m mcpMessage
-			err = json.Unmarshal(t, &m)
-			msgs = []mcpMessage{m}
-		}
+		// the server is sent the body as checked: one read the server could
+		// read another way (a key in another case, which Go's decoder
+		// matches, or a key twice) is refused
+		body, msgs, err := strictMCPBody(body)
 		// a message that can't be read can't be told a tool it may use
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"jsonrpc": "2.0", "id": nil, "error": map[string]any{"code": -32700, "message": "parse error: the body isn't a JSON-RPC message"}})
+			writeJSON(w, http.StatusBadRequest, map[string]any{"jsonrpc": "2.0", "id": nil, "error": map[string]any{"code": -32700, "message": "parse error: the body isn't a JSON-RPC message magpie can read one way: " + err.Error()}})
 			return nil, nil, nil, false
 		}
 		for _, m := range msgs {
-			if m.Method != "tools/call" {
+			if !strings.EqualFold(m.Method, "tools/call") {
 				continue
 			}
 			if tool := mcpCallName(m.Params); !who.MCPAllows(server, tool) {
@@ -379,4 +375,105 @@ func (f *mcpToolsFilter) finish() {
 		}
 		f.w.Write(f.buf.Bytes())
 	}
+}
+
+// mcpEnvelopeKeys and mcpParamsKeys are the keys a relayed message is
+// read by: the JSON-RPC envelope's, and a tools/call's params'.
+var (
+	mcpEnvelopeKeys = []string{"jsonrpc", "id", "method", "params", "result", "error"}
+	mcpParamsKeys   = []string{"name", "arguments"}
+)
+
+// strictMCPBody is body, a JSON-RPC message or a batch of them, written
+// again from what magpie read of it, and the messages read. Go's decoder
+// matches a key in any case and keeps a key's last value, while a relayed
+// server reads keys as written and may keep the first: so a key that is
+// one of the envelope's or params' in another case is refused, and a key
+// given twice reaches the server once, with the value magpie checked.
+func strictMCPBody(body []byte) ([]byte, []mcpMessage, error) {
+	t := bytes.TrimSpace(body)
+	if len(t) > 0 && t[0] == '[' {
+		var raws []json.RawMessage
+		if err := json.Unmarshal(t, &raws); err != nil {
+			return nil, nil, err
+		}
+		if len(raws) == 0 {
+			return nil, nil, errors.New("an empty batch")
+		}
+		msgs := make([]mcpMessage, len(raws))
+		for i, raw := range raws {
+			out, m, err := strictMCPMessage(raw)
+			if err != nil {
+				return nil, nil, err
+			}
+			raws[i], msgs[i] = out, m
+		}
+		out, err := json.Marshal(raws)
+		return out, msgs, err
+	}
+	out, m, err := strictMCPMessage(t)
+	if err != nil {
+		return nil, nil, err
+	}
+	return out, []mcpMessage{m}, nil
+}
+
+func strictMCPMessage(raw []byte) (json.RawMessage, mcpMessage, error) {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil, mcpMessage{}, err
+	}
+	if m == nil {
+		return nil, mcpMessage{}, errors.New("a message that is null")
+	}
+	if err := exactKeys(m, mcpEnvelopeKeys); err != nil {
+		return nil, mcpMessage{}, err
+	}
+	var msg mcpMessage
+	if v, ok := m["method"]; ok {
+		if err := json.Unmarshal(v, &msg.Method); err != nil {
+			return nil, mcpMessage{}, errors.New("a method that isn't a string")
+		}
+	}
+	if p := bytes.TrimSpace(m["params"]); len(p) > 0 && p[0] == '{' {
+		var pm map[string]json.RawMessage
+		if err := json.Unmarshal(p, &pm); err != nil {
+			return nil, mcpMessage{}, err
+		}
+		if err := exactKeys(pm, mcpParamsKeys); err != nil {
+			return nil, mcpMessage{}, err
+		}
+		if v, ok := pm["name"]; ok {
+			var name string
+			if err := json.Unmarshal(v, &name); err != nil {
+				return nil, mcpMessage{}, errors.New("a tool name that isn't a string")
+			}
+		}
+		out, err := json.Marshal(pm)
+		if err != nil {
+			return nil, mcpMessage{}, err
+		}
+		m["params"] = out
+	} else if strings.EqualFold(msg.Method, "tools/call") {
+		return nil, mcpMessage{}, errors.New("a tools/call whose params aren't an object")
+	}
+	msg.ID, msg.Params = m["id"], m["params"]
+	out, err := json.Marshal(m)
+	if err != nil {
+		return nil, mcpMessage{}, err
+	}
+	return out, msg, nil
+}
+
+// exactKeys refuses a key of m that is one of keys in another case (as
+// Go's decoder, and so mcpMessage, would read it).
+func exactKeys(m map[string]json.RawMessage, keys []string) error {
+	for k := range m {
+		for _, want := range keys {
+			if k != want && strings.EqualFold(k, want) {
+				return fmt.Errorf("the key %q, which could be read as %q", k, want)
+			}
+		}
+	}
+	return nil
 }

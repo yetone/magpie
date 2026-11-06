@@ -281,7 +281,8 @@ func TestKeyMCPRun(t *testing.T) {
 	if m.Error == nil || !strings.Contains(m.Error.Message, "may not use the tool write") {
 		t.Fatalf("a call of write: %+v", m)
 	}
-	if len(got) != 2 || got[0] != "fs "+toolsList {
+	// the body is passed on as magpie read it (strictMCPBody)
+	if len(got) != 2 || got[0] != `fs {"id":2,"jsonrpc":"2.0","method":"tools/list"}` {
 		t.Fatalf("the server got %q", got)
 	}
 	if w := call(keyHeldToMCP(t, "Other", "github"), toolsList, false); w.Code != http.StatusForbidden || len(got) != 2 {
@@ -309,5 +310,61 @@ func TestKeyMCPFilterRefusesUnreadable(t *testing.T) {
 	f.finish()
 	if rec.Code != http.StatusBadGateway || strings.Contains(rec.Body.String(), `"x"`) {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+}
+
+// A relayed server reads the body magpie passes on, keys as written: a
+// call of a tool the key may not use doesn't get past mcpKeyGuard by a key
+// Go's decoder reads in another case (NAME, METHOD, Params, paramſ), and a
+// key given twice reaches the server once, as magpie checked it.
+func TestKeyMCPRelayReadsOneWay(t *testing.T) {
+	fresh(t)
+	var got []string
+	was := RunMCP
+	RunMCP = func(w http.ResponseWriter, r *http.Request, name string) {
+		b, _ := io.ReadAll(r.Body)
+		got = append(got, string(b))
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"jsonrpc":"2.0","id":3,"result":{}}`)
+	}
+	t.Cleanup(func() { RunMCP = was })
+	h := lanGuard(New().Handler())
+	some := keyHeldToMCP(t, "Some", "fs/read")
+	call := func(body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "/mcp/run/fs", strings.NewReader(body))
+		r.RemoteAddr, r.Host = here, "127.0.0.1:3425"
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Authorization", "Bearer "+some)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	for _, body := range []string{
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"write","NAME":"read"}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"write","nAme":"read","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","METHOD":"ping","params":{"name":"write"}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"write"},"Params":{"name":"read"}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"write"},"paramſ":{"name":"read"}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"write","Arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":["write"]}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":7}}`,
+		`[{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"write","NAME":"read"}}]`,
+		`[]`,
+		`null`,
+	} {
+		if w := call(body); w.Code == 200 && !strings.Contains(w.Body.String(), "may not use the tool") || len(got) != 0 {
+			t.Fatalf("%s: %d %s, the server got %q", body, w.Code, w.Body, got)
+		}
+	}
+	// a key given twice: the server is sent the one magpie read
+	for _, c := range []struct{ body, want string }{
+		{`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"write","name":"read"}}`, `{"id":3,"jsonrpc":"2.0","method":"tools/call","params":{"name":"read"}}`},
+		{`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"write"},"method":"tools/list"}`, `{"id":3,"jsonrpc":"2.0","method":"tools/list","params":{"name":"write"}}`},
+		{`[{"jsonrpc":"2.0","id":"a","method":"tools/call","params":{"name":"write","name":"read","arguments":{"p":1}}}]`, `[{"id":"a","jsonrpc":"2.0","method":"tools/call","params":{"arguments":{"p":1},"name":"read"}}]`},
+	} {
+		got = nil
+		if w := call(c.body); w.Code != 200 || len(got) != 1 || got[0] != c.want {
+			t.Fatalf("%s: %d %s, the server got %q", c.body, w.Code, w.Body, got)
+		}
 	}
 }
