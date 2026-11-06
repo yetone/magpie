@@ -6,6 +6,7 @@
 package browserext
 
 import (
+	"archive/zip"
 	"bytes"
 	"embed"
 	"fmt"
@@ -48,25 +49,14 @@ func File(name string) ([]byte, error) { return files.ReadFile("ext/" + name) }
 // A file is written only when it changed, so a browser that has the folder
 // loaded sees no change it has to reload for.
 func Write(dir, gatewayURL string) error {
-	ws := "ws" + strings.TrimPrefix(strings.TrimRight(gatewayURL, "/"), "http")
-	if !strings.HasPrefix(ws, "ws://") && !strings.HasPrefix(ws, "wss://") {
-		return fmt.Errorf("the gateway's address %q isn't http", gatewayURL)
+	cfg, err := config(gatewayURL, "")
+	if err != nil {
+		return err
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	return fs.WalkDir(files, "ext", func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		b, err := files.ReadFile(p)
-		if err != nil {
-			return err
-		}
-		name := strings.TrimPrefix(p, "ext/")
-		if name == "config.js" {
-			b = fmt.Appendf(nil, "// The gateway this extension talks to, written by magpie.\nexport const GATEWAY = %q;\n", ws)
-		}
+	return each(cfg, func(name string, b []byte) error {
 		to := filepath.Join(dir, filepath.FromSlash(name))
 		if old, err := os.ReadFile(to); err == nil && bytes.Equal(old, b) {
 			return nil
@@ -79,6 +69,63 @@ func Write(dir, gatewayURL string) error {
 	})
 }
 
+// Zip is the extension as a zip of its folder, pointed at the gateway at
+// gatewayURL and taken there with key: for a browser on another computer
+// than magpie's, or outside the container magpie runs in, where magpie
+// can't write the folder.
+func Zip(gatewayURL, key string) ([]byte, error) {
+	cfg, err := config(gatewayURL, key)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	err = each(cfg, func(name string, b []byte) error {
+		w, err := zw.Create(Folder + "/" + name)
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(b)
+		return err
+	})
+	if err == nil {
+		err = zw.Close()
+	}
+	return buf.Bytes(), err
+}
+
+// Folder is the name of the extension's folder.
+const Folder = "Magpie Browser Extension"
+
+// config is the extension's config.js for the gateway at gatewayURL
+// (http://127.0.0.1:3425) and key ("" for none, a gateway on this
+// computer's loopback).
+func config(gatewayURL, key string) ([]byte, error) {
+	ws := "ws" + strings.TrimPrefix(strings.TrimRight(gatewayURL, "/"), "http")
+	if !strings.HasPrefix(ws, "ws://") && !strings.HasPrefix(ws, "wss://") {
+		return nil, fmt.Errorf("the gateway's address %q isn't http", gatewayURL)
+	}
+	return fmt.Appendf(nil, "// The gateway this extension talks to, written by magpie.\nexport const GATEWAY = %q;\nexport const KEY = %q;\n", ws, key), nil
+}
+
+// each calls put with each of the extension's files, config.js as cfg.
+func each(cfg []byte, put func(name string, b []byte) error) error {
+	return fs.WalkDir(files, "ext", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, err := files.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		name := strings.TrimPrefix(p, "ext/")
+		if name == "config.js" {
+			b = cfg
+		}
+		return put(name, b)
+	})
+}
+
 // Dir is where the extension is written: in the home folder, where Finder
 // and Explorer show it, to drag from or choose.
 func Dir() string {
@@ -86,7 +133,7 @@ func Dir() string {
 	if err != nil {
 		return OldDir()
 	}
-	return filepath.Join(home, "Magpie Browser Extension")
+	return filepath.Join(home, Folder)
 }
 
 // OldDir is where v0.1.2442 wrote it, a hidden folder no one could find;

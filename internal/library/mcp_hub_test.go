@@ -844,5 +844,13 @@ func TestHubKeepsThisComputersOwnServersHere(t *testing.T) {
 		if got := hubServerOf(&c.s); got.HereOnly != c.here || got.Program != c.program {
 			t.Errorf("%+v: here-only %v program %v, want %v %v", c.s, got.HereOnly, got.Program, c.here, c.program)
 		}
+		// only Magpie Browser's browsers are a gateway key's (gateway.HubServer's Keyed)
+		if got, want := hubServerOf(&c.s).Keyed, len(c.s.Args) > 1 && c.s.Args[1] == "browser"; got != want {
+			t.Errorf("%+v: keyed %v, want %v", c.s, got, want)
+		}
+	}
+	keyed := gateway.WithHubVisitor(here, gateway.HubVisitor{Away: true, Key: "k1"})
+	if got := servers(keyed); !slices.Equal(got, []string{"fake", browserServerName}) && !slices.Equal(got, []string{browserServerName, "fake"}) {
+		t.Errorf("listed for a key from elsewhere: %v", got)
 	}
 }

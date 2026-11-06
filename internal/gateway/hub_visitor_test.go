@@ -1,8 +1,12 @@
 package gateway
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/yetone/magpie/internal/access"
@@ -84,5 +88,60 @@ func TestHubKeepsThisComputersOwnServersHere(t *testing.T) {
 	m = readMCP(t, hubPostAt(h, HubMCPAll, there, toolsCall("shell"+hubSep+"do", `{}`), full...))
 	if m.Error != nil || m.Result.IsError {
 		t.Fatalf("shell for the full key: %+v", m)
+	}
+}
+
+// Magpie Browser is given to a keyed caller from elsewhere too, and its
+// call goes under the key's session (browser.go), whatever session the
+// caller names; never to one from elsewhere with no key, nor to a page.
+func TestHubGivesAKeyItsBrowser(t *testing.T) {
+	fresh(t)
+	t.Setenv("MAGPIE_ADDR", "")
+	t.Setenv("MAGPIE_PUBLIC_URL", "")
+	t.Setenv("MAGPIE_TRUST_PROXY", "")
+	servers := []HubServer{{Name: "magpie-browser", HereOnly: true, Program: true, Keyed: true}}
+	f := &fakeHub{on: true, tools: map[string][]HubTool{"": {{Server: "magpie-browser", Tool: "do", Spec: hubSpec("do")}}}, servers: map[string][]HubServer{"": servers}}
+	var mu sync.Mutex
+	var seen []string
+	f.call = func(ctx context.Context, server, tool string) (json.RawMessage, error) {
+		mu.Lock()
+		seen = append(seen, HubCallerOf(ctx).Session)
+		mu.Unlock()
+		return json.RawMessage(`{"content":[{"type":"text","text":"ok"}]}`), nil
+	}
+	withHub(t, f)
+	h := lanGuard(New().Handler())
+	keys, secrets := newCaller(t, "Host", "Narrow")
+	if _, err := access.Update("models-key", access.Change{Key: keys[1].ID, Models: []string{"some/model"}}); err != nil {
+		t.Fatal(err)
+	}
+	const there = "192.0.2.7:4000"
+	call := toolsCall("magpie-browser"+hubSep+"do", `{}`)
+	for i, auth := range [][]string{{"Authorization", "Bearer " + secrets[0], "Mcp-Session-Id", "abc"}, {"Authorization", "Bearer " + secrets[1]}} {
+		m := readMCP(t, hubPostAt(h, HubMCPAll, there, call, auth...))
+		if m.Error != nil || m.Result.IsError {
+			t.Fatalf("key %d from there: %+v", i, m)
+		}
+	}
+	if w := hubPostAt(h, HubMCPAll, here, call, "Origin", "http://localhost:5173"); w.Code != http.StatusForbidden {
+		t.Fatalf("a page here: %d %s", w.Code, w.Body.String())
+	}
+	m := readMCP(t, hubPostAt(h, HubMCPAll, here, call, "Mcp-Session-Id", "abc"))
+	if m.Error != nil || m.Result.IsError {
+		t.Fatalf("here: %+v", m)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	want := []string{"key:" + keys[0].ID + "/hub--abc", "key:" + keys[1].ID + "/", "hub--abc"}
+	if !slices.Equal(seen, want) {
+		t.Fatalf("sessions %q, want %q", seen, want)
+	}
+	for _, v := range []HubVisitor{{Away: true}, {Away: true, Held: true}} {
+		if v.Gives(servers[0]) {
+			t.Errorf("%+v is given Magpie Browser", v)
+		}
+	}
+	if (HubVisitor{Away: true, Key: "k"}).Gives(HubServer{Name: "magpie-image", HereOnly: true}) {
+		t.Error("a key from elsewhere is given magpie's image server")
 	}
 }

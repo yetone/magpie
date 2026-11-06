@@ -3195,6 +3195,19 @@ does the same in a terminal: open the link it prints, then paste the address
 the browser ended on. Keys, sign-ins and plugins live in the volume, so a
 restart, or a new container on the same volume, keeps them.
 
+Magpie Browser's extension can't be loaded from the container's folders, so
+in the browser UI the Library's Magpie Browser sheet offers *Download the
+extension*: a zip pointed at the page's own address (3430 hands the
+gateway's routes on), with a gateway key named **Magpie Browser** of its
+own, made once and reused while it is on. Unzip it and choose the folder
+with Load unpacked on `chrome://extensions`. An extension already loaded
+takes the address and a gateway key in its popup. The browser that
+connects with the page's Magpie Browser key is the container's own: its
+agents use it as they would one on loopback, and so does a caller of
+`/mcp/magpie/browser` from the host given that same key. A browser that
+connects with another key is that key's alone. A browser connecting from
+outside with no key, or from a web page's origin, is refused as before.
+
 The image has a `HEALTHCHECK`: `magpie healthcheck` exits 0 while the gateway
 answers on `MAGPIE_ADDR`, under `serve` and `web` alike, so `docker ps` shows
 the container as healthy (Compose: `depends_on: condition: service_healthy`)

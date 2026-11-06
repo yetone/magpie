@@ -139,26 +139,39 @@ type HubServer struct {
 	// browser is signed in to), magpie's image server (it draws with this
 	// magpie's own token, past a gateway key's models, accounts and
 	// spend), and another magpie's router (which passes a call on to its
-	// own). It is given only to a caller on this computer (HubVisitor).
+	// own). It is given only to a caller on this computer (HubVisitor),
+	// Magpie Browser also to a keyed one elsewhere (Keyed).
 	HereOnly bool
 	// Program: the server is a program run on this computer, with the
 	// user's rights (a command, or a tools plugin), not an HTTP server
 	// elsewhere. A gateway key held to some models, accounts or a spend
 	// limit isn't given it from another computer.
 	Program bool
+	// Keyed: the server is Magpie Browser, whose browsers are each this
+	// computer's or a gateway key's (browser.go): given to this computer
+	// and to another computer's caller with a key, and calls go to that
+	// key's browsers only.
+	Keyed bool
 }
 
 // HubVisitor is who a hub request is from, for what it is given of the
 // servers behind it (HubServer's HereOnly and Program): Away, another
 // computer, a tunnel or a web page; Held, by a gateway key held to some
 // models, accounts or a spend limit. A caller on this computer is given
-// every server.
-type HubVisitor struct{ Away, Held bool }
+// every server. Key is the gateway key an Away visitor came with, whose
+// browsers it is given (HubServer's Keyed).
+type HubVisitor struct {
+	Away, Held bool
+	Key        string
+}
 
 // Gives is whether v is given s.
 func (v HubVisitor) Gives(s HubServer) bool {
 	if !v.Away {
 		return true
+	}
+	if s.Keyed {
+		return v.Key != ""
 	}
 	return !s.HereOnly && !(v.Held && s.Program)
 }
@@ -180,7 +193,11 @@ func HubVisitorOf(ctx context.Context) HubVisitor {
 // hubVisitor is who r is from (HubVisitor).
 func hubVisitor(r *http.Request) HubVisitor {
 	away := !local(r) || fromBrowser(r)
-	return HubVisitor{Away: away, Held: away && nativeHeld(access.Caller(r.Context()))}
+	v := HubVisitor{Away: away, Held: away && nativeHeld(access.Caller(r.Context()))}
+	if !local(r) && !fromBrowser(r) {
+		v.Key = access.Caller(r.Context()).KeyID
+	}
+	return v
 }
 
 // RouterHeader marks a request of magpie's own router to another magpie's
@@ -665,6 +682,10 @@ func hubToolNamed(ctx context.Context, ts []hubTool, agent, name string) (hubToo
 // reads them, its workspaces and client (HubCaller).
 func (s *Server) hubCall(r *http.Request, agent string, t hubTool, args json.RawMessage, meta hubCallMeta) any {
 	c := HubCaller{Session: hubSession(r, agent, meta)}
+	if v := hubVisitor(r); v.Away && v.Key != "" {
+		// its browser is its key's, whatever session it names (browser.go)
+		c.Session = keyedSession(v.Key, c.Session)
+	}
 	if t.Roots {
 		c.Roots, c.Client = hubRoots(r, meta), hubClient(r)
 	}

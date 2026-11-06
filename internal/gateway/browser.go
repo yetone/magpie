@@ -7,14 +7,17 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"slices"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/browserext"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // Magpie Browser: the agents magpie serves use the user's own browser,
@@ -24,13 +27,21 @@ import (
 // working when its account changes.
 //
 // The extension holds a WebSocket to BrowserExtensionPath, taken only from
-// its own origin on this computer. An agent calls the tools at
-// BrowserMCPPath (Streamable HTTP, or `magpie mcp browser` over stdio),
-// and each call is handed to the extension, which carries it out with the
-// DevTools protocol in the tab and answers with MCP content. Only this
-// computer's agents may: unlike the other servers of magpie's own, it is
-// never served to another machine, shared or not, since it acts as the
-// user wherever they are signed in.
+// its own origin. An agent calls the tools at BrowserMCPPath (Streamable
+// HTTP, or `magpie mcp browser` over stdio), and each call is handed to
+// the extension, which carries it out with the DevTools protocol in the
+// tab and answers with MCP content.
+//
+// Whose browser is whose: the tools act as the user wherever the browser
+// is signed in, so a browser is used only by who it is the browser of.
+// One on this computer (a loopback connection) is this computer's, and
+// only this computer's agents use it. One elsewhere connects with a
+// gateway key (magpie in a container, whose host's browser reaches it
+// through a published port, or a browser on another computer), and is
+// that key's: only callers with that key use it, and this computer's
+// agents don't. A caller on another computer with no key, or with another
+// key, is never handed a browser. Keyed callers' sessions are the key's
+// own ("key:<id>/…", browserOwner), so a key names only its own browsers.
 
 // BrowserMCPPath is where the browser MCP server is served.
 const BrowserMCPPath = "/mcp/magpie/browser"
@@ -69,8 +80,15 @@ type browserConn struct {
 	id      string // b1, b2: in the order they connected, while magpie runs
 	version string
 	agent   string
-	since   time.Time
-	wmu     sync.Mutex
+	// key is the gateway key the browser connected with, whose callers
+	// use it; "" for this computer's, connected over loopback
+	key string
+	// own: key is the one this magpie's own page made for the user's own
+	// browser (OwnBrowserKey), so this computer's callers use it too, as
+	// they do one on loopback
+	own   bool
+	since time.Time
+	wmu   sync.Mutex
 }
 
 // browserName is the browser a User-Agent names, with its major version:
@@ -103,27 +121,107 @@ func (c *browserConn) send(ctx context.Context, v any) error {
 	return c.c.Write(ctx, websocket.MessageText, b)
 }
 
-func (b *browserRelay) current() *browserConn { return b.forSession("") }
-
-// forSession is the browser a session's calls go to: the one it picked
-// while that one is connected, else the last to connect.
-func (b *browserRelay) forSession(session string) *browserConn {
+// current is the browser connected last, whoever's it is, for the GUI.
+func (b *browserRelay) current() *browserConn {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if c := b.chosen[session]; c != nil && session != "" {
-		return c
-	}
 	if len(b.conns) == 0 {
 		return nil
 	}
 	return b.conns[len(b.conns)-1]
 }
 
-// all is every connected browser, the first to connect first
-func (b *browserRelay) all() []*browserConn {
+// browserOwner is the gateway key whose browsers a session's calls go to:
+// the id in a "key:<id>/" the session starts with (after the "hub:" of a
+// call through magpie's router), "" for this computer's own.
+func browserOwner(session string) string {
+	rest, ok := strings.CutPrefix(strings.TrimPrefix(session, "hub:"), "key:")
+	if !ok {
+		return ""
+	}
+	// a session that says it is a key's but names none is no one's: never
+	// this computer's ("" is no key's id)
+	if id, _, ok := strings.Cut(rest, "/"); ok && id != "" {
+		return id
+	}
+	return "?"
+}
+
+// keyedSession is session as a caller with gateway key id names it: its
+// own, so it reaches only that key's browsers whatever it says.
+func keyedSession(id, session string) string { return "key:" + id + "/" + session }
+
+// serves: a session owned by owner (browserOwner) may use c. This
+// computer's callers ("") use this computer's browsers and the one its
+// own page gave a key (own); a key's callers use the browsers that
+// connected with that key.
+func (c *browserConn) serves(owner string) bool {
+	if owner == "" {
+		return c.key == "" || c.own
+	}
+	return c.key == owner
+}
+
+// ownBrowserKeyFile holds the id of the gateway key this magpie's page
+// made for the user's own browser, when magpie's folders are out of that
+// browser's reach (magpie in a container, the page on another computer):
+// the extension downloaded from the page connects with it.
+func ownBrowserKeyFile() string { return filepath.Join(settings.Dir(), "browser-key") }
+
+// OwnBrowserKey is the id SetOwnBrowserKey recorded; "" when there is
+// none or it can't be read, and a browser with a key is then only that
+// key's.
+func OwnBrowserKey() string {
+	b, err := os.ReadFile(ownBrowserKeyFile())
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// SetOwnBrowserKey records id as the gateway key of the user's own
+// browser (OwnBrowserKey).
+func SetOwnBrowserKey(id string) error {
+	if err := os.MkdirAll(settings.Dir(), 0o700); err != nil {
+		return err
+	}
+	tmp := ownBrowserKeyFile() + ".tmp"
+	if err := os.WriteFile(tmp, []byte(id+"\n"), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, ownBrowserKeyFile())
+}
+
+// forSession is the browser a session's calls go to: the one it picked
+// while that one is connected, else the last of its owner's to connect.
+func (b *browserRelay) forSession(session string) *browserConn {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return slices.Clone(b.conns)
+	owner := browserOwner(session)
+	if c := b.chosen[session]; c != nil && session != "" && c.serves(owner) {
+		return c
+	}
+	for i := len(b.conns) - 1; i >= 0; i-- {
+		if b.conns[i].serves(owner) {
+			return b.conns[i]
+		}
+	}
+	return nil
+}
+
+// all is every browser session's calls may go to, the first to connect
+// first
+func (b *browserRelay) all(session string) []*browserConn {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	owner := browserOwner(session)
+	var out []*browserConn
+	for _, c := range b.conns {
+		if c.serves(owner) {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // choose has a session's calls go to the connected browser named by its id
@@ -133,8 +231,13 @@ func (b *browserRelay) choose(session, which string) (*browserConn, error) {
 	which = strings.ToLower(strings.TrimSpace(which))
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	var by []*browserConn
+	owner := browserOwner(session)
+	var by, theirs []*browserConn
 	for _, c := range b.conns {
+		if !c.serves(owner) {
+			continue
+		}
+		theirs = append(theirs, c)
 		if c.id == which {
 			by = []*browserConn{c}
 			break
@@ -144,8 +247,8 @@ func (b *browserRelay) choose(session, which string) (*browserConn, error) {
 		}
 	}
 	switch {
-	case len(b.conns) == 0:
-		return nil, errBrowserAway
+	case len(theirs) == 0:
+		return nil, browserAway(session)
 	case len(by) == 0:
 		return nil, fmt.Errorf("no connected browser is %q: browser_tabs with action browsers lists them", which)
 	case len(by) > 1:
@@ -196,7 +299,7 @@ func (b *browserRelay) answered(id string, result json.RawMessage) {
 func (b *browserRelay) call(ctx context.Context, session, tool string, args json.RawMessage) (json.RawMessage, error) {
 	c := b.forSession(session)
 	if c == nil {
-		return nil, errBrowserAway
+		return nil, browserAway(session)
 	}
 	b.mu.Lock()
 	if b.pending == nil {
@@ -232,10 +335,42 @@ func (b *browserRelay) call(ctx context.Context, session, tool string, args json
 
 var errBrowserAway = errors.New("Magpie Browser isn't connected, so there is no browser to use. Ask the user to set it up: magpie's Library → Magpie Browser → Set up, which loads the extension in Chrome, Edge or another Chromium browser. Once installed it connects by itself whenever that browser and magpie are both running.")
 
+// browserAway is why session has no browser to use.
+func browserAway(session string) error {
+	if browserOwner(session) == "" {
+		return errBrowserAway
+	}
+	return errors.New("Magpie Browser isn't connected with this gateway key, so there is no browser to use: a browser connects as a key's when its extension is given the key (the extension's popup → Gateway key), and is used only by that key's agents and magpie's own. Ask the user to set it up there.")
+}
+
+// browserExtensionKey is the gateway key the extension's request r comes
+// with ("" for one on this computer), and whether it is let connect: from
+// this computer over loopback, or with a gateway key that is on.
+func browserExtensionKey(r *http.Request) (string, bool) {
+	if r.Header.Get("Origin") != browserext.Origin {
+		return "", false
+	}
+	if local(r) && loopbackHost(r.Host) {
+		return "", true
+	}
+	if id := access.Caller(r.Context()).KeyID; id != "" {
+		return id, true
+	}
+	// a key lanGuard didn't read: the gateway isn't on the network, so
+	// this is a container's published port or a proxy on this computer
+	for _, k := range callerKeys(r) {
+		if c, ok := access.Authenticate(k); ok && c.KeyID != "" {
+			return c.KeyID, true
+		}
+	}
+	return "", false
+}
+
 // browserExtension takes the extension's WebSocket.
 func (s *Server) browserExtension(w http.ResponseWriter, r *http.Request) {
-	if !local(r) || !loopbackHost(r.Host) || r.Header.Get("Origin") != browserext.Origin {
-		http.Error(w, "only the Magpie Browser extension, on this computer, connects here", http.StatusForbidden)
+	key, ok := browserExtensionKey(r)
+	if !ok {
+		http.Error(w, "only the Magpie Browser extension connects here: on this computer, or with a gateway key", http.StatusForbidden)
 		return
 	}
 	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"chrome-extension://" + browserext.ID}})
@@ -244,7 +379,7 @@ func (s *Server) browserExtension(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ws.SetReadLimit(64 << 20) // a full-page screenshot
-	c := &browserConn{c: ws, since: time.Now()}
+	c := &browserConn{c: ws, key: key, own: key != "" && key == OwnBrowserKey(), since: time.Now()}
 	ctx := r.Context()
 	defer ws.CloseNow()
 	added := false
@@ -275,7 +410,11 @@ func (s *Server) browserExtension(w http.ResponseWriter, r *http.Request) {
 			if !added {
 				s.browser.add(c)
 				added = true
-				log.Printf("Magpie Browser %s connected", m.Version)
+				if key != "" {
+					log.Printf("Magpie Browser %s connected with gateway key %s", m.Version, key)
+				} else {
+					log.Printf("Magpie Browser %s connected", m.Version)
+				}
 			}
 			if browserext.Older(m.Version, browserext.Version()) {
 				// an older extension: its folder gets this magpie's, which
@@ -311,11 +450,10 @@ func (s *Server) browserStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) browserMCP(w http.ResponseWriter, r *http.Request) {
-	// never another machine's, a gateway key or not: the tools act as the
-	// user wherever their browser is signed in; and no web page's, whatever
-	// Settings lists
-	if !local(r) || fromBrowser(r) {
-		http.Error(w, "magpie's browser MCP server answers agents on this computer only", http.StatusForbidden)
+	// no web page's, whatever Settings lists; another computer's only with
+	// a gateway key, and then only that key's browsers (browserSession)
+	if fromBrowser(r) || (!local(r) && access.Caller(r.Context()).KeyID == "") {
+		http.Error(w, "magpie's browser MCP server answers agents on this computer, or with a gateway key", http.StatusForbidden)
 		return
 	}
 	serveMCP(w, r, "magpie's browser", "magpie-browser", 1<<20, s.browserMCPCall)
@@ -388,7 +526,7 @@ func (s *Server) browserMCPCall(r *http.Request, m mcpMessage) (any, map[string]
 		}
 		// with two browsers connected, the list of tabs says whose they are
 		if p.Name == "browser_tabs" && (tabs.Action == "" || tabs.Action == "list") {
-			if all := s.browser.all(); len(all) > 1 {
+			if all := s.browser.all(session); len(all) > 1 {
 				if c := s.browser.forSession(session); c != nil {
 					if content, ok := result["content"].([]any); ok {
 						result["content"] = append([]any{map[string]any{"type": "text", "text": fmt.Sprintf("These are %s's tabs (%s); %d browsers are connected: browser_tabs with action browsers lists them.", c.id, c.name(), len(all))}}, content...)
@@ -454,9 +592,9 @@ func (s *Server) browserShot(result map[string]any, data, why string) {
 
 // list is the connected browsers, the one session's calls go to marked *.
 func (b *browserRelay) list(session string) string {
-	all := b.all()
+	all := b.all(session)
 	if len(all) == 0 {
-		return errBrowserAway.Error()
+		return browserAway(session).Error()
 	}
 	mine := b.forSession(session)
 	lines := []string{fmt.Sprintf("%d browsers with Magpie Browser are connected (* is the one calls go to; browser_tabs with action use and browser picks another, by id or name):", len(all))}
@@ -471,15 +609,24 @@ func (b *browserRelay) list(session string) string {
 }
 
 // browserSession is which agent session a call is from: the header the
-// stdio server sends, else the MCP session, else the agent.
+// stdio server sends, else the MCP session, else the agent. Another
+// computer's caller's is its gateway key's (keyedSession); this
+// computer's callers are trusted with any.
 func browserSession(r *http.Request) string {
+	session := "default"
 	for _, h := range []string{BrowserSessionHeader, "Mcp-Session-Id"} {
 		if v := boundedSession(r.Header.Get(h)); v != "" {
-			return v
+			session = v
+			break
 		}
 	}
-	if a := callerOf(r).agent; a != "" {
-		return "agent:" + a
+	if session == "default" {
+		if a := callerOf(r).agent; a != "" {
+			session = "agent:" + a
+		}
 	}
-	return "default"
+	if !local(r) {
+		return keyedSession(access.Caller(r.Context()).KeyID, session)
+	}
+	return session
 }

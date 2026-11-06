@@ -80,6 +80,7 @@
     <a href="#run">Run it</a>
     <a href="#web">The browser UI</a>
     <a href="#signin">Sign in to subscriptions</a>
+    <a href="#browser">Your own browser</a>
     <a href="#volume">What is kept</a>
     <a href="#env">Environment</a>
     <a href="#share">Gateway keys and other machines</a>
@@ -149,6 +150,10 @@ docker logs magpie</pre>
       <pre id="ex-claude-code">docker exec -it magpie magpie claude-code install</pre>
     </div>
     <p>A Grok (SuperGrok) subscription signs in through xAI’s Grok Build CLI, which the image doesn’t have either. Its sign-in, in the browser UI or with <code>magpie plugin login grok</code>, installs it first, as xAI’s installer does: the stable version from <code>x.ai/cli</code>, kept in <code>/config/home/.grok</code>. To use a Grok Build binary you put on the volume yourself, set <code>GROK_BIN_DIR</code> to the folder holding it.</p>
+
+    <h2 id="browser"><a class="anchor" href="#browser">Your own browser</a></h2>
+    <p>Magpie Browser lets agents act in your own browser, through its extension. The extension can’t be loaded from the container’s folders, so in the browser UI open <span class="ui">Library</span> → <span class="ui">Magpie Browser</span> and click <span class="ui">Download the extension</span>. The zip is pointed at the page’s own address, with a gateway key named <b>Magpie Browser</b> of its own. Unzip it, open <code>chrome://extensions</code>, turn on Developer mode and click <span class="ui">Load unpacked</span> on the unzipped folder. An extension already loaded takes the address (<code>http://localhost:3430</code>, or the gateway’s published port) and a gateway key in its popup.</p>
+    <p>The browser connected with the downloaded extension is the container’s own: agents in the container use it, and so does an agent on the host that calls <code>/mcp/magpie/browser</code> with the same Magpie Browser key. A browser given another key is that key’s alone.</p>
 
     <h2 id="volume"><a class="anchor" href="#volume">What is kept</a></h2>
     <p>Everything magpie writes is under <code>/config</code>, so a restart, or a new container on the same volume, keeps your providers, keys, sign-ins and plugins.</p>

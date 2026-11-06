@@ -80,6 +80,7 @@
     <a href="#run">运行</a>
     <a href="#web">Web 界面</a>
     <a href="#signin">登录订阅</a>
+    <a href="#browser">你自己的浏览器</a>
     <a href="#volume">保存了什么</a>
     <a href="#env">环境变量</a>
     <a href="#share">网关密钥与其他机器</a>
@@ -149,6 +150,10 @@ docker logs magpie</pre>
       <pre id="ex-claude-code">docker exec -it magpie magpie claude-code install</pre>
     </div>
     <p>Grok（SuperGrok）订阅通过 xAI 的 Grok Build CLI 登录，镜像里同样没有它。在浏览器界面里登录，或者用 <code>magpie plugin login grok</code> 登录时，magpie 会先按 xAI 安装脚本的方式安装它：从 <code>x.ai/cli</code> 下载 stable 版本，放在 <code>/config/home/.grok</code>。要用你自己放进数据卷的 Grok Build，把 <code>GROK_BIN_DIR</code> 设为它所在的文件夹。</p>
+
+    <h2 id="browser"><a class="anchor" href="#browser">你自己的浏览器</a></h2>
+    <p>Magpie Browser 通过它的扩展，让 Agent 在你自己的浏览器里操作。容器里的文件夹没法直接加载成扩展，所以在浏览器界面打开 <span class="ui">资源库</span> → <span class="ui">Magpie Browser</span>，点 <span class="ui">下载扩展</span>。下载的 zip 指向这个页面自己的地址，并带一个名为 <b>Magpie Browser</b> 的专用网关密钥。解压后打开 <code>chrome://extensions</code>，打开开发者模式，点 <span class="ui">加载已解压的扩展程序</span>，选择解压出的文件夹。已经加载过的扩展，也可以在它的弹窗里填地址（<code>http://localhost:3430</code>，或网关发布到主机的端口）和网关密钥。</p>
+    <p>用下载的扩展连上的浏览器就是这个容器自己的：容器里的 Agent 直接用它，主机上用同一个 Magpie Browser 密钥调用 <code>/mcp/magpie/browser</code> 的 Agent 也能用。填了别的密钥连上的浏览器只属于那个密钥。</p>
 
     <h2 id="volume"><a class="anchor" href="#volume">保存了什么</a></h2>
     <p>magpie 写的所有东西都在 <code>/config</code> 下，所以重启、或者在同一个数据卷上新建容器，供应商、密钥、登录和插件都还在。</p>

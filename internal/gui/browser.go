@@ -3,11 +3,14 @@ package gui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/browserext"
 	"github.com/yetone/magpie/internal/gateway"
 )
@@ -31,6 +34,64 @@ type browserJSON struct {
 	Browser   string `json:"browser,omitempty"`
 	// Drag: the page may drag the folder out of the window itself
 	Drag bool `json:"drag,omitempty"`
+	// Away: the page is looked at from another computer than magpie's, or
+	// magpie runs in a container, so the folder magpie writes is out of
+	// the browser's reach; the extension is downloaded instead, with a
+	// gateway key of its own (browserKey)
+	Away bool `json:"away,omitempty"`
+}
+
+// browserAway is whether r's page is in a browser magpie's folders are out
+// of reach of (browserJSON's Away).
+func browserAway(r *http.Request) bool {
+	return gateway.InContainer() || !loopbackPeer(r.RemoteAddr)
+}
+
+// browserKeyName names the gateway key a downloaded extension connects with.
+const browserKeyName = "Magpie Browser"
+
+// browserKey is the secret of the gateway key a downloaded extension
+// connects with: the one recorded as the user's own browser's
+// (gateway.OwnBrowserKey) while it is on, else a new one, recorded. The
+// browser it connects is used by that key's callers and by this
+// computer's (gateway/browser.go), not by another key's.
+func browserKey() (string, error) {
+	if id := gateway.OwnBrowserKey(); id != "" && access.On(id) {
+		if secret, err := access.Update("copy-key", access.Change{Key: id}); err == nil && secret != "" {
+			return secret, nil
+		}
+	}
+	secret, err := access.Update("add-key", access.Change{Name: browserKeyName})
+	if err != nil {
+		return "", err
+	}
+	who, ok := access.Authenticate(secret)
+	if !ok {
+		return "", errors.New("the key made for the extension isn't on")
+	}
+	// this computer's agents use the browser that connects with it, as
+	// they do one on loopback
+	if err := gateway.SetOwnBrowserKey(who.KeyID); err != nil {
+		return "", err
+	}
+	return secret, nil
+}
+
+// browserAt is the gateway address a downloaded extension dials: the
+// page's own (at, its origin, whose port hands the gateway's routes on,
+// onePort), else MAGPIE_PUBLIC_URL, else the gateway's.
+func browserAt(at string) (string, error) {
+	if at == "" {
+		if u := gateway.PublicURL(); u != "" {
+			return u, nil
+		}
+		return gateway.URL(), nil
+	}
+	u, err := url.Parse(at)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" {
+		return "", errors.New("the extension's gateway is an http or https origin, such as http://localhost:3430")
+	}
+	return u.Scheme + "://" + u.Host, nil
 }
 
 func browserState(ctx context.Context) browserJSON {
@@ -67,7 +128,39 @@ func browserState(ctx context.Context) browserJSON {
 
 func browserRoutes(mux *http.ServeMux, w Windows) {
 	mux.HandleFunc("GET /api/library/browser", func(rw http.ResponseWriter, r *http.Request) {
-		writeJSON(rw, browserState(r.Context()))
+		st := browserState(r.Context())
+		st.Away = browserAway(r)
+		writeJSON(rw, st)
+	})
+	// the extension as a zip, for a browser magpie's folders are out of
+	// reach of (browserJSON's Away): pointed at the page's own address,
+	// and given a gateway key of its own
+	mux.HandleFunc("POST /api/library/browser/extension", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			At string `json:"at"`
+		}
+		if r.Body != nil {
+			json.NewDecoder(http.MaxBytesReader(rw, r.Body, 4<<10)).Decode(&in)
+		}
+		at, err := browserAt(in.At)
+		if err != nil {
+			http.Error(rw, err.Error(), http.StatusBadRequest)
+			return
+		}
+		key, err := browserKey()
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		b, err := browserext.Zip(at, key)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		rw.Header().Set("Content-Type", "application/zip")
+		rw.Header().Set("Content-Disposition", `attachment; filename="`+browserext.Folder+`.zip"`)
+		rw.Header().Set("Cache-Control", "no-store")
+		rw.Write(b)
 	})
 	// Set up: the extension written, and its folder shown selected, to
 	// drag onto the browser's extensions page or choose with Load unpacked

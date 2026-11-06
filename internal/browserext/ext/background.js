@@ -2,7 +2,7 @@
 // calls of the agents it serves (magpie mcp browser), and it carries them
 // out in this browser's own tabs, signed in to whatever the user is.
 
-import { GATEWAY } from "./config.js";
+import { GATEWAY, KEY } from "./config.js";
 import { attach, fault, forget, read, send, settle, sleep, state, waitLoad, watch, watchConsole } from "./cdp.js";
 import { find, take } from "./snapshot.js";
 import { press as keyPress } from "./keys.js";
@@ -25,13 +25,25 @@ async function gatewayURL() {
   return GATEWAY;
 }
 
+// the gateway key a magpie on another computer, or in a container, takes
+// the extension with (magpie on this computer needs none): the popup's,
+// else the one magpie wrote in when it gave the extension out
+async function gatewayKey() {
+  try {
+    const { key } = await chrome.storage.local.get("key");
+    if (key !== undefined) return key;
+  } catch {}
+  return KEY || "";
+}
+
 async function connect() {
   if (connecting || (ws && ws.readyState <= 1)) return;
   connecting = true;
   const base = await gatewayURL();
+  const key = await gatewayKey();
   let s;
   try {
-    s = new WebSocket(base.replace(/\/$/, "") + "/v1/magpie/browser/extension");
+    s = new WebSocket(base.replace(/\/$/, "") + "/v1/magpie/browser/extension" + (key ? "?key=" + encodeURIComponent(key) : ""));
   } catch (e) {
     connecting = false;
     setStatus({ connected: false, gateway: base, error: String(e.message || e) });
@@ -83,7 +95,7 @@ chrome.alarms.onAlarm.addListener(() => connect());
 chrome.runtime.onStartup.addListener(() => connect());
 chrome.runtime.onInstalled.addListener(() => connect());
 chrome.storage.onChanged.addListener((c, area) => {
-  if (area === "local" && c.gateway) {
+  if (area === "local" && (c.gateway || c.key)) {
     retry = 1000;
     if (ws) ws.close();
     else connect();

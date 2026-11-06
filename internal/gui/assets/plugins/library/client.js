@@ -6446,21 +6446,56 @@ magpie.plugin("library", (ctx) => {
     const box = el("div", "mk-browser");
     const state = el("div", "mk-browser-state");
     const steps = el("ol", "mk-browser-steps");
+    let away = false;
     const go = button(t("Set up the extension…"), "action", async () => {
       go.disabled = true;
       try {
-        draw(await api("library/browser/setup", {}));
-        steps.hidden = false;
+        if (away) await download();
+        else {
+          draw(await api("library/browser/setup", {}));
+          steps.hidden = false;
+        }
       } catch (e) { status(e.message, "err"); }
       go.disabled = false;
     });
+    // magpie's folders are out of this browser's reach (another computer,
+    // or magpie in a container): the extension comes as a zip, pointed at
+    // this page's address with a gateway key of its own
+    const download = async () => {
+      const r = await fetch("/api/library/browser/extension", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ at: location.origin }),
+      });
+      if (!r.ok) throw new Error((await r.text()).trim() || r.statusText);
+      const url = URL.createObjectURL(await r.blob());
+      const a = el("a");
+      a.href = url;
+      a.download = "Magpie Browser Extension.zip";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      steps.hidden = false;
+    };
     const draw = (b) => {
+      away = !!b.away;
       state.replaceChildren();
       const dot = el("span", "mk-browser-dot" + (b.connected ? " on" : ""));
       state.append(dot, el("span", "", b.connected
         ? t("Connected to your browser") + (b.extension ? " · " + b.extension : "")
+        : away ? t("Not connected: download the extension and load it in your browser")
         : b.written ? t("Not connected: load the folder below in your browser, and keep that browser open") : t("Not set up: set up the extension in Chrome, Edge, Arc, Brave or another Chromium browser")));
-      go.textContent = b.written ? t("Show the extension folder") : t("Set up the extension…");
+      go.textContent = away ? t("Download the extension") : b.written ? t("Show the extension folder") : t("Set up the extension…");
+      if (away) {
+        steps.replaceChildren(
+          el("li", "", t("Unzip the download.")),
+          el("li", "", t("Open chrome://extensions (edge://extensions in Edge) in the browser you use every day.")),
+          el("li", "", t("Turn on Developer mode.")),
+          el("li", "", t("Click Load unpacked and choose the unzipped Magpie Browser Extension folder.")),
+        );
+        folder.hidden = true;
+        if (b.connected) steps.hidden = true;
+        return;
+      }
       steps.replaceChildren(
         el("li", "", t("Open chrome://extensions (edge://extensions in Edge) in the browser you use every day.")),
         el("li", "", t("Turn on Developer mode.")),
