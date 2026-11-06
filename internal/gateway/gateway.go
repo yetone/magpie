@@ -738,6 +738,7 @@ var WhileServing []func(context.Context)
 // serving, which is fine for the caller to ignore.
 func (s *Server) ListenAndServe(ctx context.Context) error {
 	migrateLANKeyBestEffort()
+	ScopeOwnBrowserKey()
 	cfg, err := tlsConfig()
 	if err != nil {
 		return err

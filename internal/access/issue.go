@@ -1,6 +1,7 @@
 package access
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -239,7 +240,9 @@ func Check(secret string) (Identity, error) {
 		// fall back after either durable marker exists, or to a revoked mirror.
 		if s.LAN && s.LANKeyID == "" && s.LANKey != "" && !strings.HasPrefix(s.LANKey, revokedLANPrefix) && !slices.ContainsFunc(keys, func(k Key) bool { return k.LAN }) && subtle.ConstantTimeCompare([]byte(secret), []byte(s.LANKey)) == 1 {
 			k := legacyLANKey(s.LANKey)
-			return Identity{KeyID: k.ID, KeyName: k.Name, Default: true}, nil
+			// sum as Check gives the same key once migrated, so the
+			// caller's identity is one before and after
+			return Identity{KeyID: k.ID, KeyName: k.Name, Default: true, sum: sha256.Sum256([]byte(k.Secret))}, nil
 		}
 		return Identity{}, errUnknown
 	}
@@ -251,12 +254,73 @@ func Check(secret string) (Identity, error) {
 	if k.expired(now) {
 		return Identity{}, &Refused{Why: fmt.Sprintf("the gateway key %q expired at %s: ask for a new one", k.Name, k.Expires.UTC().Format(time.RFC3339))}
 	}
-	return identityOf(k, keys, now)
+	who, err := identityOf(k, keys, now)
+	who.sum = sha256.Sum256([]byte(k.Secret))
+	return who, err
+}
+
+// Current: who, a key Check took earlier, is still one it takes now, by
+// the same secret: not turned off, removed, expired, rotated, nor
+// bounded by an issuer that no longer lets it in. A connection a key
+// opened (Magpie Browser's WebSocket) is closed once it isn't. false
+// for no key, and when the store can't be read.
+func Current(who Identity) bool {
+	if who.KeyID == "" {
+		return false
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	keys, err := load()
+	if err != nil {
+		return false
+	}
+	i := slices.IndexFunc(keys, func(k Key) bool { return k.ID == who.KeyID })
+	if i < 0 {
+		return false // the legacy sharing key not yet in the store is never a browser's
+	}
+	k := keys[i]
+	if k.Off || k.Secret == "" || k.expired(Now()) || sha256.Sum256([]byte(k.Secret)) != who.sum {
+		return false
+	}
+	_, err = identityOf(k, keys, Now())
+	return err == nil
+}
+
+// ErrNoKey: there is no gateway key with that id.
+var ErrNoKey = errors.New("Key not found")
+
+// ScopeBrowser holds the key id to connecting the Magpie Browser
+// extension alone (Key.Browser), read-only for a magpie from before
+// that, and unable to issue keys. It is for the key a magpie from before
+// the scope made for the extension (gui's browserKey), which could use
+// every model and was written into a zip in Downloads: the extension
+// goes on connecting with it, and the copy in the zip loses the rest.
+// The sharing key, which magpie gives its own agents, is never scoped.
+func ScopeBrowser(id string) error {
+	mu.Lock()
+	defer mu.Unlock()
+	keys, err := load()
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(keys, func(k Key) bool { return k.ID == id })
+	if i < 0 {
+		return ErrNoKey
+	}
+	k := &keys[i]
+	if k.LAN || k.ID == settings.Load().LANKeyID {
+		return errors.New("The sharing key is given to magpie's own agents, so it can't be held to Magpie Browser")
+	}
+	if k.Browser && k.ReadOnly && !k.Issues {
+		return nil
+	}
+	k.Browser, k.ReadOnly, k.Issues = true, true, false
+	return save(keys)
 }
 
 // identityOf is who k is, folded into its issuer when it has one.
 func identityOf(k Key, keys []Key, now time.Time) (Identity, error) {
-	who := Identity{KeyID: k.ID, KeyName: k.Name, Limit: k.Limit, More: k.More, Models: HeldModels(k.Models, k.Accounts), AccountModels: len(k.Models) == 0 && len(k.Accounts) > 0, Accounts: k.Accounts, Quotas: k.Quotas, ReadOnly: k.ReadOnly, Expires: k.Expires, Issues: k.Issues && k.Issuer == ""}
+	who := Identity{KeyID: k.ID, KeyName: k.Name, Limit: k.Limit, More: k.More, Models: HeldModels(k.Models, k.Accounts), AccountModels: len(k.Models) == 0 && len(k.Accounts) > 0, Accounts: k.Accounts, Quotas: k.Quotas, ReadOnly: k.ReadOnly, Browser: k.Browser, Expires: k.Expires, Issues: k.Issues && k.Issuer == "" && !k.Browser}
 	// the default key as Default tells it: marked LAN, or the id the
 	// settings name (settings read only for an unmarked key)
 	who.Default = k.LAN || (k.ID != "" && settings.Load().LANKeyID == k.ID)
@@ -277,6 +341,7 @@ func identityOf(k Key, keys []Key, now time.Time) (Identity, error) {
 	}
 	who.Accounts = foldAccounts(who.Accounts, p.Accounts)
 	who.ReadOnly = who.ReadOnly || p.ReadOnly
+	who.Browser = who.Browser || p.Browser
 	who.Quotas = who.Quotas && p.Quotas
 	if !p.Expires.IsZero() && (who.Expires.IsZero() || p.Expires.Before(who.Expires)) {
 		who.Expires = p.Expires

@@ -3221,12 +3221,19 @@ extension*: a zip pointed at the page's own address (3430 hands the
 gateway's routes on), with a gateway key named **Magpie Browser** of its
 own, made once and reused while it is on. Unzip it and choose the folder
 with Load unpacked on `chrome://extensions`. An extension already loaded
-takes the address and a gateway key in its popup. The browser that
-connects with the page's Magpie Browser key is the container's own: its
-agents use it as they would one on loopback, and so does a caller of
-`/mcp/magpie/browser` from the host given that same key. A browser that
-connects with another key is that key's alone. A browser connecting from
-outside with no key, or from a web page's origin, is refused as before.
+takes the address and a gateway key in its popup. The Magpie Browser key
+connects the extension and nothing else: it reaches no model, MCP server
+or stats, so a copy of the zip left in Downloads spends nothing. A key a
+magpie from before made for the zip with full access is held so the next
+time the gateway starts. A browser is the container's own only when it
+connects from the container's own computer; the host's Chrome reaches the
+container from the bridge (172.17.0.1), so it is the key's alone, and the
+container's agents don't use it yet (#5529). To use it from the host, give
+the caller of `/mcp/magpie/browser` a key of its own with full access and
+connect the extension with that key. A browser that connects with another
+key is that key's alone. A browser connecting from outside with no key, or
+from a web page's origin, is refused as before. A keyed browser is let go
+once its key is turned off, removed or rotated.
 
 The image has a `HEALTHCHECK`: `magpie healthcheck` exits 0 while the gateway
 answers on `MAGPIE_ADDR`, under `serve` and `web` alike, so `docker ps` shows

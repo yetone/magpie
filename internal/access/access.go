@@ -160,6 +160,15 @@ type Key struct {
 	// readOnlyRoutes and refuses it every other, every model, MCP and
 	// write route among them. Off, the key may do what its other limits let it.
 	ReadOnly bool `json:"readOnly,omitempty"`
+	// Browser holds the key to connecting the Magpie Browser extension
+	// (GET /v1/magpie/browser/extension) and nothing else: the key the
+	// GUI writes into the extension's zip (gui's browserKey), which lands
+	// in Downloads, where anyone who reads it has it. The gateway refuses
+	// it every other route, every model and MCP server among them
+	// (readOnlyGuard). Such a key is ReadOnly too, so a magpie from before
+	// this field, which reads it as any other key, holds it to reading
+	// stats rather than handing it every model.
+	Browser bool `json:"browser,omitempty"`
 	// Expires is when the key stops working (an issued key, IssueKey);
 	// zero for one that doesn't. Prune removes it a while after.
 	Expires time.Time `json:"expires,omitzero"`
@@ -188,6 +197,12 @@ type Identity struct {
 	Accounts      []string
 	Quotas        bool
 	ReadOnly      bool
+	// Browser: the key may connect the Magpie Browser extension and do
+	// nothing else (Key.Browser).
+	Browser bool
+	// sum is the SHA-256 of the secret the request came with, so a
+	// connection kept open can tell the key was rotated since (Current).
+	sum [32]byte
 	// Expires is when the key stops working, its issuer's expiry if
 	// sooner; zero for never.
 	Expires time.Time
@@ -391,6 +406,9 @@ type Change struct {
 	// ReadOnly is what "access-key" sets, and "add-key" gives the new key:
 	// it may read stats and use no model (Key.ReadOnly).
 	ReadOnly bool `json:"readOnly,omitempty"`
+	// Browser is what "add-key" gives the new key: it may connect the
+	// Magpie Browser extension alone (Key.Browser).
+	Browser bool `json:"browser,omitempty"`
 	// Issues is what "issuer-key" sets: the key may issue short-lived
 	// keys under itself (Key.Issues).
 	Issues bool `json:"issues,omitempty"`
@@ -435,7 +453,7 @@ func Update(action string, in Change) (string, error) {
 			}
 			secret = Prefix + token
 		}
-		keys = append(keys, Key{ID: id, Name: name, Secret: secret, ReadOnly: in.ReadOnly})
+		keys = append(keys, Key{ID: id, Name: name, Secret: secret, ReadOnly: in.ReadOnly || in.Browser, Browser: in.Browser})
 	} else {
 		i := slices.IndexFunc(keys, func(k Key) bool { return k.ID == in.Key })
 		if i < 0 {
@@ -549,6 +567,9 @@ func Update(action string, in Change) (string, error) {
 			keys[i].Quotas = in.Quotas
 		case "issuer-key":
 			// may issue short-lived keys under itself (POST /v1/magpie/keys)
+			if in.Issues && keys[i].Browser {
+				return "", errors.New("This key is the Magpie Browser extension's, which can't issue keys: let another key of yours issue them")
+			}
 			if in.Issues && (keys[i].Issuer != "" || !keys[i].Expires.IsZero()) {
 				return "", errors.New("An issued key can't issue keys of its own: let a key of yours issue them")
 			}
@@ -559,6 +580,11 @@ func Update(action string, in Change) (string, error) {
 			// no longer use a model
 			if in.ReadOnly && defaultKey {
 				return "", errors.New("The sharing key is the one magpie gives agents that reach it from elsewhere, so it can't be read-only: add a key of its own for reading stats")
+			}
+			// the extension's key is in a zip in Downloads: it connects the
+			// extension and nothing else, whatever access is asked
+			if keys[i].Browser {
+				return "", errors.New("This key is the Magpie Browser extension's: it connects the extension and nothing else. Add another key for models or stats")
 			}
 			keys[i].ReadOnly = in.ReadOnly
 		case "on-key", "off-key":

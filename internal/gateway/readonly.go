@@ -61,11 +61,37 @@ func (m *routeMux) HandleFunc(pattern string, h func(http.ResponseWriter, *http.
 	m.ServeMux.HandleFunc(pattern, h)
 }
 
+// BrowserKeyCode is the error code the Magpie Browser extension's key
+// (access.Key.Browser) is refused a route with.
+const BrowserKeyCode = "gateway_key_browser_only"
+
+// browserKeyRoute is the one route the extension's key is answered: the
+// extension's WebSocket. Its key is written into a zip that lands in
+// Downloads (gui's browserKey), so whoever reads the zip has it; it must
+// spend nothing, read nothing and reach no MCP server, the browser's own
+// included (TestBrowserKeyEveryRoute).
+const browserKeyRoute = "GET " + BrowserExtensionPath
+
 // readOnlyGuard refuses a read-only key every route of mux but
-// readOnlyRoutes, before anything is read, reserved or sent.
+// readOnlyRoutes, and the Magpie Browser extension's key every route but
+// browserKeyRoute, before anything is read, reserved or sent. Both are
+// judged here, after the key is known (callerGuard, lanGuard's
+// identifyCaller) and by the pattern the request is routed to, so no
+// route is left out, one added later included.
 func readOnlyGuard(mux *routeMux, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		who := access.Caller(r.Context())
+		if who.Browser {
+			if _, pattern := mux.Handler(r); pattern != browserKeyRoute {
+				log.Printf("refused %s %s: gateway key %q is Magpie Browser's", r.Method, r.URL.Path, who.KeyName)
+				writeJSON(w, http.StatusForbidden, map[string]any{"error": map[string]any{
+					"message": "this gateway key is the Magpie Browser extension's: it connects the extension and nothing else, no model, MCP server, stats or write. Use another gateway key for those (Gateway → Gateway keys)",
+					"type":    "permission_error", "code": BrowserKeyCode}})
+				return
+			}
+			next.ServeHTTP(w, r)
+			return
+		}
 		if who.ReadOnly {
 			// a path that isn't clean is routed to a redirect under the
 			// pattern of where it goes, and judged again when it gets there

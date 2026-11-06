@@ -1,24 +1,27 @@
 // A read-only gateway key (Steven on Discord: an ESP32 desk display that
 // polls quotas and usage and uses no model) is made so from its row's menu,
 // says so in its row, and is given full access the same way; the sharing
-// key, which magpie gives its own agents, can't be made read-only.
+// key, which magpie gives its own agents, can't be made read-only. Magpie
+// Browser's key says it is the browser's and has no access to change.
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
 const { fixture } = require("./fixtures/caller-keys.cjs");
 
 const words = {
-  en: { more: "Key actions", make: "Make read-only", full: "Give full access", tag: "Read only", made: "Server is read-only", given: "Server has full access", why: "The sharing key is given to agents, so it can't be read-only" },
-  zh: { more: "密钥操作", make: "设为只读", full: "恢复完整权限", tag: "只读", made: "Server 已设为只读", given: "Server 已恢复完整权限", why: "共享密钥会交给 Agent 使用，不能设为只读" },
-  "zh-TW": { more: "金鑰操作", make: "設為唯讀", full: "恢復完整權限", tag: "唯讀", made: "Server 已設為唯讀", given: "Server 已恢復完整權限", why: "共享金鑰會交給 Agent 使用，不能設為唯讀" },
-  ja: { more: "キーの操作", make: "読み取り専用にする", full: "フルアクセスに戻す", tag: "読み取り専用", made: "Server を読み取り専用にしました", given: "Server をフルアクセスに戻しました", why: "共有キーはエージェントに渡されるため、読み取り専用にはできません" },
-  de: { more: "Schlüsselaktionen", make: "Nur Lesezugriff geben", full: "Vollen Zugriff geben", tag: "Nur Lesen", made: "Server hat jetzt nur Lesezugriff", given: "Server hat wieder vollen Zugriff", why: "Der Freigabeschlüssel wird an Agenten gegeben und kann daher nicht auf Nur Lesen gestellt werden" },
+  en: { browser: "Browser only", more: "Key actions", make: "Make read-only", full: "Give full access", tag: "Read only", made: "Server is read-only", given: "Server has full access", why: "The sharing key is given to agents, so it can't be read-only" },
+  zh: { browser: "仅浏览器", more: "密钥操作", make: "设为只读", full: "恢复完整权限", tag: "只读", made: "Server 已设为只读", given: "Server 已恢复完整权限", why: "共享密钥会交给 Agent 使用，不能设为只读" },
+  "zh-TW": { browser: "僅瀏覽器", more: "金鑰操作", make: "設為唯讀", full: "恢復完整權限", tag: "唯讀", made: "Server 已設為唯讀", given: "Server 已恢復完整權限", why: "共享金鑰會交給 Agent 使用，不能設為唯讀" },
+  ja: { browser: "ブラウザ専用", more: "キーの操作", make: "読み取り専用にする", full: "フルアクセスに戻す", tag: "読み取り専用", made: "Server を読み取り専用にしました", given: "Server をフルアクセスに戻しました", why: "共有キーはエージェントに渡されるため、読み取り専用にはできません" },
+  de: { browser: "Nur Browser", more: "Schlüsselaktionen", make: "Nur Lesezugriff geben", full: "Vollen Zugriff geben", tag: "Nur Lesen", made: "Server hat jetzt nur Lesezugriff", given: "Server hat wieder vollen Zugriff", why: "Der Freigabeschlüssel wird an Agenten gegeben und kann daher nicht auf Nur Lesen gestellt werden" },
 };
 
 const keys = () => [
   { id: "laptop", name: "Laptop", masked: "sk-magpie-key-…111111", readOnly: true },
   { id: "server", name: "Server", masked: "sk-magpie-key-…222222" },
   { id: "magpie", name: "Magpie", masked: "sk-magpie-key-…444444", lan: true },
+  // the key the Magpie Browser extension's zip was given
+  { id: "ext", name: "Magpie Browser", masked: "sk-magpie-key-…555555", readOnly: true, browser: true },
 ];
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -76,6 +79,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.keyboard.press("Escape");
         assert.equal(events.filter((e) => e.action === "access-key" && e.body.key === "magpie").length, 0);
         assert.deepEqual(await scrolled(), before, "a click moved the page");
+
+        // Magpie Browser's key says it is the browser's, not read-only,
+        // and its access isn't changed from the menu
+        assert.equal((await tag("ext").textContent()).trim(), w.browser);
+        assert.ok((await tag("ext").getAttribute("title")).length > 10, "the tag says what a browser key is");
+        await menu("ext");
+        assert.equal(await item(w.make).count(), 0);
+        assert.equal(await item(w.full).count(), 0);
+        await page.keyboard.press("Escape");
+        assert.equal(events.filter((e) => e.action === "access-key" && e.body.key === "ext").length, 0);
 
         // the row still fits: nothing runs past the window's edge
         const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

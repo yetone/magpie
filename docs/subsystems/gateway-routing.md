@@ -576,6 +576,30 @@ route the router has is in neither `readOnlyRoutes` nor its refused list,
 and sends each refused pattern, by each method it takes, from loopback and
 from the network.
 
+A browser key (`access.Key.Browser`) connects the Magpie Browser extension
+and nothing else. The GUI writes one into the extension's zip
+(`browserKey` in [`internal/gui/browser.go`](../../internal/gui/browser.go),
+`add-key` with `Browser`), and the zip lands in Downloads, so a copy of it
+can turn up anywhere. `readOnlyGuard` looks at it first: the one route it
+reaches is `GET /v1/magpie/browser/extension` (`browserKeyRoute`), and every
+other pattern, the browser MCP included, is refused 403
+`gateway_key_browser_only`, from loopback and from the network, however the
+key is sent. A browser key is `ReadOnly` too, so a magpie from before the
+field reads it as read-only, never as full. It can't be given full access
+or made an issuer (`access-key` and `issuer-key` refuse it), and an agent
+holding one isn't taken to go through magpie (`gatewayTakes`). The key a
+magpie from before made for the zip had full access. `ScopeOwnBrowserKey`,
+run as the gateway starts serving, and the next download
+(`access.ScopeBrowser`) hold the key recorded in `browser-key` to the
+extension with the same secret: the extension keeps connecting, and the
+copy in Downloads loses every model, MCP server and stat. Only a key the
+GUI made for the zip is recorded there, and the sharing key is never
+scoped. `TestBrowserKeyEveryRoute` in
+[`browser_key_test.go`](../../internal/gateway/browser_key_test.go) sends
+every pattern but the extension's, by each method, from loopback and from
+the network, and checks no upstream is reached; `TestScopeBrowser` in
+[`internal/access/browser_test.go`](../../internal/access/browser_test.go).
+
 `POST /v1/magpie/quotas/codex-reset` (`Server.codexReset` in
 [`gateway.go`](../../internal/gateway/gateway.go), #3850) spends one of a
 Codex account's resets, which can't be undone, so its admission is

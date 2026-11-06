@@ -578,8 +578,12 @@ func gatewayKeyQuotas(out io.Writer, args []string) error {
 	return err
 }
 
-// accessWord is a key's access as the list says it: "read-only" or "full".
+// accessWord is a key's access as the list says it: "browser" (Magpie
+// Browser's, access.Key.Browser), "read-only" or "full".
 func accessWord(k access.Key) string {
+	if k.Browser {
+		return "browser"
+	}
 	if k.ReadOnly {
 		return "read-only"
 	}
@@ -614,7 +618,9 @@ func gatewayKeyAccess(out io.Writer, args []string) error {
 		return fmt.Errorf("Key not found")
 	}
 	k := keys[i]
-	if k.ReadOnly {
+	if k.Browser {
+		_, err = fmt.Fprintf(out, "%s: Magpie Browser's, it connects the extension and uses no model, MCP server, stats or write\n", k.Name)
+	} else if k.ReadOnly {
 		_, err = fmt.Fprintf(out, "%s: read-only, it reads quotas and usage and uses no model, MCP server or write\n", k.Name)
 	} else {
 		_, err = fmt.Fprintf(out, "%s: full access, models and stats as its other limits let it\n", k.Name)

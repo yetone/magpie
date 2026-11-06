@@ -153,7 +153,7 @@ docker logs magpie</pre>
 
     <h2 id="browser"><a class="anchor" href="#browser">你自己的浏览器</a></h2>
     <p>Magpie Browser 通过它的扩展，让 Agent 在你自己的浏览器里操作。容器里的文件夹没法直接加载成扩展，所以在浏览器界面打开 <span class="ui">资源库</span> → <span class="ui">Magpie Browser</span>，点 <span class="ui">下载扩展</span>。下载的 zip 指向这个页面自己的地址，并带一个名为 <b>Magpie Browser</b> 的专用网关密钥。解压后打开 <code>chrome://extensions</code>，打开开发者模式，点 <span class="ui">加载已解压的扩展程序</span>，选择解压出的文件夹。已经加载过的扩展，也可以在它的弹窗里填地址（<code>http://localhost:3430</code>，或网关发布到主机的端口）和网关密钥。</p>
-    <p>用下载的扩展连上的浏览器就是这个容器自己的：容器里的 Agent 直接用它，主机上用同一个 Magpie Browser 密钥调用 <code>/mcp/magpie/browser</code> 的 Agent 也能用。填了别的密钥连上的浏览器只属于那个密钥。</p>
+    <p>Magpie Browser 密钥只用来连接扩展，不能使用模型、MCP 服务器或统计，所以留在下载文件夹里的 zip 副本花不了你的额度。主机上的浏览器经 Docker 的网桥连到容器，不算容器所在电脑本机的连接，所以它只属于这个密钥，容器里的 Agent 暂时用不到它（<a href="https://github.com/yetone/magpie/issues/5529">#5529</a>）。要让主机上的 Agent 用它：给这个 Agent 一个完整权限的网关密钥，在扩展弹窗里填同一个密钥连上，再用它调用 <code>/mcp/magpie/browser</code>。填了别的密钥连上的浏览器只属于那个密钥；密钥被停用、删除或轮换后，连接随即断开。</p>
 
     <h2 id="volume"><a class="anchor" href="#volume">保存了什么</a></h2>
     <p>magpie 写的所有东西都在 <code>/config</code> 下，所以重启、或者在同一个数据卷上新建容器，供应商、密钥、登录和插件都还在。</p>

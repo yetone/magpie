@@ -226,7 +226,7 @@ function renderGatewayKeys() {
     tick.onclick = () => gatewayKeyAction(k.off ? "on-key" : "off-key", { key: k.id });
     // the copy sits by the key it copies (the owner: stranded among the
     // badges it read as nobody's); Rotate and Remove wait in the row's menu
-    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), copyCallerKeyBtn(k), el("span", "grow"), ...(k.readOnly ? [gatewayReadOnlyTag()] : []), gatewayModelsBadge(k), gatewayQuotasBadge(k), gatewayLimitBadge(k), gatewayKeyMore(k));
+    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), copyCallerKeyBtn(k), el("span", "grow"), ...(k.browser ? [gatewayBrowserTag()] : k.readOnly ? [gatewayReadOnlyTag()] : []), gatewayModelsBadge(k), gatewayQuotasBadge(k), gatewayLimitBadge(k), gatewayKeyMore(k));
     const under = gatewayLimit?.id === k.id ? [gatewayLimitEditor(k)] : keyUsed(k).map((u) => gatewayLimitLine(k, u));
     if (under.length) row.classList.add("with-limit"), row.append(...under);
     list.append(row);
@@ -325,10 +325,12 @@ function gatewayKeyMore(k) {
     openRowMenu(more, [
       { name: k.off ? "Enable key" : "Disable key", icon: POWER_GLYPH, run: () => gatewayKeyAction(k.off ? "on-key" : "off-key", { key: k.id }) },
       // read-only (Steven on Discord: a desk display's key reads quotas
-      // and usage, and uses nothing); the sharing key is given to agents
-      k.readOnly
+      // and usage, and uses nothing); the sharing key is given to agents.
+      // Magpie Browser's key connects the extension alone, and stays so:
+      // it is in a zip in Downloads
+      ...(k.browser ? [] : [k.readOnly
         ? { name: "Give full access", icon: EYE_GLYPH, run: () => gatewayKeyAccess(k, false) }
-        : { name: "Make read-only", icon: EYE_GLYPH, run: () => gatewayKeyAccess(k, true), off: k.lan, why: k.lan ? t("The sharing key is given to agents, so it can't be read-only") : "" },
+        : { name: "Make read-only", icon: EYE_GLYPH, run: () => gatewayKeyAccess(k, true), off: k.lan, why: k.lan ? t("The sharing key is given to agents, so it can't be read-only") : "" }]),
       { name: "Rotate key", icon: ROTATE_GLYPH, run: () => askGatewayKey(k, true) },
       { name: "Remove", icon: REMOVE_GLYPH, sep: true, run: () => askGatewayKey(k, false) },
     ]);
@@ -346,6 +348,14 @@ async function gatewayKeyAccess(k, readOnly) {
 function gatewayReadOnlyTag() {
   const tag = el("span", "amodels key-readonly set", t("Read only"));
   tag.title = t("This key only reads quotas and usage. It can't use models or MCP servers, or change anything.");
+  return tag;
+}
+
+// Magpie Browser's key (the one the extension's zip was given) says so in
+// its row: it connects the extension and nothing else
+function gatewayBrowserTag() {
+  const tag = el("span", "amodels key-readonly key-browser set", t("Browser only"));
+  tag.title = t("This key connects the Magpie Browser extension and nothing else. It can't use models, MCP servers or stats.");
   return tag;
 }
 

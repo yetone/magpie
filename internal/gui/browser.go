@@ -52,16 +52,21 @@ const browserKeyName = "Magpie Browser"
 
 // browserKey is the secret of the gateway key a downloaded extension
 // connects with: the one recorded as the user's own browser's
-// (gateway.OwnBrowserKey) while it is on, else a new one, recorded. The
-// browser it connects is used by that key's callers and by this
-// computer's (gateway/browser.go), not by another key's.
+// (gateway.OwnBrowserKey) while it is on, else a new one, recorded. It is
+// a browser key (access.Key.Browser), which connects the extension and
+// nothing else: the zip it is written into lands in Downloads, and a copy
+// of it must not reach the user's models. One a magpie from before made
+// with full access is held to that first (access.ScopeBrowser). The
+// browser it connects is used by that key's callers, and by this
+// computer's when it connects from this computer (gateway/browser.go),
+// never by another key's.
 func browserKey() (string, error) {
-	if id := gateway.OwnBrowserKey(); id != "" && access.On(id) {
+	if id := gateway.OwnBrowserKey(); id != "" && access.On(id) && access.ScopeBrowser(id) == nil {
 		if secret, err := access.Update("copy-key", access.Change{Key: id}); err == nil && secret != "" {
 			return secret, nil
 		}
 	}
-	secret, err := access.Update("add-key", access.Change{Name: browserKeyName})
+	secret, err := access.Update("add-key", access.Change{Name: browserKeyName, Browser: true})
 	if err != nil {
 		return "", err
 	}
@@ -69,8 +74,8 @@ func browserKey() (string, error) {
 	if !ok {
 		return "", errors.New("the key made for the extension isn't on")
 	}
-	// this computer's agents use the browser that connects with it, as
-	// they do one on loopback
+	// this computer's agents use the browser that connects with it from
+	// this computer, as they do one on loopback
 	if err := gateway.SetOwnBrowserKey(who.KeyID); err != nil {
 		return "", err
 	}

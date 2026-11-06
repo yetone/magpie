@@ -75,8 +75,10 @@ func ourKey(k string) bool {
 // (#1332). A key of another magpie's, which this gateway would refuse, is
 // not.
 func gatewayTakes(k string) bool {
-	_, ok := access.Authenticate(k)
-	return ok
+	who, ok := access.Authenticate(k)
+	// Magpie Browser's key reaches no model, so an agent holding it
+	// doesn't go through magpie
+	return ok && !who.Browser
 }
 
 // gatewayKey says want is a key magpie gives an agent for its gateway:

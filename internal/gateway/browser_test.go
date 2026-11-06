@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/browserext"
 )
 
@@ -457,8 +459,13 @@ func TestBrowserOwner(t *testing.T) {
 }
 
 // The browser connected with the key magpie's own page made for it
-// (OwnBrowserKey) is this computer's too, as magpie in a container has no
-// browser on loopback; one connected with another key isn't.
+// (OwnBrowserKey) is this computer's too when it connected from this
+// computer (local), as through a name other than loopback's; one
+// connected with another key isn't. From elsewhere the own key proves
+// nothing: it is in a zip in Downloads, and a browser a copy of it
+// connects from another computer (the Docker bridge's 172.17.0.1, say) is
+// handed none of this computer's calls. Nor can the key call the browser
+// MCP itself: it connects the extension and nothing else.
 func TestOwnBrowserKeyIsThisComputers(t *testing.T) {
 	fresh(t)
 	t.Setenv("MAGPIE_ADDR", "")
@@ -468,11 +475,13 @@ func TestOwnBrowserKeyIsThisComputers(t *testing.T) {
 		t.Fatal("an own browser key with none recorded")
 	}
 	s := New()
-	const testPeer = "X-Test-Peer"
+	// testPeer: the request comes from that address, to testHost's name
+	const testPeer, testHost = "X-Test-Peer", "X-Test-Host"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if p := r.Header.Get(testPeer); p != "" {
-			r.RemoteAddr, r.Host = p, "192.0.2.1:3425"
+			r.RemoteAddr, r.Host = p, cmp.Or(r.Header.Get(testHost), "192.0.2.1:3425")
 			r.Header.Del(testPeer)
+			r.Header.Del(testHost)
 		}
 		lanGuard(s.Handler()).ServeHTTP(w, r)
 	}))
@@ -483,6 +492,12 @@ func TestOwnBrowserKeyIsThisComputers(t *testing.T) {
 	}
 	if got := OwnBrowserKey(); got != keys[0].ID {
 		t.Fatalf("OwnBrowserKey = %q, want %q", got, keys[0].ID)
+	}
+	// as a magpie from before made it, with full access: held to the
+	// extension as the gateway starts
+	ScopeOwnBrowserKey()
+	if k, _ := access.List(); !k[len(k)-2].Browser {
+		t.Fatal("the own key isn't held to the extension")
 	}
 	away := http.Header{testPeer: {"172.17.0.1:40000"}}
 	reply := func(name string) func(_, _, _ string, _ map[string]any) any {
@@ -500,9 +515,9 @@ func TestOwnBrowserKeyIsThisComputers(t *testing.T) {
 		}
 		return strings.Join(all, "\n"), m.Result.IsError
 	}
-	connected := func(id string) {
+	connected := func(id string, n int) {
 		t.Helper()
-		for deadline := time.Now().Add(10 * time.Second); len(s.browser.all(keyedSession(id, "x"))) < 1; time.Sleep(5 * time.Millisecond) {
+		for deadline := time.Now().Add(10 * time.Second); len(s.browser.all(keyedSession(id, "x"))) < n; time.Sleep(5 * time.Millisecond) {
 			if time.Now().After(deadline) {
 				t.Fatal("the extension never connected")
 			}
@@ -510,17 +525,37 @@ func TestOwnBrowserKeyIsThisComputers(t *testing.T) {
 	}
 	// another key's browser alone: not this computer's
 	fakeExtensionWith(t, srv.URL, secrets[1], away, "Chrome/141", reply("the other key's"))
-	connected(keys[1].ID)
+	connected(keys[1].ID, 1)
 	if got, bad := tabs("127.0.0.1:5000", BrowserSessionHeader, "s1"); !bad || got == "tabs of the other key's" {
 		t.Fatalf("this computer's caller used another key's browser: %q", got)
 	}
-	fakeExtensionWith(t, srv.URL, secrets[0], away, "Chrome/141", reply("own"))
-	connected(keys[0].ID)
+	// the own key's copy, from another computer: not this computer's
+	fakeExtensionWith(t, srv.URL, secrets[0], away, "Chrome/141", reply("a copy's"))
+	connected(keys[0].ID, 1)
+	if got, bad := tabs("127.0.0.1:5000", BrowserSessionHeader, "s1"); !bad || got == "tabs of a copy's" {
+		t.Fatalf("this computer's caller used the browser a copy of the own key connected from elsewhere: %q", got)
+	}
+	// nor from loopback through a proxy, which is someone else's
+	fakeExtensionWith(t, srv.URL, secrets[0], http.Header{testPeer: {"127.0.0.1:40001"}, testHost: {"magpie.example:3425"}, "X-Forwarded-For": {"203.0.113.9"}}, "Chrome/141", reply("a proxied copy's"))
+	connected(keys[0].ID, 2)
+	if got, bad := tabs("127.0.0.1:5000", BrowserSessionHeader, "s1"); !bad || strings.Contains(got, "copy's") {
+		t.Fatalf("this computer's caller used the browser a proxied copy connected: %q", got)
+	}
+	// from this computer, by a name that isn't loopback's: this computer's
+	fakeExtensionWith(t, srv.URL, secrets[0], http.Header{testPeer: {"127.0.0.1:40002"}, testHost: {"host.docker.internal:3425"}}, "Chrome/141", reply("own"))
+	connected(keys[0].ID, 3)
 	if got, bad := tabs("127.0.0.1:5000", BrowserSessionHeader, "s1"); bad || got != "tabs of own" {
 		t.Fatalf("this computer's caller: %q", got)
 	}
-	if got, bad := tabs("172.17.0.1:40000", "Authorization", "Bearer "+secrets[0], BrowserSessionHeader, "s1"); bad || got != "tabs of own" {
-		t.Fatalf("the own key's caller: %q", got)
+	// the own key calls no MCP server, the browser's included
+	r := httptest.NewRequest("POST", BrowserMCPPath, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	r.RemoteAddr = "172.17.0.1:40000"
+	r.Header.Set("Authorization", "Bearer "+secrets[0])
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), BrowserKeyCode) {
+		t.Fatalf("the own key's caller reached the browser MCP: %d %.200s", w.Code, w.Body.String())
 	}
 	if got, bad := tabs("172.17.0.1:40000", "Authorization", "Bearer "+secrets[1], BrowserSessionHeader, "s1"); bad || got != "tabs of the other key's" {
 		t.Fatalf("the other key's caller: %q", got)

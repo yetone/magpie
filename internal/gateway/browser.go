@@ -42,6 +42,13 @@ import (
 // agents don't. A caller on another computer with no key, or with another
 // key, is never handed a browser. Keyed callers' sessions are the key's
 // own ("key:<id>/…", browserOwner), so a key names only its own browsers.
+//
+// The key the GUI writes into the extension's zip (OwnBrowserKey) is a
+// browser key (access.Key.Browser): it opens BrowserExtensionPath and
+// nothing else (readOnlyGuard), since the zip sits in Downloads and a copy
+// of it must not spend the user's subscriptions. A browser connected with
+// it is this computer's too only when it connected from this computer
+// (local); a connection lives only while its key is on (watchKey).
 
 // BrowserMCPPath is where the browser MCP server is served.
 const BrowserMCPPath = "/mcp/magpie/browser"
@@ -83,9 +90,17 @@ type browserConn struct {
 	// key is the gateway key the browser connected with, whose callers
 	// use it; "" for this computer's, connected over loopback
 	key string
+	// who is that key as it was when the browser connected: once it
+	// isn't Current (turned off, removed, expired or rotated) the
+	// connection is closed (watchKey, call)
+	who access.Identity
 	// own: key is the one this magpie's own page made for the user's own
-	// browser (OwnBrowserKey), so this computer's callers use it too, as
-	// they do one on loopback
+	// browser (OwnBrowserKey) and the browser connected from this
+	// computer (local), so this computer's callers use it too, as they
+	// do one on loopback. From elsewhere the key alone is no proof: it is
+	// in a zip in Downloads, and whoever holds a copy could otherwise
+	// connect a browser of theirs and be handed this computer's agents'
+	// calls (their pages read, and pages of theirs fed back).
 	own   bool
 	since time.Time
 	wmu   sync.Mutex
@@ -190,6 +205,22 @@ func SetOwnBrowserKey(id string) error {
 		return err
 	}
 	return os.Rename(tmp, ownBrowserKeyFile())
+}
+
+// ScopeOwnBrowserKey makes the key the extension's zip was given
+// (OwnBrowserKey) a browser key, if a magpie from before browser keys made
+// it a full-access one: the extension, which holds the same secret, keeps
+// connecting, and a copy of the zip left in Downloads no longer reaches a
+// model, MCP server or stats. Only a key the GUI made for the zip is
+// recorded there (gui's browserKey), so no key the user made is touched.
+func ScopeOwnBrowserKey() {
+	id := OwnBrowserKey()
+	if id == "" {
+		return
+	}
+	if err := access.ScopeBrowser(id); err != nil && !errors.Is(err, access.ErrNoKey) {
+		log.Printf("Magpie Browser's gateway key %s: can't make it a browser key: %v", id, err)
+	}
 }
 
 // forSession is the browser a session's calls go to: the one it picked
@@ -301,6 +332,12 @@ func (b *browserRelay) call(ctx context.Context, session, tool string, args json
 	if c == nil {
 		return nil, browserAway(session)
 	}
+	if c.key != "" && !access.Current(c.who) {
+		// its key was turned off since watchKey last looked: handed nothing
+		b.remove(c)
+		go c.drop()
+		return nil, browserAway(session)
+	}
 	b.mu.Lock()
 	if b.pending == nil {
 		b.pending = map[string]chan json.RawMessage{}
@@ -344,31 +381,68 @@ func browserAway(session string) error {
 }
 
 // browserExtensionKey is the gateway key the extension's request r comes
-// with ("" for one on this computer), and whether it is let connect: from
-// this computer over loopback, or with a gateway key that is on.
-func browserExtensionKey(r *http.Request) (string, bool) {
+// with (no KeyID for one on this computer), and whether it is let
+// connect: from this computer over loopback, or with a gateway key that
+// is on and may connect a browser (one with full access, or the
+// extension's own, Key.Browser; never a read-only one).
+func browserExtensionKey(r *http.Request) (access.Identity, bool) {
 	if r.Header.Get("Origin") != browserext.Origin {
-		return "", false
+		return access.Identity{}, false
 	}
 	if local(r) && loopbackHost(r.Host) {
-		return "", true
+		return access.Identity{}, true
 	}
-	if id := access.Caller(r.Context()).KeyID; id != "" {
-		return id, true
-	}
-	// a key lanGuard didn't read: the gateway isn't on the network, so
-	// this is a container's published port or a proxy on this computer
-	for _, k := range callerKeys(r) {
-		if c, ok := access.Authenticate(k); ok && c.KeyID != "" {
-			return c.KeyID, true
+	who := access.Caller(r.Context())
+	if who.KeyID == "" {
+		// a key lanGuard didn't read: the gateway isn't on the network,
+		// so this is a container's published port or a proxy on this
+		// computer
+		for _, k := range callerKeys(r) {
+			if c, err := access.Check(k); err == nil && c.KeyID != "" {
+				who = c
+				break
+			}
 		}
 	}
-	return "", false
+	if who.KeyID == "" || (who.ReadOnly && !who.Browser) {
+		return access.Identity{}, false
+	}
+	return who, true
+}
+
+// browserKeyCheck is how often a browser connected with a key looks
+// whether the key is still on (watchKey).
+var browserKeyCheck = 5 * time.Second
+
+// watchKey closes c's connection once the key it connected with is no
+// longer Current: turned off, removed, expired or rotated. A browser
+// call looks too (call), so none is handed to it in between.
+func (c *browserConn) watchKey(ctx context.Context) {
+	t := time.NewTicker(browserKeyCheck)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if !access.Current(c.who) {
+				c.drop()
+				return
+			}
+		}
+	}
+}
+
+// drop closes the connection of a browser whose key is no longer on.
+func (c *browserConn) drop() {
+	log.Printf("Magpie Browser connected with gateway key %s: the key is no longer on, so the connection is closed", c.key)
+	c.c.Close(websocket.StatusPolicyViolation, "the gateway key this browser connected with is no longer on")
 }
 
 // browserExtension takes the extension's WebSocket.
 func (s *Server) browserExtension(w http.ResponseWriter, r *http.Request) {
-	key, ok := browserExtensionKey(r)
+	who, ok := browserExtensionKey(r)
+	key := who.KeyID
 	if !ok {
 		http.Error(w, "only the Magpie Browser extension connects here: on this computer, or with a gateway key", http.StatusForbidden)
 		return
@@ -379,9 +453,14 @@ func (s *Server) browserExtension(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ws.SetReadLimit(64 << 20) // a full-page screenshot
-	c := &browserConn{c: ws, key: key, own: key != "" && key == OwnBrowserKey(), since: time.Now()}
+	c := &browserConn{c: ws, key: key, who: who, own: key != "" && local(r) && key == OwnBrowserKey(), since: time.Now()}
 	ctx := r.Context()
 	defer ws.CloseNow()
+	if key != "" {
+		watch, stop := context.WithCancel(ctx)
+		defer stop()
+		go c.watchKey(watch)
+	}
 	added := false
 	defer func() {
 		if added {
