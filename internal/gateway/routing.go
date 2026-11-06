@@ -597,7 +597,8 @@ func failure(status int, body []byte) string {
 		// Standard's pool, which counts some models only, and read as the
 		// account out of credit it rested Droid Core with it (#1979)
 		return failQuota
-	case status == 402, creditWords.Match(body) && (status != 429 || brokeWords.Match(body)) || bytes.Contains(body, []byte("insufficient_quota")):
+	case status == 402, creditWords.Match(body) && (status != 429 || brokeWords.Match(body)),
+		bytes.Contains(body, []byte("insufficient_quota")) && !minuteRate(body):
 		return failCredit
 	case status == 429 && resetsWhen.Match(body):
 		// out until the time it names, in whichever language it said so:
@@ -605,7 +606,7 @@ func failure(status int, body []byte) string {
 		// English one as a rate limit, and each rested its own fallback
 		// (#1669)
 		return failQuota
-	case status == 429 && minuteLimit(body):
+	case status == 429 && minuteRate(body):
 		// a limit per minute, whatever it calls itself: back in a
 		// minute, not a plan used up (minuteWords)
 		return failRate
@@ -628,13 +629,20 @@ func failure(status int, body []byte) string {
 	return failOther
 }
 
-// minuteLimit says a 429's words name a limit per minute or less
+// minuteRate says a 429's words name a limit per minute or less
 // (minuteWords), and nothing longer or spent beside it: no longer window
-// (longWords), no balance spent (brokeWords, insufficient_quota). Words
-// in a link don't count.
-func minuteLimit(body []byte) bool {
+// (longWords), no balance spent (brokeWords). Words in a link don't
+// count. A body carrying the quota code insufficient_quota reads here
+// too when its words say a rate: SenseNova's token-plan gateway answers
+// its throttle with the code beside the type rate_limit_error and the
+// message "inference exceeds tpm/rpm limit" over a pool half up — read
+// from its body it was out of credit, from the words magpie gave the
+// agent a rate limit, and the same text was both the same day (#5006).
+// The code is the gateway's throttle code, not its balance: OpenAI's own
+// out-of-credit (its message names no rate) reads credit as before.
+func minuteRate(body []byte) bool {
 	body = urlWords.ReplaceAll(body, nil)
-	return minuteWords.Match(body) && !longWords.Match(body) && !brokeWords.Match(body) && !bytes.Contains(body, []byte("insufficient_quota"))
+	return minuteWords.Match(body) && !longWords.Match(body) && !brokeWords.Match(body)
 }
 
 // dashScopeTokenRate: DashScope's (Model Studio's) 429 for the tokens

@@ -22,6 +22,13 @@ func TestRateLimitIsNotQuota(t *testing.T) {
 		`{"error":{"code":"1113","message":"余额不足或无可用资源包,请充值。"}}`:                                              failCredit,
 		`{"error":{"message":"Zhipu GLM: 余额不足或无可用资源包,请充值。","type":"rate_limit_error"}}`:                       failCredit,
 		`{"error":{"code":"1113","message":"Insufficient balance or no resource package. Please recharge."}}`: failCredit,
+		// SenseNova's token-plan gateway answers its throttle in OpenAI's
+		// shape, the code insufficient_quota beside the type
+		// rate_limit_error and a per-minute message, over a pool half up
+		// (hzyqn: the same text read credit from the body and rate from
+		// the words magpie gave the agent, #5006)
+		`{"error":{"code":"insufficient_quota","message":"inference exceeds tpm/rpm limit","type":"rate_limit_error"}}`: failRate,
+		`SenseNova: inference exceeds tpm/rpm limit`: failRate,
 	} {
 		if got := failure(429, []byte(body)); got != want {
 			t.Errorf("%s: %s, want %s", body, got, want)
