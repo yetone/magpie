@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -71,6 +72,14 @@ func cappedOn(t *testing.T, c *capped) {
 	t.Helper()
 	noRests()
 	t.Cleanup(noRests)
+	// The hold before routing is not what these tests are about, and their
+	// bodies are up to 42 MB: magpie's work on one before its first route
+	// is ~0.6s, ~9s under -race on a loaded Mac, and past unroutedUnknown's
+	// 30s on a loaded ubuntu runner under -race, which answered the
+	// compaction 504 "held 30s without routing" (#5571). The hold's own
+	// tests are in unrouted_test.go.
+	unknownLimit(t, 10*time.Minute)
+	unroutedLimits(t, unroutedShow, 10*time.Minute)
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	up := httptest.NewServer(c)
