@@ -556,8 +556,13 @@ button.rt-session { cursor: pointer; }
 .rt-group { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 14px; cursor: pointer; transition: background .12s; }
 .rt-group:hover { background: var(--card-2); }
 .rt-group.off { opacity: .6; }
-/* switched off as a whole: dimmed but for its switch, which brings it back */
-.rt-group.disabled > :not(.rt-gon) { opacity: .5; }
+/* switched off as a whole: its switch, its "switched off" tag and its
+   grey logos say so, and its words stay readable (jiabubu on Discord: at
+   half opacity they were too faint to read), the name a step quieter than
+   an on group's and not dimmed again by .off */
+.rt-group.disabled { opacity: 1; }
+.rt-group.disabled .nm b { color: var(--fg-2); font-weight: 500; }
+.rt-group.disabled > .ics, .rt-group.disabled > .rt-ghandle { filter: grayscale(1); opacity: .6; }
 .rt-group .rt-gon { flex: none; transform: scale(.85); }
 .rt-group .ics { display: flex; gap: 3px; flex: none; min-width: 18px; }
 .rt-group .ics .ic { width: 16px; height: 16px; }
