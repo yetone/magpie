@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/stall"
 	"github.com/yetone/magpie/internal/testenv"
 )
 
@@ -344,5 +345,26 @@ func TestDownloadBunDefaultSkipsOfficialSums(t *testing.T) {
 	}
 	if zipAsked.Load() != 1 {
 		t.Fatalf("zip asked %d times", zipAsked.Load())
+	}
+}
+
+// Bun's download has no bound on the whole (#5572); a server that goes
+// silent part way is ended by the stall, said as one.
+func TestBunDownloadThatGoesSilentIsAStall(t *testing.T) {
+	old := downloadStall
+	downloadStall = 100 * time.Millisecond
+	t.Cleanup(func() { downloadStall = old })
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "1000")
+		w.Write([]byte("PK"))
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	_, err := getURL(ctx, srv.URL+"/bun.zip", 1<<20)
+	if !errors.Is(err, stall.ErrStalled) || ctx.Err() != nil {
+		t.Fatalf("err = %v, want a stall", err)
 	}
 }

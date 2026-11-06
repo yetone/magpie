@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,7 +13,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/yetone/magpie/internal/stall"
 	"github.com/yetone/magpie/internal/testenv"
 )
 
@@ -210,5 +213,26 @@ func TestFindTakesTheMachinesOwnFirst(t *testing.T) {
 	t.Setenv("PATH", own)
 	if p := Find(); p == got || p == "" {
 		t.Errorf("with its own on PATH, Find() = %q, want that one", p)
+	}
+}
+
+// A build download has no bound on the whole (#5572); one whose server
+// goes silent part way is ended by the stall, said as one.
+func TestDownloadThatGoesSilentIsAStall(t *testing.T) {
+	old := downloadStall
+	downloadStall = 100 * time.Millisecond
+	t.Cleanup(func() { downloadStall = old })
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "1000")
+		w.Write([]byte("#!/bin/sh\n"))
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	err := download(ctx, Release{URL: srv.URL, Size: 1000, Checksum: "00"}, filepath.Join(t.TempDir(), "claude"), nil)
+	if !errors.Is(err, stall.ErrStalled) || ctx.Err() != nil {
+		t.Fatalf("err = %v, want a stall", err)
 	}
 }

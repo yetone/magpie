@@ -292,3 +292,50 @@ func TestDownloadStallEveryTimeSaysSo(t *testing.T) {
 		t.Fatalf("tries = %d, want %d", n, len(retryWaits)+1)
 	}
 }
+
+// A download still moving, however slowly, is never ended by a total time
+// (#5572: the 83 MB Windows exe under ~140 KB/s failed at the client's 10
+// minutes). Here the feed's client gives up after 300ms and the body
+// takes ~1.2s, a byte every 100ms well inside the stall's while: one try
+// reads it whole, with no break and no retry.
+func TestDownloadSlowButMovingOutlastsTheClientTimeout(t *testing.T) {
+	quickRetries(t)
+	oldStall, oldClient := stallAfter, client
+	stallAfter = time.Second
+	client = &http.Client{Timeout: 300 * time.Millisecond, Transport: oldClient.Transport}
+	t.Cleanup(func() { stallAfter, client = oldStall, oldClient })
+	const chunk, chunks = 4 << 10, 12
+	body := make([]byte, chunk*chunks)
+	for i := range body {
+		body[i] = byte(i * 11)
+	}
+	sum := sha256.Sum256(body)
+	var tries atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tries.Add(1)
+		w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+		for i := 0; i < chunks; i++ {
+			if _, err := w.Write(body[i*chunk : (i+1)*chunk]); err != nil {
+				return
+			}
+			w.(http.Flusher).Flush()
+			time.Sleep(100 * time.Millisecond)
+		}
+	}))
+	defer srv.Close()
+	var steps []string
+	ctx := WithStep(context.Background(), func(s string) { steps = append(steps, s) })
+	path := filepath.Join(t.TempDir(), "magpie.new")
+	if err := download(ctx, Asset{URL: srv.URL, Size: int64(len(body)), SHA256: hex.EncodeToString(sum[:])}, path); err != nil {
+		t.Fatalf("a moving download failed: %v", err)
+	}
+	if n := tries.Load(); n != 1 {
+		t.Fatalf("asked %d times, want one try that wasn't broken off", n)
+	}
+	if want := []string{StepDownload, StepVerify}; !slices.Equal(steps, want) {
+		t.Fatalf("steps = %q, want %q", steps, want)
+	}
+	if b, _ := os.ReadFile(path); !bytes.Equal(b, body) {
+		t.Fatalf("file has %d bytes, not the release's", len(b))
+	}
+}

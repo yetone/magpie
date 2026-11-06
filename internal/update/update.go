@@ -69,8 +69,20 @@ type Asset struct {
 // client asks the feed and downloads a release through the proxy the rest
 // of magpie's requests take — Settings' Proxy, else the environment's, else
 // the system's (#294) — on a transport of its own, whatever the process has
-// done to http.DefaultTransport.
+// done to http.DefaultTransport. Its Timeout bounds the feed's small
+// answers; a release's file goes through fileClient, which has none.
 var client = &http.Client{Timeout: 10 * time.Minute, Transport: proxied()}
+
+// fileClient is client without its total Timeout, for a release's file: a
+// slow download still moving goes on however long it takes, and one that
+// stops sending is ended by fetch's stall timer (stallAfter) instead. The
+// Timeout failed an 83 MB Windows download under ~140 KB/s at 10 minutes,
+// part way and still coming (#5572).
+func fileClient() *http.Client {
+	c := *client
+	c.Timeout = 0
+	return &c
+}
 
 func proxied() http.RoundTripper {
 	t := http.DefaultTransport.(*http.Transport).Clone()
@@ -1258,7 +1270,7 @@ func fetch(ctx context.Context, a Asset, path string) error {
 		if have > 0 {
 			req.Header.Set("Range", fmt.Sprintf("bytes=%d-", have))
 		}
-		res, err = source.Do(client, req)
+		res, err = source.Do(fileClient(), req)
 		if err != nil {
 			if ctx.Err() != nil {
 				return fail(err)

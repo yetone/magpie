@@ -396,8 +396,16 @@ func (u *updater) begin() bool {
 	return true
 }
 
+// checkWait bounds asking the feed. The download after it has no total
+// bound: a slow one still moving goes on, and one that stops sending is
+// ended by update's stall timer, tried again a bounded number of times
+// (#5572: an 83 MB download under ~140 KB/s failed at 10 minutes part
+// way). A var for tests.
+var checkWait = 10 * time.Minute
+
 func (u *updater) run() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx := context.Background()
+	cctx, cancel := context.WithTimeout(ctx, checkWait)
 	defer cancel()
 	s := settings.Load()
 	u.mu.Lock()
@@ -410,7 +418,7 @@ func (u *updater) run() {
 		lang = notesLang(trayLang(s.Lang, systemLang))
 	}
 	stable := s.UpdateChannel == settings.UpdateStable
-	rel, err := update.LatestIn(ctx, lang)
+	rel, err := update.LatestIn(cctx, lang)
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if err == nil && u.latest != nil && update.Newer(u.latest.Version, rel.Version) {

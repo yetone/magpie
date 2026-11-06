@@ -70,11 +70,11 @@ func keepOnce(ctx context.Context) (string, error) {
 	if !newer(r.Version, v) {
 		return "", nil
 	}
-	dctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
-	defer cancel()
-	// the old version stays until the next look: a run being started now
-	// may have been handed its path
-	if _, err := install(dctx, r, nil); err != nil {
+	// no bound on the whole: a slow download still moving finishes, and
+	// one that stops sending is ended by downloadStall (#5572). The old
+	// version stays until the next look: a run being started now may have
+	// been handed its path
+	if _, err := install(ctx, r, nil); err != nil {
 		return "", fmt.Errorf("Claude Code %s: %w", r.Version, err)
 	}
 	return fmt.Sprintf("Claude Code: magpie's download updated from %s to %s", v, r.Version), nil

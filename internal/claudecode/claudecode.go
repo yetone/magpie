@@ -26,11 +26,13 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/libc"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
+	"github.com/yetone/magpie/internal/stall"
 )
 
 // Base is where Anthropic publishes Claude Code's builds, as its installer
@@ -273,7 +275,15 @@ func download(ctx context.Context, r Release, to string, progress func(int64)) e
 	return netproxy.AgainOverHTTP1(ctx, func(ctx context.Context) error { return downloadOnce(ctx, r, to, progress) })
 }
 
-func downloadOnce(ctx context.Context, r Release, to string, progress func(int64)) error {
+// downloadStall is how long a download waits for its next byte. There is
+// no bound on the whole: a slow link still moving finishes the ~200 MB
+// build (#5572). A var for tests.
+var downloadStall = 60 * time.Second
+
+func downloadOnce(ctx context.Context, r Release, to string, progress func(int64)) (err error) {
+	ctx, w := stall.Start(ctx, downloadStall)
+	defer w.Stop()
+	defer func() { err = w.Err(err) }()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.URL, nil)
 	if err != nil {
 		return err
@@ -291,7 +301,7 @@ func downloadOnce(ctx context.Context, r Release, to string, progress func(int64
 		return err
 	}
 	h := sha256.New()
-	n, err := io.Copy(io.MultiWriter(out, h, progressWriter(progress)), io.LimitReader(res.Body, r.Size+1))
+	n, err := io.Copy(io.MultiWriter(out, h, progressWriter(progress)), io.LimitReader(w.Reader(res.Body), r.Size+1))
 	if cerr := out.Close(); err == nil {
 		err = cerr
 	}

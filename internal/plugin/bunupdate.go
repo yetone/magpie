@@ -310,11 +310,12 @@ func KeepBunUpdated(ctx context.Context) {
 		case <-t.C:
 		}
 		if len(Load().Plugins) > 0 && HasBun() {
-			cctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-			if _, err := CheckBun(cctx); err != nil {
+			// no bound on the whole: a slow download still moving
+			// finishes, and one that stops sending is ended by
+			// downloadStall (#5572)
+			if _, err := CheckBun(ctx); err != nil {
 				log.Printf("plugins: looking for a newer Bun: %s", err)
 			}
-			cancel()
 		}
 		t.Reset(bunEvery)
 	}

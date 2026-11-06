@@ -160,9 +160,9 @@ func upgrade() {
 		return
 	}
 	defer upgrading.Store(false)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-	if err := ensureServe(ctx); err != nil {
+	// no bound on the whole, as the model's download has none: get's
+	// stall timer ends one that stops sending (#5572)
+	if err := ensureServe(context.Background()); err != nil {
 		return
 	}
 	stopWhenFree()

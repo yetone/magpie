@@ -27,6 +27,7 @@ import (
 	"github.com/yetone/magpie/internal/libc"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/source"
+	"github.com/yetone/magpie/internal/stall"
 )
 
 // BunVersion is the Bun magpie downloads to run plugins with the first
@@ -354,7 +355,15 @@ func getURLFrom(ctx context.Context, url string, limit int64, mirror bool) ([]by
 	return b, err
 }
 
-func getURLOnce(ctx context.Context, url string, limit int64, mirror bool) ([]byte, error) {
+// downloadStall is how long a download from Bun's release waits for its
+// next byte; there is no bound on the whole, so a slow link still moving
+// finishes (#5572). A var for tests.
+var downloadStall = 60 * time.Second
+
+func getURLOnce(ctx context.Context, url string, limit int64, mirror bool) (b []byte, err error) {
+	ctx, w := stall.Start(ctx, downloadStall)
+	defer w.Stop()
+	defer func() { err = w.Err(err) }()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -374,7 +383,7 @@ func getURLOnce(ctx context.Context, url string, limit int64, mirror bool) ([]by
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%s: %s", url, res.Status)
 	}
-	b, err := io.ReadAll(io.LimitReader(res.Body, limit+1))
+	b, err = io.ReadAll(io.LimitReader(w.Reader(res.Body), limit+1))
 	if err != nil {
 		return nil, err
 	}

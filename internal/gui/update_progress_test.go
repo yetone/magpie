@@ -125,3 +125,66 @@ func TestUpdateSpeedFallsWhenStalled(t *testing.T) {
 		t.Fatalf("marks after the bytes went back = %d, want 1", len(m))
 	}
 }
+
+// The update's check is bounded (checkWait), its download isn't: one
+// still moving past that bound finishes (#5572, an 83 MB download under
+// ~140 KB/s failed at 10 minutes part way). Here the bound is 200ms and
+// the bytes take ~600ms.
+func TestUpdateSlowDownloadOutlastsTheCheckBound(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
+	old := checkWait
+	checkWait = 200 * time.Millisecond
+	t.Cleanup(func() { checkWait = old })
+
+	const chunk, chunks = 4 << 10, 10
+	body := make([]byte, chunk*chunks)
+	for i := range body {
+		body[i] = byte(i * 5)
+	}
+	sum := sha256.Sum256(body)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/asset" {
+			for i := 0; i < chunks; i++ {
+				if _, err := w.Write(body[i*chunk : (i+1)*chunk]); err != nil {
+					return
+				}
+				w.(http.Flusher).Flush()
+				time.Sleep(60 * time.Millisecond)
+			}
+			return
+		}
+		json.NewEncoder(w).Encode(update.Release{Version: "0.1.11", Assets: map[string]update.Asset{
+			update.BinaryAsset(): {URL: "http://" + r.Host + "/asset", Size: int64(len(body)), SHA256: hex.EncodeToString(sum[:])},
+		}})
+	}))
+	defer srv.Close()
+	t.Setenv("MAGPIE_UPDATE_FEED", srv.URL)
+	oldV := Version
+	Version = "0.1.10"
+	defer func() { Version = oldV }()
+	exe, err := update.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := &updater{exe: exe}
+	u.self, _ = os.Stat(exe)
+	defer func() {
+		u.mu.Lock()
+		staged := u.staged
+		u.mu.Unlock()
+		if staged != "" {
+			os.Remove(staged)
+		}
+	}()
+	if !u.begin() {
+		t.Fatal("no check began")
+	}
+	u.run()
+	if j := u.json(); j.State != "ready" {
+		t.Fatalf("after the download: %+v", j)
+	}
+}

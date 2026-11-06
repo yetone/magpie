@@ -190,10 +190,13 @@ func updateCmd(args []string) error {
 	if len(args) > 2 || len(args) == 2 && args[1] != "check" {
 		return fmt.Errorf("usage: magpie update [check] [--proxy <url>] [--mirror <prefix>]")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	// the check is bounded; the download after it is not: a slow one
+	// still moving goes on, and one that stops sending is ended by
+	// update's stall timer (#5572)
+	ctx := update.WithMirror(update.WithProxy(context.Background(), proxy), mirror)
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-	ctx = update.WithMirror(update.WithProxy(ctx, proxy), mirror)
-	rel, err := update.Latest(ctx)
+	rel, err := update.Latest(cctx)
 	if err != nil {
 		return err
 	}
