@@ -26,7 +26,10 @@ func TestOverflowTheVendorDidntSay(t *testing.T) {
 		wantCode, calls  int
 		want             string
 	}{
-		{"502 anthropic", "/v1/messages", big, 502, `{"error":{"message":"We are experiencing capacity issues"}}`, 400, 1, "prompt is too long"},
+		// a 5xx only from Devin, which answers an overflow so
+		// (TestDevinBusyOverflowStillTooLong): a plain provider's is its
+		// busy moment, asked again (ne9ko9 on Discord)
+		{"502 plain", "/v1/messages", big, 502, `{"error":{"message":"We are experiencing capacity issues"}}`, 502, 1 + lastRetries + replanRounds, "capacity issues"},
 		{"400 chat", "/v1/chat/completions", big, 400, `{"error":{"message":"Invalid request parameters"}}`, 400, 1, "context_length_exceeded"},
 		// Text alone well past the window is enough to ask for compaction.
 		{"413 bytes", "/v1/messages", big, 413, `{"error":{"message":"Request Entity Too Large"}}`, 400, 1, "prompt is too long"},

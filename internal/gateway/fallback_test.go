@@ -296,7 +296,7 @@ func TestEscapedWordsReadByEveryDecider(t *testing.T) {
 			t.Errorf("escaped %v: a shape refusal that says the quota is spent rests nobody", esc)
 		}
 		p := provider.Provider{ID: "fake", Name: "Fake", Contexts: map[string]int{"m": 100}}
-		if said, ok := tooLongUnsaid(p, "m", 1000, 400, say("该模型不支持当前令牌计划")); ok {
+		if said, ok := tooLongUnsaid(p, "m", 1000, 0, 400, say("该模型不支持当前令牌计划")); ok {
 			t.Errorf("escaped %v: a model the plan doesn't serve told as too long: %s", esc, said)
 		}
 	}

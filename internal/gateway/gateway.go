@@ -505,6 +505,9 @@ type Server struct {
 	// codexTurns is the model each Codex last had a turn of its own
 	// answered on, by caller (codexMemoryStandIn)
 	codexTurns sync.Map
+	// held is the most prompt tokens each provider's model answered
+	// (heldOf), by provider id and model
+	held sync.Map
 	// codexLeads is the model each Codex conversation's own turns last
 	// went on, for its side calls to follow (codexFollowTo)
 	codexLeads codexLeads
@@ -3838,6 +3841,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			w = spliceAfter(w, hw.over)
 		}
 		reasked += hw.reasked
+		if hw.code() > 0 && hw.code() < 400 && !hw.refused {
+			// an answer, passing or held whole: the model holds a prompt
+			// this size (tooLongUnsaid)
+			s.noteHeld(c.p.ID, c.model, call.Usage.prompt())
+		}
 		if hw.passing {
 			clientResponseID = call.Usage.ResponseID
 		}
@@ -3850,7 +3858,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		outgrew := false // a failure that didn't say so was the request's length
 		if !hw.passing && !hw.refused && hw.code() >= 400 {
 			if req, err := parse(from, attemptBody); err == nil {
-				if msg, ok := tooLongUnsaid(c.p, c.model, estimate(req), hw.code(), hw.errBody()); ok {
+				if msg, ok := tooLongUnsaid(c.p, c.model, estimate(req), s.heldOf(c.p.ID, c.model), hw.code(), hw.errBody()); ok {
 					// told as an overflow: not asked again, of this one or
 					// another, and nobody rests
 					hw.failure, hw.failMsg, outgrew = http.StatusBadRequest, msg, true

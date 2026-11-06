@@ -1957,25 +1957,49 @@ func saysLength(status int, body []byte) bool {
 // trouble, a model it doesn't serve, a region it doesn't serve, or one
 // already saying it overflowed. A request error that speaks of length
 // (saysLength) needs only lengthMargin of the window.
-func tooLongUnsaid(p provider.Provider, model string, tokens, status int, body []byte) (string, bool) {
+//
+// A 5xx is a vendor's busy or broken moment, which a client asks again,
+// and is read so only for a vendor seen to answer an overflow with one
+// (busyOverflows): a custom Responses relay's plain 502 "Upstream service
+// temporarily unavailable", at 385K tokens of a conversation it had just
+// answered at 454K, was told as more than gpt-6-astra's 272K, and Codex
+// ended the turn instead of asking again (ne9ko9 on Discord). Nor is a
+// failure that is no answer at all (transportFailed): a dial or read
+// that timed out, a connection reset, a stream cut short, each in
+// magpie's own words. held is the most the model was seen to answer for
+// this provider (Server.heldOf), and the window is never less than it,
+// nor than the most the provider's list says the model may be asked for
+// (windowMost).
+func tooLongUnsaid(p provider.Provider, model string, tokens, held, status int, body []byte) (string, bool) {
 	switch status {
-	case 400, 413, 422, 500, 502, 503, 504:
+	case 400, 413, 422:
+	case 500, 502, 503, 504:
+		if !busyOverflows(p) {
+			return "", false
+		}
 	default:
 		return "", false
 	}
 	raw := body
 	// the words are matched decoded, too (#1669)
 	body = wordsOf(body)
+	if transportFailed(raw) || transportFailed(body) {
+		return "", false
+	}
 	if overflowed(status, body) || failure(status, body) != failOther || quotaWords.Match(body) ||
 		unservedWords.Match(body) || refusedWords.Match(body) || provider.EdgeBlocked(body) || regionRefused(status, body) || zdrRefused(status, body) {
 		return "", false
 	}
 	window := windowOf(p, model)
+	if window <= 0 {
+		return "", false
+	}
+	window = max(window, windowMost(p, model), held)
 	margin := unsaidMargin
 	if saysLength(status, raw) {
 		margin = lengthMargin
 	}
-	if window <= 0 || float64(tokens) < float64(window)*margin {
+	if float64(tokens) < float64(window)*margin {
 		return "", false
 	}
 	msg := fmt.Sprintf("prompt is too long: about %d tokens, more than %s's context window of %d", tokens, model, window)
@@ -1991,6 +2015,75 @@ func tooLongUnsaid(p provider.Provider, model string, tokens, status int, body [
 		return full, true
 	}
 	return fmt.Sprintf("%s (%s answered %d)", msg, p.Name, status), true
+}
+
+// busyOverflows says p's vendor answers a request past its model's window
+// with a 5xx that says nothing of length: Devin's 502 "We are currently
+// experiencing capacity issues" for a conversation of about 300K tokens
+// on swe-1.7-lightning (202,752), answered at a size it holds (b3ab3e42e).
+// Devin is served by its plugin now, under its own id or another.
+func busyOverflows(p provider.Provider) bool {
+	return p.ID == "devin" || buildHost(p) == "devin"
+}
+
+// transportWords are a failure that never reached a vendor's answer, as Go,
+// Bun or Windows say it, or magpie's own words for a reply that broke off:
+// a request that met one may well fit, and is asked again.
+var transportWords = regexp.MustCompile(`(?i)dial (tcp|udp)|connectex|wsarecv|wsasend|i/o timeout|TLS handshake timeout|context deadline exceeded|Client\.Timeout|timeout awaiting response headers|connection (was )?(reset|refused|aborted|closed)|forcibly closed|broken pipe|unexpected EOF|no such host|network is unreachable|no route to host|server closed idle connection|Unable to connect|ConnectionRefused|ConnectionClosed|FailedToOpenSocket|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ECONNABORTED|ENOTFOUND|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH|EPIPE`)
+
+// transportFailed says an error body is a transport failure rather than a
+// vendor's answer (transportWords), or one magpie made of a reply that
+// broke off or said nothing.
+func transportFailed(body []byte) bool {
+	return transportWords.Match(body) || bytes.Contains(body, []byte(errEndedShort.Error())) ||
+		bytes.Contains(body, []byte(didNotStream)) || magpieSaid(string(body))
+}
+
+// noteHeld keeps n as the most prompt tokens the provider's model has
+// answered, when it is more than the most kept: a model that answered a
+// prompt of n holds one of n, whatever its window is said to be (ne9ko9
+// on Discord: gpt-6-astra, said at 272K, answered 454K and 474K).
+func (s *Server) noteHeld(id, model string, n int) {
+	if n <= 0 {
+		return
+	}
+	key := id + "\x00" + model
+	for {
+		cur, ok := s.held.Load(key)
+		if !ok {
+			if _, loaded := s.held.LoadOrStore(key, n); !loaded {
+				return
+			}
+			continue
+		}
+		if cur.(int) >= n || s.held.CompareAndSwap(key, cur, n) {
+			return
+		}
+	}
+}
+
+// heldOf is the most prompt tokens the provider's model has answered since
+// magpie started (noteHeld), 0 when none.
+func (s *Server) heldOf(id, model string) int {
+	if v, ok := s.held.Load(id + "\x00" + model); ok {
+		return v.(int)
+	}
+	return 0
+}
+
+// windowMost is the most the provider's list says its model may be asked
+// for (Entry.MaxContext), 0 when it says none: a Codex entry's
+// max_context_window of 872K above a 272K context_window, which Codex is
+// handed and may work a conversation up to.
+func windowMost(p provider.Provider, model string) int {
+	cat := provider.Served()
+	for i := range cat {
+		e := &cat[i]
+		if e.Group == "" && e.Provider.ID == p.ID && (e.Model == model || e.ID == model) {
+			return e.MaxContext
+		}
+	}
+	return 0
 }
 
 // windowOf is the tokens a provider's model takes, where known: the

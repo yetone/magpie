@@ -30,10 +30,10 @@ func TestPayloadTooLargeIsNotContextOverflow(t *testing.T) {
 			{Kind: Text, Text: strings.Repeat("word", 100)},
 			{Kind: Image, Data: strings.Repeat(pngA, 4096)},
 		}}}})
-		if inferred, ok := tooLongUnsaid(p, "m", tokens, 413, []byte(msg)); ok {
+		if inferred, ok := tooLongUnsaid(p, "m", tokens, 0, 413, []byte(msg)); ok {
 			t.Errorf("byte limit inferred as token limit: %s", inferred)
 		}
-		if inferred, ok := tooLongUnsaid(p, "m", 1000, 413, []byte(msg)); !ok || !strings.Contains(inferred, "prompt is too long") {
+		if inferred, ok := tooLongUnsaid(p, "m", 1000, 0, 413, []byte(msg)); !ok || !strings.Contains(inferred, "prompt is too long") {
 			t.Errorf("text estimate past the window lost compaction: %s", inferred)
 		}
 		if retryable(413, []byte(msg)) {

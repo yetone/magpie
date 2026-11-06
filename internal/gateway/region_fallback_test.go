@@ -44,12 +44,12 @@ func TestRegionRefusalIsRetryable(t *testing.T) {
 func TestRegionRefusalIsNotTooLong(t *testing.T) {
 	p := provider.Provider{ID: "fake", Name: "Fake", Contexts: map[string]int{"m": 100}}
 	for _, body := range []string{antigravityRegion400, googleRegion400} {
-		if said, ok := tooLongUnsaid(p, "m", 1000, 400, []byte(body)); ok {
+		if said, ok := tooLongUnsaid(p, "m", 1000, 0, 400, []byte(body)); ok {
 			t.Errorf("region refusal read as too long: %s", said)
 		}
 	}
 	// the same size, refused without saying why, still is
-	if _, ok := tooLongUnsaid(p, "m", 1000, 400, []byte(`{"error":{"message":"Invalid request parameters"}}`)); !ok {
+	if _, ok := tooLongUnsaid(p, "m", 1000, 0, 400, []byte(`{"error":{"message":"Invalid request parameters"}}`)); !ok {
 		t.Error("an unsaid overflow is no longer inferred")
 	}
 }
