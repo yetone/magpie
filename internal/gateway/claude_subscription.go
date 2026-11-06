@@ -5262,6 +5262,14 @@ var (
 	tokenCount = regexp.MustCompile(`^(?:<total_tokens>[^<]*</total_tokens>|Token usage: \S+; \S+ remaining)$`)
 	// reminderTag is a <system-reminder> tag, open or close.
 	reminderTag = regexp.MustCompile(`</?system-reminder(?:\s[^>]*)?>`)
+	// desktopNote is an annotation Claude Desktop (its Claude Code) puts
+	// beside what the run reads, telling it about the picture it scaled
+	// down, where a skill's files live, or that a tool of ToolSearch's
+	// was loaded: the agent's own words about its own work (#5403), never
+	// the user's — the picture itself rides in the tool result. Wide
+	// images read in parallel bring one note each, which may come as one
+	// text joined by blank lines: every note in it is the agent's.
+	desktopNote = regexp.MustCompile(`(?s)^(?:(?:\[Image: original \d+x\d+, displayed at \d+x\d+\. Multiply coordinates by [\d.]+ to map to original image\.\]|Tool loaded\.)\s*)+$|^Base directory for this skill: `)
 )
 
 // midTurnSaid is the user's words in each message they sent mid-turn
@@ -5289,7 +5297,7 @@ func midTurnSaid(text string) []string {
 // token count, or a notice userWords knows (injected).
 func agentNotice(text string) bool {
 	t := strings.TrimSpace(reminderTag.ReplaceAllString(text, ""))
-	if t == "" || hookNotice.MatchString(t) || tokenCount.MatchString(t) {
+	if t == "" || hookNotice.MatchString(t) || tokenCount.MatchString(t) || desktopNote.MatchString(t) {
 		return true
 	}
 	for _, lead := range injected {
