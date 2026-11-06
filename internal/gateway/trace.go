@@ -184,6 +184,12 @@ type Route struct {
 	// Conv: the conversation a request without a session id is part of,
 	// as a digest of its first user turn (conversationID)
 	Conv string `json:"conv,omitempty"`
+	// ResponseID: the id of the reply object actually released to the
+	// client, as the client read it, set when the route is done. The agent
+	// stores that id with the reply (dsh's replay state), so a request
+	// whose agent keeps it can be found again after the fact even when its
+	// conversation opening is one a fork copied (dshConvs)
+	ResponseID string `json:"responseId,omitempty"`
 	// Folder: the last two levels of the folder its agent says it works
 	// in (shortFolder), never the whole path; a request that says none
 	// takes its session's, as said last (#1068)

@@ -175,6 +175,7 @@ type ctxRec struct {
 	Time                       time.Time
 	Agent, Model, Kind, Sub    string
 	Session, Parent, Conv      string
+	ResponseID                 string
 	Done, Failed               bool
 	Asked                      bool // it has a prompt of some tokens
 	Tokens, Window, MCP, Cache int
@@ -186,7 +187,7 @@ type ctxRec struct {
 // recOf is r as the tab reads it, its whole prompt kept when whole.
 func recOf(r gateway.Route, whole bool) ctxRec {
 	c := ctxRec{ID: r.ID, Time: r.Time, Agent: r.Agent, Model: r.Model, Kind: r.Kind, Sub: r.Sub,
-		Session: r.Session, Parent: r.ParentSession, Conv: r.Conv, Done: r.Done,
+		Session: r.Session, Parent: r.ParentSession, Conv: r.Conv, ResponseID: r.ResponseID, Done: r.Done,
 		Failed: r.Status >= 400 || r.Error != "", Cache: cacheOf(r), CacheKnown: cacheKnown(r)}
 	if p := r.Prompt; p != nil {
 		c.Asked = p.Tokens > 0
@@ -267,15 +268,18 @@ func sessionOfRec(r *ctxRec) string {
 }
 
 // joinConvs puts a route that names no session under the agent's session
-// its conversation id was read from (sessions' Convs): dsh's
-// chat-completions and messages routes send no session id, so the gateway
-// keys each request by its first prompt's hash, and the page showed
-// "magpie-a…" where the Sessions page shows the session's title (Kumo31
-// on Discord). An id two sessions share stays as it is.
+// its reply or its conversation id was read from (sessions' ResponseIDs and
+// Convs): dsh's chat-completions and messages routes send no session id, so
+// the gateway keys each request by its first prompt's hash, and the page
+// showed "magpie-a…" where the Sessions page shows the session's title
+// (Kumo31 on Discord). A hash is the conversation's opening, which a fork
+// copies, so the reply's own id is asked first: a fork's reply has one its
+// source does not, and names the fork. An id two sessions share stays as it
+// is.
 func joinConvs(routes []ctxRec, list func() []sessions.Session) {
 	loose := false
 	for _, r := range routes {
-		if r.Session == "" && r.Parent == "" && r.Conv != "" {
+		if r.Session == "" && r.Parent == "" && (r.ResponseID != "" || r.Conv != "") {
 			loose = true
 			break
 		}
@@ -283,29 +287,82 @@ func joinConvs(routes []ctxRec, list func() []sessions.Session) {
 	if !loose {
 		return
 	}
-	of := convOwners(list())
+	of := routeOwners(list())
 	for i, r := range routes {
-		if r.Session == "" && r.Parent == "" && r.Conv != "" {
-			if id := of[r.Agent+"\x00"+r.Conv]; id != "" {
+		if r.Session == "" && r.Parent == "" {
+			if id := ownerOf(r.Agent, r.ResponseID, r.Conv, of); id != "" {
 				routes[i].Session = id
 			}
 		}
 	}
 }
 
-// convOwners is each agent's conversation id (agent, NUL, the gateway's
-// id) and the session of that agent it was read from (sessions' Convs);
-// "" for an id two sessions share, which stays as it is.
-func convOwners(list []sessions.Session) map[string]string {
+// ownerOf is the session an agent's route that names none belongs to: the
+// one whose own replies carry the route's reply id, and, when no one's does,
+// the one whose conversation the route opens. A reply id is the vendor's,
+// which some give out again (Ollama's chatcmpl-<0-998>), so it names a
+// session over the opening only where the two agree: the opening is no
+// one's, or two sessions', or the reply's session's own, or one it was
+// forked from (sessions' ForkOf). Another session's opening goes by the
+// opening, as it did before reply ids were read.
+func ownerOf(agent, responseID, conv string, of map[string]string) string {
+	opened := ""
+	if conv != "" {
+		opened = of[ownerKey(agent, ownerConv, conv)]
+	}
+	if responseID != "" {
+		if id := of[ownerKey(agent, ownerResponse, responseID)]; id != "" && (opened == "" || forkedFrom(agent, id, opened, of)) {
+			return id
+		}
+	}
+	return opened
+}
+
+// forkedFrom says session id is from, or a fork of it, or of a fork of it.
+func forkedFrom(agent, id, from string, of map[string]string) bool {
+	for n := 0; id != "" && n < 64; n++ {
+		if id == from {
+			return true
+		}
+		id = of[ownerKey(agent, ownerFork, id)]
+	}
+	return false
+}
+
+// The kinds of id a route without a session id is named by: the reply it
+// got, and the conversation it opens; and a session's source, for the
+// session a fork's reply names (ForkOf).
+const (
+	ownerResponse = "response"
+	ownerConv     = "conv"
+	ownerFork     = "fork"
+)
+
+func ownerKey(agent, kind, id string) string { return agent + "\x00" + kind + "\x00" + id }
+
+// routeOwners is each agent's reply ids and conversation ids (agent, NUL,
+// kind, NUL, the id) and the session of that agent each was read from
+// (sessions' ResponseIDs and Convs); "" for an id two sessions share, which
+// stays as it is. A fork's session id is kept with the one it was forked
+// from (ownerFork).
+func routeOwners(list []sessions.Session) map[string]string {
 	of := map[string]string{}
+	put := func(k, id string) {
+		if was, ok := of[k]; ok && was != id {
+			of[k] = ""
+		} else if !ok {
+			of[k] = id
+		}
+	}
 	for _, s := range list {
 		for _, c := range s.Convs {
-			k := s.Agent + "\x00" + c
-			if id, ok := of[k]; ok && id != s.ID {
-				of[k] = ""
-			} else if !ok {
-				of[k] = s.ID
-			}
+			put(ownerKey(s.Agent, ownerConv, c), s.ID)
+		}
+		for _, r := range s.ResponseIDs {
+			put(ownerKey(s.Agent, ownerResponse, r), s.ID)
+		}
+		if s.ForkOf != "" {
+			of[ownerKey(s.Agent, ownerFork, s.ID)] = s.ForkOf
 		}
 	}
 	return of

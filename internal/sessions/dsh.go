@@ -204,6 +204,10 @@ type dshResponse struct {
 	Model         string `json:"model"`
 	Provider      string `json:"provider"`
 	ResponseModel string `json:"responseModel"`
+	// ResponseID is the id of the reply object the vendor's own response
+	// carried, as dsh read it: the same id magpie's gateway wrote on the
+	// route that served it (Route.ResponseID)
+	ResponseID string `json:"responseId"`
 }
 
 // dshReplay is a reply's replay state, where dsh keeps what the vendor's own
@@ -373,6 +377,13 @@ func dshCount(s *state, h *dshHead, b []byte, main bool) {
 	}
 	if h.Version < 2 && e.Seq != nil && *e.Seq < h.SeedLength {
 		return
+	}
+	if e.Type == "assistant/message" && main {
+		if src := e.Data.Message.Source; dshGatewayProvider(src) {
+			if id := src.ReplayState.Response.ResponseID; id != "" {
+				s.ResponseIDs = append(s.ResponseIDs, id)
+			}
+		}
 	}
 	at := ms(e.Time)
 	s.saw(at, main)

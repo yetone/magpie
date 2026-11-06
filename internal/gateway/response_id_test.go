@@ -139,3 +139,40 @@ func TestGatewayPersistsTranslatedClientResponseID(t *testing.T) {
 		})
 	}
 }
+
+// A done route keeps the id of the reply the client was given: the agent
+// stores that id with the reply it keeps (dsh's replay state), so the
+// session that made the request can be found again after the fact even
+// when its conversation opening is one a fork copied.
+func TestDoneRouteKeepsTheClientResponseID(t *testing.T) {
+	for _, stream := range []bool{false, true} {
+		t.Run(map[bool]string{true: "stream", false: "json"}[stream], func(t *testing.T) {
+			fresh(t)
+			up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.Write([]byte("data: {\"id\":\"chatcmpl-upstream\",\"model\":\"model\",\"choices\":[{\"delta\":{\"content\":\"answer\"}}]}\n\ndata: {\"id\":\"chatcmpl-upstream\",\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2}}\n\ndata: [DONE]\n\n"))
+			}))
+			defer up.Close()
+			if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Key: "k", Chat: up.URL + "/v1", Models: []string{"model"}}); err != nil {
+				t.Fatal(err)
+			}
+			body := `{"model":"fake/model","input":"hi","stream":` + map[bool]string{true: "true", false: "false"}[stream] + `}`
+			s := New()
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/responses", strings.NewReader(body)))
+			if rec.Code != 200 {
+				t.Fatalf("%d %s", rec.Code, rec.Body)
+			}
+			id := clientResponseID(t, provider.Responses, rec.Body.String(), stream)
+			s.trace.mu.Lock()
+			got := ""
+			if n := len(s.trace.routes); n > 0 {
+				got = s.trace.routes[n-1].ResponseID
+			}
+			s.trace.mu.Unlock()
+			if got == "" || got != id {
+				t.Fatalf("route's reply id %q, the client's %q", got, id)
+			}
+		})
+	}
+}
