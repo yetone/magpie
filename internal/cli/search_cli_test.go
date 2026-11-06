@@ -182,3 +182,44 @@ func TestSearchCLICount(t *testing.T) {
 		t.Error("settings took a count of 21")
 	}
 }
+
+// magpie search mix names two or more search APIs to ask together, and
+// off puts them back in order (#2845).
+func TestSearchCLIMix(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	for _, args := range [][]string{{"add", "brave", "b-1"}, {"add", "exa", "e-1"}, {"add", "you"}} {
+		if err := searchCmd(args); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+	}
+	for _, bad := range [][]string{{"mix"}, {"mix", "brave"}, {"mix", "brave,google"}, {"mix", "brave,brave"}} {
+		if err := searchCmd(bad); err == nil {
+			t.Errorf("%v taken", bad)
+		}
+	}
+	mixed := func() (out []string) {
+		for _, a := range provider.StoredSearchAPIs() {
+			if a.Mix {
+				out = append(out, a.Vendor)
+			}
+		}
+		return out
+	}
+	if err := searchCmd([]string{"mix", "You, Brave"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := mixed(); !slices.Equal(got, []string{"brave", "you"}) {
+		t.Fatalf("mixed %v", got)
+	}
+	if err := searchCmd(nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := searchCmd([]string{"mix", "off"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := mixed(); len(got) != 0 {
+		t.Fatalf("after mix off %v", got)
+	}
+}

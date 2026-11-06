@@ -11,8 +11,10 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -134,14 +136,27 @@ func SearcherUnused() string {
 	return why
 }
 
-// apiSearch asks the search APIs, in their order, until one answers.
+// apiSearch asks the search APIs, in their order, until one answers. Two
+// or more marked mix (SearchAPI.Mix, #2845) are asked first, together,
+// and what they found is merged (askSearchAPIsTogether); the others are
+// asked, in order, only when none of those found anything.
 func (s *Server) apiSearch(ctx context.Context, query string) (string, []Hit, error) {
 	query, err := maskedQuery(ctx, query, nil)
 	if err != nil {
 		return "", nil, err
 	}
 	var errs []error
-	for _, a := range provider.SearchAPIs() {
+	apis := provider.SearchAPIs()
+	if mixed := slices.DeleteFunc(slices.Clone(apis), func(a provider.SearchAPI) bool { return !a.Mix }); len(mixed) > 1 {
+		pages, err := s.askSearchAPIsTogether(ctx, mixed, query)
+		if len(pages) > 0 {
+			said, hits := pagesSaid(pages)
+			return said, hits, nil
+		}
+		errs = append(errs, err)
+		apis = slices.DeleteFunc(apis, func(a provider.SearchAPI) bool { return a.Mix })
+	}
+	for _, a := range apis {
 		pages, err := s.askSearchAPIKeys(ctx, a, query)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", a.Name(), err))
@@ -155,6 +170,78 @@ func (s *Server) apiSearch(ctx context.Context, query string) (string, []Hit, er
 		return said, hits, nil
 	}
 	return "", nil, errors.Join(errs...)
+}
+
+// searchMixMost is the most pages a mixed search gives the model: two
+// search APIs' worth of the count the search asks for (searchCount: the
+// one it named, else the user's, 6 by default), never more than one
+// search may name (searchHitsMost).
+func searchMixMost(ctx context.Context) int {
+	return min(2*searchCount(ctx), searchHitsMost)
+}
+
+// askSearchAPIsTogether asks each search API at once, each with its own
+// keys and timeouts as when it is asked alone (askSearchAPIKeys), and
+// merges what they found (mixedPages). One that fails or finds nothing
+// leaves the others' pages; the error says what each of those said.
+func (s *Server) askSearchAPIsTogether(ctx context.Context, apis []provider.SearchAPI, query string) ([]foundPage, error) {
+	found := make([][]foundPage, len(apis))
+	errs := make([]error, len(apis))
+	var wg sync.WaitGroup
+	for i, a := range apis {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			pages, err := s.askSearchAPIKeys(ctx, a, query)
+			switch {
+			case err != nil:
+				errs[i] = fmt.Errorf("%s: %w", a.Name(), err)
+			case len(pages) == 0:
+				errs[i] = fmt.Errorf("%s found nothing", a.Name())
+			}
+			found[i] = pages
+		}()
+	}
+	wg.Wait()
+	return mixedPages(found, searchMixMost(ctx)), errors.Join(errs...)
+}
+
+// mixedPages takes the search APIs' pages in turn, in the APIs' order:
+// each one's first, then each one's second. A page an earlier one gave is
+// left out (by pageKey), and there are at most most of them.
+func mixedPages(found [][]foundPage, most int) []foundPage {
+	var out []foundPage
+	seen := map[string]bool{}
+	for rank := 0; len(out) < most; rank++ {
+		more := false
+		for _, pages := range found {
+			if rank >= len(pages) {
+				continue
+			}
+			more = true
+			if k := pageKey(pages[rank].URL); !seen[k] && len(out) < most {
+				seen[k] = true
+				out = append(out, pages[rank])
+			}
+		}
+		if !more {
+			break
+		}
+	}
+	return out
+}
+
+// pageKey is a page's address as two search APIs may write it apart: host
+// in lower case, http and https alike, without its fragment or a closing
+// slash.
+func pageKey(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" {
+		return strings.TrimSpace(raw)
+	}
+	u.Scheme, u.Host, u.Fragment, u.RawFragment = "https", strings.ToLower(u.Host), "", ""
+	u.Path, u.RawPath = strings.TrimSuffix(u.Path, "/"), ""
+	return u.String()
 }
 
 // askSearchAPIKeys asks a search API with its keys, in searchKeyOrder:

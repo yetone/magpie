@@ -1699,6 +1699,33 @@ and `{vendor, on}` beside the add and remove it took before.
 Covered by `TestSearchAPIOrderAndOff`, `TestSearchCLIOffAndMove`,
 `TestBackupSearchAPIsOrderAndOff` and `search-order.test.cjs`.
 
+## Asking several search APIs together (mix)
+
+Two or more search APIs marked `mix` (`SearchAPI.Mix`, #2845) are asked
+first, at once (`askSearchAPIsTogether`), each with its own keys and
+timeouts as when it is asked alone (`askSearchAPIKeys`). Their pages go to
+the model in turn (`mixedPages`): each API's first in the saved order,
+then each one's second, a page an earlier one gave left out by its address
+(`pageKey`: host in lower case, http and https alike, without fragment or
+closing slash), at most `searchMixMost`: two APIs' worth of the count the
+search asks for (the one it named, else Settings' results per search, 6 by
+default, so 12), never more than 20. One that
+fails or finds nothing leaves the others' pages; when none finds anything,
+the APIs not mixed are asked in order as before. With fewer than two mixed
+APIs on and ready, a search goes in order as if none were. Nothing is
+added to the pages to say which API found them, so the text a vendor sees
+reads as before. `MixSearchAPIs` marks the vendors named (two or more, set
+up, each once) and clears every other; none clears all. `SetSearchAPI`
+keeps the mark, and backup and sync carry it with the rest of the entry. A
+mixed search spends every mixed API's quota, takes as long as the slowest,
+and gives the model up to twice the pages (20 at most). On the CLI, `magpie search mix
+<api>,<api>` and `magpie search mix off` set it, and `magpie search` lists
+a mixed one as mix. Settings' page doesn't show or set it yet.
+
+Covered by `TestSearchAPIsMixedAskedTogether`, `TestSearchAPIsMixedOneDown`,
+`TestSearchAPIsMixedAllDownAsksTheRest`, `TestSearchAPIsMixedCapped`,
+`TestMixSearchAPIs` and `TestSearchCLIMix`.
+
 ## A search API's keys
 
 A search API's `key` may hold several keys, separated by commas (#1477).
