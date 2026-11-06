@@ -567,3 +567,14 @@ func (o *ollamaWriter) finish() {
 	}
 	writeJSON(o.w, 200, o.part(o.content.String(), o.thinking.String(), calls, true))
 }
+
+// withoutOllamaOptions is a Chat body without its top-level options, the
+// rest byte for byte (withoutTopMember): a tool's parameter or a message
+// that says "options" is left as it came, and a body without the word is
+// not read at all.
+func withoutOllamaOptions(body []byte) []byte {
+	if !bytes.Contains(body, []byte(`"options"`)) {
+		return body
+	}
+	return withoutTopMember(body, "options")
+}

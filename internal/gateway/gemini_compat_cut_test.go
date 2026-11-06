@@ -215,9 +215,10 @@ func TestGeminiCompatRelayedCallsHaveAnIndex(t *testing.T) {
 // answered in Ollama's shape) sends Ollama's per-request options beside
 // its Chat fields. Gemini's OpenAI-compatible API reads proto JSON and
 // turns the whole request away over a name it doesn't know (#3097), so a
-// body relayed to one goes without options; another vendor's gets it as
-// the client sent it.
-func TestGeminiCompatRelayLeavesOutOllamaOptions(t *testing.T) {
+// body relayed to one goes without options, as does another vendor's
+// (Mistral's 422 extra_forbidden, TestHermesOllamaOptionsNeverReachMistral):
+// no Chat API reads them.
+func TestChatRelayLeavesOutOllamaOptions(t *testing.T) {
 	// a whole text reply, as Gemini's OpenAI-compatible API streams one
 	hi := `data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"hi there"}}],"model":"models/gemini-3.8-flash","object":"chat.completion.chunk"}` + "\n\n"
 	whole := hi + compatStop + compatDone
@@ -262,13 +263,13 @@ func TestGeminiCompatRelayLeavesOutOllamaOptions(t *testing.T) {
 		t.Errorf("the rest of the request didn't go as asked: %s", read())
 	}
 
-	// another vendor's Chat upstream, no Gemini model there: the body goes
-	// as the client sent it
+	// another vendor's Chat upstream, no Gemini model there: without
+	// options too, the rest as the client sent it
 	read = served(t, "km", "kimi-k3", "/v1")
 	if code, body := post(t, "/v1/chat/completions", ask("km/kimi-k3")); code != 200 || !strings.Contains(body, `"content":"hi there"`) {
 		t.Fatalf("another vendor: %d %s", code, body)
 	}
-	if !strings.Contains(string(read()), `"options":{"num_ctx":1048576}`) {
-		t.Errorf("another vendor's Chat upstream lost the client's options: %s", read())
+	if got := string(read()); strings.Contains(got, `"options"`) || !strings.Contains(got, `"max_tokens":8`) {
+		t.Errorf("another vendor's Chat upstream: %s", got)
 	}
 }
