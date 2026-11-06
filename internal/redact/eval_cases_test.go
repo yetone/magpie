@@ -306,6 +306,66 @@ var evalCases = []evalCase{
 		Text: "- MSRV check. The repo's minimum rust-version is 1.78. Pinning to `nightly-2026-09-01` (about 7 weeks old) is plausible.\n- Risk: the pinned toolchain lacks fixes.",
 		Keep: []evalValue{{V: "nightly-2026-09-01", Kind: "PERSON"}},
 	},
+	// ylorn. on Discord, choosing apps in Alma: the model took the apps'
+	// names for people's, and the vendor answered about the wrong app
+	{
+		ID: "app-names", From: "ylorn.",
+		Text: "Cicada, Mimi, Phosphor, Parakeet, Muesli",
+		Keep: []evalValue{{V: "Cicada", Kind: "PERSON"}, {V: "Mimi", Kind: "PERSON"}, {V: "Phosphor", Kind: "PERSON"}, {V: "Parakeet", Kind: "PERSON"}, {V: "Muesli", Kind: "PERSON"}},
+	},
+	{
+		ID: "app-alone", From: "ylorn.",
+		Text: "Muesli",
+		Keep: []evalValue{{V: "Muesli", Kind: "PERSON"}},
+	},
+	{
+		ID: "app-markdown", From: "ylorn.",
+		Text: "1. **Cicada** – a minimal note-taking app with Markdown.\n2. **Mimi** – a voice memo app with AI summaries.\n3. **Phosphor** – an RSS reader.",
+		Keep: []evalValue{{V: "Cicada", Kind: "PERSON"}, {V: "Mimi", Kind: "PERSON"}, {V: "Phosphor", Kind: "PERSON"}},
+	},
+	{
+		ID: "app-compare", From: "ylorn.",
+		Text: "Compare Cicada and Mimi for note-taking on macOS. Which one syncs better with iCloud?",
+		Keep: []evalValue{{V: "Cicada", Kind: "PERSON"}, {V: "Mimi", Kind: "PERSON"}},
+	},
+	{
+		ID: "app-vs", From: "ylorn.",
+		Text: "Phosphor vs Parakeet: which is the better dictation app?",
+		Keep: []evalValue{{V: "Phosphor", Kind: "PERSON"}, {V: "Parakeet", Kind: "PERSON"}},
+	},
+	{
+		ID: "app-list", From: "ylorn.",
+		Text: "I'm choosing a transcription app. So far: Muesli, Parakeet and Mimi. Muesli is free, Parakeet has a one-time price, Mimi is a subscription.",
+		Keep: []evalValue{{V: "Muesli", Kind: "PERSON"}, {V: "Parakeet", Kind: "PERSON"}, {V: "Mimi", Kind: "PERSON"}},
+	},
+	{
+		ID: "app-using", From: "ylorn.",
+		Text: "I've been using Phosphor for a week, and yesterday I switched to Muesli. Is Cicada worth trying too?",
+		Keep: []evalValue{{V: "Phosphor", Kind: "PERSON"}, {V: "Muesli", Kind: "PERSON"}, {V: "Cicada", Kind: "PERSON"}},
+	},
+	{
+		ID: "app-zh", From: "ylorn.",
+		Text: "帮我对比一下 Cicada 和 Mimi 这两个 app，哪个更适合记笔记？Phosphor 和 Parakeet 呢？",
+		Keep: []evalValue{{V: "Cicada", Kind: "PERSON"}, {V: "Mimi", Kind: "PERSON"}, {V: "Phosphor", Kind: "PERSON"}, {V: "Parakeet", Kind: "PERSON"}},
+	},
+	{
+		ID: "app-and-person", From: "ylorn.",
+		Text: "My colleague Mimi said the Phosphor app is great; she uses it every day.",
+		Mask: []evalValue{{V: "Mimi", Kind: "PERSON"}},
+		Keep: []evalValue{{V: "Phosphor", Kind: "PERSON"}},
+	},
+	{
+		ID: "app-and-full-name", From: "ylorn.",
+		Text: "John Smith asked me to install Cicada on his Mac.",
+		Mask: []evalValue{{V: "John Smith", Kind: "PERSON"}},
+		Keep: []evalValue{{V: "Cicada", Kind: "PERSON"}},
+	},
+	{
+		ID: "app-and-zh-name", From: "ylorn.",
+		Text: "张伟说 Parakeet 这个软件很好用，让我也装一个。",
+		Mask: []evalValue{{V: "张伟", Kind: "PERSON"}},
+		Keep: []evalValue{{V: "Parakeet", Kind: "PERSON"}},
+	},
 
 	// ---- what masking is for --------------------------------------------
 	{
@@ -347,6 +407,11 @@ var evalCases = []evalCase{
 		ID: "phone-intl", From: "true",
 		Text: "If the build breaks overnight, page Tom on +1 415-555-0132.",
 		Mask: []evalValue{{V: "415-555-0132", Kind: "PHONE"}, {V: "Tom", Kind: "PERSON"}},
+	},
+	{
+		ID: "greeting", From: "true",
+		Text: "Hi Mimi, thanks for the notes from Tuesday's call. Can you send them to Laura as well?",
+		Mask: []evalValue{{V: "Mimi", Kind: "PERSON"}, {V: "Laura", Kind: "PERSON"}},
 	},
 	{
 		ID: "card", From: "true",

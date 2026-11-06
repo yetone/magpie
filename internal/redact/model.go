@@ -761,6 +761,11 @@ func personFits(s string, a, b int, v string) bool {
 	if w := strings.Fields(v); len(w) == 1 && (strings.Trim(v, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") == "" || camelProduct(v) || hostIn(s, v)) {
 		return false
 	}
+	// an app's or a product's name the model took for a first name, where
+	// its sentence speaks of a thing (thingname.go)
+	if w := strings.Fields(v); len(w) == 1 && isASCII(v) && thingNamed(s, a, b) {
+		return false
+	}
 	for i, w := range strings.Fields(v) {
 		if c := w[0]; c >= 'a' && c <= 'z' && (i == 0 || !nameParticles[w]) {
 			return false
