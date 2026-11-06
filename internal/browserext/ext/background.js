@@ -3,9 +3,10 @@
 // out in this browser's own tabs, signed in to whatever the user is.
 
 import { GATEWAY } from "./config.js";
-import { attach, fault, forget, send, settle, sleep, state, waitLoad, watch } from "./cdp.js";
+import { attach, fault, forget, read, send, settle, sleep, state, waitLoad, watch, watchConsole } from "./cdp.js";
 import { find, take } from "./snapshot.js";
-import { press as keyPress, typeSlowly } from "./keys.js";
+import { press as keyPress } from "./keys.js";
+import * as human from "./human.js";
 
 const VERSION = chrome.runtime.getManifest().version;
 const ACT_SNAPSHOT_MAX = 30000;
@@ -141,15 +142,50 @@ function tabArg(v) {
   return Number(m[1]);
 }
 
+// ours is whether a tab is an agent's: one a session works in, or one in
+// a Magpie tab group
+async function ours(tab) {
+  for (const v of sessions.values()) if (v === tab.id) return true;
+  if (tab.groupId === undefined || tab.groupId < 0) return false;
+  const g = await chrome.tabGroups.get(tab.groupId).catch(() => null);
+  return !!g && /^Magpie( \d+)?$/.test(g.title || "");
+}
+
+// what a call is told before its answer: session → text
+const said = new Map();
+// the tab of its own a session was given for a user's tab it named:
+// "session|tab" → tab
+const copies = new Map();
+
 // the tab a call works in: the one it names, else the session's, else a
 // new one of the session's own. The user's tabs are theirs: an agent never
-// starts in the one they are looking at (it navigated it away under them),
-// and works in one of theirs only when it names it.
+// acts in one of them, the one they are looking at or one behind it. One
+// it names has its page opened in a tab of the agent's own, behind, in its
+// group, signed in the same, and the agent goes on there.
 async function tabFor(session, args) {
   await loadSessions();
   const named = tabArg(args.tab);
   if (named !== null) {
-    await chrome.tabs.get(named).catch(() => { throw fault("BAD_ARGS", `there is no tab t${named} now: call browser_tabs for the open ones`); });
+    const tab = await chrome.tabs.get(named).catch(() => { throw fault("BAD_ARGS", `there is no tab t${named} now: call browser_tabs for the open ones`); });
+    if (!(await ours(tab))) {
+      const key = session + "|" + named;
+      const was = copies.get(key);
+      if (was !== undefined && (await chrome.tabs.get(was).then(() => true, () => false))) {
+        sessions.set(session, was);
+        saveSessions();
+        return was;
+      }
+      const url = tab.url || tab.pendingUrl || "about:blank";
+      const copy = await open(session, url, false);
+      copies.set(key, copy.id);
+      // loaded before the call reads it
+      for (let end = Date.now() + 20000; Date.now() < end; await sleep(150)) {
+        const c = await chrome.tabs.get(copy.id).catch(() => null);
+        if (!c || c.status === "complete") break;
+      }
+      said.set(session, `t${named} is the user's own tab, which agents leave to them: its page (${url.slice(0, 200)}) is opened in t${copy.id}, a tab of your own behind theirs, and calls go there.`);
+      return copy.id;
+    }
     sessions.set(session, named);
     saveSessions();
     return named;
@@ -243,7 +279,17 @@ async function run(m) {
   try {
     const tool = TOOLS[m.tool];
     if (!tool) return fail(`magpie's browser extension has no tool ${m.tool}: update it (magpie writes it again on start; reload it in chrome://extensions)`);
-    return await tool(m.session || "default", m.args || {});
+    const session = m.session || "default";
+    said.delete(session);
+    const r = await tool(session, m.args || {});
+    const note = said.get(session);
+    if (note) {
+      said.delete(session);
+      const first = r.content && r.content.find((c) => c.type === "text");
+      if (first) first.text = note + "\n\n" + first.text;
+      else (r.content = r.content || []).unshift(text(note));
+    }
+    return r;
   } catch (e) {
     return failure(e);
   }
@@ -293,7 +339,7 @@ const PRESSES = new Set(["button", "link", "clickable", "menuitem", "tab", "tree
 // one); null where a part can't be read
 async function look(t, el) {
   const tab = await chrome.tabs.get(t.tabId).catch(() => null);
-  const scroll = await send(t.tabId, "Runtime.evaluate", { expression: "scrollX + ',' + scrollY", returnByValue: true }).then((r) => r.result.value, () => null);
+  const scroll = await read(t, "scrollX + ',' + scrollY").catch(() => null);
   const doc = [await watch(t)];
   if (el && (el.sid || el.frame)) doc.push(await watch(t, el.frame, el.sid));
   return { url: tab && tab.url, scroll, reqs: t.reqs, doc: doc.map((d) => (d ? d[0] : null)) };
@@ -312,6 +358,10 @@ async function act(t, what, fn, el = null, press = false) {
   const shown = mine && all.find((x) => x.active && x.windowId === mine.windowId);
   const behind = shown && shown.id !== t.tabId ? shown : null;
   const was = press ? await look(t, el) : null;
+  // the window the user works in: a page that opens a window of its own
+  // (window.open with a size) doesn't take it from them
+  const focused = await chrome.windows.getLastFocused({ windowTypes: ["normal"] }).catch(() => null);
+  await human.pace(t);
   t.sentInput = false;
   let opened = null;
   // a tab the link opens comes up in front of the user's: their tab is
@@ -320,6 +370,7 @@ async function act(t, what, fn, el = null, press = false) {
     if (before.has(tab.id) || !(tab.openerTabId === t.tabId || (behind && tab.openerTabId === behind.id) || !opened)) return;
     opened = tab;
     if (behind && (tab.openerTabId === t.tabId || tab.openerTabId === behind.id)) chrome.tabs.update(behind.id, { active: true }).catch(() => {});
+    if (focused && tab.windowId !== focused.id && focused.focused) chrome.windows.update(focused.id, { focused: true }).catch(() => {});
   };
   chrome.tabs.onCreated.addListener(onCreated);
   let said;
@@ -336,6 +387,7 @@ async function act(t, what, fn, el = null, press = false) {
     if (t.sentInput && !e.code) throw fault("OUTCOME_UNKNOWN", `${what.replace(/\.$/, "")} was under way when the page changed (${String(e.message || e).slice(0, 200)})`);
     throw e;
   } finally {
+    human.done(t);
     setTimeout(() => chrome.tabs.onCreated.removeListener(onCreated), 1500);
   }
   if (!t.dialog) await settle(t, 2500, 400, el ? [el] : []);
@@ -347,10 +399,8 @@ async function act(t, what, fn, el = null, press = false) {
   if (opened && (opened.openerTabId === t.tabId || (behind && opened.openerTabId === behind.id))) {
     // a link that opens a new tab: the agent goes on in it, in its group,
     // and the user keeps the tab they had in front
-    if (behind) {
-      await chrome.tabs.update(behind.id, { active: true }).catch(() => {});
-      if (t.by) await group(t.by, opened.id, opened.windowId).catch(() => {});
-    }
+    if (behind) await chrome.tabs.update(behind.id, { active: true }).catch(() => {});
+    if (t.by) await group(t.by, opened.id, opened.windowId).catch(() => {});
     if (t.by) { sessions.set(t.by, opened.id); saveSessions(); }
     const nt = state(opened.id);
     await attach(opened.id);
@@ -386,7 +436,10 @@ async function point(t, el) {
   const q = quads[0];
   const xs = [q[0], q[2], q[4], q[6]], ys = [q[1], q[3], q[5], q[7]];
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-  const tries = [[0.5, 0.5], [0.3, 0.5], [0.7, 0.5], [0.5, 0.3], [0.5, 0.7], [0.2, 0.2], [0.8, 0.8]];
+  // somewhere near the middle, as a person aims, then other spots when
+  // something covers it
+  const a = human.aim(x0, y0, x1, y1);
+  const tries = [[(a.x - x0) / (x1 - x0 || 1), (a.y - y0) / (y1 - y0 || 1)], [0.5, 0.5], [0.3, 0.5], [0.7, 0.5], [0.5, 0.3], [0.5, 0.7], [0.2, 0.2], [0.8, 0.8]];
   let cover = "";
   for (const [fx, fy] of tries) {
     const x = x0 + (x1 - x0) * fx, y = y0 + (y1 - y0) * fy;
@@ -448,16 +501,8 @@ const BUTTONS = { left: "left", right: "right", middle: "middle" };
 const MODS = { Alt: 1, Control: 2, Ctrl: 2, Meta: 4, Command: 4, Cmd: 4, Shift: 8 };
 
 async function mouse(t, x, y, opts = {}) {
-  const button = BUTTONS[opts.button] || "left";
   const modifiers = (opts.modifiers || []).reduce((a, m) => a | (MODS[m] || 0), 0);
-  const count = opts.double ? 2 : 1;
-  await send(t.tabId, "Input.dispatchMouseEvent", { type: "mouseMoved", x, y, modifiers });
-  await sleep(30 + Math.random() * 40);
-  for (let i = 1; i <= count; i++) {
-    await send(t.tabId, "Input.dispatchMouseEvent", { type: "mousePressed", x, y, button, clickCount: i, modifiers, buttons: 1 });
-    await sleep(40 + Math.random() * 50);
-    await send(t.tabId, "Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button, clickCount: i, modifiers });
-  }
+  await human.click(t, x, y, { button: BUTTONS[opts.button] || "left", double: !!opts.double, modifiers });
 }
 
 // opensATab is whether el is, or is in, a link that opens in a new tab
@@ -511,6 +556,8 @@ const TOOLS = {
     if (action === "close") {
       const id = args.tab ? tabArg(args.tab) : sessions.get(session);
       if (id === undefined || id === null) throw fault("BAD_ARGS", "tab is needed");
+      const tab = await chrome.tabs.get(id).catch(() => { throw fault("BAD_ARGS", `there is no tab t${id} now`); });
+      if (!(await ours(tab))) throw fault("UNACTIONABLE", `t${id} is the user's own tab: agents close only their own (in a Magpie group); ask the user to close it`);
       await chrome.tabs.remove(id);
       return { content: [text(`Closed t${id}.`)] };
     }
@@ -585,7 +632,7 @@ const TOOLS = {
     const el = await find(t, args.ref);
     return act(t, `Hovering over ${el.ref}.`, async () => {
       const p = await point(t, el);
-      await send(t.tabId, "Input.dispatchMouseEvent", { type: "mouseMoved", x: p.x, y: p.y });
+      await human.move(t, p.x, p.y);
     }, el);
   },
 
@@ -595,30 +642,42 @@ const TOOLS = {
     const t = await ready(session, args);
     const el = await find(t, args.ref);
     return act(t, `Typed into ${el.ref}${args.submit ? " and pressed Enter" : ""}.`, async () => {
+      // into the field as a person goes: a click on it, its old text
+      // selected and taken out with Backspace, then the keys
       const p = await point(t, el).catch(() => null);
       if (p) await mouse(t, p.x, p.y);
-      const ok = await call(t, el, `function(clear) {
+      const kind = await call(t, el, `function(clear) {
         const e = this;
         const edit = (x) => x && (x.isContentEditable || /^(INPUT|TEXTAREA)$/.test(x.tagName));
         let to = edit(e) ? e : (e.querySelector && e.querySelector('input,textarea,[contenteditable=""],[contenteditable="true"]')) || e;
         if (document.activeElement !== to && !(to.contains && to.contains(document.activeElement))) to.focus();
         const a = document.activeElement;
-        if (!edit(a) && !(a && a.isContentEditable)) return false;
+        if (!edit(a) && !(a && a.isContentEditable)) return "";
+        let empty;
         if (/^(INPUT|TEXTAREA)$/.test(a.tagName)) {
+          empty = !a.value;
           if (clear) a.select(); else { try { const n = a.value.length; a.setSelectionRange(n, n); } catch {} }
         } else {
+          empty = !a.textContent.replace(/[\u200b\ufeff\s]/g, "");
           const s = getSelection(), r = document.createRange();
           r.selectNodeContents(a);
           if (!clear) r.collapse(false);
           s.removeAllRanges(); s.addRange(r);
         }
-        return true;
+        return (a.tagName === "INPUT" ? "line" : "lines") + (empty ? " empty" : "");
       }`, [args.clear !== false]);
-      if (!ok) throw fault("UNACTIONABLE", `${el.ref} (${el.role} "${el.name}") doesn't take text: click the field itself`);
-      if (args.clear !== false) await keyPress(t, "Delete");
-      if (args.slowly) await typeSlowly(t, args.text);
-      else if (args.text) await send(t.tabId, "Input.insertText", { text: args.text });
-      if (args.submit) await keyPress(t, "Enter");
+      if (!kind) throw fault("UNACTIONABLE", `${el.ref} (${el.role} "${el.name}") doesn't take text: click the field itself`);
+      if (args.clear !== false && !kind.endsWith("empty")) {
+        await sleep(120 + Math.random() * 200);
+        await keyPress(t, "Backspace");
+        await sleep(150 + Math.random() * 250);
+      }
+      if (args.text) await human.type(t, args.text, { newline: kind.startsWith("line ") || kind === "line" ? "" : "Shift+Enter", press: (k) => keyPress(t, k) });
+      if (args.submit) {
+        // a look over what was typed before sending it
+        await sleep(250 + Math.random() * 450);
+        await keyPress(t, "Enter");
+      }
     }, el);
   },
 
@@ -628,7 +687,7 @@ const TOOLS = {
     let el = null;
     if (args.ref) el = await find(t, args.ref);
     return act(t, `Pressed ${args.key}.`, async () => {
-      if (el) await call(t, el, "function(){ this.focus() }");
+      if (el) await call(t, el, "function(){ if (document.activeElement !== this && !this.contains(document.activeElement)) this.focus() }");
       await keyPress(t, args.key);
     }, el);
   },
@@ -682,10 +741,10 @@ const TOOLS = {
     const dx = dir === "left" ? -amount : dir === "right" ? amount : 0;
     const dy = dir === "up" ? -amount : dir === "down" ? amount : 0;
     return act(t, `Scrolled ${dir} ${amount}px.`, async () => {
-      await send(t.tabId, "Input.dispatchMouseEvent", { type: "mouseWheel", x, y, deltaX: dx, deltaY: dy });
+      // a little off the middle, where a hand rests
+      await human.wheel(t, x + (Math.random() - 0.5) * 60, y + (Math.random() - 0.5) * 60, dx, dy);
       await sleep(250);
-      const r = await send(t.tabId, "Runtime.evaluate", { expression: "[scrollX, scrollY, document.documentElement.scrollHeight, innerHeight]", returnByValue: true });
-      const [sx, sy, h, ih] = r.result.value;
+      const [sx, sy, h, ih] = await read(t, "[scrollX, scrollY, document.documentElement.scrollHeight, innerHeight]");
       return `Scrolled ${dir} ${amount}px; the page is at ${Math.round(sy)} of ${Math.max(0, h - ih)}px down${sx ? `, ${Math.round(sx)}px across` : ""}.`;
     });
   },
@@ -698,16 +757,7 @@ const TOOLS = {
     return act(t, `Dragged ${a.ref} onto ${b.ref}.`, async () => {
       const p = await point(t, a);
       const q = await point(t, b);
-      await send(t.tabId, "Input.dispatchMouseEvent", { type: "mouseMoved", x: p.x, y: p.y });
-      await send(t.tabId, "Input.dispatchMouseEvent", { type: "mousePressed", x: p.x, y: p.y, button: "left", clickCount: 1, buttons: 1 });
-      try {
-        for (let i = 1; i <= 12; i++) {
-          await send(t.tabId, "Input.dispatchMouseEvent", { type: "mouseMoved", x: p.x + ((q.x - p.x) * i) / 12, y: p.y + ((q.y - p.y) * i) / 12, button: "left", buttons: 1 });
-          await sleep(25);
-        }
-      } finally {
-        await send(t.tabId, "Input.dispatchMouseEvent", { type: "mouseReleased", x: q.x, y: q.y, button: "left", clickCount: 1 });
-      }
+      await human.drag(t, p, q);
     }, a);
   },
 
@@ -755,9 +805,9 @@ const TOOLS = {
     const end = Date.now() + bound;
     for (;;) {
       if (t.dialog) return dialogOpen(t);
-      const r = await send(t.tabId, "Runtime.evaluate", { expression: "[location.href, document.body ? document.body.innerText : '']", returnByValue: true }).catch(() => null);
-      if (r && r.result && r.result.value) {
-        const [href, body] = r.result.value;
+      const v = await read(t, "[location.href, document.body ? document.body.innerText : '']").catch(() => null);
+      if (v) {
+        const [href, body] = v;
         const ok = (!args.text || body.includes(args.text)) && (!args.textGone || !body.includes(args.textGone)) && (!args.url || href.includes(args.url));
         if (ok) break;
       }
@@ -810,8 +860,11 @@ const TOOLS = {
     let r;
     if (args.ref) {
       const el = await find(t, args.ref);
+      // the script is the agent's, for the page's own JavaScript: the
+      // element as the page's world has it
+      const o = await send(t.tabId, "DOM.resolveNode", { backendNodeId: el.backend, objectGroup: "magpie-eval" }, el.sid);
       r = await send(t.tabId, "Runtime.callFunctionOn", {
-        objectId: el.objectId, returnByValue: true, awaitPromise: true,
+        objectId: o.object.objectId, returnByValue: true, awaitPromise: true,
         functionDeclaration: fn ? `function() { return (${src})(this); }` : `function() { return (${src}); }`,
       }, el.sid);
     } else {
@@ -830,14 +883,21 @@ const TOOLS = {
     const t = await ready(session, args);
     if (t.dialog) return dialogOpen(t);
     const max = Math.min(Number(args.maxChars) || 40000, 200000);
-    const r = await send(t.tabId, "Runtime.evaluate", { expression: "document.body ? document.body.innerText : ''", returnByValue: true });
-    let s = String(r.result.value || "").replace(/\n{3,}/g, "\n\n").trim();
+    let s = String((await read(t, "document.body ? document.body.innerText : ''")) || "").replace(/\n{3,}/g, "\n\n").trim();
     if (s.length > max) s = s.slice(0, max) + `\n… (cut at ${max} characters of ${s.length})`;
     return { content: [text(`${await head(t)}\n\n${s || "(the page has no text)"}`)] };
   },
 
   async browser_console(session, args) {
     const t = await ready(session, args);
+    // the console is read only once asked for (on a developer's own host
+    // from the start): a site can tell when it is
+    if (await watchConsole(t)) {
+      await sleep(300);
+      if (!t.logs.some((l) => l.level !== "network")) {
+        return { content: [text("Magpie Browser reads this tab's console from now on (it is off until asked for, since a site can tell it is read). What the page logs next shows here: do what logs it, then call console again." + (t.logs.length ? "\n\n" + t.logs.map((l) => `[${new Date(l.at).toISOString().slice(11, 19)}] ${l.level}: ${l.text}`).join("\n") : ""))] };
+      }
+    }
     const levels = args.level === "errors" ? ["error", "assert"] : args.level === "network" ? ["network"] : null;
     let logs = t.logs.filter((l) => !levels || levels.includes(l.level));
     const n = Math.min(Number(args.limit) || 50, 300);

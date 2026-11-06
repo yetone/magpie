@@ -7,6 +7,7 @@ import (
 	"html"
 	"image/jpeg"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -277,6 +278,9 @@ func realBrowserFrom(t *testing.T, ext func(*httptest.Server) string) (srv, site
 			// behind another tab
 			io.WriteString(w, `<!doctype html><title>Watch 0</title><h1>The user's page</h1><script>let hid = 0; document.addEventListener("visibilitychange", () => { if (document.hidden) document.title = "Watch " + ++hid; });</script>`)
 			return
+		case "/human":
+			io.WriteString(w, humanFixture)
+			return
 		case "/refused":
 			w.WriteHeader(http.StatusForbidden)
 			io.WriteString(w, "<!doctype html><title>Denied</title><h1>Access denied</h1>")
@@ -301,6 +305,9 @@ func realBrowserFrom(t *testing.T, ext func(*httptest.Server) string) (srv, site
 		// (Linux), and Chrome waits on it before the extension's storage
 		// answers
 		"--use-mock-keychain", "--password-store=basic",
+		// a site's own name, not a developer's host: shop.example is the
+		// test's site
+		"--host-resolver-rules=MAP shop.example 127.0.0.1",
 		// the user's own page, which the extension never attaches to
 		site.URL+"/watch")
 	var logs bytes.Buffer
@@ -543,5 +550,167 @@ func TestBrowserOlderExtensionsFolderWritten(t *testing.T) {
 			t.Fatalf("the folder still has:\n%s", b)
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// A shop's page that watches for an automated browser the ways bot checks
+// do: its own getComputedStyle,
+// querySelectorAll, elementFromPoint and focus counting the calls a script
+// in its world makes, and every mouse, key, composition and wheel event.
+const humanFixture = `<!doctype html>
+<title>Shop</title>
+<h1>Shop</h1>
+<button id="buy" style="width: 121px; height: 41px">Buy</button>
+<button onclick="console.log('bought')">Log</button>
+<input aria-label="Search" id="search">
+<textarea aria-label="Message" id="msg"></textarea>
+<div contenteditable="true" role="textbox" aria-label="Chat" id="chat" style="min-height: 2em; border: 1px solid"></div>
+<div style="height: 4000px"></div>
+<script>
+  const seen = { calls: [], moves: 0, movesBeforeClick: -1, click: null, keys: [], shift: 0, composed: [], wheels: 0 };
+  window.seen = seen;
+  const spy = (o, k, name) => { const f = o[k]; o[k] = function (...a) { seen.calls.push(name); return f.apply(this, a); }; };
+  spy(window, "getComputedStyle", "getComputedStyle");
+  spy(Document.prototype, "querySelectorAll", "querySelectorAll");
+  spy(Element.prototype, "querySelectorAll", "querySelectorAll");
+  spy(Document.prototype, "elementFromPoint", "elementFromPoint");
+  spy(HTMLElement.prototype, "focus", "focus");
+  addEventListener("mousemove", () => seen.moves++, true);
+  buy.addEventListener("click", (ev) => {
+    const r = buy.getBoundingClientRect();
+    seen.movesBeforeClick = seen.moves;
+    seen.click = { trusted: ev.isTrusted, dx: ev.clientX - (r.left + r.width / 2), dy: ev.clientY - (r.top + r.height / 2) };
+  });
+  addEventListener("keydown", (ev) => { seen.keys.push([ev.key, performance.now(), ev.isTrusted]); if (ev.key === "Shift") seen.shift++; }, true);
+  addEventListener("compositionend", (ev) => seen.composed.push(ev.data), true);
+  // a chat box sends on Enter, as Discord's does
+  chat.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); seen.sent = chat.innerText; } });
+  addEventListener("wheel", () => seen.wheels++, { capture: true, passive: true });
+</script>`
+
+// The extension drives a site the way a person does, so the bot checks
+// sites like Discord run don't find it (the owner, 11-05: Discord flagged
+// the account under Magpie Browser, never under Claude's extension): CDP's
+// Runtime domain, which a page can find by what the console does with its
+// values, stays off until console is asked for on a site's own host; its reads and helpers run in a world of its own, so the page's
+// own functions never see a call; a click comes after the mouse has moved
+// there, trusted and off the exact middle; text is typed a key at a time
+// at uneven gaps, capitals with Shift, Chinese through an IME's
+// composition; a scroll is several wheel notches; and naming the user's
+// own tab opens its page in a tab of the agent's, leaving theirs alone.
+func TestBrowserActsLikeAPerson(t *testing.T) {
+	srv, site := realBrowser(t)
+	call, ok := browserCaller(t, srv, "person")
+	shop := strings.Replace(site.URL, "127.0.0.1", "shop.example", 1) + "/human"
+	page := ok("browser_tabs", map[string]any{"action": "new", "url": shop}, "Opened t", "Shop")
+	ref := func(role, name string) string {
+		t.Helper()
+		m := regexp.MustCompile(`- ` + role + ` "` + name + `"(?: \[[a-z=, ]+\])? \[ref=(e\d+)\]`).FindStringSubmatch(page)
+		if m == nil {
+			t.Fatalf("no %s %q with a ref in:\n%s", role, name, page)
+		}
+		return m[1]
+	}
+	page = ok("browser_snapshot", nil, "Shop")
+	ok("browser_click", map[string]any{"ref": ref("button", "Buy")}, "Clicked")
+	ok("browser_type", map[string]any{"ref": ref("textbox", "Search"), "text": "Hello, World"}, "Typed into")
+	ok("browser_type", map[string]any{"ref": ref("textbox", "Message"), "text": "你好 ok"}, "Typed into")
+	ok("browser_type", map[string]any{"ref": ref("textbox", "Chat"), "text": "早上好\nline two", "submit": true}, "Typed into")
+	ok("browser_scroll", map[string]any{"direction": "down", "amount": 600}, "Scrolled")
+	ok("browser_wait", map[string]any{"text": "Shop"})
+	ok("browser_text", nil, "Shop")
+
+	var seen struct {
+		Calls            []string
+		Moves            int
+		MovesBeforeClick int
+		Click            *struct {
+			Trusted bool
+			Dx, Dy  float64
+		}
+		Keys     [][]any
+		Shift    int
+		Composed []string
+		Wheels   int
+		Sent     string
+	}
+	out := ok("browser_evaluate", map[string]any{"script": "() => seen"})
+	if i := strings.Index(out, "{"); i < 0 || json.Unmarshal([]byte(out[i:strings.LastIndex(out, "}")+1]), &seen) != nil {
+		t.Fatalf("the page's record: %s", out)
+	}
+	if len(seen.Calls) != 0 {
+		t.Errorf("the page saw the extension call its own functions: %v", seen.Calls)
+	}
+	if seen.Click == nil || !seen.Click.Trusted {
+		t.Errorf("no trusted click on Buy: %+v", seen.Click)
+	} else if math.Abs(seen.Click.Dx) <= 0.5 && math.Abs(seen.Click.Dy) <= 0.5 {
+		t.Errorf("the click landed on the middle of Buy (%v, %v)", seen.Click.Dx, seen.Click.Dy)
+	}
+	if seen.MovesBeforeClick < 4 {
+		t.Errorf("the mouse moved %d times before the click, not along a path", seen.MovesBeforeClick)
+	}
+	var typed, gaps []float64
+	for _, k := range seen.Keys {
+		if k[0] != "Shift" && k[0] != "Backspace" && k[0] != "Process" {
+			typed = append(typed, k[1].(float64))
+		}
+		if k[2] != true {
+			t.Errorf("an untrusted keydown: %v", k)
+		}
+	}
+	if len(typed) < len("Hello, World")+len(" ok") {
+		t.Errorf("%d keydowns for %d typed characters: text went in without keys", len(typed), len("Hello, World")+len(" ok"))
+	}
+	for i := 1; i < len(typed) && i < 12; i++ {
+		gaps = append(gaps, typed[i]-typed[i-1])
+	}
+	lo, hi := 1e9, 0.0
+	for _, g := range gaps {
+		lo, hi = min(lo, g), max(hi, g)
+	}
+	if len(gaps) < 5 || hi-lo < 20 {
+		t.Errorf("the gaps between keys are even (%v): a person's are not", gaps)
+	}
+	if seen.Shift < 2 {
+		t.Errorf("Shift was pressed %d times for H and W", seen.Shift)
+	}
+	if strings.Join(seen.Composed, "") != "你好早上好" {
+		t.Errorf("Chinese didn't come through an IME's composition: %q", seen.Composed)
+	}
+	if seen.Sent != "早上好\nline two" {
+		t.Errorf("the chat box sent %q: a newline must not send it early, submit must", seen.Sent)
+	}
+	if seen.Wheels < 3 {
+		t.Errorf("a 600px scroll came as %d wheel events", seen.Wheels)
+	}
+	ok("browser_evaluate", map[string]any{"script": "() => search.value + '|' + msg.value"}, "Hello, World|你好 ok")
+
+	// the console is off on a site's own host until asked for, then read
+	ok("browser_console", nil, "reads this tab's console from now on")
+	ok("browser_click", map[string]any{"ref": ref("button", "Log")})
+	ok("browser_console", nil, "bought")
+
+	// the user's own tab, named, is opened in one of the agent's
+	users := regexp.MustCompile(`(?m)^[+ ] (t\d+) "Watch 0" .*/watch$`).FindStringSubmatch(ok("browser_tabs", nil))
+	if users == nil {
+		t.Fatal("no user's page")
+	}
+	got := ok("browser_snapshot", map[string]any{"tab": users[1]}, "is the user's own tab", "The user's page")
+	copied := regexp.MustCompile(`opened in (t\d+)`).FindStringSubmatch(got)
+	if copied == nil || copied[1] == users[1] {
+		t.Fatalf("no tab of the agent's for the user's %s:\n%s", users[1], got)
+	}
+	if again := ok("browser_snapshot", map[string]any{"tab": users[1]}); strings.Contains(again, "is the user's own tab") || !strings.Contains(again, copied[1]) {
+		t.Fatalf("naming the user's tab again didn't go on in %s:\n%s", copied[1], again)
+	}
+	list := ok("browser_tabs", nil)
+	if !regexp.MustCompile(`(?m)^\* ` + copied[1] + ` \[Magpie\] "Watch 0"`).MatchString(list) {
+		t.Fatalf("the copy %s isn't the agent's, in its group:\n%s", copied[1], list)
+	}
+	if !regexp.MustCompile(`(?m)^[+ ] ` + users[1] + ` "Watch 0" .*/watch$`).MatchString(list) {
+		t.Fatalf("the user's tab %s changed:\n%s", users[1], list)
+	}
+	if m := call("browser_tabs", map[string]any{"action": "close", "tab": users[1]}); !m.Result.IsError || !strings.Contains(m.Result.Content[0].Text, "the user's own tab") {
+		t.Fatalf("closing the user's tab: %+v", m.Result)
 	}
 }

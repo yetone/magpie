@@ -1,9 +1,16 @@
 // The DevTools protocol over chrome.debugger, one attachment per tab. A
 // tab stays attached while an agent works in it and is let go after a
 // quiet spell, so Chrome's "is debugging this browser" bar is up only
-// while it is used.
+// while it is used, and doesn't come and go between an agent's calls.
+//
+// The page never learns it is driven. Runtime is left off (a page can
+// tell it is on: Chrome then reads what the page logs, and a logged
+// object's getters run), save on a developer's own host or once an agent
+// asks for the console. Everything magpie reads or runs in a page runs
+// in an isolated world of its own, which the page's scripts can't see or
+// patch: nothing of magpie's shows in the page's own JavaScript.
 
-const IDLE_MS = 2 * 60 * 1000;
+const IDLE_MS = 5 * 60 * 1000;
 const LOG_KEPT = 300;
 
 // tabId → what is known of the page while attached
@@ -22,8 +29,12 @@ export function state(tabId) {
       // through a session of its own: frame id → session, and session →
       // { frame, parent session }
       children: new Map(), frameOf: new Map(),
-      worlds: new Map(), // "session|frame" → the isolated world settle reads
+      worlds: new Map(), // "session|frame" → magpie's isolated world there
       sentInput: false,
+      console: false, // Runtime is on: the page's logs are read
+      mouse: null, // where the mouse last was, {x, y}
+      lastInput: 0, // when the last action's input ended
+      lastWheel: 0,
     };
     tabs.set(tabId, t);
   }
@@ -54,9 +65,10 @@ export async function attach(tabId) {
       t.children.clear();
       t.frameOf.clear();
       t.worlds.clear();
+      if (!t.console) t.console = await devHost(tabId);
       await Promise.all([
         send(tabId, "Page.enable"),
-        send(tabId, "Runtime.enable"),
+        ...(t.console ? [send(tabId, "Runtime.enable")] : []),
         send(tabId, "Network.enable"),
         send(tabId, "DOM.enable"),
         send(tabId, "Accessibility.enable"),
@@ -70,6 +82,25 @@ export async function attach(tabId) {
   }
   await t.attaching;
   return t;
+}
+
+// devHost is whether a tab shows a developer's own page (localhost, a
+// .test or .localhost name), whose logs are read from the start: no site
+// there watches for a debugger
+const DEV = /^(localhost|127\.\d+\.\d+\.\d+|\[::1\]|.+\.localhost|.+\.test)$/i;
+async function devHost(tabId) {
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  try { return DEV.test(new URL(tab && (tab.pendingUrl || tab.url)).hostname); } catch { return false; }
+}
+
+// watchConsole turns Runtime on in a tab and its frames, so what the page
+// logs from now on is read; asked for by browser_console
+export async function watchConsole(t) {
+  if (t.console) return false;
+  t.console = true;
+  await send(t.tabId, "Runtime.enable").catch(() => {});
+  for (const sid of t.frameOf.keys()) send(t.tabId, "Runtime.enable", {}, sid).catch(() => {});
+  return true;
 }
 
 function why(m) {
@@ -100,7 +131,7 @@ function autoAttach(tabId, sid) {
 
 async function child(t, sid) {
   await Promise.all([
-    send(t.tabId, "Runtime.enable", {}, sid),
+    ...(t.console ? [send(t.tabId, "Runtime.enable", {}, sid)] : []),
     send(t.tabId, "Network.enable", {}, sid),
     send(t.tabId, "DOM.enable", {}, sid),
     send(t.tabId, "Accessibility.enable", {}, sid),
@@ -194,6 +225,8 @@ chrome.debugger.onEvent.addListener((src, method, p) => {
       if (!p.frame.parentId) {
         t.mainFrame = p.frame.id;
         t.inflight.clear();
+        // a developer's own page: its logs are read from the start
+        try { if (!t.console && DEV.test(new URL(p.frame.url).hostname)) watchConsole(t); } catch {}
       }
       break;
     case "Runtime.consoleAPICalled": {
@@ -263,27 +296,69 @@ async function mainFrame(t) {
   return t.mainFrame;
 }
 
+const STALE_WORLD = /Cannot find context|context with specified id|Execution context was destroyed|Inspected target navigated/i;
+
+// world is magpie's isolated world in a frame (the tab's main frame
+// without one, or the frame of session sid): its execution context id, a
+// new one for each document
+export async function world(t, frame, sid) {
+  if (!frame) frame = sid ? t.frameOf.get(sid)?.frame : await mainFrame(t);
+  if (!frame) throw new Error("the page has no frame to read");
+  const k = (sid || "") + "|" + frame;
+  let ctx = t.worlds.get(k);
+  if (!ctx) {
+    ctx = (await send(t.tabId, "Page.createIsolatedWorld", { frameId: frame, worldName: "magpie" }, sid)).executionContextId;
+    t.worlds.set(k, ctx);
+  }
+  return ctx;
+}
+
+// inWorld runs fn(ctx) in magpie's world of a frame, in a new one when
+// the document it had is gone
+async function inWorld(t, where, fn) {
+  for (let i = 0; ; i++) {
+    let ctx;
+    try {
+      ctx = await world(t, where.frame, where.sid);
+      return await fn(ctx);
+    } catch (e) {
+      if (i > 0 || !STALE_WORLD.test(String(e && e.message || e))) throw e;
+      if (where.frame) t.worlds.delete((where.sid || "") + "|" + where.frame);
+      else for (const [k, v] of t.worlds) if (v === ctx) t.worlds.delete(k);
+      if (!where.frame && !where.sid) t.mainFrame = null; // a new document may be a new frame
+    }
+  }
+}
+
+// read evaluates an expression in magpie's world of the main frame (or
+// where: {frame, sid}) and answers its value
+export async function read(t, expression, where = {}) {
+  return inWorld(t, where, async (contextId) => {
+    const r = await send(t.tabId, "Runtime.evaluate", { expression, contextId, returnByValue: true, awaitPromise: true }, where.sid);
+    if (r.exceptionDetails) throw new Error((r.exceptionDetails.exception && r.exceptionDetails.exception.description) || r.exceptionDetails.text);
+    return r.result.value;
+  });
+}
+
+// evaluate is read answering the remote object, for the caller to walk
+export async function evaluate(t, expression, objectGroup, where = {}) {
+  return inWorld(t, where, async (contextId) => (await send(t.tabId, "Runtime.evaluate", { expression, contextId, objectGroup }, where.sid)).result);
+}
+
+// resolve is an element (by backendNodeId) as an object in magpie's world
+// of the frame its document is
+export async function resolve(t, backendNodeId, where = {}, objectGroup = "magpie-act") {
+  return inWorld(t, where, async (executionContextId) =>
+    (await send(t.tabId, "DOM.resolveNode", { backendNodeId, objectGroup, executionContextId }, where.sid)).object);
+}
+
 // watch reads the changes in a frame (the tab's main frame without one),
 // or null when it can't be read
 export async function watch(t, frame, sid) {
-  if (!frame) frame = sid ? t.frameOf.get(sid)?.frame : await mainFrame(t);
-  if (!frame) return null;
-  const k = (sid || "") + "|" + frame;
-  for (let i = 0; i < 2; i++) {
-    let ctx = t.worlds.get(k);
-    if (!ctx) {
-      try {
-        ctx = (await send(t.tabId, "Page.createIsolatedWorld", { frameId: frame, worldName: "magpie-watch" }, sid)).executionContextId;
-        t.worlds.set(k, ctx);
-      } catch { return null; }
-    }
-    try {
-      const r = await send(t.tabId, "Runtime.evaluate", { expression: WATCH, contextId: ctx, returnByValue: true }, sid);
-      if (r.result && Array.isArray(r.result.value)) return r.result.value;
-    } catch {}
-    t.worlds.delete(k); // a new document: a new world
-  }
-  return null;
+  try {
+    const v = await read(t, WATCH, { frame, sid });
+    return Array.isArray(v) ? v : null;
+  } catch { return null; }
 }
 
 // settle waits for the page to go quiet after an action: no load under
@@ -312,8 +387,8 @@ export async function waitLoad(t, bound = 30000) {
   while (Date.now() < end) {
     if (!t.loading) {
       try {
-        const r = await send(t.tabId, "Runtime.evaluate", { expression: "document.readyState", returnByValue: true });
-        if (r.result.value === "complete" || r.result.value === "interactive") return true;
+        const v = await read(t, "document.readyState");
+        if (v === "complete" || v === "interactive") return true;
       } catch {}
     }
     await sleep(150);

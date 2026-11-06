@@ -2,7 +2,7 @@
 // each element it can act on given a ref (e3) that stays the element's
 // from one snapshot to the next, for as long as the page keeps it.
 
-import { fault, send } from "./cdp.js";
+import { evaluate, fault, read, resolve, send } from "./cdp.js";
 
 const INTERACTIVE = new Set([
   "button", "link", "textbox", "searchbox", "checkbox", "radio", "combobox",
@@ -43,12 +43,14 @@ const CLICKABLE = `(() => {
   return out;
 })()`;
 
-async function clickables(tabId) {
+// run in magpie's isolated world: the page's scripts never see the scan
+async function clickables(t) {
+  const tabId = t.tabId;
   const ids = new Set();
   try {
-    const r = await send(tabId, "Runtime.evaluate", { expression: CLICKABLE, objectGroup: "magpie-snap" });
-    if (!r.result || !r.result.objectId) return ids;
-    const props = await send(tabId, "Runtime.getProperties", { objectId: r.result.objectId, ownProperties: true });
+    const r = await evaluate(t, CLICKABLE, "magpie-snap");
+    if (!r || !r.objectId) return ids;
+    const props = await send(tabId, "Runtime.getProperties", { objectId: r.objectId, ownProperties: true });
     await Promise.all(props.result.filter((p) => /^\d+$/.test(p.name) && p.value && p.value.objectId).map(async (p) => {
       try {
         const d = await send(tabId, "DOM.describeNode", { objectId: p.value.objectId });
@@ -115,9 +117,9 @@ export async function take(t, opts = {}) {
   const tabId = t.tabId;
   const [{ nodes }, clickable, inner, info] = await Promise.all([
     send(tabId, "Accessibility.getFullAXTree"),
-    clickables(tabId),
+    clickables(t),
     frames(t),
-    send(tabId, "Runtime.evaluate", { expression: "[location.href, document.title]", returnByValue: true }).then((r) => r.result.value).catch(() => ["", ""]),
+    read(t, "[location.href, document.title]").catch(() => ["", ""]),
   ]);
   const [url, title] = info;
   // a new document starts its refs over; the same one keeps them
@@ -285,17 +287,17 @@ export async function find(t, ref) {
   const r = t.refs.get(ref);
   if (!r) throw fault("STALE_REF", `ref ${ref} isn't in the latest snapshot of this tab: take a snapshot and use a ref from it`);
   try {
-    const o = await send(t.tabId, "DOM.resolveNode", { backendNodeId: r.backend, objectGroup: "magpie-act" }, r.sid);
-    const c = await send(t.tabId, "Runtime.callFunctionOn", { objectId: o.object.objectId, functionDeclaration: "function(){return this.isConnected}", returnByValue: true }, r.sid);
-    if (c.result.value) return { ...r, ref, objectId: o.object.objectId };
+    const o = await resolve(t, r.backend, r);
+    const c = await send(t.tabId, "Runtime.callFunctionOn", { objectId: o.objectId, functionDeclaration: "function(){return this.isConnected}", returnByValue: true }, r.sid);
+    if (c.result.value) return { ...r, ref, objectId: o.objectId };
   } catch {}
   // the page drew it again: the same role and name, if only one has it
   await take(t, { maxChars: 1 });
   const same = [...t.refs].filter(([, v]) => v.role === r.role && v.name === r.name);
   if (same.length === 1) {
     const [nref, v] = same[0];
-    const o = await send(t.tabId, "DOM.resolveNode", { backendNodeId: v.backend, objectGroup: "magpie-act" }, v.sid);
-    return { ...v, ref: nref, objectId: o.object.objectId };
+    const o = await resolve(t, v.backend, v);
+    return { ...v, ref: nref, objectId: o.objectId };
   }
   if (same.length > 1) throw fault("AMBIGUOUS", `${ref} (${r.role} "${r.name}") was redrawn and ${same.length} elements now match it: take a snapshot and pick one`);
   throw fault("STALE_REF", `${ref} (${r.role} "${r.name}") is no longer on the page: take a snapshot`);
