@@ -17,6 +17,8 @@ type installFixture struct {
 	versions                     map[string]uint64
 	placed                       []string // folders installCLI was asked to put on PATH
 	portable                     string
+	record                       string   // the folder chosen, as HKCU\Software\magpie keeps it
+	asked                        []string // what AskFolder was offered
 }
 
 func newInstallFixture(t *testing.T) *installFixture {
@@ -36,7 +38,9 @@ func newInstallFixture(t *testing.T) *installFixture {
 		t.Fatal(err)
 	}
 	saved := []any{installTarget, downloadFolder, fileVersion, portableData, webViewHome, installCLI}
+	wasRead, wasWrite, wasAsk := recordedDir, recordDir, AskFolder
 	t.Cleanup(func() {
+		recordedDir, recordDir, AskFolder = wasRead, wasWrite, wasAsk
 		installTarget = saved[0].(func() string)
 		downloadFolder = saved[1].(func(string) bool)
 		fileVersion = saved[2].(func(string) uint64)
@@ -60,7 +64,26 @@ func newInstallFixture(t *testing.T) *installFixture {
 		f.placed = append(f.placed, dir)
 		return nil
 	}
+	recordedDir = func() string { return f.record }
+	recordDir = func(dir string) error { f.record = dir; return nil }
+	AskFolder = nil
 	return f
+}
+
+// ask has AskFolder answer dir, after the check it is given accepts it,
+// and note what it was offered.
+func (f *installFixture) ask(t *testing.T, dir string) {
+	t.Helper()
+	AskFolder = func(suggest string, check func(string) error) string {
+		f.asked = append(f.asked, suggest)
+		if dir == "" {
+			return ""
+		}
+		if err := check(dir); err != nil {
+			t.Fatalf("check refused %s: %v", dir, err)
+		}
+		return dir
+	}
 }
 
 func (f *installFixture) installed(t *testing.T, b string, version uint64) {
@@ -385,5 +408,167 @@ func TestInFolder(t *testing.T) {
 	}
 	if inFolder(root, "") || inFolder(root, "relative") {
 		t.Error("a folder that isn't absolute holds things")
+	}
+}
+
+// The first time, the user is asked where to install, offered the
+// default; the folder they choose is where magpie goes, what goes on
+// PATH, and what is kept for the next download (feng_21795_78266 on
+// Discord).
+func TestSettleInstallsWhereTheUserChose(t *testing.T) {
+	f := newInstallFixture(t)
+	mine := filepath.Join(filepath.Dir(f.downloads), "D", "Apps", "magpie")
+	f.ask(t, mine)
+	to, err := settle(f.exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(mine, "magpie.exe")
+	if to != want {
+		t.Fatalf("settle opens %q, want %q", to, want)
+	}
+	if len(f.asked) != 1 || !samePath(f.asked[0], filepath.Dir(f.to)) {
+		t.Fatalf("offered %q, want the default %q once", f.asked, filepath.Dir(f.to))
+	}
+	if got := readString(t, want); got != "MZ new download" {
+		t.Fatalf("installed copy holds %q", got)
+	}
+	if exists(f.to) {
+		t.Fatal("installed in the default folder too")
+	}
+	if len(f.placed) != 1 || !samePath(f.placed[0], mine) {
+		t.Fatalf("PATH given %v, want %s", f.placed, mine)
+	}
+	if !samePath(f.record, mine) {
+		t.Fatalf("kept %q, want %q", f.record, mine)
+	}
+	if forwards(f.exe) != (runtime.GOOS == "windows") {
+		t.Fatal("the download isn't taken as opening the chosen copy")
+	}
+
+	// opened again, and again as a newer version: never asked, never
+	// moved, and the newer one goes in the chosen folder
+	f.versions[want] = 1 << 32
+	f.versions[f.exe] = 2 << 32
+	for i := 0; i < 2; i++ {
+		to, err = settle(f.exe)
+		if err != nil || to != want {
+			t.Fatalf("again: settle = %q, %v; want %q", to, err, want)
+		}
+	}
+	if len(f.asked) != 1 {
+		t.Fatalf("asked again: %q", f.asked)
+	}
+	if exists(f.to) {
+		t.Fatal("moved to the default folder")
+	}
+	if len(f.placed) != 1 {
+		t.Fatalf("PATH written again: %v", f.placed)
+	}
+}
+
+// Declining the dialog installs nothing: the download runs where it is.
+func TestSettleDeclinedRunsHere(t *testing.T) {
+	f := newInstallFixture(t)
+	f.ask(t, "")
+	if to, err := settle(f.exe); to != "" || err != nil {
+		t.Fatalf("settle = %q, %v after declining", to, err)
+	}
+	if exists(f.to) || f.record != "" || len(f.placed) != 0 {
+		t.Fatalf("installed after declining: %v %q %v", exists(f.to), f.record, f.placed)
+	}
+}
+
+// A magpie in the default folder from before there was a choice is
+// installed: it is opened with no question and no record.
+func TestSettleDefaultInstallAsksNothing(t *testing.T) {
+	f := newInstallFixture(t)
+	f.installed(t, "MZ installed", 0)
+	f.ask(t, filepath.Join(t.TempDir(), "magpie"))
+	to, err := settle(f.exe)
+	if err != nil || to != f.to {
+		t.Fatalf("settle = %q, %v; want %q", to, err, f.to)
+	}
+	if len(f.asked) != 0 || f.record != "" {
+		t.Fatalf("asked %q, kept %q", f.asked, f.record)
+	}
+}
+
+// A chosen folder since emptied is offered again, not the default.
+func TestSettleOffersTheChosenFolderAgain(t *testing.T) {
+	f := newInstallFixture(t)
+	gone := filepath.Join(t.TempDir(), "magpie")
+	f.record = gone
+	f.ask(t, filepath.Dir(f.to))
+	to, err := settle(f.exe)
+	if err != nil || to != f.to {
+		t.Fatalf("settle = %q, %v; want %q", to, err, f.to)
+	}
+	if len(f.asked) != 1 || !samePath(f.asked[0], gone) {
+		t.Fatalf("offered %q, want %q", f.asked, gone)
+	}
+	if !samePath(f.record, filepath.Dir(f.to)) {
+		t.Fatalf("kept %q after the default was chosen", f.record)
+	}
+}
+
+// A folder picked is used as it is when named magpie, else a magpie
+// folder goes inside it.
+func TestInstallDir(t *testing.T) {
+	root := t.TempDir()
+	for _, c := range []struct{ picked, want string }{
+		{filepath.Join(root, "Apps"), filepath.Join(root, "Apps", "magpie")},
+		{filepath.Join(root, "Apps", "magpie"), filepath.Join(root, "Apps", "magpie")},
+		{filepath.Join(root, "Apps", "Magpie") + string(filepath.Separator), filepath.Join(root, "Apps", "Magpie")},
+	} {
+		if got := InstallDir(c.picked); got != c.want {
+			t.Errorf("InstallDir(%q) = %q, want %q", c.picked, got, c.want)
+		}
+	}
+}
+
+// A download folder, or one the user can't write to (Program Files
+// without an administrator), is refused with the reason; the folder it
+// had to make for the check isn't left behind.
+func TestInstallableRefuses(t *testing.T) {
+	f := newInstallFixture(t)
+	if err := Installable(f.downloads); err != ErrDownloadFolder {
+		t.Fatalf("Downloads: %v", err)
+	}
+	if err := Installable("magpie"); err == nil {
+		t.Fatal("a relative folder accepted")
+	}
+	tmp := t.TempDir()
+	if err := Installable(filepath.Join(tmp, "new", "magpie")); err != nil {
+		t.Fatalf("a folder of the user's own: %v", err)
+	}
+	if exists(filepath.Join(tmp, "new")) {
+		t.Fatal("the folders made for the check were left")
+	}
+	if err := Installable(tmp); err != nil {
+		t.Fatalf("a folder there already: %v", err)
+	}
+	if left, _ := os.ReadDir(tmp); !exists(tmp) || len(left) != 0 {
+		t.Fatalf("check left %v", left)
+	}
+	if runtime.GOOS == "windows" {
+		return // a folder's mode doesn't stop a write there; tried for real on Windows
+	}
+	ro := filepath.Join(t.TempDir(), "ro")
+	if err := os.MkdirAll(ro, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(ro, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(ro, 0o755) })
+	if os.Getuid() == 0 {
+		t.Skip("root writes anywhere")
+	}
+	if err := Installable(ro); err != ErrNeedsAdmin {
+		t.Fatalf("a folder the user can't write: %v", err)
+	}
+	if err := Installable(filepath.Join(ro, "magpie")); err != ErrNeedsAdmin {
+		t.Fatalf("a folder that can't be made: %v", err)
 	}
 }

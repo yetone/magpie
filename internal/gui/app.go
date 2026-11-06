@@ -331,7 +331,9 @@ func Run(version string, showMain bool, link string) error {
 	}
 	// Windows: the app opened from Downloads (or the Desktop, or a zip)
 	// opens the copy installed in the user's programs folder, putting
-	// itself there first, and Open at login opens that one from now on
+	// itself there first, and Open at login opens that one from now on.
+	// The first time, it asks where (installdir_windows.go).
+	askInstallFolder()
 	if from, to := update.Settle(); to != "" {
 		err := update.Forward(from, to)
 		if err == nil {

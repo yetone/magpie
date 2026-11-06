@@ -933,6 +933,32 @@ and the old one quitting only after its stream) and
 socket passing in [`handoff_test.go`](../../internal/handoff/handoff_test.go),
 and `update-wait.test.cjs`.
 
+### Where Windows installs magpie
+
+There is no installer: the Windows exe opened from Downloads, the Desktop
+or a temp folder installs itself (`update.Settle`, called from `gui.Run`).
+The first time, with nothing installed, it asks where in Windows' task
+dialog (`installDialog` in
+[`installdir_windows.go`](../../internal/gui/installdir_windows.go)): the
+folder, Install, Change… and Cancel, in the tray's language. Change… opens
+the folder picker, and a folder picked gets `magpie` added unless it is
+named that already (`update.InstallDir`). The default is
+`%LOCALAPPDATA%\Programs\magpie`; another folder is recorded at
+`HKCU\Software\magpie` `InstallLocation`, so the next exe downloaded
+replaces the copy there without asking (feng_21795_78266 on Discord).
+A folder only an administrator can write to (Program Files, Windows) or
+one downloads land in is refused in the dialog (`update.Installable`), not
+elevated: magpie is installed for the user alone (HKCU's Run, the user's
+PATH) and updates itself without elevation, so an admin folder would
+stop its updates. Cancel runs the exe where it is. The shortcut, App
+Paths, autostart, the `magpie://` scheme, PATH and self-update all take
+the running exe's folder, so they follow the choice. Uninstall forgets
+the record (`update.ForgetInstallDir`) and leaves the program where it
+is, as before. See `TestSettleInstallsWhereTheUserChose`,
+`TestSettleOffersTheChosenFolderAgain`, `TestInstallableRefuses` in
+[`install_test.go`](../../internal/update/install_test.go) and
+`TestInstallWordsEveryLanguage`.
+
 ## Verification
 
 The session readers include Cursor CLI chat stores, Cursor editor project

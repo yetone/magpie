@@ -89,6 +89,7 @@ var (
 	removeShortcut = shortcut.Remove
 	removeScheme   = unregisterScheme
 	endPII         = pii.Remove
+	forgetInstall  = update.ForgetInstallDir
 	executable     = os.Executable
 	wired          = (*agent.Agent).Wired
 	disconnectOne  = disconnect
@@ -178,6 +179,9 @@ func System(r *Report) {
 		{"Start menu shortcut", func() error { return removeShortcut(exe) }},
 		{"magpie:// links", func() error { return removeScheme(exe) }},
 		{"privacy model's helper", endPII},
+		// Windows: the folder chosen to install in, so a download opened
+		// after this asks again
+		{"install folder record", forgetInstall},
 	} {
 		d := Done{What: s.what}
 		if err := s.do(); err != nil {

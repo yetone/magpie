@@ -6,6 +6,7 @@ import (
 	ptr "unsafe"
 
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 
 	"github.com/yetone/magpie/internal/appdir"
 )
@@ -90,4 +91,51 @@ func hide(p string) {
 	if a, err := windows.GetFileAttributes(u); err == nil {
 		windows.SetFileAttributes(u, a|windows.FILE_ATTRIBUTE_HIDDEN)
 	}
+}
+
+// installKey holds InstallLocation, the folder the user chose to install
+// magpie in (Settle). Uninstall removes it.
+const installKey = `Software\magpie`
+
+func readInstallDir() string {
+	k, err := registry.OpenKey(registry.CURRENT_USER, installKey, registry.QUERY_VALUE)
+	if err != nil {
+		return ""
+	}
+	defer k.Close()
+	v, _, err := k.GetStringValue("InstallLocation")
+	if err != nil {
+		return ""
+	}
+	return v
+}
+
+func writeInstallDir(dir string) error {
+	k, _, err := registry.CreateKey(registry.CURRENT_USER, installKey, registry.SET_VALUE)
+	if err != nil {
+		return err
+	}
+	defer k.Close()
+	return k.SetStringValue("InstallLocation", dir)
+}
+
+// ForgetInstallDir takes out the record of the folder magpie was
+// installed in, and its key once nothing else is in it.
+func ForgetInstallDir() error {
+	k, err := registry.OpenKey(registry.CURRENT_USER, installKey, registry.SET_VALUE|registry.QUERY_VALUE)
+	if err != nil {
+		return nil
+	}
+	err = k.DeleteValue("InstallLocation")
+	n, _ := k.Stat()
+	k.Close()
+	if err != nil && err != registry.ErrNotExist {
+		return err
+	}
+	if n != nil && n.ValueCount == 0 && n.SubKeyCount == 0 {
+		if err := registry.DeleteKey(registry.CURRENT_USER, installKey); err != nil && err != registry.ErrNotExist {
+			return err
+		}
+	}
+	return nil
 }

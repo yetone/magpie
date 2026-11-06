@@ -1,8 +1,10 @@
 package update
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -25,6 +27,16 @@ import (
 // updates name it. The download is left where it is: it is the user's
 // file. Opened again, it opens the installed copy, or puts itself there
 // first when it is the newer version.
+//
+// The first time, before anything is copied, the user is asked where to
+// put it (AskFolder, Windows' own dialog in the GUI), with that folder as
+// the default (feng_21795_78266 on Discord). A folder other than the
+// default is kept in HKCU\Software\magpie (InstallLocation), so a
+// download opened later finds it there, never asks again and never moves
+// it. A folder the user can't write to is refused with the reason:
+// magpie installs for the one user, updates itself without an
+// administrator, and its login item and PATH are the user's own, so a
+// copy in Program Files would need an administrator for every update.
 //
 // It is left alone, and runs where it is as before, when it runs from
 // anywhere else (a folder the user chose: D:\Tools, a USB drive), when it
@@ -58,7 +70,103 @@ var (
 	// installCLI puts the installed folder on the user's PATH with the
 	// command a terminal runs there
 	installCLI = cliPlace
+	// recordedDir is the folder the user chose to install in, "" when
+	// none was (the default, or a magpie installed before it could be
+	// chosen); recordDir keeps it
+	recordedDir = readInstallDir
+	recordDir   = writeInstallDir
 )
+
+// AskFolder, when set, asks the user where to install the download,
+// offering suggest, a folder: it answers the folder chosen, which check
+// has accepted, or "" when the user would rather not install (the
+// download then runs where it is). Unset, the suggestion is taken.
+var AskFolder func(suggest string, check func(dir string) error) string
+
+// ErrNeedsAdmin is a folder chosen to install in that only an
+// administrator can write to.
+var ErrNeedsAdmin = errors.New("only an administrator can write to this folder")
+
+// ErrDownloadFolder is a folder chosen to install in that downloads land
+// in: the copy there would be taken for a download again.
+var ErrDownloadFolder = errors.New("downloads land in this folder")
+
+// InstallDir is the folder a folder picked in AskFolder's dialog means:
+// itself when it is named magpie, else a magpie folder inside it, as
+// installers do.
+func InstallDir(picked string) string {
+	picked = filepath.Clean(picked)
+	if strings.EqualFold(filepath.Base(picked), "magpie") {
+		return picked
+	}
+	return filepath.Join(picked, "magpie")
+}
+
+// Installable says why dir can't be installed in, nil when it can: a
+// file is written into it and removed, and the folders made for that are
+// removed again, so a folder looked at and then not chosen isn't left.
+func Installable(dir string) error {
+	if !filepath.IsAbs(dir) {
+		return fmt.Errorf("%s is not a full path", dir)
+	}
+	if downloadFolder(dir) {
+		return ErrDownloadFolder
+	}
+	top := ""
+	for d := filepath.Clean(dir); !exists(d); d = filepath.Dir(d) {
+		top = d
+		if filepath.Dir(d) == d {
+			break
+		}
+	}
+	if top != "" {
+		defer os.RemoveAll(top)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return writeErr(err)
+	}
+	f, err := os.CreateTemp(dir, ".magpie-install-*")
+	if err != nil {
+		return writeErr(err)
+	}
+	f.Close()
+	os.Remove(f.Name())
+	return nil
+}
+
+func writeErr(err error) error {
+	if errors.Is(err, fs.ErrPermission) {
+		return ErrNeedsAdmin
+	}
+	return err
+}
+
+// exeName is what the installed copy is called.
+const exeName = "magpie.exe"
+
+// installed is where magpie is installed: the folder the user chose, else
+// the default; ok is false when neither holds it, and to is then where
+// to offer, the folder chosen before first.
+func installed() (to string, ok bool) {
+	def := installTarget()
+	if def == "" {
+		return "", false
+	}
+	var chosen string
+	if d := recordedDir(); d != "" && filepath.IsAbs(d) {
+		chosen = filepath.Join(d, exeName)
+		if exists(chosen) {
+			return chosen, true
+		}
+	}
+	if exists(def) {
+		return def, true
+	}
+	if chosen != "" {
+		return chosen, false
+	}
+	return def, false
+}
 
 // Settle installs the desktop app run from a download folder (see
 // above), and says what to open instead of running on here: from is this
@@ -86,15 +194,33 @@ func Settle() (from, to string) {
 // settle is Settle for exe: the installed exe to open instead, "" to run
 // exe where it is.
 func settle(exe string) (string, error) {
-	to := installTarget()
+	to, ok := installed()
 	if to == "" || samePath(exe, to) || !downloadFolder(filepath.Dir(exe)) || portableData() != "" {
 		return "", nil
 	}
-	if !exists(to) {
-		if err := installFresh(exe, to); err != nil {
-			return "", err
+	if !ok {
+		dir := filepath.Dir(to)
+		if AskFolder != nil {
+			if dir = AskFolder(dir, Installable); dir == "" {
+				return "", nil
+			}
 		}
-		return to, nil
+		to = filepath.Join(dir, exeName)
+		if samePath(exe, to) {
+			return "", nil
+		}
+		// the default needs no record, unless one names another folder
+		if !samePath(to, installTarget()) || recordedDir() != "" {
+			if err := recordDir(dir); err != nil {
+				log.Println("install: keeping the folder chosen:", err)
+			}
+		}
+		if !exists(to) {
+			if err := installFresh(exe, to); err != nil {
+				return "", err
+			}
+			return to, nil
+		}
 	}
 	if sameFile(exe, to) || sameBytes(exe, to) {
 		return to, nil
@@ -248,8 +374,8 @@ func forwards(exe string) bool {
 	if runtime.GOOS != "windows" || os.Getenv(NoInstallEnv) == "1" {
 		return false
 	}
-	to := installTarget()
-	return to != "" && !samePath(exe, to) && downloadFolder(filepath.Dir(exe)) && portableData() == "" && exists(to)
+	to, ok := installed()
+	return ok && !samePath(exe, to) && downloadFolder(filepath.Dir(exe)) && portableData() == ""
 }
 
 // samePath says whether two paths name the same file, Windows' way: in

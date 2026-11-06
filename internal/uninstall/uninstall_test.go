@@ -25,7 +25,9 @@ func fakes(t *testing.T, list []*agent.Agent, isWired map[string]bool, failing m
 	wasAgents, wasWired, wasDisconnect := agents, wired, disconnectOne
 	wasFailover, wasLeftovers, wasPort, wasRestart := endFailover, endLeftovers, portRollouts, restartCodexApp
 	wasService, wasAutostart, wasShortcut, wasScheme, wasPII, wasExe := removeService, autostartOff, removeShortcut, removeScheme, endPII, executable
+	wasForget := forgetInstall
 	t.Cleanup(func() {
+		forgetInstall = wasForget
 		agents, wired, disconnectOne = wasAgents, wasWired, wasDisconnect
 		endFailover, endLeftovers, portRollouts, restartCodexApp = wasFailover, wasLeftovers, wasPort, wasRestart
 		removeService, autostartOff, removeShortcut, removeScheme, endPII, executable = wasService, wasAutostart, wasShortcut, wasScheme, wasPII, wasExe
@@ -55,6 +57,7 @@ func fakes(t *testing.T, list []*agent.Agent, isWired map[string]bool, failing m
 	removeShortcut = func(string) error { did = append(did, "shortcut"); return nil }
 	removeScheme = func(string) error { did = append(did, "scheme"); return nil }
 	endPII = step("pii")
+	forgetInstall = step("install folder")
 	executable = func() (string, error) { return "/opt/magpie/magpie", nil }
 	return &did
 }
@@ -90,7 +93,7 @@ func TestRunOrder(t *testing.T) {
 
 	r := Run(context.Background())
 
-	want := []string{"service", "autostart", "shortcut", "scheme", "pii", "failover", "disconnect codex", "disconnect claude", "leftovers", "rollouts", "codex app"}
+	want := []string{"service", "autostart", "shortcut", "scheme", "pii", "install folder", "failover", "disconnect codex", "disconnect claude", "leftovers", "rollouts", "codex app"}
 	if !slices.Equal(*did, want) {
 		t.Fatalf("did %q, want %q", *did, want)
 	}
@@ -118,7 +121,7 @@ func TestKeepData(t *testing.T) {
 
 	r := KeepData(context.Background())
 
-	want := []string{"service", "autostart", "shortcut", "scheme", "pii", "failover", "disconnect codex", "leftovers", "rollouts", "codex app"}
+	want := []string{"service", "autostart", "shortcut", "scheme", "pii", "install folder", "failover", "disconnect codex", "leftovers", "rollouts", "codex app"}
 	if !slices.Equal(*did, want) {
 		t.Fatalf("did %q, want %q", *did, want)
 	}
