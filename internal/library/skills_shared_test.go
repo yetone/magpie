@@ -168,15 +168,26 @@ func TestSkillsWhereShared(t *testing.T) {
 	}
 
 	// a library skill by a name the user has there with other files:
-	// theirs stays, and the agents ticked for the library's get it in
-	// their own folders
-	ok(t)(InstallSkills(src, []string{"mine"}, []string{"claude", "pi"}))
-	if !ours(filepath.Join(h, ".pi/agent/skills/mine"), "mine") {
-		t.Error("pi hasn't the library's mine")
+	// theirs stays; an agent that doesn't read the folder gets the
+	// library's, and one that does (Pi) has a skill of its own by that
+	// name, the user's to settle, with no second one beside it
+	r, err := InstallSkills(src, []string{"mine"}, []string{"claude", "pi"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Problems) != 1 || r.Problems[0].Agent != "pi" || !r.Problems[0].Own {
+		t.Errorf("problems: %+v", r.Problems)
+	}
+	if _, err := os.Lstat(filepath.Join(h, ".pi/agent/skills/mine")); !os.IsNotExist(err) {
+		t.Errorf("pi has the library's mine beside the user's: %v", err)
+	}
+	if !ours(filepath.Join(h, ".claude/skills/mine"), "mine") {
+		t.Error("claude hasn't the library's mine")
 	}
 	if ours(filepath.Join(shared, "mine"), "mine") || !strings.Contains(read(t, filepath.Join(shared, "mine", "SKILL.md")), "Not the library's") {
 		t.Error("the user's own mine was written over")
 	}
+	ok(t)(KeepAgentSkill("mine", "pi"))
 
 	// off on this computer: out of ~/.agents/skills, and pi's own is back
 	ok(t)(SkillHere("pdf", false))
@@ -196,7 +207,7 @@ func TestSkillsWhereShared(t *testing.T) {
 
 	// back to each agent's folder: magpie's links there go, nothing else
 	ok(t)(SkillAgents("pdf", []string{"claude", "pi"}))
-	r, err := SetSkillsWhere(SkillsInAgents)
+	r, err = SetSkillsWhere(SkillsInAgents)
 	if err != nil {
 		t.Fatal(err)
 	}

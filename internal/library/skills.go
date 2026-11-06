@@ -586,19 +586,76 @@ func sharedEntry(name string) string {
 	return ""
 }
 
-// sharedCopy is whether p, the entry in ~/.agents/skills by a library
-// skill's name, is the user's own copy of the library's very files: not
-// one magpie made (ours), not the library's own folder (sharedEntry), and
-// holding what the library's holds.
-func sharedCopy(p, name string) bool {
-	if _, err := os.Lstat(p); err != nil || ours(p, name) {
-		return false
+// sharedOwn is the user's own skills in ~/.agents/skills (another
+// installer's, such as the skills CLI's, or copied by hand) by the name an
+// agent reading that folder knows each by: its SKILL.md's name, else its
+// folder's. Pi, Codex and Gemini CLI go by that name, so a library skill
+// by it given to such an agent in its own folder too is the skill twice
+// (math_milian: Pi's "hunk-review" collision). magpie's own entries there
+// (a link into the library, a marked copy) and the library's own folders
+// aren't the user's and aren't in it.
+type sharedOwn map[string][]string
+
+func readSharedOwn() sharedOwn {
+	out := sharedOwn{}
+	dir := sharedSkillsDir()
+	es, err := os.ReadDir(dir)
+	if err != nil {
+		return out
 	}
+	lib := realDir(skillsDir())
+	for _, e := range es {
+		q := filepath.Join(dir, e.Name())
+		if to, ok := linkTarget(q); ok && within(filepath.Clean(to), skillsDir()) || within(realDir(q), lib) {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(q, marker)); err == nil {
+			continue
+		}
+		m, ok := readMeta(q)
+		if !ok {
+			continue
+		}
+		n := m.Name
+		if n == "" {
+			n = e.Name()
+		}
+		// the entry by the folder's own name first
+		if e.Name() == n {
+			out[n] = append([]string{q}, out[n]...)
+		} else {
+			out[n] = append(out[n], q)
+		}
+	}
+	return out
+}
+
+// rival is the user's own entry in ~/.agents/skills an agent reading that
+// folder finds by the library skill's name (or the name its SKILL.md
+// gives), and whether it holds the library's very files. "" when none.
+func (o sharedOwn) rival(name string) (p string, same bool) {
 	lib := skillDir(name)
-	if _, err := os.Stat(lib); err != nil || realDir(p) == realDir(lib) {
-		return false
+	if _, err := os.Stat(lib); err != nil {
+		return "", false
 	}
-	return sameTree(p, lib)
+	names := []string{name}
+	if m, ok := readMeta(lib); ok && m.Name != "" && m.Name != name {
+		names = append(names, m.Name)
+	}
+	for _, n := range names {
+		for _, q := range o[n] {
+			if realDir(q) == realDir(lib) {
+				continue
+			}
+			if sameTree(q, lib) {
+				return q, true
+			}
+			if p == "" {
+				p = q
+			}
+		}
+	}
+	return p, false
 }
 
 // within is whether p is dir or inside it.
@@ -643,6 +700,14 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 	// its own too would be the skill twice
 	shared := realDir(sharedSkillsDir())
 	isShared := realDir(t.Skills) == shared
+	// the user's own skills there, read once for this agent
+	var own sharedOwn
+	rivals := func() sharedOwn {
+		if own == nil {
+			own = readSharedOwn()
+		}
+		return own
+	}
 	inShared := func(s *Skill) bool {
 		if s == nil || !t.readsSharedDir() || realDir(t.Skills) == shared {
 			return false
@@ -658,13 +723,18 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 		}) && (ours(p, s.Name) || realDir(p) == realDir(skillDir(s.Name))) {
 			return true
 		}
-		// the user's own copy of the very same files kept in the shared
-		// folder (another installer's, or one copied by hand): the agent
-		// finds it there, and a link or copy of the library's in its own
-		// folder too is a second tree by that name. pi loads both and
-		// warns of a collision, since it drops a skill read twice only
-		// when both paths lead to one file (realpath, dist/core/skills.js)
-		return sharedCopy(p, s.Name)
+		// the user's own skill by that name kept in the shared folder
+		// (another installer's, or one copied by hand), under that folder
+		// name or another: the agent finds it there, and a link or copy of
+		// the library's in its own folder too is a second skill by that
+		// name. Pi loads both and warns of a collision, since it drops a
+		// skill read twice only when both paths lead to one file
+		// (realpath, dist/core/skills.js), and goes by the SKILL.md name.
+		// The very same files: the agent has the library's already. Other
+		// files: it has one of its own by that name, which the user
+		// settles (UseLibrarySkill, KeepAgentSkill)
+		q, _ := rivals().rival(s.Name)
+		return q != ""
 	}
 	var mine []string
 	for _, name := range a.Skills {
@@ -727,6 +797,13 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 			}
 		}
 		if inShared(s) {
+			// the user's own skill by that name in ~/.agents/skills, not the
+			// library's files: the agent has a skill of its own called so,
+			// the user's to settle as for one in its own folder
+			if q, same := rivals().rival(s.Name); q != "" && !same {
+				res.Problems = append(res.Problems, Problem{Agent: id, What: "skill:" + s.Name, Own: true,
+					Error: fmt.Sprintf("%s already has a skill of its own called %s, in %s", t.Agent.Name, s.Name, q)})
+			}
 			// a copy of its own of the very same files would be the skill
 			// twice as much as a link: kept aside, as it would be for one
 			if _, err := os.Lstat(p); err == nil && !ours(p, s.Name) && realDir(p) != realDir(skillDir(s.Name)) && sameTree(p, skillDir(s.Name)) {
@@ -2089,6 +2166,16 @@ func UseLibrarySkills(names []string, agentID string) (*Result, error) {
 			if _, err := os.Lstat(p); err == nil && !ours(p, name) && realDir(p) != realDir(skillDir(name)) {
 				if _, err := setAside(t.Agent.ID, p); err != nil {
 					return err
+				}
+			}
+			// its own by that name is the user's in ~/.agents/skills, which
+			// it reads besides its own folder: that one is set aside (every
+			// other reader of the folder had it as its own too)
+			if t.readsSharedDir() && realDir(t.Skills) != realDir(sharedSkillsDir()) {
+				if q, same := readSharedOwn().rival(name); q != "" && !same {
+					if _, err := setAside(t.Agent.ID, q); err != nil {
+						return err
+					}
 				}
 			}
 			if !slices.Contains(s.Agents, t.Agent.ID) && !slices.ContainsFunc(sharing(t), func(o string) bool { return slices.Contains(s.Agents, o) }) {

@@ -111,7 +111,15 @@ func TestKimiSweepLeavesTheUsersOwnSharedSkills(t *testing.T) {
 	src := filepath.Join(h, "src/skills")
 	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs")
 	skill(t, filepath.Join(src, "orca"), "orca", "Orca")
-	ok(t)(InstallSkills(src, []string{"pdf"}, []string{"kimi"}))
+	// the user's own pdf there is Kimi Code's own by that name: no second
+	// one beside it, the user's to settle
+	if r, err := InstallSkills(src, []string{"pdf"}, []string{"kimi"}); err != nil || len(r.Problems) != 1 || r.Problems[0].Agent != "kimi" || !r.Problems[0].Own {
+		t.Fatalf("pdf: %+v %v", r, err)
+	}
+	if _, err := os.Lstat(filepath.Join(h, ".kimi-code/skills/pdf")); !os.IsNotExist(err) {
+		t.Errorf("Kimi Code has the library's pdf beside the user's: %v", err)
+	}
+	ok(t)(KeepAgentSkill("pdf", "kimi"))
 	ok(t)(InstallSkills(src, []string{"orca"}, []string{"kimi", "codex"}))
 	ok(t)(Sync())
 	ok(t)(Sync())
