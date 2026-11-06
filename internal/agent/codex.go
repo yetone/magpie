@@ -508,12 +508,15 @@ func codexIn(at place) *Agent {
 		}
 		return nil
 	}
+	// read only (each model's efforts, on every poll of the effort
+	// field): the list kept, not a copy of it each time, 5 MB a minute on
+	// a live magpie
 	models := func() []catalog.Model {
 		switch {
 		case asProvider():
-			return magpieModels("codex")
+			return sharedModels("codex")
 		case viaBase():
-			return append(catalog.Codex(), magpieModels("codex")...)
+			return append(catalog.Codex(), sharedModels("codex")...)
 		}
 		return catalog.Codex()
 	}
@@ -2568,13 +2571,13 @@ func codexEnableEfforts(path string, ms []catalog.Model) error {
 // picks narrow nothing, as it serves no agent anything.
 func ownCodex() []catalog.Model {
 	ms := catalog.Codex()
-	p, err := provider.Find("codex")
-	if err != nil || p.Off || len(p.Models) == 0 {
+	picks := codexPicks()
+	if len(picks) == 0 {
 		return ms
 	}
 	var out []catalog.Model
 	for _, m := range ms {
-		if slices.Contains(p.Models, m.ID) {
+		if slices.Contains(picks, m.ID) {
 			out = append(out, m)
 		}
 	}
@@ -2583,6 +2586,24 @@ func ownCodex() []catalog.Model {
 	}
 	return out
 }
+
+// codexPicks is the models ticked on Codex's ChatGPT subscription, none
+// while it is switched off; kept as the agents' lists are (builtModels):
+// Find built every provider afresh to read them, on each poll of the
+// Agents page, 4 MB a minute on a live magpie for the same few ids.
+// Codex's own list (catalog.Codex, its models_cache.json) is read each
+// time, as before.
+func codexPicks() []string {
+	return builtCodexPicks.shared("", func() []string {
+		p, err := provider.Find("codex")
+		if err != nil || p.Off {
+			return nil
+		}
+		return slices.Clip(p.Models)
+	})
+}
+
+var builtCodexPicks stampedLists[string]
 
 // codexNamed is Codex's own models as its picker offers them, each under
 // its name, as every model of magpie's is (viaMagpie): the picker drew

@@ -389,7 +389,7 @@ func visibleQuotas(all []SubscriptionQuota) []SubscriptionQuota {
 		}
 		if q.Provider == "gemini" || q.Provider == "antigravity" {
 			if chosen == nil {
-				chosen = exposedIDs()
+				chosen = exposedIDs("gemini", "antigravity")
 			}
 			var base func(string) string
 			if q.Provider == "antigravity" {
@@ -409,15 +409,21 @@ func visibleQuotas(all []SubscriptionQuota) []SubscriptionQuota {
 	return out
 }
 
-// exposedIDs is, for each provider, the models magpie offers from it.
-func exposedIDs() map[string]map[string]bool {
+// exposedIDs is, for each provider of ids, the models magpie offers from
+// it. Only those are built: every provider's whole list, each account's
+// and plugin's, was built for the two whose quotas are narrowed, on each
+// usage read (20 MB of a live magpie's idle two minutes).
+func exposedIDs(ids ...string) map[string]map[string]bool {
 	out := map[string]map[string]bool{}
 	for _, p := range All() {
-		ids := map[string]bool{}
-		for _, m := range p.Exposed() {
-			ids[m.ID] = true
+		if !slices.Contains(ids, p.ID) {
+			continue
 		}
-		out[p.ID] = ids
+		offered := map[string]bool{}
+		for _, m := range p.Exposed() {
+			offered[m.ID] = true
+		}
+		out[p.ID] = offered
 	}
 	return out
 }
