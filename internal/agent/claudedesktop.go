@@ -887,7 +887,7 @@ func desktopLocaleFrom(ps []desktopPaths) string {
 //
 // It holds only for a language Desktop's 3p window has. That window is
 // its bundled UI (Resources/ion-dist), with 11 catalogs and no Chinese up
-// to 3.6556.2 at least; on every start it asks the main process for its
+// to 4.23118.0 at least; on every start it asks the main process for its
 // own pick (requestLocaleChange: its localStorage, else navigator.languages
 // mapped onto those 11, else en-US), and the main process writes that into
 // Claude-3p/config.json. So a Chinese "locale" there, carried or set by
