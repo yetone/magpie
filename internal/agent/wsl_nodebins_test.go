@@ -99,9 +99,18 @@ func TestWSLProbeLooksPastWindowsCommand(t *testing.T) {
 	os.MkdirAll(own, 0o755)
 	testenv.Program(t, filepath.Join(own, "pi"), "#!/bin/sh\necho 0.73.1\n")
 
+	// The probe asks for a version under timeout(1), which a distro has
+	// (coreutils) and macOS before 27 hasn't: there `timeout 10 pi
+	// --version` was "command not found", no version, on every macOS 26
+	// CI run (#5570). A stand-in runs the command as timeout would.
+	tools := t.TempDir()
+	if _, err := os.Stat("/usr/bin/timeout"); err != nil {
+		testenv.Program(t, filepath.Join(tools, "timeout"), "#!/bin/sh\nshift\nexec \"$@\"\n")
+	}
+
 	script := strings.ReplaceAll(wslProbeScript, "/proc/mounts", mounts)
 	cmd := exec.Command("/bin/sh", "-c", script)
-	cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin:" + winNpm}
+	cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin:" + tools + ":" + winNpm}
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("%v: %s", err, out)
@@ -110,6 +119,6 @@ func TestWSLProbeLooksPastWindowsCommand(t *testing.T) {
 		t.Fatalf("probe said:\n%s\nwant %q", out, want)
 	}
 	if d := parseProbe("U", string(out)); d == nil || !wslKindOf("pi").found(*d) || d.Versions["pi"] != "0.73.1" {
-		t.Fatalf("parsed: %+v", d)
+		t.Fatalf("parsed: %+v\nout:\n%s", d, out)
 	}
 }
