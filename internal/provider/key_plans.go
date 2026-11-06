@@ -147,7 +147,7 @@ func (p Provider) planList() []string {
 	case pr.NoList && !r.Lists:
 		out = append(out, pr.Models...)
 	}
-	for _, l := range [][]string{r.Embeddings, r.Drawers, r.Videos} {
+	for _, l := range [][]string{r.Embeddings, r.Rerankers, r.Drawers, r.Videos} {
 		out = append(out, l...)
 	}
 	return out

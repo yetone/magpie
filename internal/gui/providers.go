@@ -1034,7 +1034,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 	out.Exposed = len(exposed)
 	if len(out.Models) == 0 {
 		// a vendor of embedding and rerank models alone (heatonz)
-		for _, m := range catalog.LiveServing(p.ID, "") {
+		for _, m := range append(catalog.LiveServing(p.ID, ""), p.PlanRetrieval("")...) {
 			if m.Serves == catalog.ServesEmbedding || m.Serves == catalog.ServesRerank {
 				out.Retrieval++
 			}

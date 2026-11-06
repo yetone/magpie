@@ -74,6 +74,12 @@ type PresetDef struct {
 	// Hosts: a vendor serving other makers' models as well as its own
 	// (Groq, Ollama Cloud, Azure), whose list is no maker's word on theirs
 	Hosts bool `json:"-"`
+	// Embeddings and Rerankers are the models of a vendor of retrieval
+	// models alone (Voyage AI), which has no list to ask: served on
+	// /v1/embeddings and /v1/rerank, kept out of agents' model pickers.
+	// A Region's own lists stand over them.
+	Embeddings []string `json:"embeddings,omitempty"`
+	Rerankers  []string `json:"rerankers,omitempty"`
 }
 
 // Region is one base-URL option of a preset that offers several. The first
@@ -100,10 +106,11 @@ type Region struct {
 	Catalog string `json:"catalog,omitempty"`
 	// Models are a plan's text models, for a region that is one beside
 	// another plan or pay as you go (PresetDef.Models, for the region alone).
-	// Embeddings, Drawers and Videos are its non-chat models, kept apart from
+	// Embeddings, Rerankers, Drawers and Videos are its non-chat models, kept apart from
 	// agents' model pickers.
 	Models     []string `json:"models,omitempty"`
 	Embeddings []string `json:"embeddings,omitempty"`
+	Rerankers  []string `json:"rerankers,omitempty"`
 	Drawers    []string `json:"drawers,omitempty"`
 	Videos     []string `json:"videos,omitempty"`
 	// Images says which of Models take images, as the vendor's own list
@@ -445,6 +452,20 @@ var presets = []PresetDef{
 	{ID: "mistral", Name: "Mistral", Icon: "mistral-color", Kind: KindVendor, Catalog: "mistral",
 		Chat:    "https://api.mistral.ai/v1",
 		Website: "https://console.mistral.ai", KeysURL: "https://console.mistral.ai/api-keys"},
+	// Voyage AI makes embedding and rerank models alone, at
+	// api.voyageai.com/v1/embeddings and /v1/rerank with a Bearer key
+	// (docs.voyageai.com/reference/embeddings-api, reranker-api, read
+	// 11-06). It has no /models, so its models are the docs' (pricing,
+	// embeddings, reranker): the current ones first, then the older ones
+	// it still serves. Its contextualized and multimodal embeddings are on
+	// APIs of their own, which magpie doesn't serve. heatonz on Discord.
+	{ID: "voyage", Name: "Voyage AI", Icon: "voyage-color", Kind: KindVendor,
+		Chat:    "https://api.voyageai.com/v1",
+		Website: "https://docs.voyageai.com", KeysURL: "https://dashboard.voyageai.com/organization/api-keys",
+		NoList: true,
+		Embeddings: []string{"voyage-4-large", "voyage-4", "voyage-4-lite", "voyage-code-4", "voyage-finance-2", "voyage-law-2",
+			"voyage-3-large", "voyage-3.5", "voyage-3.5-lite", "voyage-code-3", "voyage-code-2"},
+		Rerankers: []string{"rerank-3", "rerank-3-lite", "rerank-2.5", "rerank-2.5-lite"}},
 	{ID: "groq", Name: "Groq", Icon: "groq", Kind: KindVendor, Catalog: "groq", Hosts: true,
 		Chat: "https://api.groq.com/openai/v1", Responses: "https://api.groq.com/openai/v1",
 		Website: "https://console.groq.com", KeysURL: "https://console.groq.com/keys"},

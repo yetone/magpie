@@ -513,7 +513,8 @@ func (p Provider) List(ctx context.Context) ([]catalog.Model, error) {
 func (p Provider) ListAll(ctx context.Context) ([]catalog.Model, error) {
 	ctx = p.ownRequests(p.Via(ctx), probelog.KindList)
 	if pr := Preset(p.Preset); pr != nil && pr.NoList && strings.TrimSpace(p.ModelsURL) == "" && !p.listRegion(pr) {
-		return p.planModels(nil), nil
+		// with its embedding and rerank models, marked so (Voyage AI's)
+		return append(p.planModels(nil), p.PlanRetrieval("")...), nil
 	}
 	if p.IsCline() && strings.TrimSpace(p.ModelsURL) == "" {
 		if ms, _, err := p.clineFeed(ctx); err == nil {
@@ -1241,26 +1242,48 @@ func (p Provider) planModels(ms []catalog.Model) []catalog.Model {
 // region's plan. They are resolved by the embeddings API but kept out of
 // agents' chat-model lists.
 func (p Provider) PlanEmbeddings() []catalog.Model {
-	return p.planMedia(func(r *Region) []string { return r.Embeddings }, false, false)
+	return p.planMedia(func(r *Region) []string { return r.Embeddings }, false, false, catalog.ServesEmbedding)
+}
+
+// PlanRerankers are the rerank models the preset names, as PlanEmbeddings
+// are its embedding models.
+func (p Provider) PlanRerankers() []catalog.Model {
+	return p.planMedia(func(r *Region) []string { return r.Rerankers }, false, false, catalog.ServesRerank)
+}
+
+// PlanRetrieval are the preset's models of kind's (catalog.ServesEmbedding
+// or ServesRerank), or both for "".
+func (p Provider) PlanRetrieval(kind string) []catalog.Model {
+	switch kind {
+	case catalog.ServesEmbedding:
+		return p.PlanEmbeddings()
+	case catalog.ServesRerank:
+		return p.PlanRerankers()
+	case "":
+		return append(p.PlanEmbeddings(), p.PlanRerankers()...)
+	}
+	return nil
 }
 
 // PlanDrawers are the image-generation models explicitly included in the
 // preset region's plan. They are separate from its chat models.
 func (p Provider) PlanDrawers() []catalog.Model {
-	return p.planMedia(func(r *Region) []string { return r.Drawers }, true, false)
+	return p.planMedia(func(r *Region) []string { return r.Drawers }, true, false, "")
 }
 
 // PlanVideos are the video-generation models explicitly included in the
 // preset region's plan.
 func (p Provider) PlanVideos() []catalog.Model {
-	return p.planMedia(func(r *Region) []string { return r.Videos }, false, true)
+	return p.planMedia(func(r *Region) []string { return r.Videos }, false, true, "")
 }
 
-func (p Provider) planMedia(ids func(*Region) []string, draws, films bool) []catalog.Model {
+func (p Provider) planMedia(ids func(*Region) []string, draws, films bool, serves string) []catalog.Model {
 	pr := Preset(p.Preset)
 	if pr == nil {
 		return nil
 	}
+	// a preset with no regions names its own (Voyage AI's)
+	own := &Region{Embeddings: pr.Embeddings, Rerankers: pr.Rerankers}
 	// keys on plans of their own (KeyAccount.Plan): each plan's, once
 	views := []Provider{p}
 	if p.plansMixed() {
@@ -1271,12 +1294,12 @@ func (p Provider) planMedia(ids func(*Region) []string, draws, films bool) []cat
 	for _, v := range views {
 		r := v.regionOf(pr)
 		if r == nil {
-			continue
+			r = own
 		}
 		for _, id := range ids(r) {
 			if !seen[id] {
 				seen[id] = true
-				out = append(out, catalog.Model{ID: id, Name: id, Provider: p.ID, Draws: draws, Films: films})
+				out = append(out, catalog.Model{ID: id, Name: id, Provider: p.ID, Draws: draws, Films: films, Serves: serves})
 			}
 		}
 	}

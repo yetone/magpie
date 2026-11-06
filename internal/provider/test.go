@@ -618,7 +618,8 @@ func (p Provider) testModel(q Provider, proto Protocol) string {
 		// none to chat with: an embedding or rerank model its list
 		// keeps apart (catalog.LiveServing), asked where the gateway
 		// sends it (heatonz on Discord: a provider serving only those)
-		for _, m := range catalog.LiveServing(p.ID, "") {
+		// or one its preset names (Voyage AI, which lists none)
+		for _, m := range append(catalog.LiveServing(p.ID, ""), p.PlanRetrieval("")...) {
 			if retrievalOf(m.ID) != "" && !off(p.ID, m.ID) && (k.Key == "" || p.Serves(k, m.ID)) {
 				return m.ID
 			}

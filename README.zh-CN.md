@@ -150,7 +150,7 @@ Agent 会把读到的东西放进提示词：一个 `.env`、一份配置、一�
 
 选一个预设，粘贴 key。模型列表直接来自厂商，名称和推理档位从 [models.dev](https://models.dev) 补全，今天早上刚发布的模型，下次刷新就出现在你的选择器里。
 
-> **预设包括** Anthropic · OpenAI · Google Gemini · Amazon Bedrock（runtime 与 Mantle）· DeepSeek · Kimi · 智谱 GLM · MiniMax · 阶跃星辰 · LongCat · 通义千问 · 百度千帆 · 腾讯云 · 华为云 MaaS · 火山方舟 · Mistral · Groq · Nous Portal · xAI · OpenRouter · Together · Fireworks · 硅基流动 · NVIDIA NIM · 魔搭 · Ollama · LM Studio …… 以及任何兼容 OpenAI 或 Anthropic 的地址。
+> **预设包括** Anthropic · OpenAI · Google Gemini · Amazon Bedrock（runtime 与 Mantle）· DeepSeek · Kimi · 智谱 GLM · MiniMax · 阶跃星辰 · LongCat · 通义千问 · 百度千帆 · 腾讯云 · 华为云 MaaS · 火山方舟 · Mistral · Voyage AI · Groq · Nous Portal · xAI · OpenRouter · Together · Fireworks · 硅基流动 · NVIDIA NIM · 魔搭 · Ollama · LM Studio …… 以及任何兼容 OpenAI 或 Anthropic 的地址。
 
 **导入**能读取你在 CC Switch、Claude Code、Codex 和 Alma 里配置的 provider。[**「添加到 magpie」链接**](https://usemagpie.ai/docs/zh/import)让 provider 网站一键把配置交给 magpie。每个 key 和每个账号都可以走自己的代理。
 

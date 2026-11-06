@@ -78,6 +78,9 @@ func TestServesOf(t *testing.T) {
 		"tts-1-hd": ServesSpeech, "gpt-4o-mini-tts": ServesSpeech,
 		"whisper-1": ServesTranscription, "gpt-4o-transcribe": ServesTranscription,
 		"gpt-5.5": "", "claude-sonnet-5": "", "embedder-chat": ServesEmbedding,
+		// Voyage AI's, which name no "embed" (heatonz on Discord)
+		"voyage-4-large": ServesEmbedding, "voyage-code-3": ServesEmbedding, "voyage/voyage-3.5-lite": ServesEmbedding,
+		"rerank-3": ServesRerank, "rerank-2.5-lite": ServesRerank,
 	} {
 		if got := ServesOf(id); got != want {
 			t.Errorf("ServesOf(%q) = %q, want %q", id, got, want)

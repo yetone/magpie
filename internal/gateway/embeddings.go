@@ -320,9 +320,10 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 	}
 }
 
-// resolveRetrievalModel also finds a preset plan's embedding model by its
-// bare id. Such models stay out of agents' chat-model lists, so the general
-// resolver does not otherwise see them there.
+// resolveRetrievalModel also finds a preset plan's embedding or rerank
+// model, of kind's, by its bare id. Such models stay out of agents'
+// chat-model lists, so the general resolver does not otherwise see them
+// there.
 func resolveRetrievalModel(id, kind string) (provider.Provider, string, bool) {
 	if p, model, ok := mediaGroupFirst(id, kind); ok {
 		return p, model, true
@@ -337,7 +338,7 @@ func resolveRetrievalModel(id, kind string) (provider.Provider, string, bool) {
 		if !p.On() || p.DecideOnly() {
 			continue
 		}
-		for _, m := range p.PlanEmbeddings() {
+		for _, m := range p.PlanRetrieval(kind) {
 			if m.ID == id {
 				return p, id, true
 			}

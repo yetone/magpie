@@ -57,8 +57,8 @@ func bareRef(ref string) bool {
 // servesKind says whether a provider serves a model of kind's under that
 // id: its fetched list says so (catalog.LiveServing; Videomakers for
 // videos), its chat list has an id that says so (another magpie's list,
-// which keeps them as it lists them), or, for embeddings, its plan names
-// it (PlanEmbeddings).
+// which keeps them as it lists them), or, for embeddings and rerank, its
+// preset names it (PlanRetrieval).
 func servesKind(kind string) func(p provider.Provider, model string) bool {
 	is := func(m catalog.Model, model string) bool { return m.ID == model }
 	if kind == provider.KindVideo {
@@ -73,7 +73,7 @@ func servesKind(kind string) func(p provider.Provider, model string) bool {
 		if catalog.ServesOf(model) == kind && slices.ContainsFunc(provider.KeptListing(p).Available, func(m catalog.Model) bool { return is(m, model) }) {
 			return true
 		}
-		return kind == catalog.ServesEmbedding && slices.ContainsFunc(p.PlanEmbeddings(), func(m catalog.Model) bool { return is(m, model) })
+		return slices.ContainsFunc(p.PlanRetrieval(kind), func(m catalog.Model) bool { return is(m, model) })
 	}
 }
 

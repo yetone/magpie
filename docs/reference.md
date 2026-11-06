@@ -947,6 +947,48 @@ default, `us-east-1`, `eu-central-1`, `ap-northeast-1`, `cn-hongkong` and
 Completions at `/compatible-mode/v1` and Anthropic Messages at
 `/apps/anthropic`.
 
+### Embeddings and rerank
+
+The gateway serves two retrieval APIs beside chat, at `/v1/embeddings` and
+`/v1/rerank` (also without `/v1`). Both take the gateway's key, as chat does,
+and the model is named as `/v1/models` names one, `provider/model` or the
+bare id.
+
+- `/v1/embeddings` takes OpenAI's body: `model`, `input` (a string or a
+  list), and whatever else the vendor takes (`dimensions`,
+  `encoding_format`; Voyage's `input_type`, `output_dimension`,
+  `output_dtype`, `truncation`).
+- `/v1/rerank` takes the body Cohere, Jina and Voyage share: `model`,
+  `query`, `documents` (a list of strings), and `top_n` (Cohere, Jina) or
+  `top_k` (Voyage), `return_documents`. The answer is the vendor's, its
+  results in `results` (Cohere, Jina) or `data` (Voyage), each an `index`
+  into `documents` with its `relevance_score`.
+
+The body goes to the provider's `<base>/embeddings` or `<base>/rerank` as
+sent, with only `model` changed to the vendor's name for it, and the answer
+comes back as the vendor gave it, a refusal with its status and words. The
+tokens counted are its `usage.total_tokens`. A model is asked only on its own
+API's route: an embedding model named on `/v1/rerank`, or a reranker on
+`/v1/embeddings`, is a 404, and neither is in the models agents are offered.
+A model several providers serve under one id is a routing group of its kind
+made per request (see Routing groups).
+
+Voyage AI (`voyage`, heatonz on Discord) is a preset of only these: an
+API key from dashboard.voyageai.com, at `https://api.voyageai.com/v1`. It has
+no list of models to fetch, so the preset names them: the embedding models
+`voyage-4-large`, `voyage-4`, `voyage-4-lite`, `voyage-code-4`,
+`voyage-finance-2`, `voyage-law-2`, `voyage-3-large`, `voyage-3.5`,
+`voyage-3.5-lite`, `voyage-code-3` and `voyage-code-2`, and the rerankers
+`rerank-3`, `rerank-3-lite`, `rerank-2.5` and `rerank-2.5-lite`. Its Test asks
+`voyage-4-large` for one embedding. Its contextualized
+(`/v1/contextualizedembeddings`) and multimodal (`/v1/multimodalembeddings`)
+embeddings have no route here.
+
+```sh
+curl localhost:3425/v1/rerank -H "Authorization: Bearer $MAGPIE_KEY" \
+  -d '{"model":"voyage/rerank-3","query":"what eats seeds","documents":["a magpie","a stone"],"top_k":1}'
+```
+
 ### Google Vertex AI
 
 Google Vertex AI (`google-vertex`), which Google's documentation now calls
