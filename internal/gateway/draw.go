@@ -597,6 +597,9 @@ type drawing struct {
 	N      int
 	Images []picture // to edit, or draw from
 	Mask   *picture
+	// Markup is OpenAI's markup layer: a transparent PNG laid over the
+	// first image to steer the edit, never beside a Mask (#5364)
+	Markup *picture
 	// Extra are the request's fields magpie doesn't read, which a
 	// vendor's own images API that takes them is sent as they came
 	// (Ark's sequential_image_generation, optimize_prompt_options,
@@ -607,7 +610,7 @@ type drawing struct {
 }
 
 // drawingRead are the fields of an images request magpie reads itself.
-var drawingRead = []string{"model", "prompt", "size", "quality", "background", "output_format", "response_format", "n", "image", "image[]", "images", "mask", "user"}
+var drawingRead = []string{"model", "prompt", "size", "quality", "background", "output_format", "response_format", "n", "image", "image[]", "images", "mask", "markup", "user"}
 
 // extraOf keeps v as one of d's Extra under k, unless magpie reads k.
 func (d *drawing) extraOf(k string, v any) {
@@ -949,6 +952,13 @@ func readDrawing(r *http.Request) (drawing, error) {
 			}
 			d.Mask = &pic
 		}
+		if fhs := f.File["markup"]; len(fhs) > 0 {
+			pic, err := readPart(fhs[0])
+			if err != nil {
+				return d, err
+			}
+			d.Markup = &pic
+		}
 	} else {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -965,6 +975,7 @@ func readDrawing(r *http.Request) (drawing, error) {
 			Image          json.RawMessage `json:"image"`
 			Images         json.RawMessage `json:"images"`
 			Mask           json.RawMessage `json:"mask"`
+			Markup         json.RawMessage `json:"markup"`
 			ResponseFormat string          `json:"response_format"`
 		}
 		if err := json.Unmarshal(body, &in); err != nil {
@@ -992,6 +1003,16 @@ func readDrawing(r *http.Request) (drawing, error) {
 			}
 			d.Mask = &pic
 		}
+		if srcs := imageSources(in.Markup); len(srcs) > 0 {
+			pic, err := pictureOf(srcs[0])
+			if err != nil {
+				return d, err
+			}
+			d.Markup = &pic
+		}
+	}
+	if d.Mask != nil && d.Markup != nil {
+		return d, errors.New("give a mask or a markup layer, not both: an edit takes one")
 	}
 	d.Model = strings.TrimSpace(d.Model)
 	// Ark's layer_decomposition splits the image it is given into layers,
@@ -1575,6 +1596,9 @@ func (s *Server) drawImages(ctx context.Context, p provider.Provider, model stri
 		if d.Mask != nil {
 			req["mask"] = map[string]string{"image_url": d.Mask.dataURL()}
 		}
+		if d.Markup != nil {
+			req["markup"] = map[string]string{"image_url": d.Markup.dataURL()}
+		}
 		body, _ = json.Marshal(req)
 		ct, url = "application/json", base+"/images/edits"
 	} else {
@@ -1599,6 +1623,9 @@ func (s *Server) drawImages(ctx context.Context, p provider.Provider, model stri
 		}
 		if d.Mask != nil {
 			pics, fields = append(pics, *d.Mask), append(fields, "mask")
+		}
+		if d.Markup != nil {
+			pics, fields = append(pics, *d.Markup), append(fields, "markup")
 		}
 		for i, pic := range pics {
 			if pic.URL != "" {
@@ -1638,6 +1665,9 @@ func senseNovaDrawer(model string) bool {
 func (s *Server) drawOpenRouterImages(ctx context.Context, p provider.Provider, model string, d drawing) (drawn, int, error) {
 	if d.Mask != nil {
 		return drawn{}, http.StatusBadRequest, errors.New("OpenRouter's images API does not support mask edits")
+	}
+	if d.Markup != nil {
+		return drawn{}, http.StatusBadRequest, errors.New("OpenRouter's images API does not support a markup layer")
 	}
 	req := map[string]any{"model": model, "prompt": d.Prompt, "n": d.N}
 	for k, v := range map[string]string{"size": d.Size, "quality": d.Quality, "background": d.Background, "output_format": d.Format} {

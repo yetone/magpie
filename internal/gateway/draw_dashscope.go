@@ -71,6 +71,9 @@ func dashScopeBody(model string, d drawing) ([]byte, error) {
 	if d.Mask != nil {
 		return nil, errors.New("DashScope's image models take no mask: say in the prompt which part of the image to change")
 	}
+	if d.Markup != nil {
+		return nil, errors.New("DashScope's image models take no markup layer: say in the prompt what to change")
+	}
 	size, err := dashScopeSize(d.Size)
 	if err != nil {
 		return nil, err

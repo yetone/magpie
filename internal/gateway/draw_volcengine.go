@@ -81,6 +81,9 @@ func arkBody(model string, d drawing) ([]byte, error) {
 	if d.Mask != nil {
 		return nil, errors.New("Volcengine's images API takes no mask: say in the prompt which part of the image to change")
 	}
+	if d.Markup != nil {
+		return nil, errors.New("Volcengine's images API takes no markup layer: say in the prompt what to change")
+	}
 	size, err := arkSize(d.Size)
 	if err != nil {
 		return nil, err
