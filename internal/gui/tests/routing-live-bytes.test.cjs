@@ -106,7 +106,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // quiet for 20s: the dot stops, and the account says the numbers only
         send(route({ bytes: 3 * 1048576 + 600000, estTok: 1500, contentAt: Date.now() - 20000 }));
         await account.and(page.locator("li.quiet")).waitFor();
-        assert.equal(await account.locator(".dot").evaluate((d) => getComputedStyle(d).animationName), "none");
+        assert.equal(await account.locator(".dot").evaluate((d) => getComputedStyle(d, "::after").animationName), "none");
         em = (await account.locator("em").textContent()).trim();
         assert.ok(!em.includes(answering) && em.includes("3.6 MiB"), em);
         assert.ok((await cells())[2].includes(await say("{n} s", { n: 20 })) || (await cells())[2].includes(await say("{n} s", { n: 21 })), (await cells())[2]);

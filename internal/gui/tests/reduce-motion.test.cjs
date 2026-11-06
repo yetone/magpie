@@ -59,7 +59,7 @@ const looks = (page) => page.evaluate(async () => {
   const dot = document.createElement("i");
   dot.className = "rt-livedot on";
   document.body.append(dot);
-  const anim = getComputedStyle(dot).animationName;
+  const anim = getComputedStyle(dot, "::after").animationName;
   dot.remove();
   const box = document.createElement("div");
   box.className = "signing";

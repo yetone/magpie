@@ -96,7 +96,7 @@ const init = () => {
     return n;
   };
   // the live dot's pulse, running or not
-  window.__pulses = () => [...document.querySelectorAll(".rt-livedot")].filter((d) => d.getAnimations().some((a) => a.playState === "running")).length;
+  window.__pulses = () => [...document.querySelectorAll(".rt-livedot")].filter((d) => d.getAnimations({ subtree: true }).some((a) => a.playState === "running")).length;
   window.requestAnimationFrame = (cb) => {
     // a loop of the core's (app.js's sidebar spring, navTopStep) is a
     // global; the Routing plugin's is in its own scope
