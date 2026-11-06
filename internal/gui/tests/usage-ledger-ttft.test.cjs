@@ -4,11 +4,12 @@
 // writing after it, so a list of durations can't tell a vendor slow to
 // start from one slow to write. The column says the row details' "First
 // token", "≈" for one told from a session file's times, and a dash for one
-// with none (failed, or not streamed). A narrow window leaves it out with
-// Sent, Effort and the cache, and then it reads small under each duration
-// instead (unscientific9 on Discord), a row with none adding nothing; the
+// with none (failed, or not streamed). A narrow window leaves Sent, Effort
+// and the cache out, then cuts names and wraps headers, and only then the
+// column too, which then reads small under each duration instead
+// (unscientific9 on Discord), a row with none adding nothing; the
 // hint names only what is in the details alone. Every language, both
-// engines, three widths; no backend, the API is faked.
+// engines, from wide to narrow; no backend, the API is faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -115,8 +116,25 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const durText = await rows.nth(0).locator("td.duration").textContent();
         for (let i = 0; i < 4; i++) assert.equal(await under(i), "", "a wide window adds nothing under the duration");
 
+        // a narrowing window shortens names, wraps headers and drops the
+        // price reference before it leaves the column out: a column is the
+        // larger loss, and two Windows windows a little apart in width
+        // showed it on one and not the other (unscientific9 on Discord)
+        const fits = [];
+        for (let vw = 1600; vw >= 600; vw -= 20) {
+          await p.setViewportSize({ width: vw, height: 800 });
+          await p.waitForTimeout(40);
+          fits.push([vw, await p.locator("table.led").evaluate((tb) => [...tb.classList].filter((c) => c !== "led").join(" ")), await cell(0).isVisible()]);
+        }
+        const said = fits.map((f) => f.join(":")).join(", ");
+        for (const [vw, cls, shown] of fits) {
+          assert.equal(shown, !cls.includes("tight2"), "the column is out exactly while tight2 is on, at " + vw + ": " + said);
+          if (cls.includes("tight2")) assert(cls.includes("tighter"), "the column goes only after the rest is made tighter, at " + vw + ": " + said);
+        }
+        assert(fits.some(([, cls, shown]) => cls.includes("tighter") && shown), "some width keeps the column with the rest made tighter: " + said);
+
         // a narrow window: the column goes, the details keep it, the hint says so
-        await p.setViewportSize({ width: 760, height: 800 });
+        await p.setViewportSize({ width: 600, height: 800 });
         await p.waitForTimeout(300);
         assert.equal(await cell(0).isVisible(), false, "a narrow window leaves it out");
         assert.equal((await p.locator("#ledTight").textContent()).trim(), w.hint);
