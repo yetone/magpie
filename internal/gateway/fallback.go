@@ -1640,8 +1640,14 @@ func promptRefused(status int, body []byte) bool {
 // function_declarations[17].parameters.properties[batch].items: missing
 // field, plugins#375), is the same kind as OpenCode Go's: its subset of
 // JSON Schema is its own, and another vendor's model took the reporter's
-// same tools.
-var shapeWords = regexp.MustCompile(`(?i)failed to deserialize|unknown (item |content |input )?(type|variant|field|parameter)|unknown_parameter|unrecognized (request argument|field|parameter)|extra (inputs|fields) are not permitted|additional properties are not allowed|schema exceeds the maximum (nesting )?depth|schema[^"]{0,60}\bnesting depth\b|function_declarations\[\d+\]\.parameters\b`)
+// same tools. A relay passing Google's own Gemini on says the same in the
+// words Google gave it, camel-case and with no path: "Unable to submit
+// request because `tool` functionDeclaration `parameters.response` schema
+// specified other fields alongside any_of. When using any_of, it must be
+// the only field set." (#5374, worksyang) — a description beside an
+// anyOf, which Google's Schema takes alone, the reporter's same tools
+// another member took.
+var shapeWords = regexp.MustCompile(`(?i)failed to deserialize|unknown (item |content |input )?(type|variant|field|parameter)|unknown_parameter|unrecognized (request argument|field|parameter)|extra (inputs|fields) are not permitted|additional properties are not allowed|schema exceeds the maximum (nesting )?depth|schema[^"]{0,60}\bnesting depth\b|function_declarations\[\d+\]\.parameters\b|schema specified other fields alongside any_?of`)
 
 // unsaidWords are Command Code's Provider API turning a request away with
 // nothing but a trace id: {"message":"invalid request error trace_id:
