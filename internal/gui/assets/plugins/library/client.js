@@ -69,7 +69,15 @@ magpie.plugin("library", (ctx) => {
   // places magpie never saw (unseen) only on the rows that name it, like
   // a gone one, its chip greyed out: opening its files would start WSL
   // (#3896, cybercaius on Discord).
-  const shownAgents = () => lib.agents.filter((a) => !a.gone && !a.unseen && !isHidden(a));
+  // In gateway mode (gatewaymode.go) none is shown: the page is the
+  // MCP servers the router gives other computers' apps.
+  const shownAgents = () => gatewayPage() ? [] : lib.agents.filter((a) => !a.gone && !a.unseen && !isHidden(a));
+  // With no agent to write to, none on this computer or gateway mode, the
+  // library is its MCP servers alone, served to any app through the router
+  // (treeman_26897 on Discord: magpie on a server, an MCP entry point for
+  // remote clients, had no way to turn the router on).
+  const gatewayPage = () => typeof gatewayMode !== "undefined" && !!gatewayMode;
+  const agentless = () => !!lib && (gatewayPage() || !lib.agents.length);
   const withGone = (all, on) => [...all, ...lib.agents.filter((a) => (a.gone || a.unseen && !isHidden(a)) && (on || []).includes(a.id) && !all.some((x) => x.id === a.id))];
   const mcpAgents = () => shownAgents().filter((a) => a.mcp)
     .map((a) => a.mcpVia ? { ...a, aside: t("{agent} reads MCP servers through the {ext} extension", { agent: a.name, ext: a.mcpVia }) } : a);
@@ -816,7 +824,7 @@ magpie.plugin("library", (ctx) => {
   function libHead(counts) {
     const head = el("div", "lib-head");
     const n = (k) => (counts?.[k] ? " · " + counts[k] : "");
-    const tabs = segs([
+    const tabs = segs(agentless() ? [["mcp", t("MCP servers") + n("mcp")]] : [
       ["instructions", t("Instructions")],
       ["mcp", t("MCP servers") + n("mcp")],
       ["skills", t("Skills") + n("skills")],
@@ -873,13 +881,12 @@ magpie.plugin("library", (ctx) => {
     const caret = focus ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
     page.replaceChildren();
     fits = [];
+    // the MCP servers alone with no agent to write to; the tab the reader
+    // last picked is kept for when there is one
+    if (agentless()) tab = "mcp";
     const head = libHead({ mcp: lib.servers.length, skills: lib.skills.length, hooks: (lib.hooks || []).length, subagents: (lib.subagents || []).length });
     page.append(head);
     head.classList.toggle("stuck", top > 0);
-    if (!lib.agents.length) {
-      page.append(empty(t("No agents to write to"), t("Install Claude Code, Codex, Gemini CLI, OpenCode… and the library can give them the same instructions, MCP servers and skills.")));
-      return;
-    }
     // what changed in a tab is drawn in place: only another tab (or the
     // first one after the skeleton) fades in
     const problems = problemsCard();
@@ -1640,12 +1647,17 @@ magpie.plugin("library", (ctx) => {
   const reaches = (s) => (a) => !a || (!(remote(s) && a.noRemote) && !(s.transport === "sse" && a.noSSE) && !(envRefs(s) && a.noEnvRefs));
 
   function renderServers(body) {
-    body.append(intro(t("Add a server once and switch it on for the agents that should have it — magpie writes it into each one's config in the shape that agent reads.")));
+    body.append(intro(agentless()
+      ? t("Add the servers other apps should reach, and turn on the MCP router: they connect at its address, from another computer with a gateway key.")
+      : t("Add a server once and switch it on for the agents that should have it — magpie writes it into each one's config in the shape that agent reads.")));
     const all = mcpAgents();
     pickingFor("servers", lib.servers);
     if (!lib.servers.length) {
       const add = button(t("＋ Add a server"), "action", () => editServer(null));
-      body.append(empty(t("No servers in the library yet"), lib.foundServers.length ? t("Add one, or bring in those your agents already have, below.") : t("Paste a server's JSON from its README, or fill it in."), add));
+      body.append(empty(t("No servers in the library yet"), lib.foundServers.length && !agentless() ? t("Add one, or bring in those your agents already have, below.") : t("Paste a server's JSON from its README, or fill it in."), add));
+      // with no agent, the router is what the page is for: there to turn
+      // on before the first server
+      if (agentless()) body.append(...hubPart());
     } else {
       const list = el("div", "list lib-list");
       // in the order the reader picked (#481), A→Z till then
@@ -1678,12 +1690,13 @@ magpie.plugin("library", (ctx) => {
       // checked only when the reader clicks its status (#1597, xiaozhu1337),
       // and again once it changed after that: a sign-in since isn't left
       // beside "needs sign-in" (新v学员 on Discord)
-      const unchecked = lib.servers.filter((s) => (inUse(s) || health.has(s.name)) && health.get(s.name)?.key !== healthKey(s));
+      // With no agent, the router is what starts them, so on it checks them too
+      const unchecked = lib.servers.filter((s) => (inUse(s) || (agentless() && lib.mcpHub && inHub(s)) || health.has(s.name)) && health.get(s.name)?.key !== healthKey(s));
       queueMicrotask(() => checkHealth(unchecked));
     }
     // an agent's own servers (Codex's node_repl, added each time it starts)
     // aren't listed: magpie leaves them as they are
-    const found = lib.foundServers.filter((f) => !f.own);
+    const found = agentless() ? [] : lib.foundServers.filter((f) => !f.own);
     if (found.length) {
       const rh = el("div", "row-head");
       rh.append(el("span", "label", t("In your agents")), el("span", "grow"), el("span", "note", t("not in the library — bring one in to manage it here")));
@@ -1692,10 +1705,10 @@ magpie.plugin("library", (ctx) => {
       for (const f of found) list.append(foundServerRow(f));
       body.append(list);
     }
-    if (lib.servers.length || lib.projects.length) renderProjects(body, "mcp");
+    if (!agentless() && (lib.servers.length || lib.projects.length)) renderProjects(body, "mcp");
     const skip = shownAgents().filter((a) => !a.mcp);
     if (skip.length) body.append(el("p", "lib-aside", t("{agents} has no MCP servers magpie can write.", { agents: skip.map((a) => a.name).join(", ") })));
-    body.append(...asleepAsides());
+    if (!gatewayPage()) body.append(...asleepAsides());
     // WorkBuddy connects a server only once it is trusted there, again
     // after its command or address changes (#1266)
     for (const wb of shownAgents().filter((a) => (a.id === "workbuddy" || a.id === "workbuddy-ai") && a.mcp)) {
@@ -1716,12 +1729,16 @@ magpie.plugin("library", (ctx) => {
     const row = el("div", "row lib-row lib-hub");
     const who = el("div", "who");
     who.append(el("div", "name", t("MCP router")));
-    who.append(el("div", "sub wraps", lib.mcpHub
+    who.append(el("div", "sub wraps", agentless()
+      ? (lib.mcpHub ? t("Any app connects at the address below for every server in the library, as server__tool.") : t("Serve every server in the library at one address, for any app to connect to."))
+      : lib.mcpHub
       ? t("Each agent is given one server, magpie, in place of these. magpie runs each server once for all of them and hands each call to it, as server__tool. Restart an agent for it to read the change.")
       : t("Serve every server through magpie: each agent is given one server, magpie, in place of these, and any other app connects at one address.")));
     if (lib.mcpHub) who.append(el("div", "sub lib-hubstats", hubStats()));
     row.append(hubMark(), who, toggle(!!lib.mcpHub, t("MCP router"), (on) =>
-      change("servers/hub", { on }, on
+      change("servers/hub", { on }, agentless()
+        ? (on ? t("The MCP router is on: apps can connect at its address") : t("The MCP router is off"))
+        : on
         ? t("The agents are given magpie's one MCP server — restart them to use it")
         : t("The agents are given each server's own entry again — restart them to use it"))));
     list.append(row);
@@ -1841,7 +1858,7 @@ magpie.plugin("library", (ctx) => {
     const given = hubAgents().filter((a) => a.hub === "on").map((a) => a.name);
     if (given.length) parts.push(t("in {agents}", { agents: given.length > 3 ? t("{first} and {n} more", { first: given.slice(0, 2).join(", "), n: given.length - 2 }) : given.join(", ") }));
     // the owner, counting two servers and seeing one: where the other went
-    const direct = directNames();
+    const direct = agentless() ? "" : directNames();
     if (direct) parts.push(t("{name} is given to each agent directly", { name: direct }));
     return parts.join(" · ");
   }
@@ -2123,7 +2140,8 @@ magpie.plugin("library", (ctx) => {
     sub.title = serverLine(s);
     who.append(noteSub(s.note, sub, serverLine(s)), toolsEl(s.name));
     row.append(mark(s.icon, s.transport === "stdio" ? GLYPH.cmd : GLYPH.web), who, ...removeAct(() => confirmRemoveServer(s)),
-      agentChips(withGone(all, s.agents), s.agents, chipsChange("servers/agents", s.name, "servers", (x) => serverRow(x, all)), { problems: s.problems, blocked: sseBlocked(s), all: true }));
+      // no agent to give it to: other apps reach it through the router
+      ...(agentless() ? [] : [agentChips(withGone(all, s.agents), s.agents, chipsChange("servers/agents", s.name, "servers", (x) => serverRow(x, all)), { problems: s.problems, blocked: sseBlocked(s), all: true })]));
     if (picking) return pickRow(row, s.name);
     // a line of its own under the row, not in the name's column (tao0194)
     if (s.name === "magpie-browser" && !s.agents?.length) row.append(browserAsk(row));

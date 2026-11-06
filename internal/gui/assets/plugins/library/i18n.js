@@ -2,6 +2,11 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "The MCP router is on: apps can connect at its address": "MCP 路由已打开：应用可以连接它的地址",
+    "The MCP router is off": "MCP 路由已关闭",
+    "Any app connects at the address below for every server in the library, as server__tool.": "任何应用连接下面的地址，即可使用资源库里的全部服务器，工具名为 server__tool。",
+    "Serve every server in the library at one address, for any app to connect to.": "在一个地址上提供资源库里的全部服务器，供任何应用连接。",
+    "Add the servers other apps should reach, and turn on the MCP router: they connect at its address, from another computer with a gateway key.": "添加其他应用要用的服务器，再打开 MCP 路由：它们连接路由地址，从其他电脑连接时需要网关密钥。",
     "Tools on demand": "按需加载工具",
     "An agent given more than 10 tools gets two in their place, one that finds a tool and one that runs it, so their definitions stay out of every request. Claude Code, Claude Desktop, Codex and Pi find tools themselves and are given every one.": "给一个 Agent 的工具超过 10 个时，改为给它两个工具：一个查找工具，一个运行工具，这样工具定义不会出现在每次请求里。Claude Code、Claude Desktop、Codex 和 Pi 会自己查找工具，仍会拿到全部工具。",
     "Agents are given the router's tools on demand — restart them to use it": "Agent 现在按需拿到路由的工具 — 重启它们后生效",
@@ -784,6 +789,11 @@ magpie.strings({
     "{agents} can be changed once it runs.": "{agents} 要等它运行后才能修改。",
   },
   "zh-TW": {
+    "The MCP router is on: apps can connect at its address": "MCP 路由已開啟：應用程式可以連線到它的位址",
+    "The MCP router is off": "MCP 路由已關閉",
+    "Any app connects at the address below for every server in the library, as server__tool.": "任何應用程式連線下面的位址，即可使用資源庫裡的全部伺服器，工具名稱為 server__tool。",
+    "Serve every server in the library at one address, for any app to connect to.": "在一個位址上提供資源庫裡的全部伺服器，供任何應用程式連線。",
+    "Add the servers other apps should reach, and turn on the MCP router: they connect at its address, from another computer with a gateway key.": "新增其他應用程式要用的伺服器，再開啟 MCP 路由：它們連線路由位址，從其他電腦連線時需要閘道金鑰。",
     "Tools on demand": "按需載入工具",
     "An agent given more than 10 tools gets two in their place, one that finds a tool and one that runs it, so their definitions stay out of every request. Claude Code, Claude Desktop, Codex and Pi find tools themselves and are given every one.": "給一個 Agent 的工具超過 10 個時，改為給它兩個工具：一個尋找工具，一個執行工具，這樣工具定義不會出現在每次請求裡。Claude Code、Claude Desktop、Codex 和 Pi 會自己尋找工具，仍會拿到全部工具。",
     "Agents are given the router's tools on demand — restart them to use it": "Agent 現在按需取得路由的工具 — 重新啟動它們後生效",
@@ -1566,6 +1576,11 @@ magpie.strings({
     "{agents} can be changed once it runs.": "{agents} 要等它執行後才能修改。",
   },
   ja: {
+    "The MCP router is on: apps can connect at its address": "MCP ルーターをオンにしました：アプリはそのアドレスに接続できます",
+    "The MCP router is off": "MCP ルーターをオフにしました",
+    "Any app connects at the address below for every server in the library, as server__tool.": "どのアプリも下のアドレスに接続すると、ライブラリのすべてのサーバーを server__tool として使えます。",
+    "Serve every server in the library at one address, for any app to connect to.": "ライブラリのすべてのサーバーを一つのアドレスで提供し、どのアプリからも接続できるようにします。",
+    "Add the servers other apps should reach, and turn on the MCP router: they connect at its address, from another computer with a gateway key.": "他のアプリが使うサーバーを追加し、MCP ルーターをオンにします：アプリはルーターのアドレスに接続し、他のコンピューターからはゲートウェイキーが必要です。",
     "Tools on demand": "ツールをオンデマンドで渡す",
     "An agent given more than 10 tools gets two in their place, one that finds a tool and one that runs it, so their definitions stay out of every request. Claude Code, Claude Desktop, Codex and Pi find tools themselves and are given every one.": "エージェントに渡すツールが 10 個を超えると、代わりにツールを探すものと実行するものの 2 つを渡し、ツールの定義が毎回のリクエストに入らないようにします。Claude Code、Claude Desktop、Codex、Pi は自分でツールを探すので、すべてのツールが渡されます。",
     "Agents are given the router's tools on demand — restart them to use it": "エージェントにルーターのツールをオンデマンドで渡します — 反映するにはエージェントを再起動してください",
@@ -2348,6 +2363,11 @@ magpie.strings({
     "{agents} can be changed once it runs.": "{agents} は起動後に変更できます。",
   },
   de: {
+    "The MCP router is on: apps can connect at its address": "Der MCP-Router ist an: Apps verbinden sich mit seiner Adresse",
+    "The MCP router is off": "Der MCP-Router ist aus",
+    "Any app connects at the address below for every server in the library, as server__tool.": "Jede App verbindet sich mit der Adresse unten und erreicht jeden Server der Bibliothek, als server__tool.",
+    "Serve every server in the library at one address, for any app to connect to.": "Stellt jeden Server der Bibliothek unter einer Adresse bereit, mit der sich jede App verbinden kann.",
+    "Add the servers other apps should reach, and turn on the MCP router: they connect at its address, from another computer with a gateway key.": "Fügen Sie die Server hinzu, die andere Apps erreichen sollen, und schalten Sie den MCP-Router ein: Sie verbinden sich mit seiner Adresse, von einem anderen Computer mit einem Gateway-Schlüssel.",
     "Tools on demand": "Tools bei Bedarf",
     "An agent given more than 10 tools gets two in their place, one that finds a tool and one that runs it, so their definitions stay out of every request. Claude Code, Claude Desktop, Codex and Pi find tools themselves and are given every one.": "Ein Agent, der mehr als 10 Tools bekäme, bekommt stattdessen zwei: eines findet ein Tool, das andere führt es aus, damit ihre Definitionen nicht in jeder Anfrage stehen. Claude Code, Claude Desktop, Codex und Pi suchen Tools selbst und bekommen alle.",
     "Agents are given the router's tools on demand — restart them to use it": "Agents bekommen die Tools des Routers bei Bedarf — starte sie neu, damit sie es nutzen",

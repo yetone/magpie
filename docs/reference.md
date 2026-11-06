@@ -3204,8 +3204,10 @@ key. See [Connecting anything else](#connecting-anything-else) for the
 protocol-specific base URLs. Keep `3425` behind a firewall or VPN and do not
 expose it publicly without gateway-key authentication.
 
-Such a page is in **gateway mode**: it shows Providers, Gateway, Routing,
-Usage, Sessions, Plugins and Settings, with no Agents or Library tab.
+Such a page is in **gateway mode**: it shows Sessions, Library, Providers,
+Routing, Gateway, Usage, Masking, Plugins and Settings, with no Agents tab.
+The Library has its MCP servers alone, with the MCP router: other
+computers' apps connect at the router's address with a gateway key.
 Sessions lists only the sessions of other computers' agents that came
 through this gateway, never this machine's agents' session files
 ([gateway sessions](subsystems/gateway-sessions.md)). Settings leaves out what is written into this machine's agents (provider in

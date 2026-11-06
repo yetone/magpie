@@ -39,10 +39,10 @@ const remotePage = web && !/^(localhost|127(\.\d+){3}|\[::1\]|::1)$/i.test(locat
 // layout.js applies the mode and platform before the header can paint.
 // Gateway mode (gatewaymode.go): magpie web on a server that is only the
 // gateway for other computers' agents leaves out this computer's agents'
-// pages — Agents, Sessions, Library — and their settings; Settings ›
-// General turns it off, and they are back.
+// pages — Agents, the Library but its MCP tab — and their settings;
+// Settings › General turns it off, and they are back.
 let gatewayMode = web && !!window.bootPrefs?.gateway;
-const GATEWAY_HIDES = ["agents", "library"];
+const GATEWAY_HIDES = ["agents"];
 // Plugins › Built-in (builtins.go, Lxxyx): the window's parts switched off,
 // by id. data-feature="<id>" leaves by a style while off; its tab leaves the
 // nav (navHides), a link opens Agents (show), Settings skips its rows.
@@ -20133,7 +20133,7 @@ function renderGatewayMode(s) {
     flag: t("Now on: magpie web was started with --gateway"),
     "no-agents": t("Now on: no agents on this computer"),
   }[s.gatewayWhy] || t("Now off: agents found on this computer");
-  $("#gatewayModeSub").textContent = [t("Only what a gateway for other computers needs: no Agents or Library, nor this computer's agents' settings or sessions"), now].filter(Boolean).join(" · ");
+  $("#gatewayModeSub").textContent = [t("Only what a gateway for other computers needs: no Agents page, nor this computer's agents' settings or sessions"), now].filter(Boolean).join(" · ");
 }
 
 // renderLangPick: Settings' language, one menu button showing the language

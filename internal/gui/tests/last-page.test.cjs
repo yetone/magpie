@@ -5,7 +5,7 @@
 // again (no ?view=) and reloaded is on Routing, its tab picked, nothing
 // scrolled. A page asked for (?view=, the tray's links) wins over the one
 // kept, Agents too. A page kept that isn't one, or one gateway mode leaves
-// out (Agents, Library), gives way to the first page (Providers there).
+// out (Agents), gives way to the first page (Providers there).
 // Chromium and WebKit, 1100 (sidebar) and 420 (header's tabs) wide. No
 // backend: the API is faked.
 const assert = require("node:assert/strict");
@@ -100,7 +100,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(errors, [], where);
       await context.close();
 
-      // magpie web in gateway mode: Agents and Library aren't there
+      // magpie web in gateway mode: Agents isn't there (the Library is, for
+      // its MCP router)
       const gw = await browser.newContext({ viewport: { width, height: 640 }, reducedMotion: "reduce" });
       const gp = await gw.newPage();
       gp.setDefaultTimeout(5000);
@@ -109,7 +110,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       gp.on("pageerror", (e) => gerr.push(e.message));
       await gp.route("**/*", server({ web: true, gateway: true }));
       await open(gp, BASE, "providers", `${where} gateway: first open`);
-      for (const v of ["agents", "library"]) {
+      for (const v of ["agents"]) {
         await keep(gp, v);
         await open(gp, BASE, "providers", `${where} gateway: ${v} kept`);
       }
