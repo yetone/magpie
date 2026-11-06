@@ -29,10 +29,11 @@ import (
 	"github.com/yetone/magpie/internal/usage"
 )
 
-// jevSure is how confident Jev must be of an intent for it to count.
-// Confidence runs from 0, every option as likely, to 1, one certain, as
-// System One gives it (provider.Confidence), read from the answer's
-// probabilities wherever it has them (sureOf).
+// jevSure is how confident Jev must be of an intent for it to count, a
+// group setting its own (provider.Group.IntentSure). Confidence runs from
+// 0, every option as likely, to 1, one certain, as System One gives it
+// (provider.Confidence), read from the answer's probabilities wherever it
+// has them (sureOf).
 const jevSure = 0.4
 
 // sureOf is how sure an answer is of its choice on jevSure's scale: from
@@ -234,7 +235,13 @@ func effortAsk(prev before) string {
 }
 
 // readJev is the verdict in a System One reply to jevBody, the answer
-// without "none of these" counting when the intents are levels.
+// without "none of these" counting when the intents are levels. The sure
+// an intent needs is the group's own (rulesOf applies it): Jev's likeliest
+// intent is kept as it said it (Said), and the intents' own answer as Said
+// with Topic marking it a topic — a message may be none of those — rather
+// than a level every message is at, whose torn pick holds (the level half
+// below). Whether an intent came of it is decided where the group's own
+// sure is known, so the answer still tells why it went as it did.
 func readJev(b []byte, intents []string, levels bool, prev before) (verdict, error) {
 	var out struct {
 		Model   string `json:"model"`
@@ -256,7 +263,8 @@ func readJev(b []byte, intents []string, levels bool, prev before) (verdict, err
 	if a, ok := out.Answers["intent"]; ok && len(intents) > 0 && !levels {
 		v.Sure = sureOf(a.Confidence, a.Probabilities)
 		v.Said = a.Choice // as it said it, no intent come of it or not (#4598)
-		if a.Choice != noIntent && v.Sure >= jevSure {
+		v.Topic = true
+		if a.Choice != noIntent {
 			v.Intent = intentNamed(intents, a.Choice)
 		}
 	}
@@ -278,6 +286,30 @@ func readJev(b []byte, intents []string, levels bool, prev before) (verdict, err
 		v.Effort, v.Score = jevLevels[i].effort, a.Score
 	}
 	return v, nil
+}
+
+// sureNeeded is how sure a group asks its classifier to be of an intent:
+// the group's own (IntentSure), or 0.4 as groups have always asked.
+func sureNeeded(g provider.Group) float64 {
+	if g.IntentSure != nil {
+		return *g.IntentSure
+	}
+	return jevSure
+}
+
+// intentOf v is the intent of v's answer at the group's own sure
+// (sureNeeded): a topic answer counts once Jev is sure enough of it —
+// "none of these", said or picked, never being an intent — while a level
+// is the level it said, every message being at one. A topic answer unsure
+// at the group's sure is no intent.
+func intentOf(v verdict, g provider.Group) string {
+	if !v.Topic {
+		return v.Intent
+	}
+	if v.Sure < sureNeeded(g) || v.Said == noIntent || v.Intent == "" {
+		return ""
+	}
+	return v.Intent
 }
 
 // intentNamed is the one of intents named, or "".

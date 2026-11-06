@@ -606,13 +606,27 @@ func TestJevTornLevel(t *testing.T) {
 	if v, _ := readJev(sure, in, true, before{Intent: "复杂任务"}); v.Intent != "简单任务" {
 		t.Fatalf("sure: %+v", v)
 	}
-	// topics still need Jev sure, and may be none
-	if v, _ := readJev(b, in, false, before{Intent: "复杂任务"}); v.Intent != "复杂任务" {
-		t.Fatalf("topic sure enough: %+v", v)
+	// topics: the sure needed is the group's own now (#5101), readJev
+	// keeping Jev's pick and saying how sure it was — intentOf applies the
+	// group's own at the group
+	if v, _ := readJev(b, in, false, before{Intent: "复杂任务"}); v.Intent != "复杂任务" || v.Sure != 0.43 || !v.Topic {
+		t.Fatalf("topic: %+v", v)
 	}
 	unsure := []byte(`{"answers":{"intent":{"type":"choice","choice":"复杂任务","confidence":0.2}}}`)
-	if v, _ := readJev(unsure, in, false, before{Intent: "复杂任务"}); v.Intent != "" {
+	if v, _ := readJev(unsure, in, false, before{Intent: "复杂任务"}); v.Intent != "复杂任务" || v.Sure != 0.2 {
 		t.Fatalf("topic unsure: %+v", v)
+	}
+	// a group's own sure: the default 0.4 keeps an unsure pick from
+	// matching, 0.25 lets a surer one, "none of these" never counts
+	g0 := provider.Group{}
+	if got := intentOf(verdict{Topic: true, Intent: "复杂任务", Said: "复杂任务", Sure: 0.2}, g0); got != "" {
+		t.Fatalf("default 0.4: %+v", got)
+	}
+	if got := intentOf(verdict{Topic: true, Intent: "复杂任务", Said: "复杂任务", Sure: 0.3}, provider.Group{IntentSure: ptrSure(0.25)}); got != "复杂任务" {
+		t.Fatalf("0.25: %+v", got)
+	}
+	if got := intentOf(verdict{Topic: true, Intent: "", Said: noIntent, Sure: 0.9}, provider.Group{IntentSure: ptrSure(0)}); got != "" {
+		t.Fatalf("none of these at 0: %+v", got)
 	}
 }
 

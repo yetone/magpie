@@ -34,6 +34,9 @@ const groupUsage = `usage:
                                           it is in follow; an agent set to the old id needs setting again),
                                           effort=auto (the classifier picks each turn's reasoning; needs classifier=),
                                           effort=agent (the agent's again), classifier=<provider/model>|group/<id>,
+                                          intent-sure=<0…1> (how sure the classifier must be of an intent for it
+                                          to count; 0 takes its likeliest however unsure, "none of these" never
+                                          counting; empty is the 0.4 groups have always asked),
                                           pick=<model> (routing=manual, every request to that one of its models),
                                           fast=<m1>[,m2…] (the models sent in their vendor's fast mode; empty for none),
                                           weight=<m1>=<n>[,m2=<n>…] (each model's share under routing=weight,
@@ -524,6 +527,21 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 			}
 		case "classifier", "classify":
 			g.Classifier = strings.TrimPrefix(strings.TrimSpace(v), "magpie/")
+		case "intent-sure", "intentsure":
+			// how sure the classifier must be of an intent for it to count
+			// (#5101): 0 takes its likeliest however unsure, "none of
+			// these" never counting; empty is 0.4 as groups have always
+			// asked
+			if strings.TrimSpace(v) == "" {
+				g.IntentSure = nil
+				break
+			}
+			sure, perr := strconv.ParseFloat(strings.TrimSpace(v), 64)
+			if perr != nil || !(sure >= 0 && sure <= 1) { // NaN too
+				err = fmt.Errorf("intent-sure is from 0 to 1, as intent-sure=0.25 (empty is the 0.4 groups have always asked), not %q", v)
+				break
+			}
+			g.IntentSure = &sure
 		case "fast":
 			// the members sent in their vendor's fast mode, as they are in
 			// the group
@@ -567,7 +585,7 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 			g.Pick, err = pickMember(g.Members, v)
 			g.Routing = provider.Manual
 		default:
-			return fmt.Errorf("unknown field %q (fields: name, models, models+, models-, routing, pick, stays, context, levels, family, effort, classifier, fast, weight, listed; magpie group help)", k)
+			return fmt.Errorf("unknown field %q (fields: name, models, models+, models-, routing, pick, stays, context, levels, family, effort, classifier, intent-sure, fast, weight, listed; magpie group help)", k)
 		}
 		if err != nil {
 			return err
@@ -1230,6 +1248,9 @@ func showGroup(g provider.Group) error {
 			what = "  rates how hard each turn is"
 		}
 		kv("classifier", g.Classifier+muted.Render(what))
+	}
+	if g.IntentSure != nil {
+		kv("intent-sure", fmt.Sprintf("%g", *g.IntentSure)+muted.Render("  how sure the classifier must be of an intent for it to count; 0 takes its likeliest"))
 	}
 	if u := groupUses()[g.ID]; len(u) > 0 {
 		kv("used by", green.Render(strings.Join(u, ", ")))

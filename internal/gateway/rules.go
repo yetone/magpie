@@ -337,6 +337,7 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 			t0 := time.Now()
 			v, cached, err := classify(ask, g.Classifier, intents, prev, effort, text)
 			classifiedFor(g.ID, g.Classifier, err)
+			v.Intent = intentOf(v, g) // the group's own sure of an intent (#5101)
 			c.Intent, c.Said, c.Cached, c.Ms = v.Intent, v.Said, cached, int(time.Since(t0).Milliseconds())
 			if effort {
 				c.Effort, c.Score = v.Effort, v.Score
