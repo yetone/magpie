@@ -30,6 +30,9 @@ const providersSource = lift("function providersWhileFetching() {");
 // a plugin's page that reads with Providers (the Gateway page) is polled too
 const pageLine = source.match(/^const providersPage = .*$/m);
 assert.ok(pageLine, "app.js no longer has providersPage");
+// Routing and its groups page read the providers too
+const rtLine = source.match(/^const rtView = .*$/m);
+assert.ok(rtLine, "app.js no longer has rtView");
 
 // values cross the vm's realm boundary (its Object is not the test's), so what
 // is handed to assert is copied into this one first
@@ -45,6 +48,7 @@ let view = "providers", editing = null, adding = false;
 const magpie = { page: (v) => (v === "gateway" ? { loads: "providers" } : undefined) };
 `,
     pageLine[0],
+    rtLine[0],
     `
 const document = { hidden: false };
 let providers = { fetching: true, providers: [], gateway: { calls: 0 } };
@@ -139,6 +143,18 @@ test("a poll under the Gateway page, a plugin's page that reads with Providers, 
   assert.equal(plain(p.counts()).api, 1, "it read nothing under the Gateway page");
   assert.equal(p.pending(), 1);
 });
+
+for (const v of ["routing", "groups"]) {
+  test(`a poll under the ${v} page reads`, async () => {
+    const p = page();
+    p.refuses();
+    p.arm();
+    p.set("view", v);
+    await p.fire();
+    assert.equal(plain(p.counts()).api, 1, "it read nothing under " + v);
+    assert.equal(p.pending(), 1);
+  });
+}
 
 for (const [guard, set] of [
   ["another page", (p) => p.set("view", "agents")],
