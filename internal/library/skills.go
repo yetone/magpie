@@ -581,6 +581,21 @@ func sharedEntry(name string) string {
 	return ""
 }
 
+// sharedCopy is whether p, the entry in ~/.agents/skills by a library
+// skill's name, is the user's own copy of the library's very files: not
+// one magpie made (ours), not the library's own folder (sharedEntry), and
+// holding what the library's holds.
+func sharedCopy(p, name string) bool {
+	if _, err := os.Lstat(p); err != nil || ours(p, name) {
+		return false
+	}
+	lib := skillDir(name)
+	if _, err := os.Stat(lib); err != nil || realDir(p) == realDir(lib) {
+		return false
+	}
+	return sameTree(p, lib)
+}
+
 // within is whether p is dir or inside it.
 func within(p, dir string) bool {
 	rel, err := filepath.Rel(dir, p)
@@ -633,9 +648,18 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 			return true
 		}
 		p := filepath.Join(sharedSkillsDir(), s.Name)
-		return slices.ContainsFunc(all, func(o *Target) bool {
+		if slices.ContainsFunc(all, func(o *Target) bool {
 			return o.Skills != "" && realDir(o.Skills) == shared && s.gives(o.Agent.ID)
-		}) && (ours(p, s.Name) || realDir(p) == realDir(skillDir(s.Name)))
+		}) && (ours(p, s.Name) || realDir(p) == realDir(skillDir(s.Name))) {
+			return true
+		}
+		// the user's own copy of the very same files kept in the shared
+		// folder (another installer's, or one copied by hand): the agent
+		// finds it there, and a link or copy of the library's in its own
+		// folder too is a second tree by that name. pi loads both and
+		// warns of a collision, since it drops a skill read twice only
+		// when both paths lead to one file (realpath, dist/core/skills.js)
+		return sharedCopy(p, s.Name)
 	}
 	var mine []string
 	for _, name := range a.Skills {
