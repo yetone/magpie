@@ -2023,8 +2023,11 @@ func userPrice(s settings.Settings, p Provider, model string) (catalog.Price, bo
 	for _, key := range [...]string{p.ID + "/" + model, p.ID + "/*", AnyPriceKey(model)} {
 		if m, ok := s.ModelPrices[key]; ok {
 			if pr, bad := m.Price(); bad == "" {
-				// a Claude model's 1-hour cache write left out: 2× input
-				catalog.OneHourFor(model, &pr)
+				// a Claude model's 1-hour cache write left out: 2× input,
+				// but where Copilot bills it at the 5-minute price
+				if !p.cacheWritesAlike() {
+					catalog.OneHourFor(model, &pr)
+				}
 				return pr, true
 			}
 		}
@@ -2694,13 +2697,20 @@ func tariffOf(s settings.Settings, p Provider, known bool, model string) (catalo
 		if p.codexReviewFree(model) { // signed out since: still a ChatGPT sign-in's
 			return catalog.Price{}, true
 		}
-		if pr, ok := MakerPrice(model); ok {
+		pr, ok := MakerPrice(model)
+		if ok {
 			if k := p.PeakOf(model); k != "" {
 				pr.Peak = k
 			}
-			return pr, true
+		} else {
+			pr, ok = SamePriceIn(s, id, model)
 		}
-		return SamePriceIn(s, id, model)
+		// a call Copilot served before it was signed out is billed as
+		// Copilot bills it still
+		if ok && p.cacheWritesAlike() {
+			pr = withoutOneHour(pr)
+		}
+		return pr, ok
 	}
 	pr, ok := p.ListPrice(model)
 	if !ok {
@@ -2717,7 +2727,32 @@ func tariffOf(s settings.Settings, p Provider, known bool, model string) (catalo
 	if ok && p.PriceRate > 0 {
 		pr = pr.Times(p.PriceRate)
 	}
+	if ok && p.cacheWritesAlike() {
+		pr = withoutOneHour(pr)
+	}
 	return pr, ok
+}
+
+// cacheWritesAlike reports whether p bills a cache write at one price however
+// long it is kept. Copilot does: its copilot_usage counts a 1-hour write as
+// the cache_write a 5-minute one is, at the same price (#3435:
+// claude-opus-5.5's 15,671-token 1-hour write cost 7,844,300,000 nano-AIU,
+// $5 per million, where Anthropic's 2× input would be $8).
+func (p Provider) cacheWritesAlike() bool { return p.ID == "copilot" }
+
+// withoutOneHour is a price with no 1-hour cache write of its own, so an
+// hour's write is billed as a 5-minute one (catalog.Price.OneHour): the 2×
+// input catalog.OneHourFor gave a Claude model's list price is Anthropic's,
+// not every vendor's. The tiers are copied, as they may be the catalog's.
+func withoutOneHour(pr catalog.Price) catalog.Price {
+	pr.CacheWrite1h = 0
+	if len(pr.Tiers) > 0 {
+		pr.Tiers = slices.Clone(pr.Tiers)
+		for i := range pr.Tiers {
+			pr.Tiers[i].CacheWrite1h = 0
+		}
+	}
+	return pr
 }
 
 // EntryPriceIn is what a call to an entry of the catalog costs the user,

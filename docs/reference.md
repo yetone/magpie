@@ -1526,7 +1526,10 @@ write kept for 5 minutes at 1.25× input and one kept for an hour at 2× input,
 and its usage says which were which (`cache_creation.ephemeral_5m_input_tokens`
 / `ephemeral_1h_input_tokens`, from the API and from Claude Code's
 transcripts). The fourth number is the 5-minute price; the fifth, when not
-given, is 2× input for a Claude model — Anthropic's rule. Any other model has
+given, is 2× input for a Claude model — Anthropic's rule. Copilot bills a
+cache write at one price however long it is kept (its `copilot_usage` counts a
+1-hour write as the `cache_write` a 5-minute one is), so a model on Copilot has
+no 1-hour price unless you give one, Claude's too. Any other model has
 no 1-hour price unless you give one: a 1-hour write it reports is counted at
 the 5-minute price, and neither `magpie model price` nor the app's boxes show
 a 1-hour price for it. A call recorded
