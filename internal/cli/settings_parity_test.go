@@ -250,6 +250,7 @@ var notYet = map[string]string{
 	"GET /api/library/browser":                   L,  // browser.go
 	"POST /api/library/browser/setup":            L,  // browser.go
 	"POST /api/library/browser/drag":             L,  // browser.go
+	"POST /api/library/browser/extension":        L,  // browser.go
 	"GET /api/caller-keys/models":                P,  // caller_keys.go
 	"POST /api/config/repair":                    A,  // config_repair.go
 	"GET /api/context":                           U,  // context.go
