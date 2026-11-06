@@ -88,7 +88,7 @@ func TestWSLProbeFindsMoreAgents(t *testing.T) {
 		if k.dir != "" && !strings.HasPrefix(c.file, k.dir+"/") {
 			t.Errorf("%s: its file %s isn't under %s", c.id, c.file, k.dir)
 		}
-		if k.bin != "" && !strings.Contains(wslProbeScript, `command -v `+k.bin+` `) {
+		if k.bin != "" && !strings.Contains(wslProbeScript, `p=$(wslcmd `+k.bin+`) `) {
 			t.Errorf("%s: probe lacks its command %s", c.id, k.bin)
 		}
 		if p, _, _ := wslFinds(k); k.dir != "" || k.version {
@@ -103,7 +103,7 @@ func TestWSLProbeFindsMoreAgents(t *testing.T) {
 		}
 	}
 	for _, bin := range []string{"fx", "grok", "goose"} {
-		if strings.Contains(wslProbeScript, `command -v `+bin+` `) {
+		if strings.Contains(wslProbeScript, `wslcmd `+bin+`)`) {
 			t.Errorf("probe takes any %s command for the agent", bin)
 		}
 	}
