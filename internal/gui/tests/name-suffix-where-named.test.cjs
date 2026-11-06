@@ -165,6 +165,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.mouse.wheel(0, r.y + r.height - vp.height + 40);
         await page.waitForTimeout(60);
       }
+      // and come to rest: WebKitGTK's wheel at the page's foot runs on and
+      // springs back for a while after it, click or no click
+      for (let i = 0, last = ""; i < 50; i++) {
+        const now = JSON.stringify(await scrolls(page));
+        if (now === last) break;
+        last = now;
+        await page.waitForTimeout(100);
+      }
       const before = await scrolls(page);
       await set.locator(".opt", { hasText: w.own }).click();
       await page.locator(".rt-gnames .opt.on", { hasText: w.own }).waitFor();
