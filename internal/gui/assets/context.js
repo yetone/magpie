@@ -1308,12 +1308,7 @@
       ? chart(a.compact.curve || [], r.current, r.best, show, timed)
       : chart([{ value: "5m", cost: r.short }, { value: "1h", cost: r.hour }], r.current, r.best, show);
     if (c) row.append(c);
-    // the leanest band: the windows within 3% of the cheapest on the curve,
-    // the share tune counts as costing the same. Timed, the advice keeps a
-    // window that waits no longer than now, so a window the reader picked
-    // past the band (yapechan on Discord: a larger one) comes back as the
-    // advice and isn't the leanest; it says so, names the band, and offers
-    // the band's largest window, the one of them that compacts least
+    // the leanest band: within 3% of the cheapest (yapechan on Discord)
     const curve = (a.compact && a.compact.curve) || [];
     const fewest = curve.length ? Math.min(...curve.map((p) => p.cost)) : 0;
     const band = curve.filter((p) => p.cost <= fewest * 1.03);
@@ -1404,10 +1399,7 @@
     // an hour no Undo puts back, too few calls to weigh (linkaww)
     if (a.few && ttl && cur === "1h" && !held && !set.ours) use("5m", yours);
     if (lean && !held) use(lean.value, yours || t("Fewer tokens, but more compactions to wait on"));
-    // a window of the reader's own (#1860), from the same replay: each
-    // value's tokens against the setting now, which the reader picks away
-    // from (hayden4608 on Discord: against the leanest, every line read as
-    // more), and compactions, both estimates
+    // a window of the reader's own (#1860), against the setting now (hayden4608)
     const pts = (a.compact && a.compact.curve) || [];
     if (pts.length > 1 && !held) {
       const other = el("button", "text ctx-tune-pick", t("Other window…"));
@@ -1498,6 +1490,10 @@
     pane.append(grid);
   }
 
+  // what this page can draw: another version's reply can hold other rows
+  // (Linka on Discord: a page from before few rows threw on one, "r.cost")
+  const obj = (r) => !!r && typeof r == "object", objs = (l) => Array.isArray(l) ? l.filter(obj) : [];
+
   async function loadTune(force) {
     const read = ++tuneRead, days = ctxDays;
     if (tuneData && tuneData.days !== +days) tuneData = null;
@@ -1505,7 +1501,7 @@
     if (read !== tuneRead) return;
     const json = JSON.stringify(data);
     if (!force && tuneData && json === tuneJSON) return;
-    tuneData = { days: +data.days || +days, agents: (data.agents || []).map((a) => ({ ...a, advice: a.advice || [] })) }, tuneJSON = json;
+    tuneData = { days: +data.days || +days, agents: objs(data?.agents).map((a) => ({ ...a, advice: objs(a.advice).filter((r) => obj(r.compact) || obj(r.ttl) || r.few).map((r) => ({ ...r, setting: obj(r.setting) ? r.setting : {} })) })) }, tuneJSON = json;
     renderContext();
   }
 
