@@ -219,6 +219,11 @@ type Record struct {
 	// uploaded for it. Below 0 when an upload cost more than it saved this
 	// time. None where no image went by file.
 	ImageFilesSaved int `json:"image_files_saved,omitempty"`
+	// ImageFiles is how many of the request's inline images went by file
+	// instead, the most of any one try (a retry sends the same ones again):
+	// what ImageFilesSaved was saved on (matrix0487 on Discord). None in a
+	// row from before it was kept.
+	ImageFiles int `json:"image_files,omitempty"`
 	// Kind is what the agent made the call for when it isn't a turn of
 	// the conversation: a Codex subagent's (review, compact, guardian…)
 	Kind string `json:"kind,omitempty"`

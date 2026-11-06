@@ -1350,6 +1350,8 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
    than its card on its own is cut (#2378: "缓存 879…") */
 .led-strip .sub.parts, .kpi small.parts { white-space: normal; }
 .led-strip .sub.parts > span, .kpi small.parts > span { display: inline-block; max-width: 100%; vertical-align: bottom; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the traffic line's parts read whole: one wider than the card wraps in itself, never cut (matrix0487) */
+.led-strip .sub.led-io > span { white-space: normal; }
 /* not the tile's label: .kpi span is its small capitals */
 .kpi small.parts > span { margin-top: 0; font: inherit; letter-spacing: normal; text-transform: none; color: inherit; }
 .led-strip .led-jump { text-align: start; font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }

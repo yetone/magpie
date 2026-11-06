@@ -1408,7 +1408,8 @@ function ledDetail(r, cols) {
   // none of them, and says nothing
   if (r.up_bytes > 0) add("Sent upstream", fmtBytes(r.up_bytes));
   if (r.down_bytes > 0) add("Received", fmtBytes(r.down_bytes));
-  if (r.image_files_saved > 0) add("Saved by image files", fmtBytes(r.image_files_saved));
+  // and how many images they were, for a row that kept it (matrix0487)
+  if (r.image_files_saved > 0) add("Saved by image files", r.image_files > 0 ? t(r.image_files === 1 ? "{size} ({n} image)" : "{size} ({n} images)", { size: fmtBytes(r.image_files_saved), n: ledNum(r.image_files) }) : fmtBytes(r.image_files_saved));
   add("Request ID", r.rid);
   add("Endpoint", r.ep);
   const protos = ledProtos(r);
@@ -1639,10 +1640,12 @@ function renderLedgerDash(l) {
     : line(t("none failed")), "", exactN(l.calls));
   if (l.retried) strip.lastChild.append(jumps(jump(t("{n} answered on a retry", { n: fmtN(l.retried) }), "retried", t("Show only the requests answered on a retry"))));
   // the period's traffic, of the requests that kept it: up and down, and
-  // what DeepSeek's image files saved on the way up
+  // what DeepSeek's image files saved on the way up. Its parts kept whole,
+  // the saving going under in a card too narrow for all three rather than
+  // cut (matrix0487 on Discord: "图片文件省下 44…")
   if (l.up_bytes > 0 || l.down_bytes > 0) {
-    const io = line("↑ " + fmtBytes(l.up_bytes || 0) + " · ↓ " + fmtBytes(l.down_bytes || 0) + (l.image_files_saved > 0 ? " · " + t("{n} saved by image files", { n: fmtBytes(l.image_files_saved) }) : ""));
-    io.classList.add("led-io");
+    const io = line(...usageParts(["↑ " + fmtBytes(l.up_bytes || 0), "↓ " + fmtBytes(l.down_bytes || 0), ...(l.image_files_saved > 0 ? [t("{n} saved by image files", { n: fmtBytes(l.image_files_saved) })] : [])]));
+    io.classList.add("parts", "led-io");
     io.title = t("Sent upstream") + ": " + ledNum(l.up_bytes || 0) + " B\n" + t("Received") + ": " + ledNum(l.down_bytes || 0) + " B";
     strip.lastChild.append(io);
   }

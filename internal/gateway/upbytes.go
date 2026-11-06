@@ -22,6 +22,9 @@ type upBytes struct {
 	// saved is what DeepSeek's image files kept out of the tries' bodies,
 	// less what uploading them cost this request (withDeepSeekFiles)
 	saved int
+	// images is how many inline images went by file instead, the most of
+	// any one try: a retry sends the same ones again
+	images int
 }
 
 type upBytesKey struct{}

@@ -501,3 +501,54 @@ func TestDeepSeekImageFilesSavedInRow(t *testing.T) {
 		t.Fatalf("up and saved come to %d and %d, the inline turn's bytes (image %d)", a, b, len(img))
 	}
 }
+
+// A row says how many images went by file beside what they saved
+// (matrix0487 on Discord: "10 MB（3 张）"): each inline image block the
+// body named by file id, one sent twice counted twice as its bytes are,
+// on the turn that uploads them and the turn after; a request with no
+// image says none.
+func TestDeepSeekImageFilesCountedInRow(t *testing.T) {
+	s, u := dsSetup(t)
+	block := func(img string) string {
+		return `{"type":"image_url","image_url":{"url":"data:image/png;base64,` + img + `"}}`
+	}
+	body := `{"model":"deepseek/deepseek-flash","stream":false,"messages":[{"role":"user","content":[{"type":"text","text":"what are they"},` +
+		block(dsPNG1) + `,` + block(dsPNG2) + `]},{"role":"assistant","content":"two images"},{"role":"user","content":[{"type":"text","text":"and again"},` + block(dsPNG1) + `]}]}`
+	plain := `{"model":"deepseek/deepseek-flash","stream":false,"messages":[{"role":"user","content":"no image"}]}`
+	rowsOf := func(n int) []usage.Record {
+		var rows []usage.Record
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			rows = rows[:0]
+			for _, r := range usage.Load(time.Time{}) {
+				if r.Provider == "deepseek" && !r.HandedOn {
+					rows = append(rows, r)
+				}
+			}
+			if len(rows) >= n || time.Now().After(deadline) {
+				return rows
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	for turn, b := range []string{body, body, plain} {
+		if code, reply := postTo(t, s, "/v1/chat/completions", b); code != 200 {
+			t.Fatalf("turn %d: %d %s", turn, code, reply)
+		}
+		if got := u.last("/v1/chat/completions"); turn < 2 && (strings.Contains(got, dsPNG1) || strings.Contains(got, dsPNG2)) {
+			t.Fatalf("turn %d went inline: %s", turn, got)
+		}
+		if rows := rowsOf(turn + 1); len(rows) != turn+1 {
+			t.Fatalf("turn %d: rows %+v", turn, rows)
+		}
+	}
+	rows := rowsOf(3)
+	for i, want := range []int{3, 3, 0} {
+		if rows[i].ImageFiles != want {
+			t.Fatalf("turn %d: %d images by file, want %d (saved %d)", i, rows[i].ImageFiles, want, rows[i].ImageFilesSaved)
+		}
+	}
+	if rows[1].ImageFilesSaved <= 0 {
+		t.Fatalf("the second turn saved %d", rows[1].ImageFilesSaved)
+	}
+}

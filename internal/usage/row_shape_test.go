@@ -1,9 +1,11 @@
 package usage
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 	"unsafe"
@@ -128,5 +130,43 @@ func TestRowBytesKept(t *testing.T) {
 		if recs.UpBytes != 120_000 || recs.DownBytes != 3_000 || recs.ImageFilesSaved != -40 {
 			t.Fatalf("records' totals up %d, down %d, saved %d", recs.UpBytes, recs.DownBytes, recs.ImageFilesSaved)
 		}
+	}
+}
+
+// A row keeps how many images went by file beside what they saved
+// (matrix0487 on Discord: "10 MB（3 张）"), packed and read back, and in
+// usage.jsonl; one from before has none, and a count past what the
+// packed row holds is kept as its most. Keeping it made no row larger.
+func TestRowImageFilesKept(t *testing.T) {
+	at := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
+	c := &rowChunk{}
+	c.add(Row{Record: Record{Time: at, UpBytes: 50_000, ImageFilesSaved: 10_000_000, ImageFiles: 3, Tries: 2}}, "", 0, false)
+	c.add(Row{Record: Record{Time: at, ImageFilesSaved: 72_000, ImageFiles: 100_000, Tries: 100_000}}, "", 1, false)
+	c.add(Row{Record: Record{Time: at, Input: 1}}, "", 2, false)
+	for i, c := range []*rowChunk{c, c.pack().unpack()} {
+		a, b, old := c.row(0), c.row(1), c.row(2)
+		if a.ImageFiles != 3 || a.ImageFilesSaved != 10_000_000 || a.Tries != 2 {
+			t.Fatalf("%d: read back %d images, saved %d, %d tries", i, a.ImageFiles, a.ImageFilesSaved, a.Tries)
+		}
+		if b.ImageFiles != math.MaxInt16 || b.Tries != math.MaxInt16 {
+			t.Fatalf("%d: past the most read back %d images, %d tries", i, b.ImageFiles, b.Tries)
+		}
+		if old.ImageFiles != 0 {
+			t.Fatalf("%d: a row from before reads back %d images", i, old.ImageFiles)
+		}
+	}
+	line, err := json.Marshal(Record{Time: at, ImageFilesSaved: 10_000_000, ImageFiles: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var back Record
+	if err := json.Unmarshal(line, &back); err != nil || back.ImageFiles != 3 || !strings.Contains(string(line), `"image_files":3`) {
+		t.Fatalf("usage.jsonl's line %s read back %d images (%v)", line, back.ImageFiles, err)
+	}
+	if line, _ := json.Marshal(Record{Time: at}); strings.Contains(string(line), "image_files") {
+		t.Fatalf("a row with no image says one: %s", line)
+	}
+	if n := unsafe.Sizeof(packedRow{}); n != 152 {
+		t.Fatalf("a packed row is %d bytes, was 152", n)
 	}
 }
