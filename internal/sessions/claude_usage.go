@@ -13,7 +13,22 @@ type claudeUsageState struct {
 	Messages map[string]map[string]*claudeContribution `json:"messages,omitempty"`
 	recent   list.List
 	entries  int
+	// what finish evicted, for message to use again: a history's read
+	// made a contribution, its branches and its maps for every message,
+	// and threw all but the last few thousand away (~1.5 GB on a first
+	// start's read of a 21 GB Claude Code history, #2278)
+	free         []*claudeContribution
+	freeBranches []map[string]*claudeContribution
 }
+
+// claudeFree is how many evicted contributions are kept to use again:
+// one is evicted for each one made once the window is full.
+const claudeFree = 16
+
+// claudeFreeMap is the most a map of an evicted contribution may hold to
+// be used again: clear keeps a map's room, and one long message's would
+// stay with a short one's.
+const claudeFreeMap = 64
 
 // Each active file keeps a recent window even when the whole source exceeds
 // the shared index budget. Older messages fall back to the original reader
@@ -133,7 +148,13 @@ func (r *claudeUsageState) message(id, request string) *claudeContribution {
 	}
 	branches := r.Messages[key]
 	if branches == nil {
-		branches = make(map[string]*claudeContribution)
+		if n := len(r.freeBranches); n > 0 {
+			branches = r.freeBranches[n-1]
+			r.freeBranches[n-1] = nil
+			r.freeBranches = r.freeBranches[:n-1]
+		} else {
+			branches = make(map[string]*claudeContribution)
+		}
 		r.Messages[key] = branches
 	}
 	if m := branches[request]; m != nil {
@@ -151,7 +172,15 @@ func (r *claudeUsageState) message(id, request string) *claudeContribution {
 			return m
 		}
 	}
-	m := &claudeContribution{Request: request, Call: -1, key: key}
+	var m *claudeContribution
+	if n := len(r.free); n > 0 {
+		m = r.free[n-1]
+		r.free[n-1] = nil
+		r.free = r.free[:n-1]
+		m.Request, m.Call, m.key = request, -1, key
+	} else {
+		m = &claudeContribution{Request: request, Call: -1, key: key}
+	}
 	m.node = r.recent.PushBack(m)
 	branches[request] = m
 	return m
@@ -181,11 +210,37 @@ func (r *claudeUsageState) finish(m *claudeContribution) {
 		delete(branches, old.Request)
 		if len(branches) == 0 {
 			delete(r.Messages, old.key)
+			if len(r.freeBranches) < claudeFree {
+				r.freeBranches = append(r.freeBranches, branches)
+			}
 		}
 		r.entries -= old.weight
 		r.recent.Remove(e)
 		old.node = nil
+		if len(r.free) < claudeFree {
+			r.free = append(r.free, old.reset())
+		}
 	}
+}
+
+// reset is m emptied to be used again, keeping its maps' and list's room
+// when they are small. Nothing else holds an evicted contribution: clone
+// copies each, and window reads only those still in the window.
+func (m *claudeContribution) reset() *claudeContribution {
+	tools, blocks, previous := m.Tools, m.Blocks, m.Previous[:0]
+	if len(tools) > claudeFreeMap {
+		tools = nil
+	}
+	if len(blocks) > claudeFreeMap {
+		blocks = nil
+	}
+	if cap(previous) > claudeFreeMap {
+		previous = nil
+	}
+	clear(tools)
+	clear(blocks)
+	*m = claudeContribution{Tools: tools, Blocks: blocks, Previous: previous}
+	return m
 }
 
 func (m *claudeContribution) entryWeight() int {
