@@ -38,9 +38,9 @@ var desktopBehavesAs = map[string]string{
 }
 
 // DesktopBehavesAs is the Claude model each picked tier's model runs as in
-// Desktop's Code tab, by the id Desktop hands Claude Code (DesktopID); a
-// model that is a Claude model itself has its own already. ok is false
-// when the picks can't be read.
+// Desktop's Code tab, by the id Desktop hands Claude Code (DesktopID); one
+// Claude Code knows as a Claude model by that id has its own already
+// (desktopRunsAs). ok is false when the picks can't be read.
 func DesktopBehavesAs() (as map[string]string, ok bool) {
 	picked, ok := desktopTiersKnown()
 	if !ok {
@@ -50,8 +50,10 @@ func DesktopBehavesAs() (as map[string]string, ok bool) {
 	shown, _ := provider.CatalogFor("claude-desktop")
 	as = map[string]string{}
 	for _, e := range shown {
-		if t := tierOf[e.ID]; t != "" && claudeModel(e) == "" {
-			as[DesktopID(e)] = desktopBehavesAs[t]
+		if t := tierOf[e.ID]; t != "" {
+			if b := desktopRunsAs(e, DesktopID(e), t); b != "" {
+				as[DesktopID(e)] = b
+			}
 		}
 	}
 	return as, true
@@ -92,8 +94,8 @@ func DesktopInferenceModels() (list []map[string]any, ok bool) {
 		if t := tierOf[e.ID]; t != "" {
 			tagged = true
 			entry["anthropicFamilyTier"], entry["isFamilyDefault"] = t, true
-			if claudeModel(e) == "" {
-				entry["behavesAs"] = desktopBehavesAs[t]
+			if b := desktopRunsAs(e, name, t); b != "" {
+				entry["behavesAs"] = b
 			}
 		}
 		list = append(list, entry)
@@ -131,4 +133,21 @@ func desktopTiersKnown() (map[string]string, bool) {
 		return nil, false
 	}
 	return out, true
+}
+
+// desktopRunsAs is the behavesAs of e, picked for tier t, listed by id:
+// none when Claude Code knows a Claude model by that id on its own, else
+// the Claude model e is, else t's newest. A routing group led by a Claude
+// model is shown by its mythos-magpie-<n> (claudeLooking), which Claude
+// Code doesn't know, so it is given the group's model, as a model listed
+// by anthropic/magpie-<n> is.
+func desktopRunsAs(e provider.Entry, id, t string) string {
+	m := claudeModel(e)
+	if m == "" {
+		return desktopBehavesAs[t]
+	}
+	if strings.HasPrefix(id, desktopEffortAlias) || strings.HasPrefix(id, desktopAlias) {
+		return m
+	}
+	return ""
 }
