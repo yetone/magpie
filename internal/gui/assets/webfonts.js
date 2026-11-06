@@ -18,11 +18,15 @@ window.webFonts = (() => {
   let ctx, local = null, asked = false, base = [];
   const extra = [], seen = new Map();
   const quoted = window.desktopFonts.quoted;
+  // The two generics' widths are measured once: each family then costs one
+  // or two measures, not two or four.
+  let generic;
+  const width = (f) => (ctx.font = "72px " + f, ctx.measureText("mmmlli WwQ@ 0123 中文").width);
   function drawn(name) {
     if (!seen.has(name)) {
       ctx ||= document.createElement("canvas").getContext("2d");
-      const w = (f) => (ctx.font = "72px " + f, ctx.measureText("mmmlli WwQ@ 0123 中文").width);
-      seen.set(name, !!name && ["monospace", "serif"].some((b) => w(quoted(name) + "," + b) !== w(b)));
+      generic ||= ["monospace", "serif"].map((b) => [b, width(b)]);
+      seen.set(name, !!name && generic.some(([b, w]) => width(quoted(name) + "," + b) !== w));
     }
     return seen.get(name);
   }
@@ -64,8 +68,17 @@ window.webFonts = (() => {
     local = group(await window.queryLocalFonts());
   }
   // list: the tab's families, from the server's (/api/fonts)
+  // The probe yields every few milliseconds: a measure of a family not yet
+  // drawn loads it, and probing a Mac's whole list at once held the click
+  // that opened Settings in one task, 2.6 s with the CPU slowed 4x.
   async function list(server) {
-    base = server.filter((f) => drawn(f.name));
+    const out = [];
+    let start = performance.now();
+    for (const f of server) {
+      if (drawn(f.name)) out.push(f);
+      if (performance.now() - start > 8) await new Promise((r) => setTimeout(r)), start = performance.now();
+    }
+    base = out;
     if (!asked && window.queryLocalFonts) try {
       if ((await navigator.permissions.query({ name: "local-fonts" })).state === "granted") await read(), asked = true;
     } catch {}
