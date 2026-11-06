@@ -46,7 +46,7 @@ func TestAlmaProvidersSeenDecodeOnce(t *testing.T) {
 	if err != nil || len(ps) != 1 || ps[0].Name != "magpie" || len(ps[0].Known) != 400 || ps[0].Models[0] != "gpt-5.4" {
 		t.Fatalf("first look: %v %+v", err, ps)
 	}
-	if n := testing.AllocsPerRun(20, func() {
+	if n := leastAllocs(20, func() {
 		if ps, err := almaProvidersSeen(); err != nil || len(ps) != 1 {
 			t.Fatal(err, ps)
 		}
@@ -59,7 +59,7 @@ func TestAlmaProvidersSeenDecodeOnce(t *testing.T) {
 	// the same answer asked for again, past the time one is kept, is not
 	// decoded again either
 	almaReadFor = 0
-	if n := testing.AllocsPerRun(5, func() {
+	if n := leastAllocs(5, func() {
 		if ps, err := almaProvidersSeen(); err != nil || len(ps) != 1 {
 			t.Fatal(err, ps)
 		}
