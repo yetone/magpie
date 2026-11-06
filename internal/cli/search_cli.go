@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // The web search APIs, from the terminal: magpie search (#419).
@@ -25,6 +27,10 @@ const searchUsage = `usage:
   magpie search on <api>                     ask it again
   magpie search move <api> <n>               put one at place n in the order they are asked
   magpie search rm <api>                     take one away
+  magpie search count [<n>]                  how many results a search is answered with when
+                                             the client names no count (Claude Code's WebSearch,
+                                             Codex's web_search): 1 to 20, 6 by default;
+                                             "magpie search count default" puts 6 back
 
   apis: tavily, brave, exa, firecrawl, you, deepseek, volcengine, wsa, searxng
         and the ones a plugin gives (its search hook), as <plugin>:<id> in magpie's Settings
@@ -48,6 +54,10 @@ const searchUsage = `usage:
   they were added, until one is moved), skipping one switched off: what they find goes
   to the model as it is, and no model is asked to read it.
   Without any of them, the client's search is left out.
+
+  Each result carries up to 1500 bytes of its page's text, so twice the results is
+  about twice as much for the model to read. Whether an API charges more for more
+  results is its own pricing's.
 
   e.g. magpie search add tavily tvly-…
        magpie search add searxng url=https://searx.example.com
@@ -157,6 +167,8 @@ func searchCmd(args []string) error {
 		}
 		fmt.Println(green.Render("✓"), as[i].Name(), muted.Render(fmt.Sprintf("search API %d of %d", n, len(as))))
 		return nil
+	case "count":
+		return searchCountCmd(args[1:])
 	case "rm", "remove":
 		if len(args) != 2 {
 			return fmt.Errorf("magpie search rm <api>")
@@ -167,7 +179,43 @@ func searchCmd(args []string) error {
 		fmt.Println(green.Render("✓"), "removed")
 		return nil
 	}
-	return fmt.Errorf("magpie search [add|on|off|move|rm] (magpie search help)")
+	return fmt.Errorf("magpie search [add|on|off|move|rm|count] (magpie search help)")
+}
+
+// searchCountCmd is magpie search count (#5545, mdwsk88): with no word it
+// says the count, with a number from 1 to 20 (or "default") it sets it; any
+// other word is refused and nothing is written.
+func searchCountCmd(args []string) error {
+	usage := fmt.Errorf("magpie search count [<n>], n from 1 to %d, or default for %d", settings.SearchCountMost, settings.SearchCountDefault)
+	s := settings.Load()
+	switch len(args) {
+	case 0:
+		n := s.SearchPages()
+		what := "results a search is answered with"
+		if s.SearchCount == 0 {
+			what += " (default)"
+		}
+		fmt.Println(" ", n, muted.Render(what))
+		return nil
+	case 1:
+	default:
+		return usage
+	}
+	n := 0
+	if args[0] != "default" {
+		var err error
+		if n, err = strconv.Atoi(args[0]); err != nil || n < 1 || n > settings.SearchCountMost {
+			return usage
+		}
+	}
+	if s.SearchCount != n {
+		s.SearchCount = n
+		if err := settings.Save(s); err != nil {
+			return err
+		}
+	}
+	fmt.Println(green.Render("✓"), s.SearchPages(), muted.Render("results a search is answered with"))
+	return nil
 }
 
 // quotaLine is what one key has used of its limit, as magpie search lists

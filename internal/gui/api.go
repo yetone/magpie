@@ -1525,6 +1525,25 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
+	// how many results a search that names no count is answered with
+	// (Settings › Models › Web search, #5545): 0 for the default; one
+	// out of range is refused by Save and nothing is written
+	mux.HandleFunc("POST /api/settings/search-count", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ N int }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		s := settings.Load()
+		if s.SearchCount != in.N {
+			s.SearchCount = in.N
+			if err := settings.Save(s); err != nil {
+				fail(rw, err)
+				return
+			}
+		}
+		writeJSON(rw, settingsState())
+	})
 	// whether agents' sign-ins are read and served as subscriptions
 	// (#1535): saved, the accounts read before are forgotten at once
 	mux.HandleFunc("POST /api/settings/account-discovery", func(rw http.ResponseWriter, r *http.Request) {

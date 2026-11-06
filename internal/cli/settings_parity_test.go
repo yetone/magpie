@@ -130,6 +130,7 @@ var cliForRoute = map[string]string{
 	"POST /api/settings/account-discovery": "magpie accounts discovery",
 	"POST /api/settings/search-api":        "magpie search",
 	"POST /api/settings/search-key":        "magpie search",
+	"POST /api/settings/search-count":      "magpie search count",
 	"POST /api/settings/update-mirror":     "magpie update mirror",
 	"POST /api/sync":                       "magpie sync",
 	"GET /api/davsync":                     "magpie webdav",

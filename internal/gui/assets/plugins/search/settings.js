@@ -187,6 +187,18 @@ function renderSearch(s, keep) {
     r.id = "searchAllRow";
     r.classList.add("search-all-row", ...(can ? [] : ["off"]));
   }
+  // how many results a search that names no count is answered with, as
+  // Claude Code's WebSearch and Codex's web_search never do (#5545,
+  // mdwsk88); a count set by hand in settings.json is offered too
+  {
+    const cur = s.searchCount > 0 ? Math.min(s.searchCount, 20) : 6;
+    const ns = [...new Set([3, 6, 10, 15, 20, cur])].sort((a, b) => a - b);
+    const r = row(t("Results per search"), t("More results give the model more to read: each carries up to 1500 bytes of its page"),
+      segs(ns.map((n) => [String(n), String(n)]), String(cur),
+        (v) => writingPrefs(api("settings/search-count", { n: Number(v) }))
+          .then((ns) => { prefs = state.settings = ns; renderSettings(); }).catch(settingsErr)));
+    r.id = "searchCountRow";
+  }
   // the same search as an MCP server of the gateway's (Kayphoon on
   // Discord), for an agent to mount as its web_search and web_fetch tools
   const mcpURL = mcpAddress(s, "/mcp/magpie/web-search");

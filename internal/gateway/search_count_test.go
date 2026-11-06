@@ -13,6 +13,7 @@ import (
 
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // web_search on the MCP server takes a count (treeman on Discord): how
@@ -160,6 +161,91 @@ func TestSearchCountReachesEveryAPI(t *testing.T) {
 		kimi.mu.Unlock()
 		if !strings.HasSuffix(got, want) {
 			t.Errorf("Kimi Code's search asked %q, want limit %d", got, n)
+		}
+	}
+}
+
+// A search that names no count, as Claude Code's WebSearch and Codex's
+// web_search never do, is answered with the count set in Settings › Web
+// search (#5545, mdwsk88), and web_search's schema says it as its
+// default; a count the call names still wins, and with none set it is 6.
+func TestSearchCountSetting(t *testing.T) {
+	fresh(t)
+	const spec = "@acme/opencode-mojeek-search@1.0.0"
+	plugged(t, spec, false)
+	if err := provider.SetSearchAPI(provider.SearchAPI{Vendor: "mojeek-search:mojeek", Key: "good-key-0003"}); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	var counts []int
+	old := runPluginSearch
+	t.Cleanup(func() { runPluginSearch = old })
+	runPluginSearch = func(_ context.Context, _, _, _ string, count int, _, _ string) ([]plugin.SearchPage, error) {
+		mu.Lock()
+		counts = append(counts, count)
+		mu.Unlock()
+		var pages []plugin.SearchPage
+		for i := range 30 {
+			pages = append(pages, plugin.SearchPage{Title: fmt.Sprint("page ", i), URL: fmt.Sprintf("https://ex.test/%d", i), Text: "text"})
+		}
+		return pages, nil
+	}
+	h := lanGuard(New().Handler())
+	const here = "127.0.0.1:50000"
+	set := func(n int) {
+		t.Helper()
+		s := settings.Load()
+		s.SearchCount = n
+		if err := settings.Save(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	schemaDefault := func() int {
+		t.Helper()
+		var list struct {
+			Result struct {
+				Tools []struct {
+					InputSchema struct {
+						Properties map[string]struct{ Default int }
+					}
+				}
+			}
+		}
+		if err := json.Unmarshal(mcpPost(h, here, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`).Body.Bytes(), &list); err != nil {
+			t.Fatal(err)
+		}
+		return list.Result.Tools[0].InputSchema.Properties["count"].Default
+	}
+	call := func(args string) (said, asked int) {
+		t.Helper()
+		mu.Lock()
+		counts = nil
+		mu.Unlock()
+		m := readMCP(t, mcpPost(h, here, `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"web_search","arguments":`+args+`}}`))
+		if m.Error != nil || m.Result.IsError || len(m.Result.Content) != 1 {
+			t.Fatalf("%s: %+v", args, m)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if len(counts) != 1 {
+			t.Fatalf("%s: the plugin was asked %v", args, counts)
+		}
+		return strings.Count(m.Result.Content[0].Text, " — https://ex.test/"), counts[0]
+	}
+
+	for _, tc := range []struct{ set, want int }{{11, 11}, {20, 20}, {1, 1}, {0, 6}} {
+		set(tc.set)
+		if got := searchCount(context.Background()); got != tc.want {
+			t.Errorf("set %d: a search naming no count asks for %d, want %d", tc.set, got, tc.want)
+		}
+		if got := schemaDefault(); got != tc.want {
+			t.Errorf("set %d: web_search's schema says %d by default, want %d", tc.set, got, tc.want)
+		}
+		if said, asked := call(`{"query":"latest go"}`); said != tc.want || asked != tc.want {
+			t.Errorf("set %d: no count said %d results, asked %d, want %d", tc.set, said, asked, tc.want)
+		}
+		if said, asked := call(`{"query":"latest go","count":4}`); said != 4 || asked != 4 {
+			t.Errorf("set %d: count 4 said %d results, asked %d", tc.set, said, asked)
 		}
 	}
 }

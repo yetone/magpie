@@ -544,6 +544,12 @@ type Settings struct {
 	// as for a model that can't, and the provider is sent no search tool.
 	// Only while magpie can search for it (gateway.magpieSearches).
 	SearchAll bool `json:"searchAll,omitempty"`
+	// SearchCount is how many pages a client's search is answered with
+	// when it names no count, as Claude Code's WebSearch and Codex's
+	// web_search never do (#5545, mdwsk88): from 1 to SearchCountMost, 0
+	// for SearchCountDefault. A web_search call that names a count (the
+	// web-search MCP server's) is answered with that.
+	SearchCount int `json:"searchCount,omitempty"`
 	// TrayUsages are the subscriptions and plans whose windows are shown
 	// beside the tray icon, in the order shown, each by its provider and
 	// account ("claude|a@b.c"); none when empty.
@@ -1190,6 +1196,24 @@ func (s Settings) ResetLead() time.Duration {
 		m = CodexResetLeadDefault
 	}
 	return time.Duration(m) * time.Minute
+}
+
+// SearchCountDefault is the pages a search is answered with when
+// SearchCount is 0, and SearchCountMost the most it can be set to: Brave
+// and Tavily return no more than 20.
+const (
+	SearchCountDefault = 6
+	SearchCountMost    = 20
+)
+
+// SearchPages is how many pages a search that names no count is answered
+// with: SearchCount, SearchCountDefault when it is 0 (or below), and no
+// more than SearchCountMost when settings.json was written by hand past it.
+func (s Settings) SearchPages() int {
+	if s.SearchCount < 1 {
+		return SearchCountDefault
+	}
+	return min(s.SearchCount, SearchCountMost)
 }
 
 // BusyLoadMost is past the highest BusyLoad: plugin.LoadMost, the most a
@@ -2127,6 +2151,9 @@ func saveOwn(s Settings, recording, reads bool) error {
 	}
 	if s.ClassifyTimeout < 0 || s.ClassifyTimeout > ClassifyTimeoutMost {
 		return fmt.Errorf("a routing group's classifier is given from 1 to %d seconds, or 0 for %d, not %d", ClassifyTimeoutMost, ClassifyTimeoutDefault, s.ClassifyTimeout)
+	}
+	if s.SearchCount < 0 || s.SearchCount > SearchCountMost {
+		return fmt.Errorf("a search is answered with from 1 to %d results, or 0 for %d, not %d", SearchCountMost, SearchCountDefault, s.SearchCount)
 	}
 	if s.BusyLoad < 0 || s.BusyLoad >= BusyLoadMost {
 		return fmt.Errorf("busy models go last over a load from 1 to %d%%, or 0 for off, not %d", BusyLoadMost-1, s.BusyLoad)

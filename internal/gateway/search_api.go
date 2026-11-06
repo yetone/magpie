@@ -20,6 +20,7 @@ import (
 	"github.com/yetone/magpie/internal/budget"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -29,11 +30,12 @@ import (
 // model asked to read it first.
 
 // searchHits is how many pages a search API is asked for when the search
-// names no count, and searchHitsMost the most one may name (web_search's
-// count): Brave and Tavily take no more than 20.
+// names no count and the user set none (settings.SearchCount), and
+// searchHitsMost the most one may name (web_search's count): Brave and
+// Tavily take no more than 20.
 const (
-	searchHits     = 6
-	searchHitsMost = 20
+	searchHits     = settings.SearchCountDefault
+	searchHitsMost = settings.SearchCountMost
 )
 
 type searchCountKey struct{}
@@ -45,12 +47,13 @@ func withSearchCount(ctx context.Context, n int) context.Context {
 }
 
 // searchCount is how many pages the search in ctx asks for: the count it
-// named (withSearchCount), else searchHits.
+// named (withSearchCount), else the count the user set in Settings › Web
+// search (#5545), searchHits when they set none.
 func searchCount(ctx context.Context) int {
 	if n, ok := ctx.Value(searchCountKey{}).(int); ok {
 		return n
 	}
-	return searchHits
+	return settings.Shared().SearchPages()
 }
 
 // pageText is the most of a page's text a hit carries.

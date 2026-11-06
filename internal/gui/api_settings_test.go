@@ -467,3 +467,36 @@ func TestSettingsSearchAllSetOnItsOwn(t *testing.T) {
 		t.Fatal("search-all didn't turn it off")
 	}
 }
+
+// How many results a search is answered with (Settings › Models › Web
+// search, #5545) is set on its own: the endpoint sets it and says it
+// back, a save of the whole page keeps it, and one out of 1 to 20 is
+// refused with nothing written.
+func TestSettingsSearchCountSetOnItsOwn(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	h := Handler(nil, nil)
+	post := func(path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest("POST", path, strings.NewReader(body)))
+		return rec
+	}
+	rec := post("/api/settings/search-count", `{"n":12}`)
+	if rec.Code != http.StatusOK || settings.Load().SearchCount != 12 {
+		t.Fatalf("search-count didn't set it: %d %s", rec.Code, rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), `"searchCount":12`) {
+		t.Errorf("the state sent back doesn't say it: %s", rec.Body)
+	}
+	if rec := post("/api/settings", `{"theme":"dark"}`); rec.Code != http.StatusOK || settings.Load().SearchCount != 12 {
+		t.Fatalf("a save of the page dropped searchCount: %d %s", rec.Code, rec.Body)
+	}
+	for _, bad := range []string{`{"n":21}`, `{"n":-1}`} {
+		if rec := post("/api/settings/search-count", bad); rec.Code == http.StatusOK || settings.Load().SearchCount != 12 {
+			t.Errorf("%s: %d, count now %d", bad, rec.Code, settings.Load().SearchCount)
+		}
+	}
+	if rec := post("/api/settings/search-count", `{"n":0}`); rec.Code != http.StatusOK || settings.Load().SearchCount != 0 {
+		t.Fatalf("0 didn't put the default back: %d %s", rec.Code, rec.Body)
+	}
+}

@@ -1575,6 +1575,32 @@ Covered by `TestVisionEffortPicked`, `TestVisionEffortOnAnthropic`,
 `TestSearcherEffortPicked`, `TestSearcherEffortOnGemini`,
 `TestSideEffortChecked` and `side-effort.test.cjs`.
 
+## How many results a search is answered with
+
+A search asks its backend for `searchCount(ctx)` pages
+([`search_api.go`](../../internal/gateway/search_api.go)): the count the
+search named (`withSearchCount`, the web-search MCP server's `web_search`
+`count`, held to 1 through 20), else the user's
+[`SearchCount`](../../internal/settings/settings.go) through
+`Settings.SearchPages`: 1 to `SearchCountMost` (20, the most Brave and
+Tavily return), and `SearchCountDefault` (6) when it is 0 (#5545,
+mdwsk88). Claude Code's WebSearch and Codex's web_search name no count,
+so the setting is what they get. Each built-in API, a plugin's search hook
+(cut to the count by `pluginPages`), Kimi Code's and a sign-in's search
+are asked for that many; WorkBuddy's is asked for its client's 5 unless
+the count is over 6. `web_search`'s schema says the setting as its
+`default` (`searchMCPSchema`). Each page carries up to `pageText` (1500)
+bytes of its text, so twice the count is about twice what the model
+reads; whether an API charges more for more results is its own pricing.
+
+The count is set in Settings › Models › Web search ("Results per search",
+`#searchCountRow`, 3, 6, 10, 15 and 20 offered, and a count set by hand
+in settings.json too) through `POST /api/settings/search-count`, which a
+save of the page keeps (`settingsapi.Apply`), and by `magpie search count
+[<n>|default]`. Save refuses one out of range. Tests:
+`TestSearchCountSetting`, `TestSearchCLICount`,
+`TestSettingsSearchCountSetOnItsOwn` and `search-count.test.cjs`.
+
 ## A search API's base URL
 
 Each search API ([`provider.SearchAPI`](../../internal/provider/search_api.go))

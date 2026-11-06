@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/yetone/magpie/internal/access"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // magpie's web search, the one a model that can't search is given
@@ -48,11 +49,14 @@ var searchMCPVersions = []string{"2025-06-18", "2025-03-26", "2024-11-05"}
 
 const searchMCPTool = "web_search"
 
-// searchMCPSchema is web_search's input: the query, and how many results
-// (searchHits when not given, held to 1 through searchHitsMost).
-var searchMCPSchema = fmt.Sprintf(`{"type":"object","properties":{"query":{"type":"string","description":"What to search for"},`+
-	`"count":{"type":"integer","minimum":1,"maximum":%d,"default":%d,"description":"How many results to return, 1 to %d (%d when not given)"}},"required":["query"]}`,
-	searchHitsMost, searchHits, searchHitsMost, searchHits)
+// searchMCPSchema is web_search's input: the query, and how many results,
+// held to 1 through searchHitsMost; when not given, n, the count the user
+// set (settings.SearchPages).
+func searchMCPSchema(n int) string {
+	return fmt.Sprintf(`{"type":"object","properties":{"query":{"type":"string","description":"What to search for"},`+
+		`"count":{"type":"integer","minimum":1,"maximum":%d,"default":%d,"description":"How many results to return, 1 to %d (%d when not given)"}},"required":["query"]}`,
+		searchHitsMost, n, searchHitsMost, n)
+}
 
 // searchCountArg is the count a web_search call names: a number, or a
 // number in a string, as a model may write it; nil when it names none, or
@@ -216,7 +220,7 @@ func (s *Server) searchMCPCall(r *http.Request, m mcpMessage) (any, map[string]a
 			"name":        searchMCPTool,
 			"title":       "Web search",
 			"description": t.Description,
-			"inputSchema": json.RawMessage(searchMCPSchema),
+			"inputSchema": json.RawMessage(searchMCPSchema(settings.Shared().SearchPages())),
 			"annotations": map[string]any{"readOnlyHint": true, "openWorldHint": true},
 		}, fetchTool()}}, nil
 	case "tools/call":
@@ -273,7 +277,7 @@ func (e searchMCPError) Error() string { return string(e) }
 // searchMCPRun searches for the query as a model's web_search would be:
 // held to the calling gateway key's limit, and named in the Routing view
 // as the agent's MCP call; for count results when it is given (held to 1
-// through searchHitsMost), else searchHits.
+// through searchHitsMost), else the count the user set (searchCount).
 func (s *Server) searchMCPRun(r *http.Request, query string, count *int) (string, error) {
 	if query == "" {
 		return "", searchMCPError("web_search needs a query")

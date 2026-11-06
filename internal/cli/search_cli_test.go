@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // magpie search add, with a key and an address in either order, and rm.
@@ -137,5 +138,47 @@ func TestSearchCLIOffAndMove(t *testing.T) {
 		if err := searchCmd(bad); err == nil {
 			t.Errorf("%v taken", bad)
 		}
+	}
+}
+
+// magpie search count (#5545, mdwsk88): a number from 1 to 20 is written,
+// "default" puts 6 back, and a flag, a word or a number out of range is
+// refused with nothing written.
+func TestSearchCLICount(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := searchCmd([]string{"count"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := settings.Load().SearchPages(); n != 6 {
+		t.Fatalf("by default %d", n)
+	}
+	for _, c := range []struct {
+		arg  string
+		want int
+	}{{"12", 12}, {"20", 20}, {"1", 1}, {"6", 6}, {"default", 0}} {
+		if err := searchCmd([]string{"count", c.arg}); err != nil {
+			t.Fatalf("%s: %v", c.arg, err)
+		}
+		if got := settings.Load().SearchCount; got != c.want {
+			t.Errorf("count %s wrote %d, want %d", c.arg, got, c.want)
+		}
+	}
+	if err := searchCmd([]string{"count", "9"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range [][]string{{"count", "0"}, {"count", "21"}, {"count", "-3"}, {"count", "--help"}, {"count", "many"}, {"count", "7.5"}, {"count", "8", "9"}} {
+		if err := searchCmd(bad); err == nil {
+			t.Errorf("%v taken", bad)
+		}
+		if got := settings.Load().SearchCount; got != 9 {
+			t.Fatalf("%v wrote %d", bad, got)
+		}
+	}
+	s := settings.Load()
+	s.SearchCount = 21
+	if err := settings.Save(s); err == nil {
+		t.Error("settings took a count of 21")
 	}
 }
