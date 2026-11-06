@@ -707,7 +707,9 @@ function renderActivity() {
   for (const c of calls) {
     const id = callRow(c);
     const open = expandedCalls.has(id);
-    const item = el("div", "call-item" + (open ? " open" : "") + (c.status >= 400 ? " bad" : ""));
+    // a call its agent canceled (c.canceled) saw no error: told in the
+    // muted colour, neither failed nor answered
+    const item = el("div", "call-item" + (open ? " open" : "") + (c.status >= 400 ? (c.canceled ? " gone" : " bad") : ""));
     const r = el("div", "call");
     r.setAttribute("role", "button");
     r.setAttribute("tabindex", "0");

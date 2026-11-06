@@ -6,6 +6,8 @@ import (
 	"net/http/httptrace"
 	"sync"
 	"time"
+
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // sideTimedOut is why a request magpie asks of itself (an image's
@@ -64,10 +66,11 @@ func sideTimeout(ctx context.Context) (sideTimedOut, bool) {
 // canceled is what the usage log says of a request whose context ended
 // before it was answered: the agent canceled it, or magpie's own limit for
 // a request it asked of itself ran out — still no fault of the vendor's,
-// told apart (#2318).
+// told apart (#2318). The first is no failure either, as the usage log and
+// the pages count it (usage.CanceledBy); the second is.
 func canceled(ctx context.Context) (int, string) {
 	if t, ok := sideTimeout(ctx); ok {
-		return 499, "magpie stopped waiting: its " + t.what + " had " + t.Error()
+		return usage.StatusCanceled, "magpie stopped waiting: its " + t.what + " had " + t.Error()
 	}
-	return 499, "the agent canceled the request"
+	return usage.StatusCanceled, usage.AgentCanceled
 }

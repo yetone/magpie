@@ -249,6 +249,9 @@ type Row struct {
 	PricingModel   string `json:"pricing_model,omitempty"`
 	// ComputerName is the other computer a call was made on, shared through sync (#542)
 	ComputerName string `json:"computerName,omitempty"`
+	// Canceled: its agent canceled it before it was answered
+	// (usage.Record.Canceled), which the page shows as no failure
+	Canceled bool `json:"canceled,omitempty"`
 }
 
 type Ledger struct {
@@ -361,7 +364,7 @@ func LedgerPage(p usage.Period, f usage.Filter, offset, limit int) Ledger {
 	pub := map[string]string{}
 	for _, r := range page {
 		a := who(r.Agent)
-		lr := Row{Row: r, AgentName: a.Name, Icon: a.Icon, ProviderName: which(r.Provider).Name}
+		lr := Row{Row: r, AgentName: a.Name, Icon: a.Icon, ProviderName: which(r.Provider).Name, Canceled: r.Canceled()}
 		if req := r.Requested; strings.HasPrefix(req, provider.GroupPrefix) {
 			if _, ok := pub[req]; !ok {
 				pub[req] = provider.PublicRef(req)

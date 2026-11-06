@@ -176,7 +176,7 @@ type ctxRec struct {
 	Agent, Model, Kind, Sub    string
 	Session, Parent, Conv      string
 	ResponseID                 string
-	Done, Failed               bool
+	Done, Failed, Canceled     bool
 	Asked                      bool // it has a prompt of some tokens
 	Tokens, Window, MCP, Cache int
 	Counted, Tools, CacheKnown bool
@@ -188,7 +188,8 @@ type ctxRec struct {
 func recOf(r gateway.Route, whole bool) ctxRec {
 	c := ctxRec{ID: r.ID, Time: r.Time, Agent: r.Agent, Model: r.Model, Kind: r.Kind, Sub: r.Sub,
 		Session: r.Session, Parent: r.ParentSession, Conv: r.Conv, ResponseID: r.ResponseID, Done: r.Done,
-		Failed: r.Status >= 400 || r.Error != "", Cache: cacheOf(r), CacheKnown: cacheKnown(r)}
+		Failed: r.Status >= 400 || r.Error != "", Canceled: usage.CanceledBy(r.Status, r.Error),
+		Cache: cacheOf(r), CacheKnown: cacheKnown(r)}
 	if p := r.Prompt; p != nil {
 		c.Asked = p.Tokens > 0
 		c.Tokens, c.Window, c.Counted = p.Tokens, p.Window, p.Counted
@@ -460,7 +461,11 @@ func contextOfRecs(routes []ctxRec, days int) ctxJSON {
 		}
 		acc.a.Calls++
 		if r.Failed {
-			acc.a.Errors++
+			// one its agent canceled was no error it saw, nor a prompt it
+			// finished asking
+			if !r.Canceled {
+				acc.a.Errors++
+			}
 			continue
 		}
 		if !r.Asked || r.Kind != "" || !r.Tools && tooled[ctxKey(r)] {

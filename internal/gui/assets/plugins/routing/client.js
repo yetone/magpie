@@ -503,7 +503,7 @@ function routingPage(part) {
   // rowSpeed is a done request's speed as its row says it: measured, else
   // floorOf's "≥", with what it was told from. null for none
   function rowSpeed(r, how) {
-    if (!r.done || how === "bad" || r.status >= 400) return null;
+    if (!r.done || noAnswer(how) || r.status >= 400) return null;
     const v = speedOf(r);
     if (v) return { v, text: t("{n} tok/s", { n: Math.round(v) }) };
     const f = floorOf(r);
@@ -3627,7 +3627,16 @@ function routingPage(part) {
     // fail. Bad is a reply that broke off, or every try failing
     if (r.status < 400 && (ok || !r.tries.length)) return [w ? `${who(w)} · ${w.model}` : r.provider, r.tries.length > 1 ? "moved" : "ok", ok];
     const last = r.tries[r.tries.length - 1];
+    // one its agent canceled (a person stopped it, or sent the next message
+    // while it came) was no error it saw: told, but not as a failure
+    if (r.canceled) return [last ? endWord(r, last) : `${r.status} · ${failWord("canceled")}`, "gone"];
     return [last ? endWord(r, last) : `${r.status || ""} ${r.error || ""}`.trim(), "bad"];
+  }
+
+  // a request that ended with no answer: it failed, or its agent canceled
+  // it (a declaration, as rowSpeed, above, reads it)
+  function noAnswer(how) {
+    return how === "bad" || how === "gone";
   }
 
   // a request's row's title: the way it went, to the one that took it
@@ -3639,7 +3648,7 @@ function routingPage(part) {
     // and why it went on another model than it named
     const folder = (movedSays(r) ? "\n" + movedWhy(r) : "") + (r.folder ? "\n" + t("Folder") + ": " + r.folder : "")
       + (r.callerKey ? "\n" + t("Gateway key") + ": " + keyName(r) : "");
-    const w = how !== "bad" && r.tries.length > 1 && tr && tried(r, tr);
+    const w = !noAnswer(how) && r.tries.length > 1 && tr && tried(r, tr);
     if (!w) return head + r.provider + folder;
     const first = r.tries[0], f = tried(r, first);
     const from = f && seat(f) !== seat(w) ? "\n" + t("rerouted from {from}", { from: `${where(f)} · ${first.model || f.model}` }) : "";
@@ -3889,7 +3898,7 @@ function routingPage(part) {
           s.completed++;
           const { prompt, read } = promptOf(r);
           if (prompt) { s.prompt += prompt; s.read += read; s.cached++; }
-          const d = outcome(r)[1] !== "bad" && decodeOf(r, r.ms, r.ttft, r.firstText);
+          const d = !noAnswer(outcome(r)[1]) && decodeOf(r, r.ms, r.ttft, r.firstText);
           if (d) { s.decodeMs += d.w; s.decodeOut += d.n; s.timed++; }
         }
         return s;
@@ -8479,7 +8488,7 @@ function routingPage(part) {
     to.append(el("i", "", "→"));
     const place = w ? where(w) : r.provider;
     if (!r.done) to.append(el("span", "pr-where", w ? t("{who} is answering…", { who: place }) : waitWord(r)));
-    else if (how === "bad") {
+    else if (noAnswer(how)) {
       const last = r.tries[r.tries.length - 1];
       to.append(el("span", "pr-where", last ? endWord(r, last) : `${r.status || ""} ${r.error || ""}`.trim()));
     } else {

@@ -133,7 +133,9 @@ func (e *otelExporter) traces(items []otelItem) any {
 				if r.RouteID != 0 {
 					a = append(a, otelInt("magpie.route.id", r.RouteID))
 				}
-				if r.Status >= 400 {
+				// a request its agent canceled is no failure
+				// (Record.Canceled): its status code alone says 499
+				if r.Failed() {
 					a = append(a, otelString("error.type", strconv.Itoa(r.Status)))
 				}
 				a = append(a, otelString("langfuse.observation.type", "span"))

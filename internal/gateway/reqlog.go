@@ -58,9 +58,23 @@ func endpointOf(r *http.Request, from, to provider.Protocol, p provider.Provider
 	return ep
 }
 
-// failedWith fills in what a call that failed said, on a usage record.
+// failedWith fills in what a call that failed said, on a usage record. A call
+// its agent canceled says so in its error type too (usage.CanceledErrType),
+// the record's own word for it, which no rewording of the message changes.
 func failedWith(rec *usage.Record, status int, msg, errType string) {
 	if status >= 400 || msg != "" {
+		if usage.CanceledBy(status, msg) {
+			errType = usage.CanceledErrType
+		}
 		rec.Error, rec.ErrType = keepMsg(msg), errType
+	}
+}
+
+// canceledAs marks the record an observer is given of a call or a try its
+// agent canceled, which carries the status and not the message, as the
+// agent's cancel, so an observer (the OTLP export) tells it from a failure.
+func canceledAs(rec *usage.Record, status int, msg string) {
+	if usage.CanceledBy(status, msg) {
+		rec.ErrType = usage.CanceledErrType
 	}
 }

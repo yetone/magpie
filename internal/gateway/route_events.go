@@ -12,6 +12,7 @@ import (
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // The route-events feed (#3387, joe21_eee on Discord, sywyyhykkk on
@@ -81,7 +82,7 @@ func activityOf(r *Route) routeActivity {
 	if n := len(r.Tries); n > 0 {
 		tr := r.Tries[n-1]
 		a.Model, a.Status, a.Millis, a.TTFT = cmp.Or(tr.Served, tr.Model), tr.Status, tr.Millis, cmp.Or(tr.TTFT, tr.firstMs)
-		a.Failed, a.Fallback, a.Phase = tr.Error != "" || tr.Status >= 400, n > 1, phaseAttempt
+		a.Failed, a.Fallback, a.Phase = (tr.Error != "" || tr.Status >= 400) && !usage.CanceledBy(tr.Status, tr.Error), n > 1, phaseAttempt
 		// a try's ID is its seat's, which names an account or a key's
 		// fingerprint: only the seat's provider is told
 		for _, seat := range r.Order {
@@ -99,7 +100,9 @@ func activityOf(r *Route) routeActivity {
 	}
 	if r.Done {
 		a.Phase, a.Status, a.Millis = phaseDone, r.Status, r.Millis
-		a.Failed = r.Status >= 400 || r.Error != ""
+		// one its agent canceled is no failure (usage.CanceledBy), as the
+		// Routing page and the usage log count it
+		a.Failed = (r.Status >= 400 || r.Error != "") && !usage.CanceledBy(r.Status, r.Error)
 	}
 	return a
 }

@@ -544,11 +544,18 @@ func TestOTelWaterfallFailureAndCancellation(t *testing.T) {
 				t.Fatal("no failure trace")
 			}
 			b := string(bytes.Join(traces, []byte("\n")))
-			if strings.Count(b, `"code":2`) != 2 || strings.Count(b, `"parentSpanId"`) != 1 {
-				t.Fatalf("expected failed child and root: %s", b)
+			// a request its agent canceled while its try was out is no
+			// failure, nor is the try (#2398): each says 499, and neither
+			// is an error nor has an error type
+			failed := 2
+			if canceled {
+				failed = 0
 			}
-			if canceled && !strings.Contains(b, `"intValue":"499"`) {
-				t.Fatalf("cancellation status missing: %s", b)
+			if strings.Count(b, `"code":2`) != failed || strings.Count(b, `"parentSpanId"`) != 1 {
+				t.Fatalf("expected a child and its root, %d of them failed: %s", failed, b)
+			}
+			if canceled && (strings.Count(b, `"http.response.status_code","value":{"intValue":"499"}`) != 2 || strings.Contains(b, `"error.type"`)) {
+				t.Fatalf("expected the child and root to say 499 with no error type: %s", b)
 			}
 		})
 	}

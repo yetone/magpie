@@ -64,6 +64,7 @@ func (o *observed) end(call Call, millis int64) {
 		return
 	}
 	rec := usage.Record{RouteID: o.routeID, Time: call.Time, Agent: call.Agent, Model: call.Model, Status: call.Status, Millis: millis}
+	canceledAs(&rec, call.Status, call.Error)
 	for _, w := range o.watches {
 		w.End(rec)
 	}
@@ -80,6 +81,7 @@ func (o *observed) attempt(call Call, attempt Try, providerID, effort string, he
 		Provider: providerID, Model: attempt.Model, Requested: call.Model, Served: u.Served, Effort: effort,
 		Input: u.Input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, CacheUnknown: u.cacheNotCounted(), Reasoning: u.Reasoning,
 		Millis: time.Since(attempt.Start).Milliseconds(), Status: attempt.Status, TTFT: attempt.TTFT, FirstText: attempt.FirstText, FirstReasoning: attempt.FirstReasoning, ReasoningHidden: attempt.ReasoningHidden}
+	canceledAs(&rec, attempt.Status, attempt.Error)
 	if wanted := usage.ObservedBodies(); wanted != usage.NoBodies {
 		reply, cut := capture.body.text(), capture.body.truncated
 		if !held.passing {

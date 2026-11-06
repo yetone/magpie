@@ -1592,6 +1592,7 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .led .st .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex: none; }
 .led tr.bad .st { color: var(--red); font-weight: 600; }
 .led tr.bad .st .dot { background: var(--red); -webkit-mask: var(--x-mark) center / contain no-repeat; mask: var(--x-mark) center / contain no-repeat; border-radius: 0; transform: scale(1.5); }
+.led tr.gone .st .dot { background: var(--muted); }
 /* Source chips use identity/channel colors; latency alone uses traffic lights.
    Existing theme tokens keep these legible in both native color schemes. */
 .led .source-badges .src { flex: none; }
@@ -2602,6 +2603,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .call .p { color: var(--muted); }
 .call .st { color: var(--green); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; max-width: 55%; }
 .call-item.bad .st { color: var(--red); }
+.call-item.gone .st { color: var(--muted); }
 .call-details { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1px; border-top: 1px solid var(--line-2); background: var(--line-2); }
 .call-body { min-width: 0; background: var(--card); }
 .call-body-head { height: 29px; padding: 0 8px 0 10px; display: flex; align-items: center; gap: 7px; color: var(--muted); }

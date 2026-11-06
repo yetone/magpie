@@ -124,7 +124,7 @@ func (s *Server) codexMemoryStandIn(r *http.Request, who, agent, kind, asked str
 	keyID := access.Caller(r.Context()).KeyID
 	var last usage.Record
 	usage.Visit(time.Now().Add(-7*24*time.Hour), func(rec usage.Record) {
-		if rec.Agent != who || rec.CallerKeyID != keyID || rec.Kind != "" || rec.Rejected || rec.IsReported() || rec.Failed() || rec.Requested == "" {
+		if rec.Agent != who || rec.CallerKeyID != keyID || rec.Kind != "" || rec.Rejected || rec.IsReported() || !rec.Answered() || rec.Requested == "" {
 			return
 		}
 		if rec.Time.After(last.Time) {

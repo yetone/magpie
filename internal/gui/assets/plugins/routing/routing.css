@@ -363,6 +363,8 @@
 :is(.rt-req, .rt-probe).bad .to { color: var(--red); }
 :is(.rt-req, .rt-probe).bad .to i { background: var(--red); -webkit-mask: var(--x-mark) center / contain no-repeat; mask: var(--x-mark) center / contain no-repeat; border-radius: 0; transform: scale(1.5); }
 :is(.rt-req, .rt-probe).wait .to i { background: var(--muted); }
+/* one its agent canceled: neither an answer's dot nor a failure's mark */
+.rt-req.gone .to i { background: var(--muted); }
 /* the reasoning keeps to its own box: what it was asked at is cut first,
    then what it was sent at, never drawn over the numbers beside it (#435) */
 :is(.rt-req, .rt-probe) .to .ef { flex: 0 1 auto; display: flex; min-width: 0; margin-left: -2px; color: var(--muted); }

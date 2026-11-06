@@ -130,10 +130,15 @@ type Route struct {
 	// pairs Status with it, not with the last try's own Fail (danzi002 on
 	// Discord: an earlier account's 529 server_is_overloaded read
 	// "529 · quota used up" beside the last account's usage limit)
-	Fail   string `json:"fail,omitempty"`
-	Millis int64  `json:"ms,omitempty"`
-	Tokens int    `json:"tokens,omitempty"`
-	Output int    `json:"out,omitempty"` // of Tokens, the reply's
+	Fail string `json:"fail,omitempty"`
+	// Canceled: the agent canceled the request before it was answered
+	// (usage.CanceledBy). Its agent saw no error, so it isn't one of
+	// the errors the page counts. Set as it is done, and as a day's
+	// history is read, for a route kept before it was
+	Canceled bool  `json:"canceled,omitempty"`
+	Millis   int64 `json:"ms,omitempty"`
+	Tokens   int   `json:"tokens,omitempty"`
+	Output   int   `json:"out,omitempty"` // of Tokens, the reply's
 	// Reasoning: of Output, the reply's reasoning, which its speed leaves
 	// out (usage.DecodeOf)
 	Reasoning int `json:"reasoning,omitempty"`
@@ -872,7 +877,8 @@ func (t *trace) update(r *Route, f func(r *Route)) {
 				t.totals.Rerouted++
 			}
 		}
-		if r.Status >= 400 || r.Error != "" {
+		r.Canceled = usage.CanceledBy(r.Status, r.Error)
+		if (r.Status >= 400 || r.Error != "") && !r.Canceled {
 			t.totals.Errors++
 		}
 		t.turns.end(r, turnFinal(r), time.Now())
