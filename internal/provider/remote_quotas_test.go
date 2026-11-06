@@ -554,3 +554,37 @@ func TestRemoteCodexResetAnswers(t *testing.T) {
 		t.Fatalf("a card not a remote's Codex card asked the remote (%d)", n)
 	}
 }
+
+// #5443: a refresh of a remote magpie's every card has it run each saved
+// Claude account's /usage there, about 5 seconds each, side by side. The
+// refresh was waited for as long as a read of the kept cards (8s), given
+// up on while it still read, and the cards asked for after it were the
+// old ones. It is waited for as long as the remote's gateway may take.
+func TestRemoteMagpieRefreshWaitedFor(t *testing.T) {
+	peer := &fakePeer{cards: []SubscriptionQuota{{Provider: "claude", Name: "Claude", User: "max@x.com", Windows: []QuotaWindow{{Name: "5h", Used: 0}}}}}
+	slow := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == RemoteRefreshPath {
+			// reading there, longer than a read of what it keeps may take
+			time.Sleep(time.Second)
+			peer.Lock()
+			peer.cards = []SubscriptionQuota{{Provider: "claude", Name: "Claude", User: "max@x.com", Windows: []QuotaWindow{{Name: "5h", Used: 45}}}}
+			peer.Unlock()
+		}
+		peer.ServeHTTP(w, r)
+	})
+	remoteQuotaHome(t, slow)
+	oldWait, oldRefresh := remoteWait, remoteRefreshWait
+	remoteWait, remoteRefreshWait = 100*time.Millisecond, 20*time.Second
+	t.Cleanup(func() { remoteWait, remoteRefreshWait = oldWait, oldRefresh })
+	ctx := context.Background()
+	RefreshUsage(ctx, "office", "")
+	var got *SubscriptionQuota
+	for _, q := range peerCards(RemoteCards(ctx)) {
+		if q.Provider == "office/claude" {
+			got = &q
+		}
+	}
+	if got == nil || got.Error != "" || len(got.Windows) != 1 || got.Windows[0].Used != 45 {
+		t.Fatalf("after the remote's refresh of every card: %+v", got)
+	}
+}

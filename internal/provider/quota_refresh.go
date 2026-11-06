@@ -99,6 +99,26 @@ func RefreshUsage(ctx context.Context, provider, user string) {
 	toldUsage()
 }
 
+// RefreshEach is RefreshUsage of each of cards, read side by side: a
+// gateway key told some cards has every one of them read again on a
+// Refresh of them all, and one after another, a saved Claude account's
+// /usage about 5 seconds each, a few of them outlasted the gateway's 30
+// seconds (#5443). Each read is bounded as RefreshUsage's is.
+func RefreshEach(ctx context.Context, cards []SubscriptionQuota) {
+	var wg sync.WaitGroup
+	for _, q := range cards {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			refreshCards(ctx, q.Provider, q.User)
+		}()
+	}
+	wg.Wait()
+	if len(cards) > 0 {
+		toldUsage() // the menu bar shows the same cards (#2357), told once
+	}
+}
+
 // RefreshReport is RefreshUsage answering the cards it read, as
 // QuotaReport tells them: magpie quota refresh (#2104), which reads the
 // card the Usage page's refresh button does and shows only it. A process

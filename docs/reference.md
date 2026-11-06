@@ -551,8 +551,10 @@ shared magpie's cards named with it (`Codex · office`, id `office/codex`), as
 that magpie last read them — only the computer holding the sign-ins asks the
 vendors, and it answers from what it has kept (`GET /v1/magpie/quotas/cards`).
 A card's refresh here has it read that card once more
-(`POST /v1/magpie/quotas/refresh`, at most once in 30 seconds a card); until it
-has read anything, the remote's one card says so. Their history is shown with
+(`POST /v1/magpie/quotas/refresh`, at most once in 30 seconds a card); the
+remote's own card has it read every card, each saved Claude account's
+`/usage` too, as its Usage page's Refresh does, and is waited for up to 25
+seconds (#5443). Until it has read anything, the remote's one card says so. Their history is shown with
 its own. A check-in is pressed on that computer, not here. A Codex card's
 reset can be used from here (#3850): **Use one…** asks first, as for this
 computer's accounts, and that magpie spends it on its account

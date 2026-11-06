@@ -1201,9 +1201,7 @@ func (s *Server) quotaCardsRefresh(w http.ResponseWriter, r *http.Request) {
 		case id != "":
 			provider.RefreshUsage(ctx, id, user)
 		case scope != nil:
-			for _, q := range scope.cards(provider.CachedCards(time.Now())) {
-				provider.RefreshUsage(ctx, q.Provider, q.User)
-			}
+			provider.RefreshEach(ctx, scope.cards(provider.CachedCards(time.Now())))
 		default:
 			provider.ReadAllCards(ctx)
 		}

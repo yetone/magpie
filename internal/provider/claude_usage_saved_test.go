@@ -292,3 +292,158 @@ func TestSavedClaudeUsageSavesRotatedSignIn(t *testing.T) {
 	}
 	t.Fatal("max@x.com isn't saved")
 }
+
+// #5443 (prgrmrwy): the gateway's POST /v1/magpie/quotas/refresh with no
+// card named (another magpie's refresh of this one's card, or an app with
+// a gateway key) reads every card again (ReadAllCards), and a saved,
+// inactive Claude account kept the reading it had: ReadAllCards asked
+// AskUsage alone, which runs no saved account's Claude Code. It is the
+// user's refresh of every allowance, as the Usage page's Refresh is, so
+// each saved account's /usage runs too, side by side, and the cards the
+// gateway answers (CachedCards) carry the new figures. The floor holds.
+func TestReadAllCardsReadsSavedClaude(t *testing.T) {
+	claudeThree(t)
+	var text atomic.Value
+	text.Store("Current session: 0% used\nCurrent week (all models): 10% used")
+	fakeClaudeUsage(t, &text, nil)
+	var saved []string
+	for _, l := range Logins("claude") {
+		if !l.Active {
+			saved = append(saved, l.User)
+		}
+	}
+	if len(saved) != 2 {
+		t.Fatalf("saved accounts: %v", saved)
+	}
+	var mu sync.Mutex
+	ran := map[string]int{}
+	// while held, a saved account's run waits for the other's to start:
+	// read one after another, the first gives up waiting
+	var held atomic.Bool
+	both := make(chan struct{})
+	var in atomic.Int32
+	var alone atomic.Bool
+	UsageClaudeVia(func(ctx context.Context, dir string) (string, error) {
+		if dir != "" {
+			mu.Lock()
+			ran[dir]++
+			mu.Unlock()
+			if held.Load() {
+				if in.Add(1) == 2 {
+					close(both)
+				}
+				select {
+				case <-both:
+				case <-time.After(5 * time.Second):
+					alone.Store(true)
+				case <-ctx.Done():
+					alone.Store(true)
+				}
+			}
+		}
+		return text.Load().(string), nil
+	})
+	runsIn := func(user string) int {
+		mu.Lock()
+		defer mu.Unlock()
+		return ran[claudeAccountDir(user)]
+	}
+	card := func(user string) SubscriptionQuota {
+		for _, q := range CachedCards(time.Now()) {
+			if q.Provider == "claude" && strings.EqualFold(q.User, user) {
+				return q
+			}
+		}
+		return SubscriptionQuota{}
+	}
+	age := func(user string) {
+		claudeUsage.Lock()
+		e := claudeUsage.m[strings.ToLower(user)]
+		e.tried = e.tried.Add(-time.Hour)
+		claudeUsage.m[strings.ToLower(user)] = e
+		claudeUsage.Unlock()
+	}
+	ctx := context.Background()
+	// each saved account read once, by its own card, as the reporter's
+	// had been hours before
+	for _, user := range saved {
+		RefreshUsage(ctx, "claude", user)
+		if q := card(user); q.Error != "" || len(q.Windows) != 2 || q.Windows[1].Used != 10 || runsIn(user) != 1 {
+			t.Fatalf("card refresh of saved %s: %+v, %d runs", user, q, runsIn(user))
+		}
+		age(user)
+	}
+
+	text.Store("Current session: 45% used\nCurrent week (all models): 60% used")
+	held.Store(true)
+	ReadAllCards(ctx)
+	held.Store(false)
+	for _, user := range saved {
+		q := card(user)
+		if runsIn(user) != 2 {
+			t.Fatalf("the gateway's refresh of every card ran saved %s's /usage %d times, want once more", user, runsIn(user)-1)
+		}
+		if q.Error != "" || len(q.Windows) != 2 || q.Windows[0].Used != 45 || q.Windows[1].Used != 60 {
+			t.Fatalf("the gateway's refresh of every card kept saved %s's old reading: %+v", user, q)
+		}
+	}
+	if alone.Load() {
+		t.Fatal("the saved accounts' /usage ran one after another, not side by side")
+	}
+
+	// pressed again at once: the per-account floor holds
+	ReadAllCards(ctx)
+	for _, user := range saved {
+		if n := runsIn(user); n != 2 {
+			t.Fatalf("a second refresh inside the floor ran saved %s again (%d runs)", user, n)
+		}
+	}
+}
+
+// A gateway key told only some cards has each of them read again on a
+// refresh of them all (RefreshEach), side by side: one after another, a
+// few saved Claude accounts' /usage outlasted the gateway's 30 seconds
+// (#5443).
+func TestRefreshEachReadsSideBySide(t *testing.T) {
+	claudeThree(t)
+	var text atomic.Value
+	text.Store("Current session: 12% used\nCurrent week (all models): 34% used")
+	fakeClaudeUsage(t, &text, nil)
+	var saved []SubscriptionQuota
+	for _, l := range Logins("claude") {
+		if !l.Active {
+			saved = append(saved, SubscriptionQuota{Provider: "claude", User: l.User})
+		}
+	}
+	if len(saved) != 2 {
+		t.Fatalf("saved accounts: %v", saved)
+	}
+	both := make(chan struct{})
+	var in atomic.Int32
+	var alone atomic.Bool
+	UsageClaudeVia(func(ctx context.Context, dir string) (string, error) {
+		if dir != "" {
+			if in.Add(1) == 2 {
+				close(both)
+			}
+			select {
+			case <-both:
+			case <-time.After(5 * time.Second):
+				alone.Store(true)
+			case <-ctx.Done():
+				alone.Store(true)
+			}
+		}
+		return text.Load().(string), nil
+	})
+	RefreshEach(context.Background(), saved)
+	if alone.Load() || in.Load() != 2 {
+		t.Fatalf("saved accounts read one after another: %d runs, alone %v", in.Load(), alone.Load())
+	}
+	for _, s := range saved {
+		q := LoginUsage(context.Background(), "claude")[s.User]
+		if q.Error != "" || len(q.Windows) != 2 || q.Windows[0].Used != 12 {
+			t.Fatalf("saved %s not read: %+v", s.User, q)
+		}
+	}
+}
