@@ -161,6 +161,7 @@
     </table></div>
     <p><b>実行中のセッションは、開始時のモデルを使い続けます。</b> エージェントは起動時に設定を読むので、変更は次のセッションから反映されます。Codex は起動時にモデル一覧も作るため、切り替えたら Codex アプリと開いている <code>codex</code> セッションを再起動してください。</p>
     <div class="callout"><b>Paseo やエディタ拡張などのフロントエンド</b>で Claude Code や Codex を代わりに動かすものは、同じ CLI を起動し、同じ <code>~/.claude</code> または <code>~/.codex</code> の設定を読みます。magpie で一度モデルを設定すれば、それらにも次のセッションから反映されます。</div>
+    <div class="callout"><b><code>claude-magpie</code>：Claude Code を magpie 経由で、<code>claude</code> はそのまま。</b>ふだんの <code>claude</code> は自分の Claude アカウントのまま、必要なときだけ magpie を通したいなら、Claude Code は接続せずに <code>claude-magpie</code> で起動します。同じ <code>claude</code> を、そのセッションだけ magpie の設定（ゲートウェイ、モデルと各ティア）を自分の設定の上に重ねて起動するので、<code>~/.claude/settings.json</code> は書き換えられません。引数はすべて Claude Code に渡ります：<code>claude-magpie --resume</code>、<code>claude-magpie -p "…"</code>。<span class="ui">設定 › コマンドライン</span> で <code>magpie</code> コマンドを追加すると、その隣に置かれます。すでに追加済みなら <code>magpie claude launcher add</code> を一度実行してください。<code>magpie claude run</code> でも同じです。その中で <code>/model</code> で選んだモデルは次の <code>claude-magpie</code> に引き継がれ、自分の <code>claude</code> は元のモデルのままです。magpie が起動している必要があります。</div>
 
     <h2 id="routing"><a class="anchor" href="#routing">3 · 任意：ルーティンググループ</a></h2>
     <p>プロバイダごとにアカウントが 1 つなら、ここは読み飛ばして構いません。ChatGPT アカウントが 2 つある、あるいは同じモデルをサブスクリプションとキーの両方で使えるなど、複数あるときに意味を持ちます。</p>
@@ -270,6 +271,7 @@ magpie claude group/opus-anywhere    <span class="c"># これを使う</span></p
       <tr><td><code>magpie providers</code></td><td>プロバイダ一覧：ホスト、キー、モデル、使っているエージェント</td></tr>
       <tr><td><code>magpie models</code></td><td>エージェントが選べるすべてのモデル（<code>provider/model</code> 形式）</td></tr>
       <tr><td><code>magpie claude codex/gpt-5.5</code></td><td>エージェントのモデルを設定</td></tr>
+      <tr><td><code>claude-magpie</code></td><td>このセッションだけ Claude Code を magpie 経由で起動、ふだんの <code>claude</code> は自分のアカウントのまま（<code>magpie claude run</code>、<code>magpie claude launcher add</code> で PATH に追加）</td></tr>
       <tr><td><code>magpie codex effort high</code></td><td>他の項目を設定</td></tr>
       <tr><td><code>magpie codex default</code></td><td>エージェント自身のデフォルトに戻し、magpie の設定を取り除く</td></tr>
       <tr><td><code>magpie save work</code> · <code>use work</code></td><td>プロファイルを保存・適用</td></tr>

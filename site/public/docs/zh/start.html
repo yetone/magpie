@@ -161,6 +161,7 @@
     </table></div>
     <p><b>已在运行的会话保持它启动时的模型。</b>Agent 启动时读取配置，所以改动从下一个会话生效。Codex 也在启动时生成模型列表：切换后请重启 Codex 应用和已打开的 <code>codex</code> 会话。</p>
     <div class="callout"><b>Paseo、编辑器插件等</b>替你运行 Claude Code 或 Codex 的前端，启动的是同一个 CLI，读的也是同一份 <code>~/.claude</code> 或 <code>~/.codex</code> 配置。在 magpie 里设一次模型，它们从下一个会话起也会用上。</div>
+    <div class="callout"><b><code>claude-magpie</code>：经 magpie 运行 Claude Code，<code>claude</code> 保持原样。</b>想让平常的 <code>claude</code> 继续用你自己的 Claude 账号、只在需要时才走 magpie，就不要连接 Claude Code，改用 <code>claude-magpie</code> 启动。它启动的是同一个 <code>claude</code>，只在这次会话里把 magpie 的设置（网关、模型和各档位）叠在你的设置之上，<code>~/.claude/settings.json</code> 不会被改写。所有参数都交给 Claude Code：<code>claude-magpie --resume</code>、<code>claude-magpie -p "…"</code>。在 <span class="ui">设置 › 命令行</span> 添加 <code>magpie</code> 命令时，magpie 会把它放在旁边；已经添加过的，运行一次 <code>magpie claude launcher add</code> 即可。<code>magpie claude run</code> 效果相同。在其中用 <code>/model</code> 选的模型会留给下一次 <code>claude-magpie</code>，你自己的 <code>claude</code> 保留原来的模型。magpie 需要在运行。</div>
 
     <h2 id="routing"><a class="anchor" href="#routing">3 · 可选：路由组</a></h2>
     <p>每个供应商只有一个账号时可以跳过这一步。等你有了多个——比如两个 ChatGPT 账号，或者同一个模型既有订阅又有密钥——再来设置。</p>
@@ -270,6 +271,7 @@ magpie claude group/opus-anywhere    <span class="c"># 使用它</span></pre>
       <tr><td><code>magpie providers</code></td><td>你的供应商：地址、密钥、模型、谁在用</td></tr>
       <tr><td><code>magpie models</code></td><td>Agent 能选的所有模型，写作 <code>provider/model</code></td></tr>
       <tr><td><code>magpie claude codex/gpt-5.5</code></td><td>设置 Agent 的模型</td></tr>
+      <tr><td><code>claude-magpie</code></td><td>这一次会话经 magpie 运行 Claude Code，平常的 <code>claude</code> 仍用你的账号（<code>magpie claude run</code>；<code>magpie claude launcher add</code> 放到 PATH 上）</td></tr>
       <tr><td><code>magpie codex effort high</code></td><td>设置其他字段</td></tr>
       <tr><td><code>magpie codex default</code></td><td>恢复 Agent 自己的默认值，移除 magpie 的接入</td></tr>
       <tr><td><code>magpie save work</code> · <code>use work</code></td><td>保存、应用方案</td></tr>

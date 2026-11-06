@@ -161,6 +161,7 @@
     </table></div>
     <p><b>A running session keeps the model it started with.</b> Agents read their config when they start, so the change applies to the next session. Codex builds its model list at start-up too: restart the Codex app and open <code>codex</code> sessions after a switch.</p>
     <div class="callout"><b>Paseo, editor extensions and other front-ends</b> that run Claude Code or Codex for you start the same CLI, which reads the same <code>~/.claude</code> or <code>~/.codex</code> config. Set the model once in magpie and they get it too, from their next session.</div>
+    <div class="callout"><b><code>claude-magpie</code>: Claude Code through magpie, <code>claude</code> left as it is.</b> To keep a plain <code>claude</code> on your own Claude account and start magpie's Claude Code only when you ask for it, leave Claude Code unconnected and run <code>claude-magpie</code> instead. It starts the same <code>claude</code> with magpie's settings over yours for that session (the gateway, the model and its tiers), so <code>~/.claude/settings.json</code> is never rewritten. Every argument goes to Claude Code: <code>claude-magpie --resume</code>, <code>claude-magpie -p "…"</code>. magpie puts it beside the <code>magpie</code> command when you add that in <span class="ui">Settings › Command line</span>; with the command there already, run <code>magpie claude launcher add</code> once. <code>magpie claude run</code> does the same. A model you pick with <code>/model</code> in it is kept for the next <code>claude-magpie</code>, and your own <code>claude</code> keeps its model. magpie has to be running.</div>
 
     <h2 id="routing"><a class="anchor" href="#routing">3 · Optional: routing groups</a></h2>
     <p>With one account per provider you can skip this. It matters once you have several: two ChatGPT accounts, or the same model from a subscription and from a key.</p>
@@ -270,6 +271,7 @@ magpie claude group/opus-anywhere    <span class="c"># use it</span></pre>
       <tr><td><code>magpie providers</code></td><td>Your providers: host, key, models, who uses them</td></tr>
       <tr><td><code>magpie models</code></td><td>Every model agents can pick, as <code>provider/model</code></td></tr>
       <tr><td><code>magpie claude codex/gpt-5.5</code></td><td>Set an agent’s model</td></tr>
+      <tr><td><code>claude-magpie</code></td><td>Claude Code through magpie for one session, a plain <code>claude</code> left on your account (<code>magpie claude run</code>; <code>magpie claude launcher add</code> puts it on PATH)</td></tr>
       <tr><td><code>magpie codex effort high</code></td><td>Set another field</td></tr>
       <tr><td><code>magpie codex default</code></td><td>Back to the agent’s own default, magpie’s wiring removed</td></tr>
       <tr><td><code>magpie save work</code> · <code>use work</code></td><td>Save and apply a profile</td></tr>

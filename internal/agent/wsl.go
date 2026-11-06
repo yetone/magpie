@@ -66,6 +66,9 @@ type place struct {
 	// chmod takes the group's and others' bits off a file under home, where
 	// magpie's own mode doesn't hold (a distro's: see ownerOnly); nil: here
 	chmod func(string) error
+	// dir is the agent's config folder when magpie keeps one of its own
+	// for it (claude-magpie's launch file, claude_launch.go); "": its own
+	dir string
 }
 
 func here(home string) place { return place{home: home} }
@@ -117,6 +120,9 @@ func (p place) codexHome() string {
 // this machine (appdir.ClaudeDir), ~/.claude in a distro, whose variables
 // magpie can't read.
 func (p place) claudeDir() string {
+	if p.dir != "" {
+		return p.dir
+	}
 	if p.spell != nil {
 		return p.join(".claude")
 	}

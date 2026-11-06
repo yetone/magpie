@@ -2852,7 +2852,12 @@ func StandIn(agent, model string) string {
 		// a Codex in a WSL distro is known by the same client
 		return wslCodexStandIn()
 	}
-	if m := claudeStandIn(filepath.Join(here(home).claudeDir(), "settings.json"), model); m != "" || runtime.GOOS != "windows" {
+	if m := claudeStandIn(filepath.Join(here(home).claudeDir(), "settings.json"), model); m != "" {
+		return m
+	}
+	// a claude-magpie session, its settings.json not on magpie, is on
+	// the launch file's models (claude_launch.go)
+	if m := claudeLaunchStandIn(model); m != "" || runtime.GOOS != "windows" {
 		return m
 	}
 	// a Claude Code in WSL is known by the same User-Agent
