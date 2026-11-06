@@ -815,6 +815,14 @@ var effortInOutputConfig = regexp.MustCompile(`(?i)glm-5\.[23](?:$|[-.:/\[])|min
 // (api.deepseek.com/anthropic) takes the effort in output_config.
 const deepseekHost = provider.DeepSeekHost
 
+// isDeepSeekAnthropic is whether the request goes to DeepSeek's own
+// Anthropic endpoint, whose shape is checked against the host, not the
+// preset: a "deepseek" provider pointed at another host is that host's
+// shape, and it learns from that endpoint's refusals as any other does.
+func isDeepSeekAnthropic(p provider.Provider, to provider.Protocol) bool {
+	return provider.HostOf(p.Base(to)) == deepseekHost
+}
+
 // deepseekEfforts are the levels DeepSeek's models think at: its thinking
 // guide maps minimal to low, medium and xhigh to high, and ultra to max.
 // A budget a client sent is fitted to them when the model's own list is

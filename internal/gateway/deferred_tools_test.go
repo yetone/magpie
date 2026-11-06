@@ -1,8 +1,10 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -198,5 +200,226 @@ func TestDeferredToolBlocksRefusedOnceLeftOut(t *testing.T) {
 	post(deferredBody("other/deepseek-chat", ccAddRef))
 	if got := takes.sent(); len(got) != 1 || !strings.Contains(got[0], `"tool_addition"`) {
 		t.Fatalf("a provider that takes tool_addition was sent %q", got)
+	}
+}
+
+// resultDefVendor answers as an Anthropic endpoint that takes Claude
+// Code's deferred-tool blocks but refuses the definition a newer
+// ToolSearch answer carries in its tool_result (#5404, api.deepseek.com's
+// answer of 2026-11-05), and a tool_reference naming a tool the request's
+// tools list lacks.
+type resultDefVendor struct {
+	mu     sync.Mutex
+	bodies []string
+}
+
+func (v *resultDefVendor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	b, _ := io.ReadAll(r.Body)
+	v.mu.Lock()
+	v.bodies = append(v.bodies, string(b))
+	v.mu.Unlock()
+	var m struct {
+		Tools []struct {
+			Name string `json:"name"`
+		} `json:"tools"`
+		Messages []struct {
+			Content []struct {
+				Type    string `json:"type"`
+				Content []struct {
+					Type     string `json:"type"`
+					ToolName string `json:"tool_name"`
+				} `json:"content"`
+			} `json:"content"`
+		} `json:"messages"`
+	}
+	json.Unmarshal(b, &m)
+	declared := map[string]bool{}
+	for _, t := range m.Tools {
+		declared[t.Name] = true
+	}
+	refused := ""
+	for _, msg := range m.Messages {
+		for _, bl := range msg.Content {
+			if bl.Type != "tool_result" {
+				continue
+			}
+			for _, it := range bl.Content {
+				switch {
+				case it.Type == "tool_definition":
+					refused = "unknown variant `tool_definition`, expected `tool_reference`"
+				case it.Type == "tool_reference" && !declared[it.ToolName]:
+					refused = "tool reference not found in available tools"
+				}
+			}
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if refused != "" {
+		w.WriteHeader(422)
+		io.WriteString(w, `{"error":{"message":"Failed to deserialize the JSON body into the target type: messages[1].content: `+refused+` at line 1 column 473","type":"invalid_request_error"}}`)
+		return
+	}
+	io.WriteString(w, `{"id":"msg_1","type":"message","role":"assistant","model":"m","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`)
+}
+
+func (v *resultDefVendor) sent() []string {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return append([]string(nil), v.bodies...)
+}
+
+// nestedDefBody is a conversation whose ToolSearch answer carries the
+// loaded tool's definition itself in its tool_result, as newer Claude Code
+// builds send it (#5404), with no deferred-tool block at the top level of
+// any message.
+const nestedDefBody = `{"model":"relay/deepseek-chat","max_tokens":32,"stream":false,` +
+	`"tools":[{"name":"ToolSearch","description":"find tools","input_schema":{"type":"object"}}],` +
+	`"messages":[` +
+	`{"role":"user","content":"find a reader"},` +
+	`{"role":"assistant","content":[{"type":"tool_use","id":"toolu_01","name":"ToolSearch","input":{"query":"read"}}]},` +
+	`{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01","content":[{"type":"tool_definition","definition":{"name":"Read","description":"read a file","input_schema":{"type":"object"}}}]}]},` +
+	`{"role":"user","content":"go"}` + `]}`
+
+// #5404: a ToolSearch answer's tool_definition survives a learned retry.
+// The endpoint refuses it with 422 "unknown variant `tool_definition`,
+// expected `tool_reference`"; the learned retry stripped the top-level
+// blocks alone (none here), so the same variant failed again. Now the
+// definition joins the tools and the answer goes as the reference the
+// endpoint takes — the reference only once the tool is declared, which is
+// what the hoisting is for.
+func TestToolResultDefinitionRefusedOnceBecomesReference(t *testing.T) {
+	fresh(t)
+	up := &resultDefVendor{}
+	srv := httptest.NewServer(up)
+	t.Cleanup(srv.Close)
+	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k", Anthropic: srv.URL,
+		Models: []string{"deepseek-chat"}}); err != nil {
+		t.Fatal(err)
+	}
+	h := New().Handler()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(nestedDefBody)))
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body)
+	}
+	sent := up.sent()
+	if len(sent) != 2 {
+		t.Fatalf("the relay was asked %d times, want the refusal once and then a body it takes: %d", len(sent), len(sent))
+	}
+	if !strings.Contains(sent[0], `"tool_definition"`) {
+		t.Fatalf("the first ask came already reshaped: %s", sent[0])
+	}
+	if strings.Contains(sent[1], `"tool_definition"`) {
+		t.Fatalf("the retry still carried the definition: %s", sent[1])
+	}
+	if !strings.Contains(sent[1], `"tool_name":"Read"`) {
+		t.Fatalf("the retry lost the ToolSearch answer's reference: %s", sent[1])
+	}
+	if !strings.Contains(sent[1], `"name":"Read","description":"read a file"`) {
+		t.Fatalf("the definition did not join the retry's tools: %s", sent[1])
+	}
+	if !strings.Contains(sent[1], `"tool_use_id":"toolu_01"`) {
+		t.Fatalf("the retry lost the answer's pairing: %s", sent[1])
+	}
+}
+
+// The reshaping, on the bytes: a definition in a tool_result joins the
+// tools once, the block goes as the named reference, the rest of the
+// result (a reference already there, text) stays; a body with only the
+// nested definition is still one that gets worked, and one whose result
+// can't be read goes as it came.
+func TestNestedToolResultDefinitionBecomesReference(t *testing.T) {
+	body := `{"model":"m","max_tokens":8,"stream":false,` +
+		`"tools":[{"name":"ToolSearch","description":"find tools","input_schema":{"type":"object"}},{"name":"Read","description":"read a file","input_schema":{"type":"object"}}],` +
+		`"messages":[` +
+		`{"role":"user","content":"find readers"},` +
+		`{"role":"assistant","content":[{"type":"tool_use","id":"toolu_01","name":"ToolSearch","input":{"query":"read"}}]},` +
+		`{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01","content":[{"type":"tool_reference","tool_name":"Read"},{"type":"tool_definition","definition":{"name":"Grep","description":"search files","input_schema":{"type":"object"}}},{"type":"text","text":"2 tools found"}]}]},` +
+		`{"role":"assistant","content":[{"type":"tool_use","id":"toolu_02","name":"ToolSearch","input":{"query":"grep"}}]},` +
+		`{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_02","content":[{"type":"tool_definition","definition":{"name":"Grep","description":"search files","input_schema":{"type":"object"}}}]}]},` +
+		`{"role":"user","content":"go"}]}`
+	if !hasDeferredTools([]byte(body)) {
+		t.Fatal("a nested tool_definition was not seen as a deferred tool")
+	}
+	out := string(withoutDeferredTools([]byte(body)))
+	if strings.Contains(out, `"tool_definition"`) {
+		t.Fatalf("the body still carried a tool_definition: %s", out)
+	}
+	for _, want := range []string{`"tool_name":"Read"`, `"tool_name":"Grep"`, `"text":"2 tools found"`, `"tool_use_id":"toolu_01"`, `"tool_use_id":"toolu_02"`} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("the reshaped body lost %s: %s", want, out)
+		}
+	}
+	if n := strings.Count(out, `"name":"Grep","description":"search files"`); n != 1 {
+		t.Fatalf("Grep's definition joined the tools %d times, want once: %s", n, out)
+	}
+	if n := strings.Count(out, `"name":"Read","description":"read a file"`); n != 1 {
+		t.Fatalf("Read's definition on the tools list %d times, want once: %s", n, out)
+	}
+	// a result whose content is no array of blocks goes as it came
+	unreadable := `{"model":"m","max_tokens":8,"stream":false,"tools":[{"name":"ToolSearch","description":"find tools","input_schema":{"type":"object"}}],"messages":[` +
+		`{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01","content":{"type":"tool_definition","definition":{"name":"Read","description":"read a file","input_schema":{"type":"object"}}}}]}]}`
+	if !hasDeferredTools([]byte(unreadable)) {
+		t.Fatal("a result carrying a tool_definition was not seen as a deferred tool")
+	}
+	out = string(withoutDeferredTools([]byte(unreadable)))
+	if !strings.Contains(out, `"content":{"type":"tool_definition"`) {
+		t.Fatalf("the unreadable result was reworked: %s", out)
+	}
+}
+
+// isDeepSeekAnthropic is DeepSeek's own Anthropic endpoint alone, however
+// the provider is built (#5404): a preset pointed elsewhere keeps the
+// blocks until that endpoint refuses them.
+func TestDeepSeekAnthropicRecognized(t *testing.T) {
+	ds := provider.Provider{ID: "deepseek", Name: "DeepSeek", Key: "k",
+		Anthropic: "https://api.deepseek.com/anthropic", Models: []string{"deepseek-chat"}}
+	if !isDeepSeekAnthropic(ds, provider.Anthropic) {
+		t.Fatal("DeepSeek's own endpoint was not recognized")
+	}
+	relay := provider.Provider{ID: "relay", Name: "Relay", Preset: "deepseek", Key: "k",
+		Anthropic: "https://relay.example.invalid/anthropic", Models: []string{"deepseek-chat"}}
+	if isDeepSeekAnthropic(relay, provider.Anthropic) {
+		t.Fatal("another host was taken for DeepSeek's endpoint")
+	}
+}
+
+// #5404: DeepSeek's own endpoint takes a tool_addition at no position
+// now, so a body to it goes without the deferred-tool blocks on the first
+// ask, its ToolSearch answer's definition on the tools list and the
+// answer as the reference, instead of a 422 to learn from first.
+func TestDeepSeekAnthropicIsStrippedUpFront(t *testing.T) {
+	fresh(t)
+	up := &resultDefVendor{}
+	srv := httptest.NewServer(up)
+	t.Cleanup(srv.Close)
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Key: "k", Anthropic: "http://api.deepseek.com/anthropic",
+		Models: []string{"deepseek-chat"}}); err != nil {
+		t.Fatal(err)
+	}
+	s := New()
+	addr := strings.TrimPrefix(srv.URL, "http://")
+	s.client = &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, addr)
+	}}}
+	body := strings.Replace(nestedDefBody, `"relay/deepseek-chat"`, `"deepseek/deepseek-chat"`, 1)
+	body = strings.Replace(body, `{"role":"user","content":"go"}`,
+		`{"role":"system","content":[{"type":"text","text":"t"},`+ccAddDef+`]},{"role":"user","content":"go"}`, 1)
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body)))
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body)
+	}
+	sent := up.sent()
+	if len(sent) != 1 {
+		t.Fatalf("DeepSeek was asked %d times, want once: %q", len(sent), sent)
+	}
+	for _, b := range []string{`"tool_addition"`, `"tool_definition"`} {
+		if strings.Contains(sent[0], b) {
+			t.Errorf("DeepSeek was sent %s: %s", b, sent[0])
+		}
+	}
+	if !strings.Contains(sent[0], `"tool_name":"Read"`) || !strings.Contains(sent[0], `"name":"Read","description":"read a file"`) {
+		t.Errorf("the ToolSearch answer did not go as a declared reference: %s", sent[0])
 	}
 }

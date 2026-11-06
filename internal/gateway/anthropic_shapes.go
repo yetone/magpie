@@ -48,15 +48,23 @@ import (
 // put blocks of their own in a message: {"type":"tool_addition","tool":
 // {"type":"tool_reference","name":…}} (or a tool_definition) when a tool
 // is loaded, a tool_removal when one goes, and a tool_reference. DeepSeek's
-// Anthropic endpoint takes a tool_addition naming a tool, but not one
-// defining it, nor a tool_removal or a message's tool_reference: 422
-// "messages[1].content: unknown variant `tool_removal`". A provider that
-// refuses one is sent none of them (withoutDeferredTools); Kimi, whose 400
+// Anthropic endpoint took a tool_addition naming a tool once (10-14), but
+// takes one at no position now: "`tool_addition` blocks can only be in
+// `system` messages", and a system message's with "unknown variant
+// `tool_addition`, expected `text`" (#5404, checked against
+// api.deepseek.com on 2026-11-05), so its blocks come out before the
+// first ask (isDeepSeekAnthropic). A provider that refuses one is sent
+// none of them from then on (withoutDeferredTools); Kimi, whose 400
 // names nothing, is never sent them (forwardOnce, #2042). OpenCode's
 // DeepSeek route also names nothing: 422 "Endpoint is unavailable.".
 //
 // ToolSearch's answer is a tool_result whose content is tool_reference
-// blocks alone. OpenDesign's Anthropic endpoint can't read one: 422 "Failed
+// blocks alone — or, in newer builds, the loaded tool's definition itself,
+// which an endpoint that refuses the blocks refuses there too: DeepSeek's
+// 422 "unknown variant `tool_definition`, expected `tool_reference`"
+// (#5404). It goes as the reference, its definition on the request's tools
+// list (withoutDeferredTools). OpenDesign's Anthropic endpoint can't read
+// a references-only one: 422 "Failed
 // to deserialize the JSON body into the target type: messages[4]: missing
 // field `content`" (#2124), while it takes the same result with a text block
 // beside the references. A provider that refuses one is sent each such
@@ -318,16 +326,19 @@ func deferredBlock(typ string) bool {
 }
 
 // hasDeferredTools is a request with a deferred-tool block in a message's
-// content. A tool_reference inside a tool_result (ToolSearch's answer) is
-// not one.
+// content, or with a tool_definition in a tool_result's — the ToolSearch
+// answer of newer Claude Code builds, which an endpoint that refuses the
+// blocks refuses there too (#5404). A tool_reference inside a tool_result
+// (ToolSearch's older answer) is not one.
 func hasDeferredTools(body []byte) bool {
-	if !bytes.Contains(body, []byte(`"tool_addition"`)) && !bytes.Contains(body, []byte(`"tool_removal"`)) && !bytes.Contains(body, []byte(`"tool_reference"`)) {
+	if !bytes.Contains(body, []byte(`"tool_addition"`)) && !bytes.Contains(body, []byte(`"tool_removal"`)) && !bytes.Contains(body, []byte(`"tool_reference"`)) && !bytes.Contains(body, []byte(`"tool_definition"`)) {
 		return false
 	}
 	found := false
 	getIn(body, "messages").ForEach(func(_, m gjson.Result) bool {
 		m.Get("content").ForEach(func(_, b gjson.Result) bool {
-			found = deferredBlock(b.Get("type").String())
+			found = deferredBlock(b.Get("type").String()) ||
+				b.Get("type").String() == "tool_result" && bytes.Contains([]byte(b.Get("content").Raw), []byte(`"tool_definition"`))
 			return !found
 		})
 		return !found
@@ -339,8 +350,10 @@ func hasDeferredTools(body []byte) bool {
 // messages, and without a message they leave empty. Definitions carried
 // only inline join the request's own tools list; a definition already on
 // that list wins. A tool_result's tool_reference stays: it is
-// the tool's answer, and Kimi and DeepSeek take it. A body with none is
-// sent as it was.
+// the tool's answer, and Kimi and DeepSeek take it. A tool_definition in
+// a tool_result's content (a ToolSearch answer carrying the definition
+// itself, #5404) joins the tools as its block goes as the reference a
+// tool_result takes. A body with none is sent as it was.
 func withoutDeferredTools(body []byte) []byte {
 	if !hasDeferredTools(body) {
 		return body
@@ -365,6 +378,7 @@ func withoutDeferredTools(body []byte) []byte {
 			continue
 		}
 		var kept []json.RawMessage
+		changed := false
 		for _, b := range c.Array() {
 			if b.Get("type").String() == "tool_addition" && b.Get("tool.type").String() == "tool_definition" {
 				def := b.Get("tool.definition")
@@ -373,11 +387,22 @@ func withoutDeferredTools(body []byte) []byte {
 					have[name.String()] = true
 				}
 			}
+			if b.Get("type").String() == "tool_result" && bytes.Contains([]byte(b.Get("content").Raw), []byte(`"tool_definition"`)) {
+				// a ToolSearch answer carrying the definition itself: the
+				// definition joins the tools and the block goes as the
+				// reference the result takes (#5404)
+				if fixed, added := resultDefinitionRef(b, have); fixed != nil {
+					tools = append(tools, added...)
+					kept = append(kept, fixed)
+					changed = true
+					continue
+				}
+			}
 			if !deferredBlock(b.Get("type").String()) {
 				kept = append(kept, json.RawMessage(b.Raw))
 			}
 		}
-		if len(kept) == len(c.Array()) {
+		if !changed && len(kept) == len(c.Array()) {
 			out = append(out, raw)
 			continue
 		}
@@ -404,6 +429,58 @@ func withoutDeferredTools(body []byte) []byte {
 		fields["tools"] = tools
 	}
 	return withFields(body, fields)
+}
+
+// resultDefinitionRef is a tool_result whose content carries a
+// tool_definition, the ToolSearch answer of newer Claude Code builds: each
+// definition joins the request's tools (have dedupes by name) and the
+// block goes back as the tool_reference a tool_result's content takes.
+// DeepSeek's Anthropic endpoint refuses the definition there with
+// "unknown variant `tool_definition`, expected `tool_reference`", and a
+// reference only once the tool is on the tools list (#5404, a 2026-11-05
+// check against api.deepseek.com). nil when the result can't be read, or
+// a definition in it has no name: it goes as it came.
+func resultDefinitionRef(b gjson.Result, have map[string]bool) (json.RawMessage, []json.RawMessage) {
+	var m map[string]json.RawMessage
+	if json.Unmarshal([]byte(b.Raw), &m) != nil {
+		return nil, nil
+	}
+	content := b.Get("content")
+	if !content.IsArray() {
+		return nil, nil
+	}
+	var added []json.RawMessage
+	items := make([]json.RawMessage, 0, len(content.Array()))
+	for _, item := range content.Array() {
+		if item.Get("type").String() != "tool_definition" {
+			items = append(items, json.RawMessage(item.Raw))
+			continue
+		}
+		def := item.Get("definition")
+		name := def.Get("name").String()
+		if name == "" {
+			return nil, nil // a definition without a name: the result goes as it came
+		}
+		if def.IsObject() && !have[name] {
+			added = append(added, json.RawMessage(def.Raw))
+			have[name] = true
+		}
+		ref, err := marshalPlain(map[string]string{"type": "tool_reference", "tool_name": name})
+		if err != nil {
+			return nil, nil
+		}
+		items = append(items, ref)
+	}
+	cb, err := marshalPlain(items)
+	if err != nil {
+		return nil, nil
+	}
+	m["content"] = cb
+	out, err := marshalPlain(m)
+	if err != nil {
+		return nil, nil
+	}
+	return out, added
 }
 
 // toolLoadedText is what a model is told of a tool ToolSearch loaded, where
