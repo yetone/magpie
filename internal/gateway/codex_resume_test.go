@@ -1,8 +1,11 @@
 package gateway
 
 import (
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
@@ -98,3 +101,57 @@ func TestCodexSubagentThreadOf(t *testing.T) {
 		t.Fatalf("thread_id: %q", got)
 	}
 }
+
+// jockyer on X: a provider removed, Codex moved to another model, and a
+// subagent spawned on the removed provider's model was still put back on
+// it when resumed, a 404 each time. A spawn model magpie no longer serves
+// is not gone back to: the subagent goes on as asked, and stays there,
+// after a restart too.
+func TestCodexResumedSubagentLeavesARemovedProvider(t *testing.T) {
+	up := codexSubagentSetup(t)
+	a, b := &askedUp{name: "a"}, &askedUp{name: "b"}
+	serveOn(t, "a", "ka", []string{"x"}, a)
+	serveOn(t, "b", "kb", []string{"y"}, b)
+	s := New()
+	for _, st := range []struct{ thread, parent string }{{"root-1", ""}, {"worker-1", "root-1"}} {
+		if rec := codexThreadAsks(s, "a/x", st.thread, st.parent); rec.Code != 200 {
+			t.Fatalf("%s on a/x: %d %s", st.thread, rec.Code, rec.Body.String())
+		}
+	}
+	if err := provider.Delete("a"); err != nil {
+		t.Fatal(err)
+	}
+	na := a.n()
+	for i, srv := range []*Server{s, s, New()} {
+		if rec := codexThreadAsks(srv, "b/y", "worker-1", "root-1"); rec.Code != 200 {
+			t.Fatalf("resume %d after a was removed: %d %s", i, rec.Code, rec.Body.String())
+		}
+	}
+	if a.n() != na || b.n() != 3 {
+		t.Fatalf("resumed subagent went to a %v, b %v", a.tried[na:], b.tried)
+	}
+	if got := up.asked(); len(got) != 0 {
+		t.Fatalf("went to ChatGPT: %v", got)
+	}
+}
+
+// askedUp is an OpenAI-compatible provider that notes each model asked.
+type askedUp struct {
+	mu    sync.Mutex
+	name  string
+	tried []string
+}
+
+func (u *askedUp) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	b, _ := io.ReadAll(r.Body)
+	u.mu.Lock()
+	u.tried = append(u.tried, modelOf(b))
+	u.mu.Unlock()
+	w.Header().Set("Content-Type", "text/event-stream")
+	io.WriteString(w, sse(
+		`data: {"id":"c1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","content":"from `+u.name+`"}}]}`,
+		`data: {"id":"c1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":2}}`,
+		`data: [DONE]`))
+}
+
+func (u *askedUp) n() int { u.mu.Lock(); defer u.mu.Unlock(); return len(u.tried) }

@@ -105,7 +105,30 @@ func (s *Server) codexResumeTo(r *http.Request, agent, kind, asked string, meta 
 	if thread == "" {
 		return ""
 	}
-	return s.codexSpawns.keep(thread, asked)
+	to := s.codexSpawns.keep(thread, asked)
+	// a spawn model of magpie's it no longer serves (its provider removed
+	// or switched off) is not gone back to: the subagent was sent there,
+	// to a 404, after the user had removed the provider and moved Codex
+	// to another model (jockyer on X). It goes on as asked, and that is
+	// its model from now on.
+	if strings.Contains(to, "/") && unserved(to) {
+		s.codexSpawns.moved(thread, to, asked)
+		return ""
+	}
+	return to
+}
+
+// moved notes asked as thread's model in place of from, the model it was
+// spawned on, which magpie no longer serves.
+func (c *codexSpawns) moved(thread, from, asked string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if v, ok := c.m[thread]; !ok || v.Model != from {
+		return
+	}
+	now := time.Now()
+	c.m[thread] = codexSpawn{Model: asked, At: now}
+	c.save(c.from, now)
 }
 
 // keep notes asked as thread's model when thread is new, and says the
