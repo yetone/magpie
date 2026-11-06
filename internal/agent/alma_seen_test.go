@@ -56,6 +56,23 @@ func TestAlmaProvidersSeenDecodeOnce(t *testing.T) {
 	if g := asked(); g != 1 {
 		t.Fatalf("looks asked Alma %d times", g)
 	}
+	// the same answer asked for again, past the time one is kept, is not
+	// decoded again either
+	almaReadFor = 0
+	if n := testing.AllocsPerRun(5, func() {
+		if ps, err := almaProvidersSeen(); err != nil || len(ps) != 1 {
+			t.Fatal(err, ps)
+		}
+	}); n > 400 {
+		t.Errorf("a look at the same answer asked again allocates %v times", n)
+	}
+	if g := asked(); g < 6 {
+		t.Fatalf("Alma asked %d times with nothing kept", g)
+	}
+	almaReadFor = time.Minute
+	mu.Lock()
+	gets = 1
+	mu.Unlock()
 	mu.Lock()
 	model = "gpt-5.5"
 	mu.Unlock()

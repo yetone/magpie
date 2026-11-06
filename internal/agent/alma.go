@@ -227,7 +227,10 @@ func almaProvidersSeen() ([]almaProvider, error) {
 	}
 	almaSeen.Lock()
 	defer almaSeen.Unlock()
-	if len(b) > 0 && len(b) == len(almaSeen.body) && &b[0] == &almaSeen.body[0] {
+	// the same bytes asked again (past almaReadFor, each poll of the
+	// Agents page) are the same providers: 4 MB a minute decoded again on
+	// a live magpie with Alma's 227 KB answer
+	if len(b) > 0 && len(b) == len(almaSeen.body) && (&b[0] == &almaSeen.body[0] || bytes.Equal(b, almaSeen.body)) {
 		return almaSeen.ps, nil
 	}
 	var ps []almaProvider
