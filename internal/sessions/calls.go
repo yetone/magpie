@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
+	"unsafe"
 
 	"github.com/tidwall/gjson"
 	"github.com/yetone/magpie/internal/desktopdir"
@@ -630,6 +632,15 @@ func (st *callFile) str(s string) string {
 type ccStr string
 
 func (s *ccStr) UnmarshalJSON(b []byte) error {
+	// a string with nothing escaped is its bytes: json.Unmarshal made a
+	// decoder of its own for each, six to a reply line (29 MB on a first
+	// start's 21 GB history, #2278). The line was checked whole before
+	// this is called, and bytes that aren't UTF-8 are left to it, which
+	// writes U+FFFD for them.
+	if n := len(b); n >= 2 && b[0] == '"' && b[n-1] == '"' && bytes.IndexByte(b[1:n-1], '\\') < 0 && utf8.Valid(b[1:n-1]) {
+		*s = ccStr(b[1 : n-1])
+		return nil
+	}
 	var v string
 	if json.Unmarshal(b, &v) == nil {
 		*s = ccStr(v)
@@ -684,7 +695,7 @@ func claudeCallLine(st *callFile, b []byte) {
 		}
 	}
 	var l ccCall
-	if json.Unmarshal(ccWithoutContent(b), &l) != nil || l.Type != "assistant" {
+	if ccDecode(b, &l) != nil || l.Type != "assistant" {
 		if reply && !bytes.Contains(b, ccAssistant) {
 			ccOtherCallLine(st, b)
 		}
@@ -739,20 +750,39 @@ func ccReplyHead(b []byte) bool {
 	return i >= 0 && bytes.HasPrefix(msg[i+len(ccRole):], []byte(`assistant"`))
 }
 
-// ccWithoutContent is b with its message's content null, when it has one:
-// a reply's usage, ids and model are decoded without its text, thinking
-// and tools' input, which encoding/json read twice over (checked, then
-// decoded) for fields it doesn't keep.
-func ccWithoutContent(b []byte) []byte {
-	c := gjson.GetBytes(b, "message.content")
-	if !c.Exists() || c.Index <= 0 || c.Index+len(c.Raw) > len(b) {
-		return b
+// ccDecode is json.Unmarshal of b into l with its message's content
+// null, when it has one: a reply's usage, ids and model are decoded
+// without its text, thinking and tools' input, which encoding/json read
+// twice over (checked, then decoded) for fields it doesn't keep. The line
+// without its content is made in a buffer kept for the next line, and the
+// content is found without gjson.GetBytes's copy of it: a first start's
+// read of a 21 GB history made 82 MB of those lines and 27 MB of copies
+// of their content, which nothing kept (#2278).
+func ccDecode(b []byte, l *ccCall) error {
+	if len(b) == 0 {
+		return json.Unmarshal(b, l)
 	}
-	out := make([]byte, 0, len(b)-len(c.Raw)+4)
-	out = append(out, b[:c.Index]...)
+	c := gjson.Get(unsafe.String(&b[0], len(b)), "message.content")
+	if !c.Exists() || c.Index <= 0 || c.Index+len(c.Raw) > len(b) {
+		return json.Unmarshal(b, l)
+	}
+	p := ccLines.Get().(*[]byte)
+	out := append((*p)[:0], b[:c.Index]...)
 	out = append(out, "null"...)
-	return append(out, b[c.Index+len(c.Raw):]...)
+	out = append(out, b[c.Index+len(c.Raw):]...)
+	err := json.Unmarshal(out, l) // l keeps no byte of out: its strings are copies
+	if cap(out) <= ccLineKept {
+		*p = out
+		ccLines.Put(p)
+	}
+	return err
 }
+
+// ccLines holds the buffers ccDecode makes its lines in; one grown past
+// ccLineKept, for a reply line with a long head, is left to the GC.
+var ccLines = sync.Pool{New: func() any { return new([]byte) }}
+
+const ccLineKept = 64 << 10
 
 // ccOtherCallLine reads a line of Claude Code's that is not a reply.
 func ccOtherCallLine(st *callFile, b []byte) {

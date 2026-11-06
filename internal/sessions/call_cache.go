@@ -750,6 +750,12 @@ func loadKept(f file) *callFile {
 	return st
 }
 
+// framePatchBufs holds the patches writeCalls makes a frame of, for the
+// next frame and the next file's write: each frame grew its own up to
+// framePatches, ~1 GB of a first start's 21 GB history (#2278). A frame
+// holds no more than framePatches, so a kept one is at most ~1 MB.
+var framePatchBufs = sync.Pool{New: func() any { return new([]callPatch) }}
+
 func writeCalls(st *callFile, start int, appendOnly bool) {
 	state := diskCallState(st)
 	var data bytes.Buffer
@@ -770,8 +776,15 @@ func writeCalls(st *callFile, start int, appendOnly bool) {
 		binary.LittleEndian.PutUint32(b[at:], uint32(len(b)-at-len(header)))
 		binary.LittleEndian.PutUint32(b[at+4:], crc32.ChecksumIEEE(b[at+len(header):]))
 	}
+	patches := framePatchBufs.Get().(*[]callPatch)
+	defer func() {
+		clear(frame.Patches[:cap(frame.Patches)]) // nothing of st is kept in the pool
+		*patches = frame.Patches[:0]
+		framePatchBufs.Put(patches)
+	}()
+	frame.Patches = (*patches)[:0]
 	begin := func() {
-		frame = callFrame{State: state, Strings: []string{""}, Calls: len(st.Calls)}
+		frame = callFrame{State: state, Strings: []string{""}, Calls: len(st.Calls), Patches: frame.Patches[:0]}
 		dict = map[string]uint32{"": 0}
 	}
 	begin()
