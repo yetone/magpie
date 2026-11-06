@@ -143,3 +143,49 @@ func TestClaudeMessageLookupAllocations(t *testing.T) {
 		t.Fatalf("a message with only its request: %q", q.key)
 	}
 }
+
+// TestClaudeCallsListGrownToTheFile: a Claude session's calls list grows
+// to the rate the file was read at so far, not by append's quarters: the
+// lists made on the way to 20k calls hold ~2.8 times them, ~5.2 times by
+// append, and the last ends within an eighth or so of its length. A file
+// whose second half holds fewer calls ends at no more than twice them.
+func TestClaudeCallsListGrownToTheFile(t *testing.T) {
+	at := time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC)
+	read := func(n int, sparse func(i int) int) (made int, st *callFile) {
+		// made: the calls the lists past 256 had room for
+		var lines [][]byte
+		size := int64(0)
+		for i := range n {
+			b := append(reuseLine(i, at), bytes.Repeat([]byte(" "), sparse(i))...)
+			lines = append(lines, b)
+			size += int64(len(b)) + 1
+		}
+		st = &callFile{Agent: "claude", readSize: size, Msgs: map[string]int{}, dirty: map[int]bool{}}
+		end, last := int64(0), -1
+		for _, b := range lines {
+			st.At, end = end, end+int64(len(b))+1
+			st.End = end
+			claudeCallLine(st, b)
+			if c := cap(st.Calls); c != last && len(st.Calls) > 256 {
+				made += c
+			}
+			last = cap(st.Calls)
+		}
+		return made, st
+	}
+	n := 20000
+	made, st := read(n, func(int) int { return 0 })
+	if len(st.Calls) != n {
+		t.Fatalf("%d calls of %d", len(st.Calls), n)
+	}
+	t.Logf("even: lists of %d calls past 256, cap %d for %d", made, cap(st.Calls), n)
+	if made > 7*n/2 || cap(st.Calls) > n*5/4 {
+		t.Fatalf("lists of %d calls were made, the last of %d, for %d calls", made, cap(st.Calls), n)
+	}
+	// the second half's lines ten times as long
+	made, st = read(n, func(i int) int { return 9 * 600 * (i * 2 / n) })
+	t.Logf("sparse end: lists of %d calls, cap %d for %d", made, cap(st.Calls), n)
+	if len(st.Calls) != n || cap(st.Calls) > 2*n {
+		t.Fatalf("%d calls in a list of %d", len(st.Calls), cap(st.Calls))
+	}
+}
