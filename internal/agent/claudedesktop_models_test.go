@@ -157,3 +157,46 @@ func TestClaudeDesktopModelsList(t *testing.T) {
 		t.Fatalf("the user's list: %s, was %s", now, mine)
 	}
 }
+
+// A model picked for two of Desktop's tiers is listed once more for the
+// second (gateway.DesktopTierAliases), by an id of its own: Desktop keys
+// the list by name and reads one tier off an entry, so before, the second
+// tier had no model and Claude Code ran it on the session's model. Claude
+// Code is told the pick's window under that id too, since it would take
+// the behavesAs model's.
+func TestClaudeDesktopModelsSharedTier(t *testing.T) {
+	home, p := desktopSandbox(t)
+	if err := provider.Save(provider.Provider{ID: "v", Name: "V", Chat: "http://127.0.0.1:1/v1", Key: "k", Models: []string{"a", "b"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.SaveLive("v", "http://127.0.0.1:1/v1", []catalog.Model{{ID: "a", Context: 272000}, {ID: "b", Context: 128000}}); err != nil {
+		t.Fatal(err)
+	}
+	cc := filepath.Join(home, ".claude", "settings.json")
+	writeFile(t, cc, `{"theme":"dark"}`)
+	d := claudeDesktop(home)
+	for _, kv := range [][2]string{{"provider", "magpie"}, {"sonnet", "v/a"}, {"haiku", "v/a"}} {
+		if err := d.Field(kv[0]).Set(kv[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, ok := edit.GetJSONRaw(p.prof, "inferenceModels")
+	if !ok {
+		t.Fatal("no list")
+	}
+	var list []map[string]any
+	if err := json.Unmarshal([]byte(raw), &list); err != nil {
+		t.Fatalf("%v: %s", err, raw)
+	}
+	again := gateway.DesktopTierAliases()["v/a"]
+	if len(list) != 3 || len(again) != 1 {
+		t.Fatalf("a for sonnet and haiku: %v, aliases %v", list, again)
+	}
+	haiku := list[2]
+	if haiku["name"] != again[0] || haiku["anthropicFamilyTier"] != "haiku" || haiku["behavesAs"] != "claude-haiku-5-5" {
+		t.Fatalf("haiku's entry: %v (alias %s)", haiku, again[0])
+	}
+	if v, _ := edit.GetJSON(cc, budgetPath(again[0])); v != "272000" {
+		t.Fatalf("a's window under haiku's id in Claude Code's settings: %q\n%s", v, readFile(cc))
+	}
+}

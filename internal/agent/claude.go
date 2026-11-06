@@ -429,10 +429,14 @@ func claudeCapabilities(first []string, own, desktop bool) string {
 	}
 	if desktop {
 		shown, _ := provider.CatalogFor("claude-desktop")
+		again := gateway.DesktopTierAliases()
 		for _, e := range shown {
-			// one named as a Claude model Claude Code knows on its own
-			if id := gateway.DesktopID(e); claudeName(id) == "" {
-				add(id, e.Efforts)
+			// one named as a Claude model Claude Code knows on its own;
+			// a model picked for two tiers is listed for the second too
+			for _, id := range append([]string{gateway.DesktopID(e)}, again[e.ID]...) {
+				if claudeName(id) == "" {
+					add(id, e.Efforts)
+				}
 			}
 		}
 	}
@@ -1251,9 +1255,12 @@ func claudeIn(at place) *Agent {
 		if desktopOn() {
 			shown, _ := provider.CatalogFor("claude-desktop")
 			behaves, _ := gateway.DesktopBehavesAs()
+			again := gateway.DesktopTierAliases()
 			for _, e := range shown {
-				if id := gateway.DesktopID(e); claudeName(id) == "" {
-					models = append(models, claudeBudget{id: id, window: e.Context, long: gateway.DesktopListed1M(e), compact: work(e.ID), behaves: behaves[id] != ""})
+				for _, id := range append([]string{gateway.DesktopID(e)}, again[e.ID]...) {
+					if claudeName(id) == "" {
+						models = append(models, claudeBudget{id: id, window: e.Context, long: gateway.DesktopListed1M(e), compact: work(e.ID), behaves: behaves[id] != ""})
+					}
 				}
 			}
 		}

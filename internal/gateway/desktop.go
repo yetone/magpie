@@ -461,6 +461,16 @@ func aliased(id string) (string, bool) {
 			return e.ID, true
 		}
 	}
+	// a model listed once more for a tier after the first it is picked
+	// for (desktopTierAlias), by whichever tier, so a session saved on it
+	// is served after the picks change too
+	for _, e := range provider.CatalogOf("claude-desktop") {
+		for _, t := range DesktopTierNames {
+			if aliasNumber(desktopTierKey(e.ID, t)) == number {
+				return e.ID, true
+			}
+		}
+	}
 	return "", false
 }
 
