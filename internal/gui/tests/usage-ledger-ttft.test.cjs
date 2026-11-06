@@ -5,8 +5,10 @@
 // start from one slow to write. The column says the row details' "First
 // token", "≈" for one told from a session file's times, and a dash for one
 // with none (failed, or not streamed). A narrow window leaves it out with
-// Sent, Effort and the cache, its value still in the details, and the hint
-// says so. Every language, both engines; no backend, the API is faked.
+// Sent, Effort and the cache, and then it reads small under each duration
+// instead (unscientific9 on Discord), a row with none adding nothing; the
+// hint names only what is in the details alone. Every language, both
+// engines, three widths; no backend, the API is faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -50,11 +52,11 @@ function server(lang) {
 }
 
 const L = {
-  en: { head: "TTFT", detail: "First token", duration: "Duration", hint: "Sent, Effort, the first token and the cache are in each row's details" },
-  zh: { head: "首字耗时", detail: "首字耗时", duration: "耗时", hint: "窗口较窄：发送模型、推理强度、首字和缓存在每行的详情里" },
-  "zh-TW": { head: "首字耗時", detail: "首字耗時", duration: "耗時", hint: "視窗較窄：傳送模型、推理強度、首字和快取在每行的詳情裡" },
-  ja: { head: "TTFT", detail: "最初のトークン", duration: "所要時間", hint: "ウィンドウが狭いため、送信したモデル・推論レベル・最初のトークン・キャッシュは各行の詳細にあります" },
-  de: { head: "TTFT", detail: "Erstes Token", duration: "Dauer", hint: "Schmales Fenster: Gesendet, Effort, erstes Token und Cache stehen in den Details jeder Zeile" },
+  en: { head: "TTFT", detail: "First token", duration: "Duration", hint: "Sent, Effort and the cache are in each row's details", under: "TTFT " },
+  zh: { head: "首字耗时", detail: "首字耗时", duration: "耗时", hint: "窗口较窄：发送模型、推理强度和缓存在每行的详情里", under: "首字 " },
+  "zh-TW": { head: "首字耗時", detail: "首字耗時", duration: "耗時", hint: "視窗較窄：傳送模型、推理強度和快取在每行的詳情裡", under: "首字 " },
+  ja: { head: "TTFT", detail: "最初のトークン", duration: "所要時間", hint: "ウィンドウが狭いため、送信したモデル・推論レベル・キャッシュは各行の詳細にあります", under: "TTFT " },
+  de: { head: "TTFT", detail: "Erstes Token", duration: "Dauer", hint: "Schmales Fenster: Gesendet, Effort und Cache stehen in den Details jeder Zeile", under: "TTFT " },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -105,16 +107,45 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert(await cell(3).evaluate((c) => c.classList.contains("faint")), "a dash reads faint, as the others' do");
         // numbers line up as the duration's do
         assert.deepEqual(await cell(0).evaluate((c) => getComputedStyle(c).textAlign), await rows.nth(0).locator("td.duration").evaluate((c) => getComputedStyle(c).textAlign));
+        // what reads under each duration: nothing while the column is there
+        const under = (i) => rows.nth(i).locator("td.duration").evaluate((c) => {
+          const a = getComputedStyle(c, "::after");
+          return a.content === "none" || a.content === "normal" || a.display === "none" ? "" : JSON.parse(a.content);
+        });
+        const durText = await rows.nth(0).locator("td.duration").textContent();
+        for (let i = 0; i < 4; i++) assert.equal(await under(i), "", "a wide window adds nothing under the duration");
 
         // a narrow window: the column goes, the details keep it, the hint says so
         await p.setViewportSize({ width: 760, height: 800 });
         await p.waitForTimeout(300);
         assert.equal(await cell(0).isVisible(), false, "a narrow window leaves it out");
         assert.equal((await p.locator("#ledTight").textContent()).trim(), w.hint);
+        // and says it under the duration, small and faint; a row with none, nothing
+        assert.equal(await under(0), w.under + first);
+        assert.equal(await under(1), w.under + "≈" + (await detail(1)), "about, from the session file's times");
+        assert.equal(await under(2), "", "a failure before any token adds nothing");
+        assert.equal(await under(3), "", "nor a reply not streamed");
+        assert.equal(await rows.nth(0).locator("td.duration").textContent(), durText, "the cell's own text is the duration alone");
+        const look = await rows.nth(0).locator("td.duration").evaluate((c) => {
+          const a = getComputedStyle(c, "::after"), d = getComputedStyle(c);
+          return { small: parseFloat(a.fontSize) < parseFloat(d.fontSize), block: a.display, color: a.color !== d.color };
+        });
+        assert.deepEqual(look, { small: true, block: "block", color: true }, "a small second line, muted");
+        assert(await rows.nth(0).evaluate((r) => r.getBoundingClientRect().height) < 60, "the row stays a row");
         await reader.click(p, rows.nth(0).locator("td").nth(2));
         const shown = await p.locator(".led tbody tr.led-detail dt").evaluateAll((dts) => dts.filter((x) => x.offsetParent).map((x) => x.textContent));
         assert(shown.includes(w.detail), "the details still say it: " + shown.join(", "));
         assert.equal(await p.locator("#view-usage").evaluate((v) => v.scrollWidth <= v.clientWidth + 1), true, "the page doesn't scroll sideways");
+        await reader.click(p, rows.nth(0).locator("td").nth(2));
+
+        // a phone-narrow window: still under the duration, the page not sideways
+        await p.setViewportSize({ width: 420, height: 800 });
+        await p.waitForTimeout(300);
+        if (await rows.nth(0).locator("td.duration").isVisible()) {
+          assert.equal(await under(0), w.under + first, "still under the duration at 420");
+          assert.equal(await under(3), "");
+        }
+        assert.equal(await p.locator("#view-usage").evaluate((v) => v.scrollWidth <= v.clientWidth + 1), true, "the page doesn't scroll sideways at 420");
         assert.deepEqual(errors, []);
       });
     }
