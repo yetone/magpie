@@ -94,8 +94,8 @@ func TestAntigravityGateway(t *testing.T) {
 	if !strings.HasSuffix(gw["apiKey"].(string), "-antigravity") {
 		t.Errorf("the key doesn't name the app: %v", gw["apiKey"])
 	}
-	if !sameJSON(string(file["models"]), map[string]any{"defaultModelId": "anth/claude-sonnet-5"}) {
-		t.Errorf("models: %s (the user's list would narrow the picker)", file["models"])
+	if !sameJSON(string(file["models"]), map[string]any{"defaultModelId": "anth/claude-sonnet-5", "listSource": gateway.URL() + "/v1/models?format=antigravity"}) {
+		t.Errorf("models: %s (the user's list would narrow the picker, and with no catalog every model's window is 200K)", file["models"])
 	}
 	if string(file["caCertPath"]) != `"/etc/ssl/certs/cymbal-root-ca.pem"` {
 		t.Errorf("caCertPath: %s", file["caCertPath"])
@@ -330,5 +330,78 @@ func TestAntigravityEffort(t *testing.T) {
 	}
 	if err := f.Set(""); err != nil || provider.AgentEffort("antigravity") != "" {
 		t.Fatalf("back to the default: %v, kept %q", err, provider.AgentEffort("antigravity"))
+	}
+}
+
+// Antigravity's app reads the gateway's /v1/models by id alone and gives
+// a model its catalog doesn't know a window of 200K tokens (YujunT46308 on
+// X); its models.listSource, a catalog read first, takes one per model. So
+// magpie points it at the gateway's own, and a catalog of the user's comes
+// back with their gateway.
+func TestAntigravityCatalogSource(t *testing.T) {
+	home := antigravityHome(t)
+	path := filepath.Join(home, ".antigravity", "settings.json")
+	own := strings.Replace(antigravityUser, `"list": [`, `"listSource": "https://models.cymbal.com/catalog.json", "list": [`, 1)
+	os.MkdirAll(filepath.Dir(path), 0o755)
+	os.WriteFile(path, []byte(own), 0o600)
+	a := antigravity(home)
+	f := a.Field("model")
+	if err := f.Set("magpie/anth/claude-sonnet-5"); err != nil {
+		t.Fatal(err)
+	}
+	src := func() string {
+		var m map[string]any
+		json.Unmarshal(antigravityFile(t, path)["models"], &m)
+		s, _ := m["listSource"].(string)
+		return s
+	}
+	if got, want := src(), gateway.URL()+"/v1/models?format=antigravity"; got != want {
+		t.Fatalf("listSource %q, want %q", got, want)
+	}
+	if err := f.Set(""); err != nil {
+		t.Fatal(err)
+	}
+	if !sameJSON(readFile(path), json.RawMessage(own)) {
+		t.Errorf("the user's catalog not back:\n%s", readFile(path))
+	}
+}
+
+// A file magpie wired before it wrote a catalog gets one on the next sync,
+// at the gateway's address as it is now; a catalog of the user's found
+// there is kept for when magpie steps out.
+func TestAntigravitySyncAddsCatalog(t *testing.T) {
+	home := antigravityHome(t)
+	path := filepath.Join(home, ".antigravity", "settings.json")
+	a := antigravity(home)
+	f := a.Field("model")
+	if err := f.Set("magpie/anth/claude-sonnet-5"); err != nil {
+		t.Fatal(err)
+	}
+	// as an older magpie left it: no listSource, and one of the user's
+	old := `{"gateway":{"enabled":true,"url":"http://127.0.0.1:1","apiKey":"` + agentKey("antigravity") + `","wireProtocol":"openai"},` +
+		`"models":{"defaultModelId":"anth/claude-sonnet-5","listSource":"https://models.cymbal.com/catalog.json"}}`
+	os.WriteFile(path, []byte(old), 0o600)
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	json.Unmarshal(antigravityFile(t, path)["models"], &m)
+	if got, want := m["listSource"], gateway.URL()+"/v1/models?format=antigravity"; got != want {
+		t.Fatalf("listSource after sync %v, want %v", got, want)
+	}
+	// a second sync changes nothing and keeps the stash
+	before := readFile(path)
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if readFile(path) != before {
+		t.Errorf("a second sync rewrote the file:\n%s", readFile(path))
+	}
+	if err := f.Set(""); err != nil {
+		t.Fatal(err)
+	}
+	json.Unmarshal(antigravityFile(t, path)["models"], &m)
+	if m["listSource"] != "https://models.cymbal.com/catalog.json" {
+		t.Errorf("the user's catalog lost: %s", readFile(path))
 	}
 }

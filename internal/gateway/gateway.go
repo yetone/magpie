@@ -1547,6 +1547,11 @@ func listKinds(r *http.Request) (chat, image, video bool, err error) {
 }
 
 func (s *Server) models(w http.ResponseWriter, r *http.Request) {
+	// Antigravity's app's catalog, each model with its window (antigravity_models.go)
+	if r.URL.Query().Get("format") == AntigravityFormat {
+		antigravityModels(w, r)
+		return
+	}
 	if waitsForList(r) {
 		// another magpie waiting for the list to change (models_wait.go)
 		s.modelsOnceChanged(w, r)

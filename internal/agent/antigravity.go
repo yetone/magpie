@@ -15,9 +15,20 @@ package agent
 // User-Agent of antigravity/hub/<version> (auth_method=gateway). magpie's
 // gateway answers both, so what magpie writes is that block at its own
 // address, with a key that names the app, and the model the app starts on.
-// The user's own gateway, default model and model list are stashed and put
-// back when magpie steps out. On a gateway the app asks for no Google
-// sign-in and uses none: Google's docs say the two can't be used at once.
+// That list's models are read by id alone, so the app (2.29.0) gives each
+// one its built-in catalog doesn't know a window of 200K tokens, whatever
+// the model's (YujunT46308 on X). Its models.listSource, a catalog it asks
+// ahead of the list, with the gateway's key, takes one per model
+// (maxTokens), so magpie points it at the gateway's
+// /v1/models?format=antigravity. The user's own gateway, default model,
+// model list and catalog are stashed and put back when magpie steps out.
+//
+// On a gateway the app asks for no Google sign-in and uses none (Google's
+// docs: the two can't be used at once), and its backend asks Google for
+// nothing, so what Google's servers turn on for a signed-in account, its
+// experiments and the commands behind them (/boost, /teamwork, /plugin,
+// /generative_ui: YujunT46308), is off while it's on magpie. Nothing in
+// the file keeps both; noticeAntigravity says so where it is connected.
 //
 // The same file is read by agy (Antigravity's CLI) too, below its own
 // ~/.gemini/antigravity-cli/settings.json: an agy connected on its own row
@@ -39,9 +50,16 @@ import (
 )
 
 const (
-	antigravityModel = "models.defaultModelId"
-	antigravityList  = "models.list"
+	antigravityModel  = "models.defaultModelId"
+	antigravityList   = "models.list"
+	antigravitySource = "models.listSource"
 )
+
+// antigravityCatalog is the catalog Antigravity's app is pointed at: the
+// gateway's models, each with its window (gateway.antigravityModels).
+func antigravityCatalog() string {
+	return gateway.URL() + "/v1/models?format=" + gateway.AntigravityFormat
+}
 
 // antigravityAdmin is where an organisation's admin_settings.json is kept
 // on this system (Google's docs), whose gateway outranks the user's; under
@@ -69,6 +87,7 @@ func antigravity(home string) *Agent {
 	path := filepath.Join(dir, "settings.json")
 	model := jsonGet(path, antigravityModel)
 	stashGateway, stashModel, stashList := "antigravity:"+path+":gateway", "antigravity:"+path+":defaultModelId", "antigravity:"+path+":list"
+	stashSource := "antigravity:" + path + ":listSource"
 	// wired: the file's gateway is on and carries a key magpie gave it
 	wired := func() bool {
 		on, _ := edit.GetJSON(path, "gateway.enabled")
@@ -77,6 +96,15 @@ func antigravity(home string) *Agent {
 	}
 	gatewayBlock := func() map[string]any {
 		return map[string]any{"enabled": true, "url": gateway.URL(), "apiKey": agentKey("antigravity"), "wireProtocol": "openai"}
+	}
+	// keepSource stashes a catalog of the user's that a file wired before
+	// magpie wrote one holds, to come back with their gateway
+	keepSource := func() {
+		v, _ := edit.GetJSON(path, antigravitySource)
+		if v != "" && !strings.Contains(v, "format="+gateway.AntigravityFormat) && unstashPeek(stashSource) == "" {
+			raw, _ := edit.GetJSONRaw(path, antigravitySource)
+			stash(map[string]string{stashSource: raw})
+		}
 	}
 	// putRaw writes back what was stashed as it was, or takes key out
 	putRaw := func(key, raw string) error {
@@ -99,9 +127,9 @@ func antigravity(home string) *Agent {
 			}
 			return isFile(filepath.Join(home, ".gemini", "antigravity", "agyhub_summaries_proto.pb"))
 		},
-		// its picker lists the gateway's /v1/models as asked with its key,
-		// by id
-		ListsModels: true, NoNames: true,
+		// its picker lists the gateway's models as asked with its key, by
+		// the names its catalog gives them (antigravityCatalog)
+		ListsModels: true,
 		Notice: func() string {
 			if wired() {
 				return noticeAntigravity.String()
@@ -112,7 +140,17 @@ func antigravity(home string) *Agent {
 			if !wired() {
 				return nil
 			}
-			return syncJSON(path, "gateway", theirsKept(path, "gateway", func() any { return gatewayBlock() }))
+			if err := syncJSON(path, "gateway", theirsKept(path, "gateway", func() any { return gatewayBlock() })); err != nil {
+				return err
+			}
+			// the catalog at the gateway's address, and on a file wired
+			// before magpie wrote one, so its windows reach it too
+			v, _ := edit.GetJSON(path, antigravitySource)
+			if v == antigravityCatalog() {
+				return nil
+			}
+			keepSource()
+			return edit.SetJSON(path, edit.KV{Path: antigravitySource, Value: antigravityCatalog()})
 		},
 		Check: func() string {
 			if !wired() {
@@ -144,19 +182,23 @@ func antigravity(home string) *Agent {
 						g, _ := edit.GetJSONRaw(path, "gateway")
 						m, _ := edit.GetJSONRaw(path, antigravityModel)
 						l, _ := edit.GetJSONRaw(path, antigravityList)
-						stash(map[string]string{stashGateway: g, stashModel: m, stashList: l})
+						c, _ := edit.GetJSONRaw(path, antigravitySource)
+						stash(map[string]string{stashGateway: g, stashModel: m, stashList: l, stashSource: c})
 					}
 					// a list of the user's would hide magpie's models from
-					// the picker; it is stashed with their gateway
+					// the picker, and it is read ahead of the catalog that
+					// gives each its window; it is stashed with their gateway
 					if err := edit.DelJSON(path, antigravityList); err != nil {
 						return err
 					}
 					// set again on magpie, what the user added to its block stays
 					block := any(gatewayBlock())
 					if on {
+						keepSource()
 						block = theirsKept(path, "gateway", func() any { return gatewayBlock() })()
 					}
-					return edit.SetJSON(path, edit.KV{Path: "gateway", Value: block}, edit.KV{Path: antigravityModel, Value: ref})
+					return edit.SetJSON(path, edit.KV{Path: "gateway", Value: block}, edit.KV{Path: antigravityModel, Value: ref},
+						edit.KV{Path: antigravitySource, Value: antigravityCatalog()})
 				}
 				if on {
 					// back to what the user had
@@ -164,6 +206,9 @@ func antigravity(home string) *Agent {
 						return err
 					}
 					if err := putRaw(antigravityList, unstash(stashList)); err != nil {
+						return err
+					}
+					if err := putRaw(antigravitySource, unstash(stashSource)); err != nil {
 						return err
 					}
 					if v == "" {
@@ -222,7 +267,7 @@ func antigravityTidy(path string) error {
 
 // what antigravity says after a change (notice.go)
 var (
-	noticeAntigravity      = newNotice("Antigravity reads its gateway at start-up — restart Antigravity to use magpie's models. On magpie it doesn't use your Google sign-in; turning it off here gives that back. An agy not connected on its own row follows it too.")
+	noticeAntigravity      = newNotice("Antigravity reads its gateway at start-up — restart Antigravity to use magpie's models. On a gateway it uses no Google sign-in, so what Google turns on for your account (its experiments, and commands such as /boost, /teamwork, /plugin and /generative_ui) is gone while it's on magpie; turning it off here gives that back. An agy not connected on its own row follows it too.")
 	noticeAntigravityAdmin = newNotice("Antigravity's {path} sets a gateway of its own, which wins over ~/.antigravity/settings.json, so it doesn't reach magpie")
 	noticeAntigravityEnv   = newNotice("AGY_LLM_GATEWAY_URL is set to {url}, which wins over ~/.antigravity/settings.json, so Antigravity started with it doesn't reach magpie")
 )
