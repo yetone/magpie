@@ -19,6 +19,7 @@ import (
 
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/wslrun"
 )
 
 // A WSL distro in NAT networking (WSL's default) reaches Windows at the
@@ -36,34 +37,11 @@ import (
 // of Docker Desktop's, which shares that network, has no key.
 
 // WSLNets are the networks Windows has an address on that WSL distros reach
-// it through: the IPv4 addresses of the vEthernet (WSL) adapters (named
-// "vEthernet (WSL)" or, with the Hyper-V firewall, "vEthernet (WSL (Hyper-V
-// firewall))"), there while WSL's VM runs. None off Windows. A var for the
-// tests.
+// it through (wslrun.Nets): the vEthernet (WSL…) adapters', NAT's and a
+// bridged switch's. None off Windows. A var for the tests.
 var WSLNets = wslNets
 
-func wslNets() []*net.IPNet {
-	if runtime.GOOS != "windows" {
-		return nil
-	}
-	ifs, err := net.Interfaces()
-	if err != nil {
-		return nil
-	}
-	var out []*net.IPNet
-	for _, i := range ifs {
-		if i.Flags&net.FlagUp == 0 || !strings.Contains(i.Name, "(WSL") {
-			continue
-		}
-		addrs, _ := i.Addrs()
-		for _, a := range addrs {
-			if n, ok := a.(*net.IPNet); ok && n.IP.To4() != nil && !n.IP.IsLinkLocalUnicast() {
-				out = append(out, n)
-			}
-		}
-	}
-	return out
-}
+func wslNets() []*net.IPNet { return wslrun.Nets() }
 
 // OnWSLNet says base (an agent's gateway URL) names an address Windows has
 // on a WSL network: where a distro under NAT reaches the gateway.

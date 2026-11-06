@@ -1788,10 +1788,11 @@ func parseProbe(name, out string) *distro {
 	// the default route of a distro whose 127.0.0.1 is Windows' is
 	// Windows' own next hop (consomme: 198.18.0.2 under a TUN proxy,
 	// #1230), not Windows: an agent left on it is moved to 127.0.0.1
-	// (wslMovedFrom)
-	if wslrun.HostLoopback(d.Net) {
-		d.Gateway = ""
-	}
+	// (wslMovedFrom). A bridged distro's is the LAN's router: Windows is
+	// at its address on the bridge's adapter (wslrun.HostAt), and an agent
+	// an older magpie pointed at the router is written over on the next
+	// sync, the router being among the addresses it was seen at (Was)
+	d.Gateway = wslrun.HostAt(d.Net, d.Gateway, gateway.WSLNets())
 	return d
 }
 
