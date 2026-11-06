@@ -23,11 +23,11 @@ func fakes(t *testing.T, list []*agent.Agent, isWired map[string]bool, failing m
 	t.Helper()
 	var did []string
 	wasAgents, wasWired, wasDisconnect := agents, wired, disconnectOne
-	wasFailover, wasPort, wasRestart := endFailover, portRollouts, restartCodexApp
+	wasFailover, wasLeftovers, wasPort, wasRestart := endFailover, endLeftovers, portRollouts, restartCodexApp
 	wasService, wasAutostart, wasShortcut, wasScheme, wasPII, wasExe := removeService, autostartOff, removeShortcut, removeScheme, endPII, executable
 	t.Cleanup(func() {
 		agents, wired, disconnectOne = wasAgents, wasWired, wasDisconnect
-		endFailover, portRollouts, restartCodexApp = wasFailover, wasPort, wasRestart
+		endFailover, endLeftovers, portRollouts, restartCodexApp = wasFailover, wasLeftovers, wasPort, wasRestart
 		removeService, autostartOff, removeShortcut, removeScheme, endPII, executable = wasService, wasAutostart, wasShortcut, wasScheme, wasPII, wasExe
 	})
 	agents = func() []*agent.Agent { return list }
@@ -41,6 +41,7 @@ func fakes(t *testing.T, list []*agent.Agent, isWired map[string]bool, failing m
 		return nil
 	}
 	endFailover = func() (bool, error) { did = append(did, "failover"); return true, nil }
+	endLeftovers = func() (bool, error) { did = append(did, "leftovers"); return false, nil }
 	portRollouts = func(time.Duration) { did = append(did, "rollouts") }
 	restartCodexApp = func(context.Context, time.Duration) (int, bool, error) {
 		did = append(did, "codex app")
@@ -89,7 +90,7 @@ func TestRunOrder(t *testing.T) {
 
 	r := Run(context.Background())
 
-	want := []string{"service", "autostart", "shortcut", "scheme", "pii", "failover", "disconnect codex", "disconnect claude", "rollouts", "codex app"}
+	want := []string{"service", "autostart", "shortcut", "scheme", "pii", "failover", "disconnect codex", "disconnect claude", "leftovers", "rollouts", "codex app"}
 	if !slices.Equal(*did, want) {
 		t.Fatalf("did %q, want %q", *did, want)
 	}
@@ -117,7 +118,7 @@ func TestKeepData(t *testing.T) {
 
 	r := KeepData(context.Background())
 
-	want := []string{"service", "autostart", "shortcut", "scheme", "pii", "failover", "disconnect codex", "rollouts", "codex app"}
+	want := []string{"service", "autostart", "shortcut", "scheme", "pii", "failover", "disconnect codex", "leftovers", "rollouts", "codex app"}
 	if !slices.Equal(*did, want) {
 		t.Fatalf("did %q, want %q", *did, want)
 	}
@@ -157,6 +158,37 @@ func TestRunCodexAppLeft(t *testing.T) {
 	if r := Run(context.Background()); !r.CodexApp {
 		t.Fatal("CodexApp not said")
 	}
+}
+
+// What no Disconnect could name (the marks gone with magpie's folder) goes
+// even with no agent connected, says so, and restarts the Codex app's
+// app-server for it alone; one that can't be taken is said.
+func TestRunTakesCodexLeftovers(t *testing.T) {
+	t.Run("taken", func(t *testing.T) {
+		did := fakes(t, nil, map[string]bool{}, nil)
+		endLeftovers = func() (bool, error) { return true, nil }
+		r := Run(context.Background())
+		if !slices.Contains(*did, "codex app") {
+			t.Fatalf("the Codex app not restarted for its leftovers alone: %q", *did)
+		}
+		if len(r.Agents) != 1 || r.Agents[0].What != "Codex's leftover settings" || r.Agents[0].Err != "" {
+			t.Fatalf("agents %+v", r.Agents)
+		}
+	})
+	t.Run("failed", func(t *testing.T) {
+		fakes(t, nil, map[string]bool{}, nil)
+		endLeftovers = func() (bool, error) { return false, errors.New("config.toml: permission denied") }
+		r := Run(context.Background())
+		if r.CodexApp {
+			t.Fatal("the Codex app restarted over a leftover that failed")
+		}
+		if !r.Failed() {
+			t.Fatal("not failed")
+		}
+		if says := strings.Join(r.Says(), "\n"); !strings.Contains(says, "! disconnected Codex's leftover settings: config.toml: permission denied") {
+			t.Fatalf("says:\n%s", says)
+		}
+	})
 }
 
 // Skills and servers the user's agents use from the Library stay; the

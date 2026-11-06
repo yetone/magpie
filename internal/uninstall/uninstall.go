@@ -75,6 +75,7 @@ func (r *Report) Failed() bool {
 var (
 	agents          = agent.All
 	endFailover     = agent.EndCodexFailover
+	endLeftovers    = agent.TakeCodexLeftovers
 	portRollouts    = agent.PortCodexRollouts
 	restartCodexApp = provider.RestartCodexAppWhenIdle
 	removeService   = func() error {
@@ -124,6 +125,20 @@ func Agents(ctx context.Context, r *Report) {
 		}
 		r.Agents = append(r.Agents, d)
 		codex = codex || a.ID == "codex"
+	}
+	// what no Disconnect could name: an agent whose config points at
+	// magpie's gateway with the marks magpie kept gone (its folder deleted
+	// by hand, a fresh install beside an old config) reads as not
+	// connected, and Codex left on that address knocks on a port nothing
+	// answers any more (#3866)
+	took, err := endLeftovers()
+	if took || err != nil {
+		d := Done{What: "Codex's leftover settings"}
+		if err != nil {
+			d.Err = err.Error()
+		}
+		r.Agents = append(r.Agents, d)
+		codex = true
 	}
 	// the threads Codex ran on magpie's models open without magpie
 	portRollouts(10 * time.Second)

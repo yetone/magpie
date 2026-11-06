@@ -229,6 +229,13 @@ type Agent struct {
 	// no longer answers, and retry till magpie is open again (Leon920717
 	// on X). The next start's Sync writes it again.
 	EndFailover func() error
+	// TakeLeftovers takes out what magpie wrote that no Disconnect could
+	// name: an address at magpie's gateway whose marks are gone (magpie's
+	// folder deleted by hand, a fresh install beside an old config), which
+	// reads as not connected, so uninstalling would leave it pointing at a
+	// gateway that is gone for good (#3866). Uninstall runs it after the
+	// disconnects. It answers whether it changed anything.
+	TakeLeftovers func() (bool, error)
 	// Follow, for an agent whose own picker moves its main model where
 	// magpie keeps other settings following it (Claude Code's /model and
 	// its tiers), brings those along to the model picked there. Run as the

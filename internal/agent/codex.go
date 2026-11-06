@@ -1949,6 +1949,24 @@ func codexIn(at place) *Agent {
 			}
 			return errors.Join(dropMirrorFailover(), dropBase())
 		},
+		// what no Disconnect could name, marks gone: only what names magpie
+		// itself goes, by the same gates a Disconnect takes them by
+		TakeLeftovers: func() (bool, error) {
+			took := false
+			if viaBase() {
+				if err := dropBase(); err != nil {
+					return false, err
+				}
+				took = true
+			}
+			if asProvider() {
+				if err := dropProvider(); err != nil {
+					return false, err
+				}
+				took = true
+			}
+			return took, nil
+		},
 		OwnVia: codexOwnViaMagpie,
 		SideModel: func() string {
 			if m := get("model"); viaBase() && !asProvider() && isMagpie(m) {
@@ -2851,6 +2869,19 @@ func EndCodexFailover() (ended bool, err error) {
 	}
 	codexDaemonCheck(a.Path)
 	return true, nil
+}
+
+// TakeCodexLeftovers takes out of this machine's Codex config what magpie
+// wrote that no Disconnect could name: the base URL at magpie's gateway,
+// and magpie as its provider, where the marks magpie keeps them by are
+// gone with magpie's own files (#3866). It answers whether it changed
+// anything.
+func TakeCodexLeftovers() (bool, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false, err
+	}
+	return codex(home).TakeLeftovers()
 }
 
 // RelayOpenCodex leaves a relay at the gateway's address for the Codex
