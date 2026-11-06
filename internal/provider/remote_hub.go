@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 	"time"
 )
@@ -28,9 +29,11 @@ var (
 var RemoteHubWait = 5 * time.Second
 
 // RemoteHub is a Remote magpie as its router's server is made: its
-// address (the gateway's root) and its key.
+// address (the gateway's root) and its key, and the ids it had before it
+// was renamed (Provider.Was), which its server follows.
 type RemoteHub struct {
 	ID, Name, Root, Key string
+	Was                 []string
 }
 
 // RemoteHubs are the Remote magpies in providers.json, turned off or not,
@@ -47,7 +50,7 @@ func RemoteHubs() ([]RemoteHub, error) {
 		if !p.IsRemoteMagpie() || p.SelfAnswered() || p.Key == "" || p.Anthropic == "" {
 			continue
 		}
-		out = append(out, RemoteHub{ID: p.ID, Name: p.Name, Root: strings.TrimRight(p.Anthropic, "/"), Key: p.Key})
+		out = append(out, RemoteHub{ID: p.ID, Name: p.Name, Root: strings.TrimRight(p.Anthropic, "/"), Key: p.Key, Was: slices.Clone(p.Was)})
 	}
 	return out, nil
 }
@@ -69,5 +72,13 @@ func noteRemoteHub(ctx context.Context, p Provider) {
 	}
 	if json.Unmarshal(b, &info) == nil && info.Name == "magpie" && info.MCPHub {
 		found(p.ID)
+	}
+}
+
+// AskRemoteHub asks the Remote magpie id at once whether it serves its
+// router, as its next model list would: its switch just turned on.
+func AskRemoteHub(ctx context.Context, id string) {
+	if p, err := Find(id); err == nil && !p.Off {
+		noteRemoteHub(ctx, *p)
 	}
 }

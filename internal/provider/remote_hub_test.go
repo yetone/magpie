@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -70,8 +71,23 @@ func TestRemoteHubNoted(t *testing.T) {
 		t.Fatalf("found %v, asked %v; want rem, with its key", found, asked)
 	}
 	hs, err := RemoteHubs()
-	if err != nil || len(hs) != 1 || hs[0] != (RemoteHub{ID: "rem", Name: "Rem", Root: srv.URL, Key: "k1"}) {
+	if err != nil || len(hs) != 1 || !reflect.DeepEqual(hs[0], RemoteHub{ID: "rem", Name: "Rem", Root: srv.URL, Key: "k1"}) {
 		t.Fatalf("RemoteHubs: %+v %v", hs, err)
+	}
+	// renamed (treeman_26897): listed under its id now, with the one it
+	// had, which its Library server follows
+	if err := Rename("rem", "office"); err != nil {
+		t.Fatal(err)
+	}
+	id = "office"
+	if hs, err := RemoteHubs(); err != nil || len(hs) != 1 || hs[0].ID != "office" || !slices.Equal(hs[0].Was, []string{"rem"}) {
+		t.Fatalf("RemoteHubs after a rename: %+v %v", hs, err)
+	}
+	// its switch turned on: asked at once, under its id now
+	reset()
+	AskRemoteHub(context.Background(), "office")
+	if !slices.Equal(found, []string{"office"}) || len(asked) != 1 {
+		t.Fatalf("asked at once: found %v, asked %v", found, asked)
 	}
 
 	reset()

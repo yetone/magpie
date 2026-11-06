@@ -926,6 +926,10 @@ func removeServer(l *Library, name string) error {
 		return fmt.Errorf("no server called %s", name)
 	}
 	k := serverKey(l.MCP[i])
+	if b := l.MCP[i].Bridge; b != "" {
+		// a Remote magpie's router taken out: its editor's switch is off
+		l.BridgesOn = slices.DeleteFunc(l.BridgesOn, func(id string) bool { return id == b })
+	}
 	l.MCP = slices.Delete(l.MCP, i, i+1)
 	for _, p := range l.Projects {
 		delete(p.Servers, name)

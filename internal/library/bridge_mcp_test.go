@@ -57,8 +57,12 @@ func TestRemoteMagpieRouterIsAServer(t *testing.T) {
 	ok(t)(SaveServer("", *fake))
 	ok(t)(SetMCPHub(true))
 
+	if provider.RemoteHubAsk("home") {
+		t.Fatal("a Remote magpie whose switch is off is asked")
+	}
+	ok(t)(SetRemoteMCP("home", true))
 	if !provider.RemoteHubAsk("home") {
-		t.Fatal("a Remote magpie not offered yet isn't asked")
+		t.Fatal("a Remote magpie switched on, not offered yet, isn't asked")
 	}
 	provider.RemoteHubFound("home")
 	l := loaded(t)
@@ -120,9 +124,10 @@ func TestRemoteMagpieRouterIsAServer(t *testing.T) {
 	}
 }
 
-// The server is offered once: removed by the user, it isn't added again
-// until the provider is removed and added again; switched off for an
-// agent, it stays off. One the user has at that magpie's router already
+// The server is offered once each time its switch is turned on: removed
+// by the user, it isn't added again until the switch is turned on again
+// (removing it turned the switch off); the provider removed and added
+// again, its switch is off. Switched off for an agent, it stays off. One the user has at that magpie's router already
 // is the one. The provider removed takes its server with it; one turned
 // off keeps it (RemoteHubs still lists it); providers.json unreadable
 // takes nothing out. A name a server has already, or the hub's own entry's,
@@ -135,6 +140,7 @@ func TestRemoteMagpieRouterOfferedOnce(t *testing.T) {
 
 	// the user's own at that magpie's router: none beside it
 	ok(t)(SaveServer("", Server{Name: "office", Transport: "http", URL: "http://192.168.1.9:3425" + gateway.HubMCPPath + "claude"}))
+	ok(t)(SetRemoteMCP("home", true))
 	provider.RemoteHubFound("home")
 	if l := loaded(t); len(l.MCP) != 1 || !slices.Contains(l.BridgesOffered, "home") {
 		t.Fatalf("beside the user's own: %+v, offered %v", l.MCP, l.BridgesOffered)
@@ -153,8 +159,13 @@ func TestRemoteMagpieRouterOfferedOnce(t *testing.T) {
 	}
 	f.hs = []provider.RemoteHub{home}
 	provider.RemoteHubFound("home")
+	if has("home") || RemoteMCPOn()["home"] {
+		t.Fatal("the provider added again, its switch on")
+	}
+	ok(t)(SetRemoteMCP("home", true))
+	provider.RemoteHubFound("home")
 	if !has("home") {
-		t.Fatal("the provider added again, no server")
+		t.Fatal("the provider added again and switched on, no server")
 	}
 	if a := loaded(t).server("home").Agents; len(a) != 0 {
 		t.Errorf("with the hub off, on for %v, want none", a)
@@ -174,11 +185,15 @@ func TestRemoteMagpieRouterOfferedOnce(t *testing.T) {
 	if has("home") {
 		t.Fatal("a server the user removed came back")
 	}
+	if RemoteMCPOn()["home"] || provider.RemoteHubAsk("home") {
+		t.Fatal("its server removed in the Library, the switch is still on")
+	}
 
 	// providers.json unreadable takes nothing out
 	f.hs = nil
 	ok(t)(Sync())
 	f.hs = []provider.RemoteHub{home}
+	ok(t)(SetRemoteMCP("home", true))
 	provider.RemoteHubFound("home")
 	f.err = errors.New("unreadable")
 	f.hs = nil
@@ -191,6 +206,9 @@ func TestRemoteMagpieRouterOfferedOnce(t *testing.T) {
 	if has("home") {
 		t.Fatal("the provider removed kept its server")
 	}
+	if l := loaded(t); len(l.BridgesOn) != 0 {
+		t.Fatalf("the provider removed kept its switch: %v", l.BridgesOn)
+	}
 
 	// a provider being tried in the editor, not saved: nothing
 	provider.RemoteHubFound("nope")
@@ -201,6 +219,8 @@ func TestRemoteMagpieRouterOfferedOnce(t *testing.T) {
 	// names: the hub's own entry's isn't given, nor one a server has
 	ok(t)(SaveServer("", Server{Name: "magpie-remote", Transport: "http", URL: "https://example.com/mcp"}))
 	f.hs = []provider.RemoteHub{{ID: "m", Name: "magpie", Root: "http://10.0.0.2:3425", Key: "k"}, {ID: "x", Name: "!!", Root: "http://10.0.0.3:3425", Key: "k"}}
+	ok(t)(SetRemoteMCP("m", true))
+	ok(t)(SetRemoteMCP("x", true))
 	provider.RemoteHubFound("m")
 	provider.RemoteHubFound("x")
 	l := loaded(t)
@@ -209,6 +229,103 @@ func TestRemoteMagpieRouterOfferedOnce(t *testing.T) {
 	}
 	if s := l.server("x"); s == nil || s.Bridge != "x" {
 		t.Errorf("a Remote magpie whose name gives no name: %+v", l.MCP)
+	}
+}
+
+// Adding a Remote magpie's router to the Library is the user's call
+// (treeman_26897): with the switch off it isn't asked nor given a server;
+// turned on, it is; turned off, its server is taken out, and on again it
+// is offered again. A server added before the switch was there (no
+// BridgesOn) is kept, the switch shown on, and the provider's key still
+// reaches it.
+func TestRemoteMagpieMCPIsOptIn(t *testing.T) {
+	hubSandbox(t)
+	f := fakeRemoteHubs(t, provider.RemoteHub{ID: "home", Name: "Home", Root: "http://192.168.1.9:3425", Key: "k"})
+	has := func() bool { t.Helper(); return loaded(t).server("home") != nil }
+
+	if provider.RemoteHubAsk("home") || RemoteMCPOn()["home"] {
+		t.Fatal("switched off, asked")
+	}
+	provider.RemoteHubFound("home")
+	if has() {
+		t.Fatal("switched off, given a server")
+	}
+	ok(t)(SetRemoteMCP("home", true))
+	if !RemoteMCPOn()["home"] {
+		t.Fatal("switched on, read as off")
+	}
+	provider.RemoteHubFound("home")
+	if !has() {
+		t.Fatal("switched on, no server")
+	}
+	ok(t)(SetRemoteMCP("home", false))
+	if has() || RemoteMCPOn()["home"] || provider.RemoteHubAsk("home") {
+		t.Fatal("switched off, its server kept")
+	}
+	ok(t)(SetRemoteMCP("home", true))
+	provider.RemoteHubFound("home")
+	if !has() {
+		t.Fatal("switched on again, not offered again")
+	}
+
+	// one added before the switch: a server with its Bridge, no BridgesOn
+	ok(t)(change(func(l *Library) error { l.BridgesOn = nil; return nil }))
+	if !has() || !RemoteMCPOn()["home"] {
+		t.Fatalf("a server from before the switch: kept %v, switch on %v", has(), RemoteMCPOn()["home"])
+	}
+	f.hs[0].Key = "k2"
+	ok(t)(Sync())
+	if s := loaded(t).server("home"); s == nil || s.Headers["Authorization"] != "Bearer k2" {
+		t.Fatalf("a server from before the switch, the key changed: %+v", s)
+	}
+	ok(t)(SetRemoteMCP("home", false))
+	if has() {
+		t.Fatal("a server from before the switch, switched off, kept")
+	}
+}
+
+// A Remote magpie renamed, its name and id (treeman_26897: its server
+// went), keeps its server, under the id it has now, with its switch and
+// its offer; and renamed again, still.
+func TestRemoteMagpieMCPFollowsRename(t *testing.T) {
+	hubSandbox(t)
+	f := fakeRemoteHubs(t, provider.RemoteHub{ID: "remote-magpie", Name: "Remote magpie", Root: "http://192.168.1.9:3425", Key: "k"})
+	ok(t)(SetRemoteMCP("remote-magpie", true))
+	provider.RemoteHubFound("remote-magpie")
+	if s := loaded(t).server("remote-magpie"); s == nil || s.Bridge != "remote-magpie" {
+		t.Fatalf("no server: %+v", loaded(t).MCP)
+	}
+	for _, to := range []provider.RemoteHub{
+		{ID: "home", Name: "Home", Root: "http://192.168.1.9:3425", Key: "k", Was: []string{"remote-magpie"}},
+		{ID: "lab", Name: "Lab", Root: "http://192.168.1.9:3425", Key: "k", Was: []string{"remote-magpie", "home"}},
+	} {
+		f.hs = []provider.RemoteHub{to}
+		if on := RemoteMCPOn(); !on[to.ID] {
+			t.Fatalf("renamed %s, read before a sync: switch %v", to.ID, on)
+		}
+		ok(t)(Sync())
+		l := loaded(t)
+		s := l.server("remote-magpie")
+		if s == nil || s.Bridge != to.ID {
+			t.Fatalf("renamed %s, the server: %+v", to.ID, l.MCP)
+		}
+		if !slices.Equal(l.BridgesOn, []string{to.ID}) || !slices.Equal(l.BridgesOffered, []string{to.ID}) {
+			t.Fatalf("renamed %s: on %v, offered %v", to.ID, l.BridgesOn, l.BridgesOffered)
+		}
+		if provider.RemoteHubAsk(to.ID) {
+			t.Errorf("renamed %s, offered again", to.ID)
+		}
+	}
+	// an id it had that another provider has now is that one's
+	f.hs = append(f.hs, provider.RemoteHub{ID: "home", Name: "Home", Root: "http://10.0.0.7:3425", Key: "k"})
+	ok(t)(Sync())
+	if l := loaded(t); len(l.MCP) != 1 || l.MCP[0].Bridge != "lab" || slices.Contains(l.BridgesOn, "home") {
+		t.Fatalf("an id taken by another: %+v, on %v", l.MCP, l.BridgesOn)
+	}
+	// switched off under its id now
+	ok(t)(SetRemoteMCP("lab", false))
+	if l := loaded(t); len(l.MCP) != 0 {
+		t.Fatalf("switched off after the rename: %+v", l.MCP)
 	}
 }
 

@@ -10,9 +10,15 @@ package library
 // turned off one by one, behind the MCP hub as <name>__<tool>, or written
 // into an agent as its own entry with the hub off.
 //
-//   - It is offered once (BridgesOffered): a user who removes the server
-//     doesn't get it back until the provider is removed and added again.
+//   - It is the user's call (treeman_26897 again): a Remote magpie's
+//     editor has a switch for it, off when one is added, and only one
+//     switched on (BridgesOn) is asked. Switched off, its server is taken
+//     out; a server added before the switch was there stays, the switch
+//     shown on. One taken out in the Library turns the switch off.
+//   - It is offered once each time it is switched on (BridgesOffered).
 //     One the user switched off for an agent stays off.
+//   - It follows the provider's rename: a server, an offer and a switch
+//     under an id the provider had (its Was) are under its id now.
 //   - A server the user has at that magpie's router already (its host and
 //     the router's path) is the one: none is added beside it.
 //   - It goes with the provider: once providers.json no longer has it, the
@@ -79,12 +85,62 @@ func originOf(u string) string {
 }
 
 // bridgeWanted is whether the Remote magpie id would be given a server,
-// were it to say it serves its router: it wasn't offered one yet.
+// were it to say it serves its router: switched on and not offered one
+// yet.
 func bridgeWanted(id string) bool {
 	mu.Lock()
 	l, err := load()
 	mu.Unlock()
-	return err == nil && !slices.Contains(l.BridgesOffered, id)
+	return err == nil && slices.Contains(l.BridgesOn, id) && !slices.Contains(l.BridgesOffered, id)
+}
+
+// RemoteMCPOn are the Remote magpies (provider ids) whose editor's switch
+// is on: switched on, or with a server of their router in the library
+// (one added before the switch was there too). Nil when the library
+// can't be read.
+func RemoteMCPOn() map[string]bool {
+	mu.Lock()
+	l, err := load()
+	mu.Unlock()
+	if err != nil {
+		return nil
+	}
+	l.adoptBridges() // a rename not yet written down: read as it will be
+	on := map[string]bool{}
+	for _, id := range l.BridgesOn {
+		on[id] = true
+	}
+	for _, s := range l.MCP {
+		if s.Bridge != "" {
+			on[s.Bridge] = true
+		}
+	}
+	return on
+}
+
+// SetRemoteMCP turns the switch of the Remote magpie id on or off. On, it
+// is asked again at its next model list (provider.AskRemoteHub asks at
+// once); off, its server is taken out of the library and the agents.
+func SetRemoteMCP(id string, on bool) (*Result, error) {
+	return change(func(l *Library) error {
+		l.adoptBridges()
+		if on {
+			if !slices.Contains(l.BridgesOn, id) {
+				l.BridgesOn = append(l.BridgesOn, id)
+			}
+			l.BridgesOffered = slices.DeleteFunc(l.BridgesOffered, func(x string) bool { return x == id })
+			return nil
+		}
+		l.BridgesOn = slices.DeleteFunc(l.BridgesOn, func(x string) bool { return x == id })
+		for _, s := range slices.Clone(l.MCP) {
+			if s.Bridge == id {
+				if err := removeServer(l, s.Name); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }
 
 // adoptBridge gives the router of the Remote magpie id a server, it having
@@ -106,7 +162,8 @@ func adoptBridge(id string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if slices.Contains(l.BridgesOffered, id) {
+	l.adoptBridges()
+	if slices.Contains(l.BridgesOffered, id) || !slices.Contains(l.BridgesOn, id) {
 		return false, nil
 	}
 	l.BridgesOffered = append(l.BridgesOffered, id)
@@ -119,11 +176,12 @@ func adoptBridge(id string) (bool, error) {
 }
 
 // adoptBridges brings the library's Remote magpie servers in line with the
-// providers: one whose provider is gone is taken out, and its offer with
-// it; the others' address and key are the provider's now. It asks no
-// magpie; true when it changed the library.
+// providers: what is under an id a provider had is under its id now; one
+// whose provider is gone is taken out, and its offer and switch with it;
+// the others' address and key are the provider's now. It asks no magpie;
+// true when it changed the library.
 func (l *Library) adoptBridges() bool {
-	if len(l.BridgesOffered) == 0 && !slices.ContainsFunc(l.MCP, func(s *Server) bool { return s.Bridge != "" }) {
+	if len(l.BridgesOffered) == 0 && len(l.BridgesOn) == 0 && !slices.ContainsFunc(l.MCP, func(s *Server) bool { return s.Bridge != "" }) {
 		return false
 	}
 	hs, err := remoteHubs()
@@ -134,12 +192,43 @@ func (l *Library) adoptBridges() bool {
 	for _, h := range hs {
 		by[h.ID] = h
 	}
+	// renamed (treeman_26897: its name and id changed, the server went):
+	// an id no provider has now that one had is that one's
+	now := map[string]string{}
+	for _, h := range hs {
+		for _, w := range h.Was {
+			if _, taken := by[w]; !taken && w != "" {
+				now[w] = h.ID
+			}
+		}
+	}
 	changed := false
-	if n := len(l.BridgesOffered); n > 0 {
-		l.BridgesOffered = slices.DeleteFunc(l.BridgesOffered, func(id string) bool { _, ok := by[id]; return !ok })
-		changed = len(l.BridgesOffered) != n
-		if len(l.BridgesOffered) == 0 {
-			l.BridgesOffered = nil
+	renamed := func(ids []string) []string {
+		var out []string
+		for _, id := range ids {
+			if to, ok := now[id]; ok {
+				id, changed = to, true
+			}
+			if !slices.Contains(out, id) {
+				out = append(out, id)
+			}
+		}
+		return out
+	}
+	l.BridgesOffered, l.BridgesOn = renamed(l.BridgesOffered), renamed(l.BridgesOn)
+	for _, s := range l.MCP {
+		if to, ok := now[s.Bridge]; ok && s.Bridge != "" {
+			s.Bridge, changed = to, true
+		}
+	}
+	gone := func(id string) bool { _, ok := by[id]; return !ok }
+	for _, ids := range []*[]string{&l.BridgesOffered, &l.BridgesOn} {
+		if n := len(*ids); n > 0 {
+			*ids = slices.DeleteFunc(*ids, gone)
+			changed = changed || len(*ids) != n
+		}
+		if len(*ids) == 0 {
+			*ids = nil
 		}
 	}
 	if n := len(l.MCP); n > 0 {

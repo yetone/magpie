@@ -19,6 +19,7 @@ import (
 	"github.com/yetone/magpie/internal/autostart"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/library"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
@@ -268,6 +269,9 @@ type providerJSON struct {
 	// routing unless KeepSelf (provider.Provider.SelfAnswered)
 	Self     bool `json:"self,omitempty"`
 	KeepSelf bool `json:"keepSelf,omitempty"`
+	// LibraryMCP: a Remote magpie whose router is a Library server, or
+	// is to be one (library.RemoteMCPOn)
+	LibraryMCP bool `json:"libraryMCP,omitempty"`
 	// CapStop and CapCareful: how its accounts end at their caps
 	// (plugins#349), set on their own with capstop and capcareful
 	CapStop    bool `json:"capStop,omitempty"`
@@ -1169,10 +1173,18 @@ func providersState() providersJSON {
 	uses := agentUses(agents, findGroup)
 	desktop := desktopNumbers(uses)
 	have := map[string]bool{}
+	var remoteMCP map[string]bool // read once, at the first Remote magpie
 	for _, p := range provider.All() {
 		// a preset is added once any provider is its, whatever its id
 		have[p.ID], have[p.Preset] = true, true
-		s.Providers = append(s.Providers, providerInfoWith(p, provider.KeptListing(p), uses, desktop))
+		info := providerInfoWith(p, provider.KeptListing(p), uses, desktop)
+		if p.IsRemoteMagpie() {
+			if remoteMCP == nil {
+				remoteMCP = library.RemoteMCPOn()
+			}
+			info.LibraryMCP = remoteMCP[p.ID]
+		}
+		s.Providers = append(s.Providers, info)
 	}
 	// partners first, as the add sheet lists them
 	for _, pa := range provider.Partners() {
@@ -1515,6 +1527,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			ClearAccessKey bool    `json:"clearAccessKey"`
 			// From is the id the provider had: another is a rename
 			From string `json:"from"`
+			// LibraryMCP, on a Remote magpie, is its editor's switch: its
+			// router a Library server (library.SetRemoteMCP); left out,
+			// it stays as it is
+			LibraryMCP *bool `json:"libraryMCP"`
 			// CopyOf, with New, is the provider the new one is a copy of
 			// (#268): its key and what else the form doesn't carry are
 			// taken from it when left out
@@ -2134,6 +2150,18 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					return
 				}
 			}
+			// a Remote magpie's router given a server or taken out, before
+			// its list below asks it
+			askHub := false
+			if req.LibraryMCP != nil {
+				if p, err := provider.Find(in.ID); err == nil && p.IsRemoteMagpie() && library.RemoteMCPOn()[in.ID] != *req.LibraryMCP {
+					if _, err := library.SetRemoteMCP(in.ID, *req.LibraryMCP); err != nil {
+						fail(rw, err)
+						return
+					}
+					askHub = *req.LibraryMCP
+				}
+			}
 			provider.ForgetBalances()
 			if old == nil || old.AccessKeyID != in.AccessKeyID || old.SecretAccessKey != in.SecretAccessKey {
 				// the plan's windows are read afresh with the new access key
@@ -2155,6 +2183,8 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				wg.Go(func() { provider.PrefillNewKeys(ctx, had, in.ID) })
 				if old == nil || old.Key != p.Key {
 					p.Fetch(ctx)
+				} else if askHub {
+					provider.AskRemoteHub(ctx, in.ID)
 				}
 				wg.Wait()
 				cancel()

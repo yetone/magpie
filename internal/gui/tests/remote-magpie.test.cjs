@@ -8,6 +8,10 @@
 // goes on in the API the agent spoke. Adding without one says so in its
 // own words and sends nothing; with one, the address goes as the preset's
 // endpoint, however it was typed (the backend puts every API on it).
+// Below the key, a Name and an ID, left blank the preset's, the ID
+// following the name until one is typed; and a switch, off, for its MCP
+// servers to be added to the Library (treeman_26897 on Discord), which a
+// saved one's editor has too, as the backend reads it.
 // Nothing moves the page. English and Chinese; no backend, the API is
 // faked here.
 const assert = require("node:assert/strict");
@@ -29,7 +33,7 @@ const presets = [
 ];
 const providers = [{ id: "openrouter", name: "OpenRouter", icon: "openai", preset: "openrouter", models: [], agents: [], key: { set: true, masked: "sk-…ab12" } },
   { id: "office", name: "Office", icon: "magpie", preset: "remote-magpie", chat: "http://office/v1", responses: "http://office/v1", anthropic: "http://office", decide: "http://office/v1",
-    deciders: ["judge/custom-a", "judge/custom-b"], models: [{ id: "lib/m1", name: "Chat", on: true }, { id: "judge/custom-a", name: "custom-a · judge", on: false }, { id: "judge/custom-b", name: "custom-b · judge", on: false }], agents: [], key: { set: true, masked: "sk-…ab12" } },
+    libraryMCP: true, deciders: ["judge/custom-a", "judge/custom-b"], models: [{ id: "lib/m1", name: "Chat", on: true }, { id: "judge/custom-a", name: "custom-a · judge", on: false }, { id: "judge/custom-b", name: "custom-b · judge", on: false }], agents: [], key: { set: true, masked: "sk-…ab12" } },
 ];
 
 function server(lang, saves) {
@@ -55,9 +59,9 @@ function server(lang, saves) {
 }
 
 const L = {
-  en: { field: "Endpoint", hint: /Settings → Network and sharing, under Share on local network.*the API the agent spoke/, needed: "The other magpie's address is needed", note: "another computer's magpie, shared on its network", add: "Add",
+  en: { field: "Endpoint", hint: /Settings → Network and sharing, under Share on local network.*the API the agent spoke/, needed: "The other magpie's address is needed", note: "another computer's magpie, shared on its network", add: "Add", name: "Name", mcp: "Add its MCP servers to the Library",
     decide: ["Jev endpoint", "System One endpoint"] },
-  zh: { field: "接口地址", hint: /设置 → 网络与共享 → 局域网共享.*原样转发/, needed: "需要填写另一台 magpie 的地址", note: "远程：另一台电脑上的 magpie，局域网共享", add: "添加",
+  zh: { field: "接口地址", hint: /设置 → 网络与共享 → 局域网共享.*原样转发/, needed: "需要填写另一台 magpie 的地址", note: "远程：另一台电脑上的 magpie，局域网共享", add: "添加", name: "名称", mcp: "把它的 MCP 服务器加到资源库",
     decide: ["Jev 端点", "System One 端点"] },
 };
 
@@ -152,6 +156,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           // the decision model's own address field, by its label as i18n.js has it
           for (const label of w.decide) assert.equal(await saved.locator("label", { hasText: label }).count(), 0, label);
           assert.equal(await saved.locator('input[type="url"]').count(), 1, "only the remote's address is editable");
+          assert.equal(await saved.locator(".library-mcp", { hasText: w.mcp }).locator("input").isChecked(), true, "the switch as the backend reads it");
           assert.deepEqual(await saved.locator(".mchip > span:first-child").allTextContents(),
             decisions ? ["Chat", "custom-a · judge", "custom-b · judge"] : ["Chat"]);
           if (process.env.ARTIFACT_DIR && engine === "chromium" && lang === "en") {
@@ -193,6 +198,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           editor.querySelector("input.endpoint"), editor.querySelector('input[type="password"]'),
         ].map((input) => input.getBoundingClientRect().top));
         assert(ey < ky, "the endpoint above the key");
+        // a Name and an ID under the key, blank; the switch off
+        const name = ed.locator("input.provider-name"), id = ed.locator("input.provider-id");
+        assert.equal(await ed.locator("label", { hasText: new RegExp("^" + w.name + "$") }).count(), 1);
+        assert.equal(await name.getAttribute("placeholder"), "Remote magpie");
+        assert.equal(await id.getAttribute("placeholder"), "remote-magpie");
+        const ny = await name.evaluate((n) => n.getBoundingClientRect().top);
+        assert(ky < ny, "the name under the key");
+        const mcp = ed.locator(".library-mcp", { hasText: w.mcp }).locator("input");
+        assert.equal(await mcp.isChecked(), false, "off when added");
 
         // no endpoint: said, nothing sent, the page where it was
         await key.fill("sk-magpie-x");
@@ -212,12 +226,49 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(s.preset, "remote-magpie");
         assert.equal(s.key, "sk-magpie-x");
         assert.equal(s.chat, "192.168.1.20:3425");
+        assert.equal(s.name, "Remote magpie");
+        assert.equal(s.id, "remote-magpie");
+        assert.equal(s.libraryMCP, false);
+
+        // named, its id following; then an id of its own; switched on
+        await page.locator("#addProvider").click();
+        await tile.click();
+        await ed.locator(".ehead b", { hasText: "Remote magpie" }).waitFor();
+        await ed.locator("input.endpoint").fill("192.168.1.21:3425");
+        await ed.locator("input[type=password]").first().fill("sk-magpie-y");
+        await ed.locator("input.provider-name").fill("Home Lab");
+        assert.equal(await ed.locator("input.provider-id").getAttribute("placeholder"), "home-lab");
+        await ed.locator(".library-mcp input").check();
+        await ed.locator(".bar button.primary", { hasText: w.add }).click();
+        await page.waitForFunction(() => !document.querySelector(".editor.new"));
+        assert.deepEqual([saves[1].name, saves[1].id, saves[1].libraryMCP], ["Home Lab", "home-lab", true]);
+        await page.locator("#addProvider").click();
+        await tile.click();
+        await ed.locator(".ehead b", { hasText: "Remote magpie" }).waitFor();
+        await ed.locator("input.endpoint").fill("192.168.1.22:3425");
+        await ed.locator("input[type=password]").first().fill("sk-magpie-z");
+        await ed.locator("input.provider-name").fill("Home Lab");
+        await ed.locator("input.provider-id").fill("Lab 2");
+        await ed.locator(".bar button.primary", { hasText: w.add }).click();
+        await page.waitForFunction(() => !document.querySelector(".editor.new"));
+        assert.deepEqual([saves[2].name, saves[2].id, saves[2].libraryMCP], ["Home Lab", "lab-2", false]);
 
         // another preset's editor has no endpoint field
         await page.locator("#addProvider").click();
         await sheet.locator(".tile .n", { hasText: /^OpenAI$/ }).click();
         await ed.locator(".ehead b", { hasText: "OpenAI" }).waitFor();
         assert.equal(await ed.locator("input.endpoint").count(), 0);
+        assert.equal(await ed.locator(".library-mcp").count(), 0, "no switch on another preset");
+        await page.keyboard.press("Escape");
+        await ed.waitFor({ state: "detached" });
+
+        // a saved one's switch turned off: sent so
+        await page.locator('#providers .row[data-id="office"]').click();
+        await saved.locator(".ehead b", { hasText: "Office" }).waitFor();
+        await saved.locator(".library-mcp input").uncheck();
+        await Promise.all([page.waitForResponse((r) => r.url().endsWith("/api/provider/save")), saved.locator(".bar button.primary").first().click()]);
+        assert.equal(saves.length, 4);
+        assert.deepEqual([saves[3].from, saves[3].libraryMCP], ["office", false]);
         assert.deepEqual(errors, []);
         await page.context().close();
       });
