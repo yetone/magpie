@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -61,5 +62,43 @@ func TestGroupOnResponsesRelaysArgumentDeltas(t *testing.T) {
 	defer mu.Unlock()
 	if len(paths) != 1 || !strings.HasSuffix(paths[0], "/responses") {
 		t.Fatalf("the member was asked on %v", paths)
+	}
+}
+
+// A group of members that all serve Responses, one best there, is asked
+// on Responses (provider.GroupAPI; zyh6036 on X), and the gateway relays
+// it as it is to each: the relay best on Chat that serves Responses too is
+// asked on /responses, not translated to Chat.
+func TestGroupOfResponsesServersRelaysOnResponses(t *testing.T) {
+	fresh(t)
+	var mu sync.Mutex
+	var paths []string
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"r1","object":"response","model":"gpt-5.5","status":"completed","output":[{"type":"message","id":"m1","role":"assistant","content":[{"type":"output_text","text":"hello"}]}],"usage":{"input_tokens":3,"output_tokens":1}}`)
+	}))
+	defer up.Close()
+	for _, p := range []provider.Provider{
+		{ID: "resp", Name: "Resp", Key: "k", Responses: up.URL + "/v1", Models: []string{"gpt-5.5"}},
+		{ID: "both", Name: "Both", Key: "k", Chat: up.URL + "/v1", Responses: up.URL + "/v1", Models: []string{"gpt-5.5"}},
+	} {
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := provider.SaveGroup(provider.Group{ID: "subs", Name: "Subs", Members: []string{"both/gpt-5.5", "resp/gpt-5.5"}, Routing: provider.Ordered}); err != nil {
+		t.Fatal(err)
+	}
+	// the member best on Chat, first in the group, is asked on /responses
+	rec := httptest.NewRecorder()
+	New().Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/responses", strings.NewReader(`{"model":"group/subs","input":"hi"}`)))
+	mu.Lock()
+	defer mu.Unlock()
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "hello") || !slices.Equal(paths, []string{"/v1/responses"}) {
+		t.Fatalf("the group was asked on %v: %d %s", paths, rec.Code, rec.Body)
 	}
 }

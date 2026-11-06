@@ -98,7 +98,7 @@ func TestPiGroupThinkingIsWhatPiRuns(t *testing.T) {
 }
 
 // #5037: a routing group has no api of its own — a Messages-only group
-// stays on Chat (allResponses) — so its entry went out with no promptCache
+// stays on Chat (provider.GroupAPI) — so its entry went out with no promptCache
 // and Pi's cacheWarming stopped with "cache lifetime unavailable". Whatever
 // Claude member the group picks, the gateway's own translation marks the
 // request ephemeral for five minutes, so the group declares that short

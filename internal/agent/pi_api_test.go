@@ -13,8 +13,9 @@ import (
 // relays the request as it is: a Responses-only provider's models and GPT
 // on OpenAI's API go on openai-responses; a Messages-only provider's on
 // anthropic-messages at the gateway; a Chat provider's stay on the
-// provider's openai-completions. A group whose members are all best on
-// Responses goes there too (#1594); any other group stays on Chat.
+// provider's openai-completions. A group goes on Responses when a member
+// is best there and every other serves it too (#1594, zyh6036 on X); any
+// other group stays on Chat.
 func TestPiModelsAskedOnTheirNativeAPI(t *testing.T) {
 	home := syncHome(t)
 	for _, p := range []provider.Provider{
@@ -23,6 +24,8 @@ func TestPiModelsAskedOnTheirNativeAPI(t *testing.T) {
 		{ID: "anth", Name: "Anth", Key: "k", Anthropic: "http://127.0.0.1:1", Models: []string{"claude-sonnet-5", "kimi-k3"}},
 		{ID: "gem", Name: "Gemini", Key: "k", Gemini: "http://127.0.0.1:1/v1beta", Models: []string{"gemini-3-flash"}},
 		{ID: "hybrid", Name: "Hybrid", Key: "k", Chat: "http://127.0.0.1:1/v1", Gemini: "http://127.0.0.1:1/v1beta", Models: []string{"gemini-3-flash", "gemini-2.5-pro"}},
+		// a relay serving Chat and Responses, best on Chat
+		{ID: "both", Name: "Both", Key: "k", Chat: "http://127.0.0.1:1/v1", Responses: "http://127.0.0.1:1/v1", Models: []string{"gpt-5.5"}},
 	} {
 		if err := provider.Save(p); err != nil {
 			t.Fatal(err)
@@ -31,14 +34,19 @@ func TestPiModelsAskedOnTheirNativeAPI(t *testing.T) {
 	if err := provider.SetModelAPI("hybrid/gemini-3-flash", "gemini"); err != nil {
 		t.Fatal(err)
 	}
-	// a group goes on Responses only when every member is best served there
-	// (#1594): one with a Chat member, or of Messages ones, stays on Chat
+	// a group goes on Responses when a member is best served there and
+	// every other serves it too (#1594): one with a Chat-only member, or of
+	// Messages ones, stays on Chat
 	for _, g := range []provider.Group{
 		{ID: "gpts", Name: "GPTs", Members: []string{"resp/gpt-5.5", "openai/gpt-5.5", "resp/grok-5"}},
 		{ID: "mixed", Name: "Mixed", Members: []string{"resp/grok-5", "relay/glm-4.6"}},
 		{ID: "claudes", Name: "Claudes", Members: []string{"anth/claude-sonnet-5", "anth/kimi-k3"}},
 		{ID: "outer", Name: "Outer", Members: []string{"group/gpts", "openai/gpt-5.5"}},
 		{ID: "geminis", Name: "Geminis", Members: []string{"gem/gemini-3-flash"}},
+		// zyh6036 on X: every member serves Responses, one is best there
+		{ID: "subs", Name: "Subs", Members: []string{"both/gpt-5.5", "resp/gpt-5.5"}},
+		// none is best there: each stays relayed on Chat
+		{ID: "chatfirst", Name: "Chat first", Members: []string{"both/gpt-5.5"}},
 	} {
 		if err := provider.SaveGroup(g); err != nil {
 			t.Fatal(err)
@@ -80,6 +88,9 @@ func TestPiModelsAskedOnTheirNativeAPI(t *testing.T) {
 		"group/mixed":           nil,
 		"group/claudes":         nil,
 		"group/geminis":         nil,
+		"both/gpt-5.5":          nil,
+		"group/subs":            "openai-responses",
+		"group/chatfirst":       nil,
 	} {
 		got, ok := apis[id]
 		if !ok {

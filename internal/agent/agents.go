@@ -860,7 +860,7 @@ func piModelJSON(m catalog.Model, gw string, native bool) map[string]any {
 		e["promptCache"] = c
 	} else if native && e["api"] == nil {
 		// a routing group has no api of its own (a Messages-only group stays
-		// on Chat, allResponses), and went out with no promptCache, which
+		// on Chat, provider.GroupAPI), and went out with no promptCache, which
 		// stops Pi's cacheWarming with "cache lifetime unavailable" (#5037)
 		// — while whatever Claude member it picks has the gateway's own
 		// translation marking the request ephemeral for five minutes

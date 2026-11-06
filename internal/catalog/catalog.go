@@ -48,8 +48,9 @@ type Model struct {
 	APIs []string `json:",omitempty"`
 	// Endpoints, in magpie's own models for an agent, are the gateway
 	// paths a request for it is relayed on as it is
-	// (provider.NativeEndpoints, /v1/models' native_endpoints); none for a
-	// group or a model translated anyway.
+	// (provider.NativeEndpoints, /v1/models' native_endpoints); a group's
+	// are those every member relays (provider.GroupEndpoints), which
+	// /v1/models leaves out; none for a model translated anyway.
 	Endpoints []string `json:"-"`
 	// Images is set on a model that takes images as input.
 	Images bool `json:",omitempty"`

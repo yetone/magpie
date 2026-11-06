@@ -371,8 +371,9 @@ func buildModels(agent string) []catalog.Model {
 			m.ImageInput = &yes
 		}
 		// APIs is the preferred client protocol, preserving the vendor's
-		// own content where possible. A group's members may differ, so a group has
-		// one only when every member is served best on Responses (#1594,
+		// own content where possible. A group's members may differ, so a
+		// group has Responses when one member is best there and every
+		// other takes it as it is too (provider.GroupAPI; #1594,
 		// ObsidianArch02): Pi, omp, droid and dsh then ask it there, and a
 		// GPT group's tool-call arguments stream as the member sends them
 		// instead of being held for a Chat answer
@@ -390,8 +391,8 @@ func buildModels(agent string) []catalog.Model {
 					}
 				}
 			}
-		} else if allResponses(members(e.ID)) {
-			m.APIs = []string{string(provider.Responses)}
+		} else if api := provider.GroupAPI(members(e.ID)); api != "" {
+			m.APIs = []string{string(api)}
 		}
 		// the service tiers Codex is offered on it, as the gateway's own
 		// lists offer them: Fast in the Codex CLI magpie writes
@@ -405,6 +406,13 @@ func buildModels(agent string) []catalog.Model {
 		// the gateway paths it goes on untranslated, as /v1/models says
 		// them: what an agent plugin's connect is told (cleary5779)
 		m.Endpoints = provider.NativeEndpoints(e)
+		if e.Group != "" {
+			// a group's, the APIs every member relays as it is
+			// (provider.GroupEndpoints), which /v1/models leaves out: a
+			// remote magpie sends a group's request on in the client's
+			// API, for the other side to pick per member
+			m.Endpoints = provider.GroupEndpoints(members(e.ID))
+		}
 		// Codex's /fast on a ChatGPT account's own GPT model, which
 		// OpenCode has no command for and takes as variants (#2379); a
 		// group is sent fast as the group says, as a fast pick is
@@ -430,20 +438,6 @@ func describedNow() bool {
 }
 
 var builtSeen stampedLists[bool]
-
-// allResponses reports whether a group's members are all served best on
-// Responses, so the gateway relays a Responses request to whichever it
-// picks. A group with none, or one member on another API, is false: a
-// Messages-only group stays on Chat too, as the thinking a Claude member
-// takes is known by its own model, not by the group's id.
-func allResponses(ms []provider.Member) bool {
-	for _, m := range ms {
-		if m.Provider.Native(m.Model) != provider.Responses {
-			return false
-		}
-	}
-	return len(ms) > 0
-}
 
 // maxTokens is the output limit an agent is handed for m, kept within the
 // context window it is handed with it: models.dev lists some models' output
