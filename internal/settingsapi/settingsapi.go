@@ -45,7 +45,7 @@ var Keys = []string{
 	"codexWarmup", "claudeWarmup", "codexWarmAt", "claudeWarmAt", "codexWarmAts", "claudeWarmAts",
 	"workbuddyCheckin", "traeCheckin", "minimaxCheckin", "qoderCheckin",
 	// models: replies, vision, images, search
-	"replyModel", "noLoopGuard", "claudeLeanPrompt", "claudePrintMode", "refusalRetries",
+	"replyModel", "noLoopGuard", "claudeLeanPrompt", "claudePrintMode", "refusalRetries", "retryAfterCap",
 	"vision", "visionEffort", "imageGen", "imageTimeout", "classifyTimeout",
 	"searcher", "searcherThen", "searcherEffort", "searchFirst",
 	// updates
@@ -178,6 +178,10 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	// again, which null sets back to every one left
 	if _, sent := fields["refusalRetries"]; !sent {
 		in.RefusalRetries = cur.RefusalRetries
+	}
+	// nor the longest wait an agent is told (#5371)
+	if _, sent := fields["retryAfterCap"]; !sent {
+		in.RetryAfterCap = cur.RetryAfterCap
 	}
 	// nor whether updates download by themselves (#2296)
 	if _, sent := fields["noAutoDownload"]; !sent {

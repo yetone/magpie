@@ -922,8 +922,9 @@ func (s *Server) Handler() http.Handler {
 	mux := s.routes()
 	// the goroutine dump first, ahead of every lock the rest can be stuck
 	// on (dumpFirst)
-	// a socket's turns go through all of it again (socketEntry)
-	return socketEntry(s.dumpFirst(s.counted(headerLogged(holdCatalog(corsGuard(callerGuard(readOnlyGuard(mux, withCaller(keyLimited(mux))))))))))
+	// a socket's turns go through all of it again (socketEntry); the
+	// agent's Retry-After is bounded on the way out (retryCapped)
+	return socketEntry(s.dumpFirst(retryCapped(s.counted(headerLogged(holdCatalog(corsGuard(callerGuard(readOnlyGuard(mux, withCaller(keyLimited(mux)))))))))))
 }
 
 // routes are the client APIs, each by its pattern: readOnlyGuard reads
