@@ -15,8 +15,8 @@
 
 <sub>赞助商</sub>
 
-<a href="https://usemagpie.ai/go/apinebula/readme"><picture><source media="(prefers-color-scheme: dark)" srcset="site/public/img/sponsor-apinebula-dark.svg"><img src="site/public/img/sponsor-apinebula.svg" width="144" height="36" alt="APINEBULA"></picture></a>&emsp;&emsp;<a href="https://usemagpie.ai/go/zerotoken/readme"><picture><source media="(prefers-color-scheme: dark)" srcset="site/public/img/sponsor-zerotoken-dark.svg"><img src="site/public/img/sponsor-zerotoken.svg" width="144" height="36" alt="零词元"></picture></a>&emsp;&emsp;<a href="https://usemagpie.ai/go/kimi-cn/readme"><picture><source media="(prefers-color-scheme: dark)" srcset="site/public/img/sponsor-kimi-dark.svg"><img src="site/public/img/sponsor-kimi.svg" width="144" height="36" alt="Kimi"></picture></a><br>
-<a href="https://usemagpie.ai/go/apikeyfan/readme"><picture><source media="(prefers-color-scheme: dark)" srcset="site/public/img/sponsor-apikeyfan-cn-dark.svg"><img src="site/public/img/sponsor-apikeyfan-cn.svg" width="144" height="36" alt="APIKEY.FAN"></picture></a>&emsp;&emsp;<a href="https://usemagpie.ai/go/wandapi/readme"><picture><source media="(prefers-color-scheme: dark)" srcset="site/public/img/sponsor-wandapi-cn-dark.svg"><img src="site/public/img/sponsor-wandapi-cn.svg" width="144" height="36" alt="WandAPI"></picture></a>&emsp;&emsp;<a href="https://usemagpie.ai/go/aigocode/readme"><picture><source media="(prefers-color-scheme: dark)" srcset="site/public/img/sponsor-aigocode-readme-dark.png"><img src="site/public/img/sponsor-aigocode-readme.png" width="144" height="36" alt="AIGoCode"></picture></a>
+<a href="https://usemagpie.ai/go/apinebula/readme"><picture><source media="(prefers-color-scheme: dark)" srcset="site/public/img/sponsor-apinebula-dark.svg"><img src="site/public/img/sponsor-apinebula.svg" width="144" height="36" alt="APINEBULA"></picture></a>&emsp;&emsp;<a href="https://usemagpie.ai/go/zerotoken/readme"><picture><source media="(prefers-color-scheme: dark)" srcset="site/public/img/sponsor-zerotoken-dark.svg"><img src="site/public/img/sponsor-zerotoken.svg" width="144" height="36" alt="零词元"></picture></a>&emsp;&emsp;<a href="https://usemagpie.ai/go/apikeyfan/readme"><picture><source media="(prefers-color-scheme: dark)" srcset="site/public/img/sponsor-apikeyfan-cn-dark.svg"><img src="site/public/img/sponsor-apikeyfan-cn.svg" width="144" height="36" alt="APIKEY.FAN"></picture></a><br>
+<a href="https://usemagpie.ai/go/wandapi/readme"><picture><source media="(prefers-color-scheme: dark)" srcset="site/public/img/sponsor-wandapi-cn-dark.svg"><img src="site/public/img/sponsor-wandapi-cn.svg" width="144" height="36" alt="WandAPI"></picture></a>&emsp;&emsp;<a href="https://usemagpie.ai/go/aigocode/readme"><picture><source media="(prefers-color-scheme: dark)" srcset="site/public/img/sponsor-aigocode-readme-dark.png"><img src="site/public/img/sponsor-aigocode-readme.png" width="144" height="36" alt="AIGoCode"></picture></a>
 
 **[下载](https://usemagpie.ai/zh/)** &nbsp;·&nbsp; **[文档](https://usemagpie.ai/docs/zh/start)** &nbsp;·&nbsp; **[完整参考（英文）](docs/reference.md)** &nbsp;·&nbsp; **[插件](https://github.com/magpie-community/plugins)** &nbsp;·&nbsp; **[Discord](https://discord.gg/vGSnD3ZKQF)** &nbsp;·&nbsp; [English](README.md) · **简体中文**
 
@@ -310,6 +310,10 @@ magpie plugin options model-map '{"mapping": {"fast": "deepseek/deepseek-chat"}}
     <img src="https://api.star-history.com/svg?repos=yetone/magpie&type=Date" width="600" alt="Star history">
   </picture>
 </a>
+
+## 致谢
+
+Thanks to [Kimi](https://usemagpie.ai/go/kimi-cn/readme) for supporting magpie and the open source community.
 
 ## 许可证
 
