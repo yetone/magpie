@@ -1,6 +1,7 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// Codex writes its memories with models of its own (gpt-5.6-terra to
-// consolidate, gpt-5.6-luna to sum a thread up), whatever its model (Yc on
+// Codex writes its memories with models of its own (gpt-6.1-terra to
+// consolidate, gpt-6-luna to sum a thread up, from Codex 0.167.0;
+// gpt-5.6-terra and gpt-5.6-luna before), whatever its model (Yc on
 // Discord). The model it writes them with, the [memories] extract_model and
 // consolidation_model, is a named row in Codex's settings
 // (codex-memories-settings), so Codex's own card has no square for it: the
@@ -71,8 +72,8 @@ function server(lang, sets) {
 
 // the words as i18n.js has them
 const W = {
-  en: { unset: "Codex memories model: Codex's own: gpt-5.6-terra/luna, or the session's magpie model", def: "Default", set: "Codex memories model: GPT-5.4 mini" },
-  zh: { unset: "Codex 记忆整理模型：Codex 自带的 gpt-5.6-terra/luna，或会话正在用的 magpie 模型", def: "默认", set: "Codex 记忆整理模型：GPT-5.4 mini" },
+  en: { unset: "Codex memories model: Codex's own memory models, or the session's magpie model", def: "Default", set: "Codex memories model: GPT-5.4 mini" },
+  zh: { unset: "Codex 记忆整理模型：Codex 自带的记忆模型，或会话正在用的 magpie 模型", def: "默认", set: "Codex 记忆整理模型：GPT-5.4 mini" },
 };
 
 const codex = '.row.agent[data-id="codex@wsl:Ubuntu-24.04"]';

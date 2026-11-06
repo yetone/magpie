@@ -12,7 +12,8 @@ import (
 
 // Codex's side calls ask for one of Codex's own models by its bare name,
 // whatever the conversation is on: its memories are written on
-// gpt-5.6-luna and gpt-5.6-terra, its auto-review runs on
+// gpt-6-luna and gpt-6.1-terra (gpt-5.6-luna and gpt-5.6-terra before
+// Codex 0.167.0), its auto-review runs on
 // codex-auto-review. With the conversation on one of magpie's models
 // beside Codex's ChatGPT sign-in, each of those went to that ChatGPT
 // account rather than where the user had routed Codex (cybercaius on

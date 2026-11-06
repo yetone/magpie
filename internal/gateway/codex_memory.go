@@ -49,7 +49,8 @@ func freeOnChatGPT(model, plan string) bool { return provider.ChatGPTReviewFree(
 // codexMemoryStandIn is the model a Codex memory call goes to when magpie
 // knows none by the name it came with (#742): Codex writes and
 // consolidates its memories on models of its own (memories.extract_model
-// and consolidation_model, gpt-5.6-luna and gpt-5.6-terra by default) by
+// and consolidation_model; by default gpt-6-luna and gpt-6.1-terra from
+// Codex 0.167.0, gpt-5.6-luna and gpt-5.6-terra before) by
 // their bare names, whatever it is set to, so with magpie as its provider
 // every one was turned away as an unknown model before it was routed. It
 // goes to the model that Codex's own turns go to — the last one it had

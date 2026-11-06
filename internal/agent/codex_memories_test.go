@@ -5,8 +5,9 @@ import (
 	"testing"
 )
 
-// Codex writes its memories with models of its own, gpt-5.6-luna for a
-// thread's summary and gpt-5.6-terra to consolidate them, whatever its
+// Codex writes its memories with models of its own, gpt-6-luna for a
+// thread's summary and gpt-6.1-terra to consolidate them (gpt-5.6-luna
+// and gpt-5.6-terra before Codex 0.167.0), whatever its
 // model (Yc on Discord). The memories square sets both [memories] keys to
 // one pick, Default removes them, a magpie model needs Codex on magpie,
 // and stepping out of magpie drops one of magpie's while keeping the

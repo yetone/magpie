@@ -1298,8 +1298,9 @@ func codexIn(at place) *Agent {
 	}
 	// the model Codex writes its memories with (Yc on Discord): [memories]
 	// extract_model summarises a thread, consolidation_model folds them in
-	// (codex-rs/config/src/types.rs). Unset, Codex takes gpt-5.6-luna and
-	// gpt-5.6-terra, whatever its model; magpie sets both to one pick.
+	// (codex-rs/config/src/types.rs). Unset, Codex takes models of its own
+	// whatever its model (from 0.167.0 gpt-6-luna and gpt-6.1-terra, before
+	// that gpt-5.6-luna and gpt-5.6-terra); magpie sets both to one pick.
 	memories := func() (string, error) {
 		m, err := edit.GetTOMLTable(path, "memories")
 		return cmp.Or(m["consolidation_model"], m["extract_model"]), err
