@@ -17,14 +17,12 @@ func TestAppNamesNotPersons(t *testing.T) {
 	}
 	for _, s := range []string{
 		"Cicada, Mimi, Phosphor, Parakeet, Muesli",
-		"Muesli",
 		"Cicada and Mimi",
 		"1. **Cicada** – a minimal note-taking app with Markdown.\n2. **Mimi** – a voice memo app with AI summaries.\n3. **Phosphor** – an RSS reader.\n4. **Parakeet** – a podcast player for macOS.\n5. **Muesli** – a meal planner.",
-		"Which is better for notes on my Mac, Cicada or Mimi?",
 		"I switched to Muesli last week; Parakeet crashes too often.",
 		"I'm using Phosphor now, and Cicada vs Mimi is still open.",
 		"Apps like Muesli are hard to find.",
-		"Parakeet 这个软件很好用，Cicada 和 Mimi 呢？",
+		"Parakeet 这个软件很好用。",
 	} {
 		out, _ := Mask(s, Options{Personal: true, Model: f.find})
 		if out != s {
@@ -51,7 +49,7 @@ func TestPersonBesideAppStillMasked(t *testing.T) {
 		{"张伟说 Parakeet 这个软件很好用，让我也装一个。", []string{"张伟"}, []string{"Parakeet"}},
 		{"Hi Mimi, thanks for the notes from Tuesday's call. Can you send them to Laura as well?", []string{"Mimi", "Laura"}, nil},
 		{"Mimi will review the draft tomorrow and send it to Daniel.", []string{"Mimi", "Daniel"}, nil},
-		{"Mimi", nil, nil}, // alone it says nothing whose: let go, by design
+		{"Mimi", []string{"Mimi"}, nil}, // alone it says nothing whose, and may be anyone's
 	} {
 		out, _ := Mask(c.s, Options{Personal: true, Model: f.find})
 		for _, v := range c.mask {
@@ -111,5 +109,42 @@ func TestManyNamesRestoreEachToItself(t *testing.T) {
 	}
 	if got := Restore(reply.String(), false); got != want.String() {
 		t.Fatalf("restored\n got %q\nwant %q", got, want.String())
+	}
+}
+
+// A first name the model took for a person's goes out only where a
+// thing's word is right beside it, or in a list of apps: not alone, not
+// with an app's or a system's word elsewhere in its sentence, not as a
+// possessive, and never in a tool call's arguments, which name whom a
+// tool acts for.
+func TestFirstNameNearAThingMasked(t *testing.T) {
+	f := &fakeModel{values: map[string]string{"Rina": "private_person"}}
+	o := Options{Personal: true, Model: f.find}
+	for _, s := range []string{
+		"Rina",
+		"Rina's Mac won't boot",
+		"Rina’s iPhone is on iOS 26",
+		"Rina uses Windows at home",
+		"Send the license to Rina.",
+	} {
+		if out, _ := Mask(s, o); strings.Contains(out, "Rina") {
+			t.Errorf("went as written: %q", out)
+		}
+	}
+	for name, body := range map[string]string{
+		"user text":                      `{"messages":[{"role":"user","content":"Rina"}]}`,
+		"tool_use":                       `{"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"send","input":{"recipient":"Rina"}}]}]}`,
+		"tool_use, an app's word beside": `{"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"send","input":{"note":"install Rina"}}]}]}`,
+		"function_call":                  `{"input":[{"type":"function_call","call_id":"c1","name":"send","arguments":"{\"recipient\":\"Rina\",\"note\":\"using Rina\"}"}]}`,
+	} {
+		if out, _ := MaskJSON([]byte(body), o); strings.Contains(string(out), "Rina") {
+			t.Errorf("%s: went as written: %s", name, out)
+		}
+	}
+	// an app's word right beside it still says a thing
+	for _, s := range []string{"I'm using Rina now.", "the Rina app crashed"} {
+		if out, _ := Mask(s, o); out != s {
+			t.Errorf("an app's name masked: %q", out)
+		}
 	}
 }

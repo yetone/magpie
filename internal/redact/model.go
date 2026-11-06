@@ -84,7 +84,7 @@ func modelSpans(s string, o Options) []span {
 		if kind == "PERSON" {
 			a, b = zhTrim(s, a, b)
 		}
-		if a < b && utf8.ValidString(s[a:b]) && modelTakes(kind, s[a:b]) && modelFits(s, a, b, kind) && !(kind == "PERSON" && zhWordNotName(s, a, b)) {
+		if a < b && utf8.ValidString(s[a:b]) && modelTakes(kind, s[a:b]) && modelFits(s, a, b, kind, o.args) && !(kind == "PERSON" && zhWordNotName(s, a, b)) {
 			out = append(out, span{a, b, kind, ByModel, f.Score, false})
 		}
 	}
@@ -307,7 +307,7 @@ func withModel(o Options, texts []string) Options {
 // A name's words each start with a capital, but for the particles names
 // have (van, de, bin): "local LLM", "User yetone" and claudeKeychain are
 // a program's or a log's words.
-func modelFits(s string, a, b int, kind string) bool {
+func modelFits(s string, a, b int, kind string, args bool) bool {
 	if a > 0 && wordByte(s[a-1]) && wordByte(s[a]) || b < len(s) && wordByte(s[b-1]) && wordByte(s[b]) {
 		return false
 	}
@@ -325,7 +325,7 @@ func modelFits(s string, a, b int, kind string) bool {
 	}
 	switch kind {
 	case "PERSON":
-		return personFits(s, a, b, v)
+		return personFits(s, a, b, v, args)
 	case "ACCOUNT":
 		if hexRe.MatchString(v) && strings.ContainsAny(v, "abcdef") || versionRe.MatchString(v) || !numberLike(v) {
 			return false
@@ -739,7 +739,7 @@ func wordByte(c byte) bool {
 	return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
 }
 
-func personFits(s string, a, b int, v string) bool {
+func personFits(s string, a, b int, v string, args bool) bool {
 	if strings.ContainsAny(v, "0123456789/\\@<>|=_") || strings.IndexFunc(v, unicode.IsUpper) < 0 && isASCII(v) {
 		return false
 	}
@@ -762,8 +762,10 @@ func personFits(s string, a, b int, v string) bool {
 		return false
 	}
 	// an app's or a product's name the model took for a first name, where
-	// its sentence speaks of a thing (thingname.go)
-	if w := strings.Fields(v); len(w) == 1 && isASCII(v) && thingNamed(s, a, b) {
+	// its sentence speaks of a thing (thingname.go); never in a tool
+	// call's arguments, which name whom a tool acts for
+	// ({"recipient":"Rina"})
+	if w := strings.Fields(v); len(w) == 1 && isASCII(v) && !args && thingNamed(s, a, b) {
 		return false
 	}
 	for i, w := range strings.Fields(v) {

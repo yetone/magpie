@@ -87,6 +87,9 @@ type Options struct {
 
 	// found are the spans Model found, by text, for one request's texts
 	found map[string][]Found
+	// args is masking a tool call's arguments (MaskJSON): the model's
+	// one-word name there is never taken for an app's (thingNamed)
+	args bool
 	// sent is masking for a vendor (Mask, MaskJSON): a text masked
 	// before on Route has the model's finds and the known values it had
 	// then (sentSpans)

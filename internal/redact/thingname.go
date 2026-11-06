@@ -18,23 +18,32 @@ import (
 // One word the model took for a name goes as written where what is
 // around it says a thing is meant, and nothing says a person is:
 //   - the word before or after it says so: a person's (my colleague Mimi,
-//     Hi Mimi, Mimi said, 张伟先生) or a thing's (using Phosphor, switched
-//     to Muesli, the Phosphor app, Parakeet 这个软件);
+//     Hi Mimi, Mimi said, Mimi's Mac, 张伟先生) or a thing's (using
+//     Phosphor, switched to Muesli, the Phosphor app, Parakeet 这个软件);
 //   - else its sentence: a pronoun, a relation or a title, a word of
-//     speech or a greeting say a person, and the name is masked; an app's,
-//     a tool's or a system's word, a price or a comparison say a thing;
-//   - else a text of nothing but such words (Cicada, Mimi, Phosphor) is a
+//     speech or a greeting say a person, and the name is masked;
+//   - else an item of a list whose other items speak of apps, or a text
+//     of nothing but two such words or more (Cicada, Mimi, Phosphor) is a
 //     list of names with nothing to say whose, and goes as written.
 //
-// What this lets go: a first name alone, in a sentence that names an app
-// and has nothing of a person in it ("Mimi uses the app daily"), and a
-// text that is only first names. A name of two words or more (John
-// Smith), one in a sentence with he, she, said, a greeting or a relation
-// in it, and every Chinese name are masked as before.
+// An app's word elsewhere in the sentence says nothing of the name: with
+// "Rina uses Windows at home" and "Rina's Mac won't boot" let go, a
+// person's first name went out beside a system's. Nor does a text that
+// is the word alone ("Rina", a tool's {"recipient":"Rina"}), and nothing
+// in a tool call's arguments goes by this (personFits).
+//
+// What this lets go: a first name in a list of them, or with an app's
+// word right beside it. A name of two words or more (John Smith), one in
+// a sentence with he, she, said, a greeting or a relation in it, and
+// every Chinese name are masked as before.
 
 // thingNamed says the one word at s[a:b] that the model took for a
 // person's name names a thing there.
 func thingNamed(s string, a, b int) bool {
+	if t := strings.TrimLeft(s[b:], "*_`\"'”)"); strings.HasPrefix(t, "'s") || strings.HasPrefix(t, "’s") {
+		// a possessive is a person's (Rina's Mac won't boot)
+		return false
+	}
 	cs, ce := clauseAround(s, a, b)
 	prev, prev2 := wordsBefore(s[cs:a])
 	next := latinAfter(s[b:ce])
@@ -49,9 +58,6 @@ func thingNamed(s string, a, b int) bool {
 	clause := strings.ToLower(s[cs:a] + " " + s[b:ce])
 	if hasWord(clause, personWords) || containsAny(clause, zhPersonWords) {
 		return false
-	}
-	if hasWord(clause, thingWords) || containsAny(clause, zhThingWords) {
-		return true
 	}
 	return listOfThings(s, a) || namesOnly(s)
 }
@@ -228,7 +234,7 @@ func namesOnly(s string) bool {
 		}
 		n++
 	}
-	return n > 0 && n <= 20
+	return n >= 2 && n <= 20
 }
 
 func wordSet(ws ...string) map[string]bool {
@@ -274,7 +280,7 @@ var (
 		"dad", "mother", "father", "son", "daughter", "brother", "sister", "boyfriend", "girlfriend", "teacher",
 		"client", "customer", "mr", "mrs", "ms", "dr", "dear", "hi", "hello", "hey", "thanks", "regards", "cc",
 		"said", "says", "told", "tells", "asked", "emailed", "texted", "birthday", "married")
-	// thingWords in a name's sentence say a thing is meant
+	// thingWords in a list's other items say its items are things
 	thingWords = wordSet("app", "apps", "application", "applications", "software", "tool", "tools", "utility", "utilities",
 		"plugin", "plugins", "extension", "extensions", "launcher", "widget", "widgets",
 		"macos", "ios", "ipados", "android", "mac", "iphone", "ipad", "windows", "linux", "download",
@@ -283,6 +289,5 @@ var (
 		"browser", "note-taking", "markdown", "rss")
 	// and Chinese ones, found inside the text (it has no spaces)
 	zhPersonWords = []string{"他", "她", "同事", "朋友", "老板", "先生", "女士", "老师", "说", "告诉"}
-	zhThingWords  = []string{"应用", "软件", "工具", "插件", "客户端", "这款", "一款", "下载", "安装", "订阅", "功能", "版本", "替代", "对比", "比较", "好用"}
 	zhThingAfter  = []string{"这个软件", "这个应用", "这个工具", "这款", "应用", "软件", "客户端", "插件"}
 )

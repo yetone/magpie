@@ -470,7 +470,9 @@ func MaskJSON(body []byte, o Options) ([]byte, int) {
 		if !masked(path, key, s) || under(path, defs) {
 			return s
 		}
-		t, n := mask(s, o, put, asJSON(key, ""))
+		so := o
+		so.args = under(path, args) || key == "arguments"
+		t, n := mask(s, so, put, asJSON(key, ""))
 		total += n
 		return t
 	})

@@ -314,9 +314,11 @@ var evalCases = []evalCase{
 		Keep: []evalValue{{V: "Cicada", Kind: "PERSON"}, {V: "Mimi", Kind: "PERSON"}, {V: "Phosphor", Kind: "PERSON"}, {V: "Parakeet", Kind: "PERSON"}, {V: "Muesli", Kind: "PERSON"}},
 	},
 	{
+		// a word alone says nothing whose, and may be a person's
+		// ("Rina"): what the model takes for a name is masked (#5506)
 		ID: "app-alone", From: "ylorn.",
 		Text: "Muesli",
-		Keep: []evalValue{{V: "Muesli", Kind: "PERSON"}},
+		Keep: []evalValue{{V: "Muesli", Kind: "PERSON", Known: "#5506"}},
 	},
 	{
 		ID: "app-markdown", From: "ylorn.",
