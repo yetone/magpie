@@ -63,11 +63,11 @@ function serve(lang, saves) {
 }
 
 const words = {
-  en: { save: "Save", hint: /ChatGPT's image backend picks the model itself/ },
-  zh: { save: "保存", hint: /ChatGPT 的生图后端自己决定用哪个模型/ },
-  "zh-TW": { save: "儲存", hint: /ChatGPT 的生圖後端自己決定用哪個模型/ },
+  en: { save: "Save", hint: /ChatGPT's image backend picks the GPT Image version itself/ },
+  zh: { save: "保存", hint: /ChatGPT 的生图后端自己决定用哪个 GPT Image 版本/ },
+  "zh-TW": { save: "儲存", hint: /ChatGPT 的生圖後端自己決定用哪個 GPT Image 版本/ },
   ja: { save: "保存", hint: /ChatGPT の画像生成バックエンドは/ },
-  de: { save: "Speichern", hint: /Das Bild-Backend von ChatGPT wählt das Modell selbst/ },
+  de: { save: "Speichern", hint: /Das Bild-Backend von ChatGPT wählt die GPT-Image-Version selbst/ },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {

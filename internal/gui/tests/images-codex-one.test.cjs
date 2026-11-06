@@ -65,11 +65,11 @@ function server(lang, cur, posted) {
 }
 
 const want = {
-  en: { vendor: /^ChatGPT's image backend picks the model itself, whichever is named, so one GPT Image is listed$/, note: "ChatGPT picks the model" },
-  zh: { vendor: /^ChatGPT 的生图后端自己决定用哪个模型/, note: "ChatGPT 自己决定模型" },
-  "zh-TW": { vendor: /^ChatGPT 的生圖後端自己決定用哪個模型/, note: "ChatGPT 自己決定模型" },
-  ja: { vendor: /^ChatGPT の画像生成バックエンドは/, note: "モデルは ChatGPT が選択" },
-  de: { vendor: /^Das Bild-Backend von ChatGPT wählt das Modell selbst/, note: "ChatGPT wählt das Modell" },
+  en: { vendor: /^ChatGPT's image backend picks the GPT Image version itself and doesn't say which; to choose one, use an OpenAI API key$/, note: "ChatGPT picks the model" },
+  zh: { vendor: /^ChatGPT 的生图后端自己决定用哪个 GPT Image 版本，也不告诉是哪个/, note: "ChatGPT 自己决定模型" },
+  "zh-TW": { vendor: /^ChatGPT 的生圖後端自己決定用哪個 GPT Image 版本，也不告訴是哪個/, note: "ChatGPT 自己決定模型" },
+  ja: { vendor: /^ChatGPT の画像生成バックエンドは GPT Image のバージョンを自分で選び/, note: "モデルは ChatGPT が選択" },
+  de: { vendor: /^Das Bild-Backend von ChatGPT wählt die GPT-Image-Version selbst/, note: "ChatGPT wählt das Modell" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
