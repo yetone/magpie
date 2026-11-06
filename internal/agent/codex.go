@@ -941,35 +941,53 @@ func codexIn(at place) *Agent {
 	// CC Switch 4 moves them back to "openai" itself (#7948). Codex 0.166
 	// resumes a thread only on the provider it is on now, so one of them
 	// reopened beside magpie said "This chat uses cc-switch-official, but
-	// your current provider is openai" (AcMilan on Discord). None moves
-	// while config.toml or a profile picks that id, whose threads they
-	// are then, and none from a distro's Codex. A copy of each is kept
+	// your current provider is openai" (AcMilan on Discord). So do the
+	// threads of CC Switch's OpenAI mirror (isCCSwitchMirror: "custom",
+	// name OpenAI, the sign-in, no base_url of its own), which are the
+	// ChatGPT account's as much: the Codex app names a provider by its
+	// table's name, and refused them with "This chat uses OpenAI, but your
+	// current provider is OpenAI" (Chris on Discord), Codex on the built-in
+	// OpenAI and the thread on the mirror. None moves while config.toml or
+	// a profile picks that id, whose threads they are then (lendOwn brings
+	// OpenAI's to a mirror at the top), and none from a distro's Codex. A
+	// mirror magpie took down from the top (stash codex.provider) is left
+	// to bringBeside and bringOver, which give its threads back at the
+	// Disconnect that puts it back. A copy of each is kept
 	// (MoveCodexThreads); config.toml is left as it is.
 	bringOfficial := func() {
 		if at.spell != nil || !routed() {
 			return
 		}
 		to := sessions.CodexProviderIn(dir)
-		if to != "openai" && to != magpieID || get("model_provider") == ccSwitchOfficial {
+		if to != "openai" && to != magpieID {
 			return
 		}
 		names, _ := edit.TOMLTables(path)
-		if profileNamed(names)[ccSwitchOfficial] {
-			return
+		named := profileNamed(names)
+		ids := []string{ccSwitchOfficial}
+		for _, n := range names {
+			if id, ok := strings.CutPrefix(n, "model_providers."); ok && !strings.Contains(id, ".") && id != ccSwitchOfficial && isCCSwitchMirror(id) {
+				ids = append(ids, id)
+			}
 		}
-		retagged, err := sessions.RetagPagedCodexThreads(dir, ccSwitchOfficial, to)
-		if len(retagged) > 0 {
-			log.Printf("codex: %d paginated thread(s) of CC Switch's official route moved to %s, where Codex resumes them", len(retagged), to)
-		}
-		if err != nil {
-			log.Println("codex: moving CC Switch's official paginated threads:", err)
-		}
-		moved, err := sessions.MoveCodexThreads(dir, ccSwitchOfficial, to)
-		if len(moved) > 0 {
-			log.Printf("codex: %d thread(s) of CC Switch's official route moved to %s, where Codex resumes them", len(moved), to)
-		}
-		if err != nil {
-			log.Println("codex: moving CC Switch's official threads:", err)
+		for _, from := range ids {
+			if from == to || get("model_provider") == from || named[from] || from != ccSwitchOfficial && from == stashShared()[at.key("codex.provider")] {
+				continue
+			}
+			retagged, err := sessions.RetagPagedCodexThreads(dir, from, to)
+			if len(retagged) > 0 {
+				log.Printf("codex: %d paginated thread(s) of CC Switch's official route %s moved to %s, where Codex resumes them", len(retagged), from, to)
+			}
+			if err != nil {
+				log.Printf("codex: moving CC Switch's official paginated threads of %s: %v", from, err)
+			}
+			moved, err := sessions.MoveCodexThreads(dir, from, to)
+			if len(moved) > 0 {
+				log.Printf("codex: %d thread(s) of CC Switch's official route %s moved to %s, where Codex resumes them", len(moved), from, to)
+			}
+			if err != nil {
+				log.Printf("codex: moving CC Switch's official threads of %s: %v", from, err)
+			}
 		}
 	}
 	// brought are the threads bringBeside moved onto OpenAI, and the
@@ -1002,7 +1020,7 @@ func codexIn(at place) *Agent {
 			return
 		}
 		from := stashShared()[at.key("codex.provider")]
-		if from == "" || from == "openai" || from == magpieID || from == ccSwitchOfficial || isCCSwitchMirror(from) {
+		if from == "" || from == "openai" || from == magpieID || from == ccSwitchOfficial {
 			return
 		}
 		names, _ := edit.TOMLTables(path)
@@ -1392,7 +1410,11 @@ func codexIn(at place) *Agent {
 	// provider's onto OpenAI: in place when the id is OpenAI's length, the
 	// last 30 days of them rewritten with a copy kept otherwise, a
 	// paginated one by its row. Each one moved is kept (codex.lent) for
-	// giveLent to give back once Codex is on OpenAI again. None while a
+	// giveLent to give back once Codex is on OpenAI again. CC Switch's
+	// OpenAI mirror at the top is such a provider too: the Codex app
+	// names both by the name "OpenAI" and refused OpenAI's threads with
+	// "This chat uses OpenAI, but your current provider is OpenAI" (Chris
+	// on Discord). None while a
 	// profile is chosen (Codex lists that one's threads) or names OpenAI,
 	// none once the user disconnected Codex from magpie, and none from a
 	// distro's Codex.
@@ -1401,7 +1423,7 @@ func codexIn(at place) *Agent {
 			return
 		}
 		to := get("model_provider")
-		if to == "" || to == "openai" || to == magpieID || to == ccSwitchOfficial || isCCSwitchMirror(to) || sessions.CodexProviderIn(dir) != to {
+		if to == "" || to == "openai" || to == magpieID || to == ccSwitchOfficial || sessions.CodexProviderIn(dir) != to {
 			return
 		}
 		names, _ := edit.TOMLTables(path)
