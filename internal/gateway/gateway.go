@@ -2497,7 +2497,17 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	chose, _ := r.Context().Value(magpieChoseKey{}).(bool)
 	if keyHeld && (isGroup && !groupAllowed(keyWho, g, ms) || !isGroup && !modelAllowed(keyWho, p, model)) {
 		call.Status, call.Error = 403, "model not allowed for the gateway key"
-		writeError(w, from, 403, keyModelError(keyWho, call.Model))
+		// the model the key was checked against is named, not the one the
+		// client sent: an agent that stands a request on another model
+		// (Desktop's check on its list's first, a stand-in, a tier) was
+		// refused for that one, and the sent one the key may well hold
+		// (#4175); a group as the key's lists name it (its ref), a model
+		// as provider/model, which a privacy move may have changed since
+		checked := p.ID + "/" + model
+		if isGroup {
+			checked = g.Ref()
+		}
+		writeError(w, from, 403, keyModelError(keyWho, checked))
 		turnedAway()
 		return
 	}
