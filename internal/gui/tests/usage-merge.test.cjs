@@ -142,3 +142,19 @@ test("a window held by a longer one used up counts as nothing left", () => {
   ], now);
   assert.deepEqual(by(c, "Credits").map((w) => [w.amount, w.limit, w.held]), [[600, 1000, 1]]);
 });
+
+test("a Mistral Studio month never adds up with a Vibe month (dhanyqaz on Discord)", () => {
+  // the two keys of one Student organization, as magpie reads them: the
+  // Vibe key's vibe_budget and the Studio key's api_budget, both in USD
+  const mistral = (user, w) => ({ provider: "mistral", name: "Mistral", user, plan: "Student", windows: [w] });
+  const r = merge([
+    mistral("Vibe", { name: "Month", amount: 0.64, limit: 150, unit: "USD", used: 0.43 }),
+    mistral("Studio", { name: "API · Month", amount: 3, limit: 15, unit: "USD", used: 20 }),
+  ], now);
+  assert.deepEqual(r.windows, [], "no 'All 2 accounts' figure of 165 USD");
+  const two = merge([
+    mistral("Vibe", { name: "Month", amount: 0.64, limit: 150, unit: "USD", used: 0.43 }),
+    mistral("Vibe 2", { name: "Month", amount: 15, limit: 150, unit: "USD", used: 10 }),
+  ], now);
+  assert.equal(by(two, "Month")[0].limit, 300, "two Vibe months still add up");
+});

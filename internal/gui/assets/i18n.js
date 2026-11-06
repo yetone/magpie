@@ -4376,6 +4376,7 @@ const I18N = {
     "questions": "次提问",
     "videos": "个视频",
     "Video · 24 hours": "视频 · 24 小时",
+    "API · Month": "API · 本月",
     "Video · 7 days": "视频 · 7 天",
     // agents' advice after a change (NOTICES)
     "Ante reads its catalog at start-up — restart open ante sessions to use this.": "Ante 启动时读取模型目录，需重启已打开的 ante 会话才会生效。",
@@ -8998,6 +8999,7 @@ const I18N = {
     "A new provider with {name}'s project, credentials, headers and models, to change before adding": "新建供應商，沿用 {name} 的專案、憑據、請求頭和模型，新增前可修改",
     "videos": "個影片",
     "Video · 24 hours": "影片 · 24 小時",
+    "API · Month": "API · 本月",
     "Video · 7 days": "影片 · 7 天",
     // agents' advice after a change (NOTICES)
     "Ante reads its catalog at start-up — restart open ante sessions to use this.": "Ante 啟動時讀取模型目錄，需重啟已打開的 ante 會話才會生效。",
@@ -13601,6 +13603,7 @@ const I18N = {
     "questions": "件の質問",
     "videos": "本",
     "Video · 24 hours": "動画 · 24 時間",
+    "API · Month": "API · 今月",
     "Video · 7 days": "動画 · 7 日",
     "Menu bar magpie icon": "メニューバーの magpie アイコン",
     "Pace {n}": "ペース {n}",
@@ -18238,6 +18241,7 @@ const I18N = {
     "questions": "Fragen",
     "videos": "Videos",
     "Video · 24 hours": "Video · 24 Stunden",
+    "API · Month": "API · Monat",
     "Video · 7 days": "Video · 7 Tage",
     "Discard unsaved changes? Your changes will be lost.": "Nicht gespeicherte Änderungen verwerfen? Ihre Änderungen gehen verloren.",
     "This removes the selected item. Continue?": "Das ausgewählte Element wird entfernt. Fortfahren?",
