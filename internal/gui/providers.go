@@ -148,6 +148,11 @@ type providerJSON struct {
 	// editor offers no such choice
 	PassUserAgent bool `json:"passUserAgent"`
 	OwnClient     bool `json:"ownClient,omitempty"`
+	// its errors go to the agent as the vendor sent them, asked once
+	// (provider.PassErrors, ne9ko9); TakesPassErrors: it is a provider
+	// of a key, so the editor offers it
+	PassErrors      bool `json:"passErrors"`
+	TakesPassErrors bool `json:"takesPassErrors,omitempty"`
 	// which header its key goes in on a third-party Anthropic API
 	// (provider.AuthHeader: "" both, "x-api-key", "bearer"), and whether
 	// it is one that sends both by default (provider.BothAuth)
@@ -731,7 +736,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		ID: p.ID, Name: p.Name, Icon: p.Icon, IconFrom: p.IconFrom, Preset: p.Preset, Host: p.Host(),
 		Chat: p.Chat, Responses: p.Responses, Anthropic: p.Anthropic, Gemini: p.Gemini, Decide: p.Decide, BaseAPI: p.BaseAPI, ModelTest: p.ModelTest(), TestsAs: p.TestClients(), DecideTest: p.AsksDecideModels(), MarksKinds: p.MarksKinds(),
 		Catalog: p.Catalog, Website: p.Website, KeysURL: p.KeysURL,
-		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, Headers: p.Headers, ExtraBody: p.ExtraBody, ReplyHeaders: p.ReplyHeaders, PassHeaders: p.PassHeaders, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, CountFree: p.CountFree, InsecureTLS: p.InsecureTLS, TakesInsecureTLS: p.TakesInsecureTLS(), HTTP1: p.HTTP1, LimitRestOff: p.LimitRestOff, ImageFilesOff: p.ImageFilesOff, TakesImageFiles: p.TakesImageFiles(), NativeCompaction: p.NativeCompaction, CarriesCompaction: p.CarriesCompaction(), PassUserAgent: p.PassUserAgent, OwnClient: p.OwnClient(), AuthHeader: p.AuthHeader, BothAuth: p.BothAuth(), BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, BalanceMethod: p.BalanceMethod, ModelsURL: p.ModelsURL,
+		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, Headers: p.Headers, ExtraBody: p.ExtraBody, ReplyHeaders: p.ReplyHeaders, PassHeaders: p.PassHeaders, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, CountFree: p.CountFree, InsecureTLS: p.InsecureTLS, TakesInsecureTLS: p.TakesInsecureTLS(), HTTP1: p.HTTP1, LimitRestOff: p.LimitRestOff, ImageFilesOff: p.ImageFilesOff, TakesImageFiles: p.TakesImageFiles(), NativeCompaction: p.NativeCompaction, CarriesCompaction: p.CarriesCompaction(), PassUserAgent: p.PassUserAgent, OwnClient: p.OwnClient(), PassErrors: p.PassErrors, TakesPassErrors: p.TakesPassErrors(), AuthHeader: p.AuthHeader, BothAuth: p.BothAuth(), BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, BalanceMethod: p.BalanceMethod, ModelsURL: p.ModelsURL,
 		Ready: p.Ready(), Chosen: p.PicksOf(avail), Agents: make([]providerAgent, 0, len(agents)),
 		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, RestartApp: p.RestartApp, Self: p.SelfAnswered(), KeepSelf: p.KeepSelf, CapStop: p.CapStop, CapCareful: p.CapCareful, Unlisted: p.Unlisted, NoModels: p.ServesNone(), BestInFamily: p.BestInFamily && len(p.Models) == 0 && !p.NoModels, Off: p.Off, Contexts: p.Contexts,
 		MaxConcurrency: p.MaxConcurrency, PluginConcurrency: p.PluginConcurrency(), MaxAccounts: p.MaxAccounts, PluginAccounts: p.PluginAtOnce(), PriceRate: p.PriceRate,
@@ -1485,6 +1490,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// agent's images inline (#5407); a save that leaves it out
 			// keeps it, as `magpie provider set <id> image-files=off` set it
 			ImageFilesOff *bool `json:"imageFilesOff"`
+			// PassErrors is whether its errors go to the agent as the
+			// vendor sent them (ne9ko9); a save that leaves it out keeps
+			// it, as `magpie provider set <id> errors=pass` set it
+			PassErrors *bool `json:"passErrors"`
 			// MaxConcurrency is how many requests each of its keys or
 			// accounts has out at once: a number (0 none), null for what
 			// its plugin says or none; a save that leaves it out keeps it
@@ -1878,6 +1887,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				if req.ImageFilesOff != nil {
 					in.ImageFilesOff = *req.ImageFilesOff
 				}
+				if req.PassErrors != nil {
+					in.PassErrors = *req.PassErrors
+				}
 				add := provider.Add
 				if req.CopyOf != "" {
 					add = func(p provider.Provider) (string, error) { return provider.AddCopy(p, req.CopyOf) }
@@ -1926,6 +1938,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					in.ImageFilesOff = *req.ImageFilesOff
 				} else if old != nil {
 					in.ImageFilesOff = old.ImageFilesOff
+				}
+				if req.PassErrors != nil {
+					in.PassErrors = *req.PassErrors
+				} else if old != nil {
+					in.PassErrors = old.PassErrors
 				}
 				if keepCC && old != nil {
 					in.MaxConcurrency = old.MaxConcurrency

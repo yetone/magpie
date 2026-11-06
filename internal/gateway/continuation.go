@@ -445,7 +445,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 			// only reasoning nobody acts on: a text or a call the agent
 			// has would be said twice, and a continuation's prefill would
 			// be asked to go on with the loop
-			if !t.reasoning || spoke || cont.resume || reasks >= loopReasks || r.Context().Err() != nil {
+			if !t.reasoning || spoke || cont.resume || reasks >= loopReasks || r.Context().Err() != nil || p.PassesErrors() {
 				return false
 			}
 			reasks++
@@ -540,6 +540,11 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 			summaryUpstream = actual == provider.Responses || actual == provider.Gemini || actual == provider.CodeAssist
 			empty, counts = emptyFails(actual), repliesCounted(actual)
 			voids = cutVoidAt(actual)
+		}
+		if err == nil && res.StatusCode >= 400 && !cont.resume && p.PassesErrors() {
+			// the user leaves its errors to the client (errors=pass)
+			defer res.Body.Close()
+			return passError(w, p, from, actual, res, u)
 		}
 		if err == nil && res.StatusCode >= 400 {
 			b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
@@ -674,7 +679,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 				held()
 			}
 			if (empty || counts && uncounted(this)) && !said && answersNothing(stop) {
-				if empties < emptyRetries(w, r.Context()) && r.Context().Err() == nil {
+				if empties < emptyRetries(w, r.Context()) && r.Context().Err() == nil && !p.PassesErrors() {
 					// asked again here first, for the agent to have the
 					// answer rather than the error: Gemini on a long
 					// conversation now and then ends with only its
@@ -718,7 +723,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 		// an error the client already has ends the reply: nothing of it
 		// goes on after it (a group member's mid-reply error fails the
 		// try at once, for the group's next member, #733)
-		if errSent || !cont.again(failedStatus, failedCode, again, r.Context()) {
+		if errSent || p.PassesErrors() || !cont.again(failedStatus, failedCode, again, r.Context()) {
 			if held != nil {
 				// what was held goes as the text it is, as it used to;
 				// a reply that goes on reads it again instead

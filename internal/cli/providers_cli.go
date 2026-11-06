@@ -62,6 +62,9 @@ const providerUsage = `usage:
                                           while it is busy or briefly rate limited, asking again after a pause
                                           (at most 4m); patience=off hands the agent the error at once;
                                           patience=default, 1m
+                                          errors=pass sends the agent its errors as the vendor sent them:
+                                          asked once, nothing read into them, no other provider tried;
+                                          errors=magpie, the default, has magpie handle them
   magpie provider key <id> <key>          change the API key
   magpie provider icon <id> <file|name>   give a custom provider a picture (PNG, JPEG, SVG…) or a built-in icon
   magpie provider fallback <id> <provider/model>…   where requests go when it's out of quota or down (none clears)
@@ -863,6 +866,9 @@ func showProvider(p provider.Provider) error {
 	if p.Searches {
 		kv("search", "by itself"+muted.Render("  a client's web search goes to it as sent"))
 	}
+	if p.PassesErrors() {
+		kv("errors", "pass"+muted.Render("  sent to the agent as the vendor sent them, asked once"))
+	}
 	if p.PassUserAgent {
 		why := "  the User-Agent the agent gave, not magpie's"
 		if !p.PassesUserAgent() {
@@ -1194,6 +1200,23 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 				return err
 			}
 			p.Patience = n
+		case "errors":
+			// pass: its errors go to the agent as the vendor sent them,
+			// asked once, nothing inferred, no other provider tried and
+			// none rested for (ne9ko9 on Discord); magpie: handled by
+			// magpie, the default
+			var on bool
+			switch strings.ToLower(v) {
+			case "pass", "pass-through", "passthrough", "on", "yes":
+				on = true
+			case "magpie", "default", "off", "no":
+			default:
+				return fmt.Errorf("errors=pass|magpie, not %q", v)
+			}
+			if on && !p.TakesPassErrors() {
+				return fmt.Errorf("%s isn't a provider with an API key; errors= is for one", p.Name)
+			}
+			p.PassErrors = on
 		case "user-agent", "ua":
 			// agent: a request goes with the User-Agent the agent that
 			// sent it gave, for a coding plan that serves only agents it

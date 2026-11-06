@@ -3367,11 +3367,17 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// for its allowance running out to be told as that one's error
 		// and once the agent has the stream's headers from an earlier try's
 		// keepalives, for a failure to be told as the stream's error
-		hw := newHoldWriter(w, !last || again < max(lastRetries, rateRetries) || other != nil || kept.sent || autoPicks(c) && repicked < 2 ||
-			patience > 0 && rounds < replanRounds && (waitFrom.IsZero() || time.Since(waitFrom) < patience) || wantWhole)
+		// a provider whose errors the user leaves to the client
+		// (errors=pass, ne9ko9 on Discord) is held for nothing: its reply,
+		// an error too, goes to the agent as it comes, and nothing is
+		// asked again, of it or of the next candidate. Only a stream the
+		// agent has the headers of already is held, to be told in it
+		pass := c.p.PassesErrors()
+		hw := newHoldWriter(w, kept.sent || !pass && (!last || again < max(lastRetries, rateRetries) || other != nil || autoPicks(c) && repicked < 2 ||
+			patience > 0 && rounds < replanRounds && (waitFrom.IsZero() || time.Since(waitFrom) < patience) || wantWhole))
 		// a compaction's summary is held to its end, for a cut or an
 		// error halfway to go to the next candidate (#2274)
-		hw.wantWhole = wantWhole
+		hw.wantWhole = wantWhole && !pass
 		// Claude's and GPT's reasoning is held for a refusal after it only
 		// while another candidate could answer instead: the last one's
 		// refusal isn't asked again, so holding it only kept a lone relay's
@@ -3400,7 +3406,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		if !last && c.claudeAccount() && slices.ContainsFunc(cands[i+1:], candidate.claudeAccount) {
 			retell, noRetell = tooBigToRetell(from, body)
 		}
-		if handsOver(streams, last || noRetell && len(otherThanClaudeAccounts(cands[i+1:])) == 0, wantWhole, from, refusals) {
+		if !pass && handsOver(streams, last || noRetell && len(otherThanClaudeAccounts(cands[i+1:])) == 0, wantWhole, from, refusals) {
 			// reasoning that went through as it came, and a refusal after
 			// it with nothing yet said: the next candidate answers in the
 			// same stream (refusalHandover; yhwangl on X)
@@ -3417,12 +3423,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// a reply stuck in a loop is ended, not let run to its limit
 			// (#1359)
 			hw.loop = &loopGuard{}
-			hw.reloop = reloops < loopReasks
+			hw.reloop = reloops < loopReasks && !pass
 		}
 		// a member of a group in the group is timed by the innermost
 		// group that sets a FirstToken (#2246), else by the group asked for
 		firstToken := cmp.Or(c.firstToken, g.FirstToken)
-		if isGroup && firstToken > 0 && !last && streams {
+		if isGroup && firstToken > 0 && !last && streams && !pass {
 			// slow to start, the next member is asked (Group.FirstToken)
 			hw.firstWait = time.Duration(firstToken) * time.Second
 			if left := groupBudget - time.Since(walkBegan); left < hw.firstWait {
@@ -5440,8 +5446,15 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 	}
 	if err == nil && res.StatusCode >= 400 {
 		// a file DeepSeek no longer holds: uploaded again, or the
-		// images sent inline (deepseek_files.go)
+		// images sent inline (deepseek_files.go). The file id was
+		// magpie's, so this one is asked again whatever the provider's
+		// errors setting
 		res, err = s.dsRetryGone(ctx, p, to, path, body, in, res)
+	}
+	if p.PassesErrors() {
+		// its errors are the client's to deal with (errors=pass): asked
+		// once, never again in another shape
+		return res, err
 	}
 	if err == nil && res.StatusCode >= 400 {
 		// a body over the provider's byte cap: asked again with its
@@ -6325,6 +6338,16 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	}
 	if proto == provider.Responses && prevKeptBy(p) && !storeOff(body) {
 		noteAnswered(r, prevRoute(p))
+	}
+	if res.StatusCode >= 400 && p.PassesErrors() {
+		// the user leaves its errors to the client (errors=pass): the
+		// vendor's error goes as it came, and nothing is asked again in
+		// another shape. Above, magpie only took back its own: a
+		// signature it gave, the previous response it named
+		defer res.Body.Close()
+		u.RequestID = requestID(res.Header)
+		status, msg := passError(w, p, proto, proto, res, u)
+		return status, msg, true
 	}
 	// structured output turned away (Xiaomi MiMo's Token Plan takes no
 	// json_schema, only text and json_object, #2126): a schema is asked
@@ -7635,6 +7658,10 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			}
 			return res, to, err
 		}
+		if p.PassesErrors() {
+			// its errors are the client's (errors=pass): not asked again
+			return res, to, nil
+		}
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 		res.Body.Close()
 		res.Body = io.NopCloser(bytes.NewReader(b))
@@ -8442,6 +8469,9 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 	}
 	defer res.Body.Close()
 	u.RequestID = requestID(res.Header)
+	if res.StatusCode >= 400 && p.PassesErrors() {
+		return passError(w, p, from, actual, res, u)
+	}
 	if res.StatusCode >= 400 {
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 		msg := explained(p, model, res, b)
@@ -10075,6 +10105,28 @@ const requestBytesHint = "This is a request-body byte limit, not the model's con
 // writeErrorSaid is writeError with the code and param an OpenAI-shaped
 // answer names, nil for none.
 func writeErrorSaid(w http.ResponseWriter, proto provider.Protocol, status int, msg string, code, param any) int {
+	typ := errorTypeFor(status)
+	// a relay busy for a moment, said so Pi asks again (#2372)
+	msg = saysBusy(status, msg)
+	if tooLong(status, msg) {
+		// said the way the client's own API says it, so the agent
+		// compacts the conversation and tries again rather than stopping
+		status, typ, code = 400, "invalid_request_error", "context_length_exceeded"
+		if proto == provider.Anthropic && !strings.Contains(strings.ToLower(msg), "prompt is too long") {
+			msg = "prompt is too long: " + msg
+		}
+	}
+	if h, held := w.(*holdWriter); status == http.StatusRequestEntityTooLarge && (!held || !h.hold) {
+		if !strings.Contains(msg, requestBytesHint) {
+			msg += " — " + requestBytesHint
+		}
+	}
+	return writeErrorAs(w, proto, status, typ, msg, code, param)
+}
+
+// errorTypeFor is the error type an OpenAI- or Anthropic-shaped answer
+// names for status.
+func errorTypeFor(status int) string {
 	typ := "api_error"
 	switch {
 	case status == 400:
@@ -10095,21 +10147,12 @@ func writeErrorSaid(w http.ResponseWriter, proto provider.Protocol, status int, 
 	case status == 529:
 		typ = "overloaded_error"
 	}
-	// a relay busy for a moment, said so Pi asks again (#2372)
-	msg = saysBusy(status, msg)
-	if tooLong(status, msg) {
-		// said the way the client's own API says it, so the agent
-		// compacts the conversation and tries again rather than stopping
-		status, typ, code = 400, "invalid_request_error", "context_length_exceeded"
-		if proto == provider.Anthropic && !strings.Contains(strings.ToLower(msg), "prompt is too long") {
-			msg = "prompt is too long: " + msg
-		}
-	}
-	if h, held := w.(*holdWriter); status == http.StatusRequestEntityTooLarge && (!held || !h.hold) {
-		if !strings.Contains(msg, requestBytesHint) {
-			msg += " — " + requestBytesHint
-		}
-	}
+	return typ
+}
+
+// writeErrorAs writes an error in proto's shape, as said: nothing in it
+// is read again or changed.
+func writeErrorAs(w http.ResponseWriter, proto provider.Protocol, status int, typ, msg string, code, param any) int {
 	var v any
 	switch proto {
 	case provider.Anthropic:
