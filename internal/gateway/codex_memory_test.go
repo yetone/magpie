@@ -122,6 +122,10 @@ func TestCodexMemoryOnACollidingBareNameFollowsTheSession(t *testing.T) {
 	if reqs := relay.requests(); len(reqs) != 0 {
 		t.Fatalf("the provider with the name got the memory (%d requests)", len(reqs))
 	}
+	// and says so: magpie serves the name, so not "magpie doesn't serve it" (#5413)
+	if r := lastRoute(s); r.Moved == nil || r.Moved.Why != movedCodexFollow {
+		t.Fatalf("the move: %+v", r.Moved)
+	}
 	reqs := session.requests()
 	if len(reqs) != 2 || modelOf([]byte(reqs[1])) != "gpt-6-astra" {
 		t.Fatalf("the session's provider got %d requests, the last on %q", len(reqs), modelOf([]byte(reqs[len(reqs)-1])))

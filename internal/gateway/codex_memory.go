@@ -71,9 +71,13 @@ func freeOnChatGPT(model, plan string) bool { return provider.ChatGPTReviewFree(
 // model was switched: it is read after that turn, as the app's titles are
 // (codexLeads.sideOf, beside), not on the model switched away from
 // (cybercaius on Discord).
-func (s *Server) codexMemoryStandIn(r *http.Request, who, agent, kind, asked string, body []byte) string {
+//
+// why is the move's reason for the trace: movedCodexFollow for a bare
+// default magpie serves that went on the conversation's model instead,
+// movedCodexTurn for a model magpie doesn't serve.
+func (s *Server) codexMemoryStandIn(r *http.Request, who, agent, kind, asked string, body []byte) (to, why string) {
 	if agent != "codex" || !isMemoryKind(kind) && !isReviewCall(kind, asked) {
-		return ""
+		return "", ""
 	}
 	if _, _, ok := provider.Resolve(asked); ok {
 		// A memory call on one of Codex's own bare defaults that a
@@ -94,18 +98,18 @@ func (s *Server) codexMemoryStandIn(r *http.Request, who, agent, kind, asked str
 		// computer the call came from, and a Codex on a profile or a
 		// CODEX_HOME of its own has its config elsewhere too (#5413).
 		if !isMemoryKind(kind) || strings.Contains(asked, "/") || CodexSideSet == nil || CodexSideSet("memories") {
-			return ""
+			return "", ""
 		}
 		to := s.codexMemorySession(r, body)
 		if to == "" || to == asked {
-			return ""
+			return "", ""
 		}
-		return to
+		return to, movedCodexFollow
 	}
 	if isMemoryKind(kind) {
 		if m := s.codexLeads.sideOf(r, body, true); m != "" && m != asked {
 			if _, _, ok := provider.Resolve(m); ok {
-				return m
+				return m, movedCodexTurn
 			}
 		}
 	}
@@ -113,7 +117,7 @@ func (s *Server) codexMemoryStandIn(r *http.Request, who, agent, kind, asked str
 	if m, ok := s.codexTurns.Load(key); ok {
 		if m, _ := m.(string); m != "" && m != asked {
 			if _, _, ok := provider.Resolve(m); ok {
-				return m
+				return m, movedCodexTurn
 			}
 		}
 	}
@@ -132,10 +136,10 @@ func (s *Server) codexMemoryStandIn(r *http.Request, who, agent, kind, asked str
 		m = id
 	}
 	if m == "" || m == asked {
-		return ""
+		return "", ""
 	}
 	if _, _, ok := provider.Resolve(m); !ok {
-		return ""
+		return "", ""
 	}
-	return m
+	return m, movedCodexTurn
 }
