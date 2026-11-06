@@ -72,6 +72,10 @@ func TestModelMisreadsNotMasked(t *testing.T) {
 		// the method a call is made on: gctx.GetInt64 went as a made-up key
 		// in the reporter's redaction shot (#4444)
 		{`rows, err := gctx.GetInt64("user_id")`, "gctx.GetInt64", "secret"},
+		// a setting's word the local model took for a name, wherever it
+		// stood: 白名单, 821 replacements in the reporter's three days
+		// (tianyk, #4087)
+		{"开启白名单之后，把要放行的域名填进去。", "白名单", "private_person"},
 	} {
 		f := &fakeModel{values: map[string]string{c.value: c.label}}
 		if out, n := Mask(c.text, Options{Secrets: true, Personal: true, Model: f.find}); n != 0 {
@@ -108,6 +112,8 @@ func TestModelFindsStillMasked(t *testing.T) {
 		{"the token is 9f2c4e1a7b3d5c8e9f2c", "9f2c4e1a7b3d5c8e9f2c", "secret"},
 		{"ask McDonald, he knows", "McDonald", "private_person"},
 		{"write to Rina at rina.lee@kowalczyk.pl", "Rina", "private_person"},
+		// a Chinese name where the words around it say one is meant
+		{"找王芳确认一下档期", "王芳", "private_person"},
 		{"ring +1 415.555.0132 after six", "+1 415.555.0132", "private_phone"},
 		{"we live at 3/12 Smith Street, Sydney", "3/12 Smith Street, Sydney", "private_address"},
 	} {

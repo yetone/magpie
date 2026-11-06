@@ -34,7 +34,9 @@ const zhNotGiven = "的了在是和与跟同说他她它我你您们这那个不
 // candidate's first two are looked up (zhWord). 毛利 is a gross margin
 // (毛利低 went as a name, _kaichen on X, 10-28) and a Japanese surname
 // too (毛利兰): the rules leave both, and the model, which reads the
-// sentence, finds the name.
+// sentence, finds the name. 白名 is the first two characters of 白名单,
+// a setting's word the model took for a name wherever it stood (tianyk,
+// #4087).
 var zhWords = runes2(
 	"张量", "张开", "张贴", "高度", "高效", "高级", "高速", "高亮", "高手", "高兴", "王国", "王者",
 	"黄河", "黄色", "方法", "方向", "方式", "方案", "方便", "方面", "程序", "程度", "温度", "白色",
@@ -54,7 +56,7 @@ var zhWords = runes2(
 	"范例", "游戏", "游客", "商品", "商店", "商业", "左边", "左侧", "焦点", "毕竟", "尚未",
 	"陆续", "连续", "连线", "林间", "林区", "谢谢", "顾客", "顾问", "房间", "房子", "高端", "高层",
 	"古代", "古典", "农业", "司法", "施工", "卫生", "荣誉", "宗旨", "齐全", "凌晨", "冷却", "蒙版",
-	"曲线", "黄金", "白天", "白板", "金钱", "石油", "夏天", "夏季", "唐朝", "宋朝", "秦朝", "申请",
+	"曲线", "黄金", "白天", "白板", "白名", "金钱", "石油", "夏天", "夏季", "唐朝", "宋朝", "秦朝", "申请",
 	"符号", "景色", "费用", "舒服", "辛苦", "纪律", "席位", "车间", "管道", "何时", "何况", "于是",
 	"余下", "杜绝", "罗列", "程式", "叶片", "涂层", "沙发", "池子", "巩固", "迟到", "仲裁", "钟点",
 	"钟表", "向导", "史诗", "易懂", "马路", "马虎", "汤汁", "朱红", "阳光", "任职", "董事",
@@ -86,8 +88,9 @@ var zhDict = func() map[string]bool {
 const zhColours = "红橙黄绿蓝紫黑白灰褐棕粉赤"
 
 // zhNounEnds are what makes a word a longer one (关键 → 关键词, 边界 →
-// 边界线, 毛利 → 毛利率), and no given name ends with (毛利兰 does not).
-const zhNounEnds = "词字性率值码型键框栏库器类表量度点线层期区图版式页数论员价计费件名夹帧戳"
+// 边界线, 白名 → 白名单, 毛利 → 毛利率), and no given name ends with
+// (毛利兰 does not).
+const zhNounEnds = "词单字性率值码型键框栏库器类表量度点线层期区图版式页数论员价计费件名夹帧戳"
 
 // zhWordShaped says v, a Chinese name the model or the cues took, is an
 // ordinary word: a colour (黄绿色, hh05928822 on X), a word that starts
