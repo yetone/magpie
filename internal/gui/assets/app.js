@@ -4467,10 +4467,7 @@ function updatePath(p) {
 }
 
 // renderUpdateBadge shows the header's Update pill once a newer magpie is
-// downloaded (a click restarts into it) or, where magpie can't replace
-// itself, out (a click opens the release page). The user may keep it away:
-// for good (Settings), or for this version (its ×, or a right-click), until
-// a newer one is out. magpie still downloads it and puts it in on quitting.
+// downloaded or out; Settings or its × keeps it away.
 async function renderUpdateBadge() {
   const b = $("#update"), label = b.querySelector("span");
   const u = await api(updatePath("update")).catch(() => null);
@@ -4511,7 +4508,7 @@ async function renderUpdateBadge() {
       delete b.dataset.pulling;
       return restart();
     }
-    label.textContent = downloadingText(u);
+    b.title = label.textContent = downloadingText(u);
     setTimeout(renderUpdateBadge, 700);
     return;
   }
@@ -4563,14 +4560,16 @@ async function renderUpdateBadge() {
   };
 }
 
-// downloadingText is the pill's word while an update downloads: its
-// percent once there is one. The answer leaves done out while it is 0, and
-// total too while the size isn't known yet, so the first reads have none —
-// they said "NaN%" (inaction on Discord).
+// downloadingText is the pill's word while an update downloads: its percent
+// (none while the size is unknown: "NaN%", inaction on Discord) and speed,
+// then the step after the bytes, never still (esir_tech on Discord)
+const UPDATE_STEPS = { retry: "Reconnecting…", verify: "Verifying…", unpack: "Unpacking…", signature: "Checking signature…" };
 function downloadingText(u) {
-  const p = u?.total > 0 ? Math.floor(((u.done || 0) / u.total) * 100) : NaN;
-  return Number.isFinite(p) ? t("Downloading… {p}%", { p: Math.min(100, Math.max(0, p)) }) : t("Downloading…");
+  const p = u?.total > 0 ? Math.floor(((u.done || 0) / u.total) * 100) : NaN, s = UPDATE_STEPS[u?.step];
+  if (s && u.step !== "retry") return t(s);
+  return (s ? t(s) : Number.isFinite(p) ? t("Downloading… {p}%", { p: Math.min(100, Math.max(0, p)) }) : t("Downloading…")) + (u?.speed ? " · " + speedText(u.speed) : "");
 }
+const speedText = (b) => (b >= 1e6 ? t("{n} MB/s", { n: (b / 1e6).toFixed(1) }) : t("{n} KB/s", { n: Math.max(1, Math.round(b / 1e3)) }));
 
 // updatePillOff is whether the user keeps the Update pill away for v.
 function updatePillOff(v) {
@@ -22461,8 +22460,7 @@ async function renderUpdate(r, u) {
       break;
     }
     case "found": {
-      // downloads wait for a click (Settings' Download updates
-      // automatically off, #2296): what is out, and how big it is
+      // downloads wait for a click (#2296): what is out, and its size
       sub.textContent = t("{v} is out", { v: u.latest }) + (u.size ? " · " + t("{done} MB", { done: (u.size / 1e6).toFixed(1) }) : "");
       const get = btn(t("Download update"), async () => {
         if (updateBusy) return;
@@ -22483,9 +22481,16 @@ async function renderUpdate(r, u) {
       if (!web) page();
       break;
     case "downloading":
+      if (UPDATE_STEPS[u.step] && u.step !== "retry") {
+        sub.textContent = t("{v} is downloaded", { v: u.latest }) + " · " + t(UPDATE_STEPS[u.step]);
+        again(700);
+        break;
+      }
       sub.textContent = t("Downloading {v}…", { v: u.latest });
-      if (u.total) sub.textContent += " " + Math.floor((u.done / u.total) * 100) + "% · " + t("{done} of {total} MB", { done: (u.done / 1e6).toFixed(1), total: (u.total / 1e6).toFixed(1) });
+      if (u.total) sub.textContent += " " + Math.floor(((u.done || 0) / u.total) * 100) + "% · " + t("{done} of {total} MB", { done: ((u.done || 0) / 1e6).toFixed(1), total: (u.total / 1e6).toFixed(1) });
       else if (u.done) sub.textContent += " " + t("{done} MB", { done: (u.done / 1e6).toFixed(1) });
+      if (u.step === "retry") sub.textContent += " · " + t("Reconnecting…");
+      else if (u.speed) sub.textContent += " · " + speedText(u.speed);
       page();
       again(700);
       break;
@@ -22501,15 +22506,11 @@ async function renderUpdate(r, u) {
     case "error":
       // the reason in sight: "timed out" says try a proxy, a 404 says wait
       sub.textContent = t(u.latest ? "Couldn't download {v}" : "Couldn't check for updates", { v: u.latest }) + (u.error ? " · " + u.error.replace(/^Get "[^"]*": /, "") : "");
-      // the network broke it off, after the tries download makes by itself
-      // (AIMetaPhD on X: an EOF from GitHub's asset host, with its whole
-      // signed address): what happened and what to do, in the app's words
+      // the network broke it off (AIMetaPhD on X): said in the app's words
       if (u.network && u.latest) sub.textContent = t("{v}'s download broke off, a network problem. Click Check to try again, or download it from the release page", { v: u.latest });
       sub.title = u.error || "";
       if (u.error) sub.classList.add("wraps");
-      // through a mirror (#893): it's the mirror's failing — it didn't
-      // answer, or sent a file that isn't the release's, never installed —
-      // and GitHub itself is offered, which also takes the mirror away
+      // through a mirror (#893): the mirror's failing; GitHub is offered
       if (u.mirror) {
         sub.textContent = t("Couldn't download {v} through the mirror {mirror}; it may be down or sent a file that doesn't match the release, which isn't installed", { v: u.latest, mirror: u.mirror })
           + (u.error ? " · " + u.error.replace("through the mirror " + u.mirror + ": ", "").replace(/^Get "[^"]*": /, "") : "");
@@ -22531,9 +22532,7 @@ async function renderUpdate(r, u) {
       if (u.latest) page();
       break;
     case "blocked": {
-      // the new version didn't start on this computer (#894) and this one
-      // runs on: why, and what the user can do. The clock doesn't download
-      // it again; Check tries it once more.
+      // the new version didn't start here (#894): why, and what to do
       const b = u.blocked || {};
       sub.textContent = b.policy
         ? t("{v} didn't start on this computer: Windows' Smart App Control (or another app control policy) blocked the new version, which isn't signed. magpie stays on {cur}. Download it and run it yourself, or turn Smart App Control off and check again", { v: u.latest || b.version, cur: u.current })

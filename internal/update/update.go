@@ -298,6 +298,7 @@ func Stage(ctx context.Context, rel *Release, bundle string) (string, error) {
 		return "", err
 	}
 	out := filepath.Join(dir, "unzip")
+	step(ctx, StepUnpack)
 	if b, err := proc.CommandContext(ctx, "ditto", "-x", "-k", zip, out).CombinedOutput(); err != nil {
 		os.RemoveAll(dir)
 		return "", fmt.Errorf("unzip: %v: %s", err, b)
@@ -314,6 +315,7 @@ func Stage(ctx context.Context, rel *Release, bundle string) (string, error) {
 	}
 	os.Remove(out)
 	unregister(unzipped) // in case it looked in that moment
+	step(ctx, StepSignature)
 	if err := sameSigner(ctx, bundle, app); err != nil {
 		os.RemoveAll(dir)
 		return "", err
@@ -1070,6 +1072,42 @@ func WithProgress(ctx context.Context, f func(done, total int64)) context.Contex
 	return context.WithValue(ctx, progressKey{}, f)
 }
 
+type stepKey struct{}
+
+// The steps an update made under WithStep's ctx goes through, in order.
+// After the download its percent says nothing, and a Mac's unpack and
+// signature check take seconds: each says its name instead (esir_tech on
+// Discord, a percent that sat still).
+const (
+	StepDownload  = "download"  // the bytes coming in
+	StepRetry     = "retry"     // the connection broke off or stalled: waiting to try again
+	StepVerify    = "verify"    // the file checked against its SHA-256
+	StepUnpack    = "unpack"    // the Mac's zip unpacked
+	StepSignature = "signature" // the Mac app's signature checked
+)
+
+// WithStep has an update made under ctx say each step it starts.
+func WithStep(ctx context.Context, f func(step string)) context.Context {
+	return context.WithValue(ctx, stepKey{}, f)
+}
+
+func step(ctx context.Context, s string) {
+	if f, ok := ctx.Value(stepKey{}).(func(string)); ok {
+		f(s)
+	}
+}
+
+// stallAfter is how long a download waits for its next byte. A
+// connection that sends nothing for that long (GitHub's asset host from
+// some networks holds one open with no data) is broken off and tried
+// again from where it stopped, as one that drops is; before, the download
+// sat at its percent until the update's 10 minutes ran out (esir_tech on
+// Discord, at 17%). A var for tests.
+var stallAfter = 30 * time.Second
+
+// errStalled is a try that got no byte for stallAfter.
+var errStalled = errors.New("no data came for a while")
+
 // retryWaits are the pauses before each try after the first: a
 // connection that drops at the start or part way (GitHub's asset host from
 // some networks: AIMetaPhD on X, "EOF" at 0.1.1618) is tried again, from
@@ -1092,12 +1130,14 @@ func download(ctx context.Context, a Asset, path string) error {
 	var err error
 	for try := 0; try <= len(retryWaits); try++ {
 		if try > 0 {
+			step(ctx, StepRetry)
 			select {
 			case <-ctx.Done():
 				return err
 			case <-time.After(retryWaits[try-1]):
 			}
 		}
+		step(ctx, StepDownload)
 		if err = fetch(ctx, a, path); err == nil || ctx.Err() != nil || !Network(err) {
 			break
 		}
@@ -1196,10 +1236,22 @@ func fetch(ctx context.Context, a Asset, path string) error {
 		}
 		have = 0
 	}
+	// a try that hears nothing for stallAfter, from the ask to the last
+	// byte, is broken off as the network's (errStalled)
+	tctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	idle := time.AfterFunc(stallAfter, func() { cancel(errStalled) })
+	defer idle.Stop()
+	netErr := func(err error) error {
+		if errors.Is(context.Cause(tctx), errStalled) {
+			err = errStalled
+		}
+		return &NetError{File: name, Err: err}
+	}
 	var res *http.Response
 	flag := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
 	for restarted := false; ; restarted = true {
-		req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+		req, err := http.NewRequestWithContext(tctx, "GET", u, nil)
 		if err != nil {
 			return err
 		}
@@ -1211,7 +1263,7 @@ func fetch(ctx context.Context, a Asset, path string) error {
 			if ctx.Err() != nil {
 				return fail(err)
 			}
-			return fail(&NetError{File: name, Err: err})
+			return fail(netErr(err))
 		}
 		if res.StatusCode == http.StatusRequestedRangeNotSatisfiable && have > 0 && !restarted {
 			// what was kept isn't the start of the file the host has (it
@@ -1240,7 +1292,8 @@ func fetch(ctx context.Context, a Asset, path string) error {
 	}
 	// a read that fails is the network's; a write that fails (a full
 	// disk) is not, and isn't tried again
-	in := &readErr{r: res.Body}
+	idle.Reset(stallAfter)
+	in := &readErr{r: res.Body, idle: idle}
 	var body io.Reader = in
 	if report, ok := ctx.Value(progressKey{}).(func(done, total int64)); ok {
 		total := res.ContentLength
@@ -1258,11 +1311,13 @@ func fetch(ctx context.Context, a Asset, path string) error {
 	}
 	if err != nil {
 		if ctx.Err() == nil && in.err != nil {
-			err = &NetError{File: name, Err: err}
+			err = netErr(err)
 		}
 		return fail(err)
 	}
+	idle.Stop()
 	// the whole file, what earlier tries kept included, against the feed's
+	step(ctx, StepVerify)
 	if !strings.EqualFold(fileHash(path), a.SHA256) {
 		err = fmt.Errorf("%s does not match its checksum", name)
 		if u != a.URL {
@@ -1273,14 +1328,19 @@ func fetch(ctx context.Context, a Asset, path string) error {
 	return nil
 }
 
-// readErr keeps the error its reader returned, io.EOF aside.
+// readErr keeps the error its reader returned, io.EOF aside, and puts
+// idle off again with each byte.
 type readErr struct {
-	r   io.Reader
-	err error
+	r    io.Reader
+	err  error
+	idle *time.Timer
 }
 
 func (r *readErr) Read(p []byte) (int, error) {
 	n, err := r.r.Read(p)
+	if n > 0 && r.idle != nil {
+		r.idle.Reset(stallAfter)
+	}
 	if err != nil && err != io.EOF {
 		r.err = err
 	}

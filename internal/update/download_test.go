@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -195,5 +198,97 @@ func TestDownloadNotFoundIsNotRetried(t *testing.T) {
 	err := download(context.Background(), Asset{URL: srv.URL, SHA256: "00"}, filepath.Join(t.TempDir(), "magpie.new"))
 	if err == nil || Network(err) || tries != 1 {
 		t.Fatalf("err = %v after %d tries, want one 404", err, tries)
+	}
+}
+
+// A connection that goes silent part way, its bytes held back with the
+// connection kept open (what left esir_tech's update at 17% on Discord),
+// is broken off after stallAfter and tried again from where it stopped,
+// and the steps say so: the download, the wait to try again, the rest,
+// then the checksum.
+func TestDownloadStallIsTriedAgain(t *testing.T) {
+	quickRetries(t)
+	old := stallAfter
+	stallAfter = 300 * time.Millisecond
+	t.Cleanup(func() { stallAfter = old })
+	body := make([]byte, 600<<10)
+	for i := range body {
+		body[i] = byte(i * 13)
+	}
+	sum := sha256.Sum256(body)
+	cut := len(body) * 17 / 100
+	var mu sync.Mutex
+	var ranges []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		ranges = append(ranges, r.Header.Get("Range"))
+		first := len(ranges) == 1
+		mu.Unlock()
+		if first {
+			w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+			w.Write(body[:cut])
+			w.(http.Flusher).Flush()
+			<-r.Context().Done() // silent, the connection open, until the client goes
+			return
+		}
+		from, _ := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(r.Header.Get("Range"), "bytes="), "-"))
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", from, len(body)-1, len(body)))
+		w.Header().Set("Content-Length", strconv.Itoa(len(body)-from))
+		w.WriteHeader(http.StatusPartialContent)
+		w.Write(body[from:])
+	}))
+	defer srv.Close()
+
+	var steps []string
+	var done, total int64
+	ctx := WithProgress(context.Background(), func(d, t int64) { done, total = d, t })
+	ctx = WithStep(ctx, func(s string) {
+		if len(steps) == 0 || steps[len(steps)-1] != s {
+			steps = append(steps, s)
+		}
+	})
+	// the update's own bound, far over the stall's, is what the old code
+	// waited out
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	path := filepath.Join(t.TempDir(), "magpie.new")
+	start := time.Now()
+	if err := download(ctx, Asset{URL: srv.URL, Size: int64(len(body)), SHA256: hex.EncodeToString(sum[:])}, path); err != nil {
+		t.Fatalf("after %s at %d of %d bytes: %v", time.Since(start).Round(time.Millisecond), done, total, err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if want := []string{"", fmt.Sprintf("bytes=%d-", cut)}; !slices.Equal(ranges, want) {
+		t.Fatalf("ranges asked = %q, want %q", ranges, want)
+	}
+	if b, _ := os.ReadFile(path); !bytes.Equal(b, body) {
+		t.Fatalf("file has %d bytes, not the release's", len(b))
+	}
+	if want := []string{StepDownload, StepRetry, StepDownload, StepVerify}; !slices.Equal(steps, want) {
+		t.Fatalf("steps = %q, want %q", steps, want)
+	}
+}
+
+// A stall that never ends is the network's, said so: tried every time
+// retryWaits allows, and the error names what happened.
+func TestDownloadStallEveryTimeSaysSo(t *testing.T) {
+	quickRetries(t)
+	old := stallAfter
+	stallAfter = 50 * time.Millisecond
+	t.Cleanup(func() { stallAfter = old })
+	var tries atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tries.Add(1)
+		<-r.Context().Done() // no answer at all
+	}))
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	err := download(ctx, Asset{URL: srv.URL, SHA256: "00"}, filepath.Join(t.TempDir(), "magpie.new"))
+	if err == nil || !Network(err) || !errors.Is(err, errStalled) || ctx.Err() != nil {
+		t.Fatalf("err = %v, want a stall", err)
+	}
+	if n := int(tries.Load()); n != len(retryWaits)+1 {
+		t.Fatalf("tries = %d, want %d", n, len(retryWaits)+1)
 	}
 }
