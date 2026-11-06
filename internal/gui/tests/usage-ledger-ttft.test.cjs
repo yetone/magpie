@@ -85,7 +85,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // the column, just before the duration it is part of
         const heads = await p.locator(".led thead th").allTextContents();
         assert.equal(heads.indexOf(w.head) + 1, heads.indexOf(w.duration), "first token before duration: " + heads.join(", "));
-        assert((await p.locator(".led thead th.lc-opt2").getAttribute("title")).length > 0, "its header says what it is in full");
+        assert((await p.locator(".led thead th.lc-opt2", { hasText: w.head }).getAttribute("title")).length > 0, "its header says what it is in full");
         const rows = p.locator(".led tbody tr.led-row");
         const cell = (i) => rows.nth(i).locator("td.ttft");
         assert(await cell(0).isVisible(), "a wide window shows it");

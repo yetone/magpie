@@ -1559,7 +1559,8 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .led.tight .led-dl .lc-opt { display: block; }
 .led.tight .model, .led.tight .where { max-width: 160px; }
 .led.tight th, .led.tight td { padding-left: 6px; padding-right: 6px; }
-.led.tighter .price-reference, .led.tight2 .lc-opt2 { display: none; }
+.led.tighter .price-reference, .led.tight2 .lc-opt2, .led:not(.tight2) .led-dl .lc-opt2 { display: none; }
+.led.tight2 .led-dl .lc-opt2 { display: block; }
 /* the first token, under the duration while its own column is left out */
 .led.tight2 td.duration[data-ttft]::after { content: attr(data-ttft); display: block; margin-top: 1px; font-size: 10.5px; font-weight: 400; color: var(--muted); }
 /* the account's name is cut at 110px, but its column keeps room for the
