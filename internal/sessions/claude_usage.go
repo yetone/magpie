@@ -139,15 +139,21 @@ func (r *claudeUsageState) message(id, request string) *claudeContribution {
 	if id == "" && request == "" {
 		return &claudeContribution{Call: -1}
 	}
-	key := "message:" + id
+	// the key is looked up from a buffer and made a string only to be
+	// kept: every line of a message looks it up, one keeps it
+	var buf [96]byte
+	kb := append(buf[:0], "message:"...)
+	kb = append(kb, id...)
 	if id == "" {
-		key = "request:" + request
+		kb = append(append(buf[:0], "request:"...), request...)
 	}
 	if r.Messages == nil {
 		r.Messages = make(map[string]map[string]*claudeContribution)
 	}
-	branches := r.Messages[key]
+	key := ""
+	branches := r.Messages[string(kb)]
 	if branches == nil {
+		key = string(kb)
 		if n := len(r.freeBranches); n > 0 {
 			branches = r.freeBranches[n-1]
 			r.freeBranches[n-1] = nil
@@ -170,6 +176,15 @@ func (r *claudeUsageState) message(id, request string) *claudeContribution {
 			m.Request = request
 			branches[request] = m
 			return m
+		}
+	}
+	if key == "" {
+		for _, m := range branches {
+			key = m.key // the same string, made once
+			break
+		}
+		if key == "" {
+			key = string(kb)
 		}
 	}
 	var m *claudeContribution

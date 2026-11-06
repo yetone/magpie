@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 )
 
 // reuseLine is reply i of a history: its own message, block and two tools.
@@ -114,5 +115,31 @@ func TestClaudeHistoryReadAllocations(t *testing.T) {
 	// contribution, branch list and maps for each made ~5.3 KB
 	if per > 4200 {
 		t.Fatalf("a reply's two reads made %d bytes, want at most 4200", per)
+	}
+}
+
+// TestClaudeMessageLookupAllocations: the later lines of a message find
+// it without making its key again, and a new branch of it takes the key
+// its first one made.
+func TestClaudeMessageLookupAllocations(t *testing.T) {
+	r := &claudeUsageState{}
+	id := "msg_01ABCDEFGHIJKLMNOPQRSTUVWX"
+	m := r.message(id, "req_1")
+	r.finish(m)
+	if n := testing.AllocsPerRun(100, func() { r.message(id, "req_1") }); n != 0 {
+		t.Fatalf("a message's later line made %v allocations, want 0", n)
+	}
+	if got := r.message(id, "req_1"); got != m || m.key != "message:"+id {
+		t.Fatalf("found %p (%q), want %p", got, got.key, m)
+	}
+	other := r.message(id, "req_2")
+	if other == m || other.key != m.key || unsafe.StringData(other.key) != unsafe.StringData(m.key) {
+		t.Fatalf("a second branch: %q, its own key made again", other.key)
+	}
+	if len(r.Messages["message:"+id]) != 2 {
+		t.Fatalf("branches %v", r.Messages)
+	}
+	if q := r.message("", "req_9"); q.key != "request:req_9" || r.Messages["request:req_9"]["req_9"] != q {
+		t.Fatalf("a message with only its request: %q", q.key)
 	}
 }
