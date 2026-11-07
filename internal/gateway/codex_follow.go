@@ -125,7 +125,12 @@ var (
 // title after a switch came from the old model). When this key's last
 // turn is older than codexSideFresh, such a call waits, up to
 // codexSideWait or until it is cancelled, for the next turn of any
-// conversation, and takes that one's model.
+// conversation, and takes that one's model. So does one that comes before
+// this key's Codex has had any turn through magpie, the first new
+// conversation after magpie starts (tenacious_eagle_96548 on Discord):
+// read at once, nothing was known, and the title went on the model in
+// Codex's config (CodexSideModel), another provider's, not the one picked
+// in the Codex app for the conversation.
 //
 // beside is a call Codex starts with every turn of its conversation, tied
 // to it: its memories, which Codex extracts and consolidates as each turn
@@ -133,10 +138,12 @@ var (
 // start_memories_startup_task), under that conversation's thread. Racing
 // the turn, the conversation's last model is the one before a switch, so
 // it waits too. A call tied to a conversation that isn't (a composer
-// prediction, a known thread's title) takes its last model at once.
+// prediction, a known thread's title) takes its last model at once. A
+// memory call before any turn at all is Codex consolidating as it starts,
+// with no turn on the way: it takes the config's model at once.
 func (l *codexLeads) sideOf(r *http.Request, body []byte, beside bool) string {
 	model, tied, at := l.lookup(r, body)
-	if tied && !beside || model == "" || time.Since(at) < codexSideFresh {
+	if tied && !beside || model == "" && beside || model != "" && time.Since(at) < codexSideFresh {
 		return model
 	}
 	l.mu.Lock()

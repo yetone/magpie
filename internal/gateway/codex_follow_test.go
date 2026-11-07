@@ -193,6 +193,38 @@ func TestCodexTitleBeforeTheFirstTurnFollowsTheSwitch(t *testing.T) {
 	}
 }
 
+// tenacious_eagle_96548 on Discord: Codex's config on one provider's model
+// (third), the conversation put on another's (fourth) in the Codex app,
+// and the first new conversation after magpie started had its title
+// written by the config's model. Nothing had come through magpie yet, so
+// the title, there before the conversation's first turn, took the config's
+// model at once. It waits for the turn now, and goes on the model picked.
+func TestCodexFirstTitleFollowsThePickNotTheConfig(t *testing.T) {
+	up := codexSubagentSetup(t)
+	config := relayOn(t, "third")
+	picked := relayOn(t, "fourth")
+	wasSet, wasModel, wasWait := CodexSideSet, CodexSideModel, codexSideWait
+	CodexSideSet = func(string) bool { return false }
+	CodexSideModel = func() string { return "third/gpt-6-astra" }
+	codexSideWait = time.Minute
+	t.Cleanup(func() { CodexSideSet, CodexSideModel, codexSideWait = wasSet, wasModel, wasWait })
+	s := New()
+	beforeTheTurn(t, s, func() { codexAppSide(t, s, "thread_title", "title-thread") }, func() {
+		if rec := codexSubTurn(s, "fourth/gpt-6-astra", "lead-1", "", leadAsk); rec.Code != 200 {
+			t.Errorf("the conversation: %d %s", rec.Code, rec.Body.String())
+		}
+	})
+	if got := up.asked(); len(got) != 0 {
+		t.Fatalf("ChatGPT was asked for %v", got)
+	}
+	if reqs := config.requests(); len(reqs) != 0 {
+		t.Fatalf("the config's model got %d requests, the title among them", len(reqs))
+	}
+	if reqs := picked.requests(); len(reqs) != 2 {
+		t.Fatalf("the picked model got %d requests, want the turn and the title", len(reqs))
+	}
+}
+
 // A composer prediction runs on a fork of the conversation, a thread of
 // its own: it follows the conversation it was forked from, not whichever
 // one this key's Codex last had a turn in.

@@ -59,7 +59,11 @@ func TestCodexSideTurnsOnThePickedModel(t *testing.T) {
 	})
 	side := ""
 	CodexSideModel = func() string { return side }
-	t.Cleanup(func() { CodexSideModel = nil })
+	// no turn comes before these side turns: each takes the config's
+	// model once its wait for one is over (codexLeads.sideOf)
+	wasWait := codexSideWait
+	codexSideWait = 0
+	t.Cleanup(func() { CodexSideModel, codexSideWait = nil, wasWait })
 	s := New()
 
 	// on Codex's own model: every side turn to ChatGPT, as before

@@ -84,7 +84,14 @@ model the user just switched from. A call tied to no seen thread whose
 key's last turn is older than 3s (`codexSideFresh`) waits, up to 5s
 (`codexSideWait`) or its cancellation, for the next turn and takes its
 model (`codexLeads.sideOf`, `TestCodexTitleBeforeTheFirstTurnFollowsTheSwitch`);
-a later rename suggestion with no turn beside it waits the 5s. Codex
+a later rename suggestion with no turn beside it waits the 5s. One that
+comes before the key has had any turn at all (the first new conversation
+after magpie starts) waits the same way, and takes the config's model only
+when no turn comes: read at once, it went on the config's model, another
+provider's than the one picked in the app (tenacious_eagle_96548 on
+Discord, `TestCodexFirstTitleFollowsThePickNotTheConfig`). A memory call
+before any turn is Codex consolidating as it starts, and takes the config's
+model at once. Codex
 starts its memories with each turn of a conversation that has the user's
 input (codex-rs `start_memories_startup_task`; extraction under that
 conversation's thread, consolidation on a thread of its own), so a memory
