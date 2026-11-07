@@ -52,8 +52,10 @@ import (
 // (agy.go): the app's language server is agy's, and Antigravity 2.29.0's
 // makes the same table in ~/.gemini/antigravity on its first start. title
 // is the name the app gives it, preview what it lists the conversation as
-// before that (the user's own words). Without the row, the steps' text
-// being encrypted, a conversation has no name (xxooioo on Discord).
+// before that (the user's own words), and workspace_uris the folders open
+// when it was started, the first local one its folder on the Sessions page
+// (agyFolder). Without the row, the steps' text being encrypted, a
+// conversation has no name and no folder (xxooioo on Discord).
 //
 // A session is listed read only: the app has no command to pick a
 // conversation up again from a terminal.
@@ -352,7 +354,7 @@ func parseAntigravity(f file) *state {
 	}
 	s := &state{Size: f.size, Mod: f.mod.UnixNano(), DBRevision: f.m().rev}
 	if r := f.m().agy; r != nil {
-		s.Named, s.Title = title(r.Title), title(r.Preview)
+		s.Named, s.Title, s.Cwd = title(r.Title), title(r.Preview), r.Cwd
 	}
 	for _, c := range calls {
 		s.saw(c.at, true)

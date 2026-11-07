@@ -1165,7 +1165,9 @@ const cacheVersion = 29
 //
 // antigravity 1: a Gemini deployment's name with any one letter after it
 // (gemini-4-argon-d) is its model's (GeminiDeployment), not -n alone.
-var parseVersions = map[string]int{"codex": 3, "zcode": 1, "dsh": 1, "antigravity": 1}
+// antigravity 2: a conversation's folder is its summary row's workspace
+// (a parse kept from before has none, under the same row revision).
+var parseVersions = map[string]int{"codex": 3, "zcode": 1, "dsh": 1, "antigravity": 2}
 
 type cacheFile struct {
 	Version int    `json:"version"`

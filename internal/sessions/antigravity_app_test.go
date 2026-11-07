@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/binary"
 	"encoding/hex"
@@ -258,5 +259,54 @@ func TestAntigravityAppTitle(t *testing.T) {
 	}
 	if s := find(t, List(0), "antigravity", id); s.Title != "Login redirect fix" {
 		t.Fatalf("after the app named it: %q", s.Title)
+	}
+}
+
+// xxooioo (Discord, 11-07): every Antigravity app session sat under "No
+// folder". A conversation's folder is its summary row's first local
+// workspace URI, as agy's is; a row with none, and a conversation with no
+// row, have no folder.
+func TestAntigravityAppFolder(t *testing.T) {
+	claude, _ := setup(t)
+	home := filepath.Join(filepath.Dir(claude), "home")
+	const site, api, bare, none = "37c3c786-9a11-44be-97df-b8fc1ccebc78", "4f1d2a77-0c3e-4b8e-9d61-2a5e7c90b311", "8e2b6c14-7f5a-4d09-a3c2-61d0f4e9b7a5", "b9eace9a-b15a-4dde-a440-b52e02016fa5"
+	for _, id := range []string{site, api, bare, none} {
+		antigravityFixture(t, home, id)
+	}
+	db, err := sql.Open("sqlite", filepath.Join(home, ".gemini", "antigravity", "conversation_summaries.db")+"?_pragma=journal_mode(WAL)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(antigravitySummariesSchema); err != nil {
+		t.Fatal(err)
+	}
+	for id, ws := range map[string]string{site: `["file:///work/site"]`, api: `["file:///work/api","file:///work/site"]`, bare: `[]`} {
+		if _, err := db.Exec("INSERT INTO conversation_summaries (conversation_id, title, preview, step_count, last_modified_time, workspace_uris, status, project_id, last_user_input_time, app_data_dir) VALUES (?, 'A talk', 'A talk', 2, '2026-11-07 00:12:46.60116+00:00', ?, 'CASCADE_RUN_STATUS_IDLE', 'default-project', '2026-11-07 00:12:43.784481+00:00', 'antigravity')", id, ws); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ss := List(0)
+	for id, want := range map[string]string{site: "/work/site", api: "/work/api", bare: "", none: ""} {
+		if s := find(t, ss, "antigravity", id); s.Cwd != want {
+			t.Errorf("%s: folder %q, want %q", id, s.Cwd, want)
+		}
+	}
+}
+
+// A parse of an app conversation kept from before its folder was read has
+// no folder under the same row, so the cache doesn't keep it.
+func TestAntigravityAppParseBeforeFolderReadAgain(t *testing.T) {
+	var b bytes.Buffer
+	c := cacheFile{Version: cacheVersion, Zone: "z", Parsers: map[string]int{"antigravity": 1}, Files: map[string]*state{"/a.db": {Agent: "antigravity", Size: 1}}}
+	if err := encodeCache(&b, c); err != nil {
+		t.Fatal(err)
+	}
+	files, ok := decodeCache(b.Bytes(), "z")
+	if !ok {
+		t.Fatal("refused")
+	}
+	if _, kept := files["/a.db"]; kept {
+		t.Fatal("a parse from before the folder was read is kept")
 	}
 }
