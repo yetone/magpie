@@ -143,6 +143,13 @@ func writeCards(w http.ResponseWriter, r *http.Request, s *quotaScope) {
 		refuseHeld(w, r, heldRefused)
 		return
 	}
+	// each window's whole (Holds), reckoned here from the calls routed
+	// here, which the other magpie can't (linkaww on Discord: a Docker
+	// magpie's Codex card had none on the computer reading it). A held key
+	// is told none, as in quotas.
+	if s == nil && provider.ReckonHolds != nil {
+		cs = provider.ReckonHolds(cs, time.Now())
+	}
 	writeJSON(w, 200, map[string]any{"object": "list", "data": cs})
 }
 
