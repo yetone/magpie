@@ -2877,13 +2877,13 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc .alane-in { width: 64px; }
 /* a key's spend cap (sparkling_lemur_62868 on Discord): as the limit
    pill, and marked when the key is held at it */
-.acc .aspend { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 7px; font: inherit; font-size: 11px; color: var(--muted); border: 0; border-radius: 5px; background: none; box-shadow: inset 0 0 0 1px var(--line); white-space: nowrap; cursor: default; opacity: 0; transition: opacity .15s, background .12s, color .12s; font-variant-numeric: tabular-nums; }
-.acc:hover .aspend, .acc.held .aspend, .acc .aspend.open, .acc .aspend.set { opacity: 1; }
-.acc .aspend:focus-visible { opacity: 1; }
-.acc .aspend.set { color: var(--fg); background: var(--pill-hover); box-shadow: none; }
-.acc .aspend.at-cap { color: var(--accent); background: var(--accent-soft); font-weight: 500; }
-.acc .aspend:hover, .acc .aspend.open { color: var(--fg); background: var(--pill-hover); }
-.acc .aspend-in { width: 72px; }
+.acc :is(.aspend, .abal) { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 7px; font: inherit; font-size: 11px; color: var(--muted); border: 0; border-radius: 5px; background: none; box-shadow: inset 0 0 0 1px var(--line); white-space: nowrap; cursor: default; opacity: 0; transition: opacity .15s, background .12s, color .12s; font-variant-numeric: tabular-nums; }
+.acc:hover :is(.aspend, .abal), .acc.held :is(.aspend, .abal), .acc :is(.aspend, .abal).open, .acc :is(.aspend, .abal).set { opacity: 1; }
+.acc :is(.aspend, .abal):focus-visible { opacity: 1; }
+.acc :is(.aspend, .abal).set { color: var(--fg); background: var(--pill-hover); box-shadow: none; }
+.acc :is(.aspend, .abal).at-cap { color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+.acc :is(.aspend, .abal):hover, .acc :is(.aspend, .abal).open { color: var(--fg); background: var(--pill-hover); }
+.acc :is(.aspend-in, .abal-in) { width: 72px; }
 .acc .acap-held { color: var(--fg); }
 /* held for magpie's requests, not the agent signed in to it: a warning */
 .acc .acap-held.acap-direct { color: var(--amber); }
@@ -2944,9 +2944,9 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .accts.keys .acc[data-account-id] { flex-wrap: wrap; row-gap: 3px; }
 .accts.keys .acc > .n { flex: 1000 1 4.5em; max-width: max-content; min-width: 0; }
 .accts.keys .acc .plan { flex: 1000 1 3em; max-width: max-content; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.accts.keys .acc > :is(.amodels, .proto, .alane, .aspend), .accts.keys .key-acts > .text.quiet { flex-shrink: 0; white-space: nowrap; }
-.accts.keys .acc > :is(.amodels:not(.set), .proto:not(.set), .alane:not(.set), .aspend:not(.set)), .accts.keys .key-acts > .text.quiet { overflow: hidden; }
-.accts.keys .acc:not(:hover):not(.held) > :is(.amodels:not(.set), .proto:not(.set), .alane:not(.set), .aspend:not(.set)):not(.open):not(:focus-visible),
+.accts.keys .acc > :is(.amodels, .proto, .alane, .aspend, .abal), .accts.keys .key-acts > .text.quiet { flex-shrink: 0; white-space: nowrap; }
+.accts.keys .acc > :is(.amodels:not(.set), .proto:not(.set), .alane:not(.set), .aspend:not(.set), .abal:not(.set)), .accts.keys .key-acts > .text.quiet { overflow: hidden; }
+.accts.keys .acc:not(:hover):not(.held) > :is(.amodels:not(.set), .proto:not(.set), .alane:not(.set), .aspend:not(.set), .abal:not(.set)):not(.open):not(:focus-visible),
 .accts.keys .acc:not(:hover):not(.held) .key-acts > .text.quiet:not(:focus-visible) { min-width: 0; max-width: 0; padding-left: 0; padding-right: 0; box-shadow: none; }
 /* and hidden, the gap beside it too */
 .accts.keys .acc:not(:hover):not(.held) > :is(.amodels:not(.set), .proto:not(.set)):not(.open):not(:focus-visible) { margin-left: -9px; }
@@ -2954,17 +2954,17 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 /* the limit pill unset on a key's row is quiet text, as the row's other
    hover-only controls: no padding to keep, and hidden it takes back the
    gap before it too (#892) */
-.accts.keys .acc > :is(.alane, .aspend):not(.set):not(.open):not(:focus-visible) { padding: 0; box-shadow: none; background: none; }
-.accts.keys .acc:not(:hover):not(.held) > :is(.alane, .aspend):not(.set):not(.open):not(:focus-visible) { margin-left: -9px; }
+.accts.keys .acc > :is(.alane, .aspend, .abal):not(.set):not(.open):not(:focus-visible) { padding: 0; box-shadow: none; background: none; }
+.accts.keys .acc:not(:hover):not(.held) > :is(.alane, .aspend, .abal):not(.set):not(.open):not(:focus-visible) { margin-left: -9px; }
 /* Safari before 15.4 has no :focus-visible and drops the rules above
    whole: there a focused control stays out on :focus instead */
 @supports not selector(:focus-visible) {
-  .accts.keys .acc:not(:hover):not(.held) > :is(.amodels:not(.set), .proto:not(.set), .alane:not(.set), .aspend:not(.set)):not(.open):not(:focus),
+  .accts.keys .acc:not(:hover):not(.held) > :is(.amodels:not(.set), .proto:not(.set), .alane:not(.set), .aspend:not(.set), .abal:not(.set)):not(.open):not(:focus),
   .accts.keys .acc:not(:hover):not(.held) .key-acts > .text.quiet:not(:focus) { min-width: 0; max-width: 0; padding-left: 0; padding-right: 0; box-shadow: none; }
   .accts.keys .acc:not(:hover):not(.held) > :is(.amodels:not(.set), .proto:not(.set)):not(.open):not(:focus) { margin-left: -9px; }
   .accts.keys .acc:not(:hover):not(.held) .key-acts > .text.quiet:not(:focus) { margin-right: -9px; }
-  .accts.keys .acc > :is(.alane, .aspend):not(.set):not(.open):not(:focus) { padding: 0; box-shadow: none; background: none; }
-  .accts.keys .acc:not(:hover):not(.held) > :is(.alane, .aspend):not(.set):not(.open):not(:focus) { margin-left: -9px; }
+  .accts.keys .acc > :is(.alane, .aspend, .abal):not(.set):not(.open):not(:focus) { padding: 0; box-shadow: none; background: none; }
+  .accts.keys .acc:not(:hover):not(.held) > :is(.alane, .aspend, .abal):not(.set):not(.open):not(:focus) { margin-left: -9px; }
 }
 .accts.keys .acc > .key-acts { flex: none; display: flex; align-items: center; gap: 9px; margin-left: auto; }
 .accts.keys .acc .using, .accts.keys .key-acts > .text:not(.quiet) { flex: none; white-space: nowrap; }
@@ -4297,10 +4297,10 @@ body.panel .modal { padding: 16px 12px; }
   body.web .acc > .grow + * { margin-left: auto; }
   /* nothing hovers on a phone: what a row shows on hover is shown, and a
      key's row gives it back the room it folds away till a hover (#841) */
-  body.web .acc :is(.text.quiet, .proto, .amodels, .alane, .aspend) { opacity: 1; }
+  body.web .acc :is(.text.quiet, .proto, .amodels, .alane, .aspend, .abal) { opacity: 1; }
   body.web .acc .acc-more { opacity: 1; }
-  body.web .accts.keys .acc > :is(.amodels, .proto, .alane, .aspend), body.web .accts.keys .key-acts > .text.quiet { max-width: none !important; padding: 0 7px !important; flex-shrink: 0 !important; }
-  body.web .accts.keys .acc > :is(.amodels, .proto, .alane, .aspend):not(.set) { margin-left: 0 !important; }
+  body.web .accts.keys .acc > :is(.amodels, .proto, .alane, .aspend, .abal), body.web .accts.keys .key-acts > .text.quiet { max-width: none !important; padding: 0 7px !important; flex-shrink: 0 !important; }
+  body.web .accts.keys .acc > :is(.amodels, .proto, .alane, .aspend, .abal):not(.set) { margin-left: 0 !important; }
   body.web .accts.keys .key-acts > .text.quiet { margin-right: 0 !important; }
   body.web #gatewayKeys .acc > .key-quotas { max-width: none !important; padding: 0 7px !important; margin-left: 0 !important; flex-shrink: 0; }
   body.web #gatewayKeys .acc > .key-quotas:not(.set) { box-shadow: inset 0 0 0 1px var(--line) !important; }

@@ -3,7 +3,12 @@ package usage
 import (
 	"sync"
 	"time"
+
+	"github.com/yetone/magpie/internal/provider"
 )
+
+// a key's balance typed by hand is shown less what this counts spent
+func init() { provider.KeySpent = KeySpent }
 
 // spendMemo keeps what each API key has spent from a start on, read from
 // usage.jsonl once and counted up by Append after: routing asks it on

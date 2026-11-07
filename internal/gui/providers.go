@@ -193,7 +193,10 @@ type providerJSON struct {
 	// Balance URL, and its field (provider.BalanceFound)
 	BalanceFound      string `json:"balanceFound,omitempty"`
 	BalanceFoundField string `json:"balanceFoundField,omitempty"`
-	ModelsURL         string `json:"modelsURL,omitempty"`
+	// its keys may have a balance typed by hand, their vendor telling
+	// none (provider.TakesOwnBalance)
+	TakesOwnBalance bool   `json:"takesOwnBalance,omitempty"`
+	ModelsURL       string `json:"modelsURL,omitempty"`
 	// an account-wide balance token (provider.BalanceToken): whether the
 	// vendor takes one, and whether one is saved; never the token itself
 	BalanceToken struct {
@@ -855,6 +858,16 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 			ks.Reset = &reset
 		}
 		out.KeyList[i].Spend = ks
+	}
+	// and one with a balance typed, what is left of it (the card on the
+	// Usage page shows the same, provider.ownBalanceCard)
+	out.TakesOwnBalance = p.TakesOwnBalance()
+	for i, k := range out.KeyList {
+		b, ok := p.KeyOwnBalance(k.ID)
+		if !ok {
+			continue
+		}
+		out.KeyList[i].Balance = &provider.BalanceEstimate{Set: b.USD, At: b.At, Spent: usage.KeySpent(k.ID, b.At)}
 	}
 	if !out.Key.Set && p.Ready() {
 		out.Key.Optional = true
@@ -1634,6 +1647,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// (its id), in USD a day, a month or in all; none, or an
 			// amount of 0, takes it off
 			Spend *provider.SpendCap `json:"spend"`
+			// Balance, for keyownbalance: the balance in USD typed for the
+			// key Account (its id), counted from now; none takes it off
+			Balance *float64 `json:"balance"`
 			// Alias, for accountname: the account's name of the user's
 			// own, "" to take it off (#1515)
 			Alias string `json:"alias"`
@@ -2038,8 +2054,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					in.AccountCaps, in.AccountWindowCaps = old.AccountCaps, old.AccountWindowCaps
 					in.AccountConcurrency = old.AccountConcurrency
 					in.AccountWeights = old.AccountWeights
-					in.AccountNames = old.AccountNames // with accountname
-					in.KeySpendCaps = old.KeySpendCaps // with keyspendcap
+					in.AccountNames = old.AccountNames     // with accountname
+					in.KeySpendCaps = old.KeySpendCaps     // with keyspendcap
+					in.KeyOwnBalances = old.KeyOwnBalances // with keyownbalance
 				}
 				// the image models unticked in its editor likewise: []
 				// shows them all (321sssrt on X)
@@ -2323,6 +2340,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				c = &provider.SpendCap{USD: req.Spend.USD, Period: req.Spend.Period}
 			}
 			if err := provider.SetKeySpendCap(in.ID, req.Account, c); err != nil {
+				fail(rw, err)
+				return
+			}
+		case "keyownbalance":
+			if err := provider.SetKeyOwnBalance(in.ID, req.Account, req.Balance); err != nil {
 				fail(rw, err)
 				return
 			}

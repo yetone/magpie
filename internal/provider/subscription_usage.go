@@ -166,6 +166,10 @@ type SubscriptionQuota struct {
 	// BalanceTrend is the Balance over time, as magpie read it, and when
 	// it runs out at that pace (balance_history.go)
 	BalanceTrend *BalanceTrend `json:"balanceTrend,omitempty"`
+	// Estimate is set when the Balance is one the user typed less what
+	// magpie priced the key's calls at since (key_balance_own.go), not a
+	// vendor's reading
+	Estimate *BalanceEstimate `json:"estimate,omitempty"`
 	// SharedBalance is set on each key of a provider found to read one
 	// account's balance with others (balance_shared.go): the name of the
 	// first of them, whose card shows it once for all

@@ -57,6 +57,9 @@ type KeyInfo struct {
 	// Spend is the spend cap set on it and what it has spent in its
 	// period; nil with none.
 	Spend *KeySpend `json:"spend,omitempty"`
+	// Balance is the balance the user typed for it and what is left of
+	// it by magpie's count (key_balance_own.go); nil with none.
+	Balance *BalanceEstimate `json:"balance,omitempty"`
 }
 
 // KeySpend is a key's spend cap as its row tells it: the cap, what magpie
@@ -666,6 +669,7 @@ func ReplaceKey(id, keyRef, key string) (was, now string, err error) {
 	moveKeyed(p.AccountProxies, keyRef, now)
 	moveKeyed(p.AccountConcurrency, keyRef, now)
 	moveKeyed(p.KeySpendCaps, keyRef, now)
+	moveKeyed(p.KeyOwnBalances, keyRef, now)
 	return keyRef, now, Save(*p)
 }
 

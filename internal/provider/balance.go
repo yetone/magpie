@@ -1642,6 +1642,8 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 	type job struct {
 		p    Provider
 		user string
+		// own: the key's balance typed by hand, with nothing to ask
+		own bool
 	}
 	var jobs []job
 	for _, p := range All() {
@@ -1651,12 +1653,18 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 		src, ok := balanceSourceOf(p)
 		zen := !ok && openCodeZen(p)
 		if !ok && !clineKeyCard(p) && !zen && !probesBalance(p) {
+			// a key with a balance the user typed: what is left of it
+			if p.TakesOwnBalance() {
+				for _, k := range ownBalanceKeys(p) {
+					jobs = append(jobs, job{k.p, k.user, true})
+				}
+			}
 			continue
 		}
 		others := 0
 		if src.token != "" || zen {
 			// the account's balance is the same whichever key asks
-			jobs = append(jobs, job{p, ""})
+			jobs = append(jobs, job{p, "", false})
 			continue
 		}
 		for _, k := range p.Keys {
@@ -1670,7 +1678,7 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 		keyCard := func(q Provider) bool { return !ok || hasBalanceSource(q) }
 		if others == 0 {
 			if keyCard(p.atKeyPlan(p.KeyPlan)) {
-				jobs = append(jobs, job{p, ""})
+				jobs = append(jobs, job{p, "", false})
 			}
 			continue
 		}
@@ -1681,7 +1689,7 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 		// each key asked at its own plan's host (KeyAccount.Plan):
 		// SiliconFlow's China key and its international one
 		if q := p.atKeyPlan(p.KeyPlan); keyCard(q) {
-			jobs = append(jobs, job{q, first})
+			jobs = append(jobs, job{q, first, false})
 		}
 		for _, k := range p.Keys {
 			if k.Off || k.Key == "" || k.Key == p.Key {
@@ -1696,7 +1704,7 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 			if name == "" {
 				name = Mask(k.Key)
 			}
-			jobs = append(jobs, job{q, name})
+			jobs = append(jobs, job{q, name, false})
 		}
 	}
 	jobs = slices.DeleteFunc(jobs, func(j job) bool {
@@ -1710,6 +1718,10 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 		go func() {
 			defer wg.Done()
 			defer slots.take(ctx, j.p.ID)()
+			if j.own {
+				out[i], _ = ownBalanceCard(j.p, j.p.Key, j.user)
+				return
+			}
 			q := SubscriptionQuota{Provider: j.p.ID, Name: j.p.Name, Icon: j.p.Icon, User: j.user, Windows: []QuotaWindow{}}
 			if clineKeyCard(j.p) {
 				// ClinePass's limits beside the credits (cline_usage.go)
@@ -1727,7 +1739,12 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 			}
 			amount, parts, split, ws, wide, _, err := balanceRead(ctx, j.p)
 			if errors.Is(err, errNoBalance) {
-				return // a reply with no balance for this key: no card
+				// a reply with no balance for this key, or a relay where
+				// none was found: the balance typed for it, else no card
+				if j.p.TakesOwnBalance() {
+					out[i], _ = ownBalanceCard(j.p, j.p.Key, j.user)
+				}
+				return
 			}
 			if errors.Is(err, errOpenCodeNoBalance) {
 				// nothing to read or keep: where the balance is shown
@@ -1762,8 +1779,9 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 	wg.Wait()
 	out = slices.DeleteFunc(out, func(q SubscriptionQuota) bool { return q.Provider == "" })
 	if ctx.Err() == nil {
-		// each balance kept, and drawn over time with its runs-out
-		noteBalanceHistory(out, time.Now())
+		// each balance kept, and drawn over time with its runs-out; not
+		// one estimated from a balance typed, which is no reading
+		noteBalanceHistory(slices.DeleteFunc(slices.Clone(out), func(q SubscriptionQuota) bool { return q.Estimate != nil }), time.Now())
 		// the history of the cards read now and of those kept, a partial
 		// read (one card's refresh) keeping the others
 		h := sharedBalanceHist(slices.Concat(kept, out))

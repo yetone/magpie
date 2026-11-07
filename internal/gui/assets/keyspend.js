@@ -51,6 +51,9 @@ function keySpendLine(k) {
 // keySpendFill puts key k's spend cap pill in its row, before the gap, and
 // its held line under the row's other lines
 window.keySpendFill = function (row, p, k) {
+  // and its typed balance, in keybalance.js, for a provider that takes one
+  if (window.keyBalanceFill) keyBalanceFill(row, p, k);
+  else if (p.takesOwnBalance) import("./keybalance.js").then(() => keyBalanceFill(row, p, k), () => {});
   row.querySelector(":scope > .aspend")?.remove();
   row.querySelector(":scope > .key-spend-line")?.remove();
   const pill = keySpendPill(p, k), gap = row.querySelector(":scope > .grow");
