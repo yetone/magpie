@@ -20,11 +20,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -1371,8 +1373,21 @@ func (g googleAccount) pools(ctx context.Context, ws []QuotaWindow) []QuotaWindo
 	}
 	type group struct {
 		pool, about string
-		five        bool // has its 5 hours, which stand in for its models'
+		five        int // its 5 hours' window in out, which stand in for its models'; -1 without
 	}
+	var shape []string // each group's name and buckets, for the log
+	for _, gr := range res.Groups {
+		var ids []string
+		for _, b := range gr.Buckets {
+			id := cmp.Or(b.BucketID, b.Window)
+			if b.Disabled {
+				id += " (disabled)"
+			}
+			ids = append(ids, id)
+		}
+		shape = append(shape, fmt.Sprintf("%q [%s]", gr.DisplayName, strings.Join(ids, ", ")))
+	}
+	noteQuotaSummary(g.user, shape)
 	var out []QuotaWindow
 	var groups []group
 	for _, gr := range res.Groups {
@@ -1380,7 +1395,7 @@ func (g googleAccount) pools(ctx context.Context, ws []QuotaWindow) []QuotaWindo
 		if pool == "" {
 			continue
 		}
-		n, fiveHour := 0, false
+		n, five := 0, -1
 		for _, b := range gr.Buckets {
 			if b.Disabled {
 				continue
@@ -1408,14 +1423,17 @@ func (g googleAccount) pools(ctx context.Context, ws []QuotaWindow) []QuotaWindo
 				w.ResetsAt = &t
 				w.ResetSecs = int64(max(time.Until(t), 0) / time.Second)
 			}
+			if w.Span == modelSpan && five < 0 {
+				five = len(out)
+			}
 			out = append(out, w)
 			n++
-			fiveHour = fiveHour || w.Span == modelSpan
 		}
 		if n > 0 {
-			groups = append(groups, group{pool, strings.ToLower(gr.DisplayName + " " + gr.Description), fiveHour})
+			groups = append(groups, group{pool, strings.ToLower(gr.DisplayName + " " + gr.Description), five})
 		}
 	}
+	own := map[string]bool{} // a model's own pool made below, by its name
 	for i := range ws {
 		if ws[i].Pool != "" || ws[i].Family == "" {
 			continue
@@ -1429,14 +1447,83 @@ func (g googleAccount) pools(ctx context.Context, ws []QuotaWindow) []QuotaWindo
 		// GPT-OSS"), one with its 5 hours: without them its models' own
 		// stand (#745); a group that says a version ("Gemini 4 Argon") is
 		// its model's alone, never the family's
+		//
+		// A model whose own 5 hours read otherwise than the group's is
+		// not drawing on it: the summary left out the group it does draw
+		// on (Gemini 4 Argon on an account whose summary has no such
+		// group), and folded into the family's pool its reading would be
+		// hidden behind the family's (runking on Discord). It is a pool of
+		// its own, named as Google names the model.
 		for _, gr := range groups {
-			if gr.five && !versioned(gr.pool) && strings.Contains(gr.about, strings.ToLower(ws[i].Family)) {
-				ws[i].Pool = gr.pool
+			if gr.five >= 0 && !versioned(gr.pool) && strings.Contains(gr.about, strings.ToLower(ws[i].Family)) {
+				if sameReading(ws[i], out[gr.five]) {
+					ws[i].Pool = gr.pool
+				} else if name := modelPool(ws[i]); name != "" {
+					ws[i].Pool = name
+					// its reading's span as its reset tells: Argon's,
+					// a week's (#4585), is past any 5 hours
+					w := ws[i]
+					w.Name, w.Span = "5 hours", modelSpan
+					if w.ResetsAt != nil && time.Until(*w.ResetsAt) > modelSpan+time.Minute {
+						w.Name, w.Span = "7 days", 7*24*time.Hour
+						ws[i].Span = w.Span
+					}
+					if !own[name] {
+						own[name] = true
+						w.Model, w.Family, w.Aside = "", "", true
+						out = append(out, w)
+					}
+				}
 				break
 			}
 		}
 	}
 	return out
+}
+
+// sameReading is whether a model's own 5 hours (m) read as its group's (p)
+// do: the same share left and, both told, the same reset to a minute, as
+// the two replies give one allowance.
+func sameReading(m, p QuotaWindow) bool {
+	if math.Abs(m.Used-p.Used) > 0.5 {
+		return false
+	}
+	if m.ResetsAt == nil || p.ResetsAt == nil {
+		return true // a model's left out when its 5 hours haven't started
+	}
+	d := m.ResetsAt.Sub(*p.ResetsAt)
+	return d < time.Minute && d > -time.Minute
+}
+
+// modelPool is the name of a pool of one model's own: its name as Google
+// gives it, without the level ("Gemini 4 Argon (High)" is Gemini 4
+// Argon), so the levels of one model, read alike, share it.
+func modelPool(w QuotaWindow) string {
+	name := strings.TrimSpace(w.Name)
+	if i := strings.Index(name, " ("); i > 0 {
+		name = strings.TrimSpace(name[:i])
+	}
+	return name
+}
+
+// summaryShapes is the last shape of each account's quota summary logged,
+// by a hash of the account, so a change is logged once, not every read.
+var summaryShapes sync.Map
+
+// noteQuotaSummary logs the groups and bucket ids a quota summary had,
+// (parts), when they differ from the last read's: what a report of a missing or
+// misnamed group needs. No token, no account: the account is a hash.
+func noteQuotaSummary(user string, parts []string) {
+	text := strings.Join(parts, "; ")
+	if text == "" {
+		text = "no groups"
+	}
+	sum := sha256.Sum256([]byte(strings.ToLower(user)))
+	key := hex.EncodeToString(sum[:4])
+	if old, ok := summaryShapes.Swap(key, text); ok && old == text {
+		return
+	}
+	log.Printf("antigravity account %s: quota summary groups: %s", key, text)
 }
 
 // poolNames is whether a quota group's name (pool) is a model's own: the

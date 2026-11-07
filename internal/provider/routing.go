@@ -629,6 +629,13 @@ func (a Allowance) Pooled(model string, share float64, now time.Time) bool {
 		pooled = pooled || scoped
 		whole = whole || !scoped
 	}
+	if !pooled && !whole {
+		// no window counts model, as Antigravity's Gemini models that
+		// fetchAvailableModels gives no quota (#3737): when every window
+		// the account has is some models' only, nothing is known to be
+		// the whole account's, and the refusal is the model's
+		return len(a) > 0 && !slices.ContainsFunc(a, func(l Limit) bool { return l.Model == "" && l.matches == nil })
+	}
 	return full || pooled && !whole
 }
 
