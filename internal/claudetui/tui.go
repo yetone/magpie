@@ -36,6 +36,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/wslrun"
@@ -81,6 +82,8 @@ type shim struct {
 	grid  *grid
 	watch bool
 	panel string
+	// cleared is when the screen was last cleared (clearScreen)
+	cleared time.Time
 
 	// rows ticks when a user message (or one queued mid-turn) reaches the
 	// transcript: a pasted message was sent
@@ -369,7 +372,32 @@ func (s *shim) clearScreen() {
 	s.screenMu.Lock()
 	s.screen = s.screen[:0]
 	s.panel = ""
+	s.cleared = time.Now()
 	s.screenMu.Unlock()
+}
+
+// redrawWait is how long the screen may stay as it was after a key, nothing
+// drawn since it was cleared, before it is read as it stands (seen): the
+// key was lost, and Claude Code draws nothing again for it.
+const redrawWait = 1500 * time.Millisecond
+
+// seen is what to read the screen by: what Claude Code drew since it was
+// cleared, or, nothing drawn since for redrawWait, the screen as it
+// stands. A dialog that turns away a key sent just after it opens (Claude
+// Code 2.1.319's Claude in Chrome offer) draws nothing again, and a run
+// that read only what was drawn since the key waited out its caller with
+// nothing to say (sowhynot).
+func (s *shim) seen() string {
+	p := s.plain()
+	if strings.TrimSpace(p) != "" {
+		return p
+	}
+	s.screenMu.Lock()
+	defer s.screenMu.Unlock()
+	if s.grid == nil || time.Since(s.cleared) < redrawWait {
+		return p
+	}
+	return s.grid.text()
 }
 
 // screenCols and screenRows are the size of Claude Code's terminal, the
@@ -398,11 +426,25 @@ func (s *shim) looks() (now, panel string) {
 	return now, s.panel
 }
 
-// lastScreen is the end of what Claude Code drew, for an error to say.
+// lastScreen is the end of what Claude Code drew, for an error to say:
+// with nothing drawn since the screen was cleared, the screen as it
+// stands, and with nothing on it, that nothing was drawn. An error that
+// ended on an empty screen said nothing of what Claude Code showed
+// (sowhynot).
 func (s *shim) lastScreen() string {
 	p := strings.Join(strings.Fields(s.plain()), " ")
+	if p == "" {
+		now, _ := s.looks()
+		p = strings.Join(strings.Fields(now), " ")
+	}
+	if p == "" {
+		return fmt.Sprintf("nothing on its screen (%d bytes read)", s.nread.Load())
+	}
 	if len(p) > 600 {
 		p = p[len(p)-600:]
+		for i := 0; i < len(p) && i < utf8.UTFMax && !utf8.RuneStart(p[0]); i++ {
+			p = p[1:]
+		}
 	}
 	return p
 }
@@ -498,6 +540,7 @@ func (s *shim) ready() error {
 	}
 	asking := "asked whether to trust " + folder + ", not answered"
 	bypassAsking := "asked to accept running in Bypass Permissions mode, not answered"
+	chromeAsking := "asked whether to use Claude in Chrome, not answered"
 	onboard := func(screen, key string) error {
 		if shownAt[screen].IsZero() {
 			shownAt[screen] = time.Now()
@@ -515,13 +558,19 @@ func (s *shim) ready() error {
 		return nil
 	}
 	for {
-		p := s.plain()
+		p := s.seen()
 		words := strings.Join(strings.Fields(p), " ")
+		// what it hadn't done, by the screen as it stands: what was
+		// drawn since a key is nothing until the next screen is drawn
+		now, _ := s.looks()
+		nowWords := strings.Join(strings.Fields(now+" "+p), " ")
 		doing := "showed no prompt"
-		if strings.Contains(p, "trust this folder") {
+		if strings.Contains(nowWords, "trust this folder") {
 			doing = asking
-		} else if strings.Contains(words, "Bypass Permissions mode") {
+		} else if strings.Contains(nowWords, "Bypass Permissions mode") {
 			doing = bypassAsking
+		} else if strings.Contains(nowWords, "keep browser tools off") {
+			doing = chromeAsking
 		}
 		s.doing.Store(doing)
 		switch {
@@ -567,11 +616,15 @@ func (s *shim) ready() error {
 					_, _ = io.WriteString(s.pty, "\x1b[B")
 				}
 			}
-		case strings.Contains(p, "keep browser tools off"):
+		case strings.Contains(words, "keep browser tools off"):
 			// Claude in Chrome found: kept off, as the bridge runs it
-			// --no-chrome
-			s.clearScreen()
-			_, _ = io.WriteString(s.pty, "\x1b")
+			// --no-chrome. Answered once the offer has stayed drawn, as
+			// the onboarding is: 2.1.319 turns away a key sent just after
+			// it opens and draws nothing again, and an Esc sent at once
+			// left every run on it (sowhynot)
+			if err := onboard("chrome", "\x1b"); err != nil {
+				return fmt.Errorf("Claude Code's interactive mode asks whether to use Claude in Chrome and takes no answer; run Claude Code once in a terminal and answer it: %s", s.lastScreen())
+			}
 		case strings.Contains(words, "Choose the text style"):
 			if err := onboard("theme", "\r"); err != nil {
 				return err

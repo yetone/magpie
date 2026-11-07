@@ -194,6 +194,37 @@ func fakeOnboard(r *bufio.Reader, how string) {
 	_ = os.WriteFile(filepath.Join(cfg, "onboarded"), nil, 0o600)
 }
 
+// fakeChrome shows Claude Code 2.1.319's Claude in Chrome offer, drawn
+// where the extension is found and no answer is recorded: "No, keep
+// browser tools off" chosen. As 2.1.319's dialogs do, it turns away a key
+// that comes within refuse of its opening and draws nothing again for it;
+// a later Esc is the offer declined, recorded in the config folder, and
+// it isn't shown again. With "deaf" it takes no key.
+func fakeChrome(r *bufio.Reader, how string) {
+	cfg := os.Getenv("CLAUDE_CONFIG_DIR")
+	if _, err := os.Stat(filepath.Join(cfg, "chrome-declined")); err == nil {
+		return
+	}
+	const refuse = 700 * time.Millisecond
+	fmt.Print("\x1b[2J\x1b[H\r\n ╭───────────────────────────────────────╮\r\n │\x1b[1CClaude\x1b[1Cin\x1b[1CChrome\x1b[1Cextension\x1b[1Cdetected\r\n │\r\n │ Claude will use your Chrome browser by default — navigating sites,\r\n │ filling forms, and capturing screenshots in your existing session.\r\n │\r\n │\x1b[1C\x1b[38;2;177;185;249m❯\x1b[39m\x1b[1CNo,\x1b[1Ckeep\x1b[1Cbrowser\x1b[1Ctools\x1b[1Coff\r\n │   Yes, use my browser\r\n ╰───────────────────────────────────────╯\r\n  Enter to confirm · Esc to keep browser tools off\r\n")
+	opened := time.Now()
+	for {
+		c, err := r.ReadByte()
+		if err != nil {
+			os.Exit(0)
+		}
+		if how == "deaf" || time.Since(opened) < refuse {
+			continue
+		}
+		if c == 0x1b {
+			_ = os.MkdirAll(cfg, 0o700)
+			_ = os.WriteFile(filepath.Join(cfg, "chrome-declined"), nil, 0o600)
+			fmt.Print("\x1b[2J\x1b[H")
+			return
+		}
+	}
+}
+
 func fakeClaude(args []string) {
 	if slices.Contains(args, "-p") {
 		sc := bufio.NewScanner(os.Stdin)
@@ -236,6 +267,9 @@ func fakeClaude(args []string) {
 	}
 	if v := os.Getenv("FAKE_BYPASS"); v != "" {
 		fakeBypass(r, v == "deaf")
+	}
+	if v := os.Getenv("FAKE_CHROME"); v != "" {
+		fakeChrome(r, v)
 	}
 	// what it was started with, for the test to read
 	_ = os.WriteFile(filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "args"), []byte(strings.Join(args, "\n")), 0o600)
@@ -766,6 +800,10 @@ func TestShimEndsAtItsCallersDeadline(t *testing.T) {
 		// the disclaimer the spawned claude sat on for 45s, then died in a
 		// loop of them (#5042): said, never "showed no prompt"
 		{"bypass disclaimer unanswered", `{"type":"user","message":{"role":"user","content":"hello"}}`, "asked to accept running in Bypass Permissions mode, not answered in the", "Bypass Permissions mode", []string{"FAKE_BYPASS=deaf", BypassEnv + "=1"}},
+		// the Claude in Chrome offer taking no key: said, with what the
+		// screen shows. Its Esc cleared the screen, and the error ended
+		// on nothing (sowhynot)
+		{"chrome offer unanswered", `{"type":"user","message":{"role":"user","content":"hello"}}`, "asked whether to use Claude in Chrome, not answered in the", "No, keep browser tools off", []string{"FAKE_CHROME=deaf"}},
 		// FAKE_USAGE names no panel: nothing is drawn for /usage
 		{"no /usage panel", `{"type":"command","command":"/usage"}`, "hadn't drawn /usage's panel in the", "", []string{"FAKE_USAGE=" + filepath.Join(t.TempDir(), "none")}},
 		// the banner drawn again and no panel after it: never told as one
@@ -788,6 +826,25 @@ func TestShimEndsAtItsCallersDeadline(t *testing.T) {
 				t.Fatalf("ended after %s, the deadline 3s", d)
 			}
 		})
+	}
+}
+
+// Claude Code 2.1.319's Claude in Chrome offer turns away a key sent just
+// after it opens and draws nothing again: the Esc sent the moment it was
+// drawn was lost, and every run waited on it until its caller gave up,
+// "showed no prompt" and nothing after it (sowhynot, a /usage read and
+// the endpoint test alike). It is declined once it has stayed drawn, and
+// declined again when the screen stays as it was.
+func TestShimDeclinesChromeOffer(t *testing.T) {
+	home := t.TempDir()
+	for run := range 2 {
+		out, stderr, err := runEnds(t, home, []string{"FAKE_CHROME=1"})
+		if err != nil || !strings.Contains(out, "echo: hello") || strings.Contains(out, "print mode") {
+			t.Fatalf("run %d ended %v, wrote %q, stderr %q", run, err, out, stderr)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, "claude", "chrome-declined")); err != nil {
+		t.Fatal("the offer wasn't declined")
 	}
 }
 
