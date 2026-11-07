@@ -2511,6 +2511,9 @@ included). `previousResponse` in
   new input with the provider's own id (`prevDelta`), so images aren't
   uploaded again. A provider that says it doesn't know that id
   (`prevRefused`) is sent the whole conversation at once.
+- A ChatGPT account's streamed turn goes on its conversation's kept
+  socket as a delta after the backend's own `previous_response_id`
+  (`codexKept`, see [Providers and accounts](providers-accounts.md)).
 - Not covered: the kept turns don't outlive the gateway, and a kept-id
   request is still read and masked whole on this computer before the
   delta is cut.
