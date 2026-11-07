@@ -63,11 +63,15 @@ func TestZCodeTrialRefusalRestsTheTrialAlone(t *testing.T) {
 		// a trial entry goes to zcode.z.ai's Start Plan, and a dual
 		// account's GLM Coding Plan to api.z.ai: zcode.z.ai's firewall
 		// blocking the trial says nothing of the plan's host, so the trial
-		// rests alone and the plan's model is asked. Blocking the plain
-		// model, or the account's own risk control, rests the account
+		// rests alone and the plan's model is asked. So does ZCode's risk
+		// control refusing the trial (3012, young02036 on Discord: the
+		// gift refused, the plan's models served). Blocking the plain
+		// model, or its 3012, rests the account
 		{"trial edge block", "zcode", "GLM-5.3-Flash-Trial", zcodeStartEdge, 405, true, false},
 		{"plain edge block", "zcode", "GLM-5.3", zcodeStartEdge, 405, false, true},
-		{"trial risk control", "zcode", "GLM-5.3-Flash-Trial", zcodeStartRisk, 405, true, true},
+		{"trial risk control", "zcode", "GLM-5.3-Flash-Trial", zcodeStartRisk, 405, true, false},
+		{"plain risk control", "zcode", "GLM-5.3", zcodeStartRisk, 405, false, true},
+		{"another vendor's risk control", "factory", "GLM-5.3-Trial", zcodeStartRisk, 405, false, true},
 		{"another vendor's block", "factory", "GLM-5.3-Trial", zcodeStartEdge, 405, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

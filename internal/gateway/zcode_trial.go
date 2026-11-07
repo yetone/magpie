@@ -58,10 +58,24 @@ func zcodeTrialRefused(c candidate, status int, body []byte) bool {
 // that rests the account (windy_66454 on Discord, 10-31: glm-trial's two
 // members, GLM-5.3-Flash and GLM-5.3-Flash-Trial, shared one account rest
 // and the plain one was never asked). ZCode's risk control blocking the
-// account (code 3012, failRestricted) is the account's, and is read before.
+// account (code 3012, failRestricted) is read before, and rests as
+// zcodeTrialRestricted says.
 func zcodeTrialBlocked(c candidate, status int, body []byte) bool {
 	if status < 400 || c.p.PluginProvider() != "zcode" || !strings.HasSuffix(strings.ToLower(c.model), "-trial") {
 		return false
 	}
 	return provider.EdgeBlocked(wordsOf(body)) && !restrictedSaid(status, wordsOf(body))
+}
+
+// zcodeTrialRestricted says c, a ZCode plugin account asked for one of its
+// Start Plan trial entries, was refused by ZCode's risk control (code
+// 3012, failRestricted). That is zcode.z.ai's answer, and the entry alone
+// rests: a dual account's plain models go to its GLM Coding Plan on
+// api.z.ai, which kept serving them (young02036 on Discord, 11-07:
+// GLM-5.3-Flash-Trial answered 3012 while the account's GLM-5.3 worked,
+// and the account rested whole for two hours). On a gift-only account the
+// plain model goes to zcode.z.ai too, gets its own 3012, and that rests
+// the account, as zcodeTrialBlocked's block page does.
+func zcodeTrialRestricted(c candidate, why string) bool {
+	return why == failRestricted && c.p.PluginProvider() == "zcode" && strings.HasSuffix(strings.ToLower(c.model), "-trial")
 }

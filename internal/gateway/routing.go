@@ -1722,6 +1722,10 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	if why == failQuota && zcodeTrialRefused(c, status, body) {
 		id = c.restID()
 	}
+	// and so is its 3012: zcode.z.ai's, not the GLM Coding Plan's host's
+	if zcodeTrialRestricted(c, why) {
+		id = c.restID()
+	}
 	// a relay's 429 that names the model whose credentials cooled down is
 	// that model's: its siblings on the same key still answer upstream,
 	// and the model's own sentence rests with the model, not on every
