@@ -55,8 +55,9 @@ const (
 // also after a new title and size and a new system appearance. The lights
 // are in place as AppKit draws that appearance, too. A first press while
 // another app is in front moves it from where it did with the toolbar. In
-// the earlier design, where a toolbar doesn't change the corners (an older
-// macOS, or a program linked against an earlier SDK than macOS 26's), the
+// the earlier design (an older macOS, or a program linked against an
+// earlier SDK than macOS 26's), and on macOS 27, which gives a window with a
+// toolbar a plain title bar's corners, a toolbar doesn't change them: the
 // window keeps its toolbar. The windows' program is run as linked against
 // each SDK, whatever the toolchain has, in a process of its own that runs
 // AppKit on its main thread.
@@ -90,8 +91,8 @@ func checkMainWindowCorners(t *testing.T, sdk uint32) {
 		if !near(s.Main.Titlebar, s.Toolbar.Titlebar) {
 			t.Errorf("%s: a title bar %.0fpt tall, the toolbar's was %.0fpt", s.Name, s.Main.Titlebar, s.Toolbar.Titlebar)
 		}
-		// Where a toolbar doesn't change the corners (the earlier design),
-		// the main window is left as it was
+		// Where a toolbar doesn't change the corners (the earlier design,
+		// macOS 27), the main window is left as it was
 		if near(s.Plain.Radius, s.Toolbar.Radius) && !s.Main.Toolbar {
 			t.Errorf("%s: a toolbar doesn't change the corners in this design, yet the main window's was taken off", s.Name)
 		}

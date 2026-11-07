@@ -8,6 +8,7 @@ package gui
 #import <Cocoa/Cocoa.h>
 #import <crt_externs.h>
 #import <mach-o/loader.h>
+#import <objc/message.h>
 #import <objc/runtime.h>
 
 static const NSWindowButton lightKinds[3] = {NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton};
@@ -122,7 +123,7 @@ static NSEvent *firstPress(NSEvent *e) {
 }
 
 // Whether AppKit gives this program the design of macOS 26, where a toolbar
-// gives a window larger corners: from macOS 26, for a program linked against
+// can give a window larger corners (see toolbarRounder): from macOS 26, for a program linked against
 // the macOS 26 SDK or a later one, unless its Info.plist asks for the earlier
 // design (UIDesignRequiresCompatibility). Each is read at run time. The SDK is
 // the one the program names, which depends on the toolchain that linked it:
@@ -145,21 +146,46 @@ static BOOL designOf26(void) {
 	return NO;
 }
 
+// The corner radius AppKit gives w; -1 when it doesn't say. No public API
+// gives it.
+static CGFloat cornerRadiusOf(NSWindow *w) {
+	SEL s = sel_registerName("_cornerRadius");
+	if (![w respondsToSelector:s]) return -1;
+	return ((CGFloat (*)(id, SEL))objc_msgSend)(w, s);
+}
+
+// Whether w's toolbar gives it larger corners than a plain title bar would:
+// w is held against a window of its style with no toolbar, never shown. In
+// the design of macOS 26 it does on macOS 26 (26pt, Finder's, against 16pt);
+// macOS 27 gives both 16pt. When AppKit doesn't tell the radius, the design
+// decides.
+static BOOL toolbarRounder(NSWindow *w) {
+	NSWindow *plain = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 400, 300) styleMask:w.styleMask
+		backing:NSBackingStoreBuffered defer:YES];
+	plain.titlebarAppearsTransparent = w.titlebarAppearsTransparent;
+	plain.titleVisibility = w.titleVisibility;
+	CGFloat r = cornerRadiusOf(w), pr = cornerRadiusOf(plain);
+	[plain release];
+	return r < 0 || pr < 0 || r - pr >= 0.5;
+}
+
 // The Mac's title bar with no toolbar (the design of macOS 26). The main
 // window has an empty toolbar only to inset the traffic lights into the
-// page's header (MacTitleBarHiddenInset), and in that design a window with a
-// toolbar has the larger corners of one: the size of Finder's, where every
-// other window with a plain title bar has smaller ones (TextEdit's, and an
-// Electron app's that insets its lights by moving them). The toolbar is
-// taken off, and the lights are kept where it had them, so the header still
-// fits them. The window is left as it was in the earlier design, where a
-// toolbar doesn't change the corners (see designOf26), with its lights on
-// the right (a right-to-left language), or with a title bar not laid out as
-// expected.
+// page's header (MacTitleBarHiddenInset), and on macOS 26, in that design, a
+// window with a toolbar has the larger corners of one: the size of Finder's,
+// where every other window with a plain title bar has smaller ones
+// (TextEdit's, and an Electron app's that insets its lights by moving them).
+// The toolbar is taken off, and the lights are kept where it had them, so
+// the header still fits them. The window is left as it was where a toolbar
+// doesn't change the corners: in the earlier design (see designOf26), and
+// on macOS 27, which gives a toolbar's window a plain title bar's corners
+// (toolbarRounder); with its lights on the right (a right-to-left language);
+// or with a title bar not laid out as expected.
 static void insetLights(void *p) {
 	if (!designOf26()) return;
 	NSWindow *w = (NSWindow *)p;
 	if (w.toolbar == nil || objc_getAssociatedObject(w, &lightsKey) != nil) return;
+	if (!toolbarRounder(w)) return;
 	if (w.windowTitlebarLayoutDirection == NSUserInterfaceLayoutDirectionRightToLeft) return;
 	NSView *bar = [w standardWindowButton:NSWindowCloseButton].superview, *box = bar.superview, *frame = box.superview;
 	if (frame == nil) return;
