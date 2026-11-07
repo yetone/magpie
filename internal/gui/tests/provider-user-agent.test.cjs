@@ -1,8 +1,9 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // #1851: a coding plan that serves only the agents it names knows them by
-// their User-Agent. The provider editor's User-Agent row, "Send the agent's
-// own User-Agent", is there for a provider with a key, opens as it was
-// saved, and Save posts it. A signed-in account and a vendor magpie goes as
+// their User-Agent, and a gateway of the user's own behind magpie wants to
+// see the agent's (nb5p on Discord). The provider editor's User-Agent row,
+// "Send the agent's own User-Agent", is there for a provider with a key,
+// opens ticked unless it was saved as magpie, and Save posts it. A signed-in account and a vendor magpie goes as
 // the client of (OpenCode here) have no such row. In every language, wide
 // and narrow.
 const assert = require("node:assert/strict");
@@ -22,10 +23,10 @@ const unfold = async (page) => {
 const base = {
   icon: "generic", chat: "", responses: "", anthropic: "", catalog: "",
   models: [{ id: "m1", name: "M1", on: true }], agents: [], fallback: [], headers: {},
-  key: { set: true, masked: "sk-…1234" }, keyList: [], balanceToken: { takes: false, set: false }, proxy: "", searches: false, unredacted: false, passUserAgent: false,
+  key: { set: true, masked: "sk-…1234" }, keyList: [], balanceToken: { takes: false, set: false }, proxy: "", searches: false, unredacted: false, passUserAgent: true,
 };
 const plan = { ...base, id: "plan", name: "Agent Plan", chat: "https://plan.example.com/v1" };
-const passing = { ...base, id: "passing", name: "Passing Plan", chat: "https://passing.example.com/v1", passUserAgent: true };
+const asMagpie = { ...base, id: "asmagpie", name: "Magpie Plan", chat: "https://asmagpie.example.com/v1", passUserAgent: false };
 const zen = { ...base, id: "opencode", name: "OpenCode Zen", chat: "https://opencode.ai/zen/v1", ownClient: true };
 const codex = {
   id: "codex", name: "Codex", icon: "codex-color", chat: "", responses: "", anthropic: "", catalog: "",
@@ -35,7 +36,7 @@ const codex = {
 };
 
 function serve(lang, posts) {
-  const providers = { providers: [plan, passing, zen, codex], presets: [], excluded: [], gateway: { running: true, window: true } };
+  const providers = { providers: [plan, asMagpie, zen, codex], presets: [], excluded: [], gateway: { running: true, window: true } };
   const state = { agents: [], profiles: [], settings: { lang, theme: "light" } };
   return async (route) => {
     const url = new URL(route.request().url());
@@ -58,7 +59,7 @@ function serve(lang, posts) {
 
 const strings = [
   "User-Agent", "Send the agent's own User-Agent",
-  "For a plan that serves only the coding agents it names: each request goes with the User-Agent the agent sent (pi, OpenCode, Claude Code…), not magpie's. Requests magpie makes itself, and ones the agent sent without one, still go as magpie. A User-Agent set in Headers above always wins.",
+  "Off, every request goes as magpie. A User-Agent set in Headers above always wins.",
 ];
 const words = {
   en: { tick: "Send the agent's own User-Agent", save: "Save" },
@@ -103,8 +104,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         return posts.at(-1);
       };
 
-      test(`${engine} ${lang} ${width}: a plan with a key is set to send the agent's User-Agent, and saved so`, async (t) => {
-        const { page, errors, posts } = await open(t, "Agent Plan");
+      test(`${engine} ${lang} ${width}: one saved as magpie opens unticked, and is set to send the agent's User-Agent`, async (t) => {
+        const { page, errors, posts } = await open(t, "Magpie Plan");
         assert.equal(await row(page).isVisible(), true);
         assert.equal(await box(page).isChecked(), false, "opens as magpie");
         const r = await row(page).boundingBox();
@@ -116,7 +117,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(y2, y, "the click doesn't scroll");
         const saved = await save(page, posts);
         assert.equal(saved.action, "save");
-        assert.equal(saved.body.id, "plan");
+        assert.equal(saved.body.id, "asmagpie");
         assert.equal(saved.body.passUserAgent, true);
         if (lang !== "en") {
           const missing = await page.evaluate(([l, ks]) => ks.filter((k) => !I18N[l][k]), [lang, strings]);
@@ -125,13 +126,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(errors, []);
       });
 
-      test(`${engine} ${lang} ${width}: one saved passing it opens ticked, and is saved as magpie`, async (t) => {
-        const { page, errors, posts } = await open(t, "Passing Plan");
-        assert.equal(await box(page).isChecked(), true);
+      test(`${engine} ${lang} ${width}: a plan with a key opens ticked by default, and unticked is saved as magpie`, async (t) => {
+        const { page, errors, posts } = await open(t, "Agent Plan");
+        assert.equal(await box(page).isChecked(), true, "sends the agent's by default");
         await box(page).scrollIntoViewIfNeeded();
         await box(page).uncheck();
         const saved = await save(page, posts);
-        assert.equal(saved.body.id, "passing");
+        assert.equal(saved.body.id, "plan");
         assert.equal(saved.body.passUserAgent, false);
         assert.deepEqual(errors, []);
       });

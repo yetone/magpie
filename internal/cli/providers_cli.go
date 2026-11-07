@@ -38,9 +38,8 @@ const providerUsage = `usage:
   magpie provider set <id> k=v…           change a provider's settings, with the same k=v pairs as add;
                                           codex=as-sent sends Codex's Responses requests as Codex sent them
                                           (a relay that checks they are Codex's own), codex=default fits them;
-                                          user-agent=agent sends the User-Agent the agent gave (pi, opencode…)
-                                          in place of magpie's, for a plan that serves only agents it names;
-                                          user-agent=magpie, the default, sends magpie's;
+                                          user-agent=agent, the default, sends the User-Agent the agent gave
+                                          (pi, opencode…); user-agent=magpie sends magpie's in its place;
                                           compaction=native asks the provider Codex's own compaction and hands
                                           Codex its sealed item as it came (a Responses API, a ChatGPT account,
                                           Copilot), compaction=magpie, the default, has magpie summarise
@@ -869,12 +868,8 @@ func showProvider(p provider.Provider) error {
 	if p.PassesErrors() {
 		kv("errors", "pass"+muted.Render("  sent to the agent as the vendor sent them, asked once"))
 	}
-	if p.PassUserAgent {
-		why := "  the User-Agent the agent gave, not magpie's"
-		if !p.PassesUserAgent() {
-			why = "  but magpie's: it goes as a client of " + p.Name + "'s own"
-		}
-		kv("user-agent", "agent's"+muted.Render(why))
+	if p.MagpieUserAgent {
+		kv("user-agent", "magpie's"+muted.Render("  not the one the agent gave"))
 	}
 	if p.Unredacted {
 		why := "  Settings' redaction leaves its requests as written"
@@ -1218,9 +1213,8 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			}
 			p.PassErrors = on
 		case "user-agent", "ua":
-			// agent: a request goes with the User-Agent the agent that
-			// sent it gave, for a coding plan that serves only agents it
-			// names (#1851); magpie: magpie's own, as by default. A
+			// agent, the default: a request goes with the User-Agent the
+			// agent that sent it gave (#1851); magpie: magpie's own. A
 			// header.User-Agent the user set stands over both
 			var on bool
 			switch strings.ToLower(v) {
@@ -1233,7 +1227,8 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			if on && p.Account != nil {
 				return fmt.Errorf("%s signs in as its own client, which sends the User-Agent it does; user-agent= is for a provider with an API key", p.Name)
 			}
-			p.PassUserAgent = on
+			// an account goes as its own client either way
+			p.MagpieUserAgent = !on && p.Account == nil
 		case "search":
 			// yes: the vendor searches the web by itself, a web search a
 			// client offers going to it as it was sent (a relay in front of

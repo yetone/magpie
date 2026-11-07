@@ -393,15 +393,17 @@ type Provider struct {
 	// keeps magpie's summary.
 	NativeCompaction bool `json:"nativeCompaction,omitempty"`
 
-	// PassUserAgent has a request go to the vendor with the User-Agent the
-	// agent that sent it gave (pi, opencode, Claude Code…), in place of
-	// magpie's own (#1851): a coding plan that serves only agents it names
-	// knows them by it. One the agent didn't give, or magpie's own
-	// requests, go as magpie. Off, the default, every request goes as
-	// magpie. Only a key+URL provider takes it: a signed-in account, a
-	// plugin's and one that goes as a client of its vendor's own keep the
-	// identity their signing gives (see PassesUserAgent).
-	PassUserAgent bool `json:"passUserAgent,omitempty"`
+	// MagpieUserAgent has every request go to the vendor with magpie's own
+	// User-Agent (magpie/<version>). Off, the default, a key+URL provider is
+	// sent the User-Agent the agent gave (pi, opencode, Claude Code…) as it
+	// gave it (#1851, nb5p on Discord): a coding plan that serves only
+	// agents it names, or the user's own gateway behind magpie, knows them
+	// by it. One the agent didn't give, and magpie's own requests, go as
+	// magpie either way. A signed-in account, a plugin's and one that goes
+	// as a client of its vendor's own keep the identity their signing
+	// gives (see PassesUserAgent). The opt-in "passUserAgent" it replaces
+	// is the default now, so a file that still says it reads the same.
+	MagpieUserAgent bool `json:"magpieUserAgent,omitempty"`
 
 	// PinUpstream, on the Cline API, has its DeepSeek models answered only
 	// by DeepSeek's own API (White Immortal on Discord) and its GLM models
@@ -1424,7 +1426,7 @@ func AddCopy(p Provider, from string) (string, error) {
 	p.Unredacted = p.Unredacted || src.Unredacted
 	p.CountFree = p.CountFree || src.CountFree
 	p.NativeCompaction = p.NativeCompaction || src.NativeCompaction
-	p.PassUserAgent = p.PassUserAgent || src.PassUserAgent
+	p.MagpieUserAgent = p.MagpieUserAgent || src.MagpieUserAgent
 	if p.Website == "" {
 		p.Website = src.Website
 	}

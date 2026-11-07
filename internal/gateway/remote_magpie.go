@@ -36,6 +36,11 @@ const (
 	// round and round, masked again on each pass: one passed on through
 	// catalog.MaxVia magpies is answered 508 Loop Detected instead.
 	HopsHeader = "X-Magpie-Hops"
+	// ClientUAHeader is the User-Agent the agent sent, on a request
+	// passed on to a remote magpie as magpie's own: that magpie sends its
+	// key+URL providers the agent's, as this one would have (nb5p on
+	// Discord). Taken, like AgentHeader, only from a magpie's request.
+	ClientUAHeader = "X-Magpie-User-Agent"
 )
 
 // caller is who a request is recorded as: its agent, and the computer it
@@ -51,8 +56,10 @@ type caller struct {
 	// session so the other magpie records the call as one (#2505)
 	compact string
 	// ua is the User-Agent the request came with, as it came: the one a
-	// provider that passes the agent's on is sent (userAgentFor)
-	ua string
+	// provider that passes the agent's on is sent (userAgentFor). From
+	// another magpie, the agent's it named (ClientUAHeader), relayed true.
+	ua      string
+	relayed bool
 	// keepTurn: another magpie asked that its Responses turn be kept
 	// though it says store false (KeepTurnHeader, remote_delta.go)
 	keepTurn bool
@@ -82,6 +89,7 @@ func withCaller(next http.Handler) http.Handler {
 		r.Header.Del(SearchingHeader)
 		r.Header.Del(KeepTurnHeader)
 		r.Header.Del(HopsHeader)
+		r.Header.Del(ClientUAHeader)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -107,6 +115,9 @@ func callerFrom(r *http.Request) caller {
 	if magpieAsks(r) {
 		if n, err := strconv.Atoi(strings.TrimSpace(r.Header.Get(HopsHeader))); err == nil && n > 0 {
 			c.hops = min(n, 1<<20)
+		}
+		if v := r.Header.Get(ClientUAHeader); v != "" && len(v) <= 1024 && !magpiesOwn(v) {
+			c.ua, c.relayed = v, true
 		}
 		if a := label(r.Header.Get(AgentHeader)); a != "" {
 			c.agent = usage.AgentOf(a)

@@ -430,6 +430,7 @@ func (s *Server) retrieveOpen(ctx context.Context, p provider.Provider, url, cty
 	if p.IsRemoteMagpie() {
 		req.Header.Set("User-Agent", "magpie/"+Version)
 		passOnCaller(ctx, req)
+		passOnUA(req, callerUA(ctx))
 	}
 	if err := p.Sign(ctx, req, provider.Chat, body); err != nil {
 		return nil, nil, "", 502, err

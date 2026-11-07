@@ -225,7 +225,7 @@ func TestChatRelayRefusalSaysWhy(t *testing.T) {
 					io.WriteString(w, c.body)
 				}))
 				t.Cleanup(relay.Close)
-				if err := provider.Save(provider.Provider{ID: "magpie-grok", Name: "magpie-grok", Key: "k", Models: []string{"grok-4.7"}, Chat: relay.URL + "/v1", PassUserAgent: true}); err != nil {
+				if err := provider.Save(provider.Provider{ID: "magpie-grok", Name: "magpie-grok", Key: "k", Models: []string{"grok-4.7"}, Chat: relay.URL + "/v1"}); err != nil {
 					t.Fatal(err)
 				}
 				if err := provider.SaveGroup(provider.Group{Name: "G", Members: []string{"magpie-grok/grok-4.7"}, Routing: provider.Ordered}); err != nil {

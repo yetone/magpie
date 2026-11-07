@@ -1393,6 +1393,7 @@ func (s *Server) sendWith(ctx context.Context, p provider.Provider, method, url,
 	if p.IsRemoteMagpie() {
 		req.Header.Set("User-Agent", "magpie/"+Version)
 		passOnCaller(ctx, req)
+		passOnUA(req, callerUA(ctx))
 	}
 	if sign {
 		if err := p.Sign(ctx, req, provider.Chat, body); err != nil {

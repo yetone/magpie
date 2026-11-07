@@ -5684,11 +5684,12 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	defer provider.LetGo(req)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
-	// magpie's, or the agent's own where the provider is set to pass it
-	// on (#1851); a signed-in account's signing, a client the vendor
-	// serves (OpenCode's, Cline's, Kilo's) and the user's own header put
-	// theirs on after
-	req.Header.Set("User-Agent", userAgentFor(p, in.Get("User-Agent")))
+	// the agent's own where the provider passes it on, else magpie's
+	// (#1851); a signed-in account's signing, a client the vendor serves
+	// (OpenCode's, Cline's, Kilo's) and the user's own header put theirs
+	// on after
+	ua := agentUA(ctx, in)
+	req.Header.Set("User-Agent", userAgentFor(p, ua))
 	if to == provider.Anthropic {
 		req.Header.Set("anthropic-version", "2023-06-01")
 		for _, h := range []string{"anthropic-version", "anthropic-beta"} {
@@ -5812,6 +5813,7 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	}
 	if p.IsRemoteMagpie() {
 		passOnCaller(ctx, req)
+		passOnUA(req, ua)
 		markSearching(ctx, req)
 	}
 	if err := p.Sign(ctx, req, to, body); err != nil {

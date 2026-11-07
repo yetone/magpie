@@ -17,14 +17,18 @@ import (
 // keeps the User-Agent each path was asked with, and answers each as its
 // API does.
 type uaVendor struct {
-	mu  sync.Mutex
-	got map[string]string
+	mu     sync.Mutex
+	got    map[string]string
+	leaked []string // magpie's ClientUAHeader, which no vendor is sent
 }
 
 func (v *uaVendor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	io.Copy(io.Discard, r.Body)
 	v.mu.Lock()
 	v.got[r.URL.Path] = r.Header.Get("User-Agent")
+	if h := r.Header.Get(ClientUAHeader); h != "" {
+		v.leaked = append(v.leaked, r.URL.Path+": "+h)
+	}
 	v.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	switch p := r.URL.Path; {
@@ -69,7 +73,8 @@ var uaRoutes = []struct{ name, path, body, upstream string }{
 }
 
 // uaSetup saves a key+URL provider "ua" on every API, at a uaVendor, with
-// pass for its PassUserAgent and headers for the user's own, and "ug" the
+// pass for whether it sends the agent's User-Agent (MagpieUserAgent off,
+// the default) and headers for the user's own, and "ug" the
 // same on Gemini's API alone.
 func uaSetup(t *testing.T, pass bool, headers map[string]string) *uaVendor {
 	t.Helper()
@@ -78,7 +83,7 @@ func uaSetup(t *testing.T, pass bool, headers map[string]string) *uaVendor {
 	up := httptest.NewServer(v)
 	t.Cleanup(up.Close)
 	p := provider.Provider{ID: "ua", Name: "UA", Key: "k", Chat: up.URL + "/v1", Responses: up.URL + "/v1", Anthropic: up.URL, Gemini: up.URL + "/v1beta",
-		Models: []string{"m1", "embed-1", "gpt-image-1"}, PassUserAgent: pass, Headers: headers}
+		Models: []string{"m1", "embed-1", "gpt-image-1"}, MagpieUserAgent: !pass, Headers: headers}
 	if err := provider.Save(p); err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +91,7 @@ func uaSetup(t *testing.T, pass bool, headers map[string]string) *uaVendor {
 		t.Fatal(err)
 	}
 	// Gemini's own wire, which a provider on Chat too isn't asked on
-	g := provider.Provider{ID: "ug", Name: "UG", Key: "k", Gemini: up.URL + "/v1beta", Models: []string{"m1"}, PassUserAgent: pass, Headers: headers}
+	g := provider.Provider{ID: "ug", Name: "UG", Key: "k", Gemini: up.URL + "/v1beta", Models: []string{"m1"}, MagpieUserAgent: !pass, Headers: headers}
 	if err := provider.Save(g); err != nil {
 		t.Fatal(err)
 	}
@@ -110,10 +115,11 @@ func askAs(t *testing.T, s *Server, path, body, ua string) {
 	}
 }
 
-// A key+URL provider set to pass the agent's User-Agent on (#1851) is
-// asked with the one the agent sent, on every route that reaches it: a
-// coding plan that serves only agents it names knows them by it. Off, the
-// default, it is asked as magpie; so it is when the agent sent none, and
+// A key+URL provider is asked with the User-Agent the agent sent (#1851,
+// nb5p on Discord), on every route that reaches it: a coding plan that
+// serves only agents it names knows them by it, and a gateway of the
+// user's own behind magpie sees which agent asked. Set to go as magpie, it
+// is asked as magpie; so it is when the agent sent none, and
 // on magpie's own requests (its classifier's, the image tool's), which no
 // agent sent. A User-Agent the user set in the provider's headers stands
 // over both.
@@ -127,13 +133,13 @@ func TestUserAgentPassedOn(t *testing.T) {
 		ua      string // what the agent sent
 		want    string
 	}{
-		{"off", false, nil, pi, magpie},
-		{"on", true, nil, pi, pi},
-		{"on, the agent sent none", true, nil, "", magpie},
-		{"on, magpie's classifier", true, nil, RouterAgent, magpie},
-		{"on, magpie's image tool", true, nil, "claude-code/2.1.0 " + DrawAgent, magpie},
-		{"on, the user's own header", true, map[string]string{"User-Agent": "mine/1"}, pi, "mine/1"},
-		{"off, the user's own header", false, map[string]string{"User-Agent": "mine/1"}, pi, "mine/1"},
+		{"as magpie", false, nil, pi, magpie},
+		{"default", true, nil, pi, pi},
+		{"default, the agent sent none", true, nil, "", magpie},
+		{"default, magpie's classifier", true, nil, RouterAgent, magpie},
+		{"default, magpie's image tool", true, nil, "claude-code/2.1.0 " + DrawAgent, magpie},
+		{"default, the user's own header", true, map[string]string{"User-Agent": "mine/1"}, pi, "mine/1"},
+		{"as magpie, the user's own header", false, map[string]string{"User-Agent": "mine/1"}, pi, "mine/1"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			v := uaSetup(t, tt.pass, tt.headers)
@@ -166,7 +172,8 @@ func TestUserAgentClaudeCodeAsBefore(t *testing.T) {
 	}
 }
 
-// Which providers pass it on: a key+URL one set to, and not a signed-in
+// Which providers pass it on: a key+URL one unless set to go as magpie, and
+// not a signed-in
 // account (ZCode's Coding Plan signs without a User-Agent of its own, and
 // goes as magpie), a plugin's, a vendor's own client's gateway (OpenCode,
 // Cline, Kilo) or another magpie, each of which goes as the client it
@@ -179,13 +186,13 @@ func TestUserAgentFor(t *testing.T) {
 		p    provider.Provider
 		want string
 	}{
-		{"key", provider.Provider{Chat: "https://api.example.com/v1", PassUserAgent: true}, pi},
-		{"key, off", provider.Provider{Chat: "https://api.example.com/v1"}, magpie},
-		{"account", provider.Provider{Chat: "https://api.z.ai/api/coding/paas/v4", PassUserAgent: true, Account: &provider.Account{Agent: "zcode"}}, magpie},
-		{"opencode", provider.Provider{Chat: "https://opencode.ai/zen/v1", PassUserAgent: true}, magpie},
-		{"cline", provider.Provider{Preset: "clinepass", Chat: "https://api.cline.bot/api/v1", PassUserAgent: true}, magpie},
-		{"kilo", provider.Provider{Preset: "kilo", Chat: "https://api.kilo.ai/api/gateway", PassUserAgent: true}, magpie},
-		{"remote magpie", provider.Provider{Preset: provider.RemoteMagpiePreset, Chat: "http://10.0.0.2:3425/v1", PassUserAgent: true}, magpie},
+		{"key", provider.Provider{Chat: "https://api.example.com/v1"}, pi},
+		{"key, as magpie", provider.Provider{Chat: "https://api.example.com/v1", MagpieUserAgent: true}, magpie},
+		{"account", provider.Provider{Chat: "https://api.z.ai/api/coding/paas/v4", Account: &provider.Account{Agent: "zcode"}}, magpie},
+		{"opencode", provider.Provider{Chat: "https://opencode.ai/zen/v1"}, magpie},
+		{"cline", provider.Provider{Preset: "clinepass", Chat: "https://api.cline.bot/api/v1"}, magpie},
+		{"kilo", provider.Provider{Preset: "kilo", Chat: "https://api.kilo.ai/api/gateway"}, magpie},
+		{"remote magpie", provider.Provider{Preset: provider.RemoteMagpiePreset, Chat: "http://10.0.0.2:3425/v1"}, magpie},
 	} {
 		if got := userAgentFor(tt.p, pi); got != tt.want {
 			t.Errorf("%s: %q, want %q", tt.name, got, tt.want)
@@ -194,8 +201,55 @@ func TestUserAgentFor(t *testing.T) {
 	// an account's own request headers are its signing's: stampUA leaves
 	// them as they are
 	h := http.Header{}
-	stampUA(t.Context(), provider.Provider{PassUserAgent: true, Account: &provider.Account{Agent: "zcode"}}, h)
+	stampUA(t.Context(), provider.Provider{Account: &provider.Account{Agent: "zcode"}}, h)
 	if h.Get("User-Agent") != "" {
 		t.Errorf("an account's request was stamped %q", h.Get("User-Agent"))
+	}
+}
+
+// Through another computer's magpie (a Remote magpie provider), the vendor
+// at the far end is asked with the agent's User-Agent too, not the near
+// magpie's (nb5p on Discord): the near one hands it over in a header of
+// magpie's own, which the far one takes only from a magpie, and which no
+// vendor is sent. An agent that writes that header itself is asked as it
+// is.
+func TestRemoteMagpieRelaysUserAgent(t *testing.T) {
+	const pi = "pi-coding-agent/0.9.1 (darwin; arm64)"
+	v := uaSetup(t, true, nil)
+	far := httptest.NewServer(New().Handler())
+	t.Cleanup(far.Close)
+	id, err := provider.Add(provider.Provider{ID: "office", Name: "Office", Preset: provider.RemoteMagpiePreset, Chat: strings.TrimPrefix(far.URL, "http://")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	office, _ := provider.Find(id)
+	if _, err := office.Fetch(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	s := New()
+	for _, r := range uaRoutes {
+		if r.name == "gemini" {
+			continue
+		}
+		body := strings.Replace(r.body, `"ua/`, `"`+id+`/ua/`, 1)
+		askAs(t, s, r.path, body, pi)
+		if got, ok := v.sent(r.upstream); !ok || got != pi {
+			t.Errorf("%s: the far vendor was asked as %q (asked: %v), want the agent's", r.name, got, ok)
+		}
+	}
+	// an agent that sets magpie's header itself, straight to the far one
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", far.URL+"/v1/chat/completions", strings.NewReader(uaRoutes[2].body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "curl/8.0")
+	req.Header.Set(ClientUAHeader, pi)
+	s.Handler().ServeHTTP(rec, req)
+	if got, _ := v.sent("/v1/chat/completions"); rec.Code != 200 || got != "curl/8.0" {
+		t.Errorf("a client's own %s was taken: %d, asked as %q", ClientUAHeader, rec.Code, got)
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if len(v.leaked) > 0 {
+		t.Errorf("a vendor was sent %s: %v", ClientUAHeader, v.leaked)
 	}
 }

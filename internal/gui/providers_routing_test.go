@@ -138,7 +138,7 @@ func TestDecidePresetSaveKeepsRouting(t *testing.T) {
 		t.Fatalf("not a decision-only provider of two keys: %+v", p)
 	}
 	second := p.KeyList()[1].ID
-	form := `"id":"typesafe","from":"typesafe","name":"TypeSafe Jev","preset":"typesafe","key":"","decide":"http://127.0.0.1:1/v1","models":[],"headers":{},"fallback":[],"noModels":false,"searches":false,"pinUpstream":false,"unredacted":false,"passUserAgent":false,"contexts":{},"proxy":"","maxConcurrency":0`
+	form := `"id":"typesafe","from":"typesafe","name":"TypeSafe Jev","preset":"typesafe","key":"","decide":"http://127.0.0.1:1/v1","models":[],"headers":{},"fallback":[],"noModels":false,"searches":false,"pinUpstream":false,"unredacted":false,"passUserAgent":true,"contexts":{},"proxy":"","maxConcurrency":0`
 	post("save", `{`+form+`,"unlisted":true,"accountProxies":{"`+second+`":"http://127.0.0.1:7890"},"routing":"order","affinity":"session","sink":true}`)
 	p, err = provider.Find("typesafe")
 	if err != nil {
