@@ -107,6 +107,10 @@ magpie.strings({
     "Add many words at once, pasted one a line or separated by commas": "一次添加多个词：粘贴进来，每行一个，或用逗号隔开",
     "Copy the list, one word a line": "复制整个列表，每行一个词",
     "Words copied: {n}": "已复制 {n} 个词",
+    "Value copied": "已复制这个值",
+    "One of your Masked words": "这是你的脱敏词",
+    "In Never mask already": "已在「从不脱敏」里",
+    "Sent as written from the next request on": "从下一条请求起按原样发送",
   },
   "zh-TW": {
     "Turn on masking": "開啟脫敏",
@@ -214,6 +218,10 @@ magpie.strings({
     "Add many words at once, pasted one a line or separated by commas": "一次新增多個詞：貼上進來，每行一個，或用逗號隔開",
     "Copy the list, one word a line": "複製整個清單，每行一個詞",
     "Words copied: {n}": "已複製 {n} 個詞",
+    "Value copied": "已複製這個值",
+    "One of your Masked words": "這是你的脫敏詞",
+    "In Never mask already": "已在「從不脫敏」裡",
+    "Sent as written from the next request on": "從下一則請求起照原樣送出",
   },
   ja: {
     "Turn on masking": "マスクをオンにする",
@@ -321,6 +329,10 @@ magpie.strings({
     "Add many words at once, pasted one a line or separated by commas": "複数の語をまとめて追加：1 行に 1 つ、またはカンマ区切りで貼り付け",
     "Copy the list, one word a line": "リストをコピー（1 行に 1 語）",
     "Words copied: {n}": "{n} 語をコピーしました",
+    "Value copied": "値をコピーしました",
+    "One of your Masked words": "マスクする語に登録済みです",
+    "In Never mask already": "「マスクしない」に登録済みです",
+    "Sent as written from the next request on": "次のリクエストからそのまま送信します",
   },
   de: {
     "Turn on masking": "Maskierung einschalten",
@@ -428,5 +440,9 @@ magpie.strings({
     "Add many words at once, pasted one a line or separated by commas": "Viele Wörter auf einmal hinzufügen, eingefügt eines pro Zeile oder durch Kommas getrennt",
     "Copy the list, one word a line": "Die Liste kopieren, ein Wort pro Zeile",
     "Words copied: {n}": "Wörter kopiert: {n}",
+    "Value copied": "Wert kopiert",
+    "One of your Masked words": "Eines deiner maskierten Wörter",
+    "In Never mask already": "Steht schon unter Nie maskieren",
+    "Sent as written from the next request on": "Ab der nächsten Anfrage unverändert gesendet",
   },
 });

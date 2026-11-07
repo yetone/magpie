@@ -10,6 +10,7 @@ import (
 	"github.com/yetone/magpie/internal/gwmw"
 	"github.com/yetone/magpie/internal/masking"
 	"github.com/yetone/magpie/internal/maskrec"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // previewMax is how much text the preview masks.
@@ -75,8 +76,46 @@ func shownRecord(r maskrec.Record, t gwmw.Teller) maskedRecord {
 //     at once rather than after 30 days (maxyou2090 on Discord);
 //   - POST /api/masking/preview {text} the text as a vendor would get it
 //     under the settings now, and what was found, each told by its kind
-//     and hint, never its value; nothing of it is remembered (#1977).
+//     and hint, never its value; nothing of it is remembered (#1977);
+//   - POST /api/masking/allow {p} adds what a placeholder stood for to
+//     Never mask (settings' RedactAllow, which redact-allow sets whole),
+//     so a value masked by mistake goes as written from the next request
+//     on (yew_fence on Discord). The masker is asked for the value, so
+//     only one it masked is added; 404 once it no longer knows it.
 func maskingRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("POST /api/masking/allow", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			P string `json:"p"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		t, ok := teller()
+		if !ok {
+			http.NotFound(rw, r)
+			return
+		}
+		v, ok := t.Value(in.P)
+		if !ok {
+			http.NotFound(rw, r)
+			return
+		}
+		// a settings file that can't be read is unknown, not empty: the
+		// list it holds is never written over with this one value
+		s, err := settings.LoadChecked()
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		// Save trims the list and keeps each value once, whatever its case
+		s.RedactAllow = append(s.RedactAllow, v)
+		if err := settings.Save(s); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
 	mux.HandleFunc("POST /api/masking/preview", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Text string `json:"text"`

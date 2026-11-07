@@ -276,6 +276,7 @@ var notYet = map[string]string{
 	"GET /api/masking/sent":                      U,  // masking.go
 	"GET /api/masking/summary":                   U,  // masking.go
 	"GET /api/masking/value":                     U,  // masking.go
+	"POST /api/masking/allow":                    S2, // masking.go
 	"POST /api/masking/clear":                    U,  // masking.go
 	"POST /api/masking/preview":                  U,  // masking.go
 	"POST /api/masking/values":                   U,  // masking.go
