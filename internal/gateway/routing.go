@@ -1041,6 +1041,33 @@ func verifyHeld(c candidate) (string, bool) {
 	return r.said, true
 }
 
+// restrictedHeld is the refusal to give again, without asking, and its
+// status, for a candidate resting as one its vendor restricted
+// (failRestricted), while it rests: whole, or its model alone where that
+// is how it rests (a Remote magpie's model). Left the last one, it was
+// asked by every request all the same, as restLast and probeOne keep one
+// resting member for a request to get a real answer, and refused by every
+// one (leowang on Discord: two Antigravity accounts Google had suspended,
+// 23 and 22 tries, none answered, while the rest was meant to cost one
+// refused request each per restrictedRest). The refusal is the answer:
+// no wait mends it, and the vendor's risk control counts each request
+// against the account. Its rest ending, or lifted on the Routing page,
+// it is asked again.
+func restrictedHeld(c candidate) (int, string, bool) {
+	r, ok := restOf(c.restKey())
+	if !ok && c.restID() != c.restKey() {
+		r, ok = restOf(c.restID())
+	}
+	if !ok || r.Why != failRestricted || r.said == "" {
+		return 0, "", false
+	}
+	status := r.Status
+	if status < 400 {
+		status = http.StatusForbidden
+	}
+	return status, r.said, true
+}
+
 // resetsIn is how long until a used-up ChatGPT account is back, as its
 // refusal says: {"error":{"type":"usage_limit_reached","resets_at":<unix>,
 // "resets_in_seconds":<n>}}. Zero when it doesn't say.
@@ -1551,8 +1578,10 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 			}
 		}
 	case failRestricted:
-		// out until the vendor lifts it: an appeal, not a wait (#1849)
+		// out until the vendor lifts it: an appeal, not a wait (#1849).
+		// Its words, for restrictedHeld to give again while it rests
 		d, r.By = restrictedRest, "restricted"
+		r.said = provider.APIError(body, http.StatusText(status))
 	case failVerify:
 		d, r.By = verifyRest, "verify"
 		// the error as the agent was given it, and the link in it

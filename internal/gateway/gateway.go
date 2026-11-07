@@ -3684,11 +3684,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				t.Prompt = livePrompt(t.Prompt, window)
 			}
 		})
-		held := false          // answered as its vendor did a moment ago, without asking
-		var heldBack time.Time // when the first of those held out of their allowance is back
-		var queued int64       // ms it waited for a slot of its key's or account's
-		var laneErr error      // turned away by its key's or account's queue
-		at := &wireAt{}        // the level a translated request was built at
+		held := false           // answered as its vendor did a moment ago, without asking
+		heldRestricted := false // held as an account its vendor restricted (restrictedHeld)
+		var heldBack time.Time  // when the first of those held out of their allowance is back
+		var queued int64        // ms it waited for a slot of its key's or account's
+		var laneErr error       // turned away by its key's or account's queue
+		at := &wireAt{}         // the level a translated request was built at
 		// the models Copilot's Auto picked for it, where from, and which
 		// were refused (#256)
 		autoPicked := func() []provider.AutoPick { return nil }
@@ -3697,6 +3698,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// reconnects are told so again, not sent on to a vendor that
 			// just refused it
 			held, call.Status, call.Error = true, http.StatusForbidden, said
+			noteMember(hw, r, c.p, c.model)
+			writeError(hw, from, call.Status, said)
+		} else if status, said, ok := restrictedHeld(c); ok && last {
+			// its vendor restricted the account, and it rests so: the
+			// refusal is given again without asking (restrictedHeld),
+			// until the rest ends or is lifted
+			held, heldRestricted, call.Status, call.Error = true, true, status, said
 			noteMember(hw, r, c.p, c.model)
 			writeError(hw, from, call.Status, said)
 		} else if rested, back, ok := quotaHeld(cands[i:]); ok && last {
@@ -3840,8 +3848,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			stop()
 		}
 		if handed.release != nil && handed.who == c.who() {
-			// answered without asking (verifyHeld, quotaHeld): the slot
-			// taken for it goes back
+			// answered without asking (verifyHeld, restrictedHeld,
+			// quotaHeld): the slot taken for it goes back
 			handed.release()
 			handed.release = nil
 		}
@@ -5034,6 +5042,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			try.Fail = failPrompt
 		} else {
 			try.Fail = failureOf(c, call.Status, []byte(call.Error))
+			if heldRestricted {
+				// its words may be the vendor's alone, read as
+				// restricted by its code (WorkBuddy's 11140), gone here
+				try.Fail = failRestricted
+			}
 			if offlineFailure(c, call.Status, []byte(call.Error)) {
 				// the last one left failed for want of a network
 				// (offline.go): told so, and it doesn't rest
@@ -5041,7 +5054,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			}
 			// and one its vendor restricted (riskRefused), for the next
 			// request not to be sent to it again
-			if (try.Fail == failVerify || try.Fail == failRestricted) && !held || strictAlone {
+			// A refusal given again without asking (restrictedHeld)
+			// rests nobody anew: its rest stands as it was taken, and
+			// ends when it would
+			if ((try.Fail == failVerify || try.Fail == failRestricted) && !held || strictAlone) && !heldRestricted {
 				// the last one left rests too, for the app to show and the
 				// next requests to be held
 				rest := s.restAfter(c, call.Status, hw.header, []byte(call.Error))
