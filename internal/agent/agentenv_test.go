@@ -26,7 +26,7 @@ var notAnAgent = map[string]string{
 	"USER":                  "the process' own",
 	"XDG_CONFIG_HOME":       "magpie's own folder's, which appdir decides",
 	"XDG_DATA_HOME":         "the same",
-	"XDG_DATA_DIRS":         "the system's own data folders, where a .deb puts Lody's desktop entry; a test that reaches agent.OpenLody sets it to its own",
+	"XDG_DATA_DIRS":         "the system's own data folders, where a .deb puts Lody's desktop entry; a test that reaches agent.OpenLody sets it to its own, and DeepSeek Harness Desktop's entries are read there through proc.SystemDirs",
 	"XDG_CACHE_HOME":        "Go's build cache's too, which a sandbox keeps shared; Air's ACP OpenCode under it is found by path in a test's own home (#2423)",
 	"MAGPIE_ADDR":           "magpie's own",
 	"MAGPIE_DEBUG":          "magpie's own debug flag",

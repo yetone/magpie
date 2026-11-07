@@ -141,7 +141,8 @@ func dshAt(at place) *Agent {
 			// running or not: agent-default-model is read for new
 			// ones only (#2359)
 			notes = append(notes, noticeDsh1.String())
-		} else if Running(`DeepSeek Harness\.app/`, `(^|/)dsh( |$)`) {
+		} else if Running(`DeepSeek Harness\.app/`, `(^|/)dsh( |$)`, `(^|/)deepseek-harness( |$)`) {
+			// deepseek-harness is the desktop app's executable on Linux
 			notes = append(notes, noticeDsh2.String())
 		}
 		if dshSearchesHere(dir) && !gateway.CanSearch() {

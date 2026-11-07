@@ -33,7 +33,8 @@ import (
 // DisplayVersion): its installer lets the user pick another folder. more
 // are the app's other builds, each under a bundle id of its own (CodeBuddy's
 // China build beside its international one). linux is the folder the
-// vendor's own Linux packages install the app to.
+// vendor's own Linux packages install the app to; onLinux finds an app
+// others package for Linux (linuxApp).
 type desktopApp struct {
 	id        string
 	names     []string
@@ -42,6 +43,7 @@ type desktopApp struct {
 	publisher string
 	guid      string
 	linux     string
+	onLinux   *linuxApp
 	more      []desktopApp
 }
 
@@ -62,8 +64,18 @@ var desktopApps = map[string]desktopApp{
 	// by default; the folder can be changed ("Choose an empty folder or the
 	// registered DeepSeek Harness installation folder"), and the installer
 	// registers it under HKCU\Software\1bf39983-… (#2279, read from
-	// 0.2.0-rc.2's dsh-latest-windows-x64.exe installer script).
-	"dsh": {id: "com.deepseek.dsh", names: []string{"DeepSeek Harness.app"}, win: filepath.Join("DeepSeek Harness", "DeepSeek Harness.exe"), guid: "1bf39983-50d0-5fe0-9ef4-cece76f67c5e"},
+	// 0.2.0-rc.2's dsh-latest-windows-x64.exe installer script). DeepSeek
+	// publishes no Linux build; its electron-builder config (0.2.2-rc.1)
+	// has an AppImage target, productName DeepSeek Harness, executable
+	// deepseek-harness and the dsh:// scheme. The AUR's
+	// deepseek-harness-desktop builds it into
+	// /usr/lib/deepseek-harness-desktop, with a deepseek-harness-desktop
+	// script in /usr/bin and deepseek-ai-dsh-desktop.desktop (xianhongtao
+	// on Discord: ~/.dsh shown as "CLI not found" and wired as the web
+	// profile with that app in use); deepseek-harness-desktop-bin unpacks a
+	// .deb of it into /opt/DeepSeek Harness, electron-builder's folder.
+	"dsh": {id: "com.deepseek.dsh", names: []string{"DeepSeek Harness.app"}, win: filepath.Join("DeepSeek Harness", "DeepSeek Harness.exe"), guid: "1bf39983-50d0-5fe0-9ef4-cece76f67c5e",
+		onLinux: &linuxApp{dirs: []string{"/usr/lib/deepseek-harness-desktop", "/opt/DeepSeek Harness"}, exe: "deepseek-harness", name: "DeepSeek Harness", scheme: "dsh"}},
 	// DS Bot's desktop app (app/electron-builder.yml, 0.3.0: appId
 	// io.github.fei2411.dsbot, productName DS Bot, DS Bot.app; DeepSeek
 	// Bot, its name before) runs a DSH of its own on its data folder
@@ -556,7 +568,8 @@ func storeAppVersion(packages []string, name, publisher string) string {
 // HasApp reports whether the agent's desktop app is installed here: its
 // bundle on macOS (AppVersion), its executable on Windows: under
 // %LOCALAPPDATA%\Programs, or in the folder its installer registered; on
-// Linux the folder its package installed (desktopApp.linux).
+// Linux the folder its package installed (desktopApp.linux), or one a
+// packager's install or an AppImage's desktop entry names (linuxApp).
 func (a *Agent) HasApp() bool {
 	app, ok := desktopApps[a.ID]
 	return ok && a.WSL == "" && slices.ContainsFunc(app.builds(), desktopApp.installed)
@@ -564,7 +577,7 @@ func (a *Agent) HasApp() bool {
 
 // installed reports whether app is installed on this machine (see HasApp).
 func (app desktopApp) installed() bool {
-	if app.version() != "" || app.linuxDir() != "" {
+	if app.version() != "" || app.linuxDir() != "" || app.onLinux.installed() {
 		return true
 	}
 	if app.win == "" {
