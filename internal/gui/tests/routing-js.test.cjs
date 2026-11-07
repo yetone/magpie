@@ -36,6 +36,9 @@ function serve(lang, posts, off = []) {
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:${JSON.stringify(lang)},theme:"light",web:true,featuresOff:${JSON.stringify(off)}};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json(state);
+    // what the real one answers: the state's settings (a provider's editor
+    // reads them for its own warm-ups and check-ins)
+    if (url.pathname === "/api/settings" && route.request().method() === "GET") return json(state.settings);
     if (url.pathname === "/api/providers") return json(providers);
     if (url.pathname === "/api/groups") return json({ groups: [] });
     if (url.pathname === "/api/plugins") return json({ plugins: [] });

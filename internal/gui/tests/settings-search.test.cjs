@@ -3,8 +3,10 @@
 // at the end of the Settings tabs. Words typed in it show every part's rows
 // that say them — in the language shown or in English — each part under its
 // name, the tabs set aside; a part's name or a section's heading brings all
-// of it; the warm-ups' cards all show, Codex's and Claude Code's alike;
-// nothing found says so. Escape, or clearing the box, brings back the part
+// of it; a setting that moved to its provider's editor (the warm-ups, the
+// owner on 11-07) is found as a link per provider, Codex's and Claude
+// Code's alike, whose Open takes the reader to that editor; nothing found
+// says so. Escape, or clearing the box, brings back the part
 // picked as it was. Nothing is posted and the page doesn't scroll. In the
 // smallest window (560 x 420) and magpie web on a phone (390 wide), nothing
 // runs off to the side. Every language; no backend, the API is faked here.
@@ -14,7 +16,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
-const { openPart } = require("./reader.cjs");
+const { openPart, provPrefsProviders } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 
@@ -38,6 +40,7 @@ function server(lang, posts, web) {
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme: "light", textSize: 100 }, fx: cur.fx });
     if (url.pathname === "/api/settings") return json(cur);
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
+    if (url.pathname === "/api/providers") return json(provPrefsProviders(["codex", "claude"], { codex: "ChatGPT", claude: "Claude" }));
     if (url.pathname === "/api/usage/quotas") return json([]);
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
     if (url.pathname === "/api/window/fit") return route.fulfill({ status: 204 });
@@ -85,7 +88,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       page.setDefaultTimeout(5000);
       page.setDefaultNavigationTimeout(60000);
       page.errors = [];
-      page.on("pageerror", (e) => page.errors.push(e.message));
+      page.on("pageerror", (e) => { if (engine === "webkit" && /due to access control checks/.test(e.message)) return; page.errors.push(e.message); }); // a goto in WebKit can cut off a fetch (#1350)
       await page.route("**/*", server(lang, posts, web));
       await page.goto("http://magpie.test/?view=settings&tab=general");
       await page.locator("#themeSegs .opt").first().waitFor();
@@ -128,13 +131,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(s.parts, ["usage"]);
         assert(await seen(page, "#currencySegs"), "Currency's row shows");
         assert.equal(await seen(page, "#trayUsagePick"), false);
-        assert.equal(await seen(page, "#warmTabs"), false, "the warm-ups' tabs set aside");
+        assert.equal(await seen(page, "#provPrefLinks .agent-pref-link"), false, "no provider's link for currency");
 
-        // the warm-ups: every agent's card that says it, not just the one picked
-        await type(page, (await tr("Warm up on reset")).toLowerCase());
-        assert(await seen(page, "#warmSegs"), "Codex's warm-up shows");
-        assert(await seen(page, "#claudeWarmSegs"), "Claude Code's warm-up shows");
-        assert.equal(await page.locator("#claudeWarmList").evaluate((p) => getComputedStyle(p, "::before").content), JSON.stringify("Claude Code"));
+        // the warm-ups, in their providers' editors now: a link for each
+        // provider that has one, named as the Add sheet names the
+        // subscription (ChatGPT for Codex's, Claude for Claude Code's), and the
+        // rows themselves nowhere in Settings
+        const warm = await tr("Warm up on reset");
+        await type(page, warm.toLowerCase());
+        const links = page.locator("#provPrefLinks .agent-pref-link:visible", { has: page.locator(".name", { hasText: warm }) });
+        assert.equal(await links.count(), 2, "a link for Codex's and one for Claude Code's");
+        const subs = await links.locator(".sub").allTextContents();
+        assert.deepEqual(subs, [await tr("In {provider}'s editor, on the Providers page", { provider: "ChatGPT" }), await tr("In {provider}'s editor, on the Providers page", { provider: "Claude" })]);
+        assert.equal(await page.locator("#view-settings #warmSegs, #view-settings #claudeWarmSegs").count(), 0, "the rows themselves are out of Settings");
+        assert.deepEqual(await overflow(page), []);
+        shots.push([lang + "-warm", await page.screenshot()]);
 
         // a part's name brings the whole part
         await type(page, await tr("Privacy"));
@@ -155,7 +166,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await q.inputValue(), "");
         assert.deepEqual(await state(page), { parts: ["usage"], tabs: true, none: "", misses: 0 });
         assert.equal(await page.locator(":is(#setTab-usage, .nav-s[data-of=setTab-usage]):visible").getAttribute("aria-selected"), "true");
-        assert(await seen(page, "#warmTabs"), "the warm-ups' tabs back");
+        assert.equal(await seen(page, "#provPrefLinks"), false, "the providers' links put away");
         assert(await seen(page, "#trayUsagePick"), "every row back");
         // so does clearing it by hand
         await type(page, "currency");
@@ -164,6 +175,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         assert.equal(await page.locator("#view-settings").evaluate((v) => v.scrollTop), 0, "searching scrolls nothing");
         assert.deepEqual(posts, [], "searching posts nothing");
+        assert.deepEqual(page.errors, []);
+
+        // a link's Open takes the reader to that provider's editor, its
+        // warm-up there
+        await type(page, warm.toLowerCase());
+        await links.nth(1).locator("button", { hasText: await tr("Open") }).click();
+        await page.locator(".editor .prov-prefs #claudeWarmSegs .opt").first().waitFor();
+        assert.equal(await page.locator(".editor .prov-prefs #warmSegs").count(), 0, "Claude Code's editor, not Codex's");
+        assert.deepEqual(posts, [], "opening posts nothing");
         assert.deepEqual(page.errors, []);
         await page.context().close();
       });

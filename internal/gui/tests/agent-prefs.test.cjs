@@ -123,9 +123,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // conversations with it: wait for the drawing to take it out
         await page.waitForFunction(() => !document.querySelector("#view-settings #fullContextRow")).catch(() => {});
         for (const id of CODEX) assert.equal(await page.locator(`#view-settings #${id}`).count(), 0, `${lang}: ${id} not in Settings`);
-        assert.equal(await page.locator(".agent-pref-link").first().isVisible(), false, "no link rows till searching");
+        assert.equal(await page.locator("#agentPrefLinks .agent-pref-link").first().isVisible(), false, "no link rows till searching");
         await page.locator("#setQ").fill(w.titles);
-        const link = page.locator(".agent-pref-link").filter({ hasText: w.titles });
+        const link = page.locator("#agentPrefLinks .agent-pref-link").filter({ hasText: w.titles });
         await link.waitFor();
         await noSideScroll(page, `${lang} ${width} search`);
         await link.getByRole("button", { name: w.open, exact: true }).click();
@@ -215,7 +215,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.equal(await page.locator(".ag-prefs, .agent-prefs-open").count(), 0, "no rows, no line");
     await page.goto("http://magpie.test/?view=settings");
     await page.locator("#setQ").fill("Codex");
-    assert.equal(await page.locator(".agent-pref-link").count(), 0, "no link rows");
+    assert.equal(await page.locator("#agentPrefLinks .agent-pref-link").count(), 0, "no link rows");
     assert.deepEqual(errors, []);
   });
 

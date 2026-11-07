@@ -1,7 +1,7 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // xiaowu_95660 on Discord: a manual "check in once now" beside the daily
-// check-in switch. The last row of each check-in tab in Settings › Usage,
-// Check in now, checks one account in at a press (POST
+// check-in switch. The last row of each check-in list in its provider's
+// editor, Check in now, checks one account in at a press (POST
 // /api/usage/checkin-account {by, key}); with several the press opens the
 // app's menu of them (no <select>), an account left out of the daily
 // check-in among them. What came of it stays on the row's line: checked in,
@@ -13,6 +13,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+const { watchSettingsReads, settingsDrawn, provPrefsProviders, openProvPrefs, inEditor } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
@@ -43,7 +44,7 @@ function serve(lang, asked, answers) {
       const a = answers[b.key].shift();
       return a.error ? json(a, 400) : json(a);
     }
-    if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true } });
+    if (url.pathname === "/api/providers") return json(provPrefsProviders(["workbuddy", "trae-cn"], { workbuddy: "WorkBuddy", "trae-cn": "Trae CN" }));
     if (url.pathname === "/api/usage/quotas") return json([]);
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
@@ -65,9 +66,16 @@ const W = {
 const at = (loc) => loc.evaluate((b) => Math.round(b.getBoundingClientRect().top));
 const sideways = (page) => page.evaluate(() => {
   const out = [];
-  const de = document.documentElement, v = document.querySelector("#view-settings");
+  const de = document.documentElement, v = document.querySelector(".editor .ebody") || document.querySelector(".editor");
   if (de.scrollWidth > de.clientWidth) out.push("page");
-  if (v.scrollWidth > v.clientWidth) out.push("view");
+  if (v.scrollWidth > v.clientWidth) {
+    // named by what sticks out past the editor's inner right edge, the
+    // scrollbar's left
+    const right = v.getBoundingClientRect().left + v.clientLeft + v.clientWidth;
+    const past = [...v.querySelectorAll("*")].filter((e) => e.getClientRects().length && e.getBoundingClientRect().right > right + 0.5)
+      .map((e) => e.tagName.toLowerCase() + (e.id ? "#" + e.id : "") + "." + [...e.classList].join(".") + "=" + Math.round(e.getBoundingClientRect().right - right));
+    out.push("editor " + v.scrollWidth + ">" + v.clientWidth + " " + past.slice(0, 6).join(" "));
+  }
   for (const r of document.querySelectorAll(".row.ci-now-row")) {
     if (!r.offsetParent) continue;
     const rr = r.getBoundingClientRect();
@@ -78,26 +86,6 @@ const sideways = (page) => page.evaluate(() => {
   }
   return out;
 });
-// still: until no box has scrolled for ten frames (a wheel's scroll in
-// WebKit eases in after a fixed wait)
-const still = (page) => page.evaluate(() => new Promise((done) => {
-  let last = "", same = 0;
-  const at = () => [scrollY, ...[...document.querySelectorAll("*")].map((e) => e.scrollTop)].join(",");
-  const f = () => { const now = at(); same = now === last ? same + 1 : 0; last = now; if (same >= 10) done(); else requestAnimationFrame(f); };
-  requestAnimationFrame(f);
-}));
-// wheelTo scrolls the page, as a reader would, until loc is in the
-// window's upper half, so the menu it opens has room under it
-async function wheelTo(page, loc, x) {
-  await page.mouse.move(x, 300);
-  for (let i = 0; i < 20; i++) {
-    await still(page);
-    const r = await loc.boundingBox();
-    if (r && r.y < 450) return;
-    await page.mouse.wheel(0, 200);
-  }
-  await still(page);
-}
 const launch = (engine) => engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" });
 const subOf = (by) => `.ci-now-row[data-by="${by}"] .sub`;
 
@@ -112,7 +100,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         page.setDefaultTimeout(5000);
         page.setDefaultNavigationTimeout(60000);
         const errors = [], asked = [];
-        page.on("pageerror", (e) => errors.push(e.message));
+        page.on("pageerror", (e) => { if (engine === "webkit" && /due to access control checks/.test(e.message)) return; errors.push(e.message); }); // a goto in WebKit can cut off a fetch (#1350)
         const answers = {
           "workbuddy|u2": [
             { user: "Bob", day: today, outcome: "claimed", credit: 50, streak: 3, asked: true },
@@ -125,19 +113,24 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           "trae-cn|u9": [{ user: "Cat", by: "trae", day: today, outcome: "claimed", credit: 100, asked: true }],
         };
         await page.route("**/*", serve(lang, asked, answers));
-        await page.goto("http://magpie.test/?view=settings&tab=usage");
-        const tab = page.locator("#warmTab-wb");
-        await tab.waitFor();
-        await tab.click();
-        const row = page.locator('#wbList .ci-now-row[data-by=""]');
+        await watchSettingsReads(page);
+        await openProvPrefs(page, "workbuddy");
+        await settingsDrawn(page);
+        const row = page.locator('.editor .prov-prefs #wbList .ci-now-row[data-by=""]');
         await row.locator("button").waitFor();
         assert.equal((await row.locator(".name").innerText()).trim(), w.name);
-        assert.equal(await page.evaluate(() => document.querySelector("#wbList").lastElementChild.classList.contains("ci-now-row")), true, "last in the tab, under each account's own row");
+        assert.equal(await page.evaluate(() => document.querySelector("#wbList").lastElementChild.classList.contains("ci-now-row")), true, "last in the list, under each account's own row");
         const go = row.locator("button");
         assert.equal((await go.innerText()).trim(), w.pick);
         assert.equal(await go.getAttribute("aria-haspopup"), "menu");
         assert.deepEqual(await sideways(page), []);
-        await wheelTo(page, go, width / 2);
+        await inEditor(page, go);
+        // the button in the editor's middle, with room on both sides to be
+        // held where it was pressed while a line above it changes height: at
+        // the top there is nothing to scroll back when that line gets
+        // shorter, at the end the end itself comes up
+        await go.evaluate((b) => b.scrollIntoView({ block: "center" }));
+        await page.evaluate(() => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))));
         const y = await at(go);
 
         // claimed now, for the account left out of the daily check-in
@@ -178,10 +171,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(await sideways(page), []);
 
         // Trae CN: one account, checked in at a press, its switch off and left off
-        await page.locator("#warmTab-trae").click();
-        const trow = page.locator('#traeList .ci-now-row[data-by="trae"]');
-        await trow.locator("button").waitFor();
-        await wheelTo(page, trow.locator("button"), width / 2);
+        await openProvPrefs(page, "trae-cn");
+        await settingsDrawn(page);
+        const trow = page.locator('.editor .prov-prefs #traeList .ci-now-row[data-by="trae"]');
+        await inEditor(page, trow.locator("button"));
         assert.equal((await trow.locator("button").innerText()).trim(), w.go);
         assert.equal(await trow.locator("button").getAttribute("aria-haspopup"), null);
         await trow.locator("button").click();
@@ -204,16 +197,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     page.setDefaultTimeout(5000);
     page.setDefaultNavigationTimeout(60000);
     const errors = [];
-    page.on("pageerror", (e) => errors.push(e.message));
+    page.on("pageerror", (e) => { if (engine === "webkit" && /due to access control checks/.test(e.message)) return; errors.push(e.message); }); // a goto in WebKit can cut off a fetch (#1350)
     const route = serve("en", [], {});
     await page.route("**/*", async (r) => {
       if (new URL(r.request().url()).pathname === "/api/settings") return r.fulfill({ json: { theme: "light", lang: "en", workbuddy: true, workbuddyCheckin: true, checkinAccounts: [] } });
       return route(r);
     });
-    await page.goto("http://magpie.test/?view=settings&tab=usage");
-    await page.locator("#warmTab-wb").waitFor();
-    await page.locator("#warmTab-wb").click();
-    await page.locator("#wbCheckinSegs .opt").first().waitFor();
+    await openProvPrefs(page, "workbuddy");
+    await page.locator(".editor .prov-prefs #wbCheckinSegs .opt").first().waitFor();
     assert.equal(await page.locator(".ci-now-row").count(), 0);
     assert.deepEqual(errors, []);
   });

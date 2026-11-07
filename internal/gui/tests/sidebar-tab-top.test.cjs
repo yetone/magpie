@@ -77,7 +77,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     t.after(() => browser.close());
 
     for (const [lang, w] of Object.entries(words)) await t.test(lang, async () => {
-      const context = await browser.newContext({ viewport: { width: 1100, height: 480 }, reducedMotion: "reduce" });
+      // 360 high: Allowances still runs past it since its warm-ups and
+      // check-in went to the providers' editors
+      const context = await browser.newContext({ viewport: { width: 1100, height: 360 }, reducedMotion: "reduce" });
       await context.addInitScript(() => { try { localStorage.setItem("magpie.settingsTab", "general"); localStorage.setItem("magpie.libTab", "mcp"); } catch {} });
       const page = await context.newPage();
       page.setDefaultTimeout(5000);

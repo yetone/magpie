@@ -1,16 +1,19 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// Warm up now (a Windows user on Discord): the last row of Settings › Usage's
-// Codex and Claude Code warm-up tabs sends one account the warm-up's request
-// at once (POST /api/warm-now {agent, user}). One account goes at a press;
-// with more the press opens the app's menu of them (no <select>). What it
-// came to stays on the row's line: done, or failed with the vendor's reason,
-// in red. The row is hidden with no account; a click never moves the page;
-// nothing runs off the side at 440px. en, zh, zh-TW, ja, de; the API is faked here.
+// Warm up now (a Windows user on Discord): the last row of Codex's and
+// Claude Code's warm-ups, in each one's provider editor (they were tabs in
+// Settings › Usage until the owner moved them on 11-07), sends one account
+// the warm-up's request at once (POST /api/warm-now {agent, user}). One
+// account goes at a press; with more the press opens the app's menu of
+// them (no <select>). What it came to stays on the row's line: done, or
+// failed with the vendor's reason, in red. The row is hidden with no
+// account; a click never moves the page; nothing runs off the side at
+// 440px. en, zh, zh-TW, ja, de; the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+const { provPrefsProviders, openProvPrefs, inEditor } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const WHY = "429 Too Many Requests: {\"detail\":\"usage limit reached\"} https://chatgpt.com/backend-api/codex/responses-with-a-very-long-unbroken-reason";
@@ -29,7 +32,7 @@ function serve(lang, asked, codexUsers, claudeUsers) {
       asked.push([b.agent, b.user]);
       return b.user === "a@example.com" ? json({ error: WHY }, 400) : json({ ok: true });
     }
-    if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true } });
+    if (url.pathname === "/api/providers") return json(provPrefsProviders(["codex", "claude"], { codex: "Codex", claude: "Claude Code" }));
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
     if (url.pathname.startsWith("/api/")) return json({});
@@ -53,7 +56,7 @@ const W = {
 const at = (loc) => loc.evaluate((b) => Math.round(b.getBoundingClientRect().top));
 const sideways = (page) => page.evaluate(() => {
   const out = [];
-  const de = document.documentElement, v = document.querySelector("#view-settings");
+  const de = document.documentElement, v = document.querySelector(".editor .ebody") || document.querySelector(".editor");
   if (de.scrollWidth > de.clientWidth) out.push("page");
   if (v.scrollWidth > v.clientWidth) out.push("view");
   for (const r of document.querySelectorAll(".row.warm-now:not([hidden])")) {
@@ -78,13 +81,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         page.setDefaultTimeout(5000);
         page.setDefaultNavigationTimeout(60000);
         const errors = [], asked = [];
-        page.on("pageerror", (e) => errors.push(e.message));
+        page.on("pageerror", (e) => { if (engine === "webkit" && /due to access control checks/.test(e.message)) return; errors.push(e.message); }); // a goto in WebKit can cut off a fetch (#1350)
         await page.route("**/*", serve(lang, asked, ["a@example.com", "B@Example.com"], ["own@example.com"]));
-        await page.goto("http://magpie.test/?view=settings&tab=usage");
-        const row = page.locator("#warmNowRow");
+        await openProvPrefs(page, "codex");
+        const row = page.locator(".editor .prov-prefs #warmNowRow");
         await row.locator("button").waitFor();
         assert.equal((await row.locator(".name").innerText()).trim(), w.name);
-        // last in the tab, under each account's own daily row
+        // last of Codex's warm-ups, under each account's own daily row
         assert.equal(await page.evaluate(() => document.querySelector("#codexWarmList").lastElementChild.id), "warmNowRow");
         assert.equal(await page.locator("#codexWarmList .warm-own").count(), 2);
         const go = row.locator("button");
@@ -92,8 +95,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await go.getAttribute("aria-haspopup"), "menu");
         assert.deepEqual(await sideways(page), []);
 
-        await page.mouse.move(220, 400);
-        for (let i = 0; i < 12; i++) { await page.mouse.wheel(0, 400); await page.waitForTimeout(20); }
+        await inEditor(page, go);
         const y = await at(go);
         // two accounts: the press asks which, in the app's menu
         await go.click();
@@ -124,10 +126,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.ok(Math.abs(await at(go) - y) <= 1, `a click moved the page: the button went from ${y} to ${await at(go)}`);
         assert.deepEqual(await sideways(page), []);
 
-        // Claude Code's tab: one account, sent at a press
-        await page.locator("#warmTab-claude").click();
-        const crow = page.locator("#claudeWarmNowRow");
+        // Claude Code's editor: one account, sent at a press
+        await openProvPrefs(page, "claude");
+        const crow = page.locator(".editor .prov-prefs #claudeWarmNowRow");
         await crow.locator("button").waitFor();
+        await inEditor(page, crow.locator("button"));
         assert.equal((await crow.locator("button").innerText()).trim(), w.go);
         assert.equal(await crow.locator("button").getAttribute("aria-haspopup"), null);
         await crow.locator("button").click();
@@ -148,11 +151,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     page.setDefaultTimeout(5000);
     page.setDefaultNavigationTimeout(60000);
     const errors = [];
-    page.on("pageerror", (e) => errors.push(e.message));
+    page.on("pageerror", (e) => { if (engine === "webkit" && /due to access control checks/.test(e.message)) return; errors.push(e.message); }); // a goto in WebKit can cut off a fetch (#1350)
     await page.route("**/*", serve("en", [], undefined, undefined));
-    await page.goto("http://magpie.test/?view=settings&tab=usage");
-    await page.locator("#warmAtSegs .opt").first().waitFor();
+    await openProvPrefs(page, "codex");
+    await page.locator(".editor .prov-prefs #warmAtSegs .opt").first().waitFor();
     assert.equal(await page.locator("#warmNowRow").isHidden(), true);
+    await openProvPrefs(page, "claude");
+    await page.locator(".editor .prov-prefs #claudeWarmAtSegs .opt").first().waitFor();
     assert.equal(await page.locator("#claudeWarmNowRow").isHidden(), true);
     assert.deepEqual(errors, []);
   });

@@ -4,14 +4,16 @@
 // other's window ends. Under Daily warm-up each ChatGPT account has a row:
 // Same (the time above), Own (a time field) or Off, each set on its own
 // (POST /api/settings/codex-warm-at {user, at}: "" for Same). The rows show
-// with two accounts or more, or while one has its own time; a click never
-// moves the page; nothing runs off the side at 440px. en, zh, ja, de; the
-// API is faked here.
+// with two accounts or more, or while one has its own time, in Codex's
+// provider editor (they were in Settings › Usage until the owner moved them
+// on 11-07); a click never moves the page; nothing runs off the side at
+// 440px. en, zh, ja, de; the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+const { provPrefsProviders, openProvPrefs, inEditor } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 
@@ -33,7 +35,7 @@ function serve(lang, asked, users) {
       settings.codexWarmAtOf = Object.keys(of).length ? of : undefined;
       return json(settings);
     }
-    if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true } });
+    if (url.pathname === "/api/providers") return json(provPrefsProviders(["codex"], { codex: "Codex" }));
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
     if (url.pathname.startsWith("/api/")) return json({});
@@ -53,7 +55,7 @@ const W = {
 const scrolls = (page) => page.evaluate(() => [scrollY, ...[...document.querySelectorAll("*")].filter((e) => e.scrollTop).map((e) => e.scrollTop)].join(","));
 const sideways = (page) => page.evaluate(() => {
   const out = [];
-  const de = document.documentElement, v = document.querySelector("#view-settings");
+  const de = document.documentElement, v = document.querySelector(".editor .ebody") || document.querySelector(".editor");
   if (de.scrollWidth > de.clientWidth) out.push("page");
   if (v.scrollWidth > v.clientWidth) out.push("view");
   for (const r of document.querySelectorAll(".warm-own")) {
@@ -78,10 +80,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         page.setDefaultTimeout(5000);
         page.setDefaultNavigationTimeout(60000);
         const errors = [], asked = [];
-        page.on("pageerror", (e) => errors.push(e.message));
+        page.on("pageerror", (e) => { if (engine === "webkit" && /due to access control checks/.test(e.message)) return; errors.push(e.message); }); // a goto in WebKit can cut off a fetch (#1350)
         await page.route("**/*", serve(lang, asked, ["a@example.com", "B@Example.com"]));
-        await page.goto("http://magpie.test/?view=settings&tab=usage");
-        const rows = page.locator("#codexWarmList .warm-own");
+        await openProvPrefs(page, "codex");
+        const rows = page.locator(".editor .prov-prefs #codexWarmList .warm-own");
         await rows.first().waitFor();
         assert.deepEqual(await rows.evaluateAll((rs) => rs.map((r) => r.dataset.user)), ["a@example.com", "B@Example.com"]);
         assert.deepEqual((await rows.locator(".sub").allInnerTexts()).map((s) => s.trim()), [w.same, w.same]);
@@ -90,9 +92,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(await sideways(page), []);
 
         // Own: the time above to start from, then its own
-        // the reader scrolls down to it (the view keeps the reader's place, not a script's)
-        await page.mouse.move(220, 400);
-        for (let i = 0; i < 12; i++) { await page.mouse.wheel(0, 400); await page.waitForTimeout(20); }
+        // both rows brought into sight in the editor first
+        await inEditor(page, rows.last().locator(".segs"));
+        await inEditor(page, rows.first().locator(".segs"));
         if (process.env.ARTIFACT_DIR) await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `warm-at-own-${engine}-${lang}-${width}.png`) });
         const y = await scrolls(page);
         await rows.first().locator(".segs .opt").nth(1).click();
@@ -130,10 +132,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     page.setDefaultTimeout(5000);
     page.setDefaultNavigationTimeout(60000);
     const errors = [];
-    page.on("pageerror", (e) => errors.push(e.message));
+    page.on("pageerror", (e) => { if (engine === "webkit" && /due to access control checks/.test(e.message)) return; errors.push(e.message); }); // a goto in WebKit can cut off a fetch (#1350)
     await page.route("**/*", serve("en", [], ["a@example.com"]));
-    await page.goto("http://magpie.test/?view=settings&tab=usage");
-    await page.locator("#warmAtSegs .opt").first().waitFor();
+    await openProvPrefs(page, "codex");
+    await page.locator(".editor .prov-prefs #warmAtSegs .opt").first().waitFor();
     assert.equal(await page.locator(".warm-own").count(), 0);
     assert.deepEqual(errors, []);
   });

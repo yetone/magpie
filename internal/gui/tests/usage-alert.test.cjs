@@ -64,12 +64,15 @@ function server(lang, posts, problem) {
 const view = (page) => page.locator("#view-settings").evaluate((v) => v.scrollTop);
 
 // wheelTo scrolls the settings with the wheel, as a reader would (a script
-// setting scrollTop is put back), until the alert rows are mid-page.
+// setting scrollTop is put back), until the alert rows are mid-page, or as
+// far as the page goes with them in view (Allowances is shorter since a
+// subscription's warm-ups and check-in went to its provider's editor)
 async function wheelTo(page) {
   await page.locator("#view-settings").hover();
-  for (let i = 0; i < 40; i++) {
-    const box = await page.locator("#balanceAlertRow").boundingBox();
-    if (box && box.y + box.height < 300 && await view(page) > 0) return;
+  for (let i = 0, last = -1; i < 40; i++) {
+    const box = await page.locator("#balanceAlertRow").boundingBox(), top = await view(page);
+    if (box && top > 0 && (box.y + box.height < 300 || top === last && box.y + box.height < page.viewportSize().height - 60)) return;
+    last = top;
     await page.mouse.wheel(0, 120);
     await page.waitForTimeout(30);
   }

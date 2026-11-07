@@ -159,9 +159,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert(Math.abs((await tabY(id)) - y0) <= 1, id + ": the tab stays where it was");
           assert.equal(posts.length, posted, id + ": a tab posts nothing");
         }
-        // the warm-ups are in Allowances, still a tab each
+        // the warm-ups left Allowances for their providers' editors (the
+        // owner, 11-07): none of their rows, and no tabs for them, in it
         await openPart(page, "usage");
-        assert(await page.locator("#warmTab-codex").isVisible(), "the warm-ups under Allowances");
+        assert.equal(await page.locator("#setPage-usage :is(#warmTabs, #warmSegs, #claudeWarmSegs, #wbCheckinSegs)").count(), 0, "no warm-ups under Allowances");
 
         // a part's control posts what it did
         await openPart(page, "general");

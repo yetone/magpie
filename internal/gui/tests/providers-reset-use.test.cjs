@@ -5,7 +5,7 @@
 // on it, it opens the same confirmation; Cancel spends nothing; confirmed,
 // the reset is asked for that account alone and the row reads again. A
 // GLM team's resets, counted by window and used on the vendor's page, stay
-// words. Settings › Usage's "Codex: auto-use resets" lists the same
+// words. Codex's editor's "Auto-use resets" lists the same
 // accounts, and husky_bobo (X, Windows 10) looked for the use there: each
 // account holding resets says so under its name with Use beside it, both
 // auto-use times on as theirs were, as the Windows app (navigator.platform
@@ -17,7 +17,9 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
-const { watchSettingsReads, settingsDrawn } = require("./reader.cjs");
+const { watchSettingsReads, settingsDrawn, openProvPrefs, inEditor } = require("./reader.cjs");
+
+const scrolls = (page) => page.evaluate(() => [scrollY, ...[...document.querySelectorAll("*")].filter((e) => e.scrollTop).map((e) => e.scrollTop)].join(","));
 
 const assets = path.resolve(process.env.ASSET_DIR || path.resolve(__dirname, "../assets"));
 const later = new Date(Date.now() + 3 * 864e5).toISOString();
@@ -142,7 +144,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
     for (const width of [420, 1100]) {
-      test(`${engine} ${lang} ${width}px Windows: Settings' Codex auto-use rows use a reset`, async (t) => {
+      test(`${engine} ${lang} ${width}px Windows: the Codex editor's auto-use rows use a reset`, async (t) => {
         const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
         t.after(() => browser.close());
         const page = await (await browser.newContext({ viewport: { width, height: 800 }, reducedMotion: "reduce" })).newPage();
@@ -154,42 +156,43 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.addInitScript(() => Object.defineProperty(navigator, "platform", { value: "Win32" }));
         await page.route("**/*", serve(lang, posts, false));
         await watchSettingsReads(page);
-        await page.goto("http://magpie.test/?view=settings&tab=usage");
+        await openProvPrefs(page, "codex");
         await settingsDrawn(page);
         const w = await page.evaluate((lang) => {
           const tr = (s) => (lang === "en" ? s : I18N[lang]?.[s]);
           return { two: "↺ " + tr("{n} resets")?.replace("{n}", 2), one: "↺ " + tr("1 reset"), use: tr("Use a reset"), cancel: tr("Cancel"), kept: tr("auto-used before it expires") };
         }, lang);
         for (const [k, v] of Object.entries(w)) assert.ok(v && !v.includes("undefined"), `${lang} has no words for ${k}`);
-        const row = page.locator(`.ar-own[data-user="${user}"]`);
+        const row = page.locator(`.editor .prov-prefs .ar-own[data-user="${user}"]`);
         const held = row.locator(".ar-own-resets");
         await held.waitFor();
         assert.equal((await held.locator(".resets-n").textContent()).trim(), w.two);
         assert.ok((await held.textContent()).includes(w.kept), "doesn't say the one running out is auto-used");
         const use = held.locator("button", { hasText: w.use });
-        // nothing runs past the settings view
+        // nothing runs past the editor
         const over = await page.evaluate(() => {
-          const v = document.querySelector("#view-settings").getBoundingClientRect();
+          const v = document.querySelector(".editor .prov-prefs").getBoundingClientRect();
           return [...document.querySelectorAll(".ar-own, .ar-own-resets, .ar-own-resets button")].filter((n) => n.getBoundingClientRect().right > v.right + 1).length;
         });
-        assert.equal(over, 0, "a row runs past the view");
+        assert.equal(over, 0, "a row runs past the editor");
+        await inEditor(page, use);
         await use.click();
         const ask = page.locator(".reset-ask");
         await ask.waitFor();
-        // where the click left it (Playwright scrolls the button into view)
-        const top = await page.locator("#view-settings").evaluate((v) => v.scrollTop);
+        // where the click left it
+        const top = await scrolls(page);
         await ask.locator("button", { hasText: w.cancel }).click();
         await ask.waitFor({ state: "detached" });
         assert.deepEqual(posts, []);
-        assert.equal(await page.locator("#view-settings").evaluate((v) => v.scrollTop), top, "Cancel moved the page");
+        assert.equal(await scrolls(page), top, "Cancel moved the page");
         await use.click();
         await ask.waitFor();
         await ask.locator("button.primary", { hasText: w.use }).click();
         await ask.waitFor({ state: "detached" });
         assert.deepEqual(posts, [{ user }]);
-        await page.waitForFunction(({ one, user }) => document.querySelector(`.ar-own[data-user="${user}"] .ar-own-resets .resets-n`)?.textContent.trim() === one, { one: w.one, user }, { timeout: 3000 })
-          .catch(async () => assert.fail(`Settings still says ${(await held.textContent()).trim()}`));
-        assert.equal(await page.locator("#view-settings").evaluate((v) => v.scrollTop), top, "a click moved the page");
+        await page.waitForFunction(({ one, user }) => document.querySelector(`.editor .ar-own[data-user="${user}"] .ar-own-resets .resets-n`)?.textContent.trim() === one, { one: w.one, user }, { timeout: 3000 })
+          .catch(async () => assert.fail(`the editor still says ${(await held.textContent()).trim()}`));
+        assert.equal(await scrolls(page), top, "a click moved the page");
         assert.deepEqual(errors, []);
       });
     }

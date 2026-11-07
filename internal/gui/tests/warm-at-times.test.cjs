@@ -6,14 +6,16 @@
 // changed posts the list with it, and Off posts none. Each post sends the
 // whole list (codexWarmAts) and its first as codexWarmAt, which an older
 // magpie reads. The app's own controls (no <select>), nothing runs off the
-// side at 440px, a click never moves the page. en, zh, ja, de; the API is
-// faked here, keeping the list as Go's settings do (sorted, once each).
+// side at 440px, a click never moves the page. It is in Codex's provider
+// editor (it was in Settings › Usage until the owner moved it on 11-07).
+// en, zh, ja, de; the API is faked here, keeping the list as Go's
+// settings do (sorted, once each).
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
-const { watchSettingsReads, settingsDrawn } = require("./reader.cjs");
+const { watchSettingsReads, settingsDrawn, provPrefsProviders, openProvPrefs, inEditor } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 
@@ -38,7 +40,7 @@ function serve(lang, posts) {
       }
       return json(settings);
     }
-    if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true } });
+    if (url.pathname === "/api/providers") return json(provPrefsProviders(["codex"], { codex: "Codex" }));
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
     if (url.pathname.startsWith("/api/")) return json({});
@@ -62,7 +64,7 @@ const LOCALE = { en: "en-US", zh: "zh-CN", ja: "ja-JP", de: "de-DE" };
 // what of the Daily warm-up row runs off its side, or is squeezed
 const sideways = (page) => page.evaluate(() => {
   const out = [];
-  const de = document.documentElement, v = document.querySelector("#view-settings");
+  const de = document.documentElement, v = document.querySelector(".editor .ebody") || document.querySelector(".editor");
   if (de.scrollWidth > de.clientWidth) out.push("page");
   if (v.scrollWidth > v.clientWidth) out.push("view");
   const row = document.querySelector("#warmAtSegs").closest(".row"), rr = row.getBoundingClientRect();
@@ -106,12 +108,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         page.setDefaultTimeout(5000);
         page.setDefaultNavigationTimeout(60000);
         const errors = [], posts = [];
-        page.on("pageerror", (e) => errors.push(e.message));
+        page.on("pageerror", (e) => { if (engine === "webkit" && /due to access control checks/.test(e.message)) return; errors.push(e.message); }); // a goto in WebKit can cut off a fetch (#1350)
         await page.route("**/*", serve(lang, posts));
         await watchSettingsReads(page);
-        await page.goto("http://magpie.test/?view=settings&tab=usage");
+        await openProvPrefs(page, "codex");
         await settingsDrawn(page); // rows found are the ones that stay (#1659)
-        const box = page.locator("#warmAtSegs"), fields = box.locator("input.at");
+        const box = page.locator(".editor .prov-prefs #warmAtSegs"), fields = box.locator("input.at");
         await fields.first().waitFor();
         const times = () => fields.evaluateAll((is) => is.map((i) => i.value));
         const posted = async (n, want) => {
@@ -127,8 +129,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal((await page.locator("#warmAtSub").textContent()).trim(), w.one);
         assert.deepEqual(await sideways(page), []);
 
-        await page.mouse.move(220, 400);
-        for (let i = 0; i < 12; i++) { await page.mouse.wheel(0, 400); await page.waitForTimeout(20); }
+        await inEditor(page, box.locator(".warm-add"));
         // a reader's click, on what is in sight (Playwright's own would
         // scroll it there first): what was clicked, or what is drawn in its
         // place (after, by default the same), stays where it was on the
@@ -153,23 +154,23 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // a field changed: the list with it
         await set(1, "15:05");
         await posted(2, ["09:00", "15:05"]);
-        await page.mouse.wheel(0, 2000);
-        await page.waitForTimeout(100);
+        await inEditor(page, box.locator(".warm-add"));
         still = await press(box.locator(".warm-add"), "+");
         await posted(3, ["09:00", "15:05", "20:05"]);
         await still();
         assert.deepEqual(await times(), ["09:00", "15:05", "20:05"]);
         assert.deepEqual(await sideways(page), []);
-        await page.mouse.wheel(0, 2000);
-        await page.waitForTimeout(100);
+        await inEditor(page, box);
         if (process.env.ARTIFACT_DIR) await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `warm-at-times-${engine}-${lang}-${width}.png`) });
         // × takes one away
         const rm = box.locator(".warm-rm").nth(1);
         assert.equal(await rm.getAttribute("title"), w.rm);
+        await inEditor(page, rm);
         still = await press(rm, "×", box.locator(".warm-time").first());
         await posted(4, ["09:00", "20:05"]);
         await still();
         // Off: none
+        await inEditor(page, box.locator(".segs .opt", { hasText: w.off }));
         still = await press(box.locator(".segs .opt", { hasText: w.off }), "Off");
         await posted(5, []);
         await still();

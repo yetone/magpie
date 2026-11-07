@@ -321,81 +321,11 @@
         <div class="who"><div class="name" data-t>Reset reminder</div><div class="sub" id="resetReminderSub"></div></div>
         <div id="resetReminderSegs"></div>
       </div>
-      <div class="row pref" id="codexAutoResetRow" hidden>
-        <div class="who"><div class="name" data-t>Codex: auto-use resets</div><div class="sub wraps" data-t>A ChatGPT account uses one of its resets by itself when its week is used up and no other account can answer, or before one expires unused. Off until turned on, account by account; each account's card on the Usage page has the same switch.</div></div>
-      </div>
-      <div class="row pref" id="codexResetLeadRow" hidden>
-        <div class="who"><div class="name" data-t>Codex: how early before one expires</div><div class="sub wraps" data-t>For every account with "before one expires" on: the reset about to run out unused is used this long before it does. Earlier loses what the account's windows have left then; the default is half an hour.</div></div>
-        <div id="codexResetLeadPick"></div>
-      </div>
       <div class="row pref" id="turnDoneRow">
         <div class="who"><div class="name" data-t>Task done alert</div><div class="sub" id="turnDoneSub"></div></div>
         <div id="turnDoneSegs"></div>
       </div>
-    </div>
-    <div class="row-head warm-head" data-feature="warmups"><div class="warm-tabs" id="warmTabs" role="tablist">
-      <button type="button" role="tab" id="warmTab-codex" data-warm="codex" aria-controls="codexWarmList">Codex</button>
-      <button type="button" role="tab" id="warmTab-claude" data-warm="claude" aria-controls="claudeWarmList">Claude Code</button>
-      <button type="button" role="tab" id="warmTab-wb" data-warm="wb" aria-controls="wbList" hidden>WorkBuddy</button>
-      <button type="button" role="tab" id="warmTab-trae" data-warm="trae" aria-controls="traeList" hidden>Trae CN</button>
-      <button type="button" role="tab" id="warmTab-minimax" data-warm="minimax" aria-controls="minimaxList" hidden>MiniMax Code</button>
-      <button type="button" role="tab" id="warmTab-qoder" data-warm="qoder" aria-controls="qoderList" hidden>Qoder</button>
-      <button type="button" role="tab" id="warmTab-plugins" data-warm="plugins" aria-controls="pluginCheckinList" data-t hidden>Plugins</button>
-    </div></div>
-    <div class="warm-panes" data-feature="warmups">
-    <div class="list prefs" id="codexWarmList" role="tabpanel" aria-labelledby="warmTab-codex">
-      <div class="row pref">
-        <div class="who"><div class="name" data-t>Warm up on reset</div><div class="sub" id="warmSub" title="Nothing is sent while the computer sleeps: a window that resets then starts when it wakes, and counts from then." data-tt></div></div>
-        <div id="warmSegs"></div>
-      </div>
-      <div class="row pref">
-        <div class="who"><div class="name" data-t>Daily warm-up</div><div class="sub" id="warmAtSub"></div></div>
-        <div id="warmAtSegs" class="warm-at"></div>
-      </div>
-      <div class="row pref warm-now" id="warmNowRow" hidden>
-        <div class="who"><div class="name" data-t>Warm up now</div><div class="sub" id="warmNowSub"></div></div>
-        <div id="warmNowBox"></div>
-      </div>
-    </div>
-    <div class="list prefs" id="claudeWarmList" role="tabpanel" aria-labelledby="warmTab-claude">
-      <div class="row pref">
-        <div class="who"><div class="name" data-t>Warm up on reset</div><div class="sub" id="claudeWarmSub" title="Nothing is sent while the computer sleeps: a window that resets then starts when it wakes, and counts from then." data-tt></div></div>
-        <div id="claudeWarmSegs"></div>
-      </div>
-      <div class="row pref">
-        <div class="who"><div class="name" data-t>Daily warm-up</div><div class="sub" id="claudeWarmAtSub"></div></div>
-        <div id="claudeWarmAtSegs" class="warm-at"></div>
-      </div>
-      <div class="row pref warm-now" id="claudeWarmNowRow" hidden>
-        <div class="who"><div class="name" data-t>Warm up now</div><div class="sub" id="claudeWarmNowSub"></div></div>
-        <div id="claudeWarmNowBox"></div>
-      </div>
-    </div>
-    <div class="list prefs" id="wbList" role="tabpanel" aria-labelledby="warmTab-wb">
-      <div class="row pref" id="wbCheckinRow">
-        <div class="who"><div class="name" data-t>Daily check-in</div><div class="sub" id="wbCheckinSub"></div></div>
-        <div id="wbCheckinSegs"></div>
-      </div>
-    </div>
-    <div class="list prefs" id="traeList" role="tabpanel" aria-labelledby="warmTab-trae">
-      <div class="row pref" id="traeCheckinRow">
-        <div class="who"><div class="name" data-t>Daily check-in</div><div class="sub" id="traeCheckinSub"></div></div>
-        <div id="traeCheckinSegs"></div>
-      </div>
-    </div>
-    <div class="list prefs" id="minimaxList" role="tabpanel" aria-labelledby="warmTab-minimax">
-      <div class="row pref" id="minimaxCheckinRow">
-        <div class="who"><div class="name" data-t>Daily check-in</div><div class="sub" id="minimaxCheckinSub"></div></div>
-        <div id="minimaxCheckinSegs"></div>
-      </div>
-    </div>
-    <div class="list prefs" id="qoderList" role="tabpanel" aria-labelledby="warmTab-qoder">
-      <div class="row pref" id="qoderCheckinRow">
-        <div class="who"><div class="name" data-t>Daily check-in</div><div class="sub" id="qoderCheckinSub"></div></div>
-        <div id="qoderCheckinSegs"></div>
-      </div>
-    </div>
-    <div class="list prefs" id="pluginCheckinList" role="tabpanel" aria-labelledby="warmTab-plugins"></div>
+      <div id="provPrefLinks"></div>
     </div>
   </section>
   <section class="set-page" id="setPage-network" role="tabpanel" aria-labelledby="setTab-network">
@@ -499,6 +429,71 @@
   </div>
 </div>
 
+<!-- a subscription's own warm-up, check-in and resets, drawn here and shown in its provider's editor (PROV_PREFS) -->
+<div id="provPrefRows" hidden>
+  <div class="list prefs" id="codexResetList">
+    <div class="row pref" id="codexAutoResetRow" hidden>
+      <div class="who"><div class="name" data-t>Auto-use resets</div><div class="sub wraps" data-t>A ChatGPT account uses one of its resets by itself when its week is used up and no other account can answer, or before one expires unused. Off until turned on, account by account; each account's card on the Usage page has the same switch.</div></div>
+    </div>
+    <div class="row pref" id="codexResetLeadRow" hidden>
+      <div class="who"><div class="name" data-t>How early before one expires</div><div class="sub wraps" data-t>For every account with "before one expires" on: the reset about to run out unused is used this long before it does. Earlier loses what the account's windows have left then; the default is half an hour.</div></div>
+      <div id="codexResetLeadPick"></div>
+    </div>
+  </div>
+  <div class="list prefs" id="codexWarmList" data-feature="warmups">
+    <div class="row pref">
+      <div class="who"><div class="name" data-t>Warm up on reset</div><div class="sub" id="warmSub" title="Nothing is sent while the computer sleeps: a window that resets then starts when it wakes, and counts from then." data-tt></div></div>
+      <div id="warmSegs"></div>
+    </div>
+    <div class="row pref">
+      <div class="who"><div class="name" data-t>Daily warm-up</div><div class="sub" id="warmAtSub"></div></div>
+      <div id="warmAtSegs" class="warm-at"></div>
+    </div>
+    <div class="row pref warm-now" id="warmNowRow" hidden>
+      <div class="who"><div class="name" data-t>Warm up now</div><div class="sub" id="warmNowSub"></div></div>
+      <div id="warmNowBox"></div>
+    </div>
+  </div>
+  <div class="list prefs" id="claudeWarmList" data-feature="warmups">
+    <div class="row pref">
+      <div class="who"><div class="name" data-t>Warm up on reset</div><div class="sub" id="claudeWarmSub" title="Nothing is sent while the computer sleeps: a window that resets then starts when it wakes, and counts from then." data-tt></div></div>
+      <div id="claudeWarmSegs"></div>
+    </div>
+    <div class="row pref">
+      <div class="who"><div class="name" data-t>Daily warm-up</div><div class="sub" id="claudeWarmAtSub"></div></div>
+      <div id="claudeWarmAtSegs" class="warm-at"></div>
+    </div>
+    <div class="row pref warm-now" id="claudeWarmNowRow" hidden>
+      <div class="who"><div class="name" data-t>Warm up now</div><div class="sub" id="claudeWarmNowSub"></div></div>
+      <div id="claudeWarmNowBox"></div>
+    </div>
+  </div>
+  <div class="list prefs" id="wbList" data-feature="warmups">
+    <div class="row pref" id="wbCheckinRow">
+      <div class="who"><div class="name" data-t>Daily check-in</div><div class="sub" id="wbCheckinSub"></div></div>
+      <div id="wbCheckinSegs"></div>
+    </div>
+  </div>
+  <div class="list prefs" id="traeList" data-feature="warmups">
+    <div class="row pref" id="traeCheckinRow">
+      <div class="who"><div class="name" data-t>Daily check-in</div><div class="sub" id="traeCheckinSub"></div></div>
+      <div id="traeCheckinSegs"></div>
+    </div>
+  </div>
+  <div class="list prefs" id="minimaxList" data-feature="warmups">
+    <div class="row pref" id="minimaxCheckinRow">
+      <div class="who"><div class="name" data-t>Daily check-in</div><div class="sub" id="minimaxCheckinSub"></div></div>
+      <div id="minimaxCheckinSegs"></div>
+    </div>
+  </div>
+  <div class="list prefs" id="qoderList" data-feature="warmups">
+    <div class="row pref" id="qoderCheckinRow">
+      <div class="who"><div class="name" data-t>Daily check-in</div><div class="sub" id="qoderCheckinSub"></div></div>
+      <div id="qoderCheckinSegs"></div>
+    </div>
+  </div>
+  <div class="list prefs" id="pluginCheckinList" data-feature="warmups"></div>
+</div>
 <!-- an agent's own settings, drawn here and shown in its sheet or opened row (AGENT_PREFS) -->
 <div id="agentPrefRows" hidden>
   <div class="row pref" id="codexAgentsV1Row">

@@ -1,9 +1,9 @@
-// Settings › Usage's Codex auto-use rows: each ChatGPT account's switches
+// Codex's auto-use rows, in its provider's editor (PROV_PREFS): each ChatGPT account's switches
 // and, under them, how early a reset about to expire is used. app.js
-// imports this when Settings draws them (renderAutoResetOwn), so it weighs
+// imports this when renderSettings draws them (renderAutoResetOwn), so it weighs
 // nothing on the core.
 
-// renderAutoResetOwn lists each ChatGPT account under Settings › Usage's
+// renderAutoResetOwn lists each ChatGPT account under
 // "Codex: auto-use resets", with its switch, the same say as on the
 // account's card (settings' codexAutoReset, the CLI's quota auto-reset).
 // Avalon on Discord: it was only on the accounts' cards, not in the
@@ -89,7 +89,7 @@ function renderResetLead(s, hidden) {
   const b = el("button", "sess-pick reset-lead");
   b.type = "button";
   b.setAttribute("aria-haspopup", "menu");
-  b.setAttribute("aria-label", t("Codex: how early before one expires") + ": " + name(cur));
+  b.setAttribute("aria-label", t("How early before one expires") + ": " + name(cur));
   // every choice in one cell, the current one seen: the button is as wide
   // as the widest, so a pick doesn't rewrap the row and move the page
   const say = el("span", "rl-say");

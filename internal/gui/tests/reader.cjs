@@ -223,4 +223,46 @@ async function pickItem(page, locator) {
   throw new Error("the picker's item never settled: " + last);
 }
 
-module.exports = { settled, inView, reach, wheelTo, click, openPart, watchSettingsReads, settingsDrawn, agentRow, openAgentSettings, pickItem };
+
+// provPrefsProviders: /api/providers with a signed-in subscription for each
+// id, so its editor holds its warm-ups, check-in and resets (PROV_PREFS);
+// an id with no built-in row comes from a plugin of that name
+const BUILTIN_SUBS = new Set(["codex", "claude", "workbuddy", "qoder", "qoder-cn"]);
+function provPrefsProviders(ids, names = {}) {
+  const base = { icon: "generic", chat: "https://example.invalid/v1", models: [], agents: [], fallback: [], headers: {}, keyList: [], routing: "" };
+  return {
+    providers: ids.map((id) => ({ ...base, id, name: names[id] || id, account: { agent: id, agentName: names[id] || id, user: "ann@example.test", logins: [{ agent: id, user: "ann@example.test", plan: "Pro", active: true, on: true }] } })),
+    plugins: ids.filter((id) => !BUILTIN_SUBS.has(id)).map((id) => ({ id, pid: id, name: names[id] || id, spec: "fixture-" + id, methods: [] })),
+    presets: [], excluded: [], gateway: { running: true, window: true },
+  };
+}
+// openProvPrefs: the provider's editor, open on its own settings
+async function openProvPrefs(page, id) {
+  await page.goto(`http://magpie.test/?view=providers&edit=${encodeURIComponent(id)}`);
+  await page.locator(".editor .prov-prefs:not([hidden])").waitFor({ timeout: 60000 });
+}
+// inEditor brings a control in a provider's editor into sight. The editor
+// is in the modal, whose body isn't a view, so the app lets the scroll
+// stand; then it waits till no box has scrolled for ten frames, so a check
+// that a click left the page where it was reads it at rest.
+async function inEditor(page, locator) {
+  // a save draws the lists again, so the element found can be replaced
+  // before it is scrolled to: found again then
+  for (let i = 0; ; i++) {
+    try {
+      await locator.waitFor({ state: "visible" });
+      await locator.scrollIntoViewIfNeeded();
+      break;
+    } catch (e) {
+      if (i >= 5 || !/not attached/.test(e.message)) throw e;
+    }
+  }
+  await page.evaluate(() => new Promise((done) => {
+    let last = "", same = 0;
+    const at = () => [scrollY, ...[...document.querySelectorAll("*")].map((e) => e.scrollTop)].join(",");
+    const f = () => { const now = at(); same = now === last ? same + 1 : 0; last = now; if (same >= 10) done(); else requestAnimationFrame(f); };
+    requestAnimationFrame(f);
+  }));
+}
+
+module.exports = { provPrefsProviders, openProvPrefs, inEditor, settled, inView, reach, wheelTo, click, openPart, watchSettingsReads, settingsDrawn, agentRow, openAgentSettings, pickItem };

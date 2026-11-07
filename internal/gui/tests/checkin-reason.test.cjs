@@ -4,7 +4,7 @@
 // message, and magpie showed a bare "No check-in event now". An inactive or
 // ineligible check-in now shows the plugin's (or vendor's) message beside
 // the label, on the account's Usage card, wrapped rather than cut off, and
-// in Settings' check-in line; one without a message reads as before.
+// in its provider editor's check-in line; one without a message reads as before.
 // English, Simplified and Traditional Chinese, Japanese and German, the
 // window and the panel's 440px; the API is faked here.
 const assert = require("node:assert/strict");
@@ -12,7 +12,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
-const { watchSettingsReads, settingsDrawn, reach } = require("./reader.cjs");
+const { watchSettingsReads, settingsDrawn, provPrefsProviders, openProvPrefs } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
@@ -41,7 +41,7 @@ function serve(lang) {
       return json({ agents: [], profiles: [], settings: saved });
     }
     if (url.pathname === "/api/settings") return json(settings);
-    if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true } });
+    if (url.pathname === "/api/providers") return json(provPrefsProviders(["qoder"], { qoder: "Qoder" }));
     if (url.pathname === "/api/usage/quotas") return json(quotas());
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
@@ -71,7 +71,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         page.setDefaultTimeout(5000);
         page.setDefaultNavigationTimeout(60000);
         const errors = [];
-        page.on("pageerror", (e) => errors.push(e.message));
+        page.on("pageerror", (e) => { if (engine === "webkit" && /due to access control checks/.test(e.message)) return; errors.push(e.message); }); // a goto in WebKit can cut off a fetch (#1350)
         await page.route("**/*", serve(lang));
         await watchSettingsReads(page);
         await page.goto("http://magpie.test/?view=usage");
@@ -90,19 +90,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await of("ann").getAttribute("data-why"), null);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "no sideways scroll on Usage");
 
-        // Settings' check-in line under the plugin's switch says it too
-        await page.goto("http://magpie.test/?view=settings&tab=usage");
+        // the check-in line under the plugin's switch, in Qoder's editor, says it too
+        await openProvPrefs(page, "qoder");
         await settingsDrawn(page);
-        const tab = page.locator("#warmTab-plugins");
-        await tab.waitFor();
-        await reach(page, tab);
-        await tab.click();
-        const sub = page.locator('#pluginCheckinList .row[data-provider="qoder"] .sub');
+        const sub = page.locator('.editor .prov-prefs .ci-plugin[data-provider="qoder"] > .row.pref:first-child .sub');
         await sub.waitFor();
         const text = (await sub.innerText()).replace(/\s+/g, " ");
         assert.ok(text.includes(w.user + " · " + WHY), text);
         assert.ok(text.includes(w.nope + " · " + NOPE), text);
-        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "no sideways scroll in Settings");
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "no sideways scroll in the editor");
         assert.deepEqual(errors, []);
       });
     }
