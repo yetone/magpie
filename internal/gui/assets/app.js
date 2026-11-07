@@ -4547,7 +4547,7 @@ async function renderUpdateBadge() {
   b.onclick = () => {
     // what changed is shown first, and a click there restarts (#844); one
     // that failed restarts again at once
-    if (u.state === "ready") return u.error ? restart() : confirmUpdate(u, restart);
+    if (u.state === "ready") return u.error ? restart() : confirmUpdate(u, restart, b);
     // found (#2296) or failed: a click downloads it, and restarts once it's in
     if (u.state === "error" || u.state === "found") {
       b.dataset.pulling = "1";
@@ -4705,10 +4705,11 @@ async function openWhatsNew(b, last = "") {
 // whatsnew.js, loaded when one opens; the tray's panel restarts as before.
 const notesJS = () => import("./whatsnew.js");
 const showWhatsNew = (...a) => notesJS().then(() => window.wnShow(...a));
-async function confirmUpdate(u, go) {
+async function confirmUpdate(u, go, b) {
   if (mode === "panel" || !$("#modal").hidden) return go();
-  try { await notesJS(); } catch { return go(); }
-  return window.wnConfirm(u, go);
+  b?.classList.add("busy");
+  try { await notesJS(); } catch { b?.classList.remove("busy"); return go(); }
+  return window.wnConfirm(u, go, b);
 }
 
 // ---------- picker ----------
@@ -22456,7 +22457,7 @@ async function renderUpdate(r, u) {
       if (u.gaveUp) sub.textContent += " · " + t("the gateway stayed busy for an hour, so magpie didn't restart; it updates when you restart or quit it");
       else if (busyNow) sub.textContent += " · " + busyNow;
       if (u.gaveUp) sub.classList.add("wraps");
-      btn(t("Restart to update"), () => (u.error ? install() : confirmUpdate(u, () => install())));
+      btn(t("Restart to update"), (e) => (u.error ? install() : confirmUpdate(u, () => install(), e.currentTarget)));
       if (u.error && u.url) btn(t("Download"), open);
       break;
     }

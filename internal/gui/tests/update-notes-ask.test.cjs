@@ -4,8 +4,10 @@
 // header's Update pill and Settings' Restart to update first show what
 // changed since this version, every release up to the new one, newest first,
 // and restart only on that sheet's Restart to update; Later leaves it be.
-// The update's own notes show at once, the full list once it comes. No click
-// moves the page; no coloured left border. English and Chinese; no backend.
+// The sheet opens once, with the full list: it used to open on the update's
+// own notes and swap in the rest seconds later, a one-line changelog that
+// then jumped; the pill is busy until the list is in. No click moves the
+// page; no coloured left border. English and Chinese; no backend.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -76,10 +78,24 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await pill.waitFor({ state: "visible" });
       const before = await scrolls(page);
 
-      // the pill: the sheet, not a restart
+      // every sheet drawn is kept: none may show fewer than the whole list
+      await page.evaluate(() => {
+        window.sheets = [];
+        new MutationObserver(() => {
+          const a = document.querySelector("#modal .update-ask");
+          if (a && !a.dataset.seen) { a.dataset.seen = "1"; window.sheets.push(a.querySelectorAll(".wn-merged li").length); }
+        }).observe(document.body, { childList: true, subtree: true });
+      });
+
+      // the pill: busy while the notes are asked for, then the sheet, not a
+      // restart, with every release at once
       await pill.click();
       const ask = page.locator("#modal .update-ask");
+      assert.equal(await pill.evaluate((e) => e.classList.contains("busy")), true, "the pill is busy while the notes come");
+      assert.equal(await ask.count(), 0, "no sheet before the whole list is in");
       await ask.waitFor();
+      assert.deepEqual(await page.evaluate(() => window.sheets), [2], "the sheet opens with the whole list, never the update's own notes first");
+      assert.equal(await pill.evaluate((e) => e.classList.contains("busy")), false);
       assert.equal((await ask.locator(".ehead b").textContent()).trim(), w.head);
       assert.equal((await ask.locator(".wn-since").textContent()).trim(), w.since);
       await page.waitForFunction(lines, 2);

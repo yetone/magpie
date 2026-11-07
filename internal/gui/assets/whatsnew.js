@@ -197,38 +197,55 @@ function noteLink(text, url) {
 // confirmUpdate shows what changed before an update downloaded is put in
 // (Hu9956, #844: every update came unseen, its notes three clicks away in
 // Settings › About): every release's notes after this one up to it, newest
-// first, with Restart to update and Later. The update's own notes show at
-// once; the releases between come in after. go restarts. The tray's panel,
+// first, with Restart to update and Later. go restarts. The tray's panel,
 // with no room for a dialog, restarts as before.
-async function confirmUpdate(u, go) {
+// The sheet opens once, with the whole list. It used to open on the
+// update's own notes and swap in the releases between seconds later, which
+// read as a one-line changelog that then jumped to the real one. b, the
+// button clicked, made busy by app.js, stays so until the list is in; past
+// WN_WAIT the update's own notes are shown.
+const WN_WAIT = 15000;
+let wnAsking = false;
+async function confirmUpdate(u, go, b) {
+  if (wnAsking) return b?.classList.remove("busy");
+  wnAsking = true;
+  // the notes' answer asks the feed again first, and names a release out
+  // since the one downloaded (#910), which the restart then waits for
+  let w;
+  try {
+    w = await Promise.race([
+      api(updatePath("update/notes")).catch(() => null),
+      new Promise((r) => setTimeout(() => r(null), WN_WAIT)),
+    ]);
+  } finally {
+    wnAsking = false;
+    b?.classList.remove("busy");
+  }
+  if (!$("#modal").hidden) return; // another dialog took the screen meanwhile
+  const releases = w?.releases?.length ? w.releases : u.notes ? [{ version: u.latest, notes: u.notes }] : [];
   const ed = el("div", "editor whatsnew update-ask");
   const head = el("div", "ehead");
-  const title = el("b", "", t("Update to {v}", { v: "v" + u.latest }));
-  head.append(title);
+  head.append(el("b", "", t("Update to {v}", { v: "v" + (w?.latest || u.latest) })));
   if (u.current) head.append(el("span", "wn-since", t("What changed since {v}", { v: "v" + u.current })));
   const box = el("div", "wn-list");
-  const draw = (releases, total) => {
-    box.replaceChildren();
-    if (releases.length > 1) {
-      const sec = el("section", "wn-rel");
-      sec.append(mergedNotes(releases, total));
-      box.append(sec);
-    }
-    else for (const r of releases) {
-      const sec = el("section", "wn-rel");
-      const h = el("div", "wn-ver");
-      h.append(el("b", "", "v" + r.version));
-      sec.append(h, noteBlocks(r.notes));
-      box.append(sec);
-    }
-    if (!releases.length) {
-      const sec = el("section", "wn-rel wn-none");
-      sec.append(el("p", "wn-msg", t("No release notes provided.")));
-      if (u.url) sec.append(noteLink(t("Open the release page"), u.url));
-      box.append(sec);
-    }
-  };
-  draw(u.notes ? [{ version: u.latest, notes: u.notes }] : []);
+  if (releases.length > 1) {
+    const sec = el("section", "wn-rel");
+    sec.append(mergedNotes(releases, w?.total));
+    box.append(sec);
+  }
+  else for (const r of releases) {
+    const sec = el("section", "wn-rel");
+    const h = el("div", "wn-ver");
+    h.append(el("b", "", "v" + r.version));
+    sec.append(h, noteBlocks(r.notes));
+    box.append(sec);
+  }
+  if (!releases.length) {
+    const sec = el("section", "wn-rel wn-none");
+    sec.append(el("p", "wn-msg", t("No release notes provided.")));
+    if (u.url) sec.append(noteLink(t("Open the release page"), u.url));
+    box.append(sec);
+  }
   const bar = el("div", "bar");
   const later = el("button", "text", t("Later"));
   later.onclick = cancelAsk;
@@ -240,12 +257,6 @@ async function confirmUpdate(u, go) {
   openModal(ed);
   $("#modal").classList.add("lib");
   ok.focus(NO_SCROLL);
-  // the notes' answer asks the feed again first, and names a release out
-  // since the one downloaded (#910), which the restart then waits for
-  const w = await api(updatePath("update/notes")).catch(() => null);
-  if (confirmAsk !== ed) return;
-  if (w?.latest && w.latest !== u.latest) title.textContent = t("Update to {v}", { v: "v" + w.latest });
-  if (w?.releases?.length) draw(w.releases, w.total);
 }
 
 window.wnShow = showWhatsNew;
