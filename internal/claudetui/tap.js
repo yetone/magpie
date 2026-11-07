@@ -16,6 +16,13 @@
 // Claude Code would have put them there had the variable said so, and
 // the variable is set to it for the requests after. The file says it was
 // seen (<file>.live) at the first request it could be put in.
+//
+// The file's effort, beside the extra body, is the level the run was told
+// since it started (#5584): each main request asks it in
+// output_config.effort, in place of the --effort Claude Code started
+// with. The interactive mode takes another level only from a person
+// typing /effort, which saves it as the user's default for new sessions;
+// a --settings file is read once, as Claude Code starts.
 (() => {
   const file = process.env.MAGPIE_CLAUDE_TAP;
   const guard = process.env.MAGPIE_CLAUDE_GUARD;
@@ -53,37 +60,58 @@
   }
   let streams = 0;
   let live = false;
-  // body is a request's body with the guard file's safeguards: the same
-  // bytes when they are what it has, or when it has none to replace (a
-  // request Claude Code builds without the extra body)
-  const guarded = (body) => {
-    if (!guard || typeof body !== "string" || body.indexOf('"safeguards"') < 0) return body;
-    let extra, now;
+  // body is a request's body with the guard file's safeguards and effort:
+  // the same bytes when they are what it has, or when it has none to
+  // replace (a request Claude Code builds without the extra body). The
+  // effort goes in the main turn's requests (main) alone, never in what
+  // Claude Code asks beside them (titles, summaries, its classifiers).
+  const guarded = (body, main) => {
+    if (!guard || typeof body !== "string") return body;
+    const carries = body.indexOf('"safeguards"') >= 0;
+    if (!carries && !main) return body;
+    let text, now;
     try {
-      extra = fs.readFileSync(guard, "utf8");
-      now = JSON.parse(extra);
+      text = fs.readFileSync(guard, "utf8");
+      now = JSON.parse(text);
     } catch {
       return body;
     }
-    if (!now || typeof now !== "object" || !("safeguards" in now)) return body;
+    if (!now || typeof now !== "object") return body;
+    // the file is the extra body Claude Code is to send, and the effort
+    // beside it, which is no field of a request
+    const { effort, ...extra } = now;
+    const level = main && typeof effort === "string" ? effort : "";
+    const safeguards = carries && "safeguards" in extra;
+    if (!safeguards && !main) return body;
     let req;
     try {
       req = JSON.parse(body);
     } catch {
       return body;
     }
-    if (!req || typeof req !== "object" || !("safeguards" in req)) return body;
+    if (!req || typeof req !== "object") return body;
+    if (safeguards && !("safeguards" in req)) return body;
     if (!live) {
       live = true;
       try {
         fs.writeFileSync(guard + ".live", "");
       } catch {}
     }
-    if (process.env.CLAUDE_CODE_EXTRA_BODY !== extra) process.env.CLAUDE_CODE_EXTRA_BODY = extra;
-    if (JSON.stringify(req.safeguards) === JSON.stringify(now.safeguards)) return body;
-    req.safeguards = now.safeguards;
-    put({ guard: "set" });
-    return JSON.stringify(req);
+    let changed = false;
+    if (safeguards) {
+      const env = effort === undefined ? text : JSON.stringify(extra);
+      if (process.env.CLAUDE_CODE_EXTRA_BODY !== env) process.env.CLAUDE_CODE_EXTRA_BODY = env;
+      if (JSON.stringify(req.safeguards) !== JSON.stringify(extra.safeguards)) {
+        req.safeguards = extra.safeguards;
+        changed = true;
+        put({ guard: "set" });
+      }
+    }
+    if (level && !(req.output_config && req.output_config.effort === level)) {
+      req.output_config = { ...(req.output_config || {}), effort: level };
+      changed = true;
+    }
+    return changed ? JSON.stringify(req) : body;
   };
   // read tells each event of stream s, then its end: cut when it broke
   // off, as a dropped connection or Claude Code's own Esc ends it
@@ -125,7 +153,8 @@
       try {
         const url = String((input && input.url) || input);
         if (init && /\/v1\/messages(\?|$)/.test(url)) {
-          const body = guarded(init.body);
+          const headers = new Headers(init.headers || (input && input.headers) || undefined);
+          const body = guarded(init.body, headers.get("x-claude-code-request-class") === "main");
           if (body !== init.body) init = { ...init, body };
         }
       } catch {}

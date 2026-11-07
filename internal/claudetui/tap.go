@@ -37,9 +37,11 @@ const tapEnv = "MAGPIE_CLAUDE_TAP"
 // GuardEnv names, to the helper, a file of the bridge's that holds the
 // extra body (CLAUDE_CODE_EXTRA_BODY) of the client's latest turn: tap.js
 // puts its safeguards in each request Claude Code makes, which reads that
-// variable only from an environment nothing outside it can change. The
-// bridge rewrites the file as a turn brings new ones, and tap.js writes
-// <file>.live once it has seen a request it puts them in.
+// variable only from an environment nothing outside it can change, and
+// the effort the run was told since it started, which tap.js asks each
+// main request at. The bridge rewrites the file as a turn brings new
+// ones, and tap.js writes <file>.live once it has seen a request it puts
+// them in.
 const GuardEnv = "MAGPIE_CLAUDE_GUARD"
 
 // how long a message of the transcript waits for its stream, and a turn's

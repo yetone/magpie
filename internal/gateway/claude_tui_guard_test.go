@@ -22,7 +22,9 @@ import (
 // it saw a request to put them in (<file>.live) unless FAKE_NO_TAP is
 // set, and logs the file as each of its requests would carry it. A turn
 // saying CALL3 calls the client's read tool three times, one call a
-// request, before it answers. Its log is returned.
+// request, before it answers. With FAKE_REFUSE_EFFORT set, a request the
+// file asks another effort of is refused as Anthropic refuses an effort
+// the model doesn't take. Its log is returned.
 func guardClaude(t *testing.T) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -57,6 +59,11 @@ while read -r line; do
   esac
   printf 'told %s\n' "$line" >> ` + log + `
   if [ -n "$MAGPIE_CLAUDE_GUARD" ] && [ -z "$FAKE_NO_TAP" ]; then : > "$MAGPIE_CLAUDE_GUARD.live"; fi
+  if [ -n "$FAKE_REFUSE_EFFORT" ] && grep -q '"effort"' "$MAGPIE_CLAUDE_GUARD" 2>/dev/null; then
+    sent
+    echo '` + tuiEffortRefusal + `'
+    continue
+  fi
   case "$line" in *CALL3*) ;; *)
     sent; start 0
     echo '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"pid '$me'"}}}'

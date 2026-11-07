@@ -215,7 +215,7 @@ type subscriptionRun struct {
 	safeguards    json.RawMessage
 	safeguardBeta string
 	// guard is the file the interactive mode's tap reads its safeguards
-	// from on each request (claudetui.GuardEnv); "" with none
+	// and effort from on each request (claudetui.GuardEnv); "" with none
 	guard       string
 	clientMarks bool
 	lean        bool // started with leanSystem as its system prompt
@@ -298,8 +298,11 @@ type subscriptionRun struct {
 	replied bool
 
 	// effort is the level its Claude Code thinks at, as it started (its
-	// --effort) or was told since (setEffort); "" is Claude Code's own
-	effort string
+	// --effort) or was told since (setEffort, setTUIEffort); "" is Claude
+	// Code's own. ownEffort is the one it started at, which an
+	// interactive run asks at by itself.
+	effort    string
+	ownEffort string
 
 	// loginVersion is the credential the run's account had when it
 	// started (provider.ClaudeLoginVersion), which a refusal it reports is
@@ -1229,15 +1232,17 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	// its own environment, which apply_flag_settings or a --settings file
 	// rewritten don't reach once it runs: the run is given the safeguards
 	// here, and a file (guard) its tap puts each later turn's in every
-	// request from (claudetui.GuardEnv, setSafeguards). A client's cache
-	// tail isn't added to Claude Code's own marks, which it keeps
-	// (clientCache.pasted).
-	tuiBody, guard := "", ""
-	if tui && len(req.Safeguards) > 0 {
-		tuiBody = claudeExtraBody(req.Safeguards, "")
-		env = append(env, "CLAUDE_CODE_EXTRA_BODY="+tuiBody)
+	// request from (claudetui.GuardEnv, setSafeguards), with the effort a
+	// later turn asks (setTUIEffort): every run has the file, safeguards
+	// or not. A client's cache tail isn't added to Claude Code's own
+	// marks, which it keeps (clientCache.pasted).
+	guard := ""
+	if tui {
+		if len(req.Safeguards) > 0 {
+			env = append(env, "CLAUDE_CODE_EXTRA_BODY="+claudeExtraBody(req.Safeguards, ""))
+		}
 		guard = filepath.Join(tmp, "guard.json")
-		if writeGuard(guard, tuiBody) == nil {
+		if writeGuard(guard, guardBody(req.Safeguards, "")) == nil {
 			env = append(env, claudetui.GuardEnv+"="+guard)
 		} else {
 			guard = ""
@@ -1291,10 +1296,11 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	run.appended = req.appendPrompt
 	run.tui = tui
 	run.cachePrefix = prefix
-	if tuiBody != "" {
+	if tui {
 		run.safeguards = bytes.Clone(req.Safeguards)
 		run.guard = guard
 	}
+	run.ownEffort = req.Effort
 	run.allowed = allowedTools(req)
 	if user, _ := ownerAccount(owner); user != "" {
 		run.loginVersion = provider.ClaudeLoginVersion(user)
@@ -1665,7 +1671,7 @@ func (r *subscriptionRun) setSafeguards(req *Request) error {
 		// (guardLive): the run goes on, its cache too, and upstream is
 		// sent this turn's classifier context whole (#4804).
 		if len(req.Safeguards) > 0 && r.guardLive() {
-			if err := writeGuard(r.guard, claudeExtraBody(req.Safeguards, "")); err != nil {
+			if err := r.tellGuard(req.Safeguards, r.effort); err != nil {
 				return fmt.Errorf("the turn's safeguards could not be handed to Claude Code (%v); restart it", err)
 			}
 			r.safeguards = bytes.Clone(req.Safeguards)
@@ -1702,6 +1708,31 @@ func (r *subscriptionRun) guardLive() bool {
 	}
 	_, err := os.Stat(r.guard + ".live")
 	return err == nil
+}
+
+// guardBody is a guard file: the extra body the run's Claude Code is to
+// send (claudeExtraBody: its safeguards), and effort beside it, the level
+// the tap asks each main request at in Claude Code's place, "" for the
+// one Claude Code started at.
+func guardBody(safeguards json.RawMessage, effort string) string {
+	body := map[string]any{}
+	if len(safeguards) > 0 {
+		body["safeguards"] = safeguards
+	}
+	if effort != "" {
+		body["effort"] = effort
+	}
+	b, _ := json.Marshal(body)
+	return string(b)
+}
+
+// tellGuard writes the interactive run's guard file for safeguards and
+// effort, the run's own once it is written; settingsMu is held.
+func (r *subscriptionRun) tellGuard(safeguards json.RawMessage, effort string) error {
+	if effort == r.ownEffort {
+		effort = ""
+	}
+	return writeGuard(r.guard, guardBody(safeguards, effort))
 }
 
 // writeGuard replaces the guard file with body whole: the tap reads it as
@@ -1996,12 +2027,11 @@ func (b *subscriptionBridge) resume(req *Request, owner string) (*subscriptionRu
 	// prefix the cache has never seen
 	if req.Effort != run.effort {
 		if run.tui {
-			// the interactive mode takes its effort at its start only:
-			// the run is let go, and one at the new effort started
-			run.abortFor("its effort is set at its start, and the next turn asks another")
-			return nil, nil
-		}
-		if err := run.setEffort(req.Effort); err != nil {
+			if err := run.setTUIEffort(req.Effort); err != nil {
+				run.abortFor(err.Error())
+				return nil, nil
+			}
+		} else if err := run.setEffort(req.Effort); err != nil {
 			run.abortFor("it could not be told the next turn's effort: " + err.Error())
 			return nil, nil
 		}
@@ -2219,6 +2249,33 @@ func (r *subscriptionRun) setEffort(effort string) error {
 		"request": map[string]any{"subtype": "apply_flag_settings", "settings": map[string]any{"effortLevel": effort}}})
 	if err := r.tell(line); err != nil {
 		return err
+	}
+	r.effort = effort
+	return nil
+}
+
+// setTUIEffort has the interactive run think at effort from its next
+// turn: its tap asks each main request at it (guardBody), as Claude Code
+// itself does after a person types /effort, which the run can't do: that
+// saves the level as the user's default for new sessions, in the folder
+// of the account the run is signed in to, where only 'max' is the
+// session's alone (2.1.318). Claude Code's own level, "", can't be asked
+// in place of another, and a Claude Code without the tap (guardLive) is
+// asked at its --effort only: such a run is let go, and one at the new
+// effort started. On the real 2.1.318 (Haiku 5.5) the turn after one
+// asked at high instead of medium read the whole conversation from the
+// cache (55,392 tokens read, 41 written).
+func (r *subscriptionRun) setTUIEffort(effort string) error {
+	if effort == "" && r.ownEffort != "" {
+		return errors.New("its effort is set at its start, and the next turn asks Claude Code's own")
+	}
+	if !r.guardLive() {
+		return errors.New("its effort is set at its start, its Claude Code has no tap to ask another, and the next turn does")
+	}
+	r.settingsMu.Lock()
+	defer r.settingsMu.Unlock()
+	if err := r.tellGuard(r.safeguards, effort); err != nil {
+		return fmt.Errorf("the next turn's effort could not be handed to Claude Code: %v", err)
 	}
 	r.effort = effort
 	return nil
