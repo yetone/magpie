@@ -1269,16 +1269,20 @@ func codexIn(at place) *Agent {
 		return nil
 	}
 	// giveTables puts the base URLs back, on the tables still pointed at
-	// magpie; one changed since is left as it is now
+	// magpie; one changed since is left as it is now. Each table is read
+	// as it is, not through ccSwitchTables: that counts a table of the
+	// user's own only while a thread names it, and bringOver had moved
+	// its threads onto magpie by then, so the Disconnect forgot the
+	// relay's URL and left the user's provider pointed at magpie
+	// (darwish4021 on Discord)
 	giveTables := func() error {
 		if err := giveMirrors(); err != nil {
 			return err
 		}
 		var was map[string]string
 		json.Unmarshal([]byte(stashShared()[at.key("codex.tables")]), &was)
-		now := ccSwitchTables()
 		for id, u := range was {
-			if now[id] != at.v1() {
+			if t, err := edit.GetTOMLTable(path, "model_providers."+id); err != nil || t["base_url"] != at.v1() {
 				continue
 			}
 			if err := edit.SetTOMLKey(path, "model_providers."+id, "base_url", u); err != nil {
