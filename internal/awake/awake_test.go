@@ -158,6 +158,13 @@ func TestKeepOffWaitsForTheSetting(t *testing.T) {
 	hold = func(bool) (func(), error) { held.Add(1); return func() { held.Add(-1) }, nil }
 	var looks atomic.Int32
 	var on atomic.Bool
+	// turned off, Keep also looks at each beat (beat.Next: the multiples of
+	// OthersEvery on the clock); the 50ms counted below stay clear of one,
+	// or its look counts as a second (#3687)
+	every := filememo.OthersEvery()
+	if time.Until(time.Now().Truncate(every).Add(every)) < time.Second {
+		<-beat.Next(every)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
