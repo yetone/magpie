@@ -704,6 +704,19 @@ lifetime it started with (`cachePrefix.ttl`; one saved before it was kept
 is an hour's). Until 11-07 every run was given 1h whatever the pick
 (linkaww). `TestClaudeRunKeepsTheUsersCacheTTL`.
 
+A new run (and one started from a transcript, `replaySession`) picks its
+lifetime with `runTTLFor`: `FORCE_PROMPT_CACHING_5M` on this computer
+gives 5m, as Claude Code does; else the request's own marks decide, the
+longest TTL marked on its tools, system, messages or the request itself
+(`askedCacheTTL`, `Request.askedTTL`); else `claudeRunTTL` as above. A
+client's Claude Code marks as its own user picked, 5m unless asked for an
+hour, so a remote magpie (Docker, another machine) follows the client's
+pick, not its own settings, which the client's never reach. Chat and
+Responses requests carry no marks and keep `claudeRunTTL`; warmup and
+usage runs have no request and keep it too (`cleanClaudeEnv`). Up to
+v0.1.3255, a remote relay wrote an hour's cache for a Mac set to 5m
+(Linka). `TestAskedCacheTTL`.
+
 ## Client-placed cache marks (#1717)
 
 A client can send `X-Magpie-Cache-Marks: client` on a `/v1/messages`

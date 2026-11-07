@@ -103,6 +103,62 @@ func cacheTTL(cc map[string]string) string {
 	return cc["ttl"]
 }
 
+// askedCacheTTL is the longest TTL a Messages request's own cache marks
+// ask for, on its tools, its system, its messages or the request itself,
+// "" for one that marks nothing. A Claude bridge run started for it keeps
+// its cache that long (runTTLFor): the client's Claude Code marks as its
+// user picked, an hour only when asked (Linka, a Docker magpie's relay
+// writing an hour's cache for a Mac set to 5m).
+func askedCacheTTL(a *aRequest) string {
+	ttl := ""
+	take := func(raw json.RawMessage) {
+		if len(raw) == 0 || ttl == "1h" {
+			return
+		}
+		var cc map[string]string
+		if json.Unmarshal(raw, &cc) != nil {
+			return
+		}
+		switch t := cacheTTL(cc); t {
+		case "5m", "1h":
+			if ttl == "" || t == "1h" {
+				ttl = t
+			}
+		}
+	}
+	take(a.CacheControl)
+	for _, t := range a.Tools {
+		take(t.CacheControl)
+	}
+	if bytes.Contains(a.System, cacheControlField) {
+		var system []struct {
+			CacheControl json.RawMessage `json:"cache_control"`
+		}
+		if json.Unmarshal(a.System, &system) == nil {
+			for _, b := range system {
+				take(b.CacheControl)
+			}
+		}
+	}
+	for _, m := range a.Messages {
+		if ttl == "1h" {
+			break
+		}
+		if !bytes.Contains(m.Content, cacheControlField) {
+			continue
+		}
+		var blocks []struct {
+			CacheControl json.RawMessage `json:"cache_control"`
+		}
+		if json.Unmarshal(m.Content, &blocks) == nil {
+			for _, b := range blocks {
+				take(b.CacheControl)
+			}
+		}
+	}
+	return ttl
+}
+
 func renderedCacheBlock(b aBlock) bool {
 	switch b.Type {
 	case "text":

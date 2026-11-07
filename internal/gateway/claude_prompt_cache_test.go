@@ -51,9 +51,16 @@ func TestClaudeInstructionsCachedApart(t *testing.T) {
 // requests wrote an hour's cache.
 func TestClaudeRunKeepsTheUsersCacheTTL(t *testing.T) {
 	for _, c := range []struct {
-		name, settings, env, force, want string
+		name, settings, env, force, marks, want string
 	}{
 		{name: "nothing picked", want: "1h"},
+		// the client's own marks: its Claude Code marks as its user
+		// picked, five minutes by default (Linka: a Docker magpie's
+		// relay wrote an hour's cache for a Mac set to 5m)
+		{name: "client marks 5m", marks: `{"type":"ephemeral"}`, want: "5m"},
+		{name: "client marks 5m over this computer's 1h", marks: `{"type":"ephemeral","ttl":"5m"}`, settings: `{"promptCacheTtl":"1h"}`, want: "5m"},
+		{name: "client marks 1h over this computer's 5m", marks: `{"type":"ephemeral","ttl":"1h"}`, settings: `{"promptCacheTtl":"5m"}`, want: "1h"},
+		{name: "forced 5m over client marks 1h", marks: `{"type":"ephemeral","ttl":"1h"}`, force: "1", want: "5m"},
 		{name: "agents page 5m", settings: `{"promptCacheTtl":"5m"}`, want: "5m"},
 		{name: "agents page 1h", settings: `{"promptCacheTtl":"1h"}`, want: "1h"},
 		{name: "settings env", settings: `{"env":{"CLAUDE_CODE_PROMPT_CACHE_TTL":"5m"},"promptCacheTtl":"1h"}`, want: "5m"},
@@ -75,6 +82,9 @@ func TestClaudeRunKeepsTheUsersCacheTTL(t *testing.T) {
 			}
 			if c.force != "" {
 				t.Setenv("FORCE_PROMPT_CACHING_5M", c.force)
+			}
+			if c.marks != "" {
+				h.extra = `"cache_control":` + c.marks + `,`
 			}
 			h.ask("rules", "hello", "next")
 			runs := h.runs()
@@ -98,6 +108,28 @@ func TestClaudeRunKeepsTheUsersCacheTTL(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// The TTL a Messages request asks for is its longest mark's, wherever it
+// is: Claude Code marks its system blocks and its last message (Linka).
+func TestAskedCacheTTL(t *testing.T) {
+	for _, c := range []struct{ body, want string }{
+		{`{"model":"m","messages":[{"role":"user","content":"hi"}]}`, ""},
+		{`{"model":"m","system":"rules","messages":[{"role":"user","content":"cache_control"}]}`, ""},
+		{`{"model":"m","system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.319"},{"type":"text","text":"You are Claude Code.","cache_control":{"type":"ephemeral"}}],"messages":[{"role":"user","content":[{"type":"text","text":"hi","cache_control":{"type":"ephemeral"}}]}]}`, "5m"},
+		{`{"model":"m","system":[{"type":"text","text":"You are Claude Code.","cache_control":{"type":"ephemeral","ttl":"1h"}}],"messages":[{"role":"user","content":[{"type":"text","text":"hi","cache_control":{"type":"ephemeral","ttl":"1h"}}]}]}`, "1h"},
+		{`{"model":"m","tools":[{"name":"read","input_schema":{},"cache_control":{"type":"ephemeral","ttl":"1h"}}],"messages":[{"role":"user","content":[{"type":"text","text":"hi","cache_control":{"type":"ephemeral"}}]}]}`, "1h"},
+		{`{"model":"m","messages":[{"role":"user","content":[{"type":"text","text":"hi","cache_control":{"type":"ephemeral","ttl":"1h"}}]}]}`, "1h"},
+		{`{"model":"m","cache_control":{"type":"ephemeral"},"messages":[{"role":"user","content":"hi"}]}`, "5m"},
+	} {
+		req, err := parseAnthropic([]byte(c.body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if req.askedTTL != c.want {
+			t.Errorf("%s: %q, want %q", c.body, req.askedTTL, c.want)
+		}
 	}
 }
 

@@ -156,6 +156,9 @@ func readAnthropic(body []byte, clientMarks, facts bool) (*Request, error) {
 	}
 	r := &Request{Model: a.Model, System: stringOrText(a.System), MaxTokens: a.MaxTokens,
 		Temp: a.Temperature, TopP: a.TopP, Stop: a.StopSequences, Stream: a.Stream, Fast: a.Speed == "fast"}
+	if !facts {
+		r.askedTTL = askedCacheTTL(&a)
+	}
 	if clientMarks {
 		var err error
 		r.clientCache, err = readClientCache(a)

@@ -1167,7 +1167,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		prefix = from.cachePrefix
 		prompt = renderClaudeTurn(req.Messages[len(req.Messages)-len(from.since):], req.Tools)
 	} else {
-		req.cacheTTL = claudeRunTTL(os.Environ())
+		req.cacheTTL = runTTLFor(req, os.Environ())
 		prompt, err = renderClaudePrompt(req)
 		if err != nil {
 			cleanup()
@@ -3499,6 +3499,22 @@ func inClaudeDir(env []string, configDir string) []string {
 	return out
 }
 
+func forced(v string) bool { return v != "" && v != "0" && v != "false" }
+
+// claudeForced5m: FORCE_PROMPT_CACHING_5M is set, in env or in Claude
+// Code's settings.json's env, as claudeRunTTL reads it.
+func claudeForced5m(env []string) bool {
+	if v, _ := edit.GetJSON(filepath.Join(claudeConfigDir(), "settings.json"), "env.FORCE_PROMPT_CACHING_5M"); v != "" {
+		return forced(v)
+	}
+	for _, e := range env {
+		if v, ok := strings.CutPrefix(e, "FORCE_PROMPT_CACHING_5M="); ok {
+			return forced(v)
+		}
+	}
+	return false
+}
+
 // claudeRunTTL is how long the prompt cache of a bridge's Claude Code run
 // is kept, "5m" or "1h": the user's own pick for Claude Code's main
 // conversation, as Claude Code resolves it (FORCE_PROMPT_CACHING_5M, then
@@ -3521,7 +3537,7 @@ func claudeRunTTL(env []string) string {
 		}
 		return ""
 	}
-	if v := envOf("FORCE_PROMPT_CACHING_5M"); v != "" && v != "0" && v != "false" {
+	if forced(envOf("FORCE_PROMPT_CACHING_5M")) {
 		return "5m"
 	}
 	if v := envOf("CLAUDE_CODE_PROMPT_CACHE_TTL"); v == "5m" || v == "1h" {
@@ -3531,6 +3547,23 @@ func claudeRunTTL(env []string) string {
 		return v
 	}
 	return "1h"
+}
+
+// runTTLFor is how long a bridge run started for req keeps its prompt
+// cache: five minutes when FORCE_PROMPT_CACHING_5M says so, as Claude Code
+// itself would; else what the request's own marks ask for, its client's
+// Claude Code marking as that computer's user picked, five minutes by
+// default (a remote magpie's relay was given the hour of its own setting,
+// never the Mac's, Linka); else, for a request with no marks, this
+// computer's pick or an hour (claudeRunTTL).
+func runTTLFor(req *Request, env []string) string {
+	if claudeForced5m(env) {
+		return "5m"
+	}
+	if req != nil && req.askedTTL != "" {
+		return req.askedTTL
+	}
+	return claudeRunTTL(env)
 }
 
 func cleanClaudeEnv(env []string) []string {
