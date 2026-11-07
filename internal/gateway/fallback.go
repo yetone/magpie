@@ -59,6 +59,10 @@ type candidate struct {
 	// (Member.Levels, "provider/model:low+high"): what the agent asks is
 	// sent at the nearest of them. nil for one fixed or following the group.
 	levels []string
+	// effortMap is, for a member following the group, the level it sends
+	// in place of the one asked for (Member.EffortMap); nil sends it as
+	// asked
+	effortMap map[string]string
 	// fast is set on a member the group sends in its vendor's fast mode
 	// (Group.Fast); ultra on an agent's fast pick sent Ultrafast (#1954)
 	fast, ultra bool
@@ -698,7 +702,7 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 		// the same model at another effort is another member's
 		for _, l := range [][]candidate{cs, aside, left, barred} {
 			for i := range l {
-				l[i].effort, l[i].levels, l[i].fast = m.Effort, m.Levels, m.Fast
+				l[i].effort, l[i].levels, l[i].effortMap, l[i].fast = m.Effort, m.Levels, m.EffortMap, m.Fast
 				l[i].firstToken = innerFirstToken(m)
 				l[i].patience = innerPatience(m)
 				if len(m.Path) > 0 {

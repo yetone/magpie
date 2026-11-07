@@ -448,7 +448,10 @@ type Try struct {
 	Fixed string `json:"fixed,omitempty"`
 	// RuleEffort: the reasoning the group's rule asks the member for
 	// (Rule.UseEffort, #2633), which Effort is whatever was asked
-	RuleEffort string    `json:"ruleEffort,omitempty"`
+	RuleEffort string `json:"ruleEffort,omitempty"`
+	// MappedFrom: the level asked for, which the group's member it went
+	// to sends Effort in place of (Group.EffortMaps)
+	MappedFrom string    `json:"mappedFrom,omitempty"`
 	Fast       bool      `json:"fast,omitempty"` // sent in its vendor's fast mode, as the group's member it went to is
 	Start      time.Time `json:"start"`
 	Done       bool      `json:"done"`

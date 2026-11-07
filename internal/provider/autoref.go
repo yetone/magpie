@@ -105,6 +105,7 @@ func (g *Group) canonicalRefs() {
 			g.Weights[c] = v
 		}
 	}
+	g.EffortMaps = renamedEffortMaps(g.EffortMaps, CanonicalRef)
 	for i := range g.Rules {
 		g.Rules[i].MapUses(CanonicalRef)
 	}

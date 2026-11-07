@@ -5681,9 +5681,14 @@ function routingPage(part) {
     const opt = (v, f) => v === undefined ? v : f(v);
     // a member's weight is a whole number; anything else is none
     const weightsOf = (v) => Object.fromEntries(Object.entries(v && typeof v === "object" && !Array.isArray(v) ? v : {}).filter(([, n]) => Number.isInteger(n)));
+    // a member's effort map is levels to levels (provider.Group.EffortMaps)
+    const isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
+    const words = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]; // provider.MemberEfforts
+    const effortMapsOf = (v) => Object.fromEntries(Object.entries(isObj(v) ? v : {}).filter(([, m]) => isObj(m))
+      .map(([id, m]) => [id, Object.fromEntries(Object.entries(m).filter(([a, b]) => words.includes(a) && words.includes(b)))]));
     const group = (g) => ({ ...g, id: String(g.id ?? ""), name: typeof g.name === "string" && g.name ? g.name : String(g.id ?? ""),
       members: ids(g.members), memberInfo: objs(g.memberInfo), holds: ids(g.holds), offers: ids(g.offers), shared: ids(g.shared), patterns: objs(g.patterns),
-      match: opt(g.match, ids), matched: opt(g.matched, ids), off: opt(g.off, ids), fast: opt(g.fast, ids), levels: opt(g.levels, ids), weights: opt(g.weights, weightsOf),
+      match: opt(g.match, ids), matched: opt(g.matched, ids), off: opt(g.off, ids), fast: opt(g.fast, ids), levels: opt(g.levels, ids), weights: opt(g.weights, weightsOf), effortMaps: opt(g.effortMaps, effortMapsOf),
       rules: opt(g.rules, (rs) => objs(rs).map((r) => ({ ...r, agents: opt(r.agents, ids), folders: opt(r.folders, ids), exceptFolders: opt(r.exceptFolders, ids) }))) });
     const refs = (v) => objs(v).filter((m) => typeof m.id === "string");
     return { ...x, groups: objs(x.groups).filter((g) => typeof g.id === "string" && g.id).map(group),
@@ -5811,7 +5816,7 @@ function routingPage(part) {
   // there, rather than leaving the slot empty.
   const openGroupEditor = async (g) => {
     if (groupDirty() && !(await confirmDiscard())) return false;
-    gEdit = { id: g.id, draft: { name: g.name, members: [...g.members], match: [...(g.match || [])], matched: [...(g.matched || [])], fast: [...(g.fast || [])], off: [...(g.off || [])], weights: { ...(g.weights || {}) }, accounts: [...(g.accounts || [])], routing: g.routing || "", pick: g.pick || "", affinity: g.affinity || "", sink: !!g.sink, unlists: !!g.unlists, firstToken: g.firstToken || 0, patience: patienceOf(g.patience), context: g.context || 0, classifier: g.classifier || "", intentSure: g.intentSure ?? null, effort: g.effort || "", levels: [...(g.levels || [])], rules: (g.rules || []).map((r) => ({ ...r, ...(r.more?.length ? { more: [...r.more] } : {}), intent: r.intent || "", agents: [...(r.agents || [])], folders: [...(r.folders || [])], exceptFolders: [...(r.exceptFolders || [])], time: r.time ? { ...r.time, days: [...(r.time.days || [])] } : null })) } };
+    gEdit = { id: g.id, draft: { name: g.name, members: [...g.members], match: [...(g.match || [])], matched: [...(g.matched || [])], fast: [...(g.fast || [])], off: [...(g.off || [])], weights: { ...(g.weights || {}) }, effortMaps: Object.fromEntries(Object.entries(g.effortMaps || {}).map(([id, m]) => [id, { ...m }])), accounts: [...(g.accounts || [])], routing: g.routing || "", pick: g.pick || "", affinity: g.affinity || "", sink: !!g.sink, unlists: !!g.unlists, firstToken: g.firstToken || 0, patience: patienceOf(g.patience), context: g.context || 0, classifier: g.classifier || "", intentSure: g.intentSure ?? null, effort: g.effort || "", levels: [...(g.levels || [])], rules: (g.rules || []).map((r) => ({ ...r, ...(r.more?.length ? { more: [...r.more] } : {}), intent: r.intent || "", agents: [...(r.agents || [])], folders: [...(r.folders || [])], exceptFolders: [...(r.exceptFolders || [])], time: r.time ? { ...r.time, days: [...(r.time.days || [])] } : null })) } };
     renderGroups();
     return true;
   };
@@ -6572,7 +6577,7 @@ function routingPage(part) {
         closeProtoMenu();
         if (v === cur || (groupDirty() && !(await confirmDiscard()))) return b.focus({ preventScroll: true });
         const n = opts.find(([id]) => id === v)?.[1] || v;
-        await groupAction("save", { id: g.id, name: g.name, members: namedOf(g), match: g.match || [], routing: v, pick: g.pick || "", affinity: g.affinity || "", sink: !!g.sink && sinkable(v), firstToken: g.firstToken || 0, patience: g.patience || 0, rules: g.rules || [], effort: g.effort || "", classifier: g.classifier || "", intentSure: g.intentSure ?? null, context: g.context || 0, levels: g.levels || [], family: g.family || "", fast: g.fast || [], off: g.off || [], weights: g.weights || {}, accounts: g.accounts || [], unlists: !!g.unlists },
+        await groupAction("save", { id: g.id, name: g.name, members: namedOf(g), match: g.match || [], routing: v, pick: g.pick || "", affinity: g.affinity || "", sink: !!g.sink && sinkable(v), firstToken: g.firstToken || 0, patience: g.patience || 0, rules: g.rules || [], effort: g.effort || "", classifier: g.classifier || "", intentSure: g.intentSure ?? null, context: g.context || 0, levels: g.levels || [], family: g.family || "", fast: g.fast || [], off: g.off || [], weights: g.weights || {}, effortMaps: g.effortMaps || {}, accounts: g.accounts || [], unlists: !!g.unlists },
           t("{name}: {routing}", { name: g.name, routing: t(n) }));
         // the rows were drawn anew: the keyboard stays on this one's routing
         gList.querySelector(`.rt-group[data-id="${CSS.escape(g.id)}"] .rt-groute`)?.focus({ preventScroll: true });
@@ -6705,7 +6710,7 @@ function routingPage(part) {
       b.onclick = (e) => {
         e.stopPropagation(); // the card opens the editor; this picks
         if (on) return;
-        groupAction("save", { id: g.id, name: g.name, members: namedOf(g), match: g.match || [], routing: "manual", pick: id, affinity: g.affinity || "", sink: !!g.sink, firstToken: g.firstToken || 0, patience: g.patience || 0, rules: g.rules || [], effort: g.effort || "", classifier: g.classifier || "", intentSure: g.intentSure ?? null, context: g.context || 0, levels: g.levels || [], family: g.family || "", fast: g.fast || [], off: g.off || [], weights: g.weights || {}, accounts: g.accounts || [], unlists: !!g.unlists },
+        groupAction("save", { id: g.id, name: g.name, members: namedOf(g), match: g.match || [], routing: "manual", pick: id, affinity: g.affinity || "", sink: !!g.sink, firstToken: g.firstToken || 0, patience: g.patience || 0, rules: g.rules || [], effort: g.effort || "", classifier: g.classifier || "", intentSure: g.intentSure ?? null, context: g.context || 0, levels: g.levels || [], family: g.family || "", fast: g.fast || [], off: g.off || [], weights: g.weights || {}, effortMaps: g.effortMaps || {}, accounts: g.accounts || [], unlists: !!g.unlists },
           t("{name}: every request to {model}", { name: g.name, model: memberName(id) }));
       };
       box.append(b);
@@ -6719,6 +6724,7 @@ function routingPage(part) {
     // and did nothing (悠悠哥 on Discord)
     for (const k of ["members", "match", "matched", "fast", "off", "rules", "accounts"]) if (!Array.isArray(d[k])) d[k] = [];
     if (!d.weights || typeof d.weights !== "object") d.weights = {};
+    if (!d.effortMaps || typeof d.effortMaps !== "object") d.effortMaps = {};
     const ed = el("div", "editor rt-gedit");
     ed.dataset.gslot = g ? g.id : "";
     const h = el("div", "ehead");
@@ -6941,9 +6947,15 @@ function routingPage(part) {
         if (!s && !deciderOf(id) && !drawerOf(id)) {
           const [base, fixed] = splitMember(id);
           const several = fixed.includes("+");
-          const fx = el("button", "rt-cond rt-fixed" + (fixed ? " on" : ""), fixed ? fixedWords(fixed) : t("Group's reasoning"));
+          // the levels it sends in place of those asked (LuckymanJC on
+          // Discord: one vendor's high is another's xhigh), for one that
+          // follows the group (provider.Group.EffortMaps)
+          const map = !fixed && d.effortMaps[id] && Object.keys(d.effortMaps[id]).length ? d.effortMaps[id] : null;
+          const pairs = map ? LEVELS.filter((v) => map[v]).map((v) => `${v} → ${map[v]}`).join(", ") : "";
+          const fx = el("button", "rt-cond rt-fixed" + (fixed || map ? " on" : ""), fixed ? fixedWords(fixed) : map ? t("Mapped reasoning") : t("Group's reasoning"));
           fx.title = several ? t("The agent picks among {levels} reasoning, each sent at the model's nearest level", { levels: fixed.split("+").join(" / ") })
-            : fixed ? t("Sent at {level} reasoning whatever the agent asks, at the model's nearest level", { level: fixed }) : t("Reasons as the group's effort says");
+            : fixed ? t("Sent at {level} reasoning whatever the agent asks, at the model's nearest level", { level: fixed })
+            : map ? t("Sent {pairs}; other levels as asked", { pairs }) : t("Reasons as the group's effort says");
           const levels = m?.efforts?.length ? m.efforts.filter((v) => LEVELS.includes(v)) : LEVELS.filter((v) => v !== "none" && v !== "minimal");
           // the member under another id: its rules, fast, off, weight and
           // pick go with it
@@ -6957,6 +6969,9 @@ function routingPage(part) {
             d.fast = d.fast.map((x) => x === from ? to : x);
             d.off = d.off.map((x) => x === from ? to : x);
             if (d.weights[from]) { d.weights[to] = d.weights[from]; delete d.weights[from]; }
+            // a map goes with it while it follows the group; one fixed at
+            // a level, or among several, sends those
+            if (d.effortMaps[from]) { if (!splitMember(to)[1]) d.effortMaps[to] = d.effortMaps[from]; delete d.effortMaps[from]; }
             if (d.pick === from) d.pick = to;
             return true;
           };
@@ -6974,14 +6989,33 @@ function routingPage(part) {
                 draw(); drawRules();
               } }, fx, ev);
           };
+          // a level asked, then the one sent for it: the model's own
+          // levels, or as asked; a member fixed at a level follows the
+          // group again once a level is mapped
+          const pickMap = (ev) => {
+            const have = (!fixed && d.effortMaps[id]) || {};
+            pickFrom("reasoning", fx, ev, LEVELS.map((v) => ({ value: v, label: v, note: have[v] ? `→ ${have[v]}` : t("As asked") })), (from) => {
+              pickFrom("reasoning", fx, ev, [{ value: "", label: t("As asked") }, ...levels.filter((v) => v !== from).map((v) => ({ value: v, label: v }))], (to) => {
+                if (fixed && !moveTo(base)) return;
+                if (fixed) drawRules();
+                const next = { ...(d.effortMaps[base] || {}) };
+                if (to && to !== from) next[from] = to; else delete next[from];
+                if (Object.keys(next).length) d.effortMaps[base] = next; else delete d.effortMaps[base];
+                draw();
+              }, have[from] || "");
+            });
+          };
           fx.onclick = (ev) => pickFrom("reasoning", fx, ev, [
             { value: "", label: t("Follow the group"), note: t("as the group's effort says") },
             ...levels.map((v) => ({ value: v, label: fixedWords(v), note: t("whatever the agent asks") })),
             ...(levels.length > 1 ? [{ value: "+", label: t("Several levels…"), note: t("the agent picks among them") }] : []),
+            ...(levels.length > 1 ? [{ value: "=", label: t("Map levels…"), note: t("a level in place of the one asked") }] : []),
           ], (v) => {
             if (v === "+") { pickSeveral(ev); return; }
+            if (v === "=") { pickMap(ev); return; }
+            if (!v && !fixed) { delete d.effortMaps[id]; draw(); return; } // the group's, as asked
             if (moveTo(v ? `${base}:${v}` : base)) { draw(); drawRules(); }
-          }, several ? "+" : fixed);
+          }, several ? "+" : map ? "=" : fixed);
           row.append(fx);
           // its vendor's fast mode, where the model has one: priority
           // processing, Claude's fast mode (provider.CanFast)
@@ -8010,7 +8044,7 @@ function routingPage(part) {
       if (own && !d.levels.length) return status(t("Pick a level to offer, or leave them to its models"), "warn");
       saveBtn.classList.add("busy");
       // refused, Add can be pressed again (busy, it takes no clicks)
-      groupAction("save", { id: idOf(), from: g?.id, name: d.name.trim() || idOf(), members: namedOf(d), placed: d.members, match: d.match, routing: d.routing, pick: d.pick || "", affinity: d.affinity, sink: !!d.sink && sinkable(d.routing), firstToken: d.firstToken || 0, patience: d.patience || 0, rules: d.rules, effort: d.effort, classifier: d.rules.some((r) => r.intent) || d.effort === "auto" ? d.classifier : "", intentSure: d.intentSure ?? null, context: d.context || 0, levels: own ? d.levels : [], family: g?.family || "", fast: d.fast.filter((x) => d.members.includes(x)), off: d.off.filter((x) => d.members.includes(x)), weights: Object.fromEntries(Object.entries(d.weights).filter(([x, n]) => d.members.includes(x) && n > 1)), accounts: d.accounts.filter((a) => accountPids().includes(a.slice(0, a.indexOf("/")))), unlists: !!d.unlists }, t(g ? "{name} saved" : "{name} added", { name: d.name.trim() || idOf() }))
+      groupAction("save", { id: idOf(), from: g?.id, name: d.name.trim() || idOf(), members: namedOf(d), placed: d.members, match: d.match, routing: d.routing, pick: d.pick || "", affinity: d.affinity, sink: !!d.sink && sinkable(d.routing), firstToken: d.firstToken || 0, patience: d.patience || 0, rules: d.rules, effort: d.effort, classifier: d.rules.some((r) => r.intent) || d.effort === "auto" ? d.classifier : "", intentSure: d.intentSure ?? null, context: d.context || 0, levels: own ? d.levels : [], family: g?.family || "", fast: d.fast.filter((x) => d.members.includes(x)), off: d.off.filter((x) => d.members.includes(x)), weights: Object.fromEntries(Object.entries(d.weights).filter(([x, n]) => d.members.includes(x) && n > 1)), effortMaps: Object.fromEntries(Object.entries(d.effortMaps).filter(([x, m]) => d.members.includes(x) && Object.keys(m).length)), accounts: d.accounts.filter((a) => accountPids().includes(a.slice(0, a.indexOf("/")))), unlists: !!d.unlists }, t(g ? "{name} saved" : "{name} added", { name: d.name.trim() || idOf() }))
         .then(() => saveBtn.classList.remove("busy"));
     };
     // what goes wrong is said where it is seen, never a click that does nothing

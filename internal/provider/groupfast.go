@@ -266,4 +266,10 @@ func (g *Group) RenameMember(from, to string) {
 		}
 		return m
 	})
+	g.EffortMaps = renamedEffortMaps(g.EffortMaps, func(m string) string {
+		if m == from {
+			return to
+		}
+		return m
+	})
 }

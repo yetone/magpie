@@ -258,6 +258,11 @@ type Group struct {
 	// weighs 1. Kept while the group routes otherwise, for when it is by
 	// weight again.
 	Weights map[string]int `json:"weights,omitempty"`
+	// EffortMaps are, for the members (as Members spells them) that
+	// follow the group's effort, the level each sends in place of the one
+	// asked for ("high" → "xhigh"): see groupeffortmap.go. A level not in
+	// a member's map is sent as asked.
+	EffortMaps map[string]map[string]string `json:"effortMaps,omitempty"`
 	// Family is a tag the group goes by in which agents are shown it
 	// (settings' Visible), with its id.
 	Family string `json:"family,omitempty"`
@@ -322,6 +327,10 @@ type Member struct {
 	// sent at the nearest of them. nil for a member fixed at one (Effort)
 	// or following the group.
 	Levels []string
+	// EffortMap is, for a member following the group's effort, the level
+	// it sends in place of the one asked for (Group.EffortMaps); nil
+	// sends it as asked.
+	EffortMap map[string]string
 	// Fast is set on a member the group sends in its vendor's fast mode
 	// (Group.Fast), where its model has one.
 	Fast bool
@@ -391,7 +400,7 @@ func (m Member) Groups() []string {
 // Below is the member as the group at depth (0 the group itself, 1 the
 // group in it Path[0] names, …) has it.
 func (m Member) Below(depth int) Member {
-	out := Member{ID: m.Path[depth], Path: m.Path[depth:], Via: m.Via[depth:], Provider: m.Provider, Model: m.Model, Effort: m.Effort, Levels: m.Levels, Fast: m.Fast, At: m.At}
+	out := Member{ID: m.Path[depth], Path: m.Path[depth:], Via: m.Via[depth:], Provider: m.Provider, Model: m.Model, Effort: m.Effort, Levels: m.Levels, EffortMap: m.EffortMap, Fast: m.Fast, At: m.At}
 	// its other places in the same group at depth
 	for _, o := range m.Also {
 		if len(o.Path) > depth && slices.Equal(o.Path[:depth], m.Path[:depth]) {
@@ -441,6 +450,7 @@ func cloneGroups(gs []Group) []Group {
 		g.Off, g.Levels, g.Fast = slices.Clone(g.Off), slices.Clone(g.Levels), slices.Clone(g.Fast)
 		g.Accounts, g.Seen = slices.Clone(g.Accounts), slices.Clone(g.Seen)
 		g.Weights = maps.Clone(g.Weights)
+		g.EffortMaps = renamedEffortMaps(g.EffortMaps, func(m string) string { return m })
 		if g.IntentSure != nil {
 			v := *g.IntentSure
 			g.IntentSure = &v
@@ -549,6 +559,12 @@ func withoutRemoved(g Group, have map[string]bool) Group {
 		}
 		return m
 	})
+	g.EffortMaps = renamedEffortMaps(g.EffortMaps, func(m string) string {
+		if gone(m) {
+			return ""
+		}
+		return m
+	})
 	return g
 }
 
@@ -628,6 +644,7 @@ func (g Group) own() Group {
 	g.Accounts = slices.Clone(g.Accounts)
 	g.Seen = slices.Clone(g.Seen)
 	g.Weights = maps.Clone(g.Weights)
+	g.EffortMaps = renamedEffortMaps(g.EffortMaps, func(m string) string { return m })
 	g.Rules = slices.Clone(g.Rules)
 	for i, r := range g.Rules {
 		g.Rules[i].Agents = slices.Clone(r.Agents)
@@ -1118,6 +1135,9 @@ func membersFound(entries []Entry, find entryOf, all []Group, g Group, off func(
 			}
 			fixed, levels := MemberLevels(effort)
 			mem := Member{ID: here[0], Path: here, Via: via, Provider: p, Model: m, Effort: fixed, Levels: levels, Fast: g.IsFast(id), At: at}
+			if fixed == "" && levels == nil {
+				mem.EffortMap = g.MemberEffortMap(id)
+			}
 			at++
 			if i, ok := seen[key]; ok {
 				// asked once, where it was met first; a rule naming this
@@ -1317,6 +1337,12 @@ func buildGroupEntries(entries []Entry) []Entry {
 				e.ImageInput = imageInput
 			} else {
 				e.ImageInput = anyImageInput(e.ImageInput, imageInput)
+			}
+			// a member that sends other levels than the ones asked
+			// (EffortMaps) takes the levels its map is asked for too: the
+			// gateway sends them at the level they map to
+			if len(m.EffortMap) > 0 && !reasonless && !unknown && len(efforts) > 0 {
+				efforts = mappedLevels(efforts, m.EffortMap)
 			}
 			// a member the user gave several levels of its own offers them
 			// (Garydesu on X: one model at a few efforts, the agent picking);
@@ -1565,6 +1591,9 @@ func SaveGroup(g Group) error {
 	}
 	g.Off = off
 	if err := cleanWeights(entries, &g); err != nil {
+		return err
+	}
+	if err := cleanEffortMaps(entries, &g); err != nil {
 		return err
 	}
 	var was []string
@@ -2061,6 +2090,12 @@ func RenameGroup(from, to string) error {
 			}
 		}
 		f.Groups[i].Weights = renamedWeights(f.Groups[i].Weights, func(m string) string {
+			if m == old {
+				return now
+			}
+			return m
+		})
+		f.Groups[i].EffortMaps = renamedEffortMaps(f.Groups[i].EffortMaps, func(m string) string {
 			if m == old {
 				return now
 			}

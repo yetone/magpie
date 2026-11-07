@@ -208,6 +208,7 @@ func importGroup(text string, over bool) (Imported, error) {
 		return ok && !CanFast(p, id)
 	})
 	g.Weights = renamedWeights(g.Weights, func(m string) string { return here[strings.TrimSpace(m)] })
+	g.EffortMaps = renamedEffortMaps(g.EffortMaps, func(m string) string { return here[strings.TrimSpace(m)] })
 	if g.Routing != Manual && len(g.Off) == len(g.Members) {
 		g.Off = nil // the ones it sent to are gone: those left are on
 	}

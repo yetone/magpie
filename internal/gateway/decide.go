@@ -890,3 +890,38 @@ func agentEffort(proto provider.Protocol, body []byte) string {
 	}
 	return strings.ToLower(strings.TrimSpace(bodyEffort(proto, body)))
 }
+
+// askedLevel is the reasoning level a request asks for (agentEffort),
+// and "none" for an Anthropic one that turns thinking off: a member's
+// EffortMaps may send it a level all the same.
+func askedLevel(proto provider.Protocol, body []byte) string {
+	if e := agentEffort(proto, body); e != "" || proto != provider.Anthropic {
+		return e
+	}
+	var v struct {
+		Thinking *struct {
+			Type string `json:"type"`
+		} `json:"thinking"`
+	}
+	if decodeJSON(body, &v) == nil && v.Thinking != nil && v.Thinking.Type == "disabled" {
+		return "none"
+	}
+	return ""
+}
+
+// mappedLevel is the level a member's map sends in place of in, and
+// whether it names one. Codex's ultra is max with agents of its own, so
+// a map from max takes it too.
+func mappedLevel(to map[string]string, in string) (string, bool) {
+	if in == "" {
+		return "", false
+	}
+	if l, ok := to[in]; ok {
+		return l, true
+	}
+	if in == "ultra" {
+		l, ok := to["max"]
+		return l, ok
+	}
+	return "", false
+}

@@ -3576,7 +3576,32 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// one, a suffix and the turn's pick are more particular
 			fixed = withinLevels(agentPick, levels)
 		}
-		if ruled != "" {
+		// a member that sends another level than the one asked (its
+		// EffortMaps, LuckymanJC on Discord: one vendor's high is
+		// another's xhigh) is sent that, whoever asked: a suffix, the
+		// agent's pick in magpie, the turn's pick or the agent itself. A
+		// rule's effort is the user's for this member already
+		mappedFrom, mapped := "", ""
+		if c.effort == "" && ruled == "" && len(c.effortMap) > 0 {
+			in := fixed
+			if in == "" && effort != "" {
+				in = withinLevels(effort, levels)
+			}
+			if in == "" {
+				in = withinLevels(askedLevel(from, attemptBody), levels)
+			}
+			if to, ok := mappedLevel(c.effortMap, in); ok {
+				mappedFrom, mapped = in, to
+			}
+		}
+		if mapped != "" {
+			// "none" turns its reasoning off; another level is asked at
+			// the one its model has nearest, as a fixed member's is
+			if mapped != "none" {
+				mapped = fitLevel(mapped, c.p.Efforts(c.model))
+			}
+			attemptBody = withFixedEffort(from, attemptBody, mapped)
+		} else if ruled != "" {
 			// asked even of a request that asked for no reasoning, as a
 			// member fixed at an effort is; already fitted to its levels
 			attemptBody = withFixedEffort(from, attemptBody, ruled)
@@ -3681,7 +3706,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		window := windowOf(c.p, c.model) // as the route's end reads it
 		s.trace.update(tr, func(t *Route) {
 			t.imageProvider = c.p.ID
-			t.Tries = append(t.Tries, Try{ID: c.rest, Model: c.model, Effort: sent, Picked: picked, Fixed: fixed, RuleEffort: ruled, Fast: fast, Start: began})
+			t.Tries = append(t.Tries, Try{ID: c.rest, Model: c.model, Effort: sent, Picked: picked, Fixed: fixed, RuleEffort: ruled, MappedFrom: mappedFrom, Fast: fast, Start: began})
 			t.window = window
 			if t.Prompt != nil && !t.Done {
 				t.Prompt = livePrompt(t.Prompt, window)
@@ -3950,7 +3975,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		wentTier = at.tier
 		ended = time.Now()
-		try := Try{ID: c.rest, Model: c.model, Effort: wentAt, Picked: picked, Fixed: fixed, RuleEffort: ruled, Fast: fast, Start: began, Done: true, Status: call.Status, Millis: ended.Sub(began).Milliseconds(), Error: call.Error, Queued: queued,
+		try := Try{ID: c.rest, Model: c.model, Effort: wentAt, Picked: picked, Fixed: fixed, RuleEffort: ruled, MappedFrom: mappedFrom, Fast: fast, Start: began, Done: true, Status: call.Status, Millis: ended.Sub(began).Milliseconds(), Error: call.Error, Queued: queued,
 			Served: call.Usage.Served, Upstream: call.Usage.Upstream, Pin: c.p.ClinePassAsked(c.model), Tier: wentTier, TierServed: call.Usage.Tier, Auto: autoPicked(),
 			Net: nt.timing(began, queued), SentBy: sentBy(c.p)}
 		if resetFirst != nil {
