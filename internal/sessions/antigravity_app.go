@@ -47,6 +47,14 @@ import (
 // time as an agy step is (usage's agyGateway: the app sends no session
 // header).
 //
+// What the app calls a conversation is its row of
+// conversation_summaries.db beside conversations/, the database agy keeps
+// (agy.go): the app's language server is agy's, and Antigravity 2.29.0's
+// makes the same table in ~/.gemini/antigravity on its first start. title
+// is the name the app gives it, preview what it lists the conversation as
+// before that (the user's own words). Without the row, the steps' text
+// being encrypted, a conversation has no name (xxooioo on Discord).
+//
 // A session is listed read only: the app has no command to pick a
 // conversation up again from a terminal.
 
@@ -67,12 +75,17 @@ func antigravityFiles() []file { return antigravityFilesIn(antigravityConversati
 
 // antigravityFilesIn are the conversation databases in dir. A file's size
 // and time are the database's and its write-ahead log's together, so a
-// write that is in the log alone still reads the conversation again.
+// write that is in the log alone still reads the conversation again; rev
+// is its summary row, so a title the app gives it later does too.
 func antigravityFilesIn(dir string) []file {
 	if !Reads("antigravity") {
 		return nil
 	}
 	entries, _ := os.ReadDir(dir)
+	if len(entries) == 0 {
+		return nil
+	}
+	rows := agySummariesOf(filepath.Dir(dir))
 	var out []file
 	for _, e := range entries {
 		id, ok := strings.CutSuffix(e.Name(), ".db")
@@ -88,6 +101,10 @@ func antigravityFilesIn(dir string) []file {
 			if fi.ModTime().After(f.mod) {
 				f.mod = fi.ModTime()
 			}
+		}
+		if r, ok := rows[id]; ok {
+			m := f.w()
+			m.agy, m.rev = &r, agyRev(r)
 		}
 		out = append(out, f)
 	}
@@ -333,7 +350,10 @@ func parseAntigravity(f file) *state {
 	if err != nil {
 		return &state{}
 	}
-	s := &state{Size: f.size, Mod: f.mod.UnixNano()}
+	s := &state{Size: f.size, Mod: f.mod.UnixNano(), DBRevision: f.m().rev}
+	if r := f.m().agy; r != nil {
+		s.Named, s.Title = title(r.Title), title(r.Preview)
+	}
 	for _, c := range calls {
 		s.saw(c.at, true)
 		s.use(dateOf(c.at), agAppModelOr(c.model), c.tokens)

@@ -215,3 +215,48 @@ func TestAntigravityAppDeploymentName(t *testing.T) {
 		}
 	}
 }
+
+// antigravitySummariesSchema is conversation_summaries.db as Antigravity
+// 2.29.0's language_server makes it in ~/.gemini/antigravity on its first
+// start (run in a sandbox HOME, 11-07): agy's table, in the app's folder.
+const antigravitySummariesSchema = "CREATE TABLE `conversation_summaries` (`conversation_id` text,`title` text NOT NULL DEFAULT \"\",`preview` text NOT NULL DEFAULT \"\",`step_count` integer NOT NULL DEFAULT 0,`last_modified_time` datetime NOT NULL,`workspace_uris` text NOT NULL,`status` text NOT NULL DEFAULT \"\",`source` text NOT NULL DEFAULT \"\",`project_id` text NOT NULL DEFAULT \"\",`agent_name` text NOT NULL DEFAULT \"\",`parent_conversation_id` text NOT NULL DEFAULT \"\",`nesting_depth` integer NOT NULL DEFAULT 0,`battle_id` text NOT NULL DEFAULT \"\",`winning_conversation_id` text NOT NULL DEFAULT \"\",`not_fully_idle` numeric NOT NULL DEFAULT false,`killed` numeric NOT NULL DEFAULT false,`last_user_input_time` datetime NOT NULL,`last_user_input_step_index` integer NOT NULL DEFAULT -1,`app_data_dir` text NOT NULL DEFAULT \"\",`raw_summary` blob,`group_id` text NOT NULL DEFAULT \"\",PRIMARY KEY (`conversation_id`));\n" +
+	"CREATE INDEX `idx_conversation_summaries_last_user_input_time` ON `conversation_summaries`(`last_user_input_time`);\n" +
+	"CREATE INDEX `idx_conversation_summaries_last_modified_time` ON `conversation_summaries`(`last_modified_time`);"
+
+// xxooioo (Discord #help, 11-07): every Antigravity app session read "(no
+// prompt)". The app's name for a conversation is its row of
+// conversation_summaries.db: before a title, preview holds the user's own
+// words (agy's real row: title "", preview "hi"), and once the app names
+// it, title. A conversation with no row stays unnamed.
+func TestAntigravityAppTitle(t *testing.T) {
+	claude, _ := setup(t)
+	home := filepath.Join(filepath.Dir(claude), "home")
+	const id, other = "37c3c786-9a11-44be-97df-b8fc1ccebc78", "b9eace9a-b15a-4dde-a440-b52e02016fa5"
+	antigravityFixture(t, home, id)
+	antigravityFixture(t, home, other)
+	db, err := sql.Open("sqlite", filepath.Join(home, ".gemini", "antigravity", "conversation_summaries.db")+"?_pragma=journal_mode(WAL)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(antigravitySummariesSchema); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("INSERT INTO conversation_summaries (conversation_id, title, preview, step_count, last_modified_time, workspace_uris, status, project_id, last_user_input_time, app_data_dir) VALUES (?, '', '修一下登录页的跳转', 2, '2026-11-07 00:12:46.60116+00:00', '[\"file:///work/site\"]', 'CASCADE_RUN_STATUS_IDLE', 'default-project', '2026-11-07 00:12:43.784481+00:00', 'antigravity')", id); err != nil {
+		t.Fatal(err)
+	}
+	ss := List(0)
+	if s := find(t, ss, "antigravity", id); s.Title != "修一下登录页的跳转" {
+		t.Fatalf("before a title: %q, want the preview", s.Title)
+	}
+	if s := find(t, ss, "antigravity", other); s.Title != "" {
+		t.Fatalf("no row: %q", s.Title)
+	}
+
+	if _, err := db.Exec("UPDATE conversation_summaries SET title = 'Login redirect fix', preview = 'Login redirect fix' WHERE conversation_id = ?", id); err != nil {
+		t.Fatal(err)
+	}
+	if s := find(t, List(0), "antigravity", id); s.Title != "Login redirect fix" {
+		t.Fatalf("after the app named it: %q", s.Title)
+	}
+}

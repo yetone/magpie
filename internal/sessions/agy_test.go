@@ -243,3 +243,47 @@ func TestAgyRowOnly(t *testing.T) {
 		t.Fatal("offers a conversation it can't read")
 	}
 }
+
+// agy's real row before a title (11-07, agy 1.4.12): title "", preview
+// "hi". A conversation listed from its row alone shows that, as there is
+// no transcript to read the prompt from.
+func TestAgyRowOnlyPreview(t *testing.T) {
+	dir := putAgy(t)
+	const id = "93668250-5f30-4171-86c1-8a3692824333"
+	db, err := sql.Open("sqlite", filepath.Join(dir, "conversation_summaries.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO conversation_summaries (conversation_id, title, preview, step_count, last_modified_time, workspace_uris, status, project_id, last_user_input_time, app_data_dir) VALUES (?, '', 'hi', 2, '2026-09-25 08:50:46.60116+00:00', '["file:///work/proj"]', 'CASCADE_RUN_STATUS_IDLE', 'default-cli-project', '2026-09-25 08:50:43.784481+00:00', 'antigravity-cli')`, id); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	os.MkdirAll(filepath.Join(dir, "conversations"), 0o755)
+	if err := os.WriteFile(filepath.Join(dir, "conversations", id+".db"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if s := find(t, List(0), "agy", id); s.Title != "hi" {
+		t.Fatalf("row only, no title yet: %q, want its preview", s.Title)
+	}
+}
+
+// A conversation_summaries.db made before preview was a column is still
+// read, its titles and folders with it.
+func TestAgyRowsWithoutPreview(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "conversation_summaries.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec("CREATE TABLE `conversation_summaries` (`conversation_id` text,`title` text NOT NULL DEFAULT \"\",`last_modified_time` datetime NOT NULL,`workspace_uris` text NOT NULL,PRIMARY KEY (`conversation_id`))"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO conversation_summaries VALUES ('a', 'Old one', '2026-10-12 04:00:00+00:00', '["file:///work/old"]')`); err != nil {
+		t.Fatal(err)
+	}
+	rows, ok := agyRows(db)
+	if !ok || rows["a"].Title != "Old one" || rows["a"].Cwd == "" {
+		t.Fatalf("rows %+v ok %v", rows, ok)
+	}
+}

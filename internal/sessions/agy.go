@@ -37,8 +37,11 @@ import (
 // SYSTEM steps (notices, the errors of a failed request) are agy's own.
 // What agy calls the conversation, and the folder it was started in, are
 // its row of conversation_summaries.db beside brain/: title (written by a
-// second, small model once the first reply is in, "" until then) and
-// workspace_uris, a JSON list of file:// URIs. The steps name no model, so
+// second, small model once the first reply is in, "" until then),
+// preview (what the app lists the conversation as: the user's own words
+// until it has a title, the title after) and workspace_uris, a JSON list
+// of file:// URIs. The Antigravity app's language server is agy's, and
+// keeps the same database in its own data folder (antigravity_app.go). The steps name no model, so
 // a conversation's tokens are counted under "agy", as its calls are left
 // with no model. `agy --conversation <id>` picks one up again, from any
 // folder; started on magpie's gateway, it needs the variables and --model
@@ -50,18 +53,21 @@ var AgyStart func() string
 
 // agySummary is what conversation_summaries.db says of a conversation.
 type agySummary struct {
-	Title, Cwd string
+	Title, Preview, Cwd string
 	// Last is last_modified_time: the time of a conversation that has
 	// no transcript to read it from
 	Last time.Time
 }
 
-// agySummaries is conversation_summaries.db's rows, read again only when
-// the database (or its write-ahead log) changed. A read that fails keeps
-// the rows read before.
+// agySummaries is each conversation_summaries.db's rows by its path (agy's
+// and the Antigravity app's), read again only when the database (or its
+// write-ahead log) changed. A read that fails keeps the rows read before.
 var agySummaries struct {
 	sync.Mutex
-	path string
+	read map[string]agySummaryRead
+}
+
+type agySummaryRead struct {
 	rev  string
 	rows map[string]agySummary
 }
@@ -79,17 +85,18 @@ func agySummariesOf(dir string) map[string]agySummary {
 	}
 	agySummaries.Lock()
 	defer agySummaries.Unlock()
-	if agySummaries.path == path && agySummaries.rev == rev {
-		return agySummaries.rows
+	was, seen := agySummaries.read[path]
+	if seen && was.rev == rev {
+		return was.rows
 	}
 	rows, ok := readAgySummaries(path)
 	if !ok {
-		if agySummaries.path == path {
-			return agySummaries.rows
-		}
-		return nil
+		return was.rows
 	}
-	agySummaries.path, agySummaries.rev, agySummaries.rows = path, rev, rows
+	if agySummaries.read == nil {
+		agySummaries.read = map[string]agySummaryRead{}
+	}
+	agySummaries.read[path] = agySummaryRead{rev, rows}
 	return rows
 }
 
@@ -104,8 +111,13 @@ func readAgySummaries(path string) (map[string]agySummary, bool) {
 	return agyRows(db)
 }
 
+// agyRows reads the rows; a database made before preview was a column is
+// read without it.
 func agyRows(db *sql.DB) (map[string]agySummary, bool) {
-	rows, err := db.Query("SELECT conversation_id, title, workspace_uris, last_modified_time FROM conversation_summaries")
+	rows, err := db.Query("SELECT conversation_id, title, preview, workspace_uris, last_modified_time FROM conversation_summaries")
+	if err != nil {
+		rows, err = db.Query("SELECT conversation_id, title, '', workspace_uris, last_modified_time FROM conversation_summaries")
+	}
 	if err != nil {
 		return nil, false
 	}
@@ -113,14 +125,14 @@ func agyRows(db *sql.DB) (map[string]agySummary, bool) {
 	out := map[string]agySummary{}
 	for rows.Next() {
 		var id string
-		var t, ws sql.NullString
+		var t, p, ws sql.NullString
 		var last any
-		if rows.Scan(&id, &t, &ws, &last) != nil || id == "" {
+		if rows.Scan(&id, &t, &p, &ws, &last) != nil || id == "" {
 			continue
 		}
 		var uris []string
 		json.Unmarshal([]byte(ws.String), &uris)
-		s := agySummary{Title: t.String, Last: agyTime(last)}
+		s := agySummary{Title: t.String, Preview: p.String, Last: agyTime(last)}
 		for _, u := range uris {
 			if s.Cwd = agyFolder(u, runtime.GOOS); s.Cwd != "" {
 				break
@@ -237,7 +249,7 @@ func agyFilesIn(dir string) []file {
 }
 
 func agyRev(r agySummary) string {
-	return r.Title + "\x00" + r.Cwd + "\x00" + r.Last.UTC().Format(time.RFC3339Nano)
+	return r.Title + "\x00" + r.Preview + "\x00" + r.Cwd + "\x00" + r.Last.UTC().Format(time.RFC3339Nano)
 }
 
 // agyRowOnly says the file is a conversation's own database, listed from
@@ -286,6 +298,9 @@ func parseAgy(f file, old *state) *state {
 		s := &state{Size: f.size, Mod: f.mod.UnixNano(), DBRevision: f.m().rev}
 		if f.m().agy != nil {
 			s.Named, s.Cwd = title(f.m().agy.Title), f.m().agy.Cwd
+			// no transcript to read the prompt from: what the row lists
+			// it as until it has a title
+			s.Title = title(f.m().agy.Preview)
 			if !f.m().agy.Last.IsZero() {
 				s.saw(f.m().agy.Last, true)
 			}
@@ -465,6 +480,6 @@ func agyParts(l agyLine) []Part {
 // forgetAgySummaries forgets the rows read of conversation_summaries.db.
 func forgetAgySummaries() {
 	agySummaries.Lock()
-	agySummaries.path, agySummaries.rev, agySummaries.rows = "", "", nil
+	agySummaries.read = nil
 	agySummaries.Unlock()
 }
