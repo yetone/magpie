@@ -2133,6 +2133,13 @@ func borrowedEfforts(id string) []string {
 	if base, ok := catalog.Unsuffixed(id); ok {
 		return borrowedEfforts(base)
 	}
+	// a dated snapshot of a known model, as OpenAI's own list names them
+	// and a relay passing it on does (gpt-6.1-sol-2026-09-29): the model's
+	// levels. Codex offered it low, medium and high alone, no xhigh, max
+	// or Ultra (maomao_00001 on Discord)
+	if base := datedSuffix.ReplaceAllString(id, ""); base != id && base != "" {
+		return borrowedEfforts(base)
+	}
 	return nil
 }
 
