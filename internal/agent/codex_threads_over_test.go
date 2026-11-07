@@ -24,8 +24,9 @@ import (
 // Now the threads Codex started on OpenAI move to magpie while it is
 // Codex's provider, in place (the id is one length), the file's time
 // kept, and back at the Disconnect, with no copy of each. Another
-// provider's threads stay, and OpenAI's stay when Codex was on another
-// provider before magpie, whose threads move instead (hxy920830 on X).
+// provider's threads stay. Codex on another provider before magpie, its
+// threads move too (hxy920830 on X), and OpenAI's go to that provider at
+// the Disconnect (Lice9735 on X, TestCodexOpenAIThreadsFollowMagpieFromOwnProvider).
 //
 // Threads Codex has packed (.zst) stayed on OpenAI, which Codex 0.166's
 // app refuses to resume on magpie ("This chat uses openai, but your
@@ -103,8 +104,8 @@ func TestCodexThreadsFollowMagpieIn(t *testing.T) {
 	// and refused to open them ("This chat uses custom, but your current
 	// provider is magpie": "原来的会话可以看到，但是加载不出来模型了").
 	// The threads of the provider Codex was on before magpie move as
-	// OpenAI's do, and back to it at the Disconnect; OpenAI's stay, as
-	// bringBack would give them to that provider.
+	// OpenAI's do, and back to it at the Disconnect; OpenAI's with them,
+	// to that provider at the Disconnect, where Codex resumes them.
 	t.Run("on a provider of the user's before", func(t *testing.T) {
 		cfg := "model = \"m\"\nmodel_provider = \"custom\"\n\n[model_providers.custom]\nname = \"custom\"\nbase_url = \"https://relay.example/v1\"\nwire_api = \"responses\"\n"
 		home, _ := codexHome(t, "", cfg)
@@ -119,7 +120,7 @@ func TestCodexThreadsFollowMagpieIn(t *testing.T) {
 			t.Fatalf("provider %q, want magpie", p)
 		}
 		cx.Sync()
-		for id, want := range map[string]string{plain: "openai", theirs: "magpie"} {
+		for id, want := range map[string]string{plain: "magpie", theirs: "magpie"} {
 			if p := codexRowOn(t, dir, id); p != want {
 				t.Errorf("connected: thread %s on %q, want %q", id, p, want)
 			}
@@ -134,7 +135,7 @@ func TestCodexThreadsFollowMagpieIn(t *testing.T) {
 		if p, _ := edit.GetTOMLTop(filepath.Join(dir, "config.toml"), "model_provider"); p != "custom" {
 			t.Fatalf("provider %q after the Disconnect, want custom back", p)
 		}
-		for id, want := range map[string]string{plain: "openai", theirs: "custom"} {
+		for id, want := range map[string]string{plain: "custom", theirs: "custom"} {
 			if p := codexRowOn(t, dir, id); p != want {
 				t.Errorf("disconnected: thread %s on %q, want %q", id, p, want)
 			}
@@ -167,7 +168,7 @@ func TestCodexThreadsFollowMagpieIn(t *testing.T) {
 		if err := cx.Fields[0].Set("fake/m1"); err != nil {
 			t.Fatal(err)
 		}
-		for id, want := range map[string]string{plain: "openai", theirs: "magpie", packed: "magpie", old: "myrelay"} {
+		for id, want := range map[string]string{plain: "magpie", theirs: "magpie", packed: "magpie", old: "myrelay"} {
 			if p := codexRowOn(t, dir, id); p != want {
 				t.Errorf("connected: thread %s on %q, want %q", id, p, want)
 			}
@@ -184,7 +185,7 @@ func TestCodexThreadsFollowMagpieIn(t *testing.T) {
 		if err := cx.Unwire(); err != nil {
 			t.Fatal(err)
 		}
-		for id, want := range map[string]string{plain: "openai", theirs: "myrelay", packed: "myrelay", old: "myrelay"} {
+		for id, want := range map[string]string{plain: "myrelay", theirs: "myrelay", packed: "myrelay", old: "myrelay"} {
 			if p := codexRowOn(t, dir, id); p != want {
 				t.Errorf("disconnected: thread %s on %q, want %q", id, p, want)
 			}

@@ -646,7 +646,8 @@ func MoveCodexThreads(home, from, to string) ([]CodexMove, error) {
 	if !codexProviderRe.MatchString(from) || !codexProviderRe.MatchString(to) || from == to {
 		return nil, fmt.Errorf("can't move Codex's threads from %q to %q", from, to)
 	}
-	return moveCodexThreadIDs(home, from, to, codexThreadsOn(home, from), 0)
+	moved, _, err := moveCodexThreadIDs(home, from, to, codexThreadsOn(home, from), 0)
+	return moved, err
 }
 
 // MoveCodexThreadIDs moves those of the threads ids that a Codex folder's
@@ -664,16 +665,18 @@ func MoveCodexThreadIDs(home, from, to string, ids []string) ([]CodexMove, error
 			still = append(still, id)
 		}
 	}
-	return moveCodexThreadIDs(home, from, to, still, 0)
+	moved, _, err := moveCodexThreadIDs(home, from, to, still, 0)
+	return moved, err
 }
 
 // moveCodexThreadIDs moves the threads ids of a Codex folder from the
 // provider from to the provider to, as MoveCodexThreads says, in the
 // order given. With a budget over 0 it stops once the files it has moved
-// come to that many bytes, a copy of each kept.
-func moveCodexThreadIDs(home, from, to string, ids []string, budget int64) ([]CodexMove, error) {
+// come to that many bytes, a copy of each kept, and says more when it
+// stopped there with a thread still to move.
+func moveCodexThreadIDs(home, from, to string, ids []string, budget int64) (moved []CodexMove, more bool, first error) {
 	if len(ids) == 0 {
-		return nil, nil
+		return nil, false, nil
 	}
 	storeMu.Lock()
 	defer storeMu.Unlock()
@@ -697,8 +700,6 @@ func moveCodexThreadIDs(home, from, to string, ids []string, budget int64) ([]Co
 			return nil
 		})
 	}
-	var moved []CodexMove
-	var first error
 	var spent int64
 	now := time.Now()
 	for _, id := range ids {
@@ -706,6 +707,7 @@ func moveCodexThreadIDs(home, from, to string, ids []string, budget int64) ([]Co
 			continue
 		}
 		if budget > 0 && spent >= budget {
+			more = true
 			break
 		}
 		for _, p := range files[id] {
@@ -723,7 +725,7 @@ func moveCodexThreadIDs(home, from, to string, ids []string, budget int64) ([]Co
 		mv.From = from
 		moved = append(moved, mv)
 	}
-	return moved, first
+	return moved, more, first
 }
 
 // MovePackedCodexThreads moves the threads of a Codex folder that
@@ -735,12 +737,14 @@ func moveCodexThreadIDs(home, from, to string, ids []string, budget int64) ([]Co
 // since since, newest first, and no more once the files moved come to
 // budget bytes: a history of thousands of packed threads is gigabytes,
 // and the threads a user goes back to are the recent ones. The rest wait
-// for the next call. A database whose threads have no updated_at (an
+// for the next call, and more says there are some: nothing else may call
+// again for hours, and the Codex app refuses each one left (Lice9735 on
+// X, a chat from 25 days before). A database whose threads have no updated_at (an
 // older Codex) moves none. Codex 0.166 resumes a thread only on the
 // provider it is on now ("This chat uses openai, but your current
 // provider is magpie"), so a packed thread left on OpenAI couldn't be
 // reopened while magpie was Codex's provider.
-func MovePackedCodexThreads(home, from, to string, since time.Time, budget int64) ([]CodexMove, error) {
+func MovePackedCodexThreads(home, from, to string, since time.Time, budget int64) (moved []CodexMove, more bool, err error) {
 	return moveRecentCodexThreads(home, from, to, since, budget, true)
 }
 
@@ -751,13 +755,13 @@ func MovePackedCodexThreads(home, from, to string, since time.Time, budget int64
 // the user's own provider (a relay's, "myrelay") was listed by the Codex
 // app once magpie was its provider, and refused: "This chat uses myrelay,
 // but your current provider is magpie" (hxy920830 on X).
-func MoveRecentCodexThreads(home, from, to string, since time.Time, budget int64) ([]CodexMove, error) {
+func MoveRecentCodexThreads(home, from, to string, since time.Time, budget int64) (moved []CodexMove, more bool, err error) {
 	return moveRecentCodexThreads(home, from, to, since, budget, false)
 }
 
-func moveRecentCodexThreads(home, from, to string, since time.Time, budget int64, packedOnly bool) ([]CodexMove, error) {
+func moveRecentCodexThreads(home, from, to string, since time.Time, budget int64, packedOnly bool) ([]CodexMove, bool, error) {
 	if !codexProviderRe.MatchString(from) || !codexProviderRe.MatchString(to) || from == to || budget <= 0 {
-		return nil, fmt.Errorf("can't move Codex's threads from %q to %q", from, to)
+		return nil, false, fmt.Errorf("can't move Codex's threads from %q to %q", from, to)
 	}
 	var ids []string
 	for _, p := range codexStateDBs(home) {

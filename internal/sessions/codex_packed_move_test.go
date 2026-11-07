@@ -61,20 +61,24 @@ func TestMovePackedCodexThreads(t *testing.T) {
 	d.Close()
 	since := now.Add(-30 * 24 * time.Hour)
 
-	// a budget the first thread's file reaches: that one alone
-	moved, err := MovePackedCodexThreads(home, "openai", "magpie", since, 1)
+	// a budget the first thread's file reaches: that one alone, and it
+	// says one is left, for its caller to come back for it
+	moved, more, err := MovePackedCodexThreads(home, "openai", "magpie", since, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(moved) != 1 || moved[0].ID != newest || moved[0].Backup == "" {
 		t.Fatalf("moved %+v, want the newest alone", moved)
 	}
+	if !more {
+		t.Fatal("stopped by the budget with a thread left, and said none was")
+	}
 	if _, err := os.Stat(filepath.Join(moved[0].Backup, "move.json")); err != nil {
 		t.Fatalf("no copy kept: %v", err)
 	}
 	// the next call goes on with the rest
-	if moved, err = MovePackedCodexThreads(home, "openai", "magpie", since, 64<<20); err != nil || len(moved) != 1 || moved[0].ID != newer {
-		t.Fatalf("again: %+v %v", moved, err)
+	if moved, more, err = MovePackedCodexThreads(home, "openai", "magpie", since, 64<<20); err != nil || len(moved) != 1 || moved[0].ID != newer || more {
+		t.Fatalf("again: %+v more %v %v", moved, more, err)
 	}
 	want := map[string]string{newest: "magpie", newer: "magpie", old: "openai", plain: "openai", theirs: "custom"}
 	for id, prov := range want {
@@ -101,8 +105,8 @@ func TestMovePackedCodexThreads(t *testing.T) {
 		t.Fatalf("packed rollout after the move: %v\n%s", err, out)
 	}
 	// nothing left to move
-	if moved, err = MovePackedCodexThreads(home, "openai", "magpie", since, 64<<20); err != nil || len(moved) != 0 {
-		t.Fatalf("a third time: %+v %v", moved, err)
+	if moved, more, err = MovePackedCodexThreads(home, "openai", "magpie", since, 64<<20); err != nil || len(moved) != 0 || more {
+		t.Fatalf("a third time: %+v more %v %v", moved, more, err)
 	}
 }
 
@@ -123,7 +127,7 @@ func TestMovePackedCodexThreadsNoUpdatedAt(t *testing.T) {
 		t.Fatal(err)
 	}
 	d.Close()
-	if moved, err := MovePackedCodexThreads(home, "openai", "magpie", time.Time{}, 64<<20); err != nil || len(moved) != 0 {
+	if moved, _, err := MovePackedCodexThreads(home, "openai", "magpie", time.Time{}, 64<<20); err != nil || len(moved) != 0 {
 		t.Fatalf("moved %+v %v", moved, err)
 	}
 	if got, _, _ := threadProvider(t, db, id); got != "openai" {
@@ -169,7 +173,7 @@ func TestMoveRecentCodexThreads(t *testing.T) {
 	}
 	d.Close()
 	since := now.Add(-30 * 24 * time.Hour)
-	moved, err := MoveRecentCodexThreads(home, "myrelay", "magpie", since, 64<<20)
+	moved, _, err := MoveRecentCodexThreads(home, "myrelay", "magpie", since, 64<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +202,7 @@ func TestMoveRecentCodexThreads(t *testing.T) {
 		t.Fatalf("plain rollout after the move:\n%s", b)
 	}
 	// the packed-only move of the same leaves a plain thread
-	if moved, err = MovePackedCodexThreads(home, "custom", "magpie", since, 64<<20); err != nil || len(moved) != 0 {
+	if moved, _, err = MovePackedCodexThreads(home, "custom", "magpie", since, 64<<20); err != nil || len(moved) != 0 {
 		t.Fatalf("packed-only: %+v %v", moved, err)
 	}
 }
