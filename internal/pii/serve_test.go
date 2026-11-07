@@ -111,6 +111,27 @@ func TestGPUDeathMovesToCPU(t *testing.T) {
 	}
 }
 
+// The answer of a GPU pf-serve that died is read only after it has
+// exited and been waited for, and the status still says the GPU was lost,
+// not "read |0: file already closed" (#3741: cmd.Wait closed the pipe
+// under the read).
+func TestGPUDeathReadAfterExit(t *testing.T) {
+	old := beforeRead
+	beforeRead = func(h *helper) {
+		if h.hello.GPU {
+			<-h.exited
+		}
+	}
+	t.Cleanup(func() { beforeRead = old })
+	gpuInstall(t, "gpudies")
+	if _, err := Find([]string{"hi Alice"}); err != nil {
+		t.Fatal(err)
+	}
+	if st := Now(); st.Device != "CPU" || !strings.Contains(st.GPUError, "device lost") {
+		t.Fatalf("Now = %+v, want on the CPU saying the GPU was lost", st)
+	}
+}
+
 // A pf-serve-vulkan that can't start (no Vulkan loader) leaves it to
 // pf-serve.
 func TestVulkanThatWontStartFallsBack(t *testing.T) {
