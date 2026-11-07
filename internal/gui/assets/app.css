@@ -1057,7 +1057,7 @@ body.window .field.solo { grid-column: auto; }
 .credit-days .cd-note { margin-top: 4px; font-size: 10px; color: var(--muted); }
 /* what was left over time (#651): a line a window, an even burn dashed, now
    upright; the range (or Off) is picked once, in the allowances' head */
-.quota-head .quota-trend { margin-right: 8px; }
+#view-usage .row-head.quota-head { gap: 8px; }
 .quota-curve { margin-top: 10px; }
 .quota-curve .qc-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 10.5px; color: var(--muted); }
 .quota-curve .qc-range { font-size: 10px; color: var(--muted); }
