@@ -27,6 +27,8 @@ var readOnlyRefused = []string{
 	"POST /v1/magpie/usage/requests", "POST " + provider.RemoteRefreshPath,
 	// a Codex reset, which can't be undone (#3850)
 	"POST " + provider.RemoteCodexResetPath,
+	// an update another magpie asks for
+	"POST " + provider.RemoteUpdatePath,
 	"GET /v1/magpie/route", "GET /v1/magpie/trace",
 	"GET " + ClaudeRunsPath, "GET " + HeapPath, "GET " + CPUPath, "GET " + GoroutinesPath,
 	"POST " + RestartPath,

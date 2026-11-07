@@ -643,6 +643,24 @@ sends it without a key from loopback, `Origin: null`, an app scheme, a
 read-only and held key, and expects nothing spent until the full key
 asks.
 
+`POST /v1/magpie/update?version=<v>` (`Server.remoteUpdate` in
+[`remote_update.go`](../../internal/gateway/remote_update.go),
+nnlrl_75403 on Discord) has this magpie update itself to its channel's
+latest once `v` (the asking magpie's version) is newer than its own. It
+replaces the program, so its admission is the Codex reset's: another
+machine only while magpie is shared (`sharedWith`), never a browser
+(`fromBrowser`), an enabled key with full access from loopback too (401
+without one), a read-only key 403 `gateway_key_read_only` and a held key
+403 `gateway_key_held`. The work is the updater's, set with `SetUpdater`
+by the app (`updater.updateAsked`) and by `magpie serve`
+(`serveUpdateAsked`); with none the answer is `unsupported`. It answers
+a `provider.RemoteUpdate` (`state` updating, current, off or
+unsupported with `why`) and its own `version`.
+`TestRemoteUpdateNeedsAFullKey` sends it the same refused cases as the
+Codex reset and expects the updater never called;
+`TestRemoteMagpieAskedToFollow` runs `provider.UpdateRemotes` against a
+real gateway.
+
 A remote provider serves the conversation, token-counting, System One,
 embeddings, rerank, Decisions, speech-to-text, image generation/edit and video
 creation/status/content APIs. Gemini clients enter through the local Gemini adapter and follow the

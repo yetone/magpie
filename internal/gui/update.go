@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/update"
 )
@@ -152,8 +153,10 @@ func updateDue(s settings.Settings, last, now time.Time) bool {
 
 func (u *updater) start() {
 	u.place(runtime.GOOS, update.GUI)
-	gateway.SetRestarter(u.restartBeside) // magpie update in a terminal
-	go u.followReplaced(backendCtx)       // the app's or magpie web's update (visamzh on X)
+	gateway.SetRestarter(u.restartBeside)               // magpie update in a terminal
+	gateway.SetUpdater(u.updateAsked)                   // a magpie using this one updated
+	go provider.KeepRemotesUpdated(backendCtx, Version) // and this one's remotes
+	go u.followReplaced(backendCtx)                     // the app's or magpie web's update (visamzh on X)
 	if u.bundle != "" {
 		go update.ForgetOldStaging(u.bundle) // #3965
 	}

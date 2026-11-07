@@ -954,6 +954,29 @@ process. See `TestAnotherMagpiesUpdateRestartsThisOne`,
 [`update_follow_test.go`](../../internal/gui/update_follow_test.go), and
 `update-served-anew.test.cjs`.
 
+A Remote magpie follows this one's version too (nnlrl_75403 on Discord).
+`provider.KeepRemotesUpdated` (started with the updater, and by `magpie
+serve`) runs `UpdateRemotes` 30 s after start and hourly: a released
+build with automatic updates on asks each Remote magpie on an older
+release (`GET /v1`) through `POST /v1/magpie/update` with the provider's
+key, once in six hours for a version, and keeps the answer
+(`RemoteUpdateOf`). On the other side `updater.updateAsked`
+([`update_remote.go`](../../internal/gui/update_remote.go)) downloads
+(`download`) and restarts once idle (`waitIdle`), or answers why not:
+nothing newer, automatic updates or downloads off there (the user's
+setting stands), or a copy it can't replace (`stuck`: container,
+package with its command, a folder it can't write, a build from
+source). `magpie serve`'s `serveUpdateAsked`
+([`serve_update.go`](../../internal/cli/serve_update.go)) puts the
+latest in where it runs from, one at a time and never elevated, and
+`serveFollow` restarts into it. The provider's row on the Providers
+page appends `remoteUpdate` (`remoteUpdateNote`: an English `say` and
+`tip` the page translates) to its line: "updating to v…" for 30
+minutes, or why it can't, with the command over it. See
+`TestUpdateAskedByAnotherMagpie`, `TestRemoteUpdateNote`,
+`TestServeUpdateAsked`, `TestRemoteMagpieAskedToFollow` and
+`remote-update.test.cjs`.
+
 See `TestRestartHandsTheGatewayOver` (the new version a second process,
 a stream across the restart finishing whole, requests during it answered,
 and the old one quitting only after its stream) and
