@@ -116,7 +116,7 @@ func closedUnsentClient(t *testing.T) *http.Client {
 	was := unsentAgain
 	unsentAgain = []time.Duration{5 * time.Millisecond, 5 * time.Millisecond}
 	t.Cleanup(func() { unsentAgain = was })
-	tr := vendorTransport(time.Minute)
+	tr := plainVendorTransport(time.Minute)
 	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	var h1 http.Protocols
 	h1.SetHTTP1(true)

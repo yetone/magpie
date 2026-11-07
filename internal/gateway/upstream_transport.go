@@ -66,7 +66,16 @@ var uploadStall = time.Minute
 
 // vendorTransport is a transport to the vendors that gives one wait to
 // begin answering, none for 0: the request's context then bounds it.
+// A silent HTTP/2 connection is pinged and dropped (#2843), by a health
+// check that doesn't ping a vendor still thinking into ending the
+// connection (netproxy.CalmHTTP2).
 func vendorTransport(wait time.Duration) *http.Transport {
+	t := plainVendorTransport(wait)
+	netproxy.CalmHTTP2(t)
+	return t
+}
+
+func plainVendorTransport(wait time.Duration) *http.Transport {
 	return &http.Transport{
 		Proxy:                 netproxy.Func,
 		ResponseHeaderTimeout: wait,
@@ -74,8 +83,6 @@ func vendorTransport(wait time.Duration) *http.Transport {
 		IdleConnTimeout:       90 * time.Second,
 		ForceAttemptHTTP2:     true,
 		TLSClientConfig:       upstreamTLS,
-		// a silent HTTP/2 connection is pinged and dropped (#2843)
-		HTTP2: netproxy.HTTP2Health(),
 	}
 }
 
@@ -87,7 +94,7 @@ func vendorTransport(wait time.Duration) *http.Transport {
 // write that moves no bytes ends the connection (WriteByteTimeout), and a
 // vendor that never begins answering is ended by the response header wait.
 func uploadTransport(wait time.Duration) *http.Transport {
-	t := vendorTransport(wait)
+	t := plainVendorTransport(wait)
 	t.HTTP2 = &http.HTTP2Config{WriteByteTimeout: uploadStall}
 	return t
 }

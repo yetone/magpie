@@ -26,9 +26,44 @@ import (
 // connection). The test watches the bound with the timings scaled down: a
 // holed connection is pinged at PingAfter, dropped at PingAfter+PingWait,
 // and the try on it fails with the connection, while the next one dials
-// anew and succeeds.
+// anew and succeeds. The same holds for Go's own health check, which
+// DefaultTransport has (HTTP2Health), and for the gateway's (CalmHTTP2).
 func TestRequestOnAHoledConnectionFailsAtThePing(t *testing.T) {
 	pingAfter, pingWait := time.Second, 500*time.Millisecond
+	t.Run("HTTP2Health", func(t *testing.T) {
+		holedTry(t, pingAfter, pingWait, &http.Transport{
+			ForceAttemptHTTP2: true,
+			TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+			HTTP2:             &http.HTTP2Config{SendPingTimeout: pingAfter, PingTimeout: pingWait},
+		})
+	})
+	t.Run("CalmHTTP2", func(t *testing.T) {
+		scalePings(t, pingAfter, pingWait, time.Minute)
+		tr := &http.Transport{
+			ForceAttemptHTTP2: true,
+			TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		}
+		if err := CalmHTTP2(tr); err != nil {
+			t.Fatal(err)
+		}
+		// the gateway's lostPing knows the ping's failure by Go's words
+		if said := holedTry(t, pingAfter, pingWait, tr); !strings.Contains(said, "http2: client connection lost") {
+			t.Fatalf("the turn failed with %q; want Go's words for a lost ping", said)
+		}
+	})
+}
+
+func scalePings(t *testing.T, after, wait, again time.Duration) {
+	wasAfter, wasWait, wasAgain := PingAfter, PingWait, PingAgain
+	PingAfter, PingWait, PingAgain = after, wait, again
+	t.Cleanup(func() { PingAfter, PingWait, PingAgain = wasAfter, wasWait, wasAgain })
+}
+
+// holedTry runs a request on a connection whose path died through tr,
+// which pings after pingAfter and waits pingWait for the answer, and one
+// after it.
+func holedTry(t *testing.T, pingAfter, pingWait time.Duration, tr *http.Transport) string {
+	t.Cleanup(tr.CloseIdleConnections)
 
 	// The vendor, speaking HTTP/2 over TLS on a listener the shim pumps
 	// raw bytes into, as a CONNECT tunnel would.
@@ -96,11 +131,7 @@ func TestRequestOnAHoledConnectionFailsAtThePing(t *testing.T) {
 		}
 	}
 
-	client := &http.Client{Transport: &http.Transport{
-		ForceAttemptHTTP2: true,
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-		HTTP2:             &http.HTTP2Config{SendPingTimeout: pingAfter, PingTimeout: pingWait},
-	}}
+	client := &http.Client{Transport: tr, Timeout: 20 * time.Second}
 	post := func() (time.Duration, int, error) {
 		start := time.Now()
 		req, err := http.NewRequest("POST", "https://"+shim.Addr().String()+"/turn", nil)
@@ -150,6 +181,7 @@ func TestRequestOnAHoledConnectionFailsAtThePing(t *testing.T) {
 	if dials != 2 {
 		t.Fatalf("the vendor was dialed %d times; want the retry on a connection of its own", dials)
 	}
+	return said
 }
 
 func containsAny(s string, subs ...string) bool {
