@@ -63,7 +63,8 @@ func claudeKey(work string) string { return filepath.ToSlash(evalSymlinks(work))
 
 // mydosu's saved account (#4830, Windows, Claude Code 2.1.316) was asked
 // whether to trust magpie's folder on every /usage read and every test,
-// and each waited out its caller's time on the question. Before either
+// and each waited out its caller's time on the question (a /usage read
+// runs as -p now, #5582, which asks nothing about trust). Before a test
 // runs, the account's .claude.json says the folder is trusted, under the
 // path Claude Code runs in, which a Mac's getcwd gives with its links
 // resolved (/private/var/… for /var/…).
@@ -73,7 +74,6 @@ func TestClaudeOneOffTrustsMagpiesFolder(t *testing.T) {
 		run  func(ctx context.Context, cfg string) error
 		say  string
 	}{
-		{"usage", func(ctx context.Context, cfg string) error { _, err := claudeUsage(ctx, cfg); return err }, `"local_command":"usage","result":"Current session: 1% used"`},
 		{"test", func(ctx context.Context, cfg string) error { return askClaude(ctx, cfg, "haiku") }, `"result":"Hi!"`},
 	} {
 		t.Run(c.name, func(t *testing.T) {

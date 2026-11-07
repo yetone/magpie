@@ -212,7 +212,8 @@ func parseClaudeUsage(text string, now time.Time) ([]QuotaWindow, error) {
 }
 
 // claudeNoWindow is the helper's word for an interactive /usage panel that
-// loaded with no window drawn (claudetui.NoUsageWindow).
+// loaded with no window drawn (claudetui.NoUsageWindow). The gateway reads
+// /usage through -p since #5582, which says no such thing.
 const claudeNoWindow = "No usage window has started"
 
 func clipLine(s string) string {

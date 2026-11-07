@@ -764,9 +764,11 @@ var (
 // command runs /usage, which Claude Code answers itself, asking no model:
 // it is typed, and what Claude Code shows for it is told as the result -p's
 // /usage gives (usageText), its local_command named. The panel is closed
-// after. It is the one command a line {"type":"command"} runs: the plan's
-// allowance read in the interactive mode, where -p's /usage tells no
-// window of it (Claude Code 2.1.316).
+// after. It is the one command a line {"type":"command"} runs. magpie's
+// own /usage reads no longer send it (#5582): the interactive Claude Code
+// (2.1.316) sends a counted model request as it starts, which opened an
+// idle account's five-hour window, so the gateway reads /usage through -p,
+// which prints the plan's windows for a subscription's sign-in.
 func (s *shim) command(name string) error {
 	s.doing.Store("hadn't drawn " + name + "'s panel")
 	if name != "/usage" {

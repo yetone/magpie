@@ -22,7 +22,6 @@ func TestClaudeOneOffFailureLogged(t *testing.T) {
 		name, what string
 		run        func(ctx context.Context, cfg string) error
 	}{
-		{"usage", "a /usage read", func(ctx context.Context, cfg string) error { _, err := claudeUsage(ctx, cfg); return err }},
 		{"test", "a test on haiku", func(ctx context.Context, cfg string) error { return askClaude(ctx, cfg, "haiku") }},
 	} {
 		t.Run(c.name, func(t *testing.T) {
