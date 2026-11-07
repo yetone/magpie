@@ -459,3 +459,25 @@ func TestDefaultGateway(t *testing.T) {
 		t.Errorf("not in a container: %q, want none", got)
 	}
 }
+
+// A private network's address is never called the internet's: RFC 1918's
+// (a NAS's 192.168.31.218, Docker's 172.17.0.1), Tailscale's, IPv6's own
+// private range. A name isn't looked up.
+func TestURLKind(t *testing.T) {
+	for u, want := range map[string]string{
+		"http://192.168.31.218:3425":    "local",
+		"http://172.17.0.1:3425":        "local",
+		"http://10.0.0.5:3425":          "local",
+		"http://100.101.102.103:3425":   "local",
+		"http://[fd12:3456::1]:3425":    "local",
+		"http://203.0.113.9:3425":       "internet",
+		"http://[2001:4860::8888]:3425": "internet",
+		"https://magpie.example.com":    "",
+		"http://nas.local:3425":         "",
+		"":                              "",
+	} {
+		if got := URLKind(u); got != want {
+			t.Errorf("URLKind(%q) = %q, want %q", u, got, want)
+		}
+	}
+}

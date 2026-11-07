@@ -326,6 +326,27 @@ func PublicIP(ip net.IP) bool {
 	return true
 }
 
+// URLKind is what u's host is: "internet" for an address anyone online
+// may reach (PublicIP), "local" for any other IP address (a home or
+// office network's, Tailscale's, a Docker network's), and "" for a name,
+// which magpie doesn't look up. MAGPIE_PUBLIC_URL is often a private one:
+// a NAS's 192.168.31.218, which the GUI called "Public address" (公网地址)
+// beside the 172.17.0.1 other containers on it use (jiezhengj on Discord).
+func URLKind(u string) string {
+	p, err := url.Parse(u)
+	if err != nil {
+		return ""
+	}
+	ip := net.ParseIP(p.Hostname())
+	switch {
+	case ip == nil:
+		return ""
+	case PublicIP(ip):
+		return "internet"
+	}
+	return "local"
+}
+
 // PublicURLs are those of urls (LANURLs) at an internet address.
 func PublicURLs(urls []string) []string {
 	var out []string

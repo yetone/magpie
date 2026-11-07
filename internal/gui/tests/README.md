@@ -1962,7 +1962,11 @@ the OpenAI/Anthropic switch keeps that host and doesn't move the page. Opened
 at localhost, the container's address stays and the row says it is the
 container's own and to set `MAGPIE_PUBLIC_URL`. Outside a container nothing
 changes. No coloured left border; English and Chinese, Chromium and WebKit,
-with `/api/plugins` faked.
+with `/api/plugins` faked. With `MAGPIE_PUBLIC_URL` at the NAS's private
+192.168.31.218 (jiezhengj on Discord), the Gateway page's list, Connect's
+menu and About name it the local network's, not "Public address", and the
+Docker bridge's 172.17.0.1 other containers'; an internet address is named
+the internet's. Every language, at 1100 and 420 wide.
 
 `routing-time.test.cjs` checks a routing group's rule for hours of the day
 (Discord: send a provider's peak-price hours, DeepSeek's or GLM's, to
@@ -2114,7 +2118,7 @@ with nothing shared), and a network address that needs an enabled gateway
 key. English and Chinese, Chromium and WebKit, with `/api/plugins` faked.
 
 `public-url-default.test.cjs` checks that Connect starts at MAGPIE_PUBLIC_URL,
-labelled Public address, with the snippets on it, until an address is
+labelled Public address (对外地址) when it is a name, with the snippets on it, until an address is
 picked, and that a pick (this computer's) is kept after a reload (#1551).
 About shows the public URL beside the local one; magpie web shows it as the
 gateway's address and the MCP server's, the app keeps those local. Without

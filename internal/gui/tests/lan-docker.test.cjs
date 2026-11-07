@@ -20,7 +20,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
-const { watchSettingsReads, settingsDrawn } = require("./reader.cjs");
+const { watchSettingsReads, settingsDrawn, openPart } = require("./reader.cjs");
 const { fixture } = require("./fixtures/caller-keys.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
@@ -65,18 +65,18 @@ const words = {
     opened: "Other devices use the host’s address this page was opened at, and other containers on this host the host’s Docker bridge address, both on the gateway’s port; MAGPIE_PUBLIC_URL sets another",
     bridge: "Other containers on this host use the host’s Docker bridge address, on the gateway’s port; other devices use the host’s own, which MAGPIE_PUBLIC_URL puts here",
     own: "The container’s own addresses, which other devices can’t reach: set MAGPIE_PUBLIC_URL to the host’s",
-    others: "Other containers on this host", lan: "Local network",
+    others: "Other containers on this host", lan: "Local network", here: "This computer",
   },
   zh: {
     container: "在容器中运行",
     opened: "其他设备用打开这个页面所用的宿主机地址，本机上的其他容器用宿主机的 Docker bridge 地址，端口都是网关的端口；MAGPIE_PUBLIC_URL 可另设",
     bridge: "本机上的其他容器用宿主机的 Docker bridge 地址，端口是网关的端口；其他设备用宿主机自己的地址，用 MAGPIE_PUBLIC_URL 把它设在这里",
     own: "容器自身的地址，其他设备无法访问：请将 MAGPIE_PUBLIC_URL 设为宿主机地址",
-    others: "同一主机上的其他容器", lan: "局域网",
+    others: "同一主机上的其他容器", lan: "局域网", here: "本机",
   },
-  "zh-TW": { others: "同一主機上的其他容器", lan: "區域網" },
-  ja: { others: "同じホストのほかのコンテナ", lan: "ローカルネットワーク" },
-  de: { others: "Andere Container auf diesem Host", lan: "Lokales Netzwerk" },
+  "zh-TW": { others: "同一主機上的其他容器", lan: "區域網", here: "本機" },
+  ja: { others: "同じホストのほかのコンテナ", lan: "ローカルネットワーク", here: "このコンピュータ" },
+  de: { others: "Andere Container auf diesem Host", lan: "Lokales Netzwerk", here: "Dieser Computer" },
 };
 const BRIDGE = "http://172.17.0.1:3425";
 
@@ -235,5 +235,87 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(errors, []);
       }
     });
+  }
+}
+
+// jiezhengj on Discord: magpie in Docker on a NAS, MAGPIE_PUBLIC_URL at the
+// NAS's own 192.168.31.218. The list on the Gateway page called it "Public
+// address" (公网地址), as if anyone online reached it, and Connect's menu
+// called the Docker bridge's 172.17.0.1 "Local network" while the list
+// called it other containers'. A private address is the local network's,
+// the bridge's is other containers', in the list, in Connect's menu and in
+// About alike; a public one is the internet's.
+const NAS = "http://192.168.31.218:3999";
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
+    for (const width of [1100, 420]) {
+      test(`${engine} ${lang} ${width}: MAGPIE_PUBLIC_URL at a private address is the local network's, the bridge other containers'`, async (t) => {
+        const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+        t.after(() => browser.close());
+        const w = words[lang];
+        const open = async (at, web, over = {}) => {
+          const page = await (await browser.newContext({ viewport: { width, height: 800 }, reducedMotion: "reduce" })).newPage();
+          await page.addInitScript(() => { try { localStorage.setItem("magpie.gwConnectFolded", "0"); } catch {} });
+          page.setDefaultTimeout(6000);
+          page.setDefaultNavigationTimeout(60000);
+          const errors = [];
+          page.on("pageerror", (e) => errors.push(e.message));
+          await page.route("**/*", fixture(lang, "light", [], { lan: true, web, containerHost: HOSTBR, // MAGPIE_PUBLIC_URL says the host's: no container's own addresses
+            lanURLs: [NAS], publicURL: NAS, publicKind: "local", ...over }));
+          await page.goto(at + "/?view=gateway");
+          await page.locator("#gatewayLan .gw-url").first().waitFor();
+          await page.locator("#connectAddress").waitFor();
+          return { page, errors };
+        };
+        const list = async (page) => {
+          const rows = page.locator("#gatewayLan .gw-url");
+          const out = [];
+          for (let i = 0; i < await rows.count(); i++)
+            out.push([(await rows.nth(i).locator(".gw-url-label").textContent()).trim(), (await rows.nth(i).locator("code").textContent()).trim()]);
+          return out;
+        };
+        const menu = async (page) => {
+          await page.locator("#connectAddress").click();
+          const items = page.locator(".proto-menu .pm-item");
+          await items.first().waitFor();
+          const names = (await items.locator(".pm-name").allTextContents()).map((x) => x.trim());
+          const notes = (await items.locator(".pm-note").allTextContents()).map((x) => x.trim());
+          return names.map((n, i) => [notes[i], n]);
+        };
+        const fits = async (page) => assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "wider than the window");
+
+        // magpie web, opened at the NAS: the list and Connect's menu name
+        // each address the same way
+        {
+          const { page, errors } = await open("http://192.168.31.218:3430", true);
+          assert.deepEqual(await list(page), [[w.lan, NAS], [w.others, HOSTBR]]);
+          assert.deepEqual(await menu(page), [[w.here, "http://127.0.0.1:3999/v1"], [w.lan, NAS + "/v1"], [w.others, HOSTBR + "/v1"]]);
+          await fits(page);
+          assert.deepEqual(errors, []);
+        }
+        // the app on the NAS: About names it as the Gateway page does
+        {
+          const { page, errors } = await open("http://magpie.test", false);
+          assert.deepEqual(await list(page), [[w.here, "http://127.0.0.1:3999"], [w.lan, NAS], [w.others, HOSTBR]]);
+          await page.keyboard.press("Escape");
+          await page.locator("#prefs").click();
+          await openPart(page, "about");
+          await page.locator("#publicURLRow").waitFor();
+          assert.equal((await page.locator("#publicURLRow .who .name").textContent()).trim(), w.lan);
+          await fits(page);
+          assert.deepEqual(errors, []);
+        }
+        // an internet address is the internet's, in the list and the menu
+        {
+          const PUB = "http://203.0.113.9:3999";
+          const { page, errors } = await open("http://203.0.113.9:3430", true, { containerHost: "",
+            lanURLs: [PUB], publicURL: PUB, publicKind: "internet", lanPublic: [PUB] });
+          const internet = await page.evaluate(() => t("On the internet"));
+          assert.deepEqual(await list(page), [[internet, PUB]]);
+          assert.deepEqual(await menu(page), [[w.here, "http://127.0.0.1:3999/v1"], [internet, PUB + "/v1"]]);
+          assert.deepEqual(errors, []);
+        }
+      });
+    }
   }
 }

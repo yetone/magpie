@@ -22,7 +22,7 @@ const PUBLIC = "https://magpie.example.com";
 const LOCAL = "http://127.0.0.1:3999";
 const LANGS = ["en", "zh", "zh-TW", "ja", "de"];
 const words = {
-  en: "Public address", zh: "公网地址", "zh-TW": "公開位址", ja: "公開アドレス", de: "Öffentliche Adresse",
+  en: "Public address", zh: "对外地址", "zh-TW": "對外位址", ja: "公開アドレス", de: "Öffentliche Adresse",
 };
 
 async function setup(t, engine, lang, width, options) {

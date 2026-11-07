@@ -142,3 +142,45 @@ func TestPublicURLOnlyWhereOffered(t *testing.T) {
 		t.Errorf("no MAGPIE_PUBLIC_URL: Settings shows %q", u)
 	}
 }
+
+// jiezhengj on Discord: magpie in Docker on a NAS, MAGPIE_PUBLIC_URL at
+// the NAS's 192.168.31.218, and the page called it "Public address"
+// (公网地址) as if anyone online reached it. Settings and the Gateway page
+// say what kind of address it is, and a private one is the local
+// network's.
+func TestPublicURLSaysItsKind(t *testing.T) {
+	h := t.TempDir()
+	testenv.SetHome(t, h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(h, ".local", "share"))
+	t.Setenv("MAGPIE_ADDR", "127.0.0.1:3425")
+	if err := settings.Save(settings.Settings{LAN: true}); err != nil {
+		t.Fatal(err)
+	}
+	kind := func(v any) any {
+		b, err := json.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m map[string]any
+		if err := json.Unmarshal(b, &m); err != nil {
+			t.Fatal(err)
+		}
+		return m["publicKind"]
+	}
+	for u, want := range map[string]any{
+		"http://192.168.31.218:3425": "local",
+		"http://172.17.0.1:3425":     "local",
+		"http://203.0.113.9:3425":    "internet",
+		"https://magpie.example.com": nil,
+	} {
+		t.Setenv("MAGPIE_PUBLIC_URL", u)
+		if got := kind(providersState().Gateway); got != want {
+			t.Errorf("%s: Gateway page's publicKind %v, want %v", u, got, want)
+		}
+		if got := kind(settingsState()); got != want {
+			t.Errorf("%s: Settings' publicKind %v, want %v", u, got, want)
+		}
+	}
+}

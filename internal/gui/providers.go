@@ -549,6 +549,9 @@ type gatewayJSON struct {
 	// PublicURL is MAGPIE_PUBLIC_URL when it is among LANURLs: Connect
 	// starts there until the user picks an address (#1551)
 	PublicURL string `json:"publicURL,omitempty"`
+	// PublicKind is gateway.URLKind's of PublicURL, which Connect and
+	// the list above it name it by
+	PublicKind string `json:"publicKind,omitempty"`
 	// LANPublic are those of LANURLs at an internet address, which anyone
 	// online reaches, not only this network
 	LANPublic []string `json:"lanPublic,omitempty"`
@@ -1212,7 +1215,7 @@ func providersState() providersJSON {
 		s.Gateway.LANPublic = gateway.PublicURLs(s.Gateway.LANURLs)
 		s.Gateway.Container, s.Gateway.ContainerHost = gateway.ContainerAddrs(), gateway.ContainerHostURL()
 		if u := gateway.PublicURL(); slices.Contains(s.Gateway.LANURLs, u) {
-			s.Gateway.PublicURL = u
+			s.Gateway.PublicURL, s.Gateway.PublicKind = u, gateway.URLKind(u)
 		}
 	}
 	for _, e := range cat {

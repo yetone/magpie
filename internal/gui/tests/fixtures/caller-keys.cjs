@@ -28,8 +28,10 @@ function fixture(lang, theme, events, options = {}) {
   const lanURLs = options.lanURLs || ["http://192.168.1.10:3999", "http://10.0.0.10:3999"];
   // options.lanPublic are those of them at an internet address
   const lanPublic = () => lan && options.lanPublic ? { lanPublic: options.lanPublic } : {};
-  // options.publicURL is MAGPIE_PUBLIC_URL's, offered while shared (#1551)
-  const publicURL = () => lan && options.publicURL ? { publicURL: options.publicURL } : {};
+  // options.publicURL is MAGPIE_PUBLIC_URL's, offered while shared (#1551),
+  // and options.publicKind what kind of address it is (gateway.URLKind)
+  const publicURL = () => lan && options.publicURL ? { publicURL: options.publicURL,
+    ...(options.publicKind ? { publicKind: options.publicKind } : {}) } : {};
   // options.container: magpie runs in a container, and lanURLs are its
   // own; options.containerHost is where other containers on the host
   // reach the gateway (the host's Docker bridge address)

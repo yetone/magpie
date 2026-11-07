@@ -276,17 +276,17 @@ function renderGatewayLan() {
   // the one they reach, MAGPIE_PUBLIC_URL's, not this computer's loopback
   // (#1551)
   const shown = web && g.publicURL || g.url;
-  line(t(shown === g.url ? "This computer" : "Public address"), shown);
+  const { urls, others, sub } = gwLAN(g);
+  line(addrWho(g, shown, others), shown);
   if (g.lan) {
-    const { urls, others, sub } = gwLAN(g);
-    // an internet address on an interface (an ISP's static one) is said
-    // to be one, not listed as this network's, and the one other
-    // containers on this host use (the host's Docker bridge address) is
-    // said to be theirs
-    const far = new Set(g.lanPublic || []), rest = urls.filter((u) => u !== shown);
-    rest.filter((u) => !far.has(u) && !others.includes(u)).forEach((u, i) => line(i ? "" : t("Local network"), u));
-    rest.filter((u) => others.includes(u)).forEach((u, i) => line(i ? "" : t("Other containers on this host"), u));
-    rest.filter((u) => far.has(u) && !others.includes(u)).forEach((u, i) => line(i ? "" : t("On the internet"), u));
+    // each address named as Connect's menu names it (addrWho): this
+    // network's first, then the one other containers on this host use
+    // (the host's Docker bridge address), then one on the internet (an
+    // ISP's static one); a name said once for the lines it heads
+    const said = [addrWho(g, shown, others)], rest = urls.filter((u) => u !== shown);
+    const order = [t("Local network"), t("Public address"), t("Other containers on this host"), t("On the internet")];
+    rest.map((u) => [addrWho(g, u, others), u]).sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
+      .forEach(([who, u]) => { line(said.at(-1) === who ? "" : who, u); said.push(who); });
     if (!urls.length) list.append(el("div", "gw-url-none", t("This computer has no local network address right now")));
     if (sub) list.append(el("div", "gw-url-none", sub));
   }
@@ -545,7 +545,7 @@ function renderConnect() {
 
   const b = el("div", "val");
   if (urls.length > 1) b.append(connectPick("connectAddress", "Address", base,
-    urls.map((u) => ({ v: u, name: f.base(u), note: t(u === g.url ? "This computer" : u === g.publicURL ? "Public address" : "Local network") })), connectURL,
+    urls.map((u) => ({ v: u, name: f.base(u), note: addrWho(g, u, gwLAN(g).others) })), connectURL,
     (u) => { connectWant = u; keepPick("magpie.connectAddress", u); renderConnect(); }));
   else b.append(el("code", "", base));
   b.append(copyBtn(base, "Base URL"));
