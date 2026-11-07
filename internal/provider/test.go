@@ -51,8 +51,7 @@ func (p Provider) Test(ctx context.Context) []Result {
 	if client := testClient(ctx); client != "" {
 		// the one endpoint that agent's requests go to
 		proto := clientProto(client, p.Speaks())
-		q, ok := p.keyFor(proto)
-		model := p.testModel(q, proto)
+		q, model, ok := p.testWith(proto)
 		if why := p.TestsAs(client); why != "" {
 			return []Result{{Protocol: proto, Model: model, Error: why}}
 		}
@@ -63,14 +62,18 @@ func (p Provider) Test(ctx context.Context) []Result {
 			return []Result{{Protocol: proto, Error: zenPublicNone}}
 		}
 		url, body := tiny(q, proto, UpstreamName(p, model))
-		ctx, b := q.tested(ctx, url, asClient(client, proto, body))
+		ctx, b := q.tested(p.loggedAs(ctx, q), url, asClient(client, proto, body))
 		return []Result{probe(ctx, q, proto, url, b, model, testWait)}
 	}
 	if p.isClaudeAccount() {
-		return []Result{p.testClaude(ctx, p.testModel(p, Anthropic))}
+		model := p.testModel(p, Anthropic)
+		q := p.routedTo(model)
+		return []Result{q.testClaude(p.loggedAs(ctx, q), model)}
 	}
 	if p.testsTranslated() {
-		return []Result{p.testTranslated(ctx, p.testModel(p, CodeAssist))}
+		model := p.testModel(p, CodeAssist)
+		q := p.routedTo(model)
+		return []Result{q.testTranslated(p.loggedAs(ctx, q), model)}
 	}
 	var out []Result
 	for _, proto := range p.Speaks() {
@@ -80,8 +83,7 @@ func (p Provider) Test(ctx context.Context) []Result {
 			// on Gemini, and such a model by its own test (TestModel)
 			continue
 		}
-		q, ok := p.keyFor(proto)
-		model := p.testModel(q, proto)
+		q, model, ok := p.testWith(proto)
 		if !ok {
 			out = append(out, Result{Protocol: proto, Model: model, Error: "no key is on for this endpoint"})
 			continue
@@ -92,7 +94,7 @@ func (p Provider) Test(ctx context.Context) []Result {
 			continue
 		}
 		url, body := tiny(q, proto, UpstreamName(p, model))
-		ctx, b := q.tested(ctx, url, body)
+		ctx, b := q.tested(p.loggedAs(ctx, q), url, body)
 		out = append(out, probe(ctx, q, proto, url, b, model, testWait))
 	}
 	if len(out) == 0 && p.zenPublic() {
@@ -407,6 +409,16 @@ func (p Provider) testOne(ctx context.Context, model string) Result {
 	if why := p.TestsAs(client); why != "" {
 		return Result{Protocol: clientProto(client, p.Speaks()), Model: model, Error: why}
 	}
+	// the account a request for it goes to, not the pool's first: one
+	// the user lets serve it whose own list has it, as routing takes it
+	// (AccountsFor; #4992, scutken: a newapi pool's grok-4.7, served by
+	// its third account alone, was asked of the first and failed 503 "no
+	// available channel" while real requests were answered)
+	acct, ok := p.accountFor(model)
+	if !ok {
+		return Result{Model: model, Error: "every account that's on is set not to serve this model"}
+	}
+	ctx, p = p.loggedAs(ctx, acct), acct
 	if p.isClaudeAccount() {
 		return p.testClaude(ctx, model)
 	}
@@ -513,23 +525,95 @@ func (p Provider) testOne(ctx context.Context, model string) Result {
 	return r
 }
 
-// keySeeing is p with the key a test of model on proto goes with: one made
-// for that API, else one made for any, that sees the model. A provider
-// without keys is left as it is.
+// keySeeing is p with the key a test of model on proto goes with: of
+// the keys routing takes the model to (KeysFor: one the user lets serve
+// it, whose plan and list have it), one made for that API, else one made
+// for any. A provider without keys is left as it is.
 func (p Provider) keySeeing(proto Protocol, model string) (Provider, bool) {
-	keys := p.KeysOn()
-	if len(keys) == 0 {
+	if len(p.KeysOn()) == 0 {
 		return p, true
 	}
-	serves := p.Serving(model)
+	keys, _, _, _ := p.KeysFor(model, nil)
 	for _, want := range []Protocol{proto, ""} {
 		for _, k := range keys {
-			if k.Protocol == want && serves(k) {
-				return p.WithKey(k), true
+			if k.Protocol == want {
+				return p.WithKey(k.KeyAccount), true
 			}
 		}
 	}
 	return p, false
+}
+
+// testWith is the key or account an endpoint's test goes with, and the
+// model it asks: the first key on made for proto, else for any, with a
+// model of its to test there (one the user lets it serve, AccountModels),
+// else the first such key with none; a provider without keys, with the
+// model picked from every account's, as the account that serves it
+// (routedTo). ok is false when no key is on for proto.
+func (p Provider) testWith(proto Protocol) (Provider, string, bool) {
+	keys := p.KeysOn()
+	if len(keys) == 0 {
+		model := p.testModel(p, proto)
+		return p.routedTo(model), model, true
+	}
+	var first Provider
+	found := false
+	for _, want := range []Protocol{proto, ""} {
+		for _, k := range keys {
+			if k.Protocol != want {
+				continue
+			}
+			q := p.WithKey(k)
+			if model := p.testModel(q, proto); model != "" {
+				return q, model, true
+			}
+			if !found {
+				first, found = q, true
+			}
+		}
+	}
+	if found {
+		return first, "", true
+	}
+	return p, "", false
+}
+
+// accountFor is p as the account of its accounts on a request for model
+// goes to first (AccountsFor); ok is false when the user set every one
+// not to serve it. A provider of keys is left as it is.
+func (p Provider) accountFor(model string) (Provider, bool) {
+	if p.Account == nil {
+		return p, true
+	}
+	out, _, _ := p.AccountsFor(model, nil)
+	if len(out) == 0 {
+		return p, false
+	}
+	return out[0].Provider, true
+}
+
+// routedTo is q, the key or account an endpoint's test goes with, as the
+// account a request for model goes to: the model is picked from every
+// account's on, and asked of one that serves it (#4992). With no model,
+// or none that may serve it, q is left as it is.
+func (q Provider) routedTo(model string) Provider {
+	if model == "" {
+		return q
+	}
+	if a, ok := q.accountFor(model); ok {
+		return a
+	}
+	return q
+}
+
+// loggedAs is ctx with its test's row in the request log named for q,
+// the account the test asked, when that is another of p's than p (the
+// row says who answered, as the gateway's rows do).
+func (p Provider) loggedAs(ctx context.Context, q Provider) context.Context {
+	if q.Account == nil || p.Account != nil && q.Account.User == p.Account.User {
+		return ctx
+	}
+	return q.ownRequests(ctx, probelog.KindTest)
 }
 
 // testOn is model's test on proto's endpoint with p's key, asked for by
@@ -580,6 +664,11 @@ const zenPublicNone = "no free model of OpenCode Zen is listed for this API: the
 // Responses, and every one failed, though big-pickle answers on chat).
 func (p Provider) testModel(q Provider, proto Protocol) string {
 	k := q.first()
+	// a model the key's vendor lists it, and the user lets it serve
+	// (AccountModels, #474), as routing has it
+	sees := func(id string) bool {
+		return k.Key == "" || p.Serves(k, id) && p.AccountServes(keyID(k.Key), id)
+	}
 	public := q.zenPublic()
 	off := disabledNow() // a model the user disabled is never asked (#1867)
 	var pools [][]catalog.Model
@@ -608,7 +697,7 @@ func (p Provider) testModel(q Provider, proto Protocol) string {
 				if public && !p.OpenCodeFree(m.ID) {
 					continue
 				}
-				if !p.DecidesModel(m.ID) && !off(p.ID, m.ID) && want(m.ID) && (k.Key == "" || p.Serves(k, m.ID)) {
+				if !p.DecidesModel(m.ID) && !off(p.ID, m.ID) && want(m.ID) && sees(m.ID) {
 					return m.ID
 				}
 			}
@@ -620,7 +709,7 @@ func (p Provider) testModel(q Provider, proto Protocol) string {
 		// sends it (heatonz on Discord: a provider serving only those)
 		// or one its preset names (Voyage AI, which lists none)
 		for _, m := range append(catalog.LiveServing(p.ID, ""), p.PlanRetrieval("")...) {
-			if retrievalOf(m.ID) != "" && !off(p.ID, m.ID) && (k.Key == "" || p.Serves(k, m.ID)) {
+			if retrievalOf(m.ID) != "" && !off(p.ID, m.ID) && sees(m.ID) {
 				return m.ID
 			}
 		}

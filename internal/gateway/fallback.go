@@ -336,142 +336,100 @@ func keepAtOnce(n int, out, aside []candidate) ([]candidate, []candidate) {
 }
 
 // accountsOn are the accounts of p (signed in: p.Account) a request may
-// take, in the user's order: the one signed in to, unless the user paused
-// it for the others on (#263), then the others on; kept signed in to an
-// account of the user's choosing, the one signed in to stands at its own
-// place in the order, not first (#524). A search API that signs in as a
-// plugin's provider takes its accounts so too (search_signin.go).
+// take, in the user's order (provider.AccountsOn). A search API that
+// signs in as a plugin's provider takes its accounts so too
+// (search_signin.go).
 func accountsOn(p provider.Provider, model string) []candidate {
-	also := p.AlsoOn()
 	var all []candidate
-	if len(also) == 0 || !p.OwnPaused() {
-		all = append(all, candidate{p: p, model: model, rest: p.ID})
-	}
-	for i, q := range also {
-		all = append(all, candidate{p: q, model: model, rest: p.ID + "@" + q.Account.User, rank: i + 1})
-	}
-	if ranks := p.LoginRanks(); ranks != nil {
-		at := func(c candidate) int {
-			if r, ok := ranks[strings.ToLower(c.p.Account.User)]; ok {
-				return r
-			}
-			return len(ranks)
-		}
-		slices.SortStableFunc(all, func(a, b candidate) int { return at(a) - at(b) })
-		for i := range all {
-			all[i].rank = i
-		}
+	for _, a := range p.AccountsOn() {
+		all = append(all, accountCandidate(p, a, model, nil))
 	}
 	return all
 }
 
+// accountCandidate is a of p's accounts as a candidate for model.
+func accountCandidate(p provider.Provider, a provider.AccountOn, model string, capped *capHold) candidate {
+	rest := p.ID
+	if !a.Own {
+		rest += "@" + a.Account.User
+	}
+	return candidate{p: a.Provider, model: model, rest: rest, rank: a.Rank, capped: capped}
+}
+
+// keyCandidate is k of p's keys as a candidate for model.
+func keyCandidate(p provider.Provider, k provider.KeyOn, model string, capped *capHold) candidate {
+	rest := p.ID
+	if k.Of > 1 {
+		rest += "#" + provider.KeyID(k.Key)
+	}
+	return candidate{p: p.WithKey(k.KeyAccount), model: model, rest: rest, rank: k.Rank, capped: capped}
+}
+
 // perKeyEvery is perKeyBarred with every account or key routed over, the
-// provider's AtOnce aside.
+// provider's AtOnce aside. Which accounts or keys take the model, and in
+// what order, is provider.AccountsFor and provider.KeysFor, which a
+// model's test takes them from too (#4992); the usage and spend caps are
+// the gateway's own.
 func perKeyEvery(p provider.Provider, model string, from provider.Protocol) (out, aside, left, barred []candidate) {
 	if _, off := provider.ModelDisabled(p.ID, model); off || provider.DisabledUnknown() {
 		return nil, nil, nil, nil // the user disabled it (#1867): never planned, a fallback no more than the model asked
 	}
 	if p.Account != nil {
-		all := accountsOn(p, model)
-		all = slices.DeleteFunc(all, func(c candidate) bool {
-			if p.AccountServes(c.p.Account.User, model) {
-				return false
-			}
-			barred = append(barred, c)
-			return true
-		})
 		// an account at its usage cap is used up for routing until the
 		// window it filled renews: never tried, so groups, fallbacks and
 		// the other accounts take the request (provider/account_caps.go);
 		// so is a Codex account at 100% set not to spend its credits
 		// (provider/codex_credits.go)
-		all = slices.DeleteFunc(all, func(c candidate) bool {
-			h := capHeld(p, c.p, model, time.Now())
-			if h == nil {
-				return false
+		now := time.Now()
+		caps := map[int]*capHold{}
+		on, unlisted, off := p.AccountsFor(model, func(a provider.AccountOn) bool {
+			h := capHeld(p, a.Provider, model, now)
+			if h != nil {
+				caps[a.Rank] = h
 			}
-			c.capped = h
-			barred = append(barred, c)
-			return true
+			return h != nil
 		})
-		// an account whose plan lacks the model (a Free one behind a Plus)
-		// would only answer 400; it is tried only when none lists it
-		// (by the vendor's own id: an account's list names its models by
-		// theirs, not by one the user lists one by)
-		own := p.OwnModelID(model)
-		for _, c := range all {
-			if c.p.Account.Lists(own) {
-				out = append(out, c)
-			} else {
-				left = append(left, c)
-			}
+		for _, a := range on {
+			out = append(out, accountCandidate(p, a, model, nil))
 		}
-		if len(out) == 0 {
-			return all, nil, nil, barred
+		for _, a := range unlisted {
+			left = append(left, accountCandidate(p, a, model, nil))
+		}
+		for _, a := range off {
+			barred = append(barred, accountCandidate(p, a, model, caps[a.Rank]))
 		}
 		return out, nil, left, barred
 	}
-	keys := p.KeysOn()
-	serves := p.Serving(model) // the lists read once, not once a key (@NetRozee on X)
-	// a key on a plan of its own whose models leave this one out
-	// (KeyAccount.Plan): the Agent Plan's key is never sent the pay as
-	// you go's deepseek-v4-1-flash-261017, while a key whose plan has it
-	// can take it (yckonnnn on X)
-	planHas := p.PlanServing(model)
-	var unlisted, planless []candidate
-	var noURL provider.Protocol
-	for i, k := range keys {
-		q := p.WithKey(k)
-		if len(q.Speaks()) == 0 && !q.DecidesModel(model) {
-			if noURL == "" {
-				noURL = k.Protocol
-			}
-			continue // made for a protocol this provider has no endpoint for
+	// a key at the spend cap set on it is used up for routing until the
+	// period renews: never tried, so the other keys and the fallbacks
+	// take the request (provider/key_spend.go)
+	now := time.Now()
+	spends := map[int]*capHold{}
+	on, unlisted, off, noURL := p.KeysFor(model, func(k provider.KeyOn) bool {
+		h := spendHeld(p, k.KeyAccount, now)
+		if h != nil {
+			spends[k.Rank] = h
 		}
-		rest := p.ID
-		if len(keys) > 1 {
-			rest += "#" + provider.KeyID(k.Key)
-		}
-		if !p.AccountServes(provider.KeyID(k.Key), model) {
-			barred = append(barred, candidate{p: q, model: model, rest: rest, rank: i})
-			continue
-		}
-		// a key at the spend cap set on it is used up for routing until
-		// the period renews: never tried, so the other keys and the
-		// fallbacks take the request (provider/key_spend.go)
-		if h := spendHeld(p, k, time.Now()); h != nil {
-			barred = append(barred, candidate{p: q, model: model, rest: rest, rank: i, capped: h})
-			continue
-		}
-		if !planHas(k) {
-			planless = append(planless, candidate{p: q, model: model, rest: rest, rank: i})
-			continue
-		}
-		if !serves(k) {
-			// the vendor lists the model to another key only
-			unlisted = append(unlisted, candidate{p: q, model: model, rest: rest, rank: i})
-			continue
-		}
-		out = append(out, candidate{p: q, model: model, rest: rest, rank: i})
+		return h != nil
+	})
+	for _, k := range off {
+		barred = append(barred, keyCandidate(p, k, model, spends[k.Rank]))
 	}
-	if len(out) == 0 {
-		out, unlisted = unlisted, nil // no key lists it: try them all the same
-	}
-	if len(out) == 0 {
-		// no key's plan has it as magpie knows the plans: a model the
-		// vendor added since, tried on them all the same. Else a key
-		// whose plan lacks it is never asked, not even after the others
-		// refused it: its endpoint has no such model either
-		out = planless
-	}
-	if len(out) == 0 && len(barred) > 0 {
+	if len(on) == 0 && len(barred) > 0 {
 		return nil, nil, nil, barred
 	}
-	if len(out) == 0 {
+	if len(on) == 0 {
 		// every key is set to a protocol the provider has no URL for (or
 		// it has none on): the provider as it is, on the URLs it has,
 		// marked so Routing says so rather than sending it there quietly
 		return []candidate{{p: p, model: model, rest: p.ID, noURL: noURL}}, nil, nil, nil
+	}
+	for _, k := range on {
+		out = append(out, keyCandidate(p, k, model, nil))
+	}
+	var rest []candidate
+	for _, k := range unlisted {
+		rest = append(rest, keyCandidate(p, k, model, nil))
 	}
 	sort.SliceStable(out, func(i, j int) bool { return keyFit(out[i].p, model, from) < keyFit(out[j].p, model, from) })
 	pool := out[:0:0]
@@ -482,7 +440,7 @@ func perKeyEvery(p provider.Provider, model string, from provider.Protocol) (out
 			aside = append(aside, c)
 		}
 	}
-	return pool, aside, unlisted, barred
+	return pool, aside, rest, barred
 }
 
 // keyFit ranks how well a key suits a request, best first: 0 fits, 1 needs
