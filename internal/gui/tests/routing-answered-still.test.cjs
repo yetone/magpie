@@ -118,10 +118,31 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const live = [...document.querySelectorAll(".rt-wires path.live[d]")], copies = [...document.querySelectorAll(".rt-flows path[d]")];
           return {
             hidden: live.filter((p) => getComputedStyle(p).visibility === "hidden" && getComputedStyle(p).animationName === "none").length,
-            moving: copies.filter((p) => getComputedStyle(p).animationName === "rtflow").length,
+            animated: copies.filter((p) => getComputedStyle(p).animationName !== "none").length,
             layer: getComputedStyle(document.querySelector(".rt-flows")).willChange,
           };
-        }), { hidden: 2, moving: 2, layer: "transform" });
+        }), { hidden: 2, animated: 0, layer: "transform" });
+        // the copies' dashes move, from a timer 15 times a second and not
+        // a CSS animation, which Chromium drew on the main thread every
+        // frame: with five requests in flight that was a quarter of a core
+        // in WebView2 (chenxiang, #5467). The dot held at the account fades
+        // from the same timer, not a CSS animation either.
+        const offsets = () => page.evaluate(() => [...document.querySelectorAll(".rt-flows path[d]")].map((p) => getComputedStyle(p).strokeDashoffset).join());
+        const was = await offsets();
+        await page.waitForFunction((was) => [...document.querySelectorAll(".rt-flows path[d]")].map((p) => getComputedStyle(p).strokeDashoffset).join() !== was, was);
+        const ticks = await page.evaluate(() => new Promise((res) => {
+          let n = 0;
+          const o = new MutationObserver(() => n++);
+          o.observe(document.querySelector(".rt-flows"), { attributes: true, attributeFilter: ["style"] });
+          setTimeout(() => { o.disconnect(); res(n); }, 1000);
+        }));
+        assert(ticks >= 1 && ticks <= 30, `the dashes moved ${ticks} times in a second, not every frame`);
+        // the dot let go at the account fades and comes back, by the timer
+        await page.waitForFunction(() => document.querySelector(".rt-sky .pkt.held"), null, { timeout: 15000 });
+        assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector(".rt-sky .pkt.held")).animationName), "none");
+        const fade = () => page.evaluate(() => getComputedStyle(document.querySelector(".rt-sky .pkt.held")).opacity);
+        const fadeWas = await fade();
+        await page.waitForFunction((was) => getComputedStyle(document.querySelector(".rt-sky .pkt.held")).opacity !== was, fadeWas);
         assert.match((await fold.locator("em").textContent()).trim(), new RegExp("^ag-2: " + (await say("answering…")).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 
         // opened, the key with the request is the one that flows
@@ -140,6 +161,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(s.lit, 2, "the fold's wire and the key's");
         await page.waitForFunction(() => !document.querySelector(".rt-flows path"));
         assert.equal(await page.locator(".rt-wires path.flown").count(), 0);
+        // and nothing flowing, the timer is gone: --rt-dash is let go and
+        // set no more
+        await page.waitForFunction(() => !document.querySelector(".rt-flows").style.getPropertyValue("--rt-dash"));
+        assert.equal(await page.evaluate(() => new Promise((res) => {
+          let n = 0;
+          const o = new MutationObserver(() => n++);
+          o.observe(document.querySelector(".rt-flows"), { attributes: true, attributeFilter: ["style"] });
+          setTimeout(() => { o.disconnect(); res(n); }, 400);
+        })), 0);
 
         // a reload shows it the same: lit and still
         await page.reload();

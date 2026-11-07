@@ -1904,6 +1904,34 @@ function routingPage(part) {
   // GPU each frame one flowed, 31 fps with both groups open (#3164)
   const flowing = new Map();
   let flowAsked = 0, sight = null, scrolled = 0;
+  // The copies' dashes move 8px each .7s (--rt-dash on flows), and a dot
+  // held at an account while it answers fades to .45 and back each 1.2s
+  // (--rt-held on sky), both set from a timer 15 times a second, not by
+  // CSS animations: Chromium draws an animated dash offset, or an SVG
+  // dot's opacity under its drop shadow, on the main thread every frame,
+  // and each flowing wire spans the stage. With five requests in flight
+  // the Routing page took a quarter of a core and more in WebView2
+  // (chenxiang, #5467). The timer runs only while a wire flows or a dot
+  // is held, in sight and with motion on.
+  const SLOW_EVERY = 1000 / 15;
+  let slowTimer = 0;
+  const slowNeeded = () => (flowing.size > 0 || holds.size > 0) && shown() && !still();
+  function slowTick() {
+    if (!slowNeeded()) {
+      // stopped where it was, a dot held on would stay faded and still
+      clearInterval(slowTimer); slowTimer = 0;
+      flows.style.removeProperty("--rt-dash"); sky.style.removeProperty("--rt-held");
+      return;
+    }
+    const now_ = performance.now();
+    if (flowing.size) flows.style.setProperty("--rt-dash", (-(now_ % 700) / 700 * 8).toFixed(2) + "px");
+    if (holds.size) sky.style.setProperty("--rt-held", (1 - .55 * (1 - Math.cos(2 * Math.PI * (now_ % 1200) / 1200)) / 2).toFixed(3));
+  }
+  function slowMove() {
+    if (slowTimer || !slowNeeded()) return;
+    slowTick();
+    slowTimer = setInterval(slowTick, SLOW_EVERY);
+  }
   const flowSoon = () => { if (!flowAsked) flowAsked = requestAnimationFrame(() => { flowAsked = 0; flowNear(); }); };
   function flowNear() {
     const live = new Set([...wires.querySelectorAll("path.live[d]")].filter((p) => !p.classList.contains("rest")));
@@ -1929,6 +1957,7 @@ function routingPage(part) {
       if (dash) f.copy.style.setProperty("stroke-dasharray", dash);
       else f.copy.style.removeProperty("stroke-dasharray");
     }
+    slowMove();
   }
   // dashFor is a wire's dashes from top to bottom, measured from its d,
   // which is magpie's own M, L, Q and C: WebKit's getPointAtLength took
@@ -5010,6 +5039,7 @@ function routingPage(part) {
         dot.classList.add("held");
         holds.set(dot, row);
         holdAll();
+        slowMove();
         await until(() => g !== gen || rt().tries[i].done);
         holds.delete(dot);
         if (g !== gen) break;
@@ -5333,6 +5363,7 @@ function routingPage(part) {
   // Visibility events can arrive after the browser has suspended frames, so
   // finish hidden work here too. The first visible frame alone owns resume.
   function start() {
+    slowMove();
     const waking = !!sightWait; // the poll waited: it reads what came meanwhile
     inSightAgain();
     countdown();

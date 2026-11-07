@@ -22,7 +22,9 @@
    the wires that don't move aren't drawn again each frame (#3164) */
 .rt-wires path.flown { visibility: hidden; animation: none; }
 .rt-flows { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; will-change: transform; }
-.rt-flows path { fill: none; stroke: var(--agent, var(--muted)); stroke-width: 1.5; stroke-dasharray: 3 5; animation: rtflow .7s linear infinite; }
+/* its dashes move by --rt-dash, which a timer sets 15 times a second
+   (slowTick): an animated offset was drawn again every frame */
+.rt-flows path { fill: none; stroke: var(--agent, var(--muted)); stroke-width: 1.5; stroke-dasharray: 3 5; stroke-dashoffset: var(--rt-dash, 0); }
 @keyframes rtflow { to { stroke-dashoffset: -8; } }
 /* the magpies: one carries each request out, another brings its answer
    back — the dot at the tip of its beak. They fly along the wires and
@@ -37,8 +39,9 @@
 .rt-sky .pkt.back { fill: var(--card); stroke: var(--agent, var(--fg)); stroke-width: 2.25; }
 .rt-sky .pkt.back.err { fill: var(--agent, var(--card)); stroke: var(--red); }
 .rt-sky path.via { fill: none; stroke: none; }
-.rt-sky .pkt.held { animation: rtheld 1.2s ease-in-out infinite; }
-@keyframes rtheld { 50% { opacity: .45; } }
+/* a dot held at an account fades by --rt-held, from the same timer: an
+   animated opacity under its shadow was drawn again every frame */
+.rt-sky .pkt.held { opacity: var(--rt-held, 1); }
 .rt-flier { color: var(--fg); }
 .rt-flier .body, .rt-flier .tail, .rt-flier .wing path:first-child, .rt-flier .wing.far { fill: currentColor; }
 .rt-flier .wing.far { opacity: .45; }
@@ -242,7 +245,7 @@
 .rt-time .vendor { --rt-time: var(--fg-2); }
 .rt-off { padding: 18px 4px; text-align: center; color: var(--muted); font-size: 13px; }
 @media (prefers-reduced-motion: reduce) {
-  .rt-wires path.live, .rt-flows path, .rt-sky .pkt.held, .rt-accts li.new, .rt-accts li.hit, .rt-hub.tick, .rt-src.tick, .rt-cap.in, .masking .pii { animation: none; }
+  .rt-wires path.live, .rt-accts li.new, .rt-accts li.hit, .rt-hub.tick, .rt-src.tick, .rt-cap.in, .masking .pii { animation: none; }
   .rt-accts li.now .dot::after, .rt-steps li.wait::after { animation: none; }
   .rt-accts li { transition: none; }
 }
