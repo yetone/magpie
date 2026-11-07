@@ -169,6 +169,18 @@ func ccProviderJSONAt(v1 string) any {
 		case len(m.Efforts) == 0 && m.Reasoning:
 			e["reasoning"] = true
 		}
+		// Command Code reads the window and the reply limit from this file
+		// alone — its own catalog keys on the bare vendor id and never
+		// matches "magpie/provider/model" (#5567) — and without them serves
+		// every model as its 200K default, compacting a 1M-window one long
+		// before it has to. Its names for the pair are contextWindow and
+		// maxOutput (its BYOK reference).
+		if m.Context > 0 {
+			e["contextWindow"] = m.Context
+		}
+		if m.Output > 0 {
+			e["maxOutput"] = maxTokens(m)
+		}
 		ms[m.ID] = e
 	}
 	return map[string]any{"name": "magpie", "api": "openai-completions", "baseURL": v1, "apiKey": false, "models": ms}

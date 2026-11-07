@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -67,5 +68,70 @@ func TestCommandCode(t *testing.T) {
 	s, p = read(settingsPath), read(providersPath)
 	if s["model"] != nil || s["modelProvider"] != nil || s["theme"] != "dark" || p["provider"].(map[string]any)["magpie"] != nil {
 		t.Fatalf("reset: %v %v", s, p)
+	}
+}
+
+// Command Code reads a model's window and reply limit from providers.json
+// alone — its catalog lookup keys on the bare vendor id and never matches
+// magpie's "magpie/provider/model", and it cannot interrogate the gateway's
+// /v1/models — so a model with no contextWindow there is served to it as
+// Command Code's own 200K default, a 1M-window one included (#5567). The
+// limits are those every other writer in this package hands out (m.Context,
+// maxTokens), and a model that declares no output carries none.
+func TestCommandCodeModelLimits(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.SaveLive("deepseek", "https://api.deepseek.com/v1", []catalog.Model{
+		{ID: "pro", Context: 1048576, Output: 393216, Reasoning: true},
+		{ID: "flash", Context: 1000000},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	f := commandCode(home).Field("model")
+	if err := f.Set("magpie/deepseek/pro"); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(home, ".commandcode", "providers.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var written struct {
+		Provider struct {
+			Magpie struct {
+				Models map[string]map[string]any `json:"models"`
+			} `json:"magpie"`
+		} `json:"provider"`
+	}
+	if err := json.Unmarshal(b, &written); err != nil {
+		t.Fatal(err)
+	}
+	model := func(id string) map[string]any {
+		t.Helper()
+		m, ok := written.Provider.Magpie.Models[id]
+		if !ok {
+			t.Fatalf("%s not in %v", id, written.Provider.Magpie.Models)
+		}
+		return m
+	}
+	if got := model("deepseek/pro")["contextWindow"]; got != float64(1048576) {
+		t.Fatalf("pro contextWindow %v, want 1048576", got)
+	}
+	if got := model("deepseek/pro")["maxOutput"]; got != float64(393216) {
+		t.Fatalf("pro maxOutput %v, want 393216", got)
+	}
+	if got := model("deepseek/flash")["contextWindow"]; got != float64(1000000) {
+		t.Fatalf("flash contextWindow %v, want 1000000", got)
+	}
+	if got, ok := model("deepseek/flash")["maxOutput"]; ok {
+		t.Fatalf("flash carries maxOutput %v with no output declared", got)
+	}
+	if model("deepseek/pro")["reasoning"] != true {
+		t.Fatalf("pro reasoning %v, want true", model("deepseek/pro")["reasoning"])
 	}
 }
