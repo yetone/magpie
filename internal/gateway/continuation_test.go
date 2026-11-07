@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // cutChat is a Chat upstream that severs the reply mid-stream on the calls
@@ -649,9 +650,9 @@ func TestStreamCutPrefillRefusedEndsAsBefore(t *testing.T) {
 	}
 }
 
-// The tries are each billed, so the reply's usage — the client's and the
-// ledger's — sums them: the cut try's prompt with the continuation's.
-func TestStreamCutUsageSumsTries(t *testing.T) {
+// The tries are each billed in the ledger, and the client is told the
+// last try's prompt: the continuation re-sent the cut try's.
+func TestStreamCutUsageTellsLastTry(t *testing.T) {
 	f := &cutAnthropic{
 		cuts:  map[int][]string{0: {anthStart("m", 7), anthText("hel")}},
 		whole: []string{anthStart("m", 11), anthText("lo"), anthStop(4)},
@@ -661,8 +662,13 @@ func TestStreamCutUsageSumsTries(t *testing.T) {
 	if u == nil {
 		t.Fatalf("no usage in the stream: %s", body)
 	}
-	if u["prompt_tokens"] != 18.0 || u["completion_tokens"] != 4.0 {
-		t.Fatalf("usage = %v, want the tries summed: prompt 7+11=18, completion 4", u)
+	// the client is told the continuation's prompt, which holds the cut
+	// try's; both are billed (sleepy_shibe, #5115)
+	if u["prompt_tokens"] != 11.0 || u["completion_tokens"] != 4.0 {
+		t.Fatalf("usage = %v, want the last try's prompt 11, completion 4", u)
+	}
+	if r := usage.Load(time.Time{}); len(r) != 1 || r[0].Input != 18 {
+		t.Fatalf("ledger %+v, want both tries billed: 7+11=18", r)
 	}
 }
 

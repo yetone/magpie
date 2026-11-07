@@ -192,7 +192,7 @@ func TestWebSearchForAModelThatCannot(t *testing.T) {
 	if rec.Code != 200 || len(res.Choices) != 1 || res.Choices[0].Message.Content != "Let me check.\n\nGo 1.27.1 is out." || len(res.Choices[0].Message.ToolCalls) != 0 || res.Choices[0].FinishReason != "stop" {
 		t.Fatalf("%d %s", rec.Code, rec.Body.String())
 	}
-	if res.Usage.Prompt != 40 || res.Usage.Completion != 12 {
+	if res.Usage.Prompt != 10 || res.Usage.Completion != 12 { // the last round's prompt, both rounds' output
 		t.Fatalf("usage %+v", res.Usage)
 	}
 
@@ -295,8 +295,10 @@ func TestSearchZeroCacheSplitKeepsWrites(t *testing.T) {
 	}
 	client := newSniffer(provider.Anthropic, "text/event-stream")
 	client.write(w.Body.Bytes())
-	if client.u.CacheWrite != 50 {
-		t.Fatalf("zero delta after search round reduced client cache writes: got %d, want 50", client.u.CacheWrite)
+	// the client is told the last round's writes, the first round's
+	// billed with them
+	if client.u.CacheWrite != 20 {
+		t.Fatalf("zero delta after search round reduced client cache writes: got %d, want the last round's 20", client.u.CacheWrite)
 	}
 }
 

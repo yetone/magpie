@@ -17,7 +17,9 @@ import (
 const (
 	zeroSplitBefore = `"cache_creation_input_tokens":30,"cache_creation":{"ephemeral_5m_input_tokens":20,"ephemeral_1h_input_tokens":10}`
 	zeroSplitStart  = `"cache_creation_input_tokens":20,"cache_creation":{"ephemeral_5m_input_tokens":15,"ephemeral_1h_input_tokens":5}`
-	zeroSplitDelta  = `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":7,"cache_creation_input_tokens":20,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0}}}`
+	// zeroSplitBefore1h is the first request's 1h writes in zeroSplitBefore
+	zeroSplitBefore1h = 10
+	zeroSplitDelta    = `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":7,"cache_creation_input_tokens":20,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0}}}`
 )
 
 func cacheSplitRoundStart(fields string) string {
@@ -54,8 +56,9 @@ func checkCacheContinuation(t *testing.T, delta string, hour int) {
 	}
 	u := chatUsageOf(body)
 	details, _ := u["prompt_tokens_details"].(map[string]any)
-	if details["cache_write_tokens"] != 50.0 {
-		t.Errorf("client cache writes=%v, want50", details["cache_write_tokens"])
+	// the client is told the last try's writes, the ledger every try's
+	if details["cache_write_tokens"] != 20.0 {
+		t.Errorf("client cache writes=%v, want the last try's 20", details["cache_write_tokens"])
 	}
 	wantCacheLedger(t, hour)
 }
@@ -116,8 +119,8 @@ func checkCacheSearch(t *testing.T, delta string, hour int) {
 			client := newSniffer(provider.Anthropic, w.Header().Get("Content-Type"))
 			client.write(w.Body.Bytes())
 			u := client.usage()
-			if u.CacheWrite != 50 || u.CacheWrite1h != hour {
-				t.Errorf("client writes: %d/hour%d, want50/hour%d", u.CacheWrite, u.CacheWrite1h, hour)
+			if u.CacheWrite != 20 || u.CacheWrite1h != hour-zeroSplitBefore1h {
+				t.Errorf("client writes: %d/hour%d, want the last round's 20/hour%d", u.CacheWrite, u.CacheWrite1h, hour-zeroSplitBefore1h)
 			}
 			wantCacheLedger(t, hour)
 		})
@@ -151,7 +154,9 @@ func TestProbe1717BridgeTotalZeroSplit(t *testing.T) {
 		}
 	}
 	<-done
-	if client.CacheWrite1h != 15 {
-		t.Errorf("1h writes = %d, want 15 (10 from the first message + 5 from the second's message_start)", client.CacheWrite1h)
+	// told the second message's, billed both: 10 from the first + 5 from
+	// the second's message_start
+	if client.CacheWrite1h != 5 || client.billed().CacheWrite1h != 15 {
+		t.Errorf("1h writes = %d told, %d billed; want 5 and 15", client.CacheWrite1h, client.billed().CacheWrite1h)
 	}
 }

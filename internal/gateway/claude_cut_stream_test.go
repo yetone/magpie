@@ -111,8 +111,9 @@ func TestClaudeCutStreamGoesOnInRetry(t *testing.T) {
 	if text != "the answer" || stop != "end_turn" || ended != "stop" || !ok {
 		t.Fatalf("reply %q stop %q, run ended %q %v:\n%s", text, stop, ended, ok, raw)
 	}
-	// both attempts were made, and are counted
-	if out != 12005 || write != 467708 {
+	// both attempts' output was made, and is counted; the prompt told is
+	// the retry's, which read what the cut attempt wrote (sleepy_shibe)
+	if out != 12005 || write != 0 {
 		t.Fatalf("usage: %d out, %d written:\n%s", out, write, raw)
 	}
 }

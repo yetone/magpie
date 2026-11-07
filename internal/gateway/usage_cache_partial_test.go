@@ -60,8 +60,11 @@ func checkCacheBridge(t *testing.T, delta string, hour int) {
 		}
 	}
 	<-done
-	if client.CacheWrite != 50 || client.CacheWrite1h != hour {
-		t.Errorf("client writes: %d/hour%d, want50/hour%d", client.CacheWrite, client.CacheWrite1h, hour)
+	if client.CacheWrite != 20 || client.CacheWrite1h != hour-zeroSplitBefore1h {
+		t.Errorf("client writes: %d/hour%d, want the last message's 20/hour%d", client.CacheWrite, client.CacheWrite1h, hour-zeroSplitBefore1h)
+	}
+	if b := client.billed(); b.CacheWrite != 50 || b.CacheWrite1h != hour {
+		t.Errorf("billed writes: %d/hour%d, want50/hour%d", b.CacheWrite, b.CacheWrite1h, hour)
 	}
 }
 

@@ -483,6 +483,10 @@ type Usage struct {
 	// provider's own tool (searchTally), for the request log's Web search
 	// rows; told nowhere else
 	searches int
+	// restart: the usage of a request that goes on with a reply another
+	// began (after): its prompt counts are the reply's from now on, a
+	// zero too, as what the earlier one counted is the reply's Deferred
+	restart bool
 
 	Reasoning int `json:"reasoning"`
 	// Served: the model the vendor's reply says answered, when it named
@@ -545,6 +549,9 @@ func (u Usage) prompt() int {
 }
 
 func (u *Usage) add(v Usage) {
+	if v.restart {
+		u.Input, u.CacheRead, u.CacheWrite, u.CacheWrite1h = v.Input, v.CacheRead, v.CacheWrite, v.CacheWrite1h
+	}
 	if v.Input > 0 {
 		u.Input = v.Input
 	}

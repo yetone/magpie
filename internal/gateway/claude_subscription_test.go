@@ -323,7 +323,8 @@ func TestClaudeOwnWebSearchStaysInside(t *testing.T) {
 	if s := strings.Join(got, "|"); s != "start:m1|text:Let me look. |text:Go 1.27.1|stop:stop" {
 		t.Fatalf("events: %s", s)
 	}
-	if usage.Input != 40 || usage.Output != 12 {
+	// the prompt told is the answering message's, both billed
+	if usage.Input != 30 || usage.Output != 12 || usage.billed().Input != 40 {
 		t.Fatalf("usage: %+v", usage)
 	}
 }

@@ -434,6 +434,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 	said, stop := false, ""
 	var kept []Event       // the reply's end, while nothing is said in it
 	var before, this Usage // what the tries before this one billed, and this try
+	tried := false         // a try began: the next one's prompt is the reply's (restart)
 	// spoke: the reply has said something, a text or a call; relooped: this
 	// try's reasoning was found stuck in a loop before it had, and it is
 	// let go to ask again (loopReasks)
@@ -483,11 +484,14 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 			}
 			errSent = true
 		case KStart:
-			// the tries are each billed, so their usages are summed into
-			// the reply's — the client's and the ledger's (a cut try's is
+			// the tries are each billed: the earlier ones' prompts as the
+			// reply's Deferred, their output with this one's (after); the
+			// client is told this try's prompt (a cut try's counts are
 			// only what it said before the cut)
 			this = ev.Usage
-			ev.Usage = ev.Usage.plus(before, false)
+			ev.Usage = ev.Usage.after(before, false)
+			ev.Usage.restart = tried
+			tried = true
 			u.add(ev.Usage)
 			u.add(Usage{Served: ev.Model}) // the model the vendor says answered
 		case KUsage:

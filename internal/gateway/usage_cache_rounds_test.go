@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // anthCacheStart reports the writes billed for one Anthropic round.
@@ -36,22 +39,26 @@ func TestStreamCutZeroCacheSplitKeepsWrites(t *testing.T) {
 	}
 	u := chatUsageOf(body)
 	details, _ := u["prompt_tokens_details"].(map[string]any)
-	if got := details["cache_write_tokens"]; got != 50.0 {
-		t.Fatalf("zero delta after cut try reduced client cache writes: got %v, want 50; usage %v", got, u)
+	// told the continuation's writes, billed both tries'
+	if got := details["cache_write_tokens"]; got != 20.0 {
+		t.Fatalf("zero delta after cut try reduced client cache writes: got %v, want the last try's 20; usage %v", got, u)
+	}
+	if r := usage.Load(time.Time{}); len(r) != 1 || r[0].CacheWrite != 50 {
+		t.Fatalf("ledger %+v, want both tries' writes billed: 50", r)
 	}
 }
 
 func TestClaudeInternalMessagesKeepCacheWrites(t *testing.T) {
 	for _, tc := range []struct {
 		name, before, start, delta string
-		hour                       int
+		hour, told                 int
 	}{
 		{"zeroDelta", `"cache_creation_input_tokens":30`,
 			`"cache_creation_input_tokens":20,"cache_creation":{"ephemeral_5m_input_tokens":20,"ephemeral_1h_input_tokens":0}`,
-			`"cache_creation_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0}`, 0},
+			`"cache_creation_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0}`, 0, 20},
 		{"pure5mAfterHour", `"cache_creation_input_tokens":20,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":20}`,
 			`"cache_creation_input_tokens":30,"cache_creation":{"ephemeral_5m_input_tokens":30,"ephemeral_1h_input_tokens":0}`,
-			`"cache_creation_input_tokens":30,"cache_creation":{"ephemeral_5m_input_tokens":30,"ephemeral_1h_input_tokens":0}`, 20},
+			`"cache_creation_input_tokens":30,"cache_creation":{"ephemeral_5m_input_tokens":30,"ephemeral_1h_input_tokens":0}`, 20, 30},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ev := func(e string) string { return `{"type":"stream_event","event":` + e + `}` }
@@ -93,10 +100,14 @@ func TestClaudeInternalMessagesKeepCacheWrites(t *testing.T) {
 			if starts != 1 || stops != 1 || text != "answer" {
 				t.Fatalf("internal messages did not produce one reply: starts=%d stops=%d text=%q", starts, stops, text)
 			}
-			if client.CacheWrite != 50 || client.CacheWrite1h != tc.hour || client.Output != 12 {
-				t.Fatalf("internal-message usage = writes %d/%d, output %d; want 50/%d, 12", client.CacheWrite, client.CacheWrite1h, client.Output, tc.hour)
+			// told the answering message's writes, billed both messages'
+			if client.CacheWrite != tc.told || client.CacheWrite1h != 0 || client.Output != 12 {
+				t.Fatalf("internal-message usage = writes %d/%d, output %d; want the last message's %d/0, 12", client.CacheWrite, client.CacheWrite1h, client.Output, tc.told)
 			}
-			wantUsageSplit(t, client, &aCacheCreation{Ephemeral5m: 50 - tc.hour, Ephemeral1h: tc.hour})
+			if b := client.billed(); b.CacheWrite != 50 || b.CacheWrite1h != tc.hour {
+				t.Fatalf("billed writes %d/%d, want 50/%d", b.CacheWrite, b.CacheWrite1h, tc.hour)
+			}
+			wantUsageSplit(t, client, &aCacheCreation{Ephemeral5m: tc.told})
 		})
 	}
 }

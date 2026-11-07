@@ -272,10 +272,26 @@ reader (`run.onCall`). Not shown from the transcript within `callFirst`
 it), the call is a reply of its own: a message with that one `tool_use`
 (Claude Code makes its MCP calls one at a time, a message's parallel
 calls too). The first message written after such a call is the one that
-made it. Its rows are left out (`lateID`), and its usage is told with the
+made it. Its rows are left out (`lateID`), and its usage is billed with the
 next reply. A call in that message that wasn't made yet becomes its own
 reply when it is made (`written`). A reply told this way has no words or
 thinking: the model's text before its call is lost to the client.
+
+A reply that more than one message makes (a late message, Claude Code's
+own ToolSearch or WebSearch, a cut stream's retry) tells its client the
+last message's input, cache writes and cache reads, and every message's
+output (`Usage.after`). Claude Code reads the last reply's three as how
+full the conversation is, and each message re-sent what the one before
+it had: summed, a reply after a ToolSearch read 1,154,857 cached tokens
+for a 577k conversation and Claude Code compacted early (sleepy_shibe on
+Discord). The earlier messages' prompts go in `Usage.Deferred`, billed in
+the ledger and never told. The translated route's tries (the empty reply
+asked again, a loop's re-ask, a cut reply's continuation) and web search
+rounds tell theirs the same way (#5115). A later message's prompt counts
+replace the earlier's, a zero too (`Usage.restart`), so a field the later
+one reads nothing in is not left at the earlier's (`TestClaudeOwnCallReplyTellsLastPrompt`,
+`TestClaudeTUILateMessagePromptNotTold`, `TestRetriedReplyTellsLastPrompt`,
+`TestLaterTryZeroCacheReadNotTold`).
 
 The user's own `~/.claude.json` and `~/.claude` are never written by
 magpie (Claude Code writes them, as when it records its onboarding done,

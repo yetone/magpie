@@ -3579,7 +3579,8 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 	var refusedDetails []byte // its stop_details, told only if it stands
 	replyModel := ""          // the model the reply began with
 	// what the messages before cost, as each message's usage counts only
-	// itself and the client keeps the last it is told
+	// itself and the client keeps the last it is told: their output is
+	// told with this one's, their prompt billed only (after)
 	var before, this Usage
 	var lateUsage cliUsage    // a message left out as told by its call (onCall)
 	var reqID, errKind string // the last request's id, and how it failed
@@ -3714,7 +3715,10 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			before, this = before.plus(this, false), Usage{}
 			// Claude Code's fallback model answering: a reply told
 			// whole names it; a stream named its model as it began
+			// its prompt is the reply's, the messages before billed as
+			// its Deferred (after)
 			v := usage(u)
+			v.restart = true
 			if model == replyModel {
 				model = ""
 			}
@@ -4273,8 +4277,6 @@ type cliUsage struct {
 	} `json:"output_tokens_details"`
 }
 
-// plus adds v's counts to u's; only to those u has, when it only updates
-// what the client was told.
 // claudeLimits are the allowance windows a rate_limit_event's info tells:
 // each of its unifiedWindows, and the one it is about, when that says how
 // much is used or that it turned the request away.
@@ -4309,14 +4311,48 @@ func claudeLimits(raw json.RawMessage) []provider.ClaudeLimit {
 }
 
 // carryUpdate keeps this message's known 1h writes when a partial split
-// reports only 5m counts, then adds usage from earlier messages.
+// reports only 5m counts, then adds usage from earlier messages
+// (after).
 func (u Usage) carryUpdate(this, before Usage) Usage {
 	if u.CacheWrite1h == 0 && u.cacheCreationHasCounts {
 		u.CacheWrite1h = this.CacheWrite1h
 	}
-	return u.plus(before, true)
+	return u.after(before, true)
 }
 
+// after is u, the usage of the request answering now, as told the
+// client of a reply that earlier requests began (before): another try,
+// the message after Claude Code's own tool call, a search round. What
+// they wrote out was streamed to the client as it came, so their output
+// and reasoning are added to this one's. Their prompt (input, cache
+// reads and writes) is billed as the reply's Deferred and never told as
+// its own: a client reads the last reply's prompt back as how full its
+// conversation is, and each later request re-sent what the earlier one
+// had, so a reply told the sum read twice its size and Claude Code
+// compacted early (sleepy_shibe on Discord; WorkBuddy, #5115). update
+// is whether u only updates what the client was told (a message_delta),
+// so only the counts it has are added to.
+func (u Usage) after(before Usage, update bool) Usage {
+	b := before.billed()
+	u = u.plus(Usage{Output: b.Output, Reasoning: b.Reasoning}, update)
+	if b.Input+b.CacheRead+b.CacheWrite+b.CacheWrite1h == 0 {
+		return u
+	}
+	d := Usage{Input: b.Input, CacheRead: b.CacheRead, CacheWrite: b.CacheWrite, CacheWrite1h: b.CacheWrite1h}
+	if own := u.Deferred; own != nil {
+		d.Input += own.Input
+		d.Output += own.Output
+		d.CacheRead += own.CacheRead
+		d.CacheWrite += own.CacheWrite
+		d.CacheWrite1h += own.CacheWrite1h
+		d.Reasoning += own.Reasoning
+	}
+	u.Deferred = &d
+	return u
+}
+
+// plus adds v's counts to u's; only to those u has, when it only updates
+// what the client was told.
 func (u Usage) plus(v Usage, only bool) Usage {
 	if only && u.CacheWrite > 0 && !u.cacheCreationHasCounts && u.CacheWrite1h == 0 {
 		u.cacheCreationReported = false

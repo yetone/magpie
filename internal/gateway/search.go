@@ -1331,8 +1331,11 @@ func (s *Server) searchRounds(ctx context.Context, q *Request, tool string, in <
 			col.add(ev)
 			switch ev.Kind {
 			case KStart:
+				// a round's prompt is told, the rounds before billed as
+				// the reply's Deferred (after)
 				this = ev.Usage
-				ev.Usage = ev.Usage.plus(before, false)
+				ev.Usage = ev.Usage.after(before, false)
+				ev.Usage.restart = started
 				if started {
 					ev = Event{Kind: KUsage, Usage: ev.Usage}
 				}
