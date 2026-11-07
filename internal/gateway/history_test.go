@@ -87,6 +87,38 @@ func TestHistoryKeepsDaysAndDropsOld(t *testing.T) {
 	}
 }
 
+// Today's plain file, however big, takes no room from the days before it:
+// it is kept whatever its size, and is a fraction of it once gzipped. A busy
+// day counted plain dropped every day before it, and the Context tab
+// listed only today's sessions (linkaww on Discord).
+func TestHistoryTodayTakesNoRoomFromPastDays(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	now := historyNoon(t)
+	dir := HistoryDir()
+	saveRoute(Route{ID: 1, Time: now, Model: "a", Done: true})
+	var want []string
+	for i := 3; i >= 1; i-- {
+		day := now.AddDate(0, 0, -i).Format(dayForm)
+		if err := os.WriteFile(filepath.Join(dir, day+".jsonl.gz"), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		want = append(want, day)
+	}
+	want = append(want, now.Format(dayForm))
+	// today's file past the whole budget (sparse: no bytes written)
+	if err := os.Truncate(filepath.Join(dir, now.Format(dayForm)+".jsonl"), historyBytes+1); err != nil {
+		t.Fatal(err)
+	}
+	pruneHistory(dir, now)
+	var left []string
+	for _, d := range historyFiles(dir) {
+		left = append(left, d.day)
+	}
+	if !slices.Equal(left, want) {
+		t.Fatalf("kept %v, want %v: the days before today dropped for today's size", left, want)
+	}
+}
+
 // A route that began on a day gzipped already, its reply streamed past
 // midnight and past that hour's prune, is kept with the day's other
 // routes: its file is added to the day's .gz, not written over it, and the

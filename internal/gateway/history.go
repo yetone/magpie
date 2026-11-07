@@ -4,8 +4,8 @@ package gateway
 // disk so the Routing view can show and replay a day long gone — the trace
 // holds only the last few, and only since the gateway started. A day is a
 // file of its own, one route a line; a day that is over is gzipped, the
-// routes being much alike. Kept historyDays days and historyBytes in all,
-// the oldest days going first.
+// routes being much alike. Kept historyDays days, and historyBytes for the
+// days that are over, the oldest days going first.
 
 import (
 	"bufio"
@@ -113,10 +113,10 @@ func saveRoute(r Route) {
 }
 
 // pruneHistory gzips the days that are over, and drops the days older than
-// historyDays, then the oldest until what is left fits historyBytes. A day
-// goes whole, as it does once its late routes are in its .gz: a late route's
-// file left beside the .gz (gzipFile) goes with it. A file that can't be
-// removed stays.
+// historyDays, then the oldest until the days that are over fit
+// historyBytes. A day goes whole, as it does once its late routes are in
+// its .gz: a late route's file left beside the .gz (gzipFile) goes with it.
+// A file that can't be removed stays.
 func pruneHistory(dir string, now time.Time) {
 	// a .gz.tmp left by a magpie stopped before renaming it (gzipFile) goes
 	// once it is an hour old: a younger one may be another magpie's, still
@@ -138,9 +138,16 @@ func pruneHistory(dir string, now time.Time) {
 	}
 	oldest := now.Local().AddDate(0, 0, -historyDays+1).Format(dayForm)
 	days := historyFiles(dir)
+	// the days that are over, held to historyBytes: today's file isn't
+	// counted, being kept whatever its size and written plain, at many
+	// times the size it is gzipped at once it is over. Counted, a busy
+	// day's plain file took the room of the days before it, and the
+	// Context tab showed only today's sessions (linkaww on Discord)
 	var total int64
 	for _, d := range days {
-		total += d.size
+		if d.day != today {
+			total += d.size
+		}
 	}
 	drop := ""               // the day being dropped, whole: historyFiles puts its files next to each other
 	for _, d := range days { // oldest first
