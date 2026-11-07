@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"fmt"
 	"net/http/httptest"
 	"os"
@@ -26,8 +27,9 @@ type resumeHarness struct {
 	p      provider.Provider
 	logs   string
 	config string
-	extra  string // fields each request has besides its own, each with a comma after it
-	from   string // the requests' address, "" for httptest's (another computer's)
+	extra  string  // fields each request has besides its own, each with a comma after it
+	from   string  // the requests' address, "" for httptest's (another computer's)
+	who    *caller // who the requests are recorded as, as withCaller notes it; nil for none
 }
 
 func newResumeHarness(t *testing.T) *resumeHarness {
@@ -117,7 +119,11 @@ func (h *resumeHarness) ask(system string, said ...string) {
 	body := `{"model":"claude-sonnet-5","max_tokens":100,` + h.extra + `"system":"` + system + `","tools":[{"name":"read","input_schema":{"type":"object"}}],"messages":[` + strings.Join(msgs, ",") + `]}`
 	rec := httptest.NewRecorder()
 	var u Usage
-	if code, msg := h.s.serveClaudeSubscription(rec, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body)), provider.Anthropic, h.p, "claude-sonnet-5", []byte(body), &u); code != 200 {
+	r := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body))
+	if h.who != nil {
+		r = r.WithContext(context.WithValue(r.Context(), callerCtx{}, *h.who))
+	}
+	if code, msg := h.s.serveClaudeSubscription(rec, r, provider.Anthropic, h.p, "claude-sonnet-5", []byte(body), &u); code != 200 {
 		h.t.Fatalf("%d %s", code, msg)
 	}
 }

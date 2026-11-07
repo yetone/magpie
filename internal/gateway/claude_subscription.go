@@ -3529,13 +3529,21 @@ func claudeForced5m(env []string) bool {
 // account's Claude Code reads the settings of the account's folder, not
 // the user's (linkaww: 5m picked, every relayed write an hour's).
 func claudeRunTTL(env []string) string {
+	if ttl := claudePickedTTL(env); ttl != "" {
+		return ttl
+	}
+	return "1h"
+}
+
+// claudePickedTTL is the user's pick claudeRunTTL reads, "" for none.
+func claudePickedTTL(env []string) string {
 	settingsPath := filepath.Join(claudeConfigDir(), "settings.json")
 	envOf := func(k string) string {
 		if v, _ := edit.GetJSON(settingsPath, "env."+k); v != "" {
 			return v
 		}
 		for _, e := range env {
-			if v, ok := strings.CutPrefix(e, k+"="); ok {
+			if v, found := strings.CutPrefix(e, k+"="); found {
 				return v
 			}
 		}
@@ -3550,22 +3558,51 @@ func claudeRunTTL(env []string) string {
 	if v, _ := edit.GetJSON(settingsPath, "promptCacheTtl"); v == "5m" || v == "1h" {
 		return v
 	}
-	return "1h"
+	return ""
+}
+
+// claudeSettingsKnown: Claude Code's settings.json here is missing or
+// reads and parses, so claudePickedTTL is the pick; a file that can't be
+// read says nothing of one.
+func claudeSettingsKnown() bool {
+	b, err := edit.Read(filepath.Join(claudeConfigDir(), "settings.json"))
+	return err == nil && (len(bytes.TrimSpace(b)) == 0 || edit.ValidJSONC(b))
 }
 
 // runTTLFor is how long a bridge run started for req keeps its prompt
-// cache: five minutes when FORCE_PROMPT_CACHING_5M says so, as Claude Code
-// itself would; else what the request's own marks ask for, its client's
-// Claude Code marking as that computer's user picked, five minutes by
-// default (a remote magpie's relay was given the hour of its own setting,
-// never the Mac's, Linka); else, for a request with no marks, this
-// computer's pick or an hour (claudeRunTTL).
+// cache:
+//   - five minutes when FORCE_PROMPT_CACHING_5M says so, as Claude Code
+//     itself would;
+//   - an hour when the request's marks name it: its client picked it;
+//   - the pick of the user of the computer the request's Claude Code runs
+//     on (pickedTTL: this one's, or what the magpie it came through
+//     named), and with none picked this computer's or an hour, as Claude
+//     Code keeps it on a subscription. Claude Code marks five minutes with
+//     no ttl, picked or as its default off a subscription, so its marks
+//     can't say which (linkaww: a 5m pick, relayed side calls an hour's;
+//     nothing picked, every relayed write five minutes');
+//   - else what the marks ask for, five minutes for a mark with no ttl (a
+//     remote magpie's relay was given the hour of its own setting, never
+//     the Mac's, Linka);
+//   - else, for a request with no marks, this computer's pick or an hour
+//     (claudeRunTTL).
 func runTTLFor(req *Request, env []string) string {
 	if claudeForced5m(env) {
 		return "5m"
 	}
-	if req != nil && req.askedTTL != "" {
-		return req.askedTTL
+	if req != nil {
+		if req.askedTTL == "1h" {
+			return "1h"
+		}
+		switch req.pickedTTL {
+		case "5m", "1h":
+			return req.pickedTTL
+		case "default":
+			return claudeRunTTL(env)
+		}
+		if req.askedTTL != "" {
+			return req.askedTTL
+		}
 	}
 	return claudeRunTTL(env)
 }
@@ -6525,6 +6562,9 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 	// the tools of a caller on another computer run there, not where
 	// Claude Code runs (envUnknownNote)
 	req.remoteCaller = !local(r)
+	// how long the user of the computer the request's Claude Code runs on
+	// keeps its cache, which its marks don't say (runTTLFor)
+	req.pickedTTL = claudeTTLOf(callerOf(r))
 	if req.Format != nil && req.Format.schema() == nil {
 		// --json-schema takes a schema only: any JSON object is asked for
 		// in words

@@ -52,6 +52,9 @@ func TestClaudeInstructionsCachedApart(t *testing.T) {
 func TestClaudeRunKeepsTheUsersCacheTTL(t *testing.T) {
 	for _, c := range []struct {
 		name, settings, env, force, marks, want string
+		// who the request is recorded as (claudeTTLOf): the pick another
+		// magpie named for its Claude Code, or this computer's Claude Code
+		who *caller
 	}{
 		{name: "nothing picked", want: "1h"},
 		// the client's own marks: its Claude Code marks as its user
@@ -66,6 +69,23 @@ func TestClaudeRunKeepsTheUsersCacheTTL(t *testing.T) {
 		{name: "settings env", settings: `{"env":{"CLAUDE_CODE_PROMPT_CACHE_TTL":"5m"},"promptCacheTtl":"1h"}`, want: "5m"},
 		{name: "magpie's env", env: "5m", want: "5m"},
 		{name: "forced 5m", force: "1", settings: `{"promptCacheTtl":"1h"}`, want: "5m"},
+		// linkaww's Mac → Docker magpie: Claude Code marks five minutes
+		// with no ttl whether its user picked them or not, so the Mac's
+		// magpie names the pick (ClaudeCacheTTLHeader)
+		{name: "the Mac's 5m, a side call unmarked, this computer's 1h", who: &caller{agent: "claude", cacheTTL: "5m"}, settings: `{"promptCacheTtl":"1h"}`, want: "5m"},
+		{name: "the Mac's 5m, unmarked, nothing here", who: &caller{agent: "claude", cacheTTL: "5m"}, want: "5m"},
+		{name: "the Mac's 5m, marked", who: &caller{agent: "claude", cacheTTL: "5m"}, marks: `{"type":"ephemeral"}`, settings: `{"promptCacheTtl":"1h"}`, want: "5m"},
+		{name: "the Mac's 1h, marked with no ttl", who: &caller{agent: "claude", cacheTTL: "1h"}, marks: `{"type":"ephemeral"}`, want: "1h"},
+		{name: "nothing picked on the Mac, marked with no ttl", who: &caller{agent: "claude", cacheTTL: "default"}, marks: `{"type":"ephemeral"}`, want: "1h"},
+		{name: "nothing picked on the Mac, this computer's 5m", who: &caller{agent: "claude", cacheTTL: "default"}, marks: `{"type":"ephemeral"}`, settings: `{"promptCacheTtl":"5m"}`, want: "5m"},
+		{name: "marks naming the hour over the Mac's 5m", who: &caller{agent: "claude", cacheTTL: "5m"}, marks: `{"type":"ephemeral","ttl":"1h"}`, want: "1h"},
+		{name: "forced 5m over the Mac's 1h", who: &caller{agent: "claude", cacheTTL: "1h"}, force: "1", want: "5m"},
+		// Claude Code on this computer: its user's pick is read here
+		{name: "Claude Code here, nothing picked, marked", who: &caller{agent: "claude", claudeHere: true}, marks: `{"type":"ephemeral"}`, want: "1h"},
+		{name: "Claude Code here, 5m picked, unmarked", who: &caller{agent: "claude", claudeHere: true}, settings: `{"promptCacheTtl":"5m"}`, want: "5m"},
+		// a settings.json that can't be parsed says nothing of a pick: the
+		// marks decide, as without magpie's word
+		{name: "Claude Code here, settings unreadable, marked", who: &caller{agent: "claude", claudeHere: true}, marks: `{"type":"ephemeral"}`, settings: `{"promptCacheTtl":`, want: "5m"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			h := newScriptHarness(t, "ok", `echo "ttl ${CLAUDE_CODE_PROMPT_CACHE_TTL-unset} force ${FORCE_PROMPT_CACHING_5M-unset}" >> $log`)
@@ -86,6 +106,7 @@ func TestClaudeRunKeepsTheUsersCacheTTL(t *testing.T) {
 			if c.marks != "" {
 				h.extra = `"cache_control":` + c.marks + `,`
 			}
+			h.who = c.who
 			h.ask("rules", "hello", "next")
 			runs := h.runs()
 			if len(runs) != 1 {

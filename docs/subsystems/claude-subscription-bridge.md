@@ -712,17 +712,47 @@ pick (linkaww); `everyRunKept5m` in the fork, busy-retry and side
 question tests.
 
 A new run (and one started from a transcript, `replaySession`) picks its
-lifetime with `runTTLFor`: `FORCE_PROMPT_CACHING_5M` on this computer
-gives 5m, as Claude Code does; else the request's own marks decide, the
-longest TTL marked on its tools, system, messages or the request itself
-(`askedCacheTTL`, `Request.askedTTL`); else `claudeRunTTL` as above. A
-client's Claude Code marks as its own user picked, 5m unless asked for an
-hour, so a remote magpie (Docker, another machine) follows the client's
-pick, not its own settings, which the client's never reach. Chat and
-Responses requests carry no marks and keep `claudeRunTTL`; warmup and
-usage runs have no request and keep it too (`cleanClaudeEnv`). Up to
-v0.1.3255, a remote relay wrote an hour's cache for a Mac set to 5m
-(Linka). `TestAskedCacheTTL`.
+lifetime with `runTTLFor`:
+
+- `FORCE_PROMPT_CACHING_5M` on this computer gives 5m, as Claude Code
+  does.
+- A request whose marks name an hour (`askedCacheTTL`,
+  `Request.askedTTL`: the longest TTL marked on its tools, system,
+  messages or the request itself) gets an hour: its client picked it.
+- Else the pick of the user of the computer the request's Claude Code
+  runs on (`Request.pickedTTL`, `claudeTTLOf`). For Claude Code on this
+  computer (its token or `claude-cli/` User-Agent from loopback,
+  `caller.claudeHere`), it is this computer's, read as `claudeRunTTL`
+  reads it. For a request another magpie passed on, it is what that
+  magpie named in `X-Magpie-Claude-Cache-TTL` (`ClaudeCacheTTLHeader`):
+  `5m`, `1h`, or `default` for no pick. `passOnCaller` sends it on every
+  request to a Remote magpie whose caller is Claude Code here, or that
+  came with it. `callerFrom` takes it from a `magpie/` request alone, and
+  `withCaller` takes it off what comes in, so no vendor is sent it.
+  `default` gives `claudeRunTTL`: this computer's own pick, or an hour,
+  as Claude Code keeps it on a subscription.
+- Else the marks decide, five minutes for a mark with no ttl.
+- Else `claudeRunTTL`.
+
+Claude Code marks five minutes with no ttl, whether its user picked them
+or it is its default off a subscription (2.1.316: the marker names a ttl
+only for an hour). So marks can't tell a 5m pick from no pick, and an
+unmarked side call (Haiku's title, the classifier) says nothing at all.
+Up to v0.1.3255 a remote relay wrote an hour's cache for a Mac set to 5m
+(Linka). From v0.1.3256 the marks decided, so with nothing picked every
+relayed write was five minutes, while a 5m pick still had its unmarked
+side calls written for an hour (linkaww). The header carries the pick
+itself. A settings.json that can't be read or parsed names no pick
+(`claudeSettingsKnown`), and the marks decide as before. Not seen by
+magpie: a pick made only in the shell Claude Code was started from, or
+in a project's `.claude/settings.json`. Such a client is sent `default`,
+an hour, unless its marks name an hour. A Claude Code that goes straight
+to a remote magpie, with no magpie of its own, sends no header, and its
+marks decide as before. Chat and Responses requests carry no marks and
+keep `claudeRunTTL`; warmup and usage runs have no request and keep it
+too (`cleanClaudeEnv`). `TestAskedCacheTTL`,
+`TestClaudeRunKeepsTheUsersCacheTTL`, `TestClaudeCacheTTLFromAMagpieOnly`,
+`TestClaudeCacheTTLOf`, `TestClaudeCacheTTLReachesTheRemoteMagpie`.
 
 ## Client-placed cache marks (#1717)
 

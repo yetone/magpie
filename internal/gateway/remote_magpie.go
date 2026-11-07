@@ -41,6 +41,14 @@ const (
 	// key+URL providers the agent's, as this one would have (nb5p on
 	// Discord). Taken, like AgentHeader, only from a magpie's request.
 	ClientUAHeader = "X-Magpie-User-Agent"
+	// ClaudeCacheTTLHeader is how long the prompt cache of a Claude Code
+	// request is to be kept, as the user of the computer Claude Code runs
+	// on picked it: "5m", "1h", or "default" for no pick. Claude Code
+	// marks a five-minute cache with no ttl, picked or not, so the other
+	// magpie's Claude relay can't tell a pick from its marks
+	// (claudeTTLOf, runTTLFor; linkaww). Taken only from a magpie's
+	// request.
+	ClaudeCacheTTLHeader = "X-Magpie-Claude-Cache-TTL"
 )
 
 // caller is who a request is recorded as: its agent, and the computer it
@@ -66,6 +74,12 @@ type caller struct {
 	// hops: the magpies the request was passed on through before this
 	// one (HopsHeader)
 	hops int
+	// cacheTTL is the Claude Code cache lifetime another magpie named
+	// (ClaudeCacheTTLHeader); claudeHere, that the request is Claude
+	// Code's on this computer, whose user's pick is read here
+	// (claudeTTLOf)
+	cacheTTL   string
+	claudeHere bool
 }
 
 type callerCtx struct{}
@@ -90,6 +104,7 @@ func withCaller(next http.Handler) http.Handler {
 		r.Header.Del(KeepTurnHeader)
 		r.Header.Del(HopsHeader)
 		r.Header.Del(ClientUAHeader)
+		r.Header.Del(ClaudeCacheTTLHeader)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -119,6 +134,10 @@ func callerFrom(r *http.Request) caller {
 		if v := r.Header.Get(ClientUAHeader); v != "" && len(v) <= 1024 && !magpiesOwn(v) {
 			c.ua, c.relayed = v, true
 		}
+		switch v := r.Header.Get(ClaudeCacheTTLHeader); v {
+		case "5m", "1h", "default":
+			c.cacheTTL = v
+		}
 		if a := label(r.Header.Get(AgentHeader)); a != "" {
 			c.agent = usage.AgentOf(a)
 			c.via = label(r.Header.Get(ViaHeader))
@@ -126,8 +145,31 @@ func callerFrom(r *http.Request) caller {
 				c.via, _, _ = net.SplitHostPort(r.RemoteAddr)
 			}
 		}
+	} else {
+		// Claude Code, known by its token or its User-Agent; Claude
+		// Desktop's keeps a settings.json of its own
+		c.claudeHere = (c.agent == "claude" || fromClaudeCode(r.Header)) && c.agent != "claude-desktop" && local(r)
 	}
 	return c
+}
+
+// claudeTTLOf is how long the prompt cache of c's request is to be kept,
+// as the user of the computer its Claude Code runs on picked it: "5m",
+// "1h", "default" for no pick, "" when unknown (not Claude Code's, from
+// a magpie that didn't say, or Claude Code's settings.json unreadable).
+// Claude Code on this computer: this computer's pick, as claudeRunTTL
+// reads it.
+func claudeTTLOf(c caller) string {
+	if c.cacheTTL != "" || !c.claudeHere {
+		return c.cacheTTL
+	}
+	if !claudeSettingsKnown() {
+		return ""
+	}
+	if ttl := claudePickedTTL(os.Environ()); ttl != "" {
+		return ttl
+	}
+	return "default"
 }
 
 // callerOf is who the request is recorded as.
@@ -185,6 +227,9 @@ func passOnCaller(ctx context.Context, req *http.Request) {
 	}
 	if c.compact != "" {
 		req.Header.Set(dshCompactHeader, c.compact)
+	}
+	if v := claudeTTLOf(c); v != "" {
+		req.Header.Set(ClaudeCacheTTLHeader, v)
 	}
 	if c.agent == "" {
 		return
