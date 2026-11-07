@@ -278,6 +278,10 @@ func realBrowserFrom(t *testing.T, ext func(*httptest.Server) string) (srv, site
 			// behind another tab
 			io.WriteString(w, `<!doctype html><title>Watch 0</title><h1>The user's page</h1><script>let hid = 0; document.addEventListener("visibilitychange", () => { if (document.hidden) document.title = "Watch " + ++hid; });</script>`)
 			return
+		case "/focus":
+			// a page that says in its title whether it thinks it has focus
+			io.WriteString(w, `<!doctype html><title>Focus ?</title><h1>Focus</h1><script>setInterval(() => { document.title = "Focus " + (document.hasFocus() ? "on" : "off"); }, 200);</script>`)
+			return
 		case "/human":
 			io.WriteString(w, humanFixture)
 			return
@@ -521,6 +525,55 @@ func TestBrowserLeavesTheUsersTabAlone(t *testing.T) {
 	shown("after a recording")
 }
 
+// A tab is let go about 20s after the last call in it ends, as Claude in
+// Chrome does: a page behind the user's never goes on for minutes with
+// its focus emulated (Discord took that for a bot).
+func TestBrowserLetsATabGoAfterItsCalls(t *testing.T) {
+	if os.Getenv("MAGPIE_BROWSER_HEADFUL") == "" {
+		t.Skip("headless, every tab has focus: MAGPIE_BROWSER_HEADFUL=1 runs it")
+	}
+	srv, site := realBrowser(t)
+	_, ok := browserCaller(t, srv, "letgo")
+	ok("browser_navigate", map[string]any{"url": site.URL + "/focus"}, "Focus")
+	title := func() string {
+		m := regexp.MustCompile(`(?m)^. t\d+ \[Magpie\] "(Focus [^"]*)"`).FindStringSubmatch(ok("browser_tabs", nil))
+		if m == nil {
+			t.Fatal("no Focus tab in the list")
+		}
+		return m[1]
+	}
+	// a timer behind the user's tab runs once a second
+	until := func(want string, within time.Duration) (string, time.Duration) {
+		start := time.Now()
+		for {
+			got := title()
+			if got == want || time.Since(start) > within {
+				return got, time.Since(start)
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+	if got, _ := until("Focus on", 5*time.Second); got != "Focus on" {
+		t.Fatalf("while the agent works in it, the tab behind the user's has %q, not focus", got)
+	}
+	start := time.Now()
+	for title() != "Focus off" {
+		// tabs lists, and touches no tab: it doesn't hold this one
+		if time.Since(start) > 45*time.Second {
+			t.Fatalf("the tab still has emulated focus %s after the last call in it", time.Since(start).Round(time.Second))
+		}
+		time.Sleep(time.Second)
+	}
+	if d := time.Since(start); d < 15*time.Second {
+		t.Fatalf("let go after %s, before the 20s a next call may come in", d.Round(time.Second))
+	}
+	// a call in it takes it again
+	ok("browser_snapshot", nil, "Focus")
+	if got, _ := until("Focus on", 5*time.Second); got != "Focus on" {
+		t.Fatalf("a call after it was let go left %q", got)
+	}
+}
+
 // An older extension, loaded from the folder magpie writes, has the folder
 // written with this magpie's when it connects, for the browser to read
 // when it starts again.
@@ -581,7 +634,9 @@ const humanFixture = `<!doctype html>
     seen.movesBeforeClick = seen.moves;
     seen.click = { trusted: ev.isTrusted, dx: ev.clientX - (r.left + r.width / 2), dy: ev.clientY - (r.top + r.height / 2) };
   });
-  addEventListener("keydown", (ev) => { seen.keys.push([ev.key, performance.now(), ev.isTrusted]); if (ev.key === "Shift") seen.shift++; }, true);
+  // a mouse button held down presses at 0.5, as a real mouse's does
+  buy.addEventListener("pointerdown", (ev) => { seen.pressure = ev.pressure; });
+  addEventListener("keydown", (ev) => { seen.keys.push([ev.key, performance.now(), ev.isTrusted]); if (ev.key === "Shift") { seen.shift++; if (seen.shiftAt === undefined || ev.location !== 1) seen.shiftAt = ev.location; } }, true);
   addEventListener("compositionend", (ev) => seen.composed.push(ev.data), true);
   // a chat box sends on Enter, as Discord's does
   chat.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); seen.sent = chat.innerText; } });
@@ -633,6 +688,8 @@ func TestBrowserActsLikeAPerson(t *testing.T) {
 		Composed []string
 		Wheels   int
 		Sent     string
+		Pressure *float64
+		ShiftAt  *int
 	}
 	out := ok("browser_evaluate", map[string]any{"script": "() => seen"})
 	if i := strings.Index(out, "{"); i < 0 || json.Unmarshal([]byte(out[i:strings.LastIndex(out, "}")+1]), &seen) != nil {
@@ -645,6 +702,11 @@ func TestBrowserActsLikeAPerson(t *testing.T) {
 		t.Errorf("no trusted click on Buy: %+v", seen.Click)
 	} else if math.Abs(seen.Click.Dx) <= 0.5 && math.Abs(seen.Click.Dy) <= 0.5 {
 		t.Errorf("the click landed on the middle of Buy (%v, %v)", seen.Click.Dx, seen.Click.Dy)
+	}
+	if seen.Pressure == nil {
+		t.Errorf("no pressure seen on Buy's pointerdown")
+	} else if *seen.Pressure != 0.5 {
+		t.Errorf("the button went down at pressure %v: a mouse's is 0.5", *seen.Pressure)
 	}
 	if seen.MovesBeforeClick < 4 {
 		t.Errorf("the mouse moved %d times before the click, not along a path", seen.MovesBeforeClick)
@@ -673,6 +735,11 @@ func TestBrowserActsLikeAPerson(t *testing.T) {
 	}
 	if seen.Shift < 2 {
 		t.Errorf("Shift was pressed %d times for H and W", seen.Shift)
+	}
+	if seen.ShiftAt == nil {
+		t.Errorf("no Shift keydown seen")
+	} else if *seen.ShiftAt != 1 {
+		t.Errorf("Shift came from keyboard location %v, not the left Shift (1)", *seen.ShiftAt)
 	}
 	if strings.Join(seen.Composed, "") != "你好早上好" {
 		t.Errorf("Chinese didn't come through an IME's composition: %q", seen.Composed)
@@ -712,5 +779,42 @@ func TestBrowserActsLikeAPerson(t *testing.T) {
 	}
 	if m := call("browser_tabs", map[string]any{"action": "close", "tab": users[1]}); !m.Result.IsError || !strings.Contains(m.Result.Content[0].Text, "the user's own tab") {
 		t.Fatalf("closing the user's tab: %+v", m.Result)
+	}
+}
+
+// A long text goes in at a person's pace, not squeezed into what one call
+// may wait: Discord can time a message from its first key to its sending,
+// and 800 characters typed in 35s is no person's. The call answers when
+// it has waited long enough, the typing goes on, and the tab's next call
+// waits for it (Enter included).
+func TestBrowserTypesALongTextAtAPersonsPace(t *testing.T) {
+	srv, site := realBrowser(t)
+	_, ok := browserCaller(t, srv, "typist")
+	shop := strings.Replace(site.URL, "127.0.0.1", "shop.example", 1) + "/human"
+	page := ok("browser_tabs", map[string]any{"action": "new", "url": shop}, "Shop")
+	m := regexp.MustCompile(`- textbox "Chat" \[ref=(e\d+)\]`).FindStringSubmatch(page)
+	if m == nil {
+		t.Fatalf("no Chat box in:\n%s", page)
+	}
+	text := strings.TrimSpace(strings.Repeat("a long line of chat ", 16))
+	start := time.Now()
+	first := ok("browser_type", map[string]any{"ref": m[1], "text": text, "submit": true}, "characters so far", "then Enter", "the next call in this tab waits for it")
+	if took := time.Since(start); took > 60*time.Second {
+		t.Fatalf("browser_type answered after %v: past what a call may wait", took)
+	}
+	out := ok("browser_evaluate", map[string]any{"script": "() => ({sent: seen.sent, first: seen.keys[0][1], last: seen.keys[seen.keys.length - 1][1], n: seen.keys.length})"})
+	var got struct {
+		Sent        string
+		First, Last float64
+		N           int
+	}
+	if i := strings.Index(out, "{"); i < 0 || json.Unmarshal([]byte(out[i:strings.LastIndex(out, "}")+1]), &got) != nil {
+		t.Fatalf("the page's record: %s", out)
+	}
+	if got.Sent != text {
+		t.Fatalf("the chat box sent %q after %q, not the whole text", got.Sent, first)
+	}
+	if cps := float64(len(text)) / ((got.Last - got.First) / 1000); cps > 9 {
+		t.Errorf("%d characters typed at %.1f a second: no person's pace", len(text), cps)
 	}
 }

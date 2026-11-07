@@ -3,7 +3,7 @@
 // out in this browser's own tabs, signed in to whatever the user is.
 
 import { GATEWAY, KEY } from "./config.js";
-import { attach, fault, forget, read, send, settle, sleep, state, waitLoad, watch, watchConsole } from "./cdp.js";
+import { attach, fault, forget, read, release, releaseAll, send, settle, sleep, state, waitLoad, watch, watchConsole } from "./cdp.js";
 import { find, take } from "./snapshot.js";
 import { press as keyPress } from "./keys.js";
 import * as human from "./human.js";
@@ -287,7 +287,11 @@ function failure(e) {
   return fail(`${code}: ${m}${after && !m.includes(after) ? "\n" + after : ""}`);
 }
 
+// calls running now: tabs are let go only once none is
+let running = 0;
+
 async function run(m) {
+  running++;
   try {
     const tool = TOOLS[m.tool];
     if (!tool) return fail(`magpie's browser extension has no tool ${m.tool}: update it (magpie writes it again on start; reload it in chrome://extensions)`);
@@ -304,19 +308,34 @@ async function run(m) {
     return r;
   } catch (e) {
     return failure(e);
+  } finally {
+    if (--running === 0) releaseAll();
   }
 }
+
+// how long browser_type waits for its typing before it answers
+const TYPE_WAIT_MS = 40000;
+// how long a call waits for typing still going on in its tab
+const TYPING_WAIT_MS = 60000;
 
 async function ready(session, args) {
   const tabId = await tabFor(session, args);
   const t = state(tabId);
+  if (t.typing) {
+    await Promise.race([t.typing, sleep(TYPING_WAIT_MS)]);
+    if (t.typing) throw fault("BUSY", `still typing in this tab, about ${Math.max(1, Math.ceil((t.typingEnds - Date.now()) / 1000))}s more: call again then`);
+  }
+  if (t.typingFailed) {
+    const why = t.typingFailed;
+    t.typingFailed = null;
+    throw fault("TYPING_FAILED", `the typing the last browser_type went on with stopped: ${why}. Take a snapshot to see what went in.`);
+  }
   if (t.stoppedByUser) {
     t.stoppedByUser = false;
     throw fault("USER_STOPPED", "the user stopped Magpie Browser in this tab (Cancel on Chrome's bar): ask them before going on. The next call attaches to it again.");
   }
   t.by = session; // whose call this is: act moves that session on to a tab it opens
   await attach(tabId);
-  await send(tabId, "Emulation.setFocusEmulationEnabled", { enabled: true }).catch(() => {});
   return t;
 }
 
@@ -684,12 +703,33 @@ const TOOLS = {
         await keyPress(t, "Backspace");
         await sleep(150 + Math.random() * 250);
       }
-      if (args.text) await human.type(t, args.text, { newline: kind.startsWith("line ") || kind === "line" ? "" : "Shift+Enter", press: (k) => keyPress(t, k) });
-      if (args.submit) {
-        // a look over what was typed before sending it
-        await sleep(250 + Math.random() * 450);
-        await keyPress(t, "Enter");
+      const progress = {};
+      const job = (async () => {
+        // the debugger stays on the tab for as long as the typing lasts
+        const keep = setInterval(() => attach(t.tabId).catch(() => {}), 10000);
+        try {
+          await typeIn();
+        } finally {
+          clearInterval(keep);
+        }
+      })();
+      async function typeIn() {
+        if (args.text) await human.type(t, args.text, { progress, newline: kind.startsWith("line ") || kind === "line" ? "" : "Shift+Enter", press: (k) => keyPress(t, k) });
+        if (args.submit) {
+          // a look over what was typed before sending it
+          await sleep(250 + Math.random() * 450);
+          await keyPress(t, "Enter");
+        }
       }
+      // a long text is typed at a person's pace, longer than a call may
+      // wait: the call answers and the typing goes on, and the tab's next
+      // call waits for it
+      const finished = await Promise.race([job.then(() => true), sleep(TYPE_WAIT_MS).then(() => false)]);
+      if (finished) return "";
+      t.typing = job.then(() => { t.typingFailed = null; }, (e) => { t.typingFailed = String(e && e.message || e).slice(0, 200); })
+        .finally(() => { t.typing = null; human.done(t); if (!running) release(t.tabId); });
+      t.typingEnds = Date.now() + human.typingTime([...args.text].slice(progress.done).join(""));
+      return `Typing into ${el.ref}: ${progress.done} of ${progress.of} characters so far. The rest goes in at a person's pace, about ${Math.ceil((t.typingEnds - Date.now()) / 1000)}s more${args.submit ? ", then Enter" : ""}; the next call in this tab waits for it.`;
     }, el);
   },
 

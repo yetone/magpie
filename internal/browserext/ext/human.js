@@ -72,7 +72,7 @@ export async function move(t, x, y, opts = {}) {
     if (i < steps) { px += rand(-0.7, 0.7); py += rand(-0.7, 0.7); }
     await send(t.tabId, "Input.dispatchMouseEvent", {
       type: "mouseMoved", x: Math.round(px * 100) / 100, y: Math.round(py * 100) / 100, modifiers,
-      button: buttons ? "left" : "none", buttons,
+      button: buttons ? "left" : "none", buttons, ...(buttons ? { force: 0.5 } : {}),
     });
     t.mouse = { x: px, y: py };
     await sleep(rand(7, 17));
@@ -92,7 +92,7 @@ export async function click(t, x, y, opts = {}) {
   await move(t, x, y, { modifiers });
   await sleep(clamp(gauss(110, 40), 45, 260));
   for (let i = 1; i <= count; i++) {
-    await send(t.tabId, "Input.dispatchMouseEvent", { type: "mousePressed", x, y, button, buttons: BUTTON_BIT[button], clickCount: i, modifiers });
+    await send(t.tabId, "Input.dispatchMouseEvent", { type: "mousePressed", x, y, button, buttons: BUTTON_BIT[button], clickCount: i, modifiers, force: 0.5 });
     await sleep(clamp(gauss(80, 22), 40, 150));
     await send(t.tabId, "Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button, buttons: 0, clickCount: i, modifiers });
     if (i < count) await sleep(rand(70, 130));
@@ -104,7 +104,7 @@ export async function click(t, x, y, opts = {}) {
 export async function drag(t, p, q) {
   await move(t, p.x, p.y);
   await sleep(rand(80, 160));
-  await send(t.tabId, "Input.dispatchMouseEvent", { type: "mousePressed", x: p.x, y: p.y, button: "left", buttons: 1, clickCount: 1 });
+  await send(t.tabId, "Input.dispatchMouseEvent", { type: "mousePressed", x: p.x, y: p.y, button: "left", buttons: 1, clickCount: 1, force: 0.5 });
   try {
     await sleep(rand(90, 180));
     await move(t, q.x, q.y, { buttons: 1 });
@@ -154,7 +154,7 @@ export function keyOf(ch) {
 const IME = /[぀-ヿ㐀-䶿一-鿿豈-﫿가-힯　-〿＀-￯]/;
 
 async function shiftKey(t, down) {
-  await send(t.tabId, "Input.dispatchKeyEvent", { type: down ? "rawKeyDown" : "keyUp", key: "Shift", code: "ShiftLeft", windowsVirtualKeyCode: 16, modifiers: down ? 8 : 0 });
+  await send(t.tabId, "Input.dispatchKeyEvent", { type: down ? "rawKeyDown" : "keyUp", key: "Shift", code: "ShiftLeft", location: 1, windowsVirtualKeyCode: 16, modifiers: down ? 8 : 0 });
 }
 
 // the pause after a key: a typist is quicker inside a word than between
@@ -167,19 +167,29 @@ function gap(ch, scale) {
   return Math.max(10, ms * scale);
 }
 
-// how long typing may take in all: the gateway waits 100s for a call
-const TYPE_BUDGET_MS = 35000;
+// how long typing may take in all. A person types a few characters a
+// second, and a site can time a message from its first key to its
+// sending, so a long text keeps a person's pace (browser_type goes on
+// after its call has answered) and is only quickened past four minutes.
+const TYPE_LONGEST_MS = 240000;
+
+// how long typing text takes at a person's pace, about
+export const typingTime = (text) => [...String(text)].length * 165;
 
 // type types text into the focused element. newline is how a line break
 // is typed there: "Shift+Enter" in a field where Enter sends (a chat box),
 // "" where there are no lines (a one-line field drops it).
 export async function type(t, text, opts = {}) {
   const chars = [...String(text)];
-  const est = chars.length * 120;
-  const scale = est > TYPE_BUDGET_MS ? TYPE_BUDGET_MS / est : 1;
+  const est = typingTime(text);
+  const scale = est > TYPE_LONGEST_MS ? TYPE_LONGEST_MS / est : 1;
+  const progress = opts.progress || {};
+  progress.of = chars.length;
+  progress.done = 0;
   const newline = opts.newline ?? "Shift+Enter";
   let held = false;
   for (let i = 0; i < chars.length; i++) {
+    progress.done = i;
     const ch = chars[i];
     if (ch === "\r") continue;
     if (ch === "\n") {
@@ -213,22 +223,23 @@ export async function type(t, text, opts = {}) {
       await sleep(rand(15, 45) * scale);
     }
     const mods = held ? 8 : 0;
-    await send(t.tabId, "Input.dispatchKeyEvent", { type: "keyDown", key: k.key, code: k.code, windowsVirtualKeyCode: k.keyCode, nativeVirtualKeyCode: k.keyCode, text: ch, unmodifiedText: k.shift ? ch : ch, modifiers: mods });
+    await send(t.tabId, "Input.dispatchKeyEvent", { type: "keyDown", key: k.key, code: k.code, windowsVirtualKeyCode: k.keyCode, text: ch, unmodifiedText: ch, modifiers: mods });
     // the key comes up while the next is already on its way down, now
     // and then, as fingers roll
     await sleep(clamp(gauss(55, 18), 18, 120) * Math.max(scale, 0.3));
-    await send(t.tabId, "Input.dispatchKeyEvent", { type: "keyUp", key: k.key, code: k.code, windowsVirtualKeyCode: k.keyCode, nativeVirtualKeyCode: k.keyCode, modifiers: mods });
+    await send(t.tabId, "Input.dispatchKeyEvent", { type: "keyUp", key: k.key, code: k.code, windowsVirtualKeyCode: k.keyCode, modifiers: mods });
     const next = chars[i + 1];
     if (held && !(next && keyOf(next) && keyOf(next).shift)) { await sleep(rand(10, 40) * scale); await shiftKey(t, false); held = false; }
     await sleep(gap(ch, scale));
   }
   if (held) await shiftKey(t, false);
+  progress.done = chars.length;
 }
 
 // compose enters text as an input method does: the keys go to it (key
 // "Process"), the text under composition grows, and it is committed
 async function compose(t, run, scale) {
-  const ime = (type) => send(t.tabId, "Input.dispatchKeyEvent", { type, key: "Process", code: "", windowsVirtualKeyCode: 229, nativeVirtualKeyCode: 229 });
+  const ime = (type) => send(t.tabId, "Input.dispatchKeyEvent", { type, key: "Process", code: "", windowsVirtualKeyCode: 229 });
   let ok = true;
   for (let j = 1; j <= run.length && ok; j++) {
     await ime("rawKeyDown");

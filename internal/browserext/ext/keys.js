@@ -75,6 +75,8 @@ export async function press(t, combo) {
   for (const m of mods) if (!(m in MODS)) throw new Error(`"${m}" isn't a modifier: use Control, Alt, Shift or Meta`);
   let modifiers = mods.reduce((a, m) => a | MODS[m], 0);
   const k = describe(keyName, !!(modifiers & 8));
+  // a modifier pressed alone is the left one, as on a keyboard
+  if (/Left$/.test(k.code)) k.location = 1;
   const commands = [];
   if (mac && (modifiers & 4) && MAC_COMMANDS[k.key.toLowerCase()]) commands.push(MAC_COMMANDS[k.key.toLowerCase()]);
   // held as a hand holds them: the modifiers a moment first, the key
@@ -83,22 +85,22 @@ export async function press(t, combo) {
   let held = 0;
   for (const m of mods) {
     held |= MODS[m];
-    await send(t.tabId, "Input.dispatchKeyEvent", { type: "rawKeyDown", modifiers: held, key: m, code: KEYS[m].code, windowsVirtualKeyCode: KEYS[m].keyCode });
+    await send(t.tabId, "Input.dispatchKeyEvent", { type: "rawKeyDown", modifiers: held, key: m, code: KEYS[m].code, location: 1, windowsVirtualKeyCode: KEYS[m].keyCode });
     await hold(30, 80);
   }
   // a chord with Control, Alt or Meta types no text
   const typed = k.text && !(modifiers & 7);
   await send(t.tabId, "Input.dispatchKeyEvent", {
-    type: typed ? "keyDown" : "rawKeyDown", modifiers, key: k.key, code: k.code,
-    windowsVirtualKeyCode: k.keyCode, nativeVirtualKeyCode: k.keyCode,
+    type: typed ? "keyDown" : "rawKeyDown", modifiers, key: k.key, code: k.code, location: k.location || 0,
+    windowsVirtualKeyCode: k.keyCode,
     ...(typed ? { text: k.text, unmodifiedText: k.text } : {}),
     ...(commands.length ? { commands } : {}),
   });
   await hold(50, 120);
-  await send(t.tabId, "Input.dispatchKeyEvent", { type: "keyUp", modifiers, key: k.key, code: k.code, windowsVirtualKeyCode: k.keyCode });
+  await send(t.tabId, "Input.dispatchKeyEvent", { type: "keyUp", modifiers, key: k.key, code: k.code, location: k.location || 0, windowsVirtualKeyCode: k.keyCode });
   for (const m of mods.reverse()) {
     await hold(20, 60);
     held &= ~MODS[m];
-    await send(t.tabId, "Input.dispatchKeyEvent", { type: "keyUp", modifiers: held, key: m, code: KEYS[m].code, windowsVirtualKeyCode: KEYS[m].keyCode });
+    await send(t.tabId, "Input.dispatchKeyEvent", { type: "keyUp", modifiers: held, key: m, code: KEYS[m].code, location: 1, windowsVirtualKeyCode: KEYS[m].keyCode });
   }
 }

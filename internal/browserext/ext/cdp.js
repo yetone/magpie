@@ -1,7 +1,7 @@
 // The DevTools protocol over chrome.debugger, one attachment per tab. A
-// tab stays attached while an agent works in it and is let go after a
-// quiet spell, so Chrome's "is debugging this browser" bar is up only
-// while it is used, and doesn't come and go between an agent's calls.
+// tab is attached while a call works in it and let go 20s after the last
+// call ends, as Claude in Chrome does, so a site never sits for minutes
+// under a debugger with its focus emulated.
 //
 // The page never learns it is driven. Runtime is left off (a page can
 // tell it is on: Chrome then reads what the page logs, and a logged
@@ -10,7 +10,10 @@
 // in an isolated world of its own, which the page's scripts can't see or
 // patch: nothing of magpie's shows in the page's own JavaScript.
 
-const IDLE_MS = 5 * 60 * 1000;
+// let go this long after the last call in a tab ends
+const IDLE_MS = 20 * 1000;
+// a bound on one call (or a typing that goes on after its call)
+const BUSY_MS = 5 * 60 * 1000;
 const LOG_KEPT = 300;
 
 // tabId → what is known of the page while attached
@@ -50,7 +53,8 @@ export function forget(tabId) {
 export async function attach(tabId) {
   const t = state(tabId);
   clearTimeout(t.idle);
-  t.idle = setTimeout(() => detach(tabId), IDLE_MS);
+  t.idle = setTimeout(() => detach(tabId), BUSY_MS);
+  t.busy = true;
   if (t.attached) return t;
   if (!t.attaching) {
     t.attaching = (async () => {
@@ -66,13 +70,16 @@ export async function attach(tabId) {
       t.frameOf.clear();
       t.worlds.clear();
       if (!t.console) t.console = await devHost(tabId);
+      // what Claude in Chrome turns on, and Network, which the page can't
+      // see, for knowing when it is quiet. DOM and Accessibility stay off:
+      // their calls work without them, and on they keep Blink's whole
+      // accessibility tree live while the tab is attached.
       await Promise.all([
         send(tabId, "Page.enable"),
         ...(t.console ? [send(tabId, "Runtime.enable")] : []),
         send(tabId, "Network.enable"),
-        send(tabId, "DOM.enable"),
-        send(tabId, "Accessibility.enable"),
       ]);
+      await send(tabId, "Emulation.setFocusEmulationEnabled", { enabled: true }).catch(() => {});
       await send(tabId, "Page.setInterceptFileChooserDialog", { enabled: false }).catch(() => {});
       // frames from other sites: Chrome 125 and on hands an extension
       // their sessions; before it they stay unreadable, as said in the
@@ -113,9 +120,27 @@ function why(m) {
   return m;
 }
 
+// release lets a tab a call used go IDLE_MS from now, unless typing goes
+// on in it. A tab no call used since is left on its clock.
+export function release(tabId) {
+  const t = tabs.get(tabId);
+  if (!t || !t.attached || !t.busy || t.typing) return;
+  t.busy = false;
+  clearTimeout(t.idle);
+  t.idle = setTimeout(() => detach(tabId), IDLE_MS);
+}
+
+// releaseAll is release for every attached tab, once no call is running
+export function releaseAll() {
+  for (const id of tabs.keys()) release(id);
+}
+
 export async function detach(tabId) {
   const t = tabs.get(tabId);
   if (!t || !t.attached) return;
+  clearTimeout(t.idle);
+  // the page's focus is its own again before the debugger goes
+  await send(tabId, "Emulation.setFocusEmulationEnabled", { enabled: false }).catch(() => {});
   t.attached = false;
   try { await chrome.debugger.detach({ tabId }); } catch {}
 }
@@ -133,8 +158,6 @@ async function child(t, sid) {
   await Promise.all([
     ...(t.console ? [send(t.tabId, "Runtime.enable", {}, sid)] : []),
     send(t.tabId, "Network.enable", {}, sid),
-    send(t.tabId, "DOM.enable", {}, sid),
-    send(t.tabId, "Accessibility.enable", {}, sid),
   ]).catch(() => {});
   await autoAttach(t.tabId, sid);
 }
