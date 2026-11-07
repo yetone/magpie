@@ -209,6 +209,8 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 	was.RouterNote = "Los Angeles"                    // the Library's servers/hub-note
 	was.RouterAllTools = true                         // the Library's servers/hub-tools
 	was.BusyLoad = 150                                // the Routing page's busy-load
+	// the Routing groups page's defaults for every group (groups/defaults)
+	was.GroupSink, was.GroupFirstToken, was.GroupPatience = true, 30, 120
 	if err := settings.Save(was); err != nil {
 		t.Fatal(err)
 	}

@@ -93,11 +93,67 @@ func TestSettingsCLISetsWhatTheWindowSaves(t *testing.T) {
 			t.Errorf("the window saves %q, which `magpie settings` can't set: add it to settingsapi.Keys", k)
 		}
 	}
+	pages := pagesSource(t)
+	for k, own := range ownRoute {
+		if !settingsapi.Known(k) {
+			t.Errorf("ownRoute names %q, which `magpie settings` can't set: take it out", k)
+		}
+		saved := false
+		for rest := pages; ; {
+			i := strings.Index(rest, own.call)
+			if i < 0 {
+				break
+			}
+			rest = rest[i+len(own.call):]
+			j := strings.Index(rest, "{")
+			if j < 0 {
+				break
+			}
+			body := rest[j:]
+			if regexp.MustCompile(`[{,]\s*` + own.field + `\s*:`).MatchString(body[:balanced(body)]) {
+				saved = true
+				break
+			}
+		}
+		if !saved {
+			t.Errorf("no page sends %q as %s to %s any more: send it in a save of POST /api/settings, or name the call that saves it", k, own.field, own.call)
+		}
+	}
 	for _, k := range settingsapi.Keys {
-		if !slices.Contains(gui, k) {
+		if _, own := ownRoute[k]; !own && !slices.Contains(gui, k) {
 			t.Errorf("`magpie settings` sets %q, which no page sends", k)
 		}
 	}
+}
+
+// ownRoute are the settings `magpie settings` sets that a page saves
+// through a route of its own instead of POST /api/settings, with the call
+// that does it: the Routing groups page's defaults for every group
+// (settings.SetGroupDefaults), which `magpie settings set` sets too. field
+// is the key the call's body sends it as.
+var ownRoute = map[string]struct{ call, field string }{
+	"groupSink":       {`api("groups/defaults"`, "sink"},
+	"groupFirstToken": {`api("groups/defaults"`, "firstToken"},
+	"groupPatience":   {`api("groups/defaults"`, "patience"},
+}
+
+// pagesSource is every page script the window serves, the built-in
+// plugins' among them, as one text.
+func pagesSource(t *testing.T) string {
+	t.Helper()
+	var all strings.Builder
+	err := filepath.WalkDir(filepath.Join("..", "gui", "assets"), func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".js") || strings.Contains(p, "vendor") {
+			return err
+		}
+		b, err := os.ReadFile(p)
+		all.Write(b)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return all.String()
 }
 
 // What a route without a command is waiting for. Later stages of #4745
