@@ -177,10 +177,40 @@ func (s *Server) serveDecideTries(w http.ResponseWriter, r *http.Request, body [
 		call.Millis = time.Since(start).Milliseconds()
 		s.record(call)
 	}()
+	// masked as the settings say, as a chat's or an embedding's request
+	// is, unless every try goes where the user set requests to go
+	// unmasked (provider.SkipsRedaction): a state or a question the agent
+	// wrote is the user's text like any other, and /v1/decisions,
+	// translated here (decisions_systemone.go), was masked on its own
+	// route. A masker that fails or is wanted and missing sends nothing.
+	went := asked // the model the last try asked for
+	if slices.ContainsFunc(cs, func(c candidate) bool { return !c.p.SkipsRedaction() }) {
+		mw, masked, done, hits, err := redactedHits(r.Context(), w, body)
+		defer done()
+		if err != nil { // fails closed
+			st := maskStatus(err)
+			s.trace.update(tr, func(t *Route) {
+				t.Done, t.Status, t.Error, t.Millis = true, st, err.Error(), time.Since(start).Milliseconds()
+			})
+			call.Status, call.Error = st, err.Error()
+			writeError(w, provider.Chat, st, err.Error())
+			return
+		}
+		w, body = mw, masked
+		call.RequestBody, call.RequestTruncated = captureRequestBody(body)
+		// the record names the try that had it last, not the first
+		// planned (noteMaskedUntil)
+		m, noted := noteMaskedUntil(r, "systemone", hits, string(body), tr.ID, cs[0].p.ID, asked)
+		if m != nil {
+			s.trace.update(tr, func(t *Route) { t.Masked = m })
+		}
+		defer func() { noted(call.Provider, went) }()
+	}
 	var skipped []string
 	for i, c := range cs {
 		last := i == len(cs)-1
 		at := time.Now()
+		went = c.model
 		s.trace.update(tr, func(t *Route) {
 			t.Provider = c.p.ID
 			t.Tries = append(t.Tries, Try{ID: c.rest, Model: c.model, Start: at})
