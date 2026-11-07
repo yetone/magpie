@@ -3,7 +3,8 @@
 // 回退选择版本). Its rows come after Export and Import, in the list's own
 // rows (a line between each): the interval and Versions kept as the app's
 // segmented control (no <select>), the folder with Change…, Show and, once
-// one is picked, Default, Back up now, and each version with Restore….
+// one is picked, Default, Back up now, and each version with Restore…,
+// folded under Versions (its count and newest) until it is clicked.
 // Picking Off posts on:false and the row says none are made; 1 week posts
 // hours 168; 14 posts keep 14; Default posts dir "". Restore… asks in the
 // app's own dialog, saying what is here is backed up first; Cancel posts
@@ -17,7 +18,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
-const { openPart } = require("./reader.cjs");
+const { openPart, reach } = require("./reader.cjs");
 const { strings } = require("./strings.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
@@ -125,6 +126,33 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await list.locator(".auto-backup-inside").count(), 0, "a folder picked elsewhere says nothing of magpie's");
         const versions = rowNamed(w("Versions"));
         assert.ok((await sub(versions)).startsWith(w("{n} backups · newest {when}", { n: 2, when: "" }).trim().replace(/\s*$/, "")), await sub(versions));
+        // folded (chen2652 on Discord: a long list): Versions says how many
+        // and the newest, and its name or that line opens the list in place,
+        // the page not moving, and folds it again
+        const vsub = versions.locator(".who > .sub").first();
+        const box = await vsub.boundingBox();
+        assert.ok(box && box.width > 20 && box.height > 8, "the count and newest are in sight, not a hint: " + JSON.stringify(box));
+        const fold = versions.locator("button.auto-backup-fold");
+        assert.equal(await fold.textContent(), w("Versions"));
+        assert.equal(await fold.getAttribute("aria-expanded"), "false");
+        assert.equal(await list.locator(".auto-backup-version").count(), 0, "the versions are folded at first");
+        const view = page.locator("#view-settings");
+        await reach(page, versions.locator(".who > .sub").first());
+        const where = async () => [await view.evaluate((v) => v.scrollTop), await versions.evaluate((r) => Math.round(r.getBoundingClientRect().top))];
+        const before = await where();
+        await versions.locator(".who > .sub").first().click();
+        await list.locator(".auto-backup-version").nth(1).waitFor({ state: "visible" });
+        assert.equal(await versions.locator("button.auto-backup-fold").getAttribute("aria-expanded"), "true");
+        await page.waitForTimeout(300);
+        assert.deepEqual(await where(), before, "opening the versions moved the page");
+        await versions.locator("button.auto-backup-fold").click();
+        await list.locator(".auto-backup-version").first().waitFor({ state: "detached" });
+        assert.equal(await versions.locator("button.auto-backup-fold").getAttribute("aria-expanded"), "false");
+        // the keyboard opens it too, and keeps its focus
+        await versions.locator("button.auto-backup-fold").focus();
+        await page.keyboard.press("Enter");
+        await list.locator(".auto-backup-version").nth(1).waitFor({ state: "visible" });
+        await page.waitForFunction(() => document.activeElement?.matches(".auto-backup-fold"));
         assert.equal(await list.locator(".auto-backup-version").count(), 2);
         assert.ok((await sub(list.locator(".auto-backup-version").nth(1))).startsWith(w("What was here before a restore")));
         assert.ok((await sub(list.locator(".auto-backup-version").first())).includes(w("{n} providers", { n: 3 })));
@@ -217,6 +245,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await page.waitForFunction(() => typeof window.autoBackupFill === "function");
     await page.evaluate(() => { renderSync(); renderSync(); });
     release();
+    await page.locator("#syncList .auto-backup-fold").waitFor({ state: "visible" });
+    await page.locator("#syncList .auto-backup-fold").press("Enter");
     await page.locator("#syncList .row.pref.auto-backup-version").first().waitFor({ state: "visible" });
     assert.equal(await page.locator("#syncList .row.pref.auto-backup-version").count(), 2);
     assert.equal(await page.locator("#syncList .row.pref.auto-backup").filter({ has: page.locator(".name", { hasText: /^Back up by itself$/ }) }).count(), 1);

@@ -210,6 +210,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           w("Your providers, settings and profiles, without API keys, and the sign-ins sealed with a passphrase, into a folder on this computer"));
         assert.equal(await ask.count(), 0);
         assert.equal(await rowNamed(w("Sign-ins in backups")).locator(".who > .sub").textContent(), w("Subscription accounts and plugin sign-ins, sealed with the passphrase set here"));
+        // the versions are folded under Versions until it is clicked
+        await click(rowNamed(w("Versions")).locator(".auto-backup-fold"));
         const version = list.locator(".auto-backup-version").first();
         assert.ok((await version.locator(".sub").textContent()).includes(w("sign-ins")));
         // a restore: asked, then says the sign-ins were sealed with another

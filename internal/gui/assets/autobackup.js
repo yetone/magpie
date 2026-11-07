@@ -14,6 +14,9 @@ let autoBackupLoad = null;
 let autoBackupSaid = null;
 // the passphrase asked for as the sign-ins are turned on, when none is set
 let autoBackupPhrase = false;
+// the versions listed under Versions (chen2652 on Discord: a long list,
+// folded to its count and newest until clicked), kept over redraws
+let autoBackupOpen = false, autoBackupRefocus = false;
 
 // autoBackupFill puts the rows in place of at, the empty element renderSync
 // leaves at the end of Sync's list: rows, so the list's lines run between
@@ -95,13 +98,34 @@ function autoBackupRows(v) {
     if (v.inside) dir.after(el("div", "sub wraps auto-backup-inside", t("In magpie's own folder: a reinstalled system or a lost disk takes these backups too. Pick a folder on another disk, or one a cloud drive syncs")));
   }
   const list = v.backups || [];
-  const sub = row(t("Versions"), list.length ? t("{n} backups · newest {when}", { n: list.length, when: syncWhen(list[0].made) }) : t("None yet"),
-    btn(t("Back up now"), (b) => autoBackupDo("now", {}, b))).querySelector(".sub");
+  const vrow = row(t("Versions"), list.length ? t("{n} backups · newest {when}", { n: list.length, when: syncWhen(list[0].made) }) : t("None yet"),
+    btn(t("Back up now"), (b) => autoBackupDo("now", {}, b)));
+  // how many and the newest is a state, not a hint: it stays in sight
+  const sub = vrow.querySelector(".sub");
+  sub.classList.add("say");
+  if (list.length) {
+    // the name and the line under it fold the versions away: a chevron
+    // after the name, turned down while they show
+    const name = vrow.querySelector(".name"), who = vrow.querySelector(".who");
+    const fold = el("button", "auto-backup-fold", name.textContent);
+    fold.type = "button";
+    fold.setAttribute("aria-expanded", String(autoBackupOpen));
+    fold.append(el("span", "chev", svg(CHEV_R, 10, 1.6)));
+    name.replaceChildren(fold);
+    who.classList.add("auto-backup-folds");
+    // the keyboard's focus stays on it over the redraw
+    if (autoBackupRefocus) { autoBackupRefocus = false; requestAnimationFrame(() => fold.isConnected && fold.focus(NO_SCROLL)); }
+    who.onclick = () => {
+      autoBackupOpen = !autoBackupOpen;
+      autoBackupRefocus = document.activeElement === fold;
+      renderSync();
+    };
+  }
   if (autoBackupSaid) {
     sub.after(...autoBackupSaid.map((l) => el("div", "sub wraps auto-backup-said", l)));
     autoBackupSaid = null;
   }
-  for (const b of list) {
+  for (const b of autoBackupOpen ? list : []) {
     const when = autoBackupWhen(b.made);
     const what = [t(b.providers === 1 ? "1 provider" : "{n} providers", { n: b.providers })];
     if (b.reason === "restore") what.unshift(t("What was here before a restore"));

@@ -4349,6 +4349,15 @@ body.panel .modal { padding: 16px 12px; }
 .prefs .row.pref.auto-backup .who { flex: 1 1 200px; }
 .prefs .row.pref.auto-backup .sub { white-space: normal; }
 .prefs .row.pref.auto-backup .val { margin-left: auto; max-width: 100%; }
+/* Versions folds the list of versions away (chen2652): its name and the
+   line under it open it, a chevron after the name turned down while open */
+.prefs .row.pref.auto-backup .who.auto-backup-folds { cursor: pointer; }
+.auto-backup-fold { display: inline-flex; align-items: center; gap: 4px; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.auto-backup-fold .chev { display: inline-flex; color: var(--faint); transition: transform .15s ease-out, color .12s; }
+.auto-backup-folds:hover .auto-backup-fold .chev { color: var(--muted); }
+.auto-backup-fold[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.auto-backup-fold:focus-visible { outline: 1.5px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { .auto-backup-fold .chev { transition: none; } }
 
 /* the usual context windows under the field, one click each (#120) */
 .cxpicks { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
