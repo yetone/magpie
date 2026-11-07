@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -157,6 +158,13 @@ func TestDshLinuxDesktopApp(t *testing.T) {
 // anywhere). Only the app's entry counts: named DeepSeek Harness and
 // handling dsh:// links, its program there, not hidden by the user's own.
 func TestDshLinuxDesktopEntry(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// An entry's program is found as the host finds one: on PATH
+		// (Windows wants a PATHEXT extension) or an executable file
+		// (Windows has no exec bit). On Windows the check never runs
+		// (linuxAppOS is runtime.GOOS), so there is nothing to test (#5617).
+		t.Skip("a Linux program can't be found on a Windows host")
+	}
 	home := dshLinuxSandbox(t)
 	a := &Agent{ID: "dsh", Bin: "dsh"}
 	sys := filepath.Join(proc.SystemDirs("/usr/share")[0], "applications")
