@@ -99,8 +99,7 @@ func heatDiskWrite(key string, cut, since time.Time, days []Day) error {
 // heatSettledKey names what the days before cut were counted of: each
 // chunk by its rows (a session file's through sourceDigest) under the
 // same root and meta, and the counting by the call shards' version and
-// settledCountVersion. False: the chunks
-// can't be named so (a probe's chunk made again for each query).
+// settledCountVersion. False: no disk to keep the count on.
 func heatSettledKey(d heatDiskRef, cut, since time.Time, f Filter, identities map[string]sessions.CodexIdentity, settled [3][]*rowChunk, before heatSum) (string, bool) {
 	if d.root == "" {
 		return "", false
@@ -126,9 +125,8 @@ func heatSettledKey(d heatDiskRef, cut, since time.Time, f Filter, identities ma
 			return strings.Compare(a.Source.Path, b.Source.Path)
 		})
 		for _, c := range set {
-			if c.serial == 0 {
-				return "", false
-			}
+			// a chunk without a serial (a probe's, made again for each
+			// query) is named by its rows below, as pairSerials allows
 			b = fmt.Appendf(b[:0], "\x01%d\x00%s\x00%d\x00%d\x00%s\x00", k, c.Computer, c.Count, c.Latest.UnixNano(), c.Source.Path)
 			h.Write(b)
 			if c.Source.Path != "" {
