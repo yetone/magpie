@@ -2390,14 +2390,16 @@ function routingPage(part) {
     let f = folds.get(key);
     if (!f) {
       const li = el("li", "rt-fold"), b = el("b"), st = el("em"), tg = el("span", "tag");
-      const n = el("span", "n"), chev = el("span", "chev");
+      const n = el("span", "n"), chev = el("span", "chev"), bar = el("div", "bar"), bi = el("i");
       chev.append(svg(CHEV, 12, 1.7));
-      li.append(el("i", "dot"), b, st, chev, tg);
+      bar.append(bi);
+      li.append(el("i", "dot"), b, st, chev, bar, tg);
+      li.classList.add("nobar");
       li.tabIndex = 0;
       li.setAttribute("role", "button");
       li.onclick = () => toggleFold(f);
       li.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleFold(f); } };
-      f = { li, b, st, tg, n, wire: path(), key };
+      f = { li, b, st, tg, n, bi, wire: path(), key };
       folds.set(key, f);
     }
     f.w = w;
@@ -2921,18 +2923,19 @@ function routingPage(part) {
     // a fold tells of its keys together: the one answering or that
     // answered, by name, then how many are there to route to and how many
     // rest
-    const together = (f, ms) => {
+    const together = (f, ms, sum) => {
       const has = (m, c) => m.li.classList.contains(c);
       const on = ms.find((m) => has(m, "now")) || ms.find((m) => has(m, "on")), resting = ms.filter((m) => has(m, "rest")).length;
       const held = ms.filter((m) => !has(m, "rest") && has(m, "left")).length; // at a cap, or used up (#2129)
       const parts = [];
+      if (sum) parts.push(sum.text);
       if (on) parts.push(`${who(on.w)}: ${on.st.textContent}`);
       if (resting + held < ms.length) parts.push(t("{n} available", { n: ms.length - resting - held }));
       if (resting) parts.push(t("{n} resting", { n: resting }));
       if (held) parts.push(t("{n} held", { n: held }));
       setText(f.st, parts.join(" · "));
       // a title or an intent the row cut short is read whole over the fold too
-      const tip = on?.st.title ? f.st.textContent : "";
+      const tip = tipLines(on?.st.title ? f.st.textContent : "", sum?.tip);
       if (f.st.title !== tip) { if (tip) f.st.title = tip; else f.st.removeAttribute("title"); }
       lightRow(f.li, f.wire, !!on, ms.some((m) => has(m, "now")));
       tint(f.wire, on?.wire);
@@ -2941,7 +2944,14 @@ function routingPage(part) {
     for (const f of folds.values()) {
       const ms = (f.ids || []).map((id) => rows.get(id)).filter(Boolean);
       setText(f.n, t(f.w.kind === "account" ? "{n} accounts" : "{n} keys", { n: ms.length }));
-      const all = together(f, ms);
+      // folded, a fold of accounts on one plan says what they have left
+      // together, and its bar shows it (chen2652 on Discord); open, each
+      // account's own row does, and the fold says nothing of it
+      const sum = f.w.kind === "account" && !f.open && !day ? foldQuota(ms) : null;
+      f.li.classList.toggle("nobar", !sum?.bar);
+      const fill = sum?.bar ? quotaFill(sum.bar) + "%" : "0";
+      if (f.bi.style.width !== fill) f.bi.style.width = fill;
+      const all = together(f, ms, sum);
       f.li.classList.toggle("rest", all);
       f.wire.classList.toggle("rest", all);
     }
@@ -4438,6 +4448,33 @@ function routingPage(part) {
     const mine = quotas.filter((q) => !q.from && q.kind === "subscription" && (q.provider === w.agent || q.provider === w.provider));
     const q = mine.find((q) => (q.user || "").trim().toLowerCase() === user) || (mine.length === 1 && !mine[0].user ? mine[0] : null);
     return q && !q.error && q.windows?.length ? q : null;
+  }
+  // foldQuota: what a fold's accounts have left together, from the Usage
+  // page's readings (mergeQuotas), as its strip of all of a provider's
+  // accounts says it: only when every account in it was read, and all are
+  // on one plan, so their windows are alike; a window only some of them
+  // have is left out (mergeQuotas). The tightest window that says a share
+  // is the figure and the bar; the rest, and when the first of them
+  // starts again, are on hover. Null when nothing adds up.
+  function foldQuota(ms) {
+    if (ms.length < 2 || ms.some((m) => m.w.free)) return null;
+    const cards = ms.map((m) => cardOf(m.w));
+    if (cards.some((q) => !q) || new Set(cards).size !== cards.length) return null;
+    if (new Set(cards.map((q) => q.plan || "")).size > 1) return null;
+    if (!window.mergeQuotas) { quotaAllJS().then(renderAll); return null; }
+    const ws = familyWindows(mergeQuotas(cards).windows) || [];
+    if (!ws.length) return null;
+    const shares = ws.filter((w) => !w.unlimited && !quotaNoShare(w));
+    const bar = shares.length ? shares.reduce((a, b) => (b.used > a.used ? b : a)) : null;
+    const top = bar || ws[0];
+    const line = (w) => t(w.name) + " " + quotaText(w);
+    const soon = ws.map((w) => w.firstReset).filter(Boolean).sort()[0];
+    return {
+      text: line(top), bar,
+      tip: tipLines(...ws.map(line),
+        t(top.how === "p" ? "The mean of {n} accounts on one plan" : top.how === "u" ? "Unlimited on each of {n} accounts" : "Added up over {n} accounts", { n: top.accounts }),
+        soon && t("The first of them starts again {when}", { when: resetClock(new Date(soon)) })),
+    };
   }
   // winsOf: each of an account's windows, as the Usage page's card names
   // it: "5 hours 40% used · resets in 2h"

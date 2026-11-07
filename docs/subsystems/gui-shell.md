@@ -199,6 +199,17 @@ lit and what it is doing, how many are available and how many rest
 from the fold. Accounts and keys folds a provider's keys, and its accounts,
 into one `.rt-keys` row each with their summed tally.
 
+A folded fold of accounts, live, also says what they have left together,
+first in its line, with a bar under it like an account row's (`foldQuota`,
+chen2652 on Discord): the Usage page's readings of its accounts (`cardOf`)
+put together by quotaall.js's `mergeQuotas`, the same as the Usage page's
+"All N accounts" strip, its tightest window that says a share as the figure
+and the bar, every window and when the first of them resets on hover. Only
+when every account in it was read, none is free, and all are on one plan;
+otherwise, and while the fold is open or a kept day is shown, it says
+nothing of it and each account's row has its own. See
+`routing-fold-accounts-together.test.cjs`.
+
 A group in the group's heading (`li.rt-sub`, `subNode`) folds the same way
 (`toggleSub`): folded, it says how many it routes to and what they do
 together, a request to any seat under it flies to the heading
