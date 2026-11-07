@@ -438,7 +438,14 @@ func (s *shim) lastScreen() string {
 		p = strings.Join(strings.Fields(now), " ")
 	}
 	if p == "" {
-		return fmt.Sprintf("nothing on its screen (%d bytes read)", s.nread.Load())
+		n := s.nread.Load()
+		why := fmt.Sprintf("nothing on its screen (%d bytes read)", n)
+		if n == 0 {
+			if w := s.undrawn(); w != "" {
+				why += "; " + w
+			}
+		}
+		return why
 	}
 	if len(p) > 600 {
 		p = p[len(p)-600:]
@@ -647,7 +654,7 @@ func (s *shim) ready() error {
 		case <-s.changed:
 		case <-time.After(200 * time.Millisecond):
 		case <-s.exited:
-			return fmt.Errorf("Claude Code ended before it showed its prompt (%v): %s", s.exit, s.lastScreen())
+			return fmt.Errorf(EndedEarly+" (%v): %s", s.exit, s.lastScreen())
 		case <-deadline:
 			if prompted {
 				return fmt.Errorf("Claude Code showed its prompt, but hadn't listed the tools of magpie's tool server in %s", readyWait)

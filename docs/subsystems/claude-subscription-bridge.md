@@ -646,6 +646,20 @@ as the helper waited, and every try was answered 502 "Claude Code has
 not answered magpie's initialize request in 10s" (#4504). A helper that
 answers nothing even then is ended (`tuiNoStart`), and the turn fails
 saying the interactive mode didn't start; the next turn tries it again.
+So does a helper that ends saying why Claude Code didn't come up ("claude-tui:
+…"), unless Claude Code ended itself first (`claudetui.EndedEarly`, as one
+that can't load its session does): a new Claude Code told the whole
+conversation waits on the same thing, and the turn was answered 502 after
+twice 45s (sowhynot). `TestClaudeTUINoPromptNotTriedAgain` holds both.
+A Claude Code that drew nothing in that time (0 bytes read) is said with
+what it runs meanwhile, from `ps` (`undrawn`, macOS and Linux): its
+Keychain read of its sign-in, `security find-generic-password`, has no
+time limit in Claude Code, and one held by a Keychain window or a locked
+keychain is named with what to do; any other command is named by its
+program alone, never its arguments. The helper doesn't end early on 0
+bytes: a Keychain window may still be answered, and Claude Code bounds its
+own network waits (about 30s) before it draws.
+`TestShimSaysWhatAnUndrawnClaudeWaitsOn` holds it.
 
 ## Why turns go on in one run
 

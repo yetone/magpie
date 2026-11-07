@@ -112,3 +112,36 @@ pwd >> '`+cwds+`'`)
 		t.Fatalf("the helper started %d times, want three: the caller's folder was asked about again", n)
 	}
 }
+
+// An interactive mode that doesn't come up for what Claude Code waits on
+// is the same for a new Claude Code told the whole conversation: the turn
+// fails once, saying why. It was tried again, waited out another 45s, and
+// was answered 502 after twice that (sowhynot). A Claude Code that ended
+// itself before its prompt, as one that can't load the session it was
+// told to go on with does, is still tried again told the whole
+// conversation.
+func TestClaudeTUINoPromptNotTriedAgain(t *testing.T) {
+	for _, c := range []struct {
+		name, said string
+		starts     int
+	}{
+		{"no prompt", "Claude Code showed no prompt in 45s: nothing on its screen (0 bytes read)", 1},
+		{"ended itself", claudetui.EndedEarly + " (exit status 1): No conversation found", 2},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			h, started := tuiHelperHarness(t, `echo "claude-tui: `+c.said+`" >&2
+exit 1`)
+			// a conversation no run here has had: replayed from a transcript
+			code, msg := h.askCode("rules", "hi", "again", "more")
+			if code == 200 || !strings.Contains(msg, c.said) {
+				t.Fatalf("%d %s", code, msg)
+			}
+			if n := helperStarts(started); n != c.starts {
+				t.Fatalf("the helper started %d times, want %d", n, c.starts)
+			}
+			if runs := h.runs(); len(runs) != 0 {
+				t.Fatalf("a -p Claude Code ran: %v", runs)
+			}
+		})
+	}
+}

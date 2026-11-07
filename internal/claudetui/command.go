@@ -33,6 +33,14 @@ const DeadlineEnv = "MAGPIE_CLAUDE_TUI_BY"
 // folder of magpie's.
 const Untrusted = "Claude Code asks whether to trust the folder"
 
+// EndedEarly begins what the helper says as it ends over a Claude Code
+// that ended itself before it showed its prompt, as one that can't load
+// the session it was told to go on with does. Every other way the
+// interactive mode doesn't come up (no prompt in ReadyWait, a sign-in or
+// a question only its user answers) is the same for a new Claude Code
+// told the whole conversation: the bridge tries one again only on this.
+const EndedEarly = "Claude Code ended before it showed its prompt"
+
 // WSLEnv holds, as JSON (WSL), how to run a Claude Code that is in a WSL
 // distro: the helper, on Windows, runs wsl.exe in its pseudo console.
 const WSLEnv = "MAGPIE_CLAUDE_TUI_WSL"

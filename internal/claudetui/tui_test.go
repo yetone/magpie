@@ -243,6 +243,19 @@ func fakeClaude(args []string) {
 		time.Sleep(time.Minute)
 		os.Exit(0)
 	}
+	if v := os.Getenv("FAKE_KEYCHAIN"); v != "" {
+		// reads its Keychain sign-in before it draws anything, as Claude
+		// Code does, and the read never answers (sowhynot)
+		c := exec.Command(v, "find-generic-password", "-a", "u", "-w", "-s", "Claude Code-credentials")
+		c.Stdin = os.Stdin
+		_ = c.Run()
+		os.Exit(1)
+	}
+	if os.Getenv("FAKE_SILENT") == "1" {
+		// draws nothing, and runs nothing meanwhile
+		time.Sleep(time.Minute)
+		os.Exit(1)
+	}
 	if os.Getenv("FAKE_LOGIN") == "1" {
 		// signed in for -p alone: the interactive mode asks how to sign in
 		fmt.Print("\r\nSelect login method:\r\n\r\n ❯ 1. Claude account with subscription\r\n   2. Anthropic Console account\r\n")

@@ -1339,6 +1339,14 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 				// the helper hung: the turn fails (start)
 				return nil, nil, &tuiNoStart{err}
 			}
+			if tui && run.saidOnEnd("claude-tui: ") && !run.saidOnEnd(claudetui.EndedEarly) {
+				// the helper ended saying why Claude Code didn't come up,
+				// and Claude Code hadn't ended itself, as one that can't
+				// load the session does: a new one told the whole
+				// conversation waited out the same 45s, and the turn was
+				// answered 502 after twice that (sowhynot)
+				return nil, nil, &tuiNoStart{err}
+			}
 			return nil, nil, err
 		}
 	}
