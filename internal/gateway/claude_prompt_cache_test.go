@@ -3,6 +3,8 @@ package gateway
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -32,9 +34,70 @@ func TestClaudeInstructionsCachedApart(t *testing.T) {
 	if len(blocks) != 1 || blocks[0]["cache_control"] != nil {
 		t.Fatalf("no instructions: %v", blocks)
 	}
-	env := cleanClaudeEnv([]string{"CLAUDE_CODE_PROMPT_CACHE_TTL=5m"})
-	if !slices.Contains(env, "CLAUDE_CODE_PROMPT_CACHE_TTL=1h") || slices.Contains(env, "CLAUDE_CODE_PROMPT_CACHE_TTL=5m") {
+	// a value Claude Code doesn't take is no pick: the hour stays
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	env := cleanClaudeEnv([]string{"CLAUDE_CODE_PROMPT_CACHE_TTL=7d"})
+	if !slices.Contains(env, "CLAUDE_CODE_PROMPT_CACHE_TTL=1h") || slices.Contains(env, "CLAUDE_CODE_PROMPT_CACHE_TTL=7d") {
 		t.Fatalf("env: %q", env)
+	}
+}
+
+// A bridge run keeps its prompt cache as long as the user picked for
+// Claude Code's main conversation, in the Agents page (settings.json's
+// promptCacheTtl) or a variable, and the marks magpie puts in its first
+// message are as long, since Anthropic refuses a 1h mark after a 5m one.
+// With nothing picked it is an hour, as before. linkaww: 5m picked, the
+// run was given CLAUDE_CODE_PROMPT_CACHE_TTL=1h, and 237 of 241 relayed
+// requests wrote an hour's cache.
+func TestClaudeRunKeepsTheUsersCacheTTL(t *testing.T) {
+	for _, c := range []struct {
+		name, settings, env, force, want string
+	}{
+		{name: "nothing picked", want: "1h"},
+		{name: "agents page 5m", settings: `{"promptCacheTtl":"5m"}`, want: "5m"},
+		{name: "agents page 1h", settings: `{"promptCacheTtl":"1h"}`, want: "1h"},
+		{name: "settings env", settings: `{"env":{"CLAUDE_CODE_PROMPT_CACHE_TTL":"5m"},"promptCacheTtl":"1h"}`, want: "5m"},
+		{name: "magpie's env", env: "5m", want: "5m"},
+		{name: "forced 5m", force: "1", settings: `{"promptCacheTtl":"1h"}`, want: "5m"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			h := newScriptHarness(t, "ok", `echo "ttl ${CLAUDE_CODE_PROMPT_CACHE_TTL-unset} force ${FORCE_PROMPT_CACHING_5M-unset}" >> $log`)
+			if c.settings != "" {
+				if err := os.MkdirAll(h.config, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(h.config, "settings.json"), []byte(c.settings), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if c.env != "" {
+				t.Setenv("CLAUDE_CODE_PROMPT_CACHE_TTL", c.env)
+			}
+			if c.force != "" {
+				t.Setenv("FORCE_PROMPT_CACHING_5M", c.force)
+			}
+			h.ask("rules", "hello", "next")
+			runs := h.runs()
+			if len(runs) != 1 {
+				t.Fatalf("runs: %d", len(runs))
+			}
+			for _, log := range runs {
+				if !strings.Contains(log, "ttl "+c.want+" force unset") {
+					t.Fatalf("run's environment, want %s:\n%s", c.want, log)
+				}
+				var told string
+				for _, line := range strings.Split(log, "\n") {
+					if strings.HasPrefix(line, "told ") {
+						told = line
+						break
+					}
+				}
+				other := map[string]string{"5m": "1h", "1h": "5m"}[c.want]
+				if !strings.Contains(told, `"ttl":"`+c.want+`"`) || strings.Contains(told, `"ttl":"`+other+`"`) {
+					t.Fatalf("first message's marks, want %s: %s", c.want, told)
+				}
+			}
+		})
 	}
 }
 

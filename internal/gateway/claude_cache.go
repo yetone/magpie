@@ -289,6 +289,17 @@ func cacheDropped(w http.ResponseWriter, req *Request) {
 type cachePrefix struct {
 	count int
 	floor string
+	// ttl is how long the run's Claude Code keeps its cache, as its
+	// first message's marks (claudeRunTTL); "" is a session saved before
+	// it was kept, an hour's
+	ttl string
+}
+
+func (p cachePrefix) runTTL() string {
+	if p.ttl == "" {
+		return "1h"
+	}
+	return p.ttl
 }
 
 func (p cachePrefix) accepts(tail string) bool {

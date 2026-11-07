@@ -64,6 +64,7 @@ import (
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/claudecode"
 	"github.com/yetone/magpie/internal/claudetui"
+	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
@@ -127,9 +128,9 @@ func (b *subscriptionBridge) passedOver(configDir, dir string) bool {
 //
 // It waits as long as the prompt cache it wrote lasts: on a subscription
 // within its limits Claude Code writes Anthropic's cache for an hour
-// (claudeCacheTTL; cleanClaudeEnv pins its CLAUDE_CODE_PROMPT_CACHE_TTL to
-// 1h), and a run let go sooner has its conversation told to a new one in one message, a
-// prefix the cache has never seen, so the whole of it is written again
+// (claudeCacheTTL; claudeRunTTL unless the user picked 5m, when a run kept
+// the hour only holds its process longer), and a run let go sooner has its
+// conversation told to a new one in one message, a prefix the cache has never seen, so the whole of it is written again
 // while what the old run wrote is still there to read (#463: a turn
 // after 39 minutes idle wrote the conversation again). Past the hour the cache is gone
 // either way, and the run would only hold a process.
@@ -1161,9 +1162,12 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	var prompt []map[string]any
 	var prefix cachePrefix
 	if from != nil {
+		// the session's first message has the marks it was started with:
+		// its cache is kept as long as before, whatever the pick is now
 		prefix = from.cachePrefix
 		prompt = renderClaudeTurn(req.Messages[len(req.Messages)-len(from.since):], req.Tools)
 	} else {
+		req.cacheTTL = claudeRunTTL(os.Environ())
 		prompt, err = renderClaudePrompt(req)
 		if err != nil {
 			cleanup()
@@ -1172,6 +1176,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		if req.clientCache != nil {
 			prefix = promptCachePrefix(prompt)
 		}
+		prefix.ttl = req.cacheTTL
 	}
 	// Claude Code's interactive mode unless the user turned it off
 	// (claudeTUI): the shim (claudetui) is handed the -p arguments, and
@@ -1193,7 +1198,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		cmd = binary.command(context.Background(), args...)
 	}
 	cmd.Dir = work
-	env, err := binary.proxied(ctx, cleanClaudeEnv(os.Environ()))
+	env, err := binary.proxied(ctx, cleanClaudeEnvTTL(os.Environ(), prefix.runTTL()))
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -3447,11 +3452,51 @@ func inClaudeDir(env []string, configDir string) []string {
 	return out
 }
 
+// claudeRunTTL is how long the prompt cache of a bridge's Claude Code run
+// is kept, "5m" or "1h": the user's own pick for Claude Code's main
+// conversation, as Claude Code resolves it (FORCE_PROMPT_CACHING_5M, then
+// CLAUDE_CODE_PROMPT_CACHE_TTL, in env or in settings.json's env, then
+// settings.json's promptCacheTtl, which the Agents page writes), and an
+// hour with none set, as Claude Code writes it on a subscription within
+// its limits. The run is given it in its environment, since a saved
+// account's Claude Code reads the settings of the account's folder, not
+// the user's (linkaww: 5m picked, every relayed write an hour's).
+func claudeRunTTL(env []string) string {
+	settingsPath := filepath.Join(claudeConfigDir(), "settings.json")
+	envOf := func(k string) string {
+		if v, _ := edit.GetJSON(settingsPath, "env."+k); v != "" {
+			return v
+		}
+		for _, e := range env {
+			if v, ok := strings.CutPrefix(e, k+"="); ok {
+				return v
+			}
+		}
+		return ""
+	}
+	if v := envOf("FORCE_PROMPT_CACHING_5M"); v != "" && v != "0" && v != "false" {
+		return "5m"
+	}
+	if v := envOf("CLAUDE_CODE_PROMPT_CACHE_TTL"); v == "5m" || v == "1h" {
+		return v
+	}
+	if v, _ := edit.GetJSON(settingsPath, "promptCacheTtl"); v == "5m" || v == "1h" {
+		return v
+	}
+	return "1h"
+}
+
 func cleanClaudeEnv(env []string) []string {
+	return cleanClaudeEnvTTL(env, claudeRunTTL(env))
+}
+
+// cleanClaudeEnvTTL is cleanClaudeEnv with the run's cache kept ttl
+// (claudeRunTTL).
+func cleanClaudeEnvTTL(env []string, ttl string) []string {
 	blocked := map[string]bool{
 		"ANTHROPIC_BASE_URL": true, "ANTHROPIC_API_KEY": true, "ANTHROPIC_AUTH_TOKEN": true,
 		"CLAUDECODE": true, "CLAUDE_CODE_ENTRYPOINT": true, "CLAUDE_CODE_SSE_PORT": true,
-		"CLAUDE_CODE_OAUTH_TOKEN": true, "CLAUDE_CODE_PROMPT_CACHE_TTL": true,
+		"CLAUDE_CODE_OAUTH_TOKEN": true, "CLAUDE_CODE_PROMPT_CACHE_TTL": true, "FORCE_PROMPT_CACHING_5M": true,
 		"CLAUDE_CODE_EXTRA_BODY": true, "ANTHROPIC_BETAS": true,
 	}
 	out := make([]string, 0, len(env)+3)
@@ -3471,10 +3516,11 @@ func cleanClaudeEnv(env []string) []string {
 		// model that itself, and a status changing with each commit undoes
 		// the cache from there on
 		"CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS=1",
-		// an hour's cache, as Claude Code writes it on a subscription within
-		// its limits, always: the mark on the caller's instructions
-		// (renderClaudePrompt) is an hour's, which may not follow a 5m one
-		"CLAUDE_CODE_PROMPT_CACHE_TTL=1h")
+		// the cache kept as the user picked (claudeRunTTL), stated so that
+		// the marks magpie puts in the first message (renderClaudePrompt,
+		// Request.cacheTTL) are the same: Anthropic refuses a 1h mark after
+		// a 5m one
+		"CLAUDE_CODE_PROMPT_CACHE_TTL="+ttl)
 }
 
 type lockedWriter struct{ run *subscriptionRun }
@@ -4435,11 +4481,11 @@ func renderClaudePromptAt(req *Request, split int) ([]map[string]any, error) {
 		// in one block with the conversation a request whose messages differ
 		// (the next item of a batch, a new conversation under the same
 		// instructions) found nothing cached past Claude Code's own prompt.
-		// The mark's TTL is the one Claude Code uses (claudeCacheTTL, pinned
-		// in cleanClaudeEnv): Anthropic refuses a 1h mark after a 5m one.
+		// The mark's TTL is the one Claude Code uses (runMark): Anthropic
+		// refuses a 1h mark after a 5m one.
 		block := map[string]any{"type": "text", "text": text.String()}
 		if req.clientCache == nil {
-			block["cache_control"] = cacheMark1h()
+			block["cache_control"] = req.runMark()
 		}
 		blocks = append(blocks, block)
 		text.Reset()
@@ -4519,7 +4565,7 @@ func renderClaudePromptAt(req *Request, split int) ([]map[string]any, error) {
 		if instructions >= 0 {
 			delete(blocks[instructions], "cache_control")
 		}
-		blocks[chunk]["cache_control"] = cacheMark1h()
+		blocks[chunk]["cache_control"] = req.runMark()
 	}
 	return closeBlocks(blocks, &text), nil
 }
@@ -4624,11 +4670,19 @@ func leanSystem(req *Request) string {
 // mark reach a mark 320 messages earlier.
 const historyChunk = 16
 
-// cacheMark1h is the prompt-cache mark on what magpie gives a run: an
-// hour's, as Claude Code's own (claudeCacheTTL, pinned in cleanClaudeEnv),
-// since Anthropic refuses a 1h mark after a 5m one.
+// cacheMark1h is an hour's prompt-cache mark.
 func cacheMark1h() map[string]string {
 	return map[string]string{"type": "ephemeral", "ttl": "1h"}
+}
+
+// runMark is the prompt-cache mark on what magpie gives a run: kept as
+// long as Claude Code's own (Request.cacheTTL, given to the run by
+// cleanClaudeEnvTTL), since Anthropic refuses a 1h mark after a 5m one.
+func (r *Request) runMark() map[string]string {
+	if r.cacheTTL == "5m" {
+		return cacheMark("5m")
+	}
+	return cacheMark1h()
 }
 
 // historyOpen and historyClose wrap the turns a run started anew is told

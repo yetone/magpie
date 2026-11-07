@@ -96,7 +96,9 @@ func replaySession(dirs []string, work, model string, req *Request) *savedSessio
 		return nil
 	}
 	log.Printf("claude: a new Claude Code goes on with the conversation from a transcript of it (%d messages, %d images), typed the last turn's %d", split, countImages(req.Messages[:split]), len(req.Messages)-split)
-	return &savedSession{session: sid, sessions: dirs, since: req.Messages[split:], tui: true, appended: req.appendPrompt}
+	// its first message has no marks: the run keeps its cache as the user
+	// picked (claudeRunTTL)
+	return &savedSession{session: sid, sessions: dirs, since: req.Messages[split:], tui: true, appended: req.appendPrompt, cachePrefix: cachePrefix{ttl: claudeRunTTL(os.Environ())}}
 }
 
 // replyWords is what a reply says, its thinking left out.
