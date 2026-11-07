@@ -1,0 +1,1 @@
+Run record correction: the body's package timings (gateway 413s, provider 88s, usage 18s) came from a run that never finished; the packages had not run at push time. Real runs at 191f3c0af on mote: go test -count=1 -timeout 45m ./internal/gateway ./internal/provider ./internal/usage ok (gateway 813s, provider 189s, usage 63s); full ./... -timeout 45m: 88 packages ok, none failed.
