@@ -67,6 +67,7 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -391,6 +392,9 @@ func liveAgentWire(path string, want liveAgentWant) error {
 			olds[k.key] = o
 		}
 	}
+	kept := liveAgentKeptLoad(path)
+	pids := liveAgentPIDs()
+	want, untouched := kept.take(olds, want, pids)
 	prior := liveAgentPriorOf(olds)
 	var set []edit.KV
 	var del []string
@@ -398,7 +402,7 @@ func liveAgentWire(path string, want liveAgentWant) error {
 		w, ok := want.Entries[k.key]
 		old, had := olds[k.key]
 		if !ok {
-			if had {
+			if had && !untouched[k.key] {
 				del = append(del, "providers."+k.key)
 			}
 			continue
@@ -432,20 +436,216 @@ func liveAgentWire(path string, want liveAgentWant) error {
 		}
 	}
 	if len(set) == 0 && len(del) == 0 {
+		kept.wrote(olds, want, pids)
+		liveAgentKeptSave(path, kept)
 		return nil
 	}
 	if len(del) == 0 {
-		return edit.SetJSON(path, set...)
+		err = edit.SetJSON(path, set...)
+	} else {
+		var raw, out []byte
+		if raw, err = os.ReadFile(path); err == nil {
+			if out, err = edit.PatchJSON(raw, set, del); err == nil {
+				err = edit.WriteAtomic(path, out)
+			}
+		}
 	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return err
+	if err == nil {
+		kept.wrote(olds, want, pids)
+		liveAgentKeptSave(path, kept)
 	}
-	out, err := edit.PatchJSON(raw, set, del)
-	if err != nil {
-		return err
+	return err
+}
+
+// LiveAgent's settings edit magpie's providers as any other: a model
+// deleted there, or a whole provider of magpie's, is the user's choice,
+// and a sync that wrote every model of magpie's back undid it each time
+// (zero2sin on Discord: 每次重启 LiveAgent 配置都被重置). So magpie
+// remembers, per config.json, which of its models and providers LiveAgent
+// has had, and one of them gone from the file since is taken out by the
+// user: it stays out until it is in the file again (put back in LiveAgent)
+// or magpie is turned off and on for LiveAgent. A model new to magpie's
+// list is still added.
+//
+// LiveAgent's backend writes back what it holds when a setting changes, so
+// a model magpie added while it ran, which it never read, is gone after its
+// next save without the user taking it out. One added while LiveAgent runs
+// is held as pending, with the processes that ran then, and written again
+// while it is missing under them. Once other processes run (LiveAgent
+// started again and read the file) it counts as had; once none do, as had
+// if it is still there, else it is written again. A LiveAgent that saved
+// over one and was started again before the next sync reads as the user
+// taking it out. Windows can't be asked what runs, so there each one
+// counts as had at once.
+
+// liveAgentKept is what magpie remembers of a config.json: items are
+// "m:<model id>" and "k:<provider key>".
+type liveAgentKept struct {
+	// in the file, as LiveAgent has read it
+	Had []string `json:"had,omitempty"`
+	// written while LiveAgent ran: the processes then
+	Pending map[string]string `json:"pending,omitempty"`
+	// taken out in LiveAgent
+	Gone []string `json:"gone,omitempty"`
+}
+
+func liveAgentKeptKey(path string) string { return "liveagent:" + path + ":kept" }
+
+func liveAgentKeptLoad(path string) liveAgentKept {
+	var k liveAgentKept
+	if v := stashShared()[liveAgentKeptKey(path)]; v != "" {
+		json.Unmarshal([]byte(v), &k)
 	}
-	return edit.WriteAtomic(path, out)
+	return k
+}
+
+func liveAgentKeptSave(path string, k liveAgentKept) {
+	v := ""
+	if len(k.Had) > 0 || len(k.Pending) > 0 || len(k.Gone) > 0 {
+		b, _ := json.Marshal(k)
+		v = string(b)
+	}
+	if v != stashShared()[liveAgentKeptKey(path)] {
+		stash(map[string]string{liveAgentKeptKey(path): v})
+	}
+}
+
+// liveAgentPIDs is the ids of LiveAgent's processes, "" for none, or where
+// magpie can't tell (Windows). A var so tests can say what runs.
+var liveAgentPIDs = func() string {
+	if runtime.GOOS == "windows" {
+		return ""
+	}
+	var ids []string
+	for _, pat := range liveAgentProc {
+		out, _ := proc.Command("pgrep", "-f", pat).Output()
+		for _, f := range strings.Fields(string(out)) {
+			if !slices.Contains(ids, f) {
+				ids = append(ids, f)
+			}
+		}
+	}
+	slices.Sort(ids)
+	return strings.Join(ids, ",")
+}
+
+// liveAgentHere is the items of magpie's providers in config.json now.
+func liveAgentHere(olds map[string]gjson.Result) map[string]bool {
+	here := map[string]bool{}
+	for key, o := range olds {
+		here["k:"+key] = true
+		for _, m := range o.Get("models").Array() {
+			if id := m.Get("id").String(); id != "" {
+				here["m:"+id] = true
+			}
+		}
+	}
+	return here
+}
+
+// take is want without what the user took out in LiveAgent, with k brought
+// up to the file (olds, magpie's providers in it) and LiveAgent's processes
+// now (pids). untouched are magpie's providers left in the file with
+// nothing magpie would put in them: kept as the user has them.
+func (k *liveAgentKept) take(olds map[string]gjson.Result, want liveAgentWant, pids string) (liveAgentWant, map[string]bool) {
+	here := liveAgentHere(olds)
+	// a LiveAgent started since read what magpie added; one that quit
+	// read it only if it is still there (its save drops one it never
+	// read)
+	for item, was := range k.Pending {
+		if was == pids {
+			continue
+		}
+		delete(k.Pending, item)
+		if (pids != "" || here[item]) && !slices.Contains(k.Had, item) {
+			k.Had = append(k.Had, item)
+		}
+	}
+	// with none of magpie's providers left nothing is judged: the sync
+	// writes nothing then, and on starts over
+	if len(olds) > 0 {
+		for _, item := range k.Had {
+			if !here[item] && !slices.Contains(k.Gone, item) {
+				k.Gone = append(k.Gone, item)
+			}
+		}
+	}
+	k.Gone = slices.DeleteFunc(k.Gone, func(item string) bool { return here[item] })
+	if len(k.Gone) == 0 {
+		return want, nil
+	}
+	out := liveAgentWant{Key: want.Key, Entries: map[string]liveAgentEntry{}, On: map[string]string{}}
+	untouched := map[string]bool{}
+	for key, e := range want.Entries {
+		if slices.Contains(k.Gone, "k:"+key) {
+			continue
+		}
+		had := len(e.Models) > 0
+		e.Models = slices.DeleteFunc(slices.Clone(e.Models), func(m liveAgentModel) bool { return slices.Contains(k.Gone, "m:"+m.ID) })
+		e.ModelOrder = slices.DeleteFunc(slices.Clone(e.ModelOrder), func(id string) bool { return slices.Contains(k.Gone, "m:"+id) })
+		if had && len(e.Models) == 0 {
+			untouched[key] = true
+			continue
+		}
+		out.Entries[key] = e
+	}
+	for _, id := range want.Order {
+		if on := want.On[id]; on != "" {
+			if _, ok := out.Entries[on]; ok && !slices.Contains(k.Gone, "m:"+id) {
+				out.Order = append(out.Order, id)
+				out.On[id] = on
+			}
+		}
+	}
+	return out, untouched
+}
+
+// wrote brings k up to what the sync left in the file: what was there
+// before (olds) LiveAgent has had, what magpie added now it has had too
+// unless LiveAgent ran (pids), and what left magpie's list is forgotten,
+// except what the user took out.
+func (k *liveAgentKept) wrote(olds map[string]gjson.Result, want liveAgentWant, pids string) {
+	here := liveAgentHere(olds)
+	now := map[string]bool{}
+	for key, e := range want.Entries {
+		now["k:"+key] = true
+		for _, m := range e.Models {
+			now["m:"+m.ID] = true
+		}
+	}
+	for key := range olds {
+		// a provider kept as the user has it, its models too
+		if _, ok := want.Entries[key]; !ok {
+			for item := range liveAgentHere(map[string]gjson.Result{key: olds[key]}) {
+				now[item] = true
+			}
+		}
+	}
+	k.Had = slices.DeleteFunc(k.Had, func(item string) bool { return !now[item] })
+	for item := range k.Pending {
+		if !now[item] {
+			delete(k.Pending, item)
+		}
+	}
+	items := make([]string, 0, len(now))
+	for item := range now {
+		items = append(items, item)
+	}
+	sort.Strings(items)
+	for _, item := range items {
+		if slices.Contains(k.Had, item) || k.Pending[item] != "" {
+			continue
+		}
+		if here[item] || pids == "" {
+			k.Had = append(k.Had, item)
+			continue
+		}
+		if k.Pending == nil {
+			k.Pending = map[string]string{}
+		}
+		k.Pending[item] = pids
+	}
+	sort.Strings(k.Had)
 }
 
 // liveAgentPrior is what config.json's providers of magpie's hold of each
@@ -647,6 +847,7 @@ func liveAgentUnwire(path string) error {
 			magpieOnly[m.Get("id").String()] = true
 		}
 	}
+	liveAgentKeptSave(path, liveAgentKept{})
 	if del == nil {
 		return nil
 	}
