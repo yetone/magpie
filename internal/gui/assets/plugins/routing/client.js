@@ -3198,10 +3198,25 @@ function routingPage(part) {
       return;
     }
     const sk = sessionKey(r);
-    const same = (x) => x.prompt && x.agent === r.agent && !x.kind && (sk ? sessionKey(x) === sk : r.conv && x.conv === r.conv);
-    const series = (sk || r.conv) && !r.kind ? listed().filter(same).sort((a, b) => a.id - b.id)
+    // the session's requests, as the session's line draws them (the Usage
+    // page's Context tab, contextOfRecs): the conversation's turns alone —
+    // a subagent's prompt is its own conversation's, so its line is drawn
+    // under its own sub, and in a session whose turns carry tools a
+    // tool-less call is the agent's side call under its session id (a
+    // classifier, a title), whose tokens cannot stand for the
+    // conversation's — not a swing in it (#5561: a lead at 96K–108K read
+    // as swings to 298K and back)
+    const inSession = (x) => x.prompt && x.agent === r.agent && !x.kind && (sk ? sessionKey(x) === sk : r.conv && x.conv === r.conv);
+    const withTools = (x) => (x.prompt?.parts || []).some((p) => p.kind === "tools" && p.tokens > 0);
+    const sessionReqs = listed().filter(inSession);
+    const tooled = sessionReqs.some((x) => !x.sub && withTools(x));
+    const same = (x) => (x.sub || "") === (r.sub || "") && (!tooled || withTools(x));
+    const series = (sk || r.conv) && !r.kind ? sessionReqs.filter(same).sort((a, b) => a.id - b.id)
       .map((x) => ({ id: x.id, tokens: x.prompt.tokens, time: x.time })) : null;
-    if (series && !series.some((x) => x.id === r.id)) series.push({ id: r.id, tokens: r.prompt.tokens, time: r.time });
+    // the request itself joins its line while the line is its to be on; a
+    // side call in a tool-carrying session reads its session's line without
+    // a point of its own, as Usage's Context tab draws it
+    if (series && !series.some((x) => x.id === r.id) && (!tooled || withTools(r))) series.push({ id: r.id, tokens: r.prompt.tokens, time: r.time });
     if (ctxFor && ctxFor !== r.id) ctxFor = 0;
     // the session by its name where it has one (tjhhhh), else its id
     const named = sessionName(r), sess = named || groupSession(r) || r.conv || "";
@@ -3266,7 +3281,13 @@ function routingPage(part) {
         x = { b, name, sub, bar: null };
         ctxSessBlocks.set(g.key, x);
       }
-      const r = g.last, p = r.prompt, w = p.window || 0;
+      // the session's own reading, its newest turn of the conversation —
+      // a subagent's prompt is its own conversation's, and a tool-less
+      // call in a session whose turns carry tools is the agent's side
+      // call — not whatever asked last (#5561: a subagent's 298K read as
+      // the session's)
+      const withTools = (x) => (x.prompt?.parts || []).some((p) => p.kind === "tools" && p.tokens > 0);
+      const r = g.rows.find((x) => !x.sub && (!g.rows.some((y) => !y.sub && withTools(y)) || withTools(x))) || g.last, p = r.prompt, w = p.window || 0;
       const folder = g.rows.find((y) => y.folder)?.folder || "";
       const title = g.rows.map(sessionName).find(Boolean) || "";
       const id = groupSession(r) || r.conv || "";
