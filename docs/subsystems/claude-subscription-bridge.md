@@ -702,7 +702,14 @@ mark in the first message is as long (`Request.runMark`), since Anthropic
 refuses a 1h mark after a 5m one. A session a run goes on from keeps the
 lifetime it started with (`cachePrefix.ttl`; one saved before it was kept
 is an hour's). Until 11-07 every run was given 1h whatever the pick
-(linkaww). `TestClaudeRunKeepsTheUsersCacheTTL`.
+(linkaww). `TestClaudeRunKeepsTheUsersCacheTTL`. Every `savedSession`
+carries its run's `cachePrefix`: the shelf's (`shelve`), and the branches
+cut from a live run's session for a fork's turn (`branch`), a turn sent
+again while its run is busy (`retryBranch`) and the turn after the
+interactive mode's side question (`branchAt`). Up to v0.1.3266 the three
+branches carried none, and their runs went back to an hour under a 5m
+pick (linkaww); `everyRunKept5m` in the fork, busy-retry and side
+question tests.
 
 A new run (and one started from a transcript, `replaySession`) picks its
 lifetime with `runTTLFor`: `FORCE_PROMPT_CACHING_5M` on this computer

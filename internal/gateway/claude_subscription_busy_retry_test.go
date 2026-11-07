@@ -33,6 +33,7 @@ func busyRetryClaude(t *testing.T) (string, string) {
 if [ "$1" = auth ]; then echo '{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","email":"u@example.com","subscriptionType":"max"}'; exit 0; fi
 log=` + logs + `/$$
 echo "args $*" > $log
+echo "ttl ${CLAUDE_CODE_PROMPT_CACHE_TTL-unset}" >> $log
 echo "mode ${FAKE_TUI:-print}" >> $log
 echo "args $*" >> ` + told + `
 sid=lead$$; resumed=; prev=
@@ -169,6 +170,7 @@ func TestClaudeTurnSentAgainWhileItsRunIsBusyBranchesOffItsSession(t *testing.T)
 
 func busyRetryBranches(t *testing.T, mode string) {
 	h := newBusyRetryHarness(t, mode)
+	pickFiveMinutes(t)
 	logs := keepLog(t)
 	first := h.ask(`[` + rmsg("user", "the conversation so far, told at length. fix the bug") + `]`)
 	if !strings.Contains(first, "turn 1") {
@@ -238,6 +240,8 @@ func busyRetryBranches(t *testing.T, mode string) {
 	if strings.Contains(logs.String(), "a new Claude Code is told the whole conversation: 3 messages") {
 		t.Errorf("the retry told a new Claude Code the whole conversation:\n%s", logs.String())
 	}
+	// the retry's branch keeps the 5m cache the busy run had
+	everyRunKept5m(t, h.logs)
 }
 
 // A turn that goes on past the one a busy run answers is no retry of it:

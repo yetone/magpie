@@ -239,6 +239,7 @@ func forkBranches(t *testing.T, mode string) {
 	config := filepath.Join(home, ".claude")
 	t.Setenv("CLAUDE_CONFIG_DIR", config)
 	os.MkdirAll(config, 0o755)
+	pickFiveMinutes(t)
 	os.WriteFile(filepath.Join(config, ".credentials.json"), mustJSON(map[string]any{"claudeAiOauth": map[string]any{
 		"accessToken": "tok-lead", "refreshToken": "r-lead", "expiresAt": time.Now().Add(24 * time.Hour).UnixMilli(), "subscriptionType": "max"}}), 0o600)
 	os.WriteFile(filepath.Join(home, ".claude.json"), mustJSON(map[string]any{
@@ -259,6 +260,7 @@ func forkBranches(t *testing.T, mode string) {
 if [ "$1" = auth ]; then echo '{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","email":"lead@example.com","subscriptionType":"max"}'; exit 0; fi
 log=`+logs+`/$$
 echo "args $*" > $log
+echo "ttl ${CLAUDE_CODE_PROMPT_CACHE_TTL-unset}" >> $log
 echo "mode ${FAKE_TUI:-print}" >> $log
 cb=$(cat "$(printf '%s\n' "$@" | grep -o '"claude-mcp-helper","[^"]*"' | head -1 | sed 's/.*","//; s/"$//')")
 sid=lead$$; resumed=; at=; fork=; prev=
@@ -424,4 +426,6 @@ FAKE_TUI=interactive exec "$claude" "$@"
 	if files, _ := filepath.Glob(filepath.Join(config, "projects", "*", "lead"+pid+".jsonl")); len(files) == 0 {
 		t.Error("the lead's session file is gone")
 	}
+	// the fork's branch keeps the 5m cache its lead had
+	everyRunKept5m(t, logs)
 }

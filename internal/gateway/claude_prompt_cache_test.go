@@ -301,3 +301,48 @@ func mustRender(t *testing.T, req *Request) []map[string]any {
 	}
 	return blocks
 }
+
+// pickFiveMinutes sets the test's Claude Code (CLAUDE_CONFIG_DIR) to a 5m
+// prompt cache for its main conversation, as the Agents page writes it.
+func pickFiveMinutes(t *testing.T) {
+	t.Helper()
+	dir := os.Getenv("CLAUDE_CONFIG_DIR")
+	if dir == "" {
+		t.Fatal("no CLAUDE_CONFIG_DIR")
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"promptCacheTtl":"5m"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// everyRunKept5m checks that each run whose log is in logs (a stand-in
+// Claude Code's, "ttl <CLAUDE_CODE_PROMPT_CACHE_TTL>" on a line) and whose
+// arguments resume a session was given a 5m cache, and that there was
+// one. A run that goes on from a branch of a session keeps its parent's
+// lifetime: the branches the side question, a fork and a turn sent again
+// make were given none, and an hour came back under a 5m pick (linkaww).
+func everyRunKept5m(t *testing.T, logs string) {
+	t.Helper()
+	entries, _ := os.ReadDir(logs)
+	resumed := 0
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".") {
+			continue
+		}
+		b, _ := os.ReadFile(filepath.Join(logs, e.Name()))
+		log := string(b)
+		if !strings.Contains(log, "--resume ") {
+			continue
+		}
+		resumed++
+		if !strings.Contains(log, "\nttl 5m\n") {
+			t.Errorf("a branch's run, want a 5m cache as its parent's:\n%.400s", log)
+		}
+	}
+	if resumed == 0 {
+		t.Error("no run went on from a session")
+	}
+}
