@@ -40,6 +40,7 @@ func syncHome(t *testing.T) string {
 	t.Setenv("DSH_HOME", "")
 	t.Setenv("DS_BOT_HOME", "")
 	t.Setenv("DS_BOT_SHELL_DATA", "")
+	t.Setenv("OMB_DATA_DIR", "")
 	t.Setenv("OMO_CODING_AGENT_DIR", "")
 	t.Setenv("SENPI_CODING_AGENT_DIR", "")
 	t.Setenv("PRIME_AGENT_CODING_AGENT_DIR", "")

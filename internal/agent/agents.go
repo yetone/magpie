@@ -306,6 +306,7 @@ func onMachine(home, cfg string) []*Agent {
 		raycast(home),
 		kiroCrew(home),
 		t3code(home),
+		openMausBot(home),
 		hanako(home),
 		atomcode(home),
 		snow(home),

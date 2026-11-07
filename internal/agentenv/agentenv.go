@@ -74,6 +74,8 @@ var Vars = []string{
 	// LiveAgent's data folder (K-brain's config.json), else the one
 	// ~/.liveagent/data-dir.json points to, else ~/.liveagent
 	"LIVEAGENT_HOME", "K_BRAIN_HOME",
+	// OpenMausBot's data folder (its config.json), ~/.openmausbot without it
+	"OMB_DATA_DIR",
 	// AstrBot's root, the folder holding its data/ (else ~/.astrbot, the desktop app's)
 	"ASTRBOT_ROOT",
 	// jcode's folder, ~/.jcode without it
