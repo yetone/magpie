@@ -259,13 +259,17 @@ func withOwnOutput(p provider.Provider, model string, proto provider.Protocol, b
 // API reads none as the model's whole, which another vendor's needn't
 // (DeepSeek's reads it as 8K, shortByDefault). Anthropic's always is, as
 // it needs one. An account's own backend (the ChatGPT one turns
-// max_output_tokens away) and another magpie, which fills its own, aren't.
+// max_output_tokens away) isn't. Another magpie is: this fills only a
+// translated turn (forwardTranslated), and one translated here goes to
+// the other magpie with its tools converted, a body it passes whole —
+// its own filling is translation work it never does (#5566), so its
+// vendor's short default was all a cascade got.
 func fillsOutput(p provider.Provider, to provider.Protocol) bool {
 	if to == provider.Anthropic {
 		return true
 	}
 	return (to == provider.Chat || to == provider.Responses) &&
-		(p.Account == nil || p.IsPlugin()) && !p.IsRemoteMagpie()
+		(p.Account == nil || p.IsPlugin())
 }
 
 // outputFieldRefused is a request error about the reply limit itself
