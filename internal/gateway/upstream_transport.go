@@ -173,7 +173,10 @@ type replayable struct{ http.RoundTripper }
 // one: "write tcp …: use of closed network connection". The vendor never
 // had the whole request, so it is sent again on another new connection,
 // after a moment, up to unsentAgain times (dealyang_ on X: a Codex turn through a TUN proxy's
-// fake IP, 198.18.0.17, failed with it on every reconnect). Still closed,
+// fake IP, 198.18.0.17, failed with it on every reconnect). When the
+// reader saw the close before the write began, as on a busy machine, Go
+// says only "EOF"; that too goes again, as long as the request's write
+// had not finished (#5519). Still closed,
 // the error says why (errClosedUnsent), and the routing rests nobody for
 // it (failProxy).
 func (t replayable) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -189,16 +192,19 @@ func (t replayable) RoundTrip(req *http.Request) (*http.Response, error) {
 		r.Header["X-Idempotency-Key"] = nil
 	}
 	for n := 0; ; n++ {
-		var fresh, h2 atomic.Bool
+		var fresh, h2, wrote atomic.Bool
 		trace := &httptrace.ClientTrace{GotConn: func(i httptrace.GotConnInfo) {
 			fresh.Store(!i.Reused)
 			if tc, ok := i.Conn.(interface{ ConnectionState() tls.ConnectionState }); ok {
 				h2.Store(tc.ConnectionState().NegotiatedProtocol == "h2")
 			}
+		}, WroteRequest: func(i httptrace.WroteRequestInfo) {
+			wrote.Store(i.Err == nil)
 		}}
 		try := r.WithContext(httptrace.WithClientTrace(r.Context(), trace))
 		res, err := t.RoundTripper.RoundTrip(try)
-		if err == nil || !fresh.Load() || h2.Load() || !closedBeforeSent(err) || req.Context().Err() != nil {
+		if err == nil || !fresh.Load() || h2.Load() || req.Context().Err() != nil ||
+			!closedBeforeSent(err) && (wrote.Load() || !endedUnwritten(err)) {
 			return res, err
 		}
 		if n >= len(unsentAgain) || (r.Body != nil && r.Body != http.NoBody && r.GetBody == nil) {
@@ -235,12 +241,27 @@ var unsentAgain = []time.Duration{250 * time.Millisecond, time.Second}
 // "nothing written" doesn't hold over TLS: a server had read 1186 bytes
 // of a request Go called unwritten.) A TLS connection the reader closed
 // first fails the write with a bare net.ErrClosed; the reader's own end is
-// "EOF" or a read error. A close the reader saw before the write began is
-// Go's errServerClosedIdle (seen on Windows).
+// "EOF" or a read error, read by endedUnwritten. A close the reader saw
+// before the request was handed to the connection is Go's
+// errServerClosedIdle (seen on Windows).
 func closedBeforeSent(err error) bool {
 	var op *net.OpError
 	return errors.As(err, &op) && op.Op == "write" || errors.Is(err, net.ErrClosed) ||
 		strings.Contains(err.Error(), "http: server closed idle connection")
+}
+
+// endedUnwritten says err is the reader's end of a connection the far
+// side closed — "EOF", or a read error such as a reset — which counts as
+// closed before sent only while the request's write had not finished
+// (no WroteRequest without an error): on a busy machine Go's write
+// goroutine may not have run yet when a proxy's close right after the
+// handshake arrives, so the reader sees the end first and Go returns a
+// bare "EOF", not a write error (#5519). Once the whole request was
+// written, the same end may follow a vendor that read and acted on it,
+// and it is never sent again here.
+func endedUnwritten(err error) bool {
+	var op *net.OpError
+	return errors.Is(err, io.EOF) || errors.As(err, &op) && op.Op == "read" && !op.Timeout()
 }
 
 // errClosedUnsent is a request's error once every new connection it was
