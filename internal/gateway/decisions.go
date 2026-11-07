@@ -28,7 +28,8 @@ var decisionModels = []string{"gpt-6-luna"}
 // body goes as the agent sent it to a provider that can serve the API
 // (canDecide), at its OpenAI-style base + /decisions (Azure's
 // /openai/v1/decisions), and the answer comes back as it said it. The
-// API isn't streamed, and bills input tokens only.
+// API isn't streamed, and bills input tokens only. A model that answers
+// System One instead is asked there, translated (decideBySystemOne).
 func (s *Server) decide(w http.ResponseWriter, r *http.Request) {
 	body, admitted := s.requestBody(w, r, provider.Chat)
 	if !admitted {
@@ -44,6 +45,15 @@ func (s *Server) decide(w http.ResponseWriter, r *http.Request) {
 	json.Unmarshal(req["model"], &asked)
 	if asked == "" {
 		writeError(w, provider.Chat, 400, "name the model: \"model\" is a magpie model id, as /v1/models lists them (OpenAI's Decisions API takes gpt-6-luna)")
+		return
+	}
+	// a decision model that answers System One, not this API (Bailian's
+	// decision-model-preview, Ark's, a Jev, a Clef, a plugin's, or a
+	// group of them): asked there, the request and its answer
+	// translated (decisions_systemone.go). One that serves this API
+	// itself (another magpie) is asked here, as it was.
+	if ts, ok := systemOneTargets(asked); ok && !slices.ContainsFunc(ts, func(t systemOneTarget) bool { return canDecide(t.p) }) {
+		s.decideBySystemOne(w, r, req, asked, ts)
 		return
 	}
 	s.serveRetrieval(w, r, "/decisions", "decisions", start, asked, &decisionRequest{jsonRetrieval{req: req}})

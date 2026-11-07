@@ -572,6 +572,13 @@ func (s *Server) serveSystemOne(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	s.serveSystemOneBody(w, r, body)
+}
+
+// serveSystemOneBody answers a System One request read: from
+// /v1/systemone, or one /v1/decisions was translated to
+// (decisions_systemone.go).
+func (s *Server) serveSystemOneBody(w http.ResponseWriter, r *http.Request, body []byte) {
 	var q struct {
 		Model string `json:"model"`
 	}
@@ -595,6 +602,12 @@ func (s *Server) serveSystemOne(w http.ResponseWriter, r *http.Request) {
 	}
 	p, model, err := provider.RouteDecider(q.Model)
 	if err != nil {
+		// no decision model by that name, but one OpenAI's Decisions
+		// API serves: asked there, the request and its answer
+		// translated (decisions_systemone.go)
+		if st := provider.DecideRouteStatus(err); st == http.StatusNotFound && s.systemOneByDecisions(w, r, body, q.Model) {
+			return
+		}
 		writeError(w, provider.Chat, provider.DecideRouteStatus(err), err.Error())
 		return
 	}

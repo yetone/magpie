@@ -1052,6 +1052,19 @@ only `model` changed, to an OpenAI API key, to Azure OpenAI (at
 magpie. Any other provider is refused with a 400 that says so. Only input
 tokens are counted, cached ones apart.
 
+A decision model that answers System One instead (Qwen's
+`decision-model-preview`, Ark's, a Jev, a Clef, a plugin's, or a decision
+group) is asked there: a predicate goes as a `noul` question, a choice's
+values as its criteria, a score's levels as its criteria least first, and
+`input` as the state (a string as it is, messages as
+`{"messages":[{role, content}]}`, JSON parts as their JSON). The answer comes
+back in the Decisions shape, in the questions' order, with the input and
+output tokens. What System One has no counterpart for (an image where the
+model isn't a Clef, a tool call or its output, another field such as
+`reasoning`) is refused with a 400 that names it, and nothing is sent. The
+other way, `/v1/systemone` with a model only the Decisions API serves
+(`openai/gpt-6-luna`) is asked there and answered as System One answers.
+
 ```sh
 curl localhost:3425/v1/decisions -H "Authorization: Bearer $MAGPIE_KEY" \
   -d '{"model":"gpt-6-luna","input":"The parcel arrived torn open.","questions":[{"type":"predicate","name":"damaged","instructions":"Was the parcel damaged?"}]}'
