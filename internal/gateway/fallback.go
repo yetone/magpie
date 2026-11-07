@@ -2156,6 +2156,19 @@ func passing(status int, header http.Header, body []byte, again int) (time.Durat
 // the agent has the error at once.
 var wallCodes = map[string]bool{"user_model_rate_limited": true}
 
+// zcodeRateWall is ZCode's account-wide 429, the same bucket as
+// wallCodes' (#5406, erlinerd): rested and retried, the 429 came back, and
+// two further accounts sat there while magpie kept asking (yetone on two
+// Discord reports, v0.1.3216). It is matched by the ZCode plugin's own
+// naming of the refusal, the vendor's three-part label `[1302][<its
+// words>][<its request id>]`, its words whole — the shape the two log
+// lines of #5406 show — never by the bare code: Zhipu's own API answers
+// 1302 for a concurrency or minute limit ("并发数过高", "您的账户已达到速率限制"
+// with no label), which a moment does clear, and a GLM key asked again
+// in place stays so. The words and the id together are the label's own,
+// not words anywhere in the body a prompt may quote.
+var zcodeRateWall = regexp.MustCompile(`\[1302\]\[您的账户已达到速率限制[^\]]*\]\[[0-9a-fA-F]{16,}\]`)
+
 // walled says whether body is a refusal whose error.code is one of
 // wallCodes: the code where the vendor puts it, not the words anywhere in
 // the body (a prompt or a message quoting it).
@@ -2165,11 +2178,14 @@ func walled(body []byte) bool {
 			Code json.RawMessage `json:"code"`
 		} `json:"error"`
 	}
-	if json.Unmarshal(body, &e) != nil {
+	if err := json.Unmarshal(body, &e); err != nil {
 		return false
 	}
 	var code string
-	return json.Unmarshal(e.Error.Code, &code) == nil && wallCodes[code]
+	if json.Unmarshal(e.Error.Code, &code) == nil && wallCodes[code] {
+		return true
+	}
+	return zcodeRateWall.Match(wordsOf(body))
 }
 
 // withRoom is, of the candidates left, those another member than c's may
