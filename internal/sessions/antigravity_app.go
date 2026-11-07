@@ -19,7 +19,8 @@ import (
 // conversations, on the Sessions and Usage pages, read where the app keeps
 // them whether or not it reached magpie's gateway (#2190, yygutn; xxooioo
 // on Discord). The app keeps each conversation as a SQLite database,
-// ~/.gemini/antigravity/conversations/<conversation id>.db, written in WAL
+// ~/.gemini/antigravity/conversations/<conversation id>.db (Insiders uses
+// ~/.gemini/antigravity-insiders/conversations), written in WAL
 // mode while it runs. Its messages are encrypted at rest; the figures read
 // here are not. As Antigravity 2.23.0 on macOS writes them (yygutn's real
 // rows on #2190; the app isn't installed on any machine magpie is tried on):
@@ -67,13 +68,27 @@ func AntigravityAppDir() string {
 	return filepath.Join(home, ".gemini", "antigravity")
 }
 
+// AntigravityInsidersDir is the Insiders app's separate data folder.
+func AntigravityInsidersDir() string {
+	return filepath.Join(filepath.Dir(AntigravityAppDir()), "antigravity-insiders")
+}
+
 // antigravityConversations is the folder of the app's conversation databases.
 func antigravityConversations() string {
 	return filepath.Join(AntigravityAppDir(), "conversations")
 }
 
-// antigravityFiles are the app's conversations, one database a session.
-func antigravityFiles() []file { return antigravityFilesIn(antigravityConversations()) }
+// antigravityFiles are stable and Insiders' conversations. Insiders' ids
+// have their own prefix so a UUID present in both stores is two sessions
+// with separate summaries and call ids. Stable's existing ids stay the same.
+func antigravityFiles() []file {
+	out := antigravityFilesIn(antigravityConversations())
+	insiders := antigravityFilesIn(filepath.Join(AntigravityInsidersDir(), "conversations"))
+	for i := range insiders {
+		insiders[i].key = "antigravity:insiders-" + strings.TrimPrefix(insiders[i].key, "antigravity:")
+	}
+	return append(out, insiders...)
+}
 
 // antigravityFilesIn are the conversation databases in dir. A file's size
 // and time are the database's and its write-ahead log's together, so a

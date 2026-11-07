@@ -732,6 +732,24 @@ Verification: `TestAgySessions`, `TestAgyTitleLater`, `TestAgyGrows`,
 `TestAgyTranscript`, `TestAgyFolder`, `TestAgyRowOnly`, on conversations agy 1.3.5 and 1.4.7
 wrote in a sandbox.
 
+The Antigravity desktop app's stable and Insiders stores are read by
+[`antigravity_app.go`](../../internal/sessions/antigravity_app.go):
+`~/.gemini/antigravity/conversations/*.db` and
+`~/.gemini/antigravity-insiders/conversations/*.db`. Both use the existing
+`antigravity` session-reading choice and agent on Sessions and Usage;
+`Found` detects an Insiders-only install, and `Dirs` lists each existing
+store. Each conversation takes its title and workspace from the
+`conversation_summaries.db` beside its own store, including later title
+updates. Model calls reuse the app's read-only SQLite/protobuf reader,
+including response folding and gateway matching. Insiders session ids
+have an `insiders-` prefix in magpie, leaving stable ids unchanged and
+keeping equal UUIDs in the two stores from sharing a session or call id.
+The files themselves are not renamed. Sessions stay read-only with no
+terminal resume command; encrypted conversation text is not read.
+Verification: `TestAntigravityInsidersSessions` covers Insiders alone,
+both stores with the same UUID, per-model tokens, call ids, summary refresh
+and turning the existing reading choice off, using #2190's real step bytes.
+
 A read of every call decodes each file's cached shard, and over a long
 history that is tens of thousands of files (#2278: 68k shards, 415 MB).
 Asks for the same calls while one read is under way wait for it and get

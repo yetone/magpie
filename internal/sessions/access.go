@@ -243,7 +243,7 @@ func Found() []string {
 	add("minimax-code", minimaxSessions())
 	add("kimi", kimiSessions())
 	add("agy", filepath.Join(AgyDir(), "brain"))
-	add("antigravity", antigravityConversations())
+	add("antigravity", antigravityConversations(), filepath.Join(AntigravityInsidersDir(), "conversations"))
 	add("gemini", geminiTmpDir())
 	return out
 }
