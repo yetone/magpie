@@ -82,6 +82,17 @@ it; `renderPanelQuota` puts the focus back on the button after the redraw.
 `panel-quota-refresh.test.cjs` covers it in both engines, all five
 languages, at 440 and 360px.
 Redrawing the cards preserves their refresh controls and any running turn.
+A read of every card (`loadQuotas`) draws the cards again in one go, as
+their reset countdowns need, but keeps each card's logo node
+(`keepIcons` in `renderQuotas`): a logo made afresh blinks out while its
+picture loads. While such a read is on its way for longer than 200 ms,
+`#subscriptionUsage` is `.reading` and each card's refresh turns
+(`quotaReading` in `plugins/usage/page.js`). The Overview's skeleton
+(`renderUsageLoading`) is put up only for a first read or another period
+or zone (`usageFor`); its tab pressed again while it shows that read reads
+quietly (`refreshUsage`), so no card leaves and the scroll stays put, and
+the refresh beside the period turns while it reads. Its lists keep their
+logos too. See `usage-quiet-refresh.test.cjs` (jiabubu on Discord).
 The reply updates the reading immediately; the icon then finishes its
 current full turn before stopping (no rotation under reduced motion).
 A manual refresh whose HTTP reply succeeds but whose requested card has

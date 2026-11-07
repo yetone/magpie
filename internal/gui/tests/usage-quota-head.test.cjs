@@ -70,11 +70,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       gate.quotas = gate.usage;
       await page.click('nav button[data-view="agents"], button[data-view="agents"]');
       await page.click('button[data-view="usage"]');
-      await page.waitForFunction(() => document.querySelector("#view-usage").classList.contains("loading"));
+      // the page shown before stays while it reads again (jiabubu on Discord)
+      await page.waitForFunction(() => document.querySelector("#usageReload.reading"));
       assert.equal(await head.isVisible(), true, "the head went while the page loaded");
       assert.equal(await page.locator(".subscription-card", { hasText: "Codex" }).isVisible(), true);
       free();
-      await page.waitForFunction(() => !document.querySelector("#view-usage").classList.contains("loading"));
+      await page.waitForFunction(() => !document.querySelector("#usageReload.reading, #view-usage.loading"));
       assert.equal(await head.isVisible(), true);
 
       // a period without calls keeps it over its cards

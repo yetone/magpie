@@ -1179,17 +1179,17 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 /* Inherited text supplies the inline baseline; the icon shares its centered cell. */
 .quota-refresh::before { content: "\00a0"; grid-area: 1 / 1; }
 .quota-refresh svg { grid-area: 1 / 1; }
-.subscription-card:hover .quota-refresh, .pq-card:hover .quota-refresh, .quota-refresh.busy, .quota-refresh.kept, .quota-refresh.reading { width: 14px; margin: 0 -2px 0 3px; opacity: 1; }
+.subscription-card:hover .quota-refresh, .pq-card:hover .quota-refresh, .quota-refresh.busy, .quota-refresh.kept, .quota-refresh.reading, #subscriptionUsage.reading .quota-refresh { width: 14px; margin: 0 -2px 0 3px; opacity: 1; }
 /* apart: Safari before 15.4 drops a whole selector list with :focus-visible in it */
 .quota-refresh:focus-visible { width: 14px; margin: 0 -2px 0 3px; opacity: 1; }
 .quota-refresh:hover { color: var(--fg); background: var(--pill-hover); }
 .quota-refresh.busy { cursor: default; }
-.quota-refresh.busy svg > *, .quota-refresh.reading svg > * { transform-box: view-box; transform-origin: 50% 50%; }
+.quota-refresh.busy svg > *, .quota-refresh.reading svg > *, #subscriptionUsage.reading .quota-refresh svg > * { transform-box: view-box; transform-origin: 50% 50%; }
 /* the other place's copy of a control that is turning (the tray panel's and the
    Usage page's draw the same account) turns by itself, as does a card kept
    from the last read while it is read again */
-.quota-refresh.spun svg > *, .quota-refresh.reading svg > * { animation: spin .8s linear infinite; }
-@media (prefers-reduced-motion: reduce) { .quota-refresh.spun svg > *, .quota-refresh.reading svg > * { animation: none; } }
+.quota-refresh.spun svg > *, .quota-refresh.reading svg > *, #subscriptionUsage.reading .quota-refresh:not(.busy) svg > * { animation: spin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .quota-refresh.spun svg > *, .quota-refresh.reading svg > *, #subscriptionUsage.reading .quota-refresh:not(.busy) svg > * { animation: none; } }
 @media (hover: none) { .quota-refresh { width: 14px; margin: 0 -2px 0 3px; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .quota-refresh { transition: none; } }
 .skeleton { display: block; border-radius: 5px; background: linear-gradient(90deg, var(--skel, var(--pill)) 25%, var(--skel-hi, var(--pill-hover)) 45%, var(--skel, var(--pill)) 65%); background-size: 240% 100%; animation: skeleton-shift 1.4s ease-in-out infinite; }
@@ -4501,7 +4501,7 @@ body.panel .modal { padding: 16px 12px; }
 /* how often the Usage page reads its numbers again, and a way to read them now */
 .usage-refresh { display: inline-flex; align-items: center; gap: 2px; margin-right: 10px; }
 .usage-refresh .icon { width: 24px; height: 24px; }
-.usage-refresh .icon.busy svg > * { transform-box: view-box; transform-origin: 50% 50%; animation: spin .8s linear infinite; }
+.usage-refresh .icon.busy svg > *, .usage-refresh .icon.reading svg > * { transform-box: view-box; transform-origin: 50% 50%; animation: spin .8s linear infinite; }
 .usage-refresh .sess-pick { height: 24px; }
 .led-rank .rk .rk-b { overflow-wrap: anywhere; }
 
