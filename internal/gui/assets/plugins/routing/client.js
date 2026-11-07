@@ -4636,6 +4636,7 @@ function routingPage(part) {
     actsFold = { rs: [...rs], by };
     return by;
   }
+  const provBoxes = new Map(); // a provider → its box in the accounts' list (renderActs)
   function renderActs(rs) {
     // a rest lifted by hand since the request that found it (#1869): the
     // kept requests still say it, until the next one asks it again. By the
@@ -4860,7 +4861,28 @@ function routingPage(part) {
     setText(actUsage, t("View usage"));
     unhide(actUsage, !list.length);
     unhide(actFoot, actMore.hidden && actUsage.hidden);
-    patch(acts, actsAll ? out : out.filter((b) => !hide.has(b)));
+    // each provider's blocks in one box of its own: in columns, a
+    // provider's accounts ran on into the next column under no heading,
+    // and the line between providers stood over a column's top (the
+    // owner, 11-07: "布局直接崩坏了"). Kept per provider, so a redraw
+    // with nothing new moves nothing
+    const runs = [];
+    for (const b of actsAll ? out : out.filter((b) => !hide.has(b))) {
+      const p = meta.get(b).prov, last = runs.at(-1);
+      if (last && last.p === p) last.bs.push(b); else runs.push({ p, bs: [b] });
+    }
+    const boxes = runs.map(({ p, bs }) => {
+      let g = provBoxes.get(p);
+      if (!g) provBoxes.set(p, (g = el("div", "rt-pgrp")));
+      // its heading's block opened into it: each row no deeper than before
+      patch(g, bs.flatMap((b) => (b.classList.contains("rt-lead") ? [...b.children] : [b])));
+      // hundreds of keys opened (#3164) in one unbroken box would be one
+      // column as long as all of them: a long one breaks between its rows
+      const long = bs.reduce((x, b) => x + meta.get(b).n, 0) > 12;
+      if (g.classList.contains("long") !== long) g.classList.toggle("long", long);
+      return g;
+    });
+    patch(acts, boxes);
   }
 
   // signInAgain signs the account of seat w in again, in its provider's

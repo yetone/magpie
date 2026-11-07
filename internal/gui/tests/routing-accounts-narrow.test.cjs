@@ -77,7 +77,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         return { top: Math.round(b.top), left: b.left, right: b.right, text: e.textContent };
       }));
       const settle = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 100)))));
-      for (const width of [700, 560, 420]) {
+      for (const width of [1100, 700, 560, 420]) {
         await page.setViewportSize({ width, height: 1200 });
         await settle();
         const reqs = await page.locator(".rt-reqs").boundingBox(), acts = await page.locator(".rt-acts").boundingBox();
@@ -95,6 +95,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // the providers in two columns or more, not a heading to a line
         const cols = new Set(heads.map((h) => Math.round(h.left)));
         assert(cols.size >= 2, `${width}px: the providers in columns: ${[...cols]}`);
+        // a provider's accounts all in its heading's column, none run on
+        // into the next under no heading, and no line between providers
+        // over a column's top (the owner, 11-07: "布局直接崩坏了")
+        const strays = await page.locator(".rt-acts .rt-act").evaluateAll((es) => es.filter((e) => {
+          const h = e.closest(".rt-acts > *")?.querySelector(".rt-prov");
+          return !h || Math.abs(h.getBoundingClientRect().left - e.getBoundingClientRect().left) > 1;
+        }).map((e) => e.textContent));
+        assert.deepEqual(strays, [], `${width}px: accounts away from their heading`);
+        const lines = await page.locator(".rt-acts > *").evaluateAll((es) => es.filter((e) => parseFloat(getComputedStyle(e).borderTopWidth) > 0).length);
+        assert.equal(lines, 0, `${width}px: no line over a provider in columns`);
         const items = await page.locator(".rt-acts > *").evaluateAll((es) => es.reduce((x, e) => x + e.getBoundingClientRect().height, 0));
         assert(acts.height < items * 0.7, `${width}px: the list shorter than its items one under the other: ${acts.height} vs ${items}`);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${width}px: no horizontal overflow`);
