@@ -190,6 +190,8 @@ export async function type(t, text, opts = {}) {
   let held = false;
   for (let i = 0; i < chars.length; i++) {
     progress.done = i;
+    // the user pressed Cancel on Chrome's bar: not one key more
+    if (t.stoppedByUser) throw new Error("the user stopped Magpie Browser in this tab (Cancel on Chrome's bar)");
     const ch = chars[i];
     if (ch === "\r") continue;
     if (ch === "\n") {

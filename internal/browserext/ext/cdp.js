@@ -120,6 +120,19 @@ function why(m) {
   return m;
 }
 
+// hold keeps a tab's attachment on while typing that outlived its call
+// goes on: it puts off the let-go and never attaches again. A tab that
+// was let go, or that the user stopped (Cancel on Chrome's bar), stays
+// so: the typing's next key then fails and the typing ends.
+export function hold(tabId) {
+  const t = tabs.get(tabId);
+  if (!t || !t.attached || t.stoppedByUser || t.attaching) return false;
+  clearTimeout(t.idle);
+  t.idle = setTimeout(() => detach(tabId), BUSY_MS);
+  t.busy = true;
+  return true;
+}
+
 // release lets a tab a call used go IDLE_MS from now, unless typing goes
 // on in it. A tab no call used since is left on its clock.
 export function release(tabId) {

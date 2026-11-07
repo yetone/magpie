@@ -3,7 +3,7 @@
 // out in this browser's own tabs, signed in to whatever the user is.
 
 import { GATEWAY, KEY } from "./config.js";
-import { attach, fault, forget, read, release, releaseAll, send, settle, sleep, state, waitLoad, watch, watchConsole } from "./cdp.js";
+import { attach, fault, forget, hold, read, release, releaseAll, send, settle, sleep, state, waitLoad, watch, watchConsole } from "./cdp.js";
 import { find, take } from "./snapshot.js";
 import { press as keyPress } from "./keys.js";
 import * as human from "./human.js";
@@ -318,6 +318,16 @@ const TYPE_WAIT_MS = 40000;
 // how long a call waits for typing still going on in its tab
 const TYPING_WAIT_MS = 60000;
 
+// stopped answers a call in a tab the user stopped Magpie Browser in
+// (Cancel on Chrome's bar) with that, once, before anything attaches to it
+// again
+function stopped(t) {
+  if (!t.stoppedByUser) return;
+  t.stoppedByUser = false;
+  t.typingFailed = null;
+  throw fault("USER_STOPPED", "the user stopped Magpie Browser in this tab (Cancel on Chrome's bar): ask them before going on. The next call attaches to it again.");
+}
+
 async function ready(session, args) {
   const tabId = await tabFor(session, args);
   const t = state(tabId);
@@ -325,14 +335,11 @@ async function ready(session, args) {
     await Promise.race([t.typing, sleep(TYPING_WAIT_MS)]);
     if (t.typing) throw fault("BUSY", `still typing in this tab, about ${Math.max(1, Math.ceil((t.typingEnds - Date.now()) / 1000))}s more: call again then`);
   }
+  stopped(t);
   if (t.typingFailed) {
     const why = t.typingFailed;
     t.typingFailed = null;
     throw fault("TYPING_FAILED", `the typing the last browser_type went on with stopped: ${why}. Take a snapshot to see what went in.`);
-  }
-  if (t.stoppedByUser) {
-    t.stoppedByUser = false;
-    throw fault("USER_STOPPED", "the user stopped Magpie Browser in this tab (Cancel on Chrome's bar): ask them before going on. The next call attaches to it again.");
   }
   t.by = session; // whose call this is: act moves that session on to a tab it opens
   await attach(tabId);
@@ -705,8 +712,10 @@ const TOOLS = {
       }
       const progress = {};
       const job = (async () => {
-        // the debugger stays on the tab for as long as the typing lasts
-        const keep = setInterval(() => attach(t.tabId).catch(() => {}), 10000);
+        // the debugger stays on the tab for as long as the typing lasts,
+        // but is never put back on it: a user who pressed Cancel on
+        // Chrome's bar stopped this typing too
+        const keep = setInterval(() => hold(t.tabId), 10000);
         try {
           await typeIn();
         } finally {
@@ -961,6 +970,7 @@ const TOOLS = {
   async browser_dialog(session, args) {
     const tabId = await tabFor(session, args);
     const t = state(tabId);
+    stopped(t);
     await attach(tabId);
     const accept = args.accept !== false;
     if (t.dialog) {
