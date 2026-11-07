@@ -314,6 +314,12 @@ function addrWho(g, u, others = []) {
   if (u === g.publicURL && g.publicKind !== "local") return t("Public address");
   return t("Local network");
 }
+// pubWho: About's MAGPIE_PUBLIC_URL row, from /api/settings, by addrWho
+// (a private address is the local network's; jiezhengj on Discord)
+function pubWho(s) {
+  return addrWho({ url: s.gateway, publicURL: s.publicURL, publicKind: s.publicKind, lanPublic: s.lanPublic }, s.publicURL,
+    s.lanContainerHost ? [s.lanContainerHost] : []);
+}
 // gwFar: where other machines reach the gateway, for the sidebar and the
 // key page: other containers' address only when there is no other
 function gwFar(g) {

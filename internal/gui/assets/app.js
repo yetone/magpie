@@ -20088,12 +20088,9 @@ function renderSettings() {
     const cmd = "curl -fsS -m 1 -H 'Authorization: Bearer <gateway key>' --data-binary @- " + gw + "/v1/magpie/statusline || true";
     row(t("Status line on another computer"), t("statusLine's command in Claude Code's settings.json there; a read-only gateway key is enough"), cmd, copyBtn(cmd, t("Command"))).id = "statuslineRemoteRow";
   }
-  // MAGPIE_PUBLIC_URL, where other machines reach it (#1551), named as
-  // the Gateway page names it (addrWho): a private address is the local
-  // network's, not "Public address" (jiezhengj on Discord)
+  // MAGPIE_PUBLIC_URL (#1551), named as the Gateway page names it
   if (s.publicURL && gw !== s.publicURL) {
-    const who = self.addrWho?.({ url: s.gateway, publicURL: s.publicURL, publicKind: s.publicKind, lanPublic: s.lanPublic }, s.publicURL,
-      s.lanContainerHost ? [s.lanContainerHost] : []) || t("Public address");
+    const who = self.pubWho?.(s) || t("Public address");
     row(who, t("MAGPIE_PUBLIC_URL: where other computers reach the gateway, with a gateway key"), s.publicURL, copyBtn(s.publicURL, who)).id = "publicURLRow";
   }
   const site = el("button", "text", t("Open"));
