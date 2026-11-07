@@ -32,6 +32,12 @@ type rItem struct {
 	// tool_search_output: the tools Codex's search found, which the model
 	// may call from then on
 	Tools []rTool `json:"tools,omitempty"`
+	// input_file as a standalone item: its file_data and filename sit on
+	// the item itself, flat (a PDF the client drops straight into the
+	// input array, #5452)
+	FileData string `json:"file_data,omitempty"`
+	FileID   string `json:"file_id,omitempty"`
+	Filename string `json:"filename,omitempty"`
 	// configuration_update's: an effort changed mid-thread
 	Reasoning *struct {
 		Effort string `json:"effort"`
@@ -381,6 +387,17 @@ func readResponsesFor(body []byte, facts, keepInstructions bool) (*Request, erro
 				replied = true
 			}
 			switch {
+			case it.Type == "input_file":
+				// a file part as its own item: dropped whole before, it
+				// reached the model only when the request was relayed as
+				// sent (#5452). A video rides the video machinery (#6135)
+				if mt := videoFileType(it.FileData, it.Filename); mt != "" {
+					if v, ok := videoPart(it.FileData, mt, it.Filename); ok {
+						r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{v}})
+					}
+				} else if p, ok := chatFile(it.FileData, it.FileID, it.Filename); ok {
+					r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{p}})
+				}
 			case it.Type == "message" || (it.Type == "" && it.Role != ""):
 				role := "user"
 				if it.Role == "assistant" {
@@ -1106,7 +1123,13 @@ func responsesParts(raw json.RawMessage) []Part {
 		Detail   string `json:"detail"`
 		FileData string `json:"file_data"`
 		FileURL  string `json:"file_url"`
+		FileID   string `json:"file_id"`
 		Filename string `json:"filename"`
+		File     struct {
+			FileData string `json:"file_data"`
+			FileID   string `json:"file_id"`
+			Filename string `json:"filename"`
+		} `json:"file"`
 	}
 	decodeJSON(raw, &items)
 	var out []Part
@@ -1121,12 +1144,17 @@ func responsesParts(raw json.RawMessage) []Part {
 				out = append(out, im)
 			}
 		case "input_file":
-			// a video alone (#6135); another file is still left out (#5452)
-			src := cmp.Or(it.FileData, it.FileURL)
+			// a video rides the video machinery (#6135); every other file,
+			// a PDF say, is a file part, which the encoders write in their
+			// own tongue (#5452) — dropped whole before, it reached the
+			// model only when the request was relayed as sent
+			src := cmp.Or(it.FileData, it.FileURL, it.File.FileData)
 			if mt := videoFileType(src, it.Filename); mt != "" {
 				if v, ok := videoPart(src, mt, it.Filename); ok {
 					out = append(out, v)
 				}
+			} else if p, ok := chatFile(src, cmp.Or(it.FileID, it.File.FileID), cmp.Or(it.Filename, it.File.Filename)); ok {
+				out = append(out, p)
 			}
 		}
 	}
@@ -1395,11 +1423,19 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 				}
 				content = append(content, map[string]any{"type": t, "text": p.Text})
 			case File:
-				t := "input_text"
-				if m.Role == "assistant" {
-					t = "output_text"
+				if m.Role != "assistant" && p.Data != "" {
+					// the file itself, in Responses' own tongue (#5452)
+					content = append(content, map[string]any{"type": "input_file", "file_data": "data:" + p.MediaType + ";base64," + p.Data})
+				} else {
+					// a file only referenced (a Gemini fileUri, another
+					// host's file id) is told of: Responses' file_id is
+					// OpenAI's own, not that reference (#5452)
+					t := "input_text"
+					if m.Role == "assistant" {
+						t = "output_text"
+					}
+					content = append(content, map[string]any{"type": t, "text": attachmentText(p)})
 				}
-				content = append(content, map[string]any{"type": t, "text": attachmentText(p)})
 			case Image:
 				if m.Role != "assistant" {
 					content = append(content, map[string]any{"type": "input_image", "detail": responsesDetail(p.Detail), "image_url": dataURL(p)})

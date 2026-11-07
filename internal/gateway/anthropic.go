@@ -225,6 +225,13 @@ func readAdvised(body []byte, clientMarks, facts, advised bool) (*Request, error
 							msg.Parts = append(msg.Parts, v)
 						}
 					}
+				case "document":
+					// a PDF, say, as the client sent it: dropped whole
+					// before, it reached the model only when the request
+					// was relayed as sent (#5452)
+					if b.Source != nil {
+						msg.Parts = append(msg.Parts, Part{Kind: File, MediaType: b.Source.MediaType, Data: b.Source.Data, URL: b.Source.URL, block: true})
+					}
 				case "tool_use":
 					msg.Parts = append(msg.Parts, Part{Kind: ToolCall, ID: anthropicInID(b.ID), Name: b.Name, Args: b.Input, block: true})
 				case "tool_result":
@@ -1015,7 +1022,26 @@ func anthropicBody(r *Request, model, host string, replay bool) []byte {
 					rest = append(rest, b)
 					break
 				}
-				rest = append(rest, aBlock{Type: "text", Text: attachmentText(p)})
+				if p.Data != "" {
+					// the file itself, in Messages' own tongue (#5452)
+					rest = append(rest, aBlock{Type: "document", Source: &struct {
+						Type      string `json:"type"`
+						MediaType string `json:"media_type,omitempty"`
+						Data      string `json:"data,omitempty"`
+						URL       string `json:"url,omitempty"`
+					}{Type: "base64", MediaType: p.MediaType, Data: p.Data}})
+				} else if strings.HasPrefix(p.URL, "http") {
+					// a document by its URL — Anthropic's url source takes
+					// http(s), not a cloud-storage scheme (#5452)
+					rest = append(rest, aBlock{Type: "document", Source: &struct {
+						Type      string `json:"type"`
+						MediaType string `json:"media_type,omitempty"`
+						Data      string `json:"data,omitempty"`
+						URL       string `json:"url,omitempty"`
+					}{Type: "url", URL: p.URL}})
+				} else {
+					rest = append(rest, aBlock{Type: "text", Text: attachmentText(p)})
+				}
 			case Image:
 				b := imageBlock(p)
 				b.CacheControl = partMark(p.cache)
