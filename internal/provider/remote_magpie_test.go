@@ -20,6 +20,7 @@ func TestRemoteMagpie(t *testing.T) {
 		"http://192.168.1.20:3425/v1/systemone",
 		"http://192.168.1.20:3425/v1/embeddings",
 		"http://192.168.1.20:3425/v1/rerank",
+		"http://192.168.1.20:3425/v1/decisions",
 		"http://192.168.1.20:3425/v1/images/generations",
 		"http://192.168.1.20:3425/v1/images/edits",
 		"http://192.168.1.20:3425/v1/videos",

@@ -63,6 +63,18 @@ type retrieval interface {
 	answerType(got string) string
 }
 
+// refusingRetrieval is a retrieval request only some providers can be
+// sent: refuses is why p can't, "" when it can (decisionRequest).
+type refusingRetrieval interface {
+	refuses(p provider.Provider) string
+}
+
+// countedRetrieval is a retrieval request whose answer's usage is read
+// its own way, cached tokens apart (decisionRequest).
+type countedRetrieval interface {
+	counted(b []byte) Usage
+}
+
 // jsonRetrieval is an embeddings or rerank body: a JSON object.
 type jsonRetrieval struct{ req map[string]json.RawMessage }
 
@@ -228,6 +240,8 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 		switch req.(type) {
 		case *audioForm, *speechRequest:
 			what = "audio"
+		case *decisionRequest:
+			what = "decisions"
 		}
 		// the record names the try that had it last, not the first
 		// planned (noteMaskedUntil)
@@ -240,8 +254,13 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 		call.Provider, went = c.p.ID, c.model
 		base := strings.TrimRight(c.p.OpenAIBase(), "/")
 		tried := side.try(c)
+		msg := ""
 		if base == "" {
-			msg := fmt.Sprintf("%s has no OpenAI-style API for %s", c.p.Name, path)
+			msg = fmt.Sprintf("%s has no OpenAI-style API for %s", c.p.Name, path)
+		} else if rr, ok := req.(refusingRetrieval); ok {
+			msg = rr.refuses(c.p) // never sent, so never a 404 of the vendor's
+		}
+		if msg != "" {
 			tried(400, errors.New(msg))
 			if !last {
 				skipped = append(skipped, c.label()+": "+msg)
@@ -289,6 +308,11 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 		}
 		call.Status = code
 		in, outTokens := retrievedTokens(b), answeredTokens(b)
+		var cached Usage // the cache's share, when the answer tells it
+		if cr, ok := req.(countedRetrieval); ok && res == nil && err == nil {
+			cached = cr.counted(b)
+			in, outTokens = cached.Input, cached.Output
+		}
 		if res != nil {
 			// passed on as it comes: audio, or SSE, is never held whole
 			heard.into(w.Header())
@@ -303,14 +327,15 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 			}
 		}
 		call.Usage.Input, call.Usage.Output = in, outTokens
+		call.Usage.CacheRead, call.Usage.CacheWrite = cached.CacheRead, cached.CacheWrite
 		call.Fallback = strings.Join(skipped, "; ")
 		providerKeyID, providerKeyName := "", ""
 		if c.p.Account == nil && c.p.Key != "" {
 			providerKeyID, providerKeyName = provider.KeyID(c.p.Key), c.p.KeyName
 		}
-		side.end(c.p, c.model, code, err, Usage{Input: in, Output: outTokens})
+		side.end(c.p, c.model, code, err, Usage{Input: in, Output: outTokens, CacheRead: cached.CacheRead, CacheWrite: cached.CacheWrite})
 		appendUsage(r, usage.Record{RouteID: side.id(), Operation: operation, Time: start, Agent: call.Agent, Via: call.Via, Provider: c.p.ID, Host: c.p.Where(), Model: c.model, Requested: asked, ProviderKeyID: providerKeyID, ProviderKeyName: providerKeyName, ProviderAccount: accountOf(c.p),
-			Input: in, Output: outTokens, Millis: call.Millis, Status: code, Session: sessionOf(r.Header)})
+			Input: in, Output: outTokens, CacheRead: cached.CacheRead, CacheWrite: cached.CacheWrite, Millis: call.Millis, Status: code, Session: sessionOf(r.Header)})
 		if err != nil {
 			call.Error = err.Error()
 			s.record(call)

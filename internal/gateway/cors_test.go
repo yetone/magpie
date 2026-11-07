@@ -238,6 +238,7 @@ func TestForeignPagesRefused(t *testing.T) {
 		{"POST", "/v1beta/models/plan/m1:generateContent", `{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`},
 		{"POST", "/v1/embeddings", `{"model":"plan/m1","input":"hi"}`},
 		{"POST", "/v1/rerank", `{"model":"plan/m1","query":"hi","documents":["a"]}`},
+		{"POST", "/v1/decisions", `{"model":"plan/m1","input":"hi","questions":[{"type":"predicate","instructions":"is it?"}]}`},
 		{"POST", "/v1/audio/transcriptions", "--b\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nplan/m1\r\n--b--\r\n"},
 		{"POST", "/v1/audio/speech", `{"model":"plan/m1","input":"hi","voice":"coral"}`},
 		{"POST", "/v1/images/generations", `{"model":"plan/m1","prompt":"hi"}`},
@@ -355,6 +356,7 @@ func TestOpaqueOriginNeedsAKey(t *testing.T) {
 		{"POST", "/v1/messages"},
 		{"POST", "/v1/images/generations"},
 		{"POST", "/v1/embeddings"},
+		{"POST", "/v1/decisions"},
 		{"GET", "/v1/models"},
 	} {
 		if w := do(p.method, p.path, "null", ""); w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "gateway key") || w.Header().Get("Access-Control-Allow-Origin") != "" {

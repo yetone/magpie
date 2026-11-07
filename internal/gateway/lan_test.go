@@ -372,7 +372,7 @@ func TestNetworkGatewayGuardsEveryRoute(t *testing.T) {
 		{"POST", "/v1/messages"}, {"POST", "/messages"}, {"POST", "/v1/messages/count_tokens"},
 		{"POST", "/v1/systemone"},
 		{"POST", "/v1/images/generations"}, {"POST", "/v1/images/edits"},
-		{"POST", "/v1/embeddings"}, {"POST", "/v1/rerank"},
+		{"POST", "/v1/embeddings"}, {"POST", "/v1/rerank"}, {"POST", "/v1/decisions"},
 		{"POST", "/v1/audio/transcriptions"}, {"POST", "/v1/audio/translations"}, {"POST", "/v1/audio/speech"},
 		{"POST", "/v1/videos"}, {"GET", "/v1/videos/v1"}, {"GET", "/v1/videos/v1/content"},
 		{"POST", "/_magpie/claude-mcp/tok"}, {"POST", "/mcp/neon"},
