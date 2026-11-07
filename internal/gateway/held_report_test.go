@@ -28,7 +28,7 @@ func TestUnroutedHeldReportSaved(t *testing.T) {
 	// closes; its request's context ends, and the description it was
 	// held in lets go. Held here until it has, the report still says
 	// what held it.
-	heldAnswered = func(u *unroutedHold) {
+	hook := func(u *unroutedHold) {
 		select {
 		case <-u.r.Context().Done():
 		case <-time.After(10 * time.Second):
@@ -42,7 +42,8 @@ func TestUnroutedHeldReportSaved(t *testing.T) {
 			}
 		}
 	}
-	t.Cleanup(func() { heldAnswered = nil })
+	heldAnswered.Store(&hook)
+	t.Cleanup(func() { heldAnswered.Store(nil) })
 
 	const secret = "hunter2-held-report-secret"
 	body := strings.Replace(pastedImage, `"text":"read"`, `"text":"`+secret+`"`, 1)

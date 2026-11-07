@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"runtime/pprof"
 	"strconv"
@@ -99,7 +100,8 @@ func unroutedProto(path string) provider.Protocol {
 
 // heldAnswered, when set, is called as giveUp has answered a request, its
 // client free to read the answer and close: a test holds it there.
-var heldAnswered func(u *unroutedHold)
+// A pointer, as a giveUp of a test's request may run on after it.
+var heldAnswered atomic.Pointer[func(u *unroutedHold)]
 
 // errUnrouted ends a request's context when magpie stopped holding it.
 var errUnrouted = errors.New("magpie held the request too long before routing it")
@@ -179,16 +181,26 @@ func (h *heldWriter) FlushError() error {
 // Unwrap is for http.ResponseController's deadlines.
 func (h *heldWriter) Unwrap() http.ResponseWriter { return h.w }
 
-// answer writes magpie's own reply, whole, unless the handler began one.
-// Its length is said, so the client has all of it while the handler may
-// still be held: a reply of no length ends only when the handler does.
-func (h *heldWriter) answer(proto provider.Protocol, status int, msg string) bool {
+// claim takes the reply for magpie, unless the handler began one: from
+// here the handler's writes go nowhere, and send writes magpie's answer.
+// Between the two its route is ended (#4200), so a client that has the
+// answer finds the request's route done.
+func (h *heldWriter) claim() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.wrote || h.gaveUp {
 		return false
 	}
 	h.gaveUp = true
+	return true
+}
+
+// send writes magpie's own reply, whole, once claim took it. Its length
+// is said, so the client has all of it while the handler may still be
+// held: a reply of no length ends only when the handler does.
+func (h *heldWriter) send(proto provider.Protocol, status int, msg string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	rec := httptest.NewRecorder()
 	writeError(rec, proto, status, msg)
 	out := h.w.Header()
@@ -200,7 +212,6 @@ func (h *heldWriter) answer(proto provider.Protocol, status int, msg string) boo
 	h.w.WriteHeader(status)
 	h.w.Write(rec.Body.Bytes())
 	_ = http.NewResponseController(h.w).Flush()
-	return true
 }
 
 // unroutedHold is one watched request's watch: the route that shows it
@@ -719,21 +730,18 @@ func (u *unroutedHold) giveUp(unknown bool) {
 	said := cmpOr(where, " not masking it")
 	waits := u.waitsSaid()
 	report := u.s.heldReport(u, held, status, who, asked, said)
+	// Saved before it is answered too, so the route the answer finds
+	// names it (#4200); out of f.mu, as it is a file written.
+	name, err := writeHeld(report)
 	f.mu.Lock()
-	if len(f.begun) > 0 || u.ended || u.over {
-		// routed, answered or let go meanwhile
+	if len(f.begun) > 0 || u.ended || u.over || !u.w.claim() {
+		// routed, answered or let go meanwhile, or the handler is
+		// answering: the report is of nothing stopped
 		f.mu.Unlock()
+		if err == nil {
+			os.Remove(filepath.Join(HeldDir(), name))
+		}
 		return
-	}
-	if !u.w.answer(unroutedProto(u.r.URL.Path), status, msg) {
-		f.mu.Unlock()
-		return // the handler is answering
-	}
-	if status == http.StatusRequestTimeout {
-		// and the handler reads no more of it: its read ends now, not at
-		// the next idle limit, and the connection goes with the answer
-		u.bodyStopped.Store(true)
-		_ = http.NewResponseController(u.w.w).SetReadDeadline(time.Now())
 	}
 	u.ended = true
 	defer close(u.saved)
@@ -741,22 +749,34 @@ func (u *unroutedHold) giveUp(unknown bool) {
 		u.showLocked()
 	}
 	shown := u.shown
-	f.mu.Unlock()
-	if heldAnswered != nil {
-		heldAnswered(u)
-	}
-	u.s.trace.update(shown, func(r *Route) {
-		r.Done, r.Status, r.Error, r.Millis = true, status, msg, time.Since(r.Time).Milliseconds()
-	})
-	u.cancel(errUnrouted)
-	name, err := writeHeld(report)
+	// The route is final before the answer goes (#4200): a client that
+	// reads the 504 and looks at the Routing page at once finds the
+	// request stopped, with its error and its report, not still routing.
 	saved := ""
 	if err != nil {
 		saved = "; its report could not be saved: " + err.Error()
+		name = ""
 	} else {
 		saved = "; its report is " + filepath.Join(HeldDir(), name)
-		u.s.trace.update(shown, func(r *Route) { r.Held = name })
 	}
+	u.s.trace.update(shown, func(r *Route) {
+		r.Done, r.Status, r.Error, r.Millis = true, status, msg, time.Since(r.Time).Milliseconds()
+		if name != "" {
+			r.Held = name
+		}
+	})
+	u.w.send(unroutedProto(u.r.URL.Path), status, msg)
+	if status == http.StatusRequestTimeout {
+		// and the handler reads no more of it: its read ends now, not at
+		// the next idle limit, and the connection goes with the answer
+		u.bodyStopped.Store(true)
+		_ = http.NewResponseController(u.w.w).SetReadDeadline(time.Now())
+	}
+	f.mu.Unlock()
+	if hook := heldAnswered.Load(); hook != nil {
+		(*hook)(u)
+	}
+	u.cancel(errUnrouted)
 	log.Printf("gateway: %s %s for %s from %s held %s before routing,%s%s; stopped with %d%s%s", u.r.Method, u.r.URL.Path, cmpOr(asked, "?"), who, held, said, waits, status, saved, unroutedStacks())
 }
 

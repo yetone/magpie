@@ -359,6 +359,21 @@ func TestUnroutedRequestShownThenAnswered(t *testing.T) {
 	heldSight(t, s)
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
+	// #4200: giveUp is held once its 504 is out until the test has read
+	// the route, so a route ended only after the answer is seen undone
+	// every time, not when the client happens to be quick.
+	looked := make(chan struct{})
+	var lookedOnce sync.Once
+	look := func() { lookedOnce.Do(func() { close(looked) }) }
+	t.Cleanup(look)
+	hook := func(*unroutedHold) {
+		select {
+		case <-looked:
+		case <-time.After(10 * time.Second):
+		}
+	}
+	heldAnswered.Store(&hook)
+	t.Cleanup(func() { heldAnswered.Store(nil) })
 
 	type reply struct {
 		code int
@@ -404,6 +419,10 @@ func TestUnroutedRequestShownThenAnswered(t *testing.T) {
 	if len(rs) != 1 || !rs[0].Done || rs[0].Status != http.StatusGatewayTimeout || !strings.Contains(rs[0].Error, "without routing") {
 		t.Fatalf("the held request's route: %+v", rs)
 	}
+	if rs[0].Held == "" {
+		t.Fatalf("the held request's route names no report as it is answered: %+v", rs)
+	}
+	look()
 	heldSaved(t, s)
 }
 

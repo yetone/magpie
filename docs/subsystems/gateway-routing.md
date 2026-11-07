@@ -455,7 +455,11 @@ recorded as a prediction failure (`noPrediction`).
   With no route and nothing written, the error is sent in its client's
   protocol, whole (`Content-Length`, `Connection: close`) so the client
   has it while the handler may still be held; its context ends with
-  `errUnrouted`, its route ends with the error, and the log has every
+  `errUnrouted`, its route ends with the error before the answer goes
+  (`heldWriter.claim` takes the reply, the route is marked done with its
+  status, error and report, then `send` writes it, all under `f.mu`, so
+  a client that has the 504 never finds the route still routing, #4200),
+  and the log has every
   goroutine's stack (at most once in 10 minutes). The handler's writes go
   through `heldWriter`, and nowhere once magpie has answered for it.
   The desktop app's log goes only to stderr, which its user can't reach
@@ -465,7 +469,8 @@ recorded as a prediction failure (`noPrediction`).
   the request is still held, before it is answered (the answer says
   `Connection: close`, and a client that closes on it ends the request's
   context and lets its wait go, #4300), outside `f.mu`, in `HeldDir`
-  (`<cache>/held`, mode 0700), written through a temp file and renamed,
+  (`<cache>/held`, mode 0700; also before the answer, and removed if the
+  request was routed or answered meanwhile), written through a temp file and renamed,
   the newest `heldKept` (5) kept. It has the time, version and system,
   method and path, the model and agent, how long it was held, each kind
   of known wait and its time ("(under way)" for the one it was in), the
