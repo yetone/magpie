@@ -1187,6 +1187,19 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		cleanup()
 		return nil, nil, &tuiRefusal{claudeTUIErr(claudeNotTUIWhy(req, binary))}
 	}
+	// the interactive mode's start takes its turn (tuiStarts); held till
+	// this run has been started and answered, and given back however this
+	// goes
+	turn := func() {}
+	if tui {
+		release, err := tuiStartTurn(ctx, "a Claude Code run on "+model)
+		if err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		turn = release
+	}
+	defer turn()
 	noteClaudeRun(code)
 	var cmd *exec.Cmd
 	if tui {
@@ -1379,6 +1392,40 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 // claudeTUIHelper, when set, is run as the interactive mode's helper in
 // place of magpie's executable: a test's stand-in.
 var claudeTUIHelper string
+
+// tuiStarts is the interactive mode's starts, one at a time: a Claude Code
+// takes longer to come up the more start with it, and on a machine of cold
+// ones none showed its prompt in the 45s a start alone fits in, so each
+// was ended at the deadline and answered 502, and every caller's next try
+// started the pile again — 531 interactive starts in an hour, 420 of them
+// ending "showed no prompt" (#5579). The turn taken (tuiStartTurn) is held
+// till the run has been started and its helper has answered initialize —
+// its prompt shown — and given back however the start goes; a start that
+// missed the wait holds it until magpie has given up on it (its stop is
+// under way, not waited out), so the retries behind it land on a machine
+// with one start to do, not a pile.
+// Runs already up are none of it: a -p run starts without a prompt to
+// wait for, and a start that fits in the wait alone holds the turn only
+// as long as coming up takes.
+var tuiStarts = make(chan struct{}, 1)
+
+// tuiStartTurn takes the one start's turn, waiting as long as ctx lasts.
+func tuiStartTurn(ctx context.Context, what string) (func(), error) {
+	select {
+	case tuiStarts <- struct{}{}:
+		return func() { <-tuiStarts }, nil
+	default:
+	}
+	began := time.Now()
+	log.Printf("claude: %s waits for another interactive start to show its prompt", what)
+	select {
+	case tuiStarts <- struct{}{}:
+		log.Printf("claude: %s had its start's turn after %s", what, time.Since(began).Round(time.Millisecond))
+		return func() { <-tuiStarts }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
 
 // controlWait is how long Claude Code may take to answer a control
 // request; tuiInitWait the interactive mode's helper its initialize: as
