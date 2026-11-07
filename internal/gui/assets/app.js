@@ -1513,8 +1513,8 @@ function sheet(box, open, done) {
   const none = { height: "0px", paddingTop: "0px", paddingBottom: "0px", marginTop: "0px", marginBottom: "0px", borderTopWidth: "0px", opacity: 0 };
   const ease = "cubic-bezier(.32, .72, 0, 1)";
   box.style.overflow = "hidden";
-  const run = box.animate(open ? [none, full] : [full, none], { duration: open ? 460 : 340, easing: ease, fill: open ? "none" : "forwards" });
-  for (const c of box.children) c.animate(open ? [{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }] : [{ opacity: 1 }, { opacity: 0 }], { duration: open ? 420 : 200, delay: open ? 60 : 0, easing: open ? ease : "ease-out", fill: "backwards" });
+  const run = box.animate(open ? [none, full] : [full, none], { duration: open ? 320 : 220, easing: ease, fill: open ? "none" : "forwards" });
+  for (const c of box.children) c.animate(open ? [{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }] : [{ opacity: 1 }, { opacity: 0 }], { duration: open ? 280 : 150, delay: open ? 40 : 0, easing: open ? ease : "ease-out", fill: "backwards" });
   run.onfinish = () => { if (open) box.style.overflow = ""; done?.(); };
   run.oncancel = run.onfinish;
 }
@@ -4221,14 +4221,14 @@ const levelUnset = (a) => ompAgent(a) ? t("the session's thinking level") : t("t
 // The tray panel has no scrollbars to speak of, so it grows to fit instead.
 // The agents' scroll unrolls and rolls up on these, in app.css as in the
 // panel's own height.
-const UNROLL = { ms: 620, ease: ".22,1,.36,1" };
+const UNROLL = { ms: 340, ease: ".23,1,.32,1" };
 // A row opens and closes on a critically damped spring, as iOS moves things:
 // it sets off gently, not at a jump, and settles without a long tail. The
 // curve is that spring fitted to a cubic-bezier, which the panel's edge can
 // take too; app.css has the same (--row-spring).
-const ROW_OPEN = { ms: 480, ease: ".25,.3,.1,1" };
-const ROW_CLOSE = { ms: 400, ease: ".25,.3,.1,1" };
-const ROLLUP = { ms: 420, ease: ".4,0,.2,1" };
+const ROW_OPEN = { ms: 320, ease: ".25,.3,.1,1" };
+const ROW_CLOSE = { ms: 260, ease: ".25,.3,.1,1" };
+const ROLLUP = { ms: 260, ease: ".23,1,.32,1" };
 
 // tintPanel hands the colour the panel's page shows to the system, to paint
 // under the page, which then leaves its own background clear: the page is
@@ -7953,7 +7953,7 @@ document.addEventListener("click", (e) => {
   d.open = true;
   d.classList.toggle("closing", closing);
   inner.style.overflow = "hidden";
-  const shape = closing ? { duration: 420, easing: IOS_EASE } : { duration: 570, easing: SPRING };
+  const shape = closing ? { duration: 280, easing: IOS_EASE } : { duration: 460, easing: SPRING };
   const pad = getComputedStyle(inner).paddingTop;
   const grow = inner.animate([
     { height: from + "px", paddingTop: from ? pad : "0px" },
@@ -7970,7 +7970,7 @@ document.addEventListener("click", (e) => {
     for (const row of inner.children) {
       if (row.style.display === "none" || row.hidden) continue;
       anims.push(row.animate([{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }],
-        { duration: 420, delay: 40 + Math.min(i++, 12) * 16, easing: IOS_EASE, fill: "backwards" }));
+        { duration: 300, delay: 30 + Math.min(i++, 12) * 14, easing: IOS_EASE, fill: "backwards" }));
     }
   }
   const move = { anims, closing };
@@ -8564,7 +8564,7 @@ function iconPicker(ed) {
 // spring, and closing folds it back into that (still there, re-rendered or
 // not); with nothing pressed it rises from a little below.
 const SPRING = CSS.supports?.("animation-timing-function", "linear(0, 1)")
-  // a damped spring (response .42 s, damping .8): 1.5% over, settled at 570 ms
+  // a damped spring (damping .8): 1.5% over, settled by the end of the duration it runs for (460 ms)
   ? "linear(0, 0.0203, 0.0723, 0.1448, 0.2292, 0.3188, 0.4086, 0.4951, 0.576, 0.6498, 0.7157, 0.7735, 0.8232, 0.8654, 0.9005, 0.9293, 0.9525, 0.9708, 0.9849, 0.9956, 1.0033, 1.0087, 1.0122, 1.0142, 1.015, 1.0151, 1.0146, 1.0136, 1.0124, 1.0111, 1.0097, 1.0084, 1.0071, 1.0059, 1.0049, 1.0039, 1.0031, 1.0024, 1.0018, 1.0013, 1)"
   : "cubic-bezier(.2, .9, .25, 1.02)";
 const IOS_EASE = "cubic-bezier(.32, .72, 0, 1)";
@@ -8689,7 +8689,7 @@ async function skelBird() {
   } finally {
     release();
     // nothing left to stand on: it flies off, up and away
-    if (quiet) await b.animate([{ opacity: 1 }, { opacity: 0, transform: b.style.transform + " scale(.6)" }], { duration: 160, easing: "ease-in", fill: "forwards" }).finished;
+    if (quiet) await b.animate([{ opacity: 1 }, { opacity: 0, transform: b.style.transform + " scale(.6)" }], { duration: 150, easing: "cubic-bezier(.23, 1, .32, 1)", fill: "forwards" }).finished;
     b.dataset.flap = "";
     const from = { x, y };
     if (!quiet) await tween(480, (e) => put({ x: from.x + (innerWidth + 60 - from.x) * e, y: from.y - (from.y + 80) * e, f: 1, r: -14, sx: 1, sy: 1 }), easeIn);
@@ -8960,7 +8960,7 @@ function openModal(content, quiet) {
   m.animate([{ ...VEIL_OFF, offset: 0 }], { duration: 280, easing: "ease-out" });
   if (calm()) { d.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160 }); return; }
   const to = d.getBoundingClientRect(), from = originRect(modalOrigin);
-  const grow = d.animate(from ? [morphFrom(from, to), { transform: "none", clipPath: MORPH_REST }] : [{ transform: "translateY(24px) scale(.94)" }, { transform: "none" }], { duration: 570, easing: SPRING });
+  const grow = d.animate(from ? [morphFrom(from, to), { transform: "none", clipPath: MORPH_REST }] : [{ transform: "translateY(24px) scale(.94)" }, { transform: "none" }], { duration: 440, easing: SPRING });
   d.animate([{ opacity: 0 }, { opacity: 1 }], { duration: from ? 140 : 240, easing: "ease-out" });
   if (!from) return;
   // an editor can settle its size after it was measured (a provider's grew
@@ -9009,7 +9009,7 @@ function closeModal() {
   const to = d.getBoundingClientRect(), from = calm() ? null : originRect(modalOrigin);
   d.style.transform = was;
   const clip = d.style.clipPath || MORPH_REST;
-  const shape = { duration: from ? 380 : 260, easing: IOS_EASE, fill: "forwards" };
+  const shape = { duration: from ? 300 : 200, easing: IOS_EASE, fill: "forwards" };
   const moves = [
     m.animate([VEIL_OFF], { ...shape, easing: "ease-out" }),
     calm() ? d.animate([{ opacity: 0 }], { duration: 140, fill: "forwards" })
@@ -15671,7 +15671,7 @@ function unrollSheet(view, sheet, e) {
   ], { duration: ROW_OPEN.ms + 60, easing: `cubic-bezier(${ROW_OPEN.ease})` });
   for (const c of sheet.children) {
     c.animate([{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }],
-      { duration: 340, delay: 60, easing: "cubic-bezier(.22, 1, .36, 1)", fill: "backwards" });
+      { duration: 260, delay: 40, easing: "cubic-bezier(.23, 1, .32, 1)", fill: "backwards" });
   }
   // what the view is at once the sheet starts at no height: a page that
   // was scrolled to its end is clamped shorter (WebKit), not moved by the reader
@@ -23935,12 +23935,12 @@ function navSubEnter(box) {
   const cs = getComputedStyle(box);
   const to = { height: box.offsetHeight + "px", marginTop: cs.marginTop, marginBottom: cs.marginBottom, opacity: 1 };
   box.classList.add("moving");
-  box.animate([{ height: "0px", marginTop: "0px", marginBottom: "0px", opacity: 0 }, to], { duration: 460, easing: NAV_EASE })
+  box.animate([{ height: "0px", marginTop: "0px", marginBottom: "0px", opacity: 0 }, to], { duration: 300, easing: NAV_EASE })
     .finished.then(() => box.classList.remove("moving"), () => {});
   [...box.querySelectorAll(".nav-s")].forEach((s, i) => s.animate(
     [{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }],
-    { duration: 380, delay: 60 + i * 28, easing: NAV_EASE, fill: "backwards" }));
-  box.querySelector(".nav-hl").animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, delay: 120, fill: "backwards" });
+    { duration: 260, delay: 40 + Math.min(i, 12) * 20, easing: NAV_EASE, fill: "backwards" }));
+  box.querySelector(".nav-hl").animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, delay: 80, fill: "backwards" });
 }
 // a folding list is out of the way at once: not a tab, not reachable, not
 // found by what looks for the sidebar's rows
@@ -23953,7 +23953,7 @@ function navSubLeave(box) {
   const cs = getComputedStyle(box);
   box.classList.add("moving");
   box.animate([{ height: box.offsetHeight + "px", marginTop: cs.marginTop, marginBottom: cs.marginBottom, opacity: 1 },
-    { height: "0px", marginTop: "0px", marginBottom: "0px", opacity: 0 }], { duration: 380, easing: NAV_EASE, fill: "forwards" })
+    { height: "0px", marginTop: "0px", marginBottom: "0px", opacity: 0 }], { duration: 240, easing: NAV_EASE, fill: "forwards" })
     .finished.then(() => box.remove(), () => box.remove());
 }
 // the header beside the sidebar: the group, the page, and its tab

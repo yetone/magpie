@@ -1785,8 +1785,8 @@
         wait.leave();
       }
       holdModal();
-      d.animate([{ height: h + "px", top: y, overflow: "hidden" }, { height: d.offsetHeight + "px", top: d.style.top, overflow: "hidden" }], { duration: 570, easing: SPRING });
-      n.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, easing: "ease-out" });
+      d.animate([{ height: h + "px", top: y, overflow: "hidden" }, { height: d.offsetHeight + "px", top: d.style.top, overflow: "hidden" }], { duration: 460, easing: SPRING });
+      n.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 240, easing: "ease-out" });
     };
     try {
       const p = await api("plugins/page?name=" + encodeURIComponent(l.package));

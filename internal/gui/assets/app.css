@@ -298,7 +298,7 @@ body.panel .seg { display: none; }
   color: var(--accent); background: var(--accent-soft);
   box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--accent) 35%, transparent);
   transition: background .15s, color .15s, transform .12s var(--ease), opacity .15s;
-  animation: update-in .45s var(--ease);
+  animation: update-in .3s var(--ease-out);
 }
 .update[hidden] { display: none; }
 .update:hover { background: var(--accent); color: var(--accent-fg); }
@@ -479,7 +479,7 @@ body.side-nav :is(#nav button[data-view], #prefs, .side-gw):active:not(.on) { ba
 /* the selection: one shape, sliding from row to row, setting off as the row
    is pressed (app.js navSubGlide) and most of the way there in a tenth of a
    second, so it is under the finger, not catching up with it */
-.nav-hl { position: absolute; z-index: 0; top: 0; left: 8px; right: 0; height: 26px; border-radius: 6px; background: color-mix(in srgb, var(--fg) 6.5%, transparent); pointer-events: none; will-change: transform; transition: transform .3s cubic-bezier(.25, .9, .3, 1), height .3s cubic-bezier(.25, .9, .3, 1); }
+.nav-hl { position: absolute; z-index: 0; top: 0; left: 8px; right: 0; height: 26px; border-radius: 6px; background: color-mix(in srgb, var(--fg) 6.5%, transparent); pointer-events: none; will-change: transform; transition: transform .24s var(--ease-out), height .24s var(--ease-out); }
 .nav-hl.still { transition: none; }
 @media (prefers-reduced-motion: reduce) { .nav-hl { transition: none; } }
 /* beside the sidebar a page whose head holds only its tools has them in the
@@ -527,7 +527,7 @@ body.side-nav :is(#usageTab, #view-library .lib-tabs, #view-plugins .lib-tabs, #
 /* the sidebar's button (app.js toggleSideNav), in the title bar where a Mac
    app has it: the drawing's left pane filled while the sidebar shows */
 .side-toggle { flex: none; }
-.side-toggle .st-pane { fill: currentColor; opacity: .32; transition: opacity .3s var(--ease); }
+.side-toggle .st-pane { fill: currentColor; opacity: .32; transition: opacity .2s var(--ease); }
 body:not(.side-nav) .side-toggle .st-pane { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .side-toggle .st-pane { transition: none; } }
 /* the two layouts trade places as one motion (app.js navMorph): the sidebar
@@ -540,7 +540,7 @@ body:not(.side-nav) .side-toggle .st-pane { opacity: 0; }
    the spring the lists open on it left at speed, a twelfth of the way gone
    in the first frame, and a dropped one there (WebView2's, most) read as a
    jerk, then crept for a quarter second more (wangye1644294 on X) */
-:root { --morph-t: .32s; --morph-ease: cubic-bezier(.42, 0, .58, 1); }
+:root { --morph-t: .32s; --morph-ease: cubic-bezier(.77, 0, .175, 1); }
 .nav-morph #side { view-transition-name: side; }
 .nav-morph .brand { view-transition-name: brand; }
 .nav-morph #sideToggle { view-transition-name: side-toggle; }
@@ -654,18 +654,18 @@ body.window .row .ic { width: 22px; height: 22px; }
 .agent-more { display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%; border: 0; border-top: 1px solid var(--line-2); background: none; font: inherit; font-size: 12px; color: var(--muted); padding: 9px; cursor: pointer; transition: color .2s, background-color .2s; }
 .agent-more:hover { color: var(--fg); background: var(--card-2); }
 .agent-more span { display: inline-flex; }
-.agent-more .chev { transition: transform .5s cubic-bezier(.22, 1, .36, 1); }
+.agent-more .chev { transition: transform .26s var(--ease-out); }
 .agent-more[aria-expanded="true"] .chev { transform: rotate(180deg); }
 /* the folded agents unroll like a scroll: the height opens on a long ease-out,
    each row settles in a beat after the one above, and the unrolling edge is
    soft while it moves. Rolling up is quicker, bottom row first. */
-.agent-fold { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .42s cubic-bezier(.4, 0, .2, 1); }
-.agent-fold.open { grid-template-rows: 1fr; transition-duration: .62s; transition-timing-function: cubic-bezier(.22, 1, .36, 1); }
+.agent-fold { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .26s var(--ease-out); }
+.agent-fold.open { grid-template-rows: 1fr; transition-duration: .34s; }
 .agent-fold-inner { min-height: 0; overflow: hidden; }
 .agent-fold-inner > .row:first-child { border-top: 1px solid var(--line-2); }
 .agent-fold.moving .agent-fold-inner { -webkit-mask-image: linear-gradient(#000 calc(100% - 32px), transparent); mask-image: linear-gradient(#000 calc(100% - 32px), transparent); }
-.agent-fold .row { opacity: 0; transform: translateY(-10px) scale(.985); transform-origin: 50% 0; transition: opacity .22s ease, transform .32s cubic-bezier(.4, 0, .2, 1); transition-delay: calc((var(--n) - 1 - var(--i)) * 22ms); }
-.agent-fold.open .row { opacity: 1; transform: none; transition: opacity .42s ease, transform .56s cubic-bezier(.22, 1, .36, 1); transition-delay: calc(70ms + var(--i) * 48ms); }
+.agent-fold .row { opacity: 0; transform: translateY(-10px) scale(.985); transform-origin: 50% 0; transition: opacity .14s ease, transform .2s var(--ease-out); transition-delay: calc((var(--n) - 1 - var(--i)) * 22ms); }
+.agent-fold.open .row { opacity: 1; transform: none; transition: opacity .24s ease, transform .32s var(--ease-out); transition-delay: calc(30ms + var(--i) * 24ms); }
 
 /* the logo is the row's handle: drag it to move the row, and a click opens
    the row's menu (Move up, Move down, Hide). It stays the logo under the
@@ -773,7 +773,7 @@ body.window .row.agent .who .ag-cli { flex: 0 1 auto; overflow: hidden; }
 .ag-install-head { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; font: inherit; font-size: 12.5px; color: var(--muted); padding: 4px 2px; cursor: pointer; transition: color .2s; }
 .ag-install-head:hover { color: var(--fg); }
 .ag-install-head span { display: inline-flex; }
-.ag-install-head .chev { transition: transform .3s cubic-bezier(.22, 1, .36, 1); }
+.ag-install-head .chev { transition: transform .22s var(--ease-out); }
 .ag-install-head[aria-expanded="true"] .chev { transform: rotate(180deg); }
 .ag-install-head:focus-visible { outline: 1.5px solid var(--fg-2); outline-offset: 1px; border-radius: 4px; }
 .ag-install-note { margin: 4px 2px 8px; font-size: 12px; line-height: 1.5; color: var(--muted); }
@@ -818,17 +818,17 @@ body.panel .ag-fix.ag-restart:hover { filter: none; background: color-mix(in srg
 body.window .agent-fold-cap { padding: 10px 14px 3px; }
 .agent-fold-cap + .row { border-top: 0; }
 .agent-fold .agent-fold-cap { opacity: 0; transition: opacity .22s ease; }
-.agent-fold.open .agent-fold-cap { opacity: 1; transition: opacity .42s ease; transition-delay: calc(70ms + var(--i) * 48ms); }
+.agent-fold.open .agent-fold-cap { opacity: 1; transition: opacity .24s ease; transition-delay: calc(30ms + var(--i) * 24ms); }
 /* the ones hidden by hand, last, behind a disclosure of their own that is
    shut until opened (a Finder sidebar section's): put away reads as put
    away, not as pinned under the agents in use */
 .agent-hid-line { display: flex; align-items: center; gap: 4px; width: 100%; margin: 0; padding-bottom: 8px; border-left: 0; border-right: 0; border-bottom: 0; background: none; font-family: inherit; text-align: start; cursor: pointer; }
 .agent-hid-line:hover { color: var(--fg-2); }
 .agent-hid-line:focus-visible { outline: 1.5px solid var(--fg-2); outline-offset: -2px; }
-.agent-hid-line .chev { display: inline-flex; transform: rotate(-90deg); transition: transform .3s cubic-bezier(.22, 1, .36, 1); }
+.agent-hid-line .chev { display: inline-flex; transform: rotate(-90deg); transition: transform .22s var(--ease-out); }
 .agent-hid-line[aria-expanded="true"] .chev { transform: none; }
-.agent-hid-fold { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .42s cubic-bezier(.4, 0, .2, 1); }
-.agent-hid-fold.open { grid-template-rows: 1fr; transition-duration: .62s; transition-timing-function: cubic-bezier(.22, 1, .36, 1); }
+.agent-hid-fold { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .26s var(--ease-out); }
+.agent-hid-fold.open { grid-template-rows: 1fr; transition-duration: .34s; }
 .agent-hid-inner { min-height: 0; overflow: hidden; }
 /* while a row is dragged the others slide out of its way */
 #agents.sorting { user-select: none; -webkit-user-select: none; }
@@ -1868,7 +1868,7 @@ body.panel .row.agent .ag-handle { width: 20px; height: 20px; margin: 0; }
 body.panel .row.agent .ic { width: 18px; height: 18px; }
 body.panel .row.agent .who { display: flex; align-items: center; gap: 6px; min-width: 0; }
 body.panel .row.agent > .ag-sum { justify-self: end; }
-body.panel .row.agent { transition: background-color .3s ease; }
+body.panel .row.agent { transition: background-color .16s ease; }
 body.panel .row.agent.open { background: var(--card-2); }
 .ag-sum { display: grid; grid-template-columns: auto 12px 10px; align-items: center; gap: 10px; min-width: 0; max-width: 100%; font-size: 12px; color: var(--muted); }
 .ag-sum .v { display: flex; align-items: center; justify-content: flex-end; min-width: 0; }
@@ -1878,18 +1878,18 @@ body.panel .row.agent.open { background: var(--card-2); }
    frame by frame), the words easing aside on the row's spring; the logo
    sits against them, fading and growing in a beat behind, and goes
    first on the way out. The clip is padded past the discs' rings. */
-.ag-sum .mi { display: flex; justify-content: flex-end; align-items: center; flex: none; width: 0; padding: 2px; margin: -2px -2px -2px -2px; overflow: hidden; transition: width .36s var(--row-spring), margin-right .36s var(--row-spring); }
+.ag-sum .mi { display: flex; justify-content: flex-end; align-items: center; flex: none; width: 0; padding: 2px; margin: -2px -2px -2px -2px; overflow: hidden; transition: width .22s var(--row-spring), margin-right .22s var(--row-spring); }
 .ag-sum .mi-in { display: flex; align-items: center; flex: none; width: max-content; opacity: 0; transform: scale(.6); transform-origin: 100% 50%; transition: opacity .14s ease, transform .3s var(--row-spring); }
 .row.agent .ag-sum .mi .ic { width: 14px; height: 14px; }
 .row.agent .ag-sum .mi .ic-stack .disc { width: 16px; height: 16px; }
 .row.agent .ag-sum .mi .ic-stack .disc > .ic { width: 10px !important; height: 10px !important; }
-.row.agent:hover .ag-sum .mi { width: calc(var(--w, 16px) + 4px); margin-right: 4px; transition: width .46s var(--row-spring), margin-right .46s var(--row-spring); }
-.row.agent:hover .ag-sum .mi-in { opacity: 1; transform: none; transition: opacity .28s ease .08s, transform .52s var(--row-spring) .04s; }
+.row.agent:hover .ag-sum .mi { width: calc(var(--w, 16px) + 4px); margin-right: 4px; transition: width .26s var(--row-spring), margin-right .26s var(--row-spring); }
+.row.agent:hover .ag-sum .mi-in { opacity: 1; transform: none; transition: opacity .18s ease .04s, transform .28s var(--row-spring) .02s; }
 @media (prefers-reduced-motion: reduce) { .ag-sum .mi, .ag-sum .mi-in, .row.agent:hover .ag-sum .mi, .row.agent:hover .ag-sum .mi-in { transition: none; } }
 #addSheet { scroll-margin-top: 12px; }
 .ag-sum .v.empty { color: var(--muted); }
-.ag-sum .chev { display: inline-flex; width: 10px; color: var(--faint); transform: rotate(-90deg); transition: transform .4s var(--row-spring); }
-.row.agent.open .ag-sum .chev { transition-duration: .48s; }
+.ag-sum .chev { display: inline-flex; width: 10px; color: var(--faint); transform: rotate(-90deg); transition: transform .26s var(--row-spring); }
+.row.agent.open .ag-sum .chev { transition-duration: .32s; }
 .row.agent.open .ag-sum .chev { transform: none; }
 .eff { display: inline-flex; align-items: flex-end; gap: 1.5px; height: 10px; }
 .eff i { width: 2.5px; border-radius: 1px; background: var(--faint); opacity: .45; }
@@ -1902,10 +1902,10 @@ body.panel .row.agent.open { background: var(--card-2); }
    inside comes down a few px into place as it clears; closing, it lifts
    and is gone before the height is, so nothing is left to smear */
 body.panel { --row-spring: cubic-bezier(.25, .3, .1, 1); }
-.ag-open { grid-column: 1 / -1; display: grid; grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows .4s var(--row-spring), visibility 0s .4s; }
-.row.agent.open .ag-open { grid-template-rows: 1fr; visibility: visible; transition: grid-template-rows .48s var(--row-spring); }
-.ag-body { opacity: 0; transform: translateY(-6px); transition: opacity .16s ease, transform .4s var(--row-spring); }
-.row.agent.open .ag-body { opacity: 1; transform: none; transition: opacity .3s ease .06s, transform .48s var(--row-spring); }
+.ag-open { grid-column: 1 / -1; display: grid; grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows .26s var(--row-spring), visibility 0s .26s; }
+.row.agent.open .ag-open { grid-template-rows: 1fr; visibility: visible; transition: grid-template-rows .32s var(--row-spring); }
+.ag-body { opacity: 0; transform: translateY(-6px); transition: opacity .12s ease, transform .26s var(--row-spring); }
+.row.agent.open .ag-body { opacity: 1; transform: none; transition: opacity .2s ease .04s, transform .32s var(--row-spring); }
 .ag-in { min-height: 0; overflow: hidden; }
 /* the room over the lines is inside what opens: a shut row is 36px, no more */
 .ag-body { display: flex; flex-direction: column; gap: 8px; padding: 9px 0 12px 30px; transform-origin: 50% 0; }
@@ -1954,7 +1954,7 @@ body.panel .profiles.open {
   background: var(--pop-bg); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
   border: 1px solid var(--line); border-radius: 11px; box-shadow: var(--shadow);
   transform-origin: 24px bottom; --pop-dy: 6px;
-  animation: pop-fade .18s ease-out, pop-in .42s cubic-bezier(.16, 1, .3, 1);
+  animation: pop-fade .14s ease-out, pop-in .24s var(--ease-out);
 }
 @media (prefers-reduced-motion: reduce) { body.panel .profiles.open { animation: pop-fade .12s ease-out; } }
 body.panel .profiles > .label { display: block; flex: 1 1 100%; padding: 0 2px; }
@@ -2166,12 +2166,12 @@ body.panel .foot { min-height: 0; padding: 5px 8px 7px 14px; border-top: 1px sol
 .text.primary:hover { filter: brightness(1.08); }
 .text.danger:hover { color: var(--red); background: var(--red-soft); }
 /* a partner listed since the add sheet last showed them (markNewPartners) */
-#addProvider.has-new::after { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 0 0 5px; border-radius: 50%; background: var(--accent); vertical-align: 6px; box-shadow: 0 0 0 0 var(--accent); animation: new-dot-in .4s cubic-bezier(.3, 1.6, .5, 1), new-dot-ring 2.4s ease-out .4s 2; }
-@keyframes new-dot-in { from { transform: scale(0); } }
+#addProvider.has-new::after { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 0 0 5px; border-radius: 50%; background: var(--accent); vertical-align: 6px; box-shadow: 0 0 0 0 var(--accent); animation: new-dot-in .3s cubic-bezier(.3, 1.6, .5, 1), new-dot-ring 2.4s ease-out .3s 2; }
+@keyframes new-dot-in { from { opacity: 0; transform: scale(.5); } }
 @keyframes new-dot-ring { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); } 70%, 100% { box-shadow: 0 0 0 5px transparent; } }
 /* and on the tile of each partner new when the sheet showed it, until it is opened (partnerTile) */
 .tile .new-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
-.tile .new-dot.in { animation: new-dot-in .4s cubic-bezier(.3, 1.6, .5, 1), new-dot-ring 2.4s ease-out .4s 1; }
+.tile .new-dot.in { animation: new-dot-in .3s cubic-bezier(.3, 1.6, .5, 1), new-dot-ring 2.4s ease-out .3s 1; }
 @media (prefers-reduced-motion: reduce) { #addProvider.has-new::after, .tile .new-dot.in { animation: none; } }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0 6px; min-height: 12px; }
 .chip {
@@ -2242,7 +2242,7 @@ body.window .foot .status:not(:empty):not(.lift) { position: fixed; left: 50%; b
    on the row under it (the Plugins page's Install at the window's foot)
    lands on the row. An error or warning stays selectable, to be copied. */
 body.window .foot .status:not(.err):not(.warn) { pointer-events: none; }
-.status { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .3s; }
+.status { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .2s; }
 .status.ok { color: var(--green); }
 .status.err { color: var(--red); }
 .status.warn { color: var(--amber); }
@@ -2280,13 +2280,13 @@ body .foot .status.lift { white-space: normal; overflow-wrap: anywhere; text-ove
      answer and a long soft settle with no bounce, the way iOS's menus come;
      it shows at once and fades out ahead of its motion on the way out */
   transform-origin: var(--ox, 24px) top;
-  animation: pop-fade .18s ease-out, pop-in .42s cubic-bezier(.16, 1, .3, 1);
+  animation: pop-fade .14s ease-out, pop-in .24s var(--ease-out);
 }
 .pop.up { transform-origin: var(--ox, 24px) bottom; --pop-dy: 6px; }
 @keyframes pop-fade { from { opacity: 0; } }
 @keyframes pop-in { from { transform: translateY(var(--pop-dy, -6px)) scale(.94); } }
 /* a closed picker's likeness going: it sinks back toward the button */
-.pop.leaving { pointer-events: none; animation: pop-out .22s cubic-bezier(.4, 0, .7, .2) forwards; }
+.pop.leaving { pointer-events: none; animation: pop-out .15s var(--ease-out) forwards; }
 @keyframes pop-out { to { opacity: 0; transform: translateY(calc(var(--pop-dy, -6px) * .6)) scale(.96); } }
 @media (prefers-reduced-motion: reduce) { .pop { animation: pop-fade .12s ease-out; } .pop.leaving { animation: none; } }
 .pop .search { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--line-2); color: var(--faint); }
@@ -2297,7 +2297,7 @@ body .foot .status.lift { white-space: normal; overflow-wrap: anywhere; text-ove
 #pickerRail { position: relative; width: 43px; padding: 6px 5px; border-right: 1px solid var(--line-2); display: flex; flex-direction: column; align-items: center; gap: 3px; flex: none; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
 /* it draws its own thumb (.rail-thumb) */
 #pickerRail::-webkit-scrollbar { width: 0; height: 0; }
-.rail-thumb { position: absolute; z-index: 0; top: 0; left: 5px; width: 31px; height: 31px; border-radius: 8px; opacity: 0; background: var(--sel); box-shadow: inset 0 0 0 1px var(--line-2), 0 1px 2px rgba(0, 0, 0, .06); pointer-events: none; transition: transform 260ms cubic-bezier(.22, 1, .36, 1), opacity 100ms ease-out; will-change: transform; }
+.rail-thumb { position: absolute; z-index: 0; top: 0; left: 5px; width: 31px; height: 31px; border-radius: 8px; opacity: 0; background: var(--sel); box-shadow: inset 0 0 0 1px var(--line-2), 0 1px 2px rgba(0, 0, 0, .06); pointer-events: none; transition: transform 220ms var(--ease-out), opacity 100ms ease-out; will-change: transform; }
 .rail-item { position: relative; z-index: 1; width: 31px; height: 31px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); flex: none; transition: color 150ms ease-out, transform 150ms cubic-bezier(.25, 1, .5, 1); }
 .rail-item:hover { color: var(--fg); background: color-mix(in srgb, var(--pill) 68%, transparent); }
 .rail-item:active { transform: scale(.94); }
@@ -2558,7 +2558,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 /* Change key (#1869) looks like the copy button beside it, but isn't one */
 .copy, .key-edit { width: 22px; height: 22px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); flex: none; transition: background .12s, color .12s; }
 .copy:hover, .key-edit:hover { background: var(--pill-hover); color: var(--fg); }
-.copy.done { color: var(--green); background: var(--green-soft); animation: copy-pop .36s var(--ease); }
+.copy.done { color: var(--green); background: var(--green-soft); animation: copy-pop .26s var(--ease-out); }
 @keyframes copy-pop { 0% { transform: scale(.55); } 55% { transform: scale(1.16); } 100% { transform: scale(1); } }
 /* the snippet's language, and beside it the shell it is for (#1514);
    a narrow window puts the shell on a row of its own */
@@ -2781,8 +2781,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 /* an account signed out (#1363) shows its Remove without a hover: it is
    one of the two ways out of that state, beside Sign in again */
 .acc.signed-out .text.quiet { opacity: 1; }
-.acc.new { animation: sub-in .5s cubic-bezier(.2, .8, .2, 1); }
-.acc.new .dot { animation: copy-pop .45s cubic-bezier(.2, .8, .2, 1); }
+.acc.new { animation: sub-in .3s var(--ease-out); }
+.acc.new .dot { animation: copy-pop .3s var(--ease-out); }
 @keyframes sub-in { from { opacity: 0; transform: translateY(-4px); background: var(--pill-hover); } }
 .acc.add { width: 100%; color: var(--fg-2); background: none; border: 0 solid var(--line-2); cursor: default; }
 .acc + .acc.add { border-top-width: 1px; }
@@ -3431,7 +3431,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
    starts where the fields do (--ed-at), no padding before it. */
 .editor .more summary { font-size: 12px; line-height: 18px; color: var(--fg-2); list-style: none; display: inline-flex; align-items: center; gap: 5px; padding: 3px 0; margin-left: var(--ed-at, 86px); border-radius: 4px; cursor: pointer; transition: color .12s; }
 .editor .more summary::-webkit-details-marker { display: none; }
-.editor .more summary::before { content: ""; flex: none; width: 10px; height: 10px; background: var(--muted); transition: transform .42s cubic-bezier(.32, .72, 0, 1), background-color .12s;
+.editor .more summary::before { content: ""; flex: none; width: 10px; height: 10px; background: var(--muted); transition: transform .24s var(--ease-out), background-color .12s;
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M3.6 1.6 7 5 3.6 8.4' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
           mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M3.6 1.6 7 5 3.6 8.4' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat; }
 .editor .more[open]:not(.closing) summary::before { transform: rotate(90deg); }
@@ -4044,7 +4044,7 @@ input.words.search-key, input.words.search-url { flex: 1 1 120px; width: auto; m
    One easing everywhere (iOS-ish: quick start, soft landing), short
    durations, small distances. Pressing gives a little, pages settle in,
    dialogs lift. */
-:root { --ease: cubic-bezier(.2, .8, .2, 1); }
+:root { --ease: cubic-bezier(.2, .8, .2, 1); --ease-out: cubic-bezier(.23, 1, .32, 1); }
 .text, .icon, .tile, .achip, .mchip, .use, .link {
   transition-property: background, background-color, color, border-color, box-shadow, filter, opacity, transform;
   transition-duration: .16s; transition-timing-function: var(--ease);
@@ -4060,7 +4060,7 @@ input.words.search-key, input.words.search-url { flex: 1 1 120px; width: auto; m
 
 /* the theme crossfades instead of snapping */
 html.theming, html.theming *, html.theming *::before, html.theming *::after {
-  transition: background-color .35s var(--ease), background .35s var(--ease), color .35s var(--ease), border-color .35s var(--ease), box-shadow .35s var(--ease) !important;
+  transition: background-color .25s var(--ease), background .25s var(--ease), color .25s var(--ease), border-color .25s var(--ease), box-shadow .25s var(--ease) !important;
 }
 
 /* Confirmation uses the top layer so an open editor remains intact underneath. */
@@ -4426,7 +4426,7 @@ body.panel .modal { padding: 16px 12px; }
 .sess-indexing:not(.known) .si-pct { display: none; }
 .si-line { margin-top: 4px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .si-tip { font-size: 11.5px; color: var(--faint, var(--muted)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.si-tip.in { animation: si-tip .6s ease-out; }
+.si-tip.in { animation: si-tip .3s var(--ease-out); }
 @keyframes si-tip { from { opacity: 0; transform: translateY(3px); } }
 .si-field { position: relative; align-self: stretch; min-width: 0;
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 94%, transparent);

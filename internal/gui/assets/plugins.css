@@ -173,7 +173,7 @@ button.pm-chip:disabled { cursor: default; opacity: .6; }
 @keyframes pm-pulse { 50% { opacity: .5; } }
 @keyframes pm-sheen { from { background-position: 100% 0; } to { background-position: 0 0; } }
 /* the GitHub section looking: three dots breathing in turn, and the word */
-.pm-sechead .pm-ghlook { display: inline-flex; align-items: center; gap: 7px; margin-left: auto; font-size: 11px; color: var(--faint); animation: pm-fade .4s var(--ease) both .15s; }
+.pm-sechead .pm-ghlook { display: inline-flex; align-items: center; gap: 7px; margin-left: auto; font-size: 11px; color: var(--faint); animation: pm-fade .26s var(--ease) both .08s; }
 .pm-ghlook .dots { display: inline-flex; gap: 3px; }
 .pm-ghlook .dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--accent); opacity: .25; animation: pm-breathe 1.2s ease-in-out infinite; }
 .pm-ghlook .dots i:nth-child(2) { animation-delay: .16s; }
@@ -181,7 +181,7 @@ button.pm-chip:disabled { cursor: default; opacity: .6; }
 @keyframes pm-breathe { 0%, 70%, 100% { opacity: .25; transform: none; } 35% { opacity: .9; transform: translateY(-1.5px); } }
 @keyframes pm-fade { from { opacity: 0; } }
 /* its cards when they come: in where the ghosts were, one after another */
-.pm-arrive .pm-card { animation: pm-arrive .42s cubic-bezier(.2, .7, .2, 1) both; animation-delay: calc(var(--i, 0) * 40ms); }
+.pm-arrive .pm-card { animation: pm-arrive .3s cubic-bezier(.23, 1, .32, 1) both; animation-delay: calc(min(var(--i, 0), 12) * 28ms); }
 @keyframes pm-arrive { from { opacity: 0; transform: translateY(4px); } }
 
 .pm-note { margin: 0; padding: 4px 2px; font-size: 12px; color: var(--muted); }

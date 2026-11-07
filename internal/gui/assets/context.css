@@ -384,7 +384,7 @@ i.dot.free { background: var(--k-free); box-shadow: inset 0 0 0 1px color-mix(in
   padding: 7px 9px; border-radius: 7px; cursor: pointer;
   background: color-mix(in srgb, var(--k) 11%, var(--card));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--k) 24%, transparent);
-  transition: left .62s var(--t-ease), top .62s var(--t-ease), width .62s var(--t-ease), height .62s var(--t-ease),
+  transition: left .4s var(--t-ease), top .4s var(--t-ease), width .4s var(--t-ease), height .4s var(--t-ease),
     background-color .22s ease, box-shadow .22s ease, opacity .24s ease;
 }
 .ctx-tile .n { font-size: 11.5px; font-weight: 550; line-height: 1.25; color: color-mix(in srgb, var(--k) 72%, var(--fg)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -425,7 +425,7 @@ i.dot.free { background: var(--k-free); box-shadow: inset 0 0 0 1px color-mix(in
 .ctx-look-b.on { background: var(--card); color: var(--fg); box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 0 0 .5px color-mix(in srgb, var(--fg) 10%, transparent); }
 
 /* an image the request carried, in its text */
-.ctx-pic { display: block; width: fit-content; max-width: 100%; margin: 4px 0 2px; padding: 0; border: 0; border-radius: 10px; overflow: hidden; background: color-mix(in srgb, var(--fg) 4%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--fg) 9%, transparent); cursor: zoom-in; transform-origin: top left; opacity: 0; transition: opacity .4s ease; }
+.ctx-pic { display: block; width: fit-content; max-width: 100%; margin: 4px 0 2px; padding: 0; border: 0; border-radius: 10px; overflow: hidden; background: color-mix(in srgb, var(--fg) 4%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--fg) 9%, transparent); cursor: zoom-in; transform-origin: top left; opacity: 0; transition: opacity .25s ease; }
 .ctx-pic.in { opacity: 1; }
 .ctx-pic img { display: block; max-width: min(100%, 420px); max-height: 240px; width: auto; height: auto; object-fit: contain; }
 .ctx-pic.open { cursor: zoom-out; }

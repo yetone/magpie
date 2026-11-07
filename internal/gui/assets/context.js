@@ -613,14 +613,14 @@
         n.style.height = `max(0px, calc(${pc(tl.h, H)}% - 3px))`;
         if (quiet || !n.animate || !(fresh || enter)) return;
         n.animate([{ opacity: 0, transform: "scale(.94)", filter: "blur(4px)" }, { opacity: 1, transform: "none", filter: "none" }],
-          { duration: 560, easing: IOS_EASE, delay: enter ? 40 + Math.min(i, 16) * 32 : 0, fill: "backwards" });
+          { duration: 380, easing: IOS_EASE, delay: enter ? 30 + Math.min(i, 16) * 20 : 0, fill: "backwards" });
       });
       for (const [k, n] of tiles) {
         if (seen.has(k)) continue;
         tiles.delete(k);
         n.classList.add("gone");
         if (quiet || !n.animate) { n.remove(); continue; }
-        n.animate([{ opacity: 1 }, { opacity: 0, transform: "scale(.96)" }], { duration: 260, easing: IOS_EASE, fill: "forwards" })
+        n.animate([{ opacity: 1 }, { opacity: 0, transform: "scale(.96)" }], { duration: 180, easing: IOS_EASE, fill: "forwards" })
           .finished.then(() => n.remove(), () => n.remove());
       }
     };
@@ -653,7 +653,7 @@
       const h1 = viz.offsetHeight;
       if (h0 !== h1) {
         viz.style.overflow = "hidden";
-        viz.animate([{ height: h0 + "px" }, { height: h1 + "px" }], { duration: 520, easing: IOS_EASE })
+        viz.animate([{ height: h0 + "px" }, { height: h1 + "px" }], { duration: 340, easing: IOS_EASE })
           .finished.finally(() => { viz.style.overflow = ""; }).catch(() => {});
       }
     };
