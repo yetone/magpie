@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"slices"
 	"strings"
@@ -304,7 +305,11 @@ func spendCodexReset(ctx context.Context, user, credit, why string) (ResetOutcom
 	StaleAllowance("codex", user)
 	if out.Code == "reset" {
 		renewedNow("codex", user)
-		noteResetUsed(user, why, out)
+		// the reset is spent on the server, so the spend stays a success:
+		// a record that can't be kept is named, never spent again (#5556)
+		if err := noteResetUsed(user, why, out); err != nil {
+			log.Printf("Codex reset of %s spent, but keeping the record of it failed: %v", user, err)
+		}
 	}
 	subscriptionUsageCache.Lock()
 	subscriptionUsageCache.at = time.Time{}

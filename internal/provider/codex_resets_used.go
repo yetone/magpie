@@ -77,11 +77,13 @@ func readResetsUsed() ([]ResetUse, error) {
 }
 
 // noteResetUsed keeps that a reset of user's was used, for why, when out
-// says one was. A file that doesn't parse is copied aside first, not
-// written over unread.
-func noteResetUsed(user, why string, out ResetOutcome) {
+// says one was, and says when keeping it failed: the reset is spent on
+// the server either way, so the caller names the loss rather than treat
+// the spend as failed (#5556). A file that doesn't parse is copied aside
+// first, not written over unread.
+func noteResetUsed(user, why string, out ResetOutcome) error {
 	if user == "" || out.Code != "reset" {
-		return
+		return nil
 	}
 	resetsUsedMu.Lock()
 	defer resetsUsedMu.Unlock()
@@ -100,8 +102,13 @@ func noteResetUsed(user, why string, out ResetOutcome) {
 		us = us[len(us)-resetsUsedMost:]
 	}
 	b, _ := json.MarshalIndent(us, "", "  ")
-	_ = os.MkdirAll(settings.Dir(), 0o755)
-	_ = steady.WriteFile(resetsUsedPath(), append(b, '\n'), 0o600)
+	if err := os.MkdirAll(settings.Dir(), 0o755); err != nil {
+		return fmt.Errorf("keeping that a reset was used to %s: %w", resetsUsedPath(), err)
+	}
+	if err := steady.WriteFile(resetsUsedPath(), append(b, '\n'), 0o600); err != nil {
+		return fmt.Errorf("keeping that a reset was used to %s: %w", resetsUsedPath(), err)
+	}
+	return nil
 }
 
 // ResetsUsed is what magpie spent of the Codex account user's resets,

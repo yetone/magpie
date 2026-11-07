@@ -1,11 +1,14 @@
 package provider
 
 import (
+	"bytes"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -96,6 +99,58 @@ func TestResetUsesKept(t *testing.T) {
 	// kept on disk: a restart still says it
 	if _, err := os.Stat(filepath.Join(settings.Dir(), "codex-resets-used.json")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A record write that fails is seen, not taken for kept (#5556): the
+// reset is spent on the server either way, so a lost record must never
+// spend a second credit — the spend still succeeds, exactly once, and
+// the record's loss is named in the log. The record's path made a
+// directory is the failure stood in: reading it and replacing it both
+// fail, as a full disk or a denied path would.
+func TestResetUseWriteFailureSeen(t *testing.T) {
+	signIn(t)
+	var consumed atomic.Int32
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/backend-api/wham/rate-limit-reset-credits":
+			json.NewEncoder(w).Encode(map[string]any{"available_count": 1, "credits": []any{
+				map[string]any{"id": "c1", "status": "available"},
+			}})
+		case "/backend-api/wham/rate-limit-reset-credits/consume":
+			consumed.Add(1)
+			json.NewEncoder(w).Encode(map[string]any{"code": "reset", "windows_reset": 2})
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	t.Cleanup(fake.Close)
+	oldBase := CodexBase
+	CodexBase = fake.URL + "/backend-api/codex"
+	t.Cleanup(func() { CodexBase = oldBase })
+	p := resetsUsedPath()
+	os.MkdirAll(filepath.Dir(p), 0o755)
+	if err := os.Mkdir(p, 0o755); err != nil { // the record's path, a directory
+		t.Fatal(err)
+	}
+	oldLog := log.Writer()
+	var logged bytes.Buffer
+	log.SetOutput(&logged)
+	t.Cleanup(func() { log.SetOutput(oldLog) })
+
+	out, err := UseCodexResetCard(t.Context(), "me@example.com", "")
+	if err != nil || out.Code != "reset" {
+		t.Fatalf("the reset itself: %+v %v", out, err)
+	}
+	if consumed.Load() != 1 {
+		t.Fatalf("consumed %d times, want once: a lost record is never a second spend", consumed.Load())
+	}
+	if !strings.Contains(logged.String(), "codex-resets-used.json") {
+		t.Fatalf("the record's loss went unnamed; log:\n%s", logged.String())
+	}
+	// kept, said so: a note whose write fails is an error, not silence
+	if err := noteResetUsed("me@example.com", ResetUsedByHand, ResetOutcome{Code: "reset", Windows: 2}); err == nil {
+		t.Fatal("a failed write of the record went unnamed")
 	}
 }
 
