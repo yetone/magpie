@@ -20,7 +20,8 @@ package provider
 // card's counted windows in its unit used at least as much over the same
 // span, which makes it their credits again; a pool set aside on its own
 // (WorkBuddy's Extra credits, which it spends while the plan's stand
-// still: jiabubu) counts as any other. Of one allowance seen over several
+// still: jiabubu) counts as any other, and so do the pools set aside that
+// together grant what a counted window does, its whole (poolsOfWhole). Of one allowance seen over several
 // spans (Open Design's 5 hours and week) only the longest counts.
 //
 // A reading that has used less than the one before is a cycle started
@@ -293,6 +294,7 @@ func noteDailyCredits(qs []SubscriptionQuota, now time.Time) {
 	changed := false
 	for _, q := range qs {
 		ws := creditWindows(q)
+		pools := poolsOfWhole(ws)
 		type step struct {
 			c creditWindow
 			a *creditsAccount
@@ -314,8 +316,9 @@ func noteDailyCredits(qs []SubscriptionQuota, now time.Time) {
 			if a == nil {
 				// one set aside beside a counted window in its unit is
 				// taken for that window's breakdown until it uses
-				// credits that window doesn't
-				part := c.aside && slices.ContainsFunc(ws, func(x creditWindow) bool { return !x.aside && x.unit == c.unit })
+				// credits that window doesn't; one of a whole's pools
+				// never is
+				part := c.aside && !pools[c.name] && slices.ContainsFunc(ws, func(x creditWindow) bool { return !x.aside && x.unit == c.unit })
 				a = &creditsAccount{Since: day, Part: part}
 				accts[key] = a
 				a.Last = creditsReading{Used: c.used, Total: c.total, At: now}
@@ -341,7 +344,7 @@ func noteDailyCredits(qs []SubscriptionQuota, now time.Time) {
 				// counted windows in its unit used at least as much in
 				// the same span: then it is their credits broken down
 				// (CodeArts' buckets under its 总积分), counted there.
-				a.Part = n[c.unit] > 0 && aside[c.unit] <= n[c.unit]+0.005
+				a.Part = !pools[c.name] && n[c.unit] > 0 && aside[c.unit] <= n[c.unit]+0.005
 				if a.Part {
 					d = 0
 				}
@@ -380,6 +383,38 @@ func noteDailyCredits(qs []SubscriptionQuota, now time.Time) {
 	_ = writeFileAtomic(path, b)
 }
 
+// poolsOfWhole are the windows set aside that a counted window is the
+// whole of: together, in its unit, they grant what it grants (WorkBuddy's
+// Credits and Extra credits under its Total credits, plugin 0.2.24 on).
+// Each is a pool of its own and counts its own days beside the whole's,
+// so the pools' days add up to the whole's (yapechan on Discord: 今天 0
+// for 积分 and 额外积分 beside 34.06 for 积分合计, the pools taken for the
+// whole's breakdown and counted there). A bucket that is only part of
+// what the whole grants (CodeArts' 基础积分 under its 总积分) stays its
+// breakdown.
+func poolsOfWhole(ws []creditWindow) map[string]bool {
+	out := map[string]bool{}
+	for _, whole := range ws {
+		if whole.aside {
+			continue
+		}
+		var of []string
+		sum := 0.0
+		for _, c := range ws {
+			if c.aside && c.unit == whole.unit {
+				of = append(of, c.name)
+				sum += c.total
+			}
+		}
+		if len(of) > 1 && math.Abs(sum-whole.total) <= 0.005 {
+			for _, name := range of {
+				out[name] = true
+			}
+		}
+	}
+	return out
+}
+
 // withDailyCredits gives each card in qs the days of its credits windows,
 // as kept: Daily the first's, MoreDaily the rest's.
 func withDailyCredits(qs []SubscriptionQuota, now time.Time) []SubscriptionQuota {
@@ -395,6 +430,13 @@ func withDailyCredits(qs []SubscriptionQuota, now time.Time) []SubscriptionQuota
 	out := slices.Clone(qs)
 	for i, q := range out {
 		var all []*DailyCredits
+		var ws []creditWindow
+		for _, w := range q.Windows {
+			if c, ok := creditOf(w); ok {
+				ws = append(ws, c)
+			}
+		}
+		pools := poolsOfWhole(ws)
 		for _, w := range q.Windows {
 			c, ok := creditOf(w)
 			if !ok || slices.ContainsFunc(all, func(d *DailyCredits) bool { return d.Window == c.name }) {
@@ -416,7 +458,7 @@ func withDailyCredits(qs []SubscriptionQuota, now time.Time) []SubscriptionQuota
 					d.Days = append(d.Days, DayCredits{Day: day, Used: used})
 				}
 			}
-			if a.Part && len(d.Days) == 0 {
+			if a.Part && !pools[c.name] && len(d.Days) == 0 {
 				continue // another window's breakdown, counted there
 			}
 			slices.SortFunc(d.Days, func(x, y DayCredits) int { return strings.Compare(x.Day, y.Day) })
