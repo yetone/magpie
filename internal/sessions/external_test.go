@@ -58,3 +58,28 @@ func TestGatewayStatsMergedBesideNative(t *testing.T) {
 		t.Fatalf("overview %+v\nmerged list's %+v", got, want)
 	}
 }
+
+// linkaww on Discord: Usage › Sessions lists the sessions whose keys the
+// stats name, and those named only the native ones, so a session that came
+// through the gateway alone (every one, in gateway mode) wasn't listed.
+func TestGatewayStatsNameTheGatewaySessions(t *testing.T) {
+	at := func(s int64) time.Time { return time.Unix(1_790_000_000+s, 0) }
+	native := Stats{From: "2026-10-06", To: "2026-10-08", Keys: []string{"claude:a"}, Sessions: []Summary{
+		{Key: "claude:a", Agent: "claude", ID: "a", Last: at(30), Days: []int{0}, perDay: []summaryDay{{day: 0, output: 2}}},
+	}}
+	merged := MergeExternalStats(native, nil, []ExternalSession{
+		{Agent: "claude", ID: "g1", Last: at(10), Daily: []ExternalDayUsage{{Date: "2026-10-07", Tokens: Tokens{Output: 5}}}},
+		{Agent: "pi", ID: "g2", Last: at(40), Daily: []ExternalDayUsage{{Date: "2026-10-08", Tokens: Tokens{Output: 5}}}},
+	})
+	if want := []string{"pi:g2", "claude:a", "claude:g1"}; !slices.Equal(merged.Keys, want) {
+		t.Fatalf("keys %v, want %v", merged.Keys, want)
+	}
+	if !slices.Equal(native.Keys, []string{"claude:a"}) {
+		t.Fatalf("merge wrote the native keys: %v", native.Keys)
+	}
+	// gateway mode: no native session at all
+	only := MergeExternalStats(Stats{From: "2026-10-06", To: "2026-10-08"}, nil, []ExternalSession{{Agent: "claude", ID: "g1", Last: at(10)}})
+	if !slices.Equal(only.Keys, []string{"claude:g1"}) {
+		t.Fatalf("gateway only: keys %v", only.Keys)
+	}
+}

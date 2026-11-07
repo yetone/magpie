@@ -371,6 +371,11 @@ requests name one in a header (`sessionOf`: `X-Magpie-Session`, or the
 agent's own, `sessionHeaders`), under the agent its User-Agent names
 (`usage.AgentOf`, magpie's agents and plugins' agents; another client by
 its product name).
+The stats' `keys` name these sessions too (`MergeExternalStats`), since
+Usage › Sessions lists only the keys it is given (linkaww on Discord: a
+Docker magpie in gateway mode listed almost none;
+`TestGatewayStatsNameTheGatewaySessions`,
+`TestGatewayModeStatsNameTheGatewaySessions`).
 The app's windows are never in gateway mode. Tests:
 `TestGatewayModeListsNoOwnSessions`, `gateway-mode-sessions.test.cjs`.
 

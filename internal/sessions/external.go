@@ -272,5 +272,13 @@ func MergeExternalStats(st Stats, days []ExternalDayUsage, external []ExternalSe
 	}
 	sort.Slice(st.Days, func(i, j int) bool { return st.Days[i].Date < st.Days[j].Date })
 	sort.SliceStable(st.gateway, func(i, j int) bool { return st.gateway[i].Last.After(st.gateway[j].Last) })
+	// the sessions counted name the gateway's too (linkaww on Discord):
+	// Usage › Sessions lists only the keys here, so a session that came
+	// through the gateway alone, every one in gateway mode, wasn't listed
+	if len(st.gateway) > 0 {
+		keys := make([]string, 0, len(st.Sessions)+len(st.gateway))
+		st.eachSession(func(s *Summary) { keys = append(keys, s.Key) })
+		st.Keys = keys
+	}
 	return st
 }
