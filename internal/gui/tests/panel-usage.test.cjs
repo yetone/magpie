@@ -197,19 +197,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert(tip.includes("Claude") && tip.includes("Relay"), tip);
       await p.mouse.move(2, 2);
 
-      // Native fit includes the Usage tab, and all controls fit without
-      // scrolling: each tab's whole layout (the view's padding, the header,
+      // Native fit is the tab showing, and all its controls fit without
+      // scrolling: the tab's whole layout (the view's padding, the header,
       // tabs and foot), not its section's height alone
       const need = await p.evaluate(() => {
-        const body = document.body, v = document.querySelector("#view-agents"), tab = body.dataset.ptab, out = {};
+        const body = document.body, v = document.querySelector("#view-agents"), tab = body.dataset.ptab, out = { tab };
         for (const t of ["agents", "usage", "stats", "routing"]) { body.dataset.ptab = t; out[t] = Math.ceil(body.clientHeight - v.offsetHeight + v.scrollHeight); }
         body.dataset.ptab = tab;
         return out;
       });
-      const height = Math.max(...Object.values(need));
+      const height = need[need.tab];
       for (let i=0;i<40 && fitted.at(-1) !== height;i++) await p.waitForTimeout(25);
-      assert(fitted.at(-1) >= need.usage, `the panel fits the Usage tab: ${fitted.at(-1)} < ${need.usage}`);
-      assert.equal(fitted.at(-1),height,"the panel fits its tallest tab including Usage");
+      assert.equal(fitted.at(-1),height,`the panel fits the ${need.tab} tab showing`);
       const scroll = () => p.locator("#view-agents").evaluate(v => v.scrollTop);
       const before = await scroll();
       await p.locator("#panelUsage .pu-card .segs .opt").nth(1).click();
