@@ -11,12 +11,12 @@ import (
 )
 
 // The Cline plugin's provider has ClinePass's Upstream tick too (ARNO on
-// Discord): saved on it, a DeepSeek model's request reaches the plugin
-// pinned to DeepSeek's own API and a GLM model's to Z.ai's (sdytman on
-// Discord), on Chat and Anthropic Messages alike, glm-5.3-flash by
-// OpenRouter's provider.only since Cline sends it there, and its other
-// models' requests go as sent.
-func TestClinePluginPinsDeepSeekAndGLM(t *testing.T) {
+// Discord). Since 2026-11-06 Cline answers providerOptions with 403
+// (#5442), so with the tick saved on, a DeepSeek or GLM model's request
+// reaches the plugin as sent, on Chat and Anthropic Messages alike, and
+// only glm-5.3-flash carries OpenRouter's provider.only, which Cline
+// still takes; its other models' requests go as sent too.
+func TestClinePluginTickSendsNoProviderOptions(t *testing.T) {
 	t.Setenv("FAKE_DEEPSEEK", "1")
 	t.Setenv("FAKE_GLM", "1")
 	var mu sync.Mutex
@@ -106,30 +106,15 @@ func TestClinePluginPinsDeepSeekAndGLM(t *testing.T) {
 	if p, err = provider.Find(pid); err != nil || !p.PinUpstream {
 		t.Fatalf("the tick wasn't kept: %+v, %v", p, err)
 	}
-	// ClinePass's own DeepSeek models the plugin pins itself, with the
-	// has filter that holds them on DeepSeek and a way back (0.1.11), and
-	// it keeps a body's own providerOptions: magpie's only alone would
-	// take the plugin's place, so the tick leaves them to it
-	for _, m := range []string{"cline-pass/deepseek-v4-pro", "cline-pass/deepseek-v4.1-flash", "cline-pass/deepseek-v4.1-flash-1017"} {
+	for _, m := range []string{"deepseek-v4-pro", "glm-5.3", "cline-pass/deepseek-v4-pro", "cline-pass/deepseek-v4.1-flash-1017", "cline-pass/glm-5.3"} {
 		if up, _ := p.ClinePin(m); up != "" {
-			t.Errorf("%s: magpie pinned it to %q ahead of the plugin", m, up)
+			t.Errorf("%s: pinned to %q, which only providerOptions could say", m, up)
 		}
-		if has := p.ClinePassHas(m, true); has != nil {
-			t.Errorf("%s: magpie sent has %v ahead of the plugin", m, has)
-		}
-	}
-	if up, _ := p.ClinePin("cline-pass/glm-5.3"); up != "zai" {
-		t.Errorf("cline-pass/glm-5.3: pinned to %q, want zai", up)
 	}
 	got := ask()
 	for i, q := range got[:4] {
-		want := `{"gateway":{"only":["deepseek"]}}`
-		if i >= 2 {
-			want = `{"gateway":{"only":["zai"]}}`
-		}
-		po, _ := json.Marshal(q["providerOptions"])
-		if string(po) != want {
-			t.Fatalf("request %d reached the plugin with providerOptions %s, want %s", i, po, want)
+		if q["providerOptions"] != nil || q["provider"] != nil {
+			t.Fatalf("request %d reached the plugin with providerOptions %v provider %v, want neither", i, q["providerOptions"], q["provider"])
 		}
 	}
 	if got[4]["providerOptions"] != nil || got[4]["provider"] != nil {

@@ -72,9 +72,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.goto("http://magpie.test/?view=providers");
       const zh = await page.evaluate(() => [
         "DeepSeek and GLM models only from their makers' own APIs", "Upstream",
-        "Cline serves a model from any host its gateway picks; pinned, a request for a DeepSeek model goes only to DeepSeek and one for a GLM model only to Z.ai, which keeps its prompt cache, and fails when that API can't take it",
+        "Since 2026-11-06 Cline refuses a pinned DeepSeek or GLM request with 403, so magpie sends them unpinned and Cline picks the host; only glm-5.3-flash still asks Z.ai",
       ].map((k) => I18N.zh[k]));
       assert(zh.every(Boolean), "every string has its Chinese");
+      for (const l of ["zh-TW", "ja", "de"]) {
+        const has = await page.evaluate(([l, k]) => !!I18N[l][k], [l, "Since 2026-11-06 Cline refuses a pinned DeepSeek or GLM request with 403, so magpie sends them unpinned and Cline picks the host; only glm-5.3-flash still asks Z.ai"]);
+        assert(has, `the Upstream note has its ${l}`);
+      }
       if (lang === "zh") w.tick = zh[0];
 
       await page.locator(".row.provider", { hasText: "ClinePass" }).click();
@@ -84,6 +88,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await tick.waitFor();
       assert.equal((await tick.textContent()).trim(), w.tick);
       assert.equal(await tick.locator("input").isChecked(), false, "not pinned as saved");
+      // the note says what the tick does since Cline refused providerOptions (#5442)
+      const note = await tick.locator("input").evaluate((i) => (i.getAttribute("aria-describedby") || "").split(" ").map((id) => document.getElementById(id)?.textContent).filter(Boolean).join(" "));
+      assert.equal(note, lang === "zh" ? zh[2] : "Since 2026-11-06 Cline refuses a pinned DeepSeek or GLM request with 403, so magpie sends them unpinned and Cline picks the host; only glm-5.3-flash still asks Z.ai");
       await tick.locator("input").check();
       const n = posts.length;
       await page.locator(".editor .bar").getByRole("button", { name: w.save, exact: true }).click();

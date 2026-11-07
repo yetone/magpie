@@ -407,7 +407,10 @@ type Provider struct {
 	// by DeepSeek's own API (White Immortal on Discord) and its GLM models
 	// only by Z.ai's (sdytman on Discord): Cline routes a model through an
 	// AI gateway that may serve it from any host, and the maker's own
-	// keeps its prompt cache. See ClinePin.
+	// keeps its prompt cache. Since 2026-11-06 Cline refuses the
+	// providerOptions field that pinned all but glm-5.3-flash, so only
+	// that model is pinned now (#5442); the saved value is kept as set.
+	// See ClinePin.
 	PinUpstream bool `json:"pinUpstream,omitempty"`
 
 	// AuthHeader is which header the key goes in on a third-party

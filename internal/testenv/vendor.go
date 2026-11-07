@@ -18,8 +18,9 @@ import (
 //
 // The kernel hands a port a test freed to the next listener that asks,
 // in this process or another shard's, and a request still on its way to
-// the old one lands here (#3357): TestClinePluginPinsDeepSeekAndGLM's
-// vendor got a seventh request while magpie had sent six, and
+// the old one lands here (#3357): TestClinePluginTickSendsNoProviderOptions's
+// vendor (then named TestClinePluginPinsDeepSeekAndGLM) got a seventh
+// request while magpie had sent six, and
 // TestPluginToldWhereTheAgentWorks's a second (#3347). A test that holds
 // its plugin to exactly one request per ask keeps that guarantee for its
 // own requests, and a stranger's is no longer one of them.

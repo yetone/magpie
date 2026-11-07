@@ -3476,8 +3476,8 @@ function routingPage(part) {
     if (tr.upstream) return s + " " + t("Its reply says {upstream} answered.", { upstream: tr.upstream });
     if (o.pinUnknown) return s + " " + t("Its reply didn't say which provider answered.");
     if (tr.pin) return s + " " + t("{pin} was asked for, but its reply didn't say which provider answered, so whether ClinePass kept to it is unknown.", { pin: tr.pin });
-    const tick = /(^|\/)cline-pass\/(deepseek|glm)/i.test(tr.model) ? " " + t("To ask for the maker's own API, tick “{tick}” in the provider's settings.", { tick: t("DeepSeek and GLM models only from their makers' own APIs") }) : "";
-    return s + " " + t("No provider was asked for, and its reply didn't say which one answered.") + tick;
+    // no tick to point to: since 11-06 Cline refuses the pin it wrote (#5442)
+    return s + " " + t("No provider was asked for, and its reply didn't say which one answered.");
   }
   window.swapWhy = swapWhy; // the Usage page's Requests say it too
   // a try that asked a remote magpie for one of its routing groups: the

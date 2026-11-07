@@ -4,7 +4,8 @@
 // (zRain on Discord, 10-24): its tag says "ClinePass route …", not
 // "served …", and its title and story say it is the route's name, not
 // another model, and whether DeepSeek was asked for: asked and not said
-// who answered, or nothing asked and the tick that asks. Another vendor's
+// who answered, or nothing asked (with no tick to point to: since 11-06
+// Cline refuses the pin, #5442). Another vendor's
 // swap still reads as one. The Usage page's Requests say the route too.
 // English and Chinese; the API is faked. MAGPIE_ROUTE_ASSETS points at an
 // older asset folder to watch it fail.
@@ -75,7 +76,7 @@ const want = {
     tags: ["ClinePass route " + VMC, "ClinePass route " + VMC, "served gpt-4o-mini"],
     route: /a route it picks itself: the name is the route's, not another model's/,
     asked: /deepseek was asked for, but its reply didn't say which provider answered/,
-    none: /No provider was asked for.*tick “DeepSeek and GLM models only from their makers' own APIs”/,
+    none: /No provider was asked for, and its reply didn't say which one answered\./,
     swap: /likely another model/,
     usage: /didn't say which provider answered\.$/,
   },
@@ -83,7 +84,7 @@ const want = {
     tags: ["ClinePass 路由 " + VMC, "ClinePass 路由 " + VMC, "实际 gpt-4o-mini"],
     route: /这是路由的名字，不是换成了别的模型/,
     asked: /请求时指定了 deepseek，但回复没有说是哪家上游作答/,
-    none: /请求时没有指定上游.*勾选“DeepSeek、GLM 模型只走各自官方上游”/,
+    none: /请求时没有指定上游，回复也没有说是哪家作答。/,
     swap: /很可能换成了别的模型/,
     usage: /回复没有说是哪家上游作答。$/,
   },
@@ -122,6 +123,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.match(tags[0][1], w.asked);
       assert.match(tags[1][1], w.route);
       assert.match(tags[1][1], w.none);
+      // the tick no longer pins DeepSeek (#5442), so nothing points to it
+      assert.doesNotMatch(tags[1][1], /tick|勾选/);
       assert.doesNotMatch(tags[0][1], w.swap);
       assert.match(tags[2][1], w.swap);
       const fits = await page.locator(".rt-req .to .swap").evaluateAll((es) => es.map((e) => {
@@ -154,7 +157,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           "ClinePass answered {sent} through {served}, a route it picks itself: the name is the route's, not another model's.",
           "Its reply says {upstream} answered.", "Its reply didn't say which provider answered.",
           "{pin} was asked for, but its reply didn't say which provider answered, so whether ClinePass kept to it is unknown.",
-          "To ask for the maker's own API, tick “{tick}” in the provider's settings.",
           "No provider was asked for, and its reply didn't say which one answered."].filter((k) => !I18N[l][k]), l);
         assert.deepEqual(missing, [], `every string has its ${l}`);
       }
