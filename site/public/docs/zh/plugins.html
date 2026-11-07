@@ -811,6 +811,7 @@ claude mcp add --transport http magpie-tools http://127.0.0.1:3425/mcp/magpie/to
     <p>设置 → 插件里会按这些名字列出每个插件的工具，并能复制服务器地址。<code>args</code> 可以是 zod 字段表（<code>tool.schema</code> 就是 zod）、zod 对象或 JSON Schema 对象。智能体会看到它，magpie 在 <code>execute</code> 运行前按它检查调用的参数；参数不对时回一个写明是哪个参数的错误。<code>ctx</code> 与 OpenCode 的相同，<code>agent</code> 是发起调用的智能体。每个工具最多运行 55 秒，到时 <code>ctx.abort</code> 触发。</p>
     <p>这个服务器由内置插件 <span class="ui">插件工具</span> 提供。只要有已开启的插件提供工具，它就保持开启；关闭时不列出任何工具，调用会说明它已关闭。用网关密钥发起的调用计入该密钥的限额。工具和提供方插件一样，以你的权限在插件宿主里运行，结果只回给调用它的智能体。</p>
     <p>每个提供工具的插件也会在资料库的 MCP 页里成为一个独立的服务器，以插件的短名命名（如 <code>search1api</code>），不用再手动添加地址。开启 <a href="mcp-router.html">MCP 路由</a>时，它的工具会出现在每个接入路由的智能体里，名为 <code>search1api__search</code>；和资料库里其他服务器一样，可以按智能体开关，或单独关掉某个工具。删掉后，只有把插件移除再重新添加才会再出现。</p>
+    <p>想保留插件的供应商、却不把它的工具给任何智能体：在<span class="ui">插件</span> › <span class="ui">已安装</span>里，点它工具那一行的<span class="ui">对智能体隐藏</span>。之后它的服务器不会给任何智能体，也不会给连到路由地址的应用；插件更新、关了再开、重启都保持不变。点<span class="ui">交给智能体</span>，就还给原来那些智能体。</p>
 
     <h2 id="agents"><a class="anchor" href="#agents">Agent 插件</a></h2>
     <p>插件还可以添加一个 <em>Agent</em>：magpie 没有内置接入的那种。它说明这个 Agent 把模型写在哪里，以及还要写些什么才能让 Agent 走 magpie 的网关。这样它就和 magpie 内置的 Agent 一样出现在 <span class="ui">Agent</span> 页：在它那一行选一个 magpie 的模型，magpie 就把模型连同网关地址和这个 Agent 自己的 key 写进它的配置；关掉开关，一切恢复成用户原来的样子。下面的例子添加 <a href="https://aider.chat">Aider</a>。</p>

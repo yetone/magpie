@@ -316,3 +316,4 @@ body.window .pm-manual { --bleed-l: 16px; }
   .pm-card.ghost .sk, .pm-ghlook, .pm-ghlook .dots i, .pm-arrive .pm-card { animation: none; }
   .pm-ghlook .dots i { opacity: .5; }
 }
+.pm-tools > .pm-tools-flip { flex: none; margin-left: auto; padding: 0 2px; }

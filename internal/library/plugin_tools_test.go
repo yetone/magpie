@@ -215,3 +215,90 @@ func TestPluginToolsServerThroughAnotherAddress(t *testing.T) {
 		t.Errorf("the stored server changed: %s", s.URL)
 	}
 }
+
+// A plugin's tools hidden from every agent on the Plugins page
+// (chengming0v0 on Discord: MiniMax's tools, the plugin kept for its
+// providers): no agent's hub lists or runs them, nor an app's at the
+// router's address; hidden they stay through the plugin updated, turned
+// off and on, and the server edited; shown again, the agents that had
+// them get them back. An agent ticked in the Library shows them too.
+func TestPluginToolsHidden(t *testing.T) {
+	hubSandbox(t)
+	f := fakePluginTools(t, search1api)
+	fake := fakeStdio(t, "ok", nil)
+	fake.Agents = []string{"claude"}
+	ok(t)(SaveServer("", *fake))
+	ok(t)(SetMCPHub(true))
+	ok(t)(Sync())
+	const name = "@magpie-community/tools-search1api"
+	ctx := context.Background()
+	hub := theHub{}
+	listed := func(agentID string) bool {
+		return slices.Contains(hubNames(hub.Tools(ctx, agentID)), "search1api/search")
+	}
+	if !listed("claude") || !listed("") || !PluginServers()[name].On {
+		t.Fatal("the plugin's tools aren't given to begin with")
+	}
+
+	ok(t)(PluginServerOn(name, false))
+	hidden := func(when string) {
+		t.Helper()
+		l, err := load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := l.server("search1api")
+		if s == nil || !s.Hidden || len(s.Agents) != 0 || !slices.Equal(s.Paused, []string{"claude"}) {
+			t.Fatalf("%s: %+v", when, s)
+		}
+		if listed("claude") || listed("") || PluginServers()[name].On {
+			t.Fatalf("%s: still listed", when)
+		}
+		if _, err := hub.Call(ctx, "", "search1api", "search", json.RawMessage(`{}`)); err == nil {
+			t.Fatalf("%s: an app at the router's address ran it", when)
+		}
+	}
+	hidden("hidden")
+	f.specs = []string{"@magpie-community/tools-search1api@0.1.2"}
+	ok(t)(Sync())
+	hidden("the plugin updated")
+	f.off = true
+	ok(t)(Sync())
+	f.off = false
+	ok(t)(Sync())
+	hidden("the plugin off and on")
+	l, _ := load()
+	ed := *l.server("search1api")
+	ed.Hidden, ed.Paused, ed.Note = false, nil, "videos"
+	ok(t)(SaveServer("search1api", ed))
+	hidden("edited")
+	ok(t)(PluginServerOn(name, false))
+	hidden("hidden twice")
+	ok(t)(EveryServerAgents([]string{"claude"}, true))
+	hidden("every server given to claude")
+	if l, _ := load(); !slices.Contains(l.server("fake").Agents, "claude") {
+		t.Fatal("every server given to claude left out another server")
+	}
+
+	ok(t)(PluginServerOn(name, true))
+	if l, _ := load(); !slices.Equal(l.server("search1api").Agents, []string{"claude"}) || l.server("search1api").Hidden || !listed("claude") || !listed("") {
+		t.Fatalf("shown again: %+v", l.server("search1api"))
+	}
+
+	// ticked for an agent in the Library, it is shown
+	ok(t)(PluginServerOn(name, false))
+	ok(t)(ServerAgents("search1api", []string{"codex"}))
+	if l, _ := load(); l.server("search1api").Hidden || l.server("search1api").Paused != nil || !listed("") {
+		t.Fatalf("ticked in the Library, still hidden: %+v", l.server("search1api"))
+	}
+
+	// none kept: shown, it goes to the agents of the router's entry
+	ok(t)(ServerAgents("search1api", []string{}))
+	ok(t)(PluginServerOn(name, true))
+	if l, _ := load(); !slices.Equal(l.server("search1api").Agents, []string{"claude"}) {
+		t.Fatalf("shown with none kept, the router on: %v", l.server("search1api").Agents)
+	}
+	if _, err := PluginServerOn("@x/none", true); err == nil {
+		t.Error("a plugin with no server shown")
+	}
+}

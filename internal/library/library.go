@@ -191,6 +191,12 @@ func load() (*Library, error) {
 
 func (l *Library) save() error {
 	sort.Slice(l.MCP, func(i, j int) bool { return l.MCP[i].Name < l.MCP[j].Name })
+	// a paused server given an agent, however, is on again
+	for _, s := range l.MCP {
+		if len(s.Agents) > 0 {
+			s.Hidden, s.Paused = false, nil
+		}
+	}
 	sort.Slice(l.Skills, func(i, j int) bool { return l.Skills[i].Name < l.Skills[j].Name })
 	sort.Slice(l.Projects, func(i, j int) bool { return l.Projects[i].Dir < l.Projects[j].Dir })
 	sort.Slice(l.Hooks, func(i, j int) bool { return l.Hooks[i].Name < l.Hooks[j].Name })

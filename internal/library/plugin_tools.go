@@ -29,6 +29,7 @@ package library
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/url"
 	"slices"
@@ -37,6 +38,7 @@ import (
 
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/plugin"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // pluginToolsOf and runPluginToolOf are the gateway's, a test's fakes in
@@ -190,4 +192,89 @@ func pluginHubCall(ctx context.Context, agentID string, s *Server, tool string, 
 		return nil, err
 	}
 	return json.Marshal(map[string]any{"content": []map[string]any{{"type": "text", "text": said}}, "isError": false})
+}
+
+// PluginServer is the server of a plugin's tools, as the plugin's row on
+// the Plugins page shows it.
+type PluginServer struct {
+	Name   string `json:"name"`
+	Plugin string `json:"plugin"` // plugin.Name, which PluginServerOn takes
+	// On is whether any agent is given it
+	On bool `json:"on"`
+}
+
+// PluginServers are the plugins' servers by plugin (plugin.Name); none
+// when the library can't be read.
+func PluginServers() map[string]PluginServer {
+	mu.Lock()
+	defer mu.Unlock()
+	l, err := load()
+	if err != nil {
+		return nil
+	}
+	out := map[string]PluginServer{}
+	for _, s := range l.MCP {
+		if s.Plugin != "" {
+			out[s.Plugin] = PluginServer{Name: s.Name, Plugin: s.Plugin, On: len(s.Agents) > 0}
+		}
+	}
+	return out
+}
+
+// PluginServerOn hides a plugin's tools from every agent, or shows them
+// again (chengming0v0 on Discord: a plugin's tools no agent should see,
+// the plugin kept for its providers). Hidden, no agent is given the
+// server, nor an app at the MCP router's address, and the agents it had
+// are kept (Paused); shown again, they get it back. With none kept (it was given to none when added, or
+// taken from each agent in the Library), on gives it to the agents the MCP
+// router's entry goes to, or with the router off or given to none, to every
+// agent shown that can take it, as the row's All chip in the Library does.
+func PluginServerOn(pluginName string, on bool) (*Result, error) {
+	return change(func(l *Library) error {
+		var s *Server
+		for _, x := range l.MCP {
+			if x.Plugin == pluginName {
+				s = x
+			}
+		}
+		if s == nil {
+			return fmt.Errorf("%s has no MCP server in the library", pluginName)
+		}
+		if !on {
+			if !s.Hidden {
+				s.Hidden, s.Paused, s.Agents = true, s.Agents, []string{}
+			}
+			return nil
+		}
+		if len(s.Agents) > 0 {
+			s.Hidden, s.Paused = false, nil
+			return nil
+		}
+		want := s.Paused
+		if len(want) == 0 {
+			want = l.hubAgents()
+		}
+		r := reachNow()
+		if len(want) == 0 {
+			hidden := settings.Load().AgentsHidden
+			for _, a := range r.order {
+				if !slices.Contains(hidden, a) {
+					want = append(want, a)
+				}
+			}
+		}
+		var to []string
+		for _, a := range want {
+			// one kept from before goes back as it was: its distro may be
+			// stopped, or its file unread just now
+			if len(s.Paused) > 0 || r.takes(a, s) {
+				to = append(to, a)
+			}
+		}
+		if len(to) == 0 {
+			return fmt.Errorf("no agent can take %s", s.Name)
+		}
+		s.Agents, s.Hidden, s.Paused = slices.Compact(slices.Sorted(slices.Values(to))), false, nil
+		return nil
+	})
 }

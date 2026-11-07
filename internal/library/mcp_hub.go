@@ -202,7 +202,7 @@ func hubServers(agentID string) []*Server {
 func (l *Library) hubServers(agentID string) []*Server {
 	var out []*Server
 	for _, s := range l.MCP {
-		if (agentID == "" || slices.Contains(s.Agents, agentID)) && inHub(s, agentID) {
+		if (agentID == "" && !s.Hidden || slices.Contains(s.Agents, agentID)) && inHub(s, agentID) {
 			out = append(out, s)
 		}
 	}

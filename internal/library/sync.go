@@ -783,6 +783,10 @@ func SaveServer(old string, s Server) (*Result, error) {
 			if p := l.MCP[i].Plugin; p != "" && s.Plugin == "" {
 				s.Plugin, s.Local = p, true
 			}
+			// still off, it still knows whom to give it back to
+			if len(s.Agents) == 0 && !s.Hidden {
+				s.Hidden, s.Paused = l.MCP[i].Hidden, l.MCP[i].Paused
+			}
 			// a Remote magpie's router stays its own while it is at the
 			// provider's address and key (bridge_mcp.go)
 			keptBridge(l.MCP[i], &s)
@@ -843,29 +847,22 @@ func serversAgents(names, agents []string, on bool) (*Result, error) {
 				return fmt.Errorf("no server called %s", name)
 			}
 		}
-		mcp := map[string]*mcpFile{}
-		// a stopped distro's agents, by what magpie last knew of them
-		shapes := map[string]*shape{}
+		var r reach
 		if on {
-			ts, asleep := targetsAsleep(false)
-			for _, t := range ts {
-				if t.MCP != nil {
-					mcp[t.Agent.ID] = t.MCP
-				}
-			}
-			for _, a := range asleep {
-				if sh := shapeOf(a); sh != nil {
-					shapes[a.ID] = sh
-				}
-			}
+			r = reachNow()
 		}
 		for _, s := range l.MCP {
 			if names != nil && !slices.Contains(names, s.Name) {
 				continue
 			}
+			// an agent's every server leaves out a plugin's hidden from
+			// every agent on the Plugins page; named, it is shown
+			if names == nil && on && s.Hidden {
+				continue
+			}
 			kept := slices.DeleteFunc(slices.Clone(s.Agents), func(a string) bool { return slices.Contains(agents, a) })
 			for _, a := range agents {
-				if on && mcp[a] != nil && mcp[a].supports(s) == nil || on && shapes[a] != nil && shapes[a].reaches(s) {
+				if on && r.takes(a, s) {
 					kept = append(kept, a)
 				} else if on && slices.Contains(s.Agents, a) {
 					kept = append(kept, a) // one it has already stays, whatever it says of it
@@ -875,6 +872,36 @@ func serversAgents(names, agents []string, on bool) (*Result, error) {
 		}
 		return nil
 	})
+}
+
+// reach is which agents a server can be given: those whose MCP file
+// supports it, and a stopped distro's by what magpie last knew of them.
+type reach struct {
+	mcp    map[string]*mcpFile
+	shapes map[string]*shape
+	order  []string // every agent it knows, as found
+}
+
+func reachNow() reach {
+	r := reach{mcp: map[string]*mcpFile{}, shapes: map[string]*shape{}}
+	ts, asleep := targetsAsleep(false)
+	for _, t := range ts {
+		if t.MCP != nil {
+			r.mcp[t.Agent.ID] = t.MCP
+			r.order = append(r.order, t.Agent.ID)
+		}
+	}
+	for _, a := range asleep {
+		if sh := shapeOf(a); sh != nil {
+			r.shapes[a.ID] = sh
+			r.order = append(r.order, a.ID)
+		}
+	}
+	return r
+}
+
+func (r reach) takes(a string, s *Server) bool {
+	return r.mcp[a] != nil && r.mcp[a].supports(s) == nil || r.shapes[a] != nil && r.shapes[a].reaches(s)
 }
 
 // RemoveServer takes a server out of the library and out of every agent

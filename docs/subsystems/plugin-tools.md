@@ -38,13 +38,14 @@ A tool's answer goes back to the agent that called it, on this computer or on a 
   - The router runs its tools in this process (`gateway.PluginToolsOf`, `RunPluginToolOf`), under the same Plugin tools gate. With the router off an agent is given the gateway's address of the plugin's tools as it reaches the gateway (`through`), with a key from another machine.
   - It is `local`: a carry or backup never takes it to a computer that may lack the plugin. It is offered once (`pluginsOffered`): a server the user removed comes back only when the plugin is removed and added again. The plugin removed takes its server out; turned off, the server stays and lists nothing. A plugins.json that can't be read changes nothing.
   - `/mcp/magpie/tools`, every plugin's tools under one server, stays for agents wired to it by hand.
+  - Its plugin's row on the Plugins page says which way it is ("Tools for agents" or "Tools, hidden from agents") and switches it: Hide from agents takes it from every agent, and from apps at the router's address, while the plugin and its providers keep working (chengming0v0 on Discord: a plugin's MCP tools unwanted, the plugin kept). `PluginServerOn` (`servers/plugin-on` `{name, on}`) sets `Hidden` and keeps the agents it had in `Paused`; Give to agents gives them back, or, with none kept, the router's agents (`hubAgents`) or else every agent shown that can take it. The switch is the server's own state, so it holds through a plugin update, the plugin off and on, a restart and an edit in the Library; ticking any agent for it in Library › MCP clears `Hidden` (`save`). `PluginServers` gives the row its state (`toolsServer` in `/api/plugins`); a plugin with no Library server (removed by the user) shows no switch. Library › MCP tags the server "Plugin". `/mcp/magpie/tools` is not affected: it serves only an agent wired to it by hand. (`TestPluginToolsHidden`, `plugin-tools.test.cjs`)
 
 ## Verification
 
 ```sh
 go test ./internal/plugin/ -run Tool
 go test ./internal/gateway/ -run 'ToolsMCP|ServingGates|OwnMCPRejects' -timeout 45m
-go test ./internal/library/ -run PluginTools
+go test ./internal/library/ -run 'PluginTools|Hub'
 go test ./plugins/tools/ ./internal/pluginrt/
 go test ./internal/gui/ -run 'Builtin|Plugins'
 node --test internal/gui/tests/plugin-tools.test.cjs internal/gui/tests/builtins.test.cjs

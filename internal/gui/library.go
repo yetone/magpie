@@ -543,6 +543,10 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 		case "servers/tools":
 			// the tools its agents leave out (nf1qaz2w on Discord)
 			res, err = library.ServerTools(in.Name, in.Names)
+		case "servers/plugin-on":
+			// a plugin's tools off for every agent, or on again, from its
+			// row on the Plugins page (Name is the plugin's)
+			res, err = library.PluginServerOn(in.Name, in.On)
 		case "servers/agents-all":
 			res, err = library.EveryServerAgents(in.Agents, in.On)
 		case "servers/agents-some":
