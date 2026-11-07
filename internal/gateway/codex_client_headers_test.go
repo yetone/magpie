@@ -117,9 +117,11 @@ func TestCodexHeadersReachKeyedRelay(t *testing.T) {
 			t.Errorf("%s: desktop: %v", c.proto, f.head)
 		}
 
-		// another agent's request goes as magpie's
+		// another agent's request goes with its own User-Agent (a key+URL
+		// provider is sent the agent's, nb5p on Discord) and none of
+		// Codex's headers
 		send(http.Header{"User-Agent": {"opencode/1.0"}, "X-Codex-Window-Id": {"w"}, "Session-Id": {"s"}})
-		if ua := f.head.Get("User-Agent"); !strings.HasPrefix(ua, "magpie/") || f.head.Get("X-Codex-Window-Id") != "" || f.head.Get("Session-Id") != "" {
+		if ua := f.head.Get("User-Agent"); ua != "opencode/1.0" || f.head.Get("X-Codex-Window-Id") != "" || f.head.Get("Session-Id") != "" {
 			t.Errorf("%s: other agent: %q %v", c.proto, ua, f.head)
 		}
 	}

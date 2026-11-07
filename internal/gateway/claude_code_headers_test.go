@@ -81,9 +81,11 @@ func TestClaudeCodeHeadersReachAnthropicRelay(t *testing.T) {
 		t.Errorf("x-app: %v", f.head)
 	}
 
-	// another agent's request goes as magpie's
+	// another agent's request goes with its own User-Agent (a key+URL
+	// provider is sent the agent's, nb5p on Discord) and none of Claude
+	// Code's headers
 	send("/v1/messages?beta=true", http.Header{"User-Agent": {"opencode/1.0"}, "X-App": {"other"}, "X-Stainless-Lang": {"js"}})
-	if ua := f.head.Get("User-Agent"); !strings.HasPrefix(ua, "magpie/") || f.head.Get("X-App") != "" || f.head.Get("X-Stainless-Lang") != "" || query != "" {
+	if ua := f.head.Get("User-Agent"); ua != "opencode/1.0" || f.head.Get("X-App") != "" || f.head.Get("X-Stainless-Lang") != "" || query != "" {
 		t.Errorf("other agent: %q %v %q", ua, f.head, query)
 	}
 }
