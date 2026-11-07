@@ -1,6 +1,7 @@
 package davsync
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/yetone/magpie/internal/backup"
@@ -46,5 +47,16 @@ func TestSyncSearchAPIs(t *testing.T) {
 	}
 	if len(provider.StoredSearchAPIs()) != 0 {
 		t.Fatal("removed elsewhere, kept here")
+	}
+}
+
+// Sent without keys, a search API keeps the server's keys switched off
+// too (辰林鸭~ on Discord), not only the ones on.
+func TestSyncSearchKeysOff(t *testing.T) {
+	list := []provider.SearchKey{{Key: "tvly-a", Off: true}, {Key: "tvly-b"}}
+	server := backup.Bundle{Keys: true, Searches: &[]provider.SearchAPI{{Vendor: "tavily", Key: "tvly-b", KeyList: list}}}
+	take(&server, backup.Bundle{Searches: &[]provider.SearchAPI{{Vendor: "tavily", Pick: provider.SearchPickOrder}}}, "providers")
+	if s := *server.Searches; len(s) != 1 || s[0].Pick != provider.SearchPickOrder || !slices.Equal(s[0].SearchKeys(), list) {
+		t.Fatalf("taken %+v", s)
 	}
 }

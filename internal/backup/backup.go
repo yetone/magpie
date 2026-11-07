@@ -219,7 +219,7 @@ func Collect(keys bool, app string) (Bundle, error) {
 	searches := []provider.SearchAPI{}
 	for _, a := range provider.StoredSearchAPIs() {
 		if !keys {
-			a.Key = ""
+			a = a.WithoutKeys() // those switched off too
 		}
 		searches = append(searches, a)
 	}

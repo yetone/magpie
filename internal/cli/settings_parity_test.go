@@ -231,6 +231,7 @@ var notYet = map[string]string{
 	"POST /api/settings/redact-rules":            S2, // api.go
 	"POST /api/settings/reveal":                  W,  // api.go
 	"POST /api/settings/search-all":              S2, // api.go
+	"POST /api/settings/search-keys":             S2, // api.go
 	"POST /api/settings/search-quota":            S2, // api.go
 	"POST /api/settings/text-size":               W,  // api.go
 	"POST /api/settings/trae-checkin":            S2, // api.go

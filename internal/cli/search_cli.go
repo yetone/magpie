@@ -82,6 +82,10 @@ func searchCmd(args []string) error {
 			if a.Key == "" {
 				what = "no key"
 			}
+			// keys switched off in Settings stay in its list, never asked
+			if off := len(a.SearchKeys()) - len(a.Keys()); off > 0 {
+				what += fmt.Sprintf("  +%d off", off)
+			}
 			if a.URL != "" {
 				what += "  " + a.URL
 			}

@@ -931,15 +931,13 @@ func take(to *backup.Bundle, from backup.Bundle, part string) {
 		}
 		searches := from.Searches
 		if searches != nil && !keys && (to.Keys || (to.ProvidersKeys != nil && *to.ProvidersKeys)) && to.Searches != nil { // the same for the search APIs
-			keys := map[string]string{}
+			keys := map[string]provider.SearchAPI{}
 			for _, a := range *to.Searches {
-				keys[a.Vendor] = a.Key
+				keys[a.Vendor] = a
 			}
 			ss := slices.Clone(*searches)
 			for i, a := range ss {
-				if a.Key == "" {
-					ss[i].Key = keys[a.Vendor]
-				}
+				ss[i].KeepKeysOf(keys[a.Vendor]) // those switched off too
 			}
 			searches = &ss
 		}

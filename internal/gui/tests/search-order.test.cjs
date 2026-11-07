@@ -24,9 +24,9 @@ const off = { en: "Off", zh: "关闭", ja: "オフ", de: "Aus" };
 
 function serve(lang, posted, opts) {
   let apis = [
-    { vendor: "tavily", name: "Tavily", key: "tvly…abcd", ready: true },
-    { vendor: "exa", name: "Exa", key: "exa…1234", ready: true, off: true },
-    { vendor: "brave", name: "Brave Search", key: "bsa…9876", ready: true, keys: 2 },
+    { vendor: "tavily", name: "Tavily", key: "tvly…abcd", ready: true, keyList: [{ ref: "t1", masked: "tvly…abcd" }] },
+    { vendor: "exa", name: "Exa", key: "exa…1234", ready: true, off: true, keyList: [{ ref: "e1", masked: "exa…1234" }] },
+    { vendor: "brave", name: "Brave Search", key: "bsa…9876", ready: true, keys: 2, keyList: [{ ref: "b1", masked: "bsa…9876" }, { ref: "b2", masked: "bsa…5432" }] },
   ];
   const settings = () => ({ lang, theme: "light", searchVendors: vendors, searchAPIs: apis, searchProvider: "OpenAI" });
   return async (r) => {
@@ -86,9 +86,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // Exa is off: dimmed, says so, its switch unchecked; the others on
       const exa = units.nth(1);
       assert.equal(await exa.evaluate((u) => u.classList.contains("off")), true);
-      assert((await exa.locator(".row.search-api .sub").innerText()).startsWith(off[lang]), await exa.locator(".sub").innerText());
+      assert((await exa.locator(".row.search-api .sub").innerText()).startsWith(off[lang]), await exa.locator(".row.search-api .sub").innerText());
       assert.deepEqual(await list.locator("button.search-on").evaluateAll((bs) => bs.map((b) => b.getAttribute("aria-checked"))), ["true", "false", "true"]);
-      assert(Number(await exa.locator(".row .who").evaluate((e) => getComputedStyle(e).opacity)) < 1, "an API off is dimmed");
+      assert(Number(await exa.locator(".row.search-api .who").evaluate((e) => getComputedStyle(e).opacity)) < 1, "an API off is dimmed");
       assert.equal(await exa.locator("button.search-on").evaluate((e) => getComputedStyle(e).opacity), "1", "its switch isn't");
       assert.equal(await page.locator("#searchFirstRow").count(), 1);
       assert(await page.evaluate(() => document.scrollingElement.scrollWidth <= innerWidth), "nothing wider than the window");

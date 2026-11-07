@@ -1785,15 +1785,45 @@ or a reply missing those fields is unknown, with why, never 0 used. A read
 is kept two minutes (Tavily allows /usage 10 times in 10 minutes) unless
 asked fresh. A key at its limit with no pay-as-you-go credit left rests an
 hour as "used up"; a later read that finds credit wakes a key resting for
-that or for being out of credit. Settings › Models › Web search shows a row
-of the keys under an API with several or with Tavily's (In turn / In order,
-each key masked with what it has used, Check again), and `magpie search`
-lists the same, read fresh.
+that or for being out of credit. `magpie search` lists each key's use,
+read fresh.
+
+### The keys as a list
+
+Settings › Models › Web search shows an API's keys as a list under it
+(辰林鸭~ on Discord), as a provider's accounts are: each key masked on a
+row of its own with a tick that switches it off or on, Show, Copy and
+Remove, one or several added at once (split by commas, semicolons or
+lines; the reply says how many were new and how many it had), and the
+order changed by dragging or Alt+↑/↓. A key resting says why and until
+when on its row ("asked last until 14:05: rate limited"), from
+`SearchKeyRest` and `SearchQuota.Ref`; with Tavily's quota, what it has
+used is beside it, and In turn / In order and Check again sit on the row.
+
+The list is `provider.SearchAPI.SearchKeys()`
+([`search_api.go`](../../internal/provider/search_api.go)). `Key` stays
+the keys that are on, comma-joined, so the gateway (`a.Keys()`) and an
+older magpie never ask one switched off; `keyList` is written only while
+a key is off, and with every key on the file is as before. A `Key` that
+differs from the list (written by a magpie that knows no list, or synced
+from one) wins: its keys are on in its order, a key the list had off and
+it doesn't name stays off after them. The last key on can't be switched
+off or removed from the list. The GUI names a key by `SearchKeyRef` (a
+hash), never by its value: `POST /api/settings/search-keys` takes `add`,
+`ref` with `on` or `remove`, or `arrange`, and `/api/settings/search-key`
+reads one key by its ref for Show and Copy. Saving an API with no key (a
+new base URL) keeps its keys, off ones too; a key typed in the API's own
+field replaces the list, every key on. Backup and sync carry the keys
+switched off with the rest, or drop them with the rest when keys are left
+out.
 
 Covered by `TestReadTavilyUsage`, `TestSearchKeysTakeTurnsRoundRobin`,
 `TestSearchKeyRefusedRests`, `TestSearchRestFor`, `TestSearchQuotas`,
-`TestSearchKeyNeverInFull`, `TestSearchAPIKeysTakeTurns` and
-`search-keys.test.cjs`.
+`TestSearchKeyNeverInFull`, `TestSearchAPIKeysTakeTurns`,
+`TestSearchKeyOffAndWhyItRests`, `TestSearchKeyList`,
+`TestSearchKeysKeyWins`, `TestSearchKeyListFromSettings`,
+`TestBackupSearchKeysOff`, `TestSyncSearchKeysOff`,
+`search-keys.test.cjs` and `search-key-list.test.cjs`.
 
 ## A search API's asks in the request log
 

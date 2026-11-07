@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -33,8 +34,8 @@ func TestSearchCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	as := provider.SearchAPIs()
-	if len(as) != 3 || as[0] != (provider.SearchAPI{Vendor: "tavily", Key: "tvly-1"}) || as[1].URL != "https://sx.example.com" ||
-		as[2] != (provider.SearchAPI{Vendor: "brave", Key: "b-1", URL: "https://brave2.example.com"}) {
+	if len(as) != 3 || !reflect.DeepEqual(as[0], provider.SearchAPI{Vendor: "tavily", Key: "tvly-1"}) || as[1].URL != "https://sx.example.com" ||
+		!reflect.DeepEqual(as[2], provider.SearchAPI{Vendor: "brave", Key: "b-1", URL: "https://brave2.example.com"}) {
 		t.Fatalf("%+v", as)
 	}
 	// a new key alone keeps the base URL the user set (#1580); url= with
@@ -42,13 +43,13 @@ func TestSearchCLI(t *testing.T) {
 	if err := searchCmd([]string{"add", "brave", "b-2"}); err != nil {
 		t.Fatal(err)
 	}
-	if as := provider.SearchAPIs(); as[2] != (provider.SearchAPI{Vendor: "brave", Key: "b-2", URL: "https://brave2.example.com"}) {
+	if as := provider.SearchAPIs(); !reflect.DeepEqual(as[2], provider.SearchAPI{Vendor: "brave", Key: "b-2", URL: "https://brave2.example.com"}) {
 		t.Fatalf("a new key took the base URL away: %+v", as[2])
 	}
 	if err := searchCmd([]string{"add", "brave", "url="}); err != nil {
 		t.Fatal(err)
 	}
-	if as := provider.SearchAPIs(); as[2] != (provider.SearchAPI{Vendor: "brave", Key: "b-2"}) || as[2].Base() != "https://api.search.brave.com" {
+	if as := provider.SearchAPIs(); !reflect.DeepEqual(as[2], provider.SearchAPI{Vendor: "brave", Key: "b-2"}) || as[2].Base() != "https://api.search.brave.com" {
 		t.Fatalf("url= kept the base URL: %+v", as[2])
 	}
 	for _, bad := range []string{"url=ftp://x.example.com", "url=https://x.example.com/?k=1", "url=https://x.example.com/#a", "url=x.example.com"} {
@@ -78,7 +79,7 @@ func TestSearchCLIYouWithoutKey(t *testing.T) {
 	if err := searchCmd([]string{"add", "you"}); err != nil {
 		t.Fatal(err)
 	}
-	if as := provider.SearchAPIs(); len(as) != 1 || as[0] != (provider.SearchAPI{Vendor: "you"}) {
+	if as := provider.SearchAPIs(); len(as) != 1 || !reflect.DeepEqual(as[0], provider.SearchAPI{Vendor: "you"}) {
 		t.Fatalf("%+v", as)
 	}
 }

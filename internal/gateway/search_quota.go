@@ -21,6 +21,7 @@ import (
 // SearchKeyQuota is what one key of a search API has used of its limit.
 type SearchKeyQuota struct {
 	Key string `json:"key"` // masked (provider.MaskSearchKey)
+	Ref string `json:"ref"` // provider.SearchKeyRef, its row's in the list
 	// Known: Used and Limit were read. Unlimited: read, and the key and
 	// its plan have no limit (Used is what the key has used).
 	Known     bool  `json:"known"`
@@ -171,7 +172,7 @@ func searchQuota(ctx context.Context, a provider.SearchAPI, key string, fresh bo
 		msg := strings.ReplaceAll(err.Error(), key, provider.MaskSearchKey(key))
 		q = SearchKeyQuota{Err: msg}
 	}
-	q.Key = provider.MaskSearchKey(key)
+	q.Key, q.Ref = provider.MaskSearchKey(key), provider.SearchKeyRef(key)
 	searchQuotas.Store(id, keptQuota{time.Now(), q})
 	switch {
 	case q.UsedUp:

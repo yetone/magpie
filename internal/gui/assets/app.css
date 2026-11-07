@@ -3889,19 +3889,32 @@ input.words.search-key, input.words.search-url { flex: 1 1 120px; width: auto; m
 /* a search API's base URL (#1580): on a line of its own under the key */
 .prefs .row.search-add .val.rule-add { flex-wrap: wrap; row-gap: 6px; }
 .prefs .row.search-add input.words.search-url { flex: 1 1 100%; }
-/* a search API's key, shown: selectable, and broken anywhere rather than widening the row */
-.search-api .sub.revealed { font-family: var(--code-font, var(--code)); overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
-:where(html[data-fonts]) .search-api .sub.revealed { font-style: var(--code-style, inherit); font-weight: var(--code-weight, inherit); font-stretch: var(--code-stretch, 100%); }
-/* a search API's keys and what each has used of its limit */
-/* how its searches pick a key, and Check again: wrapped, right-aligned, on a
-   narrow window in a long language rather than past its edge */
+/* a search API's keys (辰林鸭~ on Discord), listed as a provider's are:
+   how its searches pick one and Check again wrapped and right-aligned on a
+   narrow window in a long language rather than past its edge; each key's
+   rest and what it has used on a line under it */
 .row.pref.search-keys .val { flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
-.search-quota { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; font-size: 12px; min-width: 0; }
-.search-quota .quota-key { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
-.search-quota code { font-family: var(--code-font, var(--code)); color: var(--muted); }
-.search-quota .faint { color: var(--muted); overflow-wrap: anywhere; }
-.search-quota .err { color: var(--red); overflow-wrap: anywhere; }
-.search-quota .warn { color: var(--amber); }
+.row.pref.search-keys .who { min-width: 0; }
+.search-key-list { margin-top: 8px; }
+.search-key-list > .acc { position: relative; flex-wrap: wrap; row-gap: 2px; cursor: default; }
+.search-key-list > .acc code.n { font-family: var(--code-font, var(--code)); font-weight: 400; color: var(--fg-2); }
+.search-key-list > .acc code.revealed { white-space: normal; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; cursor: text; }
+.search-key-list > .acc.off code.n { opacity: .55; }
+.search-key-list > .acc .key-state { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 2px 10px; padding-left: 25px; font-size: 11.5px; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+.search-key-list .key-state .warn { color: var(--amber); }
+.search-key-list .key-state .err { color: var(--red); }
+.search-key-list .key-quota { display: contents; }
+.search-key-list > .acc.adding { display: flex; align-items: center; gap: 6px; }
+.search-key-list > .acc.adding input { flex: 1 1 12em; min-width: 0; }
+.search-key-list.reorderable > .acc:not(.add, .adding) { cursor: grab; touch-action: pan-y; }
+.search-key-list.reorderable > .acc:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.search-key-list > .acc > .grip { position: absolute; left: 2px; top: 19px; translate: 0 -50%; width: 6px; height: 11px; background: radial-gradient(circle, var(--muted) .9px, transparent 1.2px) 0 0 / 3px 3.75px; opacity: 0; transition: opacity .15s; pointer-events: none; }
+.search-key-list > .acc:is(:hover, .dragging) > .grip { opacity: 1; }
+.search-key-list > .acc:focus-visible > .grip { opacity: 1; }
+@media (hover: none) { .search-key-list > .acc > .grip { opacity: 1; } }
+.search-key-list.sorting { user-select: none; -webkit-user-select: none; }
+.search-key-list.sorting > .acc { transition: transform .16s cubic-bezier(.22, 1, .36, 1); cursor: grabbing; }
+.search-key-list.sorting > .acc.dragging { z-index: 2; background: var(--card-2); box-shadow: 0 0 0 1px var(--line); transition: none; }
 .prefs .val.rule-add .segs { margin-left: 0; }
 /* a search API and its keys' row, dragged as one into the order they are
    asked in (#2286); its grip shows only under the pointer, and one

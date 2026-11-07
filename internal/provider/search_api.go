@@ -6,6 +6,8 @@ package provider
 // kept in providers.json beside the providers, their keys with theirs.
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/url"
 	"slices"
@@ -18,8 +20,14 @@ import (
 type SearchAPI struct {
 	Vendor string `json:"vendor"` // one of SearchVendors
 	// Key is its key, or several separated by commas (Keys), each tried
-	// when the one before is refused (#1477).
+	// when the one before is refused (#1477): the keys that are on, so a
+	// magpie that knows no KeyList asks just those.
 	Key string `json:"key,omitempty"`
+	// KeyList is every key in the list's order, those switched off too
+	// (辰林鸭~ on Discord: keys added, removed, put in order and switched
+	// off one by one). It is kept only while a key is off; Key alone is
+	// the list when every key is on (SearchKeys).
+	KeyList []SearchKey `json:"keyList,omitempty"`
 	// Pick is how a search picks among several keys: "" takes them in
 	// turn (SearchPickTurns), each search the next one; SearchPickOrder
 	// asks the first until it is refused, then the next (SlouchyQuill on
@@ -136,6 +144,88 @@ func (a SearchAPI) Keys() []string {
 		}
 	}
 	return out
+}
+
+// SearchKey is one key in a search API's list: off, it is kept and never
+// asked.
+type SearchKey struct {
+	Key string `json:"key"`
+	Off bool   `json:"off,omitempty"`
+}
+
+// SearchKeyRef is how a page names one key without holding it: a hash
+// of it, the same on every computer.
+func SearchKeyRef(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:8])
+}
+
+// SearchKeys is every key of the API in its list's order, each on or
+// off. KeyList is the list while its keys that are on are Key's; a Key
+// written by something that knows no KeyList (an older magpie, or one
+// it syncs with) wins: its keys are the ones on, in its order, and a
+// key the list has off that Key doesn't name stays, off, after them.
+func (a SearchAPI) SearchKeys() []SearchKey {
+	on := a.Keys()
+	var listOn []string
+	for _, k := range a.KeyList {
+		if !k.Off {
+			listOn = append(listOn, k.Key)
+		}
+	}
+	out := []SearchKey{}
+	if len(a.KeyList) > 0 && slices.Equal(listOn, on) {
+		for _, k := range a.KeyList {
+			if k.Key != "" && !slices.ContainsFunc(out, func(x SearchKey) bool { return x.Key == k.Key }) {
+				out = append(out, k)
+			}
+		}
+		return out
+	}
+	for _, k := range on {
+		out = append(out, SearchKey{Key: k})
+	}
+	for _, k := range a.KeyList {
+		if k.Off && k.Key != "" && !slices.ContainsFunc(out, func(x SearchKey) bool { return x.Key == k.Key }) {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// putKeys makes list the API's keys: Key the ones on, KeyList the whole
+// list while one is off.
+func (a *SearchAPI) putKeys(list []SearchKey) {
+	var on []string
+	off := false
+	for _, k := range list {
+		if k.Off {
+			off = true
+		} else {
+			on = append(on, k.Key)
+		}
+	}
+	a.Key, a.KeyList = strings.Join(on, ","), nil
+	if off {
+		a.KeyList = slices.Clone(list)
+	}
+}
+
+// WithoutKeys is the API with no key, on or off: as a backup or a sync
+// that leaves keys out carries it.
+func (a SearchAPI) WithoutKeys() SearchAPI {
+	a.Key, a.KeyList = "", nil
+	return a
+}
+
+// HasKeys is whether it holds a key, on or off.
+func (a SearchAPI) HasKeys() bool { return a.Key != "" || len(a.KeyList) > 0 }
+
+// KeepKeysOf gives a, which came with no key (WithoutKeys), b's keys.
+func (a *SearchAPI) KeepKeysOf(b SearchAPI) {
+	if !a.HasKeys() {
+		a.Key, a.KeyList = b.Key, slices.Clone(b.KeyList)
+	}
 }
 
 // MaskedKey is Key as shown: each of its keys masked (MaskSearchKey), so a
@@ -274,7 +364,9 @@ func SetSearchAPI(a SearchAPI) error {
 	}
 	i := slices.IndexFunc(f.Searches, func(x SearchAPI) bool { return x.Vendor == a.Vendor })
 	if i >= 0 && a.Key == "" {
-		a.Key = f.Searches[i].Key
+		a.Key, a.KeyList = f.Searches[i].Key, f.Searches[i].KeyList
+	} else {
+		a.KeyList = nil // keys given are the list, every one on
 	}
 	if i >= 0 {
 		a.Off, a.Mix = f.Searches[i].Off, f.Searches[i].Mix
@@ -405,8 +497,8 @@ func RestoreSearchAPIs(as []SearchAPI) error {
 		if _, ok := SearchVendorOf(a.Vendor); !ok || slices.ContainsFunc(out, func(x SearchAPI) bool { return x.Vendor == a.Vendor }) {
 			continue
 		}
-		if i := slices.IndexFunc(f.Searches, func(x SearchAPI) bool { return x.Vendor == a.Vendor }); i >= 0 && a.Key == "" {
-			a.Key = f.Searches[i].Key
+		if i := slices.IndexFunc(f.Searches, func(x SearchAPI) bool { return x.Vendor == a.Vendor }); i >= 0 {
+			a.KeepKeysOf(f.Searches[i])
 		}
 		out = append(out, a)
 	}
@@ -431,8 +523,8 @@ func MirrorSearchAPIs(as []SearchAPI) error {
 		if _, ok := SearchVendorOf(a.Vendor); !ok {
 			continue
 		}
-		if i := slices.IndexFunc(f.Searches, func(x SearchAPI) bool { return x.Vendor == a.Vendor }); i >= 0 && a.Key == "" {
-			a.Key = f.Searches[i].Key
+		if i := slices.IndexFunc(f.Searches, func(x SearchAPI) bool { return x.Vendor == a.Vendor }); i >= 0 {
+			a.KeepKeysOf(f.Searches[i])
 		}
 		out = append(out, a)
 	}
@@ -441,4 +533,126 @@ func MirrorSearchAPIs(as []SearchAPI) error {
 	}
 	f.Searches = out
 	return store(f)
+}
+
+// editSearchKeys changes the vendor's list of keys with edit and saves
+// it. A list left with no key on, for an API that needs one, is refused:
+// the API's own switch or Remove is for that.
+func editSearchKeys(vendor string, edit func([]SearchKey) ([]SearchKey, error)) error {
+	f, err := read()
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(f.Searches, func(x SearchAPI) bool { return x.Vendor == vendor })
+	if i < 0 {
+		return fmt.Errorf("no %s search API is set up", vendor)
+	}
+	a := f.Searches[i]
+	list, err := edit(a.SearchKeys())
+	if err != nil {
+		return err
+	}
+	v, _ := SearchVendorOf(vendor)
+	if !v.KeyOptional && v.Auth == "" && !slices.ContainsFunc(list, func(k SearchKey) bool { return !k.Off }) {
+		return fmt.Errorf("%s needs a key on: switch the API off, or remove it, instead", a.Name())
+	}
+	a.putKeys(list)
+	f.Searches[i] = a
+	return store(f)
+}
+
+// searchKeyAt is the index in list of the key ref names.
+func searchKeyAt(list []SearchKey, ref string) (int, error) {
+	i := slices.IndexFunc(list, func(k SearchKey) bool { return SearchKeyRef(k.Key) == ref })
+	if i < 0 {
+		return 0, fmt.Errorf("no such key: it was removed or changed")
+	}
+	return i, nil
+}
+
+// AddSearchKeys puts the keys in text (one, or several separated by
+// commas, spaces or lines) after the vendor's, on; one it has already
+// is counted in had and left as it is.
+func AddSearchKeys(vendor, text string) (added, had int, err error) {
+	keys := SearchAPI{Key: text}.Keys()
+	if len(keys) == 0 {
+		return 0, 0, fmt.Errorf("no key given")
+	}
+	err = editSearchKeys(vendor, func(list []SearchKey) ([]SearchKey, error) {
+		added, had = 0, 0
+		for _, k := range keys {
+			if slices.ContainsFunc(list, func(x SearchKey) bool { return x.Key == k }) {
+				had++
+				continue
+			}
+			list = append(list, SearchKey{Key: k})
+			added++
+		}
+		return list, nil
+	})
+	return added, had, err
+}
+
+// RemoveSearchKey takes one key out of the vendor's list.
+func RemoveSearchKey(vendor, ref string) error {
+	return editSearchKeys(vendor, func(list []SearchKey) ([]SearchKey, error) {
+		i, err := searchKeyAt(list, ref)
+		if err != nil {
+			return nil, err
+		}
+		return slices.Delete(list, i, i+1), nil
+	})
+}
+
+// SwitchSearchKey switches one key on or off, keeping its place.
+func SwitchSearchKey(vendor, ref string, on bool) error {
+	return editSearchKeys(vendor, func(list []SearchKey) ([]SearchKey, error) {
+		i, err := searchKeyAt(list, ref)
+		if err != nil {
+			return nil, err
+		}
+		list[i].Off = !on
+		return list, nil
+	})
+}
+
+// ArrangeSearchKeys puts the vendor's keys in the order of refs; one not
+// named keeps its place after them, and a ref of no key is refused, so an
+// order sent from a page drawn before a key was removed changes nothing.
+func ArrangeSearchKeys(vendor string, refs []string) error {
+	return editSearchKeys(vendor, func(list []SearchKey) ([]SearchKey, error) {
+		out := make([]SearchKey, 0, len(list))
+		for _, ref := range refs {
+			i, err := searchKeyAt(list, ref)
+			if err != nil {
+				return nil, err
+			}
+			if slices.ContainsFunc(out, func(k SearchKey) bool { return k.Key == list[i].Key }) {
+				return nil, fmt.Errorf("a key is named twice")
+			}
+			out = append(out, list[i])
+		}
+		for _, k := range list {
+			if !slices.ContainsFunc(out, func(x SearchKey) bool { return x.Key == k.Key }) {
+				out = append(out, k)
+			}
+		}
+		return out, nil
+	})
+}
+
+// SearchKeyOf is the vendor's key that ref names, on or off.
+func SearchKeyOf(vendor, ref string) (string, error) {
+	for _, a := range load().Searches {
+		if a.Vendor != vendor {
+			continue
+		}
+		list := a.SearchKeys()
+		i, err := searchKeyAt(list, ref)
+		if err != nil {
+			return "", err
+		}
+		return list[i].Key, nil
+	}
+	return "", fmt.Errorf("no %s search API is set up", vendor)
 }

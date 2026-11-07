@@ -89,6 +89,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await rows.nth(1).locator(".sub").innerText(), w.none);
       assert.equal(await rows.nth(1).locator(".sub").evaluate((e) => e.classList.contains("err")), true);
       assert.equal(await rows.nth(0).locator("button.search-eye").count(), 0, "nothing to show");
+      assert.equal(await list.locator(".row.search-keys").count(), 0, "no keys to list");
 
       // Add sends it with no key, and its row says how many accounts are on
       await head.locator("button.text", { hasText: w.add }).evaluate((b) => b.click());

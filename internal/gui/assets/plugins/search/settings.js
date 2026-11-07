@@ -63,7 +63,7 @@ function renderSearch(s, keep) {
     url.placeholder = v.needURL ? "https://searx.example.com" : t("Base URL, empty for {url}", { url: v.base || "" });
     url.setAttribute("aria-label", v.needURL ? t("Address") : t("Base URL"));
     key.placeholder = v.needURL ? t("API key, if it needs one")
-      : saved()?.key ? t("A new key, or empty to keep {key}", { key: saved().key })
+      : saved()?.keyList?.length ? t("Another key for {name}, or empty to keep its keys", { name: v.name || "" })
       : v.keyOptional ? t("API key, or empty for its free search")
       : t("API key, or several split by commas");
     get.hidden = !v.keysURL || !!v.auth;
@@ -83,7 +83,8 @@ function renderSearch(s, keep) {
     // one added before keeps its key when none is typed
     // You.com is asked at its free search with none (#1626)
     if (vendor().needURL ? !d.url : !d.key && !saved()?.key && !vendor().keyOptional && !vendor().auth) return (vendor().needURL ? url : key).focus();
-    set({ vendor: d.vendor, key: d.key, url: d.url },
+    // a key typed for one added before joins its keys, never replaces them
+    set({ vendor: d.vendor, key: d.key, url: d.url, ...(saved() && d.key ? { append: true } : {}) },
       () => { searchDraft = { vendor: d.vendor, key: "", url: "", err: "" }; });
   };
   for (const i of [key, url]) {
@@ -118,30 +119,9 @@ function renderSearch(s, keep) {
       : !auth.signedIn ? t("Not signed in to {name}: sign in to it on Providers", { name: auth.name })
       : !auth.on ? t("No account of {name} is on", { name: auth.name })
       : t("Signed in to {name} · accounts on: {n}", { name: auth.name, n: auth.on });
-    const what = [signedIn || a.key || (a.ready ? "" : t("needs its key")), a.url].filter(Boolean).join(" · ");
+    // its keys are listed under it, each with its own Show and Copy
+    const what = [signedIn || (a.ready ? "" : t("needs its key")), a.url].filter(Boolean).join(" · ");
     const tools = [x];
-    if (a.key) {
-      // its saved key shown in its row and hidden again, as a provider's
-      // editor does (OnurBen on Discord)
-      const eye = el("button", "text search-eye", t("Show"));
-      eye.onclick = async () => {
-        const sub = r.querySelector(".sub");
-        if (eye.textContent === t("Show")) {
-          try { sub.textContent = [(await api("settings/search-key", { vendor: a.vendor })).key, a.url].filter(Boolean).join(" · "); } catch (e) { status(e.message, "err"); return; }
-          sub.classList.add("revealed");
-          eye.textContent = t("Hide");
-        } else {
-          sub.textContent = what;
-          sub.classList.remove("revealed");
-          eye.textContent = t("Show");
-        }
-      };
-      const cp = el("button", "text search-copy", t("Copy"));
-      cp.onclick = async () => {
-        try { copy((await api("settings/search-key", { vendor: a.vendor })).key, t("API key"), cp); } catch (e) { status(e.message, "err"); }
-      };
-      tools.unshift(eye, cp);
-    }
     // switched off it stays, key and all, and no search asks it (#2286)
     const sw = el("button", "lib-switch use-credits search-on" + (a.off ? "" : " on"));
     sw.type = "button";
@@ -160,7 +140,7 @@ function renderSearch(s, keep) {
     r.classList.add("search-api");
     if (auth && !a.off && !(auth.signedIn && auth.on)) r.querySelector(".sub").classList.add("err");
     // with-keys, not :has(), which Safari before 15.4 can't parse
-    if (a.keys > 1 || a.quota) { unit.classList.add("with-keys"); searchKeysRow(s, a, row, set); }
+    if (!auth && (a.keyList?.length || !vendors.find((v) => v.id === a.vendor)?.needURL)) { unit.classList.add("with-keys"); searchKeysRow(s, a, row, set); }
     into = box;
   });
   searchArrange(box, units, set);
@@ -262,25 +242,33 @@ function searchArrange(box, units, set) {
       move(unit, units.indexOf(unit) + (e.key === "ArrowUp" ? -1 : 1));
     };
     unit.onpointerdown = (e) => {
-      if (searchArranging || e.target.closest("input, textarea, select, a, button, code, .segs, .sub.revealed")) return;
+      if (searchArranging || e.target.closest("input, textarea, select, a, button, code, .segs, .sub.revealed, .search-key-list")) return;
       searchArranging = dragRows(e, unit, unit, box, units, (to) => move(unit, to), () => {},
         () => { searchArranging = false; });
     };
   }
 }
 
-// searchKeysRow: under a search API with several keys, or one whose keys
-// quota magpie can read (Tavily's), a row of its keys (SlouchyQuill on
-// Discord): how a search picks among them, in turn (the default) or in
-// order, and what each has used of its limit, read once as the page is
-// drawn and again on Check again. A read that fails says unknown and why,
-// never 0; a key a search set aside lately says why and until when.
+// searchKeysRow: under a search API that takes keys, its list of them
+// (辰林鸭~ on Discord), as a provider's keys are listed: each masked, on or
+// off by its dot, shown, copied or removed, dragged into another order or
+// moved with Alt+↑/↓, and one or several added at its foot. How a search
+// picks among those on, in turn (the default) or in order (SlouchyQuill on
+// Discord), and why a key is asked last now and until when, show beside
+// them; what each has used of its limit (Tavily's) is read once as the page
+// is drawn and again on Check again. A read that fails says unknown and
+// why, never 0.
 const searchQuotaSeen = {};
+let searchKeyAdding = null, searchKeyShown = {};
 function searchKeysRow(s, a, row, set) {
+  const list0 = a.keyList || [], on = list0.filter((k) => !k.off).length;
   const tools = [];
-  if (a.keys > 1) tools.push(segs([["", t("In turn")], ["order", t("In order")]], a.pick || "",
+  if (on > 1) tools.push(segs([["", t("In turn")], ["order", t("In order")]], a.pick || "",
     (v) => set({ vendor: a.vendor, pick: v || "turns" })));
-  const mine = el("div", "search-quota");
+  const keys = (body, said) => writingPrefs(api("settings/search-keys", { vendor: a.vendor, ...body }))
+    .then((r) => { prefs = r.settings; searchKeyAdding = null; renderSettings(); status(said?.(r) || t("Saved"), "ok", 1500); })
+    .catch((e) => { status(e.message, "err"); renderSettings(); });
+  const list = el("div", "accts keys search-key-list");
   const seenAs = [a.key, a.url].join(" ");
   const ask = (fresh) => {
     searchQuotaSeen[a.vendor] = { as: seenAs, loading: true };
@@ -290,46 +278,156 @@ function searchKeysRow(s, a, row, set) {
       .catch((e) => { searchQuotaSeen[a.vendor] = { as: seenAs, err: e.message }; })
       .finally(draw);
   };
-  // the list in the page now: Settings may have been drawn again while
-  // the read was out
+  const num = (n) => Number(n).toLocaleString(intlLang());
+  const whyOf = (w) => ({ "turned away": t("turned away"), "out of credit": t("out of credit"), "rate limited": t("rate limited"), "used up": t("used up") })[w] || w;
+  // each key's quota, in the rows in the page now: Settings may have been
+  // drawn again while the read was out
   const draw = () => {
-    const list = document.querySelector(`.search-keys[data-vendor="${a.vendor}"] .search-quota`) || mine;
+    const box = document.querySelector(`.search-keys[data-vendor="${CSS.escape(a.vendor)}"] .search-key-list`) || list;
     const seen = searchQuotaSeen[a.vendor];
-    list.replaceChildren();
-    if (!seen || seen.loading) return list.append(el("div", "faint", t("Reading what each key has used…")));
-    if (seen.err) return list.append(el("div", "err", t("Unknown: {why}", { why: seen.err })));
-    const num = (n) => Number(n).toLocaleString(intlLang());
-    for (const q of seen.keys) {
-      const line = el("div", "quota-key");
+    for (const line of box.querySelectorAll(".acc[data-ref]")) {
+      const at = line.querySelector(".key-quota");
+      if (!at) continue;
+      at.replaceChildren();
+      if (!seen || seen.loading) { at.append(el("span", "faint", t("Reading what each key has used…"))); continue; }
+      if (seen.err) { at.append(el("span", "err", t("Unknown: {why}", { why: seen.err }))); continue; }
+      const q = seen.keys.find((x) => x.ref === line.dataset.ref);
+      if (!q) continue;
       const said = !q.known ? t("Unknown: {why}", { why: q.err || "" })
         : q.unlimited ? t("{used} used, no limit", { used: num(q.used) })
         : t("{used} of {limit} used", { used: num(q.used), limit: num(q.limit) });
       const notes = [];
       if (q.known && q.of === "plan") notes.push(q.plan ? t("{plan} plan, shared by its account's keys", { plan: q.plan }) : t("the plan's, shared by its account's keys"));
       if (q.paygoLeft > 0) notes.push(t("{n} pay-as-you-go left", { n: num(q.paygoLeft) }));
-      if (q.resting) notes.push(t("asked last until {time}: {why}", { time: hhmm(q.restUntil),
-        why: { "turned away": t("turned away"), "out of credit": t("out of credit"), "rate limited": t("rate limited"), "used up": t("used up") }[q.resting] || q.resting }));
-      const used = el("span", q.known ? (q.usedUp ? "used warn" : "used") : "used err", said);
-      line.append(el("code", "", q.key), used);
-      if (q.usedUp) line.append(el("span", "warn", t("used up")));
-      if (notes.length) line.append(el("span", "faint", notes.join(" · ")));
-      list.append(line);
+      at.append(el("span", q.known ? (q.usedUp ? "used warn" : "used") : "used err", said));
+      if (q.usedUp) at.append(el("span", "warn", t("used up")));
+      if (notes.length) at.append(el("span", "faint", notes.join(" · ")));
     }
   };
-  if (a.quota) {
+  const rows = [];
+  for (const k of list0) {
+    const r = el("div", "acc" + (k.off ? " off" : " in-use"));
+    r.dataset.ref = k.ref;
+    const dot = el("button", "dot tick");
+    dot.type = "button";
+    if (!k.off) dot.append(svg(CHECK, 10, 2.2));
+    dot.title = k.off ? t("Use this key too") : t("Stop using this key");
+    dot.setAttribute("aria-label", dot.title);
+    dot.setAttribute("aria-pressed", String(!k.off));
+    dot.onclick = () => keys({ ref: k.ref, on: !!k.off });
+    const shown = searchKeyShown[a.vendor + " " + k.ref];
+    const code = el("code", "n" + (shown ? " revealed" : ""), shown || k.masked);
+    const eye = el("button", "text search-eye", shown ? t("Hide") : t("Show"));
+    eye.onclick = async () => {
+      const id = a.vendor + " " + k.ref;
+      if (searchKeyShown[id]) delete searchKeyShown[id];
+      else try { searchKeyShown[id] = (await api("settings/search-key", { vendor: a.vendor, ref: k.ref })).key; } catch (e) { return status(e.message, "err"); }
+      code.textContent = searchKeyShown[id] || k.masked;
+      code.classList.toggle("revealed", !!searchKeyShown[id]);
+      eye.textContent = searchKeyShown[id] ? t("Hide") : t("Show");
+    };
+    const cp = el("button", "copy search-copy");
+    cp.type = "button";
+    cp.title = t("Copy");
+    cp.setAttribute("aria-label", t("Copy"));
+    cp.append(svg(COPY_ICON, 12, 1.5));
+    cp.onclick = async () => {
+      try { copy((await api("settings/search-key", { vendor: a.vendor, ref: k.ref })).key, t("API key"), cp); } catch (e) { status(e.message, "err"); }
+    };
+    const x = el("button", "text search-key-remove", t("Remove"));
+    x.onclick = () => keys({ ref: k.ref, remove: true });
+    r.append(dot, code, el("span", "grow"), eye, cp, x);
+    // why it is asked last now, and until when: on a line of its own
+    const state = el("div", "key-state");
+    if (k.off) state.append(el("span", "faint", t("Off")));
+    else if (k.rest && new Date(k.restUntil) > Date.now()) {
+      r.classList.add("resting");
+      state.append(el("span", "warn key-rest", t("asked last until {time}: {why}", { time: hhmm(k.restUntil), why: whyOf(k.rest) })));
+    }
+    if (a.quota && !k.off) state.append(el("span", "key-quota"));
+    if (state.childNodes.length) r.append(state);
+    rows.push(r);
+    list.append(r);
+  }
+  if (searchKeyAdding === a.vendor) {
+    // one key, or several pasted at once, split as a provider's are
+    const box = el("div", "acc adding");
+    const i = input("", t("Paste a key, or several split by commas or lines"), "password");
+    i.className = "words search-key-new";
+    i.setAttribute("aria-label", t("API key"));
+    const go = () => {
+      const n = splitKeys(i.value).length;
+      if (!n) return i.focus(NO_SCROLL);
+      keys({ add: i.value }, (r) => r.had ? t("{n} keys added, {m} already there", { n: r.added, m: r.had })
+        : r.added === 1 ? t("Key added") : t("{n} keys added", { n: r.added }));
+    };
+    const add = el("button", "text primary", t("Add"));
+    add.onclick = go;
+    const no = el("button", "text", t("Cancel"));
+    no.onclick = () => { searchKeyAdding = null; renderSettings(); };
+    i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") go(); else if (e.key === "Escape") no.onclick(); };
+    box.append(i, no, add);
+    list.append(box);
+    queueMicrotask(() => i.focus(NO_SCROLL));
+  } else list.append(addRow(list0.length ? t("Add another key") : t("Add a key"), () => { searchKeyAdding = a.vendor; renderSettings(); }));
+  searchKeyArrange(a, list, rows, keys);
+  if (a.quota && on) {
     const again = el("button", "text search-quota-again", t("Check again"));
     again.onclick = () => ask(true);
     tools.push(again);
   }
   const r = row(t("Keys of {name}", { name: a.name }),
-    a.keys > 1 ? t("In turn spreads searches over the keys; in order uses the first until it is refused. A key refused lately is asked last.") : t("What the key has used of its limit"),
+    on > 1 ? t("In turn spreads searches over the keys; in order uses the first until it is refused. A key refused lately is asked last.") : "",
     ...tools);
   r.classList.add("search-keys");
   r.dataset.vendor = a.vendor;
-  if (a.quota) {
-    r.querySelector(".who").append(mine);
+  r.querySelector(".who").append(list);
+  if (a.quota && on) {
     if (searchQuotaSeen[a.vendor]?.as !== seenAs) ask(false);
     else draw();
+  }
+}
+
+// searchKeyArrange: a search API's keys are asked in their list's order
+// (in order, or from the first in turn), put in another by dragging a key
+// or with Alt+↑/↓ on it; the order shows at once and the page is drawn
+// again from what is saved.
+function searchKeyArrange(a, list, rows, keys) {
+  if (rows.length < 2) return;
+  list.classList.add("reorderable");
+  let busy = false;
+  const move = (r, to) => {
+    const from = rows.indexOf(r);
+    to = Math.max(0, Math.min(rows.length - 1, to));
+    if (to === from || busy) return;
+    busy = true;
+    const order = rows.map((x) => x.dataset.ref);
+    order.splice(to, 0, ...order.splice(from, 1));
+    const focus = document.activeElement === r;
+    list.insertBefore(r, to > from ? rows[to].nextSibling : rows[to]);
+    rows.splice(to, 0, ...rows.splice(from, 1));
+    if (focus) r.focus(NO_SCROLL);
+    keys({ arrange: order }).then(() => {
+      if (focus) document.querySelector(`.search-keys[data-vendor="${CSS.escape(a.vendor)}"] .acc[data-ref="${CSS.escape(r.dataset.ref)}"]`)?.focus(NO_SCROLL);
+    });
+  };
+  for (const r of rows) {
+    r.tabIndex = 0;
+    r.title = t("Drag to reorder · Alt+↑/↓ to move");
+    r.prepend(el("span", "grip"));
+    r.addEventListener("click", (e) => {
+      if (r.dataset.dragged) { e.preventDefault(); e.stopImmediatePropagation(); }
+    }, true);
+    r.onkeydown = (e) => {
+      if (e.target !== r || !e.altKey || !["ArrowUp", "ArrowDown"].includes(e.key)) return;
+      e.preventDefault(); e.stopPropagation();
+      move(r, rows.indexOf(r) + (e.key === "ArrowUp" ? -1 : 1));
+    };
+    r.onpointerdown = (e) => {
+      if (busy || e.target.closest("input, button, code.revealed")) return;
+      e.stopPropagation();
+      dragRows(e, r, r, list, rows, (to) => move(r, to));
+    };
   }
 }
 

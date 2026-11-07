@@ -111,3 +111,49 @@ func TestBackupSearchAPIsOrderAndOff(t *testing.T) {
 		t.Fatalf("stored %v, asked %v", stored, asked)
 	}
 }
+
+// A key switched off in a search API's list (辰林鸭~ on Discord) goes in a
+// backup with its keys and comes back off; one without keys carries none
+// of them, on or off, and the list here stays whole.
+func TestBackupSearchKeysOff(t *testing.T) {
+	home(t)
+	if err := provider.SetSearchAPI(provider.SearchAPI{Vendor: "tavily", Key: "tvly-a,tvly-b"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SwitchSearchKey("tavily", provider.SearchKeyRef("tvly-a"), false); err != nil {
+		t.Fatal(err)
+	}
+	want := []provider.SearchKey{{Key: "tvly-a", Off: true}, {Key: "tvly-b"}}
+	with, err := Collect(true, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	without, err := Collect(false, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := *without.Searches; len(s) != 1 || s[0].HasKeys() {
+		t.Fatalf("a backup without keys holds %+v", s)
+	}
+	data, err := Seal(with, "pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	home(t) // another machine
+	got, err := Open(data, "pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Restore(got, All); err != nil {
+		t.Fatal(err)
+	}
+	if as := provider.StoredSearchAPIs(); len(as) != 1 || !slices.Equal(as[0].SearchKeys(), want) || as[0].Key != "tvly-b" {
+		t.Fatalf("restored %+v", as)
+	}
+	if _, err := Restore(without, Parts{Providers: true}); err != nil {
+		t.Fatal(err)
+	}
+	if as := provider.StoredSearchAPIs(); len(as) != 1 || !slices.Equal(as[0].SearchKeys(), want) {
+		t.Fatalf("a backup without keys took keys here away: %+v", as)
+	}
+}
