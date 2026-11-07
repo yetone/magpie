@@ -181,19 +181,29 @@ talks to it as it talks to `-p`: stream-json in and out. The helper:
   base64 image is written to `image-N.<ext>` (0600) in a
   `magpie-claude-images-*` temp folder, and its path is pasted alone,
   which Claude Code reads into the message as `[Image #N]` (a path inside
-  other words stays words). Claude Code reads the file after the paste
-  returns, so the helper waits for `[Image #N]` with N past the last
-  before pasting the next piece; without that wait the second of two
-  images was lost. The transcript holds real image blocks, and Claude Code
-  notes each one's path to the model (`[Image: source: …]`). The folder
-  is removed once its message is sent (Claude Code has read the files
-  by then), and when the helper ends, on SIGINT, SIGTERM and SIGHUP too:
-  magpie's own handler (`endProbesOnSignal`) let go of the signals for
-  this command (`leaveSignals`), since it re-raised SIGTERM and killed the
-  helper before it could end Claude Code and remove its files. Windows
-  ends a run by killing its job, which no handler hears, so a helper
-  starting removes such folders, and the tap's, over an hour old
-  (`dropLeft`);
+  other words stays words). Each piece is pasted once the prompt shows
+  the one before (`send`). Claude Code reads an image's file after the
+  paste returns, so the helper waits for `[Image #N]` with N past the
+  paste before; without that wait the second of two images was lost.
+  Words with a line that ends naming an image file (`a.jpg` in an `ls`)
+  are tried as that file first (2.1.318 asks the clipboard for it, about
+  0.45s) and taken in after, and Claude Code keeps one mark of a paste
+  being taken in for every paste: an image pasted meanwhile cleared it,
+  and Enter sent the message without the words, which came in the next
+  prompt (#5548). So words are waited for too, until their last words
+  show or a `[Pasted text #N` with N past the paste before (`shown`):
+  images and pasted text are numbered together, and the prompt drawn
+  again shows the earlier ones (`TestShimWaitsForWordsNamingImages`,
+  `TestShimPastesImages`). The transcript holds real image blocks, and
+  Claude Code notes each one's path to the model (`[Image: source: …]`).
+  The folder is removed once its message is sent (Claude Code has read
+  the files by then), and when the helper ends, on SIGINT, SIGTERM and
+  SIGHUP too: magpie's own handler (`endProbesOnSignal`) let go of the
+  signals for this command (`leaveSignals`), since it re-raised SIGTERM
+  and killed the helper before it could end Claude Code and remove its
+  files. Windows ends a run by killing its job, which no handler hears,
+  so a helper starting removes such folders, and the tap's, over an hour
+  old (`dropLeft`);
 - tails `<CLAUDE_CONFIG_DIR>/projects/*/<session>.jsonl` and tells each
   row as `-p` would (`translator`): assistant messages whole, a tool's
   result, a `<synthetic>` API error as the turn's error result with its
@@ -404,7 +414,8 @@ a new Claude Code (one older than its session, or a client's own) can
 run to megabytes. A real 3MB paste showed `[Pasted text` after 35s, and
 a real 500KB one was answered with all of it in the transcript, so the
 helper waits for a paste a second per 64KB longer than `pasteWait`
-(`shownWait`) before its Enter. Until 11-01 words over 400KB were
+(`shownWait`) before the next piece or its Enter, and goes on when it
+still isn't shown. Until 11-01 words over 400KB were
 refused with a 502 (`big`), a bound no paste had been tried at.
 
 An image known only by its URL is downloaded first

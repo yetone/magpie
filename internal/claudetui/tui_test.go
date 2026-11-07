@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -225,6 +226,16 @@ func fakeChrome(r *bufio.Reader, how string) {
 	}
 }
 
+// namesImage is pasted words with a line Claude Code 2.1.318 tries as an
+// image file before it takes them in: one that ends naming one.
+var namesImage = regexp.MustCompile(`(?im)\.(png|jpe?g|gif|webp)[ \t]*$`)
+
+// nameWait is how long the fake takes words that name an image file to
+// take in. Claude Code took 0.45s, asking the clipboard for the file; the
+// fake's is longer than its image's 200ms and the Enter after it, for an
+// Enter that doesn't wait for the words to come before them.
+const nameWait = time.Second
+
 func fakeClaude(args []string) {
 	if slices.Contains(args, "-p") {
 		sc := bufio.NewScanner(os.Stdin)
@@ -307,12 +318,36 @@ func fakeClaude(args []string) {
 	}
 	streams := 0
 	fmt.Print("\r\n❯ ")
-	// the prompt's words; an image file's path pasted alone is read a
-	// moment later and becomes "[Image #<n>:<its bytes>]" where the
-	// prompt's words end then
+	// the prompt's words, and the prompt as drawn, again as a paste
+	// starts and as one is taken in. As Claude Code 2.1.318 does, it draws
+	// a paste of over 800 bytes or 2 line breaks as "[Pasted text #<n>
+	// +<breaks> lines]", numbered with the images. An image file's path
+	// pasted alone is read a moment later and becomes "[Image #<n>:<its
+	// bytes>]" where the prompt's words end then; words with a line that
+	// names an image file are tried as one first, and taken in after
+	// nameWait. One mark of a paste being taken in stands for all of them,
+	// and is cleared as any is taken in: an Enter while it is set is lost,
+	// as the one Claude Code holds is when a read ends, and an Enter after
+	// sends the prompt as it stands.
 	var mu sync.Mutex
-	var typed, paste strings.Builder
-	pasting, images := false, 0
+	var typed, drawn, paste strings.Builder
+	pasting, taking, pasted := false, false, 0
+	take := func(text, draw string) {
+		typed.WriteString(text)
+		drawn.WriteString(draw)
+		taking = false
+		fmt.Print("\r❯ " + drawn.String())
+	}
+	takeText := func(p string) {
+		mu.Lock()
+		defer mu.Unlock()
+		draw := p
+		if breaks := strings.Count(p, "\n"); len(p) > 800 || breaks > 2 {
+			pasted++
+			draw = fmt.Sprintf("[Pasted text #%d +%d lines]", pasted, breaks)
+		}
+		take(p, draw)
+	}
 	// retry is what an "r" draws while /usage's panel says it couldn't
 	// load the figures, nil when it says nothing of the kind
 	var retry []byte
@@ -333,22 +368,25 @@ func fakeClaude(args []string) {
 				continue
 			}
 			p := paste.String()
+			mu.Lock()
+			taking = true
+			fmt.Print("\r❯ " + drawn.String())
+			mu.Unlock()
 			if b, err := os.ReadFile(p); err == nil && strings.HasPrefix(filepath.Base(p), "image-") {
-				images++
-				n := images
 				go func() {
 					time.Sleep(200 * time.Millisecond)
 					mu.Lock()
 					defer mu.Unlock()
-					typed.WriteString(fmt.Sprintf("[Image #%d:%s]", n, b))
-					fmt.Printf("[Image #%d]", n)
+					pasted++
+					take(fmt.Sprintf("[Image #%d:%s]", pasted, b), fmt.Sprintf("[Image #%d]", pasted))
 				}()
 				continue
 			}
-			mu.Lock()
-			typed.WriteString(p)
-			mu.Unlock()
-			fmt.Print(p) // drawn in the prompt
+			if namesImage.MatchString(p) {
+				time.AfterFunc(nameWait, func() { takeText(p) })
+				continue
+			}
+			takeText(p)
 			continue
 		case pasting:
 			paste.WriteByte(c)
@@ -360,13 +398,19 @@ func fakeClaude(args []string) {
 		case c != '\r':
 			mu.Lock()
 			typed.WriteByte(c)
+			drawn.WriteByte(c)
 			mu.Unlock()
 			fmt.Printf("%c", c)
 			continue
 		}
 		mu.Lock()
+		if taking {
+			mu.Unlock()
+			continue
+		}
 		line := typed.String()
 		typed.Reset()
+		drawn.Reset()
 		mu.Unlock()
 		if listed != "" {
 			if _, err := os.Stat(listed); err != nil {
@@ -611,7 +655,9 @@ func TestShimPastesImages(t *testing.T) {
 			failed = failed || m["is_error"] == true && strings.Contains(fmt.Sprint(m["result"]), "an image by url")
 		}
 	}
-	if want := `echo: look:\n\n[Image #1:red]\n\nand\n\n[Image #2:blue]\n\nnow"`; !strings.Contains(said, want) {
+	// "and" between its breaks is drawn as pasted text, numbered with the
+	// images
+	if want := `echo: look:\n\n[Image #1:red]\n\nand\n\n[Image #3:blue]\n\nnow"`; !strings.Contains(said, want) {
 		t.Fatalf("Claude Code was sent %s, want %s", said, want)
 	}
 	if !failed {
@@ -622,6 +668,39 @@ func TestShimPastesImages(t *testing.T) {
 	left, _ := filepath.Glob(filepath.Join(filepath.Dir(os.Getenv("MAGPIE_TUI_TEST_CFG")), "tmp", imagesPrefix+"*"))
 	if len(left) > 0 {
 		t.Fatalf("the images are left after their message: %v", left)
+	}
+}
+
+// Words with a line that names an image file ("foo.png" in an ls) are
+// taken in a moment after they are pasted, and an image pasted meanwhile
+// that is taken in first lets Enter send the message without them. Each
+// piece waits for the prompt to show the one before, words as a "[Pasted
+// text" numbered past the paste before them, not one drawn again: the
+// message reaches Claude Code whole, as one whose lines name no image
+// does (#5548).
+func TestShimWaitsForWordsNamingImages(t *testing.T) {
+	image := func(s string) map[string]any {
+		return map[string]any{"type": "image", "source": map[string]any{"type": "base64", "media_type": "image/png", "data": base64.StdEncoding.EncodeToString([]byte(s))}}
+	}
+	text := func(s string) map[string]any { return map[string]any{"type": "text", "text": s} }
+	for _, ext := range []string{".png", ".txt"} {
+		t.Run(ext, func(t *testing.T) {
+			first := "The codeword is MANGO.\nSome notes.\nfoo" + ext + "\nmore notes."
+			second := "$ ls\nbar" + ext + "\nbaz" + ext + "\nthat is all."
+			last := "(The images above are the tool's results.)\nReply with the codeword."
+			msg, _ := json.Marshal([]any{text(first), image("red"), text(second), image("blue"), text(last)})
+			out := runShim(t, nil, append([]string{fakePath(t)}, pArgs...), []string{string(msg)}, 3)
+			var said string
+			for _, m := range out[1:] {
+				if m["type"] == "assistant" {
+					c, _ := m["message"].(map[string]any)["content"].([]any)
+					said, _ = c[0].(map[string]any)["text"].(string)
+				}
+			}
+			if want := "echo: " + first + "\n\n[Image #2:red]\n\n" + second + "\n\n[Image #4:blue]\n\n" + last; said != want {
+				t.Fatalf("Claude Code was sent %q, want %q", said, want)
+			}
+		})
 	}
 }
 
