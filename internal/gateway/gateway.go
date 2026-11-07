@@ -3433,8 +3433,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			hw.reloop = reloops < loopReasks && !pass
 		}
 		// a member of a group in the group is timed by the innermost
-		// group that sets a FirstToken (#2246), else by the group asked for
-		firstToken := cmp.Or(c.firstToken, g.FirstToken)
+		// group that sets a FirstToken (#2246), else by the group asked
+		// for, which follows the default for every group when it sets none
+		firstToken := c.firstToken
+		if firstToken == 0 && isGroup {
+			firstToken = g.FirstTokenOr()
+		}
 		if isGroup && firstToken > 0 && !last && streams && !pass {
 			// slow to start, the next member is asked (Group.FirstToken)
 			hw.firstWait = time.Duration(firstToken) * time.Second

@@ -510,6 +510,17 @@ type Settings struct {
 	// haiku needed more than 8): from 1 to ClassifyTimeoutMost, 0 for
 	// ClassifyTimeoutDefault. ClassifyWait reads it.
 	ClassifyTimeout int `json:"classifyTimeout,omitempty"`
+	// GroupSink, GroupFirstToken and GroupPatience are what every routing
+	// group does that says nothing of its own (jiezhengj on Discord: set
+	// once, not in each group), as provider.Group's Sink, FirstToken and
+	// Patience: one rate limited with quota left goes to the back; the
+	// seconds a member may take to its first token, 0 to wait; the seconds
+	// a request is kept while every member is busy, 0 for
+	// provider.PatienceDefault and -1 for off. A group that sets its own
+	// keeps it (provider.Group.Sinks, FirstTokenOr, Waits).
+	GroupSink       bool `json:"groupSink,omitempty"`
+	GroupFirstToken int  `json:"groupFirstToken,omitempty"`
+	GroupPatience   int  `json:"groupPatience,omitempty"`
 	// BusyLoad puts a model whose plugin reports it busier than this
 	// percent behind the others it could go to (plugin.ModelLoad,
 	// axelburks on Discord): from 1 to BusyLoadMost-1, past 100 for a
@@ -1978,6 +1989,21 @@ func EditCheckinOff(edit func([]string) []string) error {
 	return save(s, false)
 }
 
+// SetGroupDefaults sets what every routing group follows when it sets no
+// value of its own (GroupSink, GroupFirstToken, GroupPatience), from what
+// the file holds now, so a save elsewhere from an older snapshot isn't
+// undone. A settings file that can't be read is left as it is, with the
+// error.
+func SetGroupDefaults(sink bool, firstToken, patience int) error {
+	defer lockFile()()
+	s, err := loadChecked()
+	if err != nil {
+		return err
+	}
+	s.GroupSink, s.GroupFirstToken, s.GroupPatience = sink, firstToken, patience
+	return save(s, false)
+}
+
 // EditUsageAliases changes UsageAliases alone, as edit returns them from
 // what the file holds now, so a save elsewhere from an older snapshot isn't
 // undone. A settings file that can't be read is left as it is, with the
@@ -2158,6 +2184,14 @@ func saveOwn(s Settings, recording, reads bool) error {
 	}
 	if s.ClassifyTimeout < 0 || s.ClassifyTimeout > ClassifyTimeoutMost {
 		return fmt.Errorf("a routing group's classifier is given from 1 to %d seconds, or 0 for %d, not %d", ClassifyTimeoutMost, ClassifyTimeoutDefault, s.ClassifyTimeout)
+	}
+	if s.GroupFirstToken < 0 {
+		return fmt.Errorf("a routing group's member is given a number of seconds to its first token, or 0 to wait, not %d", s.GroupFirstToken)
+	}
+	// provider.PatienceOff and provider.PatienceLongest, which settings
+	// can't import
+	if s.GroupPatience < -1 || s.GroupPatience > 240 {
+		return fmt.Errorf("a routing group whose every member is busy waits from 1 to 240 seconds, 0 for 60 or -1 for not at all, not %d", s.GroupPatience)
 	}
 	if s.SearchCount < 0 || s.SearchCount > SearchCountMost {
 		return fmt.Errorf("a search is answered with from 1 to %d results, or 0 for %d, not %d", SearchCountMost, SearchCountDefault, s.SearchCount)

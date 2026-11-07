@@ -47,6 +47,8 @@ var Keys = []string{
 	// models: replies, vision, images, search
 	"replyModel", "noLoopGuard", "claudeLeanPrompt", "claudePrintMode", "refusalRetries", "retryAfterCap",
 	"vision", "visionEffort", "imageGen", "imageTimeout", "classifyTimeout",
+	// what every routing group does that says nothing of its own
+	"groupSink", "groupFirstToken", "groupPatience",
 	"searcher", "searcherThen", "searcherEffort", "searchFirst",
 	// updates
 	"noUpdatePill", "noAutoUpdate", "updateEvery", "noAutoDownload", "autoRestart", "updateChannel",
@@ -210,6 +212,17 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	// nor how long a routing group's classifier is given (#2934)
 	if _, sent := fields["classifyTimeout"]; !sent {
 		in.ClassifyTimeout = cur.ClassifyTimeout
+	}
+	// nor what every routing group does that says nothing of its own,
+	// which the Routing groups page sets (jiezhengj on Discord)
+	if _, sent := fields["groupSink"]; !sent {
+		in.GroupSink = cur.GroupSink
+	}
+	if _, sent := fields["groupFirstToken"]; !sent {
+		in.GroupFirstToken = cur.GroupFirstToken
+	}
+	if _, sent := fields["groupPatience"]; !sent {
+		in.GroupPatience = cur.GroupPatience
 	}
 	// nor whether animations are stilled (#3813)
 	if _, sent := fields["reduceMotion"]; !sent {

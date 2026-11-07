@@ -283,8 +283,8 @@
 .rt-gsec > .row-head:first-child .rt-gcount { margin-left: 10px; white-space: nowrap; }
 .rt-gsec > .row-head:first-child .rt-gfilter + .rt-gcount { margin-left: 10px; }
 /* the settings for every group, a card under the list */
-.rt-gset > :is(.rt-gfound, .rt-gnames) { padding: 12px 14px; }
-.rt-gset > .rt-gnames { border-top: 1px solid var(--line-2); }
+.rt-gset > :is(.rt-gfound, .rt-gnames, .rt-gdef) { padding: 12px 14px; }
+.rt-gset > :is(.rt-gnames, .rt-gdef) { border-top: 1px solid var(--line-2); }
 /* an email, hidden: stand-in letters of its shape, softly blurred —
    coming in out of focus when asked for */
 .pii { filter: blur(2.2px); opacity: .5; user-select: none; }
@@ -648,12 +648,12 @@ button.rt-session { cursor: pointer; }
 .rt-goffbox { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; }
 .rt-goffwhy { flex: 1 1 260px; min-width: 0; font-size: 12px; line-height: 1.5; color: var(--fg-2); }
 .rt-goffon { flex: none; }
-.rt-gfound, .rt-gnames { display: flex; align-items: center; gap: 12px; padding: 2px 4px 4px; }
-.rt-gfound .txt, .rt-gnames .txt { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.rt-gfound b, .rt-gnames b { font-size: 12.5px; font-weight: 600; }
-.rt-gfound small, .rt-gnames small { font-size: 11.5px; line-height: 1.45; color: var(--muted); }
+.rt-gfound, .rt-gnames, .rt-gdef { display: flex; align-items: center; gap: 12px; padding: 2px 4px 4px; }
+.rt-gfound .txt, .rt-gnames .txt, .rt-gdef .txt { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.rt-gfound b, .rt-gnames b, .rt-gdef b { font-size: 12.5px; font-weight: 600; }
+.rt-gfound small, .rt-gnames small, .rt-gdef small { font-size: 11.5px; line-height: 1.45; color: var(--muted); }
 /* the names setting's three choices go under its words when it is narrow */
-.rt-gnames { flex-wrap: wrap; }
+.rt-gnames, .rt-gdef { flex-wrap: wrap; }
 /* the providers kept out of found groups: a text button under the
    switch's words, its menu the app's */
 .rt-gfound .rt-skip-pick { justify-self: start; display: inline-flex; align-items: center; gap: 3px; max-width: 100%; height: 22px; margin-left: -7px; font-size: 11.5px; }
@@ -661,7 +661,7 @@ button.rt-session { cursor: pointer; }
 .rt-skip-pick svg { flex: none; opacity: .7; transition: transform .15s var(--ease); }
 .rt-skip-pick.open svg { transform: rotate(180deg); }
 .pop.proto-menu.rt-skip-menu { width: 230px; max-width: calc(100vw - 16px); background: var(--card); }
-.rt-gnames .txt { flex-basis: 220px; }
+.rt-gnames .txt, .rt-gdef .txt { flex-basis: 220px; }
 .rt-ghidden { display: flex; align-items: center; padding: 4px 12px 4px 8px; }
 .rt-ghidden .rt-gremoved { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--faint); }
 .rt-ghidden .rt-gremoved:hover, .rt-ghidden .rt-gremoved.open { color: var(--fg-2); }

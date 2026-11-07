@@ -5640,8 +5640,12 @@ function routingPage(part) {
   // for the providers' models), so it sits over the groups rather than in
   // one group's editor (PAMI on Discord)
   const gNames = el("div", "rt-gnames");
+  // what every group does that sets none of its own when one is rate
+  // limited, slow to start, or every member is busy (jiezhengj on Discord:
+  // set once rather than in each group); a group's editor sets its own
+  const gDefs = [el("div", "rt-gdef rt-gdef-sink"), el("div", "rt-gdef rt-gdef-first"), el("div", "rt-gdef rt-gdef-patience")];
   // the groups go with the routing groups built-in plugin; the pools stay
-  for (const n of [gHead, gFound, gNames, gList]) n.dataset.feature = "groups";
+  for (const n of [gHead, gFound, gNames, ...gDefs, gList]) n.dataset.feature = "groups";
   // and off (the Essentials preset leaves it off), where they were
   // the page says so and turns it on (bigbenniu on X: past the requests
   // there was nothing, and no word of where New group had gone). The
@@ -5673,7 +5677,7 @@ function routingPage(part) {
   sHead.append(el("span", "label", t("Settings")));
   const gSet = el("div", "list rt-gset");
   gSet.dataset.feature = "groups";
-  gSet.append(gFound, gNames);
+  gSet.append(gFound, gNames, ...gDefs);
   gsec.append(gHead, gList, gOff, sHead, gSet, pHead, pList);
   // on the Routing groups page, a page of their own; Try again on it puts
   // them back in its markup made anew
@@ -5701,14 +5705,33 @@ function routingPage(part) {
     sink: "One rate limited (429) while it still has quota goes to the back of the order, behind every one not rate limited since, and comes round again once those ahead of it are rate limited in turn — so the load goes round rather than back to the first each time. Out of quota, it rests as usual. Kept until magpie restarts.",
   };
   // in turn goes round already, and a manual group sends to one member
-  // how long a group's member may take to its first token (provider.Group.FirstToken)
+  // how long a group's member may take to its first token, as the default
+  // for every group has it (settings' groupFirstToken: 0 waits)
   const FIRST_OPTS = [[0, "Wait"], [30, "30 s"], [60, "1 min"], [120, "2 min"]];
-  // how long a request waits for a group whose every member is busy
-  // (provider.Group.Patience: 0 is the 60s default, -1 off)
+  // how long a request waits for a group whose every member is busy, as
+  // the default for every group has it (settings' groupPatience: 0 is the
+  // 60s default, -1 off)
   const PATIENCE_OPTS = [[-1, "Off"], [0, "1 min"], [120, "2 min"], [240, "4 min"]];
-  const patienceOf = (n) => n === 60 ? 0 : n || 0;
+  // a group's own (provider.Group): 0 follows the default for every group,
+  // so Wait is -1 (FirstTokenWait), 1 min a Patience of 60, and Keeps its
+  // place NoSink (jiezhengj on Discord: set once, not in each group)
+  const G_FIRST_OPTS = [[0, "Default"], [-1, "Wait"], ...FIRST_OPTS.slice(1)];
+  const G_PATIENCE_OPTS = [[0, "Default"], [-1, "Off"], [60, "1 min"], ...PATIENCE_OPTS.slice(2)];
+  const G_SINK_OPTS = [["def", "Default"], ...SINK_OPTS];
+  const sinkModeOf = (g) => g.sink ? "sink" : g.noSink ? "" : "def";
+  // the default for every group (groups.defaults), each value checked
+  const groupDefaults = () => {
+    const d = groups?.defaults || {};
+    return { sink: d.sink === true, firstToken: Number.isInteger(d.firstToken) && d.firstToken > 0 ? d.firstToken : 0,
+      patience: Number.isInteger(d.patience) && d.patience >= -1 ? d.patience : 0 };
+  };
   const patienceWord = (n) => {
+    if (n === 60) n = 0;
     const o = PATIENCE_OPTS.find(([v]) => v === (n || 0));
+    return o ? t(o[1]) : took(n * 1000);
+  };
+  const firstWord = (n) => {
+    const o = FIRST_OPTS.find(([v]) => v === Math.max(n || 0, 0));
     return o ? t(o[1]) : took(n * 1000);
   };
   const sinkable = (routing) => routing !== "rotate" && routing !== "weight" && routing !== "manual";
@@ -5908,7 +5931,7 @@ function routingPage(part) {
   // there, rather than leaving the slot empty.
   const openGroupEditor = async (g) => {
     if (groupDirty() && !(await confirmDiscard())) return false;
-    gEdit = { id: g.id, draft: { name: g.name, members: [...g.members], match: [...(g.match || [])], matched: [...(g.matched || [])], fast: [...(g.fast || [])], off: [...(g.off || [])], weights: { ...(g.weights || {}) }, effortMaps: Object.fromEntries(Object.entries(g.effortMaps || {}).map(([id, m]) => [id, { ...m }])), accounts: [...(g.accounts || [])], routing: g.routing || "", pick: g.pick || "", affinity: g.affinity || "", sink: !!g.sink, unlists: !!g.unlists, firstToken: g.firstToken || 0, patience: patienceOf(g.patience), context: g.context || 0, classifier: g.classifier || "", intentSure: g.intentSure ?? null, effort: g.effort || "", levels: [...(g.levels || [])], rules: (g.rules || []).map((r) => ({ ...r, ...(r.more?.length ? { more: [...r.more] } : {}), intent: r.intent || "", agents: [...(r.agents || [])], folders: [...(r.folders || [])], exceptFolders: [...(r.exceptFolders || [])], time: r.time ? { ...r.time, days: [...(r.time.days || [])] } : null })) } };
+    gEdit = { id: g.id, draft: { name: g.name, members: [...g.members], match: [...(g.match || [])], matched: [...(g.matched || [])], fast: [...(g.fast || [])], off: [...(g.off || [])], weights: { ...(g.weights || {}) }, effortMaps: Object.fromEntries(Object.entries(g.effortMaps || {}).map(([id, m]) => [id, { ...m }])), accounts: [...(g.accounts || [])], routing: g.routing || "", pick: g.pick || "", affinity: g.affinity || "", sink: sinkModeOf(g), unlists: !!g.unlists, firstToken: g.firstToken || 0, patience: g.patience || 0, context: g.context || 0, classifier: g.classifier || "", intentSure: g.intentSure ?? null, effort: g.effort || "", levels: [...(g.levels || [])], rules: (g.rules || []).map((r) => ({ ...r, ...(r.more?.length ? { more: [...r.more] } : {}), intent: r.intent || "", agents: [...(r.agents || [])], folders: [...(r.folders || [])], exceptFolders: [...(r.exceptFolders || [])], time: r.time ? { ...r.time, days: [...(r.time.days || [])] } : null })) } };
     renderGroups();
     return true;
   };
@@ -6096,6 +6119,7 @@ function routingPage(part) {
     replaceKeeping(gHead, head);
     drawFound();
     drawNames();
+    drawDefaults();
     const rows = [];
     if (!gSel && !own && !words.length && tpls.length) rows.push(templateCards(tpls));
     if (gSel) rows.push(selectBar(shown));
@@ -6538,6 +6562,41 @@ function routingPage(part) {
     // an open editor says what its group will be called: drawn again with it
     gNames.replaceChildren(txt, suffixSegs(() => renderGroups()));
   }
+  // drawDefaults: the default for every group that sets none of its own,
+  // saved at once as it is picked (settings' groupSink, groupFirstToken,
+  // groupPatience)
+  function drawDefaults() {
+    const def = groupDefaults();
+    const row = (box, label, hint, opts, cur, key) => {
+      const txt = el("div", "txt");
+      txt.append(el("b", "", t(label)), el("small", "", hint));
+      // a value set elsewhere (magpie settings set) that no option names
+      if (!opts.some(([v]) => v === cur)) opts = [...opts, [cur, key === "firstToken" ? firstWord(cur) : patienceWord(cur)]];
+      const pick = segs(opts.map(([v, n]) => [v, t(n)]), cur, (v) => setDefaults({ ...def, [key]: v }));
+      pick.setAttribute("aria-label", t(label));
+      box.replaceChildren(txt, pick);
+    };
+    row(gDefs[0], "Rate limited", t(SINK_HINT[def.sink ? "sink" : ""]), SINK_OPTS, def.sink ? "sink" : "", "sink");
+    row(gDefs[1], "Slow to start", def.firstToken > 0
+      ? t("A member that hasn't begun answering after {n} — no text, reasoning or tool call yet — is let go and the next one asked, before any of it reaches the agent. Let go once, it doesn't rest; let go twice in a row, its model rests on that account, a minute and longer each time, until it answers again. The last one left is always waited for. Only for streamed requests.", { n: took(def.firstToken * 1000) })
+      : t("Every member is waited for, however long it takes to begin answering."), FIRST_OPTS, def.firstToken, "firstToken");
+    row(gDefs[2], "Every member busy", def.patience < 0
+      ? t("When every member has failed, the agent gets the last one's error at once.")
+      : t("When every member has failed with an error that may pass — overloaded, unavailable, rate limited for a moment — and nothing of the reply has reached the agent, each is asked again after a pause, longer each time and never shorter than the vendor asks, for up to {n} more. A streaming agent is kept waiting meanwhile.", { n: patienceWord(def.patience) }),
+      PATIENCE_OPTS, def.patience === 60 ? 0 : def.patience, "patience");
+  }
+  async function setDefaults(d) {
+    try {
+      const next = groupsFrom(await api("groups/defaults", { sink: d.sink === true || d.sink === "sink", firstToken: d.firstToken, patience: d.patience }));
+      groups.defaults = next.defaults;
+      drawDefaults();
+      // an open editor's Default rows say the value they follow
+      if (gEdit) renderGroups();
+    } catch (e) {
+      status(e.message, "err");
+      drawDefaults();
+    }
+  }
   async function setFound(on, s) {
     if (groupDirty() && !(await confirmDiscard())) return;
     s.classList.toggle("on", on);
@@ -6669,7 +6728,7 @@ function routingPage(part) {
         closeProtoMenu();
         if (v === cur || (groupDirty() && !(await confirmDiscard()))) return b.focus({ preventScroll: true });
         const n = opts.find(([id]) => id === v)?.[1] || v;
-        await groupAction("save", { id: g.id, name: g.name, members: namedOf(g), match: g.match || [], routing: v, pick: g.pick || "", affinity: g.affinity || "", sink: !!g.sink && sinkable(v), firstToken: g.firstToken || 0, patience: g.patience || 0, rules: g.rules || [], effort: g.effort || "", classifier: g.classifier || "", intentSure: g.intentSure ?? null, context: g.context || 0, levels: g.levels || [], family: g.family || "", fast: g.fast || [], off: g.off || [], weights: g.weights || {}, effortMaps: g.effortMaps || {}, accounts: g.accounts || [], unlists: !!g.unlists },
+        await groupAction("save", { id: g.id, name: g.name, members: namedOf(g), match: g.match || [], routing: v, pick: g.pick || "", affinity: g.affinity || "", sink: !!g.sink && sinkable(v), noSink: !!g.noSink, firstToken: g.firstToken || 0, patience: g.patience || 0, rules: g.rules || [], effort: g.effort || "", classifier: g.classifier || "", intentSure: g.intentSure ?? null, context: g.context || 0, levels: g.levels || [], family: g.family || "", fast: g.fast || [], off: g.off || [], weights: g.weights || {}, effortMaps: g.effortMaps || {}, accounts: g.accounts || [], unlists: !!g.unlists },
           t("{name}: {routing}", { name: g.name, routing: t(n) }));
         // the rows were drawn anew: the keyboard stays on this one's routing
         gList.querySelector(`.rt-group[data-id="${CSS.escape(g.id)}"] .rt-groute`)?.focus({ preventScroll: true });
@@ -6802,7 +6861,7 @@ function routingPage(part) {
       b.onclick = (e) => {
         e.stopPropagation(); // the card opens the editor; this picks
         if (on) return;
-        groupAction("save", { id: g.id, name: g.name, members: namedOf(g), match: g.match || [], routing: "manual", pick: id, affinity: g.affinity || "", sink: !!g.sink, firstToken: g.firstToken || 0, patience: g.patience || 0, rules: g.rules || [], effort: g.effort || "", classifier: g.classifier || "", intentSure: g.intentSure ?? null, context: g.context || 0, levels: g.levels || [], family: g.family || "", fast: g.fast || [], off: g.off || [], weights: g.weights || {}, effortMaps: g.effortMaps || {}, accounts: g.accounts || [], unlists: !!g.unlists },
+        groupAction("save", { id: g.id, name: g.name, members: namedOf(g), match: g.match || [], routing: "manual", pick: id, affinity: g.affinity || "", sink: !!g.sink, noSink: !!g.noSink, firstToken: g.firstToken || 0, patience: g.patience || 0, rules: g.rules || [], effort: g.effort || "", classifier: g.classifier || "", intentSure: g.intentSure ?? null, context: g.context || 0, levels: g.levels || [], family: g.family || "", fast: g.fast || [], off: g.off || [], weights: g.weights || {}, effortMaps: g.effortMaps || {}, accounts: g.accounts || [], unlists: !!g.unlists },
           t("{name}: every request to {model}", { name: g.name, model: memberName(id) }));
       };
       box.append(b);
@@ -7317,11 +7376,14 @@ function routingPage(part) {
     ed.append(el("label", "", t("Routing")), rw);
     // one rate limited with quota left: its place, or the back
     const kHint = el("div", "hint"), kw = el("div", "sink-wrap"), kLab = el("label", "", t("Rate limited"));
+    // Default follows the setting for every group, under the list
     const drawSink = () => {
-      kHint.textContent = t(SINK_HINT[d.sink ? "sink" : ""]);
+      const mode = d.sink ?? "def", def = mode === "def";
+      const sinks = def ? groupDefaults().sink : mode === "sink";
+      kHint.textContent = (def ? t("As set for every group under the list: {v}.", { v: t(SINK_OPTS[sinks ? 1 : 0][1]) }) + " " : "") + t(SINK_HINT[sinks ? "sink" : ""]);
       kLab.hidden = kw.hidden = !sinkable(d.routing);
     };
-    const kPick = segs(SINK_OPTS.map(([id, n]) => [id, t(n)]), d.sink ? "sink" : "", (v) => { d.sink = v === "sink"; drawSink(); });
+    const kPick = segs(G_SINK_OPTS.map(([id, n]) => [id, t(n)]), d.sink ?? "def", (v) => { d.sink = v; drawSink(); });
     kPick.classList.add("sink-pick");
     kw.append(kPick, kHint);
     ed.append(kLab, kw);
@@ -7337,17 +7399,18 @@ function routingPage(part) {
     firstIn.setAttribute("aria-describedby", fHint.id);
     const firstUnit = el("span", "first-unit", t("min"));
     const firstMins = (s) => String(+(s / 60).toFixed(2));
-    let firstMode = FIRST_OPTS.some(([n]) => n === (d.firstToken || 0)) ? d.firstToken || 0 : "custom";
+    let firstMode = G_FIRST_OPTS.some(([n]) => n === (d.firstToken || 0)) ? d.firstToken || 0 : "custom";
     if (firstMode === "custom") firstIn.value = firstMins(d.firstToken);
     let firstErr = "";
     const drawFirst = () => {
       firstIn.hidden = firstUnit.hidden = firstMode !== "custom";
       firstIn.setAttribute("aria-invalid", String(!!firstErr));
-      fHint.textContent = firstErr || (d.firstToken
-        ? t("A member that hasn't begun answering after {n} — no text, reasoning or tool call yet — is let go and the next one asked, before any of it reaches the agent. Let go once, it doesn't rest; let go twice in a row, its model rests on that account, a minute and longer each time, until it answers again. The last one left is always waited for. Only for streamed requests.", { n: took(d.firstToken * 1000) })
+      const own = d.firstToken || 0, first = own || groupDefaults().firstToken;
+      fHint.textContent = firstErr || (own ? "" : t("As set for every group under the list: {v}.", { v: firstWord(first) }) + " ") + (first > 0
+        ? t("A member that hasn't begun answering after {n} — no text, reasoning or tool call yet — is let go and the next one asked, before any of it reaches the agent. Let go once, it doesn't rest; let go twice in a row, its model rests on that account, a minute and longer each time, until it answers again. The last one left is always waited for. Only for streamed requests.", { n: took(first * 1000) })
         : t("Every member is waited for, however long it takes to begin answering."));
     };
-    fw.append(segs([...FIRST_OPTS.map(([n, l]) => [n, t(l)]), ["custom", t("Custom")]], firstMode, (v) => {
+    fw.append(segs([...G_FIRST_OPTS.map(([n, l]) => [n, t(l)]), ["custom", t("Custom")]], firstMode, (v) => {
       firstErr = "";
       firstMode = v;
       if (v !== "custom") d.firstToken = +v;
@@ -7371,10 +7434,13 @@ function routingPage(part) {
     // every member busy at once: the agent told, or the members asked
     // again within a budget (#1418)
     const patHint = el("div", "hint"), patW = el("div");
-    const drawPatience = () => patHint.textContent = d.patience < 0
+    const drawPatience = () => {
+      const own = d.patience || 0, pat = own || groupDefaults().patience;
+      patHint.textContent = (own ? "" : t("As set for every group under the list: {v}.", { v: patienceWord(pat) }) + " ") + (pat < 0
       ? t("When every member has failed, the agent gets the last one's error at once.")
-      : t("When every member has failed with an error that may pass — overloaded, unavailable, rate limited for a moment — and nothing of the reply has reached the agent, each is asked again after a pause, longer each time and never shorter than the vendor asks, for up to {n} more. A streaming agent is kept waiting meanwhile.", { n: patienceWord(d.patience) });
-    patW.append(segs(PATIENCE_OPTS.map(([n, l]) => [n, t(l)]), d.patience || 0, (v) => { d.patience = +v; drawPatience(); }), patHint);
+      : t("When every member has failed with an error that may pass — overloaded, unavailable, rate limited for a moment — and nothing of the reply has reached the agent, each is asked again after a pause, longer each time and never shorter than the vendor asks, for up to {n} more. A streaming agent is kept waiting meanwhile.", { n: patienceWord(pat) }));
+    };
+    patW.append(segs(G_PATIENCE_OPTS.map(([n, l]) => [n, t(l)]), d.patience || 0, (v) => { d.patience = +v; drawPatience(); }), patHint);
     ed.append(el("label", "", t("Every member busy")), patW);
     drawPatience();
     // the window agents are told: the largest member's, the smallest's, or
@@ -8136,7 +8202,7 @@ function routingPage(part) {
       if (own && !d.levels.length) return status(t("Pick a level to offer, or leave them to its models"), "warn");
       saveBtn.classList.add("busy");
       // refused, Add can be pressed again (busy, it takes no clicks)
-      groupAction("save", { id: idOf(), from: g?.id, name: d.name.trim() || idOf(), members: namedOf(d), placed: d.members, match: d.match, routing: d.routing, pick: d.pick || "", affinity: d.affinity, sink: !!d.sink && sinkable(d.routing), firstToken: d.firstToken || 0, patience: d.patience || 0, rules: d.rules, effort: d.effort, classifier: d.rules.some((r) => r.intent) || d.effort === "auto" ? d.classifier : "", intentSure: d.intentSure ?? null, context: d.context || 0, levels: own ? d.levels : [], family: g?.family || "", fast: d.fast.filter((x) => d.members.includes(x)), off: d.off.filter((x) => d.members.includes(x)), weights: Object.fromEntries(Object.entries(d.weights).filter(([x, n]) => d.members.includes(x) && n > 1)), effortMaps: Object.fromEntries(Object.entries(d.effortMaps).filter(([x, m]) => d.members.includes(x) && Object.keys(m).length)), accounts: d.accounts.filter((a) => accountPids().includes(a.slice(0, a.indexOf("/")))), unlists: !!d.unlists }, t(g ? "{name} saved" : "{name} added", { name: d.name.trim() || idOf() }))
+      groupAction("save", { id: idOf(), from: g?.id, name: d.name.trim() || idOf(), members: namedOf(d), placed: d.members, match: d.match, routing: d.routing, pick: d.pick || "", affinity: d.affinity, sink: d.sink === "sink" && sinkable(d.routing), noSink: d.sink === "", firstToken: d.firstToken || 0, patience: d.patience || 0, rules: d.rules, effort: d.effort, classifier: d.rules.some((r) => r.intent) || d.effort === "auto" ? d.classifier : "", intentSure: d.intentSure ?? null, context: d.context || 0, levels: own ? d.levels : [], family: g?.family || "", fast: d.fast.filter((x) => d.members.includes(x)), off: d.off.filter((x) => d.members.includes(x)), weights: Object.fromEntries(Object.entries(d.weights).filter(([x, n]) => d.members.includes(x) && n > 1)), effortMaps: Object.fromEntries(Object.entries(d.effortMaps).filter(([x, m]) => d.members.includes(x) && Object.keys(m).length)), accounts: d.accounts.filter((a) => accountPids().includes(a.slice(0, a.indexOf("/")))), unlists: !!d.unlists }, t(g ? "{name} saved" : "{name} added", { name: d.name.trim() || idOf() }))
         .then(() => saveBtn.classList.remove("busy"));
     };
     // what goes wrong is said where it is seen, never a click that does nothing

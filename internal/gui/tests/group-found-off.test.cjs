@@ -96,7 +96,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         return [...s.children].map((c) => c.className).filter((c) => c !== "rt-goff");
       });
       assert.deepEqual(order.slice(0, 4), ["row-head", "list rt-groups", "row-head rt-gset-head", "list rt-gset"]);
-      assert.deepEqual(await page.evaluate(() => [...document.querySelector(".rt-gset").children].map((c) => c.className)), ["rt-gfound", "rt-gnames"]);
+      assert.deepEqual(await page.evaluate(() => [...document.querySelector(".rt-gset").children].map((c) => c.className)), ["rt-gfound", "rt-gnames", "rt-gdef rt-gdef-sink", "rt-gdef rt-gdef-first", "rt-gdef rt-gdef-patience"]);
       const border = await sw.evaluate((e) => { const c = getComputedStyle(e); return c.borderLeftWidth !== c.borderRightWidth || c.borderLeftColor !== c.borderRightColor; });
       assert.equal(border, false, "no left-border accent");
 

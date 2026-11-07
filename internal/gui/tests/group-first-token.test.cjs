@@ -1,11 +1,12 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // A routing group may let a member go that is slow to begin its answer
 // (Chen on X: every answer waits on a slow vendor). The group editor's
-// "Slow to start" row picks Wait, 30 s, 1 min or 2 min, or Custom and as
-// many minutes as are typed (Kismet Alan on Discord), its hint saying what
-// each does; saved, the group is sent with firstToken in seconds and its
-// card says "Next after 60 s without a first token". Wait sends 0 and the
-// card says nothing. In five languages, Chromium and WebKit, at 1100 and 420.
+// "Slow to start" row picks Default (what the Settings card under the list
+// sets for every group, sent as 0), Wait (the group's own, sent as -1),
+// 30 s, 1 min or 2 min, or Custom and as many minutes as are typed (Kismet
+// Alan on Discord), its hint saying what each does; saved, the group is
+// sent with firstToken in seconds and its card says "Next after 60 s
+// without a first token". Wait and Default leave the card saying nothing. In five languages, Chromium and WebKit, at 1100 and 420.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -27,11 +28,11 @@ const groups = () => ({
 });
 
 const words = {
-  en: { edit: "Edit", save: "Save", label: "Slow to start", wait: "Wait", min: "1 min", tag: "Next after 60 s without a first token", waits: "Every member is waited for" },
-  zh: { edit: "编辑", save: "保存", label: "迟迟不出字", wait: "一直等", min: "1 分钟", tag: "60 秒 无首字换下一个", waits: "每个成员都会一直等" },
-  "zh-TW": { edit: "編輯", save: "儲存", label: "遲遲不出字", wait: "一直等", min: "1 分鐘", tag: "60 秒 無首字換下一個", waits: "每個成員都會一直等" },
-  ja: { edit: "編集", save: "保存", label: "応答開始が遅いとき", wait: "待つ", min: "1 分", tag: "最初のトークンが 60 秒 なければ次へ", waits: "どのメンバーも" },
-  de: { edit: "Bearbeiten", save: "Speichern", label: "Langsamer Start", wait: "Warten", min: "1 Min.", tag: "Nächstes nach 60 s ohne erstes Token", waits: "Auf jedes Mitglied wird gewartet" },
+  en: { dflt: "Default", edit: "Edit", save: "Save", label: "Slow to start", wait: "Wait", min: "1 min", tag: "Next after 60 s without a first token", waits: "Every member is waited for" },
+  zh: { dflt: "默认", edit: "编辑", save: "保存", label: "迟迟不出字", wait: "一直等", min: "1 分钟", tag: "60 秒 无首字换下一个", waits: "每个成员都会一直等" },
+  "zh-TW": { dflt: "預設", edit: "編輯", save: "儲存", label: "遲遲不出字", wait: "一直等", min: "1 分鐘", tag: "60 秒 無首字換下一個", waits: "每個成員都會一直等" },
+  ja: { dflt: "デフォルト", edit: "編集", save: "保存", label: "応答開始が遅いとき", wait: "待つ", min: "1 分", tag: "最初のトークンが 60 秒 なければ次へ", waits: "どのメンバーも" },
+  de: { dflt: "Standard", edit: "Bearbeiten", save: "Speichern", label: "Langsamer Start", wait: "Warten", min: "1 Min.", tag: "Nächstes nach 60 s ohne erstes Token", waits: "Auf jedes Mitglied wird gewartet" },
 };
 const custom = { en: "Custom", zh: "自定义", "zh-TW": "自定義", ja: "カスタム", de: "Benutzerdefiniert" };
 
@@ -112,8 +113,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const row = ed.locator("label", { hasText: w.label }).locator("xpath=following-sibling::div[1]");
       await row.waitFor();
       await reach(row);
-      assert.equal(await row.locator(".opt.on").textContent(), w.wait);
-      assert((await row.locator(".hint").textContent()).startsWith(w.waits));
+      assert.equal(await row.locator(".opt.on").textContent(), w.dflt, "a group that sets none follows the default");
+      assert((await row.locator(".hint").textContent()).includes(w.waits));
       await row.locator(".opt", { hasText: w.min }).click();
       const secs = (n) => page.evaluate((n) => t("{n} s", { n }), n);
       assert((await row.locator(".hint").textContent()).includes(await secs(60)));
@@ -125,7 +126,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await reach(row);
       assert.equal(await row.locator(".opt.on").textContent(), w.min, "the editor opens at what was saved");
       await row.locator(".opt", { hasText: w.wait }).click();
-      assert.equal((await save()).firstToken, 0);
+      assert.equal((await save()).firstToken, -1, "Wait is the group's own");
       await page.waitForFunction((tag) => ![...document.querySelectorAll(".rt-group .tag")].some((x) => x.textContent === tag), w.tag);
 
       // Custom: as many minutes as are typed, from 5 when it was Wait
@@ -166,6 +167,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await row.locator(".opt", { hasText: w.min }).click();
       assert.equal(await minutes.isVisible(), false);
       assert.equal((await save()).firstToken, 60);
+
+      await (await reach(card.locator("button", { hasText: w.edit }))).click();
+      await row.waitFor();
+      await reach(row);
+      await row.locator(".opt", { hasText: w.dflt }).click();
+      assert.equal((await save()).firstToken, 0, "the default is saved as none set");
 
       const missing = await page.evaluate(() => [
         "Wait", "30 s", "1 min", "2 min", "Slow to start", "slow to start", "Next after {n} without a first token",

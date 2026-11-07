@@ -149,15 +149,44 @@ const (
 )
 
 // Waits is how long a request to the group may be kept for its members to
-// come back (Patience), 0 for not at all.
+// come back (Patience), 0 for not at all. A group that sets none follows
+// the default for every group (settings' GroupPatience, jiezhengj on
+// Discord), PatienceDefault while that is unset too.
 func (g Group) Waits() time.Duration {
+	n := g.Patience
+	if n == 0 {
+		n = settings.Load().GroupPatience
+	}
 	switch {
-	case g.Patience < 0:
+	case n < 0:
 		return 0
-	case g.Patience == 0:
+	case n == 0:
 		return PatienceDefault * time.Second
 	}
-	return time.Duration(min(g.Patience, PatienceLongest)) * time.Second
+	return time.Duration(min(n, PatienceLongest)) * time.Second
+}
+
+// FirstTokenWait is a group's FirstToken when the user picked Wait for it
+// itself: every member waited for, whatever the default for every group.
+// 0 is a group that sets nothing, which follows that default.
+const FirstTokenWait = -1
+
+// FirstTokenOr is the seconds the group lets a member take to its first
+// content: its own FirstToken, else the default for every group
+// (settings' GroupFirstToken); 0 or less waits as long as it takes.
+func (g Group) FirstTokenOr() int {
+	if g.FirstToken != 0 {
+		return g.FirstToken
+	}
+	return settings.Load().GroupFirstToken
+}
+
+// Sinks is whether one of the group's accounts or keys rate limited with
+// quota left goes to the back (Sink): the group's own word, Sink or
+// NoSink, else the default for every group (settings' GroupSink). Whether
+// its routing can sink at all is the gateway's to say.
+func (g Group) Sinks() bool {
+	return g.Sink || !g.NoSink && settings.Load().GroupSink
 }
 
 // ContextSmallest is a group's Context when agents are told the window of
@@ -192,19 +221,25 @@ type Group struct {
 	// together: one rate limited with quota left goes behind every other
 	// member's. Not for "rotate" or Manual.
 	Sink bool `json:"sink,omitempty"`
+	// NoSink is the user's Keeps its place for the group itself: none
+	// sinks, whatever the default for every group says (Sinks). Neither
+	// set, the group follows that default.
+	NoSink bool `json:"noSink,omitempty"`
 	// FirstToken is how many seconds a member's streamed reply may take to
 	// its first content — text, reasoning or a tool call — before the next
-	// member is asked instead, nothing of it having reached the agent; 0
-	// waits as long as it takes. The last one left is always waited for,
-	// and the slow one doesn't rest.
+	// member is asked instead, nothing of it having reached the agent;
+	// FirstTokenWait waits as long as it takes, and 0 follows the default
+	// for every group (FirstTokenOr). The last one left is always waited
+	// for, and the slow one doesn't rest.
 	FirstToken int `json:"firstToken,omitempty"`
 	// Patience is how many seconds more a request may be kept, once every
 	// member has failed and nothing of a reply has been sent, for the
 	// members that failed in a way that passes —
 	// busy, overloaded, rate limited for a moment — to be asked again
-	// after a pause, in turn, until one answers (#1418). 0 is
-	// PatienceDefault; PatienceOff gives the agent the last one's error
-	// once each has been asked.
+	// after a pause, in turn, until one answers (#1418). 0 follows the
+	// default for every group, PatienceDefault while that is unset (Waits);
+	// PatienceOff gives the agent the last one's error once each has been
+	// asked.
 	Patience int `json:"patience,omitempty"`
 	// Off are the members switched off: kept where they are in the
 	// order, with their rules, but sent nothing until switched on again,
@@ -1526,7 +1561,10 @@ func SaveGroup(g Group) error {
 	if g.Name == "" {
 		g.Name = g.ID
 	}
-	g.FirstToken = max(g.FirstToken, 0)
+	g.FirstToken = max(g.FirstToken, FirstTokenWait)
+	if g.Sink {
+		g.NoSink = false
+	}
 	if g.Patience < 0 {
 		g.Patience = PatienceOff
 	}

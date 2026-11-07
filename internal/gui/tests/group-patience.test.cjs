@@ -2,9 +2,11 @@
 // A routing group whose every member is busy at once — overloaded,
 // unavailable, rate limited for a moment — asks them again within a budget
 // rather than handing the agent the last one's error (#1418, Aliceonly).
-// The group editor's "Every member busy" row picks Off, 1 min (the
-// default, saved as 0), 2 min or 4 min, its hint saying what each does;
-// saved, the group is sent with patience in seconds, -1 for off. In
+// The group editor's "Every member busy" row picks Default (what the
+// Settings card under the list sets for every group, saved as 0), Off,
+// 1 min (saved as 60, the group's own), 2 min or 4 min, its hint saying
+// what each does; saved, the group is sent with patience in seconds, -1
+// for off. In
 // English and Chinese, Chromium and WebKit; every string has its Chinese,
 // Traditional Chinese, Japanese and German.
 const assert = require("node:assert/strict");
@@ -27,8 +29,8 @@ const groups = () => ({
 });
 
 const words = {
-  en: { edit: "Edit", save: "Save", label: "Every member busy", off: "Off", def: "1 min", four: "4 min", on: "each is asked again after a pause", offHint: "gets the last one's error at once" },
-  zh: { edit: "编辑", save: "保存", label: "成员全都忙", off: "关闭", def: "1 分钟", four: "4 分钟", on: "依次再问一遍每个成员", offHint: "立刻拿到最后一个的错误" },
+  en: { edit: "Edit", save: "Save", label: "Every member busy", dflt: "Default", off: "Off", def: "1 min", four: "4 min", on: "each is asked again after a pause", offHint: "gets the last one's error at once" },
+  zh: { edit: "编辑", save: "保存", label: "成员全都忙", dflt: "默认", off: "关闭", def: "1 分钟", four: "4 分钟", on: "依次再问一遍每个成员", offHint: "立刻拿到最后一个的错误" },
 };
 
 function serve(lang, posts) {
@@ -96,7 +98,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         return row;
       };
       let row = await open();
-      assert.equal(await row.locator(".opt.on").textContent(), w.def, "1 min by default");
+      assert.equal(await row.locator(".opt.on").textContent(), w.dflt, "a group that sets none follows the default");
       assert((await row.locator(".hint").textContent()).includes(w.on));
       await row.locator(".opt", { hasText: w.four }).click();
       assert((await row.locator(".hint").textContent()).includes(lang === "zh" ? "4 分" : "4 min"));
@@ -111,6 +113,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       row = await open();
       assert.equal(await row.locator(".opt.on").textContent(), w.off);
       await row.locator(".opt", { hasText: w.def }).click();
+      assert.equal((await save()).patience, 60, "1 min is the group's own");
+      row = await open();
+      assert.equal(await row.locator(".opt.on").textContent(), w.def);
+      await row.locator(".opt", { hasText: w.dflt }).click();
       assert.equal((await save()).patience, 0, "the default is saved as none set");
 
       const missing = await page.evaluate(() => {

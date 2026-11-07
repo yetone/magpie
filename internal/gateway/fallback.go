@@ -590,7 +590,7 @@ func planFallbackGroup(g provider.Group, ms []provider.Member, from provider.Pro
 	var asides []candidate
 	var wAsides []Weighed
 	out := planLevel(g, ms, 0, from, pl, &asides, &wAsides, []provider.Group{g})
-	if sinks(g.Sink, g.Routing) {
+	if sinks(g.Sinks(), g.Routing) {
 		var order []Weighed
 		out, order = sinkPlanned(out, pl.order[at:])
 		pl.order = append(pl.order[:at], order...)
@@ -625,7 +625,7 @@ func (s *Server) planGroup(g provider.Group, ms []provider.Member, from provider
 	var asides []candidate
 	var wAsides []Weighed
 	out := planLevel(g, ms, 0, from, &pl, &asides, &wAsides, nil)
-	if sinks(g.Sink, g.Routing) {
+	if sinks(g.Sinks(), g.Routing) {
 		out, pl.order = sinkPlanned(out, pl.order)
 	}
 	out, pl.order = append(out, asides...), append(pl.order, wAsides...)
@@ -652,10 +652,11 @@ func placed(ms []provider.Member, cs []candidate) {
 }
 
 // innerFirstToken is the FirstToken of the innermost group m is in
-// (m.Via, the outermost first) that sets one, 0 for none.
+// (m.Via, the outermost first) that sets one, 0 for none:
+// provider.FirstTokenWait counts as set, so an inner Wait waits.
 func innerFirstToken(m provider.Member) int {
 	for i := len(m.Via) - 1; i >= 0; i-- {
-		if m.Via[i].FirstToken > 0 {
+		if m.Via[i].FirstToken != 0 {
 			return m.Via[i].FirstToken
 		}
 	}
@@ -875,7 +876,7 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 // (#576) and rules, and its Sink was left unread, only the group the
 // agent asked for sinking.
 func sinkOwn(sub provider.Group, cs []candidate, order []Weighed) ([]candidate, []Weighed) {
-	if !sinks(sub.Sink, sub.Routing) {
+	if !sinks(sub.Sinks(), sub.Routing) {
 		return cs, order
 	}
 	return sinkPlanned(cs, order)

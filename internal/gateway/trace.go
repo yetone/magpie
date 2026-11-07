@@ -273,7 +273,7 @@ type NestedRule struct {
 
 // groupRef is the trace's g, with its models ms.
 func groupRef(g provider.Group, ms []provider.Member) *GroupRef {
-	ref := &GroupRef{ID: g.ID, Ref: g.Ref(), Name: g.Name, Routing: g.Routing, Affinity: g.Affinity, Auto: g.Auto, Sink: sinks(g.Sink, g.Routing)}
+	ref := &GroupRef{ID: g.ID, Ref: g.Ref(), Name: g.Name, Routing: g.Routing, Affinity: g.Affinity, Auto: g.Auto, Sink: sinks(g.Sinks(), g.Routing)}
 	seen := map[string]bool{}
 	for _, m := range ms {
 		ref.Members = append(ref.Members, m.Spelled())
