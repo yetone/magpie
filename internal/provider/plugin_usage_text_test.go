@@ -38,3 +38,27 @@ func TestPluginTextRowIsText(t *testing.T) {
 		t.Fatalf("json %s", s)
 	}
 }
+
+// Google AI Studio's plugin (magpie-gemini-web's ai-studio) reports no
+// allowance, only the models its accounts cool down on, beside two lines
+// about its local service: its proxy and its admin page. With nothing
+// cooling those lines are all its card has, and each is text, which the
+// menu bar has no figure for and Settings leaves out of its picker
+// (LuckymanJC on Discord); a cooldown is a reading.
+func TestAIStudioServiceLinesAreText(t *testing.T) {
+	service := []plugin.UsageWindow{
+		{Name: "代理出口", Display: "不走代理（未设置）"},
+		{Name: "管理页", Display: "http://127.0.0.1:5000（用户名 admin）"},
+	}
+	q := quotaOfPlugin(SubscriptionQuota{Provider: "ai-studio", User: "a@gmail.com"}, plugin.Usage{Windows: service})
+	for _, w := range q.Windows {
+		if !w.Text {
+			t.Errorf("%s: not text", w.Name)
+		}
+	}
+	cooling := append([]plugin.UsageWindow{{Name: "所有模型", Used: fptr(100), ResetsAt: "2026-11-07T15:00:00Z", Display: "冷却中"}}, service...)
+	q = quotaOfPlugin(SubscriptionQuota{Provider: "ai-studio", User: "a@gmail.com"}, plugin.Usage{Windows: cooling})
+	if q.Windows[0].Text || q.Windows[0].Used != 100 {
+		t.Fatalf("cooldown %+v", q.Windows[0])
+	}
+}
