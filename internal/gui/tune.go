@@ -96,6 +96,11 @@ type tuneAgent struct {
 type tuneState struct {
 	Days   int         `json:"days"`
 	Agents []tuneAgent `json:"agents"`
+	// Gateway: in gateway mode the agents are on other computers, and
+	// their session files and settings aren't here to replay or change
+	// (linkaww on Discord: a Docker magpie's Claude Code card said 0
+	// calls beside the requests it routed); the page leaves the card out
+	Gateway bool `json:"gateway,omitempty"`
 }
 
 // tuneOf works the advice out of the calls the agents' files hold.
@@ -331,12 +336,28 @@ func tuneRoutes(mux *http.ServeMux) {
 		if days <= 0 || days > 30 {
 			days = 7
 		}
+		if ownSessionsOff() {
+			writeJSON(rw, tuneState{Days: days, Agents: []tuneAgent{}, Gateway: true})
+			return
+		}
 		writeJSON(rw, tuneFor(days))
 	})
+	// what Tuned for you changes is this computer's agents' settings,
+	// which in gateway mode serve none of the requests it was shown for
+	gatewayRefused := func(rw http.ResponseWriter) bool {
+		if !ownSessionsOff() {
+			return false
+		}
+		http.Error(rw, "gateway mode: the agents are on other computers; tune them there", http.StatusConflict)
+		return true
+	}
 	type change struct {
 		Agent, Knob, Model, Value string
 	}
 	mux.HandleFunc("POST /api/tune/apply", func(rw http.ResponseWriter, r *http.Request) {
+		if gatewayRefused(rw) {
+			return
+		}
 		var in change
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)
@@ -366,6 +387,9 @@ func tuneRoutes(mux *http.ServeMux) {
 		writeJSON(rw, settingsState())
 	})
 	mux.HandleFunc("POST /api/tune/undo", func(rw http.ResponseWriter, r *http.Request) {
+		if gatewayRefused(rw) {
+			return
+		}
 		var in change
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)

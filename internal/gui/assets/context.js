@@ -1472,6 +1472,8 @@
   }
 
   function renderTune(pane) {
+    // gateway mode: the agents and their files are on other computers
+    if (tuneData?.gateway || !tuneData && gatewayMode) return;
     const head = el("div", "row-head ctx-sess-head");
     head.append(el("span", "label", t("Tuned for you")), el("span", "grow"));
     pane.append(head);
@@ -1501,7 +1503,7 @@
     if (read !== tuneRead) return;
     const json = JSON.stringify(data);
     if (!force && tuneData && json === tuneJSON) return;
-    tuneData = { days: +data.days || +days, agents: objs(data?.agents).map((a) => ({ ...a, advice: objs(a.advice).filter((r) => obj(r.compact) || obj(r.ttl) || r.few).map((r) => ({ ...r, setting: obj(r.setting) ? r.setting : {} })) })) }, tuneJSON = json;
+    tuneData = { days: +data.days || +days, gateway: !!data?.gateway, agents: objs(data?.agents).map((a) => ({ ...a, advice: objs(a.advice).filter((r) => obj(r.compact) || obj(r.ttl) || r.few).map((r) => ({ ...r, setting: obj(r.setting) ? r.setting : {} })) })) }, tuneJSON = json;
     renderContext();
   }
 

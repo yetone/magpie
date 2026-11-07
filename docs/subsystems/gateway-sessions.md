@@ -375,7 +375,11 @@ The stats' `keys` name these sessions too (`MergeExternalStats`), since
 Usage › Sessions lists only the keys it is given (linkaww on Discord: a
 Docker magpie in gateway mode listed almost none;
 `TestGatewayStatsNameTheGatewaySessions`,
-`TestGatewayModeStatsNameTheGatewaySessions`).
+`TestGatewayModeStatsNameTheGatewaySessions`). Usage › Context's Tuned for
+you is left out (`/api/tune` says `gateway: true`, and Use and Undo are
+refused): it replays this computer's agent files, so it said Claude Code
+made 0 requests (`TestTuneInGatewayModeIsLeftOut`,
+`context-tune-gateway.test.cjs`).
 The app's windows are never in gateway mode. Tests:
 `TestGatewayModeListsNoOwnSessions`, `gateway-mode-sessions.test.cjs`.
 
