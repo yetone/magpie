@@ -146,6 +146,90 @@ func TestSpendExpiringCodexResets(t *testing.T) {
 	}
 }
 
+// The checks and the spend are of the same reset (#5555): a card that
+// passed them and vanished by the spend's own read is never replaced by
+// another — the spend reads the account's cards afresh, and one the
+// checks had passed gone from that read spends nothing, not the card
+// that runs out later (which is no more due to be spent). The list is
+// read three times on the way to a spend: the look's, the read again
+// under the lock, and the spend's own — only the last one loses the
+// card. The week at 43% is used, none of it spent, so the account never
+// counts as used up.
+func TestExpiringSpendKeptToTheCreditChecked(t *testing.T) {
+	signIn(t)
+	old, oldUntil := expiring.next, expiring.until
+	expiring.next, expiring.until = map[string]time.Time{}, map[string]time.Time{}
+	t.Cleanup(func() { expiring.next, expiring.until = old, oldUntil })
+	soon := time.Now().Add(20 * time.Minute).UTC().Format(time.RFC3339)
+	later := time.Now().Add(30 * 24 * time.Hour).UTC().Format(time.RFC3339)
+	var reads, consumed atomic.Int32
+	var spentID string
+	// every read from the spend's own on leaves the expired card out, as
+	// the vendor's list would
+	expireSoon := atomic.Bool{}
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/backend-api/wham/usage":
+			json.NewEncoder(w).Encode(map[string]any{"plan_type": "pro",
+				"rate_limit": map[string]any{
+					"primary_window":   map[string]any{"used_percent": 0, "limit_window_seconds": 18000},
+					"secondary_window": map[string]any{"used_percent": 43, "limit_window_seconds": 604800, "reset_at": time.Now().Add(72 * time.Hour).Unix()}},
+				"rate_limit_reset_credits": map[string]any{"available_count": 2}})
+		case "/backend-api/wham/rate-limit-reset-credits":
+			credits := []any{
+				map[string]any{"id": "later", "status": "available", "expires_at": later},
+				map[string]any{"id": "soon", "status": "available", "expires_at": soon},
+			}
+			if expireSoon.Load() && reads.Add(1) > 2 { // the spend's own read: "soon" expired and went
+				credits = credits[:1]
+			}
+			json.NewEncoder(w).Encode(map[string]any{"available_count": len(credits), "credits": credits})
+		case "/backend-api/wham/rate-limit-reset-credits/consume":
+			consumed.Add(1)
+			var b struct {
+				Credit string `json:"credit_id"`
+			}
+			json.NewDecoder(r.Body).Decode(&b)
+			spentID = b.Credit
+			json.NewEncoder(w).Encode(map[string]any{"code": "reset", "windows_reset": 2})
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	t.Cleanup(fake.Close)
+	oldBase := CodexBase
+	CodexBase = fake.URL + "/backend-api/codex"
+	t.Cleanup(func() { CodexBase = oldBase })
+	if err := SetCodexAutoReset("me@example.com", true); err != nil {
+		t.Fatal(err)
+	}
+	due := func() {
+		expiring.Lock()
+		expiring.next["me@example.com"] = time.Time{}
+		expiring.Unlock()
+	}
+
+	expireSoon.Store(true)
+	SpendExpiringCodexResets(t.Context())
+	if consumed.Load() != 0 {
+		t.Fatalf("spent %d (%q): the card that ran out was replaced by one the checks never passed", consumed.Load(), spentID)
+	}
+	// the account is looked at again soon: the next pass sees "later" alone,
+	// which isn't due to be spent, and still spends nothing
+	due()
+	SpendExpiringCodexResets(t.Context())
+	if consumed.Load() != 0 {
+		t.Fatalf("spent %d (%q) with no card about to run out", consumed.Load(), spentID)
+	}
+	// the checks and the spend of the same card: nothing gone, that one is spent
+	expireSoon.Store(false)
+	due()
+	SpendExpiringCodexResets(t.Context())
+	if consumed.Load() != 1 || spentID != "soon" {
+		t.Fatalf("spent %d (%q), want the one that runs out first", consumed.Load(), spentID)
+	}
+}
+
 // #2226 (JasonBuildAI): a Codex switched off or removed from magpie is
 // left alone in the background, so the loop reads none of its accounts'
 // allowance and spends none of their resets, even with auto-use on.
@@ -347,7 +431,7 @@ func TestExpiringSpendReadAgain(t *testing.T) {
 		"none held any more":         {blocked, &ResetCredits{}, false},
 		"run out already":            {blocked, &ResetCredits{Count: 1, Until: &now}, false},
 	} {
-		if got := spendExpiringNow(c.w, c.r, now); got != c.want {
+		if _, got := spendExpiringNow(c.w, c.r, now); got != c.want {
 			t.Errorf("%s: spendExpiringNow = %v, want %v", name, got, c.want)
 		}
 	}

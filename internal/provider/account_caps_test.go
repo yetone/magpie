@@ -243,7 +243,7 @@ func TestCapNeverSpendsACodexReset(t *testing.T) {
 	if usedUp(q, now) || !BackAt(q, now).IsZero() {
 		t.Fatal("80% read as used up")
 	}
-	if spendExpiringNow(ws, &ResetCredits{Count: 1, Until: &until}, now) {
+	if _, ok := spendExpiringNow(ws, &ResetCredits{Count: 1, Until: &until}, now); ok {
 		t.Fatal("a reset with 20 days to run is spent at 80%")
 	}
 	if h := allowanceOf(ws, now).CapHeld("gpt-6", WindowCaps{All: 70}, now); h == nil {
