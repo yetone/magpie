@@ -11141,6 +11141,8 @@ const servedIds = (p) => draft.chosen.length ? draft.chosen : draft.none || draf
 
 // modelsOpen: models let out to full height (#833). MCHIPS_MAX: .mchips' max-height
 let modelsOpen = false;
+// whether a provider's chips were last tall enough to fold, by its id
+const foldNeeded = {};
 // unpickedShown: the editor showing unpicked models under Picked only (yyddbds)
 let unpickedShown = null;
 // picksLeft: picks set aside, given back when Picked only is clicked again (yyddbds)
@@ -11298,13 +11300,19 @@ function renderModels(p) {
     fold.setAttribute("aria-expanded", modelsOpen);
     foldLabel.textContent = t(modelsOpen ? "Collapse the list" : "Expand the list");
     fold.title = t(modelsOpen ? "Hold the models to a few lines again" : "Show every model at once, not in a small box to scroll");
-    // laid out first: the editor is put on the page after it is drawn.
     // Held, the box is MCHIPS_LINES tall (app.css .mchips); open, it is as
     // tall as its chips, which must be more than that to fold
-    requestAnimationFrame(() => {
+    const measure = () => {
+      if (!chips.isConnected) return;
       const most = Math.min(MCHIPS_MAX, innerHeight * 0.4);
-      fold.hidden = !(chips.scrollHeight > (modelsOpen ? most : chips.clientHeight) + 1);
-    });
+      fold.hidden = !(foldNeeded[p.id] = chips.scrollHeight > (modelsOpen ? most : chips.clientHeight) + 1);
+    };
+    // put on the page in this same task: measured there, till then as the
+    // last one was, or a redraw (Fetch models again, indexyz) showed the
+    // fold a frame and the dialog, holding the press, moved by it
+    fold.hidden = !foldNeeded[p.id];
+    if (chips.isConnected) measure();
+    else queueMicrotask(() => chips.isConnected ? measure() : requestAnimationFrame(measure));
   };
   const draw = () => {
     if (agentMenu && chips.contains(agentMenu.anchor)) closeAgentMenu();
