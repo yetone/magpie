@@ -67,6 +67,35 @@ func byteCapRefusal(status int, errBody []byte) bool {
 	return status == http.StatusRequestEntityTooLarge || bodyCapWords.MatchString(words)
 }
 
+// pageCapLeast is the least a request weighs before a proxy's page in
+// place of the API's answer is read as a refusal of its bytes.
+const pageCapLeast = 4 << 20
+
+// pageOverSize is a proxy's refusal of a large body said as its own page:
+// an nginx or CDN "502 Bad Gateway" (or 413, 500, 503, 504, 520 to 524)
+// page or an empty body, in place of the API's answer, to a request of
+// pageCapLeast or more. chenxiang0010's relay (an OpenAI-compatible one
+// in front of DeepSeek) answered an 8.2 MB Claude Code turn so: magpie
+// passed the 502 on, Claude Code asked the same body again nine times
+// and every --resume of the session met the same page. Said as a 413 it
+// goes to the route's next member, isn't asked again unchanged, and tells
+// the user to compact. A small request's page is the relay's own fault
+// and stays what it was.
+func pageOverSize(status int, errBody []byte, sent int) bool {
+	if sent < pageCapLeast {
+		return false
+	}
+	switch {
+	case status == http.StatusRequestEntityTooLarge, status == http.StatusInternalServerError,
+		status == http.StatusBadGateway, status == http.StatusServiceUnavailable,
+		status == http.StatusGatewayTimeout, status >= 520 && status <= 524:
+	default:
+		return false
+	}
+	_, ok := provider.Unsaid(errBody)
+	return ok
+}
+
 // capSizes are the sizes a refusal names: "33554432 bytes", "32 MB",
 // "32MiB", "40.1 MB".
 var capSizes = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*(bytes|b|kb|kib|mb|mib|gb|gib)\b`)
@@ -163,21 +192,33 @@ func (s *Server) refitOverCap(ctx context.Context, p provider.Provider, to provi
 			return res, nil
 		}
 		b := peekError(res)
-		if !byteCapRefusal(res.StatusCode, b) {
+		// body as it came is never smaller than what was sent: a page
+		// to a small one is ruled out before body is fitted
+		page := !byteCapRefusal(res.StatusCode, b)
+		if page && !pageOverSize(res.StatusCode, b, len(body)) {
 			return res, nil
 		}
-		// what forwardOnce sent: body as it fits it
-		was, _ := s.capFit(p, to, path, codexImagesFit(p, to, body))
-		sent := len(was)
+		sent := s.capSent(p, to, path, body)
+		if page && sent < pageCapLeast {
+			return res, nil
+		}
 		n := statedCap(b, sent)
 		if n == 0 {
 			n = capRoom(sent) // it said no number: less than was sent
 		}
-		n = s.bodyCaps.learn(p.ID, n)
+		if page {
+			// a page is a guess at a cap, not a vendor's word: it isn't
+			// kept for the provider's later requests
+			if k := s.bodyCaps.of(p.ID); k > 0 && k < n {
+				n = k
+			}
+		} else {
+			n = s.bodyCaps.learn(p.ID, n)
+		}
 		fitted, left, ok := withoutOldImages(to, body, capRoom(n))
 		if !ok || len(fitted) >= sent {
 			res.Body.Close()
-			return overCap(res, b, p, len(body), statedCap(b, len(body)), images(to, body)), nil
+			return overCap(res, b, p, len(body), statedCap(b, len(body)), images(to, body), page), nil
 		}
 		log.Printf("%s refused a request of %s (HTTP %d: %s); asking again with the %d oldest images left out (%s)", p.Name, mb(sent), res.StatusCode, provider.APIError(b, ""), left, mb(len(fitted)))
 		res.Body.Close()
@@ -188,14 +229,21 @@ func (s *Server) refitOverCap(ctx context.Context, p provider.Provider, to provi
 	}
 	if res.StatusCode >= 400 {
 		b := peekError(res)
-		if byteCapRefusal(res.StatusCode, b) {
+		page := !byteCapRefusal(res.StatusCode, b)
+		if !page || pageOverSize(res.StatusCode, b, len(body)) && s.capSent(p, to, path, body) >= pageCapLeast {
 			// refused as often as it was asked smaller: said as a 413, so
 			// Codex's compaction asks as text (summaryTooLarge)
 			res.Body.Close()
-			return overCap(res, b, p, len(body), statedCap(b, len(body)), images(to, body)), nil
+			return overCap(res, b, p, len(body), statedCap(b, len(body)), images(to, body), page), nil
 		}
 	}
 	return res, nil
+}
+
+// capSent is how many bytes forwardOnce sent for body.
+func (s *Server) capSent(p provider.Provider, to provider.Protocol, path string, body []byte) int {
+	was, _ := s.capFit(p, to, path, codexImagesFit(p, to, body))
+	return len(was)
 }
 
 // peekError is the first MiB of res's error body, res.Body left to read
@@ -209,8 +257,17 @@ func peekError(res *http.Response) []byte {
 // overCap is a byte-cap refusal said as a 413 with what it is about: the
 // request's size, the provider's cap when it named one, and that leaving
 // out its earlier images didn't bring it under.
-func overCap(res *http.Response, errBody []byte, p provider.Provider, size, n, imgs int) *http.Response {
+// page is a refusal said as a proxy's page (pageOverSize), which is named
+// for what it most likely was.
+func overCap(res *http.Response, errBody []byte, p provider.Provider, size, n, imgs int, page bool) *http.Response {
 	said := provider.APIError(errBody, http.StatusText(res.StatusCode))
+	if page {
+		what := "an empty reply"
+		if w, ok := provider.WebPage(errBody); ok {
+			what = w
+		}
+		said = fmt.Sprintf("%s answered %s; a proxy in front of it answers so for a request larger than it takes", p.Name, what)
+	}
 	limit := "what " + p.Name + " takes in one request"
 	if n > 0 {
 		limit = fmt.Sprintf("the %s %s takes in one request", mb(n), p.Name)
