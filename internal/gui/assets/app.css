@@ -621,11 +621,13 @@ body.window :is(#view-agents, #view-sessions, #view-providers, #view-routing, #v
    show where the reader is in them with a thin thumb, on the Mac too
    (PAMI on Discord: no page had a scrollbar) — the WebView draws the
    Mac's overlay one only while a trackpad scrolls, and a mouse never;
-   the heatmap's weeks that scroll sideways in their card too */
-body.mac :is(.view, .modal .dialog, .modal .editor.framed > .ebody, .heat-scroll)::-webkit-scrollbar { width: 8px; height: 8px; background: transparent; } /* across as thin as at the side (#1623) */
-body.mac :is(.view, .modal .dialog, .modal .editor.framed > .ebody, .heat-scroll)::-webkit-scrollbar-thumb { background: var(--faint); border: 2px solid transparent; border-radius: 8px; background-clip: padding-box; }
-body.mac :is(.view, .modal .dialog, .modal .editor.framed > .ebody, .heat-scroll)::-webkit-scrollbar-thumb:hover { background-color: var(--muted); }
-body.mac :is(.view, .modal .dialog, .modal .editor.framed > .ebody, .heat-scroll)::-webkit-scrollbar-corner { background: transparent; }
+   the heatmap's weeks that scroll sideways in their card too, and a menu
+   or picker longer than its box, where a mouse got the system's thick dark
+   bar instead (the owner, Settings' Search API menu) */
+body.mac :is(.view, .modal .dialog, .modal .editor.framed > .ebody, .heat-scroll, .pop, .pop ul)::-webkit-scrollbar { width: 8px; height: 8px; background: transparent; } /* across as thin as at the side (#1623) */
+body.mac :is(.view, .modal .dialog, .modal .editor.framed > .ebody, .heat-scroll, .pop, .pop ul)::-webkit-scrollbar-thumb { background: var(--faint); border: 2px solid transparent; border-radius: 8px; background-clip: padding-box; }
+body.mac :is(.view, .modal .dialog, .modal .editor.framed > .ebody, .heat-scroll, .pop, .pop ul)::-webkit-scrollbar-thumb:hover { background-color: var(--muted); }
+body.mac :is(.view, .modal .dialog, .modal .editor.framed > .ebody, .heat-scroll, .pop, .pop ul)::-webkit-scrollbar-corner { background: transparent; }
 /* WebKit lays a framed editor's grid out at the full width and then lets
    the 8px bar take its right edge, so a body that scrolled ran 8px wide
    and scrolled sideways; the bar's room is always kept, out of the right
