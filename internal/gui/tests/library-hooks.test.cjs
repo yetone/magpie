@@ -19,6 +19,9 @@
 // and grows to show all of what is written.
 // At 440px wide in en, zh, zh-TW, ja and de: no sideways scroll, and what
 // each click pressed stays where it was on the screen.
+// #5604 (NEKO-CwC): a session-start hook is narrowed to some starts from
+// an app menu too (At which starts); an agent that can't run it at just
+// those greys, saying why, and is left out when it is saved.
 // No backend: the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -32,11 +35,13 @@ const HOME = "/Users/allen";
 const agent = (id, name, more = {}) => ({ id, name, icon: "", skills: `${HOME}/.${id}/skills`, mcp: `${HOME}/.${id}/mcp.json`, ...more });
 const LONG = "【格式化】编辑文件后自动运行 prettier 格式化改动过的文件，保持代码风格统一；只对 TypeScript、JavaScript 和 CSS 文件生效，失败时不会阻止本轮对话继续进行。";
 const hk = (name, event, matcher, command, agents, description) => ({ name, event, matcher, command, agents, ...(description ? { description } : {}) });
+// the starts each agent can be narrowed to, as hooksView lists them (in part)
+const FIVE = ["startup", "resume", "clear", "compact", "fork"];
 const HOOK_AGENTS = [
-  { id: "claude", file: `${HOME}/.claude/settings.json`, events: ["PreToolUse", "PostToolUse", "Notification", "Stop"] },
-  { id: "codex", file: `${HOME}/.codex/hooks.json`, events: ["PreToolUse", "PostToolUse", "Stop"] },
-  { id: "cursor", file: `${HOME}/.cursor/hooks.json`, events: ["afterFileEdit", "stop"] },
-  { id: "gemini", file: `${HOME}/.gemini/settings.json`, events: ["AfterTool", "AfterAgent"] },
+  { id: "claude", file: `${HOME}/.claude/settings.json`, events: ["PreToolUse", "PostToolUse", "Notification", "Stop", "SessionStart"], startSources: FIVE, starts: ["startup", "resume", "clear", "compact", "fork", "startup|resume|clear|compact"] },
+  { id: "codex", file: `${HOME}/.codex/hooks.json`, events: ["PreToolUse", "PostToolUse", "Stop", "SessionStart"], startSources: FIVE, starts: ["startup", "resume", "clear", "compact", "fork", "startup|resume|clear|compact"] },
+  { id: "cursor", file: `${HOME}/.cursor/hooks.json`, events: ["afterFileEdit", "stop", "sessionStart"] },
+  { id: "gemini", file: `${HOME}/.gemini/settings.json`, events: ["AfterTool", "AfterAgent", "SessionStart"], startSources: ["startup", "resume", "clear"], starts: ["startup", "resume", "clear", "startup|resume|clear", "startup|resume|clear|compact"] },
   { id: "opencode", no: "OpenCode has no hooks magpie can write" },
 ];
 const lib = (hooks) => ({
@@ -305,6 +310,44 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator("#status").filter({ hasText: w("{n} hooks removed", { n: 3 }) }).waitFor();
         assert.equal(await v.locator(".lib-hook").count(), 0);
         await v.locator(".lib-empty").filter({ hasText: w("No hooks in the library yet") }).waitFor();
+
+        // a session-start hook for compaction alone: Claude Code and Codex
+        // can run it, Gemini CLI never starts a session that way, and
+        // Cursor's start can't be narrowed at all
+        await press(page, v.locator(".lib-empty button"));
+        await ed.waitFor();
+        await settled(page);
+        await ed.locator("input").first().fill("reinject");
+        await ed.locator('input[placeholder="curl -s https://api.day.app/KEY/done"]').fill("cat AGENTS.md");
+        await ed.locator(".lib-hookevent").click();
+        await menu.waitFor();
+        await menu.locator(".pm-item", { hasText: w("When a session starts") }).click();
+        await menu.waitFor({ state: "detached" });
+        assert.equal(await ed.locator(".lib-hooktool").count(), 0);
+        assert.equal((await ed.locator(".lib-hookstart").textContent()).trim(), w("Any start"));
+        await ed.locator("label", { hasText: w("At which starts") }).first().waitFor();
+        for (const id of ["claude", "codex", "cursor", "gemini"]) assert.equal(await edChip(id).getAttribute("aria-disabled"), null, id + " greyed for any start");
+        await ed.locator(".lib-hookstart").click();
+        await menu.waitFor();
+        assert.equal((await menu.locator(".pm-head").textContent()).trim(), w("At which starts"));
+        assert.deepEqual((await menu.locator(".pm-item").allTextContents()).map((x) => x.trim()),
+          ["Any start", "A fresh session", "A resumed session", "After /clear", "After the context is compacted", "A forked session", "Any start but a fork"].map((x) => w(x)));
+        await menu.locator(".pm-item", { hasText: w("After the context is compacted") }).click();
+        await menu.waitFor({ state: "detached" });
+        assert.equal((await ed.locator(".lib-hookstart").textContent()).trim(), w("After the context is compacted"));
+        assert.equal(await edChip("claude").getAttribute("aria-disabled"), null);
+        assert.equal(await edChip("codex").getAttribute("aria-disabled"), null);
+        assert.equal(await edChip("gemini").getAttribute("aria-disabled"), "true");
+        assert.equal(await edChip("gemini").getAttribute("title"), w("{agent} never starts a session that way", { agent: "Gemini CLI" }));
+        assert.equal(await edChip("cursor").getAttribute("aria-disabled"), "true");
+        assert.equal(await edChip("cursor").getAttribute("title"), w("{agent} runs a session-start hook at every start: it can't be narrowed", { agent: "Cursor" }));
+        assert.deepEqual(await sideways(page), [], "sideways scroll in the editor, narrowed to a start");
+        await ed.locator(".bar button.primary").click();
+        await ed.waitFor({ state: "detached" });
+        assert.deepEqual(posts.shift(), { what: "hooks/save", body: { old: "", hook: { name: "reinject", description: "", event: "session-start", matcher: "compact", command: "cat AGENTS.md", timeout: 0, agents: ["claude", "codex"] } } });
+        await row("reinject").waitFor();
+        assert.equal((await row("reinject").locator(".lib-hookev").textContent()).trim(), w("When a session starts") + " · " + w("After the context is compacted"));
+        assert.equal(await row("reinject").locator('.lib-ag[data-agent="gemini"]').getAttribute("title"), w("{agent} never starts a session that way", { agent: "Gemini CLI" }));
 
         assert.deepEqual(posts, []);
         assert.deepEqual(errors, []);

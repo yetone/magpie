@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -49,7 +50,9 @@ type Hook struct {
 	Event string `json:"event"`
 	// Matcher narrows a tool event to some tools: for a portable event
 	// "shell" or "edit" (each agent's own tool names for them), for an
-	// agent's own event the agent's own matcher; "" is every tool
+	// agent's own event the agent's own matcher; "" is every tool. A
+	// session-start hook is narrowed to the starts it runs at instead
+	// (#5604): one or more of HookStarts joined by "|", "compact"
 	Matcher string   `json:"matcher,omitempty"`
 	Command string   `json:"command"`
 	Timeout int      `json:"timeout,omitempty"` // seconds; 0 is the agent's own
@@ -70,12 +73,130 @@ var HookEvents = []string{"turn-end", "after-tool", "before-tool", "prompt", "se
 // HookTools are the kinds of tools a portable tool event can be narrowed to.
 var HookTools = []string{"shell", "edit"}
 
+// HookStarts are the starts a portable session-start hook can be narrowed
+// to (#5604, NEKO-CwC), in Claude Code's words for them (its SessionStart
+// source): a new session, one resumed, one after /clear, one after its
+// context was compacted, and a forked one.
+var HookStarts = []string{"startup", "resume", "clear", "compact", "fork"}
+
+// startSpec is how an agent's session start can be narrowed: the starts it
+// has (a hook narrowed to others is one it would never run), and how its
+// matcher names a set of them.
+type startSpec struct {
+	sources []string
+	// one: its matcher is one source, compared whole (Gemini CLI's
+	// hookPlanner.matchesTrigger is matcher === trigger)
+	one bool
+	// groups: its matcher names a group of them, not each one (Grok's
+	// "new" is a fresh session and one after /clear alike)
+	groups map[string][]string
+}
+
+// startSpecs are the agents whose session start takes a matcher, from
+// each one's own source. Cursor has none: its importer of Claude Code's
+// hooks says a SessionStart matcher "is not supported in Cursor, hooks
+// will fire for all triggers".
+var startSpecs = map[string]*startSpec{
+	// claude 2.1.316: SessionStart's matcher is tested on its source,
+	// startup|resume|clear|compact|fork, as a tool's name is
+	"claude": {sources: HookStarts},
+	// codex-rs/hooks: SessionStartSource is the same five, and a matcher of
+	// names and "|" is matched name by name (engine/matcher.rs)
+	"codex": {sources: HookStarts},
+	// gemini-cli: SessionStartSource is startup, resume and clear, and the
+	// matcher is compared whole
+	"gemini": {sources: []string{"startup", "resume", "clear"}, one: true},
+	// the Grok CLI (docs/user-guide/10-hooks.md): the start source is "new"
+	// for a fresh session, /new and /clear included, or "load" for one
+	// resumed; Claude Code's own words never match there
+	"grok":     {sources: []string{"startup", "resume", "clear"}, groups: grokStarts},
+	"grok-app": {sources: []string{"startup", "resume", "clear"}, groups: grokStarts},
+}
+
+var grokStarts = map[string][]string{"new": {"startup", "clear"}, "load": {"resume"}}
+
+// startSet is a session-start matcher's starts, in HookStarts' order, or
+// why it names none: a start it doesn't know, or one named twice.
+func startSet(m string) ([]string, error) {
+	parts := strings.Split(m, "|")
+	for i, p := range parts {
+		if !slices.Contains(HookStarts, p) || slices.Contains(parts[:i], p) {
+			return nil, fmt.Errorf("session-start can't be narrowed to %s", m)
+		}
+	}
+	return slices.DeleteFunc(slices.Clone(HookStarts), func(s string) bool { return !slices.Contains(parts, s) }), nil
+}
+
+// startMatcher is agent's own matcher for a session-start hook narrowed to
+// m, "" for every start, or why it can't run the hook at just those. A
+// hook is never widened to starts it was narrowed away from, nor written
+// with a matcher the agent never matches: either would run it where the
+// user said not to, or nowhere, and say nothing.
+func startMatcher(agent, m string) (string, error) {
+	if m == "" {
+		return "", nil
+	}
+	set, err := startSet(m)
+	if err != nil {
+		return "", err
+	}
+	sp := startSpecs[agent]
+	if sp == nil {
+		return "", errors.New("its session start can't be narrowed: it runs a hook at every start")
+	}
+	in := slices.DeleteFunc(slices.Clone(sp.sources), func(s string) bool { return !slices.Contains(set, s) })
+	switch {
+	case len(in) == 0:
+		return "", fmt.Errorf("it has no session start called %s", strings.Join(set, " or "))
+	case len(in) == len(sp.sources):
+		// every start it has: the rest are ones it never makes
+		return "", nil
+	case sp.one:
+		if len(in) > 1 {
+			return "", fmt.Errorf("its session start can be narrowed to one of %s, not to %s", strings.Join(sp.sources, ", "), strings.Join(in, "|"))
+		}
+		return in[0], nil
+	case sp.groups != nil:
+		for _, g := range slices.Sorted(maps.Keys(sp.groups)) {
+			if slices.Equal(sp.groups[g], in) {
+				return g, nil
+			}
+		}
+		var says []string
+		for _, g := range slices.Sorted(maps.Keys(sp.groups)) {
+			says = append(says, strings.Join(sp.groups[g], "|"))
+		}
+		return "", fmt.Errorf("its session start can be narrowed to %s, not to %s", strings.Join(says, " or "), strings.Join(in, "|"))
+	}
+	return strings.Join(in, "|"), nil
+}
+
+// startsTaken are the session-start matchers agent can be given, each in
+// HookStarts' order: what the page offers it.
+func startsTaken(agent string) []string {
+	var out []string
+	for bits := 1; bits < 1<<len(HookStarts); bits++ {
+		var set []string
+		for i, s := range HookStarts {
+			if bits&(1<<i) != 0 {
+				set = append(set, s)
+			}
+		}
+		m := strings.Join(set, "|")
+		if _, err := startMatcher(agent, m); err == nil {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
 // hookSpec is how one agent keeps its hooks.
 type hookSpec struct {
 	path   string
 	events map[string]string // portable → the agent's own
 	native []string          // every event the agent has
 	tools  map[string]string // shell, edit → the agent's matcher for them
+	agent  string            // whose: the agent's id, for its session start's matcher
 	flat   bool              // Cursor: an entry is the command itself, not a group of them
 	ms     bool              // Gemini: timeouts in milliseconds
 	toml   bool              // Grok: hooks are [[hooks.<Event>]] tables in config.toml, not JSON
@@ -132,6 +253,14 @@ var claudeHookEvents = []string{"PreToolUse", "PostToolUse", "PostToolUseFailure
 	"DirectoryAdded", "MessageDisplay"}
 
 func hookSpecOf(t *Target) (*hookSpec, string) {
+	sp, why := hookSpecFor(t)
+	if sp != nil {
+		sp.agent = t.Agent.ID
+	}
+	return sp, why
+}
+
+func hookSpecFor(t *Target) (*hookSpec, string) {
 	if t.Agent.WSL != "" {
 		return nil, wslNoHooks(t.Agent)
 	}
@@ -208,7 +337,10 @@ func (sp *hookSpec) event(agent string, h *Hook) (string, error) {
 // entry is h as the agent's file holds it, under its event ev.
 func (sp *hookSpec) entry(h *Hook, ev string) json.RawMessage {
 	m := h.Matcher
-	if !strings.Contains(h.Event, ":") {
+	switch {
+	case h.Event == "session-start":
+		m, _ = startMatcher(sp.agent, h.Matcher) // one it can't take is never written (syncHooks)
+	case !strings.Contains(h.Event, ":"):
 		m = sp.tools[h.Matcher] // "" for none, and for an event that takes no matcher
 	}
 	timeout := h.Timeout
@@ -314,6 +446,10 @@ func (h *Hook) check() error {
 	}
 	if !slices.Contains(HookEvents, h.Event) {
 		return fmt.Errorf("no event called %s", h.Event)
+	}
+	if h.Matcher != "" && h.Event == "session-start" {
+		_, err := startSet(h.Matcher)
+		return err
 	}
 	if h.Matcher != "" && (!slices.Contains(toolEvents, h.Event) || !slices.Contains(HookTools, h.Matcher)) {
 		return fmt.Errorf("%s can't be narrowed to %s", h.Event, h.Matcher)
@@ -584,6 +720,9 @@ func (l *Library) syncHooks(t *Target, b *backups, res *Result) {
 	var ws []*wanted
 	for _, h := range want {
 		ev, err := sp.event(id, h)
+		if err == nil && h.Event == "session-start" {
+			_, err = startMatcher(id, h.Matcher)
+		}
 		if err != nil {
 			res.fail(id, "hook:"+h.Name, err)
 			continue
@@ -1053,6 +1192,11 @@ func hookTakes(h *Hook, a string) bool {
 	if x, _, ok := strings.Cut(h.Event, ":"); ok {
 		return sameHookFamily(x, a)
 	}
+	if h.Event == "session-start" {
+		if _, err := startMatcher(a, h.Matcher); err != nil {
+			return false
+		}
+	}
 	return slices.Contains(hookAgents, a)
 }
 
@@ -1113,6 +1257,10 @@ type HookAgentView struct {
 	Off bool `json:"off,omitempty"`
 	// Events are its own events, for a hook of its alone
 	Events []string `json:"events,omitempty"`
+	// Starts are the session-start matchers it can be given (#5604);
+	// StartSources the starts it has, to say why it can't be given another
+	Starts       []string `json:"starts,omitempty"`
+	StartSources []string `json:"startSources,omitempty"`
 }
 
 // hooksView is the Hooks page for these agents, and those in stopped WSL
@@ -1128,6 +1276,10 @@ func (l *Library) hooksView(targets []*Target, asleep []*agent.Agent, of func(st
 		if sp != nil {
 			specs[t.Agent.ID] = sp
 			av.File, av.Off, av.Events = sp.path, hooksOff(t, sp), sp.native
+			av.Starts = startsTaken(t.Agent.ID)
+			if ss := startSpecs[t.Agent.ID]; ss != nil {
+				av.StartSources = ss.sources
+			}
 		}
 		agents = append(agents, av)
 	}
