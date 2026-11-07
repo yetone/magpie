@@ -17,14 +17,13 @@ import (
 
 // codexTitlesTo is where a request Codex makes for a thread's title goes
 // (#705): a hidden turn of its own (thread_title,
-// thread_title_reconsideration), which Codex sends on its own model —
-// gpt-5.6-luna when signed in to ChatGPT, the conversation's model when
-// magpie is its provider. "" for a request that isn't one, or one left to
-// go as Codex sent it; "off", or the model that writes the title:
-// settings.CodexTitles, else the model Codex asked for when it is one of
-// magpie's (ours: the request came to magpie's own API, where every model
-// is). Codex reads a title only as the {"title": …} its text.format asks
-// for, which a model behind the Chat or Anthropic API is never shown, so
+// thread_title_reconsideration), which Codex sends on a model it chooses
+// itself — gpt-5.6-luna when signed in to ChatGPT, its provider list's
+// default or first model when magpie is its provider. "" for a request
+// that isn't one, or one left to go as Codex sent it; "off", or the model
+// that writes the title: settings.CodexTitles, else the conversation's
+// model (codexSideTo). Codex reads a title only as the {"title": …} its
+// text.format asks for, which a model behind the Chat or Anthropic API is never shown, so
 // a title on one of magpie's models goes through codexTitle whoever picked
 // it (#743: Codex as magpie's provider had none at all, the model's plain
 // answer turned down).
@@ -54,12 +53,28 @@ var CodexSideModel func() string
 // (atom_Ray on X: an hour on a third-party model took 2% of the 5-hour
 // window). Those go on the session's model (session: Server.codexSideSession),
 // as the conversation's turns do; on Codex's own, as Codex sent them.
+//
+// With magpie as Codex's provider the model asked for is not the user's
+// pick either: the app asks for a new conversation's title on
+// ephemeralGenerationModel, and when the provider's list lacks it, on the
+// list's default model or else its first (the app's oX), never on the
+// model picked for the conversation (tenacious_eagle_96548 on Discord:
+// the conversation on A/dsf4.1, its title on B/qwen3.7). Those go on the
+// session's model too when magpie knows it, else on the model asked for.
 func codexSideTo(body []byte, ours bool, session func() string) string {
 	m := modelOf(body)
-	if m != "" && (ours || strings.Contains(m, "/")) {
+	if ours {
+		if session != nil {
+			if to := session(); to != "" {
+				return to
+			}
+		}
 		return m
 	}
-	if !ours && session != nil {
+	if strings.Contains(m, "/") {
+		return m
+	}
+	if session != nil {
 		return session()
 	}
 	return ""

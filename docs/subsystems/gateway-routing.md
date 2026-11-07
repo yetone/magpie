@@ -105,7 +105,16 @@ record), cybercaius on Discord
 `TestCodexMemoryOfASwitchedConversationFollowsTheSwitch`,
 `TestCodexMemoryStandInFollowsTheSwitch`). A call tied to a seen thread
 and not started with a turn (a prediction, a known thread's title) takes
-that thread's last model at once. Codex
+that thread's last model at once. With magpie as Codex's provider (`/v1/responses`)
+the model in such a request is not the user's pick either: the Codex app
+asks a new conversation's title on its provider list's default or first
+model that takes low effort (app.asar's `oX`), never the thread's, so a
+title, description, summary or prediction there goes on the session's
+model (`codexSideSession`, through `codexSideTo`), and on the model asked
+only when no session's is known (tenacious_eagle_96548 on Discord: titles
+on another provider's qwen while the conversation was on dsf4.1,
+`TestCodexOwnTitleFollowsThePickNotTheAppsChoice`). settings.CodexTitles,
+when set, still writes every title. Codex
 asks a title with no reasoning effort on any model but its own title
 model, and its auto-review at a model's default, which it has none of for
 magpie's models; a model that needs an effort answered those with 400

@@ -225,6 +225,50 @@ func TestCodexFirstTitleFollowsThePickNotTheConfig(t *testing.T) {
 	}
 }
 
+// codexOwnCall is a request Codex with magpie as its provider sends to
+// /v1/responses on model, in the thread session: a turn of its own
+// (source "") or one of the app's side turns.
+func codexOwnCall(t *testing.T, s *Server, model, session, source string) {
+	t.Helper()
+	req := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(`{"model":"`+model+`","stream":true,"input":[`+leadAsk+`]}`))
+	req.Header.Set("Authorization", "Bearer "+TokenFor("codex"))
+	req.Header.Set("session_id", session)
+	if source != "" {
+		req.Header.Set("x-codex-turn-metadata", `{"thread_source":"`+source+`"}`)
+	}
+	s.Handler().ServeHTTP(httptest.NewRecorder(), req)
+}
+
+// tenacious_eagle_96548 on Discord, with magpie as Codex's provider: the
+// conversation on fourth/ picked in the app, its title on third/. The app
+// asks for a new conversation's title on a model it chooses itself (the
+// provider list's default, else its first), never the conversation's, so
+// the model in the request is not the user's pick. Each of the app's side
+// turns goes on the conversation's model, the title waiting for the turn
+// it is sent beside.
+func TestCodexOwnTitleFollowsThePickNotTheAppsChoice(t *testing.T) {
+	fresh(t)
+	appChose := relayOn(t, "third")
+	picked := relayOn(t, "fourth")
+	wasModel, wasWait := CodexSideModel, codexSideWait
+	CodexSideModel = func() string { return "" }
+	codexSideWait = time.Minute
+	t.Cleanup(func() { CodexSideModel, codexSideWait = wasModel, wasWait })
+	s := New()
+	beforeTheTurn(t, s, func() { codexOwnCall(t, s, "third/gpt-6-astra", "title-thread", "thread_title") }, func() {
+		codexOwnCall(t, s, "fourth/gpt-6-astra", "conv-1", "")
+	})
+	for _, src := range []string{"thread_description", "thread_summary"} {
+		codexOwnCall(t, s, "third/gpt-6-astra", "conv-1", src)
+	}
+	if reqs := appChose.requests(); len(reqs) != 0 {
+		t.Fatalf("the app's choice got %d requests", len(reqs))
+	}
+	if reqs := picked.requests(); len(reqs) != 4 {
+		t.Fatalf("the picked model got %d requests, want the turn, the title, the description and the summary", len(reqs))
+	}
+}
+
 // A composer prediction runs on a fork of the conversation, a thread of
 // its own: it follows the conversation it was forked from, not whichever
 // one this key's Codex last had a turn in.
