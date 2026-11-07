@@ -42,6 +42,12 @@ type Seat struct {
 	WeekLow bool
 	// Soon is when its windows renew, the biggest first (Allowance.Renewal)
 	Soon []time.Time
+	// Unreached is how many of Soon's windows, the biggest first, can no
+	// longer be used up before they renew unless the next one's left is
+	// used before that renews (provider.Allowance.Unreached): Smart ranks
+	// it by the next one, as what that leaves at its reset is lost
+	// (#5639). 0 for every account whose windows don't tell their counts.
+	Unreached int
 	// Lapse is when the soonest of what it has left is lost, apart from
 	// its windows' renewals (Allowance.Lapse): zero when not told. Smart
 	// goes by it when Soon ties.

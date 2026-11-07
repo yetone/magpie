@@ -114,7 +114,11 @@ func identity(n int) []int {
 // Smart is the default: of those with quota to spare, the one whose
 // allowance renews soonest, since what it has left is lost then, while one
 // renewing later keeps: the biggest window decides — the week, not the five
-// hours in it — and the next one only when that renews in the same hour. An
+// hours in it — and the next one only when that renews in the same hour. A
+// biggest window whose left the next can no longer let through before it
+// renews (Seat.Unreached: a Volcengine Agent Plan's month two weeks out,
+// with more left than two weeks hold) is passed over: what the week
+// leaves is lost at its reset then, so the week decides (#5639). An
 // account with no week (Claude Enterprise's five hours alone) goes by its
 // five hours, so ahead of every week but one renewing sooner; a window not
 // started renews its whole span from now (#576). A Codex account that
@@ -153,7 +157,9 @@ var Smart = Strategy{Order: func(_ string, seats []Seat) []int {
 		if a.Learns != b.Learns {
 			return a.Learns
 		}
-		ri, rj := a.Soon, b.Soon
+		// a window that can't be used up before it renews any more ranks
+		// it no more: the next one does (Seat.Unreached)
+		ri, rj := a.Soon[min(a.Unreached, len(a.Soon)):], b.Soon[min(b.Unreached, len(b.Soon)):]
 		for k := 0; k < len(ri) || k < len(rj); k++ {
 			var x, y time.Time // to the hour, so a few minutes don't reorder
 			if k < len(ri) {

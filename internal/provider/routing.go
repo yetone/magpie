@@ -525,6 +525,17 @@ func (a Allowance) Count(model string, now time.Time) (amount, of float64, unit 
 // whose credits have no reset, go by the package that ends first
 // (cdredfox on X).
 func (a Allowance) Renewal(model string, now time.Time) []time.Time {
+	ls := a.renewing(model, now)
+	out := make([]time.Time, len(ls))
+	for i, l := range ls {
+		out[i] = l.Resets
+	}
+	return out
+}
+
+// renewing is the windows that count model as Renewal ranks them, the
+// biggest first, each Resets its renewal.
+func (a Allowance) renewing(model string, now time.Time) []Limit {
 	model = strings.ToLower(model)
 	restart := a.Restarts(now)
 	var ls []Limit
@@ -533,6 +544,7 @@ func (a Allowance) Renewal(model string, now time.Time) []time.Time {
 			continue
 		}
 		if !l.Resets.After(now) {
+			l.Used, l.Amount = 0, 0 // its reset has passed: empty again
 			l.Resets = time.Time{}
 			if l.Span > 0 {
 				l.Resets = now.Add(l.Span)
@@ -550,11 +562,41 @@ func (a Allowance) Renewal(model string, now time.Time) []time.Time {
 		}
 		return ls[i].Resets.After(ls[j].Resets)
 	})
-	out := make([]time.Time, len(ls))
-	for i, l := range ls {
-		out[i] = l.Resets
+	return ls
+}
+
+// Unreached is how many of Renewal's windows, the biggest first, Smart
+// passes over, ranking the account by the next one: a window whose left
+// the next shorter window can no longer let through before it renews,
+// once that one renews, unless what that one has left is used first.
+// Both are counted in one unit (Limit.Of): a Volcengine Agent Plan's
+// month of 20,000 with 18,372 left, renewing two weeks after its week of
+// 7,000 does, can take at most 14,000 after the week renews, so what the
+// week has left is lost at its reset as a weekly plan's is, and it ranks
+// by its week (#5639, louisgreen0726). While the weeks still to come can
+// carry what the month has left, the month is the real cap, as when the
+// month holds less than its weeks add up to (#1778), and it ranks by the
+// month as before. A week partly before the month renews counts for the
+// share of it that is. Only a budget window ranks so (budgetSpan): what
+// five hours leave at their reset is never taken for lost, as
+// everywhere in Smart. Windows that don't tell their counts, or tell
+// them in different units, are never compared: 0.
+func (a Allowance) Unreached(model string, now time.Time) int {
+	ls := a.renewing(model, now)
+	n := 0
+	for ; n+1 < len(ls); n++ {
+		big, next := ls[n], ls[n+1]
+		if big.Of <= 0 || next.Of <= 0 || big.Unit != next.Unit || next.Span < budgetSpan || big.Span <= next.Span ||
+			big.Resets.IsZero() || !next.Resets.Before(big.Resets) {
+			break
+		}
+		left := big.Of * (100 - min(100, max(0, big.Used))) / 100
+		after := next.Of * float64(big.Resets.Sub(next.Resets)) / float64(next.Span)
+		if left <= after {
+			break
+		}
 	}
-	return out
+	return n
 }
 
 // Left is how much a wallet that counts model has left, in unit

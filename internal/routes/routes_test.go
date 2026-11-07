@@ -79,6 +79,29 @@ func TestSmart(t *testing.T) {
 	}
 }
 
+// Smart passes over a biggest window that can't be used up before it
+// renews any more (Seat.Unreached) and ranks the seat by the next: an
+// Agent Plan whose month renews in 15 days, its week tomorrow, goes before
+// a week renewing in three days once its month is out of reach (#5639),
+// and after it while the month isn't. An Unreached past Soon is harmless.
+func TestSmartPassesAnUnreachedWindow(t *testing.T) {
+	now := time.Now()
+	week := now.Add(3 * 24 * time.Hour)
+	plan := []time.Time{now.Add(15 * 24 * time.Hour), now.Add(24 * time.Hour), now.Add(5 * time.Hour)}
+	for _, c := range []struct {
+		unreached int
+		want      []string
+	}{{0, []string{"weekly", "plan"}}, {1, []string{"plan", "weekly"}}, {5, []string{"weekly", "plan"}}} {
+		s := []Seat{
+			{Key: "weekly", Used: 10, Soon: []time.Time{week, now.Add(5 * time.Hour)}},
+			{Key: "plan", Used: 8, Soon: plan, Unreached: c.unreached},
+		}
+		if got := keys(s, Apply(Smart, "p", s)); !slices.Equal(got, c.want) {
+			t.Errorf("unreached %d: %v, want %v", c.unreached, got, c.want)
+		}
+	}
+}
+
 func keys(s []Seat, order []int) []string {
 	out := make([]string, len(order))
 	for i, j := range order {

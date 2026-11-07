@@ -6,7 +6,8 @@
 // account in a group, or among a provider's keys, all at 90% or more. A
 // key not known is told as before. A lone key bought as a plan (#1016:
 // Kimi Code's, 49% of its 5 hours used) says what it has left too, at
-// 440px as well. In English, Chinese, Japanese and German.
+// 440px as well. A key whose month its weeks can no longer use up goes by
+// its week, and says so (#5639). In English, Chinese, Japanese and German.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -54,6 +55,16 @@ const scenes = {
   lone: {
     order: [
       { id: "kimi-code-cn", provider: "kimi-code-cn", name: "Kimi Code (China)", kind: "provider", model: "kimi-for-coding", known: true, used: 49, renews: [ahead(26), ahead(2)], usedRenews: ahead(2) },
+    ],
+  },
+  // #5639: a Volcengine Agent Plan key whose month (renewing in 15 days)
+  // its weeks can't use up any more goes by its week, renewing in a day,
+  // ahead of an account whose week renews in three
+  unreached: {
+    group: { id: "g", name: "Daily", routing: "" },
+    order: [
+      { id: "volcengine", provider: "volcengine", name: "Volcengine", kind: "provider", model: "doubao-seed-2.0-pro", known: true, used: 8, renews: [ahead(360), ahead(24), ahead(2)], unreached: 1, usedRenews: ahead(360) },
+      { id: "codex", provider: "codex", name: "Codex", who: "me@example.com", kind: "account", agent: "codex", model: "doubao-seed-2.0-pro", known: true, used: 10, renews: [ahead(72)] },
     ],
   },
   // keys whose windows aren't read: as before
@@ -149,7 +160,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.match(await row("relay-b").locator("em").textContent(), /95%/);
       // the header tells Smart as it weighs them, not as keys in their order
       assert.equal((await page.locator(".rt-mode").textContent()).trim(),
-        await say("Smart: of the accounts with quota to spare, the one whose allowance renews soonest goes first — what it has left would be lost at the reset. The week decides; an account with five hours and no week goes by its five hours. One at 90% or more waits until the others can't answer; one resting after a failure goes last."));
+        await say("Smart: of the accounts with quota to spare, the one whose allowance renews soonest goes first — what it has left would be lost at the reset. The week decides; an account with five hours and no week goes by its five hours, and one whose month its weeks can no longer use up before it renews by its week. One at 90% or more waits until the others can't answer; one resting after a failure goes last."));
+      assert.deepEqual(errors, []);
+    });
+    test(`${engine} ${lang}: one whose month its weeks can't use up says its week decides (#5639)`, async (t) => {
+      const { errors, say, why } = await open(t, engine, lang, "unreached");
+      const want = await say("{who} goes first: its longer window has more left than its shorter one can still let through before it renews, so the shorter one decides — it renews soonest, in {d}, and what it has left then is lost. {other} renews later and keeps its own.", { who: "Volcengine", d: await say("{n} h", { n: "24" }), other: "{other}" });
+      const head = want.split("{other}")[0];
+      assert.ok(head.length > 40 && (await why()).startsWith(head), `${await why()}\nwant ${head}…`);
       assert.deepEqual(errors, []);
     });
     for (const width of [1100, 440]) {
@@ -183,7 +201,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const steps = await page.locator(".rt-steps li").allTextContents();
       assert.ok(steps.some((s) => s.includes(aside)), steps.join("\n"));
       assert.equal((await page.locator(".rt-mode").textContent()).trim(),
-        await say("Smart: of the accounts with quota to spare, the one whose allowance renews soonest goes first — what it has left would be lost at the reset. The week decides; an account with five hours and no week goes by its five hours. One at 90% or more waits until the others can't answer; one resting after a failure goes last."));
+        await say("Smart: of the accounts with quota to spare, the one whose allowance renews soonest goes first — what it has left would be lost at the reset. The week decides; an account with five hours and no week goes by its five hours, and one whose month its weeks can no longer use up before it renews by its week. One at 90% or more waits until the others can't answer; one resting after a failure goes last."));
       assert.deepEqual(errors, []);
     });
 
