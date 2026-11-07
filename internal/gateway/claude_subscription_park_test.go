@@ -54,6 +54,30 @@ done
 	return dir
 }
 
+// saidRecorder is a recorder whose said is closed once its words were
+// written to it: a fake Claude Code's reply under way reached the client.
+type saidRecorder struct {
+	*httptest.ResponseRecorder
+	words string
+	said  chan struct{}
+	mu    sync.Mutex
+	once  sync.Once
+}
+
+func saidOn(words string) *saidRecorder {
+	return &saidRecorder{ResponseRecorder: httptest.NewRecorder(), words: words, said: make(chan struct{})}
+}
+
+func (w *saidRecorder) Write(b []byte) (int, error) {
+	w.mu.Lock()
+	n, err := w.ResponseRecorder.Write(b)
+	if strings.Contains(w.Body.String(), w.words) {
+		w.once.Do(func() { close(w.said) })
+	}
+	w.mu.Unlock()
+	return n, err
+}
+
 // alive says a process is still running (or not yet reaped).
 func alive(pid int) bool {
 	p, err := os.FindProcess(pid)
@@ -204,12 +228,13 @@ func TestClaudeRunEndsWhenTheClientLeaves(t *testing.T) {
 	t.Cleanup(s.subscription.abortAll)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
+	rec := saidOn("thinking it over")
 	go func() {
 		defer close(done)
 		p := provider.Provider{ID: "claude", Account: &provider.Account{Agent: "claude", User: "u"}}
 		body := `{"model":"claude-sonnet-5","max_tokens":100,"stream":true,"messages":[{"role":"user","content":"hang on"}]}`
 		var u Usage
-		s.serveClaudeSubscription(httptest.NewRecorder(), httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body)).WithContext(ctx), provider.Anthropic, p, "claude-sonnet-5", []byte(body), &u)
+		s.serveClaudeSubscription(rec, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body)).WithContext(ctx), provider.Anthropic, p, "claude-sonnet-5", []byte(body), &u)
 	}()
 	var pid int
 	for deadline := time.Now().Add(3 * time.Second); pid == 0 && time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
@@ -219,7 +244,11 @@ func TestClaudeRunEndsWhenTheClientLeaves(t *testing.T) {
 	if pid == 0 {
 		t.Fatal("no Claude Code started")
 	}
-	time.Sleep(200 * time.Millisecond) // its reply under way
+	select {
+	case <-rec.said: // its reply under way: its words reached the client
+	case <-time.After(10 * time.Second):
+		t.Fatal("Claude Code's words never reached the client")
+	}
 	cancel()
 	select {
 	case <-done:

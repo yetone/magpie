@@ -6,9 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -150,32 +147,34 @@ func TestClientGoneRecordedAsCanceled(t *testing.T) {
 	}
 
 	// Claude Code's run stopped mid-reply, written to the holdWriter the
-	// gateway gives it: relay still ends the stream it was encoding
-	// (message_stop), which isn't the reply made whole
-	dir := fakeClaudeCalling(t)
+	// gateway gives it. Its stream ends one of two ways, whichever comes
+	// first: abort closes the run's segment and relay ends the stream it
+	// was encoding (message_stop), or Claude Code's output reaches its end
+	// first, its reply unended, and it ends with an error event (#4822).
+	// Neither is the reply made whole.
+	fakeClaudeCalling(t)
 	s := New()
 	t.Cleanup(s.subscription.abortAll)
 	ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
+	rec := saidOn("thinking it over")
 	go func() {
-		for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
-			b, _ := os.ReadFile(filepath.Join(dir, "hang.pid"))
-			if pid, _ := strconv.Atoi(strings.TrimSpace(string(b))); pid != 0 {
-				time.Sleep(200 * time.Millisecond) // its reply under way
-				break
-			}
+		// its reply under way: its words reached the client
+		select {
+		case <-rec.said:
+		case <-time.After(10 * time.Second):
 		}
 		cancel()
 	}()
-	rec := httptest.NewRecorder()
 	h = newHoldWriter(rec, false)
 	h.ctx = ctx
 	p := provider.Provider{ID: "claude", Account: &provider.Account{Agent: "claude", User: "u"}}
 	body := `{"model":"claude-sonnet-5","max_tokens":100,"stream":true,"messages":[{"role":"user","content":"hang on"}]}`
 	var u Usage
 	s.serveClaudeSubscription(h, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body)).WithContext(ctx), provider.Anthropic, p, "claude-sonnet-5", []byte(body), &u)
-	if !strings.Contains(rec.Body.String(), "thinking it over") || !strings.Contains(rec.Body.String(), "message_stop") {
-		t.Fatalf("the run's reply: %q", rec.Body.String())
+	got := rec.Body.String()
+	if !strings.Contains(got, "thinking it over") || !strings.Contains(got, "event: message_stop") && !strings.Contains(got, "ended by magpie before it ended its reply") {
+		t.Fatalf("the run's reply: %q", got)
 	}
 	if h.ended {
 		t.Fatal("a Claude Code run stopped as its agent left taken as a whole reply, recorded as a 200")
