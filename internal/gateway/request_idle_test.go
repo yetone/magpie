@@ -113,7 +113,7 @@ func TestMCPBodyTooLarge(t *testing.T) {
 }
 
 func TestMediaJSONPastOldBodyLimit(t *testing.T) {
-	payload := append(bytes.Repeat([]byte(" "), 64<<20), []byte(`{"model":"fake/m1","prompt":"tail"}`)...)
+	payload := append(bytes.Repeat([]byte(" "), oldBodyLimit), []byte(`{"model":"fake/m1","prompt":"tail"}`)...)
 	for _, api := range []string{"images", "videos"} {
 		t.Run(api, func(t *testing.T) {
 			r := httptest.NewRequest("POST", "/", bytes.NewReader(payload))

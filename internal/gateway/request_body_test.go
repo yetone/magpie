@@ -15,11 +15,9 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 )
 
-const oldBodyLimit = 64 << 20
-
 // largeBodyRoom lifts the cut on a request held before routing, under
-// -race only, for a test that serves an oldBodyLimit body: the race
-// detector makes the scans of its 64MB before routing take 20s on an M5
+// -race only, for a test that serves a body of 20 MB or more: the race
+// detector made the scans of a 64MB body before routing take 20s on an M5
 // Pro and near 60s on CI, where without it they take under a second, so
 // the 30s cut answered 504 (#3957). Without -race the cut stays, and a
 // slower scan still fails the test.

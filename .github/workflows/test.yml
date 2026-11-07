@@ -91,8 +91,9 @@ jobs:
 
       # The redaction tests reuse this binary in fresh processes to check
       # first-use races, so it must include the race detector. The gateway's
-      # tests can't call t.Parallel (t.Setenv), so its suite runs split over
-      # one process per core (#923); each process isolates its own home.
+      # tests can't call t.Parallel (t.Setenv), so its suite runs in chunks,
+      # one process per core at a time, each taking the next chunk when done
+      # (#923, #5361); each process isolates its own home.
       - name: Race
         if: runner.os != 'Windows'
         shell: bash

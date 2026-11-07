@@ -240,6 +240,13 @@ func TestLoopGuardReadsEveryProtocol(t *testing.T) {
 // docs and their tables, a log, a numbered list, a CSV, a hex table,
 // base64 and a run of rules and braces.
 func TestLoopGuardLeavesOrdinaryRepliesAlone(t *testing.T) {
+	if raceOn {
+		// one goroutine feeding one loopGuard, so the race detector has
+		// nothing to find, and it made this corpus take 104s of the
+		// gateway's race run on an M5 Pro, 7s without (#5361); the plain
+		// Test step reads all of it
+		t.Skip("one goroutine: no race to find, and 14 times as slow under -race")
+	}
 	root := filepath.Join("..", "..")
 	var texts = map[string]string{}
 	for _, f := range []string{
