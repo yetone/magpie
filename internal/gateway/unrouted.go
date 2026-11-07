@@ -97,6 +97,10 @@ func unroutedProto(path string) provider.Protocol {
 	return provider.Chat
 }
 
+// heldAnswered, when set, is called as giveUp has answered a request, its
+// client free to read the answer and close: a test holds it there.
+var heldAnswered func(u *unroutedHold)
+
 // errUnrouted ends a request's context when magpie stopped holding it.
 var errUnrouted = errors.New("magpie held the request too long before routing it")
 
@@ -703,6 +707,24 @@ func (u *unroutedHold) giveUp(unknown bool) {
 		where = " its body still arriving (" + u.bodySaid() + ")"
 		msg, status = unroutedBodyMsg(held, u.bodySaid()), http.StatusRequestTimeout
 	}
+	f.mu.Unlock()
+	// The report is taken while it is still held, so before it is
+	// answered: the answer says Connection: close, and once its client
+	// has it and closes, the request's context ends and what held it lets
+	// go (#4300). Taken after, it could name no wait under way, and the
+	// stacks would show it gone. It is taken out of f.mu: the goroutine
+	// dump is no wait for what begins a route.
+	asked, _ := u.asked.Load().(string)
+	who := cmpOr(u.agent, cmpOr(f.agent, "?"))
+	said := cmpOr(where, " not masking it")
+	waits := u.waitsSaid()
+	report := u.s.heldReport(u, held, status, who, asked, said)
+	f.mu.Lock()
+	if len(f.begun) > 0 || u.ended || u.over {
+		// routed, answered or let go meanwhile
+		f.mu.Unlock()
+		return
+	}
 	if !u.w.answer(unroutedProto(u.r.URL.Path), status, msg) {
 		f.mu.Unlock()
 		return // the handler is answering
@@ -720,15 +742,12 @@ func (u *unroutedHold) giveUp(unknown bool) {
 	}
 	shown := u.shown
 	f.mu.Unlock()
+	if heldAnswered != nil {
+		heldAnswered(u)
+	}
 	u.s.trace.update(shown, func(r *Route) {
 		r.Done, r.Status, r.Error, r.Millis = true, status, msg, time.Since(r.Time).Milliseconds()
 	})
-	// the report is taken while it is still held: once its context ends,
-	// what held it lets go, and the stacks would show it gone
-	asked, _ := u.asked.Load().(string)
-	who := cmpOr(u.agent, cmpOr(f.agent, "?"))
-	where = cmpOr(where, " not masking it")
-	report := u.s.heldReport(u, held, status, who, asked, where)
 	u.cancel(errUnrouted)
 	name, err := writeHeld(report)
 	saved := ""
@@ -738,7 +757,7 @@ func (u *unroutedHold) giveUp(unknown bool) {
 		saved = "; its report is " + filepath.Join(HeldDir(), name)
 		u.s.trace.update(shown, func(r *Route) { r.Held = name })
 	}
-	log.Printf("gateway: %s %s for %s from %s held %s before routing,%s%s; stopped with %d%s%s", u.r.Method, u.r.URL.Path, cmpOr(asked, "?"), who, held, where, u.waitsSaid(), status, saved, unroutedStacks())
+	log.Printf("gateway: %s %s for %s from %s held %s before routing,%s%s; stopped with %d%s%s", u.r.Method, u.r.URL.Path, cmpOr(asked, "?"), who, held, said, waits, status, saved, unroutedStacks())
 }
 
 // unroutedMsg is the error of a request held for held before routing:

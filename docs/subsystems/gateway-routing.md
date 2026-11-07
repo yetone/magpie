@@ -462,7 +462,9 @@ recorded as a prediction failure (`noPrediction`).
   (Jason on Discord, a Codex request held 2m0s, told to send "magpie's
   log"), so what held it is also saved as a report
   ([`held_report.go`](../../internal/gateway/held_report.go)): taken while
-  the request is still held, before its context ends, in `HeldDir`
+  the request is still held, before it is answered (the answer says
+  `Connection: close`, and a client that closes on it ends the request's
+  context and lets its wait go, #4300), outside `f.mu`, in `HeldDir`
   (`<cache>/held`, mode 0700), written through a temp file and renamed,
   the newest `heldKept` (5) kept. It has the time, version and system,
   method and path, the model and agent, how long it was held, each kind

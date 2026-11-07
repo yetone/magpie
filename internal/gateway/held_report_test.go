@@ -24,6 +24,25 @@ func TestUnroutedHeldReportSaved(t *testing.T) {
 	heldSight(t, s)
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
+	// #4300: the client reads the 504, which says Connection: close, and
+	// closes; its request's context ends, and the description it was
+	// held in lets go. Held here until it has, the report still says
+	// what held it.
+	heldAnswered = func(u *unroutedHold) {
+		select {
+		case <-u.r.Context().Done():
+		case <-time.After(10 * time.Second):
+			t.Error("the request's context didn't end once its client had the 504")
+			return
+		}
+		for deadline := time.Now().Add(10 * time.Second); strings.Contains(u.waitsSaid(), "(under way)"); time.Sleep(time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Error("the description wait didn't end with its request's context")
+				return
+			}
+		}
+	}
+	t.Cleanup(func() { heldAnswered = nil })
 
 	const secret = "hunter2-held-report-secret"
 	body := strings.Replace(pastedImage, `"text":"read"`, `"text":"`+secret+`"`, 1)
