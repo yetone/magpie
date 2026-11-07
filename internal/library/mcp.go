@@ -8,8 +8,10 @@ import (
 	"io/fs"
 	"maps"
 	"math"
+	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -128,6 +130,7 @@ func (s *Server) check() error {
 		if s.Command == "" {
 			return fmt.Errorf("%s: a command is needed", s.Name)
 		}
+		s.Command, s.Args = spacedProgram(s.Command, s.Args)
 		s.URL, s.Headers = "", nil
 	case "http", "sse":
 		if !strings.HasPrefix(s.URL, "http://") && !strings.HasPrefix(s.URL, "https://") {
@@ -178,6 +181,39 @@ func (s *Server) check() error {
 		}
 	}
 	return nil
+}
+
+// spacedProgram is a program by full path that has spaces in it, typed
+// as it is: "/Applications/Agent HUD.app/Contents/MacOS/Agent HUD --mcp"
+// (zachzhao1984 on Discord), or C:\Program Files\… on Windows, which a
+// command line split at each space makes /Applications/Agent and three
+// arguments, a program that isn't there. When cmd is a full path to no
+// file and cmd with the words after it, joined back by a space, is a
+// program on this computer, that is the program and the rest are its
+// arguments: the fewest words that make one, as Windows reads an unquoted
+// path. A command that is there, a bare name, or a path no join makes a
+// program are left as typed.
+func spacedProgram(cmd string, args []string) (string, []string) {
+	if len(args) == 0 || !filepath.IsAbs(cmd) || program(cmd) {
+		return cmd, args
+	}
+	p := cmd
+	for i, a := range args {
+		p += " " + a
+		if program(p) {
+			return p, slices.Clone(args[i+1:])
+		}
+	}
+	return cmd, args
+}
+
+// program is whether path is a file this computer can run.
+func program(path string) bool {
+	fi, err := os.Stat(path)
+	if err != nil || !fi.Mode().IsRegular() {
+		return false
+	}
+	return runtime.GOOS == "windows" || fi.Mode().Perm()&0o111 != 0
 }
 
 // same reports whether two definitions start the same server; which agents
