@@ -210,3 +210,46 @@ func TestTuneReadsAFileOnce(t *testing.T) {
 		t.Fatalf("after one grew: %d calls", again.Agents[0].Calls)
 	}
 }
+
+// An answer that left a call out of every session, its reply not read yet
+// (ctxJSON.held), stands ctxWhileUnmatched, so the read after dsh writes the
+// reply down names it; any other answer stands ctxAgain, as before #5542: a
+// held set for a call no reply will ever name would re-read every session at
+// each 5 s refresh.
+func TestContextHeldAnswerStandsOnlyWhileAReplyIsAwaited(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	mux := keptMux(t)
+	ctxKept.Lock()
+	ctxKept.days, ctxKept.key = map[string]ctxDay{}, ""
+	ctxKept.Unlock()
+	dir := gateway.HistoryDir()
+	os.MkdirAll(dir, 0o700)
+	r := ctxRoute(1, "claude", "s1", 30000, 1000, 200000, 0)
+	r.Time = time.Now()
+	j, _ := json.Marshal(r)
+	os.WriteFile(filepath.Join(dir, time.Now().Format("2006-01-02")+".jsonl"), append(j, '\n'), 0o600)
+
+	var out ctxJSON
+	getJSON(t, mux, "/api/context?days=1", &out)
+	if out.Days != 1 {
+		t.Fatalf("first answer: %+v", out)
+	}
+	ask := func(held bool, age time.Duration) (kept bool) {
+		ctxKept.Lock()
+		ctxKept.out.Days, ctxKept.out.held, ctxKept.at = -1, held, time.Now().Add(-age)
+		ctxKept.Unlock()
+		var got ctxJSON
+		getJSON(t, mux, "/api/context?days=1", &got)
+		return got.Days == -1
+	}
+	if !ask(false, 6*time.Second) {
+		t.Error("an answer that held no call out was worked out again after 6s, not ctxAgain")
+	}
+	if ask(true, 6*time.Second) {
+		t.Error("an answer that held a call out stood past ctxWhileUnmatched")
+	}
+	if !ask(true, time.Second) {
+		t.Error("an answer that held a call out was worked out again within ctxWhileUnmatched")
+	}
+}
