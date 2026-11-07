@@ -3177,8 +3177,15 @@ function routingPage(part) {
   }
   // grown since it was measured (a font come in): measured again as it is
   // and the head's line told again, so it is held from the first width
-  // on, not from the second's next telling (a pick before it isn't held)
-  new ResizeObserver(() => { storyW = steps.clientWidth; storyDrawn = ""; holdStory(); if (headOf) header(...headOf); }).observe(steps);
+  // on, not from the second's next telling (a pick before it isn't held).
+  // On the next frame: holdStory sets the story's min-height, which in its
+  // own ResizeObserver WebKit reports as a loop (as #5586; a Smart header
+  // wrapping to more lines at 420px, #5639)
+  let storySeen = 0;
+  new ResizeObserver(() => {
+    if (storySeen) return;
+    storySeen = requestAnimationFrame(() => { storySeen = 0; storyW = steps.clientWidth; storyDrawn = ""; holdStory(); if (headOf) header(...headOf); });
+  }).observe(steps);
   // renderCtx draws the request's context window under its story, with
   // its session's prompts request by request; drawn again only when what
   // it shows changes. Live, the next request is patched into the card
