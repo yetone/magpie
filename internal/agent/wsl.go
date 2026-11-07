@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -1276,7 +1277,10 @@ var wslRun = func(timeout time.Duration, args ...string) ([]byte, error) {
 	cmd := proc.CommandContext(ctx, "wsl.exe", args...)
 	// wsl.exe speaks UTF-16 unless told otherwise; either is read
 	cmd.Env = append(os.Environ(), "WSL_UTF8=1")
-	return cmd.Output()
+	out, err := cmd.Output()
+	// one that says WSL must be updated isn't run again for hours
+	proc.WSLSaid(out, err)
+	return out, err
 }
 
 // wslRoot is where magpie opens a running distro's / from; a var for tests.
@@ -1608,9 +1612,15 @@ func wslCodexStandIn() string {
 }
 
 // wslList is the names wsl.exe lists with args; ok is false when it
-// couldn't say (no WSL, or none installed).
+// couldn't say (no WSL, or none installed). With no distro registered at
+// all wsl.exe isn't run (proc.ErrNoWSLDistro), and that is an answer:
+// none. One refused while WSL asks to be updated is not, so nothing
+// remembered of a distro is forgotten for it.
 func wslList(args ...string) (names []string, ok bool) {
 	b, err := wslRun(10*time.Second, args...)
+	if errors.Is(err, proc.ErrNoWSLDistro) {
+		return nil, true
+	}
 	if err != nil {
 		return nil, false
 	}

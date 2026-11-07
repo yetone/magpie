@@ -49,7 +49,10 @@ var Run = func(timeout time.Duration, args ...string) ([]byte, error) {
 	defer cancel()
 	cmd := proc.CommandContext(ctx, "wsl.exe", args...)
 	cmd.Env = append(os.Environ(), "WSL_UTF8=1")
-	return cmd.Output()
+	out, err := cmd.Output()
+	// one that says WSL must be updated isn't run again for hours
+	proc.WSLSaid(out, err)
+	return out, err
 }
 
 var found struct {
@@ -203,7 +206,8 @@ func running() (names []string, ok bool) {
 	}
 	if up.at.IsZero() || time.Since(up.at) > age {
 		b, err := Run(10*time.Second, "-l", "--running", "-q")
-		up.names, up.ok, up.at = Distros(b), err == nil, time.Now()
+		// no distro registered at all is an answer: none runs
+		up.names, up.ok, up.at = Distros(b), err == nil || errors.Is(err, proc.ErrNoWSLDistro), time.Now()
 		if err != nil {
 			up.names = nil
 		}
