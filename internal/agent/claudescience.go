@@ -16,9 +16,15 @@ package agent
 //
 // The daemon lives till it is stopped or the computer restarts, so while
 // it is connected magpie starts it again when it isn't running
-// (KeepClaudeScience), and says so when another one runs in its place —
-// the window, opened while none ran, starts its own without the variable
-// (Check).
+// (KeepClaudeScience). The app (0.1.72, Electron) attaches its window to
+// a daemon running; with none it starts its own (`serve --stdio
+// --adopt-install`) in its own environment, which has no such variable,
+// and its "let the app run it instead" (and the offer it makes when the
+// daemon is older than the app) stops magpie's to do the same. So the
+// keeper also puts magpie's daemon back in place of one it didn't start,
+// and of its own once the app updated past it, but only while no session
+// runs in it, and never one a service manager keeps (it would come back
+// at once); Check says so meanwhile.
 
 import (
 	"context"
@@ -29,6 +35,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -119,6 +126,24 @@ type scienceStatus struct {
 	PID     int    `json:"pid"`
 	Port    int    `json:"port"`
 	Version string `json:"version"`
+	Daemon  struct {
+		// nil when its status didn't say (an older build): unknown, so busy
+		Frames        *int   `json:"active_frames"`
+		Conversations *int   `json:"active_conversations"`
+		Context       string `json:"launch_context"` // terminal, app-child, launchd, systemd
+	} `json:"daemon"`
+}
+
+// idle is whether no session runs in the daemon, as its status says.
+func (st scienceStatus) idle() bool {
+	d := st.Daemon
+	return d.Frames != nil && d.Conversations != nil && *d.Frames == 0 && *d.Conversations == 0
+}
+
+// kept is whether a service manager (launchd, systemd) started the daemon
+// and would start it again, as it was, once stopped.
+func (st scienceStatus) kept() bool {
+	return st.Daemon.Context == "launchd" || st.Daemon.Context == "systemd"
 }
 
 // scienceDir is the daemon's data folder, ~/.claude-science. A var so
@@ -305,7 +330,7 @@ func scienceCheck() string {
 		return ""
 	}
 	if st.PID != m.PID {
-		return fmt.Sprintf("%s's daemon (pid %d) was started without magpie's gateway", scienceName, st.PID)
+		return fmt.Sprintf("%s's daemon (pid %d) was started without magpie's gateway (its window starts its own when none runs); magpie starts its own in its place once no session runs in it", scienceName, st.PID)
 	}
 	if m.URL != gateway.URL() {
 		return fmt.Sprintf("%s's daemon was started for the gateway at %s", scienceName, m.URL)
@@ -314,13 +339,15 @@ func scienceCheck() string {
 }
 
 // KeepClaudeScience starts the daemon on the gateway, while Claude Science
-// is connected, whenever it isn't running: after a restart of the
-// computer, or after it was stopped. It never stops one running — one
-// magpie didn't start may be in the middle of a session — which Check
-// tells as drift instead.
+// is connected, whenever it isn't running (after a restart of the
+// computer, or after it was stopped), and in place of one running that
+// magpie didn't start or that is older than the program installed now
+// (scienceStale), once no session runs in it. It reads the lock file every
+// few seconds and asks status (most of a second of a 130 MB Bun program)
+// when the lock's pid changed or a minute went by.
 func KeepClaudeScience(ctx context.Context) {
 	keepScienceOnce()
-	tick := time.NewTicker(time.Minute)
+	tick := time.NewTicker(scienceTick)
 	defer tick.Stop()
 	for {
 		select {
@@ -330,6 +357,92 @@ func KeepClaudeScience(ctx context.Context) {
 			keepScienceOnce()
 		}
 	}
+}
+
+// scienceTick is how often the keeper reads the lock file.
+const scienceTick = 10 * time.Second
+
+// scienceKeep is what the keeper saw: the lock's pid when it last asked
+// status, and when; the program's version by its size and time; the
+// times it put its daemon in place of another.
+var scienceKeep struct {
+	asked   time.Time
+	lockPID int
+	bin     string
+	binSize int64
+	binTime time.Time
+	version string
+	retook  []time.Time
+}
+
+// scienceRetakes is how many times in an hour the keeper puts its daemon
+// in place of another before it leaves the other running: one the user
+// keeps putting back is theirs.
+const scienceRetakes = 3
+
+// scienceVersion is the version of the program at bin, "" unknown, asked
+// again only when the file changed (the app updated).
+func scienceVersion(bin string) string {
+	fi, err := os.Stat(bin)
+	if err != nil {
+		return ""
+	}
+	k := &scienceKeep
+	if k.bin == bin && k.binSize == fi.Size() && k.binTime.Equal(fi.ModTime()) {
+		return k.version
+	}
+	out, err := scienceRun(nil, bin, "--version")
+	if err != nil {
+		return ""
+	}
+	// "claude-science 0.1.72 (release, public)"
+	v := ""
+	if f := strings.Fields(string(out)); len(f) > 1 {
+		v = f[1]
+	}
+	k.bin, k.binSize, k.binTime, k.version = bin, fi.Size(), fi.ModTime(), v
+	return v
+}
+
+// olderVersion is whether dotted version a is older than b; false when
+// either doesn't read as one.
+func olderVersion(a, b string) bool {
+	as, bs := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(as) || i < len(bs); i++ {
+		var x, y int
+		var err error
+		if i < len(as) {
+			if x, err = strconv.Atoi(as[i]); err != nil {
+				return false
+			}
+		}
+		if i < len(bs) {
+			if y, err = strconv.Atoi(bs[i]); err != nil {
+				return false
+			}
+		}
+		if x != y {
+			return x < y
+		}
+	}
+	return false
+}
+
+// scienceStale is why the daemon running isn't the one magpie keeps: one
+// it didn't start, one started for the gateway's old address, or its own
+// older than the program installed (the app updated, and would offer to
+// run its own instead); "" when it is.
+func scienceStale(bin string, st scienceStatus, m scienceMark, gw string) string {
+	switch {
+	case st.PID != m.PID:
+		return fmt.Sprintf("pid %d isn't the one magpie started", st.PID)
+	case m.URL != gw:
+		return "it was started for the gateway at " + m.URL
+	}
+	if v := scienceVersion(bin); v != "" && olderVersion(st.Version, v) {
+		return fmt.Sprintf("it runs %s and %s is installed", st.Version, v)
+	}
+	return ""
 }
 
 func keepScienceOnce() {
@@ -342,16 +455,45 @@ func keepScienceOnce() {
 	if bin == "" {
 		return
 	}
-	if st, err := scienceState(bin); err != nil || st.Running {
+	k := &scienceKeep
+	lock, _ := scienceLock()
+	if lock.PID == k.lockPID && time.Since(k.asked) < time.Minute {
+		return
+	}
+	st, err := scienceState(bin)
+	k.asked, k.lockPID = time.Now(), lock.PID
+	if err != nil {
 		return
 	}
 	gw := gateway.URL()
 	m, _ := readScienceMark()
-	st, err := scienceServe(bin, gw, m.Port)
+	port := m.Port
+	if st.Running {
+		why := scienceStale(bin, st, m, gw)
+		// a session running in it would be cut off; a service would start
+		// it again without the variable
+		if why == "" || !st.idle() || st.kept() {
+			return
+		}
+		cut := time.Now().Add(-time.Hour)
+		k.retook = slices.DeleteFunc(k.retook, func(t time.Time) bool { return t.Before(cut) })
+		if len(k.retook) >= scienceRetakes {
+			return
+		}
+		k.retook = append(k.retook, time.Now())
+		log.Printf("%s: starting its daemon on magpie's gateway again: %s", scienceName, why)
+		if out, err := scienceRun(nil, bin, "stop"); err != nil {
+			log.Printf("%s: claude-science stop: %v %s", scienceName, err, strings.TrimSpace(string(out)))
+			return
+		}
+		port = st.Port
+	}
+	st, err = scienceServe(bin, gw, port)
 	if err != nil {
 		log.Printf("%s: starting its daemon on magpie's gateway: %v", scienceName, err)
 		return
 	}
+	k.lockPID = st.PID
 	if err := writeScienceMark(scienceMark{URL: gw, PID: st.PID, Port: st.Port}); err != nil {
 		log.Printf("%s: %v", scienceName, err)
 	}

@@ -21,6 +21,10 @@ type fakeScience struct {
 	pid, port int
 	env       []string // the environment the daemon running was started in
 	calls     []string
+	// what its status says of the daemon running (nil: no daemon object,
+	// as an older build), and the version of the program installed
+	daemon             map[string]any
+	version, installed string
 }
 
 func (f *fakeScience) run(env []string, _ string, args ...string) ([]byte, error) {
@@ -30,11 +34,18 @@ func (f *fakeScience) run(env []string, _ string, args ...string) ([]byte, error
 		if !f.running {
 			return []byte(`{"running":false}`), nil
 		}
-		return json.Marshal(map[string]any{"running": true, "pid": f.pid, "port": f.port, "version": "0.1.62", "data_dir": "/x"})
+		v := f.version
+		if v == "" {
+			v = "0.1.62"
+		}
+		return json.Marshal(map[string]any{"running": true, "pid": f.pid, "port": f.port, "version": v, "data_dir": "/x", "daemon": f.daemon})
+	case "--version":
+		return []byte("claude-science " + f.installed + " (release, public)\n"), nil
 	case "stop":
 		f.running, f.env = false, nil
 	case "serve":
 		f.running, f.pid, f.env, f.port = true, f.pid+1, env, 8000
+		f.version, f.daemon = f.installed, map[string]any{"active_frames": 0, "active_conversations": 0, "launch_context": "terminal"}
 		if i := slices.Index(args, "--port"); i > 0 {
 			f.port = 0
 			json.Unmarshal([]byte(args[i+1]), &f.port)
@@ -68,8 +79,8 @@ func (f *fakeScience) base() (string, bool) {
 // ANTHROPIC_BASE_URL set to the gateway, on the port it was on, and by
 // nothing else; disconnected by restarting it without the variable, one
 // set in magpie's own environment too. A daemon magpie didn't start is
-// drift, never stopped behind the user's back; one not running is started
-// while it is connected.
+// drift, never stopped while a session runs in it; one not running is
+// started while it is connected.
 func TestClaudeScienceRestartsItsDaemon(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv(scienceVar, "https://elsewhere.example")
@@ -79,6 +90,7 @@ func TestClaudeScienceRestartsItsDaemon(t *testing.T) {
 	t.Cleanup(func() { scienceRun, scienceBin, scienceWait, scienceDir = oldRun, oldBin, oldWait, oldDir })
 	scienceRun, scienceBin, scienceWait = f.run, func() string { return "/bin/claude-science" }, time.Second
 	scienceDir = func() string { return f.dir }
+	resetScienceKeep(t)
 	a, err := Find(ScienceID)
 	if err != nil {
 		t.Fatal(err)
@@ -109,9 +121,10 @@ func TestClaudeScienceRestartsItsDaemon(t *testing.T) {
 		t.Errorf("launch %q", a.Launch())
 	}
 
-	// the window, opened while none ran, started its own: drift, and the
-	// keeper leaves it running
+	// the window, opened while none ran, started its own, and a session
+	// runs in it: drift, and the keeper leaves it running
 	f.pid, f.env, f.calls = 77, nil, nil
+	f.daemon = map[string]any{"active_frames": 1, "active_conversations": 1, "launch_context": "app-child"}
 	f.lock()
 	if d := a.Check(); !strings.Contains(d, "without magpie's gateway") {
 		t.Errorf("a daemon magpie didn't start: check %q", d)
@@ -190,5 +203,136 @@ func TestFindClaudeScience(t *testing.T) {
 	}
 	if got := findScience(home); got != want {
 		t.Errorf("found %q, want %q", got, want)
+	}
+}
+
+func resetScienceKeep(t *testing.T) {
+	scienceKeep.asked, scienceKeep.lockPID, scienceKeep.bin, scienceKeep.retook = time.Time{}, 0, "", nil
+	t.Cleanup(func() {
+		scienceKeep.asked, scienceKeep.lockPID, scienceKeep.bin, scienceKeep.retook = time.Time{}, 0, "", nil
+	})
+}
+
+// shuitunlulu_ on Discord: Claude Science went back off magpie after it
+// was connected. Its app (0.1.72) attaches its window to a daemon running,
+// and with none starts its own (launch_context app-child) without
+// ANTHROPIC_BASE_URL; its "let the app run it instead", and its offer once
+// the app updated past the daemon, do the same. The keeper puts magpie's
+// daemon back, on the port the other was on, once no session runs in it:
+// never a busy one, one whose status doesn't say, or one a service
+// manager would start again; and stops after a few in an hour.
+func TestClaudeScienceTakesBackFromItsApp(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	bin := filepath.Join(t.TempDir(), "claude-science")
+	os.WriteFile(bin, []byte("0.1.72"), 0o755)
+	f := &fakeScience{dir: t.TempDir(), running: true, pid: 40, port: 8123, installed: "0.1.72"}
+	f.lock()
+	oldRun, oldBin, oldWait, oldDir := scienceRun, scienceBin, scienceWait, scienceDir
+	t.Cleanup(func() { scienceRun, scienceBin, scienceWait, scienceDir = oldRun, oldBin, oldWait, oldDir })
+	scienceRun, scienceBin, scienceWait = f.run, func() string { return bin }, time.Second
+	scienceDir = func() string { return f.dir }
+	resetScienceKeep(t)
+	if err := scienceOn(true); err != nil {
+		t.Fatal(err)
+	}
+	ours := f.pid
+	keep := func() {
+		t.Helper()
+		f.calls = nil
+		scienceKeep.asked = time.Time{} // a minute went by
+		keepScienceOnce()
+	}
+	keep()
+	if f.pid != ours || slices.Contains(f.calls, "stop") {
+		t.Fatalf("its own daemon, on the gateway and current, was restarted: %q", f.calls)
+	}
+
+	// the app's window, opened while none ran, started its own
+	app := func(daemon map[string]any) {
+		f.pid, f.port, f.env, f.daemon = 900, 18481, nil, daemon
+		f.lock()
+	}
+	busy := map[string]any{"active_frames": 1, "active_conversations": 1, "launch_context": "app-child"}
+	app(busy)
+	keep()
+	if f.pid != 900 || slices.Contains(f.calls, "stop") {
+		t.Errorf("a daemon a session runs in was stopped: %q", f.calls)
+	}
+	app(nil) // a status that doesn't say: unknown, left
+	keep()
+	if f.pid != 900 || slices.Contains(f.calls, "stop") {
+		t.Errorf("a daemon whose status says nothing of its sessions was stopped: %q", f.calls)
+	}
+	app(map[string]any{"active_frames": 0, "active_conversations": 0, "launch_context": "launchd"})
+	keep()
+	if f.pid != 900 || slices.Contains(f.calls, "stop") {
+		t.Errorf("a daemon launchd keeps was stopped: %q", f.calls)
+	}
+	idle := map[string]any{"active_frames": 0, "active_conversations": 0, "launch_context": "app-child"}
+	app(idle)
+	if d := scienceCheck(); !strings.Contains(d, "without magpie's gateway") {
+		t.Errorf("check %q", d)
+	}
+	// the lock's pid changed: asked at once, not a minute later
+	scienceKeep.asked = time.Now()
+	scienceKeep.lockPID = ours
+	f.calls = nil
+	keepScienceOnce()
+	if got, _ := f.base(); f.pid == 900 || got != gateway.URL() || f.port != 18481 {
+		t.Errorf("not put back on the gateway on its port: %q, pid %d, base %q, port %d", f.calls, f.pid, got, f.port)
+	}
+	if m, _ := readScienceMark(); m.PID != f.pid || scienceCheck() != "" {
+		t.Errorf("mark %+v, check %q", m, scienceCheck())
+	}
+	// and the lock unchanged within the minute: status isn't asked
+	f.calls = nil
+	keepScienceOnce()
+	if len(f.calls) != 0 {
+		t.Errorf("asked again with the lock unchanged: %q", f.calls)
+	}
+
+	// the app updated: its program is newer than magpie's daemon
+	f.installed = "0.1.73"
+	os.WriteFile(bin, []byte("0.1.73 build"), 0o755)
+	before := f.pid
+	keep()
+	if f.pid == before || f.version != "0.1.73" {
+		t.Errorf("an older daemon of magpie's was left after the app updated: %q", f.calls)
+	}
+	keep()
+	if slices.Contains(f.calls, "--version") {
+		t.Errorf("the version asked again with the program unchanged: %q", f.calls)
+	}
+
+	// put back three times in the hour (the app twice and the update):
+	// one the user keeps putting back is theirs
+	app(idle)
+	keep()
+	if f.pid == 900 {
+		t.Fatalf("not put back a second time")
+	}
+	app(idle)
+	keep()
+	if f.pid != 900 || slices.Contains(f.calls, "stop") {
+		t.Errorf("put back past %d in an hour: %q", scienceRetakes, f.calls)
+	}
+
+	// disconnected: the app's own is left
+	scienceKeep.retook = nil
+	os.Remove(scienceMarkPath())
+	keep()
+	if f.pid != 900 || len(f.calls) != 0 {
+		t.Errorf("touched while disconnected: %q", f.calls)
+	}
+}
+
+func TestOlderVersion(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		want bool
+	}{{"0.1.72", "0.1.73", true}, {"0.1.9", "0.1.72", true}, {"0.1.72", "0.1.72", false}, {"0.2.0", "0.1.99", false}, {"", "0.1.72", false}, {"0.1.72", "", false}, {"x", "0.1.72", false}, {"0.1", "0.1.1", true}} {
+		if got := olderVersion(c.a, c.b); got != c.want {
+			t.Errorf("olderVersion(%q, %q) = %v", c.a, c.b, got)
+		}
 	}
 }
