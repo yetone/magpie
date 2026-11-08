@@ -28,6 +28,14 @@ import (
 // recorded nothing, and the window was shown again after a fixed pause with
 // nothing to report (#4924). The window is now shown again only once the
 // page has said it saw itself hidden.
+//
+// On mote (macOS 27.2) WebKit's own document.hidden stayed true from load
+// to the end, the window shown or not, with no visibilitychange of its own.
+// The shown signal's own visibilitychange then read hidden and unmarked,
+// and was taken for the next hiding: its record and its /hidden reached
+// the host before the panel's Escape was told, and the panel's second
+// round failed with marked=false play="running" (#5322). Only a
+// visibilitychange outside the shown signal counts as a hiding now.
 func TestClosingWindowMarksPageOutOfSight(t *testing.T) {
 	out, err := runAppKit(t, 2*time.Minute, []string{"MAGPIE_TEST_WINDOW_VISIBILITY=1"})
 	if err != nil || !strings.Contains(string(out), "window visibility: ok") {
@@ -73,7 +81,7 @@ for (const [k, off] of [["hidden", true], ["visibilityState", "hidden"]]) {
   const own = Object.getOwnPropertyDescriptor(Document.prototype, k)?.get;
   own && Object.defineProperty(Document.prototype, k, { configurable: true, get() { return outOfSight ? off : own.call(this); } });
 }
-let hiddenTold = false;
+let hiddenTold = false, showing = false;
 window.magpieWindowVisibility = (visible) => {
   if (visible) hiddenTold = false;
   // shown again: what it last saw while hidden, once
@@ -84,10 +92,14 @@ window.magpieWindowVisibility = (visible) => {
   }
   outOfSight = !visible;
   document.documentElement.classList.toggle("magpie-out-of-sight", !visible);
+  showing = visible;
   document.dispatchEvent(new Event("visibilitychange"));
+  showing = false;
 };
+// a hiding is what follows a hide: the shown signal's own event is not one,
+// though WebKit may still say hidden then
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) {
+  if (document.hidden && !showing) {
     localStorage.setItem("hiddenProbe", JSON.stringify({
       hidden: document.hidden,
       state: document.visibilityState,
