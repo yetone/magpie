@@ -226,7 +226,7 @@ function renderGatewayKeys() {
     tick.onclick = () => gatewayKeyAction(k.off ? "on-key" : "off-key", { key: k.id });
     // the copy sits by the key it copies (the owner: stranded among the
     // badges it read as nobody's); Rotate and Remove wait in the row's menu
-    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), copyCallerKeyBtn(k), el("span", "grow"), ...(k.browser ? [gatewayBrowserTag()] : k.readOnly ? [gatewayReadOnlyTag()] : []), gatewayModelsBadge(k), ...gatewayMCPBadge(k), gatewayQuotasBadge(k), gatewayLimitBadge(k), gatewayKeyMore(k));
+    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), copyCallerKeyBtn(k), el("span", "grow"), ...(k.browser ? [gatewayBrowserTag()] : k.readOnly ? [gatewayReadOnlyTag()] : []), gatewayModelsBadge(k), ...gatewayMCPBadge(k), gatewayQuotasBadge(k), ...(k.browser || k.readOnly ? [] : [gatewayConcurrencyBadge(k)]), gatewayLimitBadge(k), gatewayKeyMore(k));
     const under = gatewayLimit?.id === k.id ? [gatewayLimitEditor(k)] : keyUsed(k).map((u) => gatewayLimitLine(k, u));
     if (under.length) row.classList.add("with-limit"), row.append(...under);
     list.append(row);
@@ -614,6 +614,58 @@ function gatewayQuotasBadge(k) {
     e.preventDefault();
     const out = await gatewayKeyAction("quotas-key", { key: k.id, quotas: !k.quotas });
     if (out) status(t(k.quotas ? "{name} is told no quotas" : "{name} is told the quotas of what it may use", { name: k.name }), "ok");
+  };
+  return b;
+}
+
+// a key's requests at once (young02036 on Discord), as an account's are
+// set on the Providers page: the app's menu, no limit, a number, or the
+// user's own; more wait in a queue and go in order
+const KEY_CONC = [1, 2, 3, 5, 10];
+function gatewayConcurrencyBadge(k) {
+  const own = k.maxConcurrency || 0;
+  const b = el("button", "amodels key-conc" + (own ? " set" : ""));
+  b.type = "button";
+  b.textContent = own ? t("{n} at once", { n: own }) : t("No limit at once");
+  b.title = own ? t("At most {n} requests of this key at once; more wait in a queue and go in order", { n: own }) : t("No limit on this key's requests at once");
+  b.setAttribute("aria-label", t("Requests at once"));
+  b.setAttribute("aria-haspopup", "menu");
+  b.setAttribute("aria-expanded", "false");
+  const set = async (v) => {
+    const out = await gatewayKeyAction("concurrency-key", { key: k.id, maxConcurrency: v });
+    if (out) status(v ? t("{who}: at most {n} requests at once", { who: k.name, n: v }) : t("{who}: no limit on requests at once", { who: k.name }), "ok");
+  };
+  // Other…: a number of the user's own, in the badge's place
+  const other = () => {
+    const i = input(own ? String(own) : "", "1–1000", "text");
+    i.className = "rename-in alane-in";
+    i.inputMode = "numeric";
+    i.setAttribute("aria-label", t("Requests at once"));
+    let done = false;
+    const finish = (save) => {
+      if (done) return;
+      done = true;
+      const s = i.value.trim();
+      const v = /^\d+$/.test(s) && +s <= 1000 ? +s : null;
+      if (save && s && v == null) { status(t("Concurrency: a whole number from 0 to 1000"), "err"); return renderGatewayKeys(); }
+      if (save && s && v !== own) set(v);
+      else renderGatewayKeys();
+    };
+    i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") finish(true); else if (e.key === "Escape") finish(false); };
+    i.onblur = () => finish(true);
+    b.replaceWith(i);
+    i.focus({ preventScroll: true });
+  };
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    const nums = !own || KEY_CONC.includes(own) ? KEY_CONC : [...KEY_CONC, own].sort((x, y) => x - y);
+    const opts = [{ v: 0, name: "No limit", note: "Any number at once" }, ...nums.map((n) => ({ v: n, name: String(n), note: "", literalName: true })),
+      { v: -1, name: "Other…", note: "A number of your own, up to 1000" }];
+    openProtoMenu(b, opts, own, (v) => {
+      if (v === -1) return other();
+      if (v !== own) set(v);
+    }, "Requests at once", "sess-menu");
   };
   return b;
 }

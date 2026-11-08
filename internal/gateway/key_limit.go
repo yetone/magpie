@@ -213,6 +213,14 @@ func (s *Server) keyLimit(w http.ResponseWriter, r *http.Request) {
 	if !who.Expires.IsZero() {
 		out["expires"] = who.Expires
 	}
+	// "maxConcurrency", how many of its requests may be in flight at once
+	// (key_slots.go), and its issuer's
+	if who.KeyID != "" && who.MaxConcurrency > 0 {
+		out["maxConcurrency"] = who.MaxConcurrency
+	}
+	if who.KeyID != "" && who.Issuer != nil && who.Issuer.MaxConcurrency > 0 {
+		out["issuerMaxConcurrency"] = who.Issuer.MaxConcurrency
+	}
 	if who.KeyID == "" || len(who.Limits()) == 0 {
 		writeJSON(w, 200, out)
 		return

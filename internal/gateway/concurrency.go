@@ -493,8 +493,13 @@ func (s *Server) concurrency(w http.ResponseWriter, r *http.Request) {
 	for _, ln := range lanes {
 		waiting += ln.Waiting
 	}
+	// and those waiting for a slot of their gateway key's (key_slots.go)
+	keys := s.KeyLanes()
+	for _, ln := range keys {
+		waiting += ln.Waiting
+	}
 	b := s.Busy()
-	writeJSON(w, 200, map[string]any{"object": "concurrency", "data": lanes, "requests": b.Requests, "waiting": waiting, "tools": b.Tools, "active": s.Active()})
+	writeJSON(w, 200, map[string]any{"object": "concurrency", "data": lanes, "requests": b.Requests, "keys": keys, "waiting": waiting, "tools": b.Tools, "active": s.Active()})
 }
 
 // Lanes is how each key or account with requests out or waiting stands,

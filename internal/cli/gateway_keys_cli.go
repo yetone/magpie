@@ -43,6 +43,10 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		access.MigrateLegacyLANKeyBestEffort()
 		return gatewayKeyQuotas(out, args[1:])
 	}
+	if action == "concurrency" {
+		access.MigrateLegacyLANKeyBestEffort()
+		return gatewayKeyConcurrency(out, args[1:])
+	}
 	if action == "mcp" {
 		access.MigrateLegacyLANKeyBestEffort()
 		return gatewayKeyMCP(out, args[1:])
@@ -96,7 +100,7 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		args = args[:2]
 	}
 	if (action == "list" && len(args) != 1) || (action != "list" && len(args) != 2) {
-		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] [--read-only] | rotate <id> [--key <value> | --key -] | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|<N>d|<N>h [--tokens N] [--cost USD] [--cache-reads] [--model <provider>/<model>|<provider>/* ...]] | models <id> [all | <provider>/<model>|<provider>/* ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off] | mcp <id> [all | none | <server>|<server>/<tool> ...] | access <id> [read-only | full] | move <id> <place> | issue --ttl <duration> [--name <name>] [--models a,b] [--accounts a,b] [--tokens N] [--cost USD] [--read-only] [--from <id>] | issuer <id> [on | off] | oidc [list | add --key <id> --repo owner/name … | remove <rule id>]")
+		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] [--read-only] | rotate <id> [--key <value> | --key -] | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|<N>d|<N>h [--tokens N] [--cost USD] [--cache-reads] [--model <provider>/<model>|<provider>/* ...]] | models <id> [all | <provider>/<model>|<provider>/* ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off] | concurrency <id> [<n> | off] | mcp <id> [all | none | <server>|<server>/<tool> ...] | access <id> [read-only | full] | move <id> <place> | issue --ttl <duration> [--name <name>] [--models a,b] [--accounts a,b] [--tokens N] [--cost USD] [--read-only] [--from <id>] | issuer <id> [on | off] | oidc [list | add --key <id> --repo owner/name … | remove <rule id>]")
 	}
 	switch action {
 	case "list", "add", "rotate", "remove":
@@ -624,6 +628,52 @@ func gatewayKeyQuotas(out io.Writer, args []string) error {
 		_, err = fmt.Fprintf(out, "%s: told no quotas when held to a budget, models or accounts\n", k.Name)
 	default:
 		_, err = fmt.Fprintf(out, "%s: told the quotas of the providers and accounts it may use\n", k.Name)
+	}
+	return err
+}
+
+// gatewayKeyConcurrency shows or sets how many of a key's requests may
+// be in flight at once (young02036 on Discord); one more waits its turn,
+// as over a provider's concurrency:
+//
+//	magpie gateway-key concurrency <id>           its cap, or none
+//	magpie gateway-key concurrency <id> <n>|off   at most n at once, or no cap
+func gatewayKeyConcurrency(out io.Writer, args []string) error {
+	usage := fmt.Errorf("usage: magpie gateway-key concurrency <id> [<n> | off], n a whole number from 1 to %d", access.MaxKeyConcurrency)
+	if len(args) == 0 || len(args) > 2 {
+		return usage
+	}
+	id := args[0]
+	if len(args) == 2 {
+		n := 0
+		if args[1] != "off" {
+			v, err := strconv.Atoi(args[1])
+			if err != nil || v < 1 || v > access.MaxKeyConcurrency {
+				return usage
+			}
+			n = v
+		}
+		if _, err := access.Update("concurrency-key", access.Change{Key: id, MaxConcurrency: n}); err != nil {
+			return err
+		}
+	}
+	keys, err := access.List()
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(keys, func(k access.Key) bool { return k.ID == id })
+	if i < 0 {
+		return fmt.Errorf("Key not found")
+	}
+	k := keys[i]
+	if k.MaxConcurrency > 0 {
+		reqs := "requests"
+		if k.MaxConcurrency == 1 {
+			reqs = "request"
+		}
+		_, err = fmt.Fprintf(out, "%s: at most %d %s at once, the rest wait their turn\n", k.Name, k.MaxConcurrency, reqs)
+	} else {
+		_, err = fmt.Fprintf(out, "%s: no concurrency limit\n", k.Name)
 	}
 	return err
 }

@@ -320,7 +320,7 @@ func ScopeBrowser(id string) error {
 
 // identityOf is who k is, folded into its issuer when it has one.
 func identityOf(k Key, keys []Key, now time.Time) (Identity, error) {
-	who := Identity{KeyID: k.ID, KeyName: k.Name, Limit: k.Limit, More: k.More, Models: HeldModels(k.Models, k.Accounts), AccountModels: len(k.Models) == 0 && len(k.Accounts) > 0, Accounts: k.Accounts, MCP: k.MCP, Quotas: k.Quotas, ReadOnly: k.ReadOnly, Browser: k.Browser, Expires: k.Expires, Issues: k.Issues && k.Issuer == "" && !k.Browser}
+	who := Identity{KeyID: k.ID, KeyName: k.Name, Limit: k.Limit, More: k.More, Models: HeldModels(k.Models, k.Accounts), AccountModels: len(k.Models) == 0 && len(k.Accounts) > 0, Accounts: k.Accounts, MCP: k.MCP, Quotas: k.Quotas, ReadOnly: k.ReadOnly, Browser: k.Browser, Expires: k.Expires, Issues: k.Issues && k.Issuer == "" && !k.Browser, MaxConcurrency: k.MaxConcurrency}
 	// the default key as Default tells it: marked LAN, or the id the
 	// settings name (settings read only for an unmarked key)
 	who.Default = k.LAN || (k.ID != "" && settings.Load().LANKeyID == k.ID)
@@ -346,7 +346,7 @@ func identityOf(k Key, keys []Key, now time.Time) (Identity, error) {
 	if !p.Expires.IsZero() && (who.Expires.IsZero() || p.Expires.Before(who.Expires)) {
 		who.Expires = p.Expires
 	}
-	who.Issuer = &Identity{KeyID: p.ID, KeyName: p.Name, Limit: p.Limit, More: p.More, MCP: p.MCP}
+	who.Issuer = &Identity{KeyID: p.ID, KeyName: p.Name, Limit: p.Limit, More: p.More, MCP: p.MCP, MaxConcurrency: p.MaxConcurrency}
 	return who, nil
 }
 

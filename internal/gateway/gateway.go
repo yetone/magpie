@@ -557,6 +557,9 @@ type Server struct {
 	// the requests out at each key or account with a MaxConcurrency, and
 	// those waiting their turn (concurrency.go)
 	lanes lanes
+	// the requests in flight of each gateway key with a MaxConcurrency,
+	// and those waiting their turn (key_slots.go)
+	keyLanes lanes
 	// each account's one turn at a time near its usage cap (cap_near.go)
 	nearCap nearCaps
 	// the requests each key or account with a MaxRPM sent in the last
@@ -937,7 +940,7 @@ func (s *Server) Handler() http.Handler {
 	// on (dumpFirst)
 	// a socket's turns go through all of it again (socketEntry); the
 	// agent's Retry-After is bounded on the way out (retryCapped)
-	return socketEntry(s.dumpFirst(retryCapped(s.counted(headerLogged(holdCatalog(corsGuard(callerGuard(readOnlyGuard(mux, withCaller(keyLimited(mux)))))))))))
+	return socketEntry(s.dumpFirst(retryCapped(s.counted(headerLogged(holdCatalog(corsGuard(callerGuard(readOnlyGuard(mux, withCaller(keyLimited(s.keySlots(mux, mux))))))))))))
 }
 
 // routes are the client APIs, each by its pattern: readOnlyGuard reads
@@ -3816,14 +3819,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			queuedAlive := hw.keepQueued()
 			var release func()
 			var inLane time.Duration
-			var err error
 			var mate candidate
-			if handed.release != nil {
+			// the slot of its gateway key's first, once for the request
+			// (key_slots.go): its agent gone meanwhile, nothing is sent
+			inKey, err := keySlot(ctx)
+			if err == nil && handed.release != nil {
 				// it left a full lane's queue for this one, whose slot it
 				// took as it did (waitMate): the wait there is its queue
 				release, handed.release = handed.release, nil
 				inLane, handed.waited = handed.waited, 0
-			} else {
+			} else if err == nil {
 				// waiting, it goes to the first other key or account with
 				// room, not resting, once there is one (01huadalang on
 				// Discord: the requests already waiting for a third ZCode
@@ -3847,7 +3852,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				if firstBegan.Equal(began) {
 					// the first try's wait is the next one's queue, not a
 					// failed try's time
-					firstBegan, handed.waited = time.Time{}, inLane
+					firstBegan, handed.waited = time.Time{}, inKey+inLane
 				}
 				gaveWay[c.who()] = true
 				cands = movedAhead(cands, i, mate)
@@ -3866,7 +3871,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				}
 			}
 			queuedAlive()
-			queued = (inLane + inMinute).Milliseconds()
+			queued = (inKey + inLane + inMinute).Milliseconds()
 			var tooMany *errRPM
 			if errors.Is(err, errQueueFull) || errors.Is(err, errQueueWait) || errors.As(err, &tooMany) {
 				laneErr = err
@@ -5490,6 +5495,11 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 			heardNet() // the network is up (offline.go)
 		}
 	}()
+	// a way of a key's request that asks outside serve's tries waits for
+	// the key's slot here (key_slots.go); taken already, it goes on
+	if _, err := keySlot(ctx); err != nil {
+		return nil, err
+	}
 	if p.ImageFilesAt(to) {
 		// which images a try named by file (deepseek_files.go)
 		ctx = context.WithValue(ctx, dsSentKey{}, &dsSent{})

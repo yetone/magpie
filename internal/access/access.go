@@ -182,7 +182,16 @@ type Key struct {
 	// Issues lets the key issue short-lived keys under itself
 	// (POST /v1/magpie/keys); an issued key never can.
 	Issues bool `json:"issues,omitempty"`
+	// MaxConcurrency is how many of the key's requests may be in flight
+	// at once (young02036 on Discord); over it they wait in the key's
+	// queue and go out in order, as over a provider's MaxConcurrency.
+	// 0 for no limit.
+	MaxConcurrency int `json:"maxConcurrency,omitempty"`
 }
+
+// MaxKeyConcurrency is the most MaxConcurrency a key may have, as a
+// provider's.
+const MaxKeyConcurrency = 1000
 
 // Identity is the gateway key a request came with, its budget, the
 // models and the accounts it may use.
@@ -218,6 +227,10 @@ type Identity struct {
 	Issuer *Identity
 	// Issues: the key may issue keys under itself.
 	Issues bool
+	// MaxConcurrency is the key's own cap on requests in flight at once
+	// (Key.MaxConcurrency), 0 for none; an issued key is held to its
+	// issuer's too (Issuer.MaxConcurrency).
+	MaxConcurrency int
 	// Default: the key is the sharing key magpie made itself (Default),
 	// the one it writes into this computer's own agents that reach the
 	// gateway from beyond loopback, never one the user made for someone
@@ -422,6 +435,9 @@ type Change struct {
 	// Issues is what "issuer-key" sets: the key may issue short-lived
 	// keys under itself (Key.Issues).
 	Issues bool `json:"issues,omitempty"`
+	// MaxConcurrency is what "concurrency-key" sets: how many requests
+	// the key may have in flight at once, 0 for no limit.
+	MaxConcurrency int `json:"maxConcurrency,omitempty"`
 	// Secret is the value "add-key" gives the new key, one its clients
 	// already send (love1sbug on X: keys handed out from another gateway),
 	// or "rotate-key" gives the key; "" for one magpie makes.
@@ -581,6 +597,11 @@ func Update(action string, in Change) (string, error) {
 			keys[i].MCP = mcp
 		case "quotas-key":
 			keys[i].Quotas = in.Quotas
+		case "concurrency-key":
+			if in.MaxConcurrency < 0 || in.MaxConcurrency > MaxKeyConcurrency {
+				return "", fmt.Errorf("Concurrency: a whole number from 0 to %d", MaxKeyConcurrency)
+			}
+			keys[i].MaxConcurrency = in.MaxConcurrency
 		case "issuer-key":
 			// may issue short-lived keys under itself (POST /v1/magpie/keys)
 			if in.Issues && keys[i].Browser {
@@ -626,7 +647,7 @@ func Update(action string, in Change) (string, error) {
 		default:
 			return "", fmt.Errorf("unknown key action %q", action)
 		}
-		if defaultKey && action != "remove-key" && action != "rename-key" && action != "limit-key" && action != "reset-limit-key" && action != "models-key" && action != "accounts-key" && action != "mcp-key" && action != "quotas-key" && action != "access-key" && action != "issuer-key" && action != "move-key" {
+		if defaultKey && action != "remove-key" && action != "rename-key" && action != "limit-key" && action != "reset-limit-key" && action != "models-key" && action != "accounts-key" && action != "mcp-key" && action != "quotas-key" && action != "concurrency-key" && action != "access-key" && action != "issuer-key" && action != "move-key" {
 			mirror = &keys[i]
 		}
 	}

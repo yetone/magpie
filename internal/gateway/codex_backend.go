@@ -947,6 +947,11 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 // codexUpstreamOn is codexUpstream signed by the account on instead of
 // Codex's own sign-in, when on isn't nil (compactOn).
 func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest string, body []byte, on *provider.Provider) {
+	// a gateway key's turn on Codex's own sign-in waits for its key's slot
+	// here, outside serve (key_slots.go); its agent gone, nothing is sent
+	if _, err := keySlot(r.Context()); err != nil {
+		return
+	}
 	start := time.Now()
 	usage.Saw(agentOf(r))
 	// Codex's own turns come here from the mux, not through serve: the
