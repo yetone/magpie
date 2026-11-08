@@ -849,6 +849,15 @@ Chromium and WebKit, in English, Chinese, Japanese and German, at 1100px and
 420px. With the state answering after the history, the cards drawn by the
 agents' ids take their names once it is in, though the history is the same.
 
+`sessions-context-line.test.cjs` opens a session's details on the Sessions
+page (liang_yongxiang on Discord): one the gateway sent calls of asks
+`/api/context/session` once, with its first and last, and draws a Context
+line, a point a request telling its share of the window and the fullest
+share beside it, toned; a point clicked opens that request in Routing with
+its card; one the gateway kept no prompt of, or never saw, has no line, and
+the second isn't asked; opened again it is drawn without asking — in
+Chromium and WebKit, in all five languages, at 1100px and 420px.
+
 `tray-usages.test.cjs` picks several of the Usage page's cards for the menu
 bar in Settings: the menu keeps open as Codex and Claude Code are ticked
 beside Copilot, posts nothing till it closes and then the three once, in the

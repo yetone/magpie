@@ -121,6 +121,8 @@ type ctxJSON struct {
 const (
 	ctxSessions = 80
 	ctxPoints   = 160
+	// ctxSessionPoints is how many a session's own line keeps, the latest
+	ctxSessionPoints = 1000
 )
 
 func median(xs []int) int {
@@ -498,6 +500,13 @@ func contextOf(routes []gateway.Route, days int) ctxJSON {
 
 // contextOfRecs is contextOf of the routes as the tab reads them.
 func contextOfRecs(routes []ctxRec, days int) ctxJSON {
+	return contextOfRecsFor(routes, days, "")
+}
+
+// contextOfRecsFor is contextOfRecs, and when only isn't "" it lists that
+// one session alone (agent + "\x00" + its id), with up to ctxSessionPoints
+// of its requests: a session's line on the Sessions page.
+func contextOfRecsFor(routes []ctxRec, days int, only string) ctxJSON {
 	sort.SliceStable(routes, func(i, j int) bool { return routes[i].Time.Before(routes[j].Time) })
 	out := ctxJSON{Days: days, Agents: []ctxAgent{}, Sessions: []ctxSession{}}
 	type agentAcc struct {
@@ -615,14 +624,21 @@ func contextOfRecs(routes []ctxRec, days int) ctxJSON {
 	// the sessions, the latest first
 	slices.SortFunc(order, func(a, b string) int { return sess[b].Last.Compare(sess[a].Last) })
 	var codexIDs, desktopIDs, piIDs []string
+	keep := ctxPoints
+	if only != "" {
+		keep = ctxSessionPoints
+	}
 	for _, sk := range order {
 		s := sess[sk]
+		if only != "" && sk != only {
+			continue
+		}
 		if acc := agents[s.Agent]; acc != nil && s.Requests > 1 {
 			acc.fills = append(acc.fills, float64(s.Peak)/float64(s.Window))
 		}
 		if len(out.Sessions) < ctxSessions {
-			if len(s.Points) > ctxPoints {
-				s.Points = s.Points[len(s.Points)-ctxPoints:]
+			if len(s.Points) > keep {
+				s.Points = s.Points[len(s.Points)-keep:]
 			}
 			out.Sessions = append(out.Sessions, *s)
 			switch s.Agent {
@@ -858,13 +874,33 @@ func contextRecs(r *http.Request, days int) (out []ctxRec, stamp string) {
 }
 
 func contextRecsLocked(r *http.Request, days int) (out []ctxRec, stamp string) {
-	seen := map[int64]bool{}
 	now := time.Now()
-	var key strings.Builder
-	asked := map[string]bool{}
+	list := make([]string, 0, days)
 	for i := days - 1; i >= 0; i-- {
-		day := now.AddDate(0, 0, -i).Format("2006-01-02")
+		list = append(list, now.AddDate(0, 0, -i).Format("2006-01-02"))
+	}
+	out, stamp = daysRecsLocked(r, list)
+	// a day out of the range is let go; the range's days are kept for the
+	// next refresh
+	asked := map[string]bool{}
+	for _, day := range list {
 		asked[day] = true
+	}
+	for day := range ctxKept.days {
+		if !asked[day] {
+			delete(ctxKept.days, day)
+		}
+	}
+	return out, stamp
+}
+
+// daysRecsLocked reads the routes of the days listed, from what is kept
+// of them when their files are as they were, and the live trace's not yet
+// in the history.
+func daysRecsLocked(r *http.Request, list []string) (out []ctxRec, stamp string) {
+	seen := map[int64]bool{}
+	var key strings.Builder
+	for _, day := range list {
 		st := dayStamp(day)
 		fmt.Fprintf(&key, "%s=%s", day, st)
 		d, ok := ctxKept.days[day]
@@ -883,13 +919,6 @@ func contextRecsLocked(r *http.Request, days int) (out []ctxRec, stamp string) {
 			}
 		}
 	}
-	// a day out of the range is let go; the range's days are kept for the
-	// next refresh
-	for day := range ctxKept.days {
-		if !asked[day] {
-			delete(ctxKept.days, day)
-		}
-	}
 	if gw := served.Load(); gw != nil {
 		for _, x := range gw.Trace(r.Context(), 0, 0).Routes {
 			if x.Done && !seen[x.ID] {
@@ -905,6 +934,46 @@ func contextRecsLocked(r *http.Request, days int) (out []ctxRec, stamp string) {
 		out[i].Model = pub(out[i].Model)
 	}
 	return out, key.String()
+}
+
+// ctxSessionDays is how far back a session's line reads: the Usage page's
+// Context tab's longest range
+const ctxSessionDays = 30
+
+// contextSession is one agent's session as the Context tab counts it,
+// every request of it the gateway saw from the day of from to the day of
+// to (the session's first and last, as the Sessions page has them), read
+// within the last ctxSessionDays days; nil when the gateway saw none.
+// The days read stay kept until the tab's next read lets go of those
+// out of its range.
+func contextSession(r *http.Request, agent, id string, from, to time.Time) *ctxSession {
+	now := time.Now()
+	oldest := now.AddDate(0, 0, -(ctxSessionDays - 1))
+	if from.IsZero() || from.Before(oldest) {
+		from = oldest
+	}
+	if to.IsZero() || to.After(now) {
+		to = now
+	}
+	// day by day at noon, which a change of clocks never moves to another day
+	y, m, dd := from.Local().Date()
+	last := to.Local().Format("2006-01-02")
+	var list []string
+	for d := time.Date(y, m, dd, 12, 0, 0, 0, time.Local); len(list) < ctxSessionDays; d = d.AddDate(0, 0, 1) {
+		day := d.Format("2006-01-02")
+		list = append(list, day)
+		if day >= last {
+			break
+		}
+	}
+	ctxKept.Lock()
+	recs, _ := daysRecsLocked(r, list)
+	ctxKept.Unlock()
+	out := contextOfRecsFor(recs, len(list), agent+"\x00"+id)
+	if len(out.Sessions) == 0 {
+		return nil
+	}
+	return &out.Sessions[0]
 }
 
 // contextFor is the tab's answer for the days asked for: the last one
@@ -928,6 +997,20 @@ func contextFor(r *http.Request, days int) ctxJSON {
 }
 
 func contextRoutesAPI(mux *http.ServeMux) {
+	// one session's prompts, request by request, against its window: the
+	// line the Sessions page draws in a session's details (liang_yongxiang
+	// on Discord). from and to are its first and last, RFC 3339.
+	mux.HandleFunc("GET /api/context/session", func(rw http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		agent, id := q.Get("agent"), q.Get("id")
+		if agent == "" || id == "" {
+			http.Error(rw, "agent and id are needed", http.StatusBadRequest)
+			return
+		}
+		from, _ := time.Parse(time.RFC3339, q.Get("from"))
+		to, _ := time.Parse(time.RFC3339, q.Get("to"))
+		writeJSON(rw, map[string]any{"session": contextSession(r, agent, id, from, to)})
+	})
 	mux.HandleFunc("GET /api/context", func(rw http.ResponseWriter, r *http.Request) {
 		days, _ := strconv.Atoi(r.URL.Query().Get("days"))
 		if days <= 0 || days > 30 {

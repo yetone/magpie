@@ -143,16 +143,12 @@
     return g > 0 ? Math.floor(free / g) : null;
   }
 
-  // count words a number with the phrase for one, or for many
   const count = (n, one, many) => n === 1 ? t(one) : t(many, { n });
 
-  // spark draws a session's prompts, request by request, against its
-  // window; the one the card tells of is marked, and a point clicked opens
-  // its request
+  // a session's prompts against its window; a point opens its request
   function spark(series, at, window, onPoint) {
     const W = 240, H = 34, pad = 3;
-    // scaled to the session's peak, so a session that never came near its
-    // window still shows how it grew; the window's line shows once it is near
+    // scaled to its peak; the window's line shows once it is near
     const peak = Math.max(...series.map((p) => p.tokens), 1);
     const top = window && peak > window * 0.6 ? Math.max(window, peak) : peak * 1.2;
     const x = (i) => series.length < 2 ? W / 2 : pad + (i / (series.length - 1)) * (W - pad * 2);
@@ -186,7 +182,9 @@
       if (!onPoint) return;
       const hit = ns("rect", { x: x(i) - Math.max(2, W / series.length / 2), y: 0, width: Math.max(4, W / series.length), height: H, class: "hit" + (on ? " on" : "") });
       const tip = document.createElementNS("http://www.w3.org/2000/svg", "title");
-      tip.textContent = t("Request {n}: {tokens} tokens", { n: i + 1, tokens: fmtK(p.tokens) });
+      const w = p.window || window;
+      tip.textContent = w ? t("Request {n}: {tokens} of {window} ({pct})", { n: i + 1, tokens: fmtK(p.tokens), window: fmtK(w), pct: pct(p.tokens / w) })
+        : t("Request {n}: {tokens} tokens", { n: i + 1, tokens: fmtK(p.tokens) });
       hit.append(tip);
       hit.onclick = (e) => { e.stopPropagation(); onPoint(p); };
     });
@@ -1159,6 +1157,8 @@
     return box;
   }
 
+  window.ctxSpark = spark;
+  window.ctxHealth = health;
 
   // ---------- tuned for you: the settings that would have spent the fewest tokens ----------
 

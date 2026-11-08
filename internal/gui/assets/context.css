@@ -431,3 +431,7 @@ i.dot.free { background: var(--k-free); box-shadow: inset 0 0 0 1px color-mix(in
 .ctx-pic.open { cursor: zoom-out; }
 .ctx-pic.open img { max-width: 100%; max-height: none; }
 @media (prefers-reduced-motion: reduce) { .ctx-pic { transition: none; } }
+
+/* a session's line in its details (Sessions page, Usage's Sessions list) */
+.sess-ctx .ctx-line { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; max-width: 320px; font-variant-numeric: tabular-nums; }
+.sess-ctx .ctx-spark { flex: 1; min-width: 72px; height: 22px; }
