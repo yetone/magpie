@@ -95,7 +95,7 @@ func TestWSLAgyPick(t *testing.T) {
 	}
 	for _, p := range []string{bashrc, zshrc} {
 		body := readFile(p)
-		if !strings.Contains(body, "# >>> magpie agy >>>\nfunction agy {\n") || !strings.Contains(body, "GOOGLE_GEMINI_BASE_URL='"+gw+"'") ||
+		if !strings.Contains(body, "# >>> magpie agy >>>\n"+agyPosixHead) || !strings.Contains(body, "GOOGLE_GEMINI_BASE_URL='"+gw+"'") ||
 			!strings.Contains(body, "GEMINI_API_KEY='"+key+"'") || strings.Contains(body, "127.0.0.1") {
 			t.Fatalf("%s:\n%s", p, body)
 		}
@@ -247,7 +247,7 @@ func TestWSLAgyStopped(t *testing.T) {
 	if strings.Join(*asked, ",") != "Stopped" {
 		t.Fatalf("not started first: %v", *asked)
 	}
-	if body := readFile(filepath.Join(root, "home", "me", ".bashrc")); !strings.Contains(body, "function agy {") {
+	if body := readFile(filepath.Join(root, "home", "me", ".bashrc")); !strings.Contains(body, agyPosixHead) {
 		t.Fatalf(".bashrc:\n%s", body)
 	}
 }
