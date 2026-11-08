@@ -8,17 +8,31 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 )
 
-const keyBalanceUsage = "magpie provider key-balance <id> [key [usd|¥cny|off] [--refill monthly[:day]|weekly[:mon…sun]|off] [--expiring amount@yyyy-mm-dd|off]]"
+const keyBalanceUsage = "magpie provider key-balance <id> [key [usd|¥cny|off] [--refill monthly[:day]|weekly[:mon…sun]|off] [--expiring amount@yyyy-mm-dd|off]… [--expiring-remove [amount@]yyyy-mm-dd]…]"
 
 // keyBalanceCmd shows, or sets, the balance typed by hand on a provider's
 // API keys whose vendor tells none (tenacious_eagle on Discord): what is
 // left of it is the amount less what magpie priced the key's calls at
 // since it was typed, or since it last refilled
 // (provider/key_balance_own.go). An amount in yuan ("¥100", "100cny") is
-// counted down at the dollar's rate magpie last learned.
+// counted down at the dollar's rate magpie last learned. Each --expiring
+// adds a grant of credit that expires (tenacious_eagle_96548: promotional
+// credit twice, gone on two days), off takes every one off, and each
+// --expiring-remove takes off the grants through its day (of its amount,
+// when given); they are done in the order given, after the balance.
 func keyBalanceCmd(args []string) error {
 	var rest []string
-	var refill, expiring *string
+	var refill *string
+	type grantOp struct {
+		x      *provider.Expiring // nil: every grant off
+		remove bool
+	}
+	var grants []grantOp
+	type grantArg struct {
+		v      string
+		remove bool
+	}
+	var grantArgs []grantArg
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
@@ -28,12 +42,12 @@ func keyBalanceCmd(args []string) error {
 		case strings.HasPrefix(a, "--refill="):
 			v := strings.TrimPrefix(a, "--refill=")
 			refill = &v
-		case a == "--expiring" && i+1 < len(args):
+		case (a == "--expiring" || a == "--expiring-remove") && i+1 < len(args):
 			i++
-			expiring = &args[i]
-		case strings.HasPrefix(a, "--expiring="):
-			v := strings.TrimPrefix(a, "--expiring=")
-			expiring = &v
+			grantArgs = append(grantArgs, grantArg{args[i], a == "--expiring-remove"})
+		case strings.HasPrefix(a, "--expiring=") || strings.HasPrefix(a, "--expiring-remove="):
+			k, v, _ := strings.Cut(a, "=")
+			grantArgs = append(grantArgs, grantArg{v, k == "--expiring-remove"})
 		case strings.HasPrefix(a, "-") && a != "-":
 			// a flag magpie doesn't know, or a negative amount: never data
 			return fmt.Errorf("%s", keyBalanceUsage)
@@ -41,7 +55,8 @@ func keyBalanceCmd(args []string) error {
 			rest = append(rest, a)
 		}
 	}
-	if len(rest) < 1 || len(rest) > 3 || ((refill != nil || expiring != nil) && len(rest) < 2) {
+	expiring := len(grantArgs) > 0
+	if len(rest) < 1 || len(rest) > 3 || ((refill != nil || expiring) && len(rest) < 2) {
 		return fmt.Errorf("%s", keyBalanceUsage)
 	}
 	p, err := provider.Find(rest[0])
@@ -57,18 +72,28 @@ func keyBalanceCmd(args []string) error {
 			return err
 		}
 	}
-	var x *provider.Expiring
-	if expiring != nil {
-		if x, err = provider.ParseExpiring(*expiring); err != nil {
+	// every grant read before anything is written
+	for _, g := range grantArgs {
+		if g.remove {
+			x, err := provider.ParseExpiringDay(g.v)
+			if err != nil {
+				return err
+			}
+			grants = append(grants, grantOp{x, true})
+			continue
+		}
+		x, err := provider.ParseExpiring(g.v)
+		if err != nil {
 			return err
 		}
+		grants = append(grants, grantOp{x, false})
 	}
 	var b *provider.OwnBalance
 	if len(rest) > 2 {
 		if b, err = provider.ParseOwnBalance(rest[2]); err != nil {
 			return err
 		}
-		if b == nil && (refill != nil || expiring != nil) {
+		if b == nil && (refill != nil || expiring) {
 			return fmt.Errorf("%s", keyBalanceUsage)
 		}
 	}
@@ -93,13 +118,21 @@ func keyBalanceCmd(args []string) error {
 			return err
 		}
 	}
-	// the part that expires, set after the balance it is part of
-	if expiring != nil {
-		if err := provider.SetKeyExpiring(p.ID, rest[1], x); err != nil {
+	// credit that expires, after the balance it is on top of
+	for _, g := range grants {
+		switch {
+		case g.x == nil:
+			err = provider.ClearKeyExpiring(p.ID, rest[1])
+		case g.remove:
+			err = provider.RemoveKeyExpiring(p.ID, rest[1], *g.x)
+		default:
+			err = provider.AddKeyExpiring(p.ID, rest[1], *g.x)
+		}
+		if err != nil {
 			return err
 		}
 	}
-	if len(rest) > 2 || refill != nil || expiring != nil {
+	if len(rest) > 2 || refill != nil || expiring {
 		if p, err = provider.Find(p.ID); err != nil {
 			return err
 		}
@@ -163,12 +196,12 @@ func keyBalanceLine(e provider.BalanceEstimate) string {
 	if e.Refill != nil && e.Next != nil {
 		out += " · refills " + e.Refill.String() + ", next " + e.Next.Local().Format("Jan 2")
 	}
-	if x := e.Expiring; x != nil && x.Left != nil {
+	for _, x := range e.Expiring {
 		out += fmt.Sprintf(" · of it %s expires (%s typed %s), counted through %s", money(*x.Left), money(x.Set),
 			x.At.Local().Format("Jan 2 15:04"), x.Ends.Add(-time.Second).Format("Jan 2"))
 	}
 	if e.Expired != nil {
-		out += " · the part that expired " + e.Expired.Add(-time.Second).Format("Jan 2") + " no longer counts"
+		out += " · the credit that expired " + e.Expired.Add(-time.Second).Format("Jan 2") + " no longer counts"
 	}
 	return out
 }

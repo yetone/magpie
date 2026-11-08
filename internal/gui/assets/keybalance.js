@@ -5,10 +5,13 @@
 // key_balance_own.go). Typing it again sets it anew. It may be typed in
 // yuan ("¥100", or picked beside the field, which starts at the balance's
 // own currency, else Settings' one), and may refill each month or week.
-// Part of it may expire on a day (credit good until a date): the pill
-// says how much and in how many days, amber from a week, and the rest of
-// the balance is what stays after it. keyspend.js imports this when the
-// provider editor draws a key's row, so it weighs nothing on the core.
+// Credit may come on top that expires on a day, in grants (promotional
+// credit twice, gone on two days: tenacious_eagle_96548), the one that
+// goes soonest spent first: the pill says how much of each is left and in
+// how many days, amber from a week; each is added in one small form,
+// amount and last day together, and taken off from the menu. keyspend.js
+// imports this when the provider editor draws a key's row, so it weighs
+// nothing on the core.
 const moneyText = (v, cny) => (v < 0 ? "-" : "") + (cny ? "¥" : "$") + Math.abs(v).toFixed(2);
 // balanceAmount reads what was typed: an amount and whether it is in
 // yuan, a sign or a word saying which, else unit; null for none
@@ -38,12 +41,17 @@ function keyBalancePill(p, k) {
   const pill = el("button", "abal" + (b ? " set" : ""));
   pill.type = "button";
   pill.textContent = b ? t("≈{usd} left", { usd: b.left == null ? (cny ? "¥" : "$") + "…" : moneyText(b.left, cny) }) : t("Set balance");
-  const x = b?.expiring, xin = x && expiresIn(x.ends), xlast = x && dayOf(new Date(new Date(x.ends) - 1));
-  if (x?.left > 0) {
+  // each grant still counting, soonest first as the server lists them
+  const xs = (b?.expiring || []).map((x) => ({ ...x, in: expiresIn(x.ends), last: dayOf(new Date(new Date(x.ends) - 1)) }));
+  for (const x of xs) {
+    if (!(x.left > 0)) continue;
     const amount = moneyText(x.left, cny);
-    pill.append(" · ", el("span", "abal-exp" + (xin.soon ? " soon" : ""), xin.days <= 0 ? t("{amount} expires today", { amount })
-      : xin.days === 1 ? t("{amount} expires tomorrow", { amount }) : t("{amount} expires in {n} days", { amount, n: xin.days })));
+    pill.append(" · ", el("span", "abal-exp" + (x.in.soon ? " soon" : ""), x.in.days <= 0 ? t("{amount} expires today", { amount })
+      : x.in.days === 1 ? t("{amount} expires tomorrow", { amount }) : t("{amount} expires in {n} days", { amount, n: x.in.days })));
   }
+  // two or more wrap at a grant on a narrow row (a class, not :has(),
+  // which Safari before 15.4 drops the rule for)
+  pill.classList.toggle("abal-many", pill.querySelectorAll(".abal-exp").length > 1);
   pill.title = !b ? t("Type what the vendor's page says this key has left, and magpie counts down from it as it sends requests")
     : [t("An estimate: {set} from {when}, less {spent} magpie counted spent on this key since, at the prices the Usage page shows. Click to change", {
         set: moneyText(b.set, cny), when: new Date(b.from || b.at).toLocaleString(intlLang()),
@@ -51,8 +59,8 @@ function keyBalancePill(p, k) {
       }),
       b.left == null ? t("The dollar's rate in yuan isn't known yet, so what is left can't be counted") : "",
       b.refill && b.next ? t("Refills to {set} on {when}", { set: moneyText(b.set, cny), when: new Date(b.next).toLocaleString(intlLang(), { dateStyle: "medium" }) }) : "",
-      x ? t("Of it, {left} of the {set} typed {when} is spent first and counts through {last}", { left: x.left == null ? "…" : moneyText(x.left, cny), set: moneyText(x.set, cny),
-        when: new Date(x.at).toLocaleString(intlLang()), last: dateText(xlast) }) : "",
+      ...xs.map((x) => t("Of it, {left} of the {set} typed {when} is spent first and counts through {last}", { left: x.left == null ? "…" : moneyText(x.left, cny), set: moneyText(x.set, cny),
+        when: new Date(x.at).toLocaleString(intlLang()), last: dateText(x.last) })),
       b.expired ? t("The credit that expired on {last} no longer counts", { last: dateText(dayOf(new Date(new Date(b.expired) - 1))) }) : "",
     ].filter(Boolean).join("\n");
   const set = (v) => accountAction("provider/keyownbalance", { id: p.id, account: k.id, balance: v ? v.n : null, ...v?.cny && { currency: "cny" } },
@@ -63,19 +71,55 @@ function keyBalancePill(p, k) {
       : t("{who} refills on day {day} of each month", { who: name, day: r.day }));
   const expiring = (v) => accountAction("provider/keyexpiring", { id: p.id, account: k.id, expiring: v },
     !v ? t("{who} has no credit that expires", { who: name }) : t("{who} has {amount} that counts through {last}", { who: name, amount: moneyText(v.amount, cny), last: dateText(v.until) }));
-  // credit that expires: its amount, in the balance's currency, then the
-  // last day it counts, each typed where the pill was
+  const unexpiring = (x) => accountAction("provider/keyexpiring", { id: p.id, account: k.id, expiring: { at: x.at, until: x.until }, remove: true },
+    t("{who} no longer has {amount} that counts through {last}", { who: name, amount: moneyText(x.set, cny), last: dateText(x.last) }));
+  // a grant of credit that expires: its amount, in the balance's
+  // currency, and its last day, in one small form under the pill; Add or
+  // Enter saves, Escape or a click outside leaves it
   const credit = () => {
-    const at = pill.parentNode, own = cny ? "cny" : "usd";
-    pillNumber(pill, x ? String(x.set) : "", cny ? "¥" : "$", "abal-in", t(cny ? "Credit that expires, in CNY" : "Credit that expires, in USD"),
-      (s) => { const v = balanceAmount(s, own); return v && v.n > 0 && v.cny === cny ? v.n : null; },
-      t("Credit that expires is an amount above 0, in the balance's currency"), null, (amount) => {
-        const i = at?.querySelector(":scope > .abal-in");
-        if (!i) return;
-        pillNumber(i, xlast || "", "2026-12-31", "abal-in abal-day", t("Last day it counts"), lastDay,
-          t("The last day is a date from today on, as 2026-12-31"), null, (until) => expiring({ amount, until }));
-        at.querySelector(":scope > .abal-day").inputMode = "text";
-      });
+    const own = cny ? "cny" : "usd", head = t("Add credit that expires");
+    const box = el("div", "pop abal-form");
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-label", head);
+    const amount = el("input", "abal-f-n"), day = el("input", "abal-f-d"), add = el("button", "text primary", t("Add"));
+    amount.type = "text";
+    amount.inputMode = "decimal";
+    amount.autocomplete = "off";
+    amount.placeholder = "0.00";
+    amount.setAttribute("aria-label", t(cny ? "Credit that expires, in CNY" : "Credit that expires, in USD"));
+    day.type = "date";
+    day.min = dayOf(new Date());
+    // a month from today: a promotion's usual run, and the picker opens there
+    const soon = new Date();
+    soon.setDate(soon.getDate() + 30);
+    day.value = dayOf(soon);
+    day.setAttribute("aria-label", t("Last day it counts"));
+    add.type = "button";
+    const field = (label, ...kids) => { const f = el("label", "abal-f"); f.append(el("span", "abal-f-l", label), ...kids); return f; };
+    const money = el("span", "abal-f-m");
+    money.append(el("span", "abal-f-c", cny ? "¥" : "$"), amount);
+    const bar = el("div", "abal-f-bar");
+    bar.append(add);
+    box.append(el("div", "abal-f-h", head), field(t("Amount"), money), field(t("Last day it counts"), day), bar);
+    const save = () => {
+      const v = balanceAmount(amount.value, own), n = v && v.n > 0 && v.cny === cny ? v.n : null, until = lastDay(day.value);
+      amount.toggleAttribute("aria-invalid", n == null);
+      money.classList.toggle("bad", n == null);
+      day.toggleAttribute("aria-invalid", n != null && !until);
+      if (n == null) { status(t("Credit that expires is an amount above 0, in the balance's currency"), "err"); return amount.focus(NO_SCROLL); }
+      if (!until) { status(t("The last day is a date from today on, as 2026-12-31"), "err"); return day.focus(NO_SCROLL); }
+      closeProtoMenu();
+      expiring({ amount: n, until });
+    };
+    add.onclick = (e) => { e.stopPropagation(); save(); };
+    box.onclick = (e) => e.stopPropagation();
+    document.body.append(box);
+    placeMenu(box, pill);
+    pill.classList.add("open");
+    holdMenu(box, pill, (e) => {
+      if (e.key === "Enter" && box.contains(e.target) && e.target !== add) { e.preventDefault(); e.stopPropagation(); save(); }
+    }, (e) => { if (scrollCloses(box, e)) closeProtoMenu(); });
+    amount.focus(NO_SCROLL);
   };
   // a bare number is in the currency the button beside the field shows:
   // the balance's own, else Settings' one, until the user picks the other
@@ -130,16 +174,23 @@ function keyBalancePill(p, k) {
     e.stopPropagation();
     if (!b) return type();
     if (pill.classList.contains("open")) return closeProtoMenu();
+    const grants = xs.map((x, i) => ({ v: "x" + i, name: t("Remove {amount}", { amount: moneyText(x.set, cny) }), literalName: true, note: x.in.label,
+      title: t("Of it, {left} of the {set} typed {when} is spent first and counts through {last}", { left: x.left == null ? "…" : moneyText(x.left, cny),
+        set: moneyText(x.set, cny), when: new Date(x.at).toLocaleString(intlLang()), last: dateText(x.last) }) }));
     openProtoMenu(pill, [
       { v: "set", name: "Enter balance…", note: "Counts down from now" },
-      { v: "exp", name: "Credit that expires…", note: "" },
-      ...x || b.expired ? [{ v: "noexp", name: "No credit that expires", note: "" }] : [],
+      { v: "exp", name: "Add credit that expires…", note: "" },
+      ...grants,
+      ...xs.length > 1 || b.expired ? [{ v: "noexp", name: "No credit that expires", note: "" }] : [],
       { v: "month", name: "Refills each month…", note: "" },
       { v: "week", name: "Refills each week…", note: "" },
       { v: "never", name: "Never refills", note: "" },
       { v: "off", name: "No balance", note: "" },
     ], b.refill?.every || "never", (v) => v === "off" ? set(null) : v === "exp" ? credit() : v === "noexp" ? expiring(null) : v === "month" ? monthly() : v === "week" ? weekly()
-      : v === "never" ? b.refill && refill(null) : type(), "Balance", "sess-menu");
+      : v === "never" ? b.refill && refill(null) : v[0] === "x" ? unexpiring(xs[+v.slice(1)]) : type(), "Balance", "sess-menu");
+    // a grant that goes within a week says so in amber, as on the pill
+    const items = protoMenu?.box.querySelectorAll(".pm-item");
+    xs.forEach((x, i) => x.in.soon && items?.[2 + i]?.querySelector(".pm-note").classList.add("soon"));
   };
   return pill;
 }

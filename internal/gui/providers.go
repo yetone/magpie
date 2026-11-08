@@ -1676,9 +1676,12 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// Refill, for keybalancerefill: when the key's balance typed
 			// is whole again; none for never
 			Refill *provider.Refill `json:"refill"`
-			// Expiring, for keyexpiring: the part of the key's balance
-			// typed that expires, {amount, until}; none takes it off
+			// Expiring, for keyexpiring: a grant of credit that expires
+			// on the key's balance typed, {amount, until}, added beside
+			// the others; with Remove, the grant {at} (or every one
+			// {until}) taken off; none takes every grant off
 			Expiring *provider.Expiring `json:"expiring"`
+			Remove   bool               `json:"remove"`
 			// Alias, for accountname: the account's name of the user's
 			// own, "" to take it off (#1515)
 			Alias string `json:"alias"`
@@ -2405,7 +2408,16 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				return
 			}
 		case "keyexpiring":
-			if err := provider.SetKeyExpiring(in.ID, req.Account, req.Expiring); err != nil {
+			var err error
+			switch {
+			case req.Expiring == nil:
+				err = provider.ClearKeyExpiring(in.ID, req.Account)
+			case req.Remove:
+				err = provider.RemoveKeyExpiring(in.ID, req.Account, *req.Expiring)
+			default:
+				err = provider.AddKeyExpiring(in.ID, req.Account, *req.Expiring)
+			}
+			if err != nil {
 				fail(rw, err)
 				return
 			}

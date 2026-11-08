@@ -19,16 +19,22 @@ package provider
 // at midnight local time on a day of the month or of the week, the amount
 // typed is whole again and the spend counted from then.
 
-// It may have a second part that expires (the same user: some vendors
-// split a balance into money that stays and credit good until a date).
-// That part is spent first, as DeepSeek spends its granted balance before
-// the money topped up, and from the end of its last day, local time, it
-// counts no more; the card says how much of it is left and in how many
-// days it goes. A balance typed before has none and is counted as it was.
+// It may have credit that expires on top of it (the same user: some
+// vendors split a balance into money that stays and credit good until a
+// date), several grants of it each to its own day (promotional credit
+// twice, gone tomorrow and the day after). Credit is spent before the
+// money that stays, as DeepSeek spends its granted balance before the
+// money topped up, and of the grants the one that goes soonest first;
+// from the end of its last day, local time, a grant counts no more. The
+// card says how much of each is left and in how many days it goes. A
+// balance typed before has none and is counted as it was, and one saved
+// by v0.1.3305 with its one grant (`expiring`) is read with that grant.
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -44,15 +50,37 @@ type OwnBalance struct {
 	CNY    *float64  `json:"cny,omitempty"`
 	At     time.Time `json:"at"`
 	Refill *Refill   `json:"refill,omitempty"`
-	// Expiring is a part of the balance, in its currency, good until a
-	// day; nil for none
-	Expiring *Expiring `json:"expiring,omitempty"`
+	// Expiring is the credit on top of the balance, in its currency, each
+	// grant good until a day; none for none
+	Expiring []Expiring `json:"expirings,omitempty"`
 }
 
-// Expiring is credit on a key that is gone after a day: Amount (in the
-// balance's currency) as it stood At, spent before the rest of the
-// balance, and counted through Until (a date, 2006-01-02), to midnight
-// after it in the user's local time.
+// MaxExpiring bounds the grants of credit that expires on one key.
+const MaxExpiring = 20
+
+// UnmarshalJSON reads b as saved, and a v0.1.3305 balance's one grant
+// (`expiring`, an object) as the first of its grants: an older magpie
+// reads the list's field as nothing, never as a balance it can't parse.
+func (b *OwnBalance) UnmarshalJSON(data []byte) error {
+	type plain OwnBalance
+	var v struct {
+		plain
+		One *Expiring `json:"expiring"`
+	}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	*b = OwnBalance(v.plain)
+	if v.One != nil && !slices.Contains(b.Expiring, *v.One) {
+		b.Expiring = append([]Expiring{*v.One}, b.Expiring...)
+	}
+	return nil
+}
+
+// Expiring is a grant of credit on a key that is gone after a day:
+// Amount (in the balance's currency) as it stood At, spent before the
+// rest of the balance, and counted through Until (a date, 2006-01-02),
+// to midnight after it in the user's local time.
 type Expiring struct {
 	Amount float64   `json:"amount"`
 	Until  string    `json:"until"`
@@ -174,23 +202,24 @@ type BalanceEstimate struct {
 	From   time.Time  `json:"from"`
 	Refill *Refill    `json:"refill,omitempty"`
 	Next   *time.Time `json:"next,omitempty"`
-	// Expiring is the part of the balance that expires, when it has one
-	// and that part hasn't expired yet
-	Expiring *ExpiringLeft `json:"expiring,omitempty"`
-	// Expired is the end of a part that has expired; Left no longer
-	// counts it
+	// Expiring is the grants of credit that expires not expired yet,
+	// the soonest to go first
+	Expiring []ExpiringLeft `json:"expiring,omitempty"`
+	// Expired is the end of the last grant that has expired and still
+	// tells what the rest paid; Left no longer counts it
 	Expired *time.Time `json:"expired,omitempty"`
 }
 
-// ExpiringLeft is what is left of a balance's part that expires: Set as
-// typed, At, Left of it now (in the balance's currency; nil while Left
-// is) and Ends when it counts no more. Left is part of the estimate's
-// Left, not on top of it.
+// ExpiringLeft is what is left of a grant of credit that expires: Set as
+// typed, At, Until (the last day it counts, as typed), Left of it now (in
+// the balance's currency) and Ends when it counts no more. Left is part
+// of the estimate's Left, not on top of it.
 type ExpiringLeft struct {
-	Set  float64   `json:"set"`
-	At   time.Time `json:"at"`
-	Left *float64  `json:"left"`
-	Ends time.Time `json:"ends"`
+	Set   float64   `json:"set"`
+	At    time.Time `json:"at"`
+	Until string    `json:"until"`
+	Left  *float64  `json:"left"`
+	Ends  time.Time `json:"ends"`
 }
 
 // KeySpent is usage.KeySpent, which package usage sets: what the calls
@@ -258,46 +287,116 @@ func (p Provider) OwnBalanceEstimate(keyID string) (BalanceEstimate, bool) {
 			return usd * rate, known
 		}
 	}
-	// a part that expires takes the spend first, from when it was typed
-	// to its end; what it took after From is not the rest's to pay
-	took := 0.0
-	if x := b.Expiring; x != nil {
-		if end, ok := x.End(now.Location()); ok {
-			between := func(from, to time.Time) float64 { return spent(from) - spent(to) }
-			stop := minTime(end, now)
-			usd := 0.0
-			if x.At.Before(stop) {
-				usd = between(x.At, stop)
-			}
-			before := 0.0
-			if x.At.Before(e.From) {
-				before = between(x.At, minTime(e.From, stop))
-			}
-			s, ok1 := inCur(usd)
-			sb, ok2 := inCur(before)
-			if !ok1 || !ok2 {
-				return e, true // spend counted at no rate: unknown
-			}
-			used := min(x.Amount, s)
-			took = max(0, used-min(x.Amount, sb))
-			if end.After(now) {
-				l := x.Amount - used
-				e.Expiring = &ExpiringLeft{Set: x.Amount, At: x.At, Left: &l, Ends: end}
-			} else {
-				e.Expired = &end
-			}
-		}
+	// credit that expires takes the spend first, the grant that goes
+	// soonest before the others; what it took after From is not the
+	// rest's to pay
+	took, unknown := 0.0, false
+	e.Expiring, e.Expired, took, unknown = spendGrants(b.Expiring, e.From, now, spent, inCur)
+	if unknown {
+		e.Expiring, e.Expired = nil, nil
+		return e, true // spend counted at no rate: unknown
 	}
 	s, ok := inCur(e.Spent)
 	if !ok {
 		return e, true // spend counted at no rate: unknown
 	}
 	left := amount - (s - took)
-	if e.Expiring != nil {
-		left += *e.Expiring.Left
+	for _, x := range e.Expiring {
+		left += *x.Left
 	}
 	e.Left = &left
 	return e, true
+}
+
+// spendGrants lays the spend on a key over its grants of credit that
+// expires: from the first grant's At (or from, if sooner) to now, each
+// stretch between one grant's start or end and the next is spent from the
+// grants counting through it, the one that ends soonest first, and what
+// they don't cover falls to the rest of the balance. spent(t) is the USD
+// spent from t to now; inCur turns it into the balance's currency, false
+// while it can't. It says what is left of each grant still counting, the
+// end of the last one gone, what the grants took from from on, and true
+// when the spend couldn't be counted.
+func spendGrants(grants []Expiring, from, now time.Time, spent func(time.Time) float64, inCur func(float64) (float64, bool)) (left []ExpiringLeft, expired *time.Time, took float64, unknown bool) {
+	type grant struct {
+		x        Expiring
+		end      time.Time
+		used     float64
+		usedFrom float64
+	}
+	var gs []*grant
+	for _, x := range grants {
+		if end, ok := x.End(now.Location()); ok {
+			gs = append(gs, &grant{x: x, end: end})
+		}
+	}
+	if len(gs) == 0 {
+		return nil, nil, 0, false
+	}
+	// soonest end first; of two ending together, the one given first
+	slices.SortStableFunc(gs, func(a, c *grant) int {
+		if n := a.end.Compare(c.end); n != 0 {
+			return n
+		}
+		return a.x.At.Compare(c.x.At)
+	})
+	marks := []time.Time{from, now}
+	for _, g := range gs {
+		marks = append(marks, g.x.At, g.end)
+	}
+	slices.SortFunc(marks, time.Time.Compare)
+	marks = slices.CompactFunc(marks, time.Time.Equal)
+	// spent is asked once a mark: it reads the usage ledger
+	sp := map[int]float64{}
+	spentAt := func(i int) float64 {
+		v, ok := sp[i]
+		if !ok {
+			v = spent(marks[i])
+			sp[i] = v
+		}
+		return v
+	}
+	for i := 0; i+1 < len(marks); i++ {
+		a := marks[i]
+		if !a.Before(now) {
+			break
+		}
+		var live []*grant
+		for _, g := range gs {
+			if !g.x.At.After(a) && g.end.After(a) && g.used < g.x.Amount {
+				live = append(live, g)
+			}
+		}
+		if len(live) == 0 {
+			continue
+		}
+		s, ok := inCur(spentAt(i) - spentAt(i+1))
+		if !ok {
+			return nil, nil, 0, true
+		}
+		for _, g := range live {
+			if s <= 0 {
+				break
+			}
+			u := min(s, g.x.Amount-g.used)
+			g.used += u
+			s -= u
+			if !a.Before(from) {
+				g.usedFrom += u
+			}
+		}
+	}
+	for _, g := range gs {
+		took += g.usedFrom
+		if g.end.After(now) {
+			l := g.x.Amount - g.used
+			left = append(left, ExpiringLeft{Set: g.x.Amount, At: g.x.At, Until: g.x.Until, Left: &l, Ends: g.end})
+		} else if expired == nil || g.end.After(*expired) {
+			end := g.end
+			expired = &end
+		}
+	}
+	return left, expired, took, false
 }
 
 // TakesOwnBalance says p's keys may have a balance typed by hand: keys
@@ -333,10 +432,13 @@ func ownBalanceCard(p Provider, key, user string) (SubscriptionQuota, bool) {
 		q.Error = "the dollar's rate in yuan isn't known yet, so what is left of the balance in yuan can't be counted"
 	} else {
 		q.Balance = ownBalanceText(*e.Left, e.Currency)
-		// of it, the part that expires, and when (a line of its own)
-		if x := e.Expiring; x != nil && *x.Left > 0 {
-			ends := x.Ends
-			q.BalanceSplit = []BalancePart{{Text: ownBalanceText(*x.Left, e.Currency), Expires: &ends}}
+		// of it, each grant of credit that expires, and when (a line
+		// each, the soonest to go first)
+		for _, x := range e.Expiring {
+			if *x.Left > 0 {
+				ends := x.Ends
+				q.BalanceSplit = append(q.BalanceSplit, BalancePart{Text: ownBalanceText(*x.Left, e.Currency), Expires: &ends})
+			}
 		}
 	}
 	return q, true
@@ -359,8 +461,8 @@ func ownBalanceText(v float64, currency string) string {
 // SetKeyOwnBalance gives the key ref (its id or name) of the provider id
 // the balance b (its amount, in USD or CNY), counted from now; nil takes
 // it off. With no Refill of its own, b keeps the one the key had, and with
-// no Expiring, the part that expires the key had in the same currency (in
-// the other, its amount would mean another sum, so it goes).
+// no Expiring, the credit that expires the key had in the same currency
+// (in the other, its amounts would mean other sums, so they go).
 func SetKeyOwnBalance(id, ref string, b *OwnBalance) error {
 	if b != nil {
 		if err := checkOwnBalance(*b); err != nil {
@@ -376,35 +478,65 @@ func SetKeyOwnBalance(id, ref string, b *OwnBalance) error {
 		if v.Refill == nil && ok {
 			v.Refill = had.Refill
 		}
-		if v.Expiring == nil && ok && (v.CNY == nil) == (had.CNY == nil) {
+		if len(v.Expiring) == 0 && ok && (v.CNY == nil) == (had.CNY == nil) {
 			v.Expiring = had.Expiring
 		}
 		return &v, nil
 	})
 }
 
-// SetKeyExpiring gives the balance typed for the key ref of the provider
-// id the part x that expires, in the balance's currency, counted from now;
-// nil takes it off. The rest of the balance stays as it was. A key with
-// no balance typed takes none: type the balance that stays first, 0 when
-// all of it expires.
-func SetKeyExpiring(id, ref string, x *Expiring) error {
-	if x != nil {
-		if err := x.check(); err != nil {
-			return err
-		}
+// AddKeyExpiring gives the balance typed for the key ref of the provider
+// id a grant x of credit that expires, in the balance's currency, counted
+// from now, beside the grants it has. A key with no balance typed takes
+// none: type the balance that stays first, 0 when all of it expires.
+func AddKeyExpiring(id, ref string, x Expiring) error {
+	if err := x.check(); err != nil {
+		return err
 	}
 	return editOwnBalance(id, ref, func(had OwnBalance, ok bool) (*OwnBalance, error) {
 		if !ok {
 			return nil, fmt.Errorf("the key has no balance typed: type the balance that stays first (0 when all of it expires)")
 		}
-		if x == nil {
-			had.Expiring = nil
-			return &had, nil
+		if len(had.Expiring) >= MaxExpiring {
+			return nil, fmt.Errorf("a key has at most %d grants of credit that expires: remove one first", MaxExpiring)
 		}
-		v := *x
-		v.At = ownNow().UTC()
-		had.Expiring = &v
+		x.At = ownNow().UTC()
+		had.Expiring = append(slices.Clone(had.Expiring), x)
+		return &had, nil
+	})
+}
+
+// RemoveKeyExpiring takes a grant of credit that expires off the balance
+// typed for the key ref of the provider id: the one given At, or with no
+// At every one through Until (of Amount, when given). One that matches
+// none is an error, and the rest of the balance stays as it was.
+func RemoveKeyExpiring(id, ref string, x Expiring) error {
+	return editOwnBalance(id, ref, func(had OwnBalance, ok bool) (*OwnBalance, error) {
+		if !ok {
+			return nil, fmt.Errorf("the key has no balance typed")
+		}
+		keep := slices.DeleteFunc(slices.Clone(had.Expiring), func(g Expiring) bool {
+			if !x.At.IsZero() {
+				return g.At.Equal(x.At)
+			}
+			return g.Until == x.Until && (x.Amount == 0 || g.Amount == x.Amount)
+		})
+		if len(keep) == len(had.Expiring) {
+			return nil, fmt.Errorf("the key has no such credit that expires: %s", x.Until)
+		}
+		had.Expiring = keep
+		return &had, nil
+	})
+}
+
+// ClearKeyExpiring takes every grant of credit that expires off the
+// balance typed for the key ref of the provider id; the rest stays.
+func ClearKeyExpiring(id, ref string) error {
+	return editOwnBalance(id, ref, func(had OwnBalance, ok bool) (*OwnBalance, error) {
+		if !ok {
+			return nil, fmt.Errorf("the key has no balance typed")
+		}
+		had.Expiring = nil
 		return &had, nil
 	})
 }
@@ -451,6 +583,9 @@ func editOwnBalance(id, ref string, edit func(had OwnBalance, ok bool) (*OwnBala
 	if err != nil {
 		return err
 	}
+	if b != nil {
+		b.Expiring = liveGrants(*b, ownNow())
+	}
 	if b == nil {
 		if !ok {
 			return nil
@@ -471,6 +606,26 @@ func editOwnBalance(id, ref string, edit func(had OwnBalance, ok bool) (*OwnBala
 	return nil
 }
 
+// liveGrants are b's grants of credit that expires that still tell
+// something: those that ended before what b's spend is counted from (it
+// was typed, or refilled) took nothing the rest paid for, so they go.
+func liveGrants(b OwnBalance, now time.Time) []Expiring {
+	from := b.At
+	if b.Refill != nil {
+		if l := b.Refill.Last(now); l.After(from) {
+			from = l
+		}
+	}
+	keep := slices.DeleteFunc(slices.Clone(b.Expiring), func(x Expiring) bool {
+		end, ok := x.End(now.Location())
+		return ok && !end.After(from)
+	})
+	if len(keep) == 0 {
+		return nil
+	}
+	return keep
+}
+
 // checkOwnBalance says what is wrong with a balance typed, nil when
 // nothing is.
 func checkOwnBalance(b OwnBalance) error {
@@ -481,8 +636,11 @@ func checkOwnBalance(b OwnBalance) error {
 	if b.CNY != nil && b.USD != 0 {
 		return fmt.Errorf("a balance is in USD or in yuan, not both")
 	}
-	if b.Expiring != nil {
-		if err := b.Expiring.check(); err != nil {
+	if len(b.Expiring) > MaxExpiring {
+		return fmt.Errorf("a key has at most %d grants of credit that expires, not %d", MaxExpiring, len(b.Expiring))
+	}
+	for _, x := range b.Expiring {
+		if err := x.check(); err != nil {
 			return err
 		}
 	}
@@ -515,6 +673,25 @@ func ParseExpiring(s string) (*Expiring, error) {
 		return nil, err
 	}
 	return &x, nil
+}
+
+// ParseExpiringDay reads which grants of credit that expires to take off,
+// as the CLI takes it: a day, "2026-12-31", every grant through it, or
+// "20@2026-12-31", the one of that amount.
+func ParseExpiringDay(s string) (*Expiring, error) {
+	a := strings.TrimSpace(s)
+	if !strings.Contains(a, "@") {
+		x := Expiring{Until: a}
+		if _, ok := x.End(time.UTC); !ok {
+			return nil, fmt.Errorf("credit to take off is a day (2026-12-31) or amount@day (20@2026-12-31), not %q", s)
+		}
+		return &x, nil
+	}
+	x, err := ParseExpiring(a)
+	if err != nil || x == nil {
+		return nil, fmt.Errorf("credit to take off is a day (2026-12-31) or amount@day (20@2026-12-31), not %q", s)
+	}
+	return x, nil
 }
 
 // ParseOwnBalance reads a balance as the CLI takes it, an amount in USD
@@ -605,8 +782,13 @@ func normalKeyOwnBalances(m map[string]OwnBalance) map[string]OwnBalance {
 		if b.Refill != nil && b.Refill.check() != nil {
 			b.Refill = nil // a refill that isn't one, written by hand
 		}
-		if b.Expiring != nil && b.Expiring.check() != nil {
-			b.Expiring = nil // nor credit that expires
+		// nor a grant of credit that expires
+		b.Expiring = slices.DeleteFunc(slices.Clone(b.Expiring), func(x Expiring) bool { return x.check() != nil })
+		if len(b.Expiring) > MaxExpiring {
+			b.Expiring = b.Expiring[:MaxExpiring]
+		}
+		if len(b.Expiring) == 0 {
+			b.Expiring = nil
 		}
 		if k == "" || checkOwnBalance(b) != nil {
 			continue

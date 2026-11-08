@@ -103,8 +103,25 @@ func TestKeyOwnBalanceRoutes(t *testing.T) {
 	// ahead, listed apart and in the left; a date that isn't one refused;
 	// none takes it off and leaves the rest
 	call("POST", "/api/provider/keyexpiring", `{"id":"relay","account":"`+key+`","expiring":{"amount":50,"until":"2099-12-31"}}`)
-	if _, b := listed(); b == nil || b.Set != 700 || *b.Left != 750 || b.Expiring == nil || *b.Expiring.Left != 50 || b.Expiring.Ends.Year() != 2100 {
+	if _, b := listed(); b == nil || b.Set != 700 || *b.Left != 750 || len(b.Expiring) != 1 || *b.Expiring[0].Left != 50 || b.Expiring[0].Ends.Year() != 2100 {
 		t.Fatalf("¥700 and ¥50 that expires: %+v %+v", b, b.Expiring)
+	}
+	// a second grant, sooner: listed first, both in the left; one taken
+	// off by when it was typed leaves the other
+	call("POST", "/api/provider/keyexpiring", `{"id":"relay","account":"`+key+`","expiring":{"amount":20,"until":"2099-12-30"}}`)
+	_, b := listed()
+	if b == nil || *b.Left != 770 || len(b.Expiring) != 2 || b.Expiring[0].Set != 20 || b.Expiring[0].Until != "2099-12-30" || b.Expiring[1].Set != 50 {
+		t.Fatalf("¥50 and ¥20 that expire: %+v", b)
+	}
+	at, _ := json.Marshal(b.Expiring[1].At)
+	call("POST", "/api/provider/keyexpiring", `{"id":"relay","account":"`+key+`","expiring":{"at":`+string(at)+`,"until":"2099-12-31"},"remove":true}`)
+	if _, b := listed(); b == nil || *b.Left != 720 || len(b.Expiring) != 1 || b.Expiring[0].Set != 20 {
+		t.Fatalf("¥50 taken off: %+v", b)
+	}
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/provider/keyexpiring", strings.NewReader(`{"id":"relay","account":"`+key+`","expiring":{"at":`+string(at)+`,"until":"2099-12-31"},"remove":true}`)))
+	if w.Code == 200 {
+		t.Error("taking off a grant already gone")
 	}
 	for _, body := range []string{`{"amount":50,"until":"next week"}`, `{"amount":0,"until":"2099-12-31"}`} {
 		w := httptest.NewRecorder()
@@ -114,7 +131,7 @@ func TestKeyOwnBalanceRoutes(t *testing.T) {
 		}
 	}
 	call("POST", "/api/provider/keyexpiring", `{"id":"relay","account":"`+key+`","expiring":null}`)
-	if _, b := listed(); b == nil || b.Expiring != nil || *b.Left != 700 {
+	if _, b := listed(); b == nil || len(b.Expiring) != 0 || *b.Left != 700 {
 		t.Fatalf("expiring off: %+v", b)
 	}
 	call("POST", "/api/provider/keyownbalance", `{"id":"relay","account":"`+key+`","balance":null}`)

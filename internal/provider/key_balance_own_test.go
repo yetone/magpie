@@ -463,7 +463,10 @@ func TestTypedBalanceExpires(t *testing.T) {
 		if err := SetKeyOwnBalance("gift", k, &OwnBalance{USD: 10}); err != nil {
 			t.Fatal(err)
 		}
-		if err := SetKeyExpiring("gift", k, &Expiring{Amount: 5, Until: "2026-11-10"}); err != nil {
+		if err := ClearKeyExpiring("gift", k); err != nil {
+			t.Fatal(err)
+		}
+		if err := AddKeyExpiring("gift", k, Expiring{Amount: 5, Until: "2026-11-10"}); err != nil {
 			t.Fatal(err)
 		}
 		left := func(when time.Time) BalanceEstimate {
@@ -475,7 +478,7 @@ func TestTypedBalanceExpires(t *testing.T) {
 		}
 		// $2 spent: all of it from the part that expires
 		e := left(at(3, 12, 0))
-		if *e.Left != 13 || e.Expiring == nil || *e.Expiring.Left != 3 || !e.Expiring.Ends.Equal(at(11, 0, 0)) || e.Expired != nil {
+		if *e.Left != 13 || len(e.Expiring) != 1 || *e.Expiring[0].Left != 3 || !e.Expiring[0].Ends.Equal(at(11, 0, 0)) || e.Expired != nil {
 			t.Fatalf("%s, $2 spent: left %v, expiring %+v", zone, *e.Left, e.Expiring)
 		}
 		q := ownCards(t)["gift|"]
@@ -485,7 +488,7 @@ func TestTypedBalanceExpires(t *testing.T) {
 		// $6 spent: $5 of it the part's, $1 the rest's; nothing of the part
 		// left, so the card has no line for it
 		e = left(at(10, 23, 59))
-		if *e.Left != 9 || e.Expiring == nil || *e.Expiring.Left != 0 {
+		if *e.Left != 9 || len(e.Expiring) != 1 || *e.Expiring[0].Left != 0 {
 			t.Fatalf("%s, $6 spent before the end: left %v, expiring %+v", zone, *e.Left, e.Expiring)
 		}
 		if q := ownCards(t)["gift|"]; q.Balance != "≈$9.00" || len(q.BalanceSplit) != 0 {
@@ -507,7 +510,7 @@ func TestTypedBalanceExpires(t *testing.T) {
 	if err := SetKeyOwnBalance("gift", k, &OwnBalance{USD: 10}); err != nil {
 		t.Fatal(err)
 	}
-	if err := SetKeyExpiring("gift", k, &Expiring{Amount: 50, Until: "2026-11-16"}); err != nil {
+	if err := AddKeyExpiring("gift", k, Expiring{Amount: 50, Until: "2026-11-16"}); err != nil {
 		t.Fatal(err)
 	}
 	clockStub(t, at(21, 0))
@@ -521,7 +524,7 @@ func TestTypedBalanceExpires(t *testing.T) {
 	// would mean another sum, so it goes
 	spendAt(t, map[time.Time]float64{at(22, 1): 1, at(23, 1): 2})
 	clockStub(t, at(21, 12))
-	if err := SetKeyExpiring("gift", k, &Expiring{Amount: 2, Until: "2026-12-31"}); err != nil {
+	if err := AddKeyExpiring("gift", k, Expiring{Amount: 2, Until: "2026-12-31"}); err != nil {
 		t.Fatal(err)
 	}
 	clockStub(t, at(22, 12))
@@ -531,7 +534,7 @@ func TestTypedBalanceExpires(t *testing.T) {
 	clockStub(t, at(24, 0))
 	p, _ = Find("gift")
 	// the part took $1 before the retype and $1 after; the rest pays $1
-	if e, _ := p.OwnBalanceEstimate(k); e.Expiring == nil || *e.Expiring.Left != 0 || *e.Left != 19 {
+	if e, _ := p.OwnBalanceEstimate(k); len(e.Expiring) != 1 || *e.Expiring[0].Left != 0 || *e.Left != 19 {
 		t.Fatalf("typed again in USD: left %v, expiring %+v", *e.Left, e.Expiring)
 	}
 	cny := 100.0
@@ -539,20 +542,20 @@ func TestTypedBalanceExpires(t *testing.T) {
 		t.Fatal(err)
 	}
 	p, _ = Find("gift")
-	if b, _ := p.KeyOwnBalance(k); b.Expiring != nil {
+	if b, _ := p.KeyOwnBalance(k); len(b.Expiring) != 0 {
 		t.Fatalf("typed again in yuan, the part in dollars kept: %+v", b)
 	}
 
 	// in yuan: the part is in yuan too, the spend at the rate (7)
 	clockStub(t, at(24, 0))
 	spendAt(t, map[time.Time]float64{at(24, 1): 1})
-	if err := SetKeyExpiring("gift", k, &Expiring{Amount: 30, Until: "2026-12-31"}); err != nil {
+	if err := AddKeyExpiring("gift", k, Expiring{Amount: 30, Until: "2026-12-31"}); err != nil {
 		t.Fatal(err)
 	}
 	clockStub(t, at(24, 2))
 	p, _ = Find("gift")
-	if e, _ := p.OwnBalanceEstimate(k); *e.Left != 123 || *e.Expiring.Left != 23 {
-		t.Fatalf("¥100 and ¥30 less $1 at 7: %v, %v", *e.Left, *e.Expiring.Left)
+	if e, _ := p.OwnBalanceEstimate(k); *e.Left != 123 || len(e.Expiring) != 1 || *e.Expiring[0].Left != 23 {
+		t.Fatalf("¥100 and ¥30 less $1 at 7: %v, %+v", *e.Left, e.Expiring)
 	}
 	if q := ownCards(t)["gift|"]; q.Balance != "≈¥123.00" || q.BalanceSplit[0].Text != "≈¥23.00" || SplitWords(q.BalanceSplit) != "≈¥23.00 until Dec 31" {
 		t.Fatalf("card in yuan: %+v (%q)", q, SplitWords(q.BalanceSplit))
@@ -567,16 +570,16 @@ func TestTypedBalanceExpires(t *testing.T) {
 	if err := Save(Provider{ID: "bare", Name: "Bare", Chat: "http://127.0.0.1:1/v1", Key: "sk-b"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := SetKeyExpiring("bare", keyID("sk-b"), &Expiring{Amount: 5, Until: "2026-12-31"}); err == nil {
+	if err := AddKeyExpiring("bare", keyID("sk-b"), Expiring{Amount: 5, Until: "2026-12-31"}); err == nil {
 		t.Error("credit that expires on a key with no balance")
 	}
 	for _, bad := range []Expiring{{Amount: 0, Until: "2026-12-31"}, {Amount: -1, Until: "2026-12-31"}, {Amount: 2e6, Until: "2026-12-31"}, {Amount: 5, Until: "12/31"}, {Amount: 5}} {
-		if err := SetKeyExpiring("gift", k, &bad); err == nil {
+		if err := AddKeyExpiring("gift", k, bad); err == nil {
 			t.Errorf("%+v taken", bad)
 		}
 	}
-	n := normalKeyOwnBalances(map[string]OwnBalance{"a": {USD: 5, Expiring: &Expiring{Amount: 5, Until: "soon"}}})
-	if n["a"].USD != 5 || n["a"].Expiring != nil {
+	n := normalKeyOwnBalances(map[string]OwnBalance{"a": {USD: 5, Expiring: []Expiring{{Amount: 5, Until: "soon"}, {Amount: 3, Until: "2026-12-31"}}}})
+	if n["a"].USD != 5 || len(n["a"].Expiring) != 1 || n["a"].Expiring[0].Amount != 3 {
 		t.Errorf("a part that isn't one, written by hand: %+v", n)
 	}
 }
@@ -587,11 +590,11 @@ func TestTypedBalanceSavedBeforeExpiring(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"cny":100,"at":"2026-11-01T01:00:00Z","refill":{"every":"month","day":1}}`), &b); err != nil {
 		t.Fatal(err)
 	}
-	if b.Expiring != nil || *b.CNY != 100 || b.Refill.Day != 1 {
+	if len(b.Expiring) != 0 || *b.CNY != 100 || b.Refill.Day != 1 {
 		t.Fatalf("%+v", b)
 	}
 	out, _ := json.Marshal(b)
-	if strings.Contains(string(out), "expiring") {
+	if strings.Contains(string(out), "expiring") || strings.Contains(string(out), "expirings") {
 		t.Errorf("saved again with a part it never had: %s", out)
 	}
 }
@@ -608,6 +611,228 @@ func TestExpiringParsed(t *testing.T) {
 	}
 	for _, in := range []string{"20", "@2026-12-31", "20@", "20@2026-13-01", "¥20@2026-12-31", "0@2026-12-31", "--help"} {
 		if _, err := ParseExpiring(in); err == nil {
+			t.Errorf("%q taken", in)
+		}
+	}
+}
+
+// Two grants of credit that expires on one key (tenacious_eagle_96548:
+// promotional credit going tomorrow and the day after): the spend goes to
+// the one that ends soonest, whichever was typed first, never to one
+// typed after it; each counts to its own midnight, and what an expired
+// grant left unspent never reaches the rest.
+func TestTypedBalanceGrantsSoonestFirst(t *testing.T) {
+	probeSandbox(t)
+	probeLocal = false
+	if err := Save(Provider{ID: "promo", Name: "Promo", Chat: "http://127.0.0.1:1/v1", Key: "sk-p"}); err != nil {
+		t.Fatal(err)
+	}
+	k := keyID("sk-p")
+	for _, zone := range []string{"Pacific/Kiritimati", "UTC"} {
+		loc, err := time.LoadLocation(zone)
+		if err != nil {
+			t.Fatal(err)
+		}
+		at := func(d, h int) time.Time { return time.Date(2026, 11, d, h, 0, 0, 0, loc) }
+		spendAt(t, map[time.Time]float64{at(9, 10): 3, at(10, 10): 4, at(11, 2): 3})
+		clockStub(t, at(9, 9))
+		if err := SetKeyOwnBalance("promo", k, &OwnBalance{USD: 10}); err != nil {
+			t.Fatal(err)
+		}
+		if err := ClearKeyExpiring("promo", k); err != nil {
+			t.Fatal(err)
+		}
+		// the day after's typed first; tomorrow's two hours later
+		if err := AddKeyExpiring("promo", k, Expiring{Amount: 5, Until: "2026-11-11"}); err != nil {
+			t.Fatal(err)
+		}
+		clockStub(t, at(9, 11))
+		if err := AddKeyExpiring("promo", k, Expiring{Amount: 5, Until: "2026-11-10"}); err != nil {
+			t.Fatal(err)
+		}
+		left := func(when time.Time) BalanceEstimate {
+			t.Helper()
+			clockStub(t, when)
+			p, _ := Find("promo")
+			e, _ := p.OwnBalanceEstimate(k)
+			return e
+		}
+		// $3 at 10:00 went to the day after's, the only one then; $4 the
+		// next day to tomorrow's, which ends first
+		e := left(at(10, 12))
+		if *e.Left != 13 || len(e.Expiring) != 2 || e.Expiring[0].Until != "2026-11-10" || *e.Expiring[0].Left != 1 ||
+			e.Expiring[1].Until != "2026-11-11" || *e.Expiring[1].Left != 2 || e.Expired != nil {
+			t.Fatalf("%s: left %v, grants %+v", zone, *e.Left, e.Expiring)
+		}
+		q := ownCards(t)["promo|"]
+		if q.Balance != "≈$13.00" || len(q.BalanceSplit) != 2 || q.BalanceSplit[0].Text != "≈$1.00" || !q.BalanceSplit[0].Expires.Equal(at(11, 0)) ||
+			q.BalanceSplit[1].Text != "≈$2.00" || !q.BalanceSplit[1].Expires.Equal(at(12, 0)) {
+			t.Fatalf("%s card: %+v", zone, q)
+		}
+		// tomorrow's gone with $1 unspent; the $3 after it: $2 the day
+		// after's, $1 the rest's
+		e = left(at(11, 3))
+		if *e.Left != 9 || len(e.Expiring) != 1 || *e.Expiring[0].Left != 0 || e.Expired == nil || !e.Expired.Equal(at(11, 0)) {
+			t.Fatalf("%s, tomorrow's gone: left %v, grants %+v, expired %v", zone, *e.Left, e.Expiring, e.Expired)
+		}
+		e = left(at(12, 1))
+		if *e.Left != 9 || len(e.Expiring) != 0 || e.Expired == nil || !e.Expired.Equal(at(12, 0)) {
+			t.Fatalf("%s, both gone: left %v, grants %+v, expired %v", zone, *e.Left, e.Expiring, e.Expired)
+		}
+	}
+}
+
+// Grants are added and taken off one at a time, by when each was typed
+// or by its day; off takes them all; a key holds MaxExpiring; one that
+// ended before the balance was typed again goes when the key is next
+// written.
+func TestTypedBalanceGrantsEdited(t *testing.T) {
+	probeSandbox(t)
+	probeLocal = false
+	spendAt(t, nil)
+	if err := Save(Provider{ID: "promo", Name: "Promo", Chat: "http://127.0.0.1:1/v1", Key: "sk-p"}); err != nil {
+		t.Fatal(err)
+	}
+	k := keyID("sk-p")
+	at := func(d, h int) time.Time { return time.Date(2026, 11, d, h, 0, 0, 0, time.UTC) }
+	clockStub(t, at(9, 9))
+	if err := SetKeyOwnBalance("promo", k, &OwnBalance{USD: 0}); err != nil {
+		t.Fatal(err)
+	}
+	grants := func() []Expiring {
+		t.Helper()
+		p, _ := Find("promo")
+		b, _ := p.KeyOwnBalance(k)
+		return b.Expiring
+	}
+	for i, x := range []Expiring{{Amount: 5, Until: "2026-11-10"}, {Amount: 7, Until: "2026-11-11"}, {Amount: 9, Until: "2026-11-11"}} {
+		clockStub(t, at(9, 10+i))
+		if err := AddKeyExpiring("promo", k, x); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if g := grants(); len(g) != 3 || !g[1].At.Equal(at(9, 11)) {
+		t.Fatalf("three added: %+v", g)
+	}
+	p, _ := Find("promo")
+	if e, _ := p.OwnBalanceEstimate(k); *e.Left != 21 {
+		t.Fatalf("0 and 5+7+9: %v", *e.Left)
+	}
+	// by when it was typed: only that one
+	if err := RemoveKeyExpiring("promo", k, Expiring{At: at(9, 11)}); err != nil {
+		t.Fatal(err)
+	}
+	if g := grants(); len(g) != 2 || g[0].Amount != 5 || g[1].Amount != 9 {
+		t.Fatalf("the 7 taken off: %+v", g)
+	}
+	// by day and amount; one that matches nothing is refused and changes nothing
+	if err := RemoveKeyExpiring("promo", k, Expiring{Amount: 1, Until: "2026-11-11"}); err == nil {
+		t.Error("taking off a grant there isn't")
+	}
+	if err := RemoveKeyExpiring("promo", k, Expiring{At: at(1, 1)}); err == nil {
+		t.Error("taking off a grant typed at no such time")
+	}
+	if err := RemoveKeyExpiring("promo", k, Expiring{Amount: 9, Until: "2026-11-11"}); err != nil {
+		t.Fatal(err)
+	}
+	if g := grants(); len(g) != 1 || g[0].Amount != 5 {
+		t.Fatalf("the 9 taken off: %+v", g)
+	}
+	// MaxExpiring and no more
+	for len(grants()) < MaxExpiring {
+		if err := AddKeyExpiring("promo", k, Expiring{Amount: 1, Until: "2026-12-31"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := AddKeyExpiring("promo", k, Expiring{Amount: 1, Until: "2026-12-31"}); err == nil {
+		t.Errorf("grant %d taken", MaxExpiring+1)
+	}
+	// by day: every one through it
+	if err := RemoveKeyExpiring("promo", k, Expiring{Until: "2026-12-31"}); err != nil {
+		t.Fatal(err)
+	}
+	if g := grants(); len(g) != 1 || g[0].Amount != 5 {
+		t.Fatalf("2026-12-31's taken off: %+v", g)
+	}
+	// typed again after the 5's day: it took nothing the new balance
+	// pays for, so it goes
+	clockStub(t, at(12, 9))
+	if err := SetKeyOwnBalance("promo", k, &OwnBalance{USD: 4}); err != nil {
+		t.Fatal(err)
+	}
+	if g := grants(); len(g) != 0 {
+		t.Fatalf("a grant over before the balance was typed kept: %+v", g)
+	}
+	if err := AddKeyExpiring("promo", k, Expiring{Amount: 2, Until: "2026-12-01"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AddKeyExpiring("promo", k, Expiring{Amount: 3, Until: "2026-12-02"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ClearKeyExpiring("promo", k); err != nil {
+		t.Fatal(err)
+	}
+	p, _ = Find("promo")
+	if b, _ := p.KeyOwnBalance(k); len(b.Expiring) != 0 || b.USD != 4 {
+		t.Fatalf("off: %+v", b)
+	}
+}
+
+// A v0.1.3305 balance's one grant (`expiring`, an object) is read as the
+// first of its grants and saved in the list (`expirings`), counted as it
+// was; a balance carrying both keeps each grant once.
+func TestTypedBalanceOneGrantMigrated(t *testing.T) {
+	var b OwnBalance
+	old := `{"usd":10,"at":"2026-11-01T01:00:00Z","expiring":{"amount":5,"until":"2026-11-10","at":"2026-11-01T02:00:00Z"}}`
+	if err := json.Unmarshal([]byte(old), &b); err != nil {
+		t.Fatal(err)
+	}
+	want := Expiring{Amount: 5, Until: "2026-11-10", At: time.Date(2026, 11, 1, 2, 0, 0, 0, time.UTC)}
+	if b.USD != 10 || len(b.Expiring) != 1 || !b.Expiring[0].At.Equal(want.At) || b.Expiring[0].Amount != 5 || b.Expiring[0].Until != want.Until {
+		t.Fatalf("%+v", b)
+	}
+	out, _ := json.Marshal(b)
+	if !strings.Contains(string(out), `"expirings":[{"amount":5,"until":"2026-11-10"`) || strings.Contains(string(out), `"expiring":`) {
+		t.Fatalf("saved again: %s", out)
+	}
+	var again OwnBalance
+	if err := json.Unmarshal(out, &again); err != nil || len(again.Expiring) != 1 {
+		t.Fatalf("read again: %+v %v", again, err)
+	}
+	both := `{"usd":10,"at":"2026-11-01T01:00:00Z","expiring":{"amount":5,"until":"2026-11-10","at":"2026-11-01T02:00:00Z"},` +
+		`"expirings":[{"amount":5,"until":"2026-11-10","at":"2026-11-01T02:00:00Z"},{"amount":3,"until":"2026-11-11","at":"2026-11-01T03:00:00Z"}]}`
+	if err := json.Unmarshal([]byte(both), &b); err != nil || len(b.Expiring) != 2 || b.Expiring[1].Amount != 3 {
+		t.Fatalf("both: %+v %v", b, err)
+	}
+
+	// counted as v0.1.3305 counted it: $2 spent of 10 and 5 that expires
+	probeSandbox(t)
+	probeLocal = false
+	at := func(d, h int) time.Time { return time.Date(2026, 11, d, h, 0, 0, 0, time.UTC) }
+	spendAt(t, map[time.Time]float64{at(2, 10): 2})
+	clockStub(t, at(3, 9))
+	if err := json.Unmarshal([]byte(old), &b); err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(Provider{ID: "old", Name: "Old", Chat: "http://127.0.0.1:1/v1", Key: "sk-o", KeyOwnBalances: map[string]OwnBalance{keyID("sk-o"): b}}); err != nil {
+		t.Fatal(err)
+	}
+	p, _ := Find("old")
+	if e, _ := p.OwnBalanceEstimate(keyID("sk-o")); *e.Left != 13 || len(e.Expiring) != 1 || *e.Expiring[0].Left != 3 {
+		t.Fatalf("migrated: %+v", e)
+	}
+}
+
+// What the CLI takes for credit to take off.
+func TestExpiringDayParsed(t *testing.T) {
+	if x, err := ParseExpiringDay("2026-12-31"); err != nil || *x != (Expiring{Until: "2026-12-31"}) {
+		t.Errorf("a day: %+v %v", x, err)
+	}
+	if x, err := ParseExpiringDay("20@2026-12-31"); err != nil || *x != (Expiring{Amount: 20, Until: "2026-12-31"}) {
+		t.Errorf("amount@day: %+v %v", x, err)
+	}
+	for _, in := range []string{"", "off", "20", "12/31", "20@", "--help"} {
+		if _, err := ParseExpiringDay(in); err == nil {
 			t.Errorf("%q taken", in)
 		}
 	}
