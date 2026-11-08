@@ -58,7 +58,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const L = {};
         for (const k of ["Model settings", "+ Add header", "Remove header", "Restore default", "Fold Model settings",
           "Headers sent with {id}'s requests alone, after the provider's; one the provider has too is sent as this model's",
-          "Its own name, every reasoning level it has, whether it sees images, the API it is asked on, the model it is the same as, its own id, its list price, and no headers of its own"]) {
+          "Its own name, every reasoning level it has, whether it sees images, the API it is asked on, the model it is the same as, its own id, its list price, its listed window and reply limit, and no headers of its own"]) {
           L[k] = await say(page, lang, k);
           assert.ok(L[k], `${k} has its ${lang}`);
         }
@@ -101,7 +101,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator(".row.provider", { hasText: "Volcengine Ark" }).click();
         if (!(await editor.locator(".mnames:not([hidden])").count())) await editor.getByRole("button", { name: L["Model settings"], exact: true }).click();
         const reset = row("ep-b").getByRole("button", { name: L["Restore default"], exact: true });
-        assert.equal(await reset.getAttribute("title"), L["Its own name, every reasoning level it has, whether it sees images, the API it is asked on, the model it is the same as, its own id, its list price, and no headers of its own"]);
+        assert.equal(await reset.getAttribute("title"), L["Its own name, every reasoning level it has, whether it sees images, the API it is asked on, the model it is the same as, its own id, its list price, its listed window and reply limit, and no headers of its own"]);
         await reset.click();
         assert.equal(await row("ep-b").locator(".mheaders .pair").count(), 0);
         await editor.locator(".bar button.primary").click();

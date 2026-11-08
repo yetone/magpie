@@ -55,6 +55,21 @@ func TestProviderModelOutputSaid(t *testing.T) {
 	if got := said(); got["own-model"] != 64_000 {
 		t.Fatalf("the user's: %v", got)
 	}
+	// Model settings' Max output shows what is listed when none is set, the
+	// user's own aside (sayagoodbyeplz on Discord: 384000 from models.dev
+	// beside the 128000 typed over it)
+	if err := provider.SetModelOutput("relay/zai/glm-5.3-flash", 100_000); err != nil {
+		t.Fatal(err)
+	}
+	p, err := provider.Find("relay")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range providerInfo(*p, nil).Models {
+		if m.ID == "zai/glm-5.3-flash" && (m.Output != 100_000 || m.ListedOutput != 131072) {
+			t.Errorf("with the user's 100000: output %d, listed %d; want 100000, models.dev's 131072", m.Output, m.ListedOutput)
+		}
+	}
 }
 
 // #1438 (yhong91): a model's reply limit is shown within the window shown
