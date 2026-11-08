@@ -42,7 +42,9 @@ import (
 // Copilot's Messages API turns away auto mode's `safeguards` (automode.go)
 // on its Claude models: 400 "safeguards: Extra inputs are not permitted"
 // (#1756, claude-opus-5.5). A provider that refuses it is sent none, and
-// Claude Code, finding no safeguard_results, reviews its actions locally.
+// Claude Code, finding no safeguard_results, reviews its actions locally
+// or, where Anthropic has turned its local classifier off, asks for
+// approval (automode.go).
 //
 // Claude Code's deferred tools (ToolSearch, MCP tools that come and go)
 // put blocks of their own in a message: {"type":"tool_addition","tool":

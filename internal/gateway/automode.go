@@ -19,16 +19,24 @@ import (
 // as they were sent, relayed or built (buildAnthropic), and the results
 // come back as it gave them, on a stream made of a whole reply too
 // (anthropicWholeEvents). Any other model neither sees them nor answers
-// them (serverReview), and Claude Code, finding no result, classifies
-// locally for the rest of the session, naming the gateway in a notice.
-// magpie says nothing on the API's behalf. Where no model Claude Code can
-// reach through magpie is reviewed (AutoModeReviewed), the agent's wiring
-// turns the review off in Claude Code's settings instead
+// them (serverReview), and magpie says nothing on the API's behalf. What
+// Claude Code does then is Anthropic's choice, made per account by a flag
+// (tengu_bright_dragonfly, read in 2.1.312 to 2.1.316): with it off, it
+// classifies locally for the rest of the session, naming the gateway in a
+// notice; with it on, it has no local classifier behind a gateway at all,
+// and every action the check would have judged asks for approval ("Auto
+// mode can't check actions in this session … your requests go through
+// 127.0.0.1:3425, which doesn't pass it through", chenxiang0010 on
+// Discord). Only Anthropic can answer the check, so no route here other
+// than those AutoModeReviewed names can make auto mode work there. Where no
+// model Claude Code can reach through magpie is reviewed, the agent's
+// wiring turns the review off in Claude Code's settings
 // (CLAUDE_CODE_AUTO_MODE_SERVER=0, as Anthropic's page on the notice says to
-// for a gateway that can't run the checks), so it classifies locally from
-// the start and says nothing about the gateway (1EFLOPS on X). Where one
-// is, it is left on: /model can take the same session to that model,
-// which reviews it.
+// for a gateway that can't run the checks): with the flag off it
+// classifies locally from the start and says nothing about the gateway
+// (1EFLOPS on X); with it on, 2.1.314 says it has no check of its own to
+// use instead. Where one is, it is left on: /model can take the same
+// session to that model, which reviews it.
 //
 // Locally, the classifier is a request of its own on the session's model:
 // the transcript in <transcript> blocks, a system prompt asking for

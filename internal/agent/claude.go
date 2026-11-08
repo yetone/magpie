@@ -303,8 +303,11 @@ const claudeCapsEnv = "CLAUDE_CODE_MODEL_CAPABILITIES"
 // Behind a gateway whose model doesn't answer, it classifies locally anyway
 // and names the gateway in a notice, "this session isn't eligible because
 // your requests go through 127.0.0.1:3425…" (1EFLOPS on X, Claude Code on
-// Codex). Anthropic's page on it says to set it to 0 for a gateway that
-// can't run the checks: magpie does while none of the models Claude Code
+// Codex), or, where Anthropic has turned its local classifier off (2.1.312
+// and later), asks for approval of each action the check would judge,
+// whichever the value (gateway/automode.go). Anthropic's page on it says
+// to set it to 0 for a gateway that can't run the checks: magpie does
+// while none of the models Claude Code
 // can reach through it is reviewed (claudeReviewed), and leaves it unset
 // while one is. One the user set is theirs.
 const claudeReviewEnv = "CLAUDE_CODE_AUTO_MODE_SERVER"
