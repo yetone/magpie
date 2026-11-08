@@ -120,6 +120,19 @@ case "$(uname -m)" in
   *) arch= ;;
 esac
 
+# apiroute <url> <file>: GitHub's API address of a release file whose
+# github.com address is <url>, read from the release's description with
+# sed alone (no jq); nothing when <url> isn't a GitHub release file
+apiroute() {
+  repo=$(printf '%s' "$1" | sed -n 's|^https://github\.com/\([^/]*/[^/]*\)/releases/download/[^/]*/[^/]*$|\1|p')
+  tag=$(printf '%s' "$1" | sed -n 's|^https://github\.com/[^/]*/[^/]*/releases/download/\([^/]*\)/[^/]*$|\1|p')
+  [ -n "$repo" ] && [ -n "$tag" ] || return 0
+  # one asset's own fields (url, id, name) come before its first nested
+  # object, so cutting at each { leaves them on one line
+  get -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$repo/releases/tags/$tag" 2>/dev/null | tr -d '\n' | tr '{' '\n' |
+    sed -n "s|.*\"url\": *\"\(https://api\.github\.com/repos/$repo/releases/assets/[0-9]*\)\".*\"name\": *\"$2\".*|\1|p" | head -n 1
+}
+
 tmp=
 # fetch <file>: the newest release's <file> downloaded into $tmp and
 # checked against the SHA-256 the site gives, never a mirror's
@@ -134,6 +147,7 @@ fetch() {
   # The feed is one line of JSON; pull this file's url and hash out of it.
   entry=$(printf '%s' "$feed" | sed -n "s/.*\"$file\":{\([^}]*\)}.*/\1/p")
   url=$(printf '%s' "$entry" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
+  api=$(printf '%s' "$entry" | sed -n 's/.*"api":"\([^"]*\)".*/\1/p')
   sum=$(printf '%s' "$entry" | sed -n 's/.*"sha256":"\([^"]*\)".*/\1/p')
   version=$(printf '%s' "$feed" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
   if [ "$os" = android ] && { [ -z "$url" ] || [ -z "$sum" ]; }; then
@@ -147,7 +161,17 @@ fetch() {
   esac
   if [ "$from" != "$url" ]; then say "downloading magpie $version ($file) through $mirror"
   else say "downloading magpie $version ($file)"; fi
-  get -o "$tmp/$file" "$from" || die "could not download $from"
+  if ! get -o "$tmp/$file" "$from"; then
+    # github.com's download address can fail (504 on every try, for hours
+    # on 2026-11-08) while GitHub's API serves the same file: asked for
+    # there, checked against the same SHA-256 below. A mirror given keeps
+    # precedence: through one, nothing else is tried.
+    [ "$from" = "$url" ] || die "could not download $from"
+    [ -n "$api" ] || api=$(apiroute "$url" "$file")
+    [ -n "$api" ] || die "could not download $url"
+    say "that failed; downloading it through GitHub's API instead"
+    get -H 'Accept: application/octet-stream' -o "$tmp/$file" "$api" || die "could not download $url, nor through $api"
+  fi
   if command -v sha256sum >/dev/null; then got=$(sha256sum "$tmp/$file" | cut -d' ' -f1)
   else got=$(shasum -a 256 "$tmp/$file" | cut -d' ' -f1); fi
   if [ "$got" != "$sum" ]; then

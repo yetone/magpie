@@ -9,6 +9,27 @@ import { fileURLToPath } from "node:url";
 
 const installer = fileURLToPath(new URL("./public/install.sh", import.meta.url));
 
+// assetId and TAGS: GitHub's API's ids for the release's files, and its
+// description of the release as it prints it (indented, nested objects)
+const assetId = (name) => 700 + ["magpie-cli-linux-arm64", "magpie-linux-arm64", "magpie-cli-android-arm64"].indexOf(name);
+const TAGS = JSON.stringify(
+  {
+    url: "https://api.github.com/repos/yetone/magpie-releases/releases/1",
+    tag_name: "vtest",
+    author: { login: "x", url: "https://api.github.com/users/x" },
+    assets: ["SHA256SUMS", "magpie-cli-linux-arm64", "magpie-linux-arm64", "magpie-cli-android-arm64"].map((name) => ({
+      url: `https://api.github.com/repos/yetone/magpie-releases/releases/assets/${name === "SHA256SUMS" ? 699 : assetId(name)}`,
+      id: 1,
+      name,
+      label: "",
+      uploader: { login: "github-actions[bot]", url: "https://api.github.com/users/github-actions%5Bbot%5D" },
+      browser_download_url: `https://github.com/yetone/magpie-releases/releases/download/vtest/${name}`,
+    })),
+  },
+  null,
+  2,
+);
+
 // systemPath: a folder of links to what the script runs, without sudo, for
 // a computer that has none
 function systemPath(dir) {
@@ -21,7 +42,7 @@ function systemPath(dir) {
   return sys;
 }
 
-function install(t, { termux = true, arch = "aarch64", override = false, prefixOnly = false, missing = false, corrupt = false, desktop = false, github = false, args = [], env: extra = {}, tamper = "", libs = desktop, cli = !desktop, distro = "ID=ubuntu\nID_LIKE=debian\n", sessions = [], login = "", tty = false, uid = 1000, sudo = true, pmFails = false, payload = "test binary\n" } = {}) {
+function install(t, { termux = true, arch = "aarch64", override = false, prefixOnly = false, missing = false, corrupt = false, desktop = false, github = false, api = false, args = [], env: extra = {}, tamper = "", libs = desktop, cli = !desktop, distro = "ID=ubuntu\nID_LIKE=debian\n", sessions = [], login = "", tty = false, uid = 1000, sudo = true, pmFails = false, payload = "test binary\n" } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "magpie-install-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const tools = join(dir, "tools");
@@ -40,6 +61,7 @@ function install(t, { termux = true, arch = "aarch64", override = false, prefixO
   for (const name of new Set([file, `magpie-cli-linux-${cpu}`, `magpie-linux-${cpu}`])) {
     if (missing && name === file) continue;
     assets[name] = { url: github ? `https://github.com/yetone/magpie-releases/releases/download/vtest/${name}` : `https://download.invalid/${name}`, sha256: corrupt ? "0".repeat(64) : createHash("sha256").update(payload).digest("hex") };
+    if (api) assets[name].api = `https://api.github.com/repos/yetone/magpie-releases/releases/assets/${assetId(name)}`;
   }
   const requests = join(dir, "requests");
   writeFileSync(join(tools, "uname"), `#!/bin/sh\ncase "$1" in -m) echo '${arch}';; -s) echo Linux;; esac\n`, { mode: 0o755 });
@@ -100,6 +122,9 @@ fs.appendFileSync(process.env.INSTALL_REQUESTS, url + String.fromCharCode(10));
 fs.appendFileSync(process.env.INSTALL_ARGS, JSON.stringify(args) + String.fromCharCode(10));
 const tamper = process.env.INSTALL_TAMPER;
 if (url.endsWith("/api/latest")) process.stdout.write(process.env.INSTALL_FEED);
+else if (process.env.INSTALL_DOWN && url.startsWith(process.env.INSTALL_DOWN)) process.exit(22);
+else if (url.includes("/releases/tags/")) process.stdout.write(process.env.INSTALL_TAGS);
+else if (url.includes("/releases/assets/") && !args.includes("Accept: application/octet-stream")) fs.writeFileSync(args[args.indexOf("-o") + 1], "{}");
 else fs.writeFileSync(args[args.indexOf("-o") + 1], tamper && url.startsWith(tamper) ? "changed by the mirror" : process.env.INSTALL_PAYLOAD);
 `, { mode: 0o755 });
   const env = {
@@ -132,6 +157,7 @@ else fs.writeFileSync(args[args.indexOf("-o") + 1], tamper && url.startsWith(tam
     INSTALL_PAYLOAD: payload,
     INSTALL_ARGS: join(dir, "args"),
     INSTALL_TAMPER: tamper,
+    INSTALL_TAGS: TAGS,
     MAGPIE_PROXY: "",
     MAGPIE_MIRROR: "",
     ...extra,
@@ -598,4 +624,36 @@ test("--gui installs WebKitGTK at a terminal too; --tui, MAGPIE_CLI=1 and a head
     assert.equal(r.gui, false, JSON.stringify(opts));
     assert.equal(r.pm, "", JSON.stringify(opts));
   }
+});
+
+// 2026-11-08: github.com answered 504 for every release file while GitHub's
+// API served them. The file is then asked for through the API (the feed's
+// api, else looked up from the release's tag), and checked the same way.
+test("github.com failing, the file comes through GitHub's API, checked against the site's SHA-256", (t) => {
+  for (const api of [false, true]) {
+    const r = install(t, { termux: false, github: true, api, env: { INSTALL_DOWN: "https://github.com/" } });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(readFileSync(join(r.bin, "magpie"), "utf8"), r.payload);
+    const asked = r.requests.trim().split("\n");
+    assert.deepEqual(asked, [
+      "https://usemagpie.ai/api/latest",
+      "https://github.com/yetone/magpie-releases/releases/download/vtest/magpie-cli-linux-arm64",
+      ...(api ? [] : ["https://api.github.com/repos/yetone/magpie-releases/releases/tags/vtest"]),
+      "https://api.github.com/repos/yetone/magpie-releases/releases/assets/700",
+    ], String(api));
+    assert.ok(r.calls.at(-1).includes("Accept: application/octet-stream"), JSON.stringify(r.calls.at(-1)));
+    assert.match(r.stdout, /through GitHub's API/);
+  }
+  // the API's file is checked as any other
+  const bad = install(t, { termux: false, github: true, corrupt: true, env: { INSTALL_DOWN: "https://github.com/" } });
+  assert.notEqual(bad.status, 0);
+  assert.match(bad.stderr, /does not match its checksum/);
+  assert.equal(readFileSync(join(bad.bin, "magpie"), "utf8"), "old installation");
+});
+
+test("a mirror given keeps precedence: it failing, GitHub's API is not asked", (t) => {
+  const r = install(t, { termux: false, github: true, api: true, args: ["--mirror", "https://gh.mirror.example/"], env: { INSTALL_DOWN: "https://gh.mirror.example/" } });
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /could not download https:\/\/gh\.mirror\.example\//);
+  assert.doesNotMatch(r.requests, /api\.github\.com/);
 });

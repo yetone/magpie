@@ -2,7 +2,7 @@
 // worker turns the newest one into the update feed the app reads and into
 // download links that never go stale.
 //
-//   /api/latest            {version, notes, url, published, assets: {name: {url, size, sha256}}}
+//   /api/latest            {version, notes, url, published, assets: {name: {url, api, size, sha256}}}
 //   /api/latest?channel=stable
 //                          the same for Settings' Stable channel: a release a
 //                          week, an urgent one at once ("The Stable channel"
@@ -32,6 +32,8 @@
 //   /download/windows      the Windows app (x64);  /download/windows-arm64
 //   /download/linux        the Linux app (x86-64); /download/linux-arm64
 //   /download/<file>       any file of the newest release, by name
+//   /dl/<tag>/<file>       a release's file through GitHub's API, the feed's
+//                          url while github.com's download address fails
 //   /r/...                 the pages' PostHog snippet, passed on to PostHog
 //                          (relay, below) so a blocker that knows its host
 //                          doesn't drop the count
@@ -48,6 +50,7 @@ import { PARTNERS } from "./partners.js";
 import { SPONSORS } from "./sponsors.js";
 
 const REPO = "yetone/magpie-releases";
+const SITE = "https://usemagpie.ai";
 const TTL = 300; // seconds the newest release is remembered
 
 const SHORT = {
@@ -127,6 +130,8 @@ export default {
       return json({ releases: pick }, 200, cacheFor(got));
     }
     if (url.pathname === "/api/icon") return icon(url.searchParams.get("url"));
+    const dl = url.pathname.match(/^\/dl\/(v[0-9][0-9A-Za-z.+-]*)\/([0-9A-Za-z._+-]+)$/);
+    if (dl) return detour(ctx, env, dl[1], dl[2]);
     if (url.pathname.startsWith(RELAY)) return relay(req, url);
     if (url.pathname === "/download" || url.pathname.startsWith("/download/")) {
       const want = url.pathname.split("/")[2] || "mac-arm64";
@@ -432,8 +437,10 @@ async function latest(ctx, env) {
   if (hit && hit.rel && hit.rel.version) return hit;
   const full = await fromAPI(env);
   if (full) {
-    const got = { rel: full, degraded: false };
-    remember(ctx, "latest", got, TTL);
+    // a feed sending the files by /dl is kept briefly: github.com's own
+    // address is given again as soon as it answers
+    const got = { rel: full, degraded: detoured(full) };
+    remember(ctx, "latest", got, got.degraded ? BRIEF : TTL);
     remember(ctx, "latest-good", full, KEEP);
     return got;
   }
@@ -474,14 +481,82 @@ async function fromAPI(env, path = "releases/latest") {
   }
   const gh = await res.json();
   const tag = gh.tag_name;
-  const sums = await checksums(tag);
-  if (!sums) return null;
+  const listed = gh.assets.find((a) => a.name === "SHA256SUMS");
+  const got = await checksums(tag, env, listed && listed.url);
+  if (!got) return null;
   const rel = { version: tag.replace(/^v/, ""), notes: gh.body || "", url: gh.html_url, published: gh.published_at, assets: {} };
   for (const a of gh.assets) {
     if (a.name === "SHA256SUMS") continue;
-    rel.assets[a.name] = { url: a.browser_download_url, size: a.size, sha256: sums[a.name] || "" };
+    // api: the file's address in GitHub's API, which an app asks when
+    // url is busy. With github.com's download address failing (504 for
+    // hours on 2026-11-08), url is the site's /dl, which redirects
+    // through the API: an app too old to know api follows it, and still
+    // checks the file against sha256.
+    const url = got.direct ? a.browser_download_url : `${SITE}/dl/${tag}/${encodeURIComponent(a.name)}`;
+    rel.assets[a.name] = { url, api: a.url, size: a.size, sha256: got.sums[a.name] || "" };
   }
   return rel;
+}
+
+// detoured: whether rel's files go by the site's /dl
+function detoured(rel) {
+  return Object.values(rel.assets || {}).some((a) => a.url && a.url.startsWith(SITE + "/dl/"));
+}
+
+// located is where GitHub's API sends an ask for a release file's bytes
+// (Accept: application/octet-stream): a signed address on GitHub's asset
+// host, good for some minutes, or null. The redirect is read, not
+// followed, so no Authorization goes to the asset host.
+async function located(apiURL, env) {
+  const headers = { ...UA, Accept: "application/octet-stream" };
+  if (env && env.GITHUB_TOKEN) headers.Authorization = `Bearer ${env.GITHUB_TOKEN}`;
+  let res;
+  try {
+    res = await fetch(apiURL, { headers, redirect: "manual" });
+  } catch (e) {
+    console.log("github asset", e);
+    return null;
+  }
+  const to = res.headers.get("Location") || "";
+  let host = "";
+  try {
+    host = new URL(to).hostname;
+  } catch {}
+  if (res.status < 300 || res.status > 399 || !to.startsWith("https://") || !(host.endsWith(".githubusercontent.com") || host === "github.com")) {
+    console.log("github asset", res.status, to.slice(0, 80));
+    return null;
+  }
+  return to;
+}
+
+// detour is /dl/<tag>/<file>: a redirect to the release's file by way of
+// GitHub's API (located), for when github.com's download address fails.
+// Where GitHub's API sends is kept five minutes, and each release's list
+// of files an hour, so a worker IP's 60 anonymous asks an hour go far.
+// The file is checked by whoever downloads it, against the feed's hash.
+async function detour(ctx, env, tag, name) {
+  const key = `dl/${tag}/${name}`;
+  let to = await cached(key);
+  if (typeof to !== "string" || !to) {
+    let files = await cached(`dl-files/${tag}`);
+    if (!files || typeof files !== "object") {
+      let res = null;
+      try {
+        res = await api(`releases/tags/${tag}`, env);
+      } catch (e) {
+        console.log("github api", tag, e);
+      }
+      if (!res || !res.ok) return new Response("GitHub didn't say where the file is; try again in a minute\n", { status: 502, headers: NO_STORE });
+      files = {};
+      for (const a of (await res.json()).assets || []) files[a.name] = a.url;
+      remember(ctx, `dl-files/${tag}`, files, 3600);
+    }
+    if (!files[name]) return new Response("not found\n", { status: 404 });
+    to = await located(files[name], env);
+    if (!to) return new Response("GitHub didn't hand out the file; try again in a minute\n", { status: 502, headers: NO_STORE });
+    remember(ctx, key, to, 300);
+  }
+  return new Response(null, { status: 302, headers: { Location: to, ...NO_STORE } });
 }
 
 async function fromPages() {
@@ -505,8 +580,9 @@ async function fromPages() {
 // date from entry ({notes, published}) where there is one: every file, its
 // size unknown (0). null when SHA256SUMS can't be read.
 async function fromSums(tag, entry) {
-  const sums = await checksums(tag);
-  if (!sums) return null;
+  const got = await checksums(tag);
+  if (!got) return null;
+  const sums = got.sums;
   const url = `https://github.com/${REPO}/releases/tag/${tag}`;
   const rel = { version: tag.replace(/^v/, ""), notes: entry ? entry.notes : "", url, published: entry ? entry.published : null, assets: {} };
   for (const [name, sha256] of Object.entries(sums)) {
@@ -645,7 +721,8 @@ async function stable(ctx, env, now) {
   const pick = stableOf(ix.list.map((r) => ({ version: r.v, published: r.p, urgent: !!r.u })), now);
   if (!pick) return null;
   const tag = "v" + pick.version;
-  let rel = await fromAPI(env, "releases/tags/" + tag), degraded = false;
+  let rel = await fromAPI(env, "releases/tags/" + tag);
+  let degraded = !!rel && detoured(rel);
   if (!rel) {
     // the API said no: the files from SHA256SUMS, the notes from the ledger
     const [entry] = await fromLedger(env, null, null, pick.version, 1);
@@ -903,22 +980,35 @@ function newer(a, b) {
   return x.pre > y.pre;
 }
 
-// checksums reads a release's SHA256SUMS: {file name: hash}.
-async function checksums(tag) {
-  let r;
+// checksums reads a release's SHA256SUMS: {sums: {file name: hash},
+// direct}, or null. direct says github.com's download address gave it;
+// when that fails, viaAPI (the file's address in GitHub's API) is asked.
+async function checksums(tag, env, viaAPI) {
+  let r = null;
   try {
     r = await fetch(`https://github.com/${REPO}/releases/download/${tag}/SHA256SUMS`, { headers: UA });
   } catch (e) {
     console.log("SHA256SUMS", e);
-    return null;
   }
-  if (!r.ok) return null;
+  let direct = !!r && r.ok;
+  if (!direct) {
+    if (r) console.log("SHA256SUMS", r.status);
+    const to = viaAPI && (await located(viaAPI, env));
+    if (!to) return null;
+    try {
+      r = await fetch(to, { headers: UA });
+    } catch (e) {
+      console.log("SHA256SUMS through the API", e);
+      return null;
+    }
+    if (!r.ok) return null;
+  }
   const sums = {};
   for (const line of (await r.text()).split("\n")) {
     const [hash, name] = line.trim().split(/\s+\*?/);
     if (hash && name) sums[name] = hash;
   }
-  return sums;
+  return { sums, direct };
 }
 
 // ---- icons ------------------------------------------------------------------

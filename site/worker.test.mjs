@@ -23,6 +23,9 @@ globalThis.caches = {
 // pagesDown for github.com itself failing too. seen keeps each API ask's
 // headers.
 let apiDown = false, pagesDown = false;
+// downloadsDown: github.com's download address answering 504 while the
+// API serves the same files (2026-11-08)
+let downloadsDown = false;
 const seen = [];
 const FEED = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
@@ -69,11 +72,22 @@ globalThis.fetch = async (u, init = {}) => {
   if (u.startsWith("https://api.github.com/")) {
     seen.push(new Headers(init.headers));
     if (apiDown) return new Response('{"message":"API rate limit exceeded"}', { status: 403 });
+    const asset = u.match(/\/releases\/assets\/(\d+)$/);
+    if (asset) {
+      if (new Headers(init.headers).get("Accept") !== "application/octet-stream") return Response.json({ id: +asset[1] });
+      return new Response(null, { status: 302, headers: { Location: `https://release-assets.githubusercontent.com/a/${asset[1]}?sig=1` } });
+    }
   } else if (pagesDown) return new Response("unicorn", { status: 503 });
+  if (downloadsDown && u.includes("/releases/download/")) return new Response("", { status: 504 });
+  if (u === "https://release-assets.githubusercontent.com/a/2?sig=1") return new Response("abc  magpie-linux-amd64\n");
   if (u === "https://github.com/yetone/magpie-releases/releases/latest")
     return new Response(null, { status: 302, headers: { Location: "https://github.com/yetone/magpie-releases/releases/tag/v0.1.3" } });
   if (u.endsWith("/releases.atom")) return new Response(FEED);
-  const gh = (tag) => ({ tag_name: tag, body: BODIES[tag], html_url: "https://github.com/r/" + tag, published_at: "2026-10-01T00:00:00Z", draft: false, prerelease: false, assets: [{ name: "magpie-linux-amd64", size: 1, browser_download_url: "https://dl/x" }] });
+  const gh = (tag) => ({ tag_name: tag, body: BODIES[tag], html_url: "https://github.com/r/" + tag, published_at: "2026-10-01T00:00:00Z", draft: false, prerelease: false, assets: [
+      { name: "magpie-linux-amd64", size: 1, browser_download_url: "https://dl/x", url: "https://api.github.com/repos/yetone/magpie-releases/releases/assets/1" },
+      { name: "SHA256SUMS", size: 1, browser_download_url: "https://dl/sums", url: "https://api.github.com/repos/yetone/magpie-releases/releases/assets/2" },
+    ] });
+  if (u.endsWith("/releases/tags/v0.1.3")) return Response.json(gh("v0.1.3"));
   if (u.endsWith("/releases/latest")) return Response.json(gh("v0.1.3"));
   if (u.includes("/releases?per_page=")) return Response.json(Object.keys(BODIES).map(gh));
   if (u.endsWith("/SHA256SUMS")) return new Response("abc  magpie-linux-amd64\n");
@@ -709,4 +723,64 @@ test("seo: the home page's structured data parses and its title is in every lang
   assert.equal(app.offers.price, "0");
   assert.match(html, /<title data-i18n="meta.title">[^<]{20,70}<\/title>/);
   for (const [l, { dict }] of Object.entries(LANGS)) assert.ok(dict["meta.title"].startsWith("magpie"), l);
+});
+
+// 2026-11-08: github.com answered 504 for every release file for hours,
+// while GitHub's API served the same ones. The feed then reads the
+// checksums through the API and sends each file by the site's /dl, which
+// an app too old to know the api field follows; it is kept a minute, so
+// github.com's own address comes back as soon as it answers.
+test("latest: github.com's downloads failing, the files go by /dl, through GitHub's API", async () => {
+  store.clear();
+  downloadsDown = true;
+  try {
+    const res = await ask("/api/latest");
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("Cache-Control"), "public, max-age=60");
+    const a = (await res.json()).assets["magpie-linux-amd64"];
+    assert.deepEqual(a, {
+      url: "https://usemagpie.ai/dl/v0.1.3/magpie-linux-amd64",
+      api: "https://api.github.com/repos/yetone/magpie-releases/releases/assets/1",
+      size: 1,
+      sha256: "abc",
+    });
+    seen.length = 0;
+    // each ask's writes to the edge's cache are waited for before the next
+    const pending = [];
+    const keeping = { waitUntil: (p) => void pending.push(p) };
+    for (let i = 0; i < 2; i++) {
+      const dl = await worker.fetch(new Request("https://usemagpie.ai/dl/v0.1.3/magpie-linux-amd64"), {}, keeping);
+      await Promise.all(pending);
+      assert.equal(dl.status, 302);
+      assert.equal(dl.headers.get("Location"), "https://release-assets.githubusercontent.com/a/1?sig=1");
+      assert.equal(dl.headers.get("Cache-Control"), "no-store");
+    }
+    // the release's files once, where one is once: the second is the edge's
+    assert.equal(seen.length, 2);
+    assert.equal(seen[1].get("Accept"), "application/octet-stream");
+    assert.equal((await ask("/dl/v0.1.3/magpie-nothing")).status, 404);
+  } finally {
+    downloadsDown = false;
+  }
+  // github.com answering again: its own address, and api beside it
+  store.clear();
+  const res = await ask("/api/latest");
+  assert.equal(res.headers.get("Cache-Control"), "public, max-age=300");
+  const a = (await res.json()).assets["magpie-linux-amd64"];
+  assert.equal(a.url, "https://dl/x");
+  assert.equal(a.api, "https://api.github.com/repos/yetone/magpie-releases/releases/assets/1");
+});
+
+test("dl: a redirect GitHub's API gives anywhere but its asset host is not passed on", async () => {
+  store.clear();
+  const was = globalThis.fetch;
+  globalThis.fetch = async (u, init = {}) =>
+    /\/releases\/assets\/\d+$/.test(String(u)) ? new Response(null, { status: 302, headers: { Location: "https://evil.example/x" } }) : was(u, init);
+  try {
+    const res = await ask("/dl/v0.1.3/magpie-linux-amd64");
+    assert.equal(res.status, 502);
+    assert.equal(res.headers.get("Cache-Control"), "no-store");
+  } finally {
+    globalThis.fetch = was;
+  }
 });

@@ -3106,6 +3106,17 @@ magpie update --mirror https://mirror.example/
 No mirror is used unless you give one, and the SHA-256 every download is
 checked against still comes from usemagpie.ai, never from the mirror.
 
+When github.com's download address fails (it answered 504 for every release
+file for hours on 2026-11-08) and no mirror is set, the app, `magpie update`
+and the installer download the same file through GitHub's API
+(`api.github.com/repos/yetone/magpie-releases/releases/assets/<id>`, asked
+with `Accept: application/octet-stream`). The file is checked as before: the
+feed's SHA-256, and on the Mac the installed app's signing team. A mirror you
+set keeps precedence, and no API route is tried through it. While the
+download address fails, usemagpie.ai's feed points each file at
+`usemagpie.ai/dl/<tag>/<file>`, which redirects to the API's address, so an
+older magpie can update too.
+
 Mac releases are signed and notarised; the Windows and Linux builds are not
 signed yet (Windows SmartScreen may ask before the first run). Every build
 keeps itself current: the app
