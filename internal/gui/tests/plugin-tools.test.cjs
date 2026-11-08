@@ -110,18 +110,23 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         shown.length = 0;
         const vline = row("video").locator(".pm-tools");
         assert.equal((await vline.locator("span").first().innerText()).trim(), w.given);
-        const flip = vline.locator(".pm-tools-flip");
+        const vval = row("video").locator(".val");
+        const flip = vval.locator(".pm-tools-flip");
         assert.equal((await flip.innerText()).trim(), w.hide);
         await flip.click();
-        await vline.locator(".pm-tools-flip", { hasText: w.give }).waitFor();
+        await vval.locator(".pm-tools-flip", { hasText: w.give }).waitFor();
         assert.equal((await vline.locator("span").first().innerText()).trim(), w.hidden);
         assert.deepEqual(shown, [{ name: VIDEO, on: false }]);
         assert.ok(!(await row("video").innerText()).includes("Off\n"), "the plugin itself stays on");
-        await vline.locator(".pm-tools-flip").click();
-        await vline.locator(".pm-tools-flip", { hasText: w.hide }).waitFor();
+        await vval.locator(".pm-tools-flip").click();
+        await vval.locator(".pm-tools-flip", { hasText: w.hide }).waitFor();
         assert.deepEqual(shown, [{ name: VIDEO, on: false }, { name: VIDEO, on: true }]);
-        const [fb, vb] = await Promise.all([vline.locator(".pm-tools-flip").boundingBox(), row("video").boundingBox()]);
-        assert.ok(fb.x + fb.width <= vb.x + vb.width + 1, "the line's button overflows its row");
+        assert.equal(await vline.locator("button.pm-tools-flip").count(), 0, "the flip sits with the row's buttons, not on the tools line");
+        // on one line with Switch off and Remove (it sat a line below them, 11-08)
+        const [fb, vb] = await Promise.all([vval.locator(".pm-tools-flip").boundingBox(), row("video").boundingBox()]);
+        assert.ok(fb.x + fb.width <= vb.x + vb.width + 1, "the row's button overflows its row");
+        const mids = await vval.locator("button").evaluateAll((bs) => bs.map((b) => { const r = b.getBoundingClientRect(); return r.top + r.height / 2; }));
+        for (const m of mids) assert.ok(Math.abs(m - mids[0]) <= 1, "row buttons off one line: " + mids.join(", "));
 
         const over = await page.evaluate(() => document.scrollingElement.scrollWidth - document.scrollingElement.clientWidth);
         assert.ok(over <= 0, "page scrolls sideways by " + over);

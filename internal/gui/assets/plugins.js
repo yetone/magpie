@@ -1320,6 +1320,8 @@
       r.append(val);
       return r;
     }
+    const flip = e.tools?.length && !e.off && toolsFlip(e);
+    if (flip) val.append(flip);
     if ((e.isGateway || (mw && !mw.error) || ownOpts) && !e.off && editing?.pkg !== pkg) {
       const o = el("button", "text", t("Options"));
       o.title = e.options ? t("The options it runs with") : t("It runs with no options; its package suggests some");
@@ -1479,16 +1481,20 @@
     const b = copyBtn(url, t("MCP server address"));
     b.title = t("Copy the MCP server's address ({url}): add it to an agent as an MCP server (Streamable HTTP)", { url });
     d.append(b);
-    if (sv && !gatewayMode && !featuresOff.has("library")) {
-      const f = el("button", "link pm-tools-flip", t(sv.on ? "Hide from agents" : "Give to agents"));
-      f.onclick = (ev) => {
-        ev.stopPropagation();
-        f.disabled = true;
-        api("library/servers/plugin-on", { name: sv.plugin, on: !sv.on }).then(refresh, (err) => { f.disabled = false; statusErr(err); });
-      };
-      d.append(f);
-    }
     return d;
+  }
+  // toolsFlip gives a plugin's tools to every agent or hides them, among
+  // the row's buttons (on the tools line it sat a line below them)
+  function toolsFlip(e) {
+    const sv = e.toolsServer;
+    if (!sv || gatewayMode || featuresOff.has("library")) return null;
+    const f = el("button", "text pm-tools-flip", t(sv.on ? "Hide from agents" : "Give to agents"));
+    f.onclick = (ev) => {
+      ev.stopPropagation();
+      f.disabled = true;
+      api("library/servers/plugin-on", { name: sv.plugin, on: !sv.on }).then(refresh, (err) => { f.disabled = false; statusErr(err); });
+    };
+    return f;
   }
 
   // what a plugin's page may read of magpie's: what its package.json's
