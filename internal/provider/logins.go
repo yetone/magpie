@@ -213,6 +213,14 @@ func parseLogins(b []byte) ([]savedLogin, error) {
 	// doesn't allow its subscription used outside its client), so one
 	// signed in before is left out, and gone from the file at its next write
 	out = slices.DeleteFunc(out, func(l savedLogin) bool { return l.Agent == "dimagent" })
+	for i := range out {
+		// a Max 20x saved before it was named Ultra
+		if out[i].Agent == "claude" && out[i].Plan == "max" {
+			if c, ok := parseClaudeCredentials(out[i].Auth); ok {
+				out[i].Plan = claudePlan(out[i].Plan, c.OAuth.RateLimitTier)
+			}
+		}
+	}
 	return nameAlike(dedupeLogins(out)), nil
 }
 
@@ -754,9 +762,9 @@ func liveLogin(agent string) (savedLogin, bool) {
 		if signedOut {
 			return savedLogin{}, false
 		}
-		l := savedLogin{Agent: agent, Plan: c.OAuth.SubscriptionType, Auth: b}
+		l := savedLogin{Agent: agent, Plan: c.OAuth.plan(), Auth: b}
 		var acct map[string]any
-		if l.User, acct = claudeSignedInUser(l.Plan, plan, user); acct != nil {
+		if l.User, acct = claudeSignedInUser(c.OAuth.SubscriptionType, plan, user); acct != nil {
 			l.Profile, _ = json.Marshal(acct)
 			l.HeldAs = claudeProfileKey(l.Profile)
 		}
@@ -1772,7 +1780,7 @@ func claudeRenewedHeld(ls []savedLogin, l savedLogin) (savedLogin, bool) {
 		if h.Agent != "claude" || !h.Held || h.HeldAs != key || sameLogin(h, l) || claudeSetupToken(h.Auth) != "" {
 			continue
 		}
-		if plan := c.OAuth.SubscriptionType; plan != "" && h.Plan != "" && !strings.EqualFold(plan, h.Plan) {
+		if plan := c.OAuth.plan(); plan != "" && h.Plan != "" && !strings.EqualFold(plan, h.Plan) {
 			return savedLogin{}, false
 		}
 		return h, true

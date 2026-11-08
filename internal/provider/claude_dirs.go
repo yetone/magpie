@@ -450,7 +450,7 @@ func takeClaudeDir(l *savedLogin, c claudeCredentials) (bool, error) {
 	}
 	l.Auth = b
 	if c.OAuth.SubscriptionType != "" {
-		l.Plan = c.OAuth.SubscriptionType
+		l.Plan = c.OAuth.plan()
 	}
 	l.Renewed = time.Now().UTC().Truncate(time.Second)
 	l.Lapsed, l.Refused = "", ""

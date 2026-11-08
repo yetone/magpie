@@ -420,6 +420,18 @@ type claudeAuth struct {
 	RateLimitTier    string   `json:"rateLimitTier"`
 }
 
+// plan names the Claude subscription as Anthropic sells it now:
+// Max 20x is Claude Ultra, while Claude Code still says "max" for it
+// and tells the two apart only by the rate-limit tier.
+func (a claudeAuth) plan() string { return claudePlan(a.SubscriptionType, a.RateLimitTier) }
+
+func claudePlan(sub, tier string) string {
+	if sub == "max" && strings.Contains(tier, "max_20x") {
+		return "ultra"
+	}
+	return sub
+}
+
 // claudeCredentials keeps the whole credential blob in raw, so refreshing a
 // token writes back everything else — MCP OAuth state included — untouched.
 type claudeCredentials struct {
@@ -811,9 +823,9 @@ func claudeAccount() (Provider, bool) {
 	if signedOut {
 		return claudeStandInAccount()
 	}
-	plan := c.OAuth.SubscriptionType
+	plan := c.OAuth.plan()
 	if statusPlan != "" {
-		plan = statusPlan
+		plan = claudePlan(statusPlan, c.OAuth.RateLimitTier)
 	}
 	// named as its saved login is (liveLogin): it is then the account Logins
 	// flags Active, not served a second time beside itself, and its
