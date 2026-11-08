@@ -92,7 +92,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const strings = await page.evaluate(() => [...document.querySelectorAll(".editor .accts .pool-ends label")].map((l) => l.title));
           const keys = ["Stop when every account is at its cap", "Check usage again near a cap", "No cap on {users}: used to 100% of each window",
             "On: once every account in use is at its cap, requests get 429 instead of going to the fallbacks.",
-            "On: an account within 5 points of its cap has its usage read again if older than 15s (any account: 5m) before a request, waiting up to 10s; one whose usage can't be read is held."];
+            "On: an account near its cap has its usage read again before a request. One whose usage can't be read is held."];
           assert.deepEqual(strings, keys.slice(3));
           const missing = await page.evaluate((ks) => ["zh", "zh-TW", "ja", "de"].flatMap((l) => ks.filter((k) => !I18N[l][k]).map((k) => `${l}: ${k}`)), keys);
           assert.deepEqual(missing, [], "every string has its translations");
