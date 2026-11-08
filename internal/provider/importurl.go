@@ -31,6 +31,18 @@ import (
 //	website    the vendor's site; keys: where keys are made
 //	icon       an https picture of the vendor's own, fetched only after the
 //	           user confirms; falls back to the generic mark when absent
+//	balance    where the key's balance is asked (BalanceURL), with the key
+//	           as a chat request carries it: https, on the host of one of
+//	           the provider's own endpoints, so a link never sends the key
+//	           anywhere its requests don't already go. {key} in it is the key
+//	balance_path    the amount's field in the reply (BalancePath), e.g.
+//	           data.balance; magpie's guess for a known reply when absent
+//	balance_method  GET (the default) or POST
+//
+// An account-wide token (BalanceToken, a new-api relay's access token) or
+// a header is never taken from a link: either is worth more than the key,
+// and a URL is kept in browser history and logs. The user adds them in the
+// provider's editor.
 //
 // A link never saves anything by itself: the app shows what it would add
 // and the user says yes.
@@ -142,6 +154,10 @@ func ParseImport(link string) (Provider, error) {
 		p.Name = p.Name[:cut]
 	}
 
+	if err := linkBalance(&p, get("balance"), get("balance_path"), get("balance_method")); err != nil {
+		return Provider{}, err
+	}
+
 	p.Key = get("key")
 	if len(p.Key) > 4096 || strings.ContainsFunc(p.Key, func(r rune) bool { return r < ' ' || r == 0x7f }) {
 		return Provider{}, errors.New("the link's key is not a key")
@@ -152,6 +168,43 @@ func ParseImport(link string) (Provider, error) {
 		}
 	}
 	return p, nil
+}
+
+// linkBalance sets the balance query a link names: an https URL on one of
+// the provider's own endpoint hosts, since it is asked with the key.
+func linkBalance(p *Provider, raw, path, method string) error {
+	if raw == "" {
+		if path != "" || method != "" {
+			return errors.New("the link's balance_path= or balance_method= needs balance=")
+		}
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" {
+		return errorf("the link's balance= must be an https URL: %q", raw)
+	}
+	same := false
+	for _, ep := range []string{p.Chat, p.Responses, p.Anthropic, p.Gemini} {
+		if e, err := url.Parse(ep); err == nil && ep != "" && strings.EqualFold(e.Host, u.Host) {
+			same = true
+		}
+	}
+	if !same {
+		return errorf("the link's balance= is on %s, not the host of its endpoints: the key is sent to it", u.Host)
+	}
+	switch m := strings.ToUpper(method); m {
+	case "", "GET":
+		method = ""
+	case "POST":
+		method = m
+	default:
+		return errorf("the link's balance_method= is GET or POST, not %q", method)
+	}
+	if len(path) > 200 || strings.ContainsFunc(path, func(r rune) bool { return r < ' ' || r == 0x7f }) {
+		return errors.New("the link's balance_path= is not a field")
+	}
+	p.BalanceURL, p.BalancePath, p.BalanceMethod = u.String(), path, method
+	return nil
 }
 
 // endpoint accepts an https base URL, or plain http to this machine or the

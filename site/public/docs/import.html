@@ -138,10 +138,14 @@
       <tr><td><code>website</code></td><td>Your site (https). Shown on the provider’s page.</td></tr>
       <tr><td><code>keys</code></td><td>The page where users make keys (https). The dialog links to it when the link has no key.</td></tr>
       <tr><td><code>icon</code></td><td>A picture of your own (https): PNG, JPEG, GIF, WebP, ICO or SVG, at most 1&nbsp;MB. magpie downloads it once, after the user confirms the import, and keeps it beside the provider. Without one, magpie shows the <code>catalog</code> vendor’s logo or a plain mark.</td></tr>
+      <tr><td><code>balance</code></td><td>Where the key’s balance is read (https), on the host of one of your base URLs: magpie asks it with the key, as a chat request sends it. <code>{key}</code> in it stands for the key. Without it, magpie reads the vendors it knows, and asks a relay where new-api and sub2api tell a key its balance (<code>/api/usage/token</code>, <code>/v1/usage</code>); give one when yours answers elsewhere.</td></tr>
+      <tr><td><code>balance_path</code></td><td>Where the amount is in the JSON reply: a dotted path, list items by index (<code>data.balance</code>, <code>balance_infos.0.total_balance</code>), or a sum of them in your own units (<code>$ data.quota / 500000</code>). <code>$</code> or <code>¥</code> before it is the currency, <code>%</code> after it a percent of 1; several amounts go apart by <code>;</code>, each with a <code>label:</code> if wanted. Needs <code>balance</code>.</td></tr>
+      <tr><td><code>balance_method</code></td><td><code>GET</code>, the default, or <code>POST</code> with no body. Needs <code>balance</code>.</td></tr>
       <tr><td><code>preset</code><span class="req">or name</span></td><td>A preset id; its endpoints, catalog and pages are used, and <code>name</code> may rename it.</td></tr>
       <tr><td><code>region</code></td><td>With a preset that has regions, which one.</td></tr>
     </table></div>
     <p>At least one of <code>chat</code>, <code>responses</code>, <code>anthropic</code> and <code>gemini</code> is required without a preset; give every API you speak, and each agent uses the one it speaks natively. Base URLs must be <b>https</b>, except plain http to <code>localhost</code>, loopback, private addresses and <code>*.local</code>, where model servers usually run without TLS. They can’t carry a query, a fragment or credentials.</p>
+    <p>A link sets no other header or token for the balance: an account-wide access token is worth more than one key, and a URL stays in browser history. A balance that needs one is set up in the provider’s editor.</p>
 
     <h3 id="presets">Presets</h3>
     <p>Vendors magpie already knows. <code>magpie presets</code> prints the current list.</p>
@@ -169,6 +173,9 @@
         <label class="m-custom">Website <i>optional</i><input name="website" placeholder="https://acme.example"></label>
         <label class="m-custom">Key page <i>optional</i><input name="keys" placeholder="https://acme.example/keys"></label>
         <label class="m-custom">Icon <i>optional, https</i><input name="icon" placeholder="https://acme.example/logo.svg"></label>
+        <label class="m-custom">Balance URL <i>optional, a base URL’s host</i><input name="balance" class="mono" placeholder="https://api.acme.example/v1/dashboard/balance"></label>
+        <label class="m-custom">Balance field <i>optional</i><input name="balance_path" class="mono" placeholder="data.balance"></label>
+        <label class="m-custom">Balance method<select name="balance_method"><option value="">GET</option><option value="POST">POST</option></select></label>
       </form>
       <div class="out">
         <div class="row"><span>Web link</span><code id="o-web"></code><button class="copy" data-copy="o-web">Copy</button></div>
@@ -243,6 +250,7 @@ href = <span class="s">"https://usemagpie.ai/import#"</span> + urlencode({
       <li><b>https only.</b> Plain http is refused except to this machine or the local network; <code>file:</code>, credentials in URLs and other schemes are refused outright.</li>
       <li><b>Read once.</b> Inside the app, the link’s contents are handed to the window a single time; a reload doesn’t bring the dialog back.</li>
       <li><b>Icons are fetched, not embedded.</b> An <code>icon=</code> URL is downloaded by magpie, only after the user confirms the import, only over https, and only into its own icons folder — at most 1&nbsp;MB, and the type is checked. magpie asks for it through usemagpie.ai’s icon proxy, so your host sees Cloudflare’s address and never the user’s, and the fetch is made from Cloudflare, where nothing on the user’s own machine or network can be reached. A loopback or local-network name is refused before anything is asked. The page and the dialog never load a remote picture directly.</li>
+      <li><b>The balance stays on your hosts.</b> A <code>balance=</code> URL on any host but one of the link’s base URLs is refused, so the key goes nowhere its requests don’t already go. It is asked only after the user adds the provider.</li>
       <li><b>Keys stay out of servers.</b> The web link keeps parameters in the fragment. The key ends up only in <code>~/.config/magpie/providers.json</code>, readable by the user alone.</li>
     </ul>
     <div class="note"><b>Keys in links are secrets.</b> Put a key in a link only on a page that user alone sees, and prefer a key minted for magpie that they can revoke. Never put a shared key in a public link.</div>
@@ -380,6 +388,18 @@ href = <span class="s">"https://usemagpie.ai/import#"</span> + urlencode({
           el("icon").classList.add("bad");
           errs.push("icon= must be an https picture URL; magpie drops it otherwise.");
         }
+      }
+      {
+        const v = put("balance");
+        let ok = !v;
+        if (v) try {
+          const u = new URL(v);
+          ok = u.protocol === "https:" && !u.username && !u.password && !u.hash
+            && ["chat", "responses", "anthropic", "gemini"].some((k) => { try { return new URL(el(k).value.trim()).host.toLowerCase() === u.host.toLowerCase(); } catch { return false; } });
+        } catch {}
+        el("balance").classList.toggle("bad", !ok);
+        if (!ok) errs.push("balance= must be an https URL on the host of one of the base URLs; magpie refuses the link otherwise.");
+        if (v) { put("balance_path"); put("balance_method"); }
       }
     }
     put("key");

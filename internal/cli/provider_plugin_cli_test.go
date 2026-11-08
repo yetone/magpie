@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/yetone/magpie/internal/plugin"
@@ -46,5 +49,32 @@ func TestShowMovedProvider(t *testing.T) {
 	}
 	if strings.Contains(out, "plugin://") || strings.Contains(out, "plugin's") || !strings.Contains(out, "from zed's own sign-in") {
 		t.Fatalf("magpie provider zed:\n%s", out)
+	}
+}
+
+// magpie import shows the balance query a link names without asking it:
+// the key goes nowhere before the user says yes. Shown for a saved
+// provider, it is asked.
+func TestImportPreviewAsksNoBalance(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		_, _ = w.Write([]byte(`{"data":{"balance":12.5}}`))
+	}))
+	defer srv.Close()
+	p := provider.Provider{ID: "relay", Name: "Relay", Chat: srv.URL + "/v1", Key: "sk-test",
+		BalanceURL: srv.URL + "/bal", BalancePath: "data.balance", BalanceMethod: "POST"}
+	out, err := said(t, func() error { return showProviderAsking(p, false) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hits.Load() != 0 || !strings.Contains(out, "POST "+srv.URL+"/bal") || !strings.Contains(out, "asked once added") {
+		t.Fatalf("%d asks before yes:\n%s", hits.Load(), out)
+	}
+	if _, err := said(t, func() error { return showProvider(p) }); err != nil {
+		t.Fatal(err)
+	}
+	if hits.Load() == 0 {
+		t.Fatal("a saved provider's balance was not asked")
 	}
 }

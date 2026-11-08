@@ -138,10 +138,14 @@
       <tr><td><code>website</code></td><td>你的网站（https），显示在供应商页面上。</td></tr>
       <tr><td><code>keys</code></td><td>用户创建密钥的页面（https）。链接里没有密钥时，对话框会链接到这里。</td></tr>
       <tr><td><code>icon</code></td><td>你自己的图标（https）：PNG、JPEG、GIF、WebP、ICO 或 SVG，最大 1&nbsp;MB。用户确认导入后，magpie 只下载一次，存在供应商旁边。不填时，magpie 显示 <code>catalog</code> 对应厂商的 logo，或一个默认图标。</td></tr>
+      <tr><td><code>balance</code></td><td>查询这个密钥余额的地址（https），必须和某个 Base URL 同一个域名：magpie 会像发对话请求一样带上密钥去问。地址里的 <code>{key}</code> 会换成密钥。不填时，magpie 会读它认识的厂商的余额，中转站则去问 new-api 和 sub2api 查密钥余额的地址（<code>/api/usage/token</code>、<code>/v1/usage</code>）；你的余额接口在别处时再填。</td></tr>
+      <tr><td><code>balance_path</code></td><td>金额在 JSON 回复里的位置：点分路径，列表项用序号（<code>data.balance</code>、<code>balance_infos.0.total_balance</code>），也可以按你自己的单位做运算（<code>$ data.quota / 500000</code>）。前面加 <code>$</code> 或 <code>¥</code> 表示币种，后面加 <code>%</code> 表示按 1 为 100% 显示；多个金额用 <code>;</code> 隔开，每个可以带 <code>标签:</code>。需要同时给 <code>balance</code>。</td></tr>
+      <tr><td><code>balance_method</code></td><td><code>GET</code>（默认）或不带请求体的 <code>POST</code>。需要同时给 <code>balance</code>。</td></tr>
       <tr><td><code>preset</code><span class="req">或 name</span></td><td>预设 id；使用它的地址、目录和页面，可以用 <code>name</code> 改名。</td></tr>
       <tr><td><code>region</code></td><td>预设有多个区域时，指定用哪个。</td></tr>
     </table></div>
     <p>不用预设时，<code>chat</code>、<code>responses</code>、<code>anthropic</code>、<code>gemini</code> 至少要填一个；你支持几种 API 就填几个，每个 Agent 会用它原生支持的那一种。Base URL 必须是 <b>https</b>，只有指向 <code>localhost</code>、回环地址、内网地址和 <code>*.local</code> 时可以用 http，因为本地模型服务通常不配 TLS。地址里不能带查询参数、# 片段或账号密码。</p>
+    <p>链接不能为余额设置别的请求头或令牌：整个账号的访问令牌比单个密钥更值钱，而 URL 会留在浏览器历史里。需要令牌的余额查询，请在供应商编辑页里设置。</p>
 
     <h3 id="presets">预设</h3>
     <p>magpie 已经内置的厂商。<code>magpie presets</code> 会打印当前的列表。</p>
@@ -169,6 +173,9 @@
         <label class="m-custom">网站 <i>可选</i><input name="website" placeholder="https://acme.example"></label>
         <label class="m-custom">密钥页面 <i>可选</i><input name="keys" placeholder="https://acme.example/keys"></label>
         <label class="m-custom">图标 <i>可选，https</i><input name="icon" placeholder="https://acme.example/logo.svg"></label>
+        <label class="m-custom">余额地址 <i>可选，与 Base URL 同域名</i><input name="balance" class="mono" placeholder="https://api.acme.example/v1/dashboard/balance"></label>
+        <label class="m-custom">余额字段 <i>可选</i><input name="balance_path" class="mono" placeholder="data.balance"></label>
+        <label class="m-custom">余额请求方式<select name="balance_method"><option value="">GET</option><option value="POST">POST</option></select></label>
       </form>
       <div class="out">
         <div class="row"><span>网页链接</span><code id="o-web"></code><button class="copy" data-copy="o-web">复制</button></div>
@@ -243,6 +250,7 @@ href = <span class="s">"https://usemagpie.ai/import#"</span> + urlencode({
       <li><b>只接受 https。</b>除了本机和局域网，一律拒绝 http；<code>file:</code>、URL 里带账号密码以及其他协议直接拒绝。</li>
       <li><b>只读一次。</b>在应用里，链接内容只交给窗口一次；刷新后对话框不会再出现。</li>
       <li><b>图标是下载的，不是嵌入的。</b><code>icon=</code> 地址由 magpie 下载，只在用户确认导入之后，只走 https，只存进它自己的图标目录，最大 1&nbsp;MB，并校验类型。magpie 经 usemagpie.ai 的图标代理去取，所以你的服务器只看到 Cloudflare 的地址，看不到用户的 IP；请求从 Cloudflare 发出，碰不到用户本机和内网。回环或内网的域名在发出请求前就被拒绝。页面和对话框从不直接加载远程图片。</li>
+      <li><b>余额只在你的域名上查。</b><code>balance=</code> 的域名不是链接里某个 Base URL 的，整条链接会被拒绝，所以密钥不会发到它的请求本来不去的地方。用户添加供应商之后才会去查。</li>
       <li><b>密钥不经过服务器。</b>网页链接把参数放在 # 片段里。密钥最终只存在 <code>~/.config/magpie/providers.json</code>，只有用户本人可读。</li>
     </ul>
     <div class="note"><b>链接里的密钥就是机密。</b>只在该用户本人能看到的页面上把密钥放进链接，最好是专门给 magpie 生成、可以随时吊销的密钥。绝不要把共享密钥放进公开链接。</div>
@@ -380,6 +388,18 @@ href = <span class="s">"https://usemagpie.ai/import#"</span> + urlencode({
           el("icon").classList.add("bad");
           errs.push("icon= 必须是 https 的图片地址，否则 magpie 会忽略它。");
         }
+      }
+      {
+        const v = put("balance");
+        let ok = !v;
+        if (v) try {
+          const u = new URL(v);
+          ok = u.protocol === "https:" && !u.username && !u.password && !u.hash
+            && ["chat", "responses", "anthropic", "gemini"].some((k) => { try { return new URL(el(k).value.trim()).host.toLowerCase() === u.host.toLowerCase(); } catch { return false; } });
+        } catch {}
+        el("balance").classList.toggle("bad", !ok);
+        if (!ok) errs.push("balance= 必须是 https 地址，且与某个 Base URL 同一个域名，否则 magpie 会拒绝这条链接。");
+        if (v) { put("balance_path"); put("balance_method"); }
       }
     }
     put("key");

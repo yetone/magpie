@@ -138,10 +138,14 @@
       <tr><td><code>website</code></td><td>あなたのサイト（https）。プロバイダのページに表示されます。</td></tr>
       <tr><td><code>keys</code></td><td>ユーザーがキーを作成するページ（https）。リンクにキーがないとき、ダイアログからこのページへリンクします。</td></tr>
       <tr><td><code>icon</code></td><td>独自の画像（https）：PNG、JPEG、GIF、WebP、ICO、SVG のいずれかで、最大 1&nbsp;MB。ユーザーがインポートを確認した後に magpie が一度だけダウンロードし、プロバイダと一緒に保存します。省略すると、magpie は <code>catalog</code> のベンダーのロゴか、シンプルなマークを表示します。</td></tr>
+      <tr><td><code>balance</code></td><td>キーの残高を読む URL（https）。いずれかのベース URL と同じホストでなければなりません。magpie はチャットのリクエストと同じようにキーを付けて問い合わせます。URL 内の <code>{key}</code> はキーに置き換わります。省略すると、magpie は知っているベンダーの残高を読み、リレーには new-api と sub2api がキーの残高を返す場所（<code>/api/usage/token</code>、<code>/v1/usage</code>）を問い合わせます。残高が別の場所で返る場合に指定してください。</td></tr>
+      <tr><td><code>balance_path</code></td><td>JSON 応答のどこに金額があるか：ドット区切りのパスで、リストの要素は番号で指定します（<code>data.balance</code>、<code>balance_infos.0.total_balance</code>）。独自の単位からの計算もできます（<code>$ data.quota / 500000</code>）。前に <code>$</code> または <code>¥</code> を付けると通貨、後ろに <code>%</code> を付けると 1 を 100% として表示します。複数の金額は <code>;</code> で区切り、それぞれに <code>ラベル:</code> を付けられます。<code>balance</code> が必要です。</td></tr>
+      <tr><td><code>balance_method</code></td><td><code>GET</code>（既定）、または本文なしの <code>POST</code>。<code>balance</code> が必要です。</td></tr>
       <tr><td><code>preset</code><span class="req">または name</span></td><td>プリセット id。そのエンドポイント、カタログ、ページが使われます。<code>name</code> で名前を変えられます。</td></tr>
       <tr><td><code>region</code></td><td>リージョンのあるプリセットで、どのリージョンを使うか。</td></tr>
     </table></div>
     <p>プリセットを使わない場合、<code>chat</code>、<code>responses</code>、<code>anthropic</code>、<code>gemini</code> のうち少なくとも 1 つが必要です。対応する API はすべて指定してください。各エージェントはネイティブに話せるものを使います。ベース URL は <b>https</b> でなければなりません。ただし <code>localhost</code>、ループバック、プライベートアドレス、<code>*.local</code> 宛ては、モデルサーバーが通常 TLS なしで動くため、http も使えます。クエリ、フラグメント、認証情報は含められません。</p>
+    <p>リンクでは残高のために他のヘッダーやトークンを設定できません。アカウント全体のアクセストークンは 1 つのキーより価値があり、URL はブラウザの履歴に残るからです。トークンが必要な残高は、プロバイダの編集画面で設定してください。</p>
 
     <h3 id="presets">プリセット</h3>
     <p>magpie が組み込みで知っているベンダーです。<code>magpie presets</code> で最新の一覧を表示できます。</p>
@@ -169,6 +173,9 @@
         <label class="m-custom">Web サイト <i>任意</i><input name="website" placeholder="https://acme.example"></label>
         <label class="m-custom">キーのページ <i>任意</i><input name="keys" placeholder="https://acme.example/keys"></label>
         <label class="m-custom">アイコン <i>任意、https</i><input name="icon" placeholder="https://acme.example/logo.svg"></label>
+        <label class="m-custom">残高 URL <i>任意、ベース URL と同じホスト</i><input name="balance" class="mono" placeholder="https://api.acme.example/v1/dashboard/balance"></label>
+        <label class="m-custom">残高の項目 <i>任意</i><input name="balance_path" class="mono" placeholder="data.balance"></label>
+        <label class="m-custom">残高のメソッド<select name="balance_method"><option value="">GET</option><option value="POST">POST</option></select></label>
       </form>
       <div class="out">
         <div class="row"><span>Web リンク</span><code id="o-web"></code><button class="copy" data-copy="o-web">コピー</button></div>
@@ -243,6 +250,7 @@ href = <span class="s">"https://usemagpie.ai/import#"</span> + urlencode({
       <li><b>https のみ。</b>このマシンとローカルネットワーク宛て以外の http は拒否されます。<code>file:</code>、URL 内の認証情報、その他のスキームは即座に拒否されます。</li>
       <li><b>読み込みは一度だけ。</b>アプリ内では、リンクの内容がウィンドウに一度だけ渡されます。再読み込みしてもダイアログは再表示されません。</li>
       <li><b>アイコンは埋め込まず、取得する。</b><code>icon=</code> の URL は magpie がダウンロードします。ユーザーがインポートを確認した後だけ、https 経由だけ、自身のアイコンフォルダへだけ — 最大 1&nbsp;MB で、形式もチェックされます。取得は usemagpie.ai のアイコンプロキシを経由するので、あなたのサーバーに見えるのはユーザーの IP ではなく Cloudflare のアドレスです。リクエストは Cloudflare から出るため、ユーザー自身のマシンやローカルネットワークには届きません。ループバックやローカルネットワークの名前は、リクエストの前に拒否されます。ページとダイアログがリモートの画像を直接読み込むことはありません。</li>
+      <li><b>残高はあなたのホストでだけ読む。</b><code>balance=</code> のホストがリンク内のどのベース URL のものでもなければ、リンク全体が拒否されます。キーがリクエストの行き先以外へ送られることはありません。問い合わせはユーザーがプロバイダを追加した後だけです。</li>
       <li><b>キーはサーバーを通らない。</b>Web リンクはパラメータをフラグメントに置きます。キーは最終的に <code>~/.config/magpie/providers.json</code> にのみ保存され、ユーザー本人しか読めません。</li>
     </ul>
     <div class="note"><b>リンク内のキーは機密情報です。</b>キーをリンクに入れるのは、そのユーザー本人しか見られないページだけにし、できれば magpie 用に発行した、取り消し可能なキーを使ってください。共有キーを公開リンクに入れてはいけません。</div>
@@ -380,6 +388,18 @@ href = <span class="s">"https://usemagpie.ai/import#"</span> + urlencode({
           el("icon").classList.add("bad");
           errs.push("icon= は https の画像 URL にしてください。そうでないと magpie は無視します。");
         }
+      }
+      {
+        const v = put("balance");
+        let ok = !v;
+        if (v) try {
+          const u = new URL(v);
+          ok = u.protocol === "https:" && !u.username && !u.password && !u.hash
+            && ["chat", "responses", "anthropic", "gemini"].some((k) => { try { return new URL(el(k).value.trim()).host.toLowerCase() === u.host.toLowerCase(); } catch { return false; } });
+        } catch {}
+        el("balance").classList.toggle("bad", !ok);
+        if (!ok) errs.push("balance= は https の URL で、いずれかのベース URL と同じホストにしてください。そうでないと magpie はリンクを拒否します。");
+        if (v) { put("balance_path"); put("balance_method"); }
       }
     }
     put("key");

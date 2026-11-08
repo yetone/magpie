@@ -265,3 +265,47 @@ func TestParseImportNameCutKeepsCharactersWhole(t *testing.T) {
 		t.Fatalf("name %q (%d bytes)", p.Name, len(p.Name))
 	}
 }
+
+// A link names its balance query, which is asked with the key: only on a
+// host its endpoints are on, over https, by GET or POST.
+func TestParseImportBalance(t *testing.T) {
+	q := url.Values{
+		"name":           {"Relay"},
+		"chat":           {"https://relay.example/v1"},
+		"balance":        {"https://relay.example/api/usage/token"},
+		"balance_path":   {"data.total_available"},
+		"balance_method": {"post"},
+	}
+	p, err := ParseImport("magpie://import?" + q.Encode())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.BalanceURL != "https://relay.example/api/usage/token" || p.BalancePath != "data.total_available" || p.BalanceMethod != "POST" {
+		t.Fatalf("balance %q %q %q", p.BalanceURL, p.BalancePath, p.BalanceMethod)
+	}
+	// a preset's endpoint host counts as the link's own
+	q = url.Values{"preset": {"deepseek"}, "balance": {"https://api.deepseek.com/user/balance"}, "balance_method": {"GET"}}
+	if p, err = ParseImport("magpie://import?" + q.Encode()); err != nil || p.BalanceURL == "" || p.BalanceMethod != "" {
+		t.Fatalf("preset: %+v %v", p.BalanceURL, err)
+	}
+	for _, bad := range []url.Values{
+		{"balance": {"https://evil.example/steal"}},
+		{"balance": {"https://relay.example.evil.example/b"}},
+		{"balance": {"http://relay.example/api/usage/token"}},
+		{"balance": {"https://user@relay.example/b"}},
+		{"balance": {"https://relay.example/b"}, "balance_method": {"DELETE"}},
+		{"balance": {"https://relay.example/b"}, "balance_path": {"a\nb"}},
+		{"balance_path": {"data.balance"}},
+		{"balance_method": {"POST"}},
+	} {
+		bad.Set("name", "Relay")
+		bad.Set("chat", "https://relay.example/v1")
+		if p, err := ParseImport("magpie://import?" + bad.Encode()); err == nil {
+			t.Errorf("%v: took balance %q", bad, p.BalanceURL)
+		}
+	}
+	// none named, none set
+	if p, err := ParseImport("magpie://import?name=Relay&chat=https://relay.example/v1"); err != nil || p.BalanceURL != "" || p.BalancePath != "" || p.BalanceMethod != "" {
+		t.Fatalf("no balance: %+v %v", p, err)
+	}
+}

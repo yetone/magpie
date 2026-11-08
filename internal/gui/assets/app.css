@@ -3499,6 +3499,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .ep { display: flex; align-items: center; gap: 8px; height: 24px; min-width: 0; }
 .ep .pl { flex: none; width: 64px; font-size: 11.5px; color: var(--muted); }
 .ep code { color: var(--fg-2); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; user-select: text; -webkit-user-select: text; cursor: text; }
+.imp-bal { color: var(--fg-2); font-size: 11.5px; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
 .res { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 5px; font-size: 11px; font-variant-numeric: tabular-nums; background: var(--pill); color: var(--muted); }
 .res:empty { display: none; }
 .res.wait { background: none; color: var(--faint); }
