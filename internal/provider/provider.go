@@ -542,6 +542,14 @@ type Provider struct {
 	// that lists them away from the base URL requests go to (Xiaomi MiMo's
 	// plans are served at their own hosts, the list at api.xiaomimimo.com).
 	ModelsURL string `json:"modelsURL,omitempty"`
+	// ListOff is the editor's Fetch the model list unticked (axelburks on
+	// Discord): the vendor's list is never asked for, by a Fetch, a
+	// Refresh, a test or a schedule, and the models served are the ids the
+	// user added alone, not models.dev's nor a list fetched before. For a
+	// vendor whose list names models by ids that can't be asked for
+	// (Volcengine Ark's, where each is asked by an endpoint id the user
+	// made). A key's provider only (ListsOff).
+	ListOff bool `json:"listOff,omitempty"`
 
 	// Models the user chose to expose. Empty means "the preset's picks, or
 	// everything the vendor lists when that list is short" — unless NoModels.

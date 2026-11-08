@@ -49,6 +49,10 @@ func (p Provider) Available() []catalog.Model {
 }
 
 func (p Provider) available() []catalog.Model {
+	if p.ListsOff() {
+		// the ids added by hand alone (Exposed)
+		return nil
+	}
 	signedIn := p.Account != nil && p.Account.models != nil
 	var known []catalog.Model
 	if signedIn {
@@ -188,7 +192,7 @@ func (p Provider) liveByID(model string) []catalog.Model {
 // lists says whether the provider's fetched list is its own to read: not
 // a plugin's, nor a preset's that lists nothing (Preset.NoList).
 func (p Provider) lists() bool {
-	if p.IsPlugin() {
+	if p.IsPlugin() || p.ListsOff() {
 		return false
 	}
 	pr := Preset(p.Preset)
@@ -196,6 +200,16 @@ func (p Provider) lists() bool {
 	// plans' own and the pay as you go's
 	return p.Account != nil || pr == nil || !pr.NoList || strings.TrimSpace(p.ModelsURL) != "" || p.listRegion(pr) || p.plansMixed()
 }
+
+// ListsOff is ListOff on a key's provider: a subscription's account and a
+// plugin's provider list their models as their sign-in does.
+func (p Provider) ListsOff() bool {
+	return p.ListOff && p.Account == nil && !p.IsPlugin()
+}
+
+// ErrListOff is what a Fetch of a provider whose list is off answers,
+// with no request made.
+var ErrListOff = errors.New("its model list is off: add each model by its id")
 
 // listsRead counts liveAll's reads (ListsRead).
 var listsRead atomic.Int64
@@ -237,7 +251,7 @@ var refreshEach = 8 * time.Second
 func RefreshLists(ctx context.Context) []Listed {
 	var out []Listed
 	for _, p := range All() {
-		if !p.Ready() || p.Off {
+		if !p.Ready() || p.Off || p.ListsOff() {
 			continue
 		}
 		c, cancel := context.WithTimeout(ctx, refreshEach)
@@ -448,6 +462,9 @@ func (p Provider) fetch(ctx context.Context) ([]catalog.Model, error) {
 }
 
 func (p Provider) fetchList(ctx context.Context) ([]catalog.Model, error) {
+	if p.ListsOff() {
+		return nil, ErrListOff
+	}
 	ctx = p.ownRequests(p.Via(ctx), probelog.KindList)
 	if p.DecideOnly() {
 		return p.fetchDecide(ctx)
@@ -525,6 +542,9 @@ func (p Provider) List(ctx context.Context) ([]catalog.Model, error) {
 // ListAll is List with the models served on an API of their own kept:
 // embedding and rerank models, tagged Serves.
 func (p Provider) ListAll(ctx context.Context) ([]catalog.Model, error) {
+	if p.ListsOff() {
+		return nil, ErrListOff
+	}
 	ctx = p.ownRequests(p.Via(ctx), probelog.KindList)
 	if pr := Preset(p.Preset); pr != nil && pr.NoList && strings.TrimSpace(p.ModelsURL) == "" && !p.listRegion(pr) {
 		// with its embedding and rerank models, marked so (Voyage AI's)
@@ -556,7 +576,7 @@ func (p Provider) ListAll(ctx context.Context) ([]catalog.Model, error) {
 // of a key resting after an outage, to tell whether it is back
 // (gateway/rest_probe.go).
 func (p Provider) ListAsks() bool {
-	if p.Account != nil || p.DecideOnly() {
+	if p.Account != nil || p.DecideOnly() || p.ListsOff() {
 		return false
 	}
 	pr := Preset(p.Preset)
