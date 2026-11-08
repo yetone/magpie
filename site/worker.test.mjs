@@ -716,6 +716,19 @@ test("seo: robots.txt names the sitemap and keeps crawlers off the counted links
   for (const p of ["/api/", "/go/", "/r/", "/download"]) assert.match(txt, new RegExp(`^Disallow: ${p}$`, "m"));
 });
 
+test("seo: llms.txt lists every English docs page and links only to listed pages", async () => {
+  const { readFile, readdir } = await import("node:fs/promises");
+  const pub = new URL("./public/", import.meta.url);
+  const txt = await readFile(new URL("llms.txt", pub), "utf8");
+  const xml = await readFile(new URL("sitemap.xml", pub), "utf8");
+  const listed = new Set([...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]));
+  assert.match(txt, /^# magpie\n\n> /);
+  const links = [...txt.matchAll(/\]\((https:\/\/usemagpie\.ai\/[^)]*)\)/g)].map((m) => m[1]);
+  for (const u of links) assert.ok(listed.has(u), `llms.txt links ${u}, which the sitemap doesn't list`);
+  const docs = (await readdir(new URL("docs/", pub))).filter((f) => f.endsWith(".html") && f !== "contributors.html");
+  for (const f of docs) assert.ok(links.includes(`https://usemagpie.ai/docs/${f.slice(0, -5)}`), `llms.txt misses docs/${f}`);
+});
+
 test("seo: the home page's structured data parses and its title is in every language", async () => {
   const { readFile } = await import("node:fs/promises");
   const { LANGS } = await import("./i18n.js");

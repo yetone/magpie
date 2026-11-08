@@ -1,0 +1,56 @@
+# magpie
+
+> magpie is a free, open-source (MIT) desktop app for macOS, Windows and Linux that lets every AI coding agent use every model. Add a provider once (DeepSeek, Kimi, GLM, Qwen, MiniMax, OpenRouter, Ollama, or the Claude and ChatGPT subscriptions you already pay for), then pick it in Codex, Claude Code, Gemini CLI or any other agent. It runs a local gateway that speaks the OpenAI, Anthropic and Gemini APIs and translates between them, with streaming, tool calls and reasoning intact.
+
+magpie lives in the menu bar (tray on Windows and Linux), with a full window, a TUI and a CLI. The Mac download is about 15 MB, built on the system WebView (no Electron). It is signed and notarised on macOS and updates itself.
+
+Key facts:
+
+- Website: https://usemagpie.ai/ (English), https://usemagpie.ai/zh/ (中文), https://usemagpie.ai/ja/ (日本語), https://usemagpie.ai/de/ (Deutsch)
+- Source code: https://github.com/yetone/magpie
+- Downloads: https://github.com/yetone/magpie-releases/releases/latest
+- Install from a terminal (macOS, Linux): `curl -fsSL https://usemagpie.ai/install.sh | sh`
+- Community: Discord, linked from the website
+- Price: free
+
+## What it does
+
+- **One model switcher for every agent.** Each agent can use a different provider's model: Codex on DeepSeek, Claude Code on Kimi, Gemini CLI on GLM. magpie edits only the one setting it changes in each agent's config (settings.json, config.toml, config.yaml), keeping comments, order and indentation, and restores it when you pick the agent's own model again.
+- **A local gateway at 127.0.0.1:3425.** It speaks OpenAI Chat Completions, OpenAI Responses, Anthropic Messages and Google Gemini, and translates in both directions, so Codex (Responses only) and Claude Code (Messages only) can use any vendor's model. Any client that can set a base URL can use it: `OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL`, `GOOGLE_GEMINI_BASE_URL`.
+- **Subscription sharing.** A sign-in you made in one agent becomes a provider every other agent can use: a Claude Pro/Max sign-in in OpenCode, Pi or Goose; a ChatGPT Plus/Pro sign-in in Claude Code; a GitHub Copilot seat in any agent.
+- **Routing.** Put several keys and subscriptions behind one model name. magpie picks the account for each request (by intent, in order, round robin, least used first, or by which quota resets first), skips rate-limited and out-of-credit accounts for as long as the vendor says, and fails over to the next account before the agent sees an error. Intent routing asks a small fast model which of your rules a turn belongs to.
+- **Privacy masking.** Before a request leaves the computer, magpie replaces API keys, private keys, tokens, email addresses, and card and ID numbers with placeholders, and puts the real values back in replies and tool calls. An optional local model also finds names, addresses and passwords. Values are never written to disk.
+- **Usage per agent.** Tokens, cache hits and cost for every agent and model that goes through the gateway.
+- **Library.** Instructions, MCP servers, skills, hooks and subagents written once for every agent, and an MCP router.
+- **Remote and Docker.** Share one magpie on the network, or run it in Docker on a server or NAS (`ghcr.io/yetone/magpie`).
+- **Plugins.** OpenCode plugins add providers and subscriptions.
+
+## Supported agents
+
+Claude Code, Codex, Gemini CLI, OpenCode, Pi, Goose, Cursor CLI, GitHub Copilot CLI, VS Code, Crush, Droid, Kimi Code, Grok Build, Hermes Agent, Devin, MiniMax Code, MiMo Code, DevEco Code, Command Code, ZCode, Snow CLI, Alma and more.
+
+## Supported providers
+
+DeepSeek, Kimi (Moonshot), GLM (Zhipu), Qwen, MiniMax, Anthropic (Claude), OpenAI, Google Gemini, Mistral, xAI, Groq, OpenRouter, AiHubMix, Ollama and other local servers, any OpenAI- or Anthropic-compatible endpoint, plus Claude, ChatGPT and GitHub Copilot subscriptions.
+
+## Docs
+
+- [Get started](https://usemagpie.ai/docs/start): how magpie fits together; add providers, pick a model for each agent, route one model over several accounts.
+- [Intent routing](https://usemagpie.ai/docs/intent): how a turn is routed by what the user asks for.
+- [Privacy masking](https://usemagpie.ai/docs/masking): what is masked before a request leaves the computer and how values come back.
+- [Library](https://usemagpie.ai/docs/library): instructions, MCP servers, skills, hooks and subagents for each agent.
+- [MCP router](https://usemagpie.ai/docs/mcp-router): one magpie MCP server per agent.
+- [Remote magpie](https://usemagpie.ai/docs/remote): use one magpie from several computers.
+- [Docker](https://usemagpie.ai/docs/docker): run magpie on a server or NAS.
+- [Add to magpie](https://usemagpie.ai/docs/import): import links that add a provider and its models in one click.
+- [Integrate your app](https://usemagpie.ai/docs/integrate): how an AI app or agent works with magpie's gateway.
+- [Writing plugins](https://usemagpie.ai/docs/plugins): OpenCode plugins that add a provider.
+- [Privacy](https://usemagpie.ai/docs/privacy): what magpie sends on its own, and every switch that turns it off.
+
+## Common questions
+
+- **How do I use DeepSeek, Kimi or GLM in Claude Code?** Add the provider's key in magpie, then pick its model for Claude Code. magpie points Claude Code at its gateway and translates Anthropic Messages to the provider's API.
+- **How do I use a model other than OpenAI's in Codex?** Add the provider in magpie and pick the model for Codex; it appears in Codex's /model list with matching reasoning efforts.
+- **Can I use my ChatGPT or Claude subscription in other agents?** Yes: sign in once in magpie and the subscription's models appear in every agent's picker.
+- **Is it a CC Switch or claude-code-router alternative?** It covers the same ground for every agent at once, not only Claude Code: switching providers, a translating gateway, routing and failover.
+- **Does magpie read API keys from my shell?** No. It never reads keys from environment variables; it uses only what you add.
