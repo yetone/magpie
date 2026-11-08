@@ -140,7 +140,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.reload(); await drawn(page);
         await checkFirst(page, f, id);
         const wanted = (await ids(page))[1];
-        await rows(page).nth(1).getByRole("button", { name: "Make first", exact: true }).click();
+        // Smart and Least used first go by a subscription's quota, so Make
+        // first says the order only settles ties there; a relay's keys keep
+        // their order under Smart, never that the gateway uses it
+        // first (CryptoSarom on X)
+        const make = rows(page).nth(1).getByRole("button", { name: "Make first", exact: true });
+        const title = await make.getAttribute("title") || "";
+        assert.equal(/still goes by each account's quota/.test(title), id !== "relay" && (mode === "" || mode === "usage"), `${id} ${mode || "smart"}: ${title}`);
+        await make.click();
         await page.waitForFunction(ref => document.querySelector(".accts [data-account-id]").dataset.accountId === ref, wanted);
         await checkFirst(page, f, id);
       }
