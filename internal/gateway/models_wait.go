@@ -26,7 +26,13 @@ import (
 // of the wait, and as this gateway stops, 304 says it is the same. A list
 // is looked at again on each write magpie makes and on each change
 // another process makes to its files (filememo.Written), not polled.
-// A client asking without the header is answered as before, no ETag.
+// A client asking without the header is answered the list with the same
+// ETag, and 304 with no body when its If-None-Match names it already
+// (listModelsTagged): a script or a magpie polling the list pays a few
+// bytes while it is unchanged (clyzhicore on Discord). A wait answer says
+// in provider.ListWaitHeader how long it held, which a plain answer
+// doesn't: a proxy that drops the header would turn the wait into a plain
+// list, and its 304 alone can't tell the two apart.
 
 // listWaitMost is the longest a wait for the list is held: under the
 // minute a proxy in front of a gateway (nginx's proxy_read_timeout) lets
@@ -100,7 +106,9 @@ func (s *Server) lookAtList(r *http.Request) *listAnswer {
 // If-None-Match names, or 304 at the end of the wait.
 func (s *Server) modelsOnceChanged(w http.ResponseWriter, r *http.Request) {
 	since := strings.TrimSpace(r.Header.Get("If-None-Match"))
-	end := time.NewTimer(listWaitOf(r))
+	wait := listWaitOf(r)
+	held := strconv.Itoa(int(wait / time.Second))
+	end := time.NewTimer(wait)
 	defer end.Stop()
 	tag := ""
 	for {
@@ -114,6 +122,7 @@ func (s *Server) modelsOnceChanged(w http.ResponseWriter, r *http.Request) {
 			}
 			if a.status == http.StatusOK {
 				w.Header().Set("ETag", tag)
+				w.Header().Set(provider.ListWaitHeader, held)
 			}
 			w.Header().Set("Cache-Control", "no-store")
 			w.WriteHeader(a.status)
@@ -144,8 +153,51 @@ func (s *Server) modelsOnceChanged(w http.ResponseWriter, r *http.Request) {
 		}
 		others.Stop()
 		w.Header().Set("ETag", tag)
+		w.Header().Set(provider.ListWaitHeader, held)
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
+}
+
+// listModelsTagged answers r's list with its ETag, the one a wait for the
+// list answers (listTag), and 304 with no body when r's If-None-Match
+// names it already. The answer depends on who asks (a key's models, an
+// agent's picks), so a cache must ask again each time (private,
+// no-cache), and the tag is of the bytes this caller would be answered.
+func (s *Server) listModelsTagged(w http.ResponseWriter, r *http.Request) {
+	a := &listAnswer{header: w.Header()}
+	s.listModels(a, r)
+	if a.status == 0 {
+		a.status = http.StatusOK
+	}
+	if a.status != http.StatusOK {
+		w.WriteHeader(a.status)
+		w.Write(a.body.Bytes())
+		return
+	}
+	tag := listTag(a.status, a.body.Bytes())
+	w.Header().Set("ETag", tag)
+	w.Header().Set("Cache-Control", "private, no-cache")
+	if tagNamed(r.Header.Get("If-None-Match"), tag) {
+		w.Header().Del("Content-Type")
+		w.Header().Del("Content-Length")
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write(a.body.Bytes())
+}
+
+// tagNamed reports whether an If-None-Match value names tag: one of its
+// comma-separated tags, weak or strong (RFC 9110's weak comparison), or *.
+func tagNamed(ifNoneMatch, tag string) bool {
+	want := strings.TrimPrefix(tag, "W/")
+	for t := range strings.SplitSeq(ifNoneMatch, ",") {
+		t = strings.TrimSpace(t)
+		if t == "*" || t != "" && strings.TrimPrefix(t, "W/") == want {
+			return true
+		}
+	}
+	return false
 }

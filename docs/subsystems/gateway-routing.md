@@ -573,10 +573,20 @@ looked at again on each of magpie's writes and on each change another
 process makes to its files (`filememo.Written`), each look holding the
 catalog for itself, so the wait is exempt from `holdCatalog`. It is the
 list's own route, so the key, `lanGuard`, `corsGuard` and a key's models
-judge it exactly as the list. A list asked without the header is answered
-as before, with no ETag. `modelsOnceChanged` in
+judge it exactly as the list. A wait's answer, 200 or 304, says in
+`X-Magpie-List-Wait` how many seconds it held. A list asked without the
+header is answered the same bytes with the same `ETag` (`private,
+no-cache`), and 304 with no body, at once, when `If-None-Match` names it
+(weakly, in a list, or `*`; clyzhicore on Discord), so a client polling
+the list pays a few bytes while it is unchanged; a refused list (400) is
+untagged. The follower (`waitRemoteList` in
+[`remote_follow.go`](../../internal/provider/remote_follow.go)) takes a 304
+that came sooner than `followQuick` and doesn't say it waited as a magpie
+that doesn't wait (a proxy dropped the header), and leaves it to the
+schedule rather than asking it each second. `modelsOnceChanged` and
+`listModelsTagged` in
 [`models_wait.go`](../../internal/gateway/models_wait.go), and
-`TestModelsWaitGuardedAsTheList` in
+`TestModelsWaitGuardedAsTheList` and `TestModelsListConditional` in
 [`models_wait_test.go`](../../internal/gateway/models_wait_test.go).
 
 A read-only gateway key (`access.Key.ReadOnly`, set by `add-key` or

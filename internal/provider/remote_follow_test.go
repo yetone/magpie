@@ -14,14 +14,18 @@ import (
 
 // followFake is a magpie whose list is model, answered with its ETag, and
 // held while a wait names that tag, as the gateway's modelsOnceChanged
-// does. waits says whether it waits at all (one from before doesn't).
+// does. waits says whether it waits at all (one from before doesn't),
+// and stripped is a magpie that tags every list reached through a proxy
+// that drops ListWaitHeader: it answers each ask at once, 304 when the
+// tag is the list's, saying no wait.
 type followFake struct {
-	mu      sync.Mutex
-	model   string
-	changed chan struct{}
-	waits   bool
-	fetches atomic.Int32 // asked with no wait: the list fetched
-	asks    atomic.Int32 // asked to wait
+	mu       sync.Mutex
+	model    string
+	changed  chan struct{}
+	waits    bool
+	stripped bool
+	fetches  atomic.Int32 // asked with no wait: the list fetched
+	asks     atomic.Int32 // asked to wait
 }
 
 func (f *followFake) set(model string) {
@@ -38,6 +42,19 @@ func (f *followFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	waiting := r.Header.Get(ListWaitHeader) != ""
+	if f.stripped && waiting {
+		f.asks.Add(1)
+		f.mu.Lock()
+		tag := `"` + f.model + `"`
+		f.mu.Unlock()
+		w.Header().Set("ETag", tag)
+		if r.Header.Get("If-None-Match") == tag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		io.WriteString(w, `{"object":"list","data":[]}`)
+		return
+	}
 	if !waiting {
 		f.fetches.Add(1)
 	} else {
@@ -71,9 +88,12 @@ func (f *followFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func followFast(t *testing.T) {
 	t.Helper()
-	gap, fail, old, look := followGap, followFailWait, followOldAgain, followLook
-	followGap, followFailWait, followOldAgain, followLook = 10*time.Millisecond, 50*time.Millisecond, time.Hour, 50*time.Millisecond
-	t.Cleanup(func() { followGap, followFailWait, followOldAgain, followLook = gap, fail, old, look })
+	gap, fail, old, look, quick := followGap, followFailWait, followOldAgain, followLook, followQuick
+	// the fake holds a wait 2s, far from followQuick
+	followGap, followFailWait, followOldAgain, followLook, followQuick = 10*time.Millisecond, 50*time.Millisecond, time.Hour, 50*time.Millisecond, 500*time.Millisecond
+	t.Cleanup(func() {
+		followGap, followFailWait, followOldAgain, followLook, followQuick = gap, fail, old, look, quick
+	})
 }
 
 func followedCount(id string) int {
@@ -165,6 +185,21 @@ func TestRemoteMagpieOldListNotFollowed(t *testing.T) {
 	}
 	if n := f.fetches.Load(); n != 0 {
 		t.Errorf("an old magpie's list fetched %d times by the follower, want 0: its schedule fetches it", n)
+	}
+}
+
+// A magpie that tags every list (clyzhicore), reached through a proxy
+// that drops ListWaitHeader, answers each wait at once: its first answer,
+// tagged, can't be told from a wait's, but its 304 at once that says no
+// wait is, and it is left to the schedule rather than asked each
+// followGap.
+func TestRemoteMagpieStrippedWaitNotAskedOver(t *testing.T) {
+	f := &followFake{model: "own/m1", changed: make(chan struct{}), stripped: true}
+	followRemote(t, f, "")
+	followUntil(t, "asked twice", func() bool { return f.asks.Load() >= 2 })
+	time.Sleep(300 * time.Millisecond)
+	if n := f.asks.Load(); n != 2 {
+		t.Errorf("a magpie that doesn't wait asked %d times in 300ms, want 2", n)
 	}
 }
 

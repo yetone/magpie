@@ -1570,7 +1570,7 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 		s.modelsOnceChanged(w, r)
 		return
 	}
-	s.listModels(w, r)
+	s.listModelsTagged(w, r)
 }
 
 func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {

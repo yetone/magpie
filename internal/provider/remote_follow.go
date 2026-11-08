@@ -47,10 +47,16 @@ var (
 	// followLook is how often the providers followed are looked at again
 	// with no write of magpie's to say they changed
 	followLook = time.Minute
+	// followQuick: a 304 sooner than this that doesn't say it waited
+	// (ListWaitHeader) is from a magpie that didn't wait
+	followQuick = 5 * time.Second
 )
 
 // errListNotWaited is a magpie that answered the list at once, with no
-// ETag: one from before ListWaitHeader.
+// ETag: one from before ListWaitHeader. Or one whose 304 came at once and
+// doesn't say it waited: a magpie that tags every list, reached through a
+// proxy that dropped ListWaitHeader, which asked again would be asked
+// each followGap.
 var errListNotWaited = errors.New("its magpie doesn't wait for its list to change; fetched on its schedule")
 
 // KeepRemoteListsFollowed follows the list of each Remote magpie the user
@@ -233,6 +239,7 @@ func waitRemoteList(ctx context.Context, p Provider, tag string) (string, error)
 	if tag != "" {
 		req.Header.Set("If-None-Match", tag)
 	}
+	asked := time.Now()
 	res, err := p.Do(http.DefaultClient, req)
 	if err != nil {
 		return "", err
@@ -241,6 +248,12 @@ func waitRemoteList(ctx context.Context, p Provider, tag string) (string, error)
 	io.Copy(io.Discard, io.LimitReader(res.Body, 64<<20))
 	switch {
 	case res.StatusCode == http.StatusNotModified:
+		// a magpie from before this one says no wait it held, and holds
+		// each wait to its end; a 304 at once is a gateway stopping, or a
+		// list that wasn't waited for
+		if res.Header.Get(ListWaitHeader) == "" && time.Since(asked) < followQuick {
+			return "", errListNotWaited
+		}
 		return tag, nil
 	case res.StatusCode != http.StatusOK:
 		return "", fmt.Errorf("%s answered %s", remoteName(p), res.Status)
