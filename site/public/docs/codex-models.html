@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Use DeepSeek, Kimi, GLM or Claude in Codex · magpie</title>
+<meta name="description" content="Run Codex on DeepSeek, Kimi, GLM, Qwen or your Claude subscription. magpie writes config.toml and lists the models in /model with their reasoning efforts.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/codex-models">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/codex-models">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/codex-models">
+<link rel="canonical" href="https://usemagpie.ai/docs/codex-models">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Use DeepSeek, Kimi, GLM, Claude or any model in Codex">
+<meta property="og:description" content="Run Codex on DeepSeek, Kimi, GLM, Qwen or your Claude subscription. magpie writes config.toml and lists the models in /model with their reasoning efforts.">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/codex-models">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Use DeepSeek, Kimi, GLM, Claude or any model in Codex",
+   "description": "Run Codex on DeepSeek, Kimi, GLM, Qwen or your Claude subscription. magpie writes config.toml and lists the models in /model with their reasoning efforts.",
+   "inLanguage": "en",
+   "url": "https://usemagpie.ai/docs/codex-models",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Do I write [model_providers] myself?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "No. magpie writes Codex’s config.toml when you pick a model. You don’t export OPENAI_BASE_URL either."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Does my ChatGPT sign-in still work?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Signed in to ChatGPT, Codex keeps its own provider and sign-in. Its own models go to OpenAI on your account, and magpie’s are added beside them."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "I picked a model, but Codex’s /model doesn’t show it.",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Codex reads its model list when it starts. Restart the Codex app and open a new codex session."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can I set the reasoning effort?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes, on the Codex row’s effort slider, with magpie codex effort high, or in Codex’s /model, which lists each model’s efforts."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Which Chinese models can Codex use?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Any that a provider you add serves. magpie has presets for DeepSeek, Kimi, Kimi Code, Zhipu GLM, Z.ai, MiniMax and Qwen. Others can be added as a custom URL."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Does magpie have to be running?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes, while Codex is on a model through magpie: the gateway runs with the app. magpie daemon install keeps it running as a service with no window."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "How do I undo it?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Pick one of Codex’s own models in magpie, or run magpie codex default. magpie’s keys come out, and your provider and model come back."
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>Docs</small></a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/start">Get started</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a class="toc-only" href="/docs/remote">Remote magpie</a>
+    <a class="toc-only" href="/docs/docker">Docker</a>
+    <a class="toc-only" href="/docs/privacy">Privacy</a>
+    <a class="toc-only" href="/docs/masking">Privacy masking</a>
+    <a class="toc-only" href="/docs/mcp-router">MCP router</a>
+    <a class="toc-only" href="/docs/library">Library</a>
+    <a class="toc-only" href="/docs/claude-code-models">Models in Claude Code</a>
+    <a class="toc-only" href="/docs/codex-models">Models in Codex</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/codex-models" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/codex-models" hreflang="zh" lang="zh">中文</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">Download</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Models in Codex</p>
+    <a href="#overview">Why it needs a gateway</a>
+    <a href="#setup">Set it up</a>
+    <a href="#model-list">The /model list</a>
+    <a href="#config">What changes in config.toml</a>
+    <a href="#claude">Claude in Codex</a>
+    <a href="#routing">Several keys</a>
+    <a href="#faq">FAQ</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">Docs · Guide</p>
+    <h1>Use DeepSeek, Kimi, GLM, Claude or any model in Codex</h1>
+    <p class="lede">Codex speaks one API, OpenAI Responses. magpie puts a gateway on your computer that speaks it for every provider you add, and writes Codex’s <code>config.toml</code> for you. The models then show in Codex’s <code>/model</code>, with their reasoning efforts.</p>
+
+    <p>The gateway runs at <code>127.0.0.1:3425</code>. When a provider serves the Responses API itself, as DeepSeek and the Zhipu GLM Coding Plan do, Codex’s request is passed on as it is. When it serves only Chat Completions or Anthropic Messages, as Kimi, MiniMax and Qwen do, or a Claude subscription, magpie translates the request and the reply, streaming and tool calls included.</p>
+
+    <div class="cards">
+      <div><h3>Chinese models</h3><p>DeepSeek, Kimi and Kimi Code, Zhipu GLM (pay as you go or Coding Plan), Z.ai, MiniMax and Qwen, each with its China endpoint where it has one.</p></div>
+      <div><h3>Claude</h3><p>Your Claude subscription’s models, or an Anthropic key’s.</p></div>
+      <div><h3>Anything else</h3><p>Any OpenAI- or Anthropic-compatible URL and key, Copilot and Antigravity accounts, Ollama and LM Studio.</p></div>
+    </div>
+
+    <h2 id="setup"><a class="anchor" href="#setup">Set it up</a></h2>
+    <ol class="steps">
+      <li><b>Add the provider</b>In magpie’s <span class="ui">Providers</span> tab, press <span class="ui">＋ Add provider</span>, pick DeepSeek, Kimi, Zhipu GLM, MiniMax or Qwen, paste your API key and save. magpie asks the vendor which models it serves.</li>
+      <li><b>Pick the model for Codex</b>In the <span class="ui">Agents</span> tab, click the model on the Codex row and choose one, such as <code>deepseek/deepseek-v4-pro</code>. The effort slider under the list sets its reasoning effort. magpie writes both into <code>~/.codex/config.toml</code>.</li>
+      <li><b>Restart Codex</b>Codex builds its model list when it starts. Restart the Codex app, and open new <code>codex</code> sessions, after a switch.</li>
+    </ol>
+    <p>The same from a terminal:</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-cx-cli">Copy</button><pre id="ex-cx-cli">magpie provider add deepseek sk-…
+magpie models                        # every model, as provider/model
+magpie codex deepseek/deepseek-v4-pro
+magpie codex effort high</pre></div>
+    <div class="callout"><b>Zhipu GLM Coding Plan.</b> When you add Zhipu GLM or Z.ai, pick the plan your key is for. A Coding Plan key has its own endpoints, and sent to the pay-as-you-go one it is told it has no balance.</div>
+
+    <h2 id="model-list"><a class="anchor" href="#model-list">The models in Codex’s /model</a></h2>
+    <p>magpie’s models are listed in Codex’s <code>/model</code> beside its own, so you can switch there too. Each one carries what Codex needs to run it: its reasoning efforts and default effort, its context window and the base instructions Codex sends with it.</p>
+    <p>How they get there depends on how Codex is signed in:</p>
+    <ul>
+      <li><b>Signed in to ChatGPT.</b> Codex keeps its own OpenAI provider and your sign-in. magpie points it at the gateway with <code>openai_base_url</code>; Codex’s own models still go to OpenAI on your account, and magpie’s models join them in <code>/model</code>.</li>
+      <li><b>Not signed in, or signed in with an API key.</b> magpie becomes Codex’s provider, and the list comes from a catalog file magpie writes, <code>magpie-models.json</code> beside <code>config.toml</code>.</li>
+    </ul>
+
+    <h2 id="config"><a class="anchor" href="#config">What changes in config.toml</a></h2>
+    <p>magpie changes only the keys it needs in <code>~/.codex/config.toml</code>. Comments, ordering and your other settings stay.</p>
+    <div class="table-wrap"><table>
+      <tr><th>Key</th><th>Set to</th></tr>
+      <tr><td><code>model</code></td><td>The model you picked</td></tr>
+      <tr><td><code>model_reasoning_effort</code></td><td>The effort, when you set one</td></tr>
+      <tr><td><code>openai_base_url</code></td><td>The gateway’s address. A base URL of your own stays</td></tr>
+      <tr><td><code>model_provider</code></td><td><code>"magpie"</code>, when magpie is the provider</td></tr>
+      <tr><td><code>model_catalog_json</code></td><td>The path of the catalog file, <code>magpie-models.json</code>, when magpie is the provider</td></tr>
+      <tr><td><code>[model_providers.magpie]</code></td><td><code>name</code>, <code>base_url</code> (the gateway’s <code>/v1</code>), <code>wire_api = "responses"</code>, and the gateway’s key. Your vendor keys stay in magpie</td></tr>
+    </table></div>
+    <div class="code"><span class="lang">~/.codex/config.toml</span><button class="copy" data-copy="ex-cx-toml">Copy</button><pre id="ex-cx-toml">model = "deepseek/deepseek-v4-pro"
+model_provider = "magpie"
+model_catalog_json = "/Users/you/.codex/magpie-models.json"
+
+[model_providers.magpie]
+name = "magpie"
+base_url = "http://127.0.0.1:3425/v1"
+wire_api = "responses"</pre></div>
+    <p>That is the shape when magpie is the provider; the table also carries the gateway’s key and a header. Signed in to ChatGPT, only <code>openai_base_url</code> and <code>model</code> are set at the top. The <code>[model_providers.magpie]</code> table stays once written. A Codex thread keeps the provider it was started on, and a thread started on magpie can’t be opened again without it.</p>
+
+    <h3 id="restore">Going back to OpenAI’s models</h3>
+    <p>Pick one of Codex’s own models on its row, or run <code>magpie codex default</code>. magpie takes <code>model_provider</code>, <code>model_catalog_json</code> and the base URL back out and puts back the provider and model you had. A provider of your own at the top stays. Threads started on magpie are moved back to the provider Codex is on, so Codex lists them, and a copy is kept in magpie’s trash.</p>
+
+    <h2 id="claude"><a class="anchor" href="#claude">Claude in Codex</a></h2>
+    <p>Sign in to your Claude subscription in magpie: <span class="ui">＋ Add provider</span>, then the Claude tile. Its models are <code>claude/…</code> in Codex’s picker. magpie translates Codex’s Responses requests into Anthropic Messages and the replies back.</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-cx-claude">Copy</button><pre id="ex-cx-claude">magpie accounts add claude     # sign in to a Claude account
+magpie models | grep '^claude/'
+magpie codex claude/…</pre></div>
+    <p>Requests on a Claude subscription run through the Claude Code installed on your computer, so keep it installed. An Anthropic API key works too: add Anthropic as a vendor and pick an <code>anthropic/…</code> model.</p>
+
+    <h2 id="routing"><a class="anchor" href="#routing">Routing over several keys</a></h2>
+    <ul>
+      <li><b>Several keys for one vendor.</b> Add them all to the provider and tick each one. <span class="ui">Routing</span> on the provider says how requests spread, and <span class="ui">Fallback</span> lists models to use when it is out of quota or down.</li>
+      <li><b>One model from several providers.</b> When two of your providers serve the same model, magpie makes the group <code>auto/&lt;model&gt;</code> by itself. Pick it for Codex.</li>
+      <li><b>Your own group.</b> <span class="ui">New group</span> in the <span class="ui">Routing</span> tab puts any models behind one name, <code>group/&lt;id&gt;</code>.</li>
+    </ul>
+    <p>The routing modes are in <a href="/docs/start#routing">Get started</a>.</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
+    <h3>Do I write <code>[model_providers]</code> myself?</h3>
+    <p>No. magpie writes Codex’s <code>config.toml</code> when you pick a model. You don’t export <code>OPENAI_BASE_URL</code> either.</p>
+    <h3>Does my ChatGPT sign-in still work?</h3>
+    <p>Yes. Signed in to ChatGPT, Codex keeps its own provider and sign-in. Its own models go to OpenAI on your account, and magpie’s are added beside them.</p>
+    <h3>I picked a model, but Codex’s /model doesn’t show it.</h3>
+    <p>Codex reads its model list when it starts. Restart the Codex app and open a new <code>codex</code> session.</p>
+    <h3>Can I set the reasoning effort?</h3>
+    <p>Yes, on the Codex row’s effort slider, with <code>magpie codex effort high</code>, or in Codex’s <code>/model</code>, which lists each model’s efforts.</p>
+    <h3>Which Chinese models can Codex use?</h3>
+    <p>Any that a provider you add serves. magpie has presets for DeepSeek, Kimi, Kimi Code, Zhipu GLM, Z.ai, MiniMax and Qwen. Others can be added as a custom URL.</p>
+    <h3>Does magpie have to be running?</h3>
+    <p>Yes, while Codex is on a model through magpie: the gateway runs with the app. <code>magpie daemon install</code> keeps it running as a service with no window.</p>
+    <h3>How do I undo it?</h3>
+    <p>Pick one of Codex’s own models in magpie, or run <code>magpie codex default</code>. magpie’s keys come out, and your provider and model come back.</p>
+
+    <p style="margin-top:48px">Using Claude Code too? See <a href="/docs/claude-code-models">Use any model in Claude Code</a>. Stuck? Ask on <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>.</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a href="/docs/remote">Remote magpie</a>
+    <a href="/docs/docker">Docker</a>
+    <a href="/docs/privacy">Privacy</a>
+    <a href="/docs/masking">Privacy masking</a>
+    <a href="/docs/mcp-router">MCP router</a>
+    <a href="/docs/library">Library</a>
+    <a href="/docs/claude-code-models">Models in Claude Code</a>
+    <a href="/docs/codex-models">Models in Codex</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/contributors">Contributors</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

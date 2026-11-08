@@ -36,6 +36,8 @@ DeepSeek, Kimi (Moonshot), GLM (Zhipu), Qwen, MiniMax, Anthropic (Claude), OpenA
 ## Docs
 
 - [Get started](https://usemagpie.ai/docs/start): how magpie fits together; add providers, pick a model for each agent, route one model over several accounts.
+- [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models): run Claude Code on DeepSeek, Kimi, GLM, Qwen, MiniMax or a ChatGPT plan's GPT models; how the opus, sonnet and haiku tiers map and what changes in settings.json.
+- [Models in Codex](https://usemagpie.ai/docs/codex-models): run Codex on DeepSeek, Kimi, GLM, Qwen or a Claude subscription; the /model list with reasoning efforts and what changes in config.toml.
 - [Intent routing](https://usemagpie.ai/docs/intent): how a turn is routed by what the user asks for.
 - [Privacy masking](https://usemagpie.ai/docs/masking): what is masked before a request leaves the computer and how values come back.
 - [Library](https://usemagpie.ai/docs/library): instructions, MCP servers, skills, hooks and subagents for each agent.

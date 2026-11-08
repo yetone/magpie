@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Codex 接入 DeepSeek、Kimi、GLM、Claude 等第三方模型 · magpie</title>
+<meta name="description" content="Codex CLI 怎么用 DeepSeek、Kimi、智谱 GLM、通义千问等国产模型，或 Claude 订阅：magpie 自动配置 config.toml 的 model_providers，模型带着推理强度出现在 /model 里，随时切回 OpenAI。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/codex-models">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/codex-models">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/codex-models">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/codex-models">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Codex 接入 DeepSeek、Kimi、GLM、Claude 等第三方模型">
+<meta property="og:description" content="Codex CLI 怎么用 DeepSeek、Kimi、智谱 GLM、通义千问等国产模型，或 Claude 订阅：magpie 自动配置 config.toml 的 model_providers，模型带着推理强度出现在 /model 里，随时切回 OpenAI。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/codex-models">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Codex 接入 DeepSeek、Kimi、GLM、Claude 等第三方模型",
+   "description": "Codex CLI 怎么用 DeepSeek、Kimi、智谱 GLM、通义千问等国产模型，或 Claude 订阅：magpie 自动配置 config.toml 的 model_providers，模型带着推理强度出现在 /model 里，随时切回 OpenAI。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/codex-models",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "需要自己写 [model_providers] 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "不需要。选模型时 magpie 会写好 Codex 的 config.toml，也不用导出 OPENAI_BASE_URL。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "ChatGPT 登录还能用吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。登录了 ChatGPT 时，Codex 保留自己的供应商和登录，自带的模型仍然用你的账号发给 OpenAI，magpie 的模型加在旁边。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "选了模型，Codex 的 /model 里却没有？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Codex 启动时读取模型列表。重启 Codex 应用，新开一个 codex 会话。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "能设置推理强度吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。在 Codex 那一行的滑块上调，或者运行 magpie codex effort high，也可以在 Codex 的 /model 里选，它会列出每个模型支持的强度。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex 能用哪些国产模型？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "你添加的供应商有的都能用。magpie 内置了 DeepSeek、Kimi、Kimi Code、智谱 GLM、Z.ai、MiniMax、通义千问的预设。其他的可以用自定义地址添加。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie 必须一直开着吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Codex 用的是经过 magpie 的模型时，需要：网关跟着应用运行。magpie daemon install 可以把它装成后台服务，不开窗口。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "怎么撤销？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "在 magpie 里选 Codex 自己的模型，或者运行 magpie codex default。magpie 写的键会去掉，你原来的供应商和模型会恢复。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/codex-models" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/codex-models" hreflang="zh" lang="zh">中文</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Codex 接入其他模型</p>
+    <a href="#overview">为什么需要网关</a>
+    <a href="#setup">接入步骤</a>
+    <a href="#model-list">/model 里的模型</a>
+    <a href="#config">config.toml 里改了什么</a>
+    <a href="#claude">在 Codex 里用 Claude</a>
+    <a href="#routing">多个 Key 轮换</a>
+    <a href="#faq">常见问题</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 指南</p>
+    <h1>Codex 接入 DeepSeek、Kimi、GLM、Claude 等第三方模型</h1>
+    <p class="lede">Codex 只会说一种协议：OpenAI Responses。magpie 在你电脑上跑一个本地网关，替你添加的每个供应商说这种协议，并替你写好 Codex 的 <code>config.toml</code>。之后这些模型会出现在 Codex 的 <code>/model</code> 里，带着各自的推理强度。</p>
+
+    <p>网关地址是 <code>127.0.0.1:3425</code>。DeepSeek 和智谱 GLM Coding Plan 本身提供 Responses 接口，Codex 的请求会原样转发；Kimi、MiniMax、通义千问只提供 Chat Completions 或 Anthropic 接口，Claude 订阅也一样，这些由 magpie 双向转换请求和回复，流式输出和工具调用都包括在内。</p>
+
+    <div class="cards">
+      <div><h3>国产模型</h3><p>DeepSeek、Kimi 与 Kimi Code、智谱 GLM（按量付费或 Coding Plan）、Z.ai、MiniMax、通义千问，有国内节点的都单独列出。</p></div>
+      <div><h3>Claude</h3><p>你的 Claude 订阅里的模型，或者 Anthropic API Key。</p></div>
+      <div><h3>其他</h3><p>任何 OpenAI 或 Anthropic 兼容的地址和 Key，Copilot、Antigravity 账号，以及 Ollama、LM Studio。</p></div>
+    </div>
+
+    <h2 id="setup"><a class="anchor" href="#setup">接入步骤</a></h2>
+    <ol class="steps">
+      <li><b>添加供应商</b>在 magpie 的 <span class="ui">供应商</span> 页点 <span class="ui">＋ 添加供应商</span>，选 DeepSeek、Kimi、智谱 GLM、MiniMax 或通义千问，粘贴 API Key 保存。magpie 会去问供应商有哪些模型。</li>
+      <li><b>给 Codex 选模型</b>在 <span class="ui">Agent</span> 页点 Codex 那一行的模型，选一个，比如 <code>deepseek/deepseek-v4-pro</code>。列表下方的滑块设置推理强度。magpie 会把两者都写进 <code>~/.codex/config.toml</code>。</li>
+      <li><b>重启 Codex</b>Codex 启动时生成模型列表。切换后重启 Codex 应用，并新开 <code>codex</code> 会话。</li>
+    </ol>
+    <p>命令行也一样：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-cx-cli">复制</button><pre id="ex-cx-cli">magpie provider add deepseek sk-…
+magpie models                        # 列出所有模型，格式为 provider/model
+magpie codex deepseek/deepseek-v4-pro
+magpie codex effort high</pre></div>
+    <div class="callout"><b>智谱 GLM Coding Plan。</b>添加智谱 GLM 或 Z.ai 时，选你的 Key 对应的套餐。Coding Plan 的 Key 有自己的接口地址，发到按量付费的接口会提示余额不足。</div>
+
+    <h2 id="model-list"><a class="anchor" href="#model-list">Codex /model 里的模型</a></h2>
+    <p>magpie 的模型会和 Codex 自带的模型一起列在 <code>/model</code> 里，可以直接在里面切。每个模型都带着 Codex 运行它所需的信息：支持的推理强度和默认强度、上下文窗口，以及 Codex 随它发送的基础指令。</p>
+    <p>具体怎么出现，取决于 Codex 的登录方式：</p>
+    <ul>
+      <li><b>登录了 ChatGPT。</b>Codex 保留自己的 OpenAI 供应商和登录。magpie 只用 <code>openai_base_url</code> 把它指向网关；Codex 自带的模型仍然用你的账号发给 OpenAI，magpie 的模型加在旁边。</li>
+      <li><b>没登录，或用 API Key 登录。</b>magpie 成为 Codex 的供应商，模型列表来自 magpie 写的目录文件 <code>magpie-models.json</code>，和 <code>config.toml</code> 放在一起。</li>
+    </ul>
+
+    <h2 id="config"><a class="anchor" href="#config">config.toml 里改了什么</a></h2>
+    <p>magpie 只改 <code>~/.codex/config.toml</code> 里它需要的键，注释、顺序和你的其他设置都保留。</p>
+    <div class="table-wrap"><table>
+      <tr><th>键</th><th>写入的值</th></tr>
+      <tr><td><code>model</code></td><td>你选的模型</td></tr>
+      <tr><td><code>model_reasoning_effort</code></td><td>推理强度（设置了才写）</td></tr>
+      <tr><td><code>openai_base_url</code></td><td>网关地址。你自己设的地址保持不变</td></tr>
+      <tr><td><code>model_provider</code></td><td>magpie 作为供应商时为 <code>"magpie"</code></td></tr>
+      <tr><td><code>model_catalog_json</code></td><td>magpie 作为供应商时，目录文件 <code>magpie-models.json</code> 的路径</td></tr>
+      <tr><td><code>[model_providers.magpie]</code></td><td><code>name</code>、<code>base_url</code>（网关的 <code>/v1</code>）、<code>wire_api = "responses"</code> 和网关的 Key。你的供应商 Key 留在 magpie 里</td></tr>
+    </table></div>
+    <div class="code"><span class="lang">~/.codex/config.toml</span><button class="copy" data-copy="ex-cx-toml">复制</button><pre id="ex-cx-toml">model = "deepseek/deepseek-v4-pro"
+model_provider = "magpie"
+model_catalog_json = "/Users/you/.codex/magpie-models.json"
+
+[model_providers.magpie]
+name = "magpie"
+base_url = "http://127.0.0.1:3425/v1"
+wire_api = "responses"</pre></div>
+    <p>这是 magpie 作为供应商时的样子，表里还有网关的 Key 和一个请求头。登录了 ChatGPT 时，顶层只设 <code>openai_base_url</code> 和 <code>model</code>。<code>[model_providers.magpie]</code> 表写入后会一直保留：Codex 的会话记着它开始时用的供应商，在 magpie 上开始的会话没有这个表就打不开。</p>
+
+    <h3 id="restore">切回 OpenAI 自己的模型</h3>
+    <p>在那一行选 Codex 自己的模型，或者运行 <code>magpie codex default</code>。magpie 去掉 <code>model_provider</code>、<code>model_catalog_json</code> 和网关地址，恢复你原来的供应商和模型。你自己在顶层设的供应商保持不变。在 magpie 上开始的会话会移回 Codex 当前的供应商下，Codex 才列得出来；magpie 的回收站里留一份副本。</p>
+
+    <h2 id="claude"><a class="anchor" href="#claude">在 Codex 里用 Claude</a></h2>
+    <p>在 magpie 里登录 Claude 订阅：<span class="ui">＋ 添加供应商</span>，选 Claude。它的模型以 <code>claude/…</code> 出现在 Codex 的模型列表里。magpie 把 Codex 的 Responses 请求转成 Anthropic Messages，再把回复转回来。</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-cx-claude">复制</button><pre id="ex-cx-claude">magpie accounts add claude     # 登录一个 Claude 账号
+magpie models | grep '^claude/'
+magpie codex claude/…</pre></div>
+    <p>Claude 订阅的请求通过你电脑上安装的 Claude Code 发出，所以要保留 Claude Code。Anthropic API Key 也可以：添加 Anthropic 供应商，选 <code>anthropic/…</code> 模型。</p>
+
+    <h2 id="routing"><a class="anchor" href="#routing">多个 Key 轮换</a></h2>
+    <ul>
+      <li><b>同一家的多个 Key。</b>都加到这个供应商里并勾选。供应商的 <span class="ui">路由</span> 决定怎么分摊，<span class="ui">备用</span> 列出额度用完或服务挂掉时改用的模型。</li>
+      <li><b>同一个模型来自多个供应商。</b>magpie 会自动建一个组 <code>auto/&lt;model&gt;</code>，给 Codex 选它即可。</li>
+      <li><b>自己建组。</b>在 <span class="ui">路由</span> 页新建一个组，把任意模型放在一个名字下，<code>group/&lt;id&gt;</code>。</li>
+    </ul>
+    <p>各种路由方式见 <a href="/docs/zh/start#routing">快速上手</a>。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>需要自己写 <code>[model_providers]</code> 吗？</h3>
+    <p>不需要。选模型时 magpie 会写好 Codex 的 <code>config.toml</code>，也不用导出 <code>OPENAI_BASE_URL</code>。</p>
+    <h3>ChatGPT 登录还能用吗？</h3>
+    <p>能。登录了 ChatGPT 时，Codex 保留自己的供应商和登录，自带的模型仍然用你的账号发给 OpenAI，magpie 的模型加在旁边。</p>
+    <h3>选了模型，Codex 的 /model 里却没有？</h3>
+    <p>Codex 启动时读取模型列表。重启 Codex 应用，新开一个 <code>codex</code> 会话。</p>
+    <h3>能设置推理强度吗？</h3>
+    <p>能。在 Codex 那一行的滑块上调，或者运行 <code>magpie codex effort high</code>，也可以在 Codex 的 <code>/model</code> 里选，它会列出每个模型支持的强度。</p>
+    <h3>Codex 能用哪些国产模型？</h3>
+    <p>你添加的供应商有的都能用。magpie 内置了 DeepSeek、Kimi、Kimi Code、智谱 GLM、Z.ai、MiniMax、通义千问的预设。其他的可以用自定义地址添加。</p>
+    <h3>magpie 必须一直开着吗？</h3>
+    <p>Codex 用的是经过 magpie 的模型时，需要：网关跟着应用运行。<code>magpie daemon install</code> 可以把它装成后台服务，不开窗口。</p>
+    <h3>怎么撤销？</h3>
+    <p>在 magpie 里选 Codex 自己的模型，或者运行 <code>magpie codex default</code>。magpie 写的键会去掉，你原来的供应商和模型会恢复。</p>
+
+    <p style="margin-top:48px">也在用 Claude Code？见 <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>。遇到问题可以到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
