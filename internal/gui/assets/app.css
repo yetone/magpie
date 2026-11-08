@@ -636,6 +636,9 @@ body.mac .modal .editor.framed > .ebody { overflow-y: scroll; padding-right: 10p
 /* the same on Windows and Linux, whose bar is 10px: a field that opens
    (an advanced section, a long error) no longer narrows the body under it */
 body:not(.mac):not(.web) .modal .editor.framed > .ebody { overflow-y: scroll; padding-right: 8px; }
+/* in a browser too: WebKit gave a redrawn body its bar a frame late, so a
+   row wrapped and a place kept at the bottom moved 48px */
+body.web .modal .editor.framed > .ebody { overflow-y: scroll; }
 .list { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; flex: none; }
 body.panel .list { border: 0; border-radius: 10px; box-shadow: var(--card-edge); }
 .row { display: flex; align-items: center; gap: 9px; min-height: 40px; padding: 5px 9px 5px 11px; }
