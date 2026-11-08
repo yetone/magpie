@@ -1788,9 +1788,9 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 	wg.Wait()
 	out = slices.DeleteFunc(out, func(q SubscriptionQuota) bool { return q.Provider == "" })
 	if ctx.Err() == nil {
-		// each balance kept, and drawn over time with its runs-out; not
-		// one estimated from a balance typed, which is no reading
-		noteBalanceHistory(slices.DeleteFunc(slices.Clone(out), func(q SubscriptionQuota) bool { return q.Estimate != nil }), time.Now())
+		// each balance kept, and drawn over time with its runs-out, on
+		// the cards themselves (an estimate is neither: noteBalanceHistory)
+		noteBalanceHistory(out, time.Now())
 		// the history of the cards read now and of those kept, a partial
 		// read (one card's refresh) keeping the others
 		h := sharedBalanceHist(slices.Concat(kept, out))
