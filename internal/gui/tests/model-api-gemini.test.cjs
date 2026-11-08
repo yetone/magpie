@@ -2,7 +2,7 @@
 // A custom provider with a Gemini URL beside its chat and Anthropic ones
 // (Kayphoon on Discord: 供应商为自定义的时候已经兼容 gemini 格式了，但是在下方
 // 模型的详细配置里还是只能限定 chat 和 anthropic): a model can be asked on
-// Gemini alone, from its chip's right-click and from Names, prices & levels' API
+// Gemini alone, from its chip's right-click and from Model settings' API
 // row alike, and the Save sends it as modelPrefs. Responses, which it has
 // no URL for, isn't offered. In every language, wide and at a phone's
 // width, where the row's API choice stays inside the editor and grows to
@@ -92,8 +92,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await page.locator("#status").textContent(), w.staged);
         assert.equal(posts.length, 0, "staged, not saved");
 
-        // Names, prices & levels' API row shows it, and has Gemini for the other model
-        await page.evaluate(() => [...document.querySelectorAll(".editor button.text.action")].find((b) => b.closest(".editor") && /Names|名称|名稱|名前|Namen/.test(b.textContent)).click());
+        // Model settings' API row shows it, and has Gemini for the other model
+        await page.evaluate(() => [...document.querySelectorAll(".editor button.text.action")].find((b) => b.closest(".editor") && /Model settings|模型设置|模型設定|モデル設定|Modelleinstellungen/.test(b.textContent)).click());
         const row = (id) => page.locator(".editor .mnames .mname", { has: page.locator(`input[placeholder="${id}"]`) });
         await row("glm-5").locator(".mapi").waitFor();
         assert.deepEqual(await row("glm-5").locator(".mapi .opt").evaluateAll((os) => os.map((o) => o.dataset.api)), ["", "chat", "anthropic", "gemini"]);

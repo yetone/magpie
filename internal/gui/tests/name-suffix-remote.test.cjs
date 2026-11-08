@@ -2,7 +2,7 @@
 // ARNO on Discord (我在设置里关闭了"模型名称带供应商"但是接入的remote-magpie的
 // 模型名字还是带上了…): a remote magpie's models are named in its list with
 // its own provider after them ("DeepSeek Chat · Relay A"), by that magpie's
-// setting, and Off here kept it. Names, prices & levels says what the agents' lists
+// setting, and Off here kept it. Model settings says what the agents' lists
 // show under each choice, saved on Settings: On, that label with this
 // provider after it; Off, the model's name there alone. Every language.
 const assert = require("node:assert/strict");
@@ -73,7 +73,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.goto("http://magpie.test/?view=providers");
         const tr = (k, vars = {}) => page.evaluate(([k, vars]) => t(k, vars), [k, vars]);
         await page.locator(".row.provider").click();
-        if (!(await page.locator(".mnames:not([hidden])").count())) await page.getByRole("button", { name: await tr("Names, prices & levels"), exact: true }).click();
+        if (!(await page.locator(".mnames:not([hidden])").count())) await page.getByRole("button", { name: await tr("Model settings"), exact: true }).click();
         const sfx = page.locator(".mnames:not([hidden]) .msuffix");
         await sfx.waitFor();
         await says(sfx.locator(".hint"), await tr("Agents’ lists show “{label}”", { label }));

@@ -1,9 +1,9 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Whether a model sees images, from its chip's right-click (archsiono on X:
-// the switch was only in Names, prices & levels, "谁能找到", and a
+// the switch was only in Model settings, "谁能找到", and a
 // right-click item was asked for). "Turn on image input" for a model that
 // doesn't, "Turn off image input" for one that does; the pick is staged
-// as Names, prices & levels' tick stages it — that tick follows, the page
+// as Model settings' tick stages it — that tick follows, the page
 // doesn't move, nothing is saved — and sent with the Save as modelPrefs'
 // images. A subscription's models have it too. In English, Chinese,
 // Japanese and German, at a wide and a narrow window.
@@ -48,8 +48,8 @@ function serve(lang, posts) {
 }
 
 const words = {
-  en: { on: "Turn on image input", off: "Turn off image input", names: "Names, prices & levels", images: "Accepts images", save: "Save", staged: "text-1 accepts images once saved", unstaged: "see-2 doesn't accept images once saved" },
-  zh: { on: "开启图片输入", off: "关闭图片输入", names: "名称、价格与推理档位", images: "支持图片输入", save: "保存", staged: "保存后 text-1 将支持图片输入", unstaged: "保存后 see-2 将不支持图片输入" },
+  en: { on: "Turn on image input", off: "Turn off image input", names: "Model settings", images: "Accepts images", save: "Save", staged: "text-1 accepts images once saved", unstaged: "see-2 doesn't accept images once saved" },
+  zh: { on: "开启图片输入", off: "关闭图片输入", names: "模型设置", images: "支持图片输入", save: "保存", staged: "保存后 text-1 将支持图片输入", unstaged: "保存后 see-2 将不支持图片输入" },
   ja: { on: "画像入力をオンにする", off: "画像入力をオフにする", names: null, images: null, save: "保存", staged: "保存すると text-1 は画像入力に対応します", unstaged: "保存すると see-2 は画像入力に対応しなくなります" },
   de: { on: "Bildeingabe einschalten", off: "Bildeingabe ausschalten", names: null, images: null, save: "Speichern", staged: "text-1 nimmt nach dem Speichern Bilder an", unstaged: "see-2 nimmt nach dem Speichern keine Bilder an" },
 };
@@ -123,7 +123,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await page.locator(".editor select").count(), 0, "no native select");
         assert.equal(posts.length, 0, "staged, not saved");
 
-        // Names, prices & levels' tick follows what was staged
+        // Model settings' tick follows what was staged
         if (w.names) {
           await page.getByRole("button", { name: w.names, exact: true }).click();
           const row = (id) => page.locator(".mname", { has: page.locator("code", { hasText: id }) });

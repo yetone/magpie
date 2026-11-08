@@ -142,7 +142,7 @@ func TestExtraBodyThread(t *testing.T) {
 	if !strings.Contains(out, `"t":"root"`) {
 		t.Errorf("%s", out)
 	}
-	if p.AsksThread() == false || (Provider{Headers: map[string]string{"a": "${sessionId}"}}).AsksThread() {
+	if p.AsksThread(context.Background()) == false || (Provider{Headers: map[string]string{"a": "${sessionId}"}}).AsksThread(context.Background()) {
 		t.Error("AsksThread")
 	}
 }

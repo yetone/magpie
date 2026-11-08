@@ -460,7 +460,7 @@ type settingsJSON struct {
 	VisionMissing string `json:"visionMissing,omitempty"`
 	// VisionNotMarked are the custom providers (AddedByAddress) with a model left
 	// out of VisionModels only because nothing says it takes images: the
-	// user can say so in the provider's Names, prices & levels (nexnull on Discord)
+	// user can say so in the provider's Model settings (nexnull on Discord)
 	VisionNotMarked []string `json:"visionNotMarked,omitempty"`
 	// the reasoning levels of the model that describes images now, and the
 	// one it is asked at when one is picked (VisionEffort fitted to them)

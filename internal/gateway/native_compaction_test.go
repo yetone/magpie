@@ -517,7 +517,7 @@ func TestNativeCompactionWriterGoneSaysWhy(t *testing.T) {
 					t.Fatal(err)
 				}
 			},
-			[]string{"set not to serve gpt-5.5 (Names, prices & levels)", "let me@example.com serve gpt-5.5 again"},
+			[]string{"set not to serve gpt-5.5 (Model settings)", "let me@example.com serve gpt-5.5 again"},
 			[]string{"no longer signed in", "switched off in magpie", "paused"}},
 		{"signed out", "gone@example.com", func(t *testing.T) {},
 			[]string{"gone@example.com is no longer signed in to magpie", "sign in to gone@example.com again"},

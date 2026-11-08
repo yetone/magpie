@@ -1793,7 +1793,7 @@ falls back to, because that is how a drawing is asked for.
 A relay whose one key serves some models on chat completions and others on
 Responses, Anthropic's messages or Gemini's generateContent can be told which
 API each model is asked on. It is the provider editor's **API this model is
-asked on**, under Names, prices & levels, and `magpie model api` sets the same
+asked on**, under Model settings, and `magpie model api` sets the same
 setting from the terminal, so a script can set many models:
 
 ```sh

@@ -11,7 +11,7 @@ import (
 )
 
 // magpie model api: the one API a provider's model is asked on, the
-// setting the provider editor's Names, prices & levels picks ("API this
+// setting the provider editor's Model settings picks ("API this
 // model is asked on"), for a relay whose one key serves its models on
 // different APIs, set from a script (yew_fence_931206 on Discord). It is
 // saved through provider.SetModelPrefs, the editor's Save, into settings'
@@ -26,7 +26,7 @@ const apiUsage = `usage:
   magpie model apis [<provider>]                 the models you set an API for; with a provider, each of its
                                                  models and the API it is asked on
 
-  It is the provider editor's "API this model is asked on", under Names, prices & levels, and is
+  It is the provider editor's "API this model is asked on", under Model settings, and is
   saved the same way: the app, a running gateway and the agents' model lists go by it at once.
   The provider needs a URL for the API (More endpoints in its editor), and at least two of
   chat, responses, anthropic and gemini, for there to be a choice. Several models in one command

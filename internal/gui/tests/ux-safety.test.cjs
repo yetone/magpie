@@ -103,7 +103,7 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
       await modal.getByRole("button", { name: cancelName, exact: true }).click();
       await modal.waitFor({ state: "hidden" }); // untouched form needs no confirmation
       await row.click();
-      await modal.getByRole("button", { name: lang === "zh" ? "名称、价格与推理档位" : "Names, prices & levels", exact: true }).click();
+      await modal.getByRole("button", { name: lang === "zh" ? "模型设置" : "Model settings", exact: true }).click();
       await modal.getByRole("button", { name: cancelName, exact: true }).click();
       await modal.waitFor({ state: "hidden" }); // opening model settings alone is not an edit
       assert.equal(await page.getByRole("alertdialog").count(), 0);

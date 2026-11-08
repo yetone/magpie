@@ -1215,6 +1215,8 @@ type videoStart struct {
 // failure before any vendor is asked (the model makes no videos, a key may
 // use none of the provider's keys) has asked unset.
 func (s *Server) startVideo(ctx context.Context, r *http.Request, p provider.Provider, model string, f filming) (videoStart, int, error) {
+	// the headers the user gave the video model
+	ctx = provider.WithModel(ctx, p.ID, model)
 	// the provider's other keys to start the video on, when the first
 	// says it doesn't serve the model
 	var keys []candidate

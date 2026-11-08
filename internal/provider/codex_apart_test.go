@@ -45,7 +45,7 @@ func TestCodexPickerNamesSameNamesApart(t *testing.T) {
 		}
 		json.Unmarshal(b, &got)
 		// the text-only note is beside the point here
-		got.Desc = strings.Replace(got.Desc, " (text only: Accepts images is in its provider's Names & levels in magpie)", "", 1)
+		got.Desc = strings.Replace(got.Desc, " (text only: Accepts images is in its provider's Model settings in magpie)", "", 1)
 		if (shown{got.Name, got.Desc}) != want[i] {
 			t.Errorf("%s: shown as %q, %q; want %q, %q", ms[i].ID, got.Name, got.Desc, want[i].name, want[i].desc)
 		}

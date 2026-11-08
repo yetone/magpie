@@ -283,6 +283,8 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), retrieveTimeout)
+		// the headers the user gave the model
+		ctx = provider.WithModel(ctx, c.p.ID, c.model)
 		// the headers of the vendor's reply passed on (#4145)
 		var heard heardHeaders
 		ctx = withReplySink(ctx, c.p.ID, heard.put)

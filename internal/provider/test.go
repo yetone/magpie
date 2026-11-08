@@ -792,6 +792,7 @@ func probe(ctx context.Context, p Provider, proto Protocol, url string, body []b
 }
 
 func probeOnce(ctx context.Context, p Provider, proto Protocol, url string, body []byte, model string, wait time.Duration) (r Result) {
+	ctx = WithModel(ctx, p.ID, model) // the model's own headers, as its requests carry
 	r = Result{Protocol: proto, Model: model}
 	if model == "" {
 		r.Error = "no model to try: expose one, or refresh the model list"

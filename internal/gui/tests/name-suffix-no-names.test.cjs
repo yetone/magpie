@@ -5,7 +5,7 @@
 // alone, or that reads the gateway's names itself (agent.NoNames), can't,
 // so each place the setting is offered names the connected ones it changes
 // nothing in: under Settings › Provider in model names, under Routing's
-// Names in agents' lists, and in a provider's Names, prices & levels. One not
+// Names in agents' lists, and in a provider's Model settings. One not
 // connected, or one whose list follows it, isn't named; with none, nothing
 // is said. Every language, at a narrow width too.
 const assert = require("node:assert/strict");
@@ -22,7 +22,7 @@ const said = {
   ja: "Goose, Hermes Agent には効きません：そのモデル一覧には magpie の名前が出ません",
   de: "Wirkt nicht in Goose, Hermes Agent: deren Modelllisten zeigen magpies Namen nicht",
 };
-const names = { en: "Names, prices & levels", zh: "名称、价格与推理档位" };
+const names = { en: "Model settings", zh: "模型设置" };
 
 function serve(lang, agents, late = 0) {
   const cur = { lang, theme: "light", plainNames: false, plainOwnNames: false };
@@ -103,7 +103,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     }
   }
   for (const lang of ["en", "zh"]) {
-    test(`${engine} ${lang}: a provider's Names, prices & levels says it too`, async (t) => {
+    test(`${engine} ${lang}: a provider's Model settings says it too`, async (t) => {
       const { page, errors } = await launch(t, engine, lang, agents);
       await page.goto("http://magpie.test/?view=providers");
       await page.locator(".row.provider").click();

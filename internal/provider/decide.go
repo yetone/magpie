@@ -997,6 +997,8 @@ func (p Provider) decideAsked(ctx context.Context) ([]catalog.Model, error) {
 // AskSystemOne sends model the smallest System One question at p's
 // decision API, and says why it wasn't answered.
 func (p Provider) AskSystemOne(ctx context.Context, model string) error {
+	// the model's own headers
+	ctx = WithModel(ctx, p.ID, model)
 	if pat, off := ModelDisabled(p.ID, model); off { // never asked (#1867)
 		return fmt.Errorf("model %s/%s is disabled in magpie (it matches %q)", p.ID, model, pat)
 	}

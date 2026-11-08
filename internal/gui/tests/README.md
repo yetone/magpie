@@ -666,7 +666,7 @@ and WebKit, at 1280px, 640px and 420px, with no sideways scroll.
 `name-suffix-where-named.test.cjs` checks the setting that says whether a
 provider's name or "· routing group" follows a name in the agents' lists (#868)
 where names are given, in Chromium and WebKit, English and Chinese. The
-provider editor's Names, prices & levels has its three choices and says what the lists
+provider editor's Model settings has its three choices and says what the lists
 show. For the groups it is one setting for all of them, so it sits under the
 list on the Routing groups page (PAMI on Discord: in one group's editor it read
 as that group's): a group's editor has no choices, only what its group will be
@@ -1531,7 +1531,7 @@ Chromium and WebKit, English and Chinese: Detect APIs' "Each picked model"
 posts provider/detect with every model picked (detectModels) and shows model
 by API, each a ✓ with the time or a ✗ with why; "Use these" sets the URLs
 that answered and gives each model that answered on one API only that API in
-Names, prices & levels, unsaved, sending nothing until the Save carries them as
+Model settings, unsaved, sending nothing until the Save carries them as
 modelPrefs, while a model answering on two stays Auto. A chip's right-click
 Test says the API it was asked on ("answered via Responses"). No click moves
 the page, nothing has a left-border accent, and every string has its

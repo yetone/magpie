@@ -510,6 +510,8 @@ type decided struct {
 // another one. DecideURL and Sign errors are as they are; a transport
 // error is named with p. The request it sent is there once one was.
 func (s *Server) postDecideSent(ctx context.Context, p provider.Provider, model string, body []byte) (decided, error) {
+	// the headers the user gave the decision model
+	ctx = provider.WithModel(ctx, p.ID, model)
 	// every decision call goes through here — System One, a group rule's
 	// classifier, a decision group's members: a model the user disabled
 	// (#1867) is never asked

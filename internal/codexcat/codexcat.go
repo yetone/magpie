@@ -412,7 +412,7 @@ func entriesAt(ms []catalog.Model, after int, effort string) []any {
 			// (KimYx0207 on X). The description still ends " via magpie",
 			// which is how its entry is told from Codex's own
 			// (catalog.MagpieAdded)
-			e.Description = m.Name + " (text only: Accepts images is in its provider's Names & levels in magpie) via magpie"
+			e.Description = m.Name + " (text only: Accepts images is in its provider's Model settings in magpie) via magpie"
 		}
 		if c := m.Context; c > 0 {
 			// the model's or its provider's threshold, else the one for

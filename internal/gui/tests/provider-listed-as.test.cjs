@@ -1,8 +1,8 @@
 // A relay's model can be listed by an id of the user's (zeewell on X:
 // deepseek-v4.1-flash-1017 as deepseek-v4.1-flash), in the provider
-// editor's Names, prices & levels beside Same as: magpie lists, routes and counts
+// editor's Model settings beside Same as: magpie lists, routes and counts
 // it by that id, and the relay is still asked for its own. It is staged
-// and made with the editor's Save, as the rest of Names, prices & levels is;
+// and made with the editor's Save, as the rest of Model settings is;
 // Restore default and an emptied box list it by its own id again. A
 // signed-in account's models (ids false) have no such box.
 const assert = require("node:assert/strict");
@@ -41,7 +41,7 @@ function serve(lang, posts) {
   };
 }
 
-const keys = ["Names, prices & levels", "Listed as", "unsaved", "Save", "Restore default"];
+const keys = ["Model settings", "Listed as", "unsaved", "Save", "Restore default"];
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
@@ -60,7 +60,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       for (const k of keys) assert(L[k], `${lang} has ${k}`);
       const open = async (id) => {
         await page.locator(`.row.provider[data-id="${id}"]`).click();
-        if (!(await page.locator(".mnames:not([hidden])").count())) await page.getByRole("button", { name: L["Names, prices & levels"], exact: true }).click();
+        if (!(await page.locator(".mnames:not([hidden])").count())) await page.getByRole("button", { name: L["Model settings"], exact: true }).click();
       };
       const row = (id) => page.locator(".mname", { has: page.locator("code", { hasText: id }) });
       const box = (id) => row(id).getByRole("textbox", { name: L["Listed as"], exact: true });
@@ -97,7 +97,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await row("m1").getByRole("textbox", { name: L["Listed as"], exact: true }).count(), 0);
       const missing = await page.evaluate(() => ["Listed as",
         "The id magpie lists {id} by at this provider: agents, routing groups, the groups magpie finds, gateway keys and Usage all use it, and the provider is still asked for {own}. Empty: its own id",
-        "Its own name, every reasoning level it has, whether it sees images, the API it is asked on, the model it is the same as, its own id, and its list price",
+        "Its own name, every reasoning level it has, whether it sees images, the API it is asked on, the model it is the same as, its own id, its list price, and no headers of its own",
       ].flatMap((k) => ["zh", "zh-TW", "ja", "de"].filter((l) => !I18N[l][k]).map((l) => `${l}: ${k}`)));
       assert.deepEqual(missing, [], "every string has every language");
       assert.deepEqual(errors, []);

@@ -63,7 +63,7 @@ func TestSameModelVendorSpellings(t *testing.T) {
 }
 
 // A model whose id no rule matches up with another vendor's is merged
-// with it once the user says, in the provider's Names, prices & levels, which
+// with it once the user says, in the provider's Model settings, which
 // model it is the same as (#583): saved with the provider's Save, kept in
 // settings' ModelSameAs, and taken by the groups magpie finds.
 func TestModelSameAsMergesFoundGroup(t *testing.T) {

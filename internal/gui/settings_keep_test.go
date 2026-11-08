@@ -139,6 +139,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		UsageAliases:         map[string]string{"deepseek-v4.1-flash": "deepseek-flash"},
 		UsageCleared:         []settings.UsageClear{{Provider: "p", Model: "m", At: 1761600000000}},
 		ModelKinds:           map[string]string{"p/m": "video"},
+		ModelHeaders:         map[string]map[string]string{"p/m": {"X-Endpoint": "ep-1"}},
 		RedactRules:          []redact.Rule{{Kind: "prefix", Prefix: "oc_sk_"}},
 		RedactActions:        map[string]string{"API_KEY": "block", "EMAIL": "warn"},
 		RedactAllow:          []string{"team@kelvarn.io"},

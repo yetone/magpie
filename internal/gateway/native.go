@@ -173,6 +173,8 @@ func (s *Server) nativeArk(w http.ResponseWriter, r *http.Request, p provider.Pr
 		req.Header.Set("Accept", a)
 	}
 	stampUA(ctx, p, req.Header)
+	// the headers the user gave the model the body names
+	ctx = provider.WithModel(ctx, p.ID, call.Model)
 	if err := p.Sign(ctx, req, provider.Chat, body); err != nil {
 		fail(http.StatusBadGateway, err.Error())
 		return
@@ -434,6 +436,8 @@ func (s *Server) nativeAny(w http.ResponseWriter, r *http.Request, p provider.Pr
 		}
 	}
 	stampUA(ctx, p, req.Header)
+	// the headers the user gave the model the body names
+	ctx = provider.WithModel(ctx, p.ID, call.Model)
 	if err := p.Sign(ctx, req, proto, body); err != nil {
 		fail(http.StatusBadGateway, err.Error())
 		return

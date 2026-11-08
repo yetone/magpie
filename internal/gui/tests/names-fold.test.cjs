@@ -1,5 +1,5 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// Hu9956, #868: once Names, prices & levels was open (to set Provider in model
+// Hu9956, #868: once Model settings was open (to set Provider in model
 // names), it couldn't be closed — the only way was the button under the
 // list, out of sight — and it stayed open in every editor after, until
 // magpie was restarted. Now the open list has its own quiet title and a
@@ -15,10 +15,10 @@ const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
 const words = {
-  en: { names: "Names, prices & levels", fold: "Fold", own: "Not on names I set", cancel: "Cancel" },
-  zh: { names: "名称、价格与推理档位", fold: "收起", own: "自定义名称不带供应商", cancel: "取消" },
-  ja: { names: "名前・価格・推論レベル", fold: "折りたたむ" },
-  de: { names: "Namen, Preise & Stufen", fold: "Einklappen" },
+  en: { names: "Model settings", fold: "Fold", own: "Not on names I set", cancel: "Cancel" },
+  zh: { names: "模型设置", fold: "收起", own: "自定义名称不带供应商", cancel: "取消" },
+  ja: { names: "モデル設定", fold: "折りたたむ" },
+  de: { names: "Modelleinstellungen", fold: "Einklappen" },
 };
 
 function serve(lang, posts) {
@@ -59,7 +59,7 @@ const scrolls = (page) => page.evaluate(() => [scrollY, ...[...document.querySel
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh", "ja", "de"]) {
     const w = words[lang];
-    test(`${engine} ${lang}: Names, prices & levels folds where it opened, and opens folded`, async (t) => {
+    test(`${engine} ${lang}: Model settings folds where it opened, and opens folded`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chromium" }));
       t.after(() => browser.close());
       const page = await (await browser.newContext({ viewport: { width: 900, height: 900 }, reducedMotion: "reduce" })).newPage();

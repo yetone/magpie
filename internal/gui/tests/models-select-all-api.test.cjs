@@ -59,7 +59,7 @@ function serve(lang, posts) {
 }
 
 const LANGS = ["en", "zh", "zh-TW", "ja", "de"];
-const TIP = "{p} has no URL for the API its list serves it on ({apis}), so agents aren't offered it. Add that URL, or set the API it is asked on in Names, prices & levels.";
+const TIP = "{p} has no URL for the API its list serves it on ({apis}), so agents aren't offered it. Add that URL, or set the API it is asked on in Model settings.";
 const ALL_TIP = "Pick every model listed that this provider can serve (those the filter shows)";
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {

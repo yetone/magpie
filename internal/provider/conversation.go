@@ -95,8 +95,9 @@ func placeheld(s string) bool {
 
 // AsksThread says p's headers or extraBody name ${threadId}, which the
 // gateway reads out of the request only then.
-func (p Provider) AsksThread() bool {
-	for _, v := range p.Headers {
+// A header the user gave the model ctx says is asked counts (headersFor).
+func (p Provider) AsksThread(ctx context.Context) bool {
+	for _, v := range p.headersFor(p.modelOf(ctx)) {
 		if strings.Contains(v, ThreadPlaceholder) {
 			return true
 		}
@@ -109,12 +110,13 @@ func (p Provider) AsksThread() bool {
 	return false
 }
 
-// SentHeaders are p's Headers as they go out on a request of ctx's
-// conversation (conversationOf): the placeholders in their values as its
-// ids, without control characters. p.Headers itself when no value has
-// one.
+// SentHeaders are p's Headers, with those the user gave the model ctx
+// says is asked after them (WithModel, headersFor), as they go out on a
+// request of ctx's conversation (conversationOf): the placeholders in
+// their values as its ids, without control characters. p.Headers itself
+// when the model has none and no value has one.
 func (p Provider) SentHeaders(ctx context.Context) map[string]string {
-	return expandHeaders(p.Headers, func() Conversation { return conversationOf(ctx) })
+	return expandHeaders(p.headersFor(p.modelOf(ctx)), func() Conversation { return conversationOf(ctx) })
 }
 
 // expandHeaders is h with the placeholders in its values as the ids of

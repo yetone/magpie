@@ -2,7 +2,7 @@
 // #868 (模型名称太长了…路由组的名称也很长。会看不到后面代表什么): an agent's
 // narrow model menu cut "Long name · routing group" short, and the setting
 // that drops the suffix (Settings › Provider in model names, #335) wasn't
-// found. Names, prices & levels says what the agents' lists will show ("My Sol ·
+// found. Model settings says what the agents' lists will show ("My Sol ·
 // Relay") and where the setting is. Its three choices were in there too, and
 // read as this provider's own (joe on Discord), so the editor now says it is
 // one setting for every provider and opens Settings at it. For the routing groups it is one setting for them
@@ -20,9 +20,9 @@ const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
 const words = {
-  en: { names: "Names, prices & levels", edit: "Edit", general: "General", global: "“Provider in model names” is one setting for every provider", change: "Change in Settings", own: "Not on names I set", on: "On", off: "Off", label: "In agents’ lists",
+  en: { names: "Model settings", edit: "Edit", general: "General", global: "“Provider in model names” is one setting for every provider", change: "Change in Settings", own: "Not on names I set", on: "On", off: "Off", label: "In agents’ lists",
     shows: (l) => `Agents’ lists show “${l}”`, above: " · “· routing group” is set for every group, under the list", setting: "Names in agents’ lists" },
-  zh: { names: "名称、价格与推理档位", edit: "编辑", general: "常规", global: "「模型名带供应商」是全局设置，对所有供应商生效", change: "在设置中修改", own: "自定义名称不带供应商", on: "开启", off: "关闭", label: "Agent 列表里的名称",
+  zh: { names: "模型设置", edit: "编辑", general: "常规", global: "「模型名带供应商」是全局设置，对所有供应商生效", change: "在设置中修改", own: "自定义名称不带供应商", on: "开启", off: "关闭", label: "Agent 列表里的名称",
     shows: (l) => `Agent 的模型列表里显示为「${l}」`, above: " · 是否带「· routing group」在列表下方统一设置，对所有路由组生效", setting: "Agent 列表里的名称" },
 };
 
@@ -92,7 +92,7 @@ const scrolls = (page) => page.evaluate(() => [scrollY, ...[...document.querySel
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh"]) {
     const w = words[lang];
-    test(`${engine} ${lang}: Names, prices & levels says what agents' lists show and opens the setting on Settings`, async (t) => {
+    test(`${engine} ${lang}: Model settings says what agents' lists show and opens the setting on Settings`, async (t) => {
       const posts = [];
       const { page, errors } = await launch(t, engine, lang, posts);
       await page.goto("http://magpie.test/?view=providers");

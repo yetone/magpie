@@ -194,7 +194,7 @@ func TestCodexCatalogSaysTextOnly(t *testing.T) {
 		t.Fatalf("%+v", got.Models)
 	}
 	text, sees, group, found := got.Models[0], got.Models[1], got.Models[2], got.Models[3]
-	if !strings.Contains(text.Description, "text only") || !strings.Contains(text.Description, "Names & levels") || !catalog.MagpieAdded("", text.Slug, text.Description) {
+	if !strings.Contains(text.Description, "text only") || !strings.Contains(text.Description, "Model settings") || !catalog.MagpieAdded("", text.Slug, text.Description) {
 		t.Errorf("text-only model: %q", text.Description)
 	}
 	if sees.Description != "Sees via magpie" || group.Description != "Words via magpie" || found.Description != "Found via magpie" {

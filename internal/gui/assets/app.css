@@ -3597,7 +3597,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .msuffix { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 2px 8px 4px; font-size: 12px; }
 .msuffix .hint { font-size: 11px; color: var(--faint); overflow-wrap: anywhere; }
 .msuffix .where { font-size: 11px; color: var(--faint); overflow-wrap: anywhere; }
-/* a provider's Names, prices & levels: what the lists show, where that is set, and
+/* a provider's Model settings: what the lists show, where that is set, and
    the way there, a line each: the list is laid out again a scrollbar's width
    narrower after a change, and a shared line wrapped then, which moved the
    list (provider-levels-scroll) */
@@ -3622,6 +3622,10 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .mname .mtier[hidden], .mname .mtier-add[hidden] { display: none; }
 .mname .mtier-add { font-size: 11.5px; padding: 0; }
 .mname .mlevels { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 11.5px; }
+/* a model's own headers: name and value rows, then + Add header */
+.editor .mname .mheaders { flex: 1 1 100%; min-width: 0; gap: 4px; }
+.editor .mname .mheaders .pair input { height: 25px; font-size: 11.5px; }
+.mname .mheader-add { font-size: 11.5px; padding: 0; }
 .editor .mname label.tick { gap: 4px; }
 .mname .text { flex: none; padding: 2px 7px; font-size: 11.5px; }
 

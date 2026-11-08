@@ -991,6 +991,12 @@ type Settings struct {
 	// not "<provider>/<model>", so it is not named Model* and is not one
 	// of the per-model maps a provider's rename moves. Absent is none.
 	UsageAliases map[string]string `json:"usageAliases,omitempty"`
+	// ModelHeaders are the request headers the user gave one model of a
+	// provider, by "<provider id>/<model id>", sent on that provider's
+	// requests for the model after the provider's own Headers: a name the
+	// provider has too, in any case, is the model's (axelburks on
+	// Discord). Absent is the provider's alone (provider.SetModelHeaders).
+	ModelHeaders map[string]map[string]string `json:"modelHeaders,omitempty"`
 	// ModelKinds is what the user said a model makes, by "<provider
 	// id>/<model id>": "image" or "video", for a provider set up with a
 	// base URL whose own model list doesn't say so (shen-joe, #1399).

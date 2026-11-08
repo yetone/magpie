@@ -516,7 +516,7 @@ func modelAPI(proto Protocol) bool {
 	return slices.Contains(Protocols, proto) || proto == Gemini
 }
 
-// ModelPref is what the provider editor's Names, prices & levels changed of one
+// ModelPref is what the provider editor's Model settings changed of one
 // model, sent with its Save: each part left nil is as it was. Name "" gives
 // the model its own name back, Efforts [] all its levels, OwnImages the
 // vendor's answer for whether it sees images, API "" every API the
@@ -543,6 +543,9 @@ type ModelPref struct {
 	// takes it: "" for the provider's own. It is applied after every
 	// other change of the save, so those go with the model to its id.
 	ID *string `json:"id,omitempty"`
+	// Headers are the model's own request headers, as SetModelHeaders
+	// takes them, in place of those it had: none takes them away
+	Headers *map[string]string `json:"headers,omitempty"`
 }
 
 // SetModelPrefs makes the changes to a provider's models, by model id, as
@@ -590,6 +593,12 @@ func SetModelPrefs(pid string, prefs map[string]ModelPref) error {
 			}
 			if m.Same != nil {
 				if err := set(setModelSame(ref, *m.Same)); err != nil {
+					return err
+				}
+			}
+			// nor are a model's headers, which go on its requests alone
+			if m.Headers != nil {
+				if _, err := setModelHeaders(ref, *m.Headers); err != nil {
 					return err
 				}
 			}

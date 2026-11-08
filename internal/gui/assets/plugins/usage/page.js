@@ -457,7 +457,7 @@ function costHead(c, note, title) {
 // a request magpie sent a provider by itself to test it (SourceProbe)
 const probeWhy = () => t("magpie sent this itself to test the provider (Test, Detect APIs or a model list), not for an agent. It is not counted in any total.");
 const unpricedCalls = (n) => t(n === 1 ? "{n} call unpriced" : "{n} calls unpriced", { n: ledNum(n) });
-const unpricedCallsWhy = (n) => n ? t(n === 1 ? "{n} call had no known price and is not counted" : "{n} calls had no known price and are not counted", { n }) : t("Estimated at effective model prices. A model's price at one provider is set in that provider's Names, prices & levels and counts over its list price");
+const unpricedCallsWhy = (n) => n ? t(n === 1 ? "{n} call had no known price and is not counted" : "{n} calls had no known price and are not counted", { n }) : t("Estimated at effective model prices. A model's price at one provider is set in that provider's Model settings and counts over its list price");
 // renderCosts redraws whatever on the Usage page shows a cost, once the
 // currency changes — the numbers alone, not the page around them, so a
 // click on the setting never moves anything it isn't showing (#212)
@@ -3336,7 +3336,7 @@ function renderSessions() {
   const active = sessModel ? null : acts.filter((a) => byAgent(a) && byFolder(a)).reduce((n, a) => n + a.seconds, 0);
 
   const c = tot.cost ? fmtCost(tot) : "";
-  const unpricedNote = tot.unpriced ? t("Not counted: {models}, with no known price", { models: sessModelNames([...unpriced]) }) : t("Estimated at effective model prices. A model's price at one provider is set in that provider's Names, prices & levels and counts over its list price");
+  const unpricedNote = tot.unpriced ? t("Not counted: {models}, with no known price", { models: sessModelNames([...unpriced]) }) : t("Estimated at effective model prices. A model's price at one provider is set in that provider's Model settings and counts over its list price");
   // a session's models are counted, not its calls: the agents' files price by model
   const unpricedModels = tot.unpriced ? t(tot.unpriced === 1 ? "{n} model unpriced" : "{n} models unpriced", { n: tot.unpriced }) : "";
   costHead(c, unpricedModels, unpricedNote);

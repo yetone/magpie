@@ -1890,6 +1890,8 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 
 // countOn counts body's tokens for model on p, resolved when ok.
 func (s *Server) countOn(w http.ResponseWriter, r *http.Request, p provider.Provider, model string, ok bool, body []byte) {
+	// the headers the user gave the model, on its count as on its turns
+	r = r.WithContext(provider.WithModel(r.Context(), p.ID, model))
 	// Claude Subscription generations run through the Claude Code binary. Its
 	// OAuth token must not take a direct HTTP side path just for token counting.
 	if ok && p.Account != nil && (p.Account.Agent == "claude" || p.Account.Agent == "cursor" || p.Account.Agent == "grok" || p.Account.Agent == "devin" || p.Account.Agent == "kiro" || p.Account.Agent == "qoder" || p.Account.Agent == provider.QoderCNID || p.Account.Agent == "zed" || p.Account.Agent == "factory" || p.Account.Agent == "gemini" || p.Account.Agent == "antigravity" ||
@@ -5662,7 +5664,7 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	// its Subagent is the request's Claude Code subagent, for
 	// ${subagentId} in an extra body value (yetone/magpie#2937)
 	conv := provider.Conversation{Session: cmp.Or(sessionOf(in), conversationID(in, body)), Subagent: subOf(in)}
-	if p.AsksThread() {
+	if p.AsksThread(ctx) {
 		conv.Thread = threadOf(in, body)
 	}
 	ctx = provider.WithConversation(ctx, conv)
@@ -6036,6 +6038,8 @@ func biliProxied(path string) bool {
 // written, when the provider serves the model on another of its endpoints
 // but not this one.
 func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.Provider, proto provider.Protocol, model string, body []byte, u *Usage) (status int, msg string, done bool) {
+	// the headers the user gave the model, on p's requests for it
+	r = r.WithContext(provider.WithModel(r.Context(), p.ID, model))
 	// the reply limit the client named, read before the body is rewritten:
 	// a reply cut at its length that said nothing is a void to fail at
 	// once, unless it was asked for little (#2972)
@@ -7436,6 +7440,8 @@ func (s *Server) usable(p provider.Provider, model string) []provider.Protocol {
 // served on this one, the request is built again for the next endpoint it
 // speaks, and the model is remembered there.
 func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to provider.Protocol, req *Request, model string, in http.Header) (*http.Response, provider.Protocol, error) {
+	// the headers the user gave the model, on p's requests for it
+	ctx = provider.WithModel(ctx, p.ID, model)
 	if req.ThinkOff && req.Effort != "none" && slices.Contains(p.Efforts(model), "none") {
 		// the client turned reasoning off (Effort reads that as low), and
 		// the model can stop thinking: asked for none (#899)
