@@ -3,6 +3,7 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"image"
 	"image/color"
 	"image/gif"
@@ -61,6 +62,40 @@ func TestBrowserGIFFramesHoldWhatChanged(t *testing.T) {
 	}
 }
 
+// A recording's MP4 has a frame an action, held a second, the last three,
+// every frame the first one's size, its index before its pictures.
+func TestBrowserMP4(t *testing.T) {
+	frames := [][]byte{
+		recJPEG(t, 400, 301, image.Rectangle{}),
+		recJPEG(t, 400, 301, image.Rect(100, 100, 160, 140)),
+		recJPEG(t, 400, 301, image.Rect(100, 100, 160, 140)),
+		recJPEG(t, 800, 600, image.Rectangle{}), // a resized window
+	}
+	data, err := browserMP4(frames)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data[4:8]) != "ftyp" || bytes.Index(data, []byte("moov")) > bytes.Index(data, []byte("mdat")) {
+		t.Fatalf("starts %q: not ftyp, moov, mdat", data[:16])
+	}
+	i := bytes.Index(data, []byte("stts"))
+	if i < 0 {
+		t.Fatal("no stts")
+	}
+	// version/flags, 2 runs: 3 a second, 1 three seconds
+	want := []byte{0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0x03, 0xe8, 0, 0, 0, 1, 0, 0, 0x0b, 0xb8}
+	if got := data[i+4 : i+4+len(want)]; !bytes.Equal(got, want) {
+		t.Fatalf("stts % x", got)
+	}
+	i = bytes.Index(data, []byte("stsd")) + bytes.Index(data[bytes.Index(data, []byte("stsd")):], []byte("avc1"))
+	if w, h := int(data[i+28])<<8|int(data[i+29]), int(data[i+30])<<8|int(data[i+31]); w != 400 || h != 302 {
+		t.Fatalf("avc1 %dx%d, want 400x302 (cropped to 301)", w, h)
+	}
+	if _, err := browserMP4(nil); err == nil {
+		t.Fatal("no frames made an MP4")
+	}
+}
+
 // A frame's label says what was done to what, never what was typed.
 func TestBrowserRecSayKeepsTypedTextOut(t *testing.T) {
 	got := browserRecSay(3, "type", map[string]any{"ref": "e4", "text": "hunter2", "action": "type"})
@@ -92,41 +127,96 @@ func TestBrowserRecordStopWithNothing(t *testing.T) {
 }
 
 // Recording in a real Chromium: the actions that change the page are each
-// a frame of the GIF at the answer's link, the ones that read it are not.
-func TestBrowserRecordsAGIF(t *testing.T) {
+// a frame of the MP4 at the answer's link, which Chromium plays; the ones
+// that read it are not. format: gif makes a GIF instead.
+func TestBrowserRecordsAVideo(t *testing.T) {
 	srv, site := realBrowser(t)
 	call, ok := browserCaller(t, srv, "rec")
-	ok("browser", map[string]any{"action": "record_start"}, "Recording")
-	page := ok("browser", map[string]any{"action": "navigate", "url": site.URL}, "Magpie fixture")
-	name := regexp.MustCompile(`textbox "Name"[^\n]*\[ref=(e\d+)\]`).FindStringSubmatch(page)
-	if name == nil {
-		t.Fatalf("no Name field in:\n%s", page)
+	record := func(format string) (string, []byte, string) {
+		t.Helper()
+		ok("browser", map[string]any{"action": "record_start"}, "Recording")
+		page := ok("browser", map[string]any{"action": "navigate", "url": site.URL}, "Magpie fixture")
+		name := regexp.MustCompile(`textbox "Name"[^\n]*\[ref=(e\d+)\]`).FindStringSubmatch(page)
+		if name == nil {
+			t.Fatalf("no Name field in:\n%s", page)
+		}
+		ok("browser", map[string]any{"action": "type", "ref": name[1], "text": "hunter2"})
+		ok("browser", map[string]any{"action": "snapshot"})
+		ok("browser", map[string]any{"action": "navigate", "url": site.URL + "/two"}, "Page two")
+		args := map[string]any{"action": "record_stop"}
+		if format != "" {
+			args["format"] = format
+		}
+		m := call("browser", args)
+		if m.Result.IsError || !strings.Contains(m.Result.Content[0].Text, "Recorded 3 frames") {
+			t.Fatalf("%+v", m.Result)
+		}
+		var files []MadeFile
+		if json.Unmarshal([]byte(m.meta(FilesMeta)), &files) != nil || len(files) != 1 {
+			t.Fatalf("files %s", m.meta(FilesMeta))
+		}
+		resp, err := http.Get(files[0].URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return files[0].URL, b, resp.Header.Get("Content-Type")
 	}
-	ok("browser", map[string]any{"action": "type", "ref": name[1], "text": "hunter2"})
-	ok("browser", map[string]any{"action": "snapshot"})
-	ok("browser", map[string]any{"action": "navigate", "url": site.URL + "/two"}, "Page two")
-	m := call("browser", map[string]any{"action": "record_stop"})
-	if m.Result.IsError || !strings.Contains(m.Result.Content[0].Text, "Recorded 3 frames") {
-		t.Fatalf("%+v", m.Result)
+
+	u, b, mt := record("")
+	if mt != "video/mp4" || len(b) < 8 || string(b[4:8]) != "ftyp" {
+		t.Fatalf("%s, starts %q", mt, b[:min(len(b), 16)])
 	}
-	var files []MadeFile
-	if json.Unmarshal([]byte(m.meta(FilesMeta)), &files) != nil || len(files) != 1 {
-		t.Fatalf("files %s", m.meta(FilesMeta))
+	if !strings.Contains(u, ".mp4?") {
+		t.Fatalf("the link %s doesn't end .mp4", u)
 	}
-	resp, err := http.Get(files[0].URL)
+	// a player asks for ranges
+	req, _ := http.NewRequest("GET", u, nil)
+	req.Header.Set("Range", "bytes=0-99")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, _ := io.ReadAll(resp.Body)
+	part, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
+	if resp.StatusCode != http.StatusPartialContent || !bytes.Equal(part, b[:100]) {
+		t.Fatalf("a range: %d, %d bytes", resp.StatusCode, len(part))
+	}
+	// Chromium plays it: three frames over five seconds, browserRecWidth
+	// wide, and a picture that isn't black
+	// (opened as its own page, so its picture can be read)
+	ok("browser", map[string]any{"action": "navigate", "url": u})
+	play := `async () => {
+		const v = document.querySelector('video');
+		v.muted = true;
+		if (v.readyState < 2) await new Promise((ok, no) => { v.onloadeddata = ok; v.onerror = () => no(new Error('video error ' + (v.error && v.error.code))); setTimeout(() => no(new Error('not loaded: readyState ' + v.readyState)), 10000); });
+		const c = document.createElement('canvas');
+		c.width = v.videoWidth; c.height = v.videoHeight;
+		const g = c.getContext('2d');
+		g.drawImage(v, 0, 0);
+		const d = g.getImageData(0, 0, c.width, c.height).data;
+		let lit = 0;
+		for (let i = 0; i < d.length; i += 4) if (d[i] + d[i+1] + d[i+2] > 600) lit++;
+		return 'played ' + v.videoWidth + ' ' + v.duration + ' ' + (lit > d.length / 40);
+	}`
+	ok("browser", map[string]any{"action": "evaluate", "script": play}, fmt.Sprintf("played %d 5 true", browserRecWidth))
+
+	mp4 := len(b)
+	_, b, mt = record("gif")
+	t.Logf("MP4 %d KB, GIF %d KB", mp4/1024, len(b)/1024)
 	g, err := gif.DecodeAll(bytes.NewReader(b))
 	if err != nil {
-		t.Fatalf("%d %s: %v", resp.StatusCode, resp.Header.Get("Content-Type"), err)
+		t.Fatalf("%s: %v", mt, err)
 	}
 	if len(g.Image) != 3 || g.Config.Width != browserRecWidth {
 		t.Fatalf("%d frames, %d wide", len(g.Image), g.Config.Width)
 	}
 	if m := call("browser", map[string]any{"action": "record_stop"}); !m.Result.IsError {
 		t.Fatalf("a second stop: %+v", m.Result)
+	}
+	ok("browser", map[string]any{"action": "record_start"}, "Recording")
+	if m := call("browser", map[string]any{"action": "record_stop", "format": "webm"}); !m.Result.IsError || !strings.Contains(m.Result.Content[0].Text, "mp4 or gif") {
+		t.Fatalf("format webm: %+v", m.Result)
 	}
 }

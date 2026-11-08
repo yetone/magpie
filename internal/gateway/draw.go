@@ -1913,6 +1913,9 @@ func extOf(mimeType string) string {
 		return ".webp"
 	case "image/gif":
 		return ".gif"
+	case "video/mp4":
+		// a browser recording
+		return ".mp4"
 	case "image/svg+xml":
 		// Recraft's vector models at OpenRouter
 		return ".svg"

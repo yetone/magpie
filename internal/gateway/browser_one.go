@@ -80,7 +80,7 @@ func browserOneTool() map[string]any {
 			"snapshot [interactive, ref, maxChars]: the page as an accessibility tree, a ref on each element you can act on.\n" +
 			"click [ref, double, button, modifiers]. type [ref, text, clear, submit, slowly]. press [key, ref]. hover [ref]. select [ref, values]. scroll [direction, amount, ref]. drag [from, to]. upload [ref, paths].\n" +
 			"wait [text, textGone, url, seconds, timeout]. screenshot [ref, fullPage, png]. evaluate [script, ref]. text [maxChars]: the visible text. console [level, limit]. dialog [accept, promptText].\n" +
-			"record_start: keep a picture of the window after each action that changes the page. record_stop: those pictures as a GIF, at a link to download, for the user to see what was done.\n" +
+			"record_start: keep a picture of the window after each action that changes the page. record_stop [format]: those pictures as a video, at a link to download, for the user to see what was done.\n" +
 			"Every action takes tab, and screenshot: true to add a small picture of the window to its answer.",
 		"inputSchema": map[string]any{
 			"type": "object",
@@ -117,6 +117,7 @@ func browserOneTool() map[string]any {
 				"limit":       num("console: the most recent messages."),
 				"accept":      boolean("dialog: accept (default true) or dismiss."),
 				"promptText":  str("dialog: a prompt's answer."),
+				"format":      map[string]any{"type": "string", "enum": []string{"mp4", "gif"}, "description": "record_stop: mp4 (default) or gif."},
 				"screenshot":  boolean("Add a small picture of the window to the answer."),
 			},
 			"required": []string{"action"},

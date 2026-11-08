@@ -750,11 +750,9 @@ func (s *Server) imageMCPFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", f.mime)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "private, max-age=3600")
-	w.Header().Set("Content-Length", strconv.Itoa(len(f.data)))
-	if r.Method == http.MethodHead {
-		return
-	}
-	w.Write(f.data)
+	// ranges, which a player asks a video in (Safari only plays an MP4
+	// served so)
+	http.ServeContent(w, r, "", f.made, bytes.NewReader(f.data))
 }
 
 // imageMCPBase is the address the agent reaches the gateway at, for the

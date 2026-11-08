@@ -572,7 +572,8 @@ func (s *Server) browserMCPCall(r *http.Request, m mcpMessage) (any, map[string]
 			}
 			json.Unmarshal(p.Arguments, &acted)
 			if tool == browserRecordTool {
-				return s.browserRecord(r, browserSession(r), acted["action"] == "record_stop"), nil
+				format, _ := acted["format"].(string)
+				return s.browserRecord(r, browserSession(r), acted["action"] == "record_stop", format), nil
 			}
 			p.Name, p.Arguments, shot = tool, args, wants
 		} else if !browserToolNamed(p.Name) {
