@@ -1676,6 +1676,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// Refill, for keybalancerefill: when the key's balance typed
 			// is whole again; none for never
 			Refill *provider.Refill `json:"refill"`
+			// Expiring, for keyexpiring: the part of the key's balance
+			// typed that expires, {amount, until}; none takes it off
+			Expiring *provider.Expiring `json:"expiring"`
 			// Alias, for accountname: the account's name of the user's
 			// own, "" to take it off (#1515)
 			Alias string `json:"alias"`
@@ -2398,6 +2401,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			}
 		case "keybalancerefill":
 			if err := provider.SetKeyBalanceRefill(in.ID, req.Account, req.Refill); err != nil {
+				fail(rw, err)
+				return
+			}
+		case "keyexpiring":
+			if err := provider.SetKeyExpiring(in.ID, req.Account, req.Expiring); err != nil {
 				fail(rw, err)
 				return
 			}

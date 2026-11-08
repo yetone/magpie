@@ -1167,6 +1167,8 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .bal-part > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bal-part b { font-size: 12.5px; color: var(--fg-2); }
 .bal-part.lead b { font-size: 15px; color: var(--fg); }
+/* credit that expires within a week */
+.bal-part.soon, .bal-part.soon b, .pq-bp.soon, .pq-bp.soon b { color: var(--amber); }
 .bal-part .quota-track, .pq-card.bal .quota-track { grid-column: 1 / -1; margin-top: 4px; }
 .quota-track.full i { background: var(--amber); }
 .quota-read { flex-basis: 100%; margin-top: 2px; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -2887,8 +2889,11 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc :is(.aspend, .abal).at-cap { color: var(--accent); background: var(--accent-soft); font-weight: 500; }
 .acc :is(.aspend, .abal):hover, .acc :is(.aspend, .abal).open { color: var(--fg); background: var(--pill-hover); }
 .acc :is(.aspend-in, .abal-in) { width: 72px; }
+.acc .abal-in.abal-day { width: 88px; }
 .acc .abal-cur { flex: none; display: inline-flex; align-items: center; gap: 1px; height: 24px; margin-left: -5px; padding: 0 3px 0 7px; font: inherit; font-size: 11px; color: var(--muted); border: 0; border-radius: 5px; background: none; box-shadow: inset 0 0 0 1px var(--line); cursor: default; }
 .acc .abal-cur:hover, .acc .abal-cur.open { color: var(--fg); background: var(--pill-hover); }
+.acc .abal .abal-exp { margin-left: .3em; }
+.acc .abal .abal-exp.soon { color: var(--amber); }
 .acc .acap-held { color: var(--fg); }
 /* held for magpie's requests, not the agent signed in to it: a warning */
 .acc .acap-held.acap-direct { color: var(--amber); }

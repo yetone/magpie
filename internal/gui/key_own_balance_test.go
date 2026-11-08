@@ -99,6 +99,24 @@ func TestKeyOwnBalanceRoutes(t *testing.T) {
 	if _, b := listed(); b == nil || b.Refill != nil || b.Set != 700 {
 		t.Fatalf("refill off: %+v", b)
 	}
+	// a part that expires (tenacious_eagle_96548): ¥50 through a day far
+	// ahead, listed apart and in the left; a date that isn't one refused;
+	// none takes it off and leaves the rest
+	call("POST", "/api/provider/keyexpiring", `{"id":"relay","account":"`+key+`","expiring":{"amount":50,"until":"2099-12-31"}}`)
+	if _, b := listed(); b == nil || b.Set != 700 || *b.Left != 750 || b.Expiring == nil || *b.Expiring.Left != 50 || b.Expiring.Ends.Year() != 2100 {
+		t.Fatalf("¥700 and ¥50 that expires: %+v %+v", b, b.Expiring)
+	}
+	for _, body := range []string{`{"amount":50,"until":"next week"}`, `{"amount":0,"until":"2099-12-31"}`} {
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/provider/keyexpiring", strings.NewReader(`{"id":"relay","account":"`+key+`","expiring":`+body+`}`)))
+		if w.Code == 200 {
+			t.Errorf("%s taken", body)
+		}
+	}
+	call("POST", "/api/provider/keyexpiring", `{"id":"relay","account":"`+key+`","expiring":null}`)
+	if _, b := listed(); b == nil || b.Expiring != nil || *b.Left != 700 {
+		t.Fatalf("expiring off: %+v", b)
+	}
 	call("POST", "/api/provider/keyownbalance", `{"id":"relay","account":"`+key+`","balance":null}`)
 	if _, b := listed(); b != nil {
 		t.Fatalf("taken off: %+v", b)

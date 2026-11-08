@@ -74,6 +74,32 @@ func TestKeyBalanceCmd(t *testing.T) {
 	if b, _ := typed(); b.Refill != nil || b.CNY == nil {
 		t.Fatalf("refill off: %+v", b)
 	}
+	// credit that expires (tenacious_eagle_96548): set beside the rest,
+	// kept when the balance is typed again in its currency, taken off
+	if err := providerCmd([]string{"provider", "key-balance", "relay", "Team", "--expiring", "200@2099-12-31"}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := typed(); b.Expiring == nil || b.Expiring.Amount != 200 || b.Expiring.Until != "2099-12-31" || b.Expiring.At.IsZero() || *b.CNY != 700 {
+		t.Fatalf("--expiring 200@2099-12-31: %+v", b)
+	}
+	for _, bad := range [][]string{{"relay", "Team", "--expiring", "200"}, {"relay", "Team", "--expiring", "200@soon"}, {"relay", "Team", "--expiring", "¥200@2099-12-31"},
+		{"relay", "Team", "--expiring", "0@2099-12-31"}, {"relay", "--expiring", "1@2099-12-31"}, {"relay", "Team", "off", "--expiring", "1@2099-12-31"}} {
+		if err := providerCmd(append([]string{"provider", "key-balance"}, bad...)); err == nil {
+			t.Fatalf("%v taken", bad)
+		}
+	}
+	if err := providerCmd([]string{"provider", "key-balance", "relay", "Team", "¥650"}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := typed(); b.Expiring == nil || b.Expiring.Amount != 200 {
+		t.Fatalf("typed again in yuan, the part that expires went: %+v", b)
+	}
+	if err := providerCmd([]string{"provider", "key-balance", "relay", "Team", "--expiring=off"}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := typed(); b.Expiring != nil || *b.CNY != 650 {
+		t.Fatalf("--expiring off: %+v", b)
+	}
 	if err := providerCmd([]string{"provider", "key-balance", "relay", "Team", "off"}); err != nil {
 		t.Fatal(err)
 	}

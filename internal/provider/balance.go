@@ -399,6 +399,11 @@ const (
 func SplitWords(split []BalancePart) string {
 	out := make([]string, 0, len(split))
 	for _, p := range split {
+		if p.Expires != nil {
+			// through the last day it counts: "¥20.00 until Nov 13"
+			out = append(out, p.Text+" until "+p.Expires.Add(-time.Second).Format("Jan 2"))
+			continue
+		}
 		out = append(out, strings.ToLower(p.Label)+" "+p.Text)
 	}
 	return strings.Join(out, " · ")
@@ -760,6 +765,10 @@ type BalancePart struct {
 	Percent *float64 `json:"percent,omitempty"`
 	// Error is why the amount couldn't be read, its Text then "—".
 	Error string `json:"error,omitempty"`
+	// Expires is when the part counts no more, for a balance typed with
+	// credit that expires (key_balance_own.go); the GUI says in how many
+	// days, its Label then empty
+	Expires *time.Time `json:"expires,omitempty"`
 }
 
 // joinBalanceParts is the amounts on one line, as Balance tells them:

@@ -19,6 +19,13 @@ package provider
 // at midnight local time on a day of the month or of the week, the amount
 // typed is whole again and the spend counted from then.
 
+// It may have a second part that expires (the same user: some vendors
+// split a balance into money that stays and credit good until a date).
+// That part is spent first, as DeepSeek spends its granted balance before
+// the money topped up, and from the end of its last day, local time, it
+// counts no more; the card says how much of it is left and in how many
+// days it goes. A balance typed before has none and is counted as it was.
+
 import (
 	"fmt"
 	"math"
@@ -37,6 +44,40 @@ type OwnBalance struct {
 	CNY    *float64  `json:"cny,omitempty"`
 	At     time.Time `json:"at"`
 	Refill *Refill   `json:"refill,omitempty"`
+	// Expiring is a part of the balance, in its currency, good until a
+	// day; nil for none
+	Expiring *Expiring `json:"expiring,omitempty"`
+}
+
+// Expiring is credit on a key that is gone after a day: Amount (in the
+// balance's currency) as it stood At, spent before the rest of the
+// balance, and counted through Until (a date, 2006-01-02), to midnight
+// after it in the user's local time.
+type Expiring struct {
+	Amount float64   `json:"amount"`
+	Until  string    `json:"until"`
+	At     time.Time `json:"at"`
+}
+
+// End is when the credit counts no more: midnight after Until, in loc.
+// false when Until is no date.
+func (x Expiring) End(loc *time.Location) (time.Time, bool) {
+	d, err := time.ParseInLocation(time.DateOnly, x.Until, loc)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return time.Date(d.Year(), d.Month(), d.Day()+1, 0, 0, 0, 0, loc), true
+}
+
+// check says what is wrong with x, nil when nothing is.
+func (x Expiring) check() error {
+	if !(x.Amount > 0 && x.Amount <= MaxOwnBalance) {
+		return fmt.Errorf("credit that expires is an amount above 0 and up to %d, not %v", MaxOwnBalance, x.Amount)
+	}
+	if _, ok := x.End(time.UTC); !ok {
+		return fmt.Errorf("credit expires on a date (2026-12-31), not %q", x.Until)
+	}
+	return nil
 }
 
 // Amount is the balance typed and its currency, "cny" or "usd".
@@ -133,6 +174,23 @@ type BalanceEstimate struct {
 	From   time.Time  `json:"from"`
 	Refill *Refill    `json:"refill,omitempty"`
 	Next   *time.Time `json:"next,omitempty"`
+	// Expiring is the part of the balance that expires, when it has one
+	// and that part hasn't expired yet
+	Expiring *ExpiringLeft `json:"expiring,omitempty"`
+	// Expired is the end of a part that has expired; Left no longer
+	// counts it
+	Expired *time.Time `json:"expired,omitempty"`
+}
+
+// ExpiringLeft is what is left of a balance's part that expires: Set as
+// typed, At, Left of it now (in the balance's currency; nil while Left
+// is) and Ends when it counts no more. Left is part of the estimate's
+// Left, not on top of it.
+type ExpiringLeft struct {
+	Set  float64   `json:"set"`
+	At   time.Time `json:"at"`
+	Left *float64  `json:"left"`
+	Ends time.Time `json:"ends"`
 }
 
 // KeySpent is usage.KeySpent, which package usage sets: what the calls
@@ -178,20 +236,65 @@ func (p Provider) OwnBalanceEstimate(keyID string) (BalanceEstimate, bool) {
 		next := r.Next(now)
 		e.Next = &next
 	}
-	if KeySpent != nil {
-		e.Spent = KeySpent(keyID, e.From)
+	spent := func(start time.Time) float64 {
+		if KeySpent == nil || !start.Before(now) {
+			return 0
+		}
+		return KeySpent(keyID, start)
 	}
-	left := amount - e.Spent
+	e.Spent = spent(e.From)
+	// the spend in the balance's currency; false while it can't be told
+	inCur := func(usd float64) (float64, bool) { return usd, true }
 	if cur == "cny" {
 		e.Currency = cur
 		rate, known := cnyPerUSD()
-		switch {
-		case known:
+		if known {
 			e.Rate = rate
-			left = amount - e.Spent*rate
-		case e.Spent != 0:
-			return e, true // spend counted at no rate: unknown
 		}
+		inCur = func(usd float64) (float64, bool) {
+			if usd == 0 {
+				return 0, true
+			}
+			return usd * rate, known
+		}
+	}
+	// a part that expires takes the spend first, from when it was typed
+	// to its end; what it took after From is not the rest's to pay
+	took := 0.0
+	if x := b.Expiring; x != nil {
+		if end, ok := x.End(now.Location()); ok {
+			between := func(from, to time.Time) float64 { return spent(from) - spent(to) }
+			stop := minTime(end, now)
+			usd := 0.0
+			if x.At.Before(stop) {
+				usd = between(x.At, stop)
+			}
+			before := 0.0
+			if x.At.Before(e.From) {
+				before = between(x.At, minTime(e.From, stop))
+			}
+			s, ok1 := inCur(usd)
+			sb, ok2 := inCur(before)
+			if !ok1 || !ok2 {
+				return e, true // spend counted at no rate: unknown
+			}
+			used := min(x.Amount, s)
+			took = max(0, used-min(x.Amount, sb))
+			if end.After(now) {
+				l := x.Amount - used
+				e.Expiring = &ExpiringLeft{Set: x.Amount, At: x.At, Left: &l, Ends: end}
+			} else {
+				e.Expired = &end
+			}
+		}
+	}
+	s, ok := inCur(e.Spent)
+	if !ok {
+		return e, true // spend counted at no rate: unknown
+	}
+	left := amount - (s - took)
+	if e.Expiring != nil {
+		left += *e.Expiring.Left
 	}
 	e.Left = &left
 	return e, true
@@ -230,6 +333,11 @@ func ownBalanceCard(p Provider, key, user string) (SubscriptionQuota, bool) {
 		q.Error = "the dollar's rate in yuan isn't known yet, so what is left of the balance in yuan can't be counted"
 	} else {
 		q.Balance = ownBalanceText(*e.Left, e.Currency)
+		// of it, the part that expires, and when (a line of its own)
+		if x := e.Expiring; x != nil && *x.Left > 0 {
+			ends := x.Ends
+			q.BalanceSplit = []BalancePart{{Text: ownBalanceText(*x.Left, e.Currency), Expires: &ends}}
+		}
 	}
 	return q, true
 }
@@ -250,7 +358,9 @@ func ownBalanceText(v float64, currency string) string {
 
 // SetKeyOwnBalance gives the key ref (its id or name) of the provider id
 // the balance b (its amount, in USD or CNY), counted from now; nil takes
-// it off. With no Refill of its own, b keeps the one the key had.
+// it off. With no Refill of its own, b keeps the one the key had, and with
+// no Expiring, the part that expires the key had in the same currency (in
+// the other, its amount would mean another sum, so it goes).
 func SetKeyOwnBalance(id, ref string, b *OwnBalance) error {
 	if b != nil {
 		if err := checkOwnBalance(*b); err != nil {
@@ -266,7 +376,36 @@ func SetKeyOwnBalance(id, ref string, b *OwnBalance) error {
 		if v.Refill == nil && ok {
 			v.Refill = had.Refill
 		}
+		if v.Expiring == nil && ok && (v.CNY == nil) == (had.CNY == nil) {
+			v.Expiring = had.Expiring
+		}
 		return &v, nil
+	})
+}
+
+// SetKeyExpiring gives the balance typed for the key ref of the provider
+// id the part x that expires, in the balance's currency, counted from now;
+// nil takes it off. The rest of the balance stays as it was. A key with
+// no balance typed takes none: type the balance that stays first, 0 when
+// all of it expires.
+func SetKeyExpiring(id, ref string, x *Expiring) error {
+	if x != nil {
+		if err := x.check(); err != nil {
+			return err
+		}
+	}
+	return editOwnBalance(id, ref, func(had OwnBalance, ok bool) (*OwnBalance, error) {
+		if !ok {
+			return nil, fmt.Errorf("the key has no balance typed: type the balance that stays first (0 when all of it expires)")
+		}
+		if x == nil {
+			had.Expiring = nil
+			return &had, nil
+		}
+		v := *x
+		v.At = ownNow().UTC()
+		had.Expiring = &v
+		return &had, nil
 	})
 }
 
@@ -342,10 +481,40 @@ func checkOwnBalance(b OwnBalance) error {
 	if b.CNY != nil && b.USD != 0 {
 		return fmt.Errorf("a balance is in USD or in yuan, not both")
 	}
+	if b.Expiring != nil {
+		if err := b.Expiring.check(); err != nil {
+			return err
+		}
+	}
 	if b.Refill != nil {
 		return b.Refill.check()
 	}
 	return nil
+}
+
+// ParseExpiring reads credit that expires as the CLI takes it, an amount
+// and the last day it counts: "20@2026-12-31", the amount in the
+// balance's currency (so no sign of its own); off for none (nil).
+func ParseExpiring(s string) (*Expiring, error) {
+	a := strings.TrimSpace(s)
+	switch strings.ToLower(a) {
+	case "off", "none", "no", "-":
+		return nil, nil
+	}
+	bad := fmt.Errorf("credit that expires is amount@date (20@2026-12-31) or off, not %q", s)
+	amount, until, ok := strings.Cut(a, "@")
+	if !ok {
+		return nil, bad
+	}
+	v, err := strconv.ParseFloat(strings.ReplaceAll(strings.TrimSpace(amount), ",", ""), 64)
+	if err != nil {
+		return nil, bad
+	}
+	x := Expiring{Amount: v, Until: strings.TrimSpace(until)}
+	if err := x.check(); err != nil {
+		return nil, err
+	}
+	return &x, nil
 }
 
 // ParseOwnBalance reads a balance as the CLI takes it, an amount in USD
@@ -435,6 +604,9 @@ func normalKeyOwnBalances(m map[string]OwnBalance) map[string]OwnBalance {
 		k = strings.ToLower(strings.TrimSpace(k))
 		if b.Refill != nil && b.Refill.check() != nil {
 			b.Refill = nil // a refill that isn't one, written by hand
+		}
+		if b.Expiring != nil && b.Expiring.check() != nil {
+			b.Expiring = nil // nor credit that expires
 		}
 		if k == "" || checkOwnBalance(b) != nil {
 			continue
