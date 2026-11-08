@@ -854,8 +854,109 @@ func withFixedEffort(proto provider.Protocol, body []byte, effort string) []byte
 			return body
 		}
 		return withFields(body, map[string]any{"thinking": map[string]any{"type": "enabled", "budget_tokens": budget}})
+	case provider.Gemini:
+		var v struct {
+			Model string `json:"model"`
+		}
+		if decodeJSON(body, &v) != nil {
+			return body
+		}
+		return withGeminiEffort(body, v.Model, effort)
 	}
 	return body
+}
+
+// withModelEffort is withFixedEffort for a request going to model: a
+// Gemini request's thinkingConfig is the one model takes (withGeminiEffort),
+// which the model the client named needn't tell.
+func withModelEffort(proto provider.Protocol, body []byte, model, effort string) []byte {
+	if proto == provider.Gemini && effort != "" {
+		return withGeminiEffort(body, model, effort)
+	}
+	return withFixedEffort(proto, body, effort)
+}
+
+// withGeminiEffort asks a Gemini request's generationConfig.thinkingConfig
+// for effort, as model takes it, keeping includeThoughts as asked: a
+// Gemini 2.5 a budget in its range (vertexBudgets; it turns a level away),
+// a Gemini 3 a level of low..high (none takes xhigh or max, and it can't
+// stop thinking, so none is low), a Gemini before 2.5 nothing, as it
+// doesn't think. Another model (agy asking an OpenAI one on Gemini's API)
+// is asked the level itself, which the translation reads, and none as a
+// budget of 0. Antigravity CLI's own request sends thinkingBudget -1, or
+// an upper-case level with --effort, which agy allows only per session.
+func withGeminiEffort(body []byte, model, effort string) []byte {
+	if effort == "" {
+		return body
+	}
+	m := strings.ToLower(strings.TrimPrefix(model, "models/"))
+	if i := strings.LastIndex(m, "/"); i >= 0 {
+		m = m[i+1:]
+	}
+	if strings.HasPrefix(m, "gemini-1") || strings.HasPrefix(m, "gemini-2.0") {
+		return body
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	var top map[string]any
+	if dec.Decode(&top) != nil {
+		return body
+	}
+	gcKey, tcKey := "generationConfig", "thinkingConfig"
+	if _, ok := top[gcKey]; !ok {
+		if _, ok := top["generation_config"]; ok {
+			gcKey = "generation_config"
+		}
+	}
+	gc, _ := top[gcKey].(map[string]any)
+	if gc == nil {
+		gc = map[string]any{}
+	}
+	if _, ok := gc[tcKey]; !ok {
+		if _, ok := gc["thinking_config"]; ok {
+			tcKey = "thinking_config"
+		}
+	}
+	old, _ := gc[tcKey].(map[string]any)
+	include := old["includeThoughts"]
+	if include == nil {
+		include = old["include_thoughts"]
+	}
+	tc := map[string]any{}
+	if include != nil {
+		tc["includeThoughts"] = include
+	}
+	// the level as fitted to the model's own (a Gemini 3 Flash takes
+	// minimal), in effortRank's words
+	level := strings.ToLower(strings.TrimSpace(effort))
+	if l := effortOf(level); l != "" && level != "none" && level != "minimal" {
+		level = l
+	}
+	switch off, least, most, ok := vertexBudgets(m); {
+	case ok && level == "none":
+		// asked to think no more than it can help: thoughts aren't asked
+		// for where thinking is off ("include_thoughts is only enabled
+		// when thinking is enabled")
+		tc = map[string]any{"thinkingBudget": off}
+	case ok:
+		tc["thinkingBudget"] = min(max(budgetOf(effortOf(level)), least), most)
+	case strings.HasPrefix(m, "gemini-"):
+		switch at := slices.Index(effortRank, level); {
+		case level == "none" || at >= 0 && at < slices.Index(effortRank, "low"):
+			if level != "minimal" {
+				level = "low"
+			}
+		case at > slices.Index(effortRank, "high"):
+			level = "high"
+		}
+		tc["thinkingLevel"] = level
+	case level == "none":
+		tc = map[string]any{"thinkingBudget": 0}
+	default:
+		tc["thinkingLevel"] = level
+	}
+	gc[tcKey] = tc
+	return withFields(body, map[string]any{gcKey: gc})
 }
 
 // groupLevels are the reasoning levels the group offers for the member a

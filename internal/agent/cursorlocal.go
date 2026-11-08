@@ -326,7 +326,7 @@ func cursorLocal() *Agent {
 }
 
 // pickedEfforts are the levels an agent's effort picked in magpie
-// (provider.AgentEffort: Cursor Private Inference, Antigravity) is picked
+// (provider.AgentEffort: Cursor Private Inference, Antigravity, agy) is picked
 // among: the default, its requests going as it asks, then every level a
 // model its list shows has (low, medium and high for models that reason
 // with levels unknown). None when no model it lists reasons.
