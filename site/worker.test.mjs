@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import worker, { served, goTarget, sponsorTarget } from "./worker.js";
+import { bucket, sha } from "./r2stub.mjs";
 
 const EN = "### Features\n\n- One thing (#1)\n\n### Install\n\nDownload it.";
 const ZH = "### 新功能\n\n- 一件事 (#1)";
@@ -782,5 +783,95 @@ test("dl: a redirect GitHub's API gives anywhere but its asset host is not passe
     assert.equal(res.headers.get("Cache-Control"), "no-store");
   } finally {
     globalThis.fetch = was;
+  }
+});
+
+// R2 holding a file under the hash the release gives, as the cron leaves it
+const holding = async (b, tag, name, body, hash = sha(body)) =>
+  b.put(`${tag}/${name}`, body, { httpMetadata: { contentType: "application/octet-stream" }, customMetadata: { sha256: hash } });
+
+test("r2: the feed and /download name the site's /files for a file R2 holds, with github.com's address beside it", async () => {
+  store.clear();
+  const env = { RELEASES: bucket() };
+  // the fixture's SHA256SUMS says "abc"
+  await holding(env.RELEASES, "v0.1.3", "magpie-linux-amd64", "bytes", "abc");
+  const res = await ask("/api/latest", env);
+  assert.equal(res.status, 200);
+  assert.deepEqual((await res.json()).assets["magpie-linux-amd64"], {
+    url: "https://usemagpie.ai/files/v0.1.3/magpie-linux-amd64",
+    api: "https://api.github.com/repos/yetone/magpie-releases/releases/assets/1",
+    size: 1,
+    sha256: "abc",
+    github: "https://github.com/yetone/magpie-releases/releases/download/v0.1.3/magpie-linux-amd64",
+  });
+  const dl = await ask("/download/linux", env);
+  assert.equal(dl.status, 302);
+  assert.equal(dl.headers.get("Location"), "https://usemagpie.ai/files/v0.1.3/magpie-linux-amd64");
+  const file = await ask("/files/v0.1.3/magpie-linux-amd64", env);
+  assert.equal(file.status, 200);
+  assert.equal(await file.text(), "bytes");
+  // a tag R2 no longer keeps goes to GitHub
+  const old = await ask("/files/v0.1.1/magpie-linux-amd64", env);
+  assert.equal(old.status, 302);
+  assert.equal(old.headers.get("Location"), "https://github.com/yetone/magpie-releases/releases/download/v0.1.1/magpie-linux-amd64");
+});
+
+test("r2: bytes R2 holds under another hash than the release's are not named; github.com's address is", async () => {
+  store.clear();
+  const env = { RELEASES: bucket() };
+  await holding(env.RELEASES, "v0.1.3", "magpie-linux-amd64", "older");
+  const a = (await (await ask("/api/latest", env)).json()).assets["magpie-linux-amd64"];
+  assert.equal(a.url, "https://dl/x");
+  assert.equal(a.github, "https://github.com/yetone/magpie-releases/releases/download/v0.1.3/magpie-linux-amd64");
+  // R2 failing: the feed as GitHub has it
+  store.clear();
+  env.RELEASES.fail = true;
+  const res = await ask("/api/latest", env);
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).assets["magpie-linux-amd64"].url, "https://dl/x");
+});
+
+test("r2: the five-minute cron copies the newest release's files from github.com, by GitHub's API when that fails", async () => {
+  const body = "the linux build";
+  const was = globalThis.fetch;
+  const asked = [];
+  globalThis.fetch = async (u, init = {}) => {
+    u = String(u);
+    if (u.endsWith("/SHA256SUMS") || u === "https://release-assets.githubusercontent.com/a/2?sig=1") return new Response(`${sha(body)}  magpie-linux-amd64\n`);
+    if (u === "https://github.com/yetone/magpie-releases/releases/download/v0.1.3/magpie-linux-amd64") {
+      asked.push("github.com");
+      return downloadsDown ? new Response("", { status: 504 }) : new Response(body);
+    }
+    if (u === "https://release-assets.githubusercontent.com/a/1?sig=1") {
+      asked.push("api");
+      return new Response(body);
+    }
+    return was(u, init);
+  };
+  try {
+    for (const down of [false, true]) {
+      store.clear();
+      downloadsDown = down;
+      asked.length = 0;
+      const env = { RELEASES: bucket() };
+      const pending = [];
+      await worker.scheduled({ cron: "*/5 * * * *" }, env, { waitUntil: (p) => void pending.push(p) });
+      await Promise.all(pending);
+      assert.deepEqual(asked, down ? ["github.com", "api"] : ["github.com"]);
+      const o = env.RELEASES.objs.get("v0.1.3/magpie-linux-amd64");
+      assert.ok(o, "copied");
+      assert.equal(new TextDecoder().decode(o.bytes), body);
+      assert.equal(o.customMetadata.sha256, sha(body));
+      // the quarter-hour cron is the ledger's, and copies nothing
+      const other = { RELEASES: bucket(), LEDGER: { get: async () => null, put: async () => {} } };
+      const p2 = [];
+      await worker.scheduled({ cron: "*/15 * * * *" }, other, { waitUntil: (p) => void p2.push(p.catch(() => {})) });
+      await Promise.all(p2);
+      assert.equal(other.RELEASES.objs.size, 0);
+    }
+  } finally {
+    globalThis.fetch = was;
+    downloadsDown = false;
+    store.clear();
   }
 });

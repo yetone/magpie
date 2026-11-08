@@ -20,6 +20,9 @@
   // the ledger of releases the Stable channel is chosen from (worker.js,
   // "The Stable channel"), kept by the cron every quarter hour
   "kv_namespaces": [{ "binding": "LEDGER", "id": "716b22ec7d4c496abb7b3dc085258fde" }],
-  "triggers": { "crons": ["*/15 * * * *"] },
+  // RELEASES: each release's files, copied from GitHub by the five-minute
+  // cron and served at /files (files.js)
+  "r2_buckets": [{ "binding": "RELEASES", "bucket_name": "magpie-releases" }],
+  "triggers": { "crons": ["*/15 * * * *", "*/5 * * * *"] },
   "observability": { "enabled": true }
 }

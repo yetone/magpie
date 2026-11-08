@@ -1,6 +1,7 @@
 // usemagpie.ai. Releases live on GitHub (yetone/magpie-releases); this
 // worker turns the newest one into the update feed the app reads and into
-// download links that never go stale.
+// download links that never go stale, and serves their files from R2,
+// copied there from GitHub (files.js).
 //
 //   /api/latest            {version, notes, url, published, assets: {name: {url, api, size, sha256}}}
 //   /api/latest?channel=stable
@@ -32,6 +33,9 @@
 //   /download/windows      the Windows app (x64);  /download/windows-arm64
 //   /download/linux        the Linux app (x86-64); /download/linux-arm64
 //   /download/<file>       any file of the newest release, by name
+//   /files/<tag>/<file>    a release's file from R2 (files.js), the feed's
+//                          url and /download's for the files R2 holds;
+//                          GitHub's own address for any it doesn't
 //   /dl/<tag>/<file>       a release's file through GitHub's API, the feed's
 //                          url while github.com's download address fails
 //   /r/...                 the pages' PostHog snippet, passed on to PostHog
@@ -48,6 +52,7 @@
 import { LANGS } from "./i18n.js";
 import { PARTNERS } from "./partners.js";
 import { SPONSORS } from "./sponsors.js";
+import { serve as serveFile, held, onR2, mirror, githubFile } from "./files.js";
 
 const REPO = "yetone/magpie-releases";
 const SITE = "https://usemagpie.ai";
@@ -87,11 +92,11 @@ export default {
       if (url.searchParams.get("channel") === "stable") {
         const got = await stable(ctx, env, Date.now());
         if (!got) return json({ error: "the stable version isn't known yet" }, 503, NO_STORE);
-        return json({ ...got.rel, notes: inLang(got.rel.notes, lang) }, 200, cacheFor(got));
+        return json({ ...(await fromR2(ctx, env, got.rel)), notes: inLang(got.rel.notes, lang) }, 200, cacheFor(got));
       }
       const got = await latest(ctx, env);
       if (!got) return json({ error: "no release yet" }, 503, NO_STORE);
-      return json({ ...got.rel, notes: inLang(got.rel.notes, lang) }, 200, cacheFor(got));
+      return json({ ...(await fromR2(ctx, env, got.rel)), notes: inLang(got.rel.notes, lang) }, 200, cacheFor(got));
     }
     if (url.pathname === "/api/partners") {
       const now = Date.now();
@@ -130,13 +135,16 @@ export default {
       return json({ releases: pick }, 200, cacheFor(got));
     }
     if (url.pathname === "/api/icon") return icon(url.searchParams.get("url"));
+    const file = url.pathname.match(/^\/files\/(v[0-9][0-9A-Za-z.+-]*)\/([0-9A-Za-z._+-]+)$/);
+    if (file) return serveFile(req, env, REPO, file[1], file[2]);
     const dl = url.pathname.match(/^\/dl\/(v[0-9][0-9A-Za-z.+-]*)\/([0-9A-Za-z._+-]+)$/);
     if (dl) return detour(ctx, env, dl[1], dl[2]);
     if (url.pathname.startsWith(RELAY)) return relay(req, url);
     if (url.pathname === "/download" || url.pathname.startsWith("/download/")) {
       const want = url.pathname.split("/")[2] || "mac-arm64";
       const got = await latest(ctx, env);
-      const asset = got && got.rel.assets && got.rel.assets[SHORT[want] || want];
+      const rel = got && (await fromR2(ctx, env, got.rel));
+      const asset = rel && rel.assets && rel.assets[SHORT[want] || want];
       if (!asset) return new Response("not found\n", { status: 404 });
       if (req.method === "GET") ctx.waitUntil(capture("magpie site download", { link: want, file: SHORT[want] || want, client: client(req), country: country(req) }));
       return Response.redirect(asset.url, 302);
@@ -182,10 +190,12 @@ export default {
       ctx.waitUntil(capture("magpie site install script", { client: client(req), country: country(req) }));
     return beacon(await withWall(await env.ASSETS.fetch(req), env, url));
   },
-  // the cron (wrangler.jsonc's triggers) keeps the ledger the Stable
-  // channel is chosen from
+  // the crons (wrangler.jsonc's triggers): every quarter hour the ledger
+  // the Stable channel is chosen from, every five minutes the newest and
+  // the Stable release's files into R2
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(keepLedger(env, Date.now()));
+    if (event.cron === MIRROR_CRON) ctx.waitUntil(keepFiles(ctx, env));
+    else ctx.waitUntil(keepLedger(env, Date.now()));
   },
 };
 
@@ -457,6 +467,46 @@ async function latest(ctx, env) {
 }
 
 const UA = { "User-Agent": "usemagpie.ai" };
+
+const MIRROR_CRON = "*/5 * * * *";
+
+// fromR2 is rel with the files R2 holds at /files (onR2); what R2 holds
+// of a tag is asked once a minute.
+async function fromR2(ctx, env, rel) {
+  if (!rel || !env.RELEASES) return rel;
+  const tag = "v" + rel.version;
+  let have = await cached("r2/" + tag);
+  if (!have || typeof have !== "object") {
+    have = await held(env, tag);
+    if (have) remember(ctx, "r2/" + tag, have, BRIEF);
+  }
+  return onR2(rel, have, REPO, SITE);
+}
+
+// keepFiles is the five-minute cron's run: the newest release's files and
+// the Stable one's into R2, each from github.com's address or, when that
+// fails, by way of GitHub's API (located).
+async function keepFiles(ctx, env) {
+  if (!env.RELEASES) return;
+  const rels = [];
+  const got = await latest(ctx, env);
+  if (got) rels.push(got.rel);
+  const st = await stable(ctx, env, Date.now()).catch((e) => console.log("r2: stable", String(e)));
+  if (st) rels.push(st.rel);
+  const open = async (name, a, tag) => {
+    let res = null;
+    try {
+      res = await fetch(githubFile(REPO, tag, name), { headers: UA });
+    } catch (e) {
+      console.log("r2: github.com", name, String(e));
+    }
+    if (res && res.ok) return res;
+    const to = a.api && (await located(a.api, env));
+    return to ? fetch(to, { headers: UA }) : res;
+  };
+  const done = await mirror(env, rels, open);
+  if (done.copied.length || done.failed.length) console.log("r2", JSON.stringify(done));
+}
 
 // api asks GitHub's API, with the GITHUB_TOKEN secret where one is set.
 function api(path, env) {

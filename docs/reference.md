@@ -3106,6 +3106,16 @@ magpie update --mirror https://mirror.example/
 No mirror is used unless you give one, and the SHA-256 every download is
 checked against still comes from usemagpie.ai, never from the mirror.
 
+Release files are downloaded from usemagpie.ai's copy on Cloudflare R2
+(`usemagpie.ai/files/<tag>/<file>`). Every five minutes the site copies the
+newest release and the Stable one from GitHub into R2, which takes a file
+only with the SHA-256 the release's `SHA256SUMS` gives; the feed names R2
+only for a file it holds, and gives each file's github.com address beside it
+(`github`). When the site's copy fails, the app, `magpie update` and the
+installer go on to github.com's address, through your mirror when one is
+set (a mirror is only ever put before a github.com address). A file R2
+doesn't hold (an older release) is redirected to github.com.
+
 When github.com's download address fails (it answered 504 for every release
 file for hours on 2026-11-08) and no mirror is set, the app, `magpie update`
 and the installer download the same file through GitHub's API
