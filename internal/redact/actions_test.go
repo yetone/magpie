@@ -71,6 +71,27 @@ func TestAllowLetsAValueGo(t *testing.T) {
 	}
 }
 
+// The user's Masked words win over Never mask, the safe side of two
+// things the user asked for: a value on both lists is masked, and so is a
+// word inside a value Never mask lets go. Never mask wins over the
+// user's own rules: the value it names is the exception to the pattern.
+func TestMaskedWordsWinOverAllow(t *testing.T) {
+	const mail = "team.inbox@kelvarn.io"
+	o := Options{Secrets: true, Personal: true, Words: []string{"build-01", "kelvarn"},
+		Allow: []string{"build-01", mail, "PROJ-0001"},
+		Rules: []Rule{{Kind: "TICKET", Regex: `PROJ-\d{4}`}}}
+	out, _ := Mask("deploy on build-01, mail "+mail+", tickets PROJ-0001 and PROJ-0002", o)
+	if strings.Contains(out, "build-01") {
+		t.Errorf("a value on both lists went as written: %q", out)
+	}
+	if strings.Contains(out, "kelvarn") || !strings.Contains(out, "team.inbox@{{TERM_") {
+		t.Errorf("a masked word inside an allowed value: %q", out)
+	}
+	if !strings.Contains(out, "PROJ-0001") || strings.Contains(out, "PROJ-0002") {
+		t.Errorf("Never mask against the user's rule: %q", out)
+	}
+}
+
 // The preview masks as Mask does and remembers nothing: its placeholders
 // stand for nothing afterwards, and its values aren't masked later as
 // values seen before.

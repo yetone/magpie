@@ -1579,6 +1579,12 @@ func (r rule) takes(s string, a, b int, ok func(string) bool) bool {
 // first and longest where they overlap, nothing inside a placeholder. A
 // value o allows is left as it is, and one of a kind o warns of is left
 // and told. o.Seen, where set, is told of each.
+//
+// The user's Masked words win over Never mask: a value on both lists is
+// masked, and so is a word inside a value Never mask lets go, since of
+// two things the user asked for the one that keeps the value from the
+// vendor is the safe one. Never mask wins over everything else, the
+// user's own rules too: a value it names is the exception to them.
 func apply(s string, found []span, put func(kind, v string) string, o Options) (string, int) {
 	if len(found) == 0 {
 		return s, 0
@@ -1604,15 +1610,17 @@ func apply(s string, found []span, put func(kind, v string) string, o Options) (
 	})
 	var b strings.Builder
 	last, next, n := 0, 0, 0 // next: where the next value may start
+	kept := 0                // the end of a value let go; only a word is masked before it
 	for _, f := range found {
-		if f.start < next {
+		if f.start < next || f.start < kept && f.by != ByWord {
+			continue
+		}
+		v := s[f.start:f.end]
+		if f.by != ByWord && o.allows(v) {
+			kept = max(kept, f.end)
 			continue
 		}
 		next = f.end
-		v := s[f.start:f.end]
-		if o.allows(v) {
-			continue
-		}
 		act := o.Actions[f.kind]
 		if act != Warn && act != Block {
 			act = ""
