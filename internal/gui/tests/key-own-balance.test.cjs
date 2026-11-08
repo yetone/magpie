@@ -7,7 +7,8 @@
 // menu (no native select): Enter balance…, a refill each month (a day)
 // or each week (a weekday), Never refills, or No balance, posted to
 // provider/keyownbalance and provider/keybalancerefill. An amount in yuan
-// ("¥100") is posted as CNY and shown in yuan. An amount that isn't one is
+// ("¥100", or 100 with ¥ CNY picked beside the field) is posted as CNY
+// and shown in yuan; a balance's currency is picked there, the number kept. An amount that isn't one is
 // refused and nothing is posted. A click moves nothing; at a phone's width the row stays
 // inside the window. In every language.
 const assert = require("node:assert/strict");
@@ -66,11 +67,11 @@ function serve(lang, posts) {
 }
 
 const words = {
-  en: { k1: "≈$12.50 left", none: "Set balance", menu: "Balance", enter: "Enter balance…", off: "No balance", k2: "≈$5.00 left", k1again: "≈$40.00 left", yuan: "≈¥100.00 left", bad: "A balance is an amount from 0 to 1,000,000, in USD or in yuan (¥)", month: "Refills each month…", week: "Refills each week…", never: "Never refills", on: "Refills on", refills: "Refills to $40.00 on" },
-  zh: { k1: "≈$12.50 剩余", none: "设置余额", menu: "余额", enter: "填写余额…", off: "无余额", k2: "≈$5.00 剩余", k1again: "≈$40.00 剩余", yuan: "≈¥100.00 剩余", bad: "余额是 0 到 1,000,000 之间的金额，美元或人民币（¥）", month: "每月恢复…", week: "每周恢复…", never: "不恢复", on: "恢复于", refills: "恢复为 $40.00" },
-  "zh-TW": { k1: "≈$12.50 剩餘", none: "設定餘額", menu: "餘額", enter: "填寫餘額…", off: "無餘額", k2: "≈$5.00 剩餘", k1again: "≈$40.00 剩餘", yuan: "≈¥100.00 剩餘", bad: "餘額是 0 到 1,000,000 之間的金額，美元或人民幣（¥）", month: "每月恢復…", week: "每週恢復…", never: "不恢復", on: "恢復於", refills: "恢復為 $40.00" },
-  ja: { k1: "残り ≈$12.50", none: "残高を設定", menu: "残高", enter: "残高を入力…", off: "残高なし", k2: "残り ≈$5.00", k1again: "残り ≈$40.00", yuan: "残り ≈¥100.00", bad: "残高は 0 から 1,000,000 までの金額です（USD または人民元 ¥）", month: "毎月戻す…", week: "毎週戻す…", never: "戻さない", on: "戻す曜日", refills: "$40.00 へ戻る" },
-  de: { k1: "≈$12.50 übrig", none: "Guthaben festlegen", menu: "Guthaben", enter: "Guthaben eingeben…", off: "Kein Guthaben", k2: "≈$5.00 übrig", k1again: "≈$40.00 übrig", yuan: "≈¥100.00 übrig", bad: "Ein Guthaben ist ein Betrag von 0 bis 1.000.000, in USD oder in Yuan (¥)", month: "Monatlich auffüllen…", week: "Wöchentlich auffüllen…", never: "Nie auffüllen", on: "Auffüllen am", refills: "wieder auf $40.00 aufgefüllt" },
+  en: { currency: "Currency", yuan40: "≈¥40.00 left", usd100: "≈$100.00 left", k1: "≈$12.50 left", none: "Set balance", menu: "Balance", enter: "Enter balance…", off: "No balance", k2: "≈$5.00 left", k1again: "≈$40.00 left", yuan: "≈¥100.00 left", bad: "A balance is an amount from 0 to 1,000,000, in USD or in yuan (¥)", month: "Refills each month…", week: "Refills each week…", never: "Never refills", on: "Refills on", refills: "Refills to $40.00 on" },
+  zh: { currency: "货币", yuan40: "≈¥40.00 剩余", usd100: "≈$100.00 剩余", k1: "≈$12.50 剩余", none: "设置余额", menu: "余额", enter: "填写余额…", off: "无余额", k2: "≈$5.00 剩余", k1again: "≈$40.00 剩余", yuan: "≈¥100.00 剩余", bad: "余额是 0 到 1,000,000 之间的金额，美元或人民币（¥）", month: "每月恢复…", week: "每周恢复…", never: "不恢复", on: "恢复于", refills: "恢复为 $40.00" },
+  "zh-TW": { currency: "貨幣", yuan40: "≈¥40.00 剩餘", usd100: "≈$100.00 剩餘", k1: "≈$12.50 剩餘", none: "設定餘額", menu: "餘額", enter: "填寫餘額…", off: "無餘額", k2: "≈$5.00 剩餘", k1again: "≈$40.00 剩餘", yuan: "≈¥100.00 剩餘", bad: "餘額是 0 到 1,000,000 之間的金額，美元或人民幣（¥）", month: "每月恢復…", week: "每週恢復…", never: "不恢復", on: "恢復於", refills: "恢復為 $40.00" },
+  ja: { currency: "通貨", yuan40: "残り ≈¥40.00", usd100: "残り ≈$100.00", k1: "残り ≈$12.50", none: "残高を設定", menu: "残高", enter: "残高を入力…", off: "残高なし", k2: "残り ≈$5.00", k1again: "残り ≈$40.00", yuan: "残り ≈¥100.00", bad: "残高は 0 から 1,000,000 までの金額です（USD または人民元 ¥）", month: "毎月戻す…", week: "毎週戻す…", never: "戻さない", on: "戻す曜日", refills: "$40.00 へ戻る" },
+  de: { currency: "Währung", yuan40: "≈¥40.00 übrig", usd100: "≈$100.00 übrig", k1: "≈$12.50 übrig", none: "Guthaben festlegen", menu: "Guthaben", enter: "Guthaben eingeben…", off: "Kein Guthaben", k2: "≈$5.00 übrig", k1again: "≈$40.00 übrig", yuan: "≈¥100.00 übrig", bad: "Ein Guthaben ist ein Betrag von 0 bis 1.000.000, in USD oder in Yuan (¥)", month: "Monatlich auffüllen…", week: "Wöchentlich auffüllen…", never: "Nie auffüllen", on: "Auffüllen am", refills: "wieder auf $40.00 aufgefüllt" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -101,6 +102,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const row = (id) => page.locator(`.editor .accts .acc[data-account-id="${id}"]`);
         const pill = (id) => row(id).locator(".abal");
         const box = (id) => row(id).locator("input.abal-in");
+        const cur = (id) => row(id).locator(".abal-cur");
         const menu = page.locator(".proto-menu");
         const item = (name) => menu.locator(".pm-item", { has: page.locator(".pm-name", { hasText: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) }) });
         const scrolled = () => page.evaluate(() => [window.scrollY, ...[...document.querySelectorAll("*")].filter((e) => e.scrollTop > 0).map((e) => `${e.className}:${e.scrollTop}`)].join(" "));
@@ -221,11 +223,69 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await box("k2").waitFor();
         n = posts.length;
         await box("k2").fill("¥100");
+        // the sign typed says yuan, and the currency beside it follows
+        assert.equal((await cur("k2").textContent()).trim(), "CNY");
         await box("k2").press("Enter");
         p = await posted(n);
         assert.deepEqual(p.body, { id: "relay", account: "k2", balance: 100, currency: "cny" });
         await page.waitForTimeout(250);
         assert.equal(await pill("k2").textContent(), w.yuan);
+
+        // k1's $40 was meant in yuan (tenacious_eagle): the currency is
+        // picked beside the field, the number kept as typed, and nothing
+        // is posted before Enter
+        await still("k1");
+        await menu.waitFor();
+        await item(w.enter).click();
+        await box("k1").waitFor();
+        assert.equal(await box("k1").inputValue(), "40");
+        assert.equal((await cur("k1").textContent()).trim(), "USD");
+        n = posts.length;
+        await cur("k1").click();
+        await menu.waitFor();
+        assert.equal(await menu.locator(".pm-head").textContent(), w.currency);
+        assert.equal(await menu.locator(".pm-item.on .pm-name").textContent(), "$ USD");
+        await item("¥ CNY").click();
+        await page.waitForTimeout(200);
+        assert.equal(posts.length, n, "picking the currency posted");
+        assert.equal(await box("k1").inputValue(), "40");
+        assert.equal((await cur("k1").textContent()).trim(), "CNY");
+        assert.equal(await box("k1").evaluate((e) => e === document.activeElement), true, "the field lost its focus");
+        assert.equal(await box("k1").getAttribute("aria-label"), await page.evaluate(() => t("Balance, in CNY")));
+        assert.equal(await page.evaluate(() => [...document.querySelectorAll(".editor .accts .acc")].filter((e) => e.getBoundingClientRect().right > innerWidth + 1).length), 0, "the field's row past the window's edge");
+        await box("k1").press("Enter");
+        p = await posted(n);
+        assert.deepEqual(p.body, { id: "relay", account: "k1", balance: 40, currency: "cny" });
+        await page.waitForTimeout(250);
+        assert.equal(await pill("k1").textContent(), w.yuan40);
+
+        // k2's ¥100 back to dollars by the keyboard, saved as it is left;
+        // Escape in the menu picks nothing and posts nothing
+        await still("k2");
+        await menu.waitFor();
+        await item(w.enter).click();
+        await box("k2").waitFor();
+        assert.equal(await box("k2").inputValue(), "100");
+        assert.equal((await cur("k2").textContent()).trim(), "CNY");
+        n = posts.length;
+        await cur("k2").click();
+        await menu.waitFor();
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(200);
+        assert.equal(await menu.count(), 0);
+        assert.equal(posts.length, n, "Escape in the currency's menu posted");
+        assert.equal((await cur("k2").textContent()).trim(), "CNY");
+        await cur("k2").click();
+        await menu.waitFor();
+        await item("$ USD").click();
+        await page.waitForTimeout(200);
+        assert.equal(posts.length, n, "picking the currency posted");
+        await page.keyboard.press("Tab");
+        await page.keyboard.press("Tab");
+        p = await posted(n);
+        assert.deepEqual(p.body, { id: "relay", account: "k2", balance: 100 });
+        await page.waitForTimeout(250);
+        assert.equal(await pill("k2").textContent(), w.usd100);
 
         await still("k1");
         await menu.waitFor();

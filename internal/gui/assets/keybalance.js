@@ -3,8 +3,8 @@
 // vendor's page says is left, and magpie counts down from it by what its
 // own usage prices the calls it sends on the key (provider/
 // key_balance_own.go). Typing it again sets it anew. It may be typed in
-// yuan ("¥100", or a bare number while Settings shows costs in CNY), and
-// may refill each month or week. keyspend.js imports this when the
+// yuan ("¥100", or picked beside the field, which starts at the balance's
+// own currency, else Settings' one), and may refill each month or week. keyspend.js imports this when the
 // provider editor draws a key's row, so it weighs nothing on the core.
 const moneyText = (v, cny) => (v < 0 ? "-" : "") + (cny ? "¥" : "$") + Math.abs(v).toFixed(2);
 // balanceAmount reads what was typed: an amount and whether it is in
@@ -38,11 +38,50 @@ function keyBalancePill(p, k) {
     !r ? t("{who} no longer refills", { who: name })
       : r.every === "week" ? t("{who} refills each {weekday}", { who: name, weekday: weekdayName(r.day) })
       : t("{who} refills on day {day} of each month", { who: name, day: r.day }));
-  // a bare number is in the balance's own currency, else in Settings' one
-  const unit = b ? (cny ? "cny" : "usd") : currency === "cny" ? "cny" : "usd";
-  const type = () => pillNumber(pill, b ? (cny ? "¥" : "") + b.set : "", unit === "cny" ? "CNY" : "USD", "abal-in",
-    t(unit === "cny" ? "Balance, in CNY" : "Balance, in USD"), (s) => balanceAmount(s, unit),
-    t("A balance is an amount from 0 to 1,000,000, in USD or in yuan (¥)"), null, set);
+  // a bare number is in the currency the button beside the field shows:
+  // the balance's own, else Settings' one, until the user picks the other
+  // there (tenacious_eagle: no clearing it and going to Settings). Picking
+  // keeps the number typed, so 100 becomes ¥100 only by that pick.
+  let unit = b ? (cny ? "cny" : "usd") : currency === "cny" ? "cny" : "usd";
+  const type = () => {
+    const at = pill.parentNode;
+    pillNumber(pill, b ? String(b.set) : "", "", "abal-in", "", (s) => balanceAmount(s, unit),
+      t("A balance is an amount from 0 to 1,000,000, in USD or in yuan (¥)"), null, set);
+    const i = at?.querySelector(":scope > .abal-in");
+    if (!i) return;
+    const cur = el("button", "abal-cur"), save = i.onblur;
+    cur.type = "button";
+    cur.setAttribute("aria-haspopup", "menu");
+    cur.setAttribute("aria-expanded", "false");
+    let picking = false;
+    // a sign typed in the field says its currency, and the button follows
+    const now = () => (balanceAmount(i.value, unit)?.cny ?? unit === "cny") ? "cny" : "usd";
+    const show = () => {
+      const c = now();
+      cur.replaceChildren(c.toUpperCase(), svg(CHEV, 12, 1.6));
+      cur.setAttribute("aria-label", t("Currency"));
+      i.setAttribute("aria-label", t(c === "cny" ? "Balance, in CNY" : "Balance, in USD"));
+    };
+    i.oninput = show;
+    // the field saves as it is left, but not for its currency's menu
+    i.onblur = (e) => { if (!picking && e.relatedTarget !== cur) save(); };
+    cur.onblur = (e) => { if (!picking && e.relatedTarget !== i) save(); };
+    cur.onmousedown = (e) => e.preventDefault();
+    cur.onkeydown = (e) => e.stopPropagation();
+    cur.onclick = (e) => {
+      e.stopPropagation();
+      if (cur.classList.contains("open")) return closeProtoMenu();
+      picking = true;
+      openProtoMenu(cur, CURRENCIES.map(([v, name]) => ({ v, name, literalName: true, note: "" })), now(), (v) => {
+        unit = v;
+        i.value = i.value.trim().replace(/^(\$|¥|￥|cny|rmb|usd)\s*|\s*(元|cny|rmb|yuan|usd)$/gi, "");
+        show();
+      }, "Currency", "sess-menu");
+      protoMenu.done = () => { picking = false; i.focus(NO_SCROLL); };
+    };
+    show();
+    i.after(cur);
+  };
   const day = (s) => { const n = Number(s.trim()); return Number.isInteger(n) && n >= 1 && n <= 31 ? n : null; };
   const monthly = () => pillNumber(pill, String(b.refill?.every === "month" ? b.refill.day : 1), "1–31", "abal-in", t("Refill day of the month"), day,
     t("A day of the month is a whole number from 1 to 31"), b.refill?.every === "month" ? b.refill.day : null, (d) => refill({ every: "month", day: d }));
