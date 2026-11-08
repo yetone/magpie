@@ -36,8 +36,11 @@ i.dot.free { background: var(--k-free); box-shadow: inset 0 0 0 1px color-mix(in
    the provider's icon sat on the end of "Context window") */
 .ctx-route { gap: 6px; font-size: 12px; overflow: hidden; }
 .ctx-who { flex: none; color: var(--fg-2); font-weight: 500; white-space: nowrap; }
-.ctx-who .ic { width: 14px; height: 14px; }
-.ctx-what .ic { flex: none; width: 12px; height: 12px; }
+/* the line's middle is the text's, but its letters sit lower in it: an
+   icon goes down to them, the model's to its lowercase id's middle, the
+   agent's between its name's capitals and lowercase (the owner) */
+.ctx-who .ic { width: 14px; height: 14px; translate: 0 .5px; }
+.ctx-what .ic { flex: none; width: 12px; height: 12px; translate: 0 1px; }
 .ctx-sep { flex: none; color: var(--faint); }
 :where(.ctx-card.max420) :is(.ctx-who-n, .ctx-sep) { display: none; }
 .ctx-model { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--code-font, var(--code)); font-size: 11px; color: var(--muted); }
