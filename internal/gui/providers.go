@@ -866,11 +866,9 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 	// Usage page shows the same, provider.ownBalanceCard)
 	out.TakesOwnBalance = p.TakesOwnBalance()
 	for i, k := range out.KeyList {
-		b, ok := p.KeyOwnBalance(k.ID)
-		if !ok {
-			continue
+		if e, ok := p.OwnBalanceEstimate(k.ID); ok {
+			out.KeyList[i].Balance = &e
 		}
-		out.KeyList[i].Balance = &provider.BalanceEstimate{Set: b.USD, At: b.At, Spent: usage.KeySpent(k.ID, b.At)}
 	}
 	if !out.Key.Set && p.Ready() {
 		out.Key.Optional = true
@@ -1651,9 +1649,14 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// (its id), in USD a day, a month or in all; none, or an
 			// amount of 0, takes it off
 			Spend *provider.SpendCap `json:"spend"`
-			// Balance, for keyownbalance: the balance in USD typed for the
-			// key Account (its id), counted from now; none takes it off
-			Balance *float64 `json:"balance"`
+			// Balance, for keyownbalance: the balance typed for the key
+			// Account (its id), counted from now, in USD or, with Currency
+			// "cny", in yuan; none takes it off
+			Balance  *float64 `json:"balance"`
+			Currency string   `json:"currency"`
+			// Refill, for keybalancerefill: when the key's balance typed
+			// is whole again; none for never
+			Refill *provider.Refill `json:"refill"`
 			// Alias, for accountname: the account's name of the user's
 			// own, "" to take it off (#1515)
 			Alias string `json:"alias"`
@@ -2348,7 +2351,23 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				return
 			}
 		case "keyownbalance":
-			if err := provider.SetKeyOwnBalance(in.ID, req.Account, req.Balance); err != nil {
+			var b *provider.OwnBalance
+			switch {
+			case req.Balance == nil:
+			case req.Currency == "cny":
+				b = &provider.OwnBalance{CNY: req.Balance}
+			case req.Currency == "" || req.Currency == "usd":
+				b = &provider.OwnBalance{USD: *req.Balance}
+			default:
+				fail(rw, fmt.Errorf("a balance is in usd or cny, not %q", req.Currency))
+				return
+			}
+			if err := provider.SetKeyOwnBalance(in.ID, req.Account, b); err != nil {
+				fail(rw, err)
+				return
+			}
+		case "keybalancerefill":
+			if err := provider.SetKeyBalanceRefill(in.ID, req.Account, req.Refill); err != nil {
 				fail(rw, err)
 				return
 			}

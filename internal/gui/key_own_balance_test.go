@@ -76,6 +76,29 @@ func TestKeyOwnBalanceRoutes(t *testing.T) {
 	if _, b := listed(); b == nil || b.Set != 20 {
 		t.Fatalf("the editor saved, the balance typed is gone: %+v", b)
 	}
+	// in yuan, refilled on the 1st; a currency it doesn't know refused
+	call("POST", "/api/provider/keyownbalance", `{"id":"relay","account":"`+key+`","balance":700,"currency":"cny"}`)
+	call("POST", "/api/provider/keybalancerefill", `{"id":"relay","account":"`+key+`","refill":{"every":"month","day":1}}`)
+	if _, b := listed(); b == nil || b.Set != 700 || b.Currency != "cny" || b.Left == nil || *b.Left != 700 || b.Refill == nil || b.Refill.Day != 1 || b.Next == nil {
+		t.Fatalf("¥700 refilled on the 1st: %+v", b)
+	}
+	for _, bad := range []struct{ path, body string }{
+		{"keyownbalance", `{"id":"relay","account":"` + key + `","balance":7,"currency":"eur"}`},
+		{"keybalancerefill", `{"id":"relay","account":"` + key + `","refill":{"every":"month","day":40}}`},
+	} {
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/provider/"+bad.path, strings.NewReader(bad.body)))
+		if w.Code == 200 {
+			t.Errorf("%s %s taken", bad.path, bad.body)
+		}
+	}
+	if _, b := listed(); b.Currency != "cny" || b.Refill.Day != 1 {
+		t.Fatalf("a refused change changed it: %+v", b)
+	}
+	call("POST", "/api/provider/keybalancerefill", `{"id":"relay","account":"`+key+`","refill":null}`)
+	if _, b := listed(); b == nil || b.Refill != nil || b.Set != 700 {
+		t.Fatalf("refill off: %+v", b)
+	}
 	call("POST", "/api/provider/keyownbalance", `{"id":"relay","account":"`+key+`","balance":null}`)
 	if _, b := listed(); b != nil {
 		t.Fatalf("taken off: %+v", b)

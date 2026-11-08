@@ -46,6 +46,34 @@ func TestKeyBalanceCmd(t *testing.T) {
 	if b, _ := typed(); b.USD != 1250.5 {
 		t.Fatalf("a refused value changed the balance: %+v", b)
 	}
+	// in yuan, refilled on the 1st of each month; then weekly, the
+	// amount kept; then refilling no more
+	if err := providerCmd([]string{"provider", "key-balance", "relay", "Team", "¥700", "--refill", "monthly:1"}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := typed(); b.CNY == nil || *b.CNY != 700 || b.USD != 0 || b.Refill == nil || *b.Refill != (provider.Refill{Every: provider.RefillMonth, Day: 1}) {
+		t.Fatalf("¥700 monthly:1: %+v", b)
+	}
+	if err := providerCmd([]string{"provider", "key-balance", "relay", "Team", "--refill=weekly:fri"}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := typed(); b.CNY == nil || *b.CNY != 700 || b.Refill == nil || *b.Refill != (provider.Refill{Every: provider.RefillWeek, Day: 5}) {
+		t.Fatalf("weekly:fri: %+v", b)
+	}
+	for _, bad := range [][]string{{"relay", "Team", "--refill", "yearly"}, {"relay", "--refill", "monthly"}, {"relay", "Team", "off", "--refill", "monthly"}, {"relay", "Team", "--refill"}} {
+		if err := providerCmd(append([]string{"provider", "key-balance"}, bad...)); err == nil {
+			t.Fatalf("%v taken", bad)
+		}
+	}
+	if b, _ := typed(); b.Refill == nil || b.Refill.Every != provider.RefillWeek {
+		t.Fatalf("a refused refill changed it: %+v", b)
+	}
+	if err := providerCmd([]string{"provider", "key-balance", "relay", "Team", "--refill", "off"}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := typed(); b.Refill != nil || b.CNY == nil {
+		t.Fatalf("refill off: %+v", b)
+	}
 	if err := providerCmd([]string{"provider", "key-balance", "relay", "Team", "off"}); err != nil {
 		t.Fatal(err)
 	}

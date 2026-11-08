@@ -177,3 +177,42 @@ func TestGetDoesNotRetryAFailedFetchAtOnce(t *testing.T) {
 		t.Fatalf("fetched %d times after retryAfter, want 2", calls)
 	}
 }
+
+// Known never hands out Fallback: with no rate ever learned (no cache,
+// the fetch refused) it says so, and a failed fetch leaves it unknown,
+// never 0, 1 or the guess. A rate learned before, however old, is known,
+// and a fresh one asked for behind it.
+func TestKnownIsNeverAGuess(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	Reset()
+	t.Cleanup(Reset)
+	refused := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "down", http.StatusBadGateway)
+	}))
+	defer refused.Close()
+	defer SetRateURL(refused.URL)()
+
+	if r, ok := Known(); ok || r.CNYPerUSD != 0 {
+		t.Fatalf("no rate ever learned: %+v %v, want unknown", r, ok)
+	}
+	Settle()
+	if r, ok := Known(); ok || r.CNYPerUSD != 0 {
+		t.Fatalf("after a failed fetch: %+v %v, want unknown", r, ok)
+	}
+	if r := Soon(); r.CNYPerUSD != Fallback {
+		t.Fatalf("Soon still shows the guess, got %+v", r)
+	}
+	Settle()
+
+	// a stale rate in the cache is known, as it was learned
+	Reset()
+	old := Rate{CNYPerUSD: 7.1, At: time.Now().Add(-3 * TTL)}
+	writeCache(CachePath(), old)
+	if r, ok := Known(); !ok || r.CNYPerUSD != 7.1 {
+		t.Fatalf("a stale rate learned before: %+v %v", r, ok)
+	}
+	Settle()
+	if r, ok := Known(); !ok || r.CNYPerUSD != 7.1 {
+		t.Fatalf("a failed refresh changed the known rate: %+v %v", r, ok)
+	}
+}

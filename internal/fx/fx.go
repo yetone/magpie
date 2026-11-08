@@ -134,6 +134,18 @@ var refreshing sync.Mutex
 // else Fallback — and, when that is stale, Get behind it (one at a time),
 // for the next look to have.
 func Soon() Rate {
+	r, ok := Known()
+	if !ok {
+		return Rate{CNYPerUSD: Fallback}
+	}
+	return r
+}
+
+// Known is Soon without Fallback: the rate last learned, however old,
+// and false when magpie has never learned one, for a sum that must not be
+// counted at a guessed rate (a key's balance typed in yuan). A stale or
+// missing rate is asked for behind it, as Soon does.
+func Known() (Rate, bool) {
 	path := CachePath()
 	mu.Lock()
 	if mem == nil {
@@ -141,8 +153,9 @@ func Soon() Rate {
 			mem = &r
 		}
 	}
-	r := Rate{CNYPerUSD: Fallback}
-	if mem != nil {
+	var r Rate
+	ok := mem != nil
+	if ok {
 		r = *mem
 	}
 	mu.Unlock()
@@ -154,7 +167,7 @@ func Soon() Rate {
 			getAt(ctx, path)
 		}()
 	}
-	return r
+	return r, ok
 }
 
 // Settle waits for a fetch Soon started to end; for tests, whose home goes
