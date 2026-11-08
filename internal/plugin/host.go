@@ -1183,6 +1183,11 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 		"plugins":       items,
 		"loadMillis":    pluginLoadWait.Milliseconds(),
 		"listMillis":    pluginListWait.Milliseconds(),
+		"heavy": map[string]any{
+			"mb":          heavyMB,
+			"afterMillis": heavyAfter.Milliseconds(),
+			"everyMillis": heavyEvery.Milliseconds(),
+		},
 	}, &res)
 	if err != nil {
 		crashed := !h.alive()
@@ -1253,6 +1258,41 @@ var (
 	pluginLoadWait = 20 * time.Second
 	pluginListWait = 20 * time.Second
 )
+
+// heavyMB is how much memory a host may hold before it is replaced:
+// past it, and still past it after a full collection, the host says so
+// ("heavy") and a new host takes the calls made from then on while the
+// old one finishes its own (recycle). A plugin that holds on to what
+// its requests leave behind grows the shared host until the system ends
+// it: 783 MiB after 2h25m on a small Linux server, where the kernel's
+// OOM killer took it, with four plugins and their requests going through
+// it. Measured with every plugin of that report loaded and 3000 600KB
+// requests, 4 at a time, a host holds 84 to 236 MiB, so the bound leaves
+// room for that twice over. The host checks every heavyEvery, once it
+// has been up heavyAfter; tests shorten all three.
+var (
+	heavyMB    = 512
+	heavyAfter = 10 * time.Minute
+	heavyEvery = time.Minute
+)
+
+// recycle replaces h, when it is still the host calls go to, as a plugin
+// update does (Restart): the calls h is answering finish on it, and the
+// next call starts a new host. recycles counts the hosts it replaced.
+func (h *host) recycle() {
+	hostMu.Lock()
+	if current != h {
+		hostMu.Unlock()
+		return
+	}
+	current = nil
+	hostMu.Unlock()
+	recycles.Add(1)
+	h.retire()
+	changed()
+}
+
+var recycles atomic.Int64
 
 // drainStderr logs the child's stderr a line at a time. A line over 4 MiB
 // stops the scanner; the rest is read and dropped, so the child is never left
@@ -1387,6 +1427,9 @@ func (h *host) dispatch(m message) {
 			log.Printf("plugin: %s %s", m.Title, m.Message)
 		case "log":
 			log.Printf("plugin [%s]: %s", m.Level, m.Message)
+		case "heavy":
+			log.Printf("plugin: the host holds %d MiB after a collection; a new one takes the next calls", m.Count)
+			go h.recycle()
 		}
 		return
 	}

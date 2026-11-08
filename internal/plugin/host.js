@@ -353,6 +353,28 @@ let config = { provider: {} } // what the plugins' config hooks made of it
 let loadWait = 20 * 1000
 let listWait = 20 * 1000
 
+// watchHeavy says once when this host holds more than heavy.mb MiB, a
+// full collection run first so garbage not yet collected doesn't count:
+// magpie then starts a new host for the calls to come and stops this one
+// once its own are answered (host.go's heavyMB and recycle). It checks
+// every heavy.everyMillis, from heavy.afterMillis after the host started.
+function watchHeavy(heavy) {
+  const mb = Number(heavy?.mb)
+  if (!(mb > 0)) return
+  const every = Math.max(Number(heavy.everyMillis) || 60_000, 10)
+  const after = Math.max(Number(heavy.afterMillis) || 0, 0)
+  const rss = () => process.memoryUsage().rss / 1048576
+  const timer = setInterval(() => {
+    if (process.uptime() * 1000 < after || rss() <= mb) return
+    Bun.gc(true)
+    const held = rss()
+    if (held <= mb) return
+    clearInterval(timer)
+    send({ event: "heavy", count: Math.round(held) })
+  }, every)
+  timer.unref?.()
+}
+
 // late is what a step that took longer than ms gives instead of its own
 // result: an error saying so. The step goes on by itself; what it gives
 // later is dropped. A step handed a signal of its own (a model hook's) has
@@ -3279,6 +3301,8 @@ const handlers = {
     if (p.loadMillis > 0) loadWait = p.loadMillis
     if (p.listMillis > 0) listWait = p.listMillis
     await loadPlugins(p.plugins ?? [])
+    // from here on, when magpie holds this host as the one calls go to
+    watchHeavy(p.heavy)
     return { plugins: loaded.map(withProviders) }
   },
   providers: (p, signal) => providers(p ?? {}, signal),
