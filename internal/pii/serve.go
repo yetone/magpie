@@ -378,6 +378,10 @@ var startup = regexp.MustCompile(`^(ggml_metal_(device_init|library_init|init|fr
 // trouble is a line that says something went wrong, startup's or not.
 var trouble = regexp.MustCompile(`(?i)error|fail|assert|abort|unable|cannot|can't|could not|out of memory|exception|lost`)
 
+// deviceLost is a GPU the driver reset under pf-serve, as ggml's Vulkan
+// says it (vk::DeviceLostError, VK_ERROR_DEVICE_LOST) and Metal's.
+var deviceLost = regexp.MustCompile(`(?i)DeviceLost|device[ _]lost`)
+
 // lastSaid is the last n lines of stderr that say more than ggml's
 // startup, joined.
 func lastSaid(stderr string, n int) string {
@@ -482,11 +486,14 @@ func end(h *helper) {
 }
 
 // classify asks pf-serve, started if it isn't, what is in texts. One that
-// fails is ended and started again; one that died on the GPU is started
-// on the CPU, until the GPU is tried again. One that magpie ended on the
-// GPU for taking too long is started again on the GPU: a request too
-// slow for its time is no lost GPU. Twice in a row there is, and the CPU
-// is tried for the next. The caller holds turn.
+// fails is ended and started again. One that failed on the GPU is started
+// again on the GPU: one that died there is most often a GPU the driver
+// reset under it (vk::DeviceLostError, kongbai01203's after an idle
+// spell), which a new pf-serve gets a new device of, and one magpie ended
+// for taking too long had a request too slow for its time. Twice in a row
+// the GPU is lost, and the CPU is tried, until the GPU is tried again: at
+// once for one that died, and from the next request for one that hung,
+// whose request has waited twice already. The caller holds turn.
 func classify(texts []string) ([][]redact.Found, error) {
 	out, err := classifyTurn(texts)
 	srv.mu.Lock()
@@ -520,7 +527,7 @@ func heldBack() error {
 
 func classifyTurn(texts []string) ([][]redact.Found, error) {
 	var last error
-	for try := 0; try < 2; try++ {
+	for try := 0; try < 3; try++ {
 		srv.mu.Lock()
 		h, cpu, stop := srv.h, srv.cpu, stopCh()
 		var gone *helper
@@ -578,17 +585,19 @@ func classifyTurn(texts []string) ([][]redact.Found, error) {
 			h.kill()
 			return nil, errStopped
 		}
-		if h.hello.GPU {
-			if h.slow.Load() != nil && try == 0 {
-				// ended for taking too long: a slow request, or a
-				// GPU's hang that a new pf-serve gets past, is no lost
-				// GPU, and the try again is on the GPU
-			} else {
-				lostGPULocked(err.Error())
-			}
+		hung := h.slow.Load() != nil
+		if h.hello.GPU && try > 0 {
+			lostGPULocked(err.Error())
 		}
+		// else the try again is on the GPU: a GPU the driver reset
+		// (device lost), a crash, or a hang that a new pf-serve gets
+		// past, is no lost GPU yet
 		srv.mu.Unlock()
 		h.kill()
+		if try == 1 && (!h.hello.GPU || hung) {
+			// a third try only after the GPU died twice, on the CPU
+			break
+		}
 	}
 	return nil, fmt.Errorf("the local masking model failed: %w", last)
 }

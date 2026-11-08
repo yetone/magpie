@@ -19,11 +19,12 @@
 //
 // A process of its own, not linked in: 1.7 GB the gateway would otherwise
 // hold for good, and a GPU driver's crash that would end the gateway with
-// it. One that dies is started again; one that dies on the GPU, doesn't
-// load there in gpuLoadTimeout, or hangs there twice in a row, is started
-// on the CPU until the GPU is tried again (gpuRetryAfter), with no restart
-// of magpie. One that keeps failing holds requests back at once, not
-// after a load each, until it is tried again (retryAfter).
+// it. One that dies is started again, on the GPU too: a driver that reset
+// the GPU (device lost) is got past by a load there. One that dies or hangs
+// on the GPU twice in a row, or doesn't load there in gpuLoadTimeout, is
+// started on the CPU until the GPU is tried again (gpuRetryAfter), with
+// no restart of magpie. One that keeps failing holds requests back at
+// once, not after a load each, until it is tried again (retryAfter).
 package pii
 
 import (
@@ -155,6 +156,11 @@ type Status struct {
 	GPU      bool   `json:"gpu,omitempty"`
 	LoadMS   int    `json:"loadMs,omitempty"`
 	GPUError string `json:"gpuError,omitempty"`
+	// GPUReset says the GPU was lost to its driver resetting it
+	// (Vulkan's device lost), not to a fault of the model's; GPUAgain
+	// is when the GPU is tried again (Unix ms), while that is ahead
+	GPUReset bool  `json:"gpuReset,omitempty"`
+	GPUAgain int64 `json:"gpuAgain,omitempty"`
 	// why the last request got no answer
 	Failed string `json:"failed,omitempty"`
 	// pf-serve is loading the model, and how many requests wait for it
@@ -179,7 +185,11 @@ func Now() Status {
 	if s.GPUError == "" {
 		s.GPUError = srv.gpuLost
 	}
+	if srv.cpu && time.Now().Before(srv.gpuAgain) {
+		s.GPUAgain = srv.gpuAgain.UnixMilli()
+	}
 	srv.mu.Unlock()
+	s.GPUReset = deviceLost.MatchString(s.GPUError)
 	s.Waiting = int(waiting.Load())
 	return s
 }

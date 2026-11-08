@@ -65,9 +65,9 @@ function serve(lang, masking, model, posts) {
   };
 }
 
-async function open(engine, lang, width, masking, model, posts) {
+async function open(engine, lang, width, masking, model, posts, context = {}) {
   const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
-  const page = await (await browser.newContext({ viewport: { width, height: 1400 } })).newPage();
+  const page = await (await browser.newContext({ viewport: { width, height: 1400 }, ...context })).newPage();
   page.setDefaultTimeout(8000);
   page.setDefaultNavigationTimeout(60000);
   const errors = [];
@@ -113,6 +113,22 @@ const runs = {
   failed: { device: "CPU", gpuError: "prediction failed" }, cpu: { device: "CPU" },
   // the Intel build on Apple silicon (cdredfox on Discord: 150% of a core)
   rosetta: { device: "CPU", rosetta: true },
+};
+
+// Privacy Filter moved to the CPU after its GPU was lost (plugins#853,
+// kongbai01203: "GPU error, running on CPU" read as a fault of the
+// model's): a GPU the graphics driver reset says so, and either says until
+// when, 14:38 UTC here (zh-TW says it 下午02:38)
+const lostWords = {
+  en: { reset: "On, on the CPU until 02:38 PM: the graphics driver reset the GPU (device lost)", failed: "On, on the CPU until 02:38 PM: the GPU failed (ended)" },
+  zh: { reset: "已开启，14:38 前运行在 CPU：显卡驱动重置了 GPU（设备丢失）", failed: "已开启，14:38 前运行在 CPU：GPU 出错（ended）" },
+  "zh-TW": { reset: "已開啟，下午02:38 前執行於 CPU：顯示卡驅動程式重設了 GPU（裝置遺失）", failed: "已開啟，下午02:38 前執行於 CPU：GPU 出錯（ended）" },
+  ja: { reset: "オン、14:38 まで CPU で実行中：グラフィックスドライバーが GPU をリセットしました（デバイスロスト）", failed: "オン、14:38 まで CPU で実行中：GPU が失敗しました（ended）" },
+  de: { reset: "An, bis 14:38 auf der CPU: der Grafiktreiber hat die GPU zurückgesetzt (Gerät verloren)", failed: "An, bis 14:38 auf der CPU: die GPU ist ausgefallen (ended)" },
+};
+const lostRuns = {
+  reset: { gpuError: "pf-serve-vulkan ended (exit status 3): terminate called after throwing an instance of 'vk::DeviceLostError' | what():  vk::Device::waitForFences: ErrorDeviceLost", gpuReset: true },
+  failed: { gpuError: "ended" },
 };
 
 // what the row shows: its words and its New mark, whether they rest out of
@@ -187,6 +203,24 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const m = await look(page);
           await browser.close();
           assert.equal(m.sub, runWords[lang][k], k);
+          assert(!m.hint && !m.cut && m.inside && !m.wide, `${k} shown in full and inside: ${JSON.stringify(m)}`);
+          assert.deepEqual(errors, []);
+        }
+      });
+    }
+  }
+
+  for (const lang of Object.keys(lostWords)) {
+    for (const width of [1100, 640]) {
+      test(`${engine} ${lang} ${width}px: Privacy Filter on the CPU says how the GPU was lost, and until when`, async () => {
+        for (const [k, run] of Object.entries(lostRuns)) {
+          const model = { supported: true, installed: true, on: true, running: true, device: "cpu", size, gpuAgain: Date.UTC(2026, 10, 8, 14, 38), ...run };
+          const { browser, page, errors } = await open(engine, lang, width, true, model, [], { locale: "en-US", timezoneId: "UTC" });
+          await page.locator("#privacyModelRow .segs").waitFor();
+          const m = await look(page);
+          await browser.close();
+          // an engine's ICU may put a narrow space before PM
+          assert.equal(m.sub.replace(/[\u202f\u00a0]/g, " "), lostWords[lang][k], k);
           assert(!m.hint && !m.cut && m.inside && !m.wide, `${k} shown in full and inside: ${JSON.stringify(m)}`);
           assert.deepEqual(errors, []);
         }

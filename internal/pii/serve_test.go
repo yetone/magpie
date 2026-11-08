@@ -84,8 +84,9 @@ func TestWithinCutsSpansAtTheTextsEnds(t *testing.T) {
 	}
 }
 
-// pf-serve that dies on the GPU is started again on the CPU, which the
-// request then gets its answer from, and stays there; the status says why.
+// pf-serve that dies on the GPU twice in a row is started on the CPU,
+// which the request then gets its answer from, and stays there; the
+// status says why, and when the GPU is tried again.
 func TestGPUDeathMovesToCPU(t *testing.T) {
 	log, gpu := gpuInstall(t, "gpudies")
 	got, err := Find([]string{"hi Alice"})
@@ -95,19 +96,51 @@ func TestGPUDeathMovesToCPU(t *testing.T) {
 	if !reflect.DeepEqual(got, [][]redact.Found{{person(3, 8)}}) {
 		t.Fatalf("Find = %v", got)
 	}
-	if starts := fakeLines(t, log, "start"); !reflect.DeepEqual(starts, []string{gpu, "start pf-serve CPU"}) {
+	if starts := fakeLines(t, log, "start"); !reflect.DeepEqual(starts, []string{gpu, gpu, "start pf-serve CPU"}) {
 		t.Fatalf("starts = %q", starts)
 	}
 	st := Now()
-	if st.GPU || st.Device != "CPU" || !strings.Contains(st.GPUError, "device lost") {
-		t.Fatalf("Now = %+v, want on the CPU saying the GPU was lost", st)
+	if st.GPU || st.Device != "CPU" || !strings.Contains(st.GPUError, "device lost") || !st.GPUReset {
+		t.Fatalf("Now = %+v, want on the CPU saying the GPU was reset", st)
+	}
+	if again := time.Until(time.UnixMilli(st.GPUAgain)); again < 9*time.Minute || again > 11*time.Minute {
+		t.Fatalf("GPUAgain in %s, want the GPU tried again in 10 minutes", again)
 	}
 	Stop()
 	if _, err := Find([]string{"Alice again"}); err != nil {
 		t.Fatal(err)
 	}
-	if starts := fakeLines(t, log, "start"); len(starts) != 3 || starts[2] != "start pf-serve CPU" {
+	if starts := fakeLines(t, log, "start"); len(starts) != 4 || starts[3] != "start pf-serve CPU" {
 		t.Fatalf("starts = %q, want the CPU after a stop too", starts)
+	}
+}
+
+// A GPU pf-serve that answered, and dies at a later request because the
+// driver reset the GPU while it sat idle (vk::DeviceLostError, exit 3:
+// kongbai01203 in plugins#853, ~12 minutes after it loaded), is loaded
+// again on the GPU, which the request gets its answer from; the model
+// stays on the GPU, and the status says nothing was lost. Before, it moved
+// to the CPU for 10 minutes and said "the GPU failed".
+func TestGPUDeviceLostReloadsOnGPU(t *testing.T) {
+	log, gpu := gpuInstall(t, "gpulostidle")
+	if _, err := Find([]string{"hi Alice"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Find([]string{"Alice after a while"})
+	if err != nil || !reflect.DeepEqual(got, [][]redact.Found{{person(0, 5)}}) {
+		t.Fatalf("Find = %v, %v", got, err)
+	}
+	if starts := fakeLines(t, log, "start"); !reflect.DeepEqual(starts, []string{gpu, gpu}) {
+		t.Fatalf("starts = %q, want the GPU loaded again", starts)
+	}
+	if st := Now(); !st.GPU || st.GPUError != "" || st.GPUReset || st.GPUAgain != 0 {
+		t.Fatalf("Now = %+v, want on the GPU with nothing lost", st)
+	}
+	srv.mu.Lock()
+	cpu, fails := srv.cpu, srv.gpuFails
+	srv.mu.Unlock()
+	if cpu || fails != 0 {
+		t.Fatalf("cpu=%v fails=%d after the GPU was loaded again", cpu, fails)
 	}
 }
 
@@ -327,8 +360,8 @@ func TestServeStartsWithoutResidencyHeartbeat(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := fakeLines(t, log, "residency")
-	if len(got) != 2 {
-		t.Fatalf("residency lines = %q, want a GPU and a CPU start", got)
+	if len(got) != 3 {
+		t.Fatalf("residency lines = %q, want two GPU starts and a CPU one", got)
 	}
 	for _, l := range got {
 		if l != "residency 1" {
@@ -474,8 +507,8 @@ func TestServeKeepsMoEChunkUnlessUserSets(t *testing.T) {
 		user   string // "" unset
 		want   []string
 	}{
-		{"vulkan", true, "", []string{"moechunk pf-serve-vulkan ", "moechunk pf-serve "}},
-		{"vulkan, user's own", true, "3072", []string{"moechunk pf-serve-vulkan 3072", "moechunk pf-serve 3072"}},
+		{"vulkan", true, "", []string{"moechunk pf-serve-vulkan ", "moechunk pf-serve-vulkan ", "moechunk pf-serve "}},
+		{"vulkan, user's own", true, "3072", []string{"moechunk pf-serve-vulkan 3072", "moechunk pf-serve-vulkan 3072", "moechunk pf-serve 3072"}},
 	}
 	if runtime.GOOS == "darwin" {
 		cases = append(cases, struct {
@@ -483,7 +516,7 @@ func TestServeKeepsMoEChunkUnlessUserSets(t *testing.T) {
 			vulkan bool
 			user   string
 			want   []string
-		}{"metal", false, "", []string{"moechunk pf-serve ", "moechunk pf-serve "}})
+		}{"metal", false, "", []string{"moechunk pf-serve ", "moechunk pf-serve ", "moechunk pf-serve "}})
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -560,17 +593,17 @@ func TestGPUHungTwiceMovesToCPU(t *testing.T) {
 // no restart of magpie: the CPU's pf-serve makes way for the GPU's, and a
 // GPU that answers is the model's again.
 func TestLostGPUTriedAgain(t *testing.T) {
-	log, gpu := gpuInstall(t, "gpudiesonce")
+	log, gpu := gpuInstall(t, "gpudiestwice")
 	if _, err := Find([]string{"hi Alice"}); err != nil {
 		t.Fatal(err)
 	}
-	if starts := fakeLines(t, log, "start"); !reflect.DeepEqual(starts, []string{gpu, "start pf-serve CPU"}) {
-		t.Fatalf("starts = %q, want the GPU, then the CPU", starts)
+	if starts := fakeLines(t, log, "start"); !reflect.DeepEqual(starts, []string{gpu, gpu, "start pf-serve CPU"}) {
+		t.Fatalf("starts = %q, want the GPU twice, then the CPU", starts)
 	}
 	if _, err := Find([]string{"Alice two"}); err != nil {
 		t.Fatal(err)
 	}
-	if starts := fakeLines(t, log, "start"); len(starts) != 2 {
+	if starts := fakeLines(t, log, "start"); len(starts) != 3 {
 		t.Fatalf("starts = %q, want the CPU kept until the GPU's time", starts)
 	}
 	srv.mu.Lock()
@@ -583,7 +616,7 @@ func TestLostGPUTriedAgain(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(got, [][]redact.Found{{person(0, 5)}}) {
 		t.Fatalf("Find = %v, %v", got, err)
 	}
-	if starts := fakeLines(t, log, "start"); len(starts) != 3 || starts[2] != gpu {
+	if starts := fakeLines(t, log, "start"); len(starts) != 4 || starts[3] != gpu {
 		t.Fatalf("starts = %q, want the GPU tried again", starts)
 	}
 	if st := Now(); !st.GPU || st.GPUError != "" {
