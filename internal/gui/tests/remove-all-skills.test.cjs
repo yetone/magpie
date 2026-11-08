@@ -54,7 +54,8 @@ const press = async (page, loc) => {
   const b = await loc.boundingBox();
   await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
 };
-const rows = (page) => page.locator("#view-library .lib-row").count();
+// the skills' rows, not the router's under them
+const rows = (page) => page.locator("#view-library .lib-list:not(.lib-hublist) .lib-row").count();
 
 const words = {
   en: { rm: "Remove all", tip: "Take all 3 skills out of the library", ask: "Remove all 3 skills?", agents: /out of the library and out of Claude Code, Codex, Pi\./, kept: /2 folders are moved to magpie's backups/, linked: /1 linked from folders of your own are only unlinked/, cancel: "Cancel", go: "Remove all 3", done: "3 skills removed" },

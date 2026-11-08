@@ -60,6 +60,11 @@ type Library struct {
 	// which hands each call on to the library's servers ticked for it, in
 	// place of their own entries (#2679, mcp_hub.go)
 	MCPHub bool `json:"mcpHub,omitempty"`
+	// SkillRouter gives each agent that can take it magpie's one skill,
+	// magpie-skills, listing the library's skills ticked for it, in place
+	// of a link of each (skill_router.go). This computer's own: Collect
+	// doesn't carry it
+	SkillRouter bool `json:"skillRouter,omitempty"`
 	// PluginsOffered are the plugins (plugin.Name) given a server of their
 	// tools, for one the user removed not to come back (plugin_tools.go)
 	PluginsOffered []string `json:"pluginsOffered,omitempty"`
@@ -140,6 +145,12 @@ type Applied struct {
 	// those it uses (LiveAgent's skills-settings.json, liveagent.go): one
 	// the user unpicked since stays unpicked
 	Picked []string `json:"picked,omitempty"`
+	// Router: magpie put the skill router's entry, magpie-skills, in the
+	// agent's skills folder
+	Router bool `json:"router,omitempty"`
+	// RouterRules are the rules magpie put in Claude Code's
+	// permissions.allow so it reads a listed skill without asking.
+	RouterRules []string `json:"routerRules,omitempty"`
 }
 
 // empty is whether a holds nothing magpie wrote: a sync that only looked
@@ -149,7 +160,7 @@ type Applied struct {
 func (a *Applied) empty() bool {
 	return !a.Instructions && a.InstrHash == "" && len(a.MCP) == 0 && len(a.Skills) == 0 &&
 		len(a.ToolsOff) == 0 && len(a.ToolRules) == 0 && len(a.Hooks) == 0 &&
-		len(a.Subagents) == 0 && len(a.Startup) == 0 && len(a.Picked) == 0
+		len(a.Subagents) == 0 && len(a.Startup) == 0 && len(a.Picked) == 0 && !a.Router && len(a.RouterRules) == 0
 }
 
 var mu lock // one change at a time, from the page or the CLI's process

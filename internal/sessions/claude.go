@@ -276,7 +276,10 @@ func ccTools(s *state, m *claudeContribution, at time.Time, b []byte) {
 		}
 		var tool struct {
 			ID, Name string
-			Input    struct{ Skill any }
+			Input    struct {
+				Skill    any
+				FilePath string `json:"file_path"`
+			}
 		}
 		end := objectEnd(rest[i:])
 		if end < 0 || json.Unmarshal(rest[i:i+end], &tool) != nil {
@@ -286,6 +289,9 @@ func ccTools(s *state, m *claudeContribution, at time.Time, b []byte) {
 		skill, _ := tool.Input.Skill.(string)
 		if tool.Name != "Skill" {
 			skill = ""
+		}
+		if tool.Name == "Read" {
+			skill = routedSkill(tool.Input.FilePath)
 		}
 		ccTool(s, m, at, tool.ID, tool.Name, skill)
 	}
@@ -418,7 +424,10 @@ func claudeFull(s *state, b []byte, main bool) {
 		defer s.Claude.finish(m)
 		var blocks []struct {
 			Type, ID, Name string
-			Input          struct{ Skill any }
+			Input          struct {
+				Skill    any
+				FilePath string `json:"file_path"`
+			}
 		}
 		if json.Unmarshal(l.Message.Content, &blocks) == nil {
 			for _, c := range blocks {
@@ -426,6 +435,9 @@ func claudeFull(s *state, b []byte, main bool) {
 					skill, _ := c.Input.Skill.(string)
 					if c.Name != "Skill" {
 						skill = ""
+					}
+					if c.Name == "Read" {
+						skill = routedSkill(c.Input.FilePath)
 					}
 					ccTool(s, m, at, c.ID, c.Name, skill)
 				}

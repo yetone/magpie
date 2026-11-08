@@ -65,6 +65,9 @@ type Skill struct {
 	// Only the library keeps it, and a sync carries it; no agent is
 	// given it: the skill's folder is the agents', and this isn't in it.
 	Note string `json:"note,omitempty"`
+	// Router is "direct" for a skill the skill router leaves out: each
+	// agent keeps its own link of it (skill_router.go). A sync carries it.
+	Router string `json:"router,omitempty"`
 }
 
 // gives reports whether the agent id gets the skill on this computer: it
@@ -741,6 +744,12 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 		q, _ := rivals().rival(s.Name)
 		return q != ""
 	}
+	// the skills the router lists here (skill_router.go): no link of
+	// their own
+	routed := l.routedFor(t, sharers, cp, inShared)
+	if !t.Gone {
+		defer l.placeRouter(t, routed, a, res)
+	}
 	var mine []string
 	for _, name := range a.Skills {
 		s := l.skill(name)
@@ -749,7 +758,7 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 			mine = append(mine, name)
 			continue
 		}
-		if wanted(s) && !inShared(s) || !ours(p, name) {
+		if wanted(s) && !inShared(s) && !routed[name] || !ours(p, name) {
 			continue
 		}
 		if err := unlink(p); err != nil {
@@ -777,6 +786,9 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 			if !slices.Contains(mine, s.Name) {
 				mine = append(mine, s.Name)
 			}
+			continue
+		}
+		if routed[s.Name] {
 			continue
 		}
 		// in a WSL distro, magpie's one copy there is what the agent's
@@ -2318,7 +2330,9 @@ func foundSkills(l *Library) []FoundSkill {
 			f := byName[name]
 			// magpie's link to the library's folder is an agent having the
 			// one found there
-			if strings.HasPrefix(name, ".") || ours(p, name) && (f == nil || f.Library == "") || l.skill(name) != nil || !nameRe.MatchString(name) {
+			// and the skill router's entry is magpie's own (skill_router.go)
+			if strings.HasPrefix(name, ".") || ours(p, name) && (f == nil || f.Library == "") || l.skill(name) != nil || !nameRe.MatchString(name) ||
+				name == RouterSkill && routerOurs(p) {
 				continue
 			}
 			m, ok := readMeta(p)

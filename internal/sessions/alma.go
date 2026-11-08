@@ -323,6 +323,14 @@ func parseAlma(f file) *state {
 					if json.Unmarshal(p.Input, &in) == nil {
 						skill = in.Skill
 					}
+				} else if strings.EqualFold(name, "Read") {
+					var in struct {
+						FilePath string `json:"file_path"`
+						Path     string `json:"path"`
+					}
+					if json.Unmarshal(p.Input, &in) == nil {
+						skill = routedSkill(in.FilePath + in.Path)
+					}
 				}
 				s.tool(t, name, skill)
 			}

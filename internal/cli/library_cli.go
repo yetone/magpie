@@ -28,6 +28,8 @@ const libraryUsage = `magpie library                     what the library gives 
   magpie library mcp router <name> shared|direct   with the router on, share the server through it (the default) or keep it each
                                      agent's own entry, as with the router off: for one that reads its project from the folder it starts in
   magpie library skill agents <name> <a,b…|none>
+  magpie library skill router on|off   give each agent one skill, magpie-skills, that lists the library's: it reads the one a task needs
+  magpie library skill router <name> routed|direct   with the router on, list the skill there (the default) or keep it each agent's own
   magpie library skill off-here <name>   turn it off on this computer only: a sync neither carries that nor turns it back on
   magpie library skill on-here <name>    …and on again here
   magpie library skill hand-over <name…>|--all   move skills kept in ~/.agents/skills into the library's folder: the agents that read them
@@ -165,6 +167,10 @@ func libraryCmd(args []string) error {
 			if res, err = removeEverySkill(rest[1:]); res == nil && err == nil {
 				return nil
 			}
+		case len(rest) == 2 && rest[0] == "router" && (rest[1] == "on" || rest[1] == "off"):
+			res, err = library.SetSkillRouter(rest[1] == "on")
+		case len(rest) == 3 && rest[0] == "router" && (rest[2] == "routed" || rest[2] == "direct") && !strings.HasPrefix(rest[1], "-"):
+			res, err = library.SkillRouterHow(rest[1], rest[2] == "direct")
 		case len(rest) == 2 && (rest[0] == "off-here" || rest[0] == "on-here") && !strings.HasPrefix(rest[1], "-"):
 			res, err = library.SkillHere(rest[1], rest[0] == "on-here")
 		case len(rest) >= 2 && rest[0] == "hand-over":

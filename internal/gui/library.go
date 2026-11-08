@@ -634,6 +634,12 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 		case "skills/where":
 			// each agent's own folder, or ~/.agents/skills too (skills_shared.go)
 			res, err = library.SetSkillsWhere(in.How)
+		case "skills/router":
+			// magpie's one skill listing the rest (skill_router.go)
+			res, err = library.SetSkillRouter(in.On)
+		case "skills/router-direct":
+			// a skill kept out of the router, each agent's own link
+			res, err = library.SkillRouterHow(in.Name, in.On)
 		case "skills/keep-own":
 			res, err = library.KeepAgentSkills(oneOrMore(in.Name, in.Names), in.Agent)
 		case "market/server":

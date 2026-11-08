@@ -20,6 +20,7 @@ import (
 	"io/fs"
 	"maps"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -327,9 +328,18 @@ type day struct {
 	Skills named[int] `json:"k,omitempty"`
 }
 
+// routerSkill is the one skill magpie's skill router gives an agent
+// (library.RouterSkill). Calling it up only lists the skills behind it,
+// and the one the agent then reads is counted (routedSkill), so it isn't
+// counted as a skill of its own: every routed use would be counted twice.
+const routerSkill = "magpie-skills"
+
 // tool counts a call of a tool, and of a skill when it calls one up; a
 // skill called up with no tool (Pi's /skill:name) has no name.
 func (s *state) tool(at time.Time, name, skill string) {
+	if skill == routerSkill {
+		skill = ""
+	}
 	if name == "" && skill == "" {
 		return
 	}
@@ -340,6 +350,23 @@ func (s *state) tool(at time.Time, name, skill string) {
 	if skill != "" {
 		*d.Skills.at(skill)++
 	}
+}
+
+// routedSkill is the skill a read of path calls up through magpie's
+// skill router (library's skill_router.go): an agent given magpie-skills
+// reads a skill's SKILL.md under magpie-skills/.skills/<name>/ with its
+// file tool, not its Skill tool. "" for any other path.
+func routedSkill(path string) string {
+	p := strings.ReplaceAll(path, `\`, "/")
+	rest, ok := strings.CutSuffix(p, "/SKILL.md")
+	if !ok {
+		return ""
+	}
+	dir, name := pathpkg.Split(rest)
+	if name == "" || !strings.HasSuffix(dir, "/"+routerSkill+"/.skills/") {
+		return ""
+	}
+	return name
 }
 
 // idleGap is the longest pause between two lines still counted as work.

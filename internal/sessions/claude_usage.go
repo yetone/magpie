@@ -354,6 +354,9 @@ func ccCount(s *state, m *claudeContribution, at time.Time, model string, tokens
 
 // A later block can contain new tools even though its message usage repeats.
 func ccTool(s *state, m *claudeContribution, at time.Time, id, name, skill string) {
+	if skill == routerSkill {
+		skill = ""
+	}
 	if id == "" {
 		s.tool(at, name, skill)
 		return

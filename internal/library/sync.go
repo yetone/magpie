@@ -412,6 +412,10 @@ type AgentView struct {
 	// magpie) or own (it has an entry called magpie of its own); "" for one
 	// given none of the hub's servers
 	Hub string `json:"hub,omitempty"`
+	// SkillRouter, with the skill router on, is "on" for an agent whose
+	// skills folder is given magpie-skills, or why it keeps each skill's
+	// own link (routerWhy): copies, liveagent, shared, taken or own
+	SkillRouter string `json:"skillRouter,omitempty"`
 	// How is the way it is given its skills, link or copy, and HowOwn its
 	// own over the library's; MustCopy is one that can only take copies
 	// (in WSL)
@@ -480,6 +484,8 @@ type SkillView struct {
 	Note string `json:"note,omitempty"`
 	// Manual: its SKILL.md sets disable-model-invocation (meta.Manual)
 	Manual bool `json:"manual,omitempty"`
+	// Router is "direct" for one the skill router leaves out (Skill.Router)
+	Router string `json:"router,omitempty"`
 }
 
 // View is the Library page.
@@ -518,6 +524,9 @@ type View struct {
 	// the library's (#2679), at HubPath<agent> on the gateway
 	MCPHub  bool   `json:"mcpHub"`
 	HubPath string `json:"hubPath"`
+	// SkillRouter: the agents are given magpie's one skill, magpie-skills,
+	// listing their skills in place of a link of each (skill_router.go)
+	SkillRouter bool `json:"skillRouter"`
 	// HubNote is what the router says of itself to the agents (settings'
 	// RouterNote), and HubName what it says with none: this computer's
 	// name, to an agent on another computer (gateway.hubWhere)
@@ -589,7 +598,7 @@ func readView(problems []Problem, glance bool) (*View, error) {
 	// the agents are found once for the whole read: finding them looks
 	// through every agent's folders, in WSL too (#1624)
 	targets, asleep := targetsAsleep(false)
-	v := &View{Agents: []AgentView{}, Servers: []ServerView{}, Skills: []SkillView{}, FoundSkills: []FoundSkill{}, Instructions: l.instructionsView(targets, asleep), Dir: Dir(), Backups: BackupDir(), CopySkills: l.CopySkills, SharedSkills: l.SharedSkills, SharedDir: sharedSkillsDir(), MCPHub: l.MCPHub, HubPath: gateway.HubMCPPath, HubNote: settings.Shared().RouterNote, HubName: gateway.HostName(), HubAllTools: settings.Shared().RouterAllTools, Partial: glance}
+	v := &View{Agents: []AgentView{}, Servers: []ServerView{}, Skills: []SkillView{}, FoundSkills: []FoundSkill{}, Instructions: l.instructionsView(targets, asleep), Dir: Dir(), Backups: BackupDir(), CopySkills: l.CopySkills, SharedSkills: l.SharedSkills, SharedDir: sharedSkillsDir(), MCPHub: l.MCPHub, SkillRouter: l.SkillRouter, HubPath: gateway.HubMCPPath, HubNote: settings.Shared().RouterNote, HubName: gateway.HostName(), HubAllTools: settings.Shared().RouterAllTools, Partial: glance}
 	for _, t := range targets {
 		av := AgentView{ID: t.Agent.ID, Name: t.Agent.Name, Icon: t.Agent.Icon, Instructions: t.Instructions, Skills: t.Skills,
 			SkillsAlso: t.SkillsAlso, Note: t.Note, MCPVia: t.MCPVia, ProjectSkills: ProjectSkillsDir(t.Agent.ID), ProjectMCP: ProjectMCPFile(t.Agent.ID),
@@ -599,6 +608,12 @@ func readView(problems []Problem, glance bool) (*View, error) {
 			av.How, av.MustCopy = l.howOf(t.Agent.ID), t.Copy || t.Desktop != nil
 			if av.MustCopy {
 				av.How = HowCopy
+			}
+			if l.SkillRouter {
+				av.SkillRouter = "on"
+				if why := l.routerWhy(t, av.How == HowCopy); why != "" {
+					av.SkillRouter = why
+				}
 			}
 		}
 		if t.MCP != nil {
@@ -680,7 +695,7 @@ func readView(problems []Problem, glance bool) (*View, error) {
 	v.Subagents, v.SubagentAgents = l.subagentsView(targets, asleep, of)
 	tr := &tracer{}
 	for _, s := range l.Skills {
-		sv := SkillView{Name: s.Name, Agents: append([]string{}, s.Agents...), Icon: skillIcon(s), Problems: of("skill:" + s.Name), Repo: tr.repoOf(s), OffHere: s.OffHere, Note: s.Note}
+		sv := SkillView{Name: s.Name, Agents: append([]string{}, s.Agents...), Icon: skillIcon(s), Problems: of("skill:" + s.Name), Repo: tr.repoOf(s), OffHere: s.OffHere, Note: s.Note, Router: s.Router}
 		if s.Source != nil {
 			sv.Source, sv.Kind = s.Source.String(), s.Source.Kind
 		}

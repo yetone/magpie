@@ -937,7 +937,7 @@ func (l *Library) held(have []*Target) []*Target {
 		in[t.Agent.ID] = true
 	}
 	has := func(id string) bool {
-		if a := l.Applied[id]; a != nil && (len(a.Skills) > 0 || len(a.MCP) > 0 || len(a.Hooks) > 0) {
+		if a := l.Applied[id]; a != nil && (len(a.Skills) > 0 || len(a.MCP) > 0 || len(a.Hooks) > 0 || a.Router || len(a.RouterRules) > 0) {
 			return true
 		}
 		return slices.ContainsFunc(l.Skills, func(s *Skill) bool { return s.gives(id) }) ||

@@ -160,7 +160,9 @@ func droidTools(raw json.RawMessage) [][2]string {
 		Type  string `json:"type"`
 		Name  string `json:"name"`
 		Input struct {
-			Skill any `json:"skill"`
+			Skill    any    `json:"skill"`
+			FilePath string `json:"file_path"`
+			Path     string `json:"path"`
 		} `json:"input"`
 	}
 	json.Unmarshal(raw, &blocks)
@@ -170,6 +172,9 @@ func droidTools(raw json.RawMessage) [][2]string {
 			skill, _ := b.Input.Skill.(string)
 			if b.Name != "Skill" {
 				skill = ""
+			}
+			if strings.EqualFold(b.Name, "Read") {
+				skill = routedSkill(b.Input.FilePath + b.Input.Path)
 			}
 			out = append(out, [2]string{b.Name, strings.TrimSpace(skill)})
 		}

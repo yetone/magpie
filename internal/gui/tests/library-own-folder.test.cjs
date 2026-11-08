@@ -113,8 +113,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     };
     const row = (page, name) => page.locator("#view-library .lib-row").filter({ has: page.locator(".name", { hasText: new RegExp("^" + name) }) });
     const click = async (page, loc) => {
+      // a click where the button is: Playwright's own click scrolls a
+      // thing it finds still moving into view, which the reader's doesn't
       const top = await page.evaluate(() => document.querySelector("#view-library").scrollTop);
-      await loc.click();
+      await loc.waitFor();
+      const b = await loc.boundingBox();
+      assert(b && b.y >= 0 && b.y + b.height <= page.viewportSize().height, `${loc} is out of view: ${JSON.stringify(b)}`);
+      await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
       assert.equal(await page.evaluate(() => document.querySelector("#view-library").scrollTop), top);
     };
     const lit = (r) => r.locator(".lib-ag[data-agent]").evaluateAll((cs) => cs.filter((c) => c.getAttribute("aria-pressed") === "true").map((c) => c.dataset.agent));

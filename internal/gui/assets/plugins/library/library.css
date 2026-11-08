@@ -204,6 +204,7 @@ button.row.lib-hubfolded:hover { background: var(--pill); }
 .lib-hereline > .lib-tag.lib-offhere { cursor: pointer; margin-left: 0; flex: 0 1 auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .lib-tag.lib-offhere:hover { color: var(--fg); }
 .lib-icon.lib-here.on { color: var(--accent); }
+.lib-icon.lib-routedirect.on { color: var(--accent); }
 .lib-src { display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 11px; color: var(--faint); min-width: 0; }
 /* "linked from" stays whole, one line, and the path beside it gives way:
    CJK can break after any character, so the label shrank to a column of
