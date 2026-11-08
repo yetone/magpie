@@ -1197,6 +1197,9 @@ type NetError struct {
 }
 
 func (e *NetError) Error() string {
+	if s, ok := e.Err.(statusError); ok {
+		return fmt.Sprintf("download %s: %s, on every try", e.File, string(s))
+	}
 	cause := e.Err
 	var ue *url.Error
 	if errors.As(cause, &ue) {
@@ -1206,6 +1209,23 @@ func (e *NetError) Error() string {
 }
 
 func (e *NetError) Unwrap() error { return e.Err }
+
+// statusError is a reply a host gives when it is busy, not a refusal of
+// the file: its status line.
+type statusError string
+
+func (s statusError) Error() string { return string(s) }
+
+// busyStatus is a status trying again may get past: the host or its
+// gateway overloaded or timed out, or asking for a pause.
+func busyStatus(code int) bool {
+	switch code {
+	case http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway,
+		http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	}
+	return false
+}
 
 // Network reports whether err is a download the network broke off, which
 // trying again may get through.
@@ -1292,6 +1312,11 @@ func fetch(ctx context.Context, a Asset, path string) error {
 		flag = os.O_WRONLY | os.O_APPEND
 	case res.StatusCode == http.StatusOK:
 		have = 0 // the whole file again
+	case busyStatus(res.StatusCode):
+		// the host is busy or its edge timed out (GitHub's asset host
+		// answered 504 Gateway Timeout, 0.1.3316): tried again, as a
+		// connection that broke, with what came kept
+		return fail(&NetError{File: name, Err: statusError(res.Status)})
 	default:
 		if u != a.URL {
 			return fail(&MirrorError{Mirror: mirror, Err: fmt.Errorf("download %s through the mirror %s: %s", name, mirror, res.Status)})
