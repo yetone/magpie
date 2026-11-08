@@ -647,7 +647,8 @@ test("contributors: each language's page gets its own table, and keeps its line 
       assert.match(html, /<div id="wall"><div class="table-wrap"><table class="cw">/, path);
       assert.ok(html.includes(head), `${path} has the ${lang} table`);
       assert.ok(html.includes("packinggoodsllc_07668") && html.includes("v0.1.2581"), path);
-      assert.match(html, /static\.cloudflareinsights\.com/, `${path} keeps the beacon`);
+      assert.match(html, /posthog\.init\(/, `${path} keeps the analytics`);
+      assert.doesNotMatch(html, /cloudflareinsights/, `${path} leaves Cloudflare's beacon to Cloudflare`);
     }
     fragments = false;
     const bare = await get("/docs/zh/contributors");

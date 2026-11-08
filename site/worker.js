@@ -365,9 +365,12 @@ export async function relay(req, url) {
   }
 }
 
-// beacon adds Cloudflare Web Analytics and PostHog's Web Analytics to a page.
-// The dashboard's automatic injection skips whatever a worker returns, and
-// every page passes through this one. PostHog's requests go through RELAY
+// beacon adds PostHog's Web Analytics to a page; every page passes through
+// this one. Cloudflare Web Analytics is not added here: Cloudflare injects
+// its own beacon into worker responses now, and that one reports to this
+// site's /cdn-cgi/rum. A second, manual beacon loaded first and won, and
+// reported to cloudflareinsights.com, which answers 404 for this site's
+// token, so Web Analytics counted no visits at all. PostHog's requests go through RELAY
 // on this site. PostHog keeps its visitor id in
 // localStorage, never a cookie: these pages vary on Cookie (the lang
 // cookie), and a per-visitor cookie would ride on every request. It isn't
@@ -379,7 +382,7 @@ export async function relay(req, url) {
 // flags aren't turned off. Nothing is loaded under Do Not Track or Global
 // Privacy Control. Its project is the daily count's.
 const WEB_ANALYTICS = `<script>if(!(navigator.doNotTrack=="1"||window.doNotTrack=="1"||navigator.globalPrivacyControl)){!function(t,e){var o,n,p,r;e.__SV||(window.posthog&&window.posthog.__loaded)||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+" (stub)"},o="capture register unregister opt_out_capturing opt_in_capturing has_opted_out_capturing set_config".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);posthog.init("${POSTHOG_KEY}",{api_host:location.origin+"/r",ui_host:"https://us.posthog.com",persistence:"localStorage",person_profiles:"identified_only",capture_pageview:true,capture_pageleave:true,autocapture:true,enable_heatmaps:true,capture_dead_clicks:true,capture_exceptions:true,capture_performance:{web_vitals:true,network_timing:true},session_recording:{maskAllInputs:true},disable_surveys:true,respect_dnt:true})}</script>`;
-const BEACON = `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "c09e76abf16b40b2aa5571c196efb847"}'></script>` + WEB_ANALYTICS;
+const BEACON = WEB_ANALYTICS;
 
 // The contributors page: its #wall gets the table credits-cli.mjs rendered
 // for that language at deploy. Without it (a deploy that couldn't build
