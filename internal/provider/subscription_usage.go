@@ -83,7 +83,9 @@ type QuotaWindow struct {
 	// Credits is set on each window of a ChatGPT account that holds
 	// credits (has_credits with a balance left, or unlimited): using the
 	// window up doesn't stop it, the vendor spends the credits instead
-	// (codexGoesOnCredits). Routing reads it (Allowance.OnCredits); kept
+	// (codexGoesOnCredits); and on each of a Kimi Code key's while its
+	// booster holds money (kimiBooster). Routing reads it
+	// (Allowance.OnCredits); kept
 	// with the reading, so one shown from before still says it.
 	Credits bool `json:"credits,omitempty"`
 	// Capped is set, for the GUI only (WithCapped), on a window an

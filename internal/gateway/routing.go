@@ -1974,10 +1974,12 @@ func (s *Server) rateRest(c candidate, header http.Header, body []byte, sharedPo
 // (usedShare), except In order: there an account at 98% is still tried in
 // its turn, and one that fails then isn't benched until its week renews
 // unless the vendor said it was out (#530). A Codex account that goes on
-// on its credits is never: a window used up doesn't stop it (onCredits).
+// on its credits is never: a window used up doesn't stop it (onCredits);
+// nor is a key whose vendor goes on past its windows on a balance it
+// holds (Kimi Code's booster, #5721).
 func (c candidate) full(now time.Time) time.Time {
 	a, _ := c.allowance()
-	if spendsCredits(c.p, a) {
+	if spendsCredits(c.p, a) || c.p.Account == nil && a.OnCredits() {
 		return time.Time{}
 	}
 	return a.Full(c.model, provider.SpentShareOf(c.p.Routing), now)

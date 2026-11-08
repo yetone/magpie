@@ -641,3 +641,44 @@ func TestOpenCodeGoSaysWhyNoWindows(t *testing.T) {
 		t.Errorf("an unread reply's values are kept out of the error: %q", got)
 	}
 }
+
+// Kimi Code's booster wallet (加油包) is read beside the plan's windows
+// (#5721, the reporter's reply of 2026-11-08): its balance shows as Extra
+// usage, set aside from routing. With money left, Kimi goes on past the
+// plan's windows on it, so each of them is on credits; used up (no
+// amountLeft, which kimi-code reads as 0), they are not.
+func TestReadKimiCodeBooster(t *testing.T) {
+	body, err := os.ReadFile("testdata/kimi-booster-5721.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, ws, err := readKimiCode(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ws) != 3 || ws[0].Name != "5 hours" || ws[0].Used != 0 || ws[0].Credits ||
+		ws[1].Name != "Month" || math.Abs(ws[1].Used-98.85) > 1e-9 || ws[1].Credits ||
+		ws[2].Name != "Extra usage" || ws[2].Balance == nil || *ws[2].Balance != 0 || ws[2].Unit != "CNY" || !ws[2].Aside {
+		t.Fatalf("%+v", ws)
+	}
+
+	left := strings.Replace(string(body), `"amount": "17500000000",`, `"amount": "17500000000", "amountLeft": "5000000000",`, 1)
+	camel := strings.Replace(left, `"booster_wallet"`, `"boosterWallet"`, 1)
+	for name, b := range map[string]string{"snake_case": left, "camelCase": camel} {
+		_, ws, err = readKimiCode([]byte(b))
+		if err != nil || len(ws) != 3 || !ws[0].Credits || !ws[1].Credits ||
+			ws[2].Balance == nil || *ws[2].Balance != 50 || ws[2].Unit != "CNY" || ws[2].Credits {
+			t.Fatalf("%s: %+v %v", name, ws, err)
+		}
+	}
+
+	// a wallet that isn't a booster, or holds nothing, is no row
+	for _, b := range []string{
+		strings.Replace(left, `"type": "BOOSTER"`, `"type": "GIFT"`, 1),
+		strings.Replace(left, `"amount": "17500000000"`, `"amount": "0"`, 1),
+	} {
+		if _, ws, err = readKimiCode([]byte(b)); err != nil || len(ws) != 2 || ws[0].Credits || ws[1].Credits {
+			t.Fatalf("%+v %v", ws, err)
+		}
+	}
+}
