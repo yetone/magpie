@@ -26,10 +26,10 @@ const DIR = `${HOME}/Magpie Browser Extension`;
 const ABOUT = "Use your own browser: your tabs, signed in to the sites you use. Open pages, click, type, upload, read and take screenshots, through the Magpie Browser extension.";
 
 function fixture(lang, drag) {
-  const st = { written: false, connected: false, setups: 0, drags: 0 };
+  const st = { written: false, connected: false, setups: 0, drags: 0, ext: "0.1.0" };
   let onDrag;
   const dragged = new Promise((ok) => { onDrag = ok; });
-  const browser = () => ({ dir: DIR, written: st.written, version: "0.1.0", connected: st.connected, ...(drag ? { drag: true } : {}), ...(st.connected ? { extension: "0.1.0", browser: "Chrome/141" } : {}) });
+  const browser = () => ({ dir: DIR, written: st.written, version: "0.1.0", connected: st.connected, ...(drag ? { drag: true } : {}), ...(st.connected ? { extension: st.ext, browser: "Chrome/141", ...(st.ext !== "0.1.0" ? { outdated: true } : {}) } : {}) });
   const route = async (route) => {
     const req = route.request(), url = new URL(req.url());
     const json = (data) => route.fulfill({ json: data });
@@ -165,7 +165,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(await box.locator(".mk-browser-steps").isVisible(), false);
           assert.equal(await box.locator(".mk-browser-folder").isVisible(), false);
           assert.equal(await wide(page), 0);
+          assert.equal(await box.locator(".mk-browser-update").isVisible(), false);
           shots.push([`${lang}-${width}-${drag ? "drag" : "nodrag"}-connected`, await sheet.screenshot()]);
+
+          // an older extension connected: the browser runs it until it is
+          // reloaded, so the sheet says to reload it, and stops once it is
+          f.st.ext = "0.0.9";
+          const update = box.locator(".mk-browser-update");
+          await page.waitForFunction((s) => document.querySelector("#modal .mk-browser-update:not([hidden])")?.textContent === s,
+            w("Magpie Browser {v} is ready: reload Magpie Browser on chrome://extensions (edge://extensions in Edge).", { v: "0.1.0" }), { timeout: 10000 });
+          assert.equal(await state.textContent(), w("Connected to your browser") + " · 0.0.9");
+          assert.equal(await update.isVisible(), true);
+          assert.equal(await wide(page), 0);
+          assert.equal(await sheet.evaluate((e) => e.scrollWidth - e.clientWidth), 0);
+          shots.push([`${lang}-${width}-${drag ? "drag" : "nodrag"}-outdated`, await sheet.screenshot()]);
+          f.st.ext = "0.1.0";
+          await page.waitForFunction(() => document.querySelector("#modal .mk-browser-update")?.hidden === true, null, { timeout: 10000 });
           assert.deepEqual(errors, []);
           await context.close();
         });

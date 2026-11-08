@@ -49,6 +49,12 @@ func fakeExtensionAs(t *testing.T, base, agent string, answer func(id, session, 
 // is) and sending hdr.
 func fakeExtensionWith(t *testing.T, base, key string, hdr http.Header, agent string, answer func(id, session, tool string, args map[string]any) any) {
 	t.Helper()
+	fakeExtensionVersion(t, base, key, hdr, agent, browserext.Version(), answer)
+}
+
+// fakeExtensionVersion is fakeExtensionWith saying it is version.
+func fakeExtensionVersion(t *testing.T, base, key string, hdr http.Header, agent, version string, answer func(id, session, tool string, args map[string]any) any) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	h := http.Header{"Origin": {browserext.Origin}}
 	for k, v := range hdr {
@@ -65,7 +71,7 @@ func fakeExtensionWith(t *testing.T, base, key string, hdr http.Header, agent st
 	}
 	done := make(chan struct{})
 	t.Cleanup(func() { cancel(); c.CloseNow(); <-done })
-	if err := c.Write(ctx, websocket.MessageText, []byte(`{"type":"hello","version":"0.1.0","agent":"`+agent+`"}`)); err != nil {
+	if err := c.Write(ctx, websocket.MessageText, []byte(`{"type":"hello","version":"`+version+`","agent":"`+agent+`"}`)); err != nil {
 		t.Fatal(err)
 	}
 	go func() {
@@ -148,7 +154,7 @@ func TestBrowserMCPRelaysToTheExtension(t *testing.T) {
 	}
 	json.NewDecoder(st.Body).Decode(&status)
 	st.Body.Close()
-	if !status.Connected || status.Extension != "0.1.0" || status.Browser != "Chrome/140" {
+	if !status.Connected || status.Extension != browserext.Version() || status.Browser != "Chrome/140" {
 		t.Fatalf("status: %+v", status)
 	}
 }
@@ -311,7 +317,7 @@ func TestBrowserMCPPicksAmongBrowsers(t *testing.T) {
 	if got, _ := tabs("s1", map[string]any{}); !strings.Contains(got, "tabs of edge") || !strings.Contains(got, "b2's tabs (Edge 141); 2 browsers") {
 		t.Fatalf("s1 before picking: %q", got)
 	}
-	if got, _ := tabs("s1", map[string]any{"action": "browsers"}); !strings.Contains(got, "  b1 Chrome 141, extension 0.1.0") || !strings.Contains(got, "* b2 Edge 141, extension 0.1.0") {
+	if got, _ := tabs("s1", map[string]any{"action": "browsers"}); !strings.Contains(got, "  b1 Chrome 141, extension "+browserext.Version()) || !strings.Contains(got, "* b2 Edge 141, extension "+browserext.Version()) {
 		t.Fatalf("browsers: %q", got)
 	}
 	if got, bad := tabs("s1", map[string]any{"action": "use", "browser": "Chrome"}); bad || !strings.Contains(got, "b1 (Chrome 141)") {

@@ -6541,6 +6541,9 @@ magpie.plugin("library", (ctx) => {
   function browserSetup() {
     const box = el("div", "mk-browser");
     const state = el("div", "mk-browser-state");
+    // a connected extension older than magpie's: its folder has the new
+    // one, but the browser runs the old until it is reloaded
+    const update = el("p", "mk-browser-update");
     const steps = el("ol", "mk-browser-steps");
     let away = false;
     const go = button(t("Set up the extension…"), "action", async () => {
@@ -6580,6 +6583,10 @@ magpie.plugin("library", (ctx) => {
         ? t("Connected to your browser") + (b.extension ? " · " + b.extension : "")
         : away ? t("Not connected: download the extension and load it in your browser")
         : b.written ? t("Not connected: load the folder below in your browser, and keep that browser open") : t("Not set up: set up the extension in Chrome, Edge, Arc, Brave or another Chromium browser")));
+      update.hidden = !(b.connected && b.outdated);
+      update.textContent = update.hidden ? "" : away
+        ? t("Magpie Browser {v} is ready: download the extension again, unzip it over the old folder, and reload Magpie Browser on chrome://extensions (edge://extensions in Edge).", { v: b.version })
+        : t("Magpie Browser {v} is ready: reload Magpie Browser on chrome://extensions (edge://extensions in Edge).", { v: b.version });
       go.textContent = away ? t("Download the extension") : b.written ? t("Show the extension folder") : t("Set up the extension…");
       if (away) {
         steps.replaceChildren(
@@ -6620,7 +6627,8 @@ magpie.plugin("library", (ctx) => {
     folder.addEventListener("dragstart", (e) => e.preventDefault());
     steps.hidden = true;
     folder.hidden = true;
-    box.append(state, steps, folder, go);
+    update.hidden = true;
+    box.append(state, update, steps, folder, go);
     const poll = async () => {
       if (!box.isConnected) return;
       try { draw(await api("library/browser")); } catch {}

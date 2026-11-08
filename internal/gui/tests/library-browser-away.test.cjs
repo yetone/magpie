@@ -24,8 +24,8 @@ const DIR = `${HOME}/Magpie Browser Extension`;
 const ABOUT = "Use your own browser: your tabs, signed in to the sites you use. Open pages, click, type, upload, read and take screenshots, through the Magpie Browser extension.";
 
 function fixture(lang) {
-  const st = { connected: false, setups: 0, downloads: [] };
-  const browser = () => ({ dir: DIR, written: false, version: "0.1.7", connected: st.connected, away: true, ...(st.connected ? { extension: "0.1.7", browser: "Chrome/141" } : {}) });
+  const st = { connected: false, setups: 0, downloads: [], ext: "0.1.7" };
+  const browser = () => ({ dir: DIR, written: false, version: "0.1.7", connected: st.connected, away: true, ...(st.connected ? { extension: st.ext, browser: "Chrome/141", ...(st.ext !== "0.1.7" ? { outdated: true } : {}) } : {}) });
   const route = async (route) => {
     const req = route.request(), url = new URL(req.url());
     const json = (data) => route.fulfill({ json: data });
@@ -128,7 +128,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             w("Connected to your browser") + " · 0.1.7", { timeout: 10000 });
           assert.equal(await state.locator(".mk-browser-dot.on").count(), 1);
           assert.equal(await box.locator(".mk-browser-steps").isVisible(), false);
+          assert.equal(await box.locator(".mk-browser-update").isVisible(), false);
           assert.equal(await wide(page), 0);
+
+          // an older one connected: downloaded again, over the old folder
+          f.st.ext = "0.1.6";
+          await page.waitForFunction((s) => document.querySelector("#modal .mk-browser-update:not([hidden])")?.textContent === s,
+            w("Magpie Browser {v} is ready: download the extension again, unzip it over the old folder, and reload Magpie Browser on chrome://extensions (edge://extensions in Edge).", { v: "0.1.7" }), { timeout: 10000 });
+          assert.equal((await go.textContent()).trim(), w("Download the extension"));
+          assert.equal(await wide(page), 0);
+          assert.equal(await sheet.evaluate((e) => e.scrollWidth - e.clientWidth), 0);
+          shots.push([`${lang}-${width}-outdated`, await sheet.screenshot()]);
           assert.deepEqual(errors, []);
           await context.close();
         });

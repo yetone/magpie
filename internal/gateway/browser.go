@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -103,7 +104,10 @@ type browserConn struct {
 	// calls (their pages read, and pages of theirs fed back).
 	own   bool
 	since time.Time
-	wmu   sync.Mutex
+	// told: an agent was told this extension is older than magpie's
+	// (browserOlder), once a connection
+	told atomic.Bool
+	wmu  sync.Mutex
 }
 
 // browserName is the browser a User-Agent names, with its major version:
@@ -634,9 +638,28 @@ func (s *Server) browserMCPCall(r *http.Request, m mcpMessage) (any, map[string]
 				}
 			}
 		}
-		return said(result), nil
+		return s.browserOlder(session, said(result)), nil
 	}
 	return nil, map[string]any{"code": -32601, "message": "method not found: " + m.Method}
+}
+
+// browserOlder puts a word before result, once a connection, when the
+// extension is older than this magpie's: its folder has the new one, but
+// the browser runs what it loaded until the extension is reloaded or the
+// browser starts again, so the agent tells the user.
+func (s *Server) browserOlder(session string, result map[string]any) map[string]any {
+	c := s.browser.forSession(session)
+	if c == nil || !browserext.Older(c.version, browserext.Version()) || !c.told.CompareAndSwap(false, true) {
+		return result
+	}
+	how := "it is reloaded on chrome://extensions (edge://extensions in Edge): magpie has put the new one in its folder already"
+	if c.key != "" {
+		how = "it is downloaded again from magpie's Library → Magpie Browser, unzipped over the old folder and reloaded on chrome://extensions (edge://extensions in Edge)"
+	}
+	note := fmt.Sprintf("Tell the user: Magpie Browser in their browser is %s and magpie has %s, which the browser doesn't run until %s.", c.version, browserext.Version(), how)
+	content, _ := result["content"].([]any)
+	result["content"] = append([]any{map[string]any{"type": "text", "text": note}}, content...)
+	return result
 }
 
 // browserPicture is a picture of session's window (base64), or why there

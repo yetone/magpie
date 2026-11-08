@@ -798,6 +798,8 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .mk-sheet .mk-browser-state { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
 .mk-sheet .mk-browser-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
 .mk-sheet .mk-browser-dot.on { background: var(--green); }
+.mk-sheet .mk-browser-update { margin: 0; font-size: 12px; color: var(--fg-2); }
+.mk-sheet .mk-browser-update[hidden] { display: none; }
 .mk-sheet .mk-browser-steps { margin: 0; padding-left: 18px; font-size: 12px; color: var(--muted); display: grid; gap: 2px; }
 .mk-sheet .mk-browser-folder { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 10px; align-items: center; max-width: 100%; box-sizing: border-box; padding: 8px 12px; border: 1px dashed var(--line); border-radius: 8px; background: var(--card); cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none; }
 .mk-sheet .mk-browser-folder[hidden] { display: none; }

@@ -39,6 +39,10 @@ type browserJSON struct {
 	// the browser's reach; the extension is downloaded instead, with a
 	// gateway key of its own (browserKey)
 	Away bool `json:"away,omitempty"`
+	// Outdated: the connected extension is older than Version. Its folder
+	// has this magpie's, but the browser runs what it loaded until the
+	// extension is reloaded, so the sheet says to reload it
+	Outdated bool `json:"outdated,omitempty"`
 }
 
 // browserAway is whether r's page is in a browser magpie's folders are out
@@ -127,6 +131,7 @@ func browserState(ctx context.Context) browserJSON {
 	}
 	if resp.StatusCode == http.StatusOK && json.NewDecoder(resp.Body).Decode(&st) == nil {
 		out.Connected, out.Extension, out.Browser = st.Connected, st.Extension, st.Browser
+		out.Outdated = st.Connected && st.Extension != "" && browserext.Older(st.Extension, out.Version)
 	}
 	return out
 }
