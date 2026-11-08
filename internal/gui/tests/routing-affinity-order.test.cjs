@@ -16,14 +16,16 @@ const { chromium, webkit } = require("playwright");
 // too, and says so ("back"; 01huadalang, 11-01: a MiMo backup kept a Codex
 // session by its cache).
 const words = {
-  en: { back: ["listed ahead of it in the group", "turn 2 goes back"], order: ["goes in order", "turn 2 goes back"], main: ["a fallback", "turn 2 goes back"], strict: ["a fallback", "Strict", "new conversations go to"] },
-  zh: { back: ["排在它前面", "第 2 轮回到它"], order: ["按顺序路由", "第 2 轮回到"], main: ["备用", "第 2 轮回到它"], strict: ["备用", "严格", "新会话会走"] },
-  "zh-TW": { back: ["排在它前面", "第 2 輪回到它"], order: ["按順序路由", "第 2 輪回到"], main: ["備用", "第 2 輪回到它"], strict: ["備用", "嚴格", "新會話會走"] },
-  ja: { back: ["受けられなかった", "ターン 2 は"], order: ["順番どおり", "ターン 2 は"], main: ["代替", "ターン 2 は"], strict: ["代替", "厳格", "新しい会話は"] },
-  de: { back: ["in der Gruppe davor", "Runde 2 dorthin zurück"], order: ["der Reihe nach", "Runde 2 zurück"], main: ["ein Ersatz", "Runde 2 dorthin zurück"], strict: ["ein Ersatz", "Strikt", "neue Unterhaltungen gehen an"] },
+  en: { back: ["listed ahead of it in the group", "turn 2 goes back"], order: ["the group goes in order", "turn 2 goes back"], accounts: ["the provider goes in order", "turn 2 goes back"], main: ["a fallback", "turn 2 goes back"], strict: ["a fallback", "Strict", "new conversations go to"] },
+  zh: { back: ["排在它前面", "第 2 轮回到它"], order: ["该组按顺序路由", "第 2 轮回到"], accounts: ["该提供商按顺序路由", "第 2 轮回到"], main: ["备用", "第 2 轮回到它"], strict: ["备用", "严格", "新会话会走"] },
+  "zh-TW": { back: ["排在它前面", "第 2 輪回到它"], order: ["該群組按順序路由", "第 2 輪回到"], accounts: ["該供應商按順序路由", "第 2 輪回到"], main: ["備用", "第 2 輪回到它"], strict: ["備用", "嚴格", "新會話會走"] },
+  ja: { back: ["受けられなかった", "ターン 2 は"], order: ["順番どおり", "ターン 2 は"], accounts: ["このプロバイダーは順番どおり", "ターン 2 は"], main: ["代替", "ターン 2 は"], strict: ["代替", "厳格", "新しい会話は"] },
+  de: { back: ["in der Gruppe davor", "Runde 2 dorthin zurück"], order: ["der Reihe nach", "Runde 2 zurück"], accounts: ["der Anbieter geht der Reihe nach", "Runde 2 zurück"], main: ["ein Ersatz", "Runde 2 dorthin zurück"], strict: ["ein Ersatz", "Strikt", "neue Unterhaltungen gehen an"] },
 };
 
-function routes(now, why) {
+function routes(now, as) {
+  // "accounts": a provider routing its own keys In order, no group (CryptoSarom on X)
+  const why = as === "accounts" ? "order" : as;
   const time = new Date(now.getTime() - 5000).toISOString();
   const at = new Date(now.getTime() - 65000).toISOString();
   const k1 = { id: "cw#k1", provider: "cw", name: "CW", kind: "key", who: "k1", model: "m" };
@@ -31,7 +33,7 @@ function routes(now, why) {
   // Strict leaves the plan the one it keeps, and names the main beside it
   const order = why === "strict" ? [k2] : [k1, k2];
   return [{ id: 1, seq: 1, time, agent: "claude", model: "cw/m", provider: "cw", order, done: true, status: 200, ms: 20,
-    group: why === "order" ? { id: "g", name: "G", routing: "order" } : why === "back" ? { id: "g", name: "G", routing: "" } : undefined,
+    group: as === "order" ? { id: "g", name: "G", routing: "order" } : why === "back" ? { id: "g", name: "G", routing: "" } : undefined,
     affinity: { mode: why === "strict" ? "strict" : "", turn: 2, last: "cw#k2", lastTurn: 1, at, cacheRead: 20000, cacheWrite: 3000, why, main: why === "strict" ? k1 : undefined },
     tries: [{ id: order[0].id, model: "m", start: time, done: true, status: 200, ms: 20 }] }];
 }
@@ -77,7 +79,7 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
           await page.waitForFunction(() => /\d/.test(document.body.innerText) && document.querySelector(".rt-cap")?.textContent);
           return page.evaluate(() => document.body.innerText + "\n" + document.querySelector(".rt-cap").textContent);
         };
-        for (const why of ["back", "order", "main", "strict"]) {
+        for (const why of ["back", "order", "accounts", "main", "strict"]) {
           rs = routes(now, why);
           const text = await story();
           for (const w of words[lang][why]) assert.ok(text.includes(w), `${why}: ${w} not in\n${text}`);

@@ -539,7 +539,8 @@ func stickKey(scope string, in http.Header, body []byte) string {
 // (dirOf): one parse of a held body serves both (factsOf), where counting
 // it in the masked body parsed the conversation a second time, ~27 MB
 // more for each 4 MB Codex request in flight. inOrder: the request is to
-// a routing group set to In order, whose order the user chose (backToFirst).
+// a routing group, or a provider's keys or accounts, set to In order,
+// whose order the user chose (backToFirst).
 func affine(scope, mode string, rotate, spread, inOrder bool, in http.Header, from provider.Protocol, body, written []byte, cs []candidate, pl planned) ([]candidate, planned, *Affinity, string) {
 	key := stickKey(scope, in, body)
 	a := &Affinity{Mode: mode}
@@ -618,7 +619,7 @@ func affine(scope, mode string, rotate, spread, inOrder bool, in http.Header, fr
 		// for it, which the provider can't read, and the whole prompt is
 		// sent afresh to the provider at the next turn all the same
 		a.Why = "main"
-	case !a.Within && inOrder && mode == "" && backToFirst(cs, pl.order, at):
+	case !a.Within && inOrder && mode == "" && backToFirst(cs, pl.order, at, !strings.HasPrefix(scope, provider.GroupPrefix)) && (strings.HasPrefix(scope, provider.GroupPrefix) || cacheHolds(st, cs[at].p)):
 		// a group set to In order tries its members in the order the user
 		// put them in: a conversation that went to a later member while
 		// the first couldn't take it (a 429, a 5xx, a rest) goes back to
@@ -629,7 +630,10 @@ func affine(scope, mode string, rotate, spread, inOrder bool, in http.Header, fr
 		// Discord: an API key first, a Claude subscription second, 8 of 10
 		// requests on the subscription). Within a turn it stays, on the
 		// reasoning the later member sealed; Stays: Session or Strict,
-		// the user's own, keep it where it is
+		// the user's own, keep it where it is. A provider's own keys or
+		// accounts routed In order do the same (CryptoSarom on X); only
+		// a cache that would keep it is overridden, so one gone cold or
+		// never written is still told as that
 		a.Why = "order"
 	case !a.Within && !inOrder && !rotate && mode == "" && st.stoodIn && backFromStandIn(cs, pl.order, at):
 		// a member listed after another, in a group routed Smart or any
@@ -721,11 +725,16 @@ func backToMain(order []Weighed, at int) bool {
 // first, order[0], is a member of the group ahead of the member that
 // answered last, cs[at]: another member, not another key or account of
 // the same one (a provider's keys, a group in the group, keep their own
-// affinity). restLast puts a resting one behind every ready one, so the
+// affinity). accounts: a provider's own keys or accounts routed In order,
+// where the first is another key or account of the provider's own, not a
+// fallback. restLast puts a resting one behind every ready one, so the
 // first is ready only when it isn't resting.
-func backToFirst(cs []candidate, order []Weighed, at int) bool {
+func backToFirst(cs []candidate, order []Weighed, at int, accounts bool) bool {
 	if at <= 0 || at >= len(order) || at >= len(cs) || order[0].Rest != nil || order[0].Aside {
 		return false
+	}
+	if accounts {
+		return !order[0].Fallback && !order[at].Fallback && cs[0].who() != cs[at].who()
 	}
 	member := func(i int) string {
 		if len(order[i].Via) > 0 {
@@ -1504,4 +1513,12 @@ func keptAgain(aff *Affinity, c candidate, hw *holdWriter, asked bool) (time.Dur
 		return 0, false
 	}
 	return passing(hw.code(), hw.header, hw.errBody(), 0)
+}
+
+// cacheHolds says whether what the conversation has cached would keep it
+// where it is: enough written or read (cacheWorth), and not gone cold
+// (coldAfter, or kept for an hour: #2302). The "no-cache" and "cold"
+// cases of affine read the same.
+func cacheHolds(st stick, p provider.Provider) bool {
+	return st.cacheRead+st.cacheWrite >= cacheWorth && (time.Since(st.at) <= coldAfter(p) || st.hour.warm(time.Now()))
 }

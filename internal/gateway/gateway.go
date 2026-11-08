@@ -2979,7 +2979,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// (#63): its reasoning, sealed by the account that wrote it, is refused
 	// by another.
 	before := len(cands)
-	inOrder := isGroup && routingOf(g.Routing) == provider.Ordered
+	inOrder := routingOf(p.Routing) == provider.Ordered
+	if isGroup {
+		inOrder = routingOf(g.Routing) == provider.Ordered
+	}
 	cands, pl, aff, stuck := affine(scope, mode, rotate, spread, inOrder, r.Header, from, body, plain, cands, pl)
 	// a strict conversation left with its own account of several: its
 	// failure rests the account as it would with the others still there,

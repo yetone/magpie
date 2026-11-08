@@ -239,7 +239,9 @@ func TestPluginFactoryStandardOnlyCaps(t *testing.T) {
 		back     string // who the conversation goes to once A is back
 	}{
 		{"auto", "", false, "a"},
-		{"auto, cached on B", "", true, "b"},
+		// In order gives it back to A at its next turn whatever B
+		// cached (CryptoSarom on X)
+		{"auto, cached on B", "", true, "a"},
 		{"session", provider.AffinitySession, false, "b"},
 	} {
 		t.Run(way.name, func(t *testing.T) {
