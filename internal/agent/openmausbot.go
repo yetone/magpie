@@ -35,19 +35,25 @@ package agent
 // engines, as it holds it, when the user changes one in its Settings
 // (routes/instances.ts: replaceInstances). So a change is refused while it
 // runs, where magpie can tell; a sync writes anyway, as one OpenMausBot
-// writes over is written again by the next.
+// writes over is written again by the next, or within half a minute by
+// KeepOpenMausBotListed. One running on an older list than the file's
+// offers a Restart on its Agents row (apprestart.go), which reads it.
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/beat"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
@@ -316,6 +322,91 @@ func ombMerged(path, dir, gw string) any {
 		delete(w, "displayName")
 	}
 	return mergeTheirs(have, w, []string{"environment"})
+}
+
+// ombSaved is the models magpie's engine at path lists in OpenMausBot's
+// picker, as the file has them.
+func ombSaved(path string) []string {
+	raw, _ := edit.GetJSON(path, ombInstance+".config.endpointModels")
+	var have []string
+	json.Unmarshal([]byte(raw), &have)
+	return have
+}
+
+// ombPart is what OpenMausBot reads of magpie's engine at path when it
+// starts, for a Restart while it runs on an older one (AppBehind): the
+// gateway, the model first picked and the models listed, not the key.
+func ombPart(path string) string {
+	url, _ := edit.GetJSON(path, ombInstance+".environment.ANTHROPIC_BASE_URL")
+	model, _ := edit.GetJSON(path, ombInstance+".environment.ANTHROPIC_MODEL")
+	return url + "\n" + model + "\n" + strings.Join(ombSaved(path), "\n")
+}
+
+// ombListStale says magpie's engine at path lists other models than magpie
+// does for OpenMausBot. A sync rewrites the list when magpie's changes, but
+// OpenMausBot writes back the one it held since it started when the user
+// changes an engine in it, and an edit of magpie's engine there keeps the
+// model picked alone (claude-endpoints.ts's updateClaudeEndpoint): either
+// leaves the picker, and its search, without models picked in magpie
+// (maxleebeta, 11-08: Antigravity's weren't found), and no catalog change
+// follows to write the list again.
+//
+// It is not a Check drift: that reads as unwired, and a port change
+// rewires only agents without one.
+func ombListStale(path string) bool {
+	want := ombModels()
+	if len(want) == 0 {
+		return false
+	}
+	have := ombSaved(path)
+	if len(have) != len(want) {
+		return true
+	}
+	for _, m := range want {
+		if !slices.Contains(have, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// ombKeepEvery is how often KeepOpenMausBotListed looks.
+const ombKeepEvery = 30 * time.Second
+
+// KeepOpenMausBotListed writes magpie's models into OpenMausBot's engine
+// again, while the gateway serves, when OpenMausBot wrote a list over
+// them (ombListStale). The model picked in it stays.
+func KeepOpenMausBotListed(ctx context.Context) { keepOMBListed(ctx, ombKeepEvery) }
+
+// keepOMBListed is KeepOpenMausBotListed at an interval the tests can
+// shorten; a failure is said once, not every round.
+func keepOMBListed(ctx context.Context, every time.Duration) {
+	said := ""
+	for {
+		msg := ""
+		if err := ombListedOnce(); err != nil {
+			msg = err.Error()
+		}
+		if msg != "" && msg != said {
+			log.Print("OpenMausBot: ", msg)
+		}
+		said = msg
+		select {
+		case <-ctx.Done():
+			return
+		case <-beat.Next(every):
+		}
+	}
+}
+
+// ombListedOnce is one round of KeepOpenMausBotListed.
+func ombListedOnce() error {
+	home, _ := homes()
+	a := openMausBot(home)
+	if !a.Wired() || !ombListStale(a.Path) {
+		return nil
+	}
+	return synced(a.Sync)
 }
 
 // ombWire writes magpie's engine into OpenMausBot's config.json at path,

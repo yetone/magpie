@@ -447,6 +447,9 @@ func run(args []string) error {
 	// and Cursor Private Inference's variables, which the Mac's launchd
 	// forgets at a restart, for the gateway's address now
 	gateway.WhileServing = append(gateway.WhileServing, agent.KeepCursorLocalEnv)
+	// and magpie's models in OpenMausBot's engine, which OpenMausBot
+	// writes back as it held them when an engine is changed in it
+	gateway.WhileServing = append(gateway.WhileServing, agent.KeepOpenMausBotListed)
 	// and Claude Science's daemon, which a restart of the computer ends,
 	// started on the gateway again while it is connected
 	gateway.WhileServing = append(gateway.WhileServing, agent.KeepClaudeScience)

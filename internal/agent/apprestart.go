@@ -16,10 +16,11 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 )
 
-// Claude Desktop and WorkBuddy read what magpie writes for them as they
-// start (微雨南山 and stones on Discord, 10-24: a provider added showed up
-// there only after a restart). Claude Desktop asks the gateway for its
-// models once, at start. WorkBuddy 5.6's app.asar watches models.json only
+// Claude Desktop, WorkBuddy and OpenMausBot read what magpie writes for
+// them as they start (微雨南山 and stones on Discord, 10-24: a provider
+// added showed up there only after a restart; maxleebeta, 11-08: a model
+// picked for OpenMausBot wasn't in its search). Claude Desktop asks the
+// gateway for its models once, at start. WorkBuddy 5.6's app.asar watches models.json only
 // when the file was there at start, and the watch is on the file itself,
 // so a rewrite by rename leaves it watching the old one. While such an app
 // runs on what it read before magpie's last change, its Agents row offers
@@ -43,13 +44,15 @@ var claudeDesktopApp = desktopApp{id: "com.anthropic.claudefordesktop", names: [
 
 // restartApps are the agents whose desktop app the Agents row restarts.
 // macOS: Claude.app, WorkBuddy.app and WorkBuddy AI.app (both run an
-// executable named Electron). Windows: Claude Desktop is claude.exe, from
-// Squirrel's %LOCALAPPDATA%\AnthropicClaude (a claude.exe stub beside
-// app-<version>\claude.exe) or its MSIX (desktopdir's Claude_… and
-// AnthropicPBC.Claude_…), never Claude Code's claude.exe elsewhere;
+// executable named Electron) and OpenMausBot.app. Windows: Claude
+// Desktop is claude.exe, from Squirrel's %LOCALAPPDATA%\AnthropicClaude
+// (a claude.exe stub beside app-<version>\claude.exe) or its MSIX
+// (desktopdir's Claude_… and AnthropicPBC.Claude_…), never Claude
+// Code's claude.exe elsewhere;
 // WorkBuddy is C:\Program Files\WorkBuddy\WorkBuddy.exe (5.6.2, seen on
 // the Windows box). WorkBuddy AI's Windows build wasn't to hand, so it has
-// no Restart there. None of them ships a Linux app.
+// no Restart there. Only OpenMausBot ships a Linux app; magpie doesn't
+// restart it there.
 var restartApps = map[string]restartable{
 	"claude-desktop": {mac: claudeDesktopApp, winExe: "claude.exe", win: func(image string) bool {
 		return winBase(image, "claude.exe") && (winHas(image, `\AnthropicClaude\`) || winHas(image, `\WindowsApps\Claude_`) || winHas(image, `\WindowsApps\AnthropicPBC.Claude_`))
@@ -58,6 +61,12 @@ var restartApps = map[string]restartable{
 		return winBase(image, "WorkBuddy.exe") && !winHas(image, `WorkBuddy AI`) && !winHas(image, `WorkBuddy-AI`)
 	}},
 	"workbuddy-ai": {mac: workbuddyAIApp},
+	// OpenMausBot reads its engines, magpie's models among them, once at
+	// start (openmausbot.go); its Windows build is electron-builder's
+	// per-user NSIS, OpenMausBot.exe under Programs\openmausbot
+	"openmausbot": {mac: ombApp, winExe: "OpenMausBot.exe", win: func(image string) bool {
+		return winBase(image, "OpenMausBot.exe")
+	}},
 }
 
 func winBase(image, name string) bool {
@@ -307,6 +316,7 @@ func (a *Agent) AppBehind() *AppRun {
 // at start, and that part. Claude Desktop: deploymentMode, the profile
 // applied and magpie's profile (or the user's for magpie's gateway), with the models the gateway lists it.
 // WorkBuddy: magpie's models in its models.json (workbuddyPart).
+// OpenMausBot: magpie's engine in its config.json (ombPart).
 func (a *Agent) appReads() (files []string, reads func() string) {
 	switch a.ID {
 	case "claude-desktop":
@@ -351,6 +361,8 @@ func (a *Agent) appReads() (files []string, reads func() string) {
 		}
 	case "workbuddy", "workbuddy-ai":
 		return []string{a.Path}, func() string { return workbuddyPart(a.Path) }
+	case "openmausbot":
+		return []string{a.Path}, func() string { return ombPart(a.Path) }
 	}
 	return nil, nil
 }

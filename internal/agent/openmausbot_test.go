@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,7 +10,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
@@ -389,5 +392,224 @@ func TestOpenMausBotProcess(t *testing.T) {
 		if match(cmd) {
 			t.Errorf("taken for OpenMausBot: %s", cmd)
 		}
+	}
+}
+
+// ombAntigravity signs magpie in to Antigravity with the reporter's
+// models (maxleebeta on Discord, 11-08): Gemini 3.8 Flash's two efforts,
+// one 1M family model, and two Claude models.
+func ombAntigravity(t *testing.T) {
+	t.Helper()
+	cfg := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "magpie")
+	writeFile(t, filepath.Join(cfg, "logins.json"), `[{"agent":"antigravity","user":"u@example.com","seen":"2026-09-25T08:45:36Z","on":true,"auth":{"refresh_token":"r","access_token":"a","expiry_date":99999999999999}}]`)
+	if err := catalog.SaveLive("antigravity", "", []catalog.Model{
+		{ID: "gemini-3.8-flash-high", Name: "Gemini 3.8 Flash (High)", Images: true, Context: 1048576},
+		{ID: "gemini-3.8-flash-low", Name: "Gemini 3.8 Flash (Low)", Images: true, Context: 1048576},
+		{ID: "claude-sonnet-4-6-thinking", Name: "Claude Sonnet 4.6 (Thinking)", Images: true},
+		{ID: "claude-opus-4-6-thinking", Name: "Claude Opus 4.6 (Thinking)", Images: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// ombSaves writes magpie's engine at path as OpenMausBot saves its fleet,
+// JSON.stringify(cfg, null, 2), with engine in magpie's place.
+func ombSaves(t *testing.T, path string, engine json.RawMessage) {
+	t.Helper()
+	var file map[string]any
+	if err := json.Unmarshal([]byte(readFile(path)), &file); err != nil {
+		t.Fatal(err)
+	}
+	var e any
+	if err := json.Unmarshal(engine, &e); err != nil {
+		t.Fatal(err)
+	}
+	file["instances"].(map[string]any)[magpieID] = e
+	b, _ := json.MarshalIndent(file, "", "  ")
+	writeFile(t, path, string(b))
+}
+
+// The models picked in magpie stay in OpenMausBot's picker, and so in its
+// search (maxleebeta on Discord, 11-08: "3.8" found nothing). OpenMausBot
+// writes back the engine it read at start when an engine is changed in
+// its Settings, and an edit of magpie's engine there keeps only the model
+// picked; no catalog change follows, so before KeepOpenMausBotListed
+// nothing wrote magpie's list again.
+func TestOpenMausBotListWrittenAgain(t *testing.T) {
+	home := syncHome(t)
+	stashHome(t)
+	ombRelay(t)
+	a := openMausBot(home)
+	path := a.Path
+	// the round reads $HOME, stashHome's now: point it at this file
+	t.Setenv("OMB_DATA_DIR", filepath.Dir(path))
+	writeFile(t, path, `{"instances":{"claude":{"driver":"claudeAgent"}}}`)
+	if err := a.Field("provider").Set(magpieID); err != nil {
+		t.Fatal(err)
+	}
+	// the engine as OpenMausBot read it when it started, the user's model
+	// picked in it
+	var held map[string]any
+	json.Unmarshal(ombRead(t, path)[magpieID], &held)
+	held["environment"].(map[string]any)["ANTHROPIC_MODEL"] = "relay/gpt-5.5"
+	heldRaw, _ := json.Marshal(held)
+
+	ombAntigravity(t)
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	const gemini = "antigravity/gemini-3.8-flash[1m]"
+	if !slices.Contains(ombSaved(path), gemini) {
+		t.Fatalf("magpie's sync didn't list Antigravity's models: %q", ombSaved(path))
+	}
+	full := ombSaved(path)
+
+	for _, c := range []struct {
+		name   string
+		engine json.RawMessage
+	}{
+		// the fleet it held, written back over magpie's list
+		{"written back", heldRaw},
+		// Edit endpoint in its Settings: endpointModels is the model alone
+		{"edited there", func() json.RawMessage {
+			var e map[string]any
+			json.Unmarshal(heldRaw, &e)
+			e["config"].(map[string]any)["endpointModels"] = []string{"relay/gpt-5.5"}
+			b, _ := json.Marshal(e)
+			return b
+		}()},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			ombSaves(t, path, c.engine)
+			if slices.Contains(ombSaved(path), gemini) {
+				t.Fatal("the stale engine lists Gemini 3.8 Flash; the test proves nothing")
+			}
+			if err := ombListedOnce(); err != nil {
+				t.Fatal(err)
+			}
+			if got := ombSaved(path); !slices.Equal(got, full) {
+				t.Fatalf("listed %q, want magpie's %q", got, full)
+			}
+			e := ombFormat(t, ombRead(t, path)[magpieID])
+			if e.Environment["ANTHROPIC_MODEL"] != "relay/gpt-5.5" {
+				t.Fatalf("the model picked in OpenMausBot was replaced: %q", e.Environment["ANTHROPIC_MODEL"])
+			}
+			if _, ok := ombRead(t, path)["claude"]; !ok {
+				t.Fatal("OpenMausBot's other engine is gone")
+			}
+		})
+	}
+
+	// a round with the list as magpie's writes nothing
+	old := time.Now().Add(-time.Hour).Truncate(time.Second)
+	os.Chtimes(path, old, old)
+	before := readFile(path)
+	if err := ombListedOnce(); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := os.Stat(path); !st.ModTime().Equal(old) || readFile(path) != before {
+		t.Fatal("a round rewrote a list already magpie's")
+	}
+
+	// while magpie serves, the loop writes it again
+	ombSaves(t, path, heldRaw)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { keepOMBListed(ctx, 10*time.Millisecond); close(done) }()
+	for end := time.Now().Add(10 * time.Second); !slices.Equal(ombSaved(path), full); time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(end) {
+			cancel()
+			<-done
+			t.Fatalf("not written again while serving: %q", ombSaved(path))
+		}
+	}
+	cancel()
+	<-done
+
+	// off in magpie: OpenMausBot's file is left as it is
+	if err := a.Field("provider").Set(""); err != nil {
+		t.Fatal(err)
+	}
+	after := readFile(path)
+	if err := ombListedOnce(); err != nil {
+		t.Fatal(err)
+	}
+	if readFile(path) != after {
+		t.Fatalf("a round wrote an engine magpie was taken out of:\n%s", readFile(path))
+	}
+}
+
+// OpenMausBot running on the list it read before magpie last changed its
+// engine offers the row's Restart, and its own save of the same engine
+// after it started doesn't.
+func TestOpenMausBotRestartOnMac(t *testing.T) {
+	home := restartSandbox(t)
+	ombRelay(t)
+	apps := filepath.Join(home, "Applications")
+	bundle := macApp(t, apps, "OpenMausBot.app", "com.openmausbot.app", "OpenMausBot")
+	restartOnMac = true
+	appFolders = func() []string { return []string{apps} }
+	alive, up := false, time.Hour
+	running = func(pat string) []runningProc {
+		ps := []runningProc{
+			{up, bundle + "/Contents/MacOS/OpenMausBot"},
+			{up, bundle + "/Contents/Frameworks/OpenMausBot Helper (Renderer).app/Contents/MacOS/OpenMausBot Helper (Renderer) --type=renderer"},
+			// its server, a script on the app's own executable
+			{0, bundle + "/Contents/MacOS/OpenMausBot " + bundle + "/Contents/Resources/server/index.js"},
+		}
+		var out []runningProc
+		for _, p := range ps {
+			if alive && regexp.MustCompile(pat).MatchString(p.cmd) {
+				out = append(out, p)
+			}
+		}
+		return out
+	}
+	a := openMausBot(home)
+	writeFile(t, a.Path, `{"instances":{"claude":{"driver":"claudeAgent"}}}`)
+	if err := a.Field("provider").Set(magpieID); err != nil {
+		t.Fatal(err)
+	}
+	wrote := time.Now().Add(-30 * time.Minute)
+	os.Chtimes(a.Path, wrote, wrote)
+	alive = true
+	if a.AppBehind() == nil {
+		t.Fatal("no Restart for OpenMausBot started an hour before magpie wrote its engine")
+	}
+
+	var did []string
+	appQuit = func(_ context.Context, b string) error { did = append(did, "quit "+b); alive = false; return nil }
+	appOpen = func(_ context.Context, b string) error { did = append(did, "open "+b); alive, up = true, 0; return nil }
+	if err := a.RestartApp(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"quit " + bundle, "open " + bundle}; !slices.Equal(did, want) {
+		t.Fatalf("did %q, want %q", did, want)
+	}
+	if a.AppBehind() != nil {
+		t.Fatal("still offered after the restart")
+	}
+
+	// it saves its fleet a few seconds after it started: no change of magpie's
+	up = 10 * time.Second
+	ombSaves(t, a.Path, ombRead(t, a.Path)[magpieID])
+	at := time.Now().Add(-6 * time.Second)
+	os.Chtimes(a.Path, at, at)
+	if got := a.AppBehind(); got != nil {
+		t.Fatalf("OpenMausBot's own save after its start read as magpie's change: behind since %v", got.Since)
+	}
+
+	// a model magpie adds is one it hasn't read
+	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"glm-4.6", "gpt-5.5", "glm-5"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(ombSaved(a.Path), "relay/glm-5") {
+		t.Fatalf("not synced: %q", ombSaved(a.Path))
+	}
+	if a.AppBehind() == nil {
+		t.Fatal("no Restart after magpie added a model OpenMausBot started without")
 	}
 }

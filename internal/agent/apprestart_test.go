@@ -310,6 +310,8 @@ func TestRestartAppsOnWindows(t *testing.T) {
 		{"workbuddy", `C:\Program Files\WorkBuddy\WorkBuddy.exe`, true},
 		{"workbuddy", `C:\Program Files\WorkBuddy AI\WorkBuddy.exe`, false},
 		{"workbuddy", `C:\Program Files\WorkBuddy\resources\cli\codebuddy.exe`, false},
+		{"openmausbot", `C:\Users\u\AppData\Local\Programs\openmausbot\OpenMausBot.exe`, true},
+		{"openmausbot", `C:\Users\u\AppData\Local\Programs\openmausbot\resources\app.asar.unpacked\node_modules\@anthropic-ai\claude-code\bin\claude.exe`, false},
 	}
 	for _, c := range cases {
 		if got := restartApps[c.id].win(c.image); got != c.want {
