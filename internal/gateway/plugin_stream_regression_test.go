@@ -2,9 +2,11 @@ package gateway
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -54,7 +56,10 @@ func pluginReplyGateway(t *testing.T, vendor http.Handler) (string, string, *htt
 		return c, err
 	}
 	t.Cleanup(tr.CloseIdleConnections)
-	return gw.URL, pid + "/fake-1", &http.Client{Transport: tr, Timeout: 75 * time.Second}
+	// #3286: no total deadline here. pluginReplyComplete times its request
+	// by progress, which no fixed total of a loaded machine's can stand for;
+	// the stalled-client test gives its second request a context of its own.
+	return gw.URL, pid + "/fake-1", &http.Client{Transport: tr}
 }
 
 func pluginReplyRequest(model string, stream bool) string {
@@ -66,6 +71,7 @@ type pluginPacedReader struct {
 	rate    int64
 	read    int64
 	started time.Time
+	alive   func([]byte) // sees each read's bytes: pluginReplyComplete's idle guard
 }
 
 func (p *pluginPacedReader) Read(b []byte) (int, error) {
@@ -74,6 +80,9 @@ func (p *pluginPacedReader) Read(b []byte) (int, error) {
 	}
 	n, err := p.r.Read(b)
 	p.read += int64(n)
+	if n > 0 && p.alive != nil {
+		p.alive(b[:n])
+	}
 	if n > 0 && p.rate > 0 {
 		due := p.started.Add(time.Duration(p.read * int64(time.Second) / p.rate))
 		if wait := time.Until(due); wait > 0 {
@@ -85,6 +94,29 @@ func (p *pluginPacedReader) Read(b []byte) (int, error) {
 
 func pluginReplyComplete(t *testing.T, size int, stream bool, rate int64) time.Duration {
 	t.Helper()
+	// #3286: the request's deadline follows progress, not the wall clock.
+	// A fixed 75s Client.Timeout cut a reader that was still reading
+	// (38977536 of 41943040 content bytes at 75.54s under -race on macOS
+	// CI): how long the transfer takes is the machine's, and what the test
+	// guards is that a reader who keeps reading gets the whole reply. So the
+	// request ends only when the reply makes no progress for idleTrip: no
+	// frame written by the vendor and no content reaching the client. Wire
+	// bytes alone are not progress: the gateway keeps a quiet stream alive
+	// with ": keepalive" lines for minutes, so a reply that stopped part way
+	// (a host that stops crediting the reader, say) would read as alive. A
+	// stop still goes red, with the guard's word beside the read error's own.
+	const idleTrip = 60 * time.Second
+	ctx, cancel := context.WithCancelCause(context.Background())
+	idle := time.AfterFunc(idleTrip, func() { cancel(fmt.Errorf("nothing moved for %v", idleTrip)) })
+	defer func() {
+		cancel(nil)
+		idle.Stop()
+	}()
+	moved := func() {
+		if ctx.Err() == nil {
+			idle.Reset(idleTrip)
+		}
+	}
 	produced := make(chan time.Time, 1)
 	up := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Plugin accounts require an upstream stream even for a downstream
@@ -96,6 +128,7 @@ func pluginReplyComplete(t *testing.T, size int, stream bool, rate int64) time.D
 				return
 			}
 			w.(http.Flusher).Flush()
+			moved()
 		}
 		_, _ = io.WriteString(w, "data: [DONE]\n\n")
 		select {
@@ -104,10 +137,21 @@ func pluginReplyComplete(t *testing.T, size int, stream bool, rate int64) time.D
 		}
 	})
 	url, model, client := pluginReplyGateway(t, up)
+	// why carries the idle guard's word beside a read error's own.
+	why := func(err error) error {
+		if cause := context.Cause(ctx); cause != nil && !errors.Is(err, cause) {
+			return fmt.Errorf("%w (%v)", err, cause)
+		}
+		return err
+	}
 	start := time.Now()
-	res, err := client.Post(url+"/v1/chat/completions", "application/json", strings.NewReader(pluginReplyRequest(model, stream)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url+"/v1/chat/completions", strings.NewReader(pluginReplyRequest(model, stream)))
 	if err != nil {
 		t.Fatal(err)
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		t.Fatal(why(err))
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
@@ -115,6 +159,15 @@ func pluginReplyComplete(t *testing.T, size int, stream bool, rate int64) time.D
 		t.Fatalf("status %d: %s", res.StatusCode, b)
 	}
 	reader := &pluginPacedReader{r: res.Body, rate: rate}
+	if !stream {
+		// the reply comes whole, once the gateway has it: any byte of it
+		// but the whitespace a JSON value may be padded with is progress
+		reader.alive = func(b []byte) {
+			if len(bytes.TrimSpace(b)) > 0 {
+				moved()
+			}
+		}
+	}
 	got := sha256.New()
 	total := 0
 	if !stream {
@@ -124,7 +177,7 @@ func pluginReplyComplete(t *testing.T, size int, stream bool, rate int64) time.D
 			}
 		}
 		if err := json.NewDecoder(reader).Decode(&reply); err != nil {
-			t.Fatalf("JSON reply: %v", err)
+			t.Fatalf("JSON reply: %v", why(err))
 		}
 		if len(reply.Choices) != 1 {
 			t.Fatalf("JSON choices = %d, want 1", len(reply.Choices))
@@ -159,12 +212,15 @@ func pluginReplyComplete(t *testing.T, size int, stream bool, rate int64) time.D
 				t.Fatalf("SSE error after %d content bytes: %s", total, event.Error)
 			}
 			for _, choice := range event.Choices {
+				if choice.Delta.Content != "" {
+					moved()
+				}
 				total += len(choice.Delta.Content)
 				_, _ = io.WriteString(got, choice.Delta.Content)
 			}
 		}
 		if err := scanner.Err(); err != nil {
-			t.Fatalf("SSE read after %d content bytes: %v", total, err)
+			t.Fatalf("SSE read after %d content bytes: %v", total, why(err))
 		}
 		if !done {
 			t.Fatalf("SSE ended without [DONE] after %d content bytes", total)
@@ -204,9 +260,11 @@ func TestPluginStreamLargeReplies(t *testing.T) {
 	}
 }
 
-// The downstream keeps reading for longer than the ten-second stall window.
-// Its duration is observable here; the private plugin queue's watermark is
-// not. The host's focused tests cover progress while above that mark.
+// The downstream keeps reading for longer than the ten-second stall window
+// the plugin host once gave a slow consumer, and gets the whole reply: the
+// host's credit window, not a timer, holds a slow reader's upstream back.
+// Its duration is observable here; the host's queue is not. The host's
+// focused tests cover the credit itself.
 func TestPluginStreamLongActiveReader(t *testing.T) {
 	elapsed := pluginReplyComplete(t, 40<<20, true, 5<<19)
 	if elapsed < 12*time.Second {
