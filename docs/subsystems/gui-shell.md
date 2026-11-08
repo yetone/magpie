@@ -689,6 +689,17 @@ The window opened with `view=groups&newgroup=<model>` (`mainView` keeps
 header's row has no room for it (at 860px it pushed the logo out,
 `brand.test.cjs`), so there app.css hides it, `markNav` lights Routing's
 tab for both pages, and Routing's head shows `#rtToGroups` instead.
+The groups page leads back up as a Mac app's back button does
+(unscientific9 on Discord): its toolbar starts with `‹ Routing`
+(`.rt-gback`, `groupsBack`), which shows Routing and gives the request's
+group it came from the keyboard again. It shows where the page was opened
+from Routing (`openedFrom`: a request's group, `#rtToGroups`; `.rt-gfrom`
+on `#view-groups`, cleared once the page is hidden) and always where the
+header has no tab of its own for the page; beside the sidebar, opened from
+its own tab, it has none. Escape does the same while the button shows and
+nothing on the page takes it: not in a field, nor with a group's editor,
+Import or Select open, nor under a modal. The app has no ⌘[ anywhere, so
+none here (`routing-groups-back.test.cjs`).
 The page's New group goes through `newGroup`, which asks before replacing a
 dirty group draft; Cancel retains the draft and Discard opens the new editor.
 `newGroupWith` applies the same guard when creating a group from a model and

@@ -282,6 +282,9 @@
 .rt-gsec > .row-head:first-child .rt-gfilter { flex: 0 1 300px; width: auto; margin: 0; }
 .rt-gsec > .row-head:first-child .rt-gcount { margin-left: 10px; white-space: nowrap; }
 .rt-gsec > .row-head:first-child .rt-gfilter + .rt-gcount { margin-left: 10px; }
+/* the way back to Routing (gBack): beside the sidebar only when the page was opened from Routing */
+.rt-gsec > .row-head:first-child .rt-gback { flex: none; margin-right: 8px; white-space: nowrap; }
+body.side-nav #view-groups:not(.rt-gfrom) .rt-gback { display: none; }
 /* the settings for every group, a card under the list */
 .rt-gset > :is(.rt-gfound, .rt-gnames, .rt-gdef) { padding: 12px 14px; }
 .rt-gset > :is(.rt-gnames, .rt-gdef) { border-top: 1px solid var(--line-2); }
