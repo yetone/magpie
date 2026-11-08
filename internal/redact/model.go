@@ -120,6 +120,9 @@ func delimiter(c byte) bool { return isSpace(c) || strings.IndexByte(`"',;:`, c)
 // the local model was turned off (#3144). Such a word is a protocol's or a
 // program's, wherever it is: a setting, a tool's argument, code.
 func modelTakes(kind, v string) bool {
+	if hexLiteral.MatchString(v) {
+		return false
+	}
 	switch kind {
 	case "SECRET":
 		return len(v) >= 8 && !madeID(v) && !namesThing(v) && !versionValue(v)
@@ -900,6 +903,17 @@ var (
 	// mixed (EIP-55's checksum)
 	evmRe     = regexp.MustCompile(`^0[xX][0-9a-fA-F]{40}$`)
 	decimalRe = regexp.MustCompile(`^\d+\.\d+$`)
+	// a number written in hex as code and notes write one, of 64 bits at
+	// most: a memory address (0x004EA5E0), a constant, a flag. The model
+	// took such an address in reverse-engineering notes for a secret, and
+	// the vendor's model read {{SECRET_…}} where the address was
+	// (TakaNaShi_ShiKi on X); as an account number it went as
+	// {{ACCOUNT_…}}. modelTakes takes one as no kind. No key is that
+	// short, and a cue isn't asked as for a bare hex run (secretCued): the
+	// function at an address is often named for a key (DecryptKey:
+	// 0x004EA5E0). A key written so is longer (0x and 64 hex digits) and
+	// is masked still.
+	hexLiteral = regexp.MustCompile(`^0[xX][0-9a-fA-F]{1,16}$`)
 	// a time of day in words the model took for a passphrase (release
 	// about 17:05Z)
 	clockIn   = regexp.MustCompile(`(?:^|\s)\d{1,2}:\d{2}(?::\d{2})?Z?(?:\s|$)`)

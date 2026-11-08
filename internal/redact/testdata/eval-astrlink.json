@@ -346,6 +346,21 @@
 		"text": "0d38dbff0a086bdf",
 		"found": []
 	},
+	"hex-addresses": {
+		"text": "031879183fba95a9",
+		"found": [
+			{
+				"Start": 134,
+				"End": 144,
+				"Label": "secret",
+				"score": 0.6246458292007446
+			}
+		]
+	},
+	"hex-addresses-en": {
+		"text": "cbc72ea1cee687c8",
+		"found": []
+	},
 	"hex-lines": {
 		"text": "b378b2965f1a80de",
 		"found": []

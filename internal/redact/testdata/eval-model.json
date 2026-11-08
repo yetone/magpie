@@ -452,6 +452,34 @@
 		"text": "0d38dbff0a086bdf",
 		"found": []
 	},
+	"hex-addresses": {
+		"text": "031879183fba95a9",
+		"found": [
+			{
+				"Start": 134,
+				"End": 144,
+				"Label": "secret",
+				"score": 0.6788917183876038
+			}
+		]
+	},
+	"hex-addresses-en": {
+		"text": "cbc72ea1cee687c8",
+		"found": [
+			{
+				"Start": 25,
+				"End": 35,
+				"Label": "account_number",
+				"score": 0.9999469518661499
+			},
+			{
+				"Start": 56,
+				"End": 66,
+				"Label": "account_number",
+				"score": 0.9954479932785034
+			}
+		]
+	},
 	"hex-lines": {
 		"text": "b378b2965f1a80de",
 		"found": [
