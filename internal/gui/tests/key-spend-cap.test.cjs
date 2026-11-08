@@ -2,7 +2,7 @@
 // A key's spend cap (sparkling_lemur_62868 on Discord: a team's OpenAI key
 // with credits other services spend from too, and magpie to stop at a
 // share of them). Each key's row has a pill: what it spent of its cap
-// today, this month or in all, else No spend cap (hover-only, as the
+// today, this month or in all, else No spend cap (always shown, as the
 // row's other unset pills). A key at its cap is marked, with a line under
 // its row that says so and when it is back. A click opens the app's own
 // menu (no native select): No spend cap, or a period and then an amount
@@ -123,7 +123,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await line.count(), 1);
         assert((await line.textContent()).startsWith(w.held), await line.textContent());
         assert.equal(await row("k1").locator(".key-spend-line").count(), 0);
-        // a cap set is always shown; none set only on a hover
+        // a cap set is shown off the pointer, and so is none (#841)
         await page.mouse.move(0, 0);
         await page.waitForTimeout(250);
         assert.equal(await pill("k1").evaluate((e) => getComputedStyle(e).opacity), "1");

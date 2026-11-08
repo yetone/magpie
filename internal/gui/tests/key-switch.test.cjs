@@ -4,8 +4,8 @@
 // again I have to add it again"). The tick dot was the only switch and
 // wasn't read as one. Each key's row has Switch off, or Switch on when it is
 // off, beside Remove: the first key too, while another key is on. Switch
-// off shows on hover, as Remove does; an off key's Switch on always
-// shows. The last key on has none (the provider's own switch is for that). The click posts
+// off is always shown, as Remove is, and so is an off key's Switch
+// on. The last key on has none (the provider's own switch is for that). The click posts
 // keys/off or keys/on for that row's key, never keys/remove, and doesn't
 // scroll the page; the button fits a phone's width. In every language,
 // Chromium and WebKit.
@@ -96,8 +96,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const click = async (id, label) => {
           const b = sw(id);
           await row(id).scrollIntoViewIfNeeded();
-          // Switch off shows on hover, as Remove does; Switch on always
-          if (label === on) assert.ok(await b.isVisible(), `${id}'s Switch on is hidden`);
+          // shown off the pointer, Switch off as Switch on (#841)
+          await page.mouse.move(0, 0);
+          assert.equal(await b.evaluate((e) => getComputedStyle(e).opacity), "1", `${id}'s ${label} is hidden off the pointer`);
           await row(id).hover({ position: { x: 4, y: 4 } });
           assert.equal((await b.textContent()).trim(), label, `${id}'s switch`);
           const box = await b.boundingBox();

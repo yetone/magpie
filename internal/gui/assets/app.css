@@ -2783,7 +2783,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc.in-use .dot { background: var(--fg); box-shadow: none; color: var(--card); }
 .acc .using { font-size: 11px; color: var(--fg-2); padding: 2px 8px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line); }
 .acc .text.quiet { opacity: 0; transition: opacity .15s; }
-.acc:hover .text.quiet, .acc.held .text.quiet { opacity: 1; }
+.acc:hover .text.quiet { opacity: 1; }
 .acc .text.quiet:focus-visible { opacity: 1; }
 /* an account signed out (#1363) shows its Remove without a hover: it is
    one of the two ways out of that state, beside Sign in again */
@@ -2849,7 +2849,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc .proto svg { opacity: .7; transition: transform .15s var(--ease); }
 .acc .proto.open svg { transform: rotate(180deg); }
 .acc .proto:not(.set) { opacity: 0; background: none; box-shadow: inset 0 0 0 1px var(--line); }
-.acc:hover .proto, .acc.held .proto, .acc .proto.open, .acc.adding .proto { opacity: 1; }
+.acc:hover .proto, .acc .proto.open, .acc.adding .proto { opacity: 1; }
 .acc .proto:focus-visible { opacity: 1; }
 .acc .proto.set { color: var(--fg-2); }
 .acc .proto:hover, .acc .proto.open { color: var(--fg); background: var(--pill-hover); }
@@ -2857,7 +2857,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
    shown always once it keeps some only, and its picker under the row */
 .acc .amodels { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 7px; font: inherit; font-size: 11px; color: var(--muted); border: 0; border-radius: 5px; background: var(--pill); white-space: nowrap; cursor: default; transition: opacity .15s, background .12s, color .12s; }
 .acc .amodels:not(.set) { opacity: 0; background: none; box-shadow: inset 0 0 0 1px var(--line); }
-.acc:hover .amodels, .acc.held .amodels, .acc .amodels.open { opacity: 1; }
+.acc:hover .amodels, .acc .amodels.open { opacity: 1; }
 .acc .amodels:focus-visible { opacity: 1; }
 .acc .amodels.set { color: var(--accent); background: var(--accent-soft); font-weight: 500; }
 .acc .amodels:hover, .acc .amodels.open { color: var(--fg); background: var(--pill-hover); }
@@ -2872,7 +2872,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 /* an account's or key's limit on requests at once (#892), and how many
    run and wait under it: shown on hover unless a limit applies */
 .acc .alane { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 7px; font: inherit; font-size: 11px; color: var(--muted); border: 0; border-radius: 5px; background: none; box-shadow: inset 0 0 0 1px var(--line); white-space: nowrap; cursor: default; opacity: 0; transition: opacity .15s, background .12s, color .12s; font-variant-numeric: tabular-nums; }
-.acc:hover .alane, .acc.held .alane, .acc .alane.open, .acc .alane.set { opacity: 1; }
+.acc:hover .alane, .acc .alane.open, .acc .alane.set { opacity: 1; }
 /* apart: Safari before 15.4 drops a whole selector list with :focus-visible in it */
 .acc .alane:focus-visible { opacity: 1; }
 .acc .alane.set { color: var(--fg); background: var(--pill-hover); box-shadow: none; }
@@ -2883,7 +2883,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 /* a key's spend cap (sparkling_lemur_62868 on Discord): as the limit
    pill, and marked when the key is held at it */
 .acc :is(.aspend, .abal) { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 7px; font: inherit; font-size: 11px; color: var(--muted); border: 0; border-radius: 5px; background: none; box-shadow: inset 0 0 0 1px var(--line); white-space: nowrap; cursor: default; opacity: 0; transition: opacity .15s, background .12s, color .12s; font-variant-numeric: tabular-nums; }
-.acc:hover :is(.aspend, .abal), .acc.held :is(.aspend, .abal), .acc :is(.aspend, .abal).open, .acc :is(.aspend, .abal).set { opacity: 1; }
+.acc:hover :is(.aspend, .abal), .acc :is(.aspend, .abal).open, .acc :is(.aspend, .abal).set { opacity: 1; }
 .acc :is(.aspend, .abal):focus-visible { opacity: 1; }
 .acc :is(.aspend, .abal).set { color: var(--fg); background: var(--pill-hover); box-shadow: none; }
 .acc :is(.aspend, .abal).at-cap { color: var(--accent); background: var(--accent-soft); font-weight: 500; }
@@ -2942,39 +2942,29 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc .acc-tools > :is(.amodels, .acap, .alane, .text.quiet) { opacity: 1; }
 /* Remove ends the line, and where the line wraps it ends the next */
 .acc .acc-tools > .text.quiet { margin-left: auto; }
-/* a key's row (#841): what shows only on hover takes no room till then,
-   so a key's weight never squeezes its name away. Shown, a chip keeps
-   its whole text (young02036: 全部模型 was cut to 全): the name and the
-   masked key give way, down to a few letters each, and what doesn't fit
-   beside them then goes under the row's first line. What ends the row
-   (key-acts) goes as one, still at the right end, each on one line. A
-   press there keeps its row open (held) through the redraw it brings,
-   till the pointer moves off: else the row, one line again, slips out
-   from under the pointer and what was pressed hides */
+/* a key's row (#841): its controls are always shown, and the row is laid
+   out the same under the pointer as off it (tenacious_eagle_96548 on
+   Discord: hidden till a hover, the row grew a line under the pointer
+   and gave it back as the pointer left, the rows below jumping each time,
+   and a balance being typed moved away under the caret). The list is
+   drawn only in the provider's editor, where every key is there to be
+   set. A chip keeps its whole text (young02036: 全部模型 was cut to 全),
+   and so do the name and the masked key: what doesn't fit beside them goes
+   under the row's first line, and only a name and key wider than the row
+   give way, down to a few letters each.
+   What ends the row (key-acts) goes as one, still at the right end, each
+   on one line */
 .accts.keys .acc[data-account-id] { flex-wrap: wrap; row-gap: 3px; }
-.accts.keys .acc > .n { flex: 1000 1 4.5em; max-width: max-content; min-width: 0; }
-.accts.keys .acc .plan { flex: 1000 1 3em; max-width: max-content; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.accts.keys .acc > .n { flex: 0 1 auto; min-width: 0; }
+.accts.keys .acc .plan { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .accts.keys .acc > :is(.amodels, .proto, .alane, .aspend, .abal), .accts.keys .key-acts > .text.quiet { flex-shrink: 0; white-space: nowrap; }
-.accts.keys .acc > :is(.amodels:not(.set), .proto:not(.set), .alane:not(.set), .aspend:not(.set), .abal:not(.set)), .accts.keys .key-acts > .text.quiet { overflow: hidden; }
-.accts.keys .acc:not(:hover):not(.held) > :is(.amodels:not(.set), .proto:not(.set), .alane:not(.set), .aspend:not(.set), .abal:not(.set)):not(.open):not(:focus-visible),
-.accts.keys .acc:not(:hover):not(.held) .key-acts > .text.quiet:not(:focus-visible) { min-width: 0; max-width: 0; padding-left: 0; padding-right: 0; box-shadow: none; }
-/* and hidden, the gap beside it too */
-.accts.keys .acc:not(:hover):not(.held) > :is(.amodels:not(.set), .proto:not(.set)):not(.open):not(:focus-visible) { margin-left: -9px; }
-.accts.keys .acc:not(:hover):not(.held) .key-acts > .text.quiet:not(:focus-visible) { margin-right: -9px; }
-/* the limit pill unset on a key's row is quiet text, as the row's other
-   hover-only controls: no padding to keep, and hidden it takes back the
-   gap before it too (#892) */
+.accts.keys .acc :is(.text.quiet, .proto, .amodels, .alane, .aspend, .abal) { opacity: 1; }
+/* the limit pills unset on a key's row are quiet text, as Remove is: no
+   padding or edge of their own (#892) */
 .accts.keys .acc > :is(.alane, .aspend, .abal):not(.set):not(.open):not(:focus-visible) { padding: 0; box-shadow: none; background: none; }
-.accts.keys .acc:not(:hover):not(.held) > :is(.alane, .aspend, .abal):not(.set):not(.open):not(:focus-visible) { margin-left: -9px; }
-/* Safari before 15.4 has no :focus-visible and drops the rules above
-   whole: there a focused control stays out on :focus instead */
+/* Safari before 15.4 has no :focus-visible and drops the rule above whole */
 @supports not selector(:focus-visible) {
-  .accts.keys .acc:not(:hover):not(.held) > :is(.amodels:not(.set), .proto:not(.set), .alane:not(.set), .aspend:not(.set), .abal:not(.set)):not(.open):not(:focus),
-  .accts.keys .acc:not(:hover):not(.held) .key-acts > .text.quiet:not(:focus) { min-width: 0; max-width: 0; padding-left: 0; padding-right: 0; box-shadow: none; }
-  .accts.keys .acc:not(:hover):not(.held) > :is(.amodels:not(.set), .proto:not(.set)):not(.open):not(:focus) { margin-left: -9px; }
-  .accts.keys .acc:not(:hover):not(.held) .key-acts > .text.quiet:not(:focus) { margin-right: -9px; }
   .accts.keys .acc > :is(.alane, .aspend, .abal):not(.set):not(.open):not(:focus) { padding: 0; box-shadow: none; background: none; }
-  .accts.keys .acc:not(:hover):not(.held) > :is(.alane, .aspend, .abal):not(.set):not(.open):not(:focus) { margin-left: -9px; }
 }
 .accts.keys .acc > .key-acts { flex: none; display: flex; align-items: center; gap: 9px; margin-left: auto; }
 .accts.keys .acc .using, .accts.keys .key-acts > .text:not(.quiet) { flex: none; white-space: nowrap; }
@@ -4310,7 +4300,7 @@ body.panel .modal { padding: 16px 12px; }
   body.web .acc > .grow { flex: 1 0 100%; height: 0; margin: -2px 0; }
   body.web .acc > .grow + * { margin-left: auto; }
   /* nothing hovers on a phone: what a row shows on hover is shown, and a
-     key's row gives it back the room it folds away till a hover (#841) */
+     key's unset pills keep their edge and room (#841) */
   body.web .acc :is(.text.quiet, .proto, .amodels, .alane, .aspend, .abal) { opacity: 1; }
   body.web .acc .acc-more { opacity: 1; }
   body.web .accts.keys .acc > :is(.amodels, .proto, .alane, .aspend, .abal), body.web .accts.keys .key-acts > .text.quiet { max-width: none !important; padding: 0 7px !important; flex-shrink: 0 !important; }

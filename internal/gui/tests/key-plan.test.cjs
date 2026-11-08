@@ -100,7 +100,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const names = {};
         for (const r of preset.regions) names[r.id] = await say(r.name);
         for (const [id, plan] of [["aaaaaaaaaa", "coding"], ["bbbbbbbbbb", "api"], ["cccccccccc", "agent"]]) {
-          // a key on the provider's own plan shows its chip on hover, as Any protocol does
+          // a key on the provider's own plan shows its chip, as Any protocol does
           await row(id).hover();
           const c = row(id).locator("button.proto").filter({ hasText: names[plan] });
           assert.equal(await c.count(), 1, `${id}: no chip saying ${names[plan]}`);

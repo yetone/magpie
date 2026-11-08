@@ -71,7 +71,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator(".row.provider", { hasText: "Relay" }).first().click();
         const row = page.locator('.editor .accts.keys .acc[data-account-id="relay-g"]');
         await row.waitFor();
-        await row.hover(); // an unset pill shows on the row's hover
+        await row.hover();
         await row.locator("button.proto").click();
         const items = page.locator(".proto-menu .pm-item");
         await items.first().waitFor();

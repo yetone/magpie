@@ -2,7 +2,7 @@
 // A key's balance typed by hand (tenacious_eagle on Discord: a provider
 // with no balance URL). Where the vendor tells no balance, each key's row
 // has a pill: what is left of the balance typed, marked as an estimate
-// (≈), else Set balance (hover-only, as the row's other unset pills).
+// (≈), else Set balance (always shown, as the row's other unset pills).
 // Set balance opens the amount in place; a balance set opens the app's
 // menu (no native select): Enter balance…, a refill each month (a day)
 // or each week (a weekday), Never refills, or No balance, posted to
@@ -124,7 +124,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await pill("k1").textContent(), w.k1);
         assert.equal(await pill("k2").textContent(), w.none);
         assert.equal(await page.locator("select").count(), 0, "no native select");
-        // a balance typed is always shown; none only on a hover
+        // a balance typed is shown off the pointer, and so is none (#841)
         await page.mouse.move(0, 0);
         await page.waitForTimeout(250);
         assert.equal(await pill("k1").evaluate((e) => getComputedStyle(e).opacity), "1");

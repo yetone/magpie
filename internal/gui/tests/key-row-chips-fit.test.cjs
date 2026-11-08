@@ -6,8 +6,10 @@
 // key's name and its masked key give way; what doesn't fit beside them then
 // goes under the row's first line, Make first still at the right end. Every
 // chip's text fits its box, no two controls overlap and nothing leaves the
-// card, hovered or not. In every language, in the app's window from its
-// narrowest and in a browser tab, Chromium and WebKit.
+// card, hovered or not, and the row is laid out the same under the pointer
+// as off it (tenacious_eagle_96548 on Discord: the row grew under the
+// pointer and shrank as it left). In every language, in the app's window
+// from its narrowest and in a browser tab, Chromium and WebKit.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -56,7 +58,7 @@ function measure(id) {
     return s.display !== "none" && s.visibility !== "hidden" && +s.opacity > 0.5 && b.width > 0;
   });
   return {
-    card: { left: card.left, right: card.right },
+    card: { left: card.left, right: card.right, top: card.top },
     els: shown.map((e) => {
       const b = e.getBoundingClientRect();
       return { cls: String(e.className), text: e.textContent.trim(), left: b.left, right: b.right, top: b.top, bottom: b.bottom, sw: e.scrollWidth, cw: e.clientWidth };
@@ -102,10 +104,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const m = await page.evaluate(measure, id);
           const at = `${id}${hovered ? " hovered" : ""}`;
           const all = m.els.map((e) => `${e.cls}「${e.text}」${Math.round(e.left)}–${Math.round(e.right)}@${Math.round(e.top)}`).join(" | ");
-          // the chips the report is about are shown, when hovered
-          if (hovered) {
-            for (const c of ["proto", "amodels", "key-switch"]) assert.ok(m.els.some((e) => e.cls.split(" ").includes(c)), `${at}: no ${c} shown: ${all}`);
-          }
+          // the chips the report is about are shown, hovered or not
+          for (const c of ["proto", "amodels", "key-switch"]) assert.ok(m.els.some((e) => e.cls.split(" ").includes(c)), `${at}: no ${c} shown: ${all}`);
           for (const e of m.els) {
             const words = e.cls.split(" ");
             // only the name and the masked key may end in "…"
@@ -116,22 +116,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           // a long one keeps a few letters
           const name = m.els.find((e) => e.cls.split(" ").includes("n"));
           assert.ok(name && name.cw >= Math.min(name.sw - 1, 30), `${at}: the name is squeezed to ${name?.cw}px: ${all}`);
-          // not hovered, a key's row is one line, Make first beside its
-          // name; a phone's tab lays its buttons out under it
-          if (!hovered && !(web && width <= 760)) {
-            const tops = m.els.map((e) => (e.top + e.bottom) / 2);
-            assert.ok(Math.max(...tops) - Math.min(...tops) < 8, `${at}: the row isn't one line: ${all}`);
-          }
           // no two controls overlap
           for (let i = 0; i < m.els.length; i++) for (let j = i + 1; j < m.els.length; j++) {
             const a = m.els[i], b = m.els[j];
             const apart = a.right <= b.left + 0.5 || b.right <= a.left + 0.5 || a.bottom <= b.top + 0.5 || b.bottom <= a.top + 0.5;
             assert.ok(apart, `${at}: ${a.cls}「${a.text}」and ${b.cls}「${b.text}」overlap: ${all}`);
           }
+          return m;
         };
+        // the pointer moves nothing: every control where it was off the row
+        const where = (m) => m.els.map((e) => `${e.cls.split(" ")[0]}@${Math.round(e.left - m.card.left)},${Math.round(e.top - m.card.top)},${Math.round(e.right - e.left)}`).join(" | ");
         for (const id of ["aaaaaaaaaa", "bbbbbbbbbb", "cccccccccc"]) {
-          await check(id, false);
-          await check(id, true);
+          const off = await check(id, false);
+          const on = await check(id, true);
+          assert.equal(where(on), where(off), `${id}: the row is laid out otherwise under the pointer`);
         }
         // Make first ends its row on the right, wrapped or not
         const ends = await page.evaluate(() => {
