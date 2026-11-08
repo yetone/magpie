@@ -1,0 +1,187 @@
+diff --git a/src/gguf_loader.cpp b/src/gguf_loader.cpp
+index fd21ef5..b8bb492 100644
+--- a/src/gguf_loader.cpp
++++ b/src/gguf_loader.cpp
+@@ -1,5 +1,17 @@
+ #include "gguf_loader.h"
+ 
++#ifdef _WIN32
++#ifndef NOMINMAX
++#define NOMINMAX
++#endif
++#include <windows.h>
++#else
++#include <fcntl.h>
++#include <sys/mman.h>
++#include <sys/stat.h>
++#include <unistd.h>
++#endif
++
+ namespace pf {
+ 
+ static const char * ARCH = "openai-privacy-filter";
+@@ -107,7 +119,96 @@ bool model_file::open(const std::string & path, bool with_data) {
+     return true;
+ }
+ 
++bool model_file::map(const std::string & path) {
++    if (!guf || !ctx) {
++        error = "map before open";
++        return false;
++    }
++#ifdef _WIN32
++    HANDLE f = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
++                           FILE_ATTRIBUTE_NORMAL, nullptr);
++    if (f == INVALID_HANDLE_VALUE) {
++        error = "failed to open GGUF for mapping: " + path;
++        return false;
++    }
++    LARGE_INTEGER sz;
++    if (!GetFileSizeEx(f, &sz)) {
++        CloseHandle(f);
++        error = "failed to size GGUF: " + path;
++        return false;
++    }
++    map_size   = (size_t) sz.QuadPart;
++    map_handle = CreateFileMappingA(f, nullptr, PAGE_READONLY, 0, 0, nullptr);
++    CloseHandle(f);
++    if (map_handle) {
++        map_addr = MapViewOfFile(map_handle, FILE_MAP_READ, 0, 0, 0);
++    }
++    if (!map_addr) {
++        error = "failed to map GGUF: " + path;
++        if (map_handle) { CloseHandle(map_handle); map_handle = nullptr; }
++        map_size = 0;
++        return false;
++    }
++#else
++    const int fd = ::open(path.c_str(), O_RDONLY);
++    if (fd < 0) {
++        error = "failed to open GGUF for mapping: " + path;
++        return false;
++    }
++    struct stat st;
++    if (fstat(fd, &st) != 0) {
++        ::close(fd);
++        error = "failed to size GGUF: " + path;
++        return false;
++    }
++    map_size = (size_t) st.st_size;
++    void * a = mmap(nullptr, map_size, PROT_READ, MAP_SHARED, fd, 0);
++    ::close(fd);
++    if (a == MAP_FAILED) {
++        map_size = 0;
++        error = "failed to map GGUF: " + path;
++        return false;
++    }
++    map_addr = a;
++#endif
++    const size_t off = gguf_get_data_offset(guf);
++    if (off > map_size) {
++        error = "GGUF shorter than its header: " + path;
++        return false;
++    }
++    data      = (char *) map_addr + off;
++    data_size = map_size - off;
++    for (ggml_tensor * t = ggml_get_first_tensor(ctx); t; t = ggml_get_next_tensor(ctx, t)) {
++        const int64_t id = gguf_find_tensor(guf, ggml_get_name(t));
++        if (id < 0) {
++            error = std::string("tensor not in GGUF: ") + ggml_get_name(t);
++            return false;
++        }
++        const size_t o = gguf_get_tensor_offset(guf, id);
++        if (o > data_size || ggml_nbytes(t) > data_size - o) {
++            error = std::string("GGUF cut short in tensor ") + ggml_get_name(t);
++            return false;
++        }
++        t->data = (char *) data + o;
++    }
++    return true;
++}
++
+ void model_file::close() {
++    if (map_addr) {
++#ifdef _WIN32
++        UnmapViewOfFile(map_addr);
++#else
++        munmap(map_addr, map_size);
++#endif
++        map_addr = nullptr;
++    }
++#ifdef _WIN32
++    if (map_handle) { CloseHandle((HANDLE) map_handle); map_handle = nullptr; }
++#endif
++    map_size  = 0;
++    data      = nullptr;
++    data_size = 0;
+     if (ctx) { ggml_free(ctx);  ctx = nullptr; }
+     if (guf) { gguf_free(guf);  guf = nullptr; }
+     hp = hparams{};
+diff --git a/src/gguf_loader.h b/src/gguf_loader.h
+index a679bb9..34fb17c 100644
+--- a/src/gguf_loader.h
++++ b/src/gguf_loader.h
+@@ -50,8 +50,24 @@ struct model_file {
+     bool open(const std::string & path, bool with_data);
+     void close();
+ 
++    // map maps the file read-only and points each tensor of a file opened
++    // without data at its bytes in the mapping, in place of a copy: the
++    // weights are then pages of the file, which the system reads in as
++    // they are used and can let go under memory pressure, not 1.6 GB of
++    // the process's own memory. data and data_size are the tensors' region.
++    bool   map(const std::string & path);
++    void * data      = nullptr;
++    size_t data_size = 0;
++
+     ggml_tensor * tensor(const char * name) const;   // nullptr if absent
+     ggml_tensor * require(const char * name);        // sets error if absent
++
++  private:
++    void * map_addr = nullptr;
++    size_t map_size = 0;
++#ifdef _WIN32
++    void * map_handle = nullptr;
++#endif
+ };
+ 
+ } // namespace pf
+diff --git a/src/model.cpp b/src/model.cpp
+index 0ff1edb..8ca5555 100644
+--- a/src/model.cpp
++++ b/src/model.cpp
+@@ -63,11 +63,12 @@ bool model::load(const std::string & gguf_path, const std::string & device, int
+         error = be.error;
+         return false;
+     }
+-    // The CPU uses the loader's buffer in place, so it is read whole. A
+-    // device gets the metadata only, and realize_weights reads each tensor
+-    // from the file into the device's buffer: the weights are never held
+-    // twice, once in the device's buffer and once here.
+-    if (!file.open(gguf_path, /*with_data =*/ be.is_cpu())) {
++    // The CPU uses the file's bytes in place, mapped (model_file::map),
++    // never a copy of its own. A device gets the metadata only, and
++    // realize_weights reads each tensor from the file into the device's
++    // buffer: the weights are never held twice, once in the device's
++    // buffer and once here.
++    if (!file.open(gguf_path, /*with_data =*/ false) || (be.is_cpu() && !file.map(gguf_path))) {
+         error = file.error;
+         return false;
+     }
+@@ -124,12 +125,10 @@ bool model::map_tensors() {
+ 
+ bool model::realize_weights(const std::string & gguf_path) {
+     if (be.is_cpu()) {
+-        // Zero-copy: the GGUF loaded with no_alloc=false, so all tensor data
+-        // lives in one contiguous ctx buffer. Wrap it as a CPU backend buffer
+-        // so graphs can reference loader tensors directly as leaves.
+-        void * base  = ggml_get_mem_buffer(file.ctx);
+-        size_t size  = ggml_get_mem_size(file.ctx);
+-        weights_buf = ggml_backend_cpu_buffer_from_ptr(base, size);
++        // Zero-copy: the tensors point into the file's mapping (map), one
++        // contiguous region. Wrap it as a CPU backend buffer so graphs can
++        // reference loader tensors directly as leaves.
++        weights_buf = ggml_backend_cpu_buffer_from_ptr(file.data, file.data_size);
+         if (!weights_buf) {
+             error = "cpu weight buffer wrap failed";
+             return false;
