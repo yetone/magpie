@@ -1319,6 +1319,14 @@ func switchSavedLogin(agent, user string) (from string, _ error) {
 	// given the refresh token that refresh is spending
 	savedTokenMu.Lock()
 	defer savedTokenMu.Unlock()
+	if agent == "codex" {
+		// nor while Codex's own sign-in is being refreshed
+		// (codexTokenRenewing): the one saved below as the account being
+		// replaced would hold the refresh token that refresh is spending,
+		// and the refresh would write its account back over the switch
+		codexMu.Lock()
+		defer codexMu.Unlock()
+	}
 	loginsMu.Lock()
 	defer loginsMu.Unlock()
 	ls := readLogins()

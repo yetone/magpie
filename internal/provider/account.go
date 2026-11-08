@@ -1169,6 +1169,18 @@ func codexTokenRenewing(ctx context.Context, dir, stale string) (tok, accountID 
 	// moment on Windows is waited out (#2239, #1505). A write that still
 	// fails loses the rotation, said in the log; the fresh access token in
 	// hand still serves this request.
+	//
+	// Only over the sign-in this refresh started from, though. The refresh
+	// is a network round trip, and the store may hold another sign-in by
+	// now: Codex signed in to another account (the Codex app's own
+	// sign-in, or a magpie outside codexMu), or signed out. Writing the
+	// refreshed one over it switched Codex back to the account it had
+	// been switched off (darwish4021 on Discord: "switched my account").
+	// The fresh access token still serves the request in hand.
+	if now, _, err := readCodexLogin(dir, true); err != nil || !sameRefreshToken(now, a.Tokens.RefreshToken) {
+		log.Printf("codex: the sign-in in %s changed while %s was being refreshed; the refresh is not written over it", dir, accountID)
+		return tok, accountID, nil
+	}
 	if out, err := json.MarshalIndent(raw, "", "  "); err == nil {
 		if werr := st.write(out); werr != nil {
 			where := st.file()
@@ -1221,6 +1233,13 @@ func forcedReason(ctx context.Context) string {
 // body of client_id, grant_type, refresh_token and refresh_reason, with
 // no scope (a refresh keeps the scopes granted), and Codex's originator
 // and User-Agent.
+// sameRefreshToken says the sign-in b still holds refresh, the refresh
+// token a refresh started from.
+func sameRefreshToken(b []byte, refresh string) bool {
+	var a codexAuth
+	return json.Unmarshal(b, &a) == nil && refresh != "" && a.Tokens.RefreshToken == refresh
+}
+
 func codexRefresh(ctx context.Context, raw map[string]any, reason string) (string, error) {
 	toks, _ := raw["tokens"].(map[string]any)
 	if toks == nil {
