@@ -5601,6 +5601,77 @@ func withTaskNotices(results []Part, msgs []Message) []Part {
 	return out
 }
 
+// skillBody is the text Claude Code sends after a Skill call's result:
+// the skill's SKILL.md, headed with where its files are.
+var skillBody = regexp.MustCompile(`^Base directory for this skill: `)
+
+// withSkillBodies hands the run each skill's body that came after the
+// results, at the end of its Skill call's result. Claude Code answers a
+// Skill call with "Launching skill: pdf" and sends the skill's SKILL.md
+// as a text block after the results; since #5403 that text counts as the
+// agent's (desktopNote), not the user's, and was handed to no one, so the
+// run's model loaded a skill and never saw what it says.
+func withSkillBodies(results []Part, msgs []Message) []Part {
+	if len(results) == 0 {
+		return results
+	}
+	i := len(msgs)
+	for i > 0 && msgs[i-1].Role != "assistant" {
+		i--
+	}
+	skills := map[string]bool{}
+	if i > 0 {
+		for _, p := range msgs[i-1].Parts {
+			if p.Kind == ToolCall && p.Name == "Skill" {
+				skills[p.CallID] = true
+				skills[p.ID] = true
+			}
+		}
+	}
+	var out []Part
+	seen := false
+	for _, m := range msgs[i:] {
+		if withImages(m) {
+			continue
+		}
+		var last string
+		for _, p := range m.Parts {
+			switch {
+			case p.Kind == ToolResult:
+				seen = true
+				last = p.CallID
+			case p.Kind != Text || !seen:
+			default:
+				body := strings.TrimSpace(reminderTag.ReplaceAllString(p.Text, ""))
+				if !skillBody.MatchString(body) {
+					continue
+				}
+				if out == nil {
+					out = slices.Clone(results)
+				}
+				// the Skill call's result, else the one it follows, else the last
+				k := slices.IndexFunc(out, func(r Part) bool {
+					return r.CallID != "" && skills[r.CallID] && !strings.Contains(r.Text, "Base directory for this skill: ")
+				})
+				if k < 0 {
+					k = slices.IndexFunc(out, func(r Part) bool { return r.CallID == last })
+				}
+				if k < 0 {
+					k = len(out) - 1
+				}
+				if out[k].Text != "" {
+					out[k].Text += "\n\n"
+				}
+				out[k].Text += body
+			}
+		}
+	}
+	if out == nil {
+		return results
+	}
+	return out
+}
+
 var (
 	// midTurnHead heads a message the user sent while a tool ran, as
 	// Claude Code tells its model one: "The user sent a new message while
@@ -6782,7 +6853,7 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 			run.mu.Lock()
 			run.allowed = allowedTools(req)
 			run.mu.Unlock()
-			events, err = run.continueWith(withTaskNotices(results, req.Messages), saidWithResults(req.Messages), more)
+			events, err = run.continueWith(withTaskNotices(withSkillBodies(results, req.Messages), req.Messages), saidWithResults(req.Messages), more)
 		}
 		if err != nil {
 			// it ended while it waited, or can't take the results: a new

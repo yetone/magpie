@@ -1661,6 +1661,16 @@ whole, the run never heard the sub-agent finished, and the main agent
 waited for it (stones_2026 on Discord). A notification after a reply is a
 turn of its own and is told as it is.
 
+A skill's body is not the user's either. Claude Code sends a loaded
+skill's SKILL.md as a text block after the Skill call's result, starting
+"Base directory for this skill: ", and `desktopNote` counts that as an
+agent notice (#5403), so the run's model got "Launching skill: …" and
+nothing it said. `withSkillBodies` appends each such body to the result
+of its Skill call (the first that has none yet), or to the result before
+it, and the [skill router](skill-router.md)'s entry and every skill
+reach the run whole. `TestSkillBodyRealClaudeCode` holds a real Claude
+Code request.
+
 Where the result ends is said by the message's parts alone. A tool whose
 output says "Do not use tools." has it told as its output, inside the
 result. The words of a message that holds images (pi-ai's "Attached

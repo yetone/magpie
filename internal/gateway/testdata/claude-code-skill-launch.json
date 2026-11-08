@@ -1,0 +1,45 @@
+{
+ "model": "claude-opus-5-5",
+ "max_tokens": 128000,
+ "messages": [
+  {
+   "role": "user",
+   "content": [
+    {
+     "type": "text",
+     "text": "Call the Skill tool with magpie-skills, then say DONE."
+    }
+   ]
+  },
+  {
+   "role": "assistant",
+   "content": [
+    {
+     "id": "toolu_01Ki4FUUEBT8M4Ai6KnsB5Jt",
+     "input": {
+      "skill": "magpie-skills"
+     },
+     "name": "Skill",
+     "type": "tool_use"
+    }
+   ]
+  },
+  {
+   "role": "user",
+   "content": [
+    {
+     "type": "tool_result",
+     "tool_use_id": "toolu_01Ki4FUUEBT8M4Ai6KnsB5Jt",
+     "content": "Launching skill: magpie-skills"
+    },
+    {
+     "type": "text",
+     "text": "Base directory for this skill: /Users/u/.claude/skills/magpie-skills\n\n# The user's skills\n\nEach skill below is a folder with a SKILL.md of instructions, often with scripts or templates beside it. When the task fits a skill, open its SKILL.md with the Read tool at the exact path given (it is there, so don't search for it), then do what it says. A file or script it names is in the same folder as that SKILL.md.\n\n## greet-user\n\nGreet the user by name. Use when the user asks to be greeted.\n\nRead: `/Users/u/.claude/skills/magpie-skills/.skills/greet-user/SKILL.md`\n\n## pirate-voice\n\nTalk like a pirate. Use when asked for pirate speech.\n\nRead: `/Users/u/.claude/skills/magpie-skills/.skills/pirate-voice/SKILL.md`\n",
+     "cache_control": {
+      "type": "ephemeral"
+     }
+    }
+   ]
+  }
+ ]
+}
