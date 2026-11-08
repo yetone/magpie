@@ -59,7 +59,9 @@ import (
 // the fake address is pinned and dialled, and the TUN carries it to the
 // host the name stands for. Through a proxy on this computer (loopback or
 // localhost), the proxy is given the name, never the fake address, which
-// it can't route; through a proxy elsewhere it is refused. An address
+// it can't route; through a proxy elsewhere it is refused. The fake-IP
+// resolver's own AAAA beside its fake A (netguard.FakePaired, mihomo's
+// fake-ip-range6) is left out and never dialled. An address
 // literal in the range, or an answer with any other address beside the
 // fake ones, is judged as ever. What the name stands for is then the
 // fake-IP resolver's to decide, where magpie can't see: a name that
@@ -313,12 +315,14 @@ func fakeAnswer(addrs []netip.Addr) bool {
 }
 
 // dropLoon leaves out the AAAA records Loon synthesizes for an A answer
-// in the same reply (netguard.LoonPaired): the A answer is judged, and
-// pinned, in their place.
+// in the same reply (netguard.LoonPaired), and the fake AAAA a fake-IP
+// resolver answers beside its fake A (netguard.FakePaired: mihomo's
+// fake-ip-range6, on by default in Clash Verge Rev): the A answer is
+// judged, and pinned, in their place.
 func dropLoon(addrs []netip.Addr) []netip.Addr {
 	var out []netip.Addr
 	for _, a := range addrs {
-		if !netguard.LoonPaired(a, addrs) {
+		if !netguard.LoonPaired(a, addrs) && !netguard.FakePaired(a, addrs) {
 			out = append(out, a)
 		}
 	}

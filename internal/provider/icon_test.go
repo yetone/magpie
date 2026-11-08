@@ -147,6 +147,13 @@ func TestIconIPsLoon(t *testing.T) {
 		{"loopback pair", []string{"fd27:712::7f00:1", "127.0.0.1"}, nil},
 		{"other ula", []string{"fd27:712:1::c600:1061", "198.0.16.97"}, nil},
 		{"mixed private", []string{"fd27:712::c600:1061", "198.0.16.97", "192.168.1.1"}, nil},
+		// mihomo's fake-ip-range6 beside its fake A: Clash Verge Rev's
+		// default (jiezhengj); the fake A is dialled in its place
+		{"clash verge fake aaaa", []string{"fdfe:dcba:9876::5", "198.18.0.5"}, []string{"198.18.0.5"}},
+		{"clash verge filled-in range6", []string{"198.18.0.5", "2001:2::5"}, []string{"198.18.0.5"}},
+		{"fake aaaa, no fake a", []string{"fdfe:dcba:9876::5", "8.8.8.8"}, nil},
+		{"fake aaaa alone", []string{"fdfe:dcba:9876::5"}, nil},
+		{"fake pair beside private", []string{"fdfe:dcba:9876::5", "198.18.0.5", "10.0.0.1"}, nil},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var ips []net.IPAddr

@@ -61,3 +61,36 @@ func TestLoonPaired(t *testing.T) {
 		}
 	}
 }
+
+func TestFakePaired(t *testing.T) {
+	addrs := func(ss ...string) []netip.Addr {
+		var out []netip.Addr
+		for _, s := range ss {
+			out = append(out, netip.MustParseAddr(s))
+		}
+		return out
+	}
+	for _, c := range []struct {
+		name    string
+		a       string
+		answers []netip.Addr
+		want    bool
+	}{
+		{"Clash Verge Rev's default range6", "fdfe:dcba:9876::7", addrs("198.18.0.7", "fdfe:dcba:9876::7"), true},
+		{"its filled-in 2001:2::/64", "2001:2::7", addrs("2001:2::7", "198.18.0.7"), true},
+		{"a sing-box fc00::/18", "fc00::7", addrs("198.19.0.7"), true},
+		{"the A IPv4-mapped", "fdfe:dcba:9876::7", addrs("::ffff:198.18.0.7"), true},
+		{"beside a real A", "fdfe:dcba:9876::7", addrs("93.184.216.34"), false},
+		{"beside a private A", "fdfe:dcba:9876::7", addrs("10.0.0.1"), false},
+		{"alone", "fdfe:dcba:9876::7", addrs("fdfe:dcba:9876::7"), false},
+		{"loopback", "::1", addrs("198.18.0.7"), false},
+		{"link-local", "fe80::1", addrs("198.18.0.7"), false},
+		{"outside 2001:2::/48", "2001:3::7", addrs("198.18.0.7"), false},
+		{"an IPv4 address", "10.0.0.1", addrs("198.18.0.7"), false},
+		{"the fake A itself", "198.18.0.7", addrs("198.18.0.7"), false},
+	} {
+		if got := FakePaired(netip.MustParseAddr(c.a), c.answers); got != c.want {
+			t.Errorf("%s: %v, want %v", c.name, got, c.want)
+		}
+	}
+}

@@ -23,6 +23,7 @@ var specialNets = func() []netip.Prefix {
 		"::/96",           // IPv4-compatible (deprecated)
 		"100::/64",        // discard
 		"2001::/32",       // Teredo
+		"2001:2::/48",     // benchmarking (RFC 5180); a fake-IP resolver's AAAA (FakePaired)
 		"2001:db8::/32",   // documentation
 		"fec0::/10",       // site-local (deprecated)
 		"64:ff9b:1::/48",  // local-use NAT64
@@ -36,6 +37,8 @@ var (
 	nat64   = netip.MustParsePrefix("64:ff9b::/96")
 	fakeNet = netip.MustParsePrefix("198.18.0.0/15")
 	loonNet = netip.MustParsePrefix("fd27:712::/96")
+	ulaNet  = netip.MustParsePrefix("fc00::/7")
+	bench6  = netip.MustParsePrefix("2001:2::/48")
 )
 
 // Public says a is on the open internet: not loopback, RFC 1918, fc00::/7,
@@ -90,6 +93,30 @@ func LoonPaired(a netip.Addr, answers []netip.Addr) bool {
 	v4 := netip.AddrFrom4([4]byte{b[12], b[13], b[14], b[15]})
 	for _, o := range answers {
 		if o.Unmap() == v4 {
+			return true
+		}
+	}
+	return false
+}
+
+// FakePaired says a is the AAAA answer a fake-IP resolver gives beside
+// its fake A answer: an IPv6 address in fc00::/7 or 2001:2::/48 (RFC
+// 5180's benchmarking range) while answers hold an IPv4 one in
+// 198.18.0.0/15 (FakeIP). mihomo answers AAAA from its fake-ip-range6
+// when IPv6 is on, and Clash Verge Rev turns it on by default with
+// fdfe:dcba:9876::1/64, or fills in 2001:2::/64; sing-box's inet6_range
+// is a ULA as a rule (jiezhengj on Discord, 11-08: every web_fetch
+// refused under Clash Verge Rev's TUN). Such an a is not dialled: the
+// fake A answer is judged, and pinned, in its place, so it reaches
+// nothing a fake A answer alone wouldn't. Without a fake A answer
+// beside it, a ULA is private as ever.
+func FakePaired(a netip.Addr, answers []netip.Addr) bool {
+	a = a.Unmap()
+	if !a.Is6() || !ulaNet.Contains(a) && !bench6.Contains(a) {
+		return false
+	}
+	for _, o := range answers {
+		if o = o.Unmap(); o.Is4() && FakeIP(o) {
 			return true
 		}
 	}

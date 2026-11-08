@@ -138,8 +138,9 @@ func publicHost(ctx context.Context, host string) error {
 }
 
 // iconIPs is ips without the AAAA records Loon synthesizes for an A
-// answer beside them (netguard.LoonPaired; that A answer is judged in
-// their place), or an error when any other is not public.
+// answer beside them (netguard.LoonPaired), nor a fake-IP resolver's
+// fake AAAA beside its fake A (netguard.FakePaired); that A answer is
+// judged in their place. It is an error when any other is not public.
 func iconIPs(host string, ips []net.IPAddr) ([]net.IPAddr, error) {
 	all := make([]netip.Addr, len(ips))
 	for i, ip := range ips {
@@ -151,7 +152,7 @@ func iconIPs(host string, ips []net.IPAddr) ([]net.IPAddr, error) {
 			allowed = append(allowed, ip)
 			continue
 		}
-		if netguard.LoonPaired(all[i].Unmap(), all) {
+		if netguard.LoonPaired(all[i].Unmap(), all) || netguard.FakePaired(all[i], all) {
 			continue
 		}
 		return nil, errorf("the icon host %s resolves to %s, which is not public", host, ip.IP)

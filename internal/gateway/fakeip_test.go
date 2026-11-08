@@ -203,6 +203,47 @@ func TestFakeIPNameDialledThroughTheTUN(t *testing.T) {
 	}
 }
 
+// Clash Verge Rev turns on IPv6 with mihomo's fake-ip-range6 by default
+// (fdfe:dcba:9876::1/64, or 2001:2::/64 it fills in), so the resolver
+// answers a fake AAAA beside the fake A, and every web_fetch was refused
+// as a private address (jiezhengj on Discord, mihomo 1.19.33's TUN). The
+// AAAA is never dialled: the fake A is pinned, through the TUN, and a
+// proxy on this computer is given the name.
+func TestFakeIPWithItsIPv6Answer(t *testing.T) {
+	fresh(t)
+	useProxy(t, "direct")
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte("through the tun " + r.Host))
+	}))
+	t.Cleanup(page.Close)
+	dialled := tun(t, page)
+	answers(t, map[string][]string{
+		"example.com": {"fdfe:dcba:9876::7", "198.18.0.7"},
+		"filled.test": {"198.18.0.8", "2001:2::8"},
+	})
+	h := lanGuard(New().Handler())
+	got, isErr := fetchText_(t, h, fetchCall("http://example.com/", ""))
+	if isErr || !strings.Contains(got, "through the tun example.com") {
+		t.Fatalf("web_fetch of a name with a fake A and AAAA, no proxy: %v %q", isErr, got)
+	}
+	if err := guardedGet("http://filled.test/"); err != nil {
+		t.Fatalf("2001:2::/64 beside the fake A: %v", err)
+	}
+	if d := dialled(); len(d) != 2 || d[0] != "198.18.0.7:80" || d[1] != "198.18.0.8:80" {
+		t.Fatalf("dialled %q, want the fake A answers only", d)
+	}
+	proxy, asked := fakeProxy(t, "<html><body><p>fetched by name</p></body></html>")
+	useProxy(t, proxy.URL)
+	got, isErr = fetchText_(t, h, fetchCall("http://example.com/", ""))
+	if isErr || !strings.Contains(got, "fetched by name") {
+		t.Fatalf("web_fetch through a local proxy: %v %q", isErr, got)
+	}
+	if a := asked(); len(a) != 1 || a[0] != "http://example.com:80/ Host=example.com:80" {
+		t.Fatalf("the proxy was asked %q, want the name", a)
+	}
+}
+
 // What stays refused, with a proxy on this computer and without: a
 // private answer, a fake answer beside a private (or any real) one, a
 // fake address written as the URL, and a fake answer through a proxy
@@ -224,12 +265,18 @@ func TestFakeIPRefusesTheRest(t *testing.T) {
 		"mixedpub.test": {"198.18.0.9", "93.184.216.34"},
 		"loonlan.test":  {"fd27:712::a00:1", "10.0.0.1"},
 		"loonbare.test": {"fd27:712::c612:139"},
+		"ulabare.test":  {"fdfe:dcba:9876::7"},
+		"ulapub.test":   {"fdfe:dcba:9876::7", "93.184.216.34"},
+		"fake6lan.test": {"198.18.0.9", "fdfe:dcba:9876::7", "10.0.0.1"},
+		"fake6lo.test":  {"198.18.0.9", "fdfe:dcba:9876::7", "::1"},
 	})
 	refused := []string{
 		"http://lan.test/", "http://loop.test/", "http://meta.test/latest/meta-data/", "http://cgnat.test/",
 		"http://ten.test/", "http://mixed.test/", "http://mixed6.test/", "http://mixedpub.test/",
 		"http://loonlan.test/", "http://loonbare.test/", "http://198.18.0.7/", "https://198.18.0.7/",
 		"http://[::ffff:198.18.0.7]/",
+		"http://ulabare.test/", "http://ulapub.test/", "http://fake6lan.test/", "http://fake6lo.test/",
+		"http://[fdfe:dcba:9876::7]/", "http://[2001:2::7]/",
 	}
 	proxy, asked := fakeProxy(t, "reached")
 	for _, p := range []string{"direct", proxy.URL, "http://localhost:" + proxy.URL[strings.LastIndex(proxy.URL, ":")+1:]} {
