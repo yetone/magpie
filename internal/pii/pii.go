@@ -15,7 +15,12 @@
 // the sha256 pinned here, and the setting (settings.RedactModel) is saved
 // only once both are. pf-serve is started on the first request that needs
 // it, on the GPU where there is one (Metal, Vulkan) and else the CPU, and
-// is ended after a while with none, which lets its memory go.
+// is ended after a while with none (idleAfter), which lets its memory go.
+// On the CPU it maps the model's file rather than reading it in
+// (native/privacy-filter/patches/weights-paged.patch): the weights are
+// the file's pages, which the system can drop under pressure, and what
+// pf-serve holds of its own is ~200-300 MB, not 1.8 GB (#853 in
+// magpie-community/plugins).
 //
 // A process of its own, not linked in: 1.7 GB the gateway would otherwise
 // hold for good, and a GPU driver's crash that would end the gateway with
@@ -53,15 +58,15 @@ var (
 // oldTags are the tags pinned before, newest first: one of theirs on disk
 // is run until serveTag's is downloaded (upgrade).
 var (
-	serveTag  = "pf-v3"
-	oldTags   = []string{"pf-v2", "pf-v1"}
+	serveTag  = "pf-v4"
+	oldTags   = []string{"pf-v3", "pf-v2", "pf-v1"}
 	serveBase = "https://github.com/yetone/magpie/releases/download/"
 	serveSHA  = map[string]string{
-		"darwin-amd64":  "5d9277d6852b7e3dcc30d102f43c21bf54a5c3199e0f9f998d965ec7a30ea6d7",
-		"darwin-arm64":  "b45951751bb26633a5ca3827fbf3718f10dfd5c313da6b4f6ba786755353cb4b",
-		"linux-amd64":   "b2b231209d8806648ec8dfe2d7b1a06c4cc273d1de4d50325e7a1638e63c7cc4",
-		"linux-arm64":   "9812356fcb311c351c094aa9a587da3d54166382699b59e9f1c92ab08abae792",
-		"windows-amd64": "8fd8f7295743197311d13ed34aa9fb7be891f4e2586dfda6c4a3335e6cef52f3",
+		"darwin-amd64":  "dc287579abeafe0be0add35305bde05f9cb06405f6b98dda5d71c9bf2c53c2a0",
+		"darwin-arm64":  "da4c89248937221a880996964e76a3dec18a9f8f80f2ee39e1cf26ef0933ac69",
+		"linux-amd64":   "8a7e61e6deebde68b13fc17009c84aef9da2230ea9e696c9e62b32e79c30db00",
+		"linux-arm64":   "0c29b9fdd1452f75414ee5fc623cfec70f4180af5046a9e669a289db7bf3da08",
+		"windows-amd64": "4457116e76d5861b28f26fa15613a943a434d35174f30aa3b8488e76bccc6545",
 	}
 )
 
