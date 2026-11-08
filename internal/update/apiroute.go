@@ -20,7 +20,8 @@ import (
 // download whose github.com address is busy goes on there (download): the
 // same bytes, checked against the feed's hash, and on the Mac against the
 // installed app's team, exactly as before. A mirror the user gave keeps
-// precedence: through one, no API route is tried.
+// precedence: through one, no API route is tried. A file the feed names
+// on the site's R2 goes on to its github.com address (Asset.GitHub) first.
 
 // githubWeb and githubAPI are GitHub's addresses; vars for tests.
 var (
@@ -29,14 +30,18 @@ var (
 )
 
 // apiRoute is the API address of a's file: the feed's (Asset.API), else
-// the one GitHub's API lists for the release a.URL names. "" with a nil
+// the one GitHub's API lists for the release a.GitHub (or a.URL) names. "" with a nil
 // error when a's file isn't on GitHub (a test's server, a feed pointed
 // elsewhere).
 func apiRoute(ctx context.Context, a Asset) (string, error) {
 	if a.API != "" {
 		return a.API, nil
 	}
-	rest, ok := strings.CutPrefix(a.URL, githubWeb+"/")
+	src := a.URL
+	if a.GitHub != "" {
+		src = a.GitHub
+	}
+	rest, ok := strings.CutPrefix(src, githubWeb+"/")
 	if !ok {
 		return "", nil
 	}

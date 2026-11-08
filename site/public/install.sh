@@ -148,34 +148,52 @@ fetch() {
   entry=$(printf '%s' "$feed" | sed -n "s/.*\"$file\":{\([^}]*\)}.*/\1/p")
   url=$(printf '%s' "$entry" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
   api=$(printf '%s' "$entry" | sed -n 's/.*"api":"\([^"]*\)".*/\1/p')
+  # github: the file's github.com address when url is the site's copy (R2)
+  github=$(printf '%s' "$entry" | sed -n 's/.*"github":"\([^"]*\)".*/\1/p')
   sum=$(printf '%s' "$entry" | sed -n 's/.*"sha256":"\([^"]*\)".*/\1/p')
   version=$(printf '%s' "$feed" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
   if [ "$os" = android ] && { [ -z "$url" ] || [ -z "$sum" ]; }; then
     die "the newest release has no $file; build in Termux with go build -tags nogui (see $site/docs/start)"
   fi
   [ -n "$url" ] && [ -n "$sum" ] || die "the newest release has no $file"
+  case "$url" in https://github.com/*) github=$url ;; esac
 
-  from=$url
+  # The tries, in order: url (the site's copy, or github.com's own);
+  # github.com's address, through the mirror when one is given (a mirror
+  # is only ever put before a github.com address); GitHub's API, never
+  # through a mirror. via is the mirror a try went through.
+  from=$url via=
   case "$url" in
-    https://github.com/*) [ -z "$mirror" ] || from="$mirror$url" ;;
+    https://github.com/*) [ -z "$mirror" ] || { from="$mirror$url" via=$mirror; } ;;
   esac
-  if [ "$from" != "$url" ]; then say "downloading magpie $version ($file) through $mirror"
+  if [ -n "$via" ]; then say "downloading magpie $version ($file) through $mirror"
   else say "downloading magpie $version ($file)"; fi
   if ! get -o "$tmp/$file" "$from"; then
-    # github.com's download address can fail (504 on every try, for hours
-    # on 2026-11-08) while GitHub's API serves the same file: asked for
-    # there, checked against the same SHA-256 below. A mirror given keeps
-    # precedence: through one, nothing else is tried.
-    [ "$from" = "$url" ] || die "could not download $from"
-    [ -n "$api" ] || api=$(apiroute "$url" "$file")
-    [ -n "$api" ] || die "could not download $url"
-    say "that failed; downloading it through GitHub's API instead"
-    get -H 'Accept: application/octet-stream' -o "$tmp/$file" "$api" || die "could not download $url, nor through $api"
+    if [ -z "$via" ] && [ -n "$github" ] && [ "$github" != "$url" ]; then
+      from=$github
+      [ -z "$mirror" ] || { from="$mirror$github" via=$mirror; }
+      say "that failed; downloading it from github.com${via:+ through $via} instead"
+      get -o "$tmp/$file" "$from" || from=
+    else
+      from=
+    fi
+    if [ -z "$from" ]; then
+      # github.com's download address can fail (504 on every try, for
+      # hours on 2026-11-08) while GitHub's API serves the same file:
+      # asked for there, checked against the same SHA-256 below. A mirror
+      # given keeps precedence: through one, the API is never asked.
+      [ -z "$mirror" ] || die "could not download $mirror${github:-$url}"
+      [ -n "$api" ] || api=$(apiroute "${github:-$url}" "$file")
+      [ -n "$api" ] || die "could not download $url"
+      say "that failed; downloading it through GitHub's API instead"
+      get -H 'Accept: application/octet-stream' -o "$tmp/$file" "$api" || die "could not download $url, nor through $api"
+      via=
+    fi
   fi
   if command -v sha256sum >/dev/null; then got=$(sha256sum "$tmp/$file" | cut -d' ' -f1)
   else got=$(shasum -a 256 "$tmp/$file" | cut -d' ' -f1); fi
   if [ "$got" != "$sum" ]; then
-    [ "$from" = "$url" ] || die "$file from $mirror does not match its checksum from $site; not installed"
+    [ -z "$via" ] || die "$file from $via does not match its checksum from $site; not installed"
     die "$file does not match its checksum"
   fi
 }

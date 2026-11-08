@@ -67,6 +67,10 @@ type Asset struct {
 	// API is GitHub's API address of the file, asked when URL is busy
 	// (apiroute.go); a feed without it has it looked up from URL.
 	API string `json:"api,omitempty"`
+	// GitHub is the file's github.com address when URL is another (the
+	// site's copy on R2): where a download goes on when URL fails, and
+	// what a mirror the user gave is put in front of.
+	GitHub string `json:"github,omitempty"`
 }
 
 // client asks the feed and downloads a release through the proxy the rest
@@ -1142,12 +1146,17 @@ func download(ctx context.Context, a Asset, path string) error {
 	if err := clearFile(path); err != nil {
 		return err
 	}
-	var err, direct error
-	// on, the tries go through GitHub's API route (apiroute.go): once
-	// the address itself answered busy, which trying it again didn't get
-	// past on 2026-11-08, or for the last try after connections that
-	// broke. Never through a mirror the user gave.
-	on, tried := a, false
+	var err error
+	// the tries go to a's own address, then, once it answered busy
+	// (which trying it again didn't get past on 2026-11-08) or for the
+	// last tries after connections that broke, to the routes after it:
+	// github.com's address of a file the feed names elsewhere (GitHub,
+	// through the user's mirror when one is set), then GitHub's API
+	// route (apiroute.go), never through a mirror.
+	on, viaAPI := a, false
+	toGitHub := a.GitHub != "" && a.GitHub != a.URL
+	toAPI := mirrorOf(ctx) == ""
+	var before []string // each route left, and how it failed
 	for try := 0; try <= len(retryWaits); try++ {
 		if try > 0 {
 			step(ctx, StepRetry)
@@ -1159,18 +1168,32 @@ func download(ctx context.Context, a Asset, path string) error {
 		}
 		step(ctx, StepDownload)
 		tctx := ctx
-		if on.URL != a.URL {
+		if viaAPI {
 			tctx = withAPIRoute(ctx)
 		}
 		if err = fetch(tctx, on, path); err == nil || ctx.Err() != nil || !Network(err) {
 			break
 		}
-		if !tried && mirrorOf(ctx) == "" && (busyErr(err) || try == len(retryWaits)-1) {
-			tried = true
-			if api, aerr := apiRoute(ctx, a); api != "" {
-				on.URL, direct = api, err
-			} else if aerr != nil {
-				err = fmt.Errorf("%w (GitHub's API route couldn't be found: %v)", err, aerr)
+		left := 0
+		if toGitHub {
+			left++
+		}
+		if toAPI {
+			left++
+		}
+		if left > 0 && (busyErr(err) || try >= len(retryWaits)-left) {
+			if toGitHub {
+				toGitHub = false
+				before = append(before, fmt.Sprintf("%v (from %s)", err, hostOf(on.URL)))
+				on.URL = a.GitHub
+			} else {
+				toAPI = false
+				if api, aerr := apiRoute(ctx, a); api != "" {
+					before = append(before, err.Error())
+					on.URL, viaAPI = api, true
+				} else if aerr != nil {
+					err = fmt.Errorf("%w (GitHub's API route couldn't be found: %v)", err, aerr)
+				}
 			}
 		}
 		// the tries after a connection that broke go over HTTP/1.1: a
@@ -1180,8 +1203,12 @@ func download(ctx context.Context, a Asset, path string) error {
 		ctx = netproxy.OverHTTP1(ctx)
 	}
 	if err != nil {
-		if direct != nil {
-			err = fmt.Errorf("%w, and through api.github.com: %v", direct, err)
+		if len(before) > 0 {
+			last := "from " + hostOf(on.URL)
+			if viaAPI {
+				last = "through api.github.com"
+			}
+			err = fmt.Errorf("%s, and %s: %w", strings.Join(before, ", "), last, err)
 		}
 		if cerr := clearFile(path); cerr != nil {
 			err = errors.Join(err, cerr)
@@ -1208,6 +1235,15 @@ func clearFile(path string) error {
 		return &saidError{fmt.Sprintf("couldn't clear the earlier download %s: another program has it open (often an antivirus checking it); check for updates again in a minute", filepath.Base(path)), err}
 	}
 	return fmt.Errorf("couldn't clear the earlier download %s: %w", filepath.Base(path), err)
+}
+
+// hostOf is u's host, for an error that says where a try went without
+// the address itself.
+func hostOf(u string) string {
+	if p, err := url.Parse(u); err == nil && p.Host != "" {
+		return p.Host
+	}
+	return u
 }
 
 // NetError is a download the network broke off: the connection failed or
