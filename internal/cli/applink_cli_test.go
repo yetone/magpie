@@ -18,7 +18,7 @@ func TestImportAddSaysNothingOpensIt(t *testing.T) {
 	t.Cleanup(func() { openInBrowser = old })
 	oldLink := appLink
 	t.Cleanup(func() { appLink = oldLink })
-	for _, id := range []string{"cindy", "aionui"} {
+	for _, id := range []string{"cindy", "aionui", "cherrystudio"} {
 		appLink = func(string, func(string) error) error {
 			return &agent.NoLinkHandlerError{App: id, Scheme: id}
 		}
@@ -31,7 +31,7 @@ func TestImportAddSaysNothingOpensIt(t *testing.T) {
 			t.Errorf("%s add with a handler: %v", id, err)
 		}
 	}
-	if len(handed) != 2 {
+	if len(handed) != 3 {
 		t.Fatalf("handed to the browser: %q", handed)
 	}
 }

@@ -1,4 +1,4 @@
-// An app magpie is added to by a link of its own (Cindy, Lody, AionUi) is a row like the
+// An app magpie is added to by a link of its own (Cindy, Lody, AionUi, Cherry Studio) is a row like the
 // others on the Agents page (the owner: its wide button, with no line under
 // the name, sat apart from every other): a line under its name says whether
 // magpie is added, and its button stands where the others' model picker
@@ -21,6 +21,9 @@ const cindy = (added) => ({ id: "cindy", name: "Cindy", path: "", icon: "cindy",
 // other way round from Cindy's so each run has both
 const AIONUI_LINK = "aionui://add-provider?api_key=magpie-aionui&base_url=http%3A%2F%2F127.0.0.1%3A3425%2Fv1&name=magpie&platform=custom";
 const aionui = (added) => ({ id: "aionui", name: "AionUi", path: "", icon: "aionui", import: AIONUI_LINK, added, fields: [] });
+// Cherry Studio's link as magpie makes it (agent.CherryStudioLink)
+const CHERRY_LINK = "cherrystudio://providers/api-keys?v=1&data=eyJpZCI6Im1hZ3BpZSIsImJhc2VVcmwiOiJodHRwOi8vMTI3LjAuMC4xOjM0MjUvdjEiLCJhcGlLZXkiOiJtYWdwaWUtY2hlcnJ5c3R1ZGlvIiwibmFtZSI6Im1hZ3BpZSIsInR5cGUiOiJvcGVuYWkifQ%3D%3D";
+const cherry = (added) => ({ id: "cherrystudio", name: "Cherry Studio", path: "", icon: "cherrystudio-color", import: CHERRY_LINK, added, fields: [] });
 
 async function serve(route, lang, added, ctl = {}) {
   const url = new URL(route.request().url());
@@ -29,7 +32,7 @@ async function serve(route, lang, added, ctl = {}) {
     return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:false,textSize:100};` });
   }
   if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
-  if (url.pathname === "/api/state") return json({ agents: [crush(added), cindy(added), aionui(!added), { id: "lody", name: "Lody", path: "", icon: "lody", import: "lody://provider/import?v=1&data=fixture", fields: [] }], profiles: [], settings: { lang, theme: "light", textSize: 100 } });
+  if (url.pathname === "/api/state") return json({ agents: [crush(added), cindy(added), aionui(!added), cherry(added), { id: "lody", name: "Lody", path: "", icon: "lody", import: "lody://provider/import?v=1&data=fixture", fields: [] }], profiles: [], settings: { lang, theme: "light", textSize: 100 } });
   if (url.pathname === "/api/providers") return json({ providers: [], gateway: { running: true, window: true } });
   if (url.pathname === "/api/plugins") return json({ plugins: [] });
   // nothing here opens the app's links (agent.NoLinkHandlerError)
@@ -143,6 +146,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const aionOpened = page.waitForRequest((r) => r.url().includes("/api/open"));
         await aion.locator(".ag-start").click();
         assert.equal(JSON.parse((await aionOpened).postData()).url, AIONUI_LINK);
+        // Cherry Studio: the same, with its own icon and link
+        const cherryRow = page.locator('.row.agent[data-id="cherrystudio"]');
+        await cherryRow.locator(".ag-st").waitFor();
+        assert.match(await cherryRow.locator(".ag-st-t").innerText(), new RegExp(SAID[lang][added ? 1 : 0].source.replace("Cindy", "Cherry Studio")));
+        assert.equal(await cherryRow.locator(".ag-st").evaluate((e) => e.classList.contains("on")), added);
+        assert.equal(await cherryRow.locator('.ic[data-icon="cherrystudio-color"]').count() > 0, true, "Cherry Studio's row has its icon");
+        assert.equal(await page.evaluate(async () => (await fetch("/icons/cherrystudio-color.svg")).status), 200);
+        const cherryOpened = page.waitForRequest((r) => r.url().includes("/api/open"));
+        await cherryRow.locator(".ag-start").click();
+        assert.equal(JSON.parse((await cherryOpened).postData()).url, CHERRY_LINK);
 
         // narrow: no page scroll sideways, and every import row keeps its
         // line and button inside the window
@@ -152,7 +165,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction(() => document.documentElement.scrollWidth <= window.innerWidth, null, { timeout: 3000 }).catch(async () => {
           assert.fail(`sideways scroll at 420px: ${await page.evaluate(() => document.documentElement.scrollWidth)}`);
         });
-        for (const id of ["lody", "cindy", "aionui"]) {
+        for (const id of ["lody", "cindy", "aionui", "cherrystudio"]) {
           const r = page.locator(`.row.agent[data-id="${id}"]`);
           for (const sel of [".ag-start", ".ag-st-t"]) {
             const b = await r.locator(sel).evaluate((e) => { const x = e.getBoundingClientRect(); return { left: x.left, right: x.right, width: x.width }; });

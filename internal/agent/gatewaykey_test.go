@@ -218,22 +218,23 @@ func TestPinnedGatewayKeyForEveryWriter(t *testing.T) {
 			agy = m[1]
 		}
 		return map[string]string{
-			"agy":        agy,
-			"aionui":     aionuiKey(AionUiLink(gw)),
-			"alma":       almaKey(),
-			"cindy":      cindy.Auth.APIKey,
-			"copilotjb":  jbKey,
-			"cursor":     cursorLocalEnv(gw)[cursorLocalVars[1]],
-			"hanako":     hanakoProvider().APIKey,
-			"liveagent":  liveAgentFor(gw).Key,
-			"newmax":     newMaxEntryFor(gw).APIKey,
-			"openclaw":   openClawProviderAt(gw)["apiKey"],
-			"openpencil": openPencilEntry(gw).APIKey,
-			"pencil":     pencilProviderJSON(gw)["apiKey"].(string),
-			"vscode":     vscodeStable.token(),
-			"vscodium":   vscodiumKind.token(),
-			"workbuddy":  buddyModel("codebuddy", "m", "m", 0, 0, false, nil)["apiKey"].(string),
-			"zcode":      zc,
+			"agy":          agy,
+			"aionui":       aionuiKey(AionUiLink(gw)),
+			"alma":         almaKey(),
+			"cherrystudio": cherryKey(CherryStudioLink(gw)),
+			"cindy":        cindy.Auth.APIKey,
+			"copilotjb":    jbKey,
+			"cursor":       cursorLocalEnv(gw)[cursorLocalVars[1]],
+			"hanako":       hanakoProvider().APIKey,
+			"liveagent":    liveAgentFor(gw).Key,
+			"newmax":       newMaxEntryFor(gw).APIKey,
+			"openclaw":     openClawProviderAt(gw)["apiKey"],
+			"openpencil":   openPencilEntry(gw).APIKey,
+			"pencil":       pencilProviderJSON(gw)["apiKey"].(string),
+			"vscode":       vscodeStable.token(),
+			"vscodium":     vscodiumKind.token(),
+			"workbuddy":    buddyModel("codebuddy", "m", "m", 0, 0, false, nil)["apiKey"].(string),
+			"zcode":        zc,
 		}
 	}
 	plain := keys()
@@ -253,6 +254,17 @@ func TestPinnedGatewayKeyForEveryWriter(t *testing.T) {
 			t.Errorf("%s with nothing shared: key %q, want magpie's own", agent, plain[agent])
 		}
 	}
+}
+
+// cherryKey is the apiKey Cherry Studio's link hands it.
+func cherryKey(link string) string {
+	v, _ := url.ParseQuery(strings.TrimPrefix(link, CherryStudioScheme))
+	b, _ := base64.StdEncoding.DecodeString(v.Get("data"))
+	var p struct {
+		APIKey string `json:"apiKey"`
+	}
+	json.Unmarshal(b, &p)
+	return p.APIKey
 }
 
 // aionuiKey is the api_key AionUi's link hands it.

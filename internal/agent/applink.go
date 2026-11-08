@@ -25,14 +25,14 @@ func (e *NoLinkHandlerError) Error() string {
 }
 
 // linkApps names the app behind each import link's scheme.
-var linkApps = map[string]string{"cindy": "Cindy", "lody": "Lody", "aionui": "AionUi"}
+var linkApps = map[string]string{"cindy": "Cindy", "lody": "Lody", "aionui": "AionUi", "cherrystudio": "Cherry Studio"}
 
 // linkHandler says which program opens scheme's links here: found false
 // when none does, an error when that can't be read (unknown). Each system
 // has its own; tests stand in for it.
 var linkHandler = systemLinkHandler
 
-// OpenAppLink hands an app's import link (Cindy's, Lody's, AionUi's) to
+// OpenAppLink hands an app's import link (Cindy's, Lody's, AionUi's, Cherry Studio's) to
 // open, after checking that something here opens it. The system starts
 // the opener and never says whether it found a program, so without the
 // check a click on Add magpie does nothing at all when the app never

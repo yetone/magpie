@@ -78,35 +78,36 @@ func aionuiHas(path, gw string) (has, known bool) {
 	return n > 0, true
 }
 
-// aionuiStatus keeps the last read of AionUi's database while neither it
-// nor its log changed, for at most reachedFor (a coarse clock can miss a
-// write that kept the size), so the Agents page's poll doesn't copy a
-// running AionUi's database each time.
-type aionuiStatus struct {
-	mu         sync.Mutex
-	gw         string
-	db, wal    fileStamp
-	at         time.Time
-	has, known bool
+// dbStatus keeps the last read of an app's database (has: AionUi's,
+// Cherry Studio's) while neither it nor its log changed, for at most
+// reachedFor (a coarse clock can miss a write that kept the size), so the
+// Agents page's poll doesn't copy a running app's database each time.
+type dbStatus struct {
+	has       func(path, gw string) (bool, bool)
+	mu        sync.Mutex
+	gw        string
+	db, wal   fileStamp
+	at        time.Time
+	ok, known bool
 }
 
-func (s *aionuiStatus) read(path, gw string) (bool, bool) {
+func (s *dbStatus) read(path, gw string) (bool, bool) {
 	db, wal := stampOf(path), stampOf(path+"-wal")
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.known && s.gw == gw && s.db == db && s.wal == wal && time.Since(s.at) < reachedFor {
-		return s.has, s.known
+		return s.ok, s.known
 	}
 	// a read that failed is tried again on the next poll
-	s.has, s.known = aionuiHas(path, gw)
+	s.ok, s.known = s.has(path, gw)
 	s.gw, s.db, s.wal, s.at = gw, db, wal, time.Now()
-	return s.has, s.known
+	return s.ok, s.known
 }
 
 func aionui() *Agent {
 	dir := aionuiDir()
 	db := filepath.Join(dir, "aionui", "aionui-backend.db")
-	st := &aionuiStatus{}
+	st := &dbStatus{has: aionuiHas}
 	return &Agent{
 		ID: "aionui", Name: "AionUi", Icon: "aionui",
 		Dir: dir, Path: dir,

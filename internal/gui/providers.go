@@ -3100,7 +3100,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		_ = json.NewDecoder(r.Body).Decode(&in)
 		// and System Settings' Login Items, where Open at login is allowed
 		// again: that one pane, not System Settings' scheme at large
-		if strings.HasPrefix(in.URL, "https://") || strings.HasPrefix(in.URL, "http://") || strings.HasPrefix(in.URL, agent.CindyScheme) || strings.HasPrefix(in.URL, agent.LodyScheme) || strings.HasPrefix(in.URL, agent.AionUiScheme) || in.URL == autostart.LoginItemsURL {
+		if strings.HasPrefix(in.URL, "https://") || strings.HasPrefix(in.URL, "http://") || strings.HasPrefix(in.URL, agent.CindyScheme) || strings.HasPrefix(in.URL, agent.LodyScheme) || strings.HasPrefix(in.URL, agent.AionUiScheme) || strings.HasPrefix(in.URL, agent.CherryStudioScheme) || in.URL == autostart.LoginItemsURL {
 			open := w.OpenURL
 			// an app's import link is handed over only when something
 			// here opens it: the system says nothing when nothing does,
@@ -3111,7 +3111,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				// Lody on Linux is run with the link, which xdg-open
 				// turned away (agent.OpenLody)
 				open = func(u string) error { return agent.OpenLody(u, app) }
-			case strings.HasPrefix(in.URL, agent.CindyScheme), strings.HasPrefix(in.URL, agent.AionUiScheme):
+			case strings.HasPrefix(in.URL, agent.CindyScheme), strings.HasPrefix(in.URL, agent.AionUiScheme), strings.HasPrefix(in.URL, agent.CherryStudioScheme):
 				open = app
 			}
 			// Open again on a sign-in says why it didn't open (#2043)

@@ -195,9 +195,9 @@ go test -tags nogui ./internal/edit -run 'BOM|CRLF|JSONC|TrailingComma|LoneComma
 go test -tags nogui ./internal/library -run TestHubToggleKeepsOpenCodeJSONCValid
 go test -tags nogui ./internal/agent ./internal/proc -run 'ClaudeCloud|TestT3CodeSaysAClaudeCloudSwitch|TestLoginEnvClaudeProvidersNotSet'
 go test -tags nogui ./internal/agent -run '^TestAnte'
-go test -tags nogui ./internal/agent -run 'AionUi|Cindy'
+go test -tags nogui ./internal/agent -run 'AionUi|Cindy|CherryStudio'
 go test -tags nogui ./internal/agent -run 'AppLink|CommandProgram|SystemLinkHandler'
-go test -tags nogui ./internal/gui -run 'TestAionUiImportRow|TestImportStatusUnreadableIsUnknown|TestLodyImportHandoff|TestImportLinkNothingOpens'
+go test -tags nogui ./internal/gui -run 'TestAionUiImportRow|TestCherryStudioImportRow|TestImportStatusUnreadableIsUnknown|TestLodyImportHandoff|TestImportLinkNothingOpens'
 go test -tags nogui ./internal/cli -run 'TestImportAddSaysNothingOpensIt'
 node --test internal/gui/tests/import-row.test.cjs
 go test -tags nogui ./internal/agent -run '^TestAstrBot'
@@ -295,7 +295,8 @@ registered program whose full path isn't there, refuses the link with
 `agent.NoLinkHandlerError`; a key with no command of its own (a packaged
 app's), a bare program name, KDE's empty answer, no xdg-mime, a build
 without cgo or a failed read is unknown, and the link is handed over as
-before. `/api/open` checks Cindy's, AionUi's and Lody's links this way
+before. `/api/open` checks Cindy's, AionUi's, Cherry Studio's and Lody's links
+this way
 (Lody's after `agent.OpenLody`'s desktop entry), and `fail` answers
 `code: "no_link_handler"` with `app`, `exe` and `said`, an i18n.js key
 from `linkSaid` (the one with ` ({exe})` when a gone program is named),
@@ -336,3 +337,40 @@ Settings included, so the form, the saved row and gateway traffic have not
 been tried end to end. As with Cindy and Lody, the TUI leaves the row out
 because there is nothing to pick. `magpie aionui add` opens the link.
 
+## Cherry Studio providers link
+
+Cherry Studio (`internal/agent/cherrystudio.go`) 2.x keeps its providers
+in its own SQLite database, `<userData>/Data/cherrystudio.sqlite` in WAL
+mode (1.x kept them in Chromium's Local Storage), so magpie writes nothing
+there. Its row is the link that 2.1.10's main process
+(`handleProvidersProtocolUrl`, the same in 1.x) turns into Settings → Model
+Provider with a dialog for the user to confirm:
+
+```
+cherrystudio://providers/api-keys?v=1&data=<base64 of {"id":"magpie","baseUrl":"<gateway>/v1","apiKey":<agentKeyAt("cherrystudio")>,"name":"magpie","type":"openai"}>
+```
+
+The data is standard base64, query-escaped. Cherry Studio turns a raw `+`
+into `_` and `/` into `-` before URLSearchParams reads the query, and back
+after, so URL-safe base64 would decode wrong. Type `openai` is its OpenAI
+chat completions endpoint, which lists models from `<base>/models`; a base
+URL that has a version keeps it. `TestCherryStudioLinkParsedAs2_1_10` runs
+the link through its parser and the renderer's checks, copied from 2.1.10's
+source (`testdata/cherrystudio/providers-import-2.1.10.js`), with gateways
+whose base64 spells `+` and `/`.
+
+userData is `os.UserConfigDir()/CherryStudio`, and each folder the user
+moved it to, from `~/.cherrystudio/boot-config.json`'s
+`app.user_data_path`. `Added` reads `user_provider.endpoint_configs` for
+the gateway's address, untouched (`sessions.OpenUntouched`), with the 2.1.10
+schema in `TestCherryStudioHas`, and keeps the last read per database as
+AionUi's does (`dbStatus`). A database or boot-config it can't read, or a
+userData with 1.x's Local Storage and no database, is unknown.
+
+Tried on macOS with the released 2.1.10 in a sandbox HOME and userData:
+`magpie cherrystudio add` opened the dialog, Add saved the provider
+(turned off, as Cherry Studio adds every provider; it is on once models
+are added), its model list came from the gateway, and a chat went through
+it, counted as Cherry Studio's. A link that arrives while its first-run
+welcome page is up shows no dialog; after "set up later" it does.
+`magpie cherrystudio add` opens the link; the TUI leaves the row out.

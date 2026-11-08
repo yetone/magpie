@@ -313,6 +313,7 @@ func onMachine(home, cfg string) []*Agent {
 		alma(),
 		cindy(),
 		aionui(),
+		cherryStudio(home),
 		lody(home),
 	}, append(ompProfiles(home), qwenpawAgents(home)...)...)
 }

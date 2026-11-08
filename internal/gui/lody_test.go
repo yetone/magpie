@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -40,6 +41,7 @@ func TestImportLinkNothingOpens(t *testing.T) {
 		{agent.CindyLink("http://127.0.0.1:3425"), "Cindy", ""},
 		{agent.CindyLink("http://127.0.0.1:3425"), "Cindy", `C:\gone\Cindy.exe`},
 		{agent.AionUiScheme + "a=1", "AionUi", ""},
+		{agent.CherryStudioLink("http://127.0.0.1:3425"), "Cherry Studio", ""},
 		{agent.LodyLink("http://127.0.0.1:3425"), "Lody", ""},
 	} {
 		appLink = func(link string, open func(string) error) error {
@@ -278,6 +280,68 @@ func TestAionUiImportRow(t *testing.T) {
 		if link == row.Import {
 			if w.opened != link {
 				t.Fatal("AionUi's link was not handed to the desktop")
+			}
+		} else if w.opened != "" {
+			t.Fatalf("opened unrelated URL %s", w.opened)
+		}
+	}
+}
+
+// Cherry Studio's row is its providers link, opened as it is and no other
+// cherrystudio:// link; with its userData and no database yet (1.x, or
+// 2.x before its first start) it says nothing, and with a database
+// without magpie it says not added.
+func TestCherryStudioImportRow(t *testing.T) {
+	sandboxHome(t)
+	cfg, err := os.UserConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(cfg, "CherryStudio")
+	if err := os.MkdirAll(filepath.Join(dir, "Local Storage"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	find := func() *agentJSON {
+		s := state()
+		for i := range s.Agents {
+			if s.Agents[i].ID == "cherrystudio" {
+				return &s.Agents[i]
+			}
+		}
+		return nil
+	}
+	row := find()
+	if row == nil || !strings.HasPrefix(row.Import, agent.CherryStudioScheme+"v=1&data=") {
+		t.Fatalf("Cherry Studio's row: %+v", row)
+	}
+	if b, _ := json.Marshal(row); strings.Contains(string(b), `"added"`) {
+		t.Fatalf("1.x's providers can't be read, yet the row says added: %s", b)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "Data"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", filepath.Join(dir, "Data", "cherrystudio.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("CREATE TABLE user_provider (provider_id text PRIMARY KEY, name text, endpoint_configs text)"); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	if row = find(); row.Added == nil || *row.Added {
+		t.Fatalf("Cherry Studio without magpie: %+v, want added false", row.Added)
+	}
+	linksOpen(t)
+	w := &importWindows{}
+	mux := http.NewServeMux()
+	providerRoutes(mux, w)
+	for _, link := range []string{row.Import, "cherrystudio://mcp/install?servers=x", "cherrystudio://providers/api-keys-x?a=1", "cherrystudio:providers/api-keys?a=1", "cherrystudio://navigate/settings"} {
+		w.opened = ""
+		body, _ := json.Marshal(map[string]string{"url": link})
+		mux.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("POST", "/api/open", strings.NewReader(string(body))))
+		if link == row.Import {
+			if w.opened != link {
+				t.Fatal("Cherry Studio's link was not handed to the desktop")
 			}
 		} else if w.opened != "" {
 			t.Fatalf("opened unrelated URL %s", w.opened)

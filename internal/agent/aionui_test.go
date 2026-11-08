@@ -160,7 +160,7 @@ func TestAionUiStatusRereadsOnChange(t *testing.T) {
 	if err := os.WriteFile(path, []byte("junk"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	st := &aionuiStatus{}
+	st := &dbStatus{has: aionuiHas}
 	if _, known := st.read(path, gw); known {
 		t.Fatal("junk read as known")
 	}
