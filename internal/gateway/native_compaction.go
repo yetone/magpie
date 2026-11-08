@@ -12,7 +12,9 @@ package gateway
 // can't be asked — switched off, removed, out of the group — the request
 // is refused, saying why: the compaction is never sent to another to be
 // refused, dropped (withoutCompaction), or summarised in its place, which
-// would lose the conversation's earlier context unasked.
+// would lose the conversation's earlier context unasked. A call beside
+// the conversation (compactionAside: Codex's auto-review and the like),
+// which its writer doesn't serve, goes without it instead.
 
 import (
 	"bytes"
@@ -32,6 +34,7 @@ import (
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/steady"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 const (
@@ -162,6 +165,53 @@ func (s *Server) keepsCompaction(from provider.Protocol, p provider.Provider, mo
 	}
 	cp, ok := checkpointOf(body)
 	return ok && cp.Provider == p.ID
+}
+
+// compactionAside is whether a call is one Codex makes beside the
+// conversation, on a model of its own choosing, with the conversation's
+// history in it: the auto-review of an approval (the guardian, asked on
+// codex-auto-review or the model set for it), a memory, a subagent, a
+// thread's title, description, summary, the next message's prediction or
+// a suggestion, each on the model set for it. A
+// compaction another provider sealed reaches it only because the history
+// does, and no model but its writer's reads it; such a call goes without
+// it rather than be refused, as each review was (echo_ts: Copilot's
+// compaction sent to OpenAI's codex-auto-review, 400
+// invalid_encrypted_content). What the call is about — the instructions,
+// the turns since and their tool calls — stays. The conversation's own
+// turns are held to the writer still (#1099).
+func compactionAside(kind, model string) bool {
+	switch usage.PurposeOf(kind) {
+	case "kind:guardian", "kind:memory_consolidation", "kind:collab_spawn",
+		"kind:thread_title", "kind:thread_description", "kind:composer_predictions", "kind:ambient_suggestions":
+		return true
+	}
+	if isSummaryKind(kind) {
+		return true
+	}
+	_, bare, _ := strings.Cut(model, "/")
+	if bare == "" {
+		bare = model
+	}
+	return bare == provider.CodexAutoReview
+}
+
+// foreignToSignin is the writer of a compaction body carries that
+// Codex's own ChatGPT sign-in can't read: one magpie recorded as sealed
+// by a provider in magpie other than the Codex subscription (Copilot, an
+// API key's). A seal of the Codex subscription's, one magpie has no
+// record of (OpenAI's own, compacted on the sign-in), and one whose
+// provider can't be read now are the sign-in's to judge, as before.
+func foreignToSignin(body []byte) (checkpointWriter, bool) {
+	cp, ok := checkpointOf(body)
+	if !ok || cp.Provider == "codex" {
+		return checkpointWriter{}, false
+	}
+	p, err := provider.Find(cp.Provider)
+	if err != nil || p.Account != nil && p.Account.Agent == "codex" {
+		return checkpointWriter{}, false
+	}
+	return cp, true
 }
 
 // checkpointWriter is who sealed a compaction: the key or account

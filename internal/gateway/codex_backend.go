@@ -220,6 +220,12 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 			// array too long", and Codex shows it as the turn's error
 			// (jue on Discord). A summary magpie made goes as its text.
 			body, _ = codexInput(body, false)
+			// a compaction another provider sealed: the sign-in can't
+			// read it, and nothing here can compact it but its writer
+			if cp, foreign := foreignToSignin(body); foreign {
+				writeError(w, provider.Responses, 400, checkpointError(model, cp))
+				return
+			}
 			// a key held to some accounts (#905) may not spend the sign-in
 			// compaction still relays on: refused as its turns are (#967),
 			// with nothing asked of OpenAI — and refused when the sign-in
@@ -287,6 +293,20 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		body, _ = codexInput(body, false)
+		// a compaction another provider sealed (Copilot's, native) is
+		// never relayed to the sign-in, which can't read it: a call
+		// beside the conversation goes without it, a turn is refused
+		// with why, as one routed is (#1099; echo_ts: every auto-review
+		// on codex-auto-review answered 400 invalid_encrypted_content)
+		if cp, foreign := foreignToSignin(body); foreign {
+			if !compactionAside(kind, model) {
+				writeError(w, provider.Responses, 400, checkpointError(model, cp))
+				return
+			}
+			if b, ok := withoutCompaction(body); ok {
+				body = b
+			}
+		}
 		if r.Header.Get(AccountHeader) != "" {
 			// relayed as it came, it would go to Codex's own sign-in only
 			writeError(w, provider.Responses, 400, AccountHeader+" names one of magpie's Codex accounts, and Codex isn't signed in to ChatGPT here with any on in magpie")

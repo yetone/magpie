@@ -2827,8 +2827,24 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	if from == provider.Responses {
 		if cp, ok := checkpointOf(body); ok {
 			checkpoint = &cp
-			var left bool
-			if cands, pl, left = checkpointReaders(cands, pl, cp); !left {
+			kept, keptPl, left := checkpointReaders(cands, pl, cp)
+			if !left && compactionAside(call.Kind, asked) {
+				// a call beside the conversation (an approval's review, a
+				// memory, a subagent) on a model its writer doesn't serve:
+				// asked without the seal, which no other can read (echo_ts:
+				// a Copilot compaction sent to codex-auto-review, refused
+				// as invalid_encrypted_content every review). The
+				// conversation's own turns are still held to the writer
+				if b, ok := withoutCompaction(body); ok {
+					body, checkpoint, left = b, nil, true
+					kept, keptPl = cands, pl
+					if p, ok := withoutCompaction(plain); ok {
+						plain = p
+					}
+				}
+			}
+			cands, pl = kept, keptPl
+			if !left {
 				call.Status, call.Error = 400, "native compaction sealed elsewhere"
 				writeError(w, from, 400, checkpointError(call.Model, cp))
 				turnedAway()
