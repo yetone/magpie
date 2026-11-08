@@ -336,7 +336,7 @@ func SubscriptionUsage(ctx context.Context) []SubscriptionQuota {
 		}
 		readCtx, seq := quotaReading(bg)
 		asked := claudeAskGeneration.Load()
-		go func() {
+		goRead(func() {
 			out := fetchSubscriptionUsage(readCtx)
 			noteDailyCredits(out, time.Now())
 			noteCardHistory(out, time.Now())
@@ -351,7 +351,7 @@ func SubscriptionUsage(ctx context.Context) []SubscriptionQuota {
 			// has it finished, hook and all
 			toldUsage()
 			close(done)
-		}()
+		})
 	}
 	pending := c.pending
 	c.Unlock()

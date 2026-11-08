@@ -303,6 +303,37 @@ func Unwaited() (release func()) {
 	return sync.OnceFunc(func() { unwaited.Add(-1) })
 }
 
+// readsOut counts the allowance and usage reads a caller left running
+// in the background (Allowances past firstWait, SubscriptionUsage with a
+// stale copy to serve, a key's allowance), for a test to wait for at its
+// end: what such a read finds — Claude Code's sign-in in whatever home is
+// set by then — lands in the next test's caches otherwise (#3174).
+var readsOut struct {
+	sync.Mutex
+	n    int
+	idle chan struct{} // closed when n drops to 0
+}
+
+// goRead runs f as a read left out (readsOut).
+func goRead(f func()) {
+	readsOut.Lock()
+	if readsOut.n == 0 {
+		readsOut.idle = make(chan struct{})
+	}
+	readsOut.n++
+	readsOut.Unlock()
+	go func() {
+		defer func() {
+			readsOut.Lock()
+			if readsOut.n--; readsOut.n == 0 {
+				close(readsOut.idle)
+			}
+			readsOut.Unlock()
+		}()
+		f()
+	}()
+}
+
 // Allowance is an account's allowance windows as last known.
 type Allowance []Limit
 
@@ -813,7 +844,7 @@ func Allowances(agent string) map[string]Allowance {
 		done = make(chan struct{})
 		c.loading[agent] = done
 		began := c.generation
-		go func() {
+		goRead(func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			share := renewalShare(agent) // read before the lock: it reads providers.json
@@ -899,7 +930,7 @@ func Allowances(agent string) map[string]Allowance {
 				tellStarted(agent, user)
 			}
 			close(done)
-		}()
+		})
 	}
 	_, known := c.m[agent]
 	c.Unlock()
