@@ -1865,8 +1865,8 @@ function routingPage(part) {
     const s = way(0, 1), e = way(pts.length - 1, -1);
     return s && e ? [s, e] : null;
   }
-  // via is the way through magpie from one wire to the next: a gentle arc
-  // across it, carrying on the way the flight came in and leaving the way
+  // via is the way through magpie from one wire to the next: an arc along
+  // its edge, carrying on the way the flight came in and leaving the way
   // the next wire goes — or, out the side it came in, a loop round inside.
   // It follows the wires as they move.
   function via(from, to) {
@@ -1889,9 +1889,31 @@ function routingPage(part) {
         c1 = [a.x + a.tx * k - nx * m, a.y + a.ty * k - ny * m];
         c2 = [b.x - b.tx * k + nx * m, b.y - b.ty * k + ny * m];
       } else {
-        const k = dist * .38, l = Math.min(16, dist * .12), nx = dy / dist, ny = -dx / dist;
-        c1 = [a.x + a.tx * k + nx * l, a.y + a.ty * k + ny * l];
-        c2 = [b.x - b.tx * k + nx * l, b.y - b.ty * k + ny * l];
+        // the sky is over the cards (the owner, 11-09): a magpie crossing
+        // magpie's box keeps to its edge, off its name and address. Side
+        // to side it goes along the top edge; round a corner, by it.
+        // the box layout read with the wires, not read again: a read here
+        // laid the stage out again mid-flight
+        const h = hubBox || { l: 0, t: 0, r: 0, b: 0 }, L = h.l, T = h.t, R = h.r, B = h.b, wide = R > L;
+        const side = (p) => { const e = [Math.abs(p.x - L), Math.abs(p.y - T), Math.abs(p.x - R), Math.abs(p.y - B)]; return e.indexOf(Math.min(...e)); }; // left, top, right, bottom
+        const sa = side(a), sb = side(b);
+        if (wide && sa % 2 === 0 && sb % 2 === 0 && sa !== sb) {
+          // up the side it came in, over the top a little above the edge
+          // ((a.y + 3cy + 3cy + b.y) / 8 = T - 8) and down the side it
+          // leaves by: the magpie trails its dot, and anywhere lower its
+          // tail swept the name
+          const cy = (8 * (T - 8) - a.y - b.y) / 6;
+          c1 = [a.x, cy];
+          c2 = [b.x, cy];
+        } else if (wide && sa % 2 !== sb % 2) {
+          const x = sa % 2 === 0 ? a.x : b.x, y = sa % 2 === 1 ? a.y : b.y;
+          c1 = [x, y];
+          c2 = [x, y];
+        } else {
+          const k = dist * .38, l = Math.min(16, dist * .12), nx = dy / dist, ny = -dx / dist;
+          c1 = [a.x + a.tx * k + nx * l, a.y + a.ty * k + ny * l];
+          c2 = [b.x - b.tx * k + nx * l, b.y - b.ty * k + ny * l];
+        }
       }
       // set only when it moved: a new d is measured again (measure)
       const d = `M${a.x} ${a.y} C${c1[0]} ${c1[1]} ${c2[0]} ${c2[1]} ${b.x} ${b.y}`;
@@ -2125,6 +2147,8 @@ function routingPage(part) {
     layout();
   }); };
 
+  // hubBox is magpie's box as layout last read it, on the stage, for via
+  let hubBox = null;
   function layout() {
     const r = stage.getBoundingClientRect();
     if (!r.width) return;
@@ -2143,7 +2167,7 @@ function routingPage(part) {
       boxes.set(e, v);
       return v;
     };
-    const h = b(hub), low = b(srcs).b;
+    const h = hubBox = b(hub), low = b(srcs).b;
     // a key off screen is not drawn, and its content is as tall as a drawn
     // key's (routing.css, #3164)
     let row = list.firstElementChild;

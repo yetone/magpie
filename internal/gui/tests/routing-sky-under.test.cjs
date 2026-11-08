@@ -4,7 +4,8 @@
 // the hub's "127.0.0.1:3425", its request's dot beside it, another over a
 // member's row — and the row smart routing's intent picked ran its long
 // intent off the row's right edge, its name squeezed out. The magpies fly
-// under the cards now: nothing in the sky covers a card's words, a dot held
+// over the cards, as before, but nothing at rest covers a card's words (the
+// owner, 11-09: "鸟要在卡片上面", after 869c4d112 put them under), a dot held
 // at its seat or waiting at magpie sits whole beside the card, and a long
 // intent is cut short on its row, read whole in its tooltip, the name kept.
 // Three agents at once (one still waiting at magpie), at a wide window (the
@@ -45,7 +46,7 @@ const routes = () => [
   { id: 9, seq: 9, time: at(1000), agent: "kimi", model: "group/jd", provider: "", tokens: 2000, group, order: [], tries: [], done: false },
 ];
 
-function serve(lang) {
+function serve(lang, live) {
   const state = { agents: [
     { id: "claude", name: "Claude Code", path: "/test/claude", fields: [] },
     { id: "codex", name: "Codex", path: "/test/codex", fields: [] },
@@ -60,7 +61,11 @@ function serve(lang) {
     if (url.pathname === "/api/state") return json(state);
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
     if (url.pathname === "/api/gateway/trace") {
-      if (url.searchParams.get("wait")) return new Promise(() => {}); // nothing more comes
+      if (url.searchParams.get("wait")) { // what the test sends next, when it does
+        if (live.queued.length) return json(live.queued.shift());
+        live.pending.push(r);
+        return;
+      }
       const rs = first ? routes() : [];
       first = false;
       return json({ mine: true, now: new Date().toISOString(), seq: 9, totals: { requests: 3, rerouted: 0, errors: 0 }, routes: rs });
@@ -75,31 +80,62 @@ function serve(lang) {
   };
 }
 
-// covered: the words on the stage's cards that something in the sky would
-// be drawn over. The sky is filled whole with a probe, made hittable, and
-// each card's words asked what is on top of them.
+// covered: the words on the stage's cards that a magpie or a dot is drawn
+// over. The sky is over the cards (the owner, 11-09: "鸟要在卡片上面"), so
+// what sits at rest must sit beside the words, never on them.
 const covered = () => {
+  const words = [...document.querySelectorAll(".rt-stage .rt-node b, .rt-stage .rt-node small, .rt-stage .rt-node i, .rt-accts li:not(.rt-gap) > b, .rt-accts li:not(.rt-gap) > em, .rt-accts li.rt-sub > b")]
+    .map((w) => [w, w.getBoundingClientRect()]).filter(([, r]) => r.width && r.height);
+  const things = [...document.querySelectorAll(".rt-sky .rt-flier:not(.away) :is(.body, .tail, .wing, .belly), .rt-sky .pkt:not([visibility])")];
+  const out = [];
+  for (const th of things) {
+    const a = th.getBoundingClientRect();
+    if (!a.width || !a.height) continue;
+    for (const [w, r] of words) {
+      if (a.right > r.left + 1 && a.left < r.right - 1 && a.bottom > r.top + 1 && a.top < r.bottom - 1) out.push(`${th.getAttribute("class")} over ${w.tagName.toLowerCase()} "${w.textContent.slice(0, 30)}"`);
+    }
+  }
+  return out;
+};
+
+// crossing: watches every frame a magpie flies through magpie's box, and
+// keeps what of the sky was on the hub's words then: its dot and its body.
+// The magpie trails its dot by its length, so as it leaves the box by the
+// side its tail or a wing brushes the words for a frame or two; across
+// them (the way before) dot and body went over the name and address.
+const crossing = () => {
+  window.crossed = { frames: 0, hits: [] };
+  const words = () => [...document.querySelectorAll(".rt-stage .rt-hub b, .rt-stage .rt-hub small, .rt-stage .rt-hub i")].map((w) => [w, w.getBoundingClientRect()]).filter(([, r]) => r.width && r.height);
+  const frame = () => {
+    if (document.querySelector(".rt-sky path.via[d]")) {
+      window.crossed.frames++;
+      const ws = words();
+      for (const th of document.querySelectorAll(".rt-sky .rt-flier:not(.away) .body, .rt-sky .pkt:not([visibility])")) {
+        const a = th.getBoundingClientRect();
+        for (const [w, r] of ws) if (a.right > r.left + 1 && a.left < r.right - 1 && a.bottom > r.top + 1 && a.top < r.bottom - 1) window.crossed.hits.push(`${th.getAttribute("class")} over "${w.textContent}"`);
+      }
+    }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+};
+
+// above: whether the sky is drawn over the cards. A probe filling the sky
+// is asked for at the middle of each card.
+const above = () => {
   const sky = document.querySelector(".rt-sky");
-  const NS = "http://www.w3.org/2000/svg";
-  const probe = document.createElementNS(NS, "rect");
+  const probe = document.createElementNS("http://www.w3.org/2000/svg", "rect");
   probe.setAttribute("x", "-5000"); probe.setAttribute("y", "-5000");
   probe.setAttribute("width", "10000"); probe.setAttribute("height", "10000");
   probe.style.pointerEvents = "all";
   sky.append(probe);
   sky.style.pointerEvents = "auto";
-  const out = [];
   try {
-    const words = [...document.querySelectorAll(".rt-stage .rt-node b, .rt-stage .rt-node small, .rt-stage .rt-node i, .rt-accts li:not(.rt-gap) > b, .rt-accts li:not(.rt-gap) > em, .rt-accts li.rt-sub > b")];
-    for (const w of words) {
-      const r = w.getBoundingClientRect();
-      if (!r.width || !r.height) continue;
-      for (const [x, y] of [[r.left + 2, r.top + r.height / 2], [r.left + r.width / 2, r.top + r.height / 2], [r.right - 2, r.top + r.height / 2]]) {
-        const hit = document.elementFromPoint(x, y);
-        if (hit && sky.contains(hit)) { out.push(`${w.tagName.toLowerCase()} "${w.textContent.slice(0, 30)}"`); break; }
-      }
-    }
+    return [...document.querySelectorAll(".rt-stage .rt-node, .rt-accts li:not(.rt-gap)")].map((c) => {
+      const r = c.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return !!hit && sky.contains(hit);
+    });
   } finally { probe.remove(); sky.style.pointerEvents = ""; }
-  return out;
 };
 
 // dots: each request's dot at rest, and the cards it overlaps
@@ -126,7 +162,7 @@ const intentRow = (intent) => {
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
     for (const width of [1600, 1100, 560, 390]) {
-      test(`${engine} ${lang} ${width}px: three agents at once, the magpies fly under the cards and a long intent stays in its row`, async (t) => {
+      test(`${engine} ${lang} ${width}px: three agents at once, the magpies fly over the cards, beside their words, and a long intent stays in its row`, async (t) => {
         const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
         const page = await (await browser.newContext({ viewport: { width, height: 1000 } })).newPage();
         page.setDefaultTimeout(8000);
@@ -140,7 +176,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           }
           await browser.close();
         });
-        await page.route("**/*", serve(lang));
+        const live = { pending: [], queued: [] };
+        await page.route("**/*", serve(lang, live));
         await page.goto("http://magpie.test/?view=routing");
         // the two requests routing picked for are held at their seats, the
         // third's dot waits at magpie
@@ -150,13 +187,26 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const flown = await page.evaluate(() => document.querySelectorAll(".rt-sky .rt-flier").length);
         assert(flown >= 1, "the magpie carrying the waiting request stays with it at magpie");
 
-        assert.deepEqual(await page.evaluate(covered), [], "nothing in the sky may be drawn over a card's words");
+        const over = await page.evaluate(above);
+        assert(over.length >= 3 && over.every(Boolean), `the magpies fly over the cards: ${JSON.stringify(over)}`);
+        assert.deepEqual(await page.evaluate(covered), [], "a magpie or dot at rest is never on a card's words");
         const ds = await page.evaluate(dots);
         assert.equal(ds.length, 3, JSON.stringify(ds));
         for (const d of ds) {
           assert.deepEqual(d.over, [], `a ${d.held ? "held" : "waiting"} dot must sit whole beside its card, not under or over it: ${JSON.stringify(ds)}`);
           assert(d.gap <= 12, `a ${d.held ? "held" : "waiting"} dot must sit at its card (${d.gap.toFixed(1)}px off): ${JSON.stringify(ds)}`);
         }
+
+        // routing picks a for kimi's: its magpie flies on through magpie's
+        // box, along its edge, never over its name or address
+        await page.evaluate(crossing);
+        const next = { ...routes()[2], provider: "a", order: order().slice(1), tries: [{ id: "a", model: "fast", start: new Date().toISOString() }] };
+        const reply = { mine: true, now: new Date().toISOString(), seq: 10, totals: { requests: 3, rerouted: 0, errors: 0 }, routes: [next] };
+        if (live.pending.length) await live.pending.shift().fulfill({ json: reply }); else live.queued.push(reply);
+        await page.waitForFunction(() => document.querySelectorAll(".rt-sky .pkt.held").length === 3, null, { timeout: 8000 });
+        const crossed = await page.evaluate(() => window.crossed);
+        assert(crossed.frames >= 5, `the magpie flew through magpie's box: ${JSON.stringify(crossed)}`);
+        assert.deepEqual([...new Set(crossed.hits)], [], "a magpie crossing magpie's box keeps off its words");
 
         const row = await page.evaluate(intentRow, INTENT);
         assert(row, "the row the intent picked says the intent");

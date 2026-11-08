@@ -81,8 +81,8 @@ for (const engine of engines) for (const lang of langs) for (const width of widt
     const atSeat = async (when) => {
       const w = await page.evaluate(where);
       assert(w, `${when}: the seat answering must be marked, with the request's dot held at it`);
-      // beside it, a dot clear of the card: the sky is under the cards
-      // (routing-sky-under)
+      // beside it, a dot clear of the card, off its words (the sky is over
+      // the cards: routing-sky-under)
       assert(w.dot.x < w.seat.l && w.seat.l - w.dot.x <= 10, `${when}: the held dot (x ${w.dot.x.toFixed(1)}) must sit at the seat's edge (x ${w.seat.l.toFixed(1)})`);
       assert(w.dot.y >= w.seat.t && w.dot.y <= w.seat.b, `${when}: the held dot (y ${w.dot.y.toFixed(1)}) must sit beside the seat (y ${w.seat.t.toFixed(1)}–${w.seat.b.toFixed(1)})`);
     };
