@@ -21,8 +21,13 @@ import (
 // under the full name, and the client is handed that name, which it runs:
 // not the bare magpie-web-search__web_search it has no tool of, which it
 // answered "Error: No such tool available: magpie-web-search__web_search"
-// before the model retried (packinggoods, #feedback 11-02). A tool it
-// declared still comes back under its declared name.
+// before the model retried (packinggoods, #feedback 11-02). A deferred
+// built-in has no prefix on the client: called as mcp__magpie__WebFetch it
+// is handed over as WebFetch, which the client answered "No such tool
+// available: mcp__magpie__WebFetch" before (steven_4422, #feedback 11-08).
+// Another MCP server's tool is handed over as the client names it,
+// mcp__linear__…, and a tool it declared still comes back under its
+// declared name.
 func TestClaudeBridgeHandsOverAnUnloadedMagpieTool(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("a shell script stands in for Claude Code")
@@ -33,6 +38,8 @@ while read -r line; do
   case "$line" in
     *call-search*) name=mcp__magpie__magpie-web-search__web_search ;;
     *call-browser*) name=mcp__magpie__magpie-browser__browser_click ;;
+    *call-fetch*) name=mcp__magpie__WebFetch ;;
+    *call-linear*) name=mcp__magpie__mcp__linear__get_issue ;;
     *) name=mcp__magpie__Read ;;
   esac
   echo '{"type":"stream_event","event":{"type":"message_start","message":{"id":"m","model":"claude-sonnet-5","usage":{"input_tokens":1}}}}'
@@ -50,7 +57,7 @@ done
 	// the client's tools: ToolSearch, Read and the one MCP tool it loaded;
 	// web_search is announced in the conversation only
 	tools := `[{"name":"ToolSearch","input_schema":{"type":"object"}},{"name":"Read","input_schema":{"type":"object"}},{"name":"mcp__magpie__magpie-browser__browser_click","input_schema":{"type":"object"}}]`
-	announced := "<system-reminder>\nThe following deferred tools are now available via ToolSearch. Their schemas are NOT loaded — calling them directly will fail with InputValidationError. Use ToolSearch with query \"select:<name>[,<name>...]\" to load tool schemas before calling them:\nmcp__magpie__magpie-web-search__web_search\n</system-reminder>\n"
+	announced := "<system-reminder>\nThe following deferred tools are now available via ToolSearch. Their schemas are NOT loaded — calling them directly will fail with InputValidationError. Use ToolSearch with query \"select:<name>[,<name>...]\" to load tool schemas before calling them:\nmcp__magpie__magpie-web-search__web_search\nWebFetch\nmcp__linear__get_issue\n</system-reminder>\n"
 	p := provider.Provider{ID: "claude", Account: &provider.Account{Agent: "claude", User: "u"}}
 	call := func(what string) string {
 		t.Helper()
@@ -79,6 +86,8 @@ done
 	for what, want := range map[string]string{
 		"call-search: search the web for magpie": "mcp__magpie__magpie-web-search__web_search",
 		"call-browser: click the button":         "mcp__magpie__magpie-browser__browser_click",
+		"call-fetch: fetch usemagpie.ai":         "WebFetch",
+		"call-linear: read issue MAG-1":          "mcp__linear__get_issue",
 		"read a file":                            "Read",
 	} {
 		if got := call(what); got != want {

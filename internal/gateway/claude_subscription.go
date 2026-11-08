@@ -3860,12 +3860,17 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 		search := r.search != nil && name == r.searchName || r.answerName != "" && name == r.answerName
 		refused := r.allowed != nil && !r.allowed[name]
 		// a tool the client announced but hasn't loaded yet (Claude
-		// Code's deferred MCP tools, told by name in the conversation
-		// and not in tools until a ToolSearch) is called by the
-		// client's own name, which is the name the run's agent called:
-		// the bare name cut from it is no tool the client has, and it
-		// answered "No such tool available" before a retry (packinggoods)
-		if ok && !search && name == rest && r.tools != nil && !r.tools[rest] {
+		// Code's deferred tools, told by name in the conversation and
+		// not in tools until a ToolSearch) is called by the client's
+		// own name. A tool of magpie's MCP server is
+		// mcp__magpie__<server>__<tool> there, the name the run's agent
+		// called: cut to <server>__<tool> it is no tool the client has,
+		// and it answered "No such tool available" before a retry
+		// (packinggoods). A deferred built-in (WebFetch, CronCreate) has
+		// no __ in its name and the client no prefix on it: handed over
+		// as mcp__magpie__WebFetch it was no tool either (steven_4422).
+		// Another server's (mcp__linear__…) is the client's name as cut.
+		if ok && !search && name == rest && r.tools != nil && !r.tools[rest] && magpieServerTool(rest) {
 			name = called
 		}
 		r.mu.Unlock()
@@ -5025,6 +5030,16 @@ func declaredName(names map[string]string, name string) string {
 		return n
 	}
 	return name
+}
+
+// magpieServerTool says whether rest, a name the run's agent called with
+// mcp__magpie__ cut off, is a tool of magpie's MCP server as the client
+// names it after that prefix: <server>__<tool> (the router's names,
+// hub_mcp.go). Claude Code's built-ins (WebFetch, WebSearch, CronCreate,
+// NotebookEdit…) have no __ in their names, and another MCP server's tool
+// is mcp__<server>__<tool> whole.
+func magpieServerTool(rest string) bool {
+	return strings.Contains(rest, "__") && !strings.HasPrefix(rest, "mcp__")
 }
 
 // offeredTools is the names of the caller's tools, whose past calls a run

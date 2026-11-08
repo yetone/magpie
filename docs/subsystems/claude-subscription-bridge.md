@@ -84,8 +84,16 @@ the full name, which is the client's own, when the cut name maps to
 nothing and isn't in `subscriptionRun.tools`: handed over cut, as
 `<server>__<tool>`, the client answered "No such tool available" and the
 model had to load it and call again (packinggoods, 11-02,
-`TestClaudeBridgeHandsOverAnUnloadedMagpieTool`). A deferred tool of
-another client MCP server (`mcp__linear__…`) is still not handed over.
+`TestClaudeBridgeHandsOverAnUnloadedMagpieTool`). Only a cut name of the
+router's form, `<server>__<tool>` (`magpieServerTool`), keeps the prefix.
+A deferred built-in (`WebFetch`, `WebSearch`, `CronCreate`: no `__` in
+the name, no prefix on the client) called as `mcp__magpie__WebFetch` is
+handed over as `WebFetch`; handed over whole, the client answered "No
+such tool available: mcp__magpie__WebFetch" (steven_4422, 11-08). One of
+another client MCP server called as `mcp__magpie__mcp__linear__…` is
+handed over as `mcp__linear__…`. A deferred tool the run's model calls
+by the bare client name (`WebFetch`, `mcp__linear__…`) is the run's
+Claude Code's to answer and is not handed over.
 
 A turn with `tool_choice` none is offered every tool the client sent, as
 any other turn is (bbfatx on X). Anthropic caches a prompt as tools, then
