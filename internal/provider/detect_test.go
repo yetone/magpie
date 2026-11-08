@@ -269,7 +269,11 @@ func TestModelAPI(t *testing.T) {
 	if err := SetModelAPI("relay/mixed", "gemini"); err == nil || !strings.Contains(err.Error(), "no gemini URL") {
 		t.Fatalf("gemini with no Gemini URL: %v", err)
 	}
-	if err := SetModelAPI("relay/mixed", "decide"); err == nil || !strings.Contains(err.Error(), "not \"decide\"") {
+	// System One, with no URL there (TestModelSystemOneNeedsItsURL)
+	if err := SetModelAPI("relay/mixed", "decide"); err == nil || !strings.Contains(err.Error(), "no System One URL") {
+		t.Fatalf("System One with no URL there: %v", err)
+	}
+	if err := SetModelAPI("relay/mixed", "jev"); err == nil || !strings.Contains(err.Error(), "not \"jev\"") {
 		t.Fatalf("an API a model isn't asked on: %v", err)
 	}
 	if err := SetModelAPI("relay/nope", "anthropic"); err == nil {

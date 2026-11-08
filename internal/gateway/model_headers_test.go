@@ -130,3 +130,46 @@ func TestModelHeadersReachSystemOne(t *testing.T) {
 		t.Errorf("System One: X-Route = %q, want the model's", v)
 	}
 }
+
+// axelburks on Discord: a model of a relay with a System One URL beside
+// its chat URL, set to be asked on System One, is asked there by its own
+// name, and a conversation turn for it is refused as Jev's is.
+func TestModelSetToSystemOneAskedThere(t *testing.T) {
+	fresh(t)
+	var mu sync.Mutex
+	var paths, bodies []string
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		paths, bodies = append(paths, r.URL.Path), append(bodies, string(b))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"model":"ep-decide","usage":{"input_tokens":1,"output_tokens":1}}`)
+	}))
+	t.Cleanup(up.Close)
+	if err := provider.Save(provider.Provider{ID: "ark", Name: "Ark", Key: "upstream", Chat: up.URL + "/api/v3",
+		Decide: up.URL + "/api/v3", Models: []string{"ep-chat", "ep-decide"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SetModelAPI("ark/ep-decide", "decide"); err != nil {
+		t.Fatal(err)
+	}
+	code, out := sendTo(New(), "/v1/systemone", `{"model":"ark/ep-decide","state":{"message":"hi"},"questions":{}}`)
+	if code != 200 {
+		t.Fatalf("System One: %d %s", code, out)
+	}
+	mu.Lock()
+	if len(paths) != 1 || !strings.HasSuffix(paths[0], "/systemone") || !strings.Contains(bodies[0], `"ep-decide"`) {
+		t.Fatalf("asked %v %v", paths, bodies)
+	}
+	mu.Unlock()
+	code, out = sendTo(New(), "/v1/chat/completions", `{"model":"ark/ep-decide","messages":[{"role":"user","content":"hi"}]}`)
+	if code != 400 {
+		t.Fatalf("a turn for it: %d %s", code, out)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(paths) != 1 {
+		t.Fatalf("the turn reached the vendor: %v", paths)
+	}
+}

@@ -122,6 +122,18 @@ the remote has none, suppressing the UI's legacy name-based guessing.
 The editor offers one remote address; its System One endpoint is derived
 from that address and has no separate input. Unnamed decisions use their
 model ids for display names and provider labels.
+
+A key's provider with a System One URL beside a conversation URL
+(`TakesDecideAPI` in
+[`modelprefs.go`](../../internal/provider/modelprefs.go): no account, no
+remote magpie, no Vertex) takes `decide` as a model's API (`DecideAPI`,
+saved in `modelAPIs`). `DecidesModel` is then true for that model alone, so
+it leaves `buildEntries`, joins `Deciders`, and the gateway refuses a turn
+for it; `decideModels` lists it first, and `resolveDecideModel` asks
+System One by its own name (axelburks on Discord: an Ark endpoint id).
+`apisAmong` ignores `decide`, so it never picks a conversation URL. The GUI
+offers it when `providerInfo`'s `decideAPIKind` is set and a System One URL
+is saved.
 Refresh replaces the list: removed decisions stop routing, and an empty
 remote list never gains a fabricated Jev alias.
 An older peer without the decision-list extension continues serving its

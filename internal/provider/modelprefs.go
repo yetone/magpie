@@ -437,9 +437,16 @@ func setModelAPI(ref, api string) (bool, error) {
 		return false, err
 	}
 	proto := Protocol(strings.TrimSpace(api))
-	if proto != "" {
+	if proto == DecideAPI {
+		if !p.TakesDecideAPI() {
+			return false, fmt.Errorf("%s has no System One URL beside a conversation one to ask %s on: add it under More endpoints first", p.ID, model)
+		}
+		if !p.serves(model) {
+			return false, fmt.Errorf("%s has no model %s (magpie provider %s lists them)", p.ID, model, p.ID)
+		}
+	} else if proto != "" {
 		if !modelAPI(proto) {
-			return false, fmt.Errorf("a model's API is chat, responses, anthropic or gemini, not %q", api)
+			return false, fmt.Errorf("a model's API is chat, responses, anthropic, gemini or decide (System One), not %q", api)
 		}
 		if p.Base(proto) == "" {
 			return false, fmt.Errorf("%s has no %s URL to ask %s on: add it under More endpoints first", p.ID, proto, model)
@@ -479,6 +486,9 @@ func (p Provider) ModelAPI(model string) (Protocol, bool) {
 	if !ok {
 		return "", false
 	}
+	if proto == DecideAPI {
+		return proto, p.TakesDecideAPI()
+	}
 	n := 0
 	for range p.speaking {
 		if n++; n == 2 {
@@ -486,6 +496,52 @@ func (p Provider) ModelAPI(model string) (Protocol, bool) {
 		}
 	}
 	return p.modelAPIAmong(n, proto)
+}
+
+// DecideAPI is the API a model is set to be asked on (SetModelAPI) when it
+// is a decision model at its provider's System One URL (axelburks on
+// Discord: a relay that serves its chat models and its own decision model
+// under one key, the decision model named as the relay names it). Such a
+// model is a decision model (DecidesModel): a routing group can ask it as
+// a turn begins, and it is refused for a conversation, as Jev is.
+const DecideAPI Protocol = "decide"
+
+// TakesDecideAPI reports whether p's models can be set to be asked on its
+// System One URL: a key's provider with one beside a conversation URL. A
+// provider with a System One URL alone asks every model there already; a
+// signed-in account, a plugin and a remote magpie say which of theirs
+// decide themselves.
+func (p Provider) TakesDecideAPI() bool {
+	return p.Decides() && !p.DecideOnly() && p.DecideAPIKind()
+}
+
+// DecideAPIKind reports whether p is a provider whose models could be set
+// to be asked on System One once it has a URL for it there.
+func (p Provider) DecideAPIKind() bool {
+	return p.Account == nil && !p.IsRemoteMagpie() && !p.IsVertex()
+}
+
+// decideSet reports whether the user set p's model to be asked on System
+// One, and p takes it.
+func (p Provider) decideSet(model string) bool {
+	proto, ok := p.apiSet(model)
+	return ok && proto == DecideAPI && p.TakesDecideAPI()
+}
+
+// decideSetModels are p's models the user set to be asked on System One,
+// in id order.
+func (p Provider) decideSetModels() []catalog.Model {
+	if !p.TakesDecideAPI() {
+		return nil
+	}
+	var out []catalog.Model
+	for k, v := range heldSettings().ModelAPIs {
+		if m, ok := strings.CutPrefix(k, p.ID+"/"); ok && Protocol(v) == DecideAPI {
+			out = append(out, catalog.Model{ID: m})
+		}
+	}
+	slices.SortFunc(out, func(a, b catalog.Model) int { return strings.Compare(a.ID, b.ID) })
+	return out
 }
 
 // apiSet is the API the user set model to be asked on, false with

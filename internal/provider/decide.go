@@ -137,6 +137,10 @@ func (p Provider) DecidesModel(model string) bool {
 	if p.DecideOnly() {
 		return true
 	}
+	// one the user set to be asked on System One (DecideAPI)
+	if p.decideSet(model) {
+		return true
+	}
 	if p.bailianApart() {
 		m, _ := vendorDecision(p.Decide)
 		return model == m.ID
@@ -406,7 +410,15 @@ func (p Provider) Jev() string {
 // list when fetched, else Jev's aliases (a gateway's one Jev), each with
 // its window and whether it takes images where its vendor's docs say.
 func (p Provider) decideModels() []catalog.Model {
-	return withDecideFacts(p.decideListed())
+	ms := p.decideListed()
+	// and the ones the user set to be asked on System One, first
+	if set := p.decideSetModels(); len(set) > 0 {
+		set = slices.DeleteFunc(set, func(m catalog.Model) bool {
+			return slices.ContainsFunc(ms, func(l catalog.Model) bool { return l.ID == m.ID })
+		})
+		ms = append(set, ms...)
+	}
+	return withDecideFacts(ms)
 }
 
 // A decision model's window and whether it reads images, as its vendor's

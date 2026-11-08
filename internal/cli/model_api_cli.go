@@ -19,9 +19,10 @@ import (
 
 const apiUsage = `usage:
   magpie model api <provider/model>              the API the model is asked on, and the ones its provider has
-  magpie model api <provider/model>... <api>     ask the model(s) on this API: chat, responses, anthropic or
-                                                 gemini; auto leaves it to the vendor's list and every URL the
-                                                 provider has, as by default
+  magpie model api <provider/model>... <api>     ask the model(s) on this API: chat, responses, anthropic,
+                                                 gemini, or decide (System One: a decision model a routing
+                                                 group asks as a turn begins); auto leaves it to the vendor's
+                                                 list and every URL the provider has, as by default
   magpie model api <provider/model>... --reset   the same as auto
   magpie model apis [<provider>]                 the models you set an API for; with a provider, each of its
                                                  models and the API it is asked on
@@ -29,7 +30,8 @@ const apiUsage = `usage:
   It is the provider editor's "API this model is asked on", under Model settings, and is
   saved the same way: the app, a running gateway and the agents' model lists go by it at once.
   The provider needs a URL for the API (More endpoints in its editor), and at least two of
-  chat, responses, anthropic and gemini, for there to be a choice. Several models in one command
+  chat, responses, anthropic and gemini, or a System One URL beside one of them, for there
+  to be a choice. Several models in one command
   are all checked first: a model the provider doesn't list, or an API it has no URL for, refuses
   the whole command, and nothing is written.
 
@@ -40,28 +42,34 @@ const apiUsage = `usage:
 
 // apiNames are the APIs a model can be set to be asked on, in the
 // editor's order.
-var apiNames = []provider.Protocol{provider.Chat, provider.Responses, provider.Anthropic, provider.Gemini}
+var apiNames = []provider.Protocol{provider.Chat, provider.Responses, provider.Anthropic, provider.Gemini, provider.DecideAPI}
 
 // apiLabels are the editor's names of them.
 var apiLabels = map[provider.Protocol]string{
 	provider.Chat: "Chat", provider.Responses: "Responses", provider.Anthropic: "Anthropic", provider.Gemini: "Gemini",
+	provider.DecideAPI: "System One",
 }
 
 // apiChoices are the APIs one of p's models can be asked on alone, as the
 // editor offers them (modelAPIs in app.js): those p has a URL for, when it
-// has more than one. Vertex AI's model id says its one API.
+// has more than one, and System One when it has a URL there beside a
+// conversation one. Vertex AI's model id says its one API.
 func apiChoices(p *provider.Provider) []provider.Protocol {
 	if p.IsVertex() {
 		return nil
 	}
 	var out []provider.Protocol
 	for _, a := range apiNames {
-		if strings.TrimSpace(p.Base(a)) != "" {
+		if a != provider.DecideAPI && strings.TrimSpace(p.Base(a)) != "" {
 			out = append(out, a)
 		}
 	}
 	if len(out) < 2 {
-		return nil
+		out = nil
+	}
+	// a System One URL beside a conversation one (provider.TakesDecideAPI)
+	if p.TakesDecideAPI() {
+		out = append(out, provider.DecideAPI)
 	}
 	return out
 }
@@ -89,7 +97,7 @@ func modelAPICmd(args []string) error {
 	if isReset([]string{val}) || val == provider.Auto {
 		val = ""
 	} else if !slices.Contains(apiNames, provider.Protocol(val)) {
-		return fmt.Errorf("a model's API is chat, responses, anthropic, gemini or auto, not %q\n\n%s", args[len(args)-1], apiUsage)
+		return fmt.Errorf("a model's API is chat, responses, anthropic, gemini, decide or auto, not %q\n\n%s", args[len(args)-1], apiUsage)
 	}
 	// every model is checked before any is written
 	type one struct {

@@ -9138,9 +9138,7 @@ const PROTOS = [["chat", "OpenAI", "Chat Completions — most agents"], ["respon
 const VERTEX_EP_HINT = "Gemini generateContent — what Vertex AI serves at your Google Cloud project";
 // apiLabel: the name an API (a protocol) goes by in the editor
 const apiLabel = (proto) => (PROTOS.find(([k]) => k === proto) || [])[1] || proto;
-// vertexBase is where a Vertex AI provider's requests go, the address its
-// project and location make (provider.vertexBase): "" until the project
-// typed is one an address can be made of
+// vertexBase: a Vertex AI provider's address (provider.vertexBase), "" till its project is one
 function vertexBase(v) {
   const project = (v?.project || "").trim().toLowerCase(), loc = (v?.location || "").trim().toLowerCase() || "global";
   if (!/^[a-z0-9][a-z0-9.:-]*[a-z0-9]$/.test(project) || !/^[a-z]+(-[a-z0-9]+)*$/.test(loc)) return "";
@@ -9154,11 +9152,15 @@ function vertexOfDraft() {
 }
 const decideOnly = (p) => !!p?.decide && !(p.chat || p.responses || p.anthropic || p.gemini);
 // OpenRouter lists its decision models apart
-const decidesModel = (p, id) => !!p.decide && (decideOnly(p) || (p.deciders ? p.deciders.includes(id) : id.split("/").some((s) => /^jev(?:-|$)/i.test(s))));
-// modelAPIs: those p has a URL for, if 2+ (01huadalang, Kayphoon)
+// or one set to be asked on System One (axelburks)
+const decidesModel = (p, id) => !!p.decide && (decideOnly(p) || p.models?.find((m) => m.id === id)?.api === "decide" || (p.deciders ? p.deciders.includes(id) : id.split("/").some((s) => /^jev(?:-|$)/i.test(s))));
+// modelAPIs: those p has a URL for, if 2+ (01huadalang, Kayphoon), and
+// System One beside a conversation URL (axelburks)
 const modelAPIs = (p) => {
-  const urls = ["chat", "responses", "anthropic", "gemini"].filter((k) => ((draft?.id === p.id ? draft[k] : undefined) ?? p[k] ?? "").trim());
-  return urls.length < 2 ? [] : PROTOS.filter(([k]) => urls.includes(k));
+  const of = (k) => ((draft?.id === p.id ? draft[k] : undefined) ?? p[k] ?? "").trim();
+  const urls = ["chat", "responses", "anthropic", "gemini"].filter(of);
+  const decide = p.decideAPIKind && urls.length > 0 && of("decide");
+  return PROTOS.filter(([k]) => urls.length > 1 && urls.includes(k) || decide && k === "decide");
 };
 
 // pickedOf: the models the user picked for p, only the picks (#614).
@@ -11175,6 +11177,7 @@ function renderModels(p) {
   const dashed = () => p.models.filter((m) => !noAPI(m) && (!draft.best || m.best)).slice(0, 24).map((m) => m.id);
   const noAPI = (m) => {
     const set = draft.modelPrefs?.[m.id]?.api;
+    if (set === "decide") return false;
     if (set === undefined || !p.speaks?.length) return !!m.noAPI;
     const on = set ? [set] : (m.auto || []);
     return on.length > 0 && !on.some((a) => p.speaks.includes(a));
@@ -11248,7 +11251,7 @@ function renderModels(p) {
       // its id as agents and the gateway name it, to paste where a model is
       // typed (ARNO, Discord: 右击菜单除了测试模型外，还能添加拷贝模型id的功能)
       acts.push({ name: "Copy model ID", icon: COPY_ICON, tip: id, run: () => copy(id, id, null, t("Model ID {model} copied", { model: id })) });
-      if (apis.length && !decidesModel(p, id)) {
+      if (apis.length && (!decidesModel(p, id) || apiNow(id) === "decide")) {
         const now = apiNow(id);
         acts.push({ name: now ? t("Asked on {api}…", { api: apiLabel(now) }) : t("Asked on: Auto…"), icon: "M2.5 5h11M2.5 11h11M10.5 2.5 13.5 5l-3 2.5M5.5 8.5 2.5 11l3 2.5", tip: t("Pick the API this model is asked on"), run: () => pickAPI(c, id) });
       }
@@ -11264,7 +11267,7 @@ function renderModels(p) {
       openRowMenu(c, acts);
     };
     // the API it is asked on, when one is picked (or staged)
-    const now = apis.length && !decidesModel(p, id) ? apiNow(id) : "";
+    const now = apis.length && (!decidesModel(p, id) || apiNow(id) === "decide") ? apiNow(id) : "";
     if (now) {
       const tag = el("span", "badge mapi-tag", apiLabel(now));
       tag.title = t("Asked on {api} alone; right-click to change", { api: apiLabel(now) });
@@ -11478,9 +11481,7 @@ function renderModels(p) {
     sfx.append(sfxSaid, el("span", "where", t("“Provider in model names” is one setting for every provider")), where);
     sfx.append(noNamesLine("span", "said"));
     names.append(sfx);
-    // the APIs a model can be asked on alone: those of a key's provider
-    // it has a URL for, when it has more than one (01huadalang on Discord:
-    // 一个 api 里有很多模型但是不同协议)
+    // the APIs a model can be asked on (modelAPIs)
     const apis = modelAPIs(p);
     for (const id of ids) {
       const m = p.models.find((x) => x.id === id) || { id, name: id };
@@ -11491,9 +11492,7 @@ function renderModels(p) {
       const levels = m.efforts || [];
       const savedKept = m.kept?.length || m.given ? m.kept || [] : levels;
       const nameNow = () => prefs[id]?.name ?? savedName;
-      // none of its levels kept: it is sent no reasoning field at all
-      // (yuexian7 on Discord: a model models.dev says reasons answered
-      // reasoning_effort with 422, and worked without it)
+      // none of its levels kept: no reasoning field (yuexian7)
       const noneNow = () => prefs[id]?.reasonless ?? !!m.reasonless;
       const keptNow = () => noneNow() ? [] : prefs[id]?.efforts ? (prefs[id].efforts.length || m.given ? prefs[id].efforts : levels) : savedKept;
       const imagesNow = () => prefs[id]?.ownImages ? !!m.ownImages : prefs[id]?.images ?? !!m.images;

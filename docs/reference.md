@@ -1816,6 +1816,20 @@ is refused, and when several models are named all are checked first, so a
 refused command writes nothing. A setting kept for a model the vendor no
 longer lists can still be taken off with `--reset`.
 
+A key's provider with a System One URL beside a conversation URL can set a
+model to `decide` (System One in the editor): the model becomes one of its
+decision models. It is asked on the System One URL by its own name, offered
+to routing groups as a decision model, and kept out of the conversation
+models, and a conversation turn for it is refused. This is how a relay that
+serves its decision model under a name of its own, such as an Ark endpoint
+id, is used for System One. Auto gives it back to the conversation models. A
+provider with no System One URL, one with only that URL, and a signed-in
+account refuse it.
+
+```sh
+magpie model api ark/ep-decide decide   # asked on System One
+```
+
 ### Routing groups
 
 A routing group is several models, from one provider or many, that an agent
