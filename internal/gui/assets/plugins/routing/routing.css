@@ -21,9 +21,10 @@
 /* a flowing wire is drawn by its copy in .rt-flows, a layer of its own, so
    the wires that don't move aren't drawn again each frame (#3164) */
 .rt-wires path.flown { visibility: hidden; animation: none; }
-.rt-flows { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; will-change: transform; }
+.rt-flows { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; will-change: transform; opacity: var(--rt-fade, 1); }
 /* its dashes move by --rt-dash, which a timer sets 15 times a second
-   (slowTick): an animated offset was drawn again every frame */
+   (slowTick): an animated offset was drawn again every frame. With motion
+   reduced they stand still and the layer fades by --rt-fade instead */
 .rt-flows path { fill: none; stroke: var(--agent, var(--muted)); stroke-width: 1.5; stroke-dasharray: 3 5; stroke-dashoffset: var(--rt-dash, 0); }
 @keyframes rtflow { to { stroke-dashoffset: -8; } }
 /* the magpies: one carries each request out, another brings its answer

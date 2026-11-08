@@ -1952,20 +1952,30 @@ function routingPage(part) {
   // and each flowing wire spans the stage. With five requests in flight
   // the Routing page took a quarter of a core and more in WebView2
   // (chenxiang, #5467). The timer runs only while a wire flows or a dot
-  // is held, in sight and with motion on.
+  // is held and in sight. With motion reduced (the system's or Settings')
+  // nothing moves, but what is in flight still shows: the flowing wires
+  // fade to .45 and back each 1.2s instead (--rt-fade on flows), and the
+  // held dot fades as it does with motion on. Standing still, a request
+  // in flight read as one over, and the Windows app's Routing page as
+  // having lost its animation (vantiboolean).
   const SLOW_EVERY = 1000 / 15;
   let slowTimer = 0;
-  const slowNeeded = () => (flowing.size > 0 || holds.size > 0) && shown() && !still();
+  const slowNeeded = () => (flowing.size > 0 || holds.size > 0) && shown();
   function slowTick() {
     if (!slowNeeded()) {
       // stopped where it was, a dot held on would stay faded and still
       clearInterval(slowTimer); slowTimer = 0;
-      flows.style.removeProperty("--rt-dash"); sky.style.removeProperty("--rt-held");
+      for (const k of ["--rt-dash", "--rt-fade"]) flows.style.removeProperty(k);
+      sky.style.removeProperty("--rt-held");
       return;
     }
-    const now_ = performance.now();
-    if (flowing.size) flows.style.setProperty("--rt-dash", (-(now_ % 700) / 700 * 8).toFixed(2) + "px");
-    if (holds.size) sky.style.setProperty("--rt-held", (1 - .55 * (1 - Math.cos(2 * Math.PI * (now_ % 1200) / 1200)) / 2).toFixed(3));
+    const now_ = performance.now(), fade = (1 - .55 * (1 - Math.cos(2 * Math.PI * (now_ % 1200) / 1200)) / 2).toFixed(3);
+    if (flowing.size) {
+      const calm_ = still();
+      flows.style.setProperty(calm_ ? "--rt-fade" : "--rt-dash", calm_ ? fade : (-(now_ % 700) / 700 * 8).toFixed(2) + "px");
+      flows.style.removeProperty(calm_ ? "--rt-dash" : "--rt-fade");
+    }
+    if (holds.size) sky.style.setProperty("--rt-held", fade);
   }
   function slowMove() {
     if (slowTimer || !slowNeeded()) return;
