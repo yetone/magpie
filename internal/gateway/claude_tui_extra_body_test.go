@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -201,5 +202,71 @@ func TestClaudeTUIImageByURL(t *testing.T) {
 	}
 	if n := len(h.runs()); n != 1 {
 		t.Fatalf("a request whose image couldn't be had ran: %d runs", n)
+	}
+}
+
+// Claude Code's auto mode classifier is asked afresh each call with the
+// transcript so far, its marks moving on with it. Pasted into the
+// interactive mode, which places no mark of the client's, each call read
+// only Claude Code's own prompt and wrote the whole transcript again
+// (#5585, #5655). With a transcript longer than marksPrintAt it runs as
+// claude -p, which keeps the marks: Claude Code's own caching is off and
+// the run is told the client's cache_control, Desktop's header-less
+// classifier and an opted-in client alike. A short one stays interactive.
+func TestClaudeTUIClassifierKeepsLongMarksAsPrint(t *testing.T) {
+	long := strings.Repeat(`earlier transcript entry\n`, 20000)
+	ask := func(h *resumeHarness, grown bool, short bool, header string) {
+		t.Helper()
+		body := classifierBody(t, grown)
+		if short {
+			body = bytes.Replace(body, []byte(long), []byte(strings.Repeat(`earlier transcript entry\n`, 100)), 1)
+		}
+		r := httptest.NewRequest("POST", "/v1/messages", bytes.NewReader(body))
+		if header != "" {
+			r.Header.Set("X-Magpie-Cache-Marks", header)
+		}
+		w := httptest.NewRecorder()
+		if code, msg := h.s.serveClaudeSubscription(w, r, provider.Anthropic, h.p, "claude-sonnet-5", body, &Usage{}); code != 200 {
+			t.Fatalf("%d %s", code, msg)
+		}
+	}
+	for _, header := range []string{"", "client"} {
+		t.Run("header="+header, func(t *testing.T) {
+			h := tuiScriptHarness(t, `echo "cache-disabled ${DISABLE_PROMPT_CACHING-unset}" >> $log`)
+			if !bytes.Contains(classifierBody(t, false), []byte(long)) {
+				t.Fatal("fixture: the transcript isn't where the test shortens it")
+			}
+			ask(h, false, false, header)
+			ask(h, true, false, header)
+			runs := h.runs()
+			if len(runs) != 2 {
+				t.Fatalf("%d runs, want one a call", len(runs))
+			}
+			for _, log := range runs {
+				if !strings.Contains(log, "cache-disabled 1") || !strings.Contains(log, `"cache_control"`) {
+					t.Fatalf("a long classifier's marks weren't kept by a -p run: %.400s", log)
+				}
+			}
+			if last := ClaudeModeNow().Last; last == nil || last.TUI || last.Why != cacheMarksCode {
+				t.Fatalf("the last run: %+v", last)
+			}
+			ask(h, false, true, header)
+			runs = h.runs()
+			if len(runs) != 3 {
+				t.Fatalf("%d runs after a short classifier", len(runs))
+			}
+			short := 0
+			for _, log := range runs {
+				if strings.Contains(log, "cache-disabled unset") {
+					short++
+				}
+			}
+			if short != 1 {
+				t.Fatalf("a short classifier left the interactive mode: %d interactive runs", short)
+			}
+			if last := ClaudeModeNow().Last; last == nil || !last.TUI {
+				t.Fatalf("the short classifier's run: %+v", last)
+			}
+		})
 	}
 }

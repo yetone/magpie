@@ -32,8 +32,55 @@ type clientCache struct {
 	pasted bool
 	// print: the run is claude -p though the interactive mode is on
 	// (Request.tuiRefused)
-	print  bool
+	print bool
+	// kept: the run is claude -p for the marks' sake (keptByPrint)
+	kept   bool
 	report func()
+}
+
+// marksPrintAt is how much of a request's history its client's cache
+// marks keep before claude -p is cheaper than the interactive mode for it
+// (keptByPrint). The interactive mode is pasted the words with no marks,
+// and Claude Code marks only the end of what it is pasted, so a fresh run
+// writes everything after Claude Code's own prompt again, at 2x for an
+// hour's cache (about 0.1·S + 2·M a call, S its prompt and M the marked
+// history). -p is counted at about twice the five-hour allowance a token,
+// but keeps the client's marks, so a call reads what the last one wrote
+// and writes only what is new (about 2·(0.1·(S+M) + 2·D), D the new part).
+// With S ≈ 69K tokens and D ≈ 5K the two meet at M ≈ 15–20K tokens, about
+// 64KB of text (#5585, #5655).
+const marksPrintAt = 64 << 10
+
+// markedHistory is the bytes of req's messages up to the last part a
+// client's cache mark ends (Part.cache): what a run that keeps the marks
+// reads again instead of writing.
+func markedHistory(req *Request) int {
+	n, marked := 0, 0
+	for _, m := range req.Messages {
+		for _, p := range m.Parts {
+			n += len(p.Text) + len(p.Args) + len(p.Data)
+			if p.cache != "" {
+				marked = n
+			}
+		}
+	}
+	return marked
+}
+
+// keptByPrint is whether req runs as claude -p though the interactive
+// mode is on, for its client's cache marks: Claude Code's auto mode
+// classifier, asked afresh each call with the transcript so far, marking
+// more history than marksPrintAt. Pasted, each call wrote that history
+// again and read only Claude Code's own prompt (#5585, #5655); a
+// conversation's turns go on in their run, which keeps its own cache, and
+// stay in the interactive mode.
+func keptByPrint(req *Request) bool {
+	return req.clientCache != nil && autoModeClassifier(req) && markedHistory(req) >= marksPrintAt
+}
+
+// keptAsPrint reports whether the run is claude -p for the marks' sake.
+func (c *clientCache) keptAsPrint() bool {
+	return c != nil && c.kept
 }
 
 func wantsClientCache(r *http.Request, from provider.Protocol) bool {

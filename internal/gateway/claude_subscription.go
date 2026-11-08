@@ -1183,7 +1183,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	// runs them interactively. A run it can't take is refused, never made
 	// -p: a refused request never ran, and isn't the last run
 	tui, code := claudeTUI(req, binary)
-	if !tui && code != "off" && code != "no-shim" && code != thirdPartyCode {
+	if !tui && code != "off" && code != "no-shim" && code != thirdPartyCode && code != cacheMarksCode {
 		cleanup()
 		return nil, nil, &tuiRefusal{claudeTUIErr(claudeNotTUIWhy(req, binary))}
 	}
@@ -1493,6 +1493,7 @@ func claudePrint(req *Request, binary claudeCLI) (code, why string) {
 	}{
 		{urlImages(req.Messages) > 0, "image", "an image known by its URL"},
 		{req.tuiRefused, thirdPartyCode, "Anthropic refused this agent's system prompt in the interactive mode as a third-party app's"},
+		{req.clientCache.keptAsPrint(), cacheMarksCode, fmt.Sprintf("the client's cache marks keep %dKB of history, which a fresh interactive run writes again each call", markedHistory(req)>>10)},
 	} {
 		if c.is {
 			return c.code, c.why
@@ -1776,7 +1777,7 @@ func claudeTUIOn() bool {
 // A -p run made for such a prompt goes on with its turns, as a -p run
 // from before the interactive mode was turned on doesn't.
 func wantTUI(req *Request) bool {
-	return claudeTUIOn() && !req.tuiRefused
+	return claudeTUIOn() && !req.tuiRefused && !req.clientCache.keptAsPrint()
 }
 
 // claudeNotTUIWhy is why a run isn't the interactive mode.
@@ -6526,13 +6527,14 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 	var err error
 	if name == "Claude Code" && wantsClientCache(r, from) {
 		req, err = parseAnthropicRequest(body, true)
-	} else if name == "Claude Code" && classifierClientCache(from, body) && !claudeTUIOn() {
+	} else if name == "Claude Code" && classifierClientCache(from, body) {
 		// the classifier never asked for its marks through magpie's
 		// header: a set the bridge can't keep (a TTL order Anthropic
 		// would refuse) goes the default way, as before, not refused; in
 		// the interactive mode, which can't place them, it goes the
-		// default way always, Claude Code placing its own
-		if req, err = parseAnthropicRequest(body, true); err != nil {
+		// default way, Claude Code placing its own, unless they keep
+		// enough history that it runs as -p for them (keptByPrint)
+		if req, err = parseAnthropicRequest(body, true); err != nil || claudeTUIOn() && !keptByPrint(req) {
 			req, err = parse(from, body)
 		}
 	} else {
@@ -6588,6 +6590,11 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 		if req.clientCache != nil {
 			req.clientCache.print = true
 		}
+	}
+	if name == "Claude Code" && claudeTUIOn() && !req.tuiRefused && keptByPrint(req) {
+		// the classifier's marks keep more than its fresh interactive
+		// run would write again each call: claude -p keeps them
+		req.clientCache.print, req.clientCache.kept = true, true
 	}
 	if name == "Claude Code" && wantTUI(req) && urlImages(req.Messages) > 0 {
 		// the interactive mode is pasted files: an image known by its URL
@@ -6879,6 +6886,11 @@ func thirdPartySaid(name string, code int, msg string) bool {
 // thirdPartyCode is claudePrint's code for a run that is claude -p
 // because Anthropic refused its agent's prompt in the interactive mode.
 const thirdPartyCode = "third-party"
+
+// cacheMarksCode is claudePrint's code for a run that is claude -p
+// because its client's cache marks keep more history than a fresh
+// interactive run should write again (keptByPrint).
+const cacheMarksCode = "cache-marks"
 
 // redoAsPrint is relay's status for an interactive-mode turn Anthropic
 // refused as a third-party app's (#4503, Raven on Discord: Pi in Cindy
