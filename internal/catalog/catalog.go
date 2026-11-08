@@ -655,6 +655,9 @@ func loadGen() (map[string]mdProvider, int) {
 					// deepinfra/…, xiaomi/…) votes its levels once, not
 					// once a host.
 					vote := func(who, own, by string, x mdModel) {
+						if routerIDs[who] {
+							return
+						}
 						spelt[who]++
 						if x.Name != "" && x.Name != own && x.Name != who {
 							if named[who] == nil {
@@ -1921,6 +1924,17 @@ func mostGiven(by map[int]int) int {
 	}
 	return best
 }
+
+// routerIDs are ids that name a vendor's router, not a model: OpenRouter's
+// openrouter/auto, model-oracle-ai's auto, Kilo's kilo-auto/free and the
+// rest are each their own, and a plugin's "auto" (豆包工作 picks Doubao's
+// model) is none of them. Without a path they were taken for one model,
+// and every provider's "auto" was given that model's levels, images and
+// window: pi offered thinking levels and image input for 豆包工作's auto.
+// What a provider's own list says of its router (ListedBy) still holds.
+// Only ids no vendor gives a model are here: "fast" and "balanced" are
+// trustedrouter's and Kilo's routers, but a vendor may name a model so.
+var routerIDs = map[string]bool{"auto": true, "default": true, "free": true}
 
 // bareID is a model's id without the vendor's prefix, lowercase.
 func bareID(id string) string {

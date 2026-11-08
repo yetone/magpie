@@ -304,8 +304,13 @@ func TestRenameNeverTakesAModelForAnother(t *testing.T) {
 	if ContextOf("openai/gpt-5.5") != 400000 || OutputOf("gpt-5.5") != 128000 || !SeesImages("gpt-5.5") {
 		t.Error("gpt-5.5 changed")
 	}
-	if got := EffortsOf("auto"); !slices.Contains(got, "xhigh") {
-		t.Errorf("EffortsOf(auto) = %v", got)
+	// a router's id is no one model: another vendor's "auto" takes none of
+	// model-oracle-ai's, whose own list still has its levels
+	if e, c, i := EffortsOf("auto"), ContextOf("auto"), SeesImages("auto"); e != nil || c != 0 || i || Thinks("auto") {
+		t.Errorf("auto took a router's: efforts %v, context %d, images %v", e, c, i)
+	}
+	if got, _ := ListedBy([]string{"model-oracle-ai"}, "auto"); !slices.Contains(got, "xhigh") {
+		t.Errorf("ListedBy(model-oracle-ai, auto) = %v", got)
 	}
 	if got := strings.Join(EffortsOf("opus-5"), ","); got != "minimal" {
 		t.Errorf("EffortsOf(opus-5) = %q", got)
