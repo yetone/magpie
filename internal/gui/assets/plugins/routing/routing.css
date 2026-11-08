@@ -284,6 +284,10 @@
 .rt-gsec > .row-head:first-child .rt-gfilter { flex: 0 1 300px; width: auto; margin: 0; }
 .rt-gsec > .row-head:first-child .rt-gcount { margin-left: 10px; white-space: nowrap; }
 .rt-gsec > .row-head:first-child .rt-gfilter + .rt-gcount { margin-left: 10px; }
+/* its buttons on the right apart, so one's hover never meets the next,
+   and New group, the filled one, a little further */
+.rt-gsec > .row-head:first-child > .grow ~ * + * { margin-left: 4px; }
+.rt-gsec > .row-head:first-child > .grow ~ .rt-gnew { margin-left: 8px; }
 /* the way back to Routing (gBack): beside the sidebar only when the page was opened from Routing */
 .rt-gsec > .row-head:first-child .rt-gback { flex: none; margin-right: 8px; white-space: nowrap; }
 body.side-nav #view-groups:not(.rt-gfrom) .rt-gback { display: none; }

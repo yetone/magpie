@@ -21,6 +21,8 @@ const models = [
 ];
 const info = (ids) => ids.map((id) => ({ id, ready: true }));
 const found = { id: "auto-m", name: "Model M", members: ["a/m", "b/m"], auto: true, ready: true, memberInfo: info(["a/m", "b/m"]) };
+// a second group, so Select sits beside New group as with any two
+const found2 = { ...found, id: "auto-n", name: "Model N" };
 
 const words = {
   en: { btn: "New group", tip: "Make a routing group of any models you like — agents pick it as one model" },
@@ -48,7 +50,7 @@ function serve(lang) {
       return json({ mine: true, now: new Date().toISOString(), seq: 30, totals: { requests: 30, rerouted: 0, errors: 0 }, routes });
     }
     if (url.pathname === "/api/gateway/history") return json({ cut: false, days: [], routes: [] });
-    if (url.pathname === "/api/groups") return json({ models, pools: [], deciders: [], found: true, groups: [found] });
+    if (url.pathname === "/api/groups") return json({ models, pools: [], deciders: [], found: true, groups: [found, found2] });
     if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true, url: "http://127.0.0.1:3999" } });
     if (url.pathname.startsWith("/api/")) return json({});
     const file = path.join(assets, url.pathname === "/" ? "index.html" : url.pathname);
@@ -91,6 +93,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert(hb && hb.y >= 0 && hb.y + hb.height <= vh, "New group is in sight");
       const border = await head.evaluate((e) => { const c = getComputedStyle(e); return c.borderLeftWidth !== c.borderRightWidth || c.borderLeftColor !== c.borderRightColor; });
       assert.equal(border, false, "no left-border accent");
+      // the toolbar's buttons stand apart: Select and the filled New group
+      // touched (11-08)
+      assert.equal(await page.locator(".rt-gsec > .row-head .rt-gselect").count(), 1, "Select is there");
+      const gaps = await page.evaluate(() => {
+        const bs = [...document.querySelectorAll("#view-groups .rt-gsec > .row-head:first-child > button")].filter((b) => b.offsetParent);
+        return bs.slice(1).map((b, i) => ({ pair: bs[i].className + " | " + b.className, gap: b.getBoundingClientRect().left - bs[i].getBoundingClientRect().right }));
+      });
+      assert(gaps.length >= 2, JSON.stringify(gaps));
+      for (const g of gaps) assert(g.gap >= 4, `${g.pair} touch: ${g.gap}px`);
+      const last = gaps[gaps.length - 1];
+      assert(/rt-gselect/.test(last.pair) && last.gap >= 8, `New group ${last.gap}px from Select`);
 
       await head.click();
       const ed = page.locator(".rt-gsec .rt-gedit");
