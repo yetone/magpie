@@ -1267,6 +1267,55 @@ func (s *shim) send(pieces []piece) error {
 
 var imageShown = regexp.MustCompile(`\[Image #(\d+)\]`)
 
+// promptRule is a row of the rules Claude Code draws over and under its
+// prompt.
+var promptRule = regexp.MustCompile(`^\s*─{20,}\s*$`)
+
+// prompt is the prompt as the screen shows it, its words one space apart:
+// the rows between the screen's last two rules, "" with no such rows. A
+// prompt grown past a row is drawn again only where it changed, the cells
+// already right skipped by a move of the cursor: what was drawn since a
+// paste (plain) held "3" of the "[Image #33]" it took, and "[Pasted t xt
+// #16" of a paste taken before (#5654, Claude Code 2.1.319). Its words
+// wrap where the row ends, so a mark can start on one row and end on the
+// next.
+func (s *shim) prompt() string {
+	s.screenMu.Lock()
+	var t string
+	if s.grid != nil {
+		t = s.grid.text()
+	}
+	s.screenMu.Unlock()
+	rows := strings.Split(t, "\n")
+	end := -1
+	for i := len(rows) - 1; i >= 0; i-- {
+		if !promptRule.MatchString(rows[i]) {
+			continue
+		}
+		if end < 0 {
+			end = i
+			continue
+		}
+		return strings.Join(strings.Fields(strings.Join(rows[i+1:end], " ")), " ")
+	}
+	return ""
+}
+
+// lastMark is the number of the mark re matches at the end of the prompt
+// as the screen shows it (prompt), 0 with none: the paste taken last, as
+// a paste goes where the prompt's words end.
+func lastMark(re *regexp.Regexp, prompt string) int {
+	m := re.FindAllStringSubmatchIndex(prompt, -1)
+	if len(m) == 0 || m[len(m)-1][1] != len(prompt) {
+		return 0
+	}
+	n, _ := strconv.Atoi(prompt[m[len(m)-1][2]:m[len(m)-1][3]])
+	return n
+}
+
+// textLast is Claude Code's whole mark of a long paste.
+var textLast = regexp.MustCompile(`\[Pasted text #(\d+) \+\d+ lines\]`)
+
 // path is where Claude Code reads a file of the helper's at path: one in
 // WSL under the distro's mount of the drive.
 func (s *shim) path(path string) string {
@@ -1278,7 +1327,8 @@ func (s *shim) path(path string) string {
 
 // pasteImage pastes an image file's path, and waits for the prompt to show
 // it taken as an image: one numbered past after, the message's paste
-// before it (Claude Code numbers images and long pasted text alike). It
+// before it (Claude Code numbers images and long pasted text alike), drawn
+// since the paste or ending the prompt as the screen shows it (prompt). It
 // returns the number shown.
 func (s *shim) pasteImage(path string, after int) (int, error) {
 	s.clearScreen()
@@ -1287,10 +1337,8 @@ func (s *shim) pasteImage(path string, after int) (int, error) {
 	}
 	by := time.After(pasteWait)
 	for {
-		for _, m := range imageShown.FindAllStringSubmatch(s.plain(), -1) {
-			if n, _ := strconv.Atoi(m[1]); n > after {
-				return n, nil
-			}
+		if n := s.imageTaken(after); n > 0 {
+			return n, nil
 		}
 		select {
 		case <-s.changed:
@@ -1301,6 +1349,21 @@ func (s *shim) pasteImage(path string, after int) (int, error) {
 			return 0, fmt.Errorf("Claude Code ended (%v): %s", s.exit, s.lastScreen())
 		}
 	}
+}
+
+// imageTaken is the number of the image the prompt shows taken, numbered
+// past after: drawn since the paste, or ending the prompt as the screen
+// shows it (prompt). 0 while it shows none.
+func (s *shim) imageTaken(after int) int {
+	for _, m := range imageShown.FindAllStringSubmatch(s.plain(), -1) {
+		if n, _ := strconv.Atoi(m[1]); n > after {
+			return n
+		}
+	}
+	if n := lastMark(imageShown, s.prompt()); n > after {
+		return n
+	}
+	return 0
 }
 
 // shownWait is how long a paste of n bytes may take to show: Claude Code
@@ -1315,8 +1378,10 @@ var textShown = regexp.MustCompile(`\[Pasted text #(\d+)`)
 // shown waits for the prompt to show pasted text: its last words, or
 // Claude Code's "[Pasted text #<n>" for a long one, numbered past after,
 // the message's paste before it: the prompt drawn again shows those
-// before. It returns the number shown, or after where the words show
-// as themselves. Text "" waits for nothing.
+// before. They are looked for in what was drawn since the paste, and at
+// the end of the prompt as the screen shows it (prompt). It returns the
+// number shown, or after where the words show as themselves. Text ""
+// waits for nothing.
 func (s *shim) shown(text string, after int) (int, error) {
 	if text == "" {
 		return after, nil
@@ -1330,14 +1395,8 @@ func (s *shim) shown(text string, after int) (int, error) {
 	}
 	shownBy := time.After(shownWait(len(text)))
 	for {
-		p := s.plain()
-		for _, m := range textShown.FindAllStringSubmatch(p, -1) {
-			if n, _ := strconv.Atoi(m[1]); n > after {
-				return n, nil
-			}
-		}
-		if tail != "" && strings.Contains(strings.Join(strings.Fields(p), " "), strings.Join(strings.Fields(tail), " ")) {
-			return after, nil
+		if n, ok := s.textTaken(tail, after); ok {
+			return n, nil
 		}
 		select {
 		case <-s.changed:
@@ -1348,6 +1407,31 @@ func (s *shim) shown(text string, after int) (int, error) {
 			return 0, fmt.Errorf("Claude Code ended (%v): %s", s.exit, s.lastScreen())
 		}
 	}
+}
+
+// textTaken says whether the prompt shows pasted words taken: a "[Pasted
+// text #<n>" numbered past after, or the words' last, tail, drawn since
+// the paste or ending the prompt as the screen shows it (prompt). It is
+// the number shown, or after where the words show as themselves.
+func (s *shim) textTaken(tail string, after int) (int, bool) {
+	p := s.plain()
+	for _, m := range textShown.FindAllStringSubmatch(p, -1) {
+		if n, _ := strconv.Atoi(m[1]); n > after {
+			return n, true
+		}
+	}
+	words := strings.Join(strings.Fields(tail), " ")
+	if words != "" && strings.Contains(strings.Join(strings.Fields(p), " "), words) {
+		return after, true
+	}
+	on := s.prompt()
+	if n := lastMark(textLast, on); n > after {
+		return n, true
+	}
+	if words != "" && strings.HasSuffix(on, words) {
+		return after, true
+	}
+	return 0, false
 }
 
 // transcript is the session's transcript, "" before Claude Code writes it.

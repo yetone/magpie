@@ -704,6 +704,63 @@ func TestShimWaitsForWordsNamingImages(t *testing.T) {
 	}
 }
 
+// Claude Code 2.1.319 draws a prompt grown past a row again only where
+// it changed, moving the cursor past the cells already right, so what is
+// drawn after a paste can hold a digit of the mark it took: after the
+// 33rd piece of the reporter's message, nineteen images between words,
+// the stream held "3" of "[Image #33]", and the helper waited out
+// pasteWait and ended (#5654, Chapin2018: "ended after 13s (exit status
+// 1)"). Each piece is seen taken on the screen, as Claude Code drew it.
+// The bytes are a real run's, its folder's name changed.
+func TestShimSeesPastesOnAPromptDrawnInPart(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("testdata", "paste-images-2.1.319.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// where the helper cleared the screen, before each paste, and where
+	// the run ended
+	clears := []int{1994, 2794, 3007, 3163, 3281, 3434, 3505, 3605, 3679, 3783, 3857, 3962, 4037, 5372, 5504, 5661, 5733, 5832, 5906, 6011, 6086, 6191, 6266, 7774, 7905, 8062, 8181, 8335, 8407, 8511, 8586, 8691, 8766, 8871, len(b)}
+	// the pieces from the first image on: an image, then words long
+	// enough to be a "[Pasted text", 33 marks in all
+	var images, texts, inPart int
+	for i := 1; i < len(clears); i++ {
+		s := &shim{screen: b[clears[i-1]:clears[i]], grid: newGrid(screenSize())}
+		s.grid.write(b[:clears[i]])
+		on := s.prompt()
+		img, txt := lastMark(imageShown, on), lastMark(textLast, on)
+		switch {
+		case img > 0:
+			images++
+			if n := s.imageTaken(img - 1); n != img {
+				t.Errorf("the paste before %d: image %d not seen taken (%d) on %q", clears[i], img, n, on)
+			}
+			if !strings.Contains(s.plain(), fmt.Sprintf("[Image #%d]", img)) {
+				inPart++
+			}
+		case txt > 0:
+			texts++
+			if n, ok := s.textTaken("", txt-1); !ok || n != txt {
+				t.Errorf("the paste before %d: text %d not seen taken (%d, %v) on %q", clears[i], txt, n, ok, on)
+			}
+			if !textShown.MatchString(s.plain()) {
+				inPart++
+			}
+		}
+	}
+	if images != 17 || texts != 16 {
+		t.Fatalf("read %d images and %d texts (%d in part), want 17 and 16", images, texts, inPart)
+	}
+	// the case this guards: the stream alone misses a mark
+	if inPart == 0 {
+		t.Fatal("every mark was drawn whole: the fixture no longer shows #5654")
+	}
+	s := &shim{screen: b[8871:], grid: newGrid(screenSize())}
+	s.grid.write(b)
+	if n := s.imageTaken(32); n != 33 {
+		t.Fatalf("the last image was seen as %d, want 33, on %q", n, s.prompt())
+	}
+}
+
 // A folder of images or a tap's a killed helper left is removed by a
 // later one after imagesLeft, and one in use isn't.
 func TestDropLeft(t *testing.T) {
