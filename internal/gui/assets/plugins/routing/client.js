@@ -661,6 +661,17 @@ function routingPage(part) {
   // sillytavern; a comma would part it in two (ParseRule)
   const uaName = (s) => String(s || "").trim().split(/[\/\s,]/)[0].toLowerCase();
   const agentName = (id) => agentOf(id)?.name || (id && id !== "other" ? id : t("your agent"));
+  // callerName is who sent a request, as the stage and the lists name it:
+  // the gateway key it came with, by the key's name now, else the name it
+  // had then; a request with no named key, its agent (acezan on Discord:
+  // a script's key read "Python-urllib"). srcOf is the stage's node for
+  // it: each key's its own, two keys' scripts saying one User-Agent too.
+  // Never the key's secret: a route carries its id and name alone.
+  function callerName(r) {
+    const k = r.callerKey && (callerKeys.find((x) => x.id === r.callerKey)?.name || r.callerKeyName);
+    return k || agentName(r.agent);
+  }
+  const srcOf = (r) => r.callerKey ? r.agent + "\u0001" + r.callerKey : r.agent;
   // userShown is an account of provider as the user named it in magpie
   // (provider.AccountNames, #1515), else as its plugin's usage names it
   // (accountUsers, #4416), else as its vendor names it. The name
@@ -2294,7 +2305,7 @@ function routingPage(part) {
     const out = new Map();
     for (const r of rs) {
       const key = wayOf(r), g = r.group, f = r.order.find((x) => !x.fallback) || r.order[0];
-      const agents = [...new Set([...(out.get(key)?.agents || []), agentName(r.agent)])];
+      const agents = [...new Set([...(out.get(key)?.agents || []), callerName(r)])];
       out.set(key, g ? { id: key, route: true, pk: "route/group/" + g.id, name: g.name, ref: g.ref || "group/" + g.id, routing: g.routing || "", agents }
         : { id: key, route: true, pk: "route/" + r.provider, name: f?.name || r.provider, ref: r.model, routing: f?.routing || "", icon: f ? f.icon || f.preset || "generic" : "",
           lone: r.order.filter((x) => !x.fallback).length <= 1, agents });
@@ -2309,12 +2320,12 @@ function routingPage(part) {
     if (day && !rp) return [];
     const n = now(), last = new Map(), map = src();
     const rs = [...map.values()].filter(matchesPurpose).sort((a, b) => a.id - b.id);
-    for (const r of rs) last.set(r.agent, r);
-    const out = rs.filter((r) => playing.has(r.id) || (last.get(r.agent) === r && (!r.done || at(r.time) + (r.ms || 0) > n - LINGER)));
+    for (const r of rs) last.set(srcOf(r), r);
+    const out = rs.filter((r) => playing.has(r.id) || (last.get(srcOf(r)) === r && (!r.done || at(r.time) + (r.ms || 0) > n - LINGER)));
     const c = cur && map.get(cur.id);
     if (c && !out.includes(c)) out.push(c);
-    const ags = [...new Set(out.map((r) => r.agent))].slice(-4);
-    return out.filter((r) => ags.includes(r.agent)).sort((a, b) => a.id - b.id);
+    const ags = [...new Set(out.map(srcOf))].slice(-4);
+    return out.filter((r) => ags.includes(srcOf(r))).sort((a, b) => a.id - b.id);
   }
 
   // hueOf is the colour an agent's requests and answers fly in, and it is
@@ -2555,7 +2566,7 @@ function routingPage(part) {
       srcs.replaceChildren();
     }
     // agents
-    const ags = [...new Set(rs.map((r) => r.agent))];
+    const ags = [...new Set(rs.map(srcOf))];
     for (const [id, a] of agents) if (!ags.includes(id)) { a.node.remove(); a.wire.remove(); agents.delete(id); }
     const keep = [...agents.keys()];
     const nodes = [...keep, ...ags.filter((a) => !keep.includes(a))].map((id) => agentNode(id).node);
@@ -2563,18 +2574,18 @@ function routingPage(part) {
     srcs.classList.toggle("many", ags.length > 1);
     hues(ags);
     for (const id of ags) {
-      const a = agents.get(id), r = rs.filter((x) => x.agent === id).pop(), ag = agentOf(id);
+      const a = agents.get(id), r = rs.filter((x) => srcOf(x) === id).pop(), ag = agentOf(r.agent);
       for (const n of [a.node, a.wire]) n.style.setProperty("--agent", hueOf(id));
       if (a.icon !== (ag?.icon || "generic")) { a.icon = ag?.icon || "generic"; a.ic.replaceChildren(icon(a.icon)); }
-      setText(a.name, agentName(id));
+      setText(a.name, callerName(r));
       // one agent working in more than one folder at once: which, by
       // their last level (#1068). The stage holds an agent's latest
       // request alone, so its others still going, or just done, count too.
-      const n = now(), going = pinned ? [] : [...src().values()].filter((x) => x.agent === id && (!x.done || at(x.time) + (x.ms || 0) > n - LINGER));
-      const fs = foldersOf([...new Set([...going, ...rs.filter((x) => x.agent === id)])].sort((x, y) => x.id - y.id));
+      const n = now(), going = pinned ? [] : [...src().values()].filter((x) => srcOf(x) === id && (!x.done || at(x.time) + (x.ms || 0) > n - LINGER));
+      const fs = foldersOf([...new Set([...going, ...rs.filter((x) => srcOf(x) === id)])].sort((x, y) => x.id - y.id));
       // told again every second (countdown): only what changed is written
       setText(a.sub, fs.length > 1 ? fs.map(lastLevel).join(", ") : r.model);
-      const tip = [agentName(id), r.model, ...fs.map((f) => t("Folder") + ": " + f)].join("\n");
+      const tip = [...new Set([callerName(r), agentName(r.agent)]), r.model, ...fs.map((f) => t("Folder") + ": " + f)].join("\n");
       if (a.node.title !== tip) a.node.title = tip;
     }
     // the account sets, the latest of each
@@ -2841,7 +2852,7 @@ function routingPage(part) {
     hubText();
     const n = now(), rs = staged();
     const trying = new Map(), busy = new Set(); // a seat → the request it answers now
-    for (const r of rs) for (const tr of r.tries) if (!tr.done) { trying.set(tryseat(r, tr), r); busy.add(r.agent); }
+    for (const r of rs) for (const tr of r.tries) if (!tr.done) { trying.set(tryseat(r, tr), r); busy.add(srcOf(r)); }
     askUnnamed(rs);
     const onWire = new Map(); // a seat → the agent whose magpie is at it
     for (const f of flying.values()) { onWire.set(f.id, f.agent); busy.add(f.agent); }
@@ -2977,7 +2988,7 @@ function routingPage(part) {
       // answers now, the one whose magpie is at it, else the request it
       // answered, and none once it is off, so a row kept from before
       // never shows the last agent's colour (Pkh on Discord)
-      const by = trying.get(id)?.agent ?? onWire.get(id) ?? r.agent;
+      const by = trying.has(id) ? srcOf(trying.get(id)) : onWire.get(id) ?? srcOf(r);
       if (on) row.wire.style.setProperty("--agent", hueOf(by)); else row.wire.style.removeProperty("--agent");
       row.wire.classList.toggle("rest", !!resting || !!w.unlisted || !!w.window);
     }
@@ -4489,7 +4500,7 @@ function routingPage(part) {
     const when = el("span", "at", rowClock(r.time));
     const asked = el("span", "asked");
     const sw = el("i", "ag");
-    sw.style.setProperty("--agent", hueOf(r.agent));
+    sw.style.setProperty("--agent", hueOf(srcOf(r)));
     asked.append(sw, icon(ag?.icon || "generic"), el("span", "m", r.model));
     const tags = rowTags(r);
     if (tags.length) { asked.classList.add("kinded"); asked.append(...tags); }
@@ -5094,7 +5105,7 @@ function routingPage(part) {
       if (aside) say(aside, true);
     }
     renderAll();
-    const A = agents.get(r.agent);
+    const A = agents.get(srcOf(r));
     // an agent past the stage's four (staged) isn't drawn: its request is
     // listed, not flown
     if (!A) {
@@ -5102,7 +5113,7 @@ function routingPage(part) {
       return;
     }
     const dot = packet();
-    dot.style.setProperty("--agent", hueOf(r.agent));
+    dot.style.setProperty("--agent", hueOf(srcOf(r)));
     // from: where in magpie the dot is, once it is — the way it came in
     let carrier = bird("req"), from = null, back = null;
     // rt: the route as the gateway has it now — or, dropped from what it
@@ -5125,7 +5136,7 @@ function routingPage(part) {
         }
         const row = shownRow(tryseat(r, r.tries[i])); // a folded key's fold
         if (!row) { i++; continue; }
-        flying.set(dot, { id: tryseat(r, r.tries[i]), agent: r.agent });
+        flying.set(dot, { id: tryseat(r, r.tries[i]), agent: srcOf(r) });
         if (!carrier) carrier = bird("req");
         if (from) tick(hub);
         const ws = wiresTo(row);
@@ -5247,8 +5258,8 @@ function routingPage(part) {
     rTrack.replaceChildren(rHead, ...plan.map((g) => {
       const m = el("i", "rp-mark");
       m.style.left = (g.s / (v || 1)) * 100 + "%";
-      m.style.setProperty("--agent", hueOf(g.r.agent));
-      m.title = `${clock(g.r.time)} · ${agentName(g.r.agent)} · ${g.r.model}`;
+      m.style.setProperty("--agent", hueOf(srcOf(g.r)));
+      m.title = `${clock(g.r.time)} · ${callerName(g.r)} · ${g.r.model}`;
       g.mark = m;
       return m;
     }));
@@ -5327,10 +5338,10 @@ function routingPage(part) {
     rWhat.replaceChildren(...(shown_.length ? shown_.map((g) => {
       const r = p.routes.get(g.r.id) || g.r, row = el("div", "rp-req" + (on.includes(g) ? " on" : ""));
       const sw = el("i", "ag");
-      sw.style.setProperty("--agent", hueOf(r.agent));
+      sw.style.setProperty("--agent", hueOf(srcOf(r)));
       const [said] = outcome(r);
       row.append(el("span", "rp-n", t("request {i} of {n}", { i: g.n, n: p.plan.length })), sw,
-        el("b", "", agentName(r.agent)), el("code", "mdl", r.model), ...rowTags(r), el("span", "rp-to", "→ " + said),
+        el("b", "", callerName(r)), el("code", "mdl", r.model), ...rowTags(r), el("span", "rp-to", "→ " + said),
         el("span", "rp-at", t("sent {time}", { time: new Date(r.time).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) })));
       row.onclick = () => { cur = r; renderLog(); };
       return row;
@@ -8493,12 +8504,14 @@ function routingPage(part) {
     const recent = [...routes.values()].sort((a, b) => b.id - a.id);
     const flying = recent.filter((r) => pPlays.has(r.id));
     const ags = [], dst = new Map(); // seat key → { name, sub, how }
+    const byOf = new Map(); // a caller (srcOf) → its latest request
+    for (const r of recent) if (!byOf.has(srcOf(r))) byOf.set(srcOf(r), r);
     for (const r of flying) {
-      if (!ags.includes(r.agent)) ags.push(r.agent);
+      if (!ags.includes(srcOf(r))) ags.push(srcOf(r));
       for (const tr of r.tries) { const s = pSeat(r, tr); if (!dst.has(s.key)) dst.set(s.key, s); }
     }
     for (const r of recent) {
-      if (ags.length < P_SIDE && !ags.includes(r.agent)) ags.push(r.agent);
+      if (ags.length < P_SIDE && !ags.includes(srcOf(r))) ags.push(srcOf(r));
       const tr = r.tries[r.tries.length - 1];
       if (tr) { const s = pSeat(r, tr); if (!dst.has(s.key) && dst.size < P_SIDE) dst.set(s.key, s); }
     }
@@ -8517,12 +8530,12 @@ function routingPage(part) {
     pFrom.replaceChildren(...pAg.map((id) => {
       const n = pNode("a:" + id);
       keep.add("a:" + id);
-      const ag = agentOf(id);
+      const r = byOf.get(id), ag = agentOf(r.agent);
       n.node.className = "ps-node ps-ag";
       n.node.style.setProperty("--agent", hueOf(id));
       n.wire.style.setProperty("--agent", hueOf(id));
-      n.node.replaceChildren(icon(ag?.icon || "generic"), el("span", "ps-name", agentName(id)));
-      n.node.title = [agentName(id), ...foldersOf(recent.filter((r) => r.agent === id).slice(0, 20).reverse()).map((f) => t("Folder") + ": " + f)].join("\n");
+      n.node.replaceChildren(icon(ag?.icon || "generic"), el("span", "ps-name", callerName(r)));
+      n.node.title = [...new Set([callerName(r), agentName(r.agent)]), ...foldersOf(recent.filter((x) => srcOf(x) === id).slice(0, 20).reverse()).map((f) => t("Folder") + ": " + f)].join("\n");
       return n.node;
     }));
     pTo.replaceChildren(...pDst.map((k) => {
@@ -8613,9 +8626,9 @@ function routingPage(part) {
     dot.setAttribute("r", 3.5);
     dot.setAttribute("class", "ps-dot");
     dot.setAttribute("visibility", "hidden");
-    dot.style.setProperty("--agent", hueOf(r.agent));
+    dot.style.setProperty("--agent", hueOf(srcOf(r)));
     pSky.appendChild(dot);
-    const home = () => pNodes.get("a:" + r.agent);
+    const home = () => pNodes.get("a:" + srcOf(r));
     // rt: the route as the gateway has it now — or, dropped from the 60
     // kept while it flew, over: its dot goes, as nothing more will be heard
     // of it. Waiting on it held the dot and its place for three minutes
@@ -8784,7 +8797,7 @@ function routingPage(part) {
     b.type = "button";
     const ag = agentOf(r.agent);
     const asked = el("span", "pr-a");
-    asked.append(icon(ag?.icon || "generic"), el("span", "pr-who", agentName(r.agent)), el("code", "m", r.model));
+    asked.append(icon(ag?.icon || "generic"), el("span", "pr-who", callerName(r)), el("code", "m", r.model));
     asked.append(...rowTags(r));
     const when = el("span", "at", new Date(r.time).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }));
     // where it went: the provider, the account or key, and the model that
