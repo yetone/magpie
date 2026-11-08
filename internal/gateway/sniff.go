@@ -33,6 +33,19 @@ type usageSniffer struct {
 	tail chatTail
 	// found: the searches the reply ran by itself (searchTally)
 	found searchTally
+	// resp: the Responses stream's own response, as far as it went: what
+	// a response.failed magpie ends it with carries (streamFailure)
+	resp respTail
+}
+
+// respTail is what a Responses stream said of its response before it
+// ended: the id and created_at its events named, and the sequence_number
+// the next event takes; model is the caller's, the one that answered.
+type respTail struct {
+	id      string
+	created int64
+	next    int64
+	model   string
 }
 
 func newSniffer(proto provider.Protocol, contentType string) *usageSniffer {
@@ -190,14 +203,18 @@ func (s *usageSniffer) parse(b []byte) {
 		}
 	case provider.Responses:
 		var v struct {
-			ID       string  `json:"id"`
-			Type     string  `json:"type"`
-			Model    string  `json:"model"`
-			Usage    *rUsage `json:"usage"`
+			ID    string  `json:"id"`
+			Type  string  `json:"type"`
+			Model string  `json:"model"`
+			Usage *rUsage `json:"usage"`
+			// numbers read as float64: a vendor's odd one (a fractional
+			// created_at) must not cost the usage in the same event
+			Seq      *float64 `json:"sequence_number"`
 			Response struct {
-				ID    string  `json:"id"`
-				Model string  `json:"model"`
-				Usage *rUsage `json:"usage"`
+				ID      string  `json:"id"`
+				Model   string  `json:"model"`
+				Created float64 `json:"created_at"`
+				Usage   *rUsage `json:"usage"`
 			} `json:"response"`
 		}
 		if json.Unmarshal(b, &v) == nil {
@@ -205,6 +222,15 @@ func (s *usageSniffer) parse(b []byte) {
 				s.u.add(Usage{ResponseID: v.ID})
 			} else if strings.HasPrefix(v.Type, "response.") {
 				s.u.add(Usage{ResponseID: v.Response.ID})
+				if v.Response.ID != "" {
+					s.resp.id = v.Response.ID
+				}
+				if v.Response.Created > 0 {
+					s.resp.created = int64(v.Response.Created)
+				}
+				if v.Seq != nil && int64(*v.Seq) >= s.resp.next {
+					s.resp.next = int64(*v.Seq) + 1
+				}
 			}
 			s.saw(v.Response.Model)
 			s.saw(v.Model)

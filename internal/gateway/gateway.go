@@ -7228,7 +7228,14 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			// event the upstream left is dropped (#2580): a client
 			// reading it dies on its JSON before the error is reached
 			dropHalf()
-			w.Write(append(apart(), streamFailure(proto, failed)...))
+			tail := sniff.resp
+			if rc, ok := written.(*responsesTextCalls); ok && int64(rc.seq) >= tail.next {
+				// the stream's events were numbered again on their way
+				// out: the failure follows the last the client got
+				tail.next = int64(rc.seq) + 1
+			}
+			tail.model = cmp.Or(sniff.served, model)
+			w.Write(append(apart(), streamFailureAt(proto, failed, tail)...))
 			if proto == provider.Chat && rerr != nil && rerr != io.EOF {
 				// a Chat stream the upstream severed ends on [DONE] too: a
 				// client that reads to it stops there and says the error it
@@ -7315,6 +7322,17 @@ func noteSaidStatus(w http.ResponseWriter, status int) {
 // streamFailure is an error event ending a stream in proto, as each
 // protocol's own server sends one mid-reply.
 func streamFailure(proto provider.Protocol, msg string) []byte {
+	return streamFailureAt(proto, msg, respTail{})
+}
+
+// streamFailureAt is streamFailure after what a Responses stream said of
+// its response (tail). A response.failed is a whole Response, as OpenAI's
+// own is: Grok Build reads it as async-openai's, which needs the
+// response's id, created_at, model and output, and the event's
+// sequence_number (one without created_at was "serialization error:
+// missing field `created_at`", plugins#852). The response is the one the
+// stream began, numbered after its last event.
+func streamFailureAt(proto provider.Protocol, msg string, tail respTail) []byte {
 	var name string
 	var v map[string]any
 	switch proto {
@@ -7322,7 +7340,14 @@ func streamFailure(proto provider.Protocol, msg string) []byte {
 		v = map[string]any{"error": map[string]any{"message": msg, "type": "api_error"}}
 	case provider.Responses:
 		name = "response.failed"
-		v = map[string]any{"type": name, "response": map[string]any{"object": "response", "status": "failed",
+		id := cmp.Or(tail.id, "resp_"+newID())
+		created := tail.created
+		if created <= 0 {
+			created = time.Now().Unix()
+		}
+		v = map[string]any{"type": name, "sequence_number": tail.next, "response": map[string]any{
+			"id": id, "object": "response", "created_at": created, "status": "failed",
+			"model": tail.model, "output": []any{}, "parallel_tool_calls": true, "tool_choice": "auto", "tools": []any{},
 			"error": map[string]any{"code": "server_error", "message": msg}}}
 	case provider.Gemini:
 		// Gemini's own mid-stream error, as geminiEncoder writes it: a
