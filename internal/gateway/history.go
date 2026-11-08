@@ -90,6 +90,7 @@ var historyClock = time.Now
 // the history must never break a call.
 func saveRoute(r Route) {
 	r.Seq = 0
+	r.LastConvs = nil // a live request's, named by its reply once done
 	b, err := json.Marshal(r)
 	if err != nil {
 		return

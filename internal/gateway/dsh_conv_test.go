@@ -131,6 +131,11 @@ func TestDshRoutesCarryTheSessionConvs(t *testing.T) {
 		r.Header = h.Clone()
 		r.Header.Del("Content-Length")
 		r.Header.Del("Accept-Encoding")
+		if strings.HasSuffix(name, "-turn.json") {
+			// package agent names dsh by its User-Agent, which this
+			// package's tests don't register: its token says the same
+			r.Header.Set("Authorization", "Bearer "+TokenFor("dsh"))
+		}
 		w := httptest.NewRecorder()
 		s.Handler().ServeHTTP(w, r)
 		if w.Code != 200 {
@@ -147,6 +152,31 @@ func TestDshRoutesCarryTheSessionConvs(t *testing.T) {
 		// which gui's TestContextDshSessionTitles checks)
 		if last.Session != "" || !slices.Contains(byID[id].Convs, last.Conv) {
 			t.Errorf("%s: route session %q conv %q, not one of %s's %v", name, last.Session, last.Conv, id, byID[id].Convs)
+		}
+		if !strings.HasSuffix(name, "-turn.json") {
+			continue
+		}
+		// the messages of its turn, as its own file keeps them, name the
+		// session while the request is still answering (gui's ownerLast):
+		// the one typed is that session's alone, the runtime context dsh
+		// sends after it both sessions' of the folder
+		own := 0
+		for _, c := range last.LastConvs {
+			if !slices.Contains(byID[id].TurnConvs, c) {
+				t.Errorf("%s: turn message %s is not among %s's %v", name, c, id, byID[id].TurnConvs)
+			}
+			alone := true
+			for other, s := range byID {
+				if other != id && slices.Contains(s.TurnConvs, c) {
+					alone = false
+				}
+			}
+			if alone {
+				own++
+			}
+		}
+		if len(last.LastConvs) != 2 || own != 1 {
+			t.Errorf("%s: turn messages %v, %d of them %s's alone; want the typed one and the runtime context", name, last.LastConvs, own, id)
 		}
 	}
 }

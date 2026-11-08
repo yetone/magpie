@@ -173,6 +173,12 @@ type Session struct {
 	// own replies are known to belong to a fork of that opening
 	// (gui's ownerOf)
 	SeedConvs []string `json:"-"`
+	// TurnConvs are the ids of its newest turn's user messages, one
+	// spelling each and the newest dshTurnKept at most: a request still
+	// answering has no reply id yet, and the messages it carried — in
+	// this session's file before it went out — say which branch it is of
+	// (gui's ownerLast)
+	TurnConvs []string `json:"-"`
 	// Copies are the ids of the sessions that are copies of its
 	// conversation, not listed apart from it (ccCopies)
 	Copies []string `json:"-"`
@@ -241,7 +247,11 @@ type state struct {
 	// (dshConvs), kept when its seed's end takes them off Convs: the
 	// opening a fork and its source share is the source's, and this is
 	// the fork's own record that it came from that opening (ownerSeed)
-	SeedConvs []string      `json:"seed_convs,omitempty"`
+	SeedConvs []string `json:"seed_convs,omitempty"`
+	// TurnConvs are the ids of its newest turn's user messages (the first
+	// of dshConvs each, the newest dshTurnKept), reset at the turn's start
+	// and not kept from a fork's seed (gui's ownerLast)
+	TurnConvs []string      `json:"turn_convs,omitempty"`
 	Start     time.Time     `json:"start"`
 	Last      time.Time     `json:"last"`
 	Models    named[Tokens] `json:"models,omitempty"`
@@ -407,6 +417,7 @@ func (s *state) clone() *state {
 	c.Convs = slices.Clone(s.Convs)
 	c.ResponseIDs = slices.Clone(s.ResponseIDs)
 	c.SeedConvs = slices.Clone(s.SeedConvs)
+	c.TurnConvs = slices.Clone(s.TurnConvs)
 	c.CodexSpawnNames = maps.Clone(s.CodexSpawnNames)
 	c.CodexSpawnConflicts = maps.Clone(s.CodexSpawnConflicts)
 	c.CodexAgentIDs = maps.Clone(s.CodexAgentIDs)
@@ -1186,7 +1197,9 @@ const cacheVersion = 29
 // (gemini-4-argon-d) is its model's (GeminiDeployment), not -n alone.
 // antigravity 2: a conversation's folder is its summary row's workspace
 // (a parse kept from before has none, under the same row revision).
-var parseVersions = map[string]int{"codex": 3, "zcode": 1, "dsh": 2, "antigravity": 2}
+// dsh 3: the ids of its newest turn's messages (TurnConvs), which a
+// request still answering carried and has no reply id for yet.
+var parseVersions = map[string]int{"codex": 3, "zcode": 1, "dsh": 3, "antigravity": 2}
 
 type cacheFile struct {
 	Version int    `json:"version"`
@@ -1898,6 +1911,7 @@ func assembleListed(fs []file, price func(string) *catalog.Price, codexTitle fun
 			s.Convs = append(s.Convs, st.Convs...)
 			s.ResponseIDs = append(s.ResponseIDs, st.ResponseIDs...)
 			s.SeedConvs = append(s.SeedConvs, st.SeedConvs...)
+			s.TurnConvs = append(s.TurnConvs, st.TurnConvs...)
 			if d := st.Dsh; d != nil && d.Head.IsSeeded && d.Head.DelegationDepth == 0 {
 				s.ForkOf = d.Head.ParentSession
 			}

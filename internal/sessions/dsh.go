@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -261,7 +262,13 @@ type dshEvent struct {
 	} `json:"data"`
 }
 
-var dshWanted = [][]byte{[]byte(`"user/message"`), []byte(`"session/title"`), []byte(`"session/title-llm-request"`), []byte(`"assistant/message"`), []byte(`"session/end-seed"`), []byte(`"tool/call"`)}
+// dshTurnKept is how many of a turn's newest user messages a session keeps
+// (TurnConvs), as many as the gateway reads off a request (dshLastConvs):
+// the one typed and the runtime context dsh sends after it, and a few more
+// for a file whose dsh writes no turn/start.
+const dshTurnKept = 4
+
+var dshWanted = [][]byte{[]byte(`"user/message"`), []byte(`"session/title"`), []byte(`"session/title-llm-request"`), []byte(`"assistant/message"`), []byte(`"session/end-seed"`), []byte(`"tool/call"`), []byte(`"turn/start"`)}
 
 // dshCarry is what a read of a dsh session file carries on with: where it
 // read to and the header it read first.
@@ -351,6 +358,24 @@ func dshCount(s *state, h *dshHead, b []byte, main bool) {
 			} else {
 				s.Title = title(t)
 			}
+		}
+		if main {
+			// the messages of the turn under way, as its file has them
+			// before the request goes out: the newest of them are what a
+			// request still answering carried (TurnConvs, ownerLast). One
+			// spelling is enough, the gateway writes the request's that
+			// way (dshLastConvs); a file with no turn/start keeps its
+			// newest few
+			if c := dshConvs(e.Data.Content); len(c) > 0 {
+				s.TurnConvs = append(s.TurnConvs, c[0])
+				if n := len(s.TurnConvs); n > dshTurnKept {
+					s.TurnConvs = slices.Clone(s.TurnConvs[n-dshTurnKept:])
+				}
+			}
+		}
+	case "turn/start":
+		if main {
+			s.TurnConvs = nil
 		}
 	case "session/title":
 		if t := title(e.Data.Title); t != "" {
