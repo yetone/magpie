@@ -1820,8 +1820,9 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// counted as the HEIC photos in it will be sent (heic.go)
-	body = heicAsJPEG(provider.Anthropic, body)
+	// counted as the HEIC photos in it will be sent (heic.go), their
+	// base64 read as it will be sent (base64_input.go)
+	body = heicAsJPEG(provider.Anthropic, stdBase64Body(provider.Anthropic, body))
 	var err error
 	var model string
 	body, model, err = requestModel(body)
@@ -2215,6 +2216,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// a client's "off" is magpie's none, for every route and check below
 	// that reads the body's effort (plugins#334)
 	body = offAsNone(from, body)
+	// inline base64 goes in the standard alphabet, padded, which every
+	// vendor reads, on every route below and for every check that reads
+	// an image's bytes (base64_input.go, #5697)
+	body = stdBase64Body(from, body)
 	// a HEIC photo goes as JPEG (or PNG), which every vendor takes, on
 	// every route below (heic.go)
 	body = heicAsJPEG(from, body)
