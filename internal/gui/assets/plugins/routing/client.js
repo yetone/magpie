@@ -1109,6 +1109,7 @@ function routingPage(part) {
       case "session": return t("Kept on {who}: it answered this conversation before, and affinity keeps a session with one account.", { who: last });
       case "turn": return t("Kept on {who}: {agent} is handing back tool results within turn {n}, and moving now would lose what the vendor cached of it.", { who: last, agent: agentName(r.agent), n: a.turn });
       case "cache": return t("Kept on {who}: {d} ago the vendor read {r} tokens of this conversation from its cache and wrote {w} to it; anyone else would be sent them afresh and paid in full.", { who: last, r: tokens(a.cacheRead || 0), w: tokens(a.cacheWrite || 0), d: ago });
+      case "lead": return t("Put on {first}, where this session's {model} is: one session goes on one account.", { first: who(r.order[0]), model: a.leadModel || "" });
       case "strict": return a.main ? t("{who}, a fallback, answered this conversation last. The provider's own {first} is ready again, but Stays is Strict, which never moves a conversation, so it stays on the fallback; new conversations go to {first}.", { who: last, first: who(a.main) }) : null;
       case "new-turn": return routing === "rotate"
         ? t("Turn {n} begins: in turn, it goes to the one after {who}, which answered the last turn — {next}.", { n: a.turn, who: last, next: who(r.order[0]) })
