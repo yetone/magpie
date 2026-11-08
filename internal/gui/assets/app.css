@@ -3233,17 +3233,26 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .sheet .kind b { font-size: 13px; font-weight: 600; color: var(--fg); }
 .sheet .kind span { color: var(--faint); }
 /* Partners' light (shinePartners): a hairline runs once round the heading
-   and fades, over a breath of the accent; nothing with reduced motion */
+   and, together, round the partners' tiles below it, each over a breath of
+   the accent, then fades; nothing with reduced motion. The two outlines
+   only draw: the heading's sits 3px off its words and the tiles' on their
+   edge, leaving a gap between them where the sheet has 6px */
 @property --shine-a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 .sheet .kind.shine { position: relative; width: fit-content; }
-.sheet .kind.shine i { position: absolute; inset: 17px 0 1px; border-radius: 8px; opacity: 0; pointer-events: none; }
-.sheet .kind.shine .glow { background: color-mix(in srgb, var(--accent) 7%, transparent); }
-.sheet .kind.shine .ring { padding: 1px; background: conic-gradient(from var(--shine-a), transparent 0deg 250deg, color-mix(in srgb, var(--accent) 35%, transparent) 300deg, var(--accent) 345deg, transparent 360deg); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
-.sheet .kind.lit .ring { animation: shine-trace 1.8s cubic-bezier(.5, 0, .3, 1); }
-.sheet .kind.lit .glow { animation: shine-glow 1.8s ease-out; }
+.sheet .grid.shine { position: relative; }
+.sheet .shine > i { position: absolute; border-radius: 8px; opacity: 0; pointer-events: none; }
+.sheet .kind.shine > i { inset: 19px 0 4px; }
+.sheet .grid.shine > i { inset: 0; border-radius: 10px; }
+.sheet .kind.shine > .glow { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.sheet .grid.shine > .glow { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.sheet .shine > .ring { padding: 1px; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+.sheet .kind.shine > .ring { background: conic-gradient(from var(--shine-a), transparent 0deg 250deg, color-mix(in srgb, var(--accent) 35%, transparent) 300deg, var(--accent) 345deg, transparent 360deg); }
+.sheet .grid.shine > .ring { background: conic-gradient(from var(--shine-a), transparent 0deg 280deg, color-mix(in srgb, var(--accent) 25%, transparent) 320deg, var(--accent) 352deg, transparent 360deg); }
+.sheet .lit > .ring { animation: shine-trace 1.8s cubic-bezier(.5, 0, .3, 1); }
+.sheet .lit > .glow { animation: shine-glow 1.8s ease-out; }
 @keyframes shine-trace { 0% { --shine-a: 0deg; opacity: 0; } 15%, 70% { opacity: 1; } 100% { --shine-a: 360deg; opacity: 0; } }
 @keyframes shine-glow { 35% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .sheet .kind.shine i { display: none; } }
+@media (prefers-reduced-motion: reduce) { .sheet .shine > i { display: none; } }
 /* a removed account: its name, then Add it back and Sign out… side by
    side, across the row (#694) */
 .sheet .tile.removed { grid-column: 1 / -1; }
