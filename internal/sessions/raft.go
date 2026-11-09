@@ -56,7 +56,7 @@ func raftFilesIn(dir string) []file {
 // A ZCode request names its session by the id its database gives it with a
 // prefix — sess_…, a subagent's sess_subagent_agent_… (zcodeBareID) — so the
 // bare id is a key too: without it the same session was a row under its
-// folder and again a row under "Seen through the gateway".
+// folder and again a gateway-only row.
 func GatewayKeys(s Session) []string {
 	k := []string{s.Agent + "|" + s.ID}
 	if s.Agent == "raft" {
@@ -69,17 +69,27 @@ func GatewayKeys(s Session) []string {
 		k = append(k, s.Agent+"|"+id)
 	}
 	for _, id := range s.Subs {
-		k = append(k, s.Agent+"|"+id)
+		for _, rid := range requestIDs(s.Agent, id) {
+			k = append(k, s.Agent+"|"+rid)
+		}
 	}
-	if s.Agent == "zcode" {
-		if bare := zcodeBareID(s.ID); bare != s.ID {
-			k = append(k, "zcode|"+bare)
-		}
-		for _, id := range s.Subs {
-			if bare := zcodeBareID(id); bare != id {
-				k = append(k, "zcode|"+bare)
-			}
-		}
+	for _, rid := range requestIDs(s.Agent, s.ID)[1:] {
+		k = append(k, s.Agent+"|"+rid)
 	}
 	return k
+}
+
+// requestIDs are the ids a request through the gateway can name the
+// session id by, id itself first: ZCode's database gives an id a prefix
+// (sess_…, a subagent's sess_subagent_agent_…) its requests leave out
+// (zcodeBareID). GatewayKeys and NativeIDs both read it, so the Sessions
+// list, its spend and the management page agree on which gateway record
+// is a session here (#5754).
+func requestIDs(agent, id string) []string {
+	if agent == "zcode" {
+		if bare := zcodeBareID(id); bare != id {
+			return []string{id, bare}
+		}
+	}
+	return []string{id}
 }

@@ -260,10 +260,13 @@ func nativeIDsWith(agents map[string]bool, all []file, quick bool) map[string]ma
 	for _, fs := range groups {
 		id := sessionID(fs)
 		if a := fs[0].agent; agents[a] {
-			out[a][id] = true
-			// its subagents' calls are counted in it (subIDs)
-			for _, sub := range subIDs(fs, id) {
-				out[a][sub] = true
+			// by every id a request can name it (requestIDs, as
+			// GatewayKeys), its subagents' too: their calls are counted in
+			// it (subIDs)
+			for _, sid := range append([]string{id}, subIDs(fs, id)...) {
+				for _, rid := range requestIDs(a, sid) {
+					out[a][rid] = true
+				}
 			}
 		}
 		if fs[0].agent == "raft" && agents["pi"] {

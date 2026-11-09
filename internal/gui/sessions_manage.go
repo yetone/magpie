@@ -9,6 +9,7 @@ import (
 	"os"
 	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -429,7 +430,13 @@ func searchSessions(ctx context.Context, agentID, query string, budget time.Dura
 	native := map[string]bool{}
 	if sessions.HasTranscript(agentID) {
 		for _, m := range sessions.ListAgent(agentID) {
-			native[m.ID] = true
+			// every id the gateway can know it by (a ZCode session's bare
+			// id, #5754), so its record is not searched again below
+			for _, k := range sessions.GatewayKeys(m.Session) {
+				if a, id, ok := strings.Cut(k, "|"); ok && a == agentID {
+					native[id] = true
+				}
+			}
 			jobs = append(jobs, job{m.Session, m.Last})
 		}
 	} else {

@@ -97,8 +97,12 @@ a prefix stripped (`sess_…`, a subagent's `sess_subagent_agent_…`:
 `zcodeBareID`), its own as well as its forks' and subagents' (their files
 are in its group, `Subs`, and `idInFile` reads their ids). Without it a
 ZCode session whose files are here was a row under its folder and again a
-row under Seen through the gateway (flandern1211_58540 on Discord;
-`TestZCodeGatewayRowIsTheSessionItself`). A Claude Code
+row under Seen through the gateway, and its spend counted twice
+(flandern1211_58540 on Discord, #5754;
+`TestZCodeGatewayRowIsTheSessionItself`). `requestIDs` is the one place
+that says which ids a request names a session by: `GatewayKeys` (the
+list, its spend, the stats' native set, `viaOf`, the management
+page's search) and `NativeIDs` (its count and delete) both read it. A Claude Code
 session Claude Desktop's Code tab ran is in Claude Code's folder, and only its lines' `entrypoint`
 (`claude-desktop`, `claude-desktop-3p`) tells it apart: its parse keeps the
 entrypoint of the line its folder came from (`state.Entry`), and the

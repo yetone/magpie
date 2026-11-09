@@ -10,7 +10,7 @@ import (
 // A ZCode request names its session by the id its database gives it with a
 // prefix (sess_…, a subagent's sess_subagent_agent_…), so a session whose
 // files are on this computer was listed twice: once under its folder, and
-// again under "Seen through the gateway" as the same session under its bare
+// again as a gateway-only row: the same session under its bare
 // id. Its own id, its fork's and its subagent's bare ids are keys of it
 // (eachGatewayKey), and those of neither of the two are rows of their own.
 func TestZCodeGatewayRowIsTheSessionItself(t *testing.T) {
@@ -49,6 +49,14 @@ func TestZCodeGatewayRowIsTheSessionItself(t *testing.T) {
 	for _, want := range []string{"zcode|sess_main", "zcode|main", "zcode|fork_of_main", "zcode|abc"} {
 		if !slices.Contains(keys, want) {
 			t.Errorf("keys %v lack %q", keys, want)
+		}
+	}
+	// the management page's ids (NativeIDs) are the same: its count of
+	// gateway-only sessions and its delete leave these records alone
+	native := NativeIDs(map[string]bool{"zcode": true})["zcode"]
+	for _, want := range []string{"sess_main", "main", "fork_of_main", "abc"} {
+		if !native[want] {
+			t.Errorf("NativeIDs lack %q: %v", want, native)
 		}
 	}
 	// what the gateway saw of them is that session's record: no row added

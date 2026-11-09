@@ -88,28 +88,29 @@ magpie.plugin("sessions", (ctx) => {
   const GW = "\x00gateway";
   // A session its agent ran with no project of its own, in a folder the
   // agent made for that one session: ZCode keeps ~/.zcode/workspace/
-  // <draft|time>-<uuid>, one for each session started without a project.
+  // draft-<id> or <ms>-<uuid> (its host, 3.17.2), one for each session
+  // started without a project.
   // One "folder" each was 40 folders of one session, and they are no
   // projects of the reader's (flandern1211_58540 on Discord): one group of
   // their own, not "No folder", keeps them apart from sessions whose agent
   // recorded no folder.
-  const SCRATCH = "\x00scratch";
-  const zcodeScratch = (s) => {
+  const DRAFTS = "\x00drafts";
+  const zcodeDraft = (s) => {
     const home = (data?.home || "").replace(/\\/g, "/").replace(/\/+$/, "");
     if (!home || s.agent !== "zcode" || !s.cwd) return false;
     const c = s.cwd.replace(/\\/g, "/");
     return c === home + "/.zcode/workspace" || c.startsWith(home + "/.zcode/workspace/");
   };
-  const groupOf = (s) => zcodeScratch(s) ? SCRATCH : s.cwd || (s.gateway ? GW : "");
+  const groupOf = (s) => zcodeDraft(s) ? DRAFTS : s.cwd || (s.gateway ? GW : "");
   const groupName = (k) => k === GW ? t("Seen through the gateway")
-    : k === SCRATCH ? t("Scratch sessions") : k ? baseName(k) : t("No folder");
+    : k === DRAFTS ? t("Draft sessions") : k ? baseName(k) : t("No folder");
 
   // A folder an app or the system made, not a project of the reader's: the
   // disk's root, a temp folder, or one under a hidden folder of a home
   // (~/.some-agent/…). They go under a fold of their own after the
   // projects (yetone: "/", "T" and folders named by UUIDs led the list).
   const scratch = (k) => {
-    if (!k || k === GW || k === SCRATCH) return false;
+    if (!k || k === GW || k === DRAFTS) return false;
     const p = k.replace(/\\/g, "/").replace(/\/+$/, "");
     return p === "" || /^[a-z]:$/i.test(p)
       || /^\/(private\/)?(tmp|var\/tmp|var\/folders)(\/|$)/.test(p)
@@ -743,7 +744,7 @@ magpie.plugin("sessions", (ctx) => {
       openedFor = data.agent;
       opened.clear();
       drawnIn.clear();
-      const first = list.find((s) => !scratch(groupOf(s)) && groupOf(s) !== SCRATCH) || list[0];
+      const first = list.find((s) => !scratch(groupOf(s)) && groupOf(s) !== DRAFTS) || list[0];
       if (first) opened.add(groupOf(first));
     }
     nest(list);
@@ -772,15 +773,15 @@ magpie.plugin("sessions", (ctx) => {
     const q = query.trim();
     // the projects in one list, the folders apps and the system made
     // folded under them, and the folders agents made one session each
-    // (SCRATCH) after the projects: they are no projects, but the reader
+    // (DRAFTS) after the projects: they are no projects, but the reader
     // looks for the sessions in them, so not folded away either
-    const all = [...groups].filter(([k]) => !scratch(k) && k !== SCRATCH);
+    const all = [...groups].filter(([k]) => !scratch(k) && k !== DRAFTS);
     const rest = [...groups].filter(([k]) => scratch(k));
-    const temp = groups.get(SCRATCH);
+    const temp = groups.get(DRAFTS);
     if (all.length || temp) {
       const box = el("div", "list sm-folders");
       if (all.length) folderList(box, all, FOLDERS, q);
-      if (temp) box.append(folder(SCRATCH, temp, q));
+      if (temp) box.append(folder(DRAFTS, temp, q));
       tree.append(box);
     }
     if (rest.length) tree.append(othersBox(rest, q));
@@ -900,7 +901,7 @@ magpie.plugin("sessions", (ctx) => {
     const fold = el("button", "fold");
     fold.type = "button";
     fold.setAttribute("aria-expanded", String(open));
-    const path = cwd === GW || cwd === SCRATCH ? "" : cwd;
+    const path = cwd === GW || cwd === DRAFTS ? "" : cwd;
     const line = el("span", "sm-fline");
     line.append(el("span", "name", groupName(cwd)));
     const where = path ? whereOf(path) : "";
@@ -1036,9 +1037,9 @@ magpie.plugin("sessions", (ctx) => {
       sub.prepend(p, " ");
     }
     who.append(sub);
-    // a scratch session's folder is a UUID its agent made: the row says
+    // a draft session's folder is a name its agent made: the row says
     // nothing of it otherwise (the group of them is one)
-    if (zcodeScratch(s)) r.title = s.cwd;
+    if (zcodeDraft(s)) r.title = s.cwd;
     const hit = hitOf(s);
     if (hit) who.append(hitLine(hit));
     // what it spent, as the Usage page's list shows it
@@ -1480,7 +1481,7 @@ magpie.plugin("sessions", (ctx) => {
       : folders ? t("Delete all {n} sessions in {k} folders?", { n: list.length, k: folders })
       : t("Delete {n} sessions?", { n: list.length })));
     ed.append(h);
-    if (folder && folder !== GW && folder !== SCRATCH) ed.append(el("p", "sub sm-ask-path", folder));
+    if (folder && folder !== GW && folder !== DRAFTS) ed.append(el("p", "sub sm-ask-path", folder));
     const names = el("ul", "sm-ask-list");
     for (const s of list.slice(0, 5)) names.append(el("li", "", s.title || s.id));
     if (list.length > 5) names.append(el("li", "more", t("+{n} more", { n: list.length - 5 })));
