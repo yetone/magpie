@@ -680,3 +680,47 @@ func TestCodexPIDsFindsOpenCodex(t *testing.T) {
 		t.Fatalf("a failed list gave %v", got)
 	}
 }
+
+// CLJY (Discord): before npm updates Codex on Windows, magpie stops the
+// app-server daemon when no codex session is on it, since it holds the
+// package's codex.exe, which npm can't remove while it runs. One with a
+// session on it, or none running, is left.
+func TestStopIdleCodexDaemon(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands in for codex")
+	}
+	fakeDaemon(t)
+	out := fakeCodex(t, 0)
+	home := codexHome()
+	clients, daemon := 0, true
+	listProcesses = func(context.Context) ([]proc.Process, error) {
+		var ps []proc.Process
+		if daemon {
+			ps = append(ps, proc.Process{PID: 50, Args: home + "/packages/app-server-daemon/releases/0.162.0/bin/codex app-server --listen unix:///x --managed-daemon"})
+		}
+		for i := range clients {
+			ps = append(ps, proc.Process{PID: 100 + i, Args: "codex"})
+		}
+		return ps, nil
+	}
+	ran := func() string {
+		b, _ := os.ReadFile(out + ".args")
+		os.Remove(out + ".args")
+		return strings.TrimSpace(string(b))
+	}
+	ctx := context.Background()
+	if stopped, err := StopIdleCodexDaemon(ctx); !stopped || err != nil || ran() != "app-server daemon stop" {
+		t.Fatalf("idle daemon: stopped %t, %v", stopped, err)
+	}
+	if b, _ := os.ReadFile(out + ".home"); strings.TrimSpace(string(b)) != home {
+		t.Errorf("CODEX_HOME %q, want %q", b, home)
+	}
+	clients = 1
+	if stopped, err := StopIdleCodexDaemon(ctx); stopped || err != nil || ran() != "" {
+		t.Fatalf("a session on it: stopped %t, %v", stopped, err)
+	}
+	clients, daemon = 0, false
+	if stopped, err := StopIdleCodexDaemon(ctx); stopped || err != nil || ran() != "" {
+		t.Fatalf("no daemon: stopped %t, %v", stopped, err)
+	}
+}

@@ -3,6 +3,7 @@ package proc
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 )
@@ -61,12 +62,22 @@ func SystemDirs(paths ...string) []string {
 	return out
 }
 
+// ToolIn is name's program in the first of dirs that has one, as toolIn
+// finds it on this system.
+func ToolIn(name string, dirs []string) string { return toolIn(name, runtime.GOOS, dirs) }
+
 // toolIn is name's program in the first of dirs that has one: on Windows
-// name.exe, name.cmd or name, as npm's shim or an installer's binary.
+// name.exe or name.cmd, as an installer's binary or npm's shim, else the
+// program npm's sh shim name runs, when that is a Windows program
+// (npmShimExe). A file with no extension is never run on Windows itself:
+// CreateProcess refuses it ("%1 is not a valid Win32 application"), and
+// what npm left of its shims when an install failed partway is that sh
+// one alone (CLJY on Discord: %APPDATA%\npm\claude, 308 bytes, with no
+// claude.cmd beside it, was what magpie ran).
 func toolIn(name, goos string, dirs []string) string {
 	names := []string{name}
 	if goos == "windows" {
-		names = []string{name + ".exe", name + ".cmd", name}
+		names = []string{name + ".exe", name + ".cmd"}
 	}
 	for _, d := range dirs {
 		if d == "" {
@@ -78,6 +89,43 @@ func toolIn(name, goos string, dirs []string) string {
 				return p
 			}
 		}
+		if goos == "windows" {
+			if p := npmShimExe(filepath.Join(d, name)); p != "" {
+				return p
+			}
+		}
 	}
 	return ""
+}
+
+// npmShimLine is the line of npm's sh shim (cmd-shim) that runs a program
+// of its package's directly: exec "$basedir/node_modules/<pkg>/<bin>" "$@".
+// A shim of a node script names node first, and isn't matched.
+var npmShimLine = regexp.MustCompile(`(?m)^\s*exec "\$basedir/([^"$]+\.exe)"\s+"\$@"`)
+
+// npmShimExe is the Windows program the npm sh shim at path runs, where it
+// is: Claude Code's is node_modules\@anthropic-ai\claude-code\bin\claude.exe.
+// "" when path is no such shim or its program is gone.
+func npmShimExe(path string) string {
+	st, err := os.Stat(path)
+	if err != nil || st.IsDir() || st.Size() > wrapperMax {
+		return ""
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	m := npmShimLine.FindSubmatch(b)
+	if m == nil {
+		return ""
+	}
+	rel := filepath.FromSlash(string(m[1]))
+	if !filepath.IsLocal(rel) {
+		return ""
+	}
+	exe := filepath.Join(filepath.Dir(path), rel)
+	if st, err := os.Stat(exe); err != nil || st.IsDir() {
+		return ""
+	}
+	return exe
 }

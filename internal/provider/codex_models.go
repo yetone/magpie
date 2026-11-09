@@ -10,8 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
-	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -230,19 +228,9 @@ var codexExecutable = func() string {
 	if p, err := proc.LookPath("codex"); err == nil {
 		return p
 	}
-	names := []string{"codex"}
-	if runtime.GOOS == "windows" {
-		names = []string{"codex.cmd", "codex.exe", "codex"}
-	}
-	for _, d := range proc.UserBinDirs() {
-		for _, n := range names {
-			p := filepath.Join(d, n)
-			if st, err := os.Stat(p); err == nil && !st.IsDir() {
-				return p
-			}
-		}
-	}
-	return ""
+	// on Windows npm's codex.cmd, never the sh shim npm leaves alone when
+	// an install fails partway, which Windows can't run (CLJY on Discord)
+	return proc.ToolIn("codex", proc.UserBinDirs())
 }
 
 // parseCodexModels reads the backend's list, the listed ones in its order.

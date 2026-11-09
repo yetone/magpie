@@ -74,3 +74,57 @@ func TestSystemDirsLieInTheTestsHome(t *testing.T) {
 		t.Errorf("SystemDirs outside a test = %q", got)
 	}
 }
+
+// What npm leaves of a package's shims when an install stops partway on
+// Windows is its sh shim alone, which Windows can't run: a folder holding
+// only that is given as the program it names, when that is a Windows one
+// still there, and passed over otherwise (CLJY on Discord: %APPDATA%\npm
+// had the 308-byte claude and no claude.cmd, and magpie ran the sh file).
+// The shims are cmd-shim 7's own bytes, made on the Windows box.
+func TestToolInNPMShShimAlone(t *testing.T) {
+	read := func(name string) []byte {
+		b, err := os.ReadFile(filepath.Join("testdata", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	d := t.TempDir()
+	npm, later := filepath.Join(d, "npm"), filepath.Join(d, "later")
+	os.MkdirAll(later, 0o755)
+	exe := filepath.Join(npm, "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe")
+	os.MkdirAll(filepath.Dir(exe), 0o755)
+	os.WriteFile(filepath.Join(npm, "claude"), read("npm-sh-shim-claude"), 0o644)
+	os.WriteFile(filepath.Join(npm, "codex"), read("npm-sh-shim-codex"), 0o644)
+	os.WriteFile(filepath.Join(npm, "gemini"), []byte("#!/bin/sh\nexec gemini \"$@\"\n"), 0o644)
+
+	// the package's program is gone too: the shim is no tool
+	if got := toolIn("claude", "windows", []string{npm}); got != "" {
+		t.Errorf("shim of a missing program: %q", got)
+	}
+	os.WriteFile(exe, []byte("MZ"), 0o755)
+	if got := toolIn("claude", "windows", []string{npm, later}); got != exe {
+		t.Errorf("claude: %q, want %q", got, exe)
+	}
+	// a shim that runs node, or anything but npm's, is passed over, for a
+	// runnable one in a later folder
+	if got := toolIn("codex", "windows", []string{npm}); got != "" {
+		t.Errorf("codex's node shim: %q", got)
+	}
+	if got := toolIn("gemini", "windows", []string{npm}); got != "" {
+		t.Errorf("a script that isn't npm's: %q", got)
+	}
+	os.WriteFile(filepath.Join(later, "codex.exe"), []byte("MZ"), 0o755)
+	if got := toolIn("codex", "windows", []string{npm, later}); got != filepath.Join(later, "codex.exe") {
+		t.Errorf("codex in a later folder: %q", got)
+	}
+	// a shim naming a program outside its folder is not followed
+	os.WriteFile(filepath.Join(npm, "evil"), []byte("exec \"$basedir/../../x.exe\"   \"$@\"\n"), 0o644)
+	if got := toolIn("evil", "windows", []string{npm}); got != "" {
+		t.Errorf("a shim leaving its folder: %q", got)
+	}
+	// elsewhere the sh shim is the tool, as before
+	if got := toolIn("claude", "linux", []string{npm}); got != filepath.Join(npm, "claude") {
+		t.Errorf("linux: %q", got)
+	}
+}

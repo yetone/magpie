@@ -621,3 +621,35 @@ func CodexPIDs(ctx context.Context) []int {
 	}
 	return pids
 }
+
+// StopIdleCodexDaemon stops Codex's app-server daemon for the Codex home
+// magpie signs Codex in through, when it runs with no codex session on it,
+// and says whether it did. An update of Codex by npm on Windows asks it
+// first (agent.UpdateCLI): the daemon, which has no idle exit and which
+// magpie restarts (KeepCodexDaemonCurrent), holds the package's codex.exe,
+// which npm can't remove while it runs (EPERM), and the update stopped
+// partway. The next codex started starts it again. One with sessions on it
+// is left: they hold codex.exe too.
+func StopIdleCodexDaemon(ctx context.Context) (bool, error) {
+	home := codexHome()
+	ps, err := listProcesses(ctx)
+	if err != nil {
+		return false, err
+	}
+	if findCodexDaemon(ps, home) == 0 || codexClients(ps, home) > 0 {
+		return false, nil
+	}
+	codexRestarting.Lock()
+	defer codexRestarting.Unlock()
+	cmd, err := codexDaemonCommand(ctx, home, "stop")
+	if err != nil {
+		return false, err
+	}
+	if out, err := cmd.CombinedOutput(); err != nil {
+		if msg := lastLine(out); msg != "" {
+			return false, errors.New("codex app-server daemon stop: " + msg)
+		}
+		return false, errors.New("codex app-server daemon stop: " + err.Error())
+	}
+	return true, nil
+}
