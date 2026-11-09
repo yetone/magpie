@@ -397,6 +397,35 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 		}
 		writeJSON(rw, v)
 	})
+	// billion-context: which agents have its plugin, switching one on or
+	// off, and installing bili when the page is asked to
+	mux.HandleFunc("GET /api/library/bili", func(rw http.ResponseWriter, r *http.Request) {
+		writeJSON(rw, library.ReadBili())
+	})
+	mux.HandleFunc("POST /api/library/bili", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Agent string
+			On    bool
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		v, err := library.SetBili(in.Agent, in.On)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, v)
+	})
+	mux.HandleFunc("POST /api/library/bili/install", func(rw http.ResponseWriter, r *http.Request) {
+		v, err := library.InstallBili()
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, v)
+	})
 	// a project's folder, from the system's picker; "" when it's cancelled
 	mux.HandleFunc("POST /api/library/projects/choose", func(rw http.ResponseWriter, r *http.Request) {
 		dir, err := w.ChooseFolder("Choose a project")

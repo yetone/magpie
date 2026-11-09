@@ -92,6 +92,7 @@
     <a href="#models">子代理的模型</a>
     <a href="#hooks">Hooks</a>
     <a href="#rtk">RTK</a>
+    <a href="#billion-context">billion-context</a>
     <a href="#touch">magpie 会改什么</a>
   </aside>
 
@@ -99,7 +100,7 @@
     <p class="eyebrow" id="overview">文档 · 资源库</p>
     <h1>资源库</h1>
     <p class="lede">magpie 的 <span class="ui">资源库</span> 把指令、MCP 服务器、技能、Hooks 和子代理放在一处，再把每一项写进你勾选的每个 Agent，用的是那个 Agent 自己的文件和格式。Agent 像平常一样读这些文件。magpie 不在 Agent 和这些内容之间加任何一层：什么时候用某个技能、某个 MCP 工具或某个子代理，由 Agent 自己决定。</p>
-    <p>页面有六个标签：<span class="ui">指令</span>、<span class="ui">MCP 服务器</span>、<span class="ui">技能</span>、<span class="ui">Hooks</span>、<span class="ui">子代理</span> 和 <span class="ui">RTK</span>。每一项下面有一排 Agent；勾上就给它，取消勾选就拿走。Agent 重启后读到改动。</p>
+    <p>页面有七个标签：<span class="ui">指令</span>、<span class="ui">MCP 服务器</span>、<span class="ui">技能</span>、<span class="ui">Hooks</span>、<span class="ui">子代理</span>、<span class="ui">RTK</span> 和 <span class="ui">billion-context</span>。每一项下面有一排 Agent；勾上就给它，取消勾选就拿走。Agent 重启后读到改动。</p>
 
     <h2 id="where"><a class="anchor" href="#where">存放位置</a></h2>
     <ul>
@@ -234,6 +235,9 @@ magpie library sync     # 重新写进各个 Agent</pre>
 
     <h2 id="rtk"><a class="anchor" href="#rtk">RTK</a></h2>
     <p>RTK 标签可以按 Agent 打开 <a href="https://www.rtk-ai.app/">RTK</a>：Agent 的 shell 命令经过 RTK 运行，输出被压短以节省 token。magpie 可以帮你安装 RTK；RTK 卸掉后也能关闭。</p>
+
+    <h2 id="billion-context"><a class="anchor" href="#billion-context">billion-context</a></h2>
+    <p>billion-context 标签可以按 Agent 打开 <a href="https://github.com/ranxianglei/billion-context">billion-context</a> 的插件：它把长会话里较早的对话折叠成模型可以再展开的摘要，让会话始终留在模型的上下文窗口内。支持 Pi、omp、OpenCode 和 Claude Code，打开后它们的请求仍经过 magpie。magpie 可以帮你安装（<code>npm install -g billion-context --prefix=~/.local</code>），并运行它自己的安装和卸载命令；关闭时会把安装改动过的 Agent 设置恢复原样。在这里打开的 Agent 不能再同时使用 billion-context-pi 或 opencode-acp。</p>
 
     <h2 id="touch"><a class="anchor" href="#touch">magpie 会改什么</a></h2>
     <ul>

@@ -338,6 +338,7 @@ var notYet = map[string]string{
 	"POST /api/masking/clear":                    U,  // masking.go
 	"POST /api/masking/preview":                  U,  // masking.go
 	"POST /api/masking/values":                   U,  // masking.go
+	"GET /api/library/bili":                      L,  // library.go
 	"GET /api/library/icon":                      W,  // library.go
 	"GET /api/library/market/servers":            L,  // library.go
 	"GET /api/library/market/skills":             L,  // library.go
@@ -345,6 +346,8 @@ var notYet = map[string]string{
 	"GET /api/library/pi":                        L,  // library.go
 	"GET /api/library/rtk":                       L,  // library.go
 	"GET /api/library/skill":                     L,  // library.go
+	"POST /api/library/bili":                     L,  // library.go
+	"POST /api/library/bili/install":             L,  // library.go
 	"POST /api/library/market/about":             L,  // library.go
 	"POST /api/library/mcp-signin":               L,  // library.go
 	"POST /api/library/mcp-signin/{id}/cancel":   L,  // library.go

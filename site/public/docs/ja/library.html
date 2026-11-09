@@ -92,6 +92,7 @@
     <a href="#models">サブエージェントのモデル</a>
     <a href="#hooks">フック</a>
     <a href="#rtk">RTK</a>
+    <a href="#billion-context">billion-context</a>
     <a href="#touch">magpie が触るもの</a>
   </aside>
 
@@ -99,7 +100,7 @@
     <p class="eyebrow" id="overview">ドキュメント · ライブラリ</p>
     <h1>ライブラリ</h1>
     <p class="lede">magpie の <span class="ui">ライブラリ</span> は、指示、MCP サーバー、スキル、フック、サブエージェントを一か所にまとめ、チェックしたエージェントそれぞれに、そのエージェント自身のファイルと形式で書き込みます。エージェントはいつもどおりそのファイルを読みます。magpie はエージェントと渡したものの間に層を挟みません。スキル、MCP ツール、サブエージェントをいつ使うかは、エージェント自身が決めます。</p>
-    <p>ページには <span class="ui">指示</span>、<span class="ui">MCP サーバー</span>、<span class="ui">スキル</span>、<span class="ui">フック</span>、<span class="ui">サブエージェント</span>、<span class="ui">RTK</span> の 6 つのタブがあります。各項目にはエージェントの列があり、チェックすると渡し、外すと取り除きます。エージェントは次に起動したときに変更を読みます。</p>
+    <p>ページには <span class="ui">指示</span>、<span class="ui">MCP サーバー</span>、<span class="ui">スキル</span>、<span class="ui">フック</span>、<span class="ui">サブエージェント</span>、<span class="ui">RTK</span>、<span class="ui">billion-context</span> の 7 つのタブがあります。各項目にはエージェントの列があり、チェックすると渡し、外すと取り除きます。エージェントは次に起動したときに変更を読みます。</p>
 
     <h2 id="where"><a class="anchor" href="#where">保存場所</a></h2>
     <ul>
@@ -234,6 +235,9 @@ magpie library sync     # エージェントに書き直す</pre>
 
     <h2 id="rtk"><a class="anchor" href="#rtk">RTK</a></h2>
     <p>RTK タブでは <a href="https://www.rtk-ai.app/">RTK</a> をエージェントごとにオンにします。エージェントのシェルコマンドが RTK を通り、出力が短くなってトークンを節約します。magpie は RTK をインストールでき、RTK がなくてもオフにできます。</p>
+
+    <h2 id="billion-context"><a class="anchor" href="#billion-context">billion-context</a></h2>
+    <p>billion-context タブでは <a href="https://github.com/ranxianglei/billion-context">billion-context</a> のプラグインをエージェントごとにオンにします。長いセッションの古いやり取りを、モデルが再び開ける要約に畳み込み、セッションをモデルのコンテキストウィンドウに収めます。対象は Pi、omp、OpenCode、Claude Code で、オンにしてもリクエストは magpie を通ります。magpie はインストールでき（<code>npm install -g billion-context --prefix=~/.local</code>）、billion-context 自身のインストーラーとリムーバーを実行します。オフにすると、インストールで変わったエージェントの設定を元に戻します。ここでオンにしたエージェントでは billion-context-pi や opencode-acp を併用できません。</p>
 
     <h2 id="touch"><a class="anchor" href="#touch">magpie が触るもの</a></h2>
     <ul>

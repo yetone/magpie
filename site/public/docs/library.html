@@ -92,6 +92,7 @@
     <a href="#models">Subagent models</a>
     <a href="#hooks">Hooks</a>
     <a href="#rtk">RTK</a>
+    <a href="#billion-context">billion-context</a>
     <a href="#touch">What magpie touches</a>
   </aside>
 
@@ -99,7 +100,7 @@
     <p class="eyebrow" id="overview">Docs · Library</p>
     <h1>Library</h1>
     <p class="lede">magpie’s <span class="ui">Library</span> keeps instructions, MCP servers, skills, hooks and subagents in one place, and writes each of them into every agent you tick for it, in that agent’s own files and format. The agents read those files as they always do. magpie adds no layer between an agent and what it is given: the agent itself decides when to use a skill, an MCP tool or a subagent.</p>
-    <p>The page has six tabs: <span class="ui">Instructions</span>, <span class="ui">MCP servers</span>, <span class="ui">Skills</span>, <span class="ui">Hooks</span>, <span class="ui">Subagents</span> and <span class="ui">RTK</span>. Each item has a row of agents; tick an agent to give it the item, untick it to take it away. An agent reads the change when it starts again.</p>
+    <p>The page has seven tabs: <span class="ui">Instructions</span>, <span class="ui">MCP servers</span>, <span class="ui">Skills</span>, <span class="ui">Hooks</span>, <span class="ui">Subagents</span>, <span class="ui">RTK</span> and <span class="ui">billion-context</span>. Each item has a row of agents; tick an agent to give it the item, untick it to take it away. An agent reads the change when it starts again.</p>
 
     <h2 id="where"><a class="anchor" href="#where">Where it is kept</a></h2>
     <ul>
@@ -234,6 +235,9 @@ magpie library sync     # write it into the agents again</pre>
 
     <h2 id="rtk"><a class="anchor" href="#rtk">RTK</a></h2>
     <p>The RTK tab turns on <a href="https://www.rtk-ai.app/">RTK</a> per agent: the agent’s shell commands run through RTK, which shortens their output to save tokens. magpie can install RTK for you; turning it off works with RTK gone.</p>
+
+    <h2 id="billion-context"><a class="anchor" href="#billion-context">billion-context</a></h2>
+    <p>The billion-context tab turns on <a href="https://github.com/ranxianglei/billion-context">billion-context</a>’s plugin per agent: it folds older turns of a long session into summaries the model can open again, so the session stays inside the model’s window. It is offered for Pi, omp, OpenCode and Claude Code, whose requests still go through magpie with it on. magpie can install it for you (<code>npm install -g billion-context --prefix=~/.local</code>) and runs its own installer and remover; turning it off puts back what the install changed in the agent’s settings. An agent turned on here can’t also run billion-context-pi or opencode-acp.</p>
 
     <h2 id="touch"><a class="anchor" href="#touch">What magpie touches</a></h2>
     <ul>

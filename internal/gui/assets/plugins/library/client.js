@@ -35,6 +35,8 @@ magpie.plugin("library", (ctx) => {
 
   const GLYPH = {
     cmd: "M3 4.5h10v7H3z M5.5 7l1.5 1.2-1.5 1.3 M8.5 9.5h2",
+    // two arrows closing on a line: billion-context folding a context
+    fold: "M8 2v4 M6 4.2 8 6l2-1.8 M8 14v-4 M6 11.8 8 10l2 1.8 M3 8h10",
     web: "M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z M2.5 8h11 M8 2.5c1.6 1.7 2.3 3.5 2.3 5.5S9.6 11.8 8 13.5 M8 2.5C6.4 4.2 5.7 6 5.7 8s.7 3.8 2.3 5.5",
     skill: "M4 2.5h6.5L12 4v9.5H4z M6 6h4 M6 8.5h4 M6 11h2.5",
     doc: "M4 2.5h5.5L12 5v8.5H4z M9.5 2.5V5H12",
@@ -533,8 +535,9 @@ magpie.plugin("library", (ctx) => {
       // opening the page (its nav clicked, while on it too) draws it again
       // only for a change, or for RTK's tab, which is asked again: a page
       // drawn over again replaced the row under the reader's pointer (#3099)
-      if (quiet === "open" && seen(lib) === was && tab !== "rtk" && page.querySelector(":scope > .lib-body")) return;
+      if (quiet === "open" && seen(lib) === was && tab !== "rtk" && tab !== "bili" && page.querySelector(":scope > .lib-body")) return;
       rtk = null; // asked again when its tab is drawn: an agent may have been installed since
+      bili = null;
       piView = null;
       render();
     } catch (e) {
@@ -808,8 +811,8 @@ magpie.plugin("library", (ctx) => {
       ch.append(bar("26px", 26, "lib-sk-icon"), bar("150px", 11));
       card.append(ch, rows(1, false).firstChild);
       box.append(card, head("60px"), rows(6, true));
-    } else if (which === "rtk") {
-      box.append(rows(1, false), head("60px"), rows(5, true));
+    } else if (which === "rtk" || which === "bili") {
+      box.append(rows(1, false), head("60px"), rows(which === "rtk" ? 5 : 3, true));
     } else if (which === "memory") {
       box.append(rows(1, true), rows(6, false));
     } else if (which === "pi") {
@@ -826,6 +829,8 @@ magpie.plugin("library", (ctx) => {
     // RTK's count read afresh each time its tab is opened: an agent run
     // since adds to it (#741); the page keeps the last one until then
     if (id === "rtk" && rtk) loadRTK();
+    // and which agents have billion-context's plugin: bili switched outside magpie
+    if (id === "bili" && bili) loadBili();
     // Pi's extensions too: one installed or changed outside magpie since
     if (id === "pi" && piView) loadPi();
     // memory too: agents save to it while the page is open
@@ -847,6 +852,7 @@ magpie.plugin("library", (ctx) => {
       ["hooks", t("Hooks") + n("hooks")],
       ["subagents", t("Subagents") + n("subagents")],
       ["rtk", "RTK"],
+      ["bili", "billion-context"],
       ...(hasPi() ? [["pi", t("Pi packages")]] : []),
     ], tab, openTab);
     tabs.classList.add("lib-tabs");
@@ -915,6 +921,7 @@ magpie.plugin("library", (ctx) => {
     if (tab === "instructions") renderInstructions(body);
     else if (tab === "mcp") renderServers(body);
     else if (tab === "rtk") renderRTK(body);
+    else if (tab === "bili") renderBili(body);
     else if (tab === "memory") renderMemory(body);
     else if (tab === "pi") renderPi(body);
     else if (tab === "hooks") renderHooks(body);
@@ -1449,6 +1456,107 @@ magpie.plugin("library", (ctx) => {
     rtkBusy.delete(a.id);
     render();
   }
+  // ---------- billion-context ----------
+
+  // billion-context (its CLI bili) folds an agent's older turns into
+  // summaries the model can open again, so a long session stays in the
+  // window. magpie runs bili's own installer for each agent switched on and
+  // its remover for one switched off, then puts back what the install
+  // changed in the agent's files (bili.go).
+  let bili = null;          // /api/library/bili
+  const biliBusy = new Set(); // agents being switched
+  let biliLoading = false, biliInstalling = false, biliInstallErr = "";
+  async function loadBili() {
+    if (biliLoading) return;
+    biliLoading = true;
+    try {
+      bili = await api("library/bili");
+    } catch (e) {
+      status(e.message, "err");
+    }
+    biliLoading = false;
+    if (tab === "bili" && bili) render();
+  }
+  function renderBili(body) {
+    body.append(intro(t("billion-context folds an agent's older turns into summaries the model can open again, so a long session stays inside its window. Switch it on for an agent and magpie runs billion-context's own installer for it.")));
+    if (!bili) {
+      body.append(el("div", "row skeleton"));
+      loadBili();
+      return;
+    }
+    const card = el("div", "list lib-card lib-bili");
+    const ttl = el("div", "lib-cardhead");
+    ttl.append(glyph(GLYPH.fold), el("b", "", "billion-context"), el("span", "grow"));
+    card.append(ttl);
+    if (bili.path) {
+      ttl.append(el("span", "note mono", bili.version ? "v" + bili.version : tilde(bili.path)));
+      card.append(el("p", "lib-rtk-gain", t("An agent switched on here can't also run billion-context-pi or opencode-acp.")));
+      if (bili.listErr) card.append(el("p", "lib-rtk-note lib-rtk-err", t("magpie couldn't read which agents have it: {why}", { why: bili.listErr })));
+    } else {
+      card.append(el("p", "lib-rtk-gain", biliInstalling
+        ? t("Installing billion-context… this can take a minute.")
+        : t("billion-context isn't installed. magpie can install it for you, or get it from its site.")));
+      if (bili.install) card.append(el("p", "lib-rtk-cmd", bili.install));
+      if (biliInstallErr && !biliInstalling) card.append(el("p", "lib-rtk-note lib-rtk-err lib-bili-install-err", t("The install failed: {why}", { why: biliInstallErr })));
+      const acts = el("div", "lib-acts");
+      if (bili.install) {
+        const ib = button(biliInstalling ? t("Installing…") : t("Install billion-context"), "action", installBili);
+        ib.disabled = biliInstalling;
+        acts.append(ib);
+      }
+      acts.append(button(t("Get billion-context"), bili.install ? "" : "action", () => browse(bili.url)), button(t("Check again"), "", () => { bili = null; render(); }));
+      card.append(acts);
+    }
+    body.append(card);
+    const rh = el("div", "row-head");
+    rh.append(el("span", "label", t("Agents")), el("span", "grow"), el("span", "note", t("restart an agent after switching it")));
+    body.append(rh);
+    const list = el("div", "list lib-list");
+    const rows = bili.agents.filter((a) => !isHidden(a));
+    for (const a of rows) {
+      const row = el("div", "row lib-row");
+      const who = el("div", "who");
+      who.append(el("div", "name", a.name));
+      row.append(icon(a.icon), who, el("span", "grow"));
+      // bili lists it as neither on nor off: partly there, broken
+      if (a.status) row.append(tag(t("Not whole"), "warn", t("bili plugin list says: {status}. Switch it off to take out what is there.", { status: a.status })));
+      const on = a.on || !!a.status;
+      const sw = toggle(on, t("{agent} folds its context with billion-context", { agent: a.name }), (v) => setBili(a, v));
+      if ((!bili.path) || biliBusy.has(a.id) || biliInstalling) sw.disabled = true;
+      row.append(sw);
+      list.append(row);
+    }
+    if (!rows.length) list.append(el("div", "lib-none", t("None of your agents is one billion-context has a plugin for that works with magpie: Pi, omp, OpenCode or Claude Code.")));
+    body.append(list);
+  }
+  async function setBili(a, on) {
+    biliBusy.add(a.id);
+    render();
+    try {
+      bili = await api("library/bili", { agent: a.id, on });
+      const names = (bili.restart || [a.id]).map((id) => bili.agents.find((x) => x.id === id)?.name || id).join(", ");
+      status(on ? t("billion-context is on for {agent} — restart it to use it", { agent: names }) : t("billion-context is off for {agent} — restart it to see it", { agent: names }), "ok", 6000);
+    } catch (e) {
+      status(e.message, "err", 8000);
+    }
+    biliBusy.delete(a.id);
+    render();
+  }
+  async function installBili() {
+    biliInstalling = true;
+    biliInstallErr = "";
+    render();
+    try {
+      bili = await api("library/bili/install", {});
+      status(t("billion-context is installed — switch it on for your agents below"), "ok", 6000);
+    } catch (e) {
+      biliInstallErr = e.message;
+      status(e.message, "err", 10000);
+    }
+    biliInstalling = false;
+    render();
+  }
+
   // ---------- Pi extensions ----------
 
   // Each Pi here (this computer's, and each WSL distro's) with the
