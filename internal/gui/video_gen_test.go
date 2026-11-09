@@ -9,7 +9,7 @@ import (
 	"github.com/yetone/magpie/internal/settings"
 )
 
-// Settings › Images › Video generation lists a custom provider's model the
+// Settings › Models › Images › Video generation lists a custom provider's model the
 // user marked a video model (#1399), and none of its others; one unticked
 // in its editor is left out unless it is the one picked; a pick no longer
 // marked is said missing, with Automatic's named.

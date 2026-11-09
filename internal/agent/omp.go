@@ -730,7 +730,7 @@ func ompProviderAt(gw, version string) ompProviderEntry {
 // the whole file away over an api it doesn't list.
 const ompKindSince = "18.7.0"
 
-// ompImageModels are magpie's image models (Settings › Images, as
+// ompImageModels are magpie's image models (Settings › Models › Images, as
 // generate_image offers them) as omp's image role takes them (treeman_26897
 // on Discord): kind image on openai-images, which omp's generate_image
 // posts to the provider's baseUrl + /images/generations, or /images/edits

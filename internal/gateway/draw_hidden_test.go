@@ -13,7 +13,7 @@ import (
 
 // 321sssrt on X: an image model unticked in its provider's editor
 // (HiddenDrawers) leaves what lists image models to pick from, and
-// Automatic, but still draws when named or picked in Settings › Images.
+// Automatic, but still draws when named or picked in Settings › Models › Images.
 func TestHiddenDrawerLeavesListsButStillDraws(t *testing.T) {
 	fresh(t)
 	drawingRelay(t, "hd", "gpt-image-hidden", "gpt-image-shown")

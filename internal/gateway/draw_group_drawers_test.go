@@ -80,7 +80,7 @@ func TestImageGroupOfUnpickedImageModelsDraws(t *testing.T) {
 		t.Fatalf("group/pix-images: %d %s", code, raw)
 	}
 
-	// picked in Settings › Images, it draws a request naming no model
+	// picked in Settings › Models › Images, it draws a request naming no model
 	st := settings.Load()
 	st.ImageGen = "group/pix-images"
 	if err := settings.Save(st); err != nil {

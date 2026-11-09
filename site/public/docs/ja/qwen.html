@@ -208,7 +208,7 @@ magpie opencode qwen/qwen3.8-max</pre></div>
     <ul>
       <li><b>ストリーミングしない返答。</b>思考する Qwen モデルは DashScope ではストリーミングでしか返答せず、返答をまとめて求めるリクエストは断られます。ツールやルーティンググループの分類器がまとめた返答を求めたとき、magpie は DashScope にストリーミングで求め、思考を含めた返答全体をツールに渡します。</li>
       <li><b>常に思考するモデル。</b>DashScope の <code>glm-5.3</code> のように、思考をオフにできないモデルがあります。ツールがオフを求めてモデルが断ったとき、magpie は思考をオンのまま聞き直します。</li>
-      <li><b>画像。</b>Qwen-Image と <code>wan2.7-image</code> モデルは DashScope 自身の画像 API で描きます。6 つのプリセットのどれでも使えます。magpie の <span class="ui">設定 → 画像</span> で選びます。サイズは <code>幅x高さ</code> で、最大 2048×2048 です。</li>
+      <li><b>画像。</b>Qwen-Image と <code>wan2.7-image</code> モデルは DashScope 自身の画像 API で描きます。6 つのプリセットのどれでも使えます。magpie の <span class="ui">設定 → モデル → 画像</span> で選びます。サイズは <code>幅x高さ</code> で、最大 2048×2048 です。</li>
     </ul>
 
     <h2 id="usage"><a class="anchor" href="#usage">残高と使用量</a></h2>

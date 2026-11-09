@@ -573,7 +573,7 @@ resets are still used on bigmodel.cn.
 
 Codex's native image tool first asks the provider that served its conversation
 turn for the requested image model. If that provider does not list the model,
-or the turn cannot be identified, it uses Settings → Images → Image generation
+or the turn cannot be identified, it uses Settings → Models → Images → Image generation
 (including Automatic). Off disables this fallback, not a matching model on the
 turn's provider. An explicit `provider/model` keeps its destination; an upstream
 image error does not retry through the setting. Magpie Image MCP is not required.

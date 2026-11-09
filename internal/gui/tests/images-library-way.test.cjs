@@ -1,6 +1,6 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // #2091 (nailuoGG): under the Essentials preset the Library is switched off
-// and leaves the window, but Settings › Images' Image generation still said
+// and leaves the window, but Settings › Models › Images' Image generation still said
 // "Give an agent the tool from Library → MCP servers → Discover → Magpie
 // Image", a page that isn't there. The row now says where the tool comes
 // from as things are: with the Library off it says it is off and offers

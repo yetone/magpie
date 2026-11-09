@@ -1047,7 +1047,7 @@ func (s *server) ask(method string, params any) (json.RawMessage, int, error) {
 // asked.
 func (s *server) modelProps() map[string]any {
 	out := map[string]any{
-		tool:      map[string]any{"type": "string", "description": "The image model to use, as provider/model. Leave it out to use the one set in Magpie (Settings → Images → Image generation)."},
+		tool:      map[string]any{"type": "string", "description": "The image model to use, as provider/model. Leave it out to use the one set in Magpie (Settings → Models → Images → Image generation)."},
 		videoTool: map[string]any{"type": "string", "description": "The video model to use, as provider/model. Leave it out to use the video model set up in Magpie."},
 	}
 	res, _, err := s.ask("tools/list", map[string]any{})

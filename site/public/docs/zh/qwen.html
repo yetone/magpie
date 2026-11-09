@@ -216,7 +216,7 @@ magpie opencode qwen-cn/qwen3.8-max</pre></div>
     <ul>
       <li><b>一次性返回的回复。</b>会思考的千问模型在 DashScope 上只能流式返回，要求一次性返回整个回复的请求会被拒绝。工具或路由分组的分类器要一次性回复时，magpie 向 DashScope 要流式回复，再把完整回复（含思考）交给工具。</li>
       <li><b>一直思考的模型。</b>DashScope 上有的模型不允许关掉思考，比如它的 <code>glm-5.3</code>。工具要求关掉思考而模型拒绝时，magpie 会保持思考开启再问一次。</li>
-      <li><b>图片。</b>Qwen-Image 和 <code>wan2.7-image</code> 模型通过 DashScope 自己的图片接口生成图片，六个预设都可以。在 magpie 的 <span class="ui">设置 → 图像</span> 里选用。尺寸写成 <code>宽x高</code>，最大 2048×2048。</li>
+      <li><b>图片。</b>Qwen-Image 和 <code>wan2.7-image</code> 模型通过 DashScope 自己的图片接口生成图片，六个预设都可以。在 magpie 的 <span class="ui">设置 → 模型 → 图像</span> 里选用。尺寸写成 <code>宽x高</code>，最大 2048×2048。</li>
     </ul>
 
     <h2 id="usage"><a class="anchor" href="#usage">余额与用量</a></h2>

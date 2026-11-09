@@ -2,8 +2,8 @@
 // 321sssrt on X: "openai有几十个图片模型，我没办法像是llm一样屏蔽他们". A
 // provider's editor listed its image models as plain chips nothing could
 // change. Now each is ticked, a click unticks it (and ticks it back), and
-// Save writes the unticked ones as hiddenDrawers, which Settings › Images
-// then leaves out. A pick in Settings › Images that was unticked since
+// Save writes the unticked ones as hiddenDrawers, which Settings › Models › Images
+// then leaves out. A pick in Settings › Models › Images that was unticked since
 // still draws, and its row says so and how to keep it listed. Every
 // language, wide and at a phone's width; the API is faked here.
 const assert = require("node:assert/strict");
@@ -74,11 +74,11 @@ function serve(lang, saves, cur) {
 }
 
 const words = {
-  en: { save: "Save", field: "Image models", hint: /Settings → Images lists the ticked ones/, note: [/dall-e-3 · OpenAI, picked here, is unticked/, /it still draws/] },
-  zh: { save: "保存", field: "图像模型", hint: /设置 → 图像 只列出已勾选的/, note: [/dall-e-3 · OpenAI 是此处选中的/, /它仍用于生图/] },
-  "zh-TW": { save: "儲存", field: "影像模型", hint: /設定 → 影像 只列出已勾選的/, note: [/dall-e-3 · OpenAI 是此處選取的/, /它仍用於生圖/] },
-  ja: { save: "保存", field: "画像モデル", hint: /設定 → 画像 にはチェックしたものだけ/, note: [/ここで選んだ dall-e-3 · OpenAI は/, /描画には引き続き使われます/] },
-  de: { save: "Speichern", field: "Bildmodelle", hint: /Einstellungen → Bilder listet die angehakten/, note: [/dall-e-3 · OpenAI, hier gewählt, ist/, /Es zeichnet weiter/] },
+  en: { save: "Save", field: "Image models", hint: /Settings → Models → Images lists the ticked ones/, note: [/dall-e-3 · OpenAI, picked here, is unticked/, /it still draws/] },
+  zh: { save: "保存", field: "图像模型", hint: /设置 → 模型 → 图像 只列出已勾选的/, note: [/dall-e-3 · OpenAI 是此处选中的/, /它仍用于生图/] },
+  "zh-TW": { save: "儲存", field: "影像模型", hint: /設定 → 模型 → 影像 只列出已勾選的/, note: [/dall-e-3 · OpenAI 是此處選取的/, /它仍用於生圖/] },
+  ja: { save: "保存", field: "画像モデル", hint: /設定 → モデル → 画像 にはチェックしたものだけ/, note: [/ここで選んだ dall-e-3 · OpenAI は/, /描画には引き続き使われます/] },
+  de: { save: "Speichern", field: "Bildmodelle", hint: /Einstellungen → Modelle → Bilder listet die angehakten/, note: [/dall-e-3 · OpenAI, hier gewählt, ist/, /Es zeichnet weiter/] },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -131,7 +131,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.deepEqual(page.errors, []);
           await page.context().close();
         });
-        await t.test(`${lang} at ${width}px: Settings › Images says a hidden pick still draws`, async () => {
+        await t.test(`${lang} at ${width}px: Settings › Models › Images says a hidden pick still draws`, async () => {
           const page = await open(lang, width, "settings&tab=models", [], settingsPayload(lang, { imageGen: "openai/dall-e-3", imageGenHidden: true }));
           await page.locator("#imageGenRow").waitFor();
           const note = page.locator("#imageGenRow .image-gen-hidden");

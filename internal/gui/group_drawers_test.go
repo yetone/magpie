@@ -12,7 +12,7 @@ import (
 // jzw690 on X: the group editor's "Add a model" offers a provider's
 // image models (its live list's gpt-image-2) beside its chat models, as
 // drawers apart from them; a group holding one, from a provider whose
-// picks leave it out, shows it ready, and Settings › Images offers that
+// picks leave it out, shows it ready, and Settings › Models › Images offers that
 // group. One unticked in its provider's editor isn't offered, unless a
 // group names it already.
 func TestGroupEditorOffersImageModels(t *testing.T) {
@@ -71,6 +71,6 @@ func TestGroupEditorOffersImageModels(t *testing.T) {
 		}
 	}
 	if !slices.ContainsFunc(settingsState().ImageGenModels, func(m modelRef) bool { return m.ID == "group/pix-images" }) {
-		t.Fatal("Settings › Images doesn't offer the group")
+		t.Fatal("Settings › Models › Images doesn't offer the group")
 	}
 }

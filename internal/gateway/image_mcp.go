@@ -24,7 +24,7 @@ import (
 	"github.com/yetone/magpie/internal/settings"
 )
 
-// magpie's image generation, the model Settings › Images › Image generation
+// magpie's image generation, the model Settings › Models › Images › Image generation
 // names, is also an MCP server the gateway serves itself, beside image
 // recognition's (JonahFu on X): Magpie Image (internal/imagemcp) is a stdio
 // server the Library gives an agent on this computer, which a gateway in
@@ -141,7 +141,7 @@ func imageMCPTools(r *http.Request) []any {
 		map[string]any{
 			"name":  GenerateImageTool,
 			"title": "Generate image",
-			"description": "Generate an image from a text prompt, or edit/combine images given as reference_images, with the image model set in Magpie (Settings → Images → Image generation) or the one model names. " +
+			"description": "Generate an image from a text prompt, or edit/combine images given as reference_images, with the image model set in Magpie (Settings → Models → Images → Image generation) or the one model names. " +
 				"The image comes back in the answer and at a URL Magpie keeps it at for an hour (the link opens without a header, in a browser too, until it expires); nothing is saved in your project, so save it there yourself if you need it. " +
 				"When it is not ready within about 20 seconds, the answer is an id to wait on with " + GenerationResultTool + " instead. Write a detailed prompt: subject, style, composition, colours, any text to render exactly.",
 			"inputSchema": ro(ImageToolProps(imageMCPFrom+"s"), false),
@@ -212,7 +212,7 @@ func (s *Server) imageMCPCall(r *http.Request, m mcpMessage) (any, map[string]an
 			"protocolVersion": mcpVersion(m),
 			"capabilities":    map[string]any{"tools": map[string]any{}},
 			"serverInfo":      map[string]any{"name": "magpie-image", "title": "Magpie Image", "version": Version},
-			"instructions":    GenerateImageTool + " draws with the image model set in magpie (Settings → Images → Image generation) and " + GenerateVideoTool + " makes a short video; images come back in the answer and at a URL, videos at a URL, nothing is saved in your project.",
+			"instructions":    GenerateImageTool + " draws with the image model set in magpie (Settings → Models → Images → Image generation) and " + GenerateVideoTool + " makes a short video; images come back in the answer and at a URL, videos at a URL, nothing is saved in your project.",
 		}, nil
 	case "ping":
 		return map[string]any{}, nil
@@ -265,7 +265,7 @@ func imageGenOff() (map[string]any, bool) {
 	if settings.Load().ImageGen != "off" {
 		return nil, false
 	}
-	return toolResult("Image generation is off in magpie: pick a model for it in Settings → Images → Image generation", true), true
+	return toolResult("Image generation is off in magpie: pick a model for it in Settings → Models → Images → Image generation", true), true
 }
 
 // imageMCPDraw starts generate_image's drawing and answers with what it

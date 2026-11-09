@@ -620,13 +620,13 @@ type Provider struct {
 	Unlisted bool `json:"unlisted,omitempty"`
 	// HiddenDrawers are the provider's image models the user unticked in
 	// its editor (321sssrt on X: an OpenAI key lists a dozen): left out of
-	// every list one is picked from (Settings › Images, another magpie's
+	// every list one is picked from (Settings › Models › Images, another magpie's
 	// list, Aside's) and of Automatic's choice, as an unticked chat model
 	// is left out of the agents' lists. A deny list beside Models, not in
 	// it: Models is what agents chat with, empty meaning the vendor's list,
 	// so an image model put there would be offered to chat with, and
 	// hiding one would mean picking every chat model. A request that names
-	// one still draws with it, and so does the one Settings › Images
+	// one still draws with it, and so does the one Settings › Models › Images
 	// names: a hidden pick is shown as picked, and said to be hidden.
 	HiddenDrawers []string `json:"hiddenDrawers,omitempty"`
 	// HiddenVideomakers are its video models unticked in its editor, as

@@ -128,7 +128,7 @@ func drawerMissing(v string) string {
 
 // GroupDraws is whether the routing group ref ("group/<id>") has a member
 // that draws: a model among its provider's Drawers. Such a group may be
-// picked in Settings › Images, and draws on those members in its routing's
+// picked in Settings › Models › Images, and draws on those members in its routing's
 // order, moving on while one fails (drawingGroup, #2005).
 func GroupDraws(ref string) bool {
 	_, ms, ok := drawingMembers(ref)
@@ -429,7 +429,7 @@ func DrawersOf(p provider.Provider, avail func() []catalog.Model) []catalog.Mode
 // (provider.HiddenDrawers, 321sssrt on X): the image models a list offers
 // to pick from and Automatic picks among. A request that names a hidden
 // one still draws with it (resolveDrawing reads Drawers), as does a
-// Settings › Images pick of one made before it was hidden.
+// Settings › Models › Images pick of one made before it was hidden.
 func OfferedDrawers(p provider.Provider) []catalog.Model {
 	ms := Drawers(p)
 	if len(p.HiddenDrawers) == 0 {
@@ -438,7 +438,7 @@ func OfferedDrawers(p provider.Provider) []catalog.Model {
 	return slices.DeleteFunc(slices.Clone(ms), func(m catalog.Model) bool { return p.DrawerHidden(m.ID) })
 }
 
-// DrawerHidden is whether ref (provider/model), a model Settings › Images
+// DrawerHidden is whether ref (provider/model), a model Settings › Models › Images
 // names, is one the user unticked in its provider's editor: it still draws,
 // and the Settings row says it is hidden. A ChatGPT account's other GPT
 // Image names stand for its one (ListedDrawer).
@@ -674,7 +674,7 @@ func (s *Server) images(edit bool) http.HandlerFunc {
 					fail(400, fmt.Sprintf("no model to draw with: the Image generation model picked in magpie's Settings, %q, isn't set up any more: pick another in Settings → Models → Image generation, or name one", v))
 					return
 				}
-				fail(400, "no model to draw with: pick one in magpie's Settings → Images → Image generation, or name one")
+				fail(400, "no model to draw with: pick one in magpie's Settings → Models → Images → Image generation, or name one")
 				return
 			}
 			d.Model, call.Model = m, m
@@ -682,7 +682,7 @@ func (s *Server) images(edit bool) http.HandlerFunc {
 		p, model, ok := s.drawingModel(r, d.Model)
 		if !ok {
 			if agentOf(r) == "codex" && !strings.Contains(d.Model, "/") {
-				fail(400, "no model to draw with: Codex's provider has no matching image model and magpie's Settings → Images → Image generation has none enabled")
+				fail(400, "no model to draw with: Codex's provider has no matching image model and magpie's Settings → Models → Images → Image generation has none enabled")
 				return
 			}
 			if off, isOff := provider.SwitchedOff(d.Model); isOff {

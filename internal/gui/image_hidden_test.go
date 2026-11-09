@@ -15,7 +15,7 @@ import (
 
 // 321sssrt on X: image models unticked in a provider's editor are saved
 // as HiddenDrawers, kept by a Save that leaves them out and cleared by [];
-// Settings › Images leaves them out, except the one picked there, which
+// Settings › Models › Images leaves them out, except the one picked there, which
 // stays listed as picked with the row saying it is hidden.
 func TestImageModelsHidden(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
@@ -63,7 +63,7 @@ func TestImageModelsHidden(t *testing.T) {
 		t.Fatalf("saved %v", got)
 	}
 	if got := listed(); !slices.Equal(got, []string{"pics/img-b"}) {
-		t.Fatalf("Settings › Images lists %v", got)
+		t.Fatalf("Settings › Models › Images lists %v", got)
 	}
 	if settingsState().ImageGenHidden {
 		t.Fatal("hidden note with nothing hidden picked")

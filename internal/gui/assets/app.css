@@ -4919,7 +4919,7 @@ input[type="checkbox"]:disabled { opacity: .45; }
 
 /* a disabled model's pattern, as typed (#1867): an id or a glob */
 .disabled-model .name { font-family: var(--code); font-size: 12px; overflow-wrap: anywhere; }
-/* Settings › Images: the way to the Magpie Image tool, under its words (#2091) */
+/* Settings › Models › Images: the way to the Magpie Image tool, under its words (#2091) */
 .lib-way .link { padding-left: 0; padding-right: 0; white-space: normal; text-align: start; }
 /* Settings › Proxy's Test result (#2076): under the row's text */
 .row.pref .sub.proxy-check { margin-top: 3px; white-space: normal; overflow-wrap: anywhere; }

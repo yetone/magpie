@@ -333,7 +333,7 @@ func groupsState() groupsJSON {
 			out.Models = append(out.Models, servedRef(e, set))
 		}
 	}
-	// the image models, as Settings › Images lists them: each provider's
+	// the image models, as Settings › Models › Images lists them: each provider's
 	// Drawers less those unticked in its editor, but one a group names
 	// already, so its card still reads it. draws: every one, an unticked
 	// one included, which draws all the same

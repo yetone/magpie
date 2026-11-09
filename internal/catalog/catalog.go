@@ -120,7 +120,7 @@ type Model struct {
 	// ChatGPT account answers for (provider.Entry's).
 	AgentsV2 bool `json:",omitempty"`
 	// Draws is set on a vendor-listed model that makes images (gpt-image-1,
-	// a relay's flux): kept with the list for Settings → Images, never
+	// a relay's flux): kept with the list for Settings → Models → Images, never
 	// offered to agents as a model to talk to.
 	Draws bool `json:",omitempty"`
 	// Films is set on a model another magpie lists as one it makes videos

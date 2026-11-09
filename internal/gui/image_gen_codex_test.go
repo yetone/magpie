@@ -12,7 +12,7 @@ import (
 	"github.com/yetone/magpie/internal/settings"
 )
 
-// #1865: Settings › Images lists a ChatGPT account's one GPT Image, marked
+// #1865: Settings › Models › Images lists a ChatGPT account's one GPT Image, marked
 // as the vendor's pick, and a gpt-image-2.5 saved when it was listed shows
 // as that entry while the saved value is kept as it is.
 func TestImageGenCodexOneEntry(t *testing.T) {

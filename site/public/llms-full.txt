@@ -1411,7 +1411,7 @@ Qwen Code is one of the agents magpie connects too: its row takes Qwen’s model
 
 - **Whole replies..** DashScope answers a thinking Qwen model only as a stream, and turns away a request for one whole reply. When an agent or a routing group’s classifier asks for one, magpie asks DashScope for a stream and gives the agent the whole reply, thinking included.
 - **Models that always think..** Some models on DashScope refuse to have thinking turned off, such as its `glm-5.3`. When an agent asks for it off and the model refuses, magpie asks again with thinking left on.
-- **Images..** The Qwen-Image and `wan2.7-image` models draw through DashScope’s own image API, on any of the six presets. Choose one in magpie’s Settings → Images. Give a size as `WIDTHxHEIGHT`, at most 2048×2048.
+- **Images..** The Qwen-Image and `wan2.7-image` models draw through DashScope’s own image API, on any of the six presets. Choose one in magpie’s Settings → Models → Images. Give a size as `WIDTHxHEIGHT`, at most 2048×2048.
 
 ## Balance and usage
 

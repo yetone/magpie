@@ -144,7 +144,7 @@ func videoModel(t *testing.T) {
 	}
 }
 
-// Settings › Images' video model: a model that makes videos is saved, one
+// Settings › Models › Images' video model: a model that makes videos is saved, one
 // that doesn't (a chat model, or none such) is refused, and a save from
 // another row, which doesn't send it, keeps it.
 func TestVideoGenCheckedAndKept(t *testing.T) {

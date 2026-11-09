@@ -8,7 +8,7 @@ import (
 	"github.com/yetone/magpie/internal/settings"
 )
 
-// 7up6666 on X: Settings › Images offers each routing group with a member
+// 7up6666 on X: Settings › Models › Images offers each routing group with a member
 // that draws, under the group's name with no provider of its own (the
 // picker puts it with Routing groups); a group of chat models only isn't
 // offered, and a picked group none of whose members draws is said missing.

@@ -1104,7 +1104,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		}
 	}
 	// its image models aren't among those agents chat with; the editor
-	// lists them apart, as Settings → Images is where one is picked
+	// lists them apart, as Settings → Models → Images is where one is picked
 	for _, m := range gateway.DrawersOf(p, func() []catalog.Model { return ls.Available }) {
 		out.DrawIDs = append(out.DrawIDs, m.ID)
 		if m.Name != "" && m.Name != m.ID {

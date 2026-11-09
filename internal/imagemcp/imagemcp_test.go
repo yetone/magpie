@@ -195,7 +195,7 @@ func TestGenerateSavesInTheProject(t *testing.T) {
 func TestGatewayRefusalIsAToolError(t *testing.T) {
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(400)
-		io.WriteString(w, `{"error":{"message":"no model draws: pick one in Settings → Images → Image generation"}}`)
+		io.WriteString(w, `{"error":{"message":"no model draws: pick one in Settings → Models → Images → Image generation"}}`)
 	}))
 	defer up.Close()
 	s := &server{gateway: up.URL, client: http.DefaultClient, agent: "x", pending: map[string]chan rpc{}}

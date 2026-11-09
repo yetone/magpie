@@ -435,7 +435,7 @@ func TestCustomProviderVideoKeepsTheCallersFields(t *testing.T) {
 	}
 }
 
-// Settings › Images › Video generation (the reporter's "custom providers
+// Settings › Models › Images › Video generation (the reporter's "custom providers
 // still can't pick a video model"): a custom provider's model the user
 // marked a video model, picked there, makes the video a request that names
 // none gets, and is generate_video's default, though Automatic would take

@@ -109,7 +109,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const hints = await sheet.locator(".mk-hint").allTextContents();
           assert(hints.includes(w("Pick the agents that may use your browser: they act in your tabs, signed in as you are.")), hints.join(" | "));
           // not the image server's word about what each image costs
-          assert(!hints.some((h) => h.includes(w("Pick the agents that may generate images: each image costs what the model set in Settings → Images charges."))));
+          assert(!hints.some((h) => h.includes(w("Pick the agents that may generate images: each image costs what the model set in Settings → Models → Images charges."))));
 
           const box = sheet.locator(".mk-browser");
           const state = box.locator(".mk-browser-state");

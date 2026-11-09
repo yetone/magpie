@@ -1,6 +1,6 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // jzw690 on X: a group's Add a model picker didn't list the providers'
-// image models, so a group of them, to pick in Settings › Images, couldn't
+// image models, so a group of them, to pick in Settings › Models › Images, couldn't
 // be made.
 // - The picker offers each image model in /api/groups' drawers, its note
 //   saying it is one; a click adds it, and its row says so and offers no
