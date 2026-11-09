@@ -3578,8 +3578,10 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .models { display: flex; flex-direction: column; gap: 6px; }
 .mbulk { display: flex; align-items: center; gap: 6px; }
 .mbulk > input { max-width: 260px; flex: 1; }
-/* a long list scrolls on its own, not the editor with it past its ends */
-.mchips { display: flex; flex-wrap: wrap; gap: 4px; max-height: min(240px, 40vh); overflow-y: auto; overscroll-behavior: contain; padding: 1px; }
+/* a long list scrolls on its own, not the editor with it past its ends
+   (:where(.holds), only while it overflows: Chromium held the wheel in a
+   short list that fits too, and the editor never scrolled under it) */
+.mchips { display: flex; flex-wrap: wrap; gap: 4px; max-height: min(240px, 40vh); overflow-y: auto; padding: 1px; }
 .mchips::-webkit-scrollbar { width: 0; }
 /* let out to its full height (#833): the editor's body scrolls instead */
 .mchips.open { max-height: none; overflow-y: visible; }
