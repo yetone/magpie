@@ -108,7 +108,15 @@ func mediaModelsFor(r *http.Request, video bool) (all, shown []string, def strin
 	all, def = mediaModels(video)
 	who, held := keyListHolds(r)
 	if !held {
-		return all, all, def
+		if !withGatewayKey(r) || !provider.GroupsBound() {
+			return all, all, def
+		}
+		for _, ref := range all { // less a group bound to other keys
+			if g, _, ok := provider.FindGroup(ref); !ok || !groupBarred(who, g) {
+				shown = append(shown, ref)
+			}
+		}
+		return all, shown, def
 	}
 	for _, ref := range all {
 		if refAllowed(who, ref) {

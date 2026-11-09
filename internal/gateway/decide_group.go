@@ -95,8 +95,12 @@ func (s *Server) serveDecisionGroup(w http.ResponseWriter, r *http.Request, body
 	accWho, accHeld := accountHolds(r)
 	// a gateway key held to some models (#882) names the group, or the
 	// models of it it may use
-	if keyHeld && !groupAllowed(keyWho, g, ms) {
-		writeError(w, provider.Chat, http.StatusForbidden, keyModelError(keyWho, asked))
+	if !groupGiven(r, keyWho, keyHeld, g, ms) {
+		msg := keyModelError(keyWho, asked)
+		if groupBarred(keyWho, g) { // bound to other keys
+			msg = groupKeysError(keyWho, g)
+		}
+		writeError(w, provider.Chat, http.StatusForbidden, msg)
 		return
 	}
 	// a model a pause rule holds for now is out, as for a chat

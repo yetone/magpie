@@ -393,10 +393,10 @@ func maskRouteFor(r *http.Request, h maskHits) string {
 	if !MaskRoute(to) {
 		return ""
 	}
-	if who, held := keyHolds(r); held {
+	if who, held := keyHolds(r); held || withGatewayKey(r) {
 		p, model, _ := provider.Resolve(to)
 		g, ms, isGroup := provider.FindGroup(to)
-		if isGroup && !groupAllowed(who, g, ms) || !isGroup && !modelAllowed(who, p, model) {
+		if isGroup && !groupGiven(r, who, held, g, ms) || held && !isGroup && !modelAllowed(who, p, model) {
 			return ""
 		}
 	}

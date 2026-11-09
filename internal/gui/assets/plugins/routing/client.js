@@ -5994,11 +5994,11 @@ function routingPage(part) {
       .map(([id, m]) => [id, Object.fromEntries(Object.entries(m).filter(([a, b]) => words.includes(a) && words.includes(b)))]));
     const group = (g) => ({ ...g, id: String(g.id ?? ""), name: typeof g.name === "string" && g.name ? g.name : String(g.id ?? ""),
       members: ids(g.members), memberInfo: objs(g.memberInfo), holds: ids(g.holds), offers: ids(g.offers), shared: ids(g.shared), patterns: objs(g.patterns),
-      match: opt(g.match, ids), matched: opt(g.matched, ids), off: opt(g.off, ids), fast: opt(g.fast, ids), levels: opt(g.levels, ids), weights: opt(g.weights, weightsOf), effortMaps: opt(g.effortMaps, effortMapsOf),
+      match: opt(g.match, ids), matched: opt(g.matched, ids), off: opt(g.off, ids), fast: opt(g.fast, ids), levels: opt(g.levels, ids), weights: opt(g.weights, weightsOf), effortMaps: opt(g.effortMaps, effortMapsOf), keys: opt(g.keys, ids),
       rules: opt(g.rules, (rs) => objs(rs).map((r) => ({ ...r, agents: opt(r.agents, ids), folders: opt(r.folders, ids), exceptFolders: opt(r.exceptFolders, ids) }))) });
     const refs = (v) => objs(v).filter((m) => typeof m.id === "string");
     return { ...x, groups: objs(x.groups).filter((g) => typeof g.id === "string" && g.id).map(group),
-      models: refs(x.models), deciders: refs(x.deciders), pools: objs(x.pools),
+      models: refs(x.models), deciders: refs(x.deciders), pools: objs(x.pools), gatewayKeys: x.gatewayKeys == null ? null : refs(x.gatewayKeys),
       templates: objs(x.templates).filter((tp) => tp.group && typeof tp.group === "object").map((tp) => ({ ...tp, group: group(tp.group) })) };
   }
   // quiet: the window focused again; the same groups aren't drawn again
@@ -6122,7 +6122,7 @@ function routingPage(part) {
   // there, rather than leaving the slot empty.
   const openGroupEditor = async (g) => {
     if (groupDirty() && !(await confirmDiscard())) return false;
-    gEdit = { id: g.id, draft: { name: g.name, members: [...g.members], match: [...(g.match || [])], matched: [...(g.matched || [])], fast: [...(g.fast || [])], off: [...(g.off || [])], weights: { ...(g.weights || {}) }, effortMaps: Object.fromEntries(Object.entries(g.effortMaps || {}).map(([id, m]) => [id, { ...m }])), accounts: [...(g.accounts || [])], routing: g.routing || "", pick: g.pick || "", affinity: g.affinity || "", sink: sinkModeOf(g), unlists: !!g.unlists, firstToken: g.firstToken || 0, patience: g.patience || 0, context: g.context || 0, classifier: g.classifier || "", intentSure: g.intentSure ?? null, effort: g.effort || "", levels: [...(g.levels || [])], rules: (g.rules || []).map((r) => ({ ...r, ...(r.more?.length ? { more: [...r.more] } : {}), intent: r.intent || "", agents: [...(r.agents || [])], folders: [...(r.folders || [])], exceptFolders: [...(r.exceptFolders || [])], time: r.time ? { ...r.time, days: [...(r.time.days || [])] } : null })) } };
+    gEdit = { id: g.id, draft: { name: g.name, members: [...g.members], match: [...(g.match || [])], matched: [...(g.matched || [])], fast: [...(g.fast || [])], off: [...(g.off || [])], weights: { ...(g.weights || {}) }, effortMaps: Object.fromEntries(Object.entries(g.effortMaps || {}).map(([id, m]) => [id, { ...m }])), accounts: [...(g.accounts || [])], keys: [...(g.keys || [])], routing: g.routing || "", pick: g.pick || "", affinity: g.affinity || "", sink: sinkModeOf(g), unlists: !!g.unlists, firstToken: g.firstToken || 0, patience: g.patience || 0, context: g.context || 0, classifier: g.classifier || "", intentSure: g.intentSure ?? null, effort: g.effort || "", levels: [...(g.levels || [])], rules: (g.rules || []).map((r) => ({ ...r, ...(r.more?.length ? { more: [...r.more] } : {}), intent: r.intent || "", agents: [...(r.agents || [])], folders: [...(r.folders || [])], exceptFolders: [...(r.exceptFolders || [])], time: r.time ? { ...r.time, days: [...(r.time.days || [])] } : null })) } };
     renderGroups();
     return true;
   };
@@ -7065,7 +7065,7 @@ function routingPage(part) {
     // whoever opened it, a draft has what the editor and Add read: a group
     // made from a model (newGroupWith) had no fast, and Add threw on it
     // and did nothing (悠悠哥 on Discord)
-    for (const k of ["members", "match", "matched", "fast", "off", "rules", "accounts"]) if (!Array.isArray(d[k])) d[k] = [];
+    for (const k of ["members", "match", "matched", "fast", "off", "rules", "accounts", "keys"]) if (!Array.isArray(d[k])) d[k] = [];
     if (!d.weights || typeof d.weights !== "object") d.weights = {};
     if (!d.effortMaps || typeof d.effortMaps !== "object") d.effortMaps = {};
     const ed = el("div", "editor rt-gedit");
@@ -7502,6 +7502,49 @@ function routingPage(part) {
     };
     drawAccounts();
 
+    // how a part works, said under an ⓘ beside it rather than in a
+    // paragraph under it: on hover, and read out with focus
+    const infoTip = (text) => {
+      const s = el("span", "rt-info");
+      s.tabIndex = 0;
+      s.setAttribute("role", "img");
+      const set = (v) => { s.title = v; s.setAttribute("aria-label", v); };
+      set(text);
+      s.set = set;
+      s.append(svg(INFO_I, 14, 1.5));
+      return s;
+    };
+
+    // gateway keys (Xerxes754 on X): a group bound to some keys is theirs
+    // alone; any other key neither lists it nor reaches it (Group.Keys,
+    // groupBarred). Left on any key, every key may use it, as before. The
+    // row shows once there is a key to bind, or the group is bound already
+    const keysLabel = el("label", "rt-gkeys", t("Gateway keys")), keysBox = el("div", "rt-gkeys");
+    ed.append(keysLabel, keysBox);
+    const drawKeys = () => {
+      const all = groups.gatewayKeys || [];
+      keysLabel.hidden = keysBox.hidden = !all.length && !d.keys.length;
+      const nameOf = (id) => all.find((k) => k.id === id)?.name || id;
+      const b = el("button", "rt-cond rt-gkey" + (d.keys.length ? " on" : ""));
+      b.type = "button";
+      b.append(el("span", "", d.keys.length === 1 ? nameOf(d.keys[0]) : d.keys.length ? t("{n} gateway keys", { n: d.keys.length }) : t("Any gateway key")));
+      b.title = d.keys.length ? t("Only {keys} may see and use this group", { keys: d.keys.map(nameOf).join(", ") }) : t("Every gateway key may use this group");
+      b.setAttribute("aria-label", `${t("Gateway keys")}: ${b.textContent}`);
+      // a key bound, then deleted, stays listed until it is unpicked; when
+      // the keys couldn't be read (null), it is only not known
+      const gone = d.keys.filter((id) => !all.some((k) => k.id === id)).map((id) => ({ value: id, label: id, note: groups.gatewayKeys ? t("key deleted") : "" }));
+      b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "gatewayKey", label: "gateway key", value: "", menu: true, multi: true,
+        options: [...all.map((k) => ({ value: k.id, label: k.name, note: k.off ? t("off") : k.masked || "" })), ...gone], picked: (v) => d.keys.includes(v), onPick: (v) => {
+          if (!v) return;
+          d.keys = d.keys.includes(v) ? d.keys.filter((x) => x !== v) : [...d.keys, v];
+          drawKeys();
+        } }, b, ev);
+      const row = el("div", "rt-pickrow");
+      row.append(b, infoTip(t("Bound to some keys, the group is theirs alone: any other gateway key neither sees it in its model list nor can use it. A request from this computer without a key still can.")));
+      keysBox.replaceChildren(row);
+    };
+    drawKeys();
+
     // patterns: models found by their ids, now and as providers list new
     // ones (#766): after the models named, in the catalog's order, until
     // the user puts them in another; then each keeps its place, one gone
@@ -7706,18 +7749,6 @@ function routingPage(part) {
     // "用户要输入、填写这么多东西，太恐怖了"; CherryL1quor on X took Jev for
     // the effort alone while the intent sat among the others).
     const RULE_PAUSE = "M6 4.5v7M10 4.5v7", RULE_SEND = "M3 8h9M8.5 4.5 12 8l-3.5 3.5", RULE_EFFORT = "M3 11.5a5 5 0 0 1 10 0M8 11.5l2.5-3.5";
-    // how a part works, said under an ⓘ beside it rather than in a
-    // paragraph under it: on hover, and read out with focus
-    const infoTip = (text) => {
-      const s = el("span", "rt-info");
-      s.tabIndex = 0;
-      s.setAttribute("role", "img");
-      const set = (v) => { s.title = v; s.setAttribute("aria-label", v); };
-      set(text);
-      s.set = set;
-      s.append(svg(INFO_I, 14, 1.5));
-      return s;
-    };
     const rbox = el("div", "fallback rt-rules");
     const rlist = el("div", "fbl");
     const rAdd = el("button", "rt-gadd");
@@ -8407,7 +8438,7 @@ function routingPage(part) {
       if (own && !d.levels.length) return status(t("Pick a level to offer, or leave them to its models"), "warn");
       saveBtn.classList.add("busy");
       // refused, Add can be pressed again (busy, it takes no clicks)
-      groupAction("save", { id: idOf(), from: g?.id, name: d.name.trim() || idOf(), members: namedOf(d), placed: d.members, match: d.match, routing: d.routing, pick: d.pick || "", affinity: d.affinity, sink: d.sink === "sink" && sinkable(d.routing), noSink: d.sink === "", firstToken: d.firstToken || 0, patience: d.patience || 0, rules: d.rules, effort: d.effort, classifier: d.rules.some((r) => r.intent) || d.effort === "auto" ? d.classifier : "", intentSure: d.intentSure ?? null, context: d.context || 0, levels: own ? d.levels : [], family: g?.family || "", fast: d.fast.filter((x) => d.members.includes(x)), off: d.off.filter((x) => d.members.includes(x)), weights: Object.fromEntries(Object.entries(d.weights).filter(([x, n]) => d.members.includes(x) && n > 1)), effortMaps: Object.fromEntries(Object.entries(d.effortMaps).filter(([x, m]) => d.members.includes(x) && Object.keys(m).length)), accounts: d.accounts.filter((a) => accountPids().includes(a.slice(0, a.indexOf("/")))), unlists: !!d.unlists }, t(g ? "{name} saved" : "{name} added", { name: d.name.trim() || idOf() }))
+      groupAction("save", { id: idOf(), from: g?.id, name: d.name.trim() || idOf(), members: namedOf(d), placed: d.members, match: d.match, routing: d.routing, pick: d.pick || "", affinity: d.affinity, sink: d.sink === "sink" && sinkable(d.routing), noSink: d.sink === "", firstToken: d.firstToken || 0, patience: d.patience || 0, rules: d.rules, effort: d.effort, classifier: d.rules.some((r) => r.intent) || d.effort === "auto" ? d.classifier : "", intentSure: d.intentSure ?? null, context: d.context || 0, levels: own ? d.levels : [], family: g?.family || "", fast: d.fast.filter((x) => d.members.includes(x)), off: d.off.filter((x) => d.members.includes(x)), weights: Object.fromEntries(Object.entries(d.weights).filter(([x, n]) => d.members.includes(x) && n > 1)), effortMaps: Object.fromEntries(Object.entries(d.effortMaps).filter(([x, m]) => d.members.includes(x) && Object.keys(m).length)), accounts: d.accounts.filter((a) => accountPids().includes(a.slice(0, a.indexOf("/")))), keys: d.keys, unlists: !!d.unlists }, t(g ? "{name} saved" : "{name} added", { name: d.name.trim() || idOf() }))
         .then(() => saveBtn.classList.remove("busy"));
     };
     // what goes wrong is said where it is seen, never a click that does nothing

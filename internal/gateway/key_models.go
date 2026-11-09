@@ -48,6 +48,7 @@ func keyHolds(r *http.Request) (access.Identity, bool) {
 			return who, false
 		}
 		who.Models, who.AccountModels = nil, false
+		who.KeyID = "" // nor do the keys a group is bound to (groupBarred)
 		return who, true
 	}
 	return who, who.Restricted() || len(who.Spent) > 0
@@ -145,10 +146,20 @@ func keyGroupRefusal(w http.ResponseWriter, who access.Identity, ref string, ms 
 // magpie using this one as a remote rests only the model on it, as the
 // key's other models are still served.
 func keyModelRefusal(w http.ResponseWriter, who access.Identity, ref string) (int, string) {
+	if g, _, ok := provider.FindGroup(ref); ok && groupBarred(who, g) {
+		return http.StatusForbidden, groupKeysError(who, g)
+	}
 	if s, ok := spentRef(who, ref); ok {
 		return spentRefusal(w, s)
 	}
 	return http.StatusForbidden, keyModelError(who, ref)
+}
+
+// groupKeysError is what a key is told of a routing group bound to other
+// keys (groupBarred).
+func groupKeysError(who access.Identity, g provider.Group) string {
+	return fmt.Sprintf("The gateway key %q may not use %s: the routing group is bound to other gateway keys. Bind this key to it in the group's editor on magpie's Routing page, or use another model.",
+		who.KeyName, g.Ref())
 }
 
 // spentRefusal is keyModelRefusal's 429 for the spent limit s.
@@ -256,8 +267,56 @@ func groupNamed(who access.Identity, g provider.Group) bool {
 // A member a spent limit counts doesn't take the group away from the key:
 // the request goes on to the others (groupKeeps).
 func groupAllowed(who access.Identity, g provider.Group, ms []provider.Member) bool {
+	if groupBarred(who, g) {
+		return false
+	}
 	who.Spent = nil
 	return groupNamed(who, g) || (foundGroup(g) || who.AccountModels) && membersAllowed(who, ms)
+}
+
+// groupBarred says the routing group g is bound to some gateway keys
+// (provider.Group.Keys, Xerxes754 on X) and who's key is none of them,
+// nor issued under one: such a key may neither use the group nor see it
+// listed, whatever models it may use, a key held to none included. It
+// is the one check a key not held to some models goes through too
+// (groupGiven, keyAllowed, keyListed); a key held to some is asked it in
+// groupAllowed. A request with no key — this computer's own, which key
+// limits never hold either — is never barred.
+func groupBarred(who access.Identity, g provider.Group) bool {
+	if len(g.Keys) == 0 || who.KeyID == "" {
+		return false
+	}
+	for k := &who; k != nil; k = k.Issuer {
+		if k.KeyID != "" && slices.Contains(g.Keys, k.KeyID) {
+			return false
+		}
+	}
+	return true
+}
+
+// groupGiven says a request may use the routing group g: held to some
+// models (keyHolds' who and held), as groupAllowed says; else unless g
+// is bound to other keys than its (groupBarred). A call magpie makes for
+// a model the user picked in its settings (magpieChose) is held by no
+// key, as keyHolds says.
+func groupGiven(r *http.Request, who access.Identity, held bool, g provider.Group, ms []provider.Member) bool {
+	if held {
+		return groupAllowed(who, g, ms)
+	}
+	if chose, _ := r.Context().Value(magpieChoseKey{}).(bool); chose {
+		return true
+	}
+	return !groupBarred(access.Caller(r.Context()), g)
+}
+
+// withGatewayKey says r comes with a gateway key that a routing group bound to
+// other keys bars (groupBarred): any key, but on a call magpie makes for
+// a model the user picked (magpieChose).
+func withGatewayKey(r *http.Request) bool {
+	if chose, _ := r.Context().Value(magpieChoseKey{}).(bool); chose {
+		return false
+	}
+	return access.Caller(r.Context()).KeyID != ""
 }
 
 // foundGroup says g is a group magpie found (one model several providers
@@ -278,13 +337,13 @@ func keyGroupFor(r *http.Request, id string) (string, bool) {
 		return gid, ok
 	}
 	who, held := keyHolds(r)
-	if !held {
+	if !held && !withGatewayKey(r) {
 		return gid, true
 	}
-	if g, ms, found := provider.FindGroup(gid); !found || groupAllowed(who, g, ms) {
+	if g, ms, found := provider.FindGroup(gid); !found || groupGiven(r, who, held, g, ms) {
 		return gid, true
 	}
-	if p, model, served := provider.Resolve(id); served && !provider.IsGroupRef(id) && modelAllowed(who, p, model) {
+	if p, model, served := provider.Resolve(id); served && !provider.IsGroupRef(id) && (!held || modelAllowed(who, p, model)) {
 		return "", false
 	}
 	return gid, true
@@ -418,7 +477,19 @@ func accountServesOn(who access.Identity, p provider.Provider, model string, ref
 func keyAllowed(r *http.Request, es []provider.Entry) []provider.Entry {
 	who, held := keyListHolds(r)
 	if !held {
-		return es
+		if !withGatewayKey(r) || !provider.GroupsBound() {
+			return es
+		}
+		// a key held to no models still isn't shown a group bound to
+		// other keys (groupBarred)
+		find := provider.GroupFinder()
+		return slices.DeleteFunc(slices.Clone(es), func(e provider.Entry) bool {
+			if e.Group == "" {
+				return false
+			}
+			g, _, ok := find(e.ID)
+			return ok && groupBarred(who, g)
+		})
 	}
 	k := newKeyList(who)
 	out := make([]provider.Entry, 0, len(es))
@@ -442,14 +513,14 @@ func keyAllowed(r *http.Request, es []provider.Entry) []provider.Entry {
 // none; a model they leave out stays out.
 func keyListed(r *http.Request, shown []provider.Entry, off func(string) bool) []provider.Entry {
 	who, held := keyListHolds(r)
-	if !held {
+	if !held && (!withGatewayKey(r) || !provider.GroupsBound()) {
 		return shown
 	}
 	if ins := provider.GroupStandIns(); len(ins) > 0 {
 		find := provider.GroupFinder()
 		given := func(id string) bool {
 			g, ms, ok := find(id)
-			return ok && groupAllowed(who, g, ms)
+			return ok && (held && groupAllowed(who, g, ms) || !held && !groupBarred(who, g))
 		}
 		in := make(map[string]bool, len(shown))
 		for _, e := range shown {
@@ -458,7 +529,7 @@ func keyListed(r *http.Request, shown []provider.Entry, off func(string) bool) [
 		shown = slices.Clone(shown)
 		for _, s := range ins {
 			e := s.Entry
-			if in[e.ID] || off != nil && off(e.ID) || !modelAllowed(who, e.Provider, e.Model) || slices.ContainsFunc(s.Groups, given) {
+			if in[e.ID] || off != nil && off(e.ID) || held && !modelAllowed(who, e.Provider, e.Model) || slices.ContainsFunc(s.Groups, given) {
 				continue
 			}
 			// beside its provider's other models, where it would be
@@ -699,7 +770,7 @@ func keyAccountNames(who access.Identity) string {
 // proto is the API the error is answered on.
 func countHeld(w http.ResponseWriter, r *http.Request, proto provider.Protocol, id string) bool {
 	keyWho, held := keyHolds(r)
-	if !held {
+	if !held && !withGatewayKey(r) {
 		return false
 	}
 	if gid, ok := keyGroupFor(r, id); ok {
@@ -713,7 +784,7 @@ func countHeld(w http.ResponseWriter, r *http.Request, proto provider.Protocol, 
 		return false // counted nowhere: a local estimate, as before
 	}
 	g, ms, isGroup := provider.FindGroup(id)
-	if isGroup && !groupAllowed(keyWho, g, ms) || !isGroup && !modelAllowed(keyWho, p, model) {
+	if isGroup && !groupGiven(r, keyWho, held, g, ms) || held && !isGroup && !modelAllowed(keyWho, p, model) {
 		st, msg := keyModelRefusal(w, keyWho, id)
 		writeError(w, proto, st, msg)
 		return true

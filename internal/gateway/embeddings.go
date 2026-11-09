@@ -134,7 +134,7 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 		r = heldByGroup(r, g) // held to the group's accounts, if it is
 	}
 	keyWho, keyHeld := keyHolds(r)
-	if keyHeld && (isGroup && !groupAllowed(keyWho, g, ms) || !isGroup && !modelAllowed(keyWho, p, model)) {
+	if isGroup && !groupGiven(r, keyWho, keyHeld, g, ms) || keyHeld && !isGroup && !modelAllowed(keyWho, p, model) {
 		st, msg := keyModelRefusal(w, keyWho, asked)
 		call.Status, call.Error = st, msg
 		writeError(w, provider.Chat, st, msg)

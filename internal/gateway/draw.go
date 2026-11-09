@@ -699,7 +699,7 @@ func (s *Server) images(edit bool) http.HandlerFunc {
 			r = heldByGroup(r, g) // held to the group's accounts, if it is
 		}
 		keyWho, keyHeld := keyHolds(r)
-		if keyHeld && named && (isGroup && !groupAllowed(keyWho, g, ms) || !isGroup && !modelAllowed(keyWho, p, model)) {
+		if named && (isGroup && !groupGiven(r, keyWho, keyHeld, g, ms) || keyHeld && !isGroup && !modelAllowed(keyWho, p, model)) {
 			fail(keyModelRefusal(w, keyWho, d.Model))
 			return
 		}

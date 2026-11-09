@@ -102,6 +102,11 @@ func (s *Server) codexSubagentPick(r *http.Request, agent, kind, asked string, b
 		if p, model, ok := provider.Resolve(to); !ok || !modelAllowed(who, p, model) {
 			pick.Kept = "the gateway key may not use it"
 		}
+	} else if withGatewayKey(r) {
+		// a routing group bound to other keys (groupBarred)
+		if g, _, ok := provider.FindGroup(to); ok && groupBarred(who, g) {
+			pick.Kept = "the gateway key may not use it"
+		}
 	}
 	return pick
 }

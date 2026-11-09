@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
@@ -58,9 +59,38 @@ type groupsJSON struct {
 	// to (Group.Accounts), as a gateway key's list has them (#905): each
 	// provider with more than one, or one a group names already
 	Accounts map[string][]keyModelJSON `json:"accounts"`
+	// GatewayKeys: the gateway keys a group may be bound to (Group.Keys),
+	// each a key of the user's that may ask for models: one issued under
+	// another follows its issuer, and a read-only or browser key asks for
+	// none
+	GatewayKeys []groupKeyJSON `json:"gatewayKeys"`
 	// Defaults: what every group follows when it sets no value of its own
 	// (settings.GroupSink, GroupFirstToken, GroupPatience)
 	Defaults groupDefaultsJSON `json:"defaults"`
+}
+
+type groupKeyJSON struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Masked string `json:"masked,omitempty"`
+	Off    bool   `json:"off,omitempty"`
+}
+
+// groupKeys is groupsJSON's GatewayKeys: nil (null) when the keys can't
+// be read, so the page doesn't take a bound key for one deleted.
+func groupKeys() []groupKeyJSON {
+	keys, err := access.List()
+	if err != nil {
+		return nil
+	}
+	out := []groupKeyJSON{}
+	for _, k := range keys {
+		if k.Issuer != "" || k.Browser || k.ReadOnly {
+			continue
+		}
+		out = append(out, groupKeyJSON{ID: k.ID, Name: k.Name, Masked: k.Masked, Off: k.Off})
+	}
+	return out
 }
 
 type groupDefaultsJSON struct {
@@ -324,6 +354,7 @@ func groupsState() groupsJSON {
 		out.Deciders = append(out.Deciders, modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Sub: e.Provider.Account != nil})
 	}
 	out.Accounts = groupAccounts(all)
+	out.GatewayKeys = groupKeys()
 	served := provider.Served()
 	chat := map[string]bool{}
 	set := settings.Shared() // the prices the user set, for each model's free tag

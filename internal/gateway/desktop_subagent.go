@@ -42,10 +42,10 @@ func desktopSubagentPick(r *http.Request, agent, named, resolved string, body []
 	}
 	// a key held to some models (#882) reads as Desktop only with
 	// Desktop's own client; its Code tab with a named key is Claude Code
-	if who, held := keyHolds(r); held {
+	if who, held := keyHolds(r); held || withGatewayKey(r) {
 		g, ms, isGroup := provider.FindGroup(to)
 		p, model, ok := provider.Resolve(to)
-		if isGroup && !groupAllowed(who, g, ms) || !isGroup && (!ok || !modelAllowed(who, p, model)) {
+		if isGroup && !groupGiven(r, who, held, g, ms) || held && !isGroup && (!ok || !modelAllowed(who, p, model)) {
 			pick.Kept = "the gateway key may not use it"
 		}
 	}

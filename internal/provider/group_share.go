@@ -53,6 +53,7 @@ func ShareGroup(id string) (string, error) {
 	g.Matched = nil
 	g.Auto, g.Hidden, g.Disabled = false, false, false
 	g.Accounts = nil // this magpie's accounts: another has its own
+	g.Keys = nil     // this magpie's gateway keys, the same
 	g.Seen = nil     // what this magpie found: another finds its own
 	g.Rules = slices.DeleteFunc(g.Rules, Rule.ByFolder)
 	out, err := json.Marshal(SharedGroup{Magpie: ShareMark, Version: ShareVersion, Group: g})
@@ -159,7 +160,8 @@ func importGroup(text string, over bool) (Imported, error) {
 		return Imported{}, err
 	}
 	g := s.Group
-	g.Accounts = nil // another magpie's accounts, never this one's
+	g.Accounts = nil    // another magpie's accounts, never this one's
+	g.Keys = []string{} // its gateway keys too; over, the user's are kept below
 	entries := providerEntries()
 	all := Groups()
 	var res Imported
@@ -260,6 +262,7 @@ func importGroup(text string, over bool) (Imported, error) {
 		g.Name, _ = freeGroupName(slices.DeleteFunc(slices.Clone(all), func(o Group) bool { return o.ID == id }), name, id)
 		g.ID = old.ID
 		g.Accounts = old.Accounts
+		g.Keys = slices.Clone(old.Keys)
 		for _, r := range old.Rules {
 			if !r.ByFolder() {
 				continue

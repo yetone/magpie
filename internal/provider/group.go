@@ -316,6 +316,16 @@ type Group struct {
 	// of a provider it names, a provider it names none of on every
 	// account it has. Empty, every account of every member serves.
 	Accounts []string `json:"accounts,omitempty"`
+	// Keys bind the group to some gateway keys (access.Key.ID; Xerxes754
+	// on X: a group for one or two keys alone). Set, a request with
+	// another key may neither use the group nor see it in a model list,
+	// whatever models that key may use; a key issued under one of them
+	// may, as it may what its issuer may. A request with no key (this
+	// computer's own) is held by no key and passes. Empty, every key the
+	// group is given passes, as before. Saved, nil keeps the group's
+	// (SaveGroup), so a caller that doesn't know of them leaves them be;
+	// empty clears them.
+	Keys []string `json:"keys,omitempty"`
 	// Auto is set on a group magpie found: one model served by several
 	// providers. It is derived, never stored.
 	Auto bool `json:"auto,omitempty"`
@@ -485,6 +495,13 @@ func sharedGroupsIn(entries []Entry) []Group {
 // cloneGroup is g with nothing shared with it (cloneGroups).
 func cloneGroup(g Group) Group { return cloneGroups([]Group{g})[0] }
 
+// GroupsBound says some routing group is bound to gateway keys
+// (Group.Keys), read from the groups held for the catalog, no copy made:
+// a model list for a key no group binds needs no other look.
+func GroupsBound() bool {
+	return slices.ContainsFunc(sharedGroups(), func(g Group) bool { return len(g.Keys) > 0 })
+}
+
 // cloneGroups is gs with nothing shared with it: no slice, map or pointer
 // of a group or its rules.
 func cloneGroups(gs []Group) []Group {
@@ -495,7 +512,7 @@ func cloneGroups(gs []Group) []Group {
 	for i, g := range gs {
 		g.Members, g.Match, g.Matched, g.Placed = slices.Clone(g.Members), slices.Clone(g.Match), slices.Clone(g.Matched), slices.Clone(g.Placed)
 		g.Off, g.Levels, g.Fast = slices.Clone(g.Off), slices.Clone(g.Levels), slices.Clone(g.Fast)
-		g.Accounts, g.Seen = slices.Clone(g.Accounts), slices.Clone(g.Seen)
+		g.Accounts, g.Seen, g.Keys = slices.Clone(g.Accounts), slices.Clone(g.Seen), slices.Clone(g.Keys)
 		g.Weights = maps.Clone(g.Weights)
 		g.EffortMaps = renamedEffortMaps(g.EffortMaps, func(m string) string { return m })
 		if g.IntentSure != nil {
@@ -689,6 +706,7 @@ func (g Group) own() Group {
 	g.Levels = slices.Clone(g.Levels)
 	g.Fast = slices.Clone(g.Fast)
 	g.Accounts = slices.Clone(g.Accounts)
+	g.Keys = slices.Clone(g.Keys)
 	g.Seen = slices.Clone(g.Seen)
 	g.Weights = maps.Clone(g.Weights)
 	g.EffortMaps = renamedEffortMaps(g.EffortMaps, func(m string) string { return m })
@@ -1681,9 +1699,14 @@ func SaveGroup(g Group) error {
 	if err := cleanEffortMaps(entries, &g); err != nil {
 		return err
 	}
-	var was []string
+	var was, keysWas []string
 	if i := slices.IndexFunc(f.Groups, func(x Group) bool { return x.ID == g.ID }); i >= 0 {
-		was = f.Groups[i].Accounts
+		was, keysWas = f.Groups[i].Accounts, f.Groups[i].Keys
+	}
+	if g.Keys == nil {
+		g.Keys = slices.Clone(keysWas) // a caller that doesn't know of them
+	} else if g.Keys, err = cleanGroupKeys(g.Keys); err != nil {
+		return err
 	}
 	if g.Accounts, err = cleanGroupAccounts(g.Accounts, was); err != nil {
 		return err
@@ -1786,6 +1809,24 @@ func SaveGroup(g Group) error {
 // held already and its provider has no more (an account signed out, a key
 // rotated) is kept as it was, matching nothing, so the group stays held
 // rather than let off to every account; a new one must be one magpie has.
+// cleanGroupKeys is a group's Keys trimmed, each once: nil for none.
+func cleanGroupKeys(in []string) ([]string, error) {
+	var out []string
+	for _, k := range in {
+		if k = strings.TrimSpace(k); k == "" || slices.Contains(out, k) {
+			continue
+		}
+		if len(k) > 200 {
+			return nil, errors.New("a group's gateway key is its id, at most 200 characters")
+		}
+		out = append(out, k)
+	}
+	if len(out) > 500 {
+		return nil, errors.New("a group can be bound to at most 500 gateway keys")
+	}
+	return out, nil
+}
+
 func cleanGroupAccounts(in, was []string) ([]string, error) {
 	var out []string
 	for _, a := range in {

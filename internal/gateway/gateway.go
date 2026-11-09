@@ -2614,7 +2614,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	keyWho, keyHeld := keyHolds(r)
 	_, accHeld := accountHolds(r)
 	chose, _ := r.Context().Value(magpieChoseKey{}).(bool)
-	if keyHeld && (isGroup && !groupAllowed(keyWho, g, ms) || !isGroup && !modelAllowed(keyWho, p, model)) {
+	if isGroup && !groupGiven(r, keyWho, keyHeld, g, ms) || keyHeld && !isGroup && !modelAllowed(keyWho, p, model) {
 		// the model the key was checked against is named, not the one the
 		// client sent: an agent that stands a request on another model
 		// (Desktop's check on its list's first, a stand-in, a tier) was
