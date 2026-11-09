@@ -269,33 +269,7 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 		defer sessions.ShareListing()()
 		q := r.URL.Query()
 		n, _ := strconv.Atoi(q.Get("days"))
-		st := statsFor(n)
-		out := st.Overview(q.Get("agent"), q.Get("model"), q.Get("cwd"), 8)
-		period := usage.All
-		if n > 0 {
-			if p, ok := usage.RangeOf(st.From, st.To); ok {
-				period = p
-			}
-		}
-		needCodex := false
-		for key, top := range out.Top {
-			out.Top[key] = slices.Clone(top)
-			for i := range out.Top[key] {
-				if out.Top[key][i].Agent == "codex" {
-					needCodex = true
-				}
-			}
-		}
-		if needCodex {
-			modelEffort := usage.CodexModelEffort(period)
-			for key, top := range out.Top {
-				for i := range top {
-					addCodexSummaryModelEffort(&top[i], modelEffort)
-				}
-				out.Top[key] = top
-			}
-		}
-		writeJSON(rw, out)
+		writeOverview(rw, max(0, n), q.Get("agent"), q.Get("model"), q.Get("cwd"))
 	}))
 	// progress is how far the reading of the session files has got, for
 	// the page to show while its first read takes a while.
@@ -634,6 +608,93 @@ func (t listTag) same(u listTag) bool {
 // page's next ask the encoding.
 func sameStats(a, b sessions.Stats) bool {
 	return a.From == b.From && a.To == b.To && slices.Equal(a.Keys, b.Keys) && reflect.DeepEqual(a.Days, b.Days)
+}
+
+// overviewKey is what an overview's answer is made from: the stats it
+// was summed from (statsForGen's gen, which moves only when they do) and
+// the page's filters. The Codex rows' model and effort are added after.
+type overviewKey struct {
+	days              int
+	gen               uint64
+	agent, model, cwd string
+}
+
+// overviews are the last few overviews sent, encoded. The Sessions page
+// asks for one on every 15s poll, and summing a long history's 34k
+// sessions by tool and skill again, to the same answer, was ~36 ms of CPU
+// an ask.
+var overviews struct {
+	sync.Mutex
+	m map[overviewKey]*overviewKept
+}
+
+type overviewKept struct {
+	out   sessions.Overview // before the Codex rows' model and effort
+	codex bool              // a top row is Codex's
+	// the CodexModelEffort map body was made with, held so that a new one
+	// is never told from it by an address the old one gave back
+	effort map[string][]sessions.ModelEffort
+	body   []byte
+}
+
+// overviewsMade counts the overviews summed, for tests.
+var overviewsMade atomic.Int64
+
+const overviewsKept = 8
+
+func writeOverview(rw http.ResponseWriter, days int, agentID, model, cwd string) {
+	st, gen := statsForGen(days)
+	key := overviewKey{days, gen, agentID, model, cwd}
+	overviews.Lock()
+	k := overviews.m[key]
+	overviews.Unlock()
+	if k == nil {
+		overviewsMade.Add(1)
+		k = &overviewKept{out: st.Overview(agentID, model, cwd, 8)}
+		for _, top := range k.out.Top {
+			for i := range top {
+				k.codex = k.codex || top[i].Agent == "codex"
+			}
+		}
+	}
+	var effort map[string][]sessions.ModelEffort
+	if k.codex {
+		period := usage.All
+		if days > 0 {
+			if p, ok := usage.RangeOf(st.From, st.To); ok {
+				period = p
+			}
+		}
+		effort = usage.CodexModelEffort(period)
+	}
+	body := k.body
+	if body == nil || reflect.ValueOf(effort).UnsafePointer() != reflect.ValueOf(k.effort).UnsafePointer() {
+		out := k.out
+		out.Top = make(map[string][]sessions.Summary, len(k.out.Top))
+		for by, top := range k.out.Top {
+			top = slices.Clone(top)
+			if k.codex {
+				for i := range top {
+					addCodexSummaryModelEffort(&top[i], effort)
+				}
+			}
+			out.Top[by] = top
+		}
+		b, err := json.Marshal(out)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		body = append(b, '\n')
+		overviews.Lock()
+		if overviews.m == nil || len(overviews.m) >= overviewsKept && overviews.m[key] == nil {
+			overviews.m = map[overviewKey]*overviewKept{} // the page asks a few at a time; the rest were left behind
+		}
+		overviews.m[key] = &overviewKept{out: k.out, codex: k.codex, effort: effort, body: body}
+		overviews.Unlock()
+	}
+	rw.Header().Set("Content-Type", "application/json")
+	_, _ = rw.Write(body)
 }
 
 func statsFor(days int) sessions.Stats {
