@@ -1075,6 +1075,12 @@ func accountSettings(a, pk Provider) Provider {
 func Hidden() []Provider {
 	var out []Provider
 	saved := storedFile().Providers
+	// most users removed none: then no account is made at all (Accounts
+	// reads every sign-in, ~0.6 MB each poll of the Providers page,
+	// which asks twice, here and through Excluded)
+	if !slices.ContainsFunc(saved, func(p Provider) bool { return p.Hidden }) {
+		return nil
+	}
 	for _, a := range Accounts() {
 		for _, p := range saved {
 			if p.ID == a.ID && p.Hidden {

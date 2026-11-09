@@ -46,3 +46,24 @@ func TestHiddenParsedOnceUntilTheFileChanges(t *testing.T) {
 		t.Fatalf("an account shown again since is still hidden: %+v", h)
 	}
 }
+
+// With no account removed, as for most users, Hidden makes no account:
+// the Providers page asks it twice a poll, and reading every sign-in
+// for an empty answer was ~0.6 MB of each poll's garbage.
+func TestHiddenNoneMakesNoAccount(t *testing.T) {
+	home := claudeHome(t)
+	claudeSignIn(t, home, time.Now().Add(24*time.Hour))
+	writeFile(t, Path(), map[string]any{"providers": []map[string]any{{"id": "claude"}}})
+	Hidden()
+	accounts := testing.AllocsPerRun(10, func() { Accounts() })
+	if accounts == 0 {
+		t.Fatal("Accounts made nothing, so this test tells nothing")
+	}
+	if h := testing.AllocsPerRun(10, func() { Hidden() }); h >= accounts {
+		t.Errorf("Hidden with nothing removed made %.0f allocations, its accounts %.0f", h, accounts)
+	}
+	writeFile(t, Path(), map[string]any{"providers": []map[string]any{{"id": "claude", "hidden": true}}})
+	if h := Hidden(); len(h) != 1 || h[0].ID != "claude" {
+		t.Fatalf("a removed account: Hidden = %+v", h)
+	}
+}
