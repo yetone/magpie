@@ -363,8 +363,8 @@ type day struct {
 	// it runs while its session's own file goes on.
 	Active int64 `json:"a,omitempty"`
 	// Hours is Active again, by the local hour of the day it was put on
-	// (24 of them, or none)
-	Hours []int64 `json:"h,omitempty"`
+	// (only the hours that have some, or none; 24 numbers in the cache)
+	Hours hours `json:"h,omitempty"`
 	// Prompts are the messages typed in the session's own file, Replies
 	// the agent's messages back (Claude Code's, Codex's, Pi's and omp's)
 	Prompts int `json:"u,omitempty"`
@@ -469,10 +469,7 @@ func (s *state) saw(t time.Time, main bool) {
 		if gap := t.Sub(s.Last); main && !s.Last.IsZero() && gap < idleGap {
 			d := s.day(dateOf(t))
 			d.Active += gap.Milliseconds()
-			if d.Hours == nil {
-				d.Hours = make([]int64, 24)
-			}
-			d.Hours[t.In(time.Local).Hour()] += gap.Milliseconds()
+			d.Hours.add(t.In(time.Local).Hour(), gap.Milliseconds())
 		}
 		s.Last = t
 	}
@@ -505,9 +502,7 @@ func (s *state) clone() *state {
 	for i, e := range c.Days {
 		v := e.v
 		d := &day{Active: v.Active, Models: slices.Clone(v.Models), Prompts: v.Prompts, Replies: v.Replies}
-		if v.Hours != nil {
-			d.Hours = append([]int64(nil), v.Hours...)
-		}
+		d.Hours = slices.Clone(v.Hours)
 		d.Tools, d.Skills = slices.Clone(v.Tools), slices.Clone(v.Skills)
 		c.Days[i].v = d
 	}

@@ -422,12 +422,12 @@ func statsOfRange(days int, today time.Time, files []file, copies map[string]str
 					act[k] = a
 				}
 				a.ms += d.Active
-				if len(d.Hours) == 24 {
+				if d.Hours != nil {
 					if a.hours == nil {
 						a.hours = make([]int64, 24)
 					}
-					for h, ms := range d.Hours {
-						a.hours[h] += ms
+					for _, e := range d.Hours {
+						a.hours[hourOf(e)] += msOf(e)
 					}
 				}
 				dates[date] = true
