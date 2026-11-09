@@ -46,7 +46,14 @@ test("a plugin's words are its own", () => {
       const p = path.join(d, e.name);
       if (e.isDirectory()) {
         if (!["node_modules", ".git", "site", "tests", "testdata", "docs"].includes(e.name)) walk(p);
-      } else if (/\.(go|js|html|css)$/.test(e.name) && e.name !== "i18n.js") texts.push([p, fs.readFileSync(p, "utf8")]);
+      } else if (/\.(go|js|html|css)$/.test(e.name) && e.name !== "i18n.js") {
+        let text = fs.readFileSync(p, "utf8");
+        // a comment line says nothing to the window: Go's "(View routing,
+        // the …" and "Use the library's sets …" cite a plugin's words
+        // (#5332, #5327, #5426, #5482)
+        if (/\.(go|js)$/.test(e.name)) text = text.split("\n").filter((l) => !/^\s*\/\//.test(l)).join("\n");
+        texts.push([p, text]);
+      }
     }
   };
   walk(repo);
