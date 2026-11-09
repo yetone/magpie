@@ -118,7 +118,7 @@ func OwnDays(since time.Time) map[string][]SharedCall {
 		if r.Via != "" {
 			continue
 		}
-		r.Archive, r.Computer = "", ""
+		r.Archive, r.Computer, r.ClientIP = "", "", "" // the address a call came from stays here
 		if len(r.Error) > 300 {
 			r.Error = r.Error[:300]
 		}

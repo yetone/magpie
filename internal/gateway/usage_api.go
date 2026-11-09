@@ -80,9 +80,9 @@ func (s *Server) usageRequests(w http.ResponseWriter, r *http.Request) {
 	f := usageapi.FilterOf(q)
 	who := access.Caller(r.Context())
 	if !heldKey(who) {
-		writeJSON(w, 200, usageapi.LedgerPage(usageapi.PeriodOf(q.Get("period")), f, offset, limit))
+		writeJSON(w, 200, withoutClientIPs(usageapi.LedgerPage(usageapi.PeriodOf(q.Get("period")), f, offset, limit)))
 		return
 	}
 	f.CallerKey = who.KeyID
-	writeJSON(w, 200, usageapi.OwnPage(usageapi.LedgerPage(usageapi.PeriodOf(q.Get("period")), f, offset, limit), who.KeyID))
+	writeJSON(w, 200, withoutClientIPs(usageapi.OwnPage(usageapi.LedgerPage(usageapi.PeriodOf(q.Get("period")), f, offset, limit), who.KeyID)))
 }

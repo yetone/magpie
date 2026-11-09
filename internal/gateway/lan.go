@@ -827,6 +827,7 @@ func appendUsage(r *http.Request, rec usage.Record) {
 	who := access.Caller(r.Context())
 	rec.CallerKeyID, rec.CallerKeyName, rec.CallerIssuerID = who.KeyID, who.KeyName, who.IssuerID()
 	rec.Local = local(r)
+	rec.ClientIP = clientIP(r)
 	if r.Context().Value(observedKey{}) != nil {
 		rec.Watched = true
 	}

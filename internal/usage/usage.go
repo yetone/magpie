@@ -260,6 +260,13 @@ type Record struct {
 	// has the request's attempts already, so it can pass the row over.
 	// Never persisted.
 	Watched bool `json:"-"`
+	// ClientIP is the address the request came to the gateway from, as the
+	// connection gave it (the gateway trusts no forwarding header, so behind
+	// a proxy it is the proxy's): a loopback address for this computer. It
+	// stays on this computer: sync (SharedCalls) and the gateway's
+	// /v1/magpie/usage/requests leave it out. "" for a row kept before it
+	// was recorded, a call a client reported, or magpie's own.
+	ClientIP string `json:"client_ip,omitempty"`
 	// Local is true only for verified loopback gateway requests. It is used
 	// for local-session deduplication, never persisted or exported.
 	Local bool `json:"-"`

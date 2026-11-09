@@ -629,6 +629,15 @@ summary and gets the ledger filtered to its own `CallerKey`, with its filter
 lists cut to its own rows (`usageapi.OwnPage`): the ledger's facets are drawn
 from every call in the period, so without the cut they would name other keys.
 `TestUsageOverGateway` covers both, and a red when either cut is removed.
+Each gateway row keeps the address its request came from
+(`Record.ClientIP`, set in `appendUsage` from `peerAddr`: the connection's
+own, never a forwarding header). The window's `/api/usage/requests` has it
+for the Usage page's request detail; `/v1/magpie/usage/requests` takes it
+out for every caller (`withoutClientIPs`), and sync's `OwnDays` leaves it
+out, so it never leaves this computer. CSV export, OTel and middleware
+points name their columns and don't carry it. `rowText` packs it, or the
+ledger's cache reads it back empty
+(`TestUsageRowsKeepTheClientsAddress`, `TestClientIPKeptHereNotShared`).
 A held key is refused (`refuseHeld`, 403 `provider.KeyHeldCode`) the
 quotas, their history, kept cards and refresh, and `/v1/magpie/concurrency`
 (#1981); `/v1/magpie/route` tells it only routes whose `callerKey` is its
