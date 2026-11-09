@@ -42,8 +42,10 @@ func TestGroupSaveRenames(t *testing.T) {
 	if !ok || g.Name != "Astra" || g.Routing != provider.Ordered {
 		t.Fatalf("%v %+v", ok, g)
 	}
-	if _, _, ok := provider.FindGroup("group/auto-gpt-6-astra"); ok {
-		t.Fatal("auto-gpt-6-astra is back")
+	// the old id answers with the renamed group (00af08e7b), never a found
+	// auto- group come back
+	if g, _, ok := provider.FindGroup("group/auto-gpt-6-astra"); ok && g.ID != "gpt-6-astra" {
+		t.Fatalf("auto-gpt-6-astra is back: %+v", g)
 	}
 	// a save without a new id stays a save
 	if w := post(`{"id":"gpt-6-astra","from":"gpt-6-astra","name":"Astra 2",` + members + `}`); w.Code != 200 {
