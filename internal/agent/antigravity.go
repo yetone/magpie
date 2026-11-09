@@ -106,6 +106,28 @@ func antigravity(home string) *Agent {
 			stash(map[string]string{stashSource: raw})
 		}
 	}
+	// startOn writes the model the app starts on, cur, at the level its
+	// picker offers for want (the effort picked, "" for the row's), when
+	// it is magpie's and the file is on magpie
+	startOn := func(cur, want string) error {
+		if cur == "" || !wired() {
+			return nil
+		}
+		base, at := antigravityBase(cur), ""
+		if want == "" {
+			want = provider.AgentEffort("antigravity")
+			if _, at = provider.MemberEffort(cur); at != "" {
+				want = at // the level it starts on stays, if offered
+			}
+		}
+		if !isMagpie(base) {
+			return nil
+		}
+		if to := gateway.AntigravityModel(base, want); to != cur {
+			return edit.SetJSON(path, edit.KV{Path: antigravityModel, Value: to})
+		}
+		return nil
+	}
 	// putRaw writes back what was stashed as it was, or takes key out
 	putRaw := func(key, raw string) error {
 		if raw == "" {
@@ -145,12 +167,16 @@ func antigravity(home string) *Agent {
 			}
 			// the catalog at the gateway's address, and on a file wired
 			// before magpie wrote one, so its windows reach it too
-			v, _ := edit.GetJSON(path, antigravitySource)
-			if v == antigravityCatalog() {
-				return nil
+			if v, _ := edit.GetJSON(path, antigravitySource); v != antigravityCatalog() {
+				keepSource()
+				if err := edit.SetJSON(path, edit.KV{Path: antigravitySource, Value: antigravityCatalog()}); err != nil {
+					return err
+				}
 			}
-			keepSource()
-			return edit.SetJSON(path, edit.KV{Path: antigravitySource, Value: antigravityCatalog()})
+			// the model it starts on as its catalog lists it now: a model
+			// with levels is listed once a level, and an id the catalog
+			// doesn't list starts the app on its first model instead
+			return startOn(model(), "")
 		},
 		Check: func() string {
 			if !wired() {
@@ -171,7 +197,8 @@ func antigravity(home string) *Agent {
 			Key: "model", Label: "model",
 			Get: func() string {
 				if v := model(); wired() && v != "" {
-					return magpieID + "/" + v
+					// the level its picker starts on is the effort's
+					return magpieID + "/" + antigravityBase(v)
 				}
 				return model()
 			},
@@ -197,7 +224,7 @@ func antigravity(home string) *Agent {
 						keepSource()
 						block = theirsKept(path, "gateway", func() any { return gatewayBlock() })()
 					}
-					return edit.SetJSON(path, edit.KV{Path: "gateway", Value: block}, edit.KV{Path: antigravityModel, Value: ref},
+					return edit.SetJSON(path, edit.KV{Path: "gateway", Value: block}, edit.KV{Path: antigravityModel, Value: gateway.AntigravityModel(ref, provider.AgentEffort("antigravity"))},
 						edit.KV{Path: antigravitySource, Value: antigravityCatalog()})
 				}
 				if on {
@@ -238,15 +265,21 @@ func antigravity(home string) *Agent {
 				return withVia(group("Antigravity", own), "antigravity", magpieID+"/")
 			},
 		}, {
-			// how hard its models reason: the app's picker lists the
-			// gateway's models by id, with no control of its own for a
-			// level, so Antigravity's own families went at the level
-			// the app asked or their default (MDX-Tom, #4838). The
-			// gateway asks its requests for the level picked here
-			// (provider.AgentEffort), and with none they go as it asks.
+			// how hard its models reason (MDX-Tom, #4838). The app's own
+			// picker offers a level for a model the catalog lists at
+			// each of its levels (gateway.antigravityModels), and the
+			// level picked there goes with the request, ahead of this
+			// one. This is the level the app starts on, and what a
+			// model it can't offer levels for is asked for
+			// (provider.AgentEffort); with none, those go as it asks.
 			Key: "effort", Label: "effort",
 			Get: func() string { return provider.AgentEffort("antigravity") },
-			Set: func(v string) error { return provider.SetAgentEffort("antigravity", v) },
+			Set: func(v string) error {
+				if err := provider.SetAgentEffort("antigravity", v); err != nil {
+					return err
+				}
+				return startOn(model(), v)
+			},
 			Options: func(map[string]string) []Option {
 				if !wired() {
 					return nil
@@ -255,6 +288,13 @@ func antigravity(home string) *Agent {
 			},
 		}},
 	}
+}
+
+// antigravityBase is the model the app starts on without the level its
+// picker starts it at (gateway.AntigravityModel).
+func antigravityBase(id string) string {
+	m, _ := provider.MemberEffort(id)
+	return m
 }
 
 // antigravityTidy takes out a models object magpie left empty.

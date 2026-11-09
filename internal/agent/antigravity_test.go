@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -316,17 +317,53 @@ func TestAntigravityEffort(t *testing.T) {
 	if got := values(); !slices.Equal(got, []string{"", "low", "high"}) {
 		t.Fatalf("offered %q", got)
 	}
+	// the app's picker offers a level only for a model its catalog
+	// lists at each one (YujunT46308 on X), so it starts on one of
+	// those: with no effort picked, its weakest, as it has no medium
+	starts := func() string {
+		var m map[string]any
+		json.Unmarshal(antigravityFile(t, path)["models"], &m)
+		s, _ := m["defaultModelId"].(string)
+		return s
+	}
+	if got := starts(); got != "think/gemini-3.8-flash:low" {
+		t.Errorf("starts on %q, want think/gemini-3.8-flash:low", got)
+	}
 	if err := f.Set("high"); err != nil {
 		t.Fatal(err)
 	}
 	if got, kept := f.Get(), provider.AgentEffort("antigravity"); got != "high" || kept != "high" {
 		t.Fatalf("picked high: shown %q, kept %q", got, kept)
 	}
+	if got := starts(); got != "think/gemini-3.8-flash:high" {
+		t.Errorf("picked high: starts on %q, want think/gemini-3.8-flash:high", got)
+	}
+	if got := a.Field("model").Get(); got != "magpie/think/gemini-3.8-flash" {
+		t.Errorf("model shown as %q, want it without the level", got)
+	}
+	// a model picked with high kept starts at high
+	if err := a.Field("model").Set("magpie/think/gemini-3.8-flash"); err != nil {
+		t.Fatal(err)
+	}
+	if got := starts(); got != "think/gemini-3.8-flash:high" {
+		t.Errorf("model picked again: starts on %q, want think/gemini-3.8-flash:high", got)
+	}
+	// an older magpie's file, the model without a level, starts on one
+	// after a sync
+	if err := edit.SetJSON(path, edit.KV{Path: "models.defaultModelId", Value: "think/gemini-3.8-flash"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if got := starts(); got != "think/gemini-3.8-flash:high" {
+		t.Errorf("after sync: starts on %q, want think/gemini-3.8-flash:high", got)
+	}
 	if err := f.Set("hard"); err == nil {
 		t.Fatal("a word that isn't a level was kept")
 	}
 	if !sameJSON(string(antigravityFile(t, path)["gateway"]), map[string]any{"enabled": true, "url": gateway.URL(), "apiKey": agentKey("antigravity"), "wireProtocol": "openai"}) {
-		t.Errorf("the pick touched the app's file: %s", readFile(path))
+		t.Errorf("the pick touched the app's gateway: %s", readFile(path))
 	}
 	if err := f.Set(""); err != nil || provider.AgentEffort("antigravity") != "" {
 		t.Fatalf("back to the default: %v, kept %q", err, provider.AgentEffort("antigravity"))
