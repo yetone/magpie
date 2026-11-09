@@ -473,6 +473,14 @@
   }
 
   // the one button a plugin shows: what to do with it next
+  // Install's arrow into a tray, drawn in the word's colour
+  const dlGlyph = () => {
+    const ns = "http://www.w3.org/2000/svg", g = document.createElementNS(ns, "svg"), p = document.createElementNS(ns, "path");
+    for (const [k, v] of Object.entries({ class: "dl", width: 11, height: 11, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", "stroke-width": 1.9, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" })) g.setAttribute(k, v);
+    p.setAttribute("d", "M8 2.5v8M4.5 7.5 8 11l3.5-3.5M3 13.5h10");
+    g.append(p);
+    return g;
+  };
   function actionFor(pkg, nm, listed) {
     const b = el("button", "pm-act");
     const e = entryOf(pkg);
@@ -503,7 +511,7 @@
       const c = movableOf(pkg)[0];
       if (c) return moveButton(b, c);
       b.classList.add("get");
-      b.textContent = t("Install");
+      b.append(dlGlyph(), t("Install"));
       b.disabled = busy.size > 0;
       b.onclick = (ev) => { ev.stopPropagation(); install(pkg, nm); };
       return b;

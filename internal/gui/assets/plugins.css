@@ -166,24 +166,25 @@ button.pm-chip:disabled { cursor: default; opacity: .6; }
 .pm-chip.soft { background: none; box-shadow: inset 0 0 0 1px var(--line); color: var(--muted); }
 
 /* a plugin's one button */
+:root { --ring-act: color-mix(in srgb, var(--fg) 15%, transparent); }
+@supports not (color: color-mix(in srgb, red 50%, blue)) { :root { --ring-act: var(--line); } }
 .pm-act {
   flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
   height: 26px; min-width: 64px; padding: 0 12px; border-radius: 13px;
   font-size: 12px; font-weight: 600; white-space: nowrap;
-  background: var(--pill); color: var(--fg-2); transition: background .14s var(--ease), color .14s var(--ease), filter .14s;
+  background: var(--pill); color: var(--fg-2); transition: background .14s ease, color .14s ease, filter .14s ease;
 }
 .pm-act:hover:not(:disabled) { background: var(--pill-hover); color: var(--fg); }
-.pm-act.get { background: var(--accent-soft); color: var(--accent); }
-.pm-act.get:hover:not(:disabled) { background: var(--accent); color: var(--accent-fg); }
-/* an update out: Install's size, green for its own (#1587) */
-.pm-act.pm-up { background: var(--green-soft); color: var(--green); }
-.pm-act.pm-up:hover:not(:disabled) { background: var(--green); color: var(--card); }
-/* Sign in, in a list of cards or rows, is Install's tinted capsule: one
-   style for a row's action, so no card shouts over its neighbours (HIG's
-   one filled button is a sheet's own); a plugin's page fills it */
-.pm-act.go { background: var(--accent-soft); color: var(--accent); }
-.pm-act.go:hover:not(:disabled), .pm-dact .pm-act.go { background: var(--accent); color: var(--accent-fg); }
-.pm-dact .pm-act.go:hover:not(:disabled) { filter: brightness(1.08); }
+/* Install, Move and a list's Sign in: a thin ring round body-coloured
+   text, grey under the pointer, so a grid of them reads as quiet as a
+   list's (the owner: 一个个大安装像一个个补丁); a plugin's page fills its one */
+.pm-act.get, .pm-act.go, .pm-act.pm-up { background: transparent; color: var(--fg); box-shadow: inset 0 0 0 1px var(--ring-act); }
+.pm-act.get:hover:not(:disabled), .pm-act.go:hover:not(:disabled), .pm-act.pm-up:hover:not(:disabled) { background: var(--pill); }
+.pm-act .dl { flex: none; margin-left: -1px; }
+/* an update out: Install's ring, its word green (#1587) */
+.pm-act.pm-up, .pm-act.pm-up:hover:not(:disabled) { color: var(--green); }
+.pm-dact .pm-act.go { background: var(--accent); color: var(--accent-fg); box-shadow: none; }
+.pm-dact .pm-act.go:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
 .pm-act.done { background: none; color: var(--green); padding: 0 8px; min-width: 0; }
 .pm-act.done:hover:not(:disabled) { background: var(--green-soft); color: var(--green); }
 .pm-act.busy { color: var(--muted); font-weight: 500; }

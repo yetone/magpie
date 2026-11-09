@@ -192,14 +192,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await dlg.locator(".pm-act.go", { hasText: w.signIn }).waitFor();
         assert.deepEqual(asked.find(([k]) => k === "add")[1], { spec: "opencode-copilot-auth" });
         // the page's one action is filled; on the card behind it, Sign in is
-        // Install's tinted capsule, so no card in the grid shouts over the
-        // rest (the Kiko03O1 reply on X: ui 设计能不能好看点)
+        // Install's thin ring, so no card in the grid shouts over the rest
+        // (the Kiko03O1 reply on X: ui 设计能不能好看点; the owner: 一个个大
+        // 安装像一个个补丁)
         const fill = (loc) => loc.evaluate((b) => getComputedStyle(b).backgroundColor);
         const tone = (v) => page.evaluate((v) => { const d = document.createElement("div"); d.style.background = `var(${v})`; document.body.append(d); const c = getComputedStyle(d).backgroundColor; d.remove(); return c; }, v);
         assert.equal(await fill(dlg.locator(".pm-act.go")), await tone("--accent"));
         const cardGo = copilot.locator(".pm-act.go", { hasText: w.signIn });
         await cardGo.waitFor();
-        assert.equal(await fill(cardGo), await tone("--accent-soft"));
+        assert.equal(await fill(cardGo), "rgba(0, 0, 0, 0)");
+        assert.notEqual(await cardGo.evaluate((b) => getComputedStyle(b).boxShadow), "none", "the card's Sign in has its ring");
         await dlg.locator(".pm-act.go").click();
         await page.locator("#view-providers").waitFor({ state: "visible" });
         await page.waitForFunction(() => document.querySelector("#modal").hidden);

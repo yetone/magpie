@@ -51,7 +51,7 @@ const L = {
 const look = (b) => b.evaluate((e) => {
   // offset sizes, as laid out: a list's entrance scale is not the button's size
   const s = getComputedStyle(e);
-  return { h: e.offsetHeight, w: e.offsetWidth, minW: s.minWidth, pad: s.paddingLeft + " " + s.paddingRight, font: s.fontSize + " " + s.fontWeight, radius: s.borderRadius, margin: s.margin, bg: s.backgroundColor, color: s.color };
+  return { h: e.offsetHeight, w: e.offsetWidth, minW: s.minWidth, pad: s.paddingLeft + " " + s.paddingRight, font: s.fontSize + " " + s.fontWeight, radius: s.borderRadius, margin: s.margin, bg: s.backgroundColor, ring: s.boxShadow, color: s.color };
 });
 
 function sameSize(got, want, what) {
@@ -62,7 +62,9 @@ function sameSize(got, want, what) {
   assert.equal(got.radius, want.radius, what + ": corners");
   assert.equal(got.margin, want.margin, what + ": margins (the title bar's .update pill isn't its look)");
   assert.ok(got.w >= parseFloat(want.minW), what + ": at least Install's width");
-  assert.notEqual(got.bg, want.bg, what + ": a colour of its own, not Install's");
+  // Install's ring, its word green: told apart by its colour alone
+  assert.equal(got.bg, want.bg, what + ": Install's fill");
+  assert.equal(got.ring, want.ring, what + ": Install's ring");
   assert.notEqual(got.color, want.color, what + ": its text a colour of its own");
 }
 
