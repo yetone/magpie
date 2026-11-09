@@ -447,7 +447,9 @@ func lanGuard(next http.Handler) http.Handler {
 		}
 		r = takePagePort(r)
 		// a WSL distro's agent, at the address Windows has on its network
-		// (wsl.go), is one of this computer's
+		// (wsl.go), is one of this computer's; one given the key in its
+		// path (Claude Science's) has it taken off first
+		r = takeWSLPathKey(r)
 		if fromWSL(r) {
 			r = asFromLoopback(r)
 		}

@@ -102,6 +102,53 @@ func TestWSLCallerServedWithSharingOff(t *testing.T) {
 	}
 }
 
+// shuitunlulu_ on Discord: Claude Science in a WSL distro wasn't found or
+// connected by magpie on Windows. Its daemon takes only an address
+// (ANTHROPIC_BASE_URL, http only to loopback) and sends its Claude sign-in
+// as its bearer, so under NAT it is given the relay in the distro with the
+// WSL key as the address's first segment. From the WSL network that
+// request is served as this computer's at the path without the key, its
+// sign-in left as it was; the key in the path from elsewhere, or a wrong
+// one, is no WSL request.
+func TestWSLKeyInPath(t *testing.T) {
+	fresh(t)
+	t.Setenv("MAGPIE_ADDR", "")
+	fakeWSLNet(t, "172.17.32.1/20")
+	key := WSLKey()
+	var seen *http.Request
+	h := lanGuard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { seen = r }))
+	call := func(from, path string) (int, string) {
+		seen = nil
+		r := httptest.NewRequest("POST", "http://172.17.32.1:3425"+path, nil)
+		r.RemoteAddr = from
+		r = r.WithContext(context.WithValue(r.Context(), http.LocalAddrContextKey, &net.TCPAddr{IP: net.ParseIP("172.17.32.1"), Port: 3425}))
+		r.Header.Set("Authorization", "Bearer sk-ant-oat01-signin")
+		r.Header.Set("X-Anthropic-Surface", "operon")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w.Code, w.Body.String()
+	}
+	const distro = "172.17.38.240:51000"
+	if code, body := call(distro, "/"+key+"/v1/messages?beta=true"); code != 200 || seen == nil {
+		t.Fatalf("key in the path: %d %s", code, body)
+	}
+	if !local(seen) || seen.URL.Path != "/v1/messages" || seen.URL.RawQuery != "beta=true" || seen.RequestURI != "/v1/messages?beta=true" {
+		t.Errorf("served as %s at %q (%q)", seen.RemoteAddr, seen.URL.Path, seen.RequestURI)
+	}
+	if got := seen.Header.Get("Authorization"); got != "Bearer sk-ant-oat01-signin" || !claudeSignIn(seen) || agentOf(seen) != ScienceID {
+		t.Errorf("sign-in %q, agent %q", got, agentOf(seen))
+	}
+	for name, c := range map[string]struct{ from, path string }{
+		"no key":          {distro, "/v1/messages"},
+		"a wrong key":     {distro, "/" + key[:len(key)-1] + "x/v1/messages"},
+		"another network": {"192.168.1.20:5000", "/" + key + "/v1/messages"},
+	} {
+		if code, body := call(c.from, c.path); code != http.StatusForbidden || !strings.Contains(body, "isn't shared") {
+			t.Errorf("%s: %d %s, want refused as another machine's", name, code, body)
+		}
+	}
+}
+
 // The gateway on loopback also listens at each address Windows has on a
 // WSL network, comes or goes with it, and stops when sharing puts it on
 // every address anyway. [::1] stands for the WSL network's address here.

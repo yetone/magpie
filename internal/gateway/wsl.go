@@ -174,7 +174,44 @@ func fromWSL(r *http.Request) bool {
 		return false
 	}
 	k := wslKeyHeld()
-	return k != "" && slices.ContainsFunc(callerKeys(r), func(v string) bool { return wslToken(v, k) != "" })
+	if k == "" {
+		return false
+	}
+	if v, _ := r.Context().Value(wslPathKeyCtx{}).(string); wslToken(v, k) != "" {
+		return true
+	}
+	return slices.ContainsFunc(callerKeys(r), func(v string) bool { return wslToken(v, k) != "" })
+}
+
+// wslPathKeyCtx holds the WSL key a request's path began with
+// (takeWSLPathKey).
+type wslPathKeyCtx struct{}
+
+// takeWSLPathKey is r without the WSL key its path begins with, which is
+// kept for fromWSL: /wsl-…/v1/messages is /v1/messages. A client that
+// can't send the key as its own is given it in the address: Claude Science
+// takes only ANTHROPIC_BASE_URL, with no key of magpie's (it sends its
+// Claude sign-in as its bearer), and http there only to a loopback
+// address, so in a distro under NAT it is given the relay magpie runs
+// there (agent/claudescience_wsl.go), http://127.0.0.1:<port>/wsl-…, to
+// this address on the WSL network. A path whose first segment isn't the
+// key is left as it is.
+func takeWSLPathKey(r *http.Request) *http.Request {
+	seg, rest, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
+	if !strings.HasPrefix(seg, wslKeyPrefix) {
+		return r
+	}
+	if wslToken(seg, wslKeyHeld()) == "" {
+		return r
+	}
+	r2 := r.Clone(context.WithValue(r.Context(), wslPathKeyCtx{}, seg))
+	r2.URL.Path = "/" + rest
+	if raw := r2.URL.RawPath; raw != "" {
+		_, rawRest, _ := strings.Cut(strings.TrimPrefix(raw, "/"), "/")
+		r2.URL.RawPath = "/" + rawRest
+	}
+	r2.RequestURI = r2.URL.RequestURI()
+	return r2
 }
 
 // asFromLoopback is r as a request from this computer: from loopback, its
