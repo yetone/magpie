@@ -40,6 +40,7 @@ var notAnAgent = map[string]string{
 	"GIT_SSH_COMMAND":     "the same, as a command",
 	"XDG_CURRENT_DESKTOP": "the desktop the user runs, which says whether xdg-mime's answer about an app's links is the whole one (agent.OpenAppLink), not a folder",
 	"TZ":                  "the machine's time zone, which a routing rule's hours fall back to (c888ef272), not a folder",
+	"LAZYCAT_APP_DOMAIN":  "the domain LazyCat serves magpie at, which sharing offers (ac4af5823), not a folder",
 }
 
 // TestFolderVarsAreListed says every variable the packages that find an
