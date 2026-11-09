@@ -747,8 +747,15 @@ handler again) all pass it; `keySlotRoutes` names the routes it holds, and
 through `serve`'s tries (chat, Responses, Messages, Ollama, Gemini, the Codex
 backend) take the slot in the try, after `keepQueued`, so a waiting stream
 gets its 200 and keepalive comments as it does waiting for a provider's
-slot; the rest (embeddings, images, audio, videos, rerank, decisions, System
-One, native) take it before their handler runs. `forward` and
+slot. A try on an account within 5 points of its usage cap takes it
+before the account's one turn at a time (`nearCap`), its wait still in the
+try's `Queued`: taken the other way round, a turn kept on the account after
+a passing failure held the key's slot and waited for the account's turn,
+while the turn that had taken it waited for the key's, each till its agent
+hung up (ox0pine on X: a key held to one provider stuck in routing;
+`TestKeySlotAndNearCapTurnNeverWaitOnEachOther`). The rest (embeddings,
+images, audio, videos, rerank, decisions, System One, native) take it
+before their handler runs. `forward` and
 `codexUpstreamOn` take it too, so no path of a held route reaches a vendor
 unheld. The slot is the request's until its handler returns, a stream's to
 its end; a later take within the same request takes nothing more (`keyHold`).

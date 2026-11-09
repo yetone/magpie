@@ -3360,6 +3360,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 	}()
 	nearBehind := map[string]bool{} // accounts near their cap moved behind the rest once
+	var nearInKey time.Duration     // the key's slot waited for before an account's turn near its cap
 	for i := 0; i < len(cands); i++ {
 		if failedRow != nil {
 			failedRow()
@@ -3427,6 +3428,19 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// strictKeep keeps it, and an account already held when its try
 			// begins was let in past its cap on purpose (a reset spent for
 			// it, its credits), so is not held again here.
+			//
+			// The slot of its gateway key's is taken first, as every try
+			// takes it before its lane: a turn kept on this account after
+			// a passing failure holds the key's slot, and one that took
+			// the account's turn it gave back, then waited for the key's,
+			// left each waiting for the other's till the agents hung up
+			// (ox0pine on X: a key held to one provider stuck in routing)
+			waited, err := keySlot(r.Context())
+			nearInKey += waited
+			if err != nil {
+				call.Status, call.Error = canceled(r.Context())
+				break
+			}
 			done, ok := s.nearCap.tryTake(c.who())
 			if !ok && i < len(cands)-1 && !nearBehind[c.who()] {
 				nearBehind[c.who()] = true
@@ -3435,7 +3449,6 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				continue
 			}
 			if !ok {
-				var err error
 				if done, err = s.nearCap.take(r.Context(), c.who()); err != nil {
 					// the agent went away while it waited: nothing was sent
 					call.Status, call.Error = canceled(r.Context())
@@ -3923,6 +3936,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// the slot of its gateway key's first, once for the request
 			// (key_slots.go): its agent gone meanwhile, nothing is sent
 			inKey, err := keySlot(ctx)
+			inKey, nearInKey = inKey+nearInKey, 0
 			if err == nil && handed.release != nil {
 				// it left a full lane's queue for this one, whose slot it
 				// took as it did (waitMate): the wait there is its queue
