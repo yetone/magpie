@@ -14,6 +14,10 @@ import (
 type observed struct {
 	watches []usage.Watch
 	routeID int64
+	// keyName is the gateway key the request came with, by the name the
+	// user gave it (access.Identity.KeyName), never its secret; "" without
+	// one. Each span carries it as the ledger's row does (CallerKeyName).
+	keyName string
 }
 
 type observedKey struct{}
@@ -27,9 +31,10 @@ func observeRequest(r *http.Request, kind string, body []byte) (*http.Request, *
 	}
 	// the agent it is recorded as, another magpie's own (callerFrom)
 	agent := callerOf(r).agent
+	who := access.Caller(r.Context())
 	q := usage.Request{Header: r.Header, Agent: agent, Session: observedSession(r.Header), Kind: observedKind(agent, kind, body),
-		Plain: local(r) && access.Caller(r.Context()).KeyID == "" && callerOf(r).via == ""}
-	o := &observed{}
+		Plain: local(r) && who.KeyID == "" && callerOf(r).via == ""}
+	o := &observed{keyName: who.KeyName}
 	for _, ob := range observers {
 		if w := ob.Begin(q); w != nil {
 			o.watches = append(o.watches, w)
@@ -63,7 +68,7 @@ func (o *observed) end(call Call, millis int64) {
 	if o == nil {
 		return
 	}
-	rec := usage.Record{RouteID: o.routeID, Time: call.Time, Agent: call.Agent, Model: call.Model, Status: call.Status, Millis: millis}
+	rec := usage.Record{RouteID: o.routeID, Time: call.Time, Agent: call.Agent, Model: call.Model, Status: call.Status, Millis: millis, CallerKeyName: o.keyName}
 	canceledAs(&rec, call.Status, call.Error)
 	for _, w := range o.watches {
 		w.End(rec)
@@ -80,7 +85,7 @@ func (o *observed) attempt(call Call, attempt Try, providerID, effort string, he
 	rec := usage.Record{RouteID: o.routeID, Time: attempt.Start, Agent: call.Agent,
 		Provider: providerID, Model: attempt.Model, Requested: call.Model, Served: u.Served, Effort: effort,
 		Input: u.Input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, CacheUnknown: u.cacheNotCounted(), Reasoning: u.Reasoning,
-		Millis: time.Since(attempt.Start).Milliseconds(), Status: attempt.Status, TTFT: attempt.TTFT, FirstText: attempt.FirstText, FirstReasoning: attempt.FirstReasoning, ReasoningHidden: attempt.ReasoningHidden}
+		Millis: time.Since(attempt.Start).Milliseconds(), Status: attempt.Status, TTFT: attempt.TTFT, FirstText: attempt.FirstText, FirstReasoning: attempt.FirstReasoning, ReasoningHidden: attempt.ReasoningHidden, CallerKeyName: o.keyName}
 	canceledAs(&rec, attempt.Status, attempt.Error)
 	if wanted := usage.ObservedBodies(); wanted != usage.NoBodies {
 		reply, cut := capture.body.text(), capture.body.truncated

@@ -3754,7 +3754,9 @@ environment: `MAGPIE_OTEL_ENDPOINT=https://cloud.langfuse.com/api/public/otel`
 and `MAGPIE_OTEL_HEADERS=Authorization=Basic%20<base64(public-key:secret-key)>,x-langfuse-ingestion-version=4`.
 
 Traces include agent, provider, model, token counts (including cache and
-reasoning), HTTP status, timing, and route ID. Attempts with the same route ID
+reasoning), HTTP status, timing, route ID, and the name of the gateway key the
+request came with (`magpie.gateway_key.name`, absent without a key; never the
+key's ID or secret). Attempts with the same route ID
 share a trace ID. Chat, Responses, Anthropic and Gemini gateway requests
 also export a parent request span and child spans for every routing attempt,
 including unbilled failures, retries and fallbacks, so Langfuse can render a
@@ -3863,7 +3865,10 @@ details. It reads this computer's local sessions, including calls made without
 Magpie as the proxy.
 
 Metrics group duration and input/output token histograms by agent, provider,
-model, operation and error status. Prompt/reply text is exported only when
+model, operation, error status and gateway key name. Each gateway key name
+multiplies a metric's series (one set per name requests came with), which
+matters to a collector that limits or bills by series; a name is not unique,
+so keys sharing one are counted together. Prompt/reply text is exported only when
 **Include request and response bodies** is enabled (`MAGPIE_OTEL_BODIES=true`);
 secrets are masked and each body is limited to 256 KiB unless **Include the
 whole bodies** is enabled. Conversation IDs are exported only with

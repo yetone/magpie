@@ -327,6 +327,94 @@ func TestOTelExportsGatewayUsageWithoutContent(t *testing.T) {
 	}
 }
 
+// A request with a gateway key carries the key's name on its root span,
+// each attempt span and their metrics (magpie.gateway_key.name), never the
+// key's id or secret; one without a key carries no such attribute.
+func TestOTelExportsGatewayKeyName(t *testing.T) {
+	for _, keyed := range []bool{true, false} {
+		t.Run(fmt.Sprint(keyed), func(t *testing.T) {
+			plan := &fake{ctype: "application/json", code: 429, reply: `{"error":{"message":"busy"}}`}
+			spare := &fake{ctype: "application/json", reply: `{"id":"ok","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5}}`}
+			twoProviders(t, plan, spare)
+			received := make(chan []byte, 64)
+			collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				b, _ := io.ReadAll(r.Body)
+				received <- b
+				io.WriteString(w, `{}`)
+			}))
+			defer collector.Close()
+			t.Setenv("MAGPIE_OTEL_ENABLED", "true")
+			t.Setenv("MAGPIE_OTEL_ENDPOINT", collector.URL)
+			t.Setenv("MAGPIE_OTEL_HEADERS", "")
+			t.Setenv("MAGPIE_OTEL_METRICS", "true")
+			t.Setenv("MAGPIE_OTEL_BODIES", "false")
+			fastOTel(t)
+			stop := startOTel()
+			t.Cleanup(stop)
+			req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(chatReq))
+			req.RemoteAddr = "192.168.1.5:1234"
+			if keyed {
+				req = req.WithContext(access.WithIdentity(req.Context(), access.Identity{KeyID: "PRIVATE-KEY-ID", KeyName: "alice-laptop"}))
+			}
+			response := httptest.NewRecorder()
+			New().Handler().ServeHTTP(response, req)
+			if response.Code != 200 {
+				t.Fatalf("gateway: %d %s", response.Code, response.Body.String())
+			}
+			stop()
+			traces, metricExports := otelExports(received)
+			if len(metricExports) == 0 {
+				t.Fatal("no metrics exported")
+			}
+			type attr struct {
+				Key   string
+				Value map[string]string
+			}
+			var spans [][]attr
+			for _, exported := range traces {
+				var wire struct {
+					ResourceSpans []struct {
+						ScopeSpans []struct{ Spans []struct{ Attributes []attr } }
+					}
+				}
+				if err := json.Unmarshal(exported, &wire); err != nil {
+					t.Fatal(err)
+				}
+				for _, rs := range wire.ResourceSpans {
+					for _, ss := range rs.ScopeSpans {
+						for _, s := range ss.Spans {
+							spans = append(spans, s.Attributes)
+						}
+					}
+				}
+			}
+			if len(spans) != 3 {
+				t.Fatalf("want two attempts and a root, got %d spans", len(spans))
+			}
+			for i, attrs := range spans {
+				name, n := "", 0
+				for _, a := range attrs {
+					if a.Key == "magpie.gateway_key.name" {
+						name, n = a.Value["stringValue"], n+1
+					}
+				}
+				if keyed && (n != 1 || name != "alice-laptop") || !keyed && n != 0 {
+					t.Fatalf("span %d: gateway key name %q seen %d times, keyed=%v: %+v", i, name, n, keyed, attrs)
+				}
+			}
+			all := string(bytes.Join(append(traces, metricExports...), []byte("\n")))
+			if strings.Contains(all, "PRIVATE-KEY-ID") {
+				t.Fatalf("gateway key id exported: %s", all)
+			}
+			points := strings.Count(all, `"key":"magpie.gateway_key.name","value":{"stringValue":"alice-laptop"}`)
+			if keyed && points < 5 || !keyed && points != 0 {
+				// 3 spans, plus the duration and token metrics' points
+				t.Fatalf("gateway key name in %d places, keyed=%v: %s", points, keyed, all)
+			}
+		})
+	}
+}
+
 // with bodies on (#538) the span carries the request and the reply as
 // Langfuse's observation input and output — a stream's text put together,
 // a secret in the request still masked — and with it off neither

@@ -25,16 +25,19 @@ func otelInt(key string, value int64) otelAttribute {
 	return otelAttribute{key, map[string]any{"intValue": strconv.FormatInt(value, 10)}}
 }
 
-// Only this allowlist leaves the machine: never record JSON, account/key
-// names, session titles, raw errors, prompts, completions or tool arguments.
-// The one exception is traces' input and output, sent only when the user
-// turned bodies on (#538).
+// Only this allowlist leaves the machine: never record JSON, provider
+// account/key names, session titles, raw errors, prompts, completions or
+// tool arguments. The one exception is traces' input and output, sent only
+// when the user turned bodies on (#538). The gateway key a call came with
+// goes by the name the user gave it (gatewayKeyAttr), never its id or
+// secret.
 func otelAttributes(r Record) []otelAttribute {
 	op := r.Operation
 	if op == "" {
 		op = "chat"
 	}
 	a := []otelAttribute{otelString("gen_ai.operation.name", op), otelString("gen_ai.provider.name", r.Provider), otelString("gen_ai.request.model", r.Model), otelString("magpie.agent", r.Agent)}
+	a = gatewayKeyAttr(a, r)
 	if r.Served != "" {
 		a = append(a, otelString("gen_ai.response.model", r.Served))
 	}
@@ -46,6 +49,16 @@ func otelAttributes(r Record) []otelAttribute {
 		a = append(a, otelString("error.type", errType))
 	}
 	return a
+}
+
+// gatewayKeyAttr adds the name of the gateway key a call came with
+// (Record.CallerKeyName) as magpie.gateway_key.name; a call without one
+// has no such attribute.
+func gatewayKeyAttr(a []otelAttribute, r Record) []otelAttribute {
+	if r.CallerKeyName == "" {
+		return a
+	}
+	return append(a, otelString("magpie.gateway_key.name", r.CallerKeyName))
 }
 
 func otelEnvelope(signal string, data any) map[string]any {
@@ -130,6 +143,7 @@ func (e *otelExporter) traces(items []otelItem) any {
 			if sp.Root {
 				span["name"], span["kind"] = "gateway "+r.Model, 2
 				a = []otelAttribute{otelString("magpie.agent", r.Agent), otelString("magpie.requested_model", r.Model), otelInt("http.response.status_code", int64(r.Status))}
+				a = gatewayKeyAttr(a, r)
 				if r.RouteID != 0 {
 					a = append(a, otelInt("magpie.route.id", r.RouteID))
 				}
