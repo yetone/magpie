@@ -2,7 +2,9 @@ package update
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -169,7 +171,27 @@ func onPath(dir, path string) bool {
 	return false
 }
 
+// exists is whether p is there and could be looked at: false too when
+// that is unknown. Anything that makes, moves over or removes on its
+// answer asks present instead, which tells unknown apart.
 func exists(p string) bool {
-	_, err := os.Stat(p)
+	_, err := statPath(p)
 	return err == nil
 }
+
+// present is whether p is there: an error when that is unknown (Stat
+// failed for a reason other than its not being there, such as a folder
+// that may not be looked into).
+func present(p string) (bool, error) {
+	_, err := statPath(p)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, fs.ErrNotExist):
+		return false, nil
+	}
+	return false, err
+}
+
+// statPath is os.Stat; tests make it fail.
+var statPath = os.Stat

@@ -105,6 +105,12 @@ func InstallDir(picked string) string {
 // Installable says why dir can't be installed in, nil when it can: a
 // file is written into it and removed, and the folders made for that are
 // removed again, so a folder looked at and then not chosen isn't left.
+//
+// Only the folders this call made itself are removed, one by one from
+// the deepest up and only while empty, so a folder that was there
+// already is never taken: a folder whose Stat fails for any reason but
+// "not there" (no permission to look, a share that doesn't answer) is
+// unknown, and the check refuses rather than make or remove anything.
 func Installable(dir string) error {
 	if !filepath.IsAbs(dir) {
 		return fmt.Errorf("%s is not a full path", dir)
@@ -112,18 +118,35 @@ func Installable(dir string) error {
 	if downloadFolder(dir) {
 		return ErrDownloadFolder
 	}
-	top := ""
-	for d := filepath.Clean(dir); !exists(d); d = filepath.Dir(d) {
-		top = d
-		if filepath.Dir(d) == d {
+	// the folders missing on the way to dir, outermost first
+	var missing []string
+	for d := filepath.Clean(dir); ; d = filepath.Dir(d) {
+		there, err := present(d)
+		if err != nil {
+			return fmt.Errorf("can't tell whether %s is there: %w", d, err)
+		}
+		if there {
 			break
 		}
+		if filepath.Dir(d) == d {
+			return fmt.Errorf("%s is not there", d)
+		}
+		missing = append([]string{d}, missing...)
 	}
-	if top != "" {
-		defer os.RemoveAll(top)
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return writeErr(err)
+	var made []string
+	defer func() {
+		for i := len(made) - 1; i >= 0; i-- {
+			os.Remove(made[i])
+		}
+	}()
+	for _, d := range missing {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			if errors.Is(err, fs.ErrExist) {
+				continue // made by someone else meanwhile: theirs, kept
+			}
+			return writeErr(err)
+		}
+		made = append(made, d)
 	}
 	f, err := os.CreateTemp(dir, ".magpie-install-*")
 	if err != nil {
@@ -215,7 +238,12 @@ func settle(exe string) (string, error) {
 				log.Println("install: keeping the folder chosen:", err)
 			}
 		}
-		if !exists(to) {
+		there, err := present(to)
+		if err != nil {
+			// a file there that can't be looked at would be moved over
+			return "", fmt.Errorf("can't tell whether %s is there: %w", to, err)
+		}
+		if !there {
 			if err := installFresh(exe, to); err != nil {
 				return "", err
 			}
