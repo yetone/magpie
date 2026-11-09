@@ -144,10 +144,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator("#usageRangeMenu").click();
         const items = page.locator(".proto-menu .pm-item");
         assert.ok(await items.count() >= 4, "every period is in the menu");
-        await items.nth(1).click();
-        await page.waitForFunction(() => document.querySelectorAll("#period .opt")[1].classList.contains("on"));
+        await items.nth(2).click();
+        await page.waitForFunction(() => document.querySelectorAll("#period .opt")[2].classList.contains("on"));
         assert.equal(await page.locator(".proto-menu").count(), 0, "a pick shuts the menu");
-        const seven = await page.locator("#period .opt").nth(1).textContent();
+        const seven = await page.locator("#period .opt").nth(2).textContent();
         await page.waitForFunction((s) => document.querySelector("#usageRangeMenu").textContent.trim() === s.trim(), seven);
 
         // Sessions has its own range: the menu follows the tab

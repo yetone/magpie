@@ -283,7 +283,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
     for (const lang of ["en", "zh"]) await t.test(lang + ": a day filters details while keeping the whole chart", async () => {
       const { p, asked, exported, errors } = await open(lang, lang === "zh" ? "dark" : "light", { variant: "daily" });
-      await p.locator("#period .opt").nth(1).click();
+      await p.locator("#period .opt").nth(2).click();
       const days = p.locator("#ledChart .led-day");
       await days.nth(6).waitFor();
       const initial = await p.locator("#ledChart rect.col").evaluateAll((rs) => rs.map((r) => [r.dataset.day, r.dataset.k, r.getAttribute("height"), r.dataset.color]));

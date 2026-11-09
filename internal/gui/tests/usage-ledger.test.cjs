@@ -182,12 +182,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             });
             await route.fulfill({ json: data });
           });
-          await tab.locator("#period .opt").nth(2).click();
+          await tab.locator("#period .opt").nth(3).click();
           await lastAsked(tab, asked, q => q.get("period") === "30d");
           await tab.locator(key === "agent" ? "#ledAgent" : "#ledProvider").click();
           await tab.locator(".sess-menu .pm-item", { hasText: name }).click();
           await lastAsked(tab, asked, q => q.get(key) === removed);
-          await tab.locator("#period .opt").nth(1).click();
+          await tab.locator("#period .opt").nth(2).click();
           await lastAsked(tab, asked, q => q.get("period") === "7d" && !q.has(key) && q.get("offset") === "0");
           assert.equal(await tab.locator(key === "agent" ? "#ledAgent" : "#ledProvider").textContent(), all);
           assert.equal(await tab.locator(".led-row").count(), Math.min(100, ROWS.filter(r => r[key] !== removed).length));

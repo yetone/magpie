@@ -213,7 +213,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium"]
     // numbers over 30 days'
     await p.locator("#usageReload").click(); // today's refresh, held
     await gate.waitFor("usage", 2);
-    await p.locator("#period .opt").nth(2).click(); // 30 days
+    await p.locator("#period .opt").nth(3).click(); // 30 days
     await gate.waitFor("usage", 3);
     gate.release("usage", -1); // 30 days' answer first
     await p.waitForTimeout(300);
