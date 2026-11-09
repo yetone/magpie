@@ -1,8 +1,8 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Repositories their authors tagged magpie-plugin on GitHub (yetone: 在插件页
 //能否自动识别打了 magpie-plugin 的 github repo 来显示为非官方插件): Discover
-// shows them in a section of their own after the community's, each card
-// saying Unofficial, its owner and its stars. One whose package the market
+// shows them among the community's, by kind (Origin picks them alone),
+// each card saying Unreviewed, its owner and its stars. One whose package the market
 // already lists is the market's card alone. Install sends the spec magpie
 // gave: the npm name of one its author published there from the
 // repository, else github:owner/repo; one installed by any spec naming the
@@ -110,32 +110,43 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const view = page.locator("#view-plugins");
           await view.waitFor({ state: "visible" });
 
-          // a section of their own, after the community's, before the field
-          const sec = view.locator(".pm-sec", { has: page.locator("h3", { hasText: w.section }) });
-          await sec.waitFor();
+          // one market with the community's (the owner: 统筹起来): Origin
+          // picks GitHub's alone, and they are shelved by kind like any
+          await view.locator(".pm-card", { hasText: "agy-staff" }).waitFor();
           const order = await view.locator(".pm-body > *").evaluateAll((es) => es.map((e) => e.className.split(" ")[0]));
           assert.ok(order.indexOf("pm-manual") > order.lastIndexOf("pm-sec"), "the field stays last: " + order);
-          assert.match(await sec.locator(".pm-sechead span").innerText(), /magpie-plugin/);
-          const cards = sec.locator(".pm-card");
-          assert.deepEqual(await cards.locator(".pm-name b").allInnerTexts(), ["opencode-claude-auth", "opencode-quota", "agy-staff"], "the market's own package is its card alone");
+          await view.locator(".pm-bar .pm-pop").first().click();
+          await page.locator(".proto-menu .pm-item", { hasText: w.section }).click();
+          await page.waitForFunction(() => document.querySelectorAll("#view-plugins .pm-sec[data-kind] .pm-card").length === 3);
+          const sec = view.locator(".pm-sec[data-kind]").first();
+          const cards = view.locator(".pm-sec[data-kind] .pm-card");
+          assert.deepEqual((await cards.locator(".pm-name b").allInnerTexts()).sort(), ["agy-staff", "opencode-claude-auth", "opencode-quota"], "the market's own package is its card alone");
+          await view.locator(".pm-bar .pm-pop").first().click();
+          await page.locator(".proto-menu .pm-item").first().click();
+          await page.waitForFunction(() => document.querySelectorAll("#view-plugins .pm-sec[data-kind] .pm-card").length === 4);
           assert.equal(await view.locator(".pm-card", { hasText: "Open Cursor" }).count(), 1);
+          await view.locator(".pm-bar .pm-pop").first().click();
+          await page.locator(".proto-menu .pm-item", { hasText: w.section }).click();
+          await page.waitForFunction(() => document.querySelectorAll("#view-plugins .pm-sec[data-kind] .pm-card").length === 3);
 
-          const c = cards.first();
-          assert.equal((await c.locator(".pm-by").innerText()).trim(), "griffinmartin");
+          const c = cards.filter({ hasText: "opencode-claude-auth" });
+          assert.equal((await c.locator(".pm-by > span").first().innerText()).trim(), "griffinmartin");
           // the picture its package.json gives (magpie.icon), as magpie keeps it; one that gives none, the puzzle
           assert.equal(await c.locator(".pm-logo img").getAttribute("src"), "/api/icons/claude-auth.svg");
-          assert.equal(await cards.nth(2).locator(".pm-logo img").count(), 0);
+          assert.equal(await cards.filter({ hasText: "agy-staff" }).locator(".pm-logo img").count(), 0);
           // a provider and a middleware part by hue (yetone: 中间件和供应商稍微有点区分吧)
           assert.equal(await c.locator(".pm-chip.kind.pv").count(), 1);
-          // unofficial is said by the section's head, once, not by a chip on
-          // every card in it (the Kiko03O1 reply on X: ui 设计能不能好看点)
-          assert.equal(await sec.locator(".pm-chip.warn").count(), 0);
-          assert.equal(await sec.locator(".pm-meta", { hasText: w.chip }).count(), 0);
+          // among the community's, each says nobody reviewed it: a quiet
+          // outlined word by its author, not a chip in its facts (the
+          // Kiko03O1 reply on X: ui 设计能不能好看点)
+          assert.equal(await cards.locator(".pm-by .pm-chip.warn").count(), 3);
+          assert.equal(await cards.locator(".pm-meta", { hasText: w.chip }).count(), 0);
           assert.equal((await c.locator(".pm-dl").innerText()).trim(), "1.3k");
           assert.equal((await c.locator(".pm-ver").innerText()).trim(), "v2.2.1");
           // installed by its page's URL: Installed all the same
-          await cards.nth(1).locator(".pm-act.done").waitFor();
-          assert.match(await cards.nth(1).locator(".pm-act").innerText(), new RegExp(w.installed));
+          const quota = cards.filter({ hasText: "opencode-quota" });
+          await quota.locator(".pm-act.done").waitFor();
+          assert.match(await quota.locator(".pm-act").innerText(), new RegExp(w.installed));
           // nothing cut or spilling at this width
           for (const card of await cards.all()) {
             const fit = await card.evaluate((e) => [e.scrollWidth <= e.clientWidth + 1, ...[...e.querySelectorAll(".pm-chip, .pm-act, .pm-name b")].map((x) => x.getBoundingClientRect().width > 8 && x.getBoundingClientRect().right <= e.getBoundingClientRect().right + 1)]);
@@ -153,6 +164,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             for (let i = 0; i < 60 && !(await card.evaluate((e) => { const r = e.getBoundingClientRect(), v = e.closest(".view").getBoundingClientRect(); return r.top >= v.top && r.bottom <= v.bottom; })); i++) {
               await page.mouse.wheel(0, 80);
               await page.waitForTimeout(15);
+            }
+            // WebKit's wheel scroll goes on after the last wheel: wait for it
+            // to come to rest, so what is measured next is the click's own
+            for (let last = "", i = 0; i < 100; i++) {
+              const now = await scrolls(page);
+              if (now === last) break;
+              last = now;
+              await page.waitForTimeout(50);
             }
           };
           // and clicks it where it is: Playwright's own click scrolls a card
@@ -187,26 +206,27 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           };
           await install("opencode-claude-auth");
           assert.equal(await scrolls(page), before, "a click scrolls nothing");
-          await cards.first().locator(".pm-act.done").waitFor();
+          await c.locator(".pm-act.done").waitFor();
 
           // one npm hasn't from its repository: GitHub's, installed from there
-          await reach(cards.nth(2));
-          await press(cards.nth(2));
+          const agy = cards.filter({ hasText: "agy-staff" });
+          await reach(agy);
+          await press(agy);
           await dlg.locator(".pm-md", { hasText: "Hire agy as a staffer." }).waitFor();
           assert.deepEqual(asked.filter(([k]) => k === "page").pop(), ["page", "github:keli-wen/agy-staff"]);
           assert.match(await dlg.locator(".pm-note.warn").innerText(), w.fromGit);
           assert.equal(await dlg.locator(".pm-links a", { hasText: "npm" }).count(), 0, "npm has no page for it");
           assert.equal(await dlg.locator(".pm-links a", { hasText: "GitHub" }).getAttribute("href"), "https://github.com/keli-wen/agy-staff");
           await install("github:keli-wen/agy-staff");
-          await cards.nth(2).locator(".pm-act.done").waitFor();
+          await agy.locator(".pm-act.done").waitFor();
 
           // a search finds them too
           await view.locator(".pm-find input").fill("quota");
-          const found = view.locator(".pm-sec", { has: page.locator("h3", { hasText: w.section }) });
+          const found = view.locator(".pm-sec").first();
           await page.waitForFunction(() => document.querySelectorAll("#view-plugins .pm-sec .pm-card").length === 1);
           assert.deepEqual(await found.locator(".pm-name b").allInnerTexts(), ["opencode-quota"]);
           await view.locator(".pm-find input").fill("nothing-like-it");
-          await page.waitForFunction(() => !document.querySelector("#view-plugins .pm-ghsec .pm-card"));
+          await page.waitForFunction(() => !document.querySelector("#view-plugins .pm-card"));
 
           assert.equal(asked.filter(([k]) => k === "fetched").length, 0, "nothing fetched from outside: " + JSON.stringify(asked.filter(([k]) => k === "fetched")));
           assert.deepEqual(errors, []);

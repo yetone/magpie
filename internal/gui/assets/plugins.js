@@ -195,14 +195,16 @@
   // what npm says of the plugins suggested and those installed: drawn
   // when it comes, never waited on
   let npmTries = 0;
+  let npmAnswered = false; // npm was asked once: no downloads then means none to rank by
   async function askNPM(only) {
     const names = [...new Set([...(listings || []).map((l) => l.package), ...(mine?.plugins || []).filter((e) => onNPM(e.spec)).map((e) => name(e.spec))])]
       .filter((n) => !only || !npm[n]);
-    if (!names.length) return;
+    if (!names.length) { if (!npmAnswered) { npmAnswered = true; drawBody(); } return; }
     try {
       const r = await api("plugins/npm?names=" + encodeURIComponent(names.join(",")));
       Object.assign(npm, r.npm || {});
     } catch {}
+    npmAnswered = true;
     merge();
     // one npm said nothing of: unknown (Install), asked again
     let u = 0;
@@ -260,6 +262,10 @@
     tab = "discover";
     clearTimeout(searchTimer);
     hits = null;
+    // Agents alone, whoever wrote them
+    kindPick = "ag";
+    srcPick = "";
+    onlyNew = false;
     agentsFor = ev;
     draw();
   };
@@ -553,14 +559,7 @@
     const nm = el("div", "pm-name");
     nm.append(el("b", "", l.name));
     who.append(nm);
-    const by = el("div", "pm-by");
-    if (l.community) {
-      const v = el("span", "pm-verified");
-      v.append(glyph(SHIELD, 11, 1.5), el("span", "", t("magpie community")));
-      v.title = t("Written for magpie by its community, in github.com/magpie-community/plugins");
-      by.append(v);
-    } else by.append(el("span", "", l.npm?.publisher || l.package));
-    who.append(by);
+    who.append(byline(l));
     if (l.github) c.classList.add("gh");
     const go = actionFor(l.package, l.name, l);
     top.append(logo(l.icon || l.npm?.icon, false, kindOf(l)), who, go);
@@ -637,44 +636,184 @@
     return box;
   }
 
-  // GitHub's section: its own kinds, an installed strip and a field, each
-  // counting what the others leave; only the section redraws (#1055)
-  let ghKind = "";       // "" (all) | "pv" | "mw" | "ag"
-  let ghHave = "";       // "" (all) | "have" | "none"
-  let ghQuery = "";
-  let ghList = [];       // what the page's search left of the repositories
-  const ghSec = el("section", "pm-sec pm-ghsec");
-  const ghHead = el("div", "pm-sechead");
-  const ghBar = el("div", "pm-ghbar");
-  const ghGrid = el("div", "pm-grid");
-  const ghFind = el("label", "pm-find pm-ghfind");
-  const ghQ = el("input");
-  ghQ.type = "search";
-  ghQ.spellcheck = false;
-  ghQ.autocomplete = "off";
-  ghQ.oninput = () => { ghQuery = ghQ.value; drawGh(); };
-  ghQ.onkeydown = (ev) => { ev.stopPropagation(); if (ev.key === "Escape" && ghQ.value) { ghQ.value = ""; ghQ.oninput(); } };
-  ghFind.append(glyph(SEARCH, 13, 1.6), ghQ);
-  const ghMatch = (l) => {
-    const f = ghQuery.trim().toLowerCase();
-    return !f || [l.name, l.github.repo, l.github.owner, l.package, summary(l)].join(" ").toLowerCase().includes(f);
+  // Discover is one market (#owner, 11-09): every plugin, whoever wrote
+  // it (magpie's community, another author on npm, a repository its
+  // author tagged on GitHub), is the same card, its source said under its
+  // name. A strip picks the kind, a menu the source; the top is the
+  // week's picks: one a day, the most downloaded, the most starred.
+  const ORDER = ["pv", "mw", "ag", "tl", "pg"];
+  const SHELVES = { pv: "Subscriptions", mw: "Gateway middleware", ag: "Agents", tl: "Tools for agents", pg: "Pages" };
+  const SHORT = { pv: "Subscriptions", mw: "Middleware", ag: "Agents", tl: "Tools", pg: "Pages" };
+  const SHELF_N = { pv: 6 };
+  const SOURCES = [["", "All sources"], ["ours", "magpie community"], ["third", "Other authors"], ["gh", "Unofficial, on GitHub"]];
+  const SORTS = [["hot", "Most popular"], ["name", "Name"]];
+  let kindPick = "", srcPick = "", onlyNew = false, sortPick = "hot";
+  const srcOf = (l) => l.github ? "gh" : l.community ? "ours" : "third";
+  const hotOf = (l) => l.npm?.weekly || 0;
+  const nameOrder = (a, b) => a.name.localeCompare(b.name, intlLang());
+  const byHot = (a, b) => hotOf(b) - hotOf(a) || (b.github?.stars || 0) - (a.github?.stars || 0) || nameOrder(a, b);
+  const ranked = (list, how = sortPick) => [...list].sort(how === "name" ? nameOrder : byHot);
+  // the day in the reader's own calendar, which the daily pick turns on
+  const today = () => { const d = new Date(); return Math.floor((d.getTime() - d.getTimezoneOffset() * 6e4) / 864e5); };
+
+  // every plugin the market can show: the list's, and the repositories
+  // tagged on GitHub it doesn't list already
+  function everything(match) {
+    const listed = new Set((listings || []).map((l) => l.package));
+    const gh = (tagged || []).filter((l) => !(l.github.package && listed.has(l.github.package)));
+    return [...(listings || []), ...gh].filter(match);
+  }
+
+  // who it is from, under its name: magpie's community, its author, or
+  // its author and that nobody reviewed it
+  function byline(l) {
+    const by = el("div", "pm-by");
+    if (l.community) {
+      const v = el("span", "pm-verified");
+      v.append(glyph(SHIELD, 11, 1.5), el("span", "", t("magpie community")));
+      v.title = t("Written for magpie by its community, in github.com/magpie-community/plugins");
+      by.append(v);
+      return by;
+    }
+    by.append(el("span", "", l.npm?.publisher || l.github?.owner || l.package));
+    if (l.github) {
+      const u = el("span", "pm-chip warn");
+      u.append(el("span", "dot"), el("span", "", t("Unreviewed")));
+      u.title = t("repositories their authors tagged {topic} — nobody has reviewed them; read the code before you install one", { topic });
+      by.append(u);
+    }
+    return by;
+  }
+
+  const opens = (box, l) => {
+    box.tabIndex = 0;
+    box.setAttribute("role", "button");
+    box.dataset.pkg = l.package;
+    box.onclick = () => detail(l);
+    box.onkeydown = (ev) => { if (ev.target === box && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); detail(l); } };
   };
-  const ghTitle = () => [el("h3", "", t("Unofficial, on GitHub")), el("span", "", t("repositories their authors tagged {topic} — nobody has reviewed them; read the code before you install one", { topic }))];
-  // until GitHub answers, its section stands in place, saying it is looking
-  let ghArrive = false;
-  function ghWaiting() {
+
+  // the week's picks: null till npm has said how often each is downloaded
+  function picks(all) {
+    const listed = ranked(all.filter((l) => !l.github && hotOf(l) > 0), "hot");
+    if (!listed.length) return null;
+    // the day's: one of the community's most downloaded not installed
+    // yet, a different one each day
+    let pool = listed.filter((l) => l.community && !entryOf(l.package)).slice(0, 14);
+    if (!pool.length) pool = listed.slice(0, 14);
+    const day = pool[today() % pool.length];
+    const starred = all.filter((l) => l.github?.stars > 0).sort((a, b) => b.github.stars - a.github.stars || nameOrder(a, b)).slice(0, 5);
+    return { day, top: listed.slice(0, 5), starred };
+  }
+  function hero(l) {
+    const box = el("article", "pm-hero");
+    opens(box, l);
+    const top = el("div", "pm-htop");
+    const who = el("div", "pm-who");
+    const nm = el("div", "pm-name");
+    nm.append(el("b", "", l.name));
+    who.append(nm, byline(l));
+    const lg = logo(l.icon || l.npm?.icon, true, kindOf(l));
+    lg.classList.add("hero");
+    top.append(lg, who);
+    const stats = el("div", "pm-stats");
+    const stat = (v, k) => { const s = el("div", "pm-stat"); s.append(el("b", "", v), el("span", "", k)); stats.append(s); };
+    stat(count(hotOf(l)), t("Downloads last week"));
+    stat(t(SHORT[kindOf(l)]), t("Kind"));
+    if (l.npm?.version) stat("v" + l.npm.version, t("Version"));
+    const acts = el("div", "pm-hact");
+    const more = el("button", "pm-act ghost", t("Details"));
+    more.type = "button";
+    more.onclick = (ev) => { ev.stopPropagation(); detail(l); };
+    acts.append(actionFor(l.package, l.name, l), more);
+    box.append(el("div", "pm-eyebrow", t("Today's pick")), top, el("p", "pm-hsum", summary(l)), stats, acts);
+    return box;
+  }
+  function rankList(title, note, list, line) {
+    const box = el("div", "pm-rank");
+    const h = el("div", "pm-rhead");
+    h.append(el("b", "", title), el("span", "", note));
+    box.append(h);
+    list.forEach((l, i) => {
+      const row = el("div", "pm-rrow");
+      opens(row, l);
+      const who = el("div", "pm-rwho");
+      who.append(el("b", "", l.name), el("span", "", line(l)));
+      row.append(el("span", "pm-rnum", String(i + 1)), logo(l.icon || l.npm?.icon, false, kindOf(l)), who, actionFor(l.package, l.name, l));
+      box.append(row);
+    });
+    return box;
+  }
+  function recSection(all) {
+    const p = picks(all);
+    if (!p && npmAnswered) return null;
+    const sec = el("section", "pm-sec pm-recs");
+    const h = el("div", "pm-rectitle");
+    h.append(el("h2", "", t("This week")), el("span", "", new Date().toLocaleDateString(intlLang(), { month: "long", day: "numeric" })));
+    const grid = el("div", "pm-rec");
+    if (!p) {
+      grid.classList.add("ghost");
+      grid.setAttribute("aria-hidden", "true");
+      for (const c of ["pm-hero", "pm-rank", "pm-rank"]) {
+        const g = el("div", c + " ghost");
+        for (let i = 0; i < 5; i++) g.append(el("div", "sk"));
+        grid.append(g);
+      }
+    } else {
+      grid.append(hero(p.day), rankList(t("Most downloaded"), t("last week, on npm"), p.top, (l) => t(SHORT[kindOf(l)]) + " · ↓" + t("{n}/week", { n: count(hotOf(l)) })));
+      if (p.starred.length) grid.append(rankList(t("Most starred"), t("on GitHub"), p.starred, (l) => "★ " + count(l.github.stars) + " · " + l.github.owner));
+      else grid.classList.add("two");
+    }
+    sec.append(h, grid);
+    return sec;
+  }
+
+  // a pop-up button: its name, and what is picked now
+  function popButton(name, now, open) {
+    const b = el("button", "pm-pop");
+    b.type = "button";
+    b.setAttribute("aria-haspopup", "menu");
+    b.setAttribute("aria-expanded", "false");
+    b.append(el("span", "", name), el("b", "", now), glyph("M4.5 6.5 8 10l3.5-3.5", 10, 1.8));
+    b.onclick = (ev) => { ev.stopPropagation(); open(b); };
+    return b;
+  }
+  function browseBar(all, base) {
+    const bar = el("div", "pm-bar");
+    const kinds = ORDER.filter((k) => all.some((l) => kindOf(l) === k));
+    if (kindPick && !kinds.includes(kindPick)) kindPick = "";
+    const n = (k) => base.filter((l) => !k || kindOf(l) === k).length;
+    const ids = ["", ...kinds];
+    const pick = segs(ids.map((k) => [k, k ? t(SHORT[k]) : t("All")]), kindPick, (k) => { kindPick = k; drawBody(); });
+    pick.classList.add("pm-kinds");
+    pick.setAttribute("role", "group");
+    pick.setAttribute("aria-label", t("Kind of plugin"));
+    [...pick.querySelectorAll(".opt")].forEach((b, i) => b.append(el("em", "", String(n(ids[i])))));
+    bar.append(pick, el("span", "grow"));
+    if (ghLooking()) bar.append(ghLook());
+    const srcName = (srcPick ? t(SOURCES.find(([v]) => v === srcPick)[1]) : t("All")) + (onlyNew ? " · " + t("Not installed") : "");
+    bar.append(popButton(t("Origin"), srcName, (b) => openProtoMenu(b,
+      [...SOURCES.map(([v, name]) => ({ v, name, note: "" })), { v: "\x01", name: "Not installed only", note: "", ticked: onlyNew }],
+      srcPick, (v) => { if (v === "\x01") onlyNew = !onlyNew; else srcPick = v; drawBody(); }, "Origin", "pm-srcmenu", "right")));
+    bar.append(popButton(t("Sort"), t(SORTS.find(([v]) => v === sortPick)[1]), (b) => openProtoMenu(b,
+      SORTS.map(([v, name]) => ({ v, name, note: "" })), sortPick, (v) => { sortPick = v; drawBody(); }, "Sort", "pm-sortmenu", "right")));
+    return bar;
+  }
+
+  // GitHub answers seconds after the rest on a slow line: till it does,
+  // a word that it is being asked, so its plugins aren't read as none
+  let ghAsking = false;
+  const ghLooking = () => !tagged || ghAsking;
+  function ghLook() {
     const look = el("span", "pm-ghlook");
     look.setAttribute("role", "status");
     const dots = el("span", "dots");
     dots.setAttribute("aria-hidden", "true");
     dots.append(el("i"), el("i"), el("i"));
     look.append(dots, el("span", "", t("Looking on GitHub")));
-    ghHead.replaceChildren(...ghTitle(), look);
-    ghSec.setAttribute("aria-busy", "true");
-    ghArrive = true;
-    replaceKeeping(ghSec, [ghHead, skeleton(3)]);
-    return ghSec;
+    return look;
   }
+
   // why the list isn't GitHub's whole answer; kept: cards are shown. A
   // known kind in the reader's words, the raw error as its hover
   const ghWhy = (kept) => {
@@ -685,111 +824,62 @@
     if (error !== taggedErr) s.title = taggedErr;
     return s;
   };
-  // and one GitHub couldn't be asked of says so, with another go
-  function ghFailed() {
-    ghHead.replaceChildren(...ghTitle());
-    ghSec.removeAttribute("aria-busy");
-    const box = el("div", "pm-ghnone");
-    const again = el("button", "text", t("Try again"));
-    again.type = "button";
-    again.onclick = () => {
-      tagged = null;
-      taggedErr = "";
-      taggedMissing = 0;
-      drawBody();
-      loadTagged(true).then(drawBody);
-    };
-    box.append(ghWhy(false), again);
-    replaceKeeping(ghSec, [ghHead, box]);
-    return ghSec;
-  }
-  // the cards GitHub could give, and a line saying what it couldn't, with
-  // another go that keeps them until it answers
+  // what GitHub couldn't give, a quiet line under the strip, with another
+  // go that keeps what it gave until it answers
   function ghNote() {
     const note = el("div", "pm-ghwarn");
     note.setAttribute("role", "status");
     const again = el("button", "text", t("Try again"));
     again.type = "button";
     again.onclick = () => {
-      again.disabled = true;
-      loadTagged(true).then(drawBody);
+      ghAsking = true;
+      drawBody();
+      loadTagged(true).then(() => { ghAsking = false; drawBody(); });
     };
-    note.append(ghWhy(true), again);
+    note.append(ghWhy(!!tagged?.length), again);
     return note;
   }
-  function ghSection(list) {
-    ghList = list;
-    ghHead.replaceChildren(...ghTitle());
-    ghSec.removeAttribute("aria-busy");
-    drawGh();
-    // the first cards after the wait come in, one after the other; the
-    // grid drawn again for a pick doesn't
-    if (ghArrive) {
-      ghArrive = false;
-      ghSec.classList.add("pm-arrive");
-      [...ghGrid.children].forEach((c, i) => c.style.setProperty("--i", Math.min(i, 9)));
-      setTimeout(() => ghSec.classList.remove("pm-arrive"), 900);
+
+  function shelf(k, list, all) {
+    const box = el("section", "pm-sec" + (k === "ag" ? " pm-agents" : ""));
+    box.dataset.kind = k;
+    const h = el("div", "pm-sechead");
+    h.append(el("h3", "", t(SHELVES[k])), el("span", "pm-n", String(list.length)));
+    const limit = all ? list.length : SHELF_N[k] || 3;
+    if (list.length > limit) {
+      const more = el("button", "pm-more");
+      more.type = "button";
+      more.append(el("span", "", t("See all")), glyph("M6 3.5 10.5 8 6 12.5", 11, 1.7));
+      more.onclick = () => { kindPick = k; drawBody(); page.scrollTo({ top: 0 }); };
+      h.append(el("span", "grow"), more);
     }
-    return ghSec;
+    const g = el("div", "pm-grid");
+    for (const l of list.slice(0, limit)) g.append(card(l));
+    box.append(h, g);
+    return box;
   }
-  function drawGh() {
-    const head = taggedErr ? [ghHead, ghNote()] : [ghHead];
-    if ((tagged || []).length <= 6) {
-      ghGrid.replaceChildren(...ghList.map(card));
-      replaceKeeping(ghSec, [...head, ghGrid]);
-      return;
+  function market(all) {
+    const base = all.filter((l) => (!srcPick || srcOf(l) === srcPick) && (!onlyNew || !entryOf(l.package)));
+    const out = [browseBar(all, base)];
+    if (taggedErr && !ghAsking) out.push(ghNote());
+    const kinds = kindPick ? [kindPick] : ORDER;
+    let shown = 0;
+    for (const k of kinds) {
+      const list = ranked(base.filter((l) => kindOf(l) === k));
+      if (!list.length) continue;
+      out.push(shelf(k, list, !!kindPick));
+      shown++;
     }
-    // the kinds there are, in the market's order, each with how many the
-    // field leaves of it; one kind alone needs no picking
-    const found = ghList.filter(ghMatch);
-    const kinds = ["pv", "mw", "ag", "tl", "pg"].filter((k) => ghList.some((l) => kindOf(l) === k));
-    if (!kinds.includes(ghKind)) ghKind = "";
-    // which of them are here, asked once each: the counts below would ask
-    // it again for every pick in both strips. Like a kind alone, a list
-    // that is all installed or all not has nothing to pick out, and a pick
-    // that can no longer be seen doesn't go on narrowing the grid.
-    const here = new Map(ghList.map((l) => [l, !!entryOf(l.package)]));
-    const have = (l) => here.get(l);
-    const both = ghList.some(have) && ghList.some((l) => !have(l));
-    if (!both) ghHave = "";
-    // the field and the other strip narrow it, so each count is what a
-    // pick in this strip would leave; the kind's own pick is the one left
-    // out, or every count but All would be the picked kind's alone
-    const n = (k, h) => found.filter((l) => (!k || kindOf(l) === k) && (!h || have(l) === (h === "have"))).length;
-    const bar = [];
-    if (kinds.length > 1) {
-      const pick = segs([["", t("All") + " · " + n("", ghHave)], ...kinds.map((k) => [k, t(KINDS[k][1]) + " · " + n(k, ghHave)])], ghKind, (k) => { ghKind = k; drawGh(); });
-      pick.classList.add("pm-ghkinds");
-      pick.setAttribute("role", "group");
-      pick.setAttribute("aria-label", t("Kind of plugin"));
-      bar.push(pick);
+    if (!shown && ghLooking() && srcPick === "gh") out.push(skeleton(3));
+    else if (!shown && (kindPick || srcPick || onlyNew)) {
+      const none = el("div", "pm-ghnone");
+      const every = el("button", "text", t("Show all"));
+      every.type = "button";
+      every.onclick = () => { kindPick = ""; srcPick = ""; onlyNew = false; drawBody(); };
+      none.append(el("span", "", t("No plugin matches")), every);
+      out.push(none);
     }
-    // what's installed, on both sides of it: a reader looks for what to
-    // add as much as for what they have
-    if (both) {
-      const pick = segs([["", t("All")], ["have", t("Installed") + " · " + n(ghKind, "have")], ["none", t("Not installed") + " · " + n(ghKind, "none")]], ghHave, (h) => { ghHave = h; drawGh(); });
-      pick.classList.add("pm-ghhave");
-      pick.setAttribute("role", "group");
-      pick.setAttribute("aria-label", t("Installed or not"));
-      bar.push(pick);
-    }
-    bar.push(el("span", "grow"), ghFind);
-    ghQ.placeholder = t("Filter by name, author or description");
-    ghQ.setAttribute("aria-label", t("Filter the plugins on GitHub"));
-    if (ghQ.value !== ghQuery) ghQ.value = ghQuery;
-    replaceKeeping(ghBar, bar);
-    const shown = found.filter((l) => (!ghKind || kindOf(l) === ghKind) && (!ghHave || have(l) === (ghHave === "have")));
-    if (shown.length) {
-      ghGrid.replaceChildren(...shown.map(card));
-      replaceKeeping(ghSec, [...head, ghBar, ghGrid]);
-      return;
-    }
-    const none = el("div", "pm-ghnone");
-    const all = el("button", "text", t("Show all"));
-    all.type = "button";
-    all.onclick = () => { ghKind = ""; ghHave = ""; ghQuery = ""; drawGh(); ghQ.focus(); };
-    none.append(el("span", "", t("No plugin on GitHub matches")), all);
-    replaceKeeping(ghSec, [...head, ghBar, none]);
+    return out;
   }
 
   // the head and its search field are made once and drawn again in
@@ -917,41 +1007,24 @@
       return;
     }
     if (!listings) {
-      body.append(intro(), skeleton(6));
+      body.append(skeleton(6));
       return;
     }
     const f = query.trim().toLowerCase();
-    const match = (l) => !f || [l.name, l.package, summary(l), (l.providers || []).join(" "), l.npm?.publisher || ""].join(" ").toLowerCase().includes(f);
-    const ls = listings.filter(match);
-    // a tagged repository the market already lists is the market's card
-    const listed = new Set(listings.map((l) => l.package));
-    const gh = (tagged || []).filter((l) => !(l.github.package && listed.has(l.github.package)) && match(l));
-    // put in place around the GitHub section, which stays in the page
+    const match = (l) => !f || [l.name, l.package, summary(l), (l.providers || []).join(" "), l.npm?.publisher || "", l.github?.owner || ""].join(" ").toLowerCase().includes(f);
+    const all = everything(match);
     const out = [];
     if (!f) {
-      out.push(intro());
-      // magpie's community's alone: others' plugins are found by a search
-      const ours = ls.filter((l) => l.community && kindOf(l) === "pv");
-      const mws = ls.filter((l) => l.community && kindOf(l) === "mw");
-      const ags = ls.filter((l) => l.community && kindOf(l) === "ag");
-      const tls = ls.filter((l) => l.community && kindOf(l) === "tl");
-      const pgs = ls.filter((l) => l.community && kindOf(l) === "pg");
-      if (ours.length) out.push(section(t("Subscriptions"), t("written for magpie, checked against its own sign-ins"), ours));
-      if (mws.length) out.push(section(t("Gateway middleware"), t("runs in magpie's gateway on what every agent sends and gets back, whichever provider serves it"), mws));
-      const agSec = ags.length ? section(t("Agents"), t("agents magpie has no setup of its own for, connected to it as its own are"), ags) : null;
-      if (agSec) { agSec.classList.add("pm-agents"); out.push(agSec); }
-      if (tls.length) out.push(section(t("Tools for agents"), t("tools every agent can call, through magpie's MCP server"), tls));
-      if (pgs.length) out.push(section(t("Pages"), t("pages of their own in magpie's window, each shut off from the rest and reading only what it lists"), pgs));
-      if (gh.length) out.push(ghSection(gh));
-      else if (!tagged) out.push(ghWaiting());
-      else if (taggedErr && !tagged.length) out.push(ghFailed());
-      out.push(manual());
+      const rec = !kindPick && recSection(all);
+      if (rec) out.push(rec);
+      out.push(...market(all));
+      out.push(manual(), footer());
       if (mine?.registry) {
         out.push(regBox = regBox || el("div", "pm-registry"));
         import("./registry.js").then(() => pmRegistry(regBox, mine, askNPM), statusTErr);
       }
       replaceKeeping(body, out);
-      if (agentsFor && agSec) {
+      if (agentsFor && body.querySelector(".pm-agents")) {
         // after the view is put back where the reader was, as showing it
         // does; the section then is the one drawn last (npm's answers draw
         // it again)
@@ -960,14 +1033,15 @@
       }
       return;
     }
-    if (ls.length) out.push(section(t("Suggested"), "", ls));
-    if (gh.length) out.push(ghSection(gh));
-    else if (!tagged) out.push(ghWaiting());
-    else if (taggedErr && !tagged.length) out.push(ghFailed());
+    // a search looks through every source at once, most used first
+    if (all.length) out.push(section(t("Plugins"), "", ranked(all, "hot")));
+    if (ghLooking()) out.push(ghLook());
+    else if (taggedErr) out.push(ghNote());
     // npm's card goes where a card above is its package (a listing, or a
     // tagged repository npm has), not where a repository's package.json
     // only names it (#3685)
     const known = new Set([...listings.map((l) => l.package), ...(tagged || []).map((l) => l.package)]);
+    const ls = all;
     const box = el("section", "pm-sec");
     const h = el("div", "pm-sechead");
     h.append(el("h3", "", t("On npm")), el("span", "", t("OpenCode plugins and pi packages anyone published — read what one does before you install it")));
@@ -986,27 +1060,18 @@
     replaceKeeping(body, out);
   }
 
-  function intro() {
-    const box = el("div", "pm-intro");
-    const text = el("div", "pm-introtext");
-    text.append(el("h2", "", t("Plugins extend magpie")));
-    text.append(el("p", "", t("Plugins sign in to coding plans and make their requests; the models then work in every agent, like any provider's. They're OpenCode's provider plugins or pi's packages, run on Bun.")));
-    const mw = el("p", "");
-    mw.append(document.createTextNode(t("A plugin can also run in magpie's gateway on what agents send and get back, pick which account a routing asks, give every agent tools, connect an agent, or add a page of its own.") + " "));
+  // what a plugin is to the reader, and how one is written, under the list
+  function footer() {
+    const box = el("div", "pm-foot");
+    const trust = el("p", "pm-trust");
+    trust.append(glyph(SHIELD, 12, 1.5), el("span", "", t("A plugin is someone else's code with your sign-in or your requests: install the ones you trust.")));
     // the docs in the reader's language: the site has en, zh and ja, and
     // Chinese is nearer a zh-TW reader than English is
     const how = el("a", "pm-link pm-write", "");
     how.href = "https://usemagpie.ai/docs/" + ({ zh: "zh/", "zh-TW": "zh/", ja: "ja/" }[lang()] || "") + "plugins";
     how.append(el("span", "", t("Write a plugin")), glyph(OUTL, 11, 1.5));
     how.onclick = (ev) => { ev.preventDefault(); api("open", { url: how.href }).catch(() => {}); };
-    mw.append(how);
-    text.append(mw);
-    const trust = el("p", "pm-trust");
-    trust.append(glyph(SHIELD, 12, 1.5), el("span", "", t("A plugin is someone else's code with your sign-in or your requests: install the ones you trust.")));
-    text.append(trust);
-    const art = el("div", "pm-art");
-    for (const ic of ["zcode", "githubcopilot", "gemini-color", "zed", "kiro-color"]) art.append(logo(ic));
-    box.append(text, art);
+    box.append(trust, how);
     return box;
   }
 

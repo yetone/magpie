@@ -19,23 +19,72 @@
 .pm-find input::-webkit-search-cancel-button { cursor: default; }
 .pm-body { gap: 18px; padding: 10px 0 18px; }
 
-/* the opening: what plugins are, and a few of the subscriptions they bring */
-.pm-intro {
-  position: relative; overflow: hidden; display: flex; align-items: center; gap: 18px;
-  padding: 16px 18px; border-radius: 14px; border: 1px solid var(--line);
-  background:
-    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--accent) 11%, transparent), transparent 60%),
-    var(--card);
+/* the week's picks: the day's plugin, the most downloaded, the most starred */
+.pm-recs { gap: 10px; }
+.pm-rectitle { display: flex; align-items: baseline; gap: 8px; padding: 0 2px; }
+.pm-rectitle h2 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
+.pm-rectitle span { font-size: 11.5px; color: var(--muted); }
+.pm-rec { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 10px; align-items: stretch; }
+.pm-rec.two { grid-template-columns: 1.3fr 1fr; }
+.pm-hero, .pm-rank { min-width: 0; border-radius: 14px; border: 1px solid var(--line); background: var(--card); }
+.pm-hero { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; cursor: pointer; transition: border-color .14s ease, box-shadow .14s ease; }
+.pm-hero:hover { border-color: color-mix(in srgb, var(--fg) 16%, var(--line)); box-shadow: 0 4px 14px rgba(20, 22, 30, .07); }
+.pm-hero:focus-visible, .pm-rrow:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
+.pm-eyebrow { font-size: 11px; font-weight: 600; color: var(--accent); }
+.pm-htop { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.pm-logo.hero { width: 52px; height: 52px; border-radius: 14px; }
+.pm-logo.hero .ic { width: 30px; height: 30px; }
+.pm-htop .pm-name b { font-size: 15px; }
+.pm-hsum { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--fg-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.pm-stats { display: flex; gap: 22px; margin-top: auto; padding-top: 2px; }
+.pm-stat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pm-stat b { font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pm-stat span { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.pm-hact { display: flex; align-items: center; gap: 8px; }
+.pm-act.ghost { background: none; box-shadow: inset 0 0 0 1px var(--line); color: var(--fg-2); }
+.pm-act.ghost:hover { background: var(--pill); color: var(--fg); }
+.pm-rank { display: flex; flex-direction: column; padding: 12px 8px 8px; }
+.pm-rhead { display: flex; align-items: baseline; gap: 7px; padding: 0 8px 6px; }
+.pm-rhead b { font-size: 12.5px; font-weight: 650; }
+.pm-rhead span { font-size: 11px; color: var(--muted); }
+.pm-rrow { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 9px; cursor: pointer; transition: background .14s ease; }
+.pm-rrow:hover { background: var(--pill); }
+.pm-rnum { flex: none; width: 14px; text-align: center; font-size: 11.5px; font-weight: 600; color: var(--faint); font-variant-numeric: tabular-nums; }
+.pm-rrow .pm-logo { width: 28px; height: 28px; border-radius: 8px; }
+.pm-rrow .pm-logo .ic { width: 16px; height: 16px; }
+.pm-rwho { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.pm-rwho b { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-rwho span { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-rec.ghost .pm-hero, .pm-rec.ghost .pm-rank { cursor: default; gap: 10px; padding: 16px; min-height: 196px; }
+.pm-rec.ghost .sk { height: 10px; border-radius: 5px; background: var(--pill); animation: pm-pulse 1.4s linear infinite; }
+.pm-rec.ghost .sk:first-child { width: 40%; }
+.pm-rec.ghost .sk:nth-child(2n) { width: 75%; }
+
+/* the strip of kinds, then where from and in which order */
+.pm-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pm-bar .segs { flex: none; max-width: 100%; }
+.pm-bar .segs .opt em { margin-left: 5px; font-style: normal; font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.pm-bar .segs .opt.on em { color: var(--muted); }
+.pm-bar .grow { flex: 1; }
+.pm-pop { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border: 0; border-radius: 7px; background: none; box-shadow: inset 0 0 0 1px var(--line); font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; transition: background .14s ease, color .14s ease; }
+.pm-pop b { font-weight: 500; color: var(--fg); }
+.pm-pop:hover { background: var(--pill); }
+.pm-pop:active { transform: scale(.97); }
+.pm-sechead .pm-n { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.pm-sechead .grow { flex: 1; }
+.pm-more { display: inline-flex; align-items: center; gap: 2px; padding: 1px 4px; border: 0; border-radius: 5px; background: none; font: inherit; font-size: 11.5px; color: var(--accent); cursor: pointer; }
+.pm-more:hover { background: var(--accent-soft); }
+.pm-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px 14px; flex-wrap: wrap; padding: 0 2px; }
+.pm-foot .pm-trust { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 11.5px; color: var(--muted); }
+.pm-foot .pm-trust svg { flex: none; color: var(--green); }
+.pm-foot .pm-write { font-size: 12px; }
+@media (max-width: 1180px) {
+  .pm-rec, .pm-rec.two { grid-template-columns: 1fr 1fr; }
+  .pm-rec .pm-hero { grid-column: 1 / -1; }
 }
-.pm-introtext { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
-.pm-intro h2 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -.01em; text-wrap: balance; }
-.pm-intro p { margin: 0; font-size: 12px; line-height: 1.55; color: var(--fg-2); max-width: 560px; }
-.pm-intro .pm-trust { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 11.5px; color: var(--muted); }
-.pm-intro .pm-trust svg { flex: none; color: var(--green); }
-.pm-art { flex: none; display: grid; grid-template-columns: repeat(3, 34px); gap: 8px; transform: rotate(-6deg); margin-right: 6px; }
-.pm-art .pm-logo { width: 34px; height: 34px; border-radius: 10px; box-shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 0 0 1px var(--line-2); background: var(--card); }
-.pm-art .pm-logo:nth-child(4) { grid-column: 2; }
-.pm-art .pm-logo:nth-child(odd) { transform: translateY(4px); }
+@media (max-width: 760px) {
+  .pm-rec, .pm-rec.two { grid-template-columns: 1fr; }
+}
 
 /* sections of cards */
 .pm-sec { display: flex; flex-direction: column; gap: 9px; }
@@ -43,14 +92,6 @@
 .pm-sechead h3 { margin: 0; font-size: 12.5px; font-weight: 650; }
 .pm-sechead span { font-size: 11.5px; color: var(--muted); }
 .pm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(262px, 1fr)); gap: 10px; }
-/* the GitHub section's kinds, what's installed and its own field, on one
-   line while they fit; the field goes under them, the whole width, when
-   they don't */
-.pm-ghbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.pm-ghbar .segs { flex: none; max-width: 100%; }
-/* it takes a share of the room the strips leave, up to what its
-   placeholder needs, so "Filter by name, author or description" isn't cut */
-.pm-ghfind { flex: 4 0 auto; width: min(240px, 100%); max-width: min(320px, 100%); }
 .pm-ghnone { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 22px 12px; border-radius: 12px; border: 1px dashed var(--line); font-size: 12px; color: var(--muted); text-align: center; }
 /* what GitHub couldn't give, over the cards it could: a quiet line, its
    reason wrapping anywhere (a URL in it is one long word) */
@@ -173,7 +214,7 @@ button.pm-chip:disabled { cursor: default; opacity: .6; }
 @keyframes pm-pulse { 50% { opacity: .5; } }
 @keyframes pm-sheen { from { background-position: 100% 0; } to { background-position: 0 0; } }
 /* the GitHub section looking: three dots breathing in turn, and the word */
-.pm-sechead .pm-ghlook { display: inline-flex; align-items: center; gap: 7px; margin-left: auto; font-size: 11px; color: var(--faint); animation: pm-fade .26s var(--ease) both .08s; }
+.pm-ghlook { display: inline-flex; align-items: center; gap: 7px; margin-left: auto; font-size: 11px; color: var(--faint); animation: pm-fade .26s var(--ease) both .08s; }
 .pm-ghlook .dots { display: inline-flex; gap: 3px; }
 .pm-ghlook .dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--accent); opacity: .25; animation: pm-breathe 1.2s ease-in-out infinite; }
 .pm-ghlook .dots i:nth-child(2) { animation-delay: .16s; }
@@ -308,11 +349,13 @@ body.window .pm-manual { --bleed-l: 16px; }
 @media (max-width: 560px) {
   .pm-head { flex-wrap: wrap; }
   .pm-find { width: 100%; order: 3; }
-  .pm-ghfind { max-width: 100%; }
-  .pm-art { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pm-card { transition: none; }
-  .pm-card.ghost .sk, .pm-ghlook, .pm-ghlook .dots i, .pm-arrive .pm-card { animation: none; }
+  .pm-card.ghost .sk, .pm-rec.ghost .sk, .pm-ghlook, .pm-ghlook .dots i, .pm-arrive .pm-card { animation: none; }
   .pm-ghlook .dots i { opacity: .5; }
 }
+/* Discover's own menus use the app's: plugins' .pm-name and .pm-note don't reach them */
+.proto-menu.pm-srcmenu .pm-name, .proto-menu.pm-sortmenu .pm-name { display: block; }
+.proto-menu.pm-srcmenu .pm-note:empty, .proto-menu.pm-sortmenu .pm-note:empty { display: none; }
+.proto-menu.pm-srcmenu .pm-item:last-child { margin-top: 4px; box-shadow: 0 -1px 0 var(--line-2); }

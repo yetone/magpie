@@ -106,7 +106,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert(await noSideScroll(page), "the page scrolls sideways");
         await page.screenshot({ path: path.join(process.env.SHOTS || "/tmp", `plugin-agents-${engine}-${lang}-${width}.png`), fullPage: true }).catch(() => {});
 
-        // to Plugins, Discover, its Agents in sight at the top
+        // to Plugins, Discover, Agents alone, in sight at the top
         await more.click();
         const view = page.locator("#view-plugins");
         await view.waitFor();
@@ -115,7 +115,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction(() => {
           const v = document.querySelector("#view-plugins");
           const s = [...v.querySelectorAll(".pm-sec")].find((x) => x.querySelector(".pm-card .pm-chip.kind.ag"));
-          return v.scrollTop > 0 && s && Math.abs(s.getBoundingClientRect().top - v.getBoundingClientRect().top) < 80;
+          return s && Math.abs(s.getBoundingClientRect().top - v.getBoundingClientRect().top) < 80;
         });
         assert.equal(await agents.locator(".pm-card").count(), AGENTS.length);
         // it stays there once the page has what it loads

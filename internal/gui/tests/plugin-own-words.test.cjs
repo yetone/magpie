@@ -68,7 +68,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.goto("http://magpie.test/?view=plugins");
         const [own, tip] = await page.evaluate(([l, a, b]) => l === "en" ? [a, b] : [I18N[l][a], I18N[l][b]], [lang, OWN, TIP]);
         assert.ok(own && tip, "both words are translated");
-        const card = (repo) => page.locator(`#view-plugins .pm-ghsec .pm-card[data-pkg="github:someone/${repo}"]`).first();
+        const card = (repo) => page.locator(`#view-plugins .pm-card[data-pkg="github:someone/${repo}"]`).first();
 
         const office = card("magpie-officeace");
         await office.waitFor();

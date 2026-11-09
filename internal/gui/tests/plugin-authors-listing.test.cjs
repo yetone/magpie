@@ -1,10 +1,11 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // A plugin its author publishes from their own repository is listed in
 // registry.json without "community": true (the owner on
-// magpie-community/plugins#479). Discover doesn't browse it: not in
-// Agents, nor any section. A search finds it, by its name or its
-// publisher, under its publisher's name and never with the magpie
-// community badge, on its card and on its page. PinK's listing is
+// magpie-community/plugins#479). Discover browses it with the rest
+// (yetone: 社区插件、非官方插件散落的太厉害了，你要把它统筹起来): in Agents,
+// and alone under the Other authors origin. Browsed or found by a search,
+// by its name or its publisher, it is under its publisher's name and never
+// with the magpie community badge, on its card and on its page. PinK's listing is
 // registry.json's before plugins#617. Every language, both engines, at a
 // narrow width too; the API is faked here.
 const assert = require("node:assert/strict");
@@ -90,14 +91,23 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const card = (pkg) => view.locator(`.pm-card[data-pkg="${pkg}"]`);
         const shot = (name) => process.env.ARTIFACT_DIR && view.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `plugin-authors-${name}-${engine}-${lang}-${width}.png`) });
 
-        // browsed: the community's agent in Agents, PinK nowhere, after
-        // npm has answered too (a redraw)
+        // browsed: the community's agent and PinK in Agents, PinK under
+        // its publisher, after npm has answered too (a redraw)
         const agents = view.locator(".pm-sec.pm-agents");
         await agents.locator(".pm-sechead h3", { hasText: new RegExp("^" + w.agents + "$") }).waitFor();
         await card(KILO).locator(".pm-ver").waitFor();
         await card(RIVER).waitFor();
-        assert.equal(await card(PINK).count(), 0, "PinK is browsed");
-        assert.doesNotMatch(await view.innerText(), /PinK/);
+        assert.equal(await agents.locator(`.pm-card[data-pkg="${PINK}"]`).count(), 1, "PinK is in Agents");
+        assert.equal(await card(PINK).locator(".pm-verified").count(), 0);
+        assert.equal((await card(PINK).locator(".pm-by").innerText()).trim(), "zhouzhenzhou");
+        // the Other authors origin: PinK alone
+        await view.locator(".pm-bar .pm-pop").first().click();
+        await page.locator(".proto-menu .pm-item", { hasText: await page.evaluate(() => t("Other authors")) }).click();
+        await page.locator(".proto-menu").waitFor({ state: "hidden" }).catch(() => {});
+        assert.deepEqual(await view.locator(".pm-sec[data-kind] .pm-card").evaluateAll((cs) => cs.map((c) => c.dataset.pkg)), [PINK]);
+        await view.locator(".pm-bar .pm-pop").first().click();
+        await page.locator(".proto-menu .pm-item").first().click();
+        await page.locator(".proto-menu").waitFor({ state: "hidden" }).catch(() => {});
         assert.equal(await card(RIVER).locator(".pm-verified").count(), 1);
         assert.equal((await card(RIVER).locator(".pm-verified").innerText()).trim(), w.community);
         await shot("browse");
@@ -114,10 +124,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await card(RIVER).count(), 0);
         await shot("search");
 
-        // the search cleared: browsed again, PinK gone
+        // the search cleared: browsed again, PinK with them
         await q.fill("");
         await card(KILO).waitFor();
-        assert.equal(await card(PINK).count(), 0);
+        assert.equal(await card(PINK).count(), 1);
 
         // found by its publisher's name too
         await q.fill("zhouzhen");

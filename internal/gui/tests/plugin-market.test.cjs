@@ -141,10 +141,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await page.locator('#nav button[data-view="plugins"]').getAttribute("class"), "on");
         assert.match(page.url(), /view=plugins/);
 
-        // Discover: magpie's community's plugins alone, others' only found by a search
+        // Discover: magpie's community's plugins and others' together, in
+        // one shelf of their kind; another author's under their own name
         await view.locator(".pm-sechead h3", { hasText: w.ours }).waitFor();
-        assert.equal(await view.locator(".pm-sec").count(), 1);
-        assert.equal(await view.locator('.pm-card[data-pkg="opencode-copilot-auth"]').count(), 0);
+        assert.equal(await view.locator(".pm-sec[data-kind]").count(), 1);
+        assert.equal((await view.locator('.pm-sec[data-kind] .pm-card[data-pkg="opencode-copilot-auth"] .pm-by').innerText()).trim(), "thdxr");
         assert.doesNotMatch(await view.innerText(), /OpenCode 社区|OpenCode's community/);
         assert.equal(await view.locator('.pm-card[data-pkg="@magpie-community/opencode-qoder-auth"] .pm-act').innerText(), w.soon);
         assert.ok(await view.locator('.pm-card[data-pkg="@magpie-community/opencode-qoder-auth"] .pm-act').isDisabled());

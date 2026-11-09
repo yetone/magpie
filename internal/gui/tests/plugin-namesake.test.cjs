@@ -202,7 +202,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
               assert.equal(await dlg.locator("h2").innerText(), w.title(old, now));
               return { dlg, before };
             };
-            const ghCard = (page, owner) => page.locator("#view-plugins .pm-sec", { has: page.locator("h3", { hasText: w.section }) }).locator(".pm-card", { has: page.locator(".pm-by", { hasText: owner }) });
+            const ghCard = (page, owner) => page.locator("#view-plugins .pm-sec[data-kind] .pm-card", { has: page.locator(".pm-by", { hasText: owner }) });
 
             // npm's package installed: the repository's card asks
             {
@@ -239,7 +239,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
               const asked = [];
               const { page, errors } = await open({ installed: [{ spec: MINE, package: PKG, off: true }], repos: [], hits: [HIT] }, asked);
               try {
-                await page.locator("#view-plugins .pm-find:not(.pm-ghfind) input").fill("free-model");
+                await page.locator("#view-plugins .pm-head .pm-find input").fill("free-model");
                 const card = page.locator("#view-plugins .pm-sec", { has: page.locator("h3", { hasText: w.onNpm }) }).locator(".pm-card", { hasText: PKG });
                 await card.locator(".pm-act.get").waitFor();
                 const now = "npm:" + PKG;
@@ -315,7 +315,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
               page.on("pageerror", (e) => errors.push(e.message));
               await page.route("**/*", server(lang, { installed: [{ spec, package: PKG }], repos: [OWN, NAMESAKE] }, asked));
               await page.goto("http://magpie.test/?view=plugins", { timeout: 30000 });
-              const sec = page.locator("#view-plugins .pm-sec", { has: page.locator("h3", { hasText: w.section }) });
+              const sec = page.locator("#view-plugins .pm-sec[data-kind]");
               const own = sec.locator(".pm-card", { has: page.locator(".pm-by", { hasText: "mu-zi-lee" }) });
               const theirs = sec.locator(".pm-card", { has: page.locator(".pm-by", { hasText: "Gyarados4157" }) });
               await own.locator(".pm-act.done").waitFor();
@@ -367,12 +367,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
               const view = page.locator("#view-plugins");
               await view.waitFor({ state: "visible" });
               await settled(page);
-              await view.locator(".pm-find:not(.pm-ghfind) input").fill("free-model");
+              await view.locator(".pm-head .pm-find input").fill("free-model");
               const npm = view.locator(".pm-sec", { has: page.locator("h3", { hasText: w.onNpm }) });
               await npm.locator(".pm-card .pm-act.get").waitFor();
               await settled(page);
               assert.deepEqual(await npm.locator(".pm-card .pm-name b").allInnerTexts(), [PKG], "npm's package of the name, and not npm's card of a repository on the page");
-              assert.equal(await view.locator(".pm-sec", { has: page.locator("h3", { hasText: w.section }) }).locator(".pm-card.have").count(), 1);
+              assert.equal(await view.locator(".pm-sec").first().locator(".pm-card.have").count(), 1);
               assert.deepEqual(errors, []);
             } finally { await page.close(); }
           });

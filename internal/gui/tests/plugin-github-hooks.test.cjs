@@ -1,12 +1,12 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // A repository tagged magpie-plugin that is gateway hooks alone
 // (package.json's magpie.hooks and no entry of its own; MengXiangxi,
-// #3821) is in "Unofficial, on GitHub" as an installed one's row has it:
+// #3821) is in Discover as an installed one's row has it:
 // the gateway's chip saying Request hook, never Provider, and picked out
 // under Middleware, as it runs in the gateway too. The repositories are
 // seven of /api/plugins/github's real answer of 2026-10-27, from a magpie
 // built at this change: two providers, three middleware and two of hooks
-// alone (past six, the section has its kinds to pick from).
+// alone.
 // The API is faked here and no request leaves the page. English, Chinese,
 // Traditional Chinese, Japanese and German, 980px and 420px.
 const assert = require("node:assert/strict");
@@ -69,31 +69,31 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.addInitScript(() => { try { localStorage.setItem("magpie.pluginTab", "discover"); } catch {} });
         try {
           await page.goto("http://magpie.test/?view=plugins");
-          const sec = page.locator("#view-plugins .pm-ghsec");
-          const cards = sec.locator(".pm-card");
+          const sec = page.locator("#view-plugins");
+          const cards = sec.locator(".pm-sec[data-kind] .pm-card");
           await cards.first().waitFor();
-          assert.deepEqual(await cards.locator(".pm-name b").allInnerTexts(), REPOS.map(name), "every one listed, in GitHub's order");
           const tr = (s) => page.evaluate((s) => t(s), s);
           const hook = await tr("Request hook");
           if (lang !== "en") assert.notEqual(hook, "Request hook", "Request hook in " + lang);
+          const kinds = sec.locator(".pm-bar .pm-kinds .opt");
+          assert.deepEqual(await kinds.evaluateAll((bs) => bs.map((b) => [b.firstChild.textContent, b.querySelector("em").textContent])),
+            [[await tr("All"), "7"], [await tr("Subscriptions"), "2"], [await tr("Middleware"), "5"]]);
 
-          // each card's one chip: the gateway's for middleware and hooks,
-          // which say Request hook, as an installed one's row does
-          for (const r of REPOS) {
-            const chip = cards.filter({ has: page.locator(".pm-name b", { hasText: new RegExp("^" + name(r) + "$") }) }).locator(".pm-chip.kind");
-            assert.equal(await chip.count(), 1, r.repo);
-            const want = r.kind === "hooks" ? hook : await tr(r.kind === "middleware" ? "Middleware" : "Provider");
-            assert.equal((await chip.innerText()).trim(), want, r.repo);
-            assert.equal(await chip.evaluate((e) => e.classList.contains("mw")), !!r.kind, r.repo + "'s chip is the gateway's");
+          // picked out under Middleware, with the middleware; each card's
+          // one chip the gateway's, which says Request hook for hooks, as
+          // an installed one's row does
+          for (const [i, of] of [[2, (r) => !!r.kind], [1, (r) => !r.kind]]) {
+            await kinds.nth(i).click();
+            const rs = REPOS.filter(of);
+            assert.deepEqual((await cards.locator(".pm-name b").allInnerTexts()).sort(), rs.map(name).sort());
+            for (const r of rs) {
+              const chip = cards.filter({ has: page.locator(".pm-name b", { hasText: new RegExp("^" + name(r) + "$") }) }).locator(".pm-chip.kind");
+              assert.equal(await chip.count(), 1, r.repo);
+              const want = r.kind === "hooks" ? hook : await tr(r.kind === "middleware" ? "Middleware" : "Provider");
+              assert.equal((await chip.innerText()).trim(), want, r.repo);
+              assert.equal(await chip.evaluate((e) => e.classList.contains("mw")), !!r.kind, r.repo + "'s chip is the gateway's");
+            }
           }
-
-          // picked out under Middleware, with the middleware
-          const kinds = sec.locator(".pm-ghkinds .opt");
-          assert.deepEqual(await kinds.allTextContents(), [await tr("All") + " · 7", await tr("Provider") + " · 2", await tr("Middleware") + " · 5"]);
-          await kinds.nth(2).click();
-          assert.deepEqual(await cards.locator(".pm-name b").allInnerTexts(), REPOS.filter((r) => r.kind).map(name));
-          await kinds.nth(1).click();
-          assert.deepEqual(await cards.locator(".pm-name b").allInnerTexts(), REPOS.filter((r) => !r.kind).map(name));
 
           const over = await page.evaluate(() => [document.querySelector("#view-plugins").scrollWidth - document.querySelector("#view-plugins").clientWidth, document.documentElement.scrollWidth - innerWidth]);
           assert.deepEqual(over.map((x) => Math.max(0, x)), [0, 0], "scrolls sideways: " + over);

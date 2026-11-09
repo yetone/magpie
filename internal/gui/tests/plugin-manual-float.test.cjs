@@ -2,7 +2,7 @@
 // Plugins › Discover's "Have one in mind?" box (install by name) floats at
 // the foot of the view while the cards scroll under it (0x3108 on X: with
 // many plugins it was found only after scrolling to the very end). With
-// many cards it is in sight at the top of the list and mid-way, on a strip
+// many cards (a kind picked, shown whole) it is in sight at the top of the list and mid-way, on a strip
 // that hides the cards passing under it; at the end of the list every card
 // is above it and the npm registry line is below it, as before. A card
 // reached with Tab is not left under it, and the search field still takes
@@ -110,6 +110,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.goto("http://magpie.test/?view=plugins");
         const view = page.locator("#view-plugins");
         await view.locator(".pm-manual").waitFor();
+        // Discover shows a shelf of each kind; the kind picked shows it
+        // whole, the many cards this is about
+        await view.locator(".pm-bar .pm-kinds .opt").nth(1).click();
         await page.waitForFunction((n) => document.querySelectorAll("#view-plugins .pm-card").length >= n, listings.length);
         await view.locator(".pm-registry").waitFor();
 

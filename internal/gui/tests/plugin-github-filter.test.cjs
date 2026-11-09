@@ -1,20 +1,18 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// The repositories tagged magpie-plugin on GitHub are many and of every
-// kind (the owner: 这里应该有分类以及搜索框方便用户筛选), so their section
-// has its kinds to pick from, each with how many there are, and a field of
-// its own that narrows them by name, author or description as it is typed.
-// Both narrow what the page's search already found, the field keeps its
-// focus and its node while the page is drawn again under it (npm's answer
-// comes while typing), nothing is left over at 420px, and a filter that
-// leaves nothing says so with a Show all. What's installed is the other
-// question the section is read with (the owner: 加一个未安装), so a second
-// strip beside the kinds picks it out, its counts following the kinds and
-// the field as they are picked, and the two narrow the grid together; a
-// list with nothing installed, or nothing else, has no such strip. The
-// repositories are the dev instance's real /api/plugins/github answer of
-// 2026-10-13 (31: 27 providers, 3 middleware, an agent); the API is faked
-// and no request leaves the page. English, Chinese, Traditional Chinese, Japanese and
-// German, 1100px, 980px and 420px.
+// Discover is one market: magpie's community, other authors and the
+// repositories tagged magpie-plugin on GitHub, browsed with one bar
+// (yetone: 社区插件、非官方插件散落的太厉害了，你要把它统筹起来). The bar's
+// kinds say how many of each there are under what Origin leaves; Origin
+// picks a source and, beside it, what isn't installed yet (the owner:
+// 加一个未安装); a shelf's See all opens its kind whole; Sort puts them by
+// name; a pick that leaves nothing says so with Show all, which puts back
+// every pick. The page's search field keeps its node, focus and every
+// key while npm's answer redraws the page under it, and nothing is left
+// over at 420px. The repositories are the dev instance's real
+// /api/plugins/github answer of 2026-10-13 (31: 27 providers, 3
+// middleware, an agent); the API is faked and no request leaves the page.
+// English, Chinese, Traditional Chinese, Japanese and German, 1100px,
+// 980px and 420px.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -55,40 +53,16 @@ function server(lang, fetched, installed = INSTALLED) {
   };
 }
 
-const kindOf = (r) => r.kind === "middleware" ? "Middleware" : r.kind === "agent" ? "Agent" : "Provider";
-const names = (rs) => rs.map((r) => r.repo.split("/")[1]).sort();
+const kindOf = (r) => r.kind === "middleware" ? "mw" : r.kind === "agent" ? "ag" : "pv";
 const has = (r, s) => [r.repo, r.owner, r.package || "", r.description || ""].join(" ").toLowerCase().includes(s.toLowerCase());
-// the two the fixture installs; that the page tells them apart the same
-// way is checked against its own cards
 const here = (r) => HERE.includes(r.repo);
+const count = (rs, k) => rs.filter((r) => !k || kindOf(r) === k).length;
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   test(engine + ": the plugins on GitHub are narrowed by kind and by a field of their own", async (t) => {
     assert(["chromium", "webkit"].includes(engine), "BROWSER must be chromium or webkit");
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chromium" }));
     t.after(() => browser.close());
-    // nothing from GitHub installed: Not installed would be All again, so
-    // there is no strip to pick it from, only the kinds and the field
-    await t.test("nothing installed", async () => {
-      const ctx = await browser.newContext({ viewport: { width: 980, height: 860 } });
-      const page = await ctx.newPage();
-      page.setDefaultTimeout(6000);
-      page.setDefaultNavigationTimeout(60000);
-      const errors = [], fetched = [];
-      page.on("pageerror", (e) => errors.push(e.message));
-      await page.route("**/*", server("en", fetched, []));
-      try {
-        await page.goto("http://magpie.test/?view=plugins");
-        const sec = page.locator("#view-plugins .pm-ghsec");
-        await sec.locator(".pm-card").first().waitFor();
-        assert.equal(await sec.locator(".pm-ghkinds").count(), 1);
-        assert.equal(await sec.locator(".pm-ghhave").count(), 0);
-        assert.equal(await sec.locator(".pm-card").count(), GH.repos.length);
-        assert.deepEqual(errors, []);
-      } finally {
-        await ctx.close();
-      }
-    });
     for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) for (const width of [1100, 980, 420]) {
       await t.test(`${lang} ${width}px`, async () => {
         const ctx = await browser.newContext({ viewport: { width, height: 860 } });
@@ -100,132 +74,99 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.route("**/*", server(lang, fetched));
         try {
           await page.goto("http://magpie.test/?view=plugins");
-          const sec = page.locator("#view-plugins .pm-ghsec");
-          const cards = sec.locator(".pm-card");
-          await cards.first().waitFor();
-          assert.equal(await cards.count(), 31);
+          const view = page.locator("#view-plugins");
+          const bar = view.locator(".pm-bar");
+          await bar.waitFor();
+          await view.locator(".pm-ghlook").waitFor({ state: "detached" });
           const tr = (s) => page.evaluate((s) => t(s), s);
-          if (lang !== "en") for (const s of ["Kind of plugin", "Installed or not", "Not installed", "Filter by name, author or description", "Filter the plugins on GitHub", "No plugin on GitHub matches"]) assert.notEqual(await tr(s), s, `${s} in ${lang}`);
-          const want = async (rs) => [await tr("All") + " · " + rs.length, ...(await Promise.all(["Provider", "Middleware", "Agent"].map(async (k) => (await tr(k)) + " · " + rs.filter((r) => kindOf(r) === k).length)))];
-          const kinds = sec.locator(".pm-ghkinds .opt");
-          assert.deepEqual(await kinds.allTextContents(), await want(GH.repos));
-          // and beside them what's installed, over the very repositories:
-          // two of them, a provider and a middleware, are already here, as
-          // the page's own cards say
-          const have = sec.locator(".pm-ghhave .opt");
-          const wantHave = async (rs) => [await tr("All"), await tr("Installed") + " · " + rs.filter(here).length, await tr("Not installed") + " · " + rs.filter((r) => !here(r)).length];
-          assert.deepEqual(await have.allTextContents(), await wantHave(GH.repos));
-          assert.equal(await sec.locator(".pm-ghhave .opt.on").textContent(), (await wantHave(GH.repos))[0]);
-          assert.deepEqual((await sec.locator(".pm-card.have .pm-name b").allInnerTexts()).sort(), names(GH.repos.filter(here)));
-          // both strips and the field, nothing left over at this width: the
-          // kinds in Japanese are wider than the bar at 420px
+          if (lang !== "en") for (const s of ["Kind of plugin", "Origin", "Sort", "Not installed only", "Other authors", "See all", "No plugin matches", "Most popular"]) assert.notEqual(await tr(s), s, `${s} in ${lang}`);
+          const cards = view.locator(".pm-sec[data-kind] .pm-card");
+          const kinds = bar.locator(".pm-kinds .opt");
+          const said = () => kinds.evaluateAll((bs) => bs.map((b) => [b.firstChild.textContent, b.querySelector("em").textContent]));
+          const want = async (rs) => Promise.all([["", "All"], ["pv", "Subscriptions"], ["mw", "Middleware"], ["ag", "Agents"]].map(async ([k, n]) => [await tr(n), String(count(rs, k))]));
+          // Zed, from magpie's community, is a subscription too
+          const ZED = { kind: undefined, repo: "z/zed" };
+          assert.deepEqual(await said(), await want([...GH.repos, ZED]));
+          // nothing left over at this width: the kinds in Japanese are wide
           const overflow = () => page.evaluate(() => {
-            const bar = document.querySelector("#view-plugins .pm-ghbar");
+            const bar = document.querySelector("#view-plugins .pm-bar");
             const v = document.querySelector("#view-plugins");
             return [bar.scrollWidth - bar.clientWidth, v.scrollWidth - v.clientWidth, document.documentElement.scrollWidth - innerWidth];
           });
           assert.deepEqual((await overflow()).map((x) => Math.max(0, x)), [0, 0, 0], JSON.stringify(await overflow()));
-          // a reader scrolls to what's under the footer with the wheel; a
-          // scroll by code, as a click's own scrolling into view, is put
-          // back (no unasked scroll), and the footer took WebKit's click
-          const press = async (b) => {
-            await page.mouse.move(width / 2, 400);
-            for (let i = 0; i < 12; i++) {
-              const [at, foot] = [await b.boundingBox(), await page.locator(".foot").boundingBox()];
-              if (at && (!foot || at.y + at.height <= foot.y)) break;
-              await page.mouse.wheel(0, 200);
-              await page.waitForTimeout(80);
-            }
-            await b.click();
+          const pops = bar.locator(".pm-pop");
+          const choose = async (i, name) => {
+            await pops.nth(i).click();
+            await page.locator(".proto-menu .pm-item", { hasText: await tr(name) }).first().click();
+            if (await page.locator(".proto-menu").isVisible().catch(() => false)) await page.keyboard.press("Escape");
+            await page.locator(".proto-menu").waitFor({ state: "hidden" }).catch(() => {});
           };
-          const field = sec.locator(".pm-ghfind input");
-          assert.equal(await field.getAttribute("placeholder"), await tr("Filter by name, author or description"));
 
-          // not installed: the 29 nobody has, both strips counting the
-          // other as it is picked
-          await have.nth(2).click();
-          assert.equal(await cards.count(), GH.repos.filter((r) => !here(r)).length);
-          assert.equal(await sec.locator(".pm-card.have").count(), 0);
-          assert.deepEqual(await kinds.allTextContents(), await want(GH.repos.filter((r) => !here(r))));
-          // a kind on top of it: the middleware nobody has, its own kind
-          // strip counting what's left of it
+          // Origin GitHub: the kinds count the 31 alone
+          await choose(0, "Unofficial, on GitHub");
+          assert.deepEqual(await said(), await want(GH.repos));
+          assert.equal((await pops.nth(0).locator("b").textContent()).trim(), await tr("Unofficial, on GitHub"));
+          // a kind on top: its shelf alone, whole
           await kinds.nth(2).click();
-          assert.equal(await cards.count(), GH.repos.filter((r) => kindOf(r) === "Middleware" && !here(r)).length);
-          assert.deepEqual(await have.allTextContents(), await wantHave(GH.repos.filter((r) => kindOf(r) === "Middleware")));
-          // installed: the two here, the middleware among them
-          await have.nth(1).click();
-          assert.deepEqual(await cards.locator(".pm-name b").allInnerTexts(), names(GH.repos.filter((r) => kindOf(r) === "Middleware" && here(r))));
-          // the field narrows both strips' counts, as it does the kinds'
-          await field.fill("doubao");
-          const doubao0 = GH.repos.filter((r) => has(r, "doubao"));
-          assert.deepEqual(await have.allTextContents(), await wantHave(doubao0.filter((r) => kindOf(r) === "Middleware")));
-          assert.deepEqual(await kinds.allTextContents(), await want(doubao0.filter(here)));
+          assert.equal(await cards.count(), count(GH.repos, "mw"));
+          assert.equal(await cards.locator(".pm-chip.kind.mw").count(), count(GH.repos, "mw"));
+          // and only what isn't here yet: the middleware installed goes,
+          // the kinds count what is left
+          await choose(0, "Not installed only");
+          const fresh = GH.repos.filter((r) => !here(r));
+          assert.equal(await cards.count(), count(fresh, "mw"));
+          assert.equal(await view.locator(".pm-card.have").count(), 0);
+          assert.deepEqual(await said(), await want(fresh));
+          assert.equal((await pops.nth(0).locator("b").textContent()).trim(), await tr("Unofficial, on GitHub") + " · " + await tr("Not installed"));
+
+          // magpie's community has no middleware: said so, and Show all
+          // puts back every pick
+          await choose(0, "magpie community");
           assert.equal(await cards.count(), 0);
-          const none0 = sec.locator(".pm-ghnone");
-          assert.equal((await none0.locator("span").textContent()).trim(), await tr("No plugin on GitHub matches"));
-          // Show all puts back both strips and the field
-          await press(none0.locator("button"));
-          assert.equal(await field.inputValue(), "");
-          assert.equal(await cards.count(), GH.repos.length);
-          assert.equal(await sec.locator(".pm-ghhave .opt.on").textContent(), (await wantHave(GH.repos))[0]);
-          assert.equal(await sec.locator(".pm-ghkinds .opt.on").textContent(), (await want(GH.repos))[0]);
+          const none = view.locator(".pm-ghnone");
+          assert.equal((await none.locator("span").textContent()).trim(), await tr("No plugin matches"));
+          await none.locator("button").click();
+          assert.equal((await bar.locator(".pm-kinds .opt.on").evaluate((b) => b.firstChild.textContent)), await tr("All"));
+          assert.equal((await pops.nth(0).locator("b").textContent()).trim(), await tr("All"));
+          assert.deepEqual(await said(), await want([...GH.repos, ZED]));
 
-          // a kind: its cards alone, each saying so
-          await kinds.nth(2).click();
-          assert.equal(await cards.count(), 3);
-          assert.deepEqual([...new Set(await cards.locator(".pm-chip.kind").allTextContents())], [await tr("Middleware")]);
+          // a shelf's See all: its kind whole
+          await choose(0, "Unofficial, on GitHub");
+          const pv = view.locator('.pm-sec[data-kind="pv"]');
+          assert.ok(await pv.locator(".pm-card").count() < count(GH.repos, "pv"));
+          await pv.locator(".pm-more").click();
+          assert.equal(await cards.count(), count(GH.repos, "pv"));
+          assert.equal((await bar.locator(".pm-kinds .opt.on").evaluate((b) => b.firstChild.textContent)), await tr("Subscriptions"));
+          // Sort by name
+          await choose(1, "Name");
+          const shown = await cards.locator(".pm-name b").allInnerTexts();
+          assert.deepEqual(shown, await page.evaluate((a) => [...a].sort((x, y) => x.localeCompare(y, intlLang())), shown));
+          assert.equal(shown.length, count(GH.repos, "pv"));
 
-          // the field, typed in while npm's answer redraws the page: the same
-          // node keeps its focus and every key; the kinds count what it leaves
-          await field.evaluate((x) => { window.__field = x; });
-          await field.click();
+          // the page's search, typed while npm's answer redraws the page:
+          // the same node keeps its focus and every key
+          const q = view.locator(".pm-head .pm-find input");
+          await q.evaluate((x) => { window.__field = x; });
+          await q.click();
           await page.keyboard.type("doubao", { delay: 120 });
           await page.waitForTimeout(800);
-          assert(await field.evaluate((x) => x === window.__field && document.activeElement === x && x.value === "doubao"), "the field kept its node, focus and text");
+          assert(await q.evaluate((x) => x === window.__field && document.activeElement === x && x.value === "doubao"), "the field kept its node, focus and text");
           const doubao = GH.repos.filter((r) => has(r, "doubao"));
-          assert.deepEqual(await kinds.allTextContents(), await want(doubao));
-          // no middleware is about doubao: said so, with Show all
-          assert.equal(await cards.count(), 0);
-          const none = sec.locator(".pm-ghnone");
-          assert.equal((await none.locator("span").textContent()).trim(), await tr("No plugin on GitHub matches"));
-          await kinds.nth(0).click();
-          assert.deepEqual((await cards.locator(".pm-who").allTextContents()).length, doubao.length);
-
-          // an author, then words of a description
+          await page.waitForFunction((n) => document.querySelector("#view-plugins .pm-sec")?.querySelectorAll(".pm-card").length === n, doubao.length);
           for (const s of ["mu-zi-lee", "Cloudflare AI Gateway"]) {
-            await field.fill(s);
+            await q.fill(s);
             const rs = GH.repos.filter((r) => has(r, s));
             assert(rs.length > 0);
-            assert.equal(await cards.count(), rs.length, s);
+            await page.waitForFunction((n) => document.querySelector("#view-plugins .pm-sec")?.querySelectorAll(".pm-card").length === n, rs.length);
           }
-
-          // Show all puts back every kind and every card
-          await kinds.nth(3).click();
-          await field.fill("zzz-nothing");
-          await press(none.locator("button"));
-          assert.equal(await field.inputValue(), "");
-          assert.equal(await cards.count(), 31);
-          assert.equal(await sec.locator(".pm-ghkinds .opt.on").textContent(), (await want(GH.repos))[0]);
-
-          // the page's search narrows first, the section's within it; what
-          // it leaves has nothing installed, so the strip goes and so does
-          // its pick, rather than narrowing the grid out of sight
-          await have.nth(1).click();
-          assert.equal(await cards.count(), GH.repos.filter(here).length);
-          const q = page.locator("#view-plugins .pm-head .pm-find input");
-          await q.fill("translate");
-          const tl = GH.repos.filter((r) => has(r, "translate"));
-          await page.waitForFunction((n) => document.querySelectorAll("#view-plugins .pm-ghsec .pm-card").length === n, tl.length);
-          assert.deepEqual(await kinds.count(), 0, "one kind alone needs no picking");
-          assert.equal(tl.some(here), false);
-          assert.equal(await have.count(), 0, "nothing installed is left to pick out");
-          await field.fill("seed");
-          assert.equal(await cards.count(), tl.filter((r) => has(r, "seed")).length);
+          await q.fill("");
+          await bar.waitFor();
 
           // nothing left over at any width
           const over = await overflow();
           assert.deepEqual(over.map((x) => Math.max(0, x)), [0, 0, 0], JSON.stringify(over));
           assert.deepEqual(errors, []);
+          assert.deepEqual(fetched, []);
         } finally {
           await ctx.close();
         }

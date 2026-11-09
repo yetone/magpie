@@ -87,7 +87,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(await kinds(pg), [w.page]);
 
         // the way to write one: the docs in the window's language, opened outside
-        const how = view.locator(".pm-intro .pm-write");
+        const how = view.locator(".pm-foot .pm-write");
         assert.equal((await how.innerText()).trim(), w.write);
         assert.equal(await how.getAttribute("href"), w.docs);
         opened.length = 0;

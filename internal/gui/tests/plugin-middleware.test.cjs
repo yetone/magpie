@@ -98,14 +98,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     }
   });
 
-  // Discover says plugins can be middleware too, not only subscriptions,
-  // and links to how one is written in the reader's language
-  test(engine + ": Discover's intro names what a plugin can be, and how to write one", async (t) => {
+  // Discover's strip of kinds says plugins can be middleware too, not only
+  // subscriptions, and its foot links to how one is written in the
+  // reader's language, under what installing one means
+  test(engine + ": Discover names what a plugin can be, and how to write one", async (t) => {
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
     t.after(() => browser.close());
     const I = {
-      en: { h: "Plugins extend magpie", p: /run in magpie's gateway .* give every agent tools, connect an agent, or add a page of its own/, a: "Write a plugin", url: "https://usemagpie.ai/docs/plugins", trust: /sign-in or your requests/ },
-      zh: { h: "插件扩展 magpie", p: /在 magpie 网关里处理.*给每个 Agent 提供工具.*加一个自己的页面/, a: "编写插件", url: "https://usemagpie.ai/docs/zh/plugins", trust: /登录或看到你的请求/ },
+      en: { kinds: ["All", "Subscriptions", "Middleware"], a: "Write a plugin", url: "https://usemagpie.ai/docs/plugins", trust: /sign-in or your requests/ },
+      zh: { kinds: ["全部", "订阅", "中间件"], a: "编写插件", url: "https://usemagpie.ai/docs/zh/plugins", trust: /登录或看到你的请求/ },
     };
     for (const lang of ["en", "zh"]) {
       await t.test(lang, async () => {
@@ -117,18 +118,24 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", server(lang));
         await page.route("**/api/open", (r) => { opened.push(r.request().postDataJSON()); return r.fulfill({ json: {} }); });
+        await page.route("**/api/plugins/listings", (r) => r.fulfill({ json: { listings: [
+          { package: "@magpie-community/provider-x", name: "X plan", community: true, providers: ["x"], summary: { en: "Signs in to X" } },
+          { package: "@magpie-community/mw-alias", name: "Alias", kind: "middleware", community: true, summary: { en: "Renames models" } },
+        ] } }));
         await page.goto("http://magpie.test/?view=plugins");
-        const intro = page.locator("#view-plugins .pm-intro");
-        await intro.waitFor();
-        assert.equal((await intro.locator("h2").innerText()).trim(), w.h);
-        assert.match(await intro.innerText(), w.p);
+        const strip = page.locator("#view-plugins .pm-bar .pm-kinds .opt");
+        await strip.first().waitFor();
+        // each kind with how many there are: the name before its count
+        assert.deepEqual((await strip.evaluateAll((os) => os.map((o) => o.firstChild.textContent))).slice(0, 3), w.kinds);
+        const intro = page.locator("#view-plugins .pm-foot");
         assert.match(await intro.locator(".pm-trust").innerText(), w.trust);
+        await intro.locator("a.pm-link").scrollIntoViewIfNeeded();
         const y = await page.evaluate(() => [document.scrollingElement.scrollTop, ...[...document.querySelectorAll("*")].filter((e) => e.scrollTop).map((e) => e.scrollTop)].join());
         await intro.locator("a.pm-link", { hasText: w.a }).click();
         await page.waitForTimeout(100);
         assert.deepEqual(opened, [{ url: w.url }]);
         assert.equal(await page.evaluate(() => [document.scrollingElement.scrollTop, ...[...document.querySelectorAll("*")].filter((e) => e.scrollTop).map((e) => e.scrollTop)].join()), y, "the click scrolled nothing");
-        if (process.env.ARTIFACT_DIR) await intro.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `plugin-intro-${engine}-${lang}.png`) });
+        if (process.env.ARTIFACT_DIR) await intro.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `plugin-foot-${engine}-${lang}.png`) });
         assert.deepEqual(errors, []);
       });
     }
