@@ -632,9 +632,14 @@ func (a *Agent) OwnModels(cur map[string]string) bool {
 }
 
 // Detected returns the agents present on this machine, in display order.
-func Detected() []*Agent {
+func Detected() []*Agent { return DetectedIn(All()) }
+
+// DetectedIn is Detected among all, a list of All() the caller has built
+// already: a page that lists the agents and looks them up by name builds
+// All once, not once for each.
+func DetectedIn(all []*Agent) []*Agent {
 	var out []*Agent
-	for _, a := range All() {
+	for _, a := range all {
 		if a.Detected() {
 			out = append(out, a)
 		}

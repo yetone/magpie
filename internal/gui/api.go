@@ -1212,7 +1212,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	// so a config rewritten elsewhere shows without a reload
 	mux.HandleFunc("GET /api/drift", func(rw http.ResponseWriter, r *http.Request) {
 		out := map[string]*agent.Drift{}
-		for _, a := range agent.Detected() {
+		for _, a := range agent.DetectedIn(heldAgents()) {
 			if d := a.Drift(); d != nil {
 				out[a.ID] = d
 			}
@@ -2886,10 +2886,11 @@ func state() stateJSON {
 			s.Served++
 		}
 	}
-	for _, a := range agent.Clients() {
+	all := heldAgents()
+	for _, a := range agent.ClientsIn(all) {
 		s.Clients = append(s.Clients, clientJSON{ID: a.ID, Name: a.Name, Icon: a.Icon})
 	}
-	detected := agent.Detected()
+	detected := agent.DetectedIn(all)
 	now := make(map[string]map[string]string, len(detected))
 	for _, a := range detected {
 		if a.Follow != nil {

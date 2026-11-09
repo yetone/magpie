@@ -474,8 +474,14 @@ type accountJSON struct {
 // of them again for it: with the owner's config 58 MB of the 1.4 GB a
 // magpie allocated over 20 window polls.
 func agentNamed(q string) (*agent.Agent, error) {
-	return agent.FindIn(provider.Held("agent.All", agent.All), q)
+	return agent.FindIn(heldAgents(), q)
 }
+
+// heldAgents is agent.All, built once while a request holds it: the
+// Providers page, the state and the drift each looked at a list of their
+// own beside the one accountLabel looks names up in, every agent built
+// again (~0.2 MB a poll with real accounts). Shared, so read only.
+func heldAgents() []*agent.Agent { return provider.Held("agent.All", agent.All) }
 
 // accountLabel is the name and logo an account is shown with: its agent's,
 // the subscription's for one no agent magpie configures, and a plugin's
@@ -1222,7 +1228,7 @@ func providersState() providersJSON {
 	// models, not magpie's own list of them (#204): asked behind the page,
 	// which is told so and asks again, never waited for (#541)
 	provider.FetchNewBehind(8 * time.Second)
-	agents := agent.Detected()
+	agents := agent.DetectedIn(heldAgents())
 	s := providersJSON{Providers: []providerJSON{}, Presets: []presetJSON{}, Excluded: []excludedJSON{}}
 	s.OnPlugins = provider.OnPlugins()
 	s.Movable = provider.MovableIDs()

@@ -117,6 +117,15 @@ func notProbed(host string) bool {
 	if contains(noProbeHosts, host) {
 		return true
 	}
+	return presetHosts()[host]
+}
+
+// presetHosts are the hostnames, lowered, that a vendor's or a local
+// server's preset names. The presets never change, and gathering their
+// bases again for every provider of every Providers poll was 3.5 MB of
+// what forty polls allocated with real accounts.
+var presetHosts = sync.OnceValue(func() map[string]bool {
+	out := map[string]bool{}
 	for _, d := range presets {
 		if d.Kind != KindVendor && d.Kind != KindLocal {
 			continue
@@ -126,13 +135,15 @@ func notProbed(host string) bool {
 			bases = append(bases, r.Chat, r.Responses, r.Anthropic)
 		}
 		for _, b := range bases {
-			if b != "" && strings.EqualFold(hostnameOf(b), host) {
-				return true
+			if b != "" {
+				if h := strings.ToLower(hostnameOf(b)); h != "" {
+					out[h] = true
+				}
 			}
 		}
 	}
-	return false
-}
+	return out
+})
 
 func hostnameOf(raw string) string { return hostParts(raw).name }
 
