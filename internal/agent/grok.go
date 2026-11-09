@@ -31,6 +31,7 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -333,11 +334,7 @@ func grokIn(at place) *Agent {
 					// magpie's rows for the account Grok Build is signed in
 					// to are its own models a second time: they fold into
 					// one row (Fate on Discord: grokbuild 在登录态下会加载重复的模型)
-					opts := viaMagpie("grok", magpieID+"/")
-					for i := range opts {
-						opts[i].Same = opts[i].own
-					}
-					return append(grokOwnOptions(dir, path, cur["model"]), opts...)
+					return joinedVia(grokOwnOptions(dir, path, cur["model"]), grokVia(), [2]string{"grok same", dir + "\x00" + path})
 				},
 			},
 			{
@@ -369,6 +366,39 @@ func grokIn(at place) *Agent {
 // on its sign-in or their own key, so each says so (Direct): a row not
 // connected listed nothing of Grok's own, only magpie's, unless a Grok
 // subscription was signed in in magpie (EZN7L2C3, #834).
+// grokVia is magpie's rows for Grok Build, each marked Same where it is
+// the account Grok Build is signed in to, kept as viaMagpieShared keeps
+// its list: a copy marked again for every look was most of what the
+// window's state spent on Grok Build. Read only.
+func grokVia() []Option {
+	return builtOptions.shared("grok\x00"+magpieID+"/\x00same", func() []Option {
+		opts := buildVia("grok", magpieID+"/")
+		for i := range opts {
+			opts[i].Same = opts[i].own
+		}
+		return opts
+	})
+}
+
+// grokCached is a model in Grok Build's models_cache.json that it shows.
+type grokCached struct{ id, name string }
+
+// grokCache is models_cache.json's shown models, read again only once the
+// file changed: it is a few hundred KB, read and walked for every look.
+func grokCache(path string) []grokCached {
+	ms, _ := filememo.Read("grok models cache", path, func(raw []byte) ([]grokCached, error) {
+		var out []grokCached
+		gjson.GetBytes(raw, "models").ForEach(func(k, v gjson.Result) bool {
+			if !v.Get("info.hidden").Bool() {
+				out = append(out, grokCached{k.String(), v.Get("info.name").String()})
+			}
+			return true
+		})
+		return out, nil
+	})
+	return ms
+}
+
 func grokOwnOptions(dir, path, cur string) []Option {
 	seen := map[string]bool{}
 	var out []Option
@@ -385,13 +415,8 @@ func grokOwnOptions(dir, path, cur string) []Option {
 	}
 	// dir and path empty: a stopped distro's, whose files aren't read (#3896)
 	if dir != "" {
-		if raw, err := os.ReadFile(filepath.Join(dir, "models_cache.json")); err == nil {
-			gjson.GetBytes(raw, "models").ForEach(func(k, v gjson.Result) bool {
-				if !v.Get("info.hidden").Bool() {
-					add(k.String(), v.Get("info.name").String(), "xAI")
-				}
-				return true
-			})
+		for _, m := range grokCache(filepath.Join(dir, "models_cache.json")) {
+			add(m.id, m.name, "xAI")
 		}
 	}
 	ms, _, _ := catalog.Live("grok")
