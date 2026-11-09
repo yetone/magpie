@@ -6,7 +6,7 @@
 // of it; a setting that moved to its provider's editor (the warm-ups, the
 // owner on 11-07) is found as a link per provider, Codex's and Claude
 // Code's alike, whose Open takes the reader to that editor; nothing found
-// says so. Escape, or clearing the box, brings back the part
+// says so; a link needs its provider, and its plugin on. Escape, or clearing the box, brings back the part
 // picked as it was. Nothing is posted and the page doesn't scroll. In the
 // smallest window (560 x 420) and magpie web on a phone (390 wide), nothing
 // runs off to the side. Every language; no backend, the API is faked here.
@@ -20,7 +20,7 @@ const { openPart, provPrefsProviders } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 
-function server(lang, posts, web) {
+function server(lang, posts, web, { provs = ["codex", "claude"], off = [] } = {}) {
   const cur = {
     theme: "light", lang, tray: "panel", quotaLeft: false, currency: "usd", textSize: 100,
     dock: false, dockWindow: false, proxy: "", redact: false, redactPersonal: false, redactWords: [],
@@ -35,12 +35,12 @@ function server(lang, posts, web) {
     const req = route.request(), url = new URL(req.url());
     const json = (data) => route.fulfill({ json: data });
     if (req.method() !== "GET") posts.push(url.pathname);
-    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:${web},textSize:100};` });
+    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:${web},textSize:100,featuresOff:${JSON.stringify(off)}};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme: "light", textSize: 100 }, fx: cur.fx });
     if (url.pathname === "/api/settings") return json(cur);
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
-    if (url.pathname === "/api/providers") return json(provPrefsProviders(["codex", "claude"], { codex: "ChatGPT", claude: "Claude" }));
+    if (url.pathname === "/api/providers") return json(provPrefsProviders(provs, { codex: "ChatGPT", claude: "Claude" }));
     if (url.pathname === "/api/usage/quotas") return json([]);
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
     if (url.pathname === "/api/window/fit") return route.fulfill({ status: 204 });
@@ -82,14 +82,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       }
       await browser.close();
     });
-    const open = async (lang, posts, { width = 560, height = 420, web = false } = {}) => {
+    const open = async (lang, posts, { width = 560, height = 420, web = false, ...set } = {}) => {
       const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
       const page = await context.newPage();
       page.setDefaultTimeout(5000);
       page.setDefaultNavigationTimeout(60000);
       page.errors = [];
       page.on("pageerror", (e) => { if (engine === "webkit" && /due to access control checks/.test(e.message)) return; page.errors.push(e.message); }); // a goto in WebKit can cut off a fetch (#1350)
-      await page.route("**/*", server(lang, posts, web));
+      await page.route("**/*", server(lang, posts, web, set));
       await page.goto("http://magpie.test/?view=settings&tab=general");
       await page.locator("#themeSegs .opt").first().waitFor();
       return page;
@@ -188,6 +188,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.context().close();
       });
     }
+
+    // a link is only for a provider there is, and goes with the warm-ups
+    // when they are off in Plugins › Built-in (netube99 on X)
+    await t.test("a provider's link needs the provider and its plugin", async () => {
+      for (const [set, want] of [[{ provs: ["codex"] }, ["ChatGPT"]], [{ off: ["warmups"] }, []]]) {
+        const page = await open("en", [], set);
+        await page.waitForFunction(() => providers || providersEarly?.got);
+        await type(page, "warm up on reset");
+        const links = page.locator("#provPrefLinks .agent-pref-link:visible");
+        assert.deepEqual((await links.locator(".sub").allTextContents()).map((s) => s.replace(/^In (.*)'s editor.*$/, "$1")), want, JSON.stringify(set));
+        assert.deepEqual(page.errors, []);
+        await page.context().close();
+      }
+    });
 
     await t.test("magpie web on a phone", async () => {
       const page = await open("zh", [], { width: 390, height: 760, web: true });

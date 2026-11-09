@@ -162,9 +162,10 @@ test("compat.js is the first of the page's own scripts", async () => {
   // Errors, keybalance.js when it draws a key whose vendor tells no
   // balance, modellimits.js when it draws a model's row, notices.js when
   // About's Open-source licenses opens, videogen.js when Settings draws
-  // Image generation; the checks above
+  // Image generation, provlinks.js when Settings' search first wants its
+  // provider links; the checks above
   // still read them
-  for (const f of await scripts()) if (!["webfonts.js", "cfgblocked.js", "signsheets.js", "ruleedit.js", "ratewindows.js", "traywindows.js", "autoresetown.js", "registry.js", "navlamp.js", "whatsnew.js", "claudemode.js", "ctxtext.js", "resetask.js", "quotaall.js", "quitask.js", "checkinnow.js", "autobackup.js", "scrollends.js", "profilerename.js", "settingshints.js", "keyspend.js", "syncfiles.js", "agentcompact.js", "balfound.js", "passerrors.js", "keybalance.js", "modellimits.js", "notices.js", "videogen.js"].includes(f)) assert(all.includes(f), f + " is not loaded by index.html");
+  for (const f of await scripts()) if (!["webfonts.js", "cfgblocked.js", "signsheets.js", "ruleedit.js", "ratewindows.js", "traywindows.js", "autoresetown.js", "registry.js", "navlamp.js", "whatsnew.js", "claudemode.js", "ctxtext.js", "resetask.js", "quotaall.js", "quitask.js", "checkinnow.js", "autobackup.js", "scrollends.js", "profilerename.js", "settingshints.js", "keyspend.js", "syncfiles.js", "agentcompact.js", "balfound.js", "passerrors.js", "keybalance.js", "modellimits.js", "notices.js", "videogen.js", "provlinks.js"].includes(f)) assert(all.includes(f), f + " is not loaded by index.html");
 });
 
 test("the styles hold up in Safari 15.0", async () => {
