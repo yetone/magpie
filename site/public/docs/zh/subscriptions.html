@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>在任意编程 Agent 中使用 Claude、ChatGPT、GitHub Copilot 订阅 · magpie</title>
+<meta name="description" content="在 magpie 里登录一次 Claude、ChatGPT、GitHub Copilot、Gemini Code Assist 或 Antigravity，就能在 Claude Code、Codex、Gemini CLI、OpenCode 等 Agent 里用它的模型，支持多账号轮换和自动切换。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/subscriptions">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/subscriptions">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/subscriptions">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/subscriptions">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="在任意编程 Agent 中使用 Claude Pro/Max、ChatGPT Plus/Pro、GitHub Copilot 订阅">
+<meta property="og:description" content="在 magpie 里登录一次 Claude、ChatGPT、GitHub Copilot、Gemini Code Assist 或 Antigravity，就能在 Claude Code、Codex、Gemini CLI、OpenCode 等 Agent 里用它的模型，支持多账号轮换和自动切换。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/subscriptions">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "在任意编程 Agent 中使用 Claude Pro/Max、ChatGPT Plus/Pro、GitHub Copilot 订阅",
+   "description": "在 magpie 里登录一次 Claude、ChatGPT、GitHub Copilot、Gemini Code Assist 或 Antigravity，就能在 Claude Code、Codex、Gemini CLI、OpenCode 等 Agent 里用它的模型，支持多账号轮换和自动切换。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/subscriptions",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Claude Code 能用 ChatGPT Plus 或 Pro 订阅吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。在 magpie 里登录 ChatGPT，在 Claude Code 那一行选一个 codex/… 模型，或者运行 magpie claude codex/gpt-5.5。magpie 把 Claude Code 的 Anthropic 请求转成 GPT 模型的格式，再把回复转回来，工具调用也包括在内。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex 或 OpenCode 能用 Claude Pro 或 Max 订阅吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。在 magpie 里登录 Claude，在这个 Agent 那一行选一个 claude/… 模型。Claude 订阅的请求通过你电脑上安装的 Claude Code 发出，所以要保留 Claude Code。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "GitHub Copilot 的模型能在 VS Code 以外用吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。在 magpie 里登录 Copilot（GitHub 会给你一个验证码），它的模型以 copilot/… 出现在 Claude Code、Codex、Gemini CLI、OpenCode 以及 magpie 配置的其他 Agent 里。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "在其他 Agent 里用订阅需要 API Key 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "不需要。magpie 在厂商自己的页面登录，Agent 拿到的是网关的 Key。你的登录信息留在 magpie 里。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "能同时用多个 Claude 或 ChatGPT 账号、一个到限额就换下一个吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。在 magpie 里添加每个账号，并在供应商那一行勾选。默认的智能路由会用还有额度的账号，一个用完或被限流就换下一个。magpie accounts 能看到每个账号还剩多少。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "请求会经过 magpie 的服务器吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "不会。网关跑在你自己的电脑上。你的提示词、回复、Key 和账号只会发给你使用的供应商，这条路径上没有 magpie 自己的服务器。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "每个 Agent 都要登录一次订阅吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "不用。订阅是在 magpie 里添加的，不需要在别的 Agent 里登录。登录一次，指向 magpie 的每个 Agent 都能用。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/subscriptions" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/subscriptions" hreflang="zh" lang="zh">中文</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>订阅用于任意 Agent</p>
+    <a href="#overview">原理</a>
+    <a href="#which">支持哪些订阅</a>
+    <a href="#signin">登录</a>
+    <a href="#agents">在其他 Agent 里用</a>
+    <a href="#accounts">多账号</a>
+    <a href="#tools">其他工具</a>
+    <a href="#faq">常见问题</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 指南</p>
+    <h1>在任意编程 Agent 中使用 Claude Pro/Max、ChatGPT Plus/Pro、GitHub Copilot 订阅</h1>
+    <p class="lede">在 magpie 里登录一次订阅，它的模型就会出现在 magpie 配置的每个 Agent 里：Claude Code 用 ChatGPT 订阅里的 GPT 模型，Codex 或 OpenCode 用 Claude 订阅里的 Claude 模型，Copilot 的模型哪个 Agent 都能用。不需要 API Key。</p>
+
+    <p>magpie 在你电脑上跑一个网关，地址是 <code>127.0.0.1:3425</code>。它同时支持 OpenAI、Anthropic 和 Gemini 三种 API，并在它们之间互相转换，流式输出和工具调用都包括在内，所以只会说一种 API 的 Agent 也能用另一种 API 提供的模型。magpie 会把网关地址和 Key 写进每个 Agent 自己的配置文件。</p>
+
+    <h2 id="which"><a class="anchor" href="#which">支持哪些订阅</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>订阅</th><th>模型 ID</th><th>命令行登录</th></tr>
+      <tr><td>Claude（Pro、Max、Team）</td><td><code>claude/…</code></td><td><code>magpie accounts add claude</code></td></tr>
+      <tr><td>ChatGPT（Plus、Pro、Business）</td><td><code>codex/…</code></td><td><code>magpie accounts add codex</code></td></tr>
+      <tr><td>GitHub Copilot</td><td><code>copilot/…</code></td><td><code>magpie accounts add copilot</code></td></tr>
+      <tr><td>Gemini（Code Assist）</td><td><code>gemini/…</code></td><td><code>magpie accounts add gemini</code></td></tr>
+      <tr><td>Antigravity</td><td><code>antigravity/…</code></td><td><code>magpie accounts add antigravity</code></td></tr>
+    </table></div>
+    <ul>
+      <li><b>Claude。</b>Claude 订阅的请求通过你电脑上安装的 Claude Code 发出，所以要保留 Claude Code。</li>
+      <li><b>Copilot。</b>Copilot 会给你一个验证码，在 GitHub 页面上输入。使用自有域名的 GitHub Enterprise：<code>magpie accounts add copilot --host &lt;name&gt;.ghe.com</code>。</li>
+      <li><b>Gemini。</b>这是 Gemini CLI 的 Google 登录。Google 只对有自己 Google Cloud 项目的 Code Assist Standard 或 Enterprise 账号提供服务；用 <code>magpie accounts project gemini &lt;邮箱&gt; &lt;项目&gt;</code> 指定项目。</li>
+      <li><b>Antigravity。</b>登录后可以用 Antigravity 的 Claude 和 Gemini 模型。</li>
+    </ul>
+    <p>其他订阅以插件形式在 magpie 的 <span class="ui">插件</span> 页添加，见 <a href="/docs/zh/plugins">插件</a>。</p>
+
+    <h2 id="signin"><a class="anchor" href="#signin">登录</a></h2>
+    <ol class="steps">
+      <li><b>打开添加供应商</b>在 magpie 的 <span class="ui">供应商</span> 页点 <span class="ui">＋ 添加供应商</span>。</li>
+      <li><b>点订阅的卡片</b>magpie 会在浏览器里打开厂商自己的登录页，登录完成后账号立刻出现。</li>
+      <li><b>给 Agent 选它的模型</b>在 <span class="ui">Agent</span> 页点某个 Agent 那一行的模型，选订阅里的一个模型。</li>
+    </ol>
+    <p>本机上已经登录的 Agent，比如 Claude Code 或 Codex，也会作为供应商出现，显示为 <em>已登录 …</em>。运行 <code>magpie accounts discovery off</code> 后，magpie 不再读取这些登录信息。</p>
+
+    <h2 id="agents"><a class="anchor" href="#agents">在其他 Agent 里用</a></h2>
+    <p>订阅的模型会出现在 magpie 里每个 Agent 的模型列表中。几种常见组合：</p>
+    <div class="table-wrap"><table>
+      <tr><th>Agent</th><th>订阅</th><th>命令行</th></tr>
+      <tr><td>Claude Code</td><td>ChatGPT</td><td><code>magpie claude codex/gpt-5.5</code></td></tr>
+      <tr><td>Codex</td><td>Claude</td><td><code>magpie codex claude/claude-opus-5-5</code></td></tr>
+      <tr><td>Gemini CLI</td><td>ChatGPT</td><td><code>magpie gemini model codex/gpt-5.5</code></td></tr>
+      <tr><td>OpenCode</td><td>Claude</td><td>在 OpenCode 那一行选一个 <code>claude/…</code> 模型</td></tr>
+    </table></div>
+    <p><code>magpie models</code> 列出所有可选模型，格式为 <code>provider/model</code>。各 Agent 的指南写了 magpie 改了它配置里的什么、怎么还原：<a href="/docs/zh/claude-code-models">Claude Code</a>、<a href="/docs/zh/codex-models">Codex</a>、<a href="/docs/zh/gemini-cli-models">Gemini CLI</a>。<code>magpie &lt;agent&gt; default</code> 会去掉 magpie 的接入，还原 Agent 原来的设置。</p>
+
+    <h2 id="accounts"><a class="anchor" href="#accounts">多账号与自动切换</a></h2>
+    <ul>
+      <li><b>再加一个账号。</b>再点一次 Claude 或 ChatGPT 卡片，或再运行一次 <code>magpie accounts add</code>。每个账号都列在这个供应商下面。</li>
+      <li><b>把请求分给多个账号。</b>展开供应商那一行，勾选要用的每个账号。<span class="ui">路由</span> 决定请求怎么分：默认的 <span class="ui">智能</span> 会发给还有额度、且额度最先重置的账号；另外还有 <span class="ui">按顺序</span>、<span class="ui">用完再换</span>、<span class="ui">轮流</span>、<span class="ui">用量少的优先</span>、<span class="ui">到期前用完</span>、<span class="ui">按权重</span>（比如 Max 账号设 5、Pro 账号设 1）和 <span class="ui">速度优先</span>。</li>
+      <li><b>用完了自动换。</b>供应商的 <span class="ui">备用</span> 列出额度用完、被限流或不可用时改用的模型。</li>
+      <li><b>两个订阅里的同一个模型。</b>Claude 订阅和 Copilot 里的 Claude Opus 会自动合成一个组 <code>auto/&lt;model&gt;</code>，选它就能两边一起用。</li>
+      <li><b>看还剩多少。</b><code>magpie accounts</code> 列出每个账号和它的额度用了多少。</li>
+    </ul>
+    <p>路由方式详见 <a href="/docs/zh/start#routing">快速上手</a>。</p>
+
+    <h2 id="tools"><a class="anchor" href="#tools">其他工具</a></h2>
+    <p>任何能设置 base URL 的工具，也能通过网关用订阅。<span class="ui">网关</span> 标签页的 <span class="ui">接入</span> 部分有地址和 Key 可以直接复制。OpenAI 客户端的 base URL 是 <code>http://127.0.0.1:3425/v1</code>，Anthropic 或 Gemini 客户端是 <code>http://127.0.0.1:3425</code>。见 <a href="/docs/zh/integrate">接入你的应用</a>。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>Claude Code 能用 ChatGPT Plus 或 Pro 订阅吗？</h3>
+    <p>能。在 magpie 里登录 ChatGPT，在 Claude Code 那一行选一个 <code>codex/…</code> 模型，或者运行 <code>magpie claude codex/gpt-5.5</code>。magpie 把 Claude Code 的 Anthropic 请求转成 GPT 模型的格式，再把回复转回来，工具调用也包括在内。</p>
+    <h3>Codex 或 OpenCode 能用 Claude Pro 或 Max 订阅吗？</h3>
+    <p>能。在 magpie 里登录 Claude，在这个 Agent 那一行选一个 <code>claude/…</code> 模型。Claude 订阅的请求通过你电脑上安装的 Claude Code 发出，所以要保留 Claude Code。</p>
+    <h3>GitHub Copilot 的模型能在 VS Code 以外用吗？</h3>
+    <p>能。在 magpie 里登录 Copilot（GitHub 会给你一个验证码），它的模型以 <code>copilot/…</code> 出现在 Claude Code、Codex、Gemini CLI、OpenCode 以及 magpie 配置的其他 Agent 里。</p>
+    <h3>在其他 Agent 里用订阅需要 API Key 吗？</h3>
+    <p>不需要。magpie 在厂商自己的页面登录，Agent 拿到的是网关的 Key。你的登录信息留在 magpie 里。</p>
+    <h3>能同时用多个 Claude 或 ChatGPT 账号、一个到限额就换下一个吗？</h3>
+    <p>能。在 magpie 里添加每个账号，并在供应商那一行勾选。默认的智能路由会用还有额度的账号，一个用完或被限流就换下一个。<code>magpie accounts</code> 能看到每个账号还剩多少。</p>
+    <h3>请求会经过 magpie 的服务器吗？</h3>
+    <p>不会。网关跑在你自己的电脑上。你的提示词、回复、Key 和账号只会发给你使用的供应商，这条路径上没有 magpie 自己的服务器。</p>
+    <h3>每个 Agent 都要登录一次订阅吗？</h3>
+    <p>不用。订阅是在 magpie 里添加的，不需要在别的 Agent 里登录。登录一次，指向 magpie 的每个 Agent 都能用。</p>
+
+    <p style="margin-top:48px">用的是 API Key？见 <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a> 和 <a href="/docs/zh/codex-models">Codex 接入其他模型</a>。遇到问题可以到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

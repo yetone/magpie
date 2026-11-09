@@ -8,6 +8,7 @@
 <url><loc>https://usemagpie.ai/docs/codex-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/contributors</loc></url>
 <url><loc>https://usemagpie.ai/docs/docker</loc></url>
+<url><loc>https://usemagpie.ai/docs/gemini-cli-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/import</loc></url>
 <url><loc>https://usemagpie.ai/docs/integrate</loc></url>
 <url><loc>https://usemagpie.ai/docs/intent</loc></url>
@@ -18,10 +19,12 @@
 <url><loc>https://usemagpie.ai/docs/privacy</loc></url>
 <url><loc>https://usemagpie.ai/docs/remote</loc></url>
 <url><loc>https://usemagpie.ai/docs/start</loc></url>
+<url><loc>https://usemagpie.ai/docs/subscriptions</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/claude-code-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/codex-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/contributors</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/docker</loc></url>
+<url><loc>https://usemagpie.ai/docs/zh/gemini-cli-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/import</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/integrate</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/intent</loc></url>
@@ -32,6 +35,7 @@
 <url><loc>https://usemagpie.ai/docs/zh/privacy</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/remote</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/start</loc></url>
+<url><loc>https://usemagpie.ai/docs/zh/subscriptions</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/contributors</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/docker</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/import</loc></url>
