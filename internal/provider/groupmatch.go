@@ -21,6 +21,9 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
+
+	"github.com/dlclark/regexp2"
 )
 
 // RegexpPrefix starts a member that is a regular expression over the whole
@@ -36,26 +39,50 @@ func IsPattern(s string) bool {
 	return strings.HasPrefix(s, RegexpPrefix) || strings.Contains(s, "*")
 }
 
+// matcher is a compiled pattern.
+type matcher interface{ MatchString(string) bool }
+
+// patternTimeout bounds one backtracking match over one id: a pattern that
+// takes longer matches nothing rather than holding the catalog's read.
+const patternTimeout = 100 * time.Millisecond
+
+// backtracking is a pattern Go's regexp can't read, read by regexp2.
+type backtracking struct{ x *regexp2.Regexp }
+
+func (b backtracking) MatchString(s string) bool {
+	ok, err := b.x.MatchString(s)
+	return err == nil && ok
+}
+
 // compilePattern is a pattern as the regexp it means. A glob's "*" is any
 // run of characters, "/" too, and the rest is the id as spelt, in any case
 // ("openrouter/*:free", "*-free"); a regexp must match the whole id, in any
 // case as a glob does unless it says "(?-i)" (usrname1833 on Discord).
-func compilePattern(p string) (*regexp.Regexp, error) {
+func compilePattern(p string) (matcher, error) {
 	if re, ok := strings.CutPrefix(p, RegexpPrefix); ok {
 		if strings.TrimSpace(re) == "" {
 			return nil, fmt.Errorf("%q has no regular expression after %s", p, RegexpPrefix)
 		}
 		x, err := regexp.Compile("(?i)^(?:" + re + ")$")
-		if err != nil {
+		if err == nil {
+			return x, nil
+		}
+		// What Go's regexp can't read, a lookahead most often (maer8824 on
+		// Discord: "re:(?!.*flash).*glm.*", glm but not flash), is read as
+		// the GUI's preview reads it, with backtracking: a pattern Go reads
+		// is never read this way, so its matches stay what they were.
+		y, err2 := regexp2.Compile("(?i)^(?:"+re+")\\z", regexp2.None)
+		if err2 != nil {
 			return nil, fmt.Errorf("%q is not a regular expression magpie can read: %v", p, err)
 		}
-		return x, nil
+		y.MatchTimeout = patternTimeout
+		return backtracking{y}, nil
 	}
 	parts := strings.Split(p, "*")
 	for i, s := range parts {
 		parts[i] = regexp.QuoteMeta(s)
 	}
-	return regexp.Compile("(?i)^" + strings.Join(parts, ".*") + "$")
+	return regexp.MustCompile("(?i)^" + strings.Join(parts, ".*") + "$"), nil
 }
 
 // CleanPatterns are a group's patterns as they are kept: trimmed, each
@@ -92,7 +119,7 @@ func matchesIn(entries []Entry, g Group) []string {
 	if len(g.Match) == 0 {
 		return nil
 	}
-	var res []*regexp.Regexp
+	var res []matcher
 	for _, p := range g.Match {
 		if x, err := compilePattern(p); err == nil {
 			res = append(res, x)
@@ -108,7 +135,7 @@ func matchesIn(entries []Entry, g Group) []string {
 		if named[e.ID] || slices.Contains(out, e.ID) {
 			continue
 		}
-		if slices.ContainsFunc(res, func(x *regexp.Regexp) bool { return x.MatchString(e.ID) }) {
+		if slices.ContainsFunc(res, func(x matcher) bool { return x.MatchString(e.ID) }) {
 			out = append(out, e.ID)
 		}
 	}

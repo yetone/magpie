@@ -292,3 +292,34 @@ func TestRegexpPatternIgnoresCase(t *testing.T) {
 		}
 	}
 }
+
+// A re: pattern Go's regexp can't read, a lookahead (maer8824 on Discord:
+// glm but not flash), is read as the GUI's preview reads it, so the group
+// saves and matches what the preview showed. One Go reads keeps Go's
+// reading, and one neither reads is still refused.
+func TestRegexpPatternLookahead(t *testing.T) {
+	for _, c := range []struct {
+		p, id string
+		ok    bool
+	}{
+		{"re:(?!.*flash).*glm.*", "zhipu/glm-4.6", true},
+		{"re:(?!.*flash).*glm.*", "zhipu/GLM-4.5-Flash", false},
+		{"re:.*glm(?=-4)", "zhipu/glm-4", false},
+		{"re:(?-i)(?!.*Flash).*glm.*", "z/glm-flash", true},
+		{"re:.*(?<!-air)", "z/glm-4.5-air", false},
+		{"re:.*(?<!-air)", "z/glm-4.5", true},
+	} {
+		if got := PatternMatches(c.p, c.id); got != c.ok {
+			t.Errorf("%s ~ %s: %v, want %v", c.p, c.id, got, c.ok)
+		}
+	}
+	if _, err := CleanPatterns([]string{"re:(?!.*flash).*glm.*"}); err != nil {
+		t.Errorf("lookahead refused: %v", err)
+	}
+	if _, err := CleanPatterns([]string{"re:(unclosed"}); err == nil {
+		t.Error("an unreadable pattern was kept")
+	}
+	if _, err := CleanAutoInclude([]string{"re:(?!.*flash).*glm.*"}); err != nil {
+		t.Errorf("auto-include lookahead refused: %v", err)
+	}
+}

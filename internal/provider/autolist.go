@@ -26,7 +26,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -201,7 +200,7 @@ func takeMatching(id string, isNew func(string) bool) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var res []*regexp.Regexp
+	var res []matcher
 	for _, r := range p.AutoInclude {
 		if x, err := compilePattern(r); err == nil {
 			res = append(res, x)
@@ -220,7 +219,7 @@ func takeMatching(id string, isNew func(string) bool) ([]string, error) {
 		if !isNew(m.ID) || slices.Contains(served, m.ID) || slices.Contains(taken, m.ID) {
 			continue
 		}
-		if slices.ContainsFunc(res, func(x *regexp.Regexp) bool { return x.MatchString(m.ID) }) {
+		if slices.ContainsFunc(res, func(x matcher) bool { return x.MatchString(m.ID) }) {
 			taken = append(taken, m.ID)
 		}
 	}
