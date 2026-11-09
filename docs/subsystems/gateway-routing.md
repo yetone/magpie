@@ -775,13 +775,19 @@ only `access.Caller`'s own: no key, a wrong one, one turned off and
 magpie's own token are 401 alike, and `?key=` is refused 400, so a key is
 never written into an address or a log. It names no account, no other key,
 no provider and no secret; its models are `/v1/models`' for that key
-(`keyAllowed`), none for a read-only key. The page loads nothing from
+(`keyAllowed`), none for a read-only key. Its Claude Code setup writes the
+picked model as `ANTHROPIC_MODEL` only; `ANTHROPIC_DEFAULT_OPUS_MODEL`,
+`_SONNET_` and `_HAIKU_` are `tiers`, the newest Claude model of each family
+among the key's models (`keyPageTiers`, no routing group, a tier with none
+left out), so Claude Code's /model tiers and its small asks on haiku keep
+their own family (strinah on Discord). The page loads nothing from
 elsewhere, posts no form and can't be framed (its CSP), keeps the key in
 the tab's `sessionStorage` only, and sends it to its own origin with
 `credentials: "omit"`. Gateway → Gateway keys shows the page's address
 (`MAGPIE_PUBLIC_URL`, else the LAN address offered) with a Copy, while
 shared and with a key (`gatewayKeyPage` in `keys.js`). `key_page.go`, and
-`TestKeyPageTellsAKeyItsOwn`, `TestKeyPageRefusesWithoutItsKey` and
+`TestKeyPageTellsAKeyItsOwn`, `TestKeyPageRefusesWithoutItsKey`,
+`TestKeyPageTiersAreTheirFamilys`, `TestKeyPageTiersPickTheNewest` and
 `TestKeyPageOpensWithoutAKey` in
 [`key_page_test.go`](../../internal/gateway/key_page_test.go);
 `internal/gui/tests/key-page.test.cjs` drives the page itself.

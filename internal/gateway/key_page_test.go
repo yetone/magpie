@@ -251,3 +251,70 @@ func TestKeyPageReadOnlyKey(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+// strinah on Discord: the key page's Claude Code setup wrote the picked
+// model into every tier, so a pick of Opus ran haiku's small asks and
+// /model's sonnet and haiku on Opus. Each tier is named the newest model
+// of its family the key may use, none where it may use none, and a model
+// the key is held from is never named.
+func TestKeyPageTiersAreTheirFamilys(t *testing.T) {
+	fresh(t)
+	t.Setenv("MAGPIE_ADDR", "")
+	budget.Forget()
+	if err := provider.Save(provider.Provider{ID: "plan", Name: "Plan", Key: "upstream-secret", Chat: "http://127.0.0.1:1/v1", Models: []string{
+		"gpt-6", "claude-opus-4-8", "claude-opus-5", "claude-sonnet-4-6", "claude-sonnet-5", "claude-haiku-4-5-20251001", "claude-fable-5-1",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	keys, secrets := newCaller(t, "Held", "Whole")
+	if _, err := access.Update("models-key", access.Change{Key: keys[0].ID, Models: []string{"plan/gpt-6", "plan/claude-opus-4-8", "plan/claude-sonnet-4-6"}}); err != nil {
+		t.Fatal(err)
+	}
+	h := lanGuard(New().Handler())
+	want := []map[string]string{
+		{"opus": "plan/claude-opus-4-8", "sonnet": "plan/claude-sonnet-4-6"},
+		{"opus": "plan/claude-opus-5", "sonnet": "plan/claude-sonnet-5", "haiku": "plan/claude-haiku-4-5-20251001"},
+	}
+	for i, secret := range secrets {
+		w := keyPageReq{method: "GET", path: keyPageData, from: "192.168.1.9:5000", header: map[string]string{"Authorization": "Bearer " + secret}}.do(h)
+		if w.Code != 200 {
+			t.Fatal(w.Code, w.Body.String())
+		}
+		var got struct {
+			Tiers map[string]string `json:"tiers"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		if len(got.Tiers) != len(want[i]) {
+			t.Errorf("%s: tiers %v, want %v", keys[i].Name, got.Tiers, want[i])
+		}
+		for tier, id := range want[i] {
+			if got.Tiers[tier] != id {
+				t.Errorf("%s: %s tier %q, want %q (all %v)", keys[i].Name, tier, got.Tiers[tier], id, got.Tiers)
+			}
+		}
+	}
+}
+
+func TestKeyPageTiersPickTheNewest(t *testing.T) {
+	got := keyPageTiers([]provider.Entry{
+		{ID: "a/claude-haiku-4-5", Model: "claude-haiku-4-5"},
+		{ID: "copilot/claude-opus-5.5", Model: "claude-opus-5.5"},
+		{ID: "b/claude-opus-5-5", Model: "claude-opus-5-5"},
+		{ID: "or/anthropic/claude-sonnet-4.6", Model: "anthropic/claude-sonnet-4.6"},
+		{ID: "a/claude-opus-4-8", Model: "claude-opus-4-8"},
+		{ID: "group/auto-claude", Model: "claude-haiku-5-5", Group: "auto-claude"},
+		{ID: "x/old", Model: "claude-3-5-haiku-20241022"},
+		{ID: "a/claude-fable-5-1", Model: "claude-fable-5-1"},
+	})
+	want := map[string]string{"opus": "copilot/claude-opus-5.5", "sonnet": "or/anthropic/claude-sonnet-4.6", "haiku": "a/claude-haiku-4-5"}
+	if len(got) != len(want) {
+		t.Errorf("tiers %v, want %v", got, want)
+	}
+	for tier, id := range want {
+		if got[tier] != id {
+			t.Errorf("%s tier %q, want %q", tier, got[tier], id)
+		}
+	}
+}

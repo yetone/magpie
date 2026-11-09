@@ -88,6 +88,7 @@ func (s *Server) keyInfo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	models := []map[string]string{}
+	tiers := map[string]string{}
 	// a read-only key is refused every model (readOnlyGuard)
 	if !who.ReadOnly {
 		// as /v1/models tells this key, for no agent in particular
@@ -97,6 +98,7 @@ func (s *Server) keyInfo(w http.ResponseWriter, r *http.Request) {
 		for i, e := range shown {
 			models = append(models, map[string]string{"id": e.ID, "label": labels[i]})
 		}
+		tiers = keyPageTiers(shown)
 	}
 	writeJSON(w, 200, map[string]any{
 		"name":      who.KeyName,
@@ -105,8 +107,46 @@ func (s *Server) keyInfo(w http.ResponseWriter, r *http.Request) {
 		"usage":     sums,
 		"topModels": top,
 		"models":    models,
+		"tiers":     tiers,
 		"version":   Version,
 	})
+}
+
+// keyPageTiers are the models the key page's Claude Code setup names for
+// Claude Code's opus, sonnet and haiku tiers (ANTHROPIC_DEFAULT_<TIER>_MODEL):
+// of the models the key may use, the newest Claude model of each family,
+// the first listed of a version served by more than one. A tier with none
+// is left out, as is a routing group, which isn't one model of a family.
+// The model picked on the page is ANTHROPIC_MODEL alone: written into every
+// tier, a pick of Opus ran Claude Code's small asks (a session's title,
+// Explore subagents, WebFetch's reading), meant for Haiku, on Opus, and
+// /model's sonnet and haiku on it too (strinah on Discord).
+func keyPageTiers(shown []provider.Entry) map[string]string {
+	out := map[string]string{}
+	best := map[string][2]int{}
+	for _, e := range shown {
+		if e.Group != "" {
+			continue
+		}
+		m := e.Model
+		if m == "" {
+			m = e.ID
+		}
+		t := claudeTier(m)
+		if t == "" || t == "fable" {
+			continue
+		}
+		major, minor, ok := claudeVersionOf(m)
+		if !ok {
+			continue
+		}
+		if b, seen := best[t]; seen && (major < b[0] || major == b[0] && minor <= b[1]) {
+			continue
+		}
+		best[t] = [2]int{major, minor}
+		out[t] = e.ID
+	}
+	return out
 }
 
 // keyPageTotals are the sums the key page shows of a key's calls.

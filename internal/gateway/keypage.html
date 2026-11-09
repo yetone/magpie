@@ -436,10 +436,13 @@ function drawSetup() {
   };
   if (tab === "claude") {
     $("tabNote").textContent = t("claudeNote") + " " + t("pick");
-    block("~/.claude/settings.json", JSON.stringify({ env: {
-      ANTHROPIC_BASE_URL: BASE, ANTHROPIC_AUTH_TOKEN: k, ANTHROPIC_MODEL: m,
-      ANTHROPIC_DEFAULT_OPUS_MODEL: m, ANTHROPIC_DEFAULT_SONNET_MODEL: m, ANTHROPIC_DEFAULT_HAIKU_MODEL: m,
-    } }, null, 2));
+    // the pick is the main model alone; each tier keeps its family's model
+    // the key may use (keyPageTiers), so /model's tiers and Claude Code's
+    // small asks on haiku still go to their own
+    const env = { ANTHROPIC_BASE_URL: BASE, ANTHROPIC_AUTH_TOKEN: k, ANTHROPIC_MODEL: m };
+    const tiers = data?.tiers || {};
+    for (const tier of ["opus", "sonnet", "haiku"]) if (tiers[tier]) env["ANTHROPIC_DEFAULT_" + tier.toUpperCase() + "_MODEL"] = tiers[tier];
+    block("~/.claude/settings.json", JSON.stringify({ env }, null, 2));
   } else if (tab === "codex") {
     $("tabNote").textContent = t("codexNote") + " " + t("pick");
     block("~/.codex/config.toml", [

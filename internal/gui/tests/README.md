@@ -68,7 +68,9 @@ Chromium and WebKit and every language: a wrong key is told so in the
 page's language and shows nothing; the right one shows its limit, its
 usage and most used model, picks that model, and gives Claude Code, Codex,
 OpenAI-compatible and curl setup at the address the page was opened at,
-with a placeholder until "Put my key in the setup" is ticked. A reload
+with a placeholder until "Put my key in the setup" is ticked. Claude
+Code's setup names the pick as ANTHROPIC_MODEL alone and each tier's
+model as the gateway's `tiers` says, leaving out a tier with none. A reload
 keeps the key in the tab, Forget takes it away, and no request carries the
 key in its address. A read-only key gets no setup. Gateway → Gateway keys
 shows the page's address (the LAN one, or `MAGPIE_PUBLIC_URL`) with a

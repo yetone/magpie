@@ -124,6 +124,40 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     });
   }
 
+  // strinah on Discord: picking claude/claude-opus-5 wrote it into every
+  // tier too, so Claude Code's haiku asks and /model's sonnet ran on Opus.
+  // The pick is ANTHROPIC_MODEL alone; each tier is the gateway's model of
+  // its family for the key, and a tier it has none for is left out.
+  test(`${engine}: the pick is the main model, the tiers keep their families`, async (t) => {
+    const me = {
+      ...ME, topModels: [],
+      models: [{ id: "claude/claude-opus-5", label: "Opus 5" }, { id: "claude/claude-sonnet-5", label: "Sonnet 5" }, { id: "claude/claude-haiku-4-5", label: "Haiku 4.5" }, { id: "plan/m1", label: "m1" }],
+      tiers: { opus: "claude/claude-opus-5", sonnet: "claude/claude-sonnet-5", haiku: "claude/claude-haiku-4-5" },
+    };
+    const { browser, page, seen } = await open(engine, "en", me);
+    t.after(() => browser.close());
+    await signIn(page, KEY);
+    await page.locator("#info").waitFor();
+    const tiers = { ANTHROPIC_DEFAULT_OPUS_MODEL: "claude/claude-opus-5", ANTHROPIC_DEFAULT_SONNET_MODEL: "claude/claude-sonnet-5", ANTHROPIC_DEFAULT_HAIKU_MODEL: "claude/claude-haiku-4-5" };
+    for (const pick of ["claude/claude-opus-5", "plan/m1", "claude/claude-haiku-4-5"]) {
+      await page.click(`#models [data-id="${pick}"]`);
+      const env = JSON.parse(await snippet(page)).env;
+      assert.deepEqual(env, { ANTHROPIC_BASE_URL: BASE, ANTHROPIC_AUTH_TOKEN: "YOUR_GATEWAY_KEY", ANTHROPIC_MODEL: pick, ...tiers }, pick);
+    }
+    // a key with no Claude of a family gets no tier for it
+    await browser.close();
+    const two = await open(engine, "en", { ...me, tiers: { opus: "claude/claude-opus-5" } });
+    t.after(() => two.browser.close());
+    await signIn(two.page, KEY);
+    await two.page.locator("#info").waitFor();
+    await two.page.click('#models [data-id="plan/m1"]');
+    const env = JSON.parse(await snippet(two.page)).env;
+    assert.deepEqual(Object.keys(env).filter((k) => k.startsWith("ANTHROPIC_DEFAULT_")), ["ANTHROPIC_DEFAULT_OPUS_MODEL"]);
+    assert.equal(env.ANTHROPIC_MODEL, "plan/m1");
+    assert.deepEqual(seen.errors, []);
+    assert.deepEqual(two.seen.errors, []);
+  });
+
   test(`${engine}: a read-only key is shown its usage and no setup`, async (t) => {
     const { browser, page } = await open(engine, "en", { ...ME, readOnly: true, models: [], limits: [] });
     t.after(() => browser.close());
