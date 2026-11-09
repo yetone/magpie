@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -47,7 +48,7 @@ func TestPluginOwnIconAndKeyHint(t *testing.T) {
 	if lemon.MaxAccounts != 4 || lime.MaxAccounts != 2 {
 		t.Errorf("maxAccounts = %d, %d, want 4, 2", lemon.MaxAccounts, lime.MaxAccounts)
 	}
-	if len(lemon.Methods) != 2 || lemon.Methods[0] != (Method{Type: "api", Label: "Lemon API key (from lemon.example/keys)", Placeholder: "sk-lemon-…"}) || lemon.Methods[1].Placeholder != "" {
+	if len(lemon.Methods) != 2 || !reflect.DeepEqual(lemon.Methods[0], Method{Type: "api", Label: "Lemon API key (from lemon.example/keys)", Placeholder: "sk-lemon-…"}) || lemon.Methods[1].Placeholder != "" {
 		t.Fatalf("lemon's methods = %+v", lemon.Methods)
 	}
 	if len(lime.Methods) != 1 || lime.Methods[0].Placeholder != "" {

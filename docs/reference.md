@@ -1281,6 +1281,12 @@ OpenCode ignores:
   are asked first, as in OpenCode, and reach `authorize(inputs)`. A prompt of
   `type: "password"` (magpie's own; OpenCode has `text` and `select`) is typed unseen:
   a masked field in the app, no echo in `magpie plugin login` (#1982).
+- **Sign-in words in other languages**: beside OpenCode's English, a
+  method's `labels`, a prompt's `messages`, and a select option's `labels`
+  and `hints`, each an object of language code to text (`{"zh": "…",
+  "zh-TW": "…", "ja": "…", "de": "…"}`), as a page's `titles` are. The app
+  shows the window's language, then its first part (`zh` for `zh-TW`), else
+  the English; `magpie plugin login` stays English.
 
 ```js
 export const LemonPlugin = async () => ({

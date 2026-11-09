@@ -1,0 +1,6 @@
+{
+  "name": "opencode-langwords-auth",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js"
+}

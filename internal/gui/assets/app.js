@@ -12698,6 +12698,12 @@ async function pluginKey(sub, key) {
   }
 }
 
+// inLang: a plugin's sign-in words in the window's language. Beside a
+// method's label, a question's message and a choice's label and hint, the
+// plugin may give them by language (labels, messages, hints: {"zh": "…"}),
+// as a page gives its titles; else they show as the plugin wrote them.
+const inLang = (by, s) => (by && typeof by === "object" && (by[locale] || by[locale.split("-")[0]])) || s;
+
 // renderPluginAsk: a plugin sign-in's step before the browser — the way
 // to sign in, a question, or the key.
 function renderPluginAsk(sub) {
@@ -12713,7 +12719,7 @@ function renderPluginAsk(sub) {
     const ch = el("div", "choices");
     box.append(close, ch);
     sub.plugin.methods.forEach((m, i) => {
-      const b = el("button", "text primary", m.label || t(m.type === "api" ? "API key" : "Browser"));
+      const b = el("button", "text primary", inLang(m.labels, m.label) || t(m.type === "api" ? "API key" : "Browser"));
       b.dataset.method = String(i);
       b.onclick = () => startPluginSignIn(sub, i, {}, { user: flow.forUser, proxy: flow.picked });
       ch.append(b);
@@ -12724,12 +12730,13 @@ function renderPluginAsk(sub) {
   const form = el("form", "callback-form");
   const why = el("span", "s why", flow.error || "");
   if (flow.state === "prompt" && q.type === "select") {
-    tt.append(el("span", "n", q.message), why);
+    tt.append(el("span", "n", inLang(q.messages, q.message)), why);
     const ch = el("div", "choices");
     box.append(close, ch);
     for (const o of q.options || []) {
-      const b = el("button", "text primary", o.label);
-      if (o.hint) b.title = o.hint;
+      const b = el("button", "text primary", inLang(o.labels, o.label));
+      const hint = inLang(o.hints, o.hint);
+      if (hint) b.title = hint;
       b.onclick = () => pluginAnswer(sub, o.value);
       ch.append(b);
     }
@@ -12741,7 +12748,7 @@ function renderPluginAsk(sub) {
   // at what the key looks like
   const way = key ? sub.plugin.methods?.[flow.method] || {} : {};
   const own = (way.label || "").trim();
-  const label = key ? (own && own.toLowerCase() !== "api key" ? own : t("{name} API key", { name: sub.name })) : q.message;
+  const label = key ? (own && own.toLowerCase() !== "api key" ? inLang(way.labels, own) : t("{name} API key", { name: sub.name })) : inLang(q.messages, q.message);
   tt.append(el("span", "n", label));
   // a key, and a question the plugin marks "password" (a token, #1982),
   // are typed unseen
@@ -13020,7 +13027,7 @@ function renderSigning(sub) {
       const ways = el("div", "ways");
       sub.plugin.methods.forEach((m, i) => {
         if (labels.some((l) => (m.label || "").includes(l))) return;
-        const b = el("button", "link", t(m.label || (m.type === "api" ? "API key" : "Browser")));
+        const b = el("button", "link", inLang(m.labels, t(m.label || (m.type === "api" ? "API key" : "Browser"))));
         b.dataset.method = String(i);
         b.onclick = () => startPluginSignIn(sub, i, {}, { user: flow.forUser, proxy: flow.picked });
         ways.append(b);

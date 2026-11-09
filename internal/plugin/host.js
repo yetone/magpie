@@ -2363,6 +2363,24 @@ function optionValue(provider, key) {
   return optionValues(provider)[key] === true
 }
 
+// byLang is a sign-in word by language, magpie's own field beside
+// OpenCode's English one (a method's labels, a question's messages, a
+// choice's labels and hints: {"zh": "…", "zh-TW": "…"}), as { [name]: map }
+// to spread, or {}: codes of 1–16 characters, at most 16, empty and
+// non-string ones left out, as a page's titles are (plugin.titles).
+function byLang(v, name) {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return {}
+  const out = {}
+  let n = 0
+  for (const [k, x] of Object.entries(v)) {
+    const code = k.trim(), text = shown(x, 300)
+    if (!code || code.length > 16 || !text || n === 16) continue
+    out[code] = text
+    n++
+  }
+  return n ? { [name]: out } : {}
+}
+
 // methods are the auth hook's ways to sign in. An "api" one may say what
 // its key looks like (placeholder, magpie's own: OpenCode's dialog says
 // "API key"); its label titles the key's field, as OpenCode's does.
@@ -2370,6 +2388,7 @@ function methods(auth) {
   return (auth.methods ?? []).map((m) => ({
     type: m.type,
     label: m.label,
+    ...byLang(m.labels, "labels"),
     ...(m.type === "api" && m.keyless === true && typeof m.authorize === "function" ? { keyless: true } : {}),
     ...(m.type === "api" && shown(m.placeholder, 200) ? { placeholder: shown(m.placeholder, 200) } : {}),
   }))
@@ -2602,8 +2621,9 @@ async function nextPrompt(provider, index, inputs) {
       type: p.type,
       key: p.key,
       message: p.message,
+      ...byLang(p.messages, "messages"),
       placeholder: p.placeholder ?? "",
-      options: p.type === "select" ? p.options.map((o) => ({ label: o.label, value: o.value, hint: o.hint ?? "" })) : undefined,
+      options: p.type === "select" ? p.options.map((o) => ({ label: o.label, value: o.value, hint: o.hint ?? "", ...byLang(o.labels, "labels"), ...byLang(o.hints, "hints") })) : undefined,
     }
   }
   return null
