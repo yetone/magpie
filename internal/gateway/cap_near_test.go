@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -118,8 +119,13 @@ func nearCapAccounts(t *testing.T, capAt int, want float64, spares ...string) {
 		t.Fatal(err)
 	}
 	users := append([]string{"me@example.com"}, spares...)
-	for _, u := range users {
-		provider.StaleAllowance("codex", u)
+	// a reading begun now, not one an earlier test left that already
+	// says want: the reading out would land after this test's reply was
+	// heard and put its account back under its cap
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if !provider.ReadUsageNow(ctx, "codex", users...) {
+		t.Fatal("never read")
 	}
 	t.Cleanup(func() {
 		for _, u := range users {
