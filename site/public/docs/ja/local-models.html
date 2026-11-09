@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Code・Codex で Ollama や LM Studio のローカルモデルを使う方法 · magpie</title>
+<meta name="description" content="Ollama、LM Studio、oMLX、MLX-Serve、vLLM、llama.cpp のローカルモデルで Claude Code と Codex を動かします。magpie が各エージェントをローカルサーバーへ向け、必要な API を話します。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/local-models">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/local-models">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/local-models">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/local-models">
+<link rel="canonical" href="https://usemagpie.ai/docs/ja/local-models">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Claude Code・Codex で Ollama や LM Studio のローカルモデルを使う方法">
+<meta property="og:description" content="Ollama、LM Studio、oMLX、MLX-Serve、vLLM、llama.cpp のローカルモデルで Claude Code と Codex を動かします。magpie が各エージェントをローカルサーバーへ向け、必要な API を話します。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/ja/local-models">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Claude Code・Codex で Ollama や LM Studio のローカルモデルを使う方法",
+   "description": "Ollama、LM Studio、oMLX、MLX-Serve、vLLM、llama.cpp のローカルモデルで Claude Code と Codex を動かします。magpie が各エージェントをローカルサーバーへ向け、必要な API を話します。",
+   "inLanguage": "ja",
+   "url": "https://usemagpie.ai/docs/ja/local-models",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Claude Code で Ollama は使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。magpie に Ollama を追加し、Claude Code のモデルにそのモデルを選ぶだけです。magpie が Claude Code の settings.json にゲートウェイのアドレスを書き込み、Ollama の Anthropic 互換 API が Claude Code のリクエストをそのまま受け取ります。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex で Ollama や LM Studio は使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。Codex は Responses API しか話さないので、magpie がリクエストを Chat Completions に変換して Ollama や LM Studio に送り、応答を戻します。ツール呼び出しも同じです。oMLX と MLX-Serve は Responses をそのまま受け付けます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "API キーは必要ですか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "いいえ。ローカルのプリセットにはキーが要りません。サーバーにキーを設定している場合は、プロバイダの編集画面で入力します。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "別のマシンで動くモデルも使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。プロバイダのサーバーアドレスを http://192.168.1.20:11434 のようにそのマシンに変えてください。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "ローカルモデルだと Claude Code の長い会話が失敗するのはなぜですか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Claude Code は知らないモデルを 200K とみなすからです。magpie でプロバイダに実際のコンテキストウィンドウを設定すれば、Claude Code も Codex も上限に達する前に圧縮します。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "元に戻すには？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie でエージェント自身のモデルを選ぶか、magpie claude default や magpie codex default を実行します。magpie が書いたものは取り除かれ、置き換えたものは元に戻ります。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/ja/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>ドキュメント</small></a>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/start">はじめに</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a class="toc-only" href="/docs/ja/remote">リモート magpie</a>
+    <a class="toc-only" href="/docs/ja/docker">Docker</a>
+    <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
+    <a class="toc-only" href="/docs/ja/masking">プライバシーマスキング</a>
+    <a class="toc-only" href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a class="toc-only" href="/docs/ja/library">ライブラリ</a>
+    <a class="toc-only" href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a class="toc-only" href="/docs/ja/local-models">ローカルモデル</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="言語" title="言語" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/local-models" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/local-models" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/local-models" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="Discord の magpie" title="Discord に参加"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="GitHub の magpie" title="GitHub のソースコード"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">ダウンロード</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>ローカルモデル</p>
+    <a href="#overview">ゲートウェイが要る理由</a>
+    <a href="#servers">対応サーバー</a>
+    <a href="#setup">セットアップ</a>
+    <a href="#address">別のポート・別のマシン</a>
+    <a href="#custom">vLLM・llama.cpp など</a>
+    <a href="#window">コンテキストウィンドウ</a>
+    <a href="#masking">マスク</a>
+    <a href="#faq">よくある質問</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">ドキュメント · ガイド</p>
+    <h1>Claude Code・Codex で Ollama や LM Studio のローカルモデルを使う方法</h1>
+    <p class="lede">Claude Code が話すのは Anthropic Messages、Codex が話すのは OpenAI Responses です。一方、ローカルのモデルサーバーが話すのは主に OpenAI Chat Completions で、Anthropic Messages も話すものがあります。magpie がその間に入るので、Ollama で pull したモデルや LM Studio で読み込んだモデルを Claude Code と Codex からそのまま使えます。</p>
+
+    <p>ゲートウェイは <code>127.0.0.1:3425</code> で動きます。magpie はエージェントをここへ向け、各リクエストをローカルサーバーへ送ります。サーバーがエージェントの API をそのまま話せるならリクエストはそのまま渡し、話せない場合は magpie がリクエストと応答を変換します。ストリーミングもツール呼び出しもそのままです。</p>
+
+    <div class="cards">
+      <div><h3>Ollama・LM Studio</h3><p>既定のポートでキー不要のプリセット。magpie がサーバーにモデル一覧を問い合わせます。</p></div>
+      <div><h3>oMLX・MLX-Serve</h3><p>Apple シリコン向けの MLX サーバーもプリセットがあります。</p></div>
+      <div><h3>その他</h3><p>vLLM、llama.cpp のサーバー、任意の OpenAI 互換 URL。同じマシンでも別のマシンでも。</p></div>
+    </div>
+
+    <h2 id="servers"><a class="anchor" href="#servers">対応サーバー</a></h2>
+    <p>プロバイダを追加するとき、<span class="ui">このマシン上</span> に並んでいます。</p>
+    <div class="table-wrap"><table>
+      <tr><th>サーバー</th><th>既定のアドレス</th><th>magpie が使う API</th></tr>
+      <tr><td>Ollama</td><td><code>http://localhost:11434</code></td><td>Chat Completions、Anthropic Messages</td></tr>
+      <tr><td>LM Studio</td><td><code>http://localhost:1234</code></td><td>Chat Completions</td></tr>
+      <tr><td>oMLX</td><td><code>http://localhost:8000</code></td><td>Chat Completions、Responses、Anthropic Messages</td></tr>
+      <tr><td>MLX-Serve</td><td><code>http://localhost:11234</code></td><td>Chat Completions、Responses、Anthropic Messages</td></tr>
+    </table></div>
+    <p>つまり、Claude Code は Ollama・oMLX・MLX-Serve にはリクエストをそのまま送り、LM Studio には magpie が変換して送ります。Codex は oMLX・MLX-Serve にはそのまま、Ollama・LM Studio には magpie が Responses を Chat Completions に変換して送ります。</p>
+
+    <h2 id="setup"><a class="anchor" href="#setup">セットアップ</a></h2>
+    <ol class="steps">
+      <li><b>サーバーを起動する</b>Ollama でモデルを pull するか LM Studio で読み込み、サーバーを動かしたままにします。</li>
+      <li><b>magpie に追加する</b><span class="ui">プロバイダ</span> タブで <span class="ui">＋ プロバイダを追加</span> を押し、<span class="ui">このマシン上</span> から Ollama か LM Studio を選びます。キーは不要です。magpie がサーバーにモデルを問い合わせ、<code>ollama/…</code> や <code>lmstudio/…</code> として表示されます。</li>
+      <li><b>エージェントのモデルを選ぶ</b><span class="ui">エージェント</span> タブで Claude Code か Codex の行のモデルをクリックし、ローカルモデルを選びます。magpie が Claude Code の <code>settings.json</code> や Codex の <code>config.toml</code> を書き換えます。新しいセッションから使えます。</li>
+    </ol>
+    <p>ターミナルからも同じことができます。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-lm-cli">コピー</button><pre id="ex-lm-cli">ollama pull qwen3
+magpie provider add ollama
+magpie models                     # すべてのモデル（プロバイダ/モデル）
+magpie claude ollama/qwen3        # Claude Code
+magpie codex ollama/qwen3         # Codex</pre></div>
+    <p>エージェントの中でも、Claude Code と Codex の <code>/model</code> に magpie のモデルが並ぶので、ローカルモデルとクラウドのモデルをそこで切り替えられます。各エージェントの設定で何が変わるかは <a href="/docs/ja/claude-code-models#settings">Claude Code でほかのモデルを使う</a> と <a href="/docs/ja/codex-models">Codex でほかのモデルを使う</a> を参照してください。</p>
+
+    <h2 id="address"><a class="anchor" href="#address">別のポート、別のマシン</a></h2>
+    <p>サーバーが別のポートで待ち受けている場合や、GPU マシンや NAS など別のマシンで動いている場合は、プロバイダの編集画面で <span class="ui">サーバーアドレス</span> を変えます。各 URL がそのアドレスへ移り、パスはそのままです。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-lm-addr">コピー</button><pre id="ex-lm-addr">magpie provider add lmstudio address=http://192.168.1.5:1234
+magpie provider set ollama address=192.168.1.20:11434
+magpie provider set ollama address=     # 既定のアドレスに戻す</pre></div>
+    <p>自己署名証明書の HTTPS サーバーには、編集画面の <span class="ui">証明書を検証しない</span> で接続できます。そのプロバイダ自身のホストにだけ効きます。</p>
+
+    <h2 id="custom"><a class="anchor" href="#custom">vLLM、llama.cpp などのサーバー</a></h2>
+    <p>プリセットのないサーバーは <span class="ui">カスタム</span> で追加します。<code>http://localhost:8080/v1</code> のような URL を貼り付け、<span class="ui">API を検出</span> を押すと、magpie がその URL で Chat Completions・Responses・Anthropic Messages・Gemini にそれぞれ最小のリクエストを送り、応答したものを使います。キーが要らないサーバーなら空欄のままで構いません。</p>
+
+    <h2 id="window"><a class="anchor" href="#window">コンテキストウィンドウ</a></h2>
+    <p>エージェントは、モデルが受け付けるリクエストの長さを前提に会話を組み立てます。Claude Code は知らないモデルを 200K とみなし、Codex は伝えられたウィンドウの 90% で会話を圧縮します。ローカルモデルはずっと小さいウィンドウで読み込まれていることが多いので、実際の値を magpie に伝えてください。プロバイダの編集画面の <span class="ui">詳細設定</span> にある <span class="ui">コンテキストウィンドウ</span> で、全モデルにも個別のモデルにも設定できます。magpie がそれをエージェントに伝えます。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-lm-ctx">コピー</button><pre id="ex-lm-ctx">magpie provider set ollama context=32k
+magpie provider set ollama context.qwen3=128k</pre></div>
+
+    <h2 id="masking"><a class="anchor" href="#masking">マスク</a></h2>
+    <p>magpie の <a href="/docs/ja/masking">プライバシーマスク</a> は、リクエストがゲートウェイを出る前にキーやトークンなどの秘密をプレースホルダーに置き換えます。ローカルサーバーへのリクエストも同じです。モデルが自分のマシンやネットワーク内で動いているなら、編集画面で <span class="ui">リクエストをマスクしない</span> をオンにするか、<code>magpie provider set ollama unmasked=yes</code> を実行します。判断はあなた次第です。Ollama のクラウドモデルや、ローカルで動かしている中継サービスは、アドレスに関係なくリクエストをベンダーへ送ります。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
+    <h3>Claude Code で Ollama は使えますか？</h3>
+    <p>使えます。magpie に Ollama を追加し、Claude Code のモデルにそのモデルを選ぶだけです。magpie が Claude Code の <code>settings.json</code> にゲートウェイのアドレスを書き込み、Ollama の Anthropic 互換 API が Claude Code のリクエストをそのまま受け取ります。</p>
+    <h3>Codex で Ollama や LM Studio は使えますか？</h3>
+    <p>使えます。Codex は Responses API しか話さないので、magpie がリクエストを Chat Completions に変換して Ollama や LM Studio に送り、応答を戻します。ツール呼び出しも同じです。oMLX と MLX-Serve は Responses をそのまま受け付けます。</p>
+    <h3>API キーは必要ですか？</h3>
+    <p>いいえ。ローカルのプリセットにはキーが要りません。サーバーにキーを設定している場合は、プロバイダの編集画面で入力します。</p>
+    <h3>別のマシンで動くモデルも使えますか？</h3>
+    <p>使えます。プロバイダのサーバーアドレスを <code>http://192.168.1.20:11434</code> のようにそのマシンに変えてください。</p>
+    <h3>ローカルモデルだと Claude Code の長い会話が失敗するのはなぜですか？</h3>
+    <p>Claude Code は知らないモデルを 200K とみなすからです。magpie でプロバイダに実際のコンテキストウィンドウを設定すれば、Claude Code も Codex も上限に達する前に圧縮します。</p>
+    <h3>元に戻すには？</h3>
+    <p>magpie でエージェント自身のモデルを選ぶか、<code>magpie claude default</code> や <code>magpie codex default</code> を実行します。magpie が書いたものは取り除かれ、置き換えたものは元に戻ります。</p>
+
+    <p style="margin-top:48px">クラウドのモデルを使うなら <a href="/docs/ja/claude-code-models">Claude Code でほかのモデルを使う</a> と <a href="/docs/ja/codex-models">Codex でほかのモデルを使う</a> を参照してください。困ったときは <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> で質問してください。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a href="/docs/ja/remote">リモート magpie</a>
+    <a href="/docs/ja/docker">Docker</a>
+    <a href="/docs/ja/privacy">プライバシー</a>
+    <a href="/docs/ja/masking">プライバシーマスキング</a>
+    <a href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a href="/docs/ja/library">ライブラリ</a>
+    <a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a href="/docs/ja/local-models">ローカルモデル</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/ja/contributors">コントリビューター</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "コピーしました"; setTimeout(() => (b.textContent = "コピー"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

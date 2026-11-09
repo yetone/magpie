@@ -40,6 +40,7 @@ DeepSeek, Kimi (Moonshot), GLM (Zhipu), Qwen, MiniMax, Anthropic (Claude), OpenA
 - [Models in Codex](https://usemagpie.ai/docs/codex-models): run Codex on DeepSeek, Kimi, GLM, Qwen or a Claude subscription; the /model list with reasoning efforts and what changes in config.toml.
 - [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models): run Gemini CLI on DeepSeek, Kimi, GLM, Qwen or a Claude or ChatGPT subscription; what changes in ~/.gemini/.env and settings.json, and how to switch back.
 - [Subscriptions in any agent](https://usemagpie.ai/docs/subscriptions): sign in to Claude, ChatGPT, GitHub Copilot, Gemini Code Assist or Antigravity in magpie and use its models in Claude Code, Codex, Gemini CLI or OpenCode, with several accounts and failover.
+- [Local models in Claude Code and Codex](https://usemagpie.ai/docs/local-models): run Claude Code and Codex on Ollama, LM Studio, oMLX, MLX-Serve, vLLM or llama.cpp; default addresses, which API each server speaks, context window and masking.
 - [Intent routing](https://usemagpie.ai/docs/intent): how a turn is routed by what the user asks for.
 - [Privacy masking](https://usemagpie.ai/docs/masking): what is masked before a request leaves the computer and how values come back.
 - [Library](https://usemagpie.ai/docs/library): instructions, MCP servers, skills, hooks and subagents for each agent.

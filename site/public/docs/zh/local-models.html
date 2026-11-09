@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Code、Codex 接入 Ollama、LM Studio 本地模型 · magpie</title>
+<meta name="description" content="让 Claude Code 和 Codex 用上 Ollama、LM Studio、oMLX、MLX-Serve、vLLM 或 llama.cpp 跑的本地模型。magpie 把 Agent 指向你的本地服务，并替它说它需要的协议。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/local-models">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/local-models">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/local-models">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/local-models">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/local-models">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Claude Code、Codex 接入 Ollama、LM Studio 本地模型">
+<meta property="og:description" content="让 Claude Code 和 Codex 用上 Ollama、LM Studio、oMLX、MLX-Serve、vLLM 或 llama.cpp 跑的本地模型。magpie 把 Agent 指向你的本地服务，并替它说它需要的协议。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/local-models">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Claude Code、Codex 接入 Ollama、LM Studio 本地模型",
+   "description": "让 Claude Code 和 Codex 用上 Ollama、LM Studio、oMLX、MLX-Serve、vLLM 或 llama.cpp 跑的本地模型。magpie 把 Agent 指向你的本地服务，并替它说它需要的协议。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/local-models",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Claude Code 能用 Ollama 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。在 magpie 里添加 Ollama，给 Claude Code 选它的模型即可。magpie 把网关地址写进 Claude Code 的 settings.json，Ollama 的 Anthropic 兼容接口直接接收 Claude Code 的请求。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex 能用 Ollama 或 LM Studio 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。Codex 只说 Responses 协议，magpie 会把它的请求转成 Chat Completions 发给 Ollama 和 LM Studio，再把回复转回来，工具调用也一样。oMLX 和 MLX-Serve 本身就支持 Responses。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "需要 API Key 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "不需要，本地预设不用 Key。你给服务加了 Key 的话，在供应商编辑页填上即可。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "模型可以跑在另一台电脑上吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "可以。把供应商的服务器地址改成那台电脑，比如 http://192.168.1.20:11434。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "为什么本地模型在 Claude Code 里长对话会出错？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Claude Code 把不认识的模型当作 200K 窗口。在 magpie 里给这个供应商设好真实的上下文窗口，Claude Code 和 Codex 就会在用满之前压缩。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "怎么恢复原样？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "在 magpie 里给 Agent 选回它自己的模型，或运行 magpie claude default、magpie codex default。magpie 写进去的会被删掉，被替换的会恢复。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/local-models" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/local-models" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/local-models" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>本地模型</p>
+    <a href="#overview">为什么需要网关</a>
+    <a href="#servers">支持的本地服务</a>
+    <a href="#setup">配置步骤</a>
+    <a href="#address">换端口或换电脑</a>
+    <a href="#custom">vLLM、llama.cpp 等</a>
+    <a href="#window">上下文窗口</a>
+    <a href="#masking">脱敏</a>
+    <a href="#faq">常见问题</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 指南</p>
+    <h1>Claude Code、Codex 接入 Ollama、LM Studio 本地模型</h1>
+    <p class="lede">Claude Code 只说 Anthropic Messages，Codex 只说 OpenAI Responses，而本地模型服务一般说 OpenAI Chat Completions，有的也说 Anthropic Messages。magpie 在你电脑上夹在中间，让 Claude Code 和 Codex 直接用上你在 Ollama 里 pull 的、在 LM Studio 里加载的模型。</p>
+
+    <p>网关跑在 <code>127.0.0.1:3425</code>。magpie 把 Agent 指向它，再把每个请求转给你的本地服务。服务本身就说 Agent 的协议时，请求原样转过去；不说时，magpie 负责翻译请求和回复，流式输出和工具调用都保留。</p>
+
+    <div class="cards">
+      <div><h3>Ollama、LM Studio</h3><p>内置预设，默认端口，不需要 Key。magpie 会去问服务有哪些模型。</p></div>
+      <div><h3>oMLX、MLX-Serve</h3><p>Apple 芯片上的 MLX 服务，同样有预设。</p></div>
+      <div><h3>其他</h3><p>vLLM、llama.cpp 的 server，或任何 OpenAI 兼容地址，本机或局域网里的都行。</p></div>
+    </div>
+
+    <h2 id="servers"><a class="anchor" href="#servers">支持的本地服务</a></h2>
+    <p>添加供应商时，它们在 <span class="ui">本机</span> 一栏：</p>
+    <div class="table-wrap"><table>
+      <tr><th>服务</th><th>默认地址</th><th>magpie 用到的协议</th></tr>
+      <tr><td>Ollama</td><td><code>http://localhost:11434</code></td><td>Chat Completions、Anthropic Messages</td></tr>
+      <tr><td>LM Studio</td><td><code>http://localhost:1234</code></td><td>Chat Completions</td></tr>
+      <tr><td>oMLX</td><td><code>http://localhost:8000</code></td><td>Chat Completions、Responses、Anthropic Messages</td></tr>
+      <tr><td>MLX-Serve</td><td><code>http://localhost:11234</code></td><td>Chat Completions、Responses、Anthropic Messages</td></tr>
+    </table></div>
+    <p>所以 Claude Code 接 Ollama、oMLX 或 MLX-Serve 时请求原样发过去，接 LM Studio 时由 magpie 翻译。Codex 接 oMLX 或 MLX-Serve 时原样发过去，接 Ollama 或 LM Studio 时 magpie 把 Responses 请求转成 Chat Completions。</p>
+
+    <h2 id="setup"><a class="anchor" href="#setup">配置步骤</a></h2>
+    <ol class="steps">
+      <li><b>启动本地服务</b>在 Ollama 里 pull 一个模型，或在 LM Studio 里加载一个，让服务保持运行。</li>
+      <li><b>在 magpie 里添加</b>在 <span class="ui">供应商</span> 页点 <span class="ui">＋ 添加供应商</span>，在 <span class="ui">本机</span> 一栏选 Ollama 或 LM Studio，不用填 Key。magpie 会去问服务有哪些模型，它们显示为 <code>ollama/…</code> 或 <code>lmstudio/…</code>。</li>
+      <li><b>给 Agent 选模型</b>在 <span class="ui">Agent</span> 页点 Claude Code 或 Codex 那一行的模型，选本地模型。magpie 会写好 Claude Code 的 <code>settings.json</code> 或 Codex 的 <code>config.toml</code>，新开一个会话即可。</li>
+    </ol>
+    <p>用命令行也一样：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-lm-cli">复制</button><pre id="ex-lm-cli">ollama pull qwen3
+magpie provider add ollama
+magpie models                     # 所有模型，格式为 供应商/模型
+magpie claude ollama/qwen3        # Claude Code
+magpie codex ollama/qwen3         # Codex</pre></div>
+    <p>在 Agent 里，Claude Code 和 Codex 的 <code>/model</code> 也会列出 magpie 的模型，本地模型和云端模型可以随时切换。两个 Agent 的配置具体改了什么，见 <a href="/docs/zh/claude-code-models#settings">Claude Code 接入其他模型</a> 和 <a href="/docs/zh/codex-models">Codex 接入其他模型</a>。</p>
+
+    <h2 id="address"><a class="anchor" href="#address">换端口，或用另一台电脑上的模型</a></h2>
+    <p>服务监听在别的端口，或者跑在另一台电脑上（比如显卡机、NAS），就在供应商编辑页改 <span class="ui">服务器地址</span>。它的每个 URL 都会换到这个地址，路径不变。</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-lm-addr">复制</button><pre id="ex-lm-addr">magpie provider add lmstudio address=http://192.168.1.5:1234
+magpie provider set ollama address=192.168.1.20:11434
+magpie provider set ollama address=     # 恢复默认地址</pre></div>
+    <p>HTTPS 服务用的是自签名证书时，在编辑页打开 <span class="ui">不校验它的证书</span>，只对这个供应商自己的地址生效。</p>
+
+    <h2 id="custom"><a class="anchor" href="#custom">vLLM、llama.cpp 等其他服务</a></h2>
+    <p>没有预设的服务用 <span class="ui">自定义</span> 添加：粘贴它的地址，比如 <code>http://localhost:8080/v1</code>，点 <span class="ui">检测协议</span>。magpie 会在这个地址上分别向 Chat Completions、Responses、Anthropic Messages 和 Gemini 发一个最小请求，留下有回应的那些。服务不需要 Key 的话，Key 可以留空。</p>
+
+    <h2 id="window"><a class="anchor" href="#window">上下文窗口</a></h2>
+    <p>Agent 会按模型能接受多长的请求来安排对话。Claude Code 把不认识的模型当作 200K，Codex 在被告知的窗口用到 90% 时压缩对话。本地模型加载时的窗口往往小得多，所以要把真实的窗口告诉 magpie：供应商编辑页 <span class="ui">高级</span> 里的 <span class="ui">上下文窗口</span>，可以给全部模型设，也可以单独给某个模型设。magpie 会告知各个 Agent。</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-lm-ctx">复制</button><pre id="ex-lm-ctx">magpie provider set ollama context=32k
+magpie provider set ollama context.qwen3=128k</pre></div>
+
+    <h2 id="masking"><a class="anchor" href="#masking">脱敏</a></h2>
+    <p>magpie 的 <a href="/docs/zh/masking">本地脱敏</a> 会在请求离开网关前把 Key、Token 等敏感信息换成占位符，发给本地服务的请求也一样。模型就跑在你自己的电脑或局域网里时，可以在编辑页打开 <span class="ui">请求不脱敏</span>，或运行 <code>magpie provider set ollama unmasked=yes</code>。这由你决定：Ollama 的云端模型，或者你在本机跑的中转站，不管地址是什么，都会把请求转给厂商。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>Claude Code 能用 Ollama 吗？</h3>
+    <p>能。在 magpie 里添加 Ollama，给 Claude Code 选它的模型即可。magpie 把网关地址写进 Claude Code 的 <code>settings.json</code>，Ollama 的 Anthropic 兼容接口直接接收 Claude Code 的请求。</p>
+    <h3>Codex 能用 Ollama 或 LM Studio 吗？</h3>
+    <p>能。Codex 只说 Responses 协议，magpie 会把它的请求转成 Chat Completions 发给 Ollama 和 LM Studio，再把回复转回来，工具调用也一样。oMLX 和 MLX-Serve 本身就支持 Responses。</p>
+    <h3>需要 API Key 吗？</h3>
+    <p>不需要，本地预设不用 Key。你给服务加了 Key 的话，在供应商编辑页填上即可。</p>
+    <h3>模型可以跑在另一台电脑上吗？</h3>
+    <p>可以。把供应商的服务器地址改成那台电脑，比如 <code>http://192.168.1.20:11434</code>。</p>
+    <h3>为什么本地模型在 Claude Code 里长对话会出错？</h3>
+    <p>Claude Code 把不认识的模型当作 200K 窗口。在 magpie 里给这个供应商设好真实的上下文窗口，Claude Code 和 Codex 就会在用满之前压缩。</p>
+    <h3>怎么恢复原样？</h3>
+    <p>在 magpie 里给 Agent 选回它自己的模型，或运行 <code>magpie claude default</code>、<code>magpie codex default</code>。magpie 写进去的会被删掉，被替换的会恢复。</p>
+
+    <p style="margin-top:48px">想用云端模型？见 <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a> 和 <a href="/docs/zh/codex-models">Codex 接入其他模型</a>。遇到问题可以到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
