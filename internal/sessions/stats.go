@@ -179,8 +179,10 @@ type Active struct {
 	Agent   string `json:"agent"`
 	Cwd     string `json:"cwd"`
 	Seconds int64  `json:"seconds"`
-	// Hours is Seconds again by the local hour of the day (24, or none)
-	Hours []int64 `json:"hours,omitempty"`
+	// Hours is Seconds again by the local hour of the day (24 in JSON, or
+	// none), only the hours with time held: each range statsFor keeps has
+	// one for every day, agent and folder, ~4.5 MB of mostly zeros at 24
+	Hours hours `json:"hours,omitempty"`
 }
 
 // StatsFor reads the usage of the last days days up to today, today
@@ -353,7 +355,7 @@ func statsOfRange(days int, today time.Time, files []file, copies map[string]str
 	type ak struct{ date, agent, cwd string }
 	type act0 struct {
 		ms    int64
-		hours []int64
+		hours hours
 	}
 	use := map[uk]Tokens{}
 	act := map[ak]*act0{}
@@ -423,11 +425,8 @@ func statsOfRange(days int, today time.Time, files []file, copies map[string]str
 				}
 				a.ms += d.Active
 				if d.Hours != nil {
-					if a.hours == nil {
-						a.hours = make([]int64, 24)
-					}
 					for _, e := range d.Hours {
-						a.hours[hourOf(e)] += msOf(e)
+						a.hours.add(hourOf(e), msOf(e))
 					}
 				}
 				dates[date] = true
@@ -508,9 +507,9 @@ func statsOfRange(days int, today time.Time, files []file, copies map[string]str
 	for k, a := range act {
 		v := Active{Agent: k.agent, Cwd: k.cwd, Seconds: a.ms / 1000}
 		if a.hours != nil {
-			v.Hours = make([]int64, 24)
-			for h, ms := range a.hours {
-				v.Hours[h] = ms / 1000
+			v.Hours = make(hours, len(a.hours))
+			for i, e := range a.hours {
+				v.Hours[i] = hourEntry(hourOf(e), msOf(e)/1000)
 			}
 		}
 		byDate[k.date].Active = append(byDate[k.date].Active, v)

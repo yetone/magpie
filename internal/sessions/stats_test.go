@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -201,11 +202,15 @@ func TestStatsHoursAndSessions(t *testing.T) {
 		ccMsg("m2", "2026-09-20T15:59:00.000Z", 200, 20)+ // 23:59
 		ccMsg("m3", "2026-09-20T16:03:00.000Z", 400, 40)), 0o644) // 00:03
 
+	// as the page reads them: 24 numbers of seconds
 	hours := func(s Stats, date string) []int64 {
 		for _, d := range s.Days {
 			for _, a := range d.Active {
 				if d.Date == date && a.Cwd == "/work/night" {
-					return a.Hours
+					var all struct{ Hours []int64 }
+					b, _ := json.Marshal(a)
+					json.Unmarshal(b, &all)
+					return all.Hours
 				}
 			}
 		}
