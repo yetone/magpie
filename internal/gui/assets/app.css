@@ -4266,6 +4266,9 @@ body.panel .modal { padding: 16px 12px; }
   body.web .proxy-controls, body.web .proxy-auth { justify-content: flex-start; }
   body.web .usage-head { height: auto; min-height: 44px; flex-wrap: wrap; gap: 8px; }
   body.web .usage-head > .segs { max-width: 100%; flex-wrap: wrap; }
+  /* Requests' Split by (#4943): its five choices ran 86px past a phone */
+  body.web .led-split { max-width: 100%; flex-wrap: wrap; }
+  body.web .led-split > .segs { max-width: 100%; flex-wrap: wrap; }
   body.web .usage-head > .grow, body.web .sess-tools > .grow { display: none; }
   /* the head on a phone: the tabs across it, and under them one line, the
      days as a menu, the sum, and the refresh as a dot and its figure */

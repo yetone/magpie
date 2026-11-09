@@ -5,8 +5,10 @@
 // later in WebKit; a phone's finger has moved the table on by then, so the
 // bar's echo wrote the table back where it was, every other frame. Here the
 // table is moved between frames, as a phone's own scrolling moves it, and
-// the page never writes it back; the same for the bar dragged. English and
-// Chinese, Chromium and WebKit at a phone's size; no backend, the API is faked.
+// the page never writes it back. A phone shows no such bar at all (#4943:
+// it stood as an empty band at the screen's foot); a finger moves the
+// table. English and Chinese, Chromium and WebKit at a phone's size; no
+// backend, the API is faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -96,24 +98,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await p.locator("#ledWrap .led tbody tr").first().waitFor();
         await p.waitForTimeout(300);
         assert(await p.locator("#ledWrap").evaluate((e) => e.scrollWidth > e.clientWidth + 100), "the table is wider than the phone");
-        assert.equal(await p.locator("#ledHScroll").isHidden(), false, "the scrollbar is kept at the foot");
+        assert.equal(await p.locator("#ledHScroll").isHidden(), true, "a phone keeps no stand-in scrollbar at the foot (#4943)");
 
         // the table swiped: it is never written back, and never stands still
-        // a frame while the finger moves it; the bar follows it
+        // a frame while the finger moves it
         const table = await p.evaluate(() => window.__swipe("ledWrap"));
         const stood = table.seen.filter((x, i) => i && x <= table.seen[i - 1]).length;
         assert.equal(table.writes.ledWrap, 0, "the page wrote the swiped table back: " + JSON.stringify(table));
         assert.equal(stood, 0, "the table stood still or went back under the finger: " + JSON.stringify(table.seen));
         await p.waitForTimeout(100);
-        const [w, b] = await p.evaluate(() => [document.getElementById("ledWrap").scrollLeft, document.getElementById("ledHScroll").scrollLeft]);
-        assert(w > 100 && w === b, "the bar followed the table: " + JSON.stringify({ w, b }));
-
-        // the bar dragged: it is never written back, and the table follows it
-        const bar = await p.evaluate(() => window.__swipe("ledHScroll"));
-        assert.equal(bar.writes.ledHScroll, 0, "the page wrote the dragged bar back: " + JSON.stringify(bar));
-        await p.waitForTimeout(100);
-        const [w2, b2] = await p.evaluate(() => [document.getElementById("ledWrap").scrollLeft, document.getElementById("ledHScroll").scrollLeft]);
-        assert(b2 > 100 && w2 === b2, "the table followed the bar: " + JSON.stringify({ w2, b2 }));
+        assert(await p.locator("#ledWrap").evaluate((e) => e.scrollLeft > 100), "the table stayed where the swipe left it");
         assert.deepEqual(errors, []);
       });
     }

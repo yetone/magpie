@@ -2115,10 +2115,13 @@ function ledFollowed(e, other) {
   if (box.scrollLeft !== echo) ledFollow(other(), box);
 }
 // the table's scrollbar, kept in view at the window's foot (#799): as wide
-// as the table can go sideways, and moving it as the table moves it
+// as the table can go sideways, and moving it as the table moves it. A
+// finger moves the table itself, and a touch screen draws no bar in the
+// box, so there it stood as an empty band at the screen's foot (#4943)
+const ledTouch = matchMedia("(hover: none) and (pointer: coarse)");
 function ledHScroll() {
   const wrap = $("#ledWrap"), bar = $("#ledHScroll");
-  const over = !!wrap.querySelector("table") && wrap.scrollWidth > wrap.clientWidth + 1;
+  const over = !!wrap.querySelector("table") && wrap.scrollWidth > wrap.clientWidth + 1 && !ledTouch.matches;
   bar.hidden = !over;
   if (!over) return;
   bar.firstElementChild.style.width = wrap.scrollWidth - wrap.clientWidth + bar.clientWidth + "px";
