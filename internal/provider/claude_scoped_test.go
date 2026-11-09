@@ -44,6 +44,33 @@ Current week (Fable): 64% used · resets Jul 24 at 8pm (UTC)`, now)
 	}
 }
 
+// Claude Code 2.1.321's /usage on a Team account the day Fable 5.2
+// launched, word for word: its one Fable week holds Fable 5.2 too.
+func TestClaudeFable52CountsInTheFableWeek(t *testing.T) {
+	now := time.Date(2026, 11, 9, 21, 0, 0, 0, time.UTC)
+	ws, err := parseClaudeUsage(`You are currently using your subscription to power your Claude Code usage
+
+Current session: 0% used · resets Nov 10 at 5:40am (Asia/Shanghai)
+Current week (all models): 0% used · resets Nov 11 at 6am (Asia/Shanghai)
+Current week (Fable): 0% used · resets Nov 11 at 6am (Asia/Shanghai)`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ws) != 3 || ws[2].Name != "7 days · Fable" || ws[2].Model != "fable" {
+		t.Fatalf("windows: %+v", ws)
+	}
+	ws[2].Used = 100
+	a := allowanceOf(ws, now)
+	for _, m := range []string{"claude-fable-5-2", "claude-fable-5-1"} {
+		if used, _ := a.For(m, now); used != 100 {
+			t.Fatalf("%s: %v", m, used)
+		}
+	}
+	if used, _ := a.For("claude-opus-5-5", now); used != 0 {
+		t.Fatalf("opus: %v", used)
+	}
+}
+
 func TestClaudeScopeModel(t *testing.T) {
 	for in, want := range map[string]string{"Fable": "fable", "Fable 5.1": "fable-5-1", "": ""} {
 		if got := claudeScopeModel(in); got != want {
