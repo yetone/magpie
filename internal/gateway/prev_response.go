@@ -57,6 +57,9 @@ type prevTurn struct {
 	// the provider that keeps it too, if one does: the id it gave it
 	// and which provider and key (prevRoute)
 	upstreamID, route string
+	// the provider and key whose reply the output is, as relayed
+	// (prevRoute), kept or not; empty for a translated reply
+	made string
 }
 
 type prevStore struct {
@@ -173,10 +176,12 @@ type prevAsk struct {
 	total, fresh int
 	upstreamID   string // the id the provider that answered it keeps it under
 	route        string
+	made         string // the route whose reply the named response was
 	// which try answered: its route if it was relayed to a provider
-	// that keeps what it is sent, empty otherwise
-	mu       sync.Mutex
-	answered string
+	// that keeps what it is sent, empty otherwise; and by, its route
+	// for any relayed try
+	mu           sync.Mutex
+	answered, by string
 }
 
 type prevAskKey struct{}
@@ -184,6 +189,13 @@ type prevAskKey struct{}
 func prevAskOf(ctx context.Context) *prevAsk {
 	a, _ := ctx.Value(prevAskKey{}).(*prevAsk)
 	return a
+}
+
+// prevHeld is whether the request named a response magpie holds and was
+// given its conversation whole.
+func prevHeld(r *http.Request) bool {
+	a := prevAskOf(r.Context())
+	return a != nil && a.known
 }
 
 // prevLost is the id a request named that magpie doesn't hold, which a
@@ -202,10 +214,12 @@ func writePrevNotFound(w http.ResponseWriter, id string) (int, string) {
 }
 
 // noteAnswered is called by each try: the last is the one that answered.
-func noteAnswered(r *http.Request, route string) {
+// route is the provider and key if it keeps what it is sent, by the
+// provider and key a relayed try went to (both empty for a translation).
+func noteAnswered(r *http.Request, route, by string) {
 	if a := prevAskOf(r.Context()); a != nil {
 		a.mu.Lock()
-		a.answered = route
+		a.answered, a.by = route, by
 		a.mu.Unlock()
 	}
 }
@@ -231,7 +245,7 @@ func previousResponse(w http.ResponseWriter, r *http.Request, from provider.Prot
 			ask.id = id
 			if t, ok := prevResponses.get(prevKey{scope, id}); ok {
 				prior = t.items
-				ask.known, ask.upstreamID, ask.route = true, t.upstreamID, t.route
+				ask.known, ask.upstreamID, ask.route, ask.made = true, t.upstreamID, t.route, t.made
 			}
 		}
 	}
@@ -303,6 +317,7 @@ func previousResponse(w http.ResponseWriter, r *http.Request, from provider.Prot
 		if ask.answered != "" {
 			t.upstreamID, t.route = id, ask.answered
 		}
+		t.made = ask.by
 		ask.mu.Unlock()
 		prevResponses.put(t)
 	}
@@ -431,6 +446,96 @@ func prevRefused(status int, b []byte) bool {
 	}
 	s := strings.ToLower(string(b))
 	return strings.Contains(s, "previous_response") || strings.Contains(s, "previousresponse")
+}
+
+// prevForeign is an upstream's refusal of an item, or the response named,
+// that another of its resources made: Azure OpenAI's, behind a relay that
+// spreads one key over several resources (hykql on Discord: "The
+// requested item was created under a different Azure OpenAI resource. Use
+// the same resource that created the item to access it."). The text is
+// the report's; it was not reproduced against Azure itself.
+func prevForeign(status int, b []byte) bool {
+	if !badRequest(status) && status != http.StatusNotFound {
+		return false
+	}
+	s := strings.ToLower(string(b))
+	return strings.Contains(s, "created under a different") && strings.Contains(s, "resource")
+}
+
+// prevElsewhere is body, a Responses request magpie gave its conversation
+// whole, with the items it brought back no longer naming what the
+// upstream that made them keeps them under, when they go to another
+// provider or key than the one whose reply they were (or always, when
+// force: one upstream said they are another resource's). An item that
+// can go without its id (idOptional) goes without it, its text and
+// call_id kept; reasoning keeps its place only with its encrypted_content,
+// as Codex sends it, since what it held lives only where it was made. Any
+// other kind, and the client's own new input, stay as they were. A body
+// whose items the tries changed in number is left as it is, as prevDelta
+// leaves it.
+func prevElsewhere(r *http.Request, p provider.Provider, body []byte, force bool) []byte {
+	a := prevAskOf(r.Context())
+	if a == nil || !a.known || !force && a.made == prevRoute(p) {
+		return body
+	}
+	n := a.total - a.fresh
+	if n <= 0 || !bytes.Contains(body, []byte(`"id"`)) {
+		return body
+	}
+	var q map[string]json.RawMessage
+	if decodeJSONView(body, &q) != nil {
+		return body
+	}
+	items, ok := inputList(q["input"])
+	if !ok || len(items) != a.total {
+		return body
+	}
+	out := make([]json.RawMessage, 0, len(items))
+	changed := false
+	for i, raw := range items {
+		var it map[string]json.RawMessage
+		if i >= n || json.Unmarshal(raw, &it) != nil {
+			out = append(out, raw)
+			continue
+		}
+		if _, has := it["id"]; !has {
+			out = append(out, raw)
+			continue
+		}
+		var typ string
+		json.Unmarshal(it["type"], &typ)
+		switch {
+		case typ == "reasoning" && gjson.GetBytes(raw, "encrypted_content").String() == "":
+			changed = true
+			continue
+		case typ == "reasoning" || idOptional[typ]:
+			delete(it, "id")
+			b, err := marshalPlain(it)
+			if err != nil {
+				return body
+			}
+			out, changed = append(out, b), true
+		default:
+			out = append(out, raw)
+		}
+	}
+	if !changed {
+		return body
+	}
+	in, err := marshalPlain(out)
+	if err != nil {
+		return body
+	}
+	m := make(map[string]json.RawMessage, len(q))
+	for k, v := range q {
+		m[k] = v
+	}
+	m["input"] = in
+	nb, err := marshalPlain(m)
+	if err != nil {
+		return body
+	}
+	return nb
 }
 
 // storeOff is whether a Responses body says store false.

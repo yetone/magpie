@@ -5339,7 +5339,7 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	// a response the request named that magpie doesn't hold goes only to
 	// a provider it is relayed to as written (prev_response.go): Claude's
 	// and the ChatGPT backend's accounts drop it, as a translation does
-	noteAnswered(r, "")
+	noteAnswered(r, "", "")
 	if id := prevLost(r); id != "" && p.Account != nil && (p.Account.Agent == "claude" || p.Account.Agent == "codex") {
 		return writePrevNotFound(w, id)
 	}
@@ -6485,10 +6485,15 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	}
 	// the new input alone, after the id the provider keeps the previous
 	// response under, when it answered that one (prev_response.go)
-	sentWhole, delta := body, false
+	// and when not, the items it brought back without the ids that name
+	// them where they were made, when that was another provider or key
+	asSent, sentWhole, delta := body, body, false
 	var remote *remoteTurn
 	if proto == provider.Responses {
-		body, delta = prevDelta(r, p, body)
+		sentWhole = prevElsewhere(r, p, body, false)
+		if body, delta = prevDelta(r, p, body); !delta {
+			body = sentWhole
+		}
 		// and to another magpie, which Codex's store false would leave
 		// sent whole each turn: asked to keep it, and sent the input after
 		// the turn it kept last (remote_delta.go)
@@ -6520,14 +6525,24 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			}
 		}
 	}
-	if delta && badRequest(res.StatusCode) || delta && res.StatusCode == http.StatusNotFound {
-		// one it no longer holds: the conversation whole
+	if (delta || proto == provider.Responses && prevHeld(r)) && (badRequest(res.StatusCode) || res.StatusCode == http.StatusNotFound) {
+		// one it no longer holds: the conversation whole; and one another
+		// of its resources made (prevForeign): the whole, with the items
+		// magpie brought back naming nothing. Asked again once, and only
+		// with a body that differs.
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 		res.Body.Close()
 		res.Body = io.NopCloser(bytes.NewReader(b))
-		if prevRefused(res.StatusCode, b) {
-			body = sentWhole
-			if remote != nil {
+		next := body
+		switch {
+		case proto == provider.Responses && prevForeign(res.StatusCode, b):
+			next = prevElsewhere(r, p, asSent, true)
+		case delta && prevRefused(res.StatusCode, b):
+			next = sentWhole
+		}
+		if !bytes.Equal(next, body) {
+			body = next
+			if delta && remote != nil {
 				remote.refused()
 			}
 			if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(body), r.Header); err != nil {
@@ -6535,8 +6550,12 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			}
 		}
 	}
-	if proto == provider.Responses && prevKeptBy(p) && !storeOff(body) {
-		noteAnswered(r, prevRoute(p))
+	if proto == provider.Responses {
+		route := ""
+		if prevKeptBy(p) && !storeOff(body) {
+			route = prevRoute(p)
+		}
+		noteAnswered(r, route, prevRoute(p))
 	}
 	if res.StatusCode >= 400 && p.PassesErrors() {
 		// the user leaves its errors to the client (errors=pass): the

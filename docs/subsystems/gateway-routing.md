@@ -2667,6 +2667,20 @@ included). `previousResponse` in
   new input with the provider's own id (`prevDelta`), so images aren't
   uploaded again. A provider that says it doesn't know that id
   (`prevRefused`) is sent the whole conversation at once.
+- A kept turn remembers which provider and key its reply came from
+  (`made`, any relayed reply, kept upstream or not). A conversation going
+  on with another one is sent the items magpie brings back without the
+  ids that name them where they were made (`prevElsewhere`): an item that
+  may go without its id (`idOptional`) loses it, reasoning stays only
+  with its `encrypted_content`, and the client's new input is as sent.
+- An upstream that says the response or an item belongs to another of
+  its resources (`prevForeign`: Azure OpenAI behind a relay that spreads
+  one key over several resources, hykql's report; the text was not
+  reproduced against Azure) is asked once more with the conversation
+  whole and those ids taken out. Only a request whose conversation magpie
+  holds is asked again, and only with a body that differs: an id magpie
+  doesn't hold, or a refusal with nothing of magpie's to take out, is
+  passed on as before.
 - A ChatGPT account's streamed turn goes on its conversation's kept
   socket as a delta after the backend's own `previous_response_id`
   (`codexKept`, see [Providers and accounts](providers-accounts.md)).
