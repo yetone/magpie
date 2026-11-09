@@ -5791,7 +5791,14 @@ magpie.plugin("library", (ctx) => {
       }
       nm.append(b);
     } else if (c?.status === "unknown") {
-      nm.append(tag(t("Not checked"), "lib-unchecked", checkError(c)));
+      const b = tag(t("Not checked"), "lib-unchecked", checkError(c));
+      // GitHub's limit without a token: the tag leads to where one is
+      // added, Settings › Network and sharing's GitHub row
+      if (c.limited && !c.limited.token) {
+        b.classList.add("link");
+        b.onclick = (e) => { e.stopPropagation(); openSettingsAt(e, "network", "#githubList .row"); };
+      }
+      nm.append(b);
     }
     // changed here since it was fetched from GitHub (#1449): an update asks
     // before it replaces that

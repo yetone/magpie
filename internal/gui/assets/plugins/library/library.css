@@ -234,6 +234,8 @@ button.row.lib-hubfolded:hover { background: var(--pill); }
 .lib-tag.lib-new.link { cursor: pointer; }
 .lib-tag.lib-new.link:hover { background: color-mix(in srgb, var(--accent) 22%, var(--accent-soft)); }
 .lib-tag.lib-unchecked { color: var(--faint); font-weight: 400; }
+.lib-tag.lib-unchecked.link { cursor: pointer; }
+.lib-tag.lib-unchecked.link:hover { color: var(--fg-2); }
 .lib-tag.lib-signed { color: var(--green); background: var(--green-soft); }
 .lib-tag.lib-signed::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 
