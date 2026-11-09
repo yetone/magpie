@@ -41,8 +41,11 @@ package agent
 // and so does a config split with $include.
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -53,6 +56,7 @@ import (
 
 	"github.com/yetone/magpie/internal/capre"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/filememo"
 )
 
 // what OpenClaw says after a change (notice.go)
@@ -123,7 +127,27 @@ func openClawRead(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(strings.TrimSpace(string(b))) == 0 {
+	return openClawPlain(path, b)
+}
+
+// openClawLook is openClawRead for a look that writes nothing (the
+// model's Get, Check), which every drift poll makes: the file is made
+// plain JSON and checked once a change, and the bytes are shared, so read
+// only.
+func openClawLook(path string) ([]byte, error) {
+	s, err := filememo.Read("openclaw json", path, func(b []byte) ([]byte, error) {
+		return openClawPlain(path, edit.TrimBOM(b))
+	})
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	return s, err
+}
+
+// openClawPlain is b, OpenClaw's file, made plain JSON in a copy of its
+// own, or nil for an empty file.
+func openClawPlain(path string, b []byte) ([]byte, error) {
+	if len(bytes.TrimSpace(b)) == 0 {
 		return nil, nil
 	}
 	s := jsonc.ToJSONInPlace(append([]byte(nil), b...))
@@ -220,7 +244,7 @@ func openClawAt(at place) *Agent {
 	dir, path := openClawPaths(at)
 	keyWas := at.key("openclaw:" + path + ":model")
 	read := func() gjson.Result {
-		s, _ := openClawRead(path)
+		s, _ := openClawLook(path)
 		return gjson.ParseBytes(s)
 	}
 	ours := func(c gjson.Result) bool { return prefixed(openClawPrimary(c.Get(openClawModel))) }
@@ -434,7 +458,7 @@ func openClawAt(at place) *Agent {
 			return patch(set, del)
 		},
 		Check: func() string {
-			s, err := openClawRead(path)
+			s, err := openClawLook(path)
 			if err != nil {
 				return err.Error()
 			}
