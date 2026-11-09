@@ -1118,7 +1118,7 @@ magpie.plugin("library", (ctx) => {
     if (d.on) {
       const auto = d.auto ? t("Automatic") + " · " + modelName(d.auto) : t("Automatic");
       const pick = menuButton(d.model ? modelName(d.model) : auto, "lib-distmodel", () => openProtoMenu(pick, [
-        { v: "", name: t("Automatic"), note: d.auto ? modelName(d.auto) : t("no model"), literalName: true },
+        { v: "", name: t("Automatic"), note: d.auto ? modelName(d.auto) : t("No models"), literalName: true },
         ...d.models.map((m) => ({ v: m.id, name: m.name || m.id, note: m.providerName || "", literalName: true }))],
       d.model || "", (v) => distChange("memory/distill", { on: true, model: v }), "Model", "", "left", false, d.models.length > 8 ? "Search models" : ""));
       acts.append(pick);
