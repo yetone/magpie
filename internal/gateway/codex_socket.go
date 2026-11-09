@@ -159,9 +159,15 @@ func (t codexSocket) RoundTrip(req *http.Request) (*http.Response, error) {
 // overSocket is RoundTrip for a turn that may go over the socket; shun
 // says a refused handshake leaves the host to HTTP for a while.
 func (t codexSocket) overSocket(req *http.Request, shun bool) (*http.Response, error) {
+	overHTTP := false
+	defer func() { sentOnSocket(req.Context(), !overHTTP) }()
+	viaHTTP := func() (*http.Response, error) {
+		overHTTP = true
+		return t.next.RoundTrip(req)
+	}
 	body, ok := codexSocketMessage(req)
 	if !ok {
-		return t.next.RoundTrip(req)
+		return viaHTTP()
 	}
 	msg := codexCreate(body)
 	var shape *codexTurnShape
@@ -188,11 +194,11 @@ func (t codexSocket) overSocket(req *http.Request, shun bool) (*http.Response, e
 		}
 	}
 	if codexMessageTooBig(req.URL.Host, len(msg)) {
-		return t.next.RoundTrip(req)
+		return viaHTTP()
 	}
 	res, err := t.socket(req, msg, key, shape, shun)
 	if errors.Is(err, errCodexSocketFallBack) {
-		return t.next.RoundTrip(req)
+		return viaHTTP()
 	}
 	return res, err
 }
@@ -394,6 +400,7 @@ func (t codexSocket) turn(req *http.Request, k *codexKept, msg []byte, shape *co
 		k.close()
 		return nil, ended(err)
 	}
+	wroteSocket(req.Context(), len(msg))
 	header := k.header.Clone()
 	body := &codexSocketBody{c: k.c, ctx: req.Context(), k: k, shape: shape}
 	for range codexSocketPrelude {

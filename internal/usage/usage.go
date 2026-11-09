@@ -224,6 +224,10 @@ type Record struct {
 	// what ImageFilesSaved was saved on (matrix0487 on Discord). None in a
 	// row from before it was kept.
 	ImageFiles int `json:"image_files,omitempty"`
+	// Socket says the request went over the Responses WebSocket, its
+	// last try (provider.Socket, matrix0487 on Discord): UpBytes is then
+	// what the socket was sent, a delta on a kept socket.
+	Socket bool `json:"ws,omitempty"`
 	// Kind is what the agent made the call for when it isn't a turn of
 	// the conversation: a Codex subagent's (review, compact, guardian…)
 	Kind string `json:"kind,omitempty"`

@@ -1426,7 +1426,8 @@ function ledProtos(r) {
 function ledProtoBadge(r) {
   const p = ledProtos(r);
   if (!p) return null;
-  const k = el("span", "src proto proto-" + p.to.toLowerCase(), p.from !== p.to ? p.from + " → " + p.to : p.to);
+  // "· WS" for one that went over the Responses WebSocket (matrix0487)
+  const k = el("span", "src proto proto-" + p.to.toLowerCase(), (p.from !== p.to ? p.from + " → " + p.to : p.to) + (r.ws ? " · WS" : ""));
   k.title = p.from !== p.to ? t("The agent spoke {from}; sent upstream as {to}", p) : t("Sent upstream as {to}, as the agent spoke it", p);
   return k;
 }
@@ -1502,7 +1503,10 @@ function ledDetail(r, cols) {
   add("Request ID", r.rid);
   add("Endpoint", r.ep);
   const protos = ledProtos(r);
-  if (protos) add("Protocol", protos.from !== protos.to ? protos.from + " → " + protos.to : protos.to);
+  // and the Responses WebSocket it went over, whose Sent upstream is then
+  // what the socket was sent: a kept one's new input (matrix0487)
+  const proto = protos ? (protos.from !== protos.to ? protos.from + " → " + protos.to : protos.to) : "";
+  if (proto || r.ws) add("Protocol", proto && r.ws ? proto + " · WebSocket" : proto || "WebSocket");
   // why the upstream said its reply ended, in its own words: a reply that
   // ended too soon is told apart by it (蓝猫 on Discord)
   add("Upstream stop reason", r.stop);

@@ -1628,7 +1628,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		RequestID: requestID(res.Header), ResponseID: uu.ResponseID, Endpoint: r.URL.Path}
 	failedWith(&rec, call.Status, call.Error, errType)
 	if up := upBytesOf(r.Context()); up != nil {
-		rec.UpBytes, rec.PlainBytes = up.wire, up.plain
+		rec.UpBytes, rec.PlainBytes, rec.Socket = up.wire, up.plain, up.socket
 		rec.DownBytes = up.downOf()
 	}
 	appendUsage(r, rec)

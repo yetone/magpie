@@ -150,12 +150,35 @@ func TestRowFlagsApart(t *testing.T) {
 			}
 		})
 	}
-	bits := []uint16{1, 2, 4, 8, 16, 32, swapKnown, rowHandedOn, rowReasoningHidden, rowOwnCost, rowCompactionKnown, rowCompaction, rowCredits, rowCacheUnknown}
+	bits := []uint16{1, 2, 4, 8, 16, 32, swapKnown, rowHandedOn, rowReasoningHidden, rowOwnCost, rowCompactionKnown, rowCompaction, rowCredits, rowCacheUnknown, rowSocket}
 	var all uint16
 	for _, b := range bits {
 		if all&b != 0 {
 			t.Fatalf("Flags bit %d is taken twice", b)
 		}
 		all |= b
+	}
+}
+
+// A row that went over the Responses WebSocket says so as it was kept,
+// packed and read back (matrix0487), and one that didn't doesn't.
+func TestRowKeepsSocket(t *testing.T) {
+	for _, ws := range []bool{true, false} {
+		r := Record{Time: time.Now(), Provider: "codex", Model: "gpt-5.5", Output: 10, Status: 200, UpBytes: 300, Socket: ws}
+		made := func() *rowChunk {
+			var chunk rowChunk
+			for i := 0; i < 80; i++ {
+				chunk.add(Row{Record: r}, "", int64(i), false)
+			}
+			return &chunk
+		}
+		b := newBlockPricer(provider.Renames{}, nil, func(Record) *catalog.Price { return nil })
+		raw := made()
+		for _, row := range []Row{raw.row(0), b.block(raw).row(0), b.block(made().pack()).row(0)} {
+			if row.Socket != ws || row.UpBytes != 300 {
+				t.Errorf("socket %v, %d up; want %v, 300", row.Socket, row.UpBytes, ws)
+			}
+		}
+		b.release()
 	}
 }

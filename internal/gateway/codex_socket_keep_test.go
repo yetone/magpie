@@ -3,12 +3,15 @@ package gateway
 import (
 	"fmt"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/tidwall/gjson"
+
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // keptReply answers a turn as the backend does: one assistant message,
@@ -276,5 +279,49 @@ func TestCodexKeptSocketOtherReplyGoesWhole(t *testing.T) {
 	second := gjson.ParseBytes(f.turn(1).msg)
 	if second.Get("previous_response_id").Exists() || len(second.Get("input").Array()) != 3 {
 		t.Errorf("a turn after another reply went as a delta: %s", f.turn(1).msg)
+	}
+}
+
+// matrix0487 on Discord: a request's row said 13 MB went up while its
+// kept socket was sent the new input alone. A turn that went over the
+// socket counts what the socket was sent, the delta on a kept one, and
+// says it went over the socket; one over HTTP says neither.
+func TestCodexSocketRowCountsWhatTheSocketSent(t *testing.T) {
+	socketOn(t)
+	f := &fakeSocketBackend{keep: true}
+	f.frames = keptReply(f)
+	chatgpt(t, f.ServeHTTP)
+
+	start := time.Now()
+	long := strings.Repeat("x", 50_000)
+	big := strings.Replace(userPing, "ping", long, 1)
+	keptPost(t, "acct-1", keptTurn("conv-1", "gpt-5.5-ws", big))
+	keptPost(t, "acct-1", keptTurn("conv-1", "gpt-5.5-ws", big, asstPong, userAgain))
+	if posts, sockets := f.counts(); posts != 0 || sockets != 2 || f.opened() != 1 {
+		t.Fatalf("%d posts, %d turns on %d sockets; want both turns on one socket", posts, sockets, f.opened())
+	}
+	var rows []usage.Record
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		rows = rows[:0]
+		for _, r := range usage.Load(start) {
+			if r.Time.After(start) && r.Model == "gpt-5.5-ws" {
+				rows = append(rows, r)
+			}
+		}
+		if len(rows) >= 2 || time.Now().After(deadline) {
+			break
+		}
+	}
+	if len(rows) != 2 {
+		t.Fatalf("%d rows, want 2", len(rows))
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Time.Before(rows[j].Time) })
+	for i, r := range rows {
+		if want := len(f.turn(i).msg); !r.Socket || r.UpBytes != want {
+			t.Errorf("turn %d: socket %v, %d bytes up; want the socket's %d", i, r.Socket, r.UpBytes, want)
+		}
+	}
+	if rows[1].UpBytes > 1000 {
+		t.Errorf("the delta turn counted %d bytes up, the whole conversation", rows[1].UpBytes)
 	}
 }

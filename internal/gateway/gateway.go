@@ -5346,7 +5346,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			rec.Tries = tries
 		}
 		if up := upBytesOf(r.Context()); up != nil {
-			rec.UpBytes, rec.PlainBytes = up.wire, up.plain
+			rec.UpBytes, rec.PlainBytes, rec.Socket = up.wire, up.plain, up.socket
 			rec.DownBytes, rec.ImageFilesSaved, rec.ImageFiles = up.downOf(), up.saved, up.images
 		}
 		failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)

@@ -25,6 +25,13 @@ type upBytes struct {
 	// images is how many inline images went by file instead, the most of
 	// any one try: a retry sends the same ones again
 	images int
+	// last is what sentUp last counted, the try's body as HTTP sends it;
+	// socket says that try went over the Responses WebSocket instead
+	// (overSocket), which counted what it was sent in its place
+	last   int
+	socket bool
+	// ws is what the socket was written for that try so far (wroteSocket)
+	ws int
 }
 
 type upBytesKey struct{}
@@ -42,7 +49,37 @@ func sentUp(ctx context.Context, wire, plain int) {
 	if u := upBytesOf(ctx); u != nil {
 		u.wire += wire
 		u.plain = plain
+		u.last, u.socket, u.ws = wire, false, 0
 	}
+}
+
+// wroteSocket counts a message the Responses WebSocket was sent for the
+// try sentUp last counted: a kept socket's delta, or the whole turn on a
+// new one.
+func wroteSocket(ctx context.Context, n int) {
+	if u := upBytesOf(ctx); u != nil {
+		u.ws += n
+	}
+}
+
+// sentOnSocket settles that try once the socket is done with it. A turn
+// the socket answered (only) sent what the socket was written, not the
+// body sentUp counted: #5781's matrix0487 saw 13 MB a row while a kept
+// socket was sent the new input alone. One that went over HTTP after
+// all sent both.
+func sentOnSocket(ctx context.Context, only bool) {
+	u := upBytesOf(ctx)
+	if u == nil {
+		return
+	}
+	if only {
+		u.wire += u.ws - u.last
+		u.last = u.ws
+	} else {
+		u.wire += u.ws
+		u.last += u.ws
+	}
+	u.socket, u.ws = only, 0
 }
 
 // gotDown counts res's body for the request's ledger row as it is read
