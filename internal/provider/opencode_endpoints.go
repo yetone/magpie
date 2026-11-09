@@ -36,6 +36,10 @@ func openCodeRoot(base string) (root, catalogID string) {
 // workspace's pay-as-you-go credits), "" for any other, a provider of the
 // user's own at …/inference/custom among them, which its vendor bills.
 func openCodeGateway(base string) string {
+	// every host openCodeHost takes holds it: another base isn't parsed
+	if !strings.Contains(strings.ToLower(base), "opencode.ai") {
+		return ""
+	}
 	u, err := url.Parse(strings.TrimSpace(base))
 	if err != nil || !openCodeHost(u.Hostname()) {
 		return ""

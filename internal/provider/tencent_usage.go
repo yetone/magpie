@@ -95,6 +95,12 @@ func tencentPlanRegion(p Provider) (string, bool) {
 		return "", false
 	}
 	for _, base := range []string{p.Chat, p.Responses, p.Anthropic} {
+		// both hosts below hold it: every other base, asked for each
+		// provider on each Providers page, isn't parsed (ToLower makes
+		// no copy of a base already lower-case)
+		if !strings.Contains(strings.ToLower(base), "tencentmaas.com") {
+			continue
+		}
 		u, err := url.Parse(base)
 		if err != nil || !strings.HasPrefix(strings.TrimSuffix(u.Path, "/")+"/", "/plan/") {
 			continue
