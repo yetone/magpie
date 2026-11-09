@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"regexp"
 
+	"github.com/yetone/magpie/internal/capre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -35,7 +36,7 @@ const historyToolsRefused = "tools[].history"
 const stubToolDescription = "Called earlier in this conversation; not available now."
 
 // anthropicToolName is a name Anthropic takes for a tool.
-var anthropicToolName = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,128}$`)
+var anthropicToolName = capre.MustCompile(`^[a-zA-Z0-9_-]+$`, 128)
 
 // toolsMissing is an upstream refusing tool calls in a request with no
 // tools: Anthropic's "must define tools", Bedrock's "The toolConfig field

@@ -2,9 +2,10 @@ package access
 
 import (
 	"errors"
-	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/yetone/magpie/internal/capre"
 )
 
 // A key's MCP list (Key.MCP, wakaka on Discord) holds it to some of the
@@ -20,7 +21,7 @@ const NoMCP = "-"
 
 // mcpServerRe is a server's name as the Library takes one (library's
 // nameRe), and as magpie names its own servers.
-var mcpServerRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
+var mcpServerRe = capre.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`, 64)
 
 // CleanMCP is a key's MCP list as it is kept: each entry trimmed and
 // checked, told apart in no other way than as written, a tool dropped

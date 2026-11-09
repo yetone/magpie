@@ -6756,7 +6756,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 				continue
 			}
 		}
-		if len(fs) == 0 && len(ms) == 0 && proto == provider.Responses && itemIDRefusal.Match(b) {
+		if len(fs) == 0 && len(ms) == 0 && proto == provider.Responses && itemIDRefusal(b) {
 			// and an input item's id with a character OpenAI's don't
 			// have, which a relay in front of OpenAI turns away as it
 			// does (echo_ts): asked once more with ids it takes, and so

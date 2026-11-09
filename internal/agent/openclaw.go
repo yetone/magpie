@@ -45,13 +45,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/jsonc"
 
+	"github.com/yetone/magpie/internal/capre"
 	"github.com/yetone/magpie/internal/edit"
 )
 
@@ -72,7 +72,7 @@ const (
 )
 
 // openClawProfile is a profile name OpenClaw takes (profile-utils.ts).
-var openClawProfile = regexp.MustCompile(`(?i)^[a-z0-9][a-z0-9_-]{0,63}$`)
+var openClawProfile = capre.MustCompile(`(?i)^[a-z0-9][a-z0-9_-]*$`, 64)
 
 // openClawHome is OpenClaw's ~: $OPENCLAW_HOME, a leading ~ in it the
 // system's home (resolveEffectiveHomeDir).

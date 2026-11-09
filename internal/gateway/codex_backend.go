@@ -19,6 +19,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/tidwall/gjson"
 
@@ -3099,7 +3100,24 @@ func callItemIDs(body []byte) []byte {
 // "Invalid 'input[1].id': 'rs_6aca2fc7533c979d5f0e4f7a:rs_01a125caa544754e9a3c70080100b009'.
 // Expected an ID that contains letters, numbers, underscores, or dashes,
 // but this value contained additional characters."
-var itemIDRefusal = regexp.MustCompile(`(?s)Invalid 'input\[\d+\]\.id'.{0,1000}?Expected an ID that contains letters, numbers, underscores, or dashes`)
+// It is the tail within 1000 characters of the head: the regexp
+// .{0,1000}? it was unrolled to 88kB of program, held from start to exit.
+func itemIDRefusal(b []byte) bool {
+	const tail = "Expected an ID that contains letters, numbers, underscores, or dashes"
+	for _, at := range itemIDRefusalHead.FindAllIndex(b, -1) {
+		rest, end := b[at[1]:], 0
+		for n := 0; n < 1000 && end < len(rest); n++ {
+			_, w := utf8.DecodeRune(rest[end:])
+			end += w
+		}
+		if bytes.Contains(rest[:min(len(rest), end+len(tail))], []byte(tail)) {
+			return true
+		}
+	}
+	return false
+}
+
+var itemIDRefusalHead = regexp.MustCompile(`Invalid 'input\[\d+\]\.id'`)
 
 // itemIDsRefused is how unfit remembers a provider turning away, for
 // model, an input item id with another character in it (plainItemIDs).
