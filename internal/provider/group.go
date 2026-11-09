@@ -473,6 +473,18 @@ func sharedGroups() []Group {
 	return heldFrom("groups", providerEntries(), buildGroupsIn)
 }
 
+// sharedGroupsIn is groupsIn without the copy, for a caller that only
+// reads them: a group found in it is copied alone (cloneGroup). A routing
+// group's lookup (FindGroup, GroupFinder) copied every group and its
+// rules for the one it wanted, each time: 4 MB of the window's 15-second
+// drift poll, and once per request on a group.
+func sharedGroupsIn(entries []Entry) []Group {
+	return heldFrom("groups", entries, buildGroupsIn)
+}
+
+// cloneGroup is g with nothing shared with it (cloneGroups).
+func cloneGroup(g Group) Group { return cloneGroups([]Group{g})[0] }
+
 // cloneGroups is gs with nothing shared with it: no slice, map or pointer
 // of a group or its rules.
 func cloneGroups(gs []Group) []Group {
@@ -1111,9 +1123,10 @@ func GroupFinder() func(id string) (Group, []Member, bool) {
 		}
 		if !read {
 			entries, read = providerEntries(), true
-			all, find = groupsIn(entries), entriesBy(entries)
+			all, find = sharedGroupsIn(entries), heldFrom("entries by", entries, entriesBy)
 		}
 		if g, ok := groupOf(all, gid); ok && !g.Disabled {
+			g = cloneGroup(g)
 			return g, membersFound(entries, find, all, g, disabledNow(), nil), true
 		}
 		return Group{}, nil, false
@@ -1141,9 +1154,10 @@ func FindGroupAlso(id string, also func(p Provider, model string) bool) (Group, 
 		return Group{}, nil, false
 	}
 	entries := providerEntries()
-	all := groupsIn(entries)
+	all := sharedGroupsIn(entries)
 	if g, ok := groupOf(all, gid); ok && !g.Disabled {
-		return g, membersFound(entries, entriesBy(entries), all, g, disabledNow(), also), true
+		g = cloneGroup(g)
+		return g, membersFound(entries, heldFrom("entries by", entries, entriesBy), all, g, disabledNow(), also), true
 	}
 	return Group{}, nil, false
 }
@@ -1189,7 +1203,9 @@ func membersFound(entries []Entry, find entryOf, all []Group, g Group, off func(
 				if !ok || sub.Disabled || slices.Contains(in, gid) || len(via) >= maxNest {
 					continue // gone, switched off, a loop, or deeper than anyone nests
 				}
-				sub = sub.Within(g)
+				// its own copy: all may be the groups held (sharedGroupsIn),
+				// and a member's Via and EffortMap are its caller's
+				sub = cloneGroup(sub).Within(g)
 				walk(sub, here, append(slices.Clone(via), sub.Live()), append(slices.Clone(in), gid))
 				continue
 			}
