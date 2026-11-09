@@ -502,7 +502,8 @@ func (rs *responsesSocket) turn(ctx context.Context, t *socketTurnRun, frame []b
 		socketTurnBody(body)
 	}
 	req := rs.request(ctx, body)
-	out := &socketTurnWriter{rs: rs, ctx: ctx, run: t, h: http.Header{}}
+	out := &socketTurnWriter{rs: rs, ctx: ctx, run: t, h: http.Header{},
+		codex: fromCodex(req.Header) || agentOf(req) == "codex"}
 	rs.o.via.ServeHTTP(out, req)
 	out.finish()
 	if ctx.Err() != nil {
@@ -645,10 +646,11 @@ func (rs *responsesSocket) request(ctx context.Context, body []byte) *http.Reque
 // as the socket's frames: each event of a stream as one, an error as an
 // error frame.
 type socketTurnWriter struct {
-	rs  *responsesSocket
-	ctx context.Context
-	run *socketTurnRun
-	h   http.Header
+	rs    *responsesSocket
+	ctx   context.Context
+	run   *socketTurnRun
+	h     http.Header
+	codex bool // the client is Codex's own: the backend's events are for it
 
 	status int
 	stream bool
@@ -722,6 +724,12 @@ func (w *socketTurnWriter) startStream() {
 // response.metadata, the model list's tag in codex.response.metadata,
 // and the account's windows in codex.rate_limits.
 func (w *socketTurnWriter) headerFrames() [][]byte {
+	// Codex's own events, which a typed client on the socket reads as
+	// unknown variants and gives up on (as on the HTTP route, the same
+	// guard in passthrough)
+	if !w.codex {
+		return nil
+	}
 	var out [][]byte
 	meta := map[string]string{}
 	for _, k := range []string{"x-codex-turn-state", "openai-model", "x-reasoning-included"} {

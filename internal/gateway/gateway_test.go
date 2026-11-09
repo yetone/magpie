@@ -612,6 +612,40 @@ func TestResponsesClientChatUpstream(t *testing.T) {
 	}
 }
 
+// Every event magpie writes for a Responses client is shaped as the typed
+// client reads it: a sequence_number on each, and a whole Response wherever
+// one is carried. A missing field is a turn the client drops whole
+// ("serialization error: missing field ..."), which is what let this filter
+// after one field at a time fail repeatedly.
+func TestResponsesEventsAreClientShaped(t *testing.T) {
+	f := &fake{t: t, reply: sse(
+		`data: {"id":"c1","model":"m1","choices":[{"delta":{"content":"ok"}}]}`,
+		`data: {"id":"c1","choices":[{"delta":{},"finish_reason":"stop"}]}`)}
+	setup(t, provider.Chat, f)
+	code, body := post(t, "/v1/responses", `{"model":"m1","stream":true,"input":"hi"}`)
+	if code != 200 {
+		t.Fatalf("status %d: %s", code, body)
+	}
+	seen := 0
+	for _, e := range events(body) {
+		seen++
+		typ, _ := e["type"].(string)
+		if _, ok := e["sequence_number"]; !ok {
+			t.Errorf("%s carries no sequence_number: %v", typ, e)
+		}
+		if r, ok := e["response"].(map[string]any); ok {
+			for _, k := range []string{"id", "object", "created_at", "status", "model", "output"} {
+				if _, ok := r[k]; !ok {
+					t.Errorf("%s's response lacks %s: %v", typ, k, r)
+				}
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no events in a translated reply")
+	}
+}
+
 func TestPassthroughRewritesModel(t *testing.T) {
 	f := &fake{t: t, ctype: "application/json", reply: `{"id":"msg","type":"message","content":[]}`}
 	setup(t, provider.Anthropic, f)

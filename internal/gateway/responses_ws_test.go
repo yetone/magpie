@@ -600,7 +600,7 @@ func TestCodexSocketServed(t *testing.T) {
 	})
 	_, ts := sockServer(t)
 	h := http.Header{"Authorization": {"Bearer chatgpt-token"}, "Chatgpt-Account-Id": {"acct-1"},
-		"Openai-Beta": {"responses_websockets=2026-02-06"}}
+		"Openai-Beta": {"responses_websockets=2026-02-06"}, "User-Agent": {"codex_cli_rs/0.166.0"}}
 	c, resp, err := dialSock(t, ts, CodexPath+"/responses", h)
 	if err != nil {
 		code := 0
