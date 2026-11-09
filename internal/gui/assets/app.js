@@ -23306,7 +23306,7 @@ function renderBuiltins(box, list, done) {
       }
     };
     r.append(who, b);
-    if (!f.on || !f.schema || broken) return [r];
+    if (!f.on || !f.schema || broken || f.page) return [r]; // a page has its own
     const form = magpie.ui.form(f.schema, f.config, async (change) => {
       try {
         const next = await api("plugins/builtin", { id: f.id, config: change });
@@ -23335,12 +23335,11 @@ const featWho = {};
 // settings and page go back (featOff, Masking's head; netube99 on X)
 function featGo(line, f) {
   const [tab, row] = f.setAt?.split(" ") || [];
-  if (!tab) return;
   const to = [];
   // not to settings hidden while it is off (Observability, warm-ups)
-  if (f.on || !$(row)?.closest("[data-feature]")) to.push([t("Settings") + " › " + $("#setTab-" + tab).textContent, (e) => openSettingsAt(e, tab, row + " .row")]);
-  const nav = f.on && f.page && $(`#nav [data-view="${f.page}"]`);
-  if (nav) to.push([nav.textContent, () => nav.click()]);
+  if (tab && (f.on || !$(row)?.closest("[data-feature]"))) to.push([t("Settings") + " › " + $("#setTab-" + tab).textContent, (e) => openSettingsAt(e, tab, row + " .row")]);
+  const nav = f.on && $(`#nav [data-view="${f.page || f.opens}"]`);
+  if (nav && !nav.hidden) to.push([nav.textContent, () => nav.click()]);
   for (const [say, go] of to) {
     const b = el("button", "link", say);
     b.type = "button";

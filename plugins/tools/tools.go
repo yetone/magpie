@@ -19,7 +19,8 @@ func init() {
 	pluginrt.Register(pluginrt.Manifest{
 		ID: "tools", API: "^1", Requires: []string{"gateway"}, Essential: true,
 		Name: "Plugin tools", Sub: "Offer the tools your plugins give to every agent, as an MCP server",
-		One: "1 plugin gives tools", Many: "{n} plugins give tools",
+		Opens: "plugins",
+		One:   "1 plugin gives tools", Many: "{n} plugins give tools",
 		InUse: plugin.ToolsOn,
 		Apply: func(c *pluginrt.Ctx) error {
 			c.OnDispose(gwtool.Serve(gwtool.PluginTools))

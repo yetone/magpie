@@ -21,7 +21,8 @@ func init() {
 	pluginrt.Register(pluginrt.Manifest{
 		ID: "budget", API: "^1", Requires: []string{"settings", "gateway"}, Essential: true,
 		Name: "Key limits", Sub: "Hold each gateway key to the tokens or estimated cost you set for it",
-		One: "1 key with a limit", Many: "{n} keys with a limit",
+		Opens: "gateway",
+		One:   "1 key with a limit", Many: "{n} keys with a limit",
 		InUse: InUse,
 		Apply: func(c *pluginrt.Ctx) error {
 			c.OnDispose(gwbudget.Limit(budget.Limiter{}))

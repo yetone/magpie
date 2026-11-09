@@ -12,7 +12,8 @@ func init() {
 	pluginrt.Register(pluginrt.Manifest{
 		ID: "warmups", API: "^1", Requires: []string{"window", "settings"},
 		Name: "Warm-up and check-in", Sub: "Start a subscription's usage window at a time you pick, and claim vendors' daily check-in credits",
-		One: "1 warm-up or check-in on", Many: "{n} warm-ups and check-ins on",
+		Opens: "providers",
+		One:   "1 warm-up or check-in on", Many: "{n} warm-ups and check-ins on",
 		InUse: func() (int, error) {
 			s, err := settings.LoadChecked()
 			if err != nil {

@@ -42,9 +42,11 @@ type builtinJSON struct {
 	Use   string          `json:"use,omitempty"` // One or Many, by InUse
 	Parts []pluginrt.Part `json:"parts,omitempty"`
 	// SetAt is the manifest's: the Settings tab and row of its settings;
-	// Page the window page it has, on or off
+	// Page the window page it has, on or off, which has its settings
+	// (schema) too; Opens the page it is used on when it has none
 	SetAt string `json:"setAt,omitempty"`
 	Page  string `json:"page,omitempty"`
+	Opens string `json:"opens,omitempty"`
 	// Schema is its settings' (pluginrt/schema.go), which the page draws
 	// a form of; Config their values now
 	Schema *pluginrt.Schema `json:"schema,omitempty"`
@@ -77,7 +79,7 @@ func builtinsState() []builtinJSON {
 	for _, m := range pluginrt.Registered() {
 		c, s := byID[m.ID], st[m.ID]
 		j := builtinJSON{ID: m.ID, Name: m.Name, Sub: m.Sub, On: s.State == pluginrt.Active, Chosen: c.Chosen, Source: c.Source, State: s.State, Why: s.Why, InUse: c.InUse, Parts: s.Parts, Schema: m.Schema(), Config: c.Config}
-		j.SetAt = m.SetAt
+		j.SetAt, j.Opens = m.SetAt, m.Opens
 		for _, p := range m.Parts {
 			if p.Slot == "nav.page" {
 				j.Page = p.Key

@@ -23,7 +23,8 @@ func init() {
 	pluginrt.Register(pluginrt.Manifest{
 		ID: "middleware", API: "^1", Requires: []string{"gateway"}, Essential: true,
 		Name: "JS gateway plugins", Sub: "Run the JavaScript gateway plugins: middleware on agents' requests and replies, routings and usage observers",
-		One: "1 gateway plugin on", Many: "{n} gateway plugins on",
+		Opens: "plugins",
+		One:   "1 gateway plugin on", Many: "{n} gateway plugins on",
 		InUse: func() (int, error) { return middleware.On(), nil },
 		Apply: func(c *pluginrt.Ctx) error {
 			c.OnDispose(gwmw.Use(middleware.Chain{}))

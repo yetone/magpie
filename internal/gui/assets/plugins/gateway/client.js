@@ -75,6 +75,7 @@ function renderGatewayView() {
   page.removeAttribute("aria-busy");
   renderGateway();
   renderGatewayLan();
+  renderGatewayOwn();
   $("#gatewayKeysBlock").hidden = !providers.gateway.lan;
   // not shared, the keys are left out; this line says where they come from,
   // as a tunnel to loopback is refused until sharing is on (DD on Discord)
@@ -84,6 +85,33 @@ function renderGatewayView() {
   renderConnect();
   renderGatewayModels();
   renderActivity();
+}
+
+// The page's own settings, under the calls they are about (Recent calls at
+// a time, drawn from the plugin's schema), and where the gateway's port,
+// allow list and model ids are set: the switch, settings and page of one
+// feature lead to each other (netube99 on X)
+function renderGatewayOwn() {
+  const box = $("#gwOwn");
+  const f = prefs?.builtins?.find((x) => x.id === "gateway");
+  if (!f) {
+    box.replaceChildren();
+    if (!prefs) loadSettings().then(() => view === "gateway" && renderGatewayOwn(), () => {});
+    return;
+  }
+  const rows = f.schema ? magpie.ui.form(f.schema, f.config, async (change) => {
+    try {
+      applyFeatures(prefs.builtins = state.settings.builtins = await api("plugins/builtin", { id: "gateway", config: change }));
+      status(t("Saved"), "ok", 1500);
+    } catch (err) { status(t(err.message), "err"); }
+    renderGatewayOwn();
+  }) : [];
+  const r = el("div", "row pref"), who = el("div", "who"), go = el("button", "text", t("Settings") + " › " + $("#setTab-network").textContent);
+  who.append(el("div", "name", t("Port, allowed addresses and model ids")));
+  go.type = "button";
+  go.onclick = (e) => openSettingsAt(e, "network", "#portList .row");
+  r.append(who, go);
+  box.replaceChildren(...rows, r);
 }
 
 // The status card's button (leslie_luo on Discord: told to quit the older
@@ -807,6 +835,7 @@ magpie.plugin("gateway", (ctx) => {
 <div class="list" id="gwModels"></div>
 <div class="row-head"><span class="label" data-t>Recent calls</span><span class="grow"></span><span class="note" id="callsNote"></span></div>
 <div class="list activity" id="activity"></div>
+<div class="list prefs gw-own" id="gwOwn"></div>
 `,
     mount() {
       $("#foldConnect").prepend(svg(CHEV_R, 11, 1.6));

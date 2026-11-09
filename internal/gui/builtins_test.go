@@ -370,13 +370,17 @@ func TestBuiltinSaysWhereItsSettingsAre(t *testing.T) {
 	if err := pluginrt.Set("redact", false); err != nil {
 		t.Fatal(err)
 	}
-	want := map[string][2]string{
-		"redact":  {"privacy #redactList", "masking"},
-		"search":  {"models #searchList", ""},
-		"otel":    {"otel #otelList", ""},
-		"gateway": {"network #portList", "gateway"},
-		"library": {"", "library"},
-		"groups":  {"", ""},
+	want := map[string][3]string{
+		"redact":   {"privacy #redactList", "masking", ""},
+		"search":   {"models #searchList", "", ""},
+		"otel":     {"otel #otelList", "", ""},
+		"gateway":  {"network #portList", "gateway", ""},
+		"library":  {"", "library", ""},
+		"groups":   {"", "", "groups"},
+		"budget":   {"", "", "gateway"},
+		"rotation": {"", "", "providers"},
+		"warmups":  {"", "", "providers"},
+		"tools":    {"", "", "plugins"},
 	}
 	for _, b := range builtinsState() {
 		w, ok := want[b.ID]
@@ -384,7 +388,7 @@ func TestBuiltinSaysWhereItsSettingsAre(t *testing.T) {
 			continue
 		}
 		delete(want, b.ID)
-		if got := [2]string{b.SetAt, b.Page}; got != w {
+		if got := [3]string{b.SetAt, b.Page, b.Opens}; got != w {
 			t.Errorf("%s (on %v): %q, want %q", b.ID, b.On, got, w)
 		}
 		if b.ID == "redact" && b.On {

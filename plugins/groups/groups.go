@@ -18,7 +18,8 @@ func init() {
 	pluginrt.Register(pluginrt.Manifest{
 		ID: "groups", API: "^1", Requires: []string{"window", "providers"},
 		Name: "Routing groups", Sub: "Several models agents pick as one: each request goes to the right one, and to the next when one fails",
-		One: "1 group in use", Many: "{n} groups in use",
+		Opens: "groups",
+		One:   "1 group in use", Many: "{n} groups in use",
 		// a providers.json that can't be read is not known, so it stays on
 		InUse: provider.NamedGroups,
 		Parts: []pluginrt.Part{{Slot: "part", Key: "groups"}},

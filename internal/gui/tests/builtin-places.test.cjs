@@ -123,9 +123,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             assert.equal(await wide(page), 0);
             assert.deepEqual(await past(featRow(page, "redact")), []);
             if (!link) shots.push([`${lang}-${width}-builtin`, await featRow(page, "redact").screenshot()]);
-            // Observability on: its settings; Library: a page and no settings, no line
+            // Observability on: its settings; Library: a page and no settings, the page
             assert.equal((await featRow(page, "otel").locator(".feat-go").textContent()).trim(), w("Settings") + " › " + w("Observability"));
-            assert.equal(await featRow(page, "library").locator(".feat-go").count(), 0);
+            assert.equal((await featRow(page, "library").locator(".feat-go").textContent()).trim(), w("Library"));
             await line.locator("button.link").nth(link).click();
             if (link) await page.locator("#view-masking #maskCard .msk-head").waitFor();
             else await page.locator("#view-settings #redactList .row.flash").waitFor();
