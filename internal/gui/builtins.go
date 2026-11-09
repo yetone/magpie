@@ -41,6 +41,10 @@ type builtinJSON struct {
 	InUse int             `json:"inUse"`
 	Use   string          `json:"use,omitempty"` // One or Many, by InUse
 	Parts []pluginrt.Part `json:"parts,omitempty"`
+	// SetAt is the manifest's: the Settings tab and row of its settings;
+	// Page the window page it has, on or off
+	SetAt string `json:"setAt,omitempty"`
+	Page  string `json:"page,omitempty"`
 	// Schema is its settings' (pluginrt/schema.go), which the page draws
 	// a form of; Config their values now
 	Schema *pluginrt.Schema `json:"schema,omitempty"`
@@ -73,6 +77,12 @@ func builtinsState() []builtinJSON {
 	for _, m := range pluginrt.Registered() {
 		c, s := byID[m.ID], st[m.ID]
 		j := builtinJSON{ID: m.ID, Name: m.Name, Sub: m.Sub, On: s.State == pluginrt.Active, Chosen: c.Chosen, Source: c.Source, State: s.State, Why: s.Why, InUse: c.InUse, Parts: s.Parts, Schema: m.Schema(), Config: c.Config}
+		j.SetAt = m.SetAt
+		for _, p := range m.Parts {
+			if p.Slot == "nav.page" {
+				j.Page = p.Key
+			}
+		}
 		if err != nil {
 			j.Broken, j.Chosen = err.Error(), j.On
 		}
@@ -95,15 +105,13 @@ func builtinsState() []builtinJSON {
 func searchesNow() []string {
 	var apis []string
 	for _, a := range provider.SearchAPIs() {
-		if v, ok := provider.SearchVendorOf(a.Vendor); ok {
-			apis = append(apis, v.Name)
-		}
+		apis = append(apis, a.Name())
 	}
 	by := gateway.Searcher()
 	switch {
 	case by == "":
 		return apis
-	case settings.Load().SearchFirst == "api":
+	case settings.Load().SearchFirst == settings.SearchFirstAPI:
 		return append(apis, by)
 	}
 	return append([]string{by}, apis...)

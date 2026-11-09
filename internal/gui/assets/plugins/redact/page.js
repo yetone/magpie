@@ -143,7 +143,16 @@ function drawMaskCard() {
     b.type = "button";
     b.onclick = maskTurnOn;
     head.append(b);
-  } else head.append(maskOffButton());
+  } else {
+    // back to its settings (netube99 on X), unless Turn off goes there
+    if (!maskSettings().redactWords?.length) {
+      const set = el("button", "text", t("Settings") + " › " + $("#setTab-privacy").textContent);
+      set.type = "button";
+      set.onclick = (e) => openSettingsAt(e, "privacy", "#redactList .row");
+      head.append(set);
+    }
+    head.append(maskOffButton());
+  }
   if (sum?.requests || maskDays === 30) head.append(segs([["7", t("7 days")], ["30", t("30 days")]], String(maskDays), (v) => {
     maskDays = +v;
     try { localStorage.setItem("magpie.maskDays", v); } catch {}

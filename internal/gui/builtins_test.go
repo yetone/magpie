@@ -6,11 +6,13 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/pluginrt"
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 	_ "github.com/yetone/magpie/plugins/all"
 )
@@ -317,5 +319,79 @@ func TestBuiltinsTranslated(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// Web search's row says what a model that can't search is searched with
+// now (netube99 on X): nothing yet in a new home, a search API once one
+// is set, and none while it is off.
+func TestBuiltinSearchSaysWhatSearches(t *testing.T) {
+	builtinHome(t)
+	if _, err := pluginrt.Settle(); err != nil {
+		t.Fatal(err)
+	}
+	search := func() builtinJSON {
+		for _, b := range builtinsState() {
+			if b.ID == "search" {
+				return b
+			}
+		}
+		t.Fatal("no search row")
+		return builtinJSON{}
+	}
+	if b := search(); !b.On || len(b.Searches) != 0 {
+		t.Fatalf("a new home: %+v", b)
+	}
+	if err := provider.SetSearchAPI(provider.SearchAPI{Vendor: "tavily", Key: "tvly-test"}); err != nil {
+		t.Fatal(err)
+	}
+	if b := search(); !b.On || !slices.Equal(b.Searches, []string{"Tavily"}) {
+		t.Fatalf("with Tavily: %+v", b)
+	}
+	if err := provider.RemoveSearchAPI("tavily"); err != nil {
+		t.Fatal(err)
+	}
+	if err := pluginrt.Set("search", false); err != nil {
+		t.Fatal(err)
+	}
+	if b := search(); b.On || b.Searches != nil {
+		t.Fatalf("off: %+v", b)
+	}
+}
+
+// A built-in with settings says where they are, and its page on or off,
+// for its row to go to both (netube99 on X: masking's switch, settings and
+// page didn't name each other)
+func TestBuiltinSaysWhereItsSettingsAre(t *testing.T) {
+	builtinHome(t)
+	if _, err := pluginrt.Settle(); err != nil {
+		t.Fatal(err)
+	}
+	if err := pluginrt.Set("redact", false); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][2]string{
+		"redact":  {"privacy #redactList", "masking"},
+		"search":  {"models #searchList", ""},
+		"otel":    {"otel #otelList", ""},
+		"gateway": {"network #portList", "gateway"},
+		"library": {"", "library"},
+		"groups":  {"", ""},
+	}
+	for _, b := range builtinsState() {
+		w, ok := want[b.ID]
+		if !ok {
+			continue
+		}
+		delete(want, b.ID)
+		if got := [2]string{b.SetAt, b.Page}; got != w {
+			t.Errorf("%s (on %v): %q, want %q", b.ID, b.On, got, w)
+		}
+		if b.ID == "redact" && b.On {
+			t.Error("redact stayed on")
+		}
+	}
+	if len(want) > 0 {
+		t.Errorf("not listed: %v", want)
 	}
 }

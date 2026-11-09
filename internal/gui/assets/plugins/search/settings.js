@@ -15,7 +15,7 @@ function renderSearch(s, keep) {
   const box = $("#searchList");
   box.replaceChildren();
   const off = s.builtins?.find((f) => f.id === "search")?.on === false;
-  if (off) searchOffRow(box);
+  featOff(box, s, "search", t("magpie searches for no model until it is on. Adding a search API or naming a provider below turns it on"));
   renderSearcher(s, keep, box);
   // rows go into the box, or into a search API's own unit (its row and its
   // keys' row), which is dragged as one (#2286)
@@ -197,48 +197,14 @@ function renderSearch(s, keep) {
   mcp.querySelector(".who").append(...libWay("magpie-web-search", t("Give agents Magpie Web Search…"), "search-mcp-lib"));
 }
 
-// searchOffRow: Web search switched off in Plugins › Built-in (netube99 on
-// X: the switch, the Library and Settings said nothing of each other).
-// Nothing here searches until it is on, which adding a search API or
-// naming a provider does by itself (InUse in plugins/search).
-function searchOffRow(box) {
-  const r = el("div", "row pref search-off");
-  const who = el("div", "who");
-  who.append(el("div", "name", t("Off in Plugins › Built-in")),
-    el("div", "sub", t("magpie searches for no model until it is on. Adding a search API or naming a provider below turns it on")));
-  const on = el("button", "text", t("Turn on"));
-  on.type = "button";
-  on.onclick = async () => {
-    on.disabled = true;
-    try {
-      const next = await api("plugins/builtin", { id: "search", on: true });
-      prefs.builtins = next;
-      applyFeatures(next);
-      renderSettings();
-      status(t("Saved"), "ok", 1500);
-    } catch (err) {
-      on.disabled = false;
-      status(t(err.message), "err");
-    }
-  };
-  const val = el("div", "val");
-  val.append(on);
-  r.append(who, val);
-  box.append(r);
-}
-
-// Plugins › Built-in › Web search's own line: what a model that can't
-// search is searched with now, or that nothing is yet, and the way to
-// Settings, where it is set up
-featWho.search = (who, f) => {
-  const line = el("div", "sub search-now");
-  if (f.on) line.append(f.searches?.length ? t("Searches with {names}", { names: f.searches.join(" → ") })
-    : el("span", "warn", t("Nothing to search with yet")), " · ");
-  const go = el("button", "link", t("Set up in Settings"));
-  go.type = "button";
-  go.onclick = (e) => openSettingsAt(e, "models", "#searchList .row");
-  line.append(go);
-  who.append(line);
+// Plugins › Built-in › Web search's own line (featGo): what a model that
+// can't search is searched with now, in place of how many are set up, or
+// that nothing is yet (netube99 on X)
+featWho.search = (line, f, who) => {
+  if (!f.on) return;
+  if (f.searches?.length) who.querySelector(".feat-why")?.remove();
+  line.append(f.searches?.length ? t("Searches with {names}", { names: f.searches.join(" → ") })
+    : el("span", "warn", t("Nothing to search with yet")));
 };
 
 // searchArrange: the search APIs are asked in the order they are listed,

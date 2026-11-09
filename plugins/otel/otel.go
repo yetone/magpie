@@ -35,6 +35,7 @@ func init() {
 			}
 			return 0, nil
 		},
+		SetAt:  "otel #otelList",
 		Parts:  []pluginrt.Part{{Slot: "settings.section", Key: "otel"}},
 		Client: []string{"i18n.js", "page.js"},
 		Apply: func(c *pluginrt.Ctx) error {

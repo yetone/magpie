@@ -300,14 +300,9 @@ function keepIcons(...roots) {
     keptIcons.get(e.dataset.icon).push(e);
   }
 }
-// A mono logo is a CSS mask, not an <img>: a row drawn again makes its
-// span afresh, and only the spans on the page keep the picture, so the
-// engine may let it go between rows and paint the new one empty until it
-// is loaded again: the logo blinks, an <img> beside it doesn't (#1847). Every
-// mask picture that has loaded is kept by a span of its own on a hidden
-// shelf for as long as the page is open, so a logo drawn again paints at
-// once on any page. Each picture is tried once, not once per logo: a
-// probe made for every logo asked for the file again on a redraw.
+// A mono logo is a CSS mask, which a redrawn row can paint empty until it
+// loads again (#1847): each loaded picture is kept by a span on a hidden
+// shelf, and tried once, not once per logo.
 const maskLoads = new Map();
 let maskShelf = null;
 function maskSpan(src, failed) {
@@ -4313,13 +4308,9 @@ function fit(extra = 0, glide) {
   const still = !glide || calm();
   fitSend("window/fit?h=" + h + (still ? "" : "&ms=" + glide.ms + "&ease=" + glide.ease));
 }
-// fitSend asks for one height at a time. Wails serves each of the page's
-// requests on a goroutine of its own, so two fits asked together reached
-// the panel in either order (69 of 400 pairs the wrong way round in a real
-// WKWebView), and the older one landing last kept the panel at its height:
-// fit.last and the panel's own height then took the newer as done, and the
-// Allowances tab's card was cut off by the foot (robot_yz on X). A fit
-// asked while one is on its way waits for it, and only the latest goes.
+// fitSend asks for one height at a time: Wails serves requests on their own
+// goroutines, so two fits could land in either order and the older keep the
+// panel short (robot_yz on X). One asked meanwhile waits; only the latest goes.
 function fitSend(path) {
   if (fitSend.busy) { fitSend.next = path; return; }
   fitSend.busy = true;
@@ -6791,14 +6782,10 @@ function accountPlan(a) {
 // page that gets anything else connected to it: base URL, key, model ids,
 // and a snippet in whichever language the reader is holding.
 
-// copy asks magpie to put text on the clipboard, as the page's own
-// clipboard API is refused inside the app's window; a browser tab on the
-// dev UI falls back to it. A tab on `magpie web` reached over plain http
-// from another computer (a NAS's) has no clipboard API at all, so the
-// older copy command is the last try there. magpie refuses a copy it
-// couldn't read back (#1881: GTK 3 on KDE Plasma without middle-click
-// paste served it empty), and the page's ways are tried then too. When
-// none copies, the page says so and shows the text to copy by hand.
+// copy asks magpie for the clipboard (the window refuses the page's API),
+// then the page's API, then the old copy command (plain-http `magpie web`).
+// magpie refuses a copy it can't read back (#1881); none copying, the page
+// shows the text to copy by hand.
 async function copy(text, what, btn, message) {
   const done = () => { status(message || t("{what} copied", { what }), "ok"); flashCopied(btn); };
   const res = await fetch("/api/copy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) }).catch(() => null);
@@ -14627,14 +14614,10 @@ async function accountAction(path, body, okMsg, confirmed = false, say = (m) => 
   }
 }
 
-// An account's or key's own models (#474): one of several can be kept for
-// some of the provider's models only — a small allowance kept for the cheap
-// ones — and the gateway never sends it another. Unset, it serves all the
-// provider's, as before. The pill on its row says which it serves; a click
-// opens the provider's models under it as chips, picked and saved apart
-// from the editor's Save. acctModels is the row being picked: { id, ref,
-// chosen }. Picks left unsaved there go with the editor's Save, which says
-// it saved them (#2862).
+// An account's or key's own models (#474): kept for some models only, the
+// gateway sends it no other; unset, all. Its pill opens them as chips,
+// saved apart from the editor's Save, which takes unsaved picks (#2862).
+// acctModels is the row being picked: { id, ref, chosen }.
 let acctModels = null;
 function accountModelsOf(p, ref) { return p.accountModels?.[String(ref).toLowerCase()] || []; }
 // accountModelsDraft: the open picker's unsaved picks as accountmodels takes
@@ -21836,6 +21819,7 @@ function renderRedact(s, keep) {
   box.replaceChildren();
   find.replaceChildren();
   share.replaceChildren();
+  featOff(box, s, "redact", t("Nothing is masked until it is on. Choosing anything to mask below turns it on"));
   const rowIn = (into, name, sub, ...tools) => {
     const r = el("div", "row pref");
     const who = el("div", "who");
@@ -23054,14 +23038,8 @@ function hold(h) {
     // button held, and room made for the button slid the chip up under the
     // tabs, out of sight
     if (want > max && h.top) want = max;
-    // room is only kept while some of the view stays in sight: a redraw can take
-    // away the whole of what the reader was looking at (a group's editor closed
-    // on its Save, the list it had in it), and scrolled to `want` not one row of
-    // the view would be in sight, only the room — a blank page. The browser's own
-    // clamp after the content shrank stands instead.
-    // A sliver is as blank: with the group editor's rows folded under
-    // Advanced, its Save left the last settings card, 88px of a 594px window,
-    // above the room. So a third of the window is content, or no room.
+    // room only while a third of the window still shows the view, never a
+    // blank page; the browser's own clamp stands instead
     if (want > max && contentEnd(v) - want < v.clientHeight / 3) want = max;
     if (want > max) setRoom(v, want + v.clientHeight - contentEnd(v));
     v.scrollTop = want;
@@ -23296,7 +23274,10 @@ function renderBuiltins(box, list, done) {
     const who = el("div", "who");
     who.append(el("div", "name", t(f.name)), el("div", "sub", t(f.sub)));
     if (f.inUse > 0) who.append(el("div", "sub feat-why", t(f.use, { n: f.inUse })));
-    featWho[f.id]?.(who, f); // a plugin's own line (plugins/search)
+    const line = el("div", "sub feat-go");
+    featWho[f.id]?.(line, f, who); // what it does now (plugins/search)
+    featGo(line, f);
+    if (line.childNodes.length) who.append(line);
     const b = el("button", "lib-switch use-credits" + (f.on ? " on" : ""));
     b.type = "button";
     b.setAttribute("role", "switch");
@@ -23345,6 +23326,46 @@ function renderBuiltins(box, list, done) {
 }
 window.renderBuiltins = renderBuiltins;
 const featWho = {};
+// featGo: a built-in's row goes to its settings and its page, as their
+// settings and page go back (featOff, Masking's head; netube99 on X)
+function featGo(line, f) {
+  const [tab, row] = f.setAt?.split(" ") || [];
+  if (!tab) return;
+  const to = [];
+  // not to settings hidden while it is off (Observability, warm-ups)
+  if (f.on || !$(row)?.closest("[data-feature]")) to.push([t("Settings") + " › " + $("#setTab-" + tab).textContent, (e) => openSettingsAt(e, tab, row + " .row")]);
+  const nav = f.on && f.page && $(`#nav [data-view="${f.page}"]`);
+  if (nav) to.push([nav.textContent, () => nav.click()]);
+  for (const [say, go] of to) {
+    const b = el("button", "link", say);
+    b.type = "button";
+    b.onclick = go;
+    line.append(line.childNodes.length ? " · " : "", b);
+  }
+}
+// featOff: the settings of a built-in switched off say so, and turn it on
+function featOff(box, s, id, sub) {
+  if (s.builtins?.find((f) => f.id === id)?.on !== false) return;
+  const r = el("div", "row pref feat-off"), who = el("div", "who"), val = el("div", "val");
+  r.dataset.of = id;
+  who.append(el("div", "name", t("Off in Plugins › Built-in")), el("div", "sub", sub));
+  const on = el("button", "text", t("Turn on"));
+  on.type = "button";
+  on.onclick = async () => {
+    on.disabled = true;
+    try {
+      applyFeatures(prefs.builtins = await api("plugins/builtin", { id, on: true }));
+      renderSettings();
+      status(t("Saved"), "ok", 1500);
+    } catch (err) {
+      on.disabled = false;
+      status(t(err.message), "err");
+    }
+  };
+  val.append(on);
+  r.append(who, val);
+  box.append(r);
+}
 // openSettings: the Settings page, in the window (the panel opens it there)
 function openSettings() {
   if (mode !== "window") { api("window/main?view=settings", {}); return; }
@@ -23539,13 +23560,9 @@ function markNav(v) {
 }
 
 // ---- the sidebar ----------------------------------------------------------
-// A window wide enough has its pages down a sidebar, as a Mac app's: in
-// groups, the open page's own tabs under it, Settings at its foot and the
-// gateway's address under that, the header saying where the reader is
-// ("Work / Library / MCP servers"). Narrower, and magpie web on a phone,
-// the pages go back into the header as tabs and each page shows its own
-// tabs again, as iPadOS's sidebar turns into a tab bar when it has no room.
-// It is the same #nav, moved between the two.
+// A wide window has its pages down a sidebar, as a Mac app's; narrower
+// (and on a phone) they go back into the header as tabs, as iPadOS's
+// sidebar does. It is the same #nav, moved between the two.
 var SIDE_AT = 1024;
 var sideQuery = matchMedia(`(min-width: ${SIDE_AT}px)`);
 function sideNav() { return document.body.classList.contains("side-nav"); }

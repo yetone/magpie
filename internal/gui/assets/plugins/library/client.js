@@ -6709,7 +6709,7 @@ magpie.plugin("library", (ctx) => {
       const go = el("button", "link", t("Set up in Settings"));
       go.type = "button";
       go.onclick = async (e) => { if (await closeLibModal()) openSettingsAt(e, "models", "#searchList .row"); };
-      hint.append(go);
+      hint.append(" ", go);
       ed.append(hint);
     } else if (x.name === "magpie-vision") {
       ed.append(el("p", "mk-hint", t("Pick the agents that may read images with it: each image goes to the Image recognition model set in Settings → Models → Images, and costs what that model charges.")));

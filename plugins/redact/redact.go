@@ -22,6 +22,7 @@ func init() {
 		Name: "Privacy masking", Sub: "Secrets, personal data and your own words go to vendors as placeholders, and come back as they were",
 		One: "Masking is on", Many: "Masking is on",
 		InUse: InUse,
+		SetAt: "privacy #redactList",
 		// Insights › Masking: what masking did, request by request
 		Parts:  []pluginrt.Part{{Slot: "nav.page", Key: "masking"}},
 		Client: []string{"i18n.js", "redact.css", "client.js", "page.js"},
