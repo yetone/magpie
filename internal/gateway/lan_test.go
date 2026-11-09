@@ -172,31 +172,95 @@ func TestPublicURLShared(t *testing.T) {
 	}
 }
 
-// A container is known by Docker's or Podman's marker file, or a runtime
-// in PID 1's cgroup; a plain system has none of them.
+// A container is known by Docker's or Podman's marker file, a runtime in
+// PID 1's cgroup, a container's init or magpie as PID 1, or a cgroup v2
+// namespace's root on an overlay root filesystem (Docker's default under
+// cgroup v2 names no runtime, and a NAS's runtime may write no marker:
+// mtoolstec on X, LazyCat). A plain system has none of them, a systemd
+// host on an overlay root included.
 func TestInContainer(t *testing.T) {
-	mk := func(file, body string) string {
+	mk := func(files map[string]string) string {
 		root := t.TempDir()
-		if file != "" {
+		for file, body := range files {
 			p := filepath.Join(root, file)
 			os.MkdirAll(filepath.Dir(p), 0o755)
 			os.WriteFile(p, []byte(body), 0o644)
 		}
 		return root
 	}
+	const (
+		overlay = "22 1 0:21 / / rw,relatime - ext4 /dev/sda1 rw\n" +
+			"512 480 0:52 / / rw,relatime master:1 - overlay overlay rw,lowerdir=/l,upperdir=/u,workdir=/w\n" +
+			"513 512 0:55 / /proc rw,nosuid - proc proc rw\n"
+		ext4  = "22 1 8:1 / / rw,relatime shared:1 - ext4 /dev/sda1 rw\n23 22 0:5 / /proc rw - proc proc rw\n"
+		btrfs = "30 1 0:27 /@ / rw,relatime shared:1 - btrfs /dev/nvme0n1p2 rw\n"
+	)
 	for _, c := range []struct {
-		file, body string
-		want       bool
+		name  string
+		files map[string]string
+		want  bool
 	}{
-		{"", "", false},
-		{"proc/1/cgroup", "0::/init.scope\n", false},
-		{".dockerenv", "", true},
-		{"run/.containerenv", "", true},
-		{"proc/1/cgroup", "12:pids:/docker/4f1c…\n", true},
-		{"proc/1/cgroup", "0::/kubepods/besteffort/pod1\n", true},
+		{"nothing", nil, false},
+		{"systemd host", map[string]string{"proc/1/cgroup": "0::/init.scope\n", "proc/1/comm": "systemd\n", "proc/1/mountinfo": ext4}, false},
+		{"systemd host on overlayroot", map[string]string{"proc/1/cgroup": "0::/init.scope\n", "proc/1/comm": "systemd\n", "proc/1/mountinfo": overlay}, false},
+		{"cgroup-less init host", map[string]string{"proc/1/cgroup": "0::/\n", "proc/1/comm": "init\n", "proc/1/mountinfo": btrfs}, false},
+		{"WSL", map[string]string{"proc/1/cgroup": "0::/\n", "proc/1/comm": "init\n", "proc/1/mountinfo": ext4}, false},
+		{".dockerenv", map[string]string{".dockerenv": ""}, true},
+		{".containerenv", map[string]string{"run/.containerenv": ""}, true},
+		{"cgroup v1 docker", map[string]string{"proc/1/cgroup": "12:pids:/docker/4f1c…\n"}, true},
+		{"kubepods", map[string]string{"proc/1/cgroup": "0::/kubepods/besteffort/pod1\n"}, true},
+		{"cgroup v2 namespace on overlay", map[string]string{"proc/1/cgroup": "0::/\n", "proc/1/comm": "sh\n", "proc/1/mountinfo": overlay}, true},
+		{"magpie as PID 1", map[string]string{"proc/1/cgroup": "0::/\n", "proc/1/comm": "magpie\n", "proc/1/mountinfo": btrfs}, true},
+		{"docker --init", map[string]string{"proc/1/comm": "docker-init\n"}, true},
+		{"tini", map[string]string{"proc/1/comm": "tini\n"}, true},
 	} {
-		if got := inContainer(mk(c.file, c.body)); got != c.want {
-			t.Errorf("%s %q: %v", c.file, c.body, got)
+		if got := inContainer(mk(c.files)); got != c.want {
+			t.Errorf("%s: %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// In a LazyCat (懒猫微服) app magpie sees only its container's address,
+// and Settings offered http://172.28.3.65:3425 under "Share on local
+// network" (mtoolstec on X). LazyCat names the app's domain in
+// LAZYCAT_APP_DOMAIN, and the app is reached there over HTTPS: it is the
+// address shared, unless MAGPIE_PUBLIC_URL names another. A package's
+// MAGPIE_PUBLIC_URL template a system didn't render is no address, and
+// LazyCat's is used instead.
+func TestLazyCatPublicURL(t *testing.T) {
+	t.Setenv("MAGPIE_ADDR", "0.0.0.0:3425")
+	t.Setenv("MAGPIE_PUBLIC_URL", "")
+	t.Setenv("LAZYCAT_APP_DOMAIN", "")
+	if got := PublicURL(); got != "" {
+		t.Fatalf("outside LazyCat: %q", got)
+	}
+	for _, c := range []struct{ public, domain, want string }{
+		{"", "magpie.snyht3.heiyu.space", "https://magpie.snyht3.heiyu.space"},
+		{"", " Magpie.Snyht3.heiyu.space\n", "https://magpie.snyht3.heiyu.space"},
+		{"https://{{.S.AppDomain}}", "magpie.snyht3.heiyu.space", "https://magpie.snyht3.heiyu.space"},
+		{"https://ai.example.com", "magpie.snyht3.heiyu.space", "https://ai.example.com"},
+		{"", "https://magpie.snyht3.heiyu.space", ""},
+		{"", "magpie", ""},
+		{"", "magpie.box.heiyu.space/x", ""},
+		{"", "-a.heiyu.space", ""},
+	} {
+		t.Setenv("MAGPIE_PUBLIC_URL", c.public)
+		t.Setenv("LAZYCAT_APP_DOMAIN", c.domain)
+		if got := PublicURL(); got != c.want {
+			t.Errorf("MAGPIE_PUBLIC_URL=%q LAZYCAT_APP_DOMAIN=%q: %q, want %q", c.public, c.domain, got, c.want)
+			continue
+		}
+		if c.want == "" {
+			continue
+		}
+		if got := LANURLs(); !slices.Equal(got, []string{c.want}) {
+			t.Errorf("LAZYCAT_APP_DOMAIN=%q: shared at %v, want %s", c.domain, got, c.want)
+		}
+		if ContainerAddrs() {
+			t.Errorf("LAZYCAT_APP_DOMAIN=%q: the addresses are said to be a container's", c.domain)
+		}
+		if !InContainer() {
+			t.Errorf("LAZYCAT_APP_DOMAIN=%q: not in a container", c.domain)
 		}
 	}
 }

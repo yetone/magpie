@@ -78,9 +78,57 @@ func logInvalidPublicURL() {
 
 var warnInvalidPublicURL = sync.OnceFunc(logInvalidPublicURL)
 
-// publicURL is the validated MAGPIE_PUBLIC_URL, with a scheme and without
-// trailing slashes. An invalid value is treated as unset and warned once.
+// publicURL is where other machines reach the gateway when the system
+// says so: the validated MAGPIE_PUBLIC_URL, else a LazyCat app's own
+// address (lazyCatURL).
 func publicURL() string {
+	if u := namedPublicURL(); u != "" {
+		return u
+	}
+	return lazyCatURL()
+}
+
+// lazyCatURL is where a LazyCat (懒猫微服, lazycat.cloud) app is reached:
+// LazyCat injects LAZYCAT_APP_DOMAIN (magpie.<box>.heiyu.space) into every
+// container of an app, and serves the app there over HTTPS. Inside, magpie
+// sees only its container's address (172.28.x.x), which nothing outside
+// the box reaches, and Settings offered http://172.28.3.65:3425 under
+// "Share on local network" (mtoolstec on X). The magpie-lzcapp package
+// sets MAGPIE_PUBLIC_URL to the same domain through a manifest template,
+// which a system before lzcos 1.3.8 doesn't render, and another package
+// or a hand-written manifest may not set it at all. "" outside LazyCat,
+// or when the value is no domain.
+func lazyCatURL() string {
+	d := strings.ToLower(strings.TrimSpace(os.Getenv("LAZYCAT_APP_DOMAIN")))
+	if !domainName(d) {
+		return ""
+	}
+	return "https://" + d
+}
+
+// domainName: d is a DNS name of two labels or more, each of letters,
+// digits and hyphens.
+func domainName(d string) bool {
+	if len(d) > 253 || !strings.Contains(d, ".") {
+		return false
+	}
+	for _, l := range strings.Split(d, ".") {
+		if l == "" || len(l) > 63 || l[0] == '-' || l[len(l)-1] == '-' {
+			return false
+		}
+		for _, c := range l {
+			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// namedPublicURL is the validated MAGPIE_PUBLIC_URL, with a scheme and
+// without trailing slashes. An invalid value is treated as unset and
+// warned once.
+func namedPublicURL() string {
 	u := strings.TrimSpace(os.Getenv("MAGPIE_PUBLIC_URL"))
 	if u == "" {
 		return ""
@@ -102,7 +150,8 @@ func publicURL() string {
 	return u
 }
 
-// PublicURL is MAGPIE_PUBLIC_URL, with a scheme; "" when it isn't set.
+// PublicURL is MAGPIE_PUBLIC_URL, with a scheme, else a LazyCat app's
+// address; "" when neither is set.
 func PublicURL() string { return publicURL() }
 
 // OnNetwork: MAGPIE_ADDR puts the gateway beyond loopback (0.0.0.0 in the
@@ -120,7 +169,7 @@ func OnNetwork() bool {
 // gateway key — while the gateway is shared, or listens on the network.
 func remoteKeyed() bool { return settings.Load().LAN || OnNetwork() }
 
-// PublicHost is MAGPIE_PUBLIC_URL's host, "" when it isn't set.
+// PublicHost is PublicURL's host, "" when it isn't set.
 func PublicHost() string {
 	u, err := url.Parse(publicURL())
 	if err != nil {
@@ -222,11 +271,23 @@ func defaultGateway(table string) string {
 }
 
 // InContainer: this magpie runs in a container (Docker, Podman, a
-// Kubernetes pod), whose image is what gets updated, not its binary.
-func InContainer() bool { return inContainer("/") }
+// Kubernetes pod, a LazyCat app), whose image is what gets updated, not
+// its binary.
+func InContainer() bool { return lazyCatURL() != "" || inContainer("/") }
 
 // inContainer: the system under root is a container's — Docker's or
-// Podman's marker file, or a container runtime in PID 1's cgroup.
+// Podman's marker file, a container runtime in PID 1's cgroup, a
+// container's init (or magpie itself, as the image starts it) as PID 1,
+// or the root of a cgroup namespace on an overlay root filesystem.
+//
+// Under cgroup v2 with a private cgroup namespace, Docker's default
+// since 20.10, PID 1's cgroup reads "0::/" and names no runtime, and a
+// runtime may write no marker file (a NAS's own, LazyCat's). A host's
+// PID 1 is an init system (systemd, in /init.scope), and a host's root
+// filesystem is rarely an overlay, so neither alone is taken for a
+// container: a read-only overlay root (Raspberry Pi OS, overlayroot)
+// sits under systemd in /init.scope, and an init without cgroups puts
+// "0::/" on an ext4 or btrfs root.
 func inContainer(root string) bool {
 	for _, f := range []string{".dockerenv", "run/.containerenv"} {
 		if _, err := os.Stat(filepath.Join(root, f)); err == nil {
@@ -238,6 +299,34 @@ func inContainer(root string) bool {
 		if strings.Contains(string(b), w) {
 			return true
 		}
+	}
+	comm, _ := os.ReadFile(filepath.Join(root, "proc/1/comm"))
+	switch strings.TrimSpace(string(comm)) {
+	case "magpie", "tini", "docker-init", "dumb-init", "catatonit":
+		return true
+	}
+	if strings.TrimSpace(string(b)) == "0::/" {
+		m, _ := os.ReadFile(filepath.Join(root, "proc/1/mountinfo"))
+		return overlayRoot(string(m))
+	}
+	return false
+}
+
+// overlayRoot: in mountinfo (proc(5)), the filesystem mounted last at "/"
+// is an overlay, as a container's image layers are.
+func overlayRoot(mountinfo string) bool {
+	fs := ""
+	for _, line := range strings.Split(mountinfo, "\n") {
+		f := strings.Fields(line)
+		sep := slices.Index(f, "-")
+		if sep < 5 || sep+1 >= len(f) || f[4] != "/" {
+			continue
+		}
+		fs = f[sep+1]
+	}
+	switch fs {
+	case "overlay", "fuse-overlayfs", "aufs":
+		return true
 	}
 	return false
 }
