@@ -2505,6 +2505,10 @@ function rowOf(id, a, keys, stored, p, own) {
     // long before expires (keepSignedIn)
     renews: keepsAlive(a.auth),
     renewLead: keepsAlive(a.auth) ? leadOf(a.auth) : 0,
+    // the vendor spends a refresh token once: renewed, the old one is
+    // refused (invalid_grant). magpie never carries such a sign-in to
+    // another computer (#5583)
+    rotating: a.auth.rotating === true,
     options: optionsOf(a.auth),
     decide: p.decide === true,
     searches: p.searches === true,

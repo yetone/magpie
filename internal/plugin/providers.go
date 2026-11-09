@@ -150,6 +150,12 @@ type Provider struct {
 	// 5 minutes when not said), as the host reckons it (RenewAt).
 	Renews    bool  `json:"renews,omitempty"`
 	RenewLead int64 `json:"renewLead,omitempty"`
+	// Rotating is the auth hook declaring that the vendor spends a refresh
+	// token once (auth.rotating): renewed, the old one is refused
+	// (invalid_grant). Two computers holding a copy would race to renew it
+	// and the loser is signed out for good, so its sign-ins are never
+	// carried by a backup or a sync (provider.CollectSignIns, #5583).
+	Rotating bool `json:"rotating,omitempty"`
 	// Options are the switches the plugin declares for the provider
 	// (auth.options, #2038), as the host checked them
 	Options []Option `json:"options,omitempty"`

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/plugin"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // Sign-ins in a backup or a sync (qianxunji and curtinp118 on Discord:
@@ -318,5 +319,135 @@ func TestApplySignInsKeepsWhatChangedSinceTheMerge(t *testing.T) {
 	}
 	if ls := savedNow(t); !strings.Contains(string(ls[0].Auth), `"renewed"`) {
 		t.Fatalf("written over: %s", ls[0].Auth)
+	}
+}
+
+// A plugin whose vendor spends a refresh token once (the auth hook's
+// rotating) signs one computer in: carried to a second, both renew it as
+// it comes due, and the vendor turns the loser away for good, with no
+// newer generation anywhere in the sync path to come back from (#5583,
+// skalitz-wolf). Its sign-in is never carried.
+func declaresRotating(t *testing.T) {
+	t.Helper()
+	t.Setenv("MAGPIE_BUN", "") // nothing here runs a plugin
+	write := func(name string, v any) {
+		b, _ := json.Marshal(v)
+		os.MkdirAll(settings.Dir(), 0o700)
+		if err := os.WriteFile(filepath.Join(settings.Dir(), name), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	minimax, kiro := "@magpie-community/opencode-minimax-auth", "@example/opencode-kiro-auth"
+	write("plugins.json", map[string]any{"plugins": []map[string]any{{"spec": minimax}, {"spec": kiro}}})
+	plugin.UseCached([]plugin.Provider{
+		// the vendor spends a refresh token once: two computers holding a
+		// copy race to renew it (#5583)
+		{ID: "minimax-code", Spec: minimax, Renews: true, Rotating: true},
+		{ID: "kiro", Spec: kiro},
+	})
+	t.Cleanup(func() { plugin.UseCached(nil) })
+}
+
+func writePluginAuth(t *testing.T, m map[string]any) {
+	t.Helper()
+	b, _ := json.Marshal(m)
+	if err := os.MkdirAll(filepath.Dir(plugin.AuthPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(plugin.AuthPath(), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCollectSignInsLeavesARotatingSignInOut(t *testing.T) {
+	signIn(t)
+	declaresRotating(t)
+	writePluginAuth(t, map[string]any{
+		"minimax-code": map[string]any{"type": "oauth", "access": "m", "refresh": "r1", "expires": 3000, "accountId": "k@x.com"},
+		"kiro":         map[string]any{"type": "oauth", "access": "k", "refresh": "r", "expires": 3000, "accountId": "k2@x.com"},
+	})
+	s, err := CollectSignIns()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.Plugins["minimax-code"]; ok {
+		t.Fatal("a rotating sign-in is carried: the second computer becomes the token's second owner (#5583)")
+	}
+	if _, ok := s.Plugins["kiro"]; !ok {
+		t.Fatal("a plain sign-in stopped being carried")
+	}
+}
+
+func TestMergeSignInsDoesNotTakeARotatingSignInIn(t *testing.T) {
+	signIn(t)
+	declaresRotating(t)
+	remote := &SignIns{Plugins: map[string]json.RawMessage{
+		"minimax-code": json.RawMessage(`{"type":"oauth","access":"m","refresh":"r2","expires":5000,"accountId":"k@x.com"}`),
+		"kiro":         json.RawMessage(`{"type":"oauth","access":"k","refresh":"r","expires":5000,"accountId":"k2@x.com"}`),
+	}}
+	_, plan, hashes := MergeSignIns(nil, remote, nil) // a computer joining
+	for _, r := range plan.put {
+		if r.key == "minimax-code" {
+			t.Fatal("a rotating sign-in is put in here: the token's second owner (#5583)")
+		}
+	}
+	if _, ok := hashes["plugin|minimax-code|k@x.com"]; ok {
+		t.Fatal("a rotating sign-in goes up")
+	}
+	if _, ok := hashes["plugin|kiro|k2@x.com"]; !ok {
+		t.Fatal("a plain sign-in stopped going up")
+	}
+}
+
+func TestRestoreSignInsLeavesARotatingSignInOut(t *testing.T) {
+	signIn(t)
+	declaresRotating(t)
+	writePluginAuth(t, map[string]any{
+		"kiro": map[string]any{"type": "oauth", "access": "k", "refresh": "r", "expires": 3000, "accountId": "k2@x.com"},
+	})
+	s := &SignIns{Plugins: map[string]json.RawMessage{
+		// a backup made before the plugin said so, or on a magpie older
+		// than the flag
+		"minimax-code": json.RawMessage(`{"type":"oauth","access":"m","refresh":"r2","expires":5000,"accountId":"k@x.com"}`),
+	}}
+	r, err := RestoreSignIns(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Added != 0 {
+		t.Fatalf("a backup's rotating sign-in is put in: the token's second owner (#5583): %+v", r)
+	}
+	m, err := plugin.AuthEntries()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m["minimax-code"]; ok {
+		t.Fatal("a rotating sign-in was written to plugin-auth.json")
+	}
+}
+
+// MiniMax Code and Qoder rotate their refresh tokens, and their plugins
+// say nothing of it yet: their sign-ins stay on this computer all the
+// same, with no plugin listed at all (a sync at start, before the plugin
+// host has said what it serves).
+func TestKnownRotatingSignInsStayWithNoPluginListed(t *testing.T) {
+	signIn(t)
+	plugin.UseCached(nil)
+	writePluginAuth(t, map[string]any{
+		"minimax-code": map[string]any{"type": "oauth", "access": "m", "refresh": "r1", "expires": 3000, "accountId": "k@x.com"},
+		"qoder-cn":     map[string]any{"type": "oauth", "access": "q", "refresh": "r2", "expires": 3000, "accountId": "q@x.com"},
+		"kiro":         map[string]any{"type": "oauth", "access": "k", "refresh": "r", "expires": 3000, "accountId": "k2@x.com"},
+	})
+	s, err := CollectSignIns()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"minimax-code", "qoder-cn"} {
+		if _, ok := s.Plugins[id]; ok {
+			t.Fatalf("%s's rotating sign-in is carried (#5583)", id)
+		}
+	}
+	if _, ok := s.Plugins["kiro"]; !ok {
+		t.Fatal("a plain sign-in stopped being carried")
 	}
 }

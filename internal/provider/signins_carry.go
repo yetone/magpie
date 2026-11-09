@@ -18,7 +18,14 @@ package provider
 //     over. Codex's auth.json is written, temp-and-rename, only when Codex
 //     is signed out here and the user hasn't removed its account; Claude
 //     Code's keychain is never touched: a saved Claude account is served
-//     by the gateway as it is.
+//     by the gateway as it is;
+//   - a plugin whose auth hook says rotating (the vendor spends a refresh
+//     token once: renewed, the old one answers invalid_grant) is never
+//     carried at all — a copy on a second computer would race this one to
+//     renew it, and the vendor would turn the loser away for good, with
+//     no newer generation anywhere to come back from (#5583). It stays
+//     signed in on the computer that signed in, and one carried by a
+//     backup or a sync made before the plugin said so is left out here.
 
 import (
 	"bytes"
@@ -146,7 +153,9 @@ func credTime(auth json.RawMessage, renewed time.Time) time.Time {
 
 // records are s's sign-ins by id. Two of one id (accounts told apart here
 // in a way that doesn't carry) are left out both: neither is put over the
-// other, nor anything here.
+// other, nor anything here. A plugin whose provider says its refresh
+// token rotates (Rotating, the auth hook's rotating) is left out too:
+// its sign-in is one computer's alone (#5583).
 func (s *SignIns) records() map[string]signInRec {
 	out := map[string]signInRec{}
 	if s == nil {
@@ -168,12 +177,44 @@ func (s *SignIns) records() map[string]signInRec {
 		}
 		add(signInRec{id: loginRecID(l), hash: credHash(l.Auth), at: credTime(l.Auth, l.Renewed), login: &l})
 	}
-	for k, raw := range s.Plugins {
-		var at time.Time
-		if ms := plugin.AuthExpires(raw); ms > 0 {
-			at = time.UnixMilli(ms)
+	if len(s.Plugins) > 0 {
+		rotating := rotatingPlugins()
+		for k, raw := range s.Plugins {
+			if rotating[plugin.ProviderOf(k)] {
+				continue // a refresh token the vendor spends once (#5583)
+			}
+			var at time.Time
+			if ms := plugin.AuthExpires(raw); ms > 0 {
+				at = time.UnixMilli(ms)
+			}
+			add(signInRec{id: pluginRecID(k, raw), hash: credHash(raw), at: at, key: k, raw: raw})
 		}
-		add(signInRec{id: pluginRecID(k, raw), hash: credHash(raw), at: at, key: k, raw: raw})
+	}
+	return out
+}
+
+// rotatesKnown are the community plugins whose vendor spends a refresh
+// token once, read from their sources: MiniMax Code ("MiniMax spends a
+// refresh token once", invalid_grant 400 after) and Qoder ("a refresh
+// token is spent once, so two refreshes would spend it twice").
+var rotatesKnown = []string{"minimax-code", "minimax-code-global", "qoder", "qoder-cn"}
+
+// rotatingPlugins are the ids of the plugins whose auth hook says their
+// refresh tokens rotate (Rotating): a sign-in of theirs is never carried,
+// so no computer holds a copy of a token the vendor lets be spent once
+// (#5583). Besides what a plugin says of its own, the community plugins
+// known to rotate (rotatesKnown) are never carried either: their auth
+// hooks said nothing of it when this landed, and the plugin host's list
+// may not be read yet when a sync runs at start.
+func rotatingPlugins() map[string]bool {
+	out := map[string]bool{}
+	for _, id := range rotatesKnown {
+		out[id] = true
+	}
+	for _, p := range plugin.Cached() {
+		if p.Rotating {
+			out[p.ID] = true
+		}
 	}
 	return out
 }
@@ -222,6 +263,19 @@ func CollectSignIns() (*SignIns, error) {
 		return nil, fmt.Errorf("the plugins' sign-ins can't be read: %w", err)
 	}
 	s := &SignIns{Plugins: pl}
+	// a plugin whose refresh token rotates is left out: its sign-in is one
+	// computer's alone, never a backup's or a sync's to copy (#5583)
+	if len(s.Plugins) > 0 {
+		rotating := rotatingPlugins()
+		for k := range s.Plugins {
+			if rotating[plugin.ProviderOf(k)] {
+				delete(s.Plugins, k)
+			}
+		}
+		if len(s.Plugins) == 0 {
+			s.Plugins = nil
+		}
+	}
 	live, _, lerr := readCodexLogin(codexHome(), false)
 	for _, l := range ls {
 		if !carried(l) {

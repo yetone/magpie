@@ -229,6 +229,16 @@ switch that anyone with the file and the passphrase can use those accounts.
   Each record has an id that names the account (agent, lower-case email and
   organisation; or the account key), its time of renewal and a hash; ids two
   rows share are left out on both sides, as no one can tell which is which.
+- **Never carried:** a plugin's sign-in whose vendor spends a refresh
+  token once. Two computers holding one copy race to renew it, and the
+  vendor turns the loser away for good with no newer copy anywhere
+  (#5583, skalitz-wolf). Such a plugin says so with its auth hook's
+  `rotating` (`Provider.Rotating`); MiniMax Code and Qoder are known to
+  (`rotatesKnown`). `CollectSignIns` leaves them out, and `records` leaves
+  out one an older file carried, so a sync neither sends nor takes one
+  and a Restore writes none. Each computer signs in to them itself
+  (`TestCollectSignInsLeavesARotatingSignInOut`,
+  `TestKnownRotatingSignInsStayWithNoPluginListed`).
 - **Sealed:** a backup or export seals them with the rest of the file. An
   automatic backup, which has no passphrase on a schedule, seals them
   alone (`SealData`) with the passphrase asked for as they are turned on,
