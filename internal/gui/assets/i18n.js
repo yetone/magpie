@@ -19216,6 +19216,17 @@ function intlLang() {
   return /^en(-|$)/i.test(sys) ? sys : "en";
 }
 
+// dateFmt is intlLang()'s date formatter for opts, made once: a
+// toLocale*String call makes a new one each time, and a card of hundreds
+// of accounts formats every account's resets on each render (#5310).
+const dateFmts = new Map();
+function dateFmt(opts) {
+  const lang = intlLang(), key = lang + JSON.stringify(opts);
+  let f = dateFmts.get(key);
+  if (!f) dateFmts.set(key, (f = new Intl.DateTimeFormat(lang, opts)));
+  return f;
+}
+
 function t(s, vars) {
   let out = I18N[locale]?.[s] ?? s;
   if (vars) for (const k in vars) out = out.split("{" + k + "}").join(vars[k]);

@@ -14551,14 +14551,13 @@ async function setQuotaLeft(on) {
 // "tomorrow 09:00", "Thu 14:30" later this week (Monday to Sunday), else
 // "Oct 12 08:05": a bare weekday in next week read as this week's (#181).
 function resetClock(at, now = new Date()) {
-  const lang = intlLang();
-  const time = at.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit", hour12: false });
+  const time = dateFmt({ hour: "2-digit", minute: "2-digit", hour12: false }).format(at);
   const day = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const days = Math.round((day(at) - day(now)) / 864e5);
   if (days <= 0) return time;
   if (days === 1) return t("tomorrow {time}", { time });
-  if (days <= 6 - ((now.getDay() + 6) % 7)) return at.toLocaleDateString(lang, { weekday: "short" }) + " " + time;
-  return at.toLocaleDateString(lang, { month: "short", day: "numeric" }) + " " + time;
+  if (days <= 6 - ((now.getDay() + 6) % 7)) return dateFmt({ weekday: "short" }).format(at) + " " + time;
+  return dateFmt({ month: "short", day: "numeric" }).format(at) + " " + time;
 }
 
 function untilText(at) {
@@ -14570,7 +14569,7 @@ function untilText(at) {
   return t("in {n}d", { n: Math.round(h / 24) });
 }
 
-function resetText(at, when = at <= Date.now() ? at.toLocaleString(intlLang()) : resetClock(at)) {
+function resetText(at, when = at <= Date.now() ? dateFmt({ year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric" }).format(at) : resetClock(at)) {
   return t(at <= Date.now() ? "Reset time passed {when}" : "Resets {when}", { when });
 }
 
