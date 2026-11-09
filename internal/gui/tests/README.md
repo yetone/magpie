@@ -394,6 +394,13 @@ the key's field and its placeholder is the field's hint, while a way labelled
 only "API key" keeps "<name> API key"; the provider's own icon shows on its
 row. English and Chinese, Chromium and WebKit, with the API faked.
 
+`plugin-ask-ways.test.cjs` checks a moved subscription whose plugin's
+first way asks a question first (Kiro's sign-in methods): the question
+offers "Other ways to sign in…", which shows every way, the API key among
+them, and a later question doesn't; the plugin's labels, messages and hints
+show in the window's language when it gives them by language, else as
+written. English and Chinese, Chromium and WebKit, with the API faked.
+
 `plugin-market.test.cjs` checks the Plugins tab: Discover lists the
 suggested plugins in their two sections, a card installs its plugin and
 then offers its sign-in, which opens in the Providers add sheet; a search
