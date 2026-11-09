@@ -36,8 +36,11 @@
 <url><loc>https://usemagpie.ai/docs/zh/remote</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/start</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/subscriptions</loc></url>
+<url><loc>https://usemagpie.ai/docs/ja/claude-code-models</loc></url>
+<url><loc>https://usemagpie.ai/docs/ja/codex-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/contributors</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/docker</loc></url>
+<url><loc>https://usemagpie.ai/docs/ja/gemini-cli-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/import</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/intent</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/library</loc></url>
@@ -47,4 +50,5 @@
 <url><loc>https://usemagpie.ai/docs/ja/privacy</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/remote</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/start</loc></url>
+<url><loc>https://usemagpie.ai/docs/ja/subscriptions</loc></url>
 </urlset>
