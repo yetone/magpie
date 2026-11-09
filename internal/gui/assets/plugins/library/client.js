@@ -535,6 +535,7 @@ magpie.plugin("library", (ctx) => {
       // drawn over again replaced the row under the reader's pointer (#3099)
       if (quiet === "open" && seen(lib) === was && tab !== "rtk" && page.querySelector(":scope > .lib-body")) return;
       rtk = null; // asked again when its tab is drawn: an agent may have been installed since
+      piView = null;
       render();
     } catch (e) {
       status(e.message, "err");
@@ -809,6 +810,8 @@ magpie.plugin("library", (ctx) => {
       box.append(card, head("60px"), rows(6, true));
     } else if (which === "rtk") {
       box.append(rows(1, false), head("60px"), rows(5, true));
+    } else if (which === "pi") {
+      box.append(head("60px"), rows(4, true));
     } else {
       box.append(rows(5, true));
     }
@@ -821,6 +824,8 @@ magpie.plugin("library", (ctx) => {
     // RTK's count read afresh each time its tab is opened: an agent run
     // since adds to it (#741); the page keeps the last one until then
     if (id === "rtk" && rtk) loadRTK();
+    // Pi's extensions too: one installed or changed outside magpie since
+    if (id === "pi" && piView) loadPi();
     if (!lib) return page.querySelector(":scope > .lib-skel")?.replaceWith(skeleton(id));
     render(); syncLists();
   }
@@ -837,6 +842,7 @@ magpie.plugin("library", (ctx) => {
       ["hooks", t("Hooks") + n("hooks")],
       ["subagents", t("Subagents") + n("subagents")],
       ["rtk", "RTK"],
+      ...(hasPi() ? [["pi", t("Pi packages")]] : []),
     ], tab, openTab);
     tabs.classList.add("lib-tabs");
     head.append(tabs);
@@ -890,6 +896,8 @@ magpie.plugin("library", (ctx) => {
     // the MCP servers alone with no agent to write to; the tab the reader
     // last picked is kept for when there is one
     if (agentless()) tab = "mcp";
+    // Pi's tab only while a Pi is here; the pick is kept for when one is
+    else if (tab === "pi" && !hasPi()) tab = "instructions";
     const head = libHead({ mcp: lib.servers.length, skills: lib.skills.length, hooks: (lib.hooks || []).length, subagents: (lib.subagents || []).length });
     page.append(head);
     head.classList.toggle("stuck", top > 0);
@@ -902,6 +910,7 @@ magpie.plugin("library", (ctx) => {
     if (tab === "instructions") renderInstructions(body);
     else if (tab === "mcp") renderServers(body);
     else if (tab === "rtk") renderRTK(body);
+    else if (tab === "pi") renderPi(body);
     else if (tab === "hooks") renderHooks(body);
     else if (tab === "subagents") renderSubagents(body);
     else renderSkills(body);
@@ -1123,6 +1132,119 @@ magpie.plugin("library", (ctx) => {
     rtkBusy.delete(a.id);
     render();
   }
+  // ---------- Pi extensions ----------
+
+  // Each Pi here (this computer's, and each WSL distro's) with the
+  // extensions and packages it loads (piext.go). One is switched off or on
+  // in its settings.json the way `pi config` does it, and copied to
+  // another Pi: a package as its entry in that Pi's settings.json, which
+  // Pi installs itself when it starts; an extension as its file or folder.
+  // leokon3 on Discord: moving an extension from the WSL Pi to Windows'.
+  const hasPi = () => !!lib && !gatewayPage() && lib.agents.some((a) => a.id.split("@")[0] === "pi" && !a.gone && !a.unseen && !isHidden(a));
+  let piView = null;       // /api/library/pi
+  const piBusy = new Set(); // "<pi> <ext or package>" being switched or copied
+  let piLoading = false;
+  async function loadPi() {
+    if (piLoading) return;
+    piLoading = true;
+    try {
+      piView = await api("library/pi");
+    } catch (e) {
+      status(e.message, "err");
+    }
+    piLoading = false;
+    if (tab === "pi" && piView) render();
+  }
+  function renderPi(body) {
+    body.append(intro(t("The extensions and packages each Pi loads. Switch one off, or copy it to another Pi: a package is added to that Pi's settings, and Pi installs it when it next starts.")));
+    if (!piView) {
+      body.append(el("div", "row skeleton"));
+      loadPi();
+      return;
+    }
+    const pis = (piView.pis || []).filter((p) => !isHidden({ id: p.id }));
+    const live = pis.filter((p) => !p.asleep && !p.err);
+    for (const p of pis) {
+      const rh = el("div", "row-head lib-pi-head");
+      rh.dataset.pi = p.id;
+      rh.append(el("span", "label", p.name), el("span", "grow"));
+      if (p.dir && !p.asleep) rh.append(pathLink(p.dir));
+      body.append(rh);
+      const list = el("div", "list lib-list lib-pi");
+      list.dataset.pi = p.id;
+      const others = live.filter((x) => x.id !== p.id);
+      if (p.asleep) {
+        list.append(el("div", "lib-none", t("WSL {distro} isn't running: magpie doesn't start it to read or change {agent}. Start the distro, then Check again.", { distro: p.wsl, agent: p.name })));
+      } else if (p.err) {
+        list.append(el("div", "lib-none lib-pi-err", t("magpie couldn't read {file}, so it lists nothing and changes nothing there: {why}", { file: "settings.json", why: p.err })));
+      } else {
+        for (const x of p.extensions || []) list.append(piRow(p, others, { ext: x.id }, x.name, tilde(x.path), x.on, null));
+        for (const k of p.packages || []) {
+          const tags = [tag(k.kind)];
+          if (!k.installed) tags.push(tag(t("Not installed"), "", t("Pi installs it when it next starts")));
+          else if (k.version) tags.push(tag("v" + k.version));
+          list.append(piRow(p, others, { pkg: k.source }, k.name, k.source, k.on, tags, k.filtered));
+        }
+        if (!(p.extensions || []).length && !(p.packages || []).length) list.append(el("div", "lib-none", t("No extensions or packages yet.")));
+      }
+      body.append(list);
+    }
+  }
+  function piRow(p, others, what, name, sub, on, tags, filtered) {
+    const key = p.id + " " + (what.ext || what.pkg);
+    const row = el("div", "row lib-row lib-pi-row");
+    row.dataset.id = what.ext || what.pkg;
+    const who = el("div", "who");
+    const n = el("div", "name mono", name);
+    for (const g of tags || []) n.append(g);
+    who.append(n, el("div", "sub mono", sub));
+    row.append(who);
+    if (others.length) {
+      const b = button(t("Copy to…"), "lib-pi-copy", () => {
+        openProtoMenu(b, others.map((x) => ({ v: x.id, name: x.name, literalName: true, note: "" })), "", (to) => copyPi(p, others.find((x) => x.id === to), what, name), "Copy to another Pi", "", "right");
+      });
+      b.disabled = piBusy.has(key);
+      row.append(b);
+    }
+    const sw = toggle(on, t("{agent} loads {name}", { agent: p.name, name }), (v) => setPi(p, what, name, v));
+    if (filtered) sw.title = t("This entry loads only some of the package; change it with pi config");
+    sw.disabled = !!filtered || piBusy.has(key);
+    row.append(sw);
+    return row;
+  }
+  async function setPi(p, what, name, on) {
+    const key = p.id + " " + (what.ext || what.pkg);
+    piBusy.add(key);
+    render();
+    try {
+      piView = await api("library/pi", { pi: p.id, ...what, on });
+      status(on ? t("{name} is on for {agent}: Pi loads it when it next starts, or at /reload", { name, agent: p.name }) : t("{name} is off for {agent}: Pi drops it when it next starts, or at /reload", { name, agent: p.name }), "ok", 6000);
+    } catch (e) {
+      status(e.message, "err", 8000);
+    }
+    piBusy.delete(key);
+    render();
+  }
+  async function copyPi(p, to, what, name) {
+    if (!to) return;
+    const key = p.id + " " + (what.ext || what.pkg);
+    piBusy.add(key);
+    render();
+    try {
+      const v = await api("library/pi/copy", { from: p.id, to: to.id, ...what });
+      piView = v;
+      status(what.pkg
+        ? t("{name} is in {agent}'s packages now: Pi installs it when it next starts", { name, agent: to.name })
+        : v.install
+          ? t("{name} is copied to {agent}. It needs its packages: run npm install in {dir} there", { name, agent: to.name, dir: v.install })
+          : t("{name} is copied to {agent}: Pi loads it when it next starts, or at /reload", { name, agent: to.name }), "ok", v.install ? 12000 : 6000);
+    } catch (e) {
+      status(e.message, "err", 8000);
+    }
+    piBusy.delete(key);
+    render();
+  }
+
   // what rtk saved day by day (week by week past 92 days), over the last
   // 30 or 90 days or since it first ran: each bar the commands' whole
   // output, the part RTK kept from the model on top of what still went

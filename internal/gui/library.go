@@ -274,6 +274,50 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			Regrouped int `json:"regrouped"`
 		}{v, n})
 	})
+	// Pi's extensions and packages, for each Pi here (this computer's and
+	// each WSL distro's): switched on or off as Pi itself does it, and
+	// copied from one Pi to another
+	mux.HandleFunc("GET /api/library/pi", func(rw http.ResponseWriter, r *http.Request) {
+		writeJSON(rw, library.ReadPiExtensions())
+	})
+	mux.HandleFunc("POST /api/library/pi", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Pi, Ext, Pkg string
+			On           bool
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		var v *library.PiExtensions
+		var err error
+		switch {
+		case in.Ext != "" && in.Pkg == "":
+			v, err = library.SetPiExtension(in.Pi, in.Ext, in.On)
+		case in.Pkg != "" && in.Ext == "":
+			v, err = library.SetPiPackage(in.Pi, in.Pkg, in.On)
+		default:
+			err = errors.New("name one extension or one package")
+		}
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, v)
+	})
+	mux.HandleFunc("POST /api/library/pi/copy", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ From, To, Ext, Pkg string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		v, err := library.CopyPi(in.From, in.To, in.Ext, in.Pkg)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, v)
+	})
 	// RTK:which agents have its hook, switching one on or off, and
 	// installing rtk when the page is asked to
 	mux.HandleFunc("GET /api/library/rtk", func(rw http.ResponseWriter, r *http.Request) {

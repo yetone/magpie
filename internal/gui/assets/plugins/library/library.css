@@ -855,3 +855,7 @@ body.window .lib-list .lib-row { --lib-indent: 38px; }
 .lib-foundmore span { display: inline-flex; }
 .lib-foundmore.open .chev { transform: rotate(180deg); }
 @media (hover: hover) and (pointer: fine) { .lib-foundmore:hover { color: var(--fg); background: var(--card-2); } }
+/* Pi's extensions: a heading per Pi, its path beside it */
+.lib-pi-head > .lib-path { flex: 0 1 auto; min-width: 0; }
+.lib-pi-row > .lib-pi-copy { flex: none; }
+.lib-pi + .lib-pi-head { margin-top: 18px; }

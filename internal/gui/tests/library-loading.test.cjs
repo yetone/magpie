@@ -90,7 +90,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     open();
     await v.locator(".lib-head .lib-more:not([disabled])").waitFor();
     assert.equal(await v.locator(".lib-skel").count(), 0, "the outline goes");
-    assert.deepEqual(await v.locator(".lib-tabs .opt").allTextContents(), ["Instructions", "MCP servers · 1", "Skills · 1", "Hooks", "Subagents", "RTK"]);
+    assert.deepEqual(await v.locator(".lib-tabs .opt").allTextContents(), ["Instructions", "MCP servers · 1", "Skills · 1", "Hooks", "Subagents", "RTK", "Pi packages"]);
     assert.equal(await v.locator(".lib-tabs .opt.on").textContent(), "Instructions");
     assert.equal(await v.locator(".lib-head .lib-more").getAttribute("title"), "~/.magpie/library");
     const after = await v.locator(".lib-tabs").boundingBox();
