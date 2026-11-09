@@ -246,6 +246,13 @@ func libSaid(res *library.Result, done string) (string, bool) {
 	if len(res.Installed) == 0 && len(res.Had) > 0 {
 		done = strings.Join(res.Had, ", ") + " in the library already"
 	}
+	// a skill from a folder, linked to the one installed (skill_link.go)
+	if len(res.Installed) == 0 && len(res.Linked) > 0 {
+		done = strings.Join(res.Linked, ", ") + " updates from GitHub now"
+	}
+	if len(res.LinkedKept) > 0 {
+		done += " · files of their own kept with the backups: " + strings.Join(res.LinkedKept, ", ")
+	}
 	for _, p := range res.Skipped {
 		done += " · " + strings.TrimPrefix(p.What, "skill:") + " skipped: " + p.Error
 	}
@@ -456,6 +463,10 @@ func (m *model) openProbe(p *library.Probe) {
 			note = "in the library as " + c.As + " · " + note
 		case c.Have:
 			note = "in the library already · " + note
+		case c.Links:
+			// the library's by its name came from a folder: this one
+			// takes its place, and it updates from GitHub from then on
+			note = "links the library's to GitHub · " + note
 		case c.As != "":
 			// another skill from elsewhere has its name
 			note = "adds as " + c.As + " · " + note

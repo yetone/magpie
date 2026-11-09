@@ -43,6 +43,12 @@ type Result struct {
 	Installed []string  `json:"installed,omitempty"`
 	Had       []string  `json:"had,omitempty"`
 	Skipped   []Problem `json:"skipped,omitempty"`
+	// Linked are, for skills installed from GitHub, the ones the library
+	// had from a folder by that name that now follow GitHub, with its
+	// files (skill_link.go); LinkedKept those of them whose own files
+	// weren't GitHub's, kept with the backups
+	Linked     []string `json:"linked,omitempty"`
+	LinkedKept []string `json:"linkedKept,omitempty"`
 	// dropped are the servers taken out of an agent's config, as it had
 	// them, whose processes go once no agent runs them (mcp_reap.go)
 	dropped []*Server

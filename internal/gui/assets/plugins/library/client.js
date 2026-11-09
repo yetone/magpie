@@ -592,10 +592,13 @@ magpie.plugin("library", (ctx) => {
     // skills installed together (lc on Discord): those the library had
     // already, and those left out because another by that name is in the
     // way, are named, beside how many were installed
-    const had = res.had || [], skipped = res.skipped || [];
-    if (had.length || skipped.length) {
+    const had = res.had || [], skipped = res.skipped || [], linked = res.linked || [];
+    if (had.length || skipped.length || linked.length) {
       const n = res.installed?.length || 0, parts = [];
       if (n) parts.push(n === 1 ? t("1 skill installed") : t("{n} skills installed", { n }));
+      // a skill from a folder, linked to the one installed (skill_link.go)
+      if (linked.length) parts.push(t("updates from GitHub now: {names}", { names: linked.join(", ") }));
+      if (res.linkedKept?.length) parts.push(t("files of their own kept with the backups: {names}", { names: res.linkedKept.join(", ") }));
       if (had.length) parts.push(t("already in the library: {names}", { names: had.join(", ") }));
       for (const p of skipped) parts.push(t("{name} skipped: {error}", { name: p.what.replace(/^skill:/, ""), error: p.error }));
       status(parts.join(" · "), skipped.length ? "warn" : "ok", skipped.length ? 12000 : 6000);
@@ -5617,6 +5620,9 @@ magpie.plugin("library", (ctx) => {
         // this one is in the library, or goes in beside it, by its own
         if (x.have && x.as) r.append(tag(t("In the library as {name}", { name: x.as }), "lib-as", t("In the library as {name}", { name: x.as })));
         else if (x.have) r.append(tag(t("in the library"), ""));
+        // the library's by that name came from a folder (biubiu8802 on
+        // X): this one takes its place, and it follows GitHub from then on
+        else if (x.links) r.append(tag(t("links to GitHub"), "lib-as", t("The library's {name} came from a folder. This one takes its place and it updates from GitHub from then on; files of its own that differ are kept with the backups.", { name: x.name })));
         else if (x.as) r.append(tag(t("adds as {name}", { name: x.as }), "lib-as", t("The library has another skill called {name}, from elsewhere. This one goes in beside it as {as}.", { name: x.name, as: x.as })));
         list.append(r);
       }

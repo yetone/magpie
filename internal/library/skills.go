@@ -958,6 +958,11 @@ type Candidate struct {
 	// As is the name the library has it by, or would add it by, when
 	// that isn't Name: another skill from elsewhere has that name
 	As string `json:"as,omitempty"`
+	// Links is that the library's skill by its name came from a folder
+	// or an agent, not from anywhere it can be updated from: installing
+	// this one puts its files and source in that one's place, so it
+	// updates from here (skill_link.go)
+	Links bool `json:"links,omitempty"`
 }
 
 // Probe is what was found at a source.
@@ -1444,8 +1449,10 @@ func probeSkills(input, name string) (*Probe, error) {
 				if s.Name != c.Name {
 					p.Candidates[i].As = s.Name
 				}
-			} else if l.skill(c.Name) != nil {
-				if p.src.remote() {
+			} else if s := l.skill(c.Name); s != nil {
+				if followsHere(s, p.src, from) {
+					p.Candidates[i].Links = true
+				} else if p.src.remote() {
 					p.Candidates[i].As = l.freeSkillName(c.Name, p.src)
 				} else {
 					// a folder of the user's isn't added beside it
@@ -1502,6 +1509,10 @@ func InstallSkills(input string, paths, agents []string) (*Result, error) {
 type installed struct {
 	added, had []string
 	skipped    []Problem
+	// linked are the skills the library had from a folder that follow the
+	// source now (skill_link.go), and kept those of them whose own files
+	// weren't the source's: they went to the backups
+	linked, kept []string
 }
 
 func (in *installed) skip(name string, err error) {
@@ -1518,13 +1529,14 @@ func installChange(f func(l *Library, in *installed) error) (*Result, error) {
 		if err := f(l, in); err != nil {
 			return err
 		}
-		if len(in.added) == 0 && len(in.had) == 0 && len(in.skipped) > 0 {
+		if len(in.added) == 0 && len(in.had) == 0 && len(in.linked) == 0 && len(in.skipped) > 0 {
 			return errors.New(in.skipped[0].Error)
 		}
 		return nil
 	})
 	if res != nil {
 		res.Installed, res.Had, res.Skipped = in.added, in.had, in.skipped
+		res.Linked, res.LinkedKept = in.linked, in.kept
 	}
 	return res, err
 }
@@ -1573,11 +1585,34 @@ func installFrom(l *Library, p *Probe, paths, agents []string, shown bool, in *i
 		// here; another by that name goes in beside it, by a name of its
 		// own (skill_beside.go)
 		if s := l.hadSkill(src, c, from); s != nil {
+			// one of the library's own by its name, the very same files,
+			// is that skill, and updates from there from now on (as
+			// noteFrom binds it when probed): another by that name from
+			// elsewhere goes in beside it, not in its place
+			if s.Source == nil && src.Kind == "github" && !linked(skillDir(s.Name)) {
+				if _, err := l.linkSkill(s, src, c.Path, from, nil); err != nil {
+					in.skip(c.Name, err)
+					continue
+				}
+			}
 			in.had = append(in.had, s.Name)
 			l.offered(p, c.Path, shown)
 			continue
 		}
 		name := c.Name
+		if s := l.skill(name); s != nil && followsHere(s, src, from) {
+			kept, err := l.linkSkill(s, src, c.Path, from, agents)
+			if err != nil {
+				in.skip(c.Name, err)
+				continue
+			}
+			in.linked = append(in.linked, name)
+			if kept {
+				in.kept = append(in.kept, name)
+			}
+			l.offered(p, c.Path, shown)
+			continue
+		}
 		if l.skill(name) != nil {
 			// the user's own folder is linked as it is, and its SKILL.md
 			// can't be named apart from the other: an agent would see two

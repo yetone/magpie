@@ -160,7 +160,11 @@ func TestSameFilesByNameAreHad(t *testing.T) {
 	if len(r.Installed) != 0 || !slices.Equal(r.Had, []string{"skill-creator"}) {
 		t.Errorf("installed %v had %v", r.Installed, r.Had)
 	}
-	// another one by that name, with no source, is another skill
+	// the one had is acme's now, and updates from there; another by that
+	// name from elsewhere is another skill
+	if l, _ := load(); l.skill("skill-creator").Source == nil || l.skill("skill-creator").Source.Repo != "acme/skills" {
+		t.Errorf("the one had is %+v", l.skill("skill-creator").Source)
+	}
 	r = ok(t)(InstallSkills("openai/skills", []string{"skills/skill-creator"}, nil))
 	if !slices.Equal(r.Installed, []string{"skill-creator-openai"}) {
 		t.Errorf("openai's: installed %v had %v", r.Installed, r.Had)
