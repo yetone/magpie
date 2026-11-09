@@ -361,6 +361,16 @@ var notYet = map[string]string{
 	"POST /api/library/rtk/upgrade":              L,  // library.go
 	"POST /api/library/skills/check":             L,  // library.go
 	"POST /api/library/skills/probe":             L,  // library.go
+	"GET /api/memory":                            L,  // memory.go
+	"POST /api/memory":                           L,  // memory.go
+	"POST /api/memory/digest":                    L,  // memory.go
+	"POST /api/memory/remove":                    L,  // memory.go
+	"GET /api/memory/distill":                    L,  // memory_distill.go
+	"POST /api/memory/distill":                   L,  // memory_distill.go
+	"POST /api/memory/distill/run":               L,  // memory_distill.go
+	"POST /api/memory/dream":                     L,  // memory_distill.go
+	"POST /api/memory/dream/run":                 L,  // memory_distill.go
+	"POST /api/memory/dream/undo":                L,  // memory_distill.go
 	"POST /api/library/skills/regroup":           W,  // library.go
 	"GET /api/omarchy/widget":                    W,  // omarchy.go
 	"POST /api/omarchy/widget":                   W,  // omarchy.go
