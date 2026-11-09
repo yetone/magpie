@@ -23296,6 +23296,7 @@ function renderBuiltins(box, list, done) {
     const who = el("div", "who");
     who.append(el("div", "name", t(f.name)), el("div", "sub", t(f.sub)));
     if (f.inUse > 0) who.append(el("div", "sub feat-why", t(f.use, { n: f.inUse })));
+    featWho[f.id]?.(who, f); // a plugin's own line (plugins/search)
     const b = el("button", "lib-switch use-credits" + (f.on ? " on" : ""));
     b.type = "button";
     b.setAttribute("role", "switch");
@@ -23343,6 +23344,7 @@ function renderBuiltins(box, list, done) {
   box.replaceChildren(...out, ...rows);
 }
 window.renderBuiltins = renderBuiltins;
+const featWho = {};
 // openSettings: the Settings page, in the window (the panel opens it there)
 function openSettings() {
   if (mode !== "window") { api("window/main?view=settings", {}); return; }

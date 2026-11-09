@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/pluginrt"
+	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // Plugins › Built-in (Lxxyx on X: "功能太多了"): magpie's built-in plugins
@@ -45,6 +48,11 @@ type builtinJSON struct {
 	// Broken is plugins.yml's error when it can't be read: every
 	// plugin runs as it did, and no switch can be changed
 	Broken string `json:"broken,omitempty"`
+	// Searches is, for Web search while it is on, what a model that
+	// can't search is searched with now, in the order asked; none: nothing
+	// searches yet (netube99 on X: the switch, the Library's search
+	// servers and Settings didn't say which does what)
+	Searches []string `json:"searches,omitempty"`
 }
 
 // builtinsState composes plugins.yml again, brings the runtime to it, and
@@ -68,6 +76,9 @@ func builtinsState() []builtinJSON {
 		if err != nil {
 			j.Broken, j.Chosen = err.Error(), j.On
 		}
+		if j.ID == "search" && j.On {
+			j.Searches = searchesNow()
+		}
 		switch {
 		case j.InUse == 1:
 			j.Use = m.One
@@ -77,6 +88,25 @@ func builtinsState() []builtinJSON {
 		out = append(out, j)
 	}
 	return out
+}
+
+// searchesNow names the provider that searches for a model that can't
+// and the search APIs on, in the order a search asks them.
+func searchesNow() []string {
+	var apis []string
+	for _, a := range provider.SearchAPIs() {
+		if v, ok := provider.SearchVendorOf(a.Vendor); ok {
+			apis = append(apis, v.Name)
+		}
+	}
+	by := gateway.Searcher()
+	switch {
+	case by == "":
+		return apis
+	case settings.Load().SearchFirst == "api":
+		return append(apis, by)
+	}
+	return append([]string{by}, apis...)
 }
 
 // builtinsOff are the ids of the plugins the window leaves out now, for

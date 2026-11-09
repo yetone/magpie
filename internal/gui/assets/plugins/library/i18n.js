@@ -2,6 +2,8 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Agents call it themselves, beside magpie's web search, which doesn't use it.": "Agent 会自己直接调用它，与 magpie 的联网搜索各管各的，magpie 的联网搜索不会用到它。",
+    "As a search API in Settings → Models → Web search, {name} searches for every model, with no server to add.": "若在 设置 → 模型 → 联网搜索 中把 {name} 添加为搜索 API，它会为所有模型搜索，无需添加服务器。",
     "Skill router": "Skill 路由",
     "Each agent is given one skill, magpie-skills, that lists its skills. It reads a skill when a task fits it, so its prompt carries one description instead of every skill's. Restart an agent for it to read the change.": "每个 Agent 只拿到一个 Skill：magpie-skills，它列出这个 Agent 的全部 Skill。任务用得上某个 Skill 时，Agent 才去读它，所以提示词里只有一条描述，而不是每个 Skill 各一条。重启 Agent 后生效。",
     "Give each agent one skill, magpie-skills, that lists its skills, in place of each one: its prompt carries one description instead of every skill's.": "给每个 Agent 一个 Skill：magpie-skills，由它列出这个 Agent 的 Skill，代替逐个给出：提示词里只有一条描述，而不是每个 Skill 各一条。",
@@ -843,6 +845,8 @@ magpie.strings({
     "{name} is copied to {agent}: Pi loads it when it next starts, or at /reload": "{name} 已复制到 {agent}：Pi 下次启动或 /reload 时加载它",
   },
   "zh-TW": {
+    "Agents call it themselves, beside magpie's web search, which doesn't use it.": "Agent 會自己直接呼叫它，與 magpie 的聯網搜尋各自獨立，magpie 的聯網搜尋不會用到它。",
+    "As a search API in Settings → Models → Web search, {name} searches for every model, with no server to add.": "若在 設定 → 模型 → 聯網搜尋 中把 {name} 新增為搜尋 API，它會為所有模型搜尋，無需新增伺服器。",
     "Skill router": "Skill 路由",
     "Each agent is given one skill, magpie-skills, that lists its skills. It reads a skill when a task fits it, so its prompt carries one description instead of every skill's. Restart an agent for it to read the change.": "每個 Agent 只拿到一個 Skill：magpie-skills，它列出這個 Agent 的全部 Skill。任務用得上某個 Skill 時，Agent 才去讀它，所以提示詞裡只有一條描述，而不是每個 Skill 各一條。重新啟動 Agent 後生效。",
     "Give each agent one skill, magpie-skills, that lists its skills, in place of each one: its prompt carries one description instead of every skill's.": "給每個 Agent 一個 Skill：magpie-skills，由它列出這個 Agent 的 Skill，取代逐一給出：提示詞裡只有一條描述，而不是每個 Skill 各一條。",
@@ -1684,6 +1688,8 @@ magpie.strings({
     "{name} is copied to {agent}: Pi loads it when it next starts, or at /reload": "{name} 已複製到 {agent}：Pi 下次啟動或 /reload 時載入它",
   },
   ja: {
+    "Agents call it themselves, beside magpie's web search, which doesn't use it.": "エージェントが自分で直接呼び出します。magpie のウェブ検索とは別のもので、magpie のウェブ検索はこれを使いません。",
+    "As a search API in Settings → Models → Web search, {name} searches for every model, with no server to add.": "設定 → モデル → ウェブ検索 で {name} を検索 API として追加すると、すべてのモデルのために検索し、サーバーを追加する必要はありません。",
     "Skill router": "スキルルーター",
     "Each agent is given one skill, magpie-skills, that lists its skills. It reads a skill when a task fits it, so its prompt carries one description instead of every skill's. Restart an agent for it to read the change.": "各エージェントには magpie-skills というスキルを 1 つだけ渡し、そこにエージェントのスキルを一覧します。タスクに合うときだけスキルを読むので、プロンプトには全スキルの説明ではなく 1 つの説明だけが入ります。変更を読み込むにはエージェントを再起動してください。",
     "Give each agent one skill, magpie-skills, that lists its skills, in place of each one: its prompt carries one description instead of every skill's.": "各エージェントにスキルを 1 つずつ渡す代わりに、それらを一覧する magpie-skills を 1 つだけ渡します。プロンプトには全スキルの説明ではなく 1 つの説明だけが入ります。",
@@ -2525,6 +2531,8 @@ magpie.strings({
     "{name} is copied to {agent}: Pi loads it when it next starts, or at /reload": "{name} を {agent} にコピーしました。Pi は次回起動時か /reload で読み込みます",
   },
   de: {
+    "Agents call it themselves, beside magpie's web search, which doesn't use it.": "Agenten rufen ihn selbst auf, neben magpies Websuche, die ihn nicht nutzt.",
+    "As a search API in Settings → Models → Web search, {name} searches for every model, with no server to add.": "Als Such-API unter Einstellungen → Modelle → Websuche sucht {name} für jedes Modell, ohne einen Server hinzuzufügen.",
     "Skill router": "Skill-Router",
     "Each agent is given one skill, magpie-skills, that lists its skills. It reads a skill when a task fits it, so its prompt carries one description instead of every skill's. Restart an agent for it to read the change.": "Jeder Agent erhält eine einzige Skill, magpie-skills, die seine Skills auflistet. Er liest eine Skill erst, wenn eine Aufgabe dazu passt, sodass sein Prompt eine Beschreibung statt der aller Skills enthält. Starte einen Agenten neu, damit er die Änderung liest.",
     "Give each agent one skill, magpie-skills, that lists its skills, in place of each one: its prompt carries one description instead of every skill's.": "Gib jedem Agenten statt jeder einzelnen Skill eine Skill, magpie-skills, die seine Skills auflistet: Sein Prompt enthält eine Beschreibung statt der aller Skills.",
