@@ -23167,6 +23167,9 @@ async function show(v) {
       if (!await cancelEdit(true)) return false;
     } else if (!$("#modal").hidden && !$("#modal").classList.contains("out")) {
       if (view === "library" && modalFormDirty() && !(await confirmDiscard())) return false;
+      // a dialog closed by leaving its page asks nothing more: left set, it
+      // took the next page's Escape (#3779, the plugin page's Sign in)
+      confirmAsk = null;
       if (view === "library") magpie.call("library", "close"); else closeModal();
     }
     if (rtView(view) && magpie.call("routing", "dirty")) {

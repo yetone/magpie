@@ -1766,9 +1766,12 @@
     const bar = el("div", "bar");
     bar.append(el("span", "note", t("Plugins are other people's code: they sign in and make the requests, or see them as middleware.")), el("span", "grow"));
     const close = el("button", "text", t("Close"));
-    close.onclick = () => { stop(); closeModal(); };
+    close.onclick = () => { stop(); closeConfirmAsk(); };
     bar.append(close);
     ed.append(bar);
+    // Escape and the backdrop close it, as every dialog borrowing #modal
+    // outside Providers (#3779)
+    confirmAsk = ed;
     openModal(ed);
     // the button follows an install or a sign-in made while it's open
     const tick = setInterval(() => { if (!ed.isConnected) return stop(); redrawAct(); }, 600);
