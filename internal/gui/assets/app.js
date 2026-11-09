@@ -6845,11 +6845,7 @@ function segs(items, current, onPick) {
   const box = el("div", "segs");
   const kind = items.map(([id]) => id).join("|");
   box.dataset.kind = kind;
-  // where its thumb was is remembered per control, not per set of options:
-  // every Off/On on the settings page has the same, and each would slide in
-  // from where the one clicked was as the page redraws. A control is known
-  // by its place: the nearest element with an id, and which of the same
-  // options it is there; one not in the page yet by itself only.
+  // its thumb is kept by its place (segsPlace), not its options
   let key = kind + "#" + ++segsMade;
   for (const [id, name] of items) {
     const b = el("button", "opt" + (id === current ? " on" : ""), name);
@@ -6865,22 +6861,31 @@ function segs(items, current, onPick) {
     };
     box.append(b);
   }
-  queueMicrotask(() => { // once it is in the page
-    key = segsPlace(box) || key;
-    slide(box, key);
-  });
+  if (!segsDue.length) queueMicrotask(segsFlush);
+  segsDue.push([box, (place) => (key = place || key)]);
   return box;
 }
+// controls placed and slid together once in the page (#5310)
+const segsDue = [];
+function segsFlush() {
+  const due = segsDue.splice(0), homes = new Map();
+  slides(due.map(([box, place]) => [box, place(segsPlace(box, homes))]));
+}
 // where a control is: the nearest id, and which of its kind there; "" if not in the page
-function segsPlace(box) {
+function segsPlace(box, homes = new Map()) {
   const home = box.isConnected && box.parentElement.closest("[id]");
-  return home ? box.dataset.kind + "@" + home.id + ":" + [...home.querySelectorAll(".segs")].filter((x) => x.dataset.kind === box.dataset.kind).indexOf(box) : "";
+  if (!home) return "";
+  let at = homes.get(home);
+  if (!at) {
+    const n = {};
+    homes.set(home, (at = new Map()));
+    for (const x of home.querySelectorAll(".segs")) at.set(x, (n[x.dataset.kind] ??= -1, ++n[x.dataset.kind]));
+  }
+  return box.dataset.kind + "@" + home.id + ":" + at.get(box);
 }
 // A tap with a mouseup and no click (refeccd, Tap to click) clicks its control.
-// WebKit before bug 329642 may give a tap, while a text field has focus, let
-// go before pressed: a press 300ms/12px from a lone release, not let go in
-// 100ms (tapBack), clicks its control, and the click the next release pairs
-// with it is dropped.
+// WebKit before bug 329642 may, a text field focused, release a tap before its
+// press: such a press (tapBack) clicks its control, and its paired click is dropped.
 let tapBack = false;
 {
   let d, clicked, held = false, loose = null, eat = false, wait = 0;
@@ -6927,12 +6932,8 @@ let tapBack = false;
   }, true);
 }
 
-// A press on an option still picks it when the control is drawn again before
-// the button is let go (a save's answer redraws Settings): down and up were on
-// two buttons, so no click came. Let go on the same option of the same
-// control, the new one is clicked; anywhere else, nothing is. A touch tap is
-// the browser's; a mouse tap that slid off its option within tapLike's bounds
-// still picks it.
+// A press still picks its option when the control is redrawn before it is let
+// go (no click came), or a mouse tap slid off it within tapLike's bounds.
 let segsPress = null;
 const optAt = (b) => [...b.parentElement.querySelectorAll(":scope > .opt")].indexOf(b);
 // the same control: same place, as many of its kind, rows the same by data-*
@@ -6971,11 +6972,8 @@ addEventListener("pointerup", (e) => {
   });
 }, true);
 
-// An installed list's order, the reader's pick, remembered for each list
-// (#481): its names A→Z or Z→A, and for a list that has one, a view of its
-// own first (the skills by where they came from). sortOf(list) is the pick,
-// sortBy(list, …) the control; a list missing or unreadable in storage
-// takes the first.
+// An installed list's order, remembered for each list (#481): sortOf(list) is
+// the pick (the first if none is stored), sortBy(list, …) the control.
 const NAME_SORTS = [["az", "A→Z"], ["za", "Z→A"]];
 function sortOf(list, items = NAME_SORTS) {
   let v = "";
@@ -9083,9 +9081,7 @@ function closeModal() {
     calm() ? d.animate([{ opacity: 0 }], { duration: 140, fill: "forwards" })
       : d.animate(from ? [{ transform: was || "none", clipPath: clip }, morphFrom(from, to)] : [{ transform: "translateY(14px) scale(.95)" }], shape),
   ];
-  // it fades as it lands, the last part of the time: on the shape's own
-  // easing an offset is of the way, and IOS_EASE has gone ~90% of it by half
-  // the time, so a dialog folding back was all but gone halfway there
+  // it fades as it lands, linear: on IOS_EASE it was all but gone halfway
   if (!calm()) moves.push(d.animate([{ offset: from ? .6 : .2, opacity: getComputedStyle(d).opacity, easing: "ease-in" }, { opacity: 0 }], { ...shape, easing: "linear" }));
   const done = modalDone = Promise.all(moves.map((a) => a.finished)).then(() => {
     if (modalDone !== done) return;
@@ -9117,11 +9113,8 @@ const modalBackdrop = backdropClick($("#modal"));
 $("#modal").onclick = (e) => { if (modalBackdrop(e)) cancelEdit(); };
 
 // ---------- sliding thumb ----------
-// Pills (the nav, every segmented control) have one thumb that glides to
-// the selected option, only when the pick changes and from where it is on
-// screen: a control redrawn on save (all of Settings is) takes the old one's
-// thumb, glide and all. One drawn hidden is placed once shown (thumbFit).
-const thumbs = new Map(); // control position → { th, pick, to }: its thumb, the option it is under or going to, and where that is
+// A control's thumb glides to the pick from where it is; one redrawn takes the old one's
+const thumbs = new Map(); // control position → { th, pick, to }
 const THUMB_MS = 280, THUMB_EASE = "cubic-bezier(.2, .8, .2, 1)"; // --ease
 const thumbKeys = new WeakMap(); // box → its key, for thumbFit
 function thumbKey(box, choices) {
@@ -9132,37 +9125,43 @@ function thumbKey(box, choices) {
   }
   return null;
 }
-// where the thumb goes under the option picked; null while it isn't laid out
+// where the thumb goes under the option picked; null if not laid out
+// Rects, unscaled: WebKit's offsetLeft/Top and scrollLeft walk the siblings before (#5310)
 function thumbTo(box, on) {
-  if (!on.offsetParent || !on.offsetWidth) return null;
-  const to = { x: on.offsetLeft, w: on.offsetWidth };
-  // a strip that wraps (the editor's Base URL APIs, narrow): the row of
-  // the one picked (top: 2px is the first's), and that row's height, not
-  // the strip's
-  if (box.clientHeight > on.offsetHeight + 8) Object.assign(to, { y: on.offsetTop - 2, h: on.offsetHeight });
+  const w = on.offsetWidth;
+  if (!w) return null;
+  const b = box.getBoundingClientRect(), r = on.getBoundingClientRect(), s = box.offsetWidth ? b.width / box.offsetWidth : 1;
+  const to = { x: Math.round((r.left - b.left) / s - box.clientLeft + (box.scrollWidth > box.clientWidth ? box.scrollLeft : 0)), w };
+  // a strip that wraps: the picked one's row (top: 2px is the first's) and height
+  if (box.clientHeight > on.offsetHeight + 8) Object.assign(to, { y: Math.round((r.top - b.top) / s - box.clientTop + (box.scrollHeight > box.clientHeight ? box.scrollTop : 0)) - 2, h: on.offsetHeight });
   return to;
 }
 const thumbAt = (p) => ({ transform: p.y ? `translate(${p.x}px, ${p.y}px)` : `translateX(${p.x}px)`, width: p.w + "px" });
 const thumbGlide = (th) => th.getAnimations().find((a) => a.id === "thumb" && a.playState === "running");
-// a thumb put at p at once, any glide of it stopped
-function thumbPut(th, p) {
-  for (const a of th.getAnimations()) if (a.id === "thumb") a.cancel();
-  th.classList.add("still");
-  Object.assign(th.style, thumbAt(p), { height: p.h ? p.h + "px" : "" });
-  void th.offsetWidth;
-  th.classList.remove("still");
+// thumbs put at once, glides stopped
+function thumbPut(th, p) { thumbsPut([[th, p]]); }
+function thumbsPut(list) {
+  for (const [th, p] of list) {
+    for (const a of th.getAnimations()) if (a.id === "thumb") a.cancel();
+    th.classList.add("still");
+    Object.assign(th.style, thumbAt(p), { height: p.h ? p.h + "px" : "" });
+    thumbPlaced.set(th, p);
+  }
+  if (list.length) void list[0][0].offsetWidth;
+  for (const [th] of list) th.classList.remove("still");
 }
 // where a thumb in the page is drawn now, partway through a glide included
+const thumbPlaced = new WeakMap();
 function thumbNow(th) {
   if (!th.style.width || !th.isConnected) return null;
+  const p = thumbPlaced.get(th);
+  if (p && !thumbGlide(th)) return p;
   const cs = getComputedStyle(th), m = new DOMMatrixReadOnly(cs.transform === "none" ? undefined : cs.transform);
   return { x: m.m41, y: m.m42, w: parseFloat(cs.width), h: th.style.height ? parseFloat(cs.height) : 0 };
 }
-// which option is picked: its place among the options
 const thumbPick = (box, on) => [...box.children].filter((c) => !c.classList.contains("thumb")).indexOf(on);
 const thumbSame = (a, b) => Math.abs(a.x - b.x) < 0.5 && Math.abs((a.y || 0) - (b.y || 0)) < 0.5 && Math.abs(a.w - b.w) < 0.5;
-// a control shown, or sized again (the fonts come in, the language changes,
-// the window narrows, on its resize first): its thumb is put under its option
+// a control shown or sized again: its thumb put under its option
 function thumbRefit(box) {
   const th = box.querySelector(":scope > .thumb"), on = box.querySelector(":scope > .on"), to = th && on && thumbTo(box, on);
   if (!to) return;
@@ -9175,33 +9174,45 @@ const thumbFit = new ResizeObserver((es) => {
   for (const { target: box } of es) box.isConnected ? thumbRefit(box) : thumbFit.unobserve(box);
 });
 addEventListener("resize", () => document.querySelectorAll(".segs").forEach(thumbRefit));
-function slide(box, key) {
-  const control = thumbKey(box, key);
-  const last = control && thumbs.get(control);
-  let th = box.querySelector(":scope > .thumb");
-  if (!th) {
-    // drawn again: the thumb of the control it replaces, glide and all
-    th = last?.th && !last.th.isConnected ? last.th : el("span", "thumb");
-    box.prepend(th);
+function slide(box, key) { slides([[box, key]]); }
+// every read, then every write
+function slides(list) {
+  const due = [];
+  for (const [box, key] of list) {
+    const control = thumbKey(box, key);
+    const last = control && thumbs.get(control);
+    let th = box.querySelector(":scope > .thumb");
+    if (!th) {
+      // drawn again: the thumb of the control it replaces, glide and all
+      th = last?.th && !last.th.isConnected ? last.th : el("span", "thumb");
+      box.prepend(th);
+    }
+    thumbKeys.set(box, key);
+    thumbFit.observe(box);
+    const on = box.querySelector(":scope > .on");
+    if (!on) { th.style.opacity = "0"; continue; }
+    th.style.opacity = "";
+    due.push({ box, control, last, th, on });
   }
-  thumbKeys.set(box, key);
-  thumbFit.observe(box);
-  const on = box.querySelector(":scope > .on");
-  if (!on) { th.style.opacity = "0"; return; }
-  th.style.opacity = "";
-  const to = thumbTo(box, on);
-  if (!to) return; // hidden: thumbFit puts it once it is shown
-  const pick = thumbPick(box, on);
-  if (control) thumbs.set(control, { th, pick, to });
-  // already there, or on its way there
-  if (last?.th === th && thumbSame(last.to, to) && (thumbGlide(th) || (th.style.width && thumbSame(thumbNow(th), to)))) return;
-  const from = thumbNow(th);
-  thumbPut(th, to);
-  if (!from || thumbSame(from, to)) return;
-  // the height is the strip's unless it wraps: only a wrapped one's glides
-  const f = thumbAt(from), t = thumbAt(to);
-  if (from.h && to.h) { f.height = from.h + "px"; t.height = to.h + "px"; }
-  th.animate([f, t], { duration: THUMB_MS, easing: THUMB_EASE, id: "thumb" });
+  for (const d of due) d.to = thumbTo(d.box, d.on);
+  const moves = [];
+  for (const d of due) {
+    const { box, control, last, th, on, to } = d;
+    if (!to) continue; // hidden: thumbFit puts it once it is shown
+    d.set = control && [control, { th, pick: thumbPick(box, on), to }];
+    // already there, or on its way there
+    if (last?.th === th && thumbSame(last.to, to) && (thumbGlide(th) || (th.style.width && thumbSame(thumbNow(th), to)))) continue;
+    moves.push({ th, from: thumbNow(th), to });
+  }
+  for (const d of due) if (d.set) thumbs.set(...d.set);
+  thumbsPut(moves.map(({ th, to }) => [th, to]));
+  for (const { th, from, to } of moves) {
+    if (!from || thumbSame(from, to)) continue;
+    // the height is the strip's unless it wraps: only a wrapped one's glides
+    const f = thumbAt(from), t = thumbAt(to);
+    if (from.h && to.h) { f.height = from.h + "px"; t.height = to.h + "px"; }
+    th.animate([f, t], { duration: THUMB_MS, easing: THUMB_EASE, id: "thumb" });
+  }
 }
 
 const PROTOS = [["chat", "OpenAI", "Chat Completions — most agents"], ["responses", "Responses", "OpenAI Responses — what Codex speaks"], ["anthropic", "Anthropic", "Anthropic Messages — what Claude Code speaks"], ["gemini", "Gemini", "Gemini generateContent — what the Gemini CLI speaks"], ["decide", "System One", "A decision API on System One (TypeSafe's Jev, a gateway's, or Bailian's decision model) — what a routing group asks as a turn begins"]];
