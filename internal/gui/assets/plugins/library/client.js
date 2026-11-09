@@ -1709,9 +1709,7 @@ magpie.plugin("library", (ctx) => {
       const rh = el("div", "row-head");
       rh.append(el("span", "label", t("In your agents")), el("span", "grow"), el("span", "note", t("not in the library — bring one in to manage it here")));
       body.append(rh);
-      const list = el("div", "list lib-list");
-      for (const f of found) list.append(foundServerRow(f));
-      body.append(list);
+      body.append(foldedFound("mcp", found.map(foundServerRow)));
     }
     if (!agentless() && (lib.servers.length || lib.projects.length)) renderProjects(body, "mcp");
     const skip = shownAgents().filter((a) => !a.mcp);
@@ -3747,9 +3745,8 @@ magpie.plugin("library", (ctx) => {
         rh.append(foundPickButton(), all);
       }
       body.append(rh);
-      const list = el("div", "list lib-list");
-      for (const f of lib.foundSkills) list.append(foundSkillRow(f));
-      body.append(list);
+      // picking, every row is there to be picked
+      body.append(foldedFound("skills", lib.foundSkills.map(foundSkillRow), pickFound));
       if (pickFound) body.append(foundPickBar());
     }
     if (lib.skills.length || lib.projects.length) renderProjects(body, "skills");
@@ -6081,6 +6078,33 @@ magpie.plugin("library", (ctx) => {
   // the model doesn't use it on its own, only a /name the user types
   function manualTag(name) {
     return tag(t("Manual only"), "lib-manual", t("Its SKILL.md sets disable-model-invocation: Claude Code runs it only when you type /{name}, never on its own.", { name }));
+  }
+
+  // What the agents have and the library doesn't is a list to go through,
+  // not the page: a long one shows its first few rows and how many more
+  // there are, so it doesn't push everything under it a screen down
+  const FOUND_SHOWN = 5;
+  const foundOpen = new Set(); // "skills", "mcp": shown whole, for this session
+  function foldedFound(kind, rows, whole) {
+    const list = el("div", "list lib-list");
+    // two or fewer hidden aren't worth a click
+    const folds = !whole && rows.length > FOUND_SHOWN + 2;
+    const open = !folds || foundOpen.has(kind);
+    list.append(...(open ? rows : rows.slice(0, FOUND_SHOWN)));
+    if (!folds) return list;
+    const more = el("button", "lib-foundmore");
+    more.type = "button";
+    const chev = el("span", "chev");
+    chev.append(svg(CHEV, 10, 1.8));
+    more.append(el("span", "", open ? t("Show less") : t("Show {n} more", { n: rows.length - FOUND_SHOWN })), chev);
+    more.classList.toggle("open", open);
+    more.setAttribute("aria-expanded", String(open));
+    more.onclick = () => {
+      if (open) foundOpen.delete(kind); else foundOpen.add(kind);
+      render();
+    };
+    list.append(more);
+    return list;
   }
 
   function foundSkillRow(f) {
