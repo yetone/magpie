@@ -4020,7 +4020,11 @@ input.words.search-key, input.words.search-url { flex: 1 1 120px; width: auto; m
 .prefs .val.searcher-then-list > .rt-cond { min-width: 0; max-width: 100%; }
 .searcher-then-n { color: var(--muted); font-variant-numeric: tabular-nums; }
 .side-effort .effort-ic svg { width: 100%; height: 100%; }
-.row.pref.lan-address-row { position: relative; height: 50px; transition: height .28s var(--ease); }
+/* its controls are placed in a fixed height, so it stays border-box where
+   Settings' other rows go content-box (a pointer that hovers): there the
+   padding was added under it, a blank band below the address (the owner,
+   11-08). 51, as tall as the rows around it. */
+.row.pref.lan-address-row, #view-settings .row.pref.lan-address-row { position: relative; box-sizing: border-box; height: 51px; transition: height .28s var(--ease); }
 .row.pref.lan-address-row .who { position: absolute; top: 16px; left: 14px; }
 .prefs .lan-address-row .val { max-width: 64%; }
 /* Browser access: a link per address, each with its copy button */
@@ -4045,7 +4049,7 @@ input.words.search-key, input.words.search-url { flex: 1 1 120px; width: auto; m
 .pop.proto-menu.lan-address-menu { width: min(320px, calc(100vw - 16px)); max-height: min(360px, 70vh); overflow-y: auto; }
 .lan-address-menu .pm-name { font: var(--code-style, normal) var(--code-weight, 400) 12px var(--code-font, var(--code)); font-stretch: var(--code-stretch, 100%); }
 @media (max-width: 600px) {
-  .row.pref.lan-address-row { height: 76px; }
+  .row.pref.lan-address-row, #view-settings .row.pref.lan-address-row { height: 81px; } /* 13 under its second line, as over its first */
   .lan-address-controls .segs { right: 12px; }
   .row.pref .proto.pick.lan-interface { top: 44px; }
   .lan-address-controls .lan-address-text { top: 47px; }
