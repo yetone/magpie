@@ -340,7 +340,7 @@ var noticeQoder = newNotice("{agent} reads its settings as a session starts — 
 // runs Qoder's CLI as its agent with that folder's settings.
 func qoderApp(dir string) bool {
 	for _, f := range []string{".qoder-app-status.json", ".qoder-app-canary-status.json", ".qoder-app-dev-status.json"} {
-		if fi, err := os.Stat(filepath.Join(dir, f)); err == nil && fi.Mode().IsRegular() {
+		if statFile(filepath.Join(dir, f)) {
 			return true
 		}
 	}

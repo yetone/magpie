@@ -424,7 +424,7 @@ func (a *Agent) Detected() bool {
 	if a.Dir != "" && Taken(a.Dir) {
 		return false
 	}
-	if _, err := os.Stat(a.Path); err == nil && (a.pathOwn == nil || a.pathOwn()) {
+	if _, ok := statKind(a.Path); ok && (a.pathOwn == nil || a.pathOwn()) {
 		return true
 	}
 	if a.Dir != "" && !a.dirShared && agentDir(a.Dir) {
