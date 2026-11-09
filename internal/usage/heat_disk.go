@@ -194,7 +194,10 @@ func sourceDigest(c *rowChunk, rows *chunkRows) [sha256.Size]byte {
 // number their strings and shapes apart. A shape is written where a row
 // first has it, and by that row after.
 func hashRows(h hash.Hash, c *rowChunk) {
-	b := make([]byte, 0, 32<<10)
+	sc := hashScratchPool.Get().(*hashScratch)
+	defer hashScratchPool.Put(sc)
+	b, shapes := sc.b[:0], sc.shapes
+	clear(shapes)
 	text := func(i uint32) {
 		s := ""
 		if int(i) < len(c.Strings) {
@@ -203,7 +206,6 @@ func hashRows(h hash.Hash, c *rowChunk) {
 		b = binary.AppendUvarint(b, uint64(len(s)))
 		b = append(b, s...)
 	}
-	shapes := map[uint32]int{}
 	for i := range c.Rows {
 		p := &c.Rows[i]
 		b = binary.AppendVarint(b, p.Time().UnixNano())
@@ -238,7 +240,20 @@ func hashRows(h hash.Hash, c *rowChunk) {
 		}
 	}
 	h.Write(b)
+	sc.b = b
 }
+
+// hashScratch is what hashRows writes through, kept between calls: a new
+// 32 KB buffer and map for each chunk was 522 MB of a real history's start
+// (a digest per session file's chunk), the most of any one function.
+type hashScratch struct {
+	b      []byte
+	shapes map[uint32]int
+}
+
+var hashScratchPool = sync.Pool{New: func() any {
+	return &hashScratch{b: make([]byte, 0, 32<<10), shapes: map[uint32]int{}}
+}}
 
 // heatDiskRef is where a heatmap's settled days are kept and what prices
 // and names its calls: the index's root and meta. Empty, they aren't kept.
