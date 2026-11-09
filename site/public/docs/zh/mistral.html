@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mistral 接入 Claude Code、Codex、Gemini CLI 和 OpenCode · magpie</title>
+<meta name="description" content="用 magpie 把 Mistral 的模型（包括 Devstral 和 Codestral）接入 Claude Code、Codex、Gemini CLI 和 OpenCode：Mistral API Key 只添加一次，每个工具各选一个模型，magpie 负责把各工具的请求转换成 Mistral 接口能接受的样子，保住思考内容，显示 Le Chat 套餐的 Vibe 月度额度，统计费用，并在多个 Key 之间分配请求。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/mistral">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/mistral">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/mistral">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/mistral">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/mistral">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Mistral 接入 Claude Code、Codex、Gemini CLI 和 OpenCode">
+<meta property="og:description" content="用 magpie 把 Mistral 的模型（包括 Devstral 和 Codestral）接入 Claude Code、Codex、Gemini CLI 和 OpenCode：Mistral API Key 只添加一次，每个工具各选一个模型，magpie 负责把各工具的请求转换成 Mistral 接口能接受的样子，保住思考内容，显示 Le Chat 套餐的 Vibe 月度额度，统计费用，并在多个 Key 之间分配请求。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/mistral">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Mistral 接入 Claude Code、Codex、Gemini CLI 和 OpenCode",
+   "description": "用 magpie 把 Mistral 的模型（包括 Devstral 和 Codestral）接入 Claude Code、Codex、Gemini CLI 和 OpenCode：Mistral API Key 只添加一次，每个工具各选一个模型，magpie 负责把各工具的请求转换成 Mistral 接口能接受的样子，保住思考内容，显示 Le Chat 套餐的 Vibe 月度额度，统计费用，并在多个 Key 之间分配请求。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/mistral",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "怎么在 Claude Code 里用 Mistral？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "在 magpie 里添加 Mistral API Key（供应商、添加供应商、Mistral），然后在 Claude Code 那一行选一个 Mistral 模型，比如 mistral-large-4，或者运行 magpie claude mistral/mistral-large-4。Mistral 只提供 Chat Completions 接口，所以 magpie 把 Claude Code 的 Anthropic Messages 请求转换后发到 https://api.mistral.ai/v1，再把回复转换回来，思考内容也一样。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex 能用 Devstral 等 Mistral 模型吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。你的 Mistral Key 列出的模型，包括 Devstral，Codex 都能用。Codex 说的是 OpenAI Responses 接口，Mistral 不提供，所以 magpie 把每个请求转换成 Chat Completions，把 apply_patch 这类 Codex 自定义工具当作函数交给模型，再把调用按 Codex 能执行的方式还回去。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "怎么在 OpenCode 里用 Codestral 等 Mistral 模型？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "在 magpie 里选好模型，或者运行 magpie opencode mistral/mistral-large-4；只要你的 Key 列出了 Codestral 或 Devstral，用法完全一样。OpenCode 说的是 Chat Completions，请求原样发给 Mistral，只在路上修掉 Mistral 会拒绝的内容：OpenCode 的 store 字段，以及放在 reasoning_content 里回传的上一轮思考。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Gemini CLI 能用 Mistral 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。Gemini CLI 说的是 Google 的 Gemini 接口，magpie 会把它的请求转换成 Mistral 的 Chat Completions，再把回复转换回来，流式输出和工具调用都包括在内。运行 magpie gemini model mistral/mistral-large-4 即可。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Mistral 为什么回 422 extra_forbidden？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Mistral 会拒绝它不认识的任何字段。magpie 会把上一轮的思考改成 Mistral 接受的思考片段，去掉部分工具附带的 Ollama 参数；遇到 Mistral 点名的可选字段（比如 OpenCode 的 store），就去掉它重新请求，之后也不再发送。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie 能显示 Le Chat 套餐的 Vibe 额度吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。Le Chat 套餐（Pro、Student 或 Team）的 Vibe Key 会显示本月 Vibe 额度用了多少、按 Mistral 计费的币种计、什么时候重置，以及套餐名称。在控制台创建的 Studio Key 则显示组织的 API 额度，名为 “API · Month”。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/mistral" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/mistral" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/mistral" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>本页内容</p>
+    <a href="#add">添加</a>
+    <a href="#endpoints">接口地址</a>
+    <a href="#models">模型列表</a>
+    <a href="#agents">在各个工具里用</a>
+    <a href="#shaping">magpie 替你修正的请求</a>
+    <a href="#reasoning">推理</a>
+    <a href="#search">联网搜索</a>
+    <a href="#cost">Vibe、费用与用量</a>
+    <a href="#keys">多个 Key</a>
+    <a href="#trouble">常见报错</a>
+    <a href="#faq">常见问题</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 供应商</p>
+    <h1>Mistral 接入 Claude Code、Codex、Gemini CLI 和 OpenCode</h1>
+    <p class="lede">Mistral 的模型只通过一种接口提供：<code>api.mistral.ai</code> 上的 OpenAI 风格 Chat Completions。把 Mistral 的 API Key 添加到 magpie 一次，Claude Code、Codex、Gemini CLI、OpenCode 以及你接入的其他工具，都能通过 magpie 的本地网关 <code>127.0.0.1:3425</code> 使用 Mistral，每个工具各用各的模型。说其他接口的工具，magpie 会在路上替它转换。</p>
+
+    <h2 id="add"><a class="anchor" href="#add">添加 Mistral</a></h2>
+    <ol class="steps">
+      <li><b>拿到 Key</b>在 <a href="https://console.mistral.ai/api-keys">console.mistral.ai</a> 创建。Le Chat 套餐的 Vibe Key 也加在同一个供应商里。</li>
+      <li><b>添加供应商</b>在 magpie 的 <span class="ui">供应商</span> 页点 <span class="ui">＋ 添加供应商</span>，选 <span class="ui">Mistral</span>，粘贴 Key 并保存。magpie 会向 Mistral 查询这个 Key 能用哪些模型。</li>
+      <li><b>给工具选上</b>在 <span class="ui">Agent</span> 页点工具那一行的模型，选一个 Mistral 模型，比如 <code>mistral-large-4</code>。</li>
+    </ol>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-add">复制</button><pre id="ex-add">magpie provider add mistral &lt;key&gt;
+magpie provider test mistral</pre></div>
+    <p>magpie 里的模型 id 是 <code>供应商/模型</code>，所以 Mistral 的模型写作 <code>mistral/mistral-large-4</code>：前面是供应商，后面是 Mistral 自己的 id。Key 保存在 magpie 的设置里，magpie 不会从 shell 里读取它。</p>
+    <p>已经在 OpenCode 或 Alma 里配好了 Mistral？magpie 从这些应用导入时，会把它变成 Mistral 供应商。有的应用一个 Key 存一条（“Mistral #0001”“Mistral #0002”……），导入后会合并成一个 Mistral 供应商，里面放着同样多的 Key，在每个工具的模型选择器里只出现一次。</p>
+
+    <h2 id="endpoints"><a class="anchor" href="#endpoints">接口地址</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>接口</th><th>地址</th><th>用途</th></tr>
+      <tr><td>Chat Completions</td><td><code>https://api.mistral.ai/v1</code></td><td>模型列表和所有工具的请求：OpenCode 的原样发送，Claude Code、Codex 和 Gemini CLI 的转换后发送</td></tr>
+      <tr><td>计费</td><td><code>https://api.mistral.ai/v1/billing/budget</code>、<code>/v1/billing/subscription</code></td><td>Key 当月的 Vibe 或 API 额度，以及所在的套餐</td></tr>
+    </table></div>
+    <p>magpie 的 Mistral 供应商没有 Anthropic Messages 或 Responses 地址，所以说这两种接口的工具，请求都会转换成 Chat Completions，回复再转换回去，流式输出和工具调用都包括在内。</p>
+
+    <h2 id="models"><a class="anchor" href="#models">模型列表</a></h2>
+    <p>magpie 从 Mistral 的 <code>https://api.mistral.ai/v1/models</code> 拉取列表，所以工具里看到的就是这个 Key 能用的模型。名称、推理档位和价格来自 models.dev 的 <code>mistral</code> 目录；Devstral、Codestral 和 Magistral 模型在每个选择器里都带着 Mistral 的图标。Mistral 也提供其他厂商的模型，比如 GLM 和 DeepSeek 的 <code>deepseek-v4.1-flash-1017</code>，它们走同一个 Key，下面的修正对它们同样有效。工具能看到哪些模型，可以在供应商的模型列表里挑，也可以在终端里设置：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-models">复制</button><pre id="ex-models">magpie provider models mistral +mistral-large-4 +mistral-medium-3.5
+magpie provider refresh-every mistral 1d</pre></div>
+
+    <h2 id="agents"><a class="anchor" href="#agents">在各个工具里用</a></h2>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-agents">复制</button><pre id="ex-agents">magpie claude mistral/mistral-large-4
+magpie codex mistral/mistral-large-4
+magpie gemini model mistral/mistral-large-4
+magpie opencode mistral/mistral-large-4</pre></div>
+    <ul>
+      <li><b>Claude Code</b> 说的是 Anthropic Messages，Mistral 不提供这个接口。magpie 把每个请求转换成 Chat Completions，再把回复转换回来；推理模型的思考会先以思考内容出现在 Claude Code 里，然后才是正文。<a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>。</li>
+      <li><b>Codex</b> 说的是 OpenAI Responses，Mistral 同样不提供，所以它的请求也要转换。<code>apply_patch</code> 这类 Codex 自定义工具会以函数的形式交给模型，模型的调用再以 Codex 能执行的自定义工具调用还回去。<a href="/docs/zh/codex-models">Codex 接入其他模型</a>。</li>
+      <li><b>Gemini CLI</b> 说的是 Google 的 Gemini 接口。magpie 把每个请求转换成 Chat Completions，再把回复转换回来。<a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>。</li>
+      <li><b>OpenCode</b> 说的是 Chat Completions，所以请求原样发给 Mistral，只做下面这些修正。<a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>。</li>
+    </ul>
+
+    <h2 id="shaping"><a class="anchor" href="#shaping">magpie 替你修正的请求</a></h2>
+    <p>Mistral 的接口对收到的内容很严格，推理模型的思考也用它自己的格式返回。magpie 在路上把两边都调整好，原样转发的请求和转换过的请求都一样：</p>
+    <ul>
+      <li><b>分段的思考内容。</b>Mistral 把推理模型的思考放进 <code>content</code>，写成带类型的分段，思考和正文有时还挤在同一个 chunk 里，而 Chat 接口约定这里是字符串。OpenCode 收到第一个这样的 chunk 就报错（“Invalid … stream event”）。magpie 把思考移到 <code>reasoning_content</code>，正文改成普通字符串，流式和非流式回复都一样。</li>
+      <li><b>回传的思考。</b>OpenCode 会把上一轮的思考放在 <code>reasoning_content</code> 里传回去，Mistral 对此回 422 <code>extra_forbidden</code>。magpie 把它改成 Mistral 自己返回时用的思考片段，放在这一轮正文前面，思考就还留在上下文里。转换过的请求也这样处理，所以在 Mistral 上跑 DeepSeek 模型时，Codex 的工具调用循环能一直走下去。</li>
+      <li><b>Mistral 不认识的字段。</b>OpenCode 的 <code>store</code> 和 Kimi Code 的思考开关都会换来 422 <code>extra_forbidden</code>。magpie 去掉 Mistral 点名的可选字段重新请求，成功之后就不再给它发这些字段。</li>
+      <li><b>Ollama 参数。</b>有的工具把网关当成了 Ollama 服务器（比如 Hermes Agent），会在 Chat 字段旁边带上 Ollama 的 <code>options</code>（其中的 <code>num_ctx</code>）。magpie 会把它们去掉，Mistral 根本看不到。</li>
+    </ul>
+
+    <h2 id="reasoning"><a class="anchor" href="#reasoning">推理</a></h2>
+    <ul>
+      <li><b>推理强度。</b>工具要求的推理强度，会按目录里列出的档位，换成这个模型最接近的一档。不知道档位的模型，按工具的原始要求发送。</li>
+      <li><b>关闭推理。</b>需要 magpie 转换请求的工具（比如 Gemini CLI）关掉推理时，如果模型的档位里有 <code>none</code>，magpie 就请求 none。</li>
+      <li><b>跨轮次的思考。</b>每个工具都以自己的格式看到推理模型的思考：OpenCode 是 <code>reasoning_content</code>，Claude Code 是思考块，Codex 是推理内容。下一轮传回来时，Mistral 收到的是思考片段，见 <a href="#shaping">magpie 替你修正的请求</a>。</li>
+    </ul>
+
+    <h2 id="search"><a class="anchor" href="#search">联网搜索</a></h2>
+    <p>Mistral 的 Chat Completions 接口不会替 magpie 联网搜索，所以在每个工具里，magpie 都给模型提供自己的搜索工具，由设置里指定的搜索服务回答；没指定时，由 magpie 自己挑一个。</p>
+
+    <h2 id="cost"><a class="anchor" href="#cost">Vibe、费用与用量</a></h2>
+    <ul>
+      <li><b>Vibe 月度额度。</b>Le Chat 套餐（Pro、Student 或 Team）附带一个月的 Mistral Vibe。它的 Vibe Key 那一行会显示本月额度用了多少（按 Mistral 计费的币种）、什么时候重置，以及套餐名称。</li>
+      <li><b>API 月度额度。</b>在控制台创建的 Studio Key 显示组织的 API 额度，名为 “API · Month”，和 Vibe 的额度分开。额度是整个组织的，所以同一个组织的每个 Key 显示的数字都一样。没有额度的 Key 不显示卡片。</li>
+      <li><b>按量付费。</b>开了按量付费时，超出额度的部分照常计费而不会被停掉，所以用完当月额度也不会让这个 Key 的模型停用。</li>
+      <li><b>缓存 token。</b>回复里报告了缓存命中的提示 token 时，<span class="ui">用量</span> 页会把它们和其余的提示分开统计。</li>
+      <li><b>保住缓存。</b>有多个 Key 时，只要一段对话的缓存值得保留（1,024 个 token 以上），而且还热着（五分钟内读过），它就一直用同一个 Key。</li>
+      <li><b>费用。</b>用量页按 models.dev 上 Mistral 的价格给每次调用计价。magpie 不会从 Mistral 读取余额；可以用 <code>key-balance</code> 自己填上，用量页会显示它减去 magpie 此后给这个 Key 的调用算出的费用。</li>
+    </ul>
+
+    <h2 id="keys"><a class="anchor" href="#keys">多个 Key 与故障切换</a></h2>
+    <p>一个 Mistral 供应商可以放多个 Key：在它下面点 <span class="ui">添加另一个密钥</span>，也可以一次粘贴好几个。请求先走第一个开着的 Key，它用完或被限流时由下一个接替。</p>
+    <ul>
+      <li><b>花费上限。</b><code>spend-cap</code> 给某个 Key 设一个每天、每月或总计的美元上限，按用量页的计价算；到了上限，路由就转去其他 Key 和备用模型。</li>
+      <li><b>备用模型。</b><code>fallback</code> 指定 Mistral 额度用完或挂掉时请求去哪：另一个供应商的模型，或一个路由分组。</li>
+    </ul>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-keys">复制</button><pre id="ex-keys">magpie provider spend-cap mistral &lt;key&gt; 20 month
+magpie provider key-balance mistral &lt;key&gt; 25
+magpie provider fallback mistral deepseek/deepseek-v4-pro</pre></div>
+
+    <h2 id="trouble"><a class="anchor" href="#trouble">常见报错</a></h2>
+    <ul>
+      <li><b>422 <code>extra_forbidden</code>，“Extra inputs are not permitted”。</b>Mistral 拒绝了它不认识的字段。工具常发的那些 magpie 已经处理好了；遇到 Mistral 点名的可选字段，magpie 会去掉它重新请求，见 <a href="#shaping">magpie 替你修正的请求</a>。</li>
+      <li><b>OpenCode 里出现 “Invalid … stream event”。</b>这是 Mistral 分段返回的思考内容造成的。magpie 会把思考放进 <code>reasoning_content</code>、正文改成字符串再交给 OpenCode。</li>
+      <li><b>没有 Vibe 卡片。</b>只有 Mistral 认定为 Vibe Key 或 Studio Key、并且额度大于零的 Key，magpie 才显示当月额度。</li>
+      <li><b>检查 Key。</b><code>magpie provider test mistral</code> 会向每个接口发一个很小的请求，或者发给你指定的每个模型。加上 <code>--as codex</code> 或 <code>--as claude-code</code>，就按那个工具的方式发送。</li>
+    </ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>怎么在 Claude Code 里用 Mistral？</h3>
+    <p>在 magpie 里添加 Mistral API Key（供应商、添加供应商、Mistral），然后在 Claude Code 那一行选一个 Mistral 模型，比如 <code>mistral-large-4</code>，或者运行 <code>magpie claude mistral/mistral-large-4</code>。Mistral 只提供 Chat Completions 接口，所以 magpie 把 Claude Code 的 Anthropic Messages 请求转换后发到 <code>https://api.mistral.ai/v1</code>，再把回复转换回来，思考内容也一样。</p>
+    <h3>Codex 能用 Devstral 等 Mistral 模型吗？</h3>
+    <p>能。你的 Mistral Key 列出的模型，包括 Devstral，Codex 都能用。Codex 说的是 OpenAI Responses 接口，Mistral 不提供，所以 magpie 把每个请求转换成 Chat Completions，把 apply_patch 这类 Codex 自定义工具当作函数交给模型，再把调用按 Codex 能执行的方式还回去。</p>
+    <h3>怎么在 OpenCode 里用 Codestral 等 Mistral 模型？</h3>
+    <p>在 magpie 里选好模型，或者运行 <code>magpie opencode mistral/mistral-large-4</code>；只要你的 Key 列出了 Codestral 或 Devstral，用法完全一样。OpenCode 说的是 Chat Completions，请求原样发给 Mistral，只在路上修掉 Mistral 会拒绝的内容：OpenCode 的 <code>store</code> 字段，以及放在 <code>reasoning_content</code> 里回传的上一轮思考。</p>
+    <h3>Gemini CLI 能用 Mistral 吗？</h3>
+    <p>能。Gemini CLI 说的是 Google 的 Gemini 接口，magpie 会把它的请求转换成 Mistral 的 Chat Completions，再把回复转换回来，流式输出和工具调用都包括在内。运行 <code>magpie gemini model mistral/mistral-large-4</code> 即可。</p>
+    <h3>Mistral 为什么回 422 extra_forbidden？</h3>
+    <p>Mistral 会拒绝它不认识的任何字段。magpie 会把上一轮的思考改成 Mistral 接受的思考片段，去掉部分工具附带的 Ollama 参数；遇到 Mistral 点名的可选字段（比如 OpenCode 的 <code>store</code>），就去掉它重新请求，之后也不再发送。</p>
+    <h3>magpie 能显示 Le Chat 套餐的 Vibe 额度吗？</h3>
+    <p>能。Le Chat 套餐（Pro、Student 或 Team）的 Vibe Key 会显示本月 Vibe 额度用了多少、按 Mistral 计费的币种计、什么时候重置，以及套餐名称。在控制台创建的 Studio Key 则显示组织的 API 额度，名为 “API · Month”。</p>
+
+    <p><b>按供应商：</b><a href="/docs/zh/deepseek">DeepSeek</a> · <a href="/docs/zh/kimi">Kimi 与 Kimi Code</a> · <a href="/docs/zh/glm">GLM 编程套餐</a> · <a href="/docs/zh/qwen">通义千问</a> · <a href="/docs/zh/minimax">MiniMax</a> · <a href="/docs/zh/gemini">Gemini</a> · <a href="/docs/zh/grok">Grok</a> · <a href="/docs/zh/openrouter">OpenRouter</a> · <a href="/docs/zh/copilot">GitHub Copilot</a> · <a href="/docs/zh/ollama">Ollama</a></p>
+    <p style="margin-top:48px">各个工具的指南：<a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>、<a href="/docs/zh/codex-models">Codex 接入其他模型</a>、<a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>、<a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>。遇到问题可以在 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

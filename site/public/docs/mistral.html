@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mistral in Claude Code, Codex, Gemini CLI and OpenCode · magpie</title>
+<meta name="description" content="Use Mistral&#x27;s models, Devstral and Codestral included, in Claude Code, Codex, Gemini CLI and OpenCode with magpie: add your Mistral API key once, pick a model per agent, and let magpie translate each agent&#x27;s requests to Mistral&#x27;s API, keep its thinking, show a Le Chat plan&#x27;s Vibe month, count cost and spread requests over several keys.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/mistral">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/mistral">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/mistral">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/mistral">
+<link rel="canonical" href="https://usemagpie.ai/docs/mistral">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Mistral in Claude Code, Codex, Gemini CLI and OpenCode">
+<meta property="og:description" content="Use Mistral&#x27;s models, Devstral and Codestral included, in Claude Code, Codex, Gemini CLI and OpenCode with magpie: add your Mistral API key once, pick a model per agent, and let magpie translate each agent&#x27;s requests to Mistral&#x27;s API, keep its thinking, show a Le Chat plan&#x27;s Vibe month, count cost and spread requests over several keys.">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/mistral">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Mistral in Claude Code, Codex, Gemini CLI and OpenCode",
+   "description": "Use Mistral's models, Devstral and Codestral included, in Claude Code, Codex, Gemini CLI and OpenCode with magpie: add your Mistral API key once, pick a model per agent, and let magpie translate each agent's requests to Mistral's API, keep its thinking, show a Le Chat plan's Vibe month, count cost and spread requests over several keys.",
+   "inLanguage": "en",
+   "url": "https://usemagpie.ai/docs/mistral",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "How do I use Mistral in Claude Code?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Add your Mistral API key in magpie (Providers, Add provider, Mistral), then pick a Mistral model such as mistral-large-4 on Claude Code’s row, or run magpie claude mistral/mistral-large-4. Mistral serves Chat Completions only, so magpie translates Claude Code’s Anthropic Messages requests to https://api.mistral.ai/v1 and the replies back, thinking included."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can Codex use Devstral and other Mistral models?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Codex can use any model your Mistral key lists, Devstral among them. Codex speaks OpenAI Responses, which Mistral doesn’t serve, so magpie translates each request to Chat Completions, offers Codex’s custom tools such as apply_patch as functions, and gives the calls back the way Codex runs them."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "How do I use Codestral or other Mistral models in OpenCode?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Pick the model in magpie, or run magpie opencode mistral/mistral-large-4; Codestral and Devstral work the same way when your key lists them. OpenCode speaks Chat Completions, so its requests go to Mistral as they are, with what Mistral would refuse fixed on the way: OpenCode’s store field, and earlier turns’ thinking sent back in reasoning_content."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can Gemini CLI use Mistral?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Gemini CLI speaks Google’s Gemini API, so magpie translates its requests to Mistral’s Chat Completions and the replies back, streaming and tool calls included. Run magpie gemini model mistral/mistral-large-4."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Why does Mistral answer 422 extra_forbidden?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Mistral turns away any field it doesn’t know. magpie sends an earlier turn’s thinking as the thinking part Mistral takes, leaves out Ollama options some agents add, and asks again without an optional field Mistral names, such as OpenCode’s store, then stops sending it."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Does magpie show my Le Chat plan’s Vibe budget?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. A Vibe key from a Le Chat plan (Pro, Student or Team) shows how much of the month’s Vibe budget is used, in the currency Mistral bills in, and when it resets, with the plan’s name. A Studio key made in the console shows the organization’s API budget instead, as “API · Month”."
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>Docs</small></a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/start">Get started</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a class="toc-only" href="/docs/remote">Remote magpie</a>
+    <a class="toc-only" href="/docs/docker">Docker</a>
+    <a class="toc-only" href="/docs/privacy">Privacy</a>
+    <a class="toc-only" href="/docs/masking">Privacy masking</a>
+    <a class="toc-only" href="/docs/mcp-router">MCP router</a>
+    <a class="toc-only" href="/docs/library">Library</a>
+    <a class="toc-only" href="/docs/claude-code-models">Models in Claude Code</a>
+    <a class="toc-only" href="/docs/codex-models">Models in Codex</a>
+    <a class="toc-only" href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a class="toc-only" href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a class="toc-only" href="/docs/local-models">Local models</a>
+    <a class="toc-only" href="/docs/opencode-models">Models in OpenCode</a>
+    <a class="toc-only" href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/mistral" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/mistral" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/mistral" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">Download</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>On this page</p>
+    <a href="#add">Add it</a>
+    <a href="#endpoints">Endpoints</a>
+    <a href="#models">Model list</a>
+    <a href="#agents">In each agent</a>
+    <a href="#shaping">What magpie fixes</a>
+    <a href="#reasoning">Reasoning</a>
+    <a href="#search">Web search</a>
+    <a href="#cost">Vibe, cost and usage</a>
+    <a href="#keys">Several keys</a>
+    <a href="#trouble">Troubleshooting</a>
+    <a href="#faq">FAQ</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">Docs · Provider</p>
+    <h1>Mistral in Claude Code, Codex, Gemini CLI and OpenCode</h1>
+    <p class="lede">Mistral serves its models on one API, OpenAI-style Chat Completions, at <code>api.mistral.ai</code>. Add a Mistral API key to magpie once, and Claude Code, Codex, Gemini CLI, OpenCode and every other agent you connect can use Mistral through magpie’s local gateway at <code>127.0.0.1:3425</code>, each agent with a model of its own. Agents that speak another API are translated on the way.</p>
+
+    <h2 id="add"><a class="anchor" href="#add">Add Mistral</a></h2>
+    <ol class="steps">
+      <li><b>Get a key</b>Make one on <a href="https://console.mistral.ai/api-keys">console.mistral.ai</a>. A Le Chat plan’s Vibe key goes in the same provider.</li>
+      <li><b>Add the provider</b>In magpie’s <span class="ui">Providers</span> tab, press <span class="ui">＋ Add provider</span>, pick <span class="ui">Mistral</span>, paste the key and save. magpie asks Mistral which models the key can use.</li>
+      <li><b>Pick it for an agent</b>In the <span class="ui">Agents</span> tab, click the model on the agent’s row and choose a Mistral model such as <code>mistral-large-4</code>.</li>
+    </ol>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-add">Copy</button><pre id="ex-add">magpie provider add mistral &lt;key&gt;
+magpie provider test mistral</pre></div>
+    <p>Model ids in magpie are <code>provider/model</code>, so Mistral’s read <code>mistral/mistral-large-4</code>: the provider, then Mistral’s own id. The key is kept in magpie’s settings; magpie doesn’t take it from your shell.</p>
+    <p>Already set Mistral up in OpenCode or Alma? magpie’s import from those apps brings it in as the Mistral provider. An app that keeps one entry per key (“Mistral #0001”, “Mistral #0002”…) becomes one Mistral provider with that many keys, listed once in every agent’s picker.</p>
+
+    <h2 id="endpoints"><a class="anchor" href="#endpoints">Endpoints</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>API</th><th>Address</th><th>Used for</th></tr>
+      <tr><td>Chat Completions</td><td><code>https://api.mistral.ai/v1</code></td><td>the model list and every agent’s requests: OpenCode’s as they are, Claude Code’s, Codex’s and Gemini CLI’s translated</td></tr>
+      <tr><td>Billing</td><td><code>https://api.mistral.ai/v1/billing/budget</code>, <code>/v1/billing/subscription</code></td><td>a key’s month of Vibe or API budget, and the plan it is on</td></tr>
+    </table></div>
+    <p>magpie’s Mistral provider has no Anthropic Messages or Responses address, so an agent that speaks either is translated to Chat Completions and the reply translated back, streaming and tool calls included.</p>
+
+    <h2 id="models"><a class="anchor" href="#models">Model list</a></h2>
+    <p>magpie fetches the list from Mistral, at <code>https://api.mistral.ai/v1/models</code>, so agents see the models your key can use. Names, reasoning levels and prices come from models.dev’s <code>mistral</code> catalog, and Devstral, Codestral and Magistral models carry Mistral’s logo in every picker. Mistral also serves models from other labs, such as GLM and DeepSeek’s <code>deepseek-v4.1-flash-1017</code>; they come through the same key, and the fixes below apply to them too. Pick the models agents see in the provider’s model list, or from the terminal:</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-models">Copy</button><pre id="ex-models">magpie provider models mistral +mistral-large-4 +mistral-medium-3.5
+magpie provider refresh-every mistral 1d</pre></div>
+
+    <h2 id="agents"><a class="anchor" href="#agents">In each agent</a></h2>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-agents">Copy</button><pre id="ex-agents">magpie claude mistral/mistral-large-4
+magpie codex mistral/mistral-large-4
+magpie gemini model mistral/mistral-large-4
+magpie opencode mistral/mistral-large-4</pre></div>
+    <ul>
+      <li><b>Claude Code</b> speaks Anthropic Messages, which Mistral doesn’t serve. magpie translates each request to Chat Completions and the reply back; a reasoning model’s thinking reaches Claude Code as thinking, then the text. <a href="/docs/claude-code-models">Models in Claude Code</a>.</li>
+      <li><b>Codex</b> speaks OpenAI Responses, which Mistral doesn’t serve either, so its requests are translated too. Codex’s custom tools, such as <code>apply_patch</code>, are offered to the model as functions, and its calls come back as the custom tool calls Codex runs. <a href="/docs/codex-models">Models in Codex</a>.</li>
+      <li><b>Gemini CLI</b> speaks Google’s Gemini API. magpie translates each request to Chat Completions and the reply back. <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>.</li>
+      <li><b>OpenCode</b> speaks Chat Completions, so its requests go to Mistral as they are, with the fixes below. <a href="/docs/opencode-models">Models in OpenCode</a>.</li>
+    </ul>
+
+    <h2 id="shaping"><a class="anchor" href="#shaping">What magpie fixes for Mistral</a></h2>
+    <p>Mistral’s API is strict about what it takes and sends a reasoning model’s thinking in a shape of its own. magpie changes both on the way, on requests it passes on and on those it translates alike:</p>
+    <ul>
+      <li><b>Thinking in typed parts.</b> Mistral sends a reasoning model’s thinking as typed parts in <code>content</code>, thinking and text sometimes in one chunk, where the Chat contract has a string. OpenCode turned the first such chunk away (“Invalid … stream event”). magpie moves the thinking to <code>reasoning_content</code> and the text to a plain string, streamed or not.</li>
+      <li><b>Thinking sent back.</b> OpenCode sends an earlier turn’s thinking back in <code>reasoning_content</code>, which Mistral refuses with 422 <code>extra_forbidden</code>. magpie puts it in the thinking part Mistral itself returns, ahead of the turn’s text, so the thinking stays in context. Translated requests get the same, so a Codex tool loop keeps going on a DeepSeek model served by Mistral.</li>
+      <li><b>Fields Mistral doesn’t know.</b> OpenCode’s <code>store</code> and Kimi Code’s thinking switch got 422 <code>extra_forbidden</code>. magpie asks again without the optional fields Mistral named, and doesn’t send them to it again once that works.</li>
+      <li><b>Ollama options.</b> An agent that took the gateway for an Ollama server, such as Hermes Agent, sends Ollama’s <code>options</code> (its <code>num_ctx</code>) beside the Chat fields. magpie leaves them out, so Mistral never sees them.</li>
+    </ul>
+
+    <h2 id="reasoning"><a class="anchor" href="#reasoning">Reasoning</a></h2>
+    <ul>
+      <li><b>Effort.</b> The effort an agent asks for is fitted to the nearest level the model has, as the catalog lists them. A model whose levels aren’t known is asked as the agent asked.</li>
+      <li><b>Reasoning off.</b> When an agent whose requests magpie translates, such as Gemini CLI, turns reasoning off and the model lists <code>none</code> among its levels, magpie asks for none.</li>
+      <li><b>Thinking across turns.</b> Each agent sees a reasoning model’s thinking in its own shape: <code>reasoning_content</code> for OpenCode, thinking blocks for Claude Code, reasoning for Codex. When it comes back in a later turn, Mistral gets it as a thinking part; see <a href="#shaping">What magpie fixes</a>.</li>
+    </ul>
+
+    <h2 id="search"><a class="anchor" href="#search">Web search</a></h2>
+    <p>Mistral’s Chat Completions API doesn’t search the web for magpie, so magpie gives the model its own search tool in every agent, answered by the searcher chosen in Settings, or by one magpie picks when none is chosen.</p>
+
+    <h2 id="cost"><a class="anchor" href="#cost">Vibe, cost and usage</a></h2>
+    <ul>
+      <li><b>Vibe month.</b> A Le Chat plan (Pro, Student or Team) comes with a month of Mistral Vibe. Its Vibe key’s row shows how much of the month’s budget is used, in the currency Mistral bills in, when it resets, and the plan’s name.</li>
+      <li><b>API month.</b> A Studio key made in the console shows the organization’s API budget, as “API · Month”, apart from a Vibe month. The budget is the organization’s, so every key of one organization shows the same numbers. A key with no budget has no card.</li>
+      <li><b>Pay as you go.</b> With pay-as-you-go on, what goes past the budget is billed rather than stopped, so a used-up month doesn’t stop the key’s models.</li>
+      <li><b>Cache tokens.</b> When a reply reports cached prompt tokens, the <span class="ui">Usage</span> tab counts them apart from the rest of the prompt.</li>
+      <li><b>Keeping the cache.</b> With several keys, a conversation stays on its key while its cache is worth keeping, 1,024 tokens or more, and still warm, read within the last five minutes.</li>
+      <li><b>Cost.</b> The Usage tab prices each call with Mistral’s prices from models.dev. magpie reads no balance from Mistral; type it in with <code>key-balance</code>, and the Usage page shows it less what magpie has priced the key’s calls at since.</li>
+    </ul>
+
+    <h2 id="keys"><a class="anchor" href="#keys">Several keys and failover</a></h2>
+    <p>One Mistral provider can hold several keys: press <span class="ui">Add another key</span> under it, or paste several at once. Requests go to the first key that’s on, and when it runs out or is rate limited the next one takes over.</p>
+    <ul>
+      <li><b>Spend caps.</b> <code>spend-cap</code> stops a key at a dollar amount a day, a month or in all, as the Usage tab prices its calls; routing then goes on to the other keys and the fallbacks.</li>
+      <li><b>Fallbacks.</b> <code>fallback</code> names where requests go when Mistral is out of quota or down: another provider’s model or a routing group.</li>
+    </ul>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-keys">Copy</button><pre id="ex-keys">magpie provider spend-cap mistral &lt;key&gt; 20 month
+magpie provider key-balance mistral &lt;key&gt; 25
+magpie provider fallback mistral deepseek/deepseek-v4-pro</pre></div>
+
+    <h2 id="trouble"><a class="anchor" href="#trouble">Troubleshooting</a></h2>
+    <ul>
+      <li><b>422 <code>extra_forbidden</code>, “Extra inputs are not permitted”.</b> Mistral turned away a field it doesn’t know. magpie fixes the ones agents are known to send and asks again without an optional field Mistral names; see <a href="#shaping">What magpie fixes</a>.</li>
+      <li><b>“Invalid … stream event” in OpenCode.</b> That was Mistral’s thinking in typed parts. magpie sends OpenCode the thinking in <code>reasoning_content</code> and the text as a string.</li>
+      <li><b>No Vibe card.</b> magpie shows the month only for a key Mistral says is a Vibe key or a Studio key, and only when its budget is more than zero.</li>
+      <li><b>Checking a key.</b> <code>magpie provider test mistral</code> sends a tiny request through each endpoint, or to each model you name. Add <code>--as codex</code> or <code>--as claude-code</code> to send it the way that agent would.</li>
+    </ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
+    <h3>How do I use Mistral in Claude Code?</h3>
+    <p>Add your Mistral API key in magpie (Providers, Add provider, Mistral), then pick a Mistral model such as <code>mistral-large-4</code> on Claude Code’s row, or run <code>magpie claude mistral/mistral-large-4</code>. Mistral serves Chat Completions only, so magpie translates Claude Code’s Anthropic Messages requests to <code>https://api.mistral.ai/v1</code> and the replies back, thinking included.</p>
+    <h3>Can Codex use Devstral and other Mistral models?</h3>
+    <p>Yes. Codex can use any model your Mistral key lists, Devstral among them. Codex speaks OpenAI Responses, which Mistral doesn’t serve, so magpie translates each request to Chat Completions, offers Codex’s custom tools such as apply_patch as functions, and gives the calls back the way Codex runs them.</p>
+    <h3>How do I use Codestral or other Mistral models in OpenCode?</h3>
+    <p>Pick the model in magpie, or run <code>magpie opencode mistral/mistral-large-4</code>; Codestral and Devstral work the same way when your key lists them. OpenCode speaks Chat Completions, so its requests go to Mistral as they are, with what Mistral would refuse fixed on the way: OpenCode’s <code>store</code> field, and earlier turns’ thinking sent back in <code>reasoning_content</code>.</p>
+    <h3>Can Gemini CLI use Mistral?</h3>
+    <p>Yes. Gemini CLI speaks Google’s Gemini API, so magpie translates its requests to Mistral’s Chat Completions and the replies back, streaming and tool calls included. Run <code>magpie gemini model mistral/mistral-large-4</code>.</p>
+    <h3>Why does Mistral answer 422 extra_forbidden?</h3>
+    <p>Mistral turns away any field it doesn’t know. magpie sends an earlier turn’s thinking as the thinking part Mistral takes, leaves out Ollama options some agents add, and asks again without an optional field Mistral names, such as OpenCode’s <code>store</code>, then stops sending it.</p>
+    <h3>Does magpie show my Le Chat plan’s Vibe budget?</h3>
+    <p>Yes. A Vibe key from a Le Chat plan (Pro, Student or Team) shows how much of the month’s Vibe budget is used, in the currency Mistral bills in, and when it resets, with the plan’s name. A Studio key made in the console shows the organization’s API budget instead, as “API · Month”.</p>
+
+    <p><b>By provider:</b> <a href="/docs/deepseek">DeepSeek</a> · <a href="/docs/kimi">Kimi and Kimi Code</a> · <a href="/docs/glm">GLM Coding Plan</a> · <a href="/docs/qwen">Qwen</a> · <a href="/docs/minimax">MiniMax</a> · <a href="/docs/gemini">Gemini</a> · <a href="/docs/grok">Grok</a> · <a href="/docs/openrouter">OpenRouter</a> · <a href="/docs/copilot">GitHub Copilot</a> · <a href="/docs/ollama">Ollama</a></p>
+    <p style="margin-top:48px">Every agent: <a href="/docs/claude-code-models">Models in Claude Code</a>, <a href="/docs/codex-models">Models in Codex</a>, <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>, <a href="/docs/opencode-models">Models in OpenCode</a>. Ask on <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> if you get stuck.</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a href="/docs/remote">Remote magpie</a>
+    <a href="/docs/docker">Docker</a>
+    <a href="/docs/privacy">Privacy</a>
+    <a href="/docs/masking">Privacy masking</a>
+    <a href="/docs/mcp-router">MCP router</a>
+    <a href="/docs/library">Library</a>
+    <a href="/docs/claude-code-models">Models in Claude Code</a>
+    <a href="/docs/codex-models">Models in Codex</a>
+    <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a href="/docs/local-models">Local models</a>
+    <a href="/docs/opencode-models">Models in OpenCode</a>
+    <a href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/contributors">Contributors</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

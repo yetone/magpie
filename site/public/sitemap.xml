@@ -32,6 +32,8 @@
 <url><loc>https://usemagpie.ai/docs/copilot</loc></url>
 <url><loc>https://usemagpie.ai/docs/gemini</loc></url>
 <url><loc>https://usemagpie.ai/docs/grok</loc></url>
+<url><loc>https://usemagpie.ai/docs/mistral</loc></url>
+<url><loc>https://usemagpie.ai/docs/ollama</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/claude-code-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/codex-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/contributors</loc></url>
@@ -60,6 +62,8 @@
 <url><loc>https://usemagpie.ai/docs/zh/copilot</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/gemini</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/grok</loc></url>
+<url><loc>https://usemagpie.ai/docs/zh/mistral</loc></url>
+<url><loc>https://usemagpie.ai/docs/zh/ollama</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/claude-code-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/codex-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/contributors</loc></url>
@@ -87,4 +91,6 @@
 <url><loc>https://usemagpie.ai/docs/ja/copilot</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/gemini</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/grok</loc></url>
+<url><loc>https://usemagpie.ai/docs/ja/mistral</loc></url>
+<url><loc>https://usemagpie.ai/docs/ja/ollama</loc></url>
 </urlset>

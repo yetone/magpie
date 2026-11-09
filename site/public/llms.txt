@@ -53,6 +53,8 @@ DeepSeek, Kimi (Moonshot), GLM (Zhipu), Qwen, MiniMax, Anthropic (Claude), OpenA
 - [GitHub Copilot in every agent](https://usemagpie.ai/docs/copilot): a Copilot seat's models in Claude Code, Codex, Gemini CLI and OpenCode; signing in (editors, Copilot CLI, GHE.com), Copilot Auto, premium requests, several accounts and errors.
 - [Gemini in every agent](https://usemagpie.ai/docs/gemini): a Google AI Studio key (or Vertex AI) in Claude Code, Codex, Gemini CLI and OpenCode; endpoints, thinking levels, thought signatures across tool calls, tool schemas, search and rate limits.
 - [Grok in every agent](https://usemagpie.ai/docs/grok): an xAI API key in Claude Code, Codex, Gemini CLI and OpenCode; which API each agent's requests use, what magpie fixes for xAI, reasoning effort, web search, prompt cache and several keys.
+- [Mistral in every agent](https://usemagpie.ai/docs/mistral): a Mistral API key in Claude Code, Codex, Gemini CLI and OpenCode; the model list, what magpie fixes for Mistral (thinking parts, refused fields), effort, search, cache and the plan card.
+- [Ollama in every agent](https://usemagpie.ai/docs/ollama): local Ollama, Ollama on another computer and Ollama Cloud in Claude Code, Codex, Gemini CLI and OpenCode; addresses, model list, context window, reasoning, tools, masking, pricing, and magpie as an Ollama server.
 - [Intent routing](https://usemagpie.ai/docs/intent): how a turn is routed by what the user asks for.
 - [Privacy masking](https://usemagpie.ai/docs/masking): what is masked before a request leaves the computer and how values come back.
 - [Library](https://usemagpie.ai/docs/library): instructions, MCP servers, skills, hooks and subagents for each agent.

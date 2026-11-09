@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ollama in Claude Code, Codex, Gemini CLI and OpenCode · magpie</title>
+<meta name="description" content="Use Ollama, on your computer or another one, and Ollama Cloud in Claude Code, Codex, Gemini CLI and OpenCode with magpie: add it once, pick a model such as qwen3 per agent, and let magpie translate each agent&#x27;s API, pass on the context window, and count usage and Ollama Cloud&#x27;s allowance.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/ollama">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/ollama">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/ollama">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/ollama">
+<link rel="canonical" href="https://usemagpie.ai/docs/ollama">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Ollama in Claude Code, Codex, Gemini CLI and OpenCode">
+<meta property="og:description" content="Use Ollama, on your computer or another one, and Ollama Cloud in Claude Code, Codex, Gemini CLI and OpenCode with magpie: add it once, pick a model such as qwen3 per agent, and let magpie translate each agent&#x27;s API, pass on the context window, and count usage and Ollama Cloud&#x27;s allowance.">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/ollama">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Ollama in Claude Code, Codex, Gemini CLI and OpenCode",
+   "description": "Use Ollama, on your computer or another one, and Ollama Cloud in Claude Code, Codex, Gemini CLI and OpenCode with magpie: add it once, pick a model such as qwen3 per agent, and let magpie translate each agent's API, pass on the context window, and count usage and Ollama Cloud's allowance.",
+   "inLanguage": "en",
+   "url": "https://usemagpie.ai/docs/ollama",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "How do I use Ollama in Claude Code?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Add Ollama in magpie (Providers, Add provider, Ollama under On this machine), then pick one of its models on Claude Code’s row, or run magpie claude ollama/qwen3. Claude Code’s requests go through magpie’s gateway to Ollama’s Anthropic Messages API at http://localhost:11434 as they are."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can Codex use Ollama?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Codex speaks only the Responses API, so magpie turns its requests into Chat Completions for Ollama, and the replies back, tool calls included. Run magpie codex ollama/qwen3."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can Gemini CLI and OpenCode use Ollama?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Gemini CLI speaks Google’s API, so magpie translates its requests to Ollama’s Chat Completions and the replies back. OpenCode speaks Chat Completions, so its requests go to Ollama as they are. Run magpie gemini model ollama/qwen3 or magpie opencode ollama/qwen3."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "How do I run qwen3-coder from Ollama in Claude Code?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Pull it in Ollama, press Fetch models in the provider’s editor in magpie (or run magpie provider refresh ollama), and pick it on Claude Code’s row. Its id in magpie is ollama/ and the name Ollama lists it under, tag included. Set its Context window too: Claude Code takes a model it doesn’t know for 200K."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can magpie use Ollama on another computer?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Set the provider’s Server address to that computer, such as magpie provider set ollama address=192.168.1.20:11434. A server on your own network is reached directly, not through a proxy set in Settings or the system."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Does magpie work with Ollama Cloud?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Add Ollama Cloud with a key from ollama.com/settings/keys. magpie lists the models the key can use, prices them from models.dev, and shows the account’s included allowance and the credits you bought."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Do I need an API key for a local Ollama?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "No. The Ollama preset takes none. Ollama Cloud needs one."
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>Docs</small></a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/start">Get started</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a class="toc-only" href="/docs/remote">Remote magpie</a>
+    <a class="toc-only" href="/docs/docker">Docker</a>
+    <a class="toc-only" href="/docs/privacy">Privacy</a>
+    <a class="toc-only" href="/docs/masking">Privacy masking</a>
+    <a class="toc-only" href="/docs/mcp-router">MCP router</a>
+    <a class="toc-only" href="/docs/library">Library</a>
+    <a class="toc-only" href="/docs/claude-code-models">Models in Claude Code</a>
+    <a class="toc-only" href="/docs/codex-models">Models in Codex</a>
+    <a class="toc-only" href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a class="toc-only" href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a class="toc-only" href="/docs/local-models">Local models</a>
+    <a class="toc-only" href="/docs/opencode-models">Models in OpenCode</a>
+    <a class="toc-only" href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/ollama" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/ollama" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/ollama" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">Download</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>On this page</p>
+    <a href="#add">Add Ollama</a>
+    <a href="#remote">Another computer</a>
+    <a href="#cloud">Ollama Cloud</a>
+    <a href="#endpoints">Endpoints</a>
+    <a href="#models">Model list</a>
+    <a href="#agents">In each agent</a>
+    <a href="#window">Context window</a>
+    <a href="#reasoning">Reasoning</a>
+    <a href="#tools">Tool calls</a>
+    <a href="#masking">Privacy masking</a>
+    <a href="#cost">Usage and cost</a>
+    <a href="#server">As an Ollama server</a>
+    <a href="#trouble">Troubleshooting</a>
+    <a href="#faq">FAQ</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">Docs · Provider</p>
+    <h1>Ollama in Claude Code, Codex, Gemini CLI and OpenCode</h1>
+    <p class="lede">Ollama serves the models you pull on two APIs, OpenAI Chat Completions and Anthropic Messages, at <code>http://localhost:11434</code>. Ollama Cloud serves its models the same way at <code>ollama.com</code>, with an API key. Add either to magpie once, and Claude Code, Codex, Gemini CLI, OpenCode and every other agent you connect can use them through magpie’s local gateway at <code>127.0.0.1:3425</code>, each agent with a model of its own.</p>
+
+    <h2 id="add"><a class="anchor" href="#add">Add Ollama</a></h2>
+    <ol class="steps">
+      <li><b>Pull a model</b>Pull a model in Ollama, such as <code>qwen3</code>, and leave the server running.</li>
+      <li><b>Add the provider</b>In magpie’s <span class="ui">Providers</span> tab, press <span class="ui">＋ Add provider</span> and pick Ollama under <span class="ui">On this machine</span>. No key is needed. magpie asks the server which models it has, and they show as <code>ollama/…</code>.</li>
+      <li><b>Pick it for an agent</b>In the <span class="ui">Agents</span> tab, click the model on the agent’s row and choose an Ollama model.</li>
+    </ol>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-add">Copy</button><pre id="ex-add">ollama pull qwen3
+magpie provider add ollama
+magpie provider test ollama</pre></div>
+    <p>Model ids in magpie are <code>provider/model</code>, so a model you pulled as <code>qwen3</code> reads <code>ollama/qwen3</code>. A tag stays in the id, as in <code>ollama/qwen3:8b</code>. In the terminal UI, magpie asks for the server’s address when you add it. LM Studio, oMLX, vLLM and llama.cpp’s server are in <a href="/docs/local-models">Local models</a>.</p>
+
+    <h2 id="remote"><a class="anchor" href="#remote">Another port or another computer</a></h2>
+    <p>If Ollama listens on another port, or runs on another computer such as a GPU box or a NAS, change <span class="ui">Server address</span> in the provider’s editor. Only the scheme, host and port change; each API keeps its path. The scheme can be left out, and <code>http</code> is taken; a path pasted with the address, such as <code>/v1</code>, is dropped.</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-remote">Copy</button><pre id="ex-remote">magpie provider set ollama address=192.168.1.20:11434
+magpie provider set ollama address=     # back to the default</pre></div>
+    <ul>
+      <li><b>Proxies.</b> A server on your own network is reached directly, whatever proxy Settings or the system name. A proxy you set on the provider itself is still used.</li>
+      <li><b>HTTPS.</b> An Ollama behind HTTPS with a self-signed certificate can be reached with <span class="ui">Don't check its certificate</span> in the editor. It applies to that provider’s own hosts only.</li>
+    </ul>
+
+    <h2 id="cloud"><a class="anchor" href="#cloud">Ollama Cloud</a></h2>
+    <ol class="steps">
+      <li><b>Get a key</b>Make one at <a href="https://ollama.com/settings/keys">ollama.com/settings/keys</a>.</li>
+      <li><b>Add the provider</b>In the <span class="ui">Providers</span> tab, press <span class="ui">＋ Add provider</span>, pick <span class="ui">Ollama Cloud</span>, paste the key and save. magpie asks Ollama Cloud which models the key can use.</li>
+      <li><b>Pick it for an agent</b>Choose an Ollama Cloud model, such as <code>deepseek-v4-pro</code>, on the agent’s row.</li>
+    </ol>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-cloud">Copy</button><pre id="ex-cloud">magpie provider add ollama-cloud &lt;key&gt;
+magpie claude ollama-cloud/deepseek-v4-pro</pre></div>
+    <p>Names, reasoning levels and prices come from models.dev’s <code>ollama-cloud</code> catalog. The key is kept in magpie’s settings.</p>
+
+    <h2 id="endpoints"><a class="anchor" href="#endpoints">Endpoints</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>Provider</th><th>Chat Completions</th><th>Anthropic Messages</th></tr>
+      <tr><td>Ollama</td><td><code>http://localhost:11434/v1</code></td><td><code>http://localhost:11434</code></td></tr>
+      <tr><td>Ollama Cloud</td><td><code>https://ollama.com/v1</code></td><td><code>https://ollama.com</code></td></tr>
+    </table></div>
+    <p>An agent whose API Ollama serves is passed on to that API. magpie uses no Responses endpoint for either, so when it has to translate, it uses Chat Completions: it keeps Responses first only for OpenAI’s own models, and Messages first only for Claude models.</p>
+
+    <h2 id="models"><a class="anchor" href="#models">Model list</a></h2>
+    <p>magpie asks the server for its list at the Chat Completions base: <code>http://localhost:11434/v1/models</code>, or <code>https://ollama.com/v1/models</code> for Ollama Cloud. A model shows in magpie once Ollama has it. After you pull another, press <span class="ui">Fetch models</span> in the provider’s editor, or run <code>magpie provider refresh ollama</code>. Pick the models agents see in the provider’s model list, or from the terminal:</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-models">Copy</button><pre id="ex-models">magpie provider refresh ollama
+magpie provider models ollama +qwen3</pre></div>
+    <p>Ollama 0.35.0 and later (0.40.5 for its cloud models) also serves decision models, such as Nimble, Clef and Tev. magpie reads Ollama’s <code>/api/tags</code> as well, and a model marked there as a decision model becomes one of the provider’s decision models for <a href="/docs/intent">intent routing</a>, never an agent’s model. An older Ollama lists none.</p>
+
+    <h2 id="agents"><a class="anchor" href="#agents">In each agent</a></h2>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-agents">Copy</button><pre id="ex-agents">magpie claude ollama/qwen3
+magpie codex ollama/qwen3
+magpie gemini model ollama/qwen3
+magpie opencode ollama/qwen3</pre></div>
+    <ul>
+      <li><b>Claude Code</b> speaks Anthropic Messages, and so does Ollama at <code>http://localhost:11434</code>, so its requests go there as they are. <a href="/docs/claude-code-models">Models in Claude Code</a>.</li>
+      <li><b>Codex</b> speaks OpenAI Responses, which magpie doesn’t send to Ollama. magpie turns each request into Chat Completions and the reply back, streaming and tool calls included. <a href="/docs/codex-models">Models in Codex</a>.</li>
+      <li><b>Gemini CLI</b> speaks Google’s Gemini API. magpie translates each request to Chat Completions and the reply back. <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>.</li>
+      <li><b>OpenCode</b> speaks Chat Completions, so its requests go to Ollama’s <code>/v1</code> as they are. <a href="/docs/opencode-models">Models in OpenCode</a>.</li>
+    </ul>
+    <p>Inside the agent, Claude Code’s and Codex’s <code>/model</code> list magpie’s models too, so you can move between a local model and a cloud one there. To go back to the agent’s own models, run <code>magpie claude default</code> or <code>magpie codex default</code>.</p>
+
+    <h2 id="window"><a class="anchor" href="#window">Context window and num_ctx</a></h2>
+    <p>Agents plan around how long a request the model takes. Claude Code takes a model it doesn’t know for 200K, and Codex compacts a conversation at 90% of the window it is told. magpie doesn’t read an Ollama chat model’s window, so tell it the real one: <span class="ui">Context window</span> under <span class="ui">Advanced</span> in the provider’s editor, for every model or one of them. magpie passes it on to the agents.</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-window">Copy</button><pre id="ex-window">magpie provider set ollama context=32k
+magpie provider set ollama context.qwen3=128k</pre></div>
+    <ul>
+      <li><b><code>num_ctx</code>.</b> Some clients send Ollama’s per-request options, such as <code>{"num_ctx": …}</code>, beside the Chat Completions fields. magpie leaves them out of every request it sends on: no Chat Completions API reads them, Ollama’s own <code>/v1</code> included. The window the model runs with is Ollama’s to set; give magpie the same number.</li>
+      <li><b>Too long.</b> When a conversation outgrows the window, Ollama answers “exceeded max context length”. magpie tells the agent so the way it understands, <code>context_length_exceeded</code> or Anthropic’s “prompt is too long”, so the agent compacts and tries again.</li>
+    </ul>
+
+    <h2 id="reasoning"><a class="anchor" href="#reasoning">Reasoning</a></h2>
+    <ul>
+      <li><b>Effort.</b> The effort an agent asks for is fitted to the nearest level the model has, as the catalog lists them. A model whose levels magpie doesn’t know is asked as the agent asked.</li>
+      <li><b>Reasoning off.</b> When an agent whose requests magpie translates, such as Codex or Gemini CLI, turns reasoning off and the model lists <code>none</code> among its levels, magpie asks for none.</li>
+      <li><b>Your own levels.</b> <code>magpie model efforts</code> offers only the levels you name, or sends a model no reasoning field at all.</li>
+    </ul>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-efforts">Copy</button><pre id="ex-efforts">magpie model efforts ollama/qwen3 low,medium,high
+magpie model efforts ollama/qwen3 off</pre></div>
+
+    <h2 id="tools"><a class="anchor" href="#tools">Tool calls</a></h2>
+    <p>Claude Code’s and OpenCode’s tool calls reach Ollama as the agent wrote them. For Codex and Gemini CLI, magpie translates the tools, the model’s calls and their results to Chat Completions and back, in streamed replies too.</p>
+
+    <h2 id="masking"><a class="anchor" href="#masking">Privacy masking</a></h2>
+    <p>magpie’s <a href="/docs/masking">privacy masking</a> replaces keys, tokens and other secrets with placeholders before a request leaves the gateway, a request to a local Ollama too. When the model runs on your own computer or network, you can turn on <span class="ui">Send requests unmasked</span> in its editor, or run <code>magpie provider set ollama unmasked=yes</code>.</p>
+    <ul>
+      <li><b>Cloud models.</b> Ollama’s cloud models pass a request on to a vendor whatever the address, so it is your call. The editor warns you while it is on for a provider that isn’t local, such as Ollama Cloud.</li>
+      <li><b>Tool arguments.</b> In a request in Ollama’s own format, a tool call’s arguments are masked as tool arguments, as in every other API.</li>
+      <li><b>Anonymous stats.</b> magpie’s daily stats name an Ollama model only when models.dev knows it; any other counts as “other”. See <a href="/docs/privacy">Privacy</a>.</li>
+    </ul>
+
+    <h2 id="cost"><a class="anchor" href="#cost">Usage and cost</a></h2>
+    <ul>
+      <li><b>Usage.</b> The <span class="ui">Usage</span> tab counts the tokens of every Ollama call. A model is priced at the price magpie finds for its id, which for a local model can be its maker’s list price. To count a local model at nothing, give it your own price.</li>
+      <li><b>Free first.</b> <code>free=yes</code> counts every model of the provider as free, so a Free first routing spends it before paid ones. Prices and Usage’s costs stay as listed.</li>
+      <li><b>Ollama Cloud’s allowance.</b> magpie reads the account’s balance from Ollama Cloud. The included allowance shows as a plan, in dollars used, with when it resets; an older plan shows its session and weekly limits instead. Credits you bought show as a balance. Past the allowance Ollama Cloud draws on those credits, so a spent allowance with credits left doesn’t stop the key.</li>
+      <li><b>Peak hours.</b> On Ollama Cloud, <code>deepseek-v4.1-flash</code> and <code>deepseek-v4-pro</code> (with their tags) cost double from 12:00 to 18:00 UTC, Monday to Friday. models.dev lists the off-peak price; the Usage tab doubles it in those hours, and a Cheapest first routing counts it.</li>
+      <li><b>Out of allowance.</b> When Ollama Cloud says a key is out without saying when it comes back, as its weekly limit does, magpie rests the key for 15 minutes. <code>quota-rest</code> sets how long, up to 8 days. With several keys (<span class="ui">Add another key</span>) the next one takes over; when every key is out, the gateway answers at once with Retry-After.</li>
+    </ul>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-cost">Copy</button><pre id="ex-cost">magpie model price ollama/qwen3 0,0,0,0
+magpie provider set ollama free=yes
+magpie provider quota-rest ollama-cloud 7d
+magpie provider fallback ollama-cloud ollama/qwen3</pre></div>
+
+    <h2 id="server"><a class="anchor" href="#server">magpie as an Ollama server</a></h2>
+    <p>Some apps take a custom model only as an Ollama server: VS Code’s Copilot Ollama provider, Visual Studio’s Copilot BYOK, Zed’s Ollama provider and the <code>ollama</code> CLI. Point them at magpie’s gateway, <code>http://127.0.0.1:3425</code>, and they see magpie’s models, from every provider, not only Ollama.</p>
+    <ul>
+      <li><b>Routes.</b> magpie answers <code>/api/version</code>, <code>/api/tags</code>, <code>/api/show</code>, <code>/api/chat</code> and <code>/api/generate</code>.</li>
+      <li><b>The same path.</b> A chat there is served as <code>/v1/chat/completions</code> is, so key limits, routing, fallbacks and usage are the same. A gateway key held to some models lists only those.</li>
+      <li><b>What it tells.</b> <code>/api/tags</code> and <code>/api/show</code> mark tools, vision when the model reads images, and thinking when it reasons. <code>/api/show</code> also gives the model’s window, or 32768 for one magpie doesn’t know. The <code>ollama</code> CLI’s <code>name:latest</code> finds a model called <code>name</code>.</li>
+    </ul>
+
+    <h2 id="trouble"><a class="anchor" href="#trouble">Troubleshooting</a></h2>
+    <ul>
+      <li><b>A model you pulled isn’t listed.</b> The list comes from the server. Press <span class="ui">Fetch models</span>, or run <code>magpie provider refresh ollama</code>, and pick it in the provider’s model list. Use the name Ollama lists, tag included.</li>
+      <li><b>Ollama isn’t running.</b> <code>magpie provider test ollama</code> sends a tiny request through each endpoint, or to each model you name; add <code>--as codex</code> or <code>--as claude-code</code> to send it the way that agent would. Start Ollama, or check <span class="ui">Server address</span>. <code>fallback</code> names where requests go while it is down.</li>
+      <li><b>“exceeded max context length”.</b> The conversation is longer than the model was loaded for. Set the real <span class="ui">Context window</span> on the provider, and the agents compact before they reach it.</li>
+      <li><b>Another computer can’t be reached.</b> Check the address and port in <span class="ui">Server address</span>; for HTTPS with a self-signed certificate, turn on <span class="ui">Don't check its certificate</span>.</li>
+    </ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
+    <h3>How do I use Ollama in Claude Code?</h3>
+    <p>Add Ollama in magpie (Providers, Add provider, Ollama under On this machine), then pick one of its models on Claude Code’s row, or run <code>magpie claude ollama/qwen3</code>. Claude Code’s requests go through magpie’s gateway to Ollama’s Anthropic Messages API at <code>http://localhost:11434</code> as they are.</p>
+    <h3>Can Codex use Ollama?</h3>
+    <p>Yes. Codex speaks only the Responses API, so magpie turns its requests into Chat Completions for Ollama, and the replies back, tool calls included. Run <code>magpie codex ollama/qwen3</code>.</p>
+    <h3>Can Gemini CLI and OpenCode use Ollama?</h3>
+    <p>Yes. Gemini CLI speaks Google’s API, so magpie translates its requests to Ollama’s Chat Completions and the replies back. OpenCode speaks Chat Completions, so its requests go to Ollama as they are. Run <code>magpie gemini model ollama/qwen3</code> or <code>magpie opencode ollama/qwen3</code>.</p>
+    <h3>How do I run qwen3-coder from Ollama in Claude Code?</h3>
+    <p>Pull it in Ollama, press Fetch models in the provider’s editor in magpie (or run <code>magpie provider refresh ollama</code>), and pick it on Claude Code’s row. Its id in magpie is <code>ollama/</code> and the name Ollama lists it under, tag included. Set its Context window too: Claude Code takes a model it doesn’t know for 200K.</p>
+    <h3>Can magpie use Ollama on another computer?</h3>
+    <p>Yes. Set the provider’s Server address to that computer, such as <code>magpie provider set ollama address=192.168.1.20:11434</code>. A server on your own network is reached directly, not through a proxy set in Settings or the system.</p>
+    <h3>Does magpie work with Ollama Cloud?</h3>
+    <p>Yes. Add Ollama Cloud with a key from <code>ollama.com/settings/keys</code>. magpie lists the models the key can use, prices them from models.dev, and shows the account’s included allowance and the credits you bought.</p>
+    <h3>Do I need an API key for a local Ollama?</h3>
+    <p>No. The Ollama preset takes none. Ollama Cloud needs one.</p>
+
+    <p>Other local servers, such as LM Studio, oMLX, vLLM and llama.cpp’s server, are in <a href="/docs/local-models">Local models</a>. To let a local model classify each request for routing, see <a href="/docs/intent">Intent routing</a>.</p>
+    <p><b>By provider:</b> <a href="/docs/deepseek">DeepSeek</a> · <a href="/docs/kimi">Kimi and Kimi Code</a> · <a href="/docs/glm">GLM Coding Plan</a> · <a href="/docs/qwen">Qwen</a> · <a href="/docs/minimax">MiniMax</a> · <a href="/docs/gemini">Gemini</a> · <a href="/docs/grok">Grok</a> · <a href="/docs/mistral">Mistral</a> · <a href="/docs/openrouter">OpenRouter</a> · <a href="/docs/copilot">GitHub Copilot</a></p>
+    <p style="margin-top:48px">Every agent: <a href="/docs/claude-code-models">Models in Claude Code</a>, <a href="/docs/codex-models">Models in Codex</a>, <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>, <a href="/docs/opencode-models">Models in OpenCode</a>. Ask on <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> if you get stuck.</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a href="/docs/remote">Remote magpie</a>
+    <a href="/docs/docker">Docker</a>
+    <a href="/docs/privacy">Privacy</a>
+    <a href="/docs/masking">Privacy masking</a>
+    <a href="/docs/mcp-router">MCP router</a>
+    <a href="/docs/library">Library</a>
+    <a href="/docs/claude-code-models">Models in Claude Code</a>
+    <a href="/docs/codex-models">Models in Codex</a>
+    <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a href="/docs/local-models">Local models</a>
+    <a href="/docs/opencode-models">Models in OpenCode</a>
+    <a href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/contributors">Contributors</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

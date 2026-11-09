@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ollama を Claude Code・Codex・Gemini CLI・OpenCode で使う · magpie</title>
+<meta name="description" content="magpie で Ollama（このマシンでも別のマシンでも）と Ollama Cloud を Claude Code・Codex・Gemini CLI・OpenCode から使う方法：一度追加するだけで、ツールごとに qwen3 などのモデルを選べます。各ツールの API の変換、コンテキストウィンドウの伝達、使用量と Ollama Cloud の枠の集計は magpie が受け持ちます。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/ollama">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/ollama">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/ollama">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/ollama">
+<link rel="canonical" href="https://usemagpie.ai/docs/ja/ollama">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Ollama を Claude Code・Codex・Gemini CLI・OpenCode で使う">
+<meta property="og:description" content="magpie で Ollama（このマシンでも別のマシンでも）と Ollama Cloud を Claude Code・Codex・Gemini CLI・OpenCode から使う方法：一度追加するだけで、ツールごとに qwen3 などのモデルを選べます。各ツールの API の変換、コンテキストウィンドウの伝達、使用量と Ollama Cloud の枠の集計は magpie が受け持ちます。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/ja/ollama">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Ollama を Claude Code・Codex・Gemini CLI・OpenCode で使う",
+   "description": "magpie で Ollama（このマシンでも別のマシンでも）と Ollama Cloud を Claude Code・Codex・Gemini CLI・OpenCode から使う方法：一度追加するだけで、ツールごとに qwen3 などのモデルを選べます。各ツールの API の変換、コンテキストウィンドウの伝達、使用量と Ollama Cloud の枠の集計は magpie が受け持ちます。",
+   "inLanguage": "ja",
+   "url": "https://usemagpie.ai/docs/ja/ollama",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Claude Code で Ollama のローカルモデルを使うには？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie に Ollama を追加し（プロバイダ → プロバイダを追加 → このマシン上の Ollama）、Claude Code の行でそのモデルを選ぶか、magpie claude ollama/qwen3 を実行します。Claude Code のリクエストは magpie のゲートウェイを通り、http://localhost:11434 にある Ollama の Anthropic Messages API へそのまま届きます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex で Ollama は使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。Codex は Responses API しか話さないので、magpie がリクエストを Chat Completions に変換して Ollama に送り、返答を元に戻します。ツール呼び出しも含みます。magpie codex ollama/qwen3 を実行してください。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Gemini CLI や OpenCode でも Ollama は使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。Gemini CLI は Google の API を話すので、magpie がリクエストを Ollama の Chat Completions に変換し、返答を元に戻します。OpenCode は Chat Completions を話すので、リクエストはそのまま Ollama に届きます。magpie gemini model ollama/qwen3 か magpie opencode ollama/qwen3 を実行してください。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Ollama の qwen3-coder を Claude Code で使うには？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Ollama で pull してから、magpie のプロバイダ編集画面で「モデルを取得」を押し（または magpie provider refresh ollama を実行し）、Claude Code の行で選びます。magpie での ID は ollama/ に Ollama が表示する名前（タグ込み）を続けたものです。コンテキストウィンドウも設定してください。Claude Code は知らないモデルを 200K とみなします。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "別のマシンの Ollama を使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。プロバイダのサーバーアドレスをそのマシンに変えます。たとえば magpie provider set ollama address=192.168.1.20:11434 です。自分のネットワーク内のサーバーには、設定やシステムのプロキシを通さず直接つなぎます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Ollama Cloud にも対応していますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "対応しています。ollama.com/settings/keys で作ったキーで Ollama Cloud を追加すると、magpie はそのキーで使えるモデルを一覧にし、models.dev の価格で計算し、アカウントのプランに含まれる枠と購入したクレジットを表示します。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "ローカルの Ollama に API キーは要りますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "要りません。Ollama のプリセットはキーなしで使えます。Ollama Cloud にはキーが要ります。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/ja/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>ドキュメント</small></a>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/start">はじめに</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a class="toc-only" href="/docs/ja/remote">リモート magpie</a>
+    <a class="toc-only" href="/docs/ja/docker">Docker</a>
+    <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
+    <a class="toc-only" href="/docs/ja/masking">プライバシーマスキング</a>
+    <a class="toc-only" href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a class="toc-only" href="/docs/ja/library">ライブラリ</a>
+    <a class="toc-only" href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a class="toc-only" href="/docs/ja/local-models">ローカルモデル</a>
+    <a class="toc-only" href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="言語" title="言語" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/ollama" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/ollama" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/ollama" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="Discord の magpie" title="Discord に参加"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="GitHub の magpie" title="GitHub のソースコード"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">ダウンロード</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>このページ</p>
+    <a href="#add">Ollama を追加する</a>
+    <a href="#remote">別のマシン</a>
+    <a href="#cloud">Ollama Cloud</a>
+    <a href="#endpoints">エンドポイント</a>
+    <a href="#models">モデル一覧</a>
+    <a href="#agents">ツールごとの使い方</a>
+    <a href="#window">コンテキストウィンドウ</a>
+    <a href="#reasoning">推論</a>
+    <a href="#tools">ツール呼び出し</a>
+    <a href="#masking">プライバシーマスク</a>
+    <a href="#cost">使用量と費用</a>
+    <a href="#server">Ollama サーバーとして</a>
+    <a href="#trouble">うまくいかないとき</a>
+    <a href="#faq">よくある質問</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">ドキュメント · プロバイダ</p>
+    <h1>Ollama を Claude Code・Codex・Gemini CLI・OpenCode で使う</h1>
+    <p class="lede">Ollama は pull したモデルを <code>http://localhost:11434</code> で OpenAI Chat Completions と Anthropic Messages の二つの API で提供します。Ollama Cloud はクラウドのモデルを <code>ollama.com</code> で同じように提供し、API キーで使います。どちらかを magpie に一度追加すれば、Claude Code・Codex・Gemini CLI・OpenCode などつないだすべてのツールが、magpie のゲートウェイ <code>127.0.0.1:3425</code> 経由で使えます。ツールごとに別のモデルを選べます。</p>
+
+    <h2 id="add"><a class="anchor" href="#add">Ollama を追加する</a></h2>
+    <ol class="steps">
+      <li><b>モデルを pull する</b>Ollama で <code>qwen3</code> などのモデルを pull し、サーバーを動かしたままにします。</li>
+      <li><b>プロバイダを追加する</b>magpie の <span class="ui">プロバイダ</span> タブで <span class="ui">＋ プロバイダを追加</span> を押し、<span class="ui">このマシン上</span> から Ollama を選びます。キーは要りません。magpie がサーバーにモデルを問い合わせ、<code>ollama/…</code> として表示されます。</li>
+      <li><b>ツールに割り当てる</b><span class="ui">エージェント</span> タブでツールの行のモデルをクリックし、Ollama のモデルを選びます。</li>
+    </ol>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-add">コピー</button><pre id="ex-add">ollama pull qwen3
+magpie provider add ollama
+magpie provider test ollama</pre></div>
+    <p>magpie のモデル ID は <code>プロバイダ/モデル</code> の形なので、<code>qwen3</code> として pull したモデルは <code>ollama/qwen3</code> になります。タグも ID に残り、<code>ollama/qwen3:8b</code> のようになります。ターミナル UI で追加すると、サーバーのアドレスを聞かれます。LM Studio・oMLX・vLLM・llama.cpp のサーバーは <a href="/docs/ja/local-models">ローカルモデル</a> を見てください。</p>
+
+    <h2 id="remote"><a class="anchor" href="#remote">別のポート・別のマシン</a></h2>
+    <p>Ollama が別のポートで待ち受けている場合や、GPU マシンや NAS など別のマシンで動いている場合は、プロバイダの編集画面で <span class="ui">サーバーアドレス</span> を変えます。変わるのはスキーム・ホスト・ポートだけで、各 API のパスはそのままです。スキームは省略でき、その場合は <code>http</code> になります。アドレスと一緒に貼ったパス（<code>/v1</code> など）は取り除かれます。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-remote">コピー</button><pre id="ex-remote">magpie provider set ollama address=192.168.1.20:11434
+magpie provider set ollama address=     # 既定に戻す</pre></div>
+    <ul>
+      <li><b>プロキシ。</b>自分のネットワーク内のサーバーには、設定やシステムがどのプロキシを指定していても直接つなぎます。プロバイダ自体に設定したプロキシは使われます。</li>
+      <li><b>HTTPS。</b>自己署名証明書の HTTPS の後ろにある Ollama には、編集画面の <span class="ui">証明書を検証しない</span> でつなげます。そのプロバイダ自身のホストにだけ効きます。</li>
+    </ul>
+
+    <h2 id="cloud"><a class="anchor" href="#cloud">Ollama Cloud</a></h2>
+    <ol class="steps">
+      <li><b>キーを作る</b><a href="https://ollama.com/settings/keys">ollama.com/settings/keys</a> で作成します。</li>
+      <li><b>プロバイダを追加する</b><span class="ui">プロバイダ</span> タブで <span class="ui">＋ プロバイダを追加</span> を押し、<span class="ui">Ollama Cloud</span> を選んでキーを貼り付け、保存します。magpie がそのキーで使えるモデルを Ollama Cloud に問い合わせます。</li>
+      <li><b>ツールに割り当てる</b>ツールの行で <code>deepseek-v4-pro</code> などの Ollama Cloud のモデルを選びます。</li>
+    </ol>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-cloud">コピー</button><pre id="ex-cloud">magpie provider add ollama-cloud &lt;key&gt;
+magpie claude ollama-cloud/deepseek-v4-pro</pre></div>
+    <p>モデル名・推論レベル・価格は models.dev の <code>ollama-cloud</code> カタログから取ります。キーは magpie の設定に保存されます。</p>
+
+    <h2 id="endpoints"><a class="anchor" href="#endpoints">エンドポイント</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>プロバイダ</th><th>Chat Completions</th><th>Anthropic Messages</th></tr>
+      <tr><td>Ollama</td><td><code>http://localhost:11434/v1</code></td><td><code>http://localhost:11434</code></td></tr>
+      <tr><td>Ollama Cloud</td><td><code>https://ollama.com/v1</code></td><td><code>https://ollama.com</code></td></tr>
+    </table></div>
+    <p>ツールが話す API を Ollama が提供していれば、リクエストはその API にそのまま渡ります。magpie はどちらにも Responses のエンドポイントを使わないので、変換が要るときは Chat Completions を使います。Responses を優先するのは OpenAI 自身のモデルだけ、Messages を優先するのは Claude のモデルだけです。</p>
+
+    <h2 id="models"><a class="anchor" href="#models">モデル一覧</a></h2>
+    <p>magpie は Chat Completions のベース URL から一覧を取ります。<code>http://localhost:11434/v1/models</code>、Ollama Cloud なら <code>https://ollama.com/v1/models</code> です。Ollama にあるモデルが magpie に表示されます。新しく pull したら、プロバイダの編集画面で <span class="ui">モデルを取得</span> を押すか、<code>magpie provider refresh ollama</code> を実行します。ツールに見せるモデルは、プロバイダのモデル一覧かターミナルで選べます。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-models">コピー</button><pre id="ex-models">magpie provider refresh ollama
+magpie provider models ollama +qwen3</pre></div>
+    <p>Ollama 0.35.0 以降（クラウドモデルは 0.40.5 以降）は、Nimble・Clef・Tev などの判定モデルも提供します。magpie は Ollama の <code>/api/tags</code> も読み、判定モデルと示されたものをそのプロバイダの <a href="/docs/ja/intent">インテントルーティング</a> 用の判定モデルにします。ツールのモデルにはなりません。古い Ollama では一覧に出ません。</p>
+
+    <h2 id="agents"><a class="anchor" href="#agents">ツールごとの使い方</a></h2>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-agents">コピー</button><pre id="ex-agents">magpie claude ollama/qwen3
+magpie codex ollama/qwen3
+magpie gemini model ollama/qwen3
+magpie opencode ollama/qwen3</pre></div>
+    <ul>
+      <li><b>Claude Code</b> は Anthropic Messages を話し、Ollama も <code>http://localhost:11434</code> で提供しているので、リクエストはそのまま届きます。<a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>。</li>
+      <li><b>Codex</b> は OpenAI Responses を話しますが、magpie はそれを Ollama には送りません。リクエストを Chat Completions に変換し、返答を元に戻します。ストリーミングとツール呼び出しも含みます。<a href="/docs/ja/codex-models">Codex で他のモデル</a>。</li>
+      <li><b>Gemini CLI</b> は Google の Gemini API を話します。magpie がリクエストを Chat Completions に変換し、返答を元に戻します。<a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>。</li>
+      <li><b>OpenCode</b> は Chat Completions を話すので、リクエストは Ollama の <code>/v1</code> にそのまま届きます。<a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>。</li>
+    </ul>
+    <p>ツールの中でも、Claude Code と Codex の <code>/model</code> に magpie のモデルが並ぶので、ローカルモデルとクラウドのモデルをそこで切り替えられます。ツール本来のモデルに戻すには <code>magpie claude default</code> か <code>magpie codex default</code> を実行します。</p>
+
+    <h2 id="window"><a class="anchor" href="#window">コンテキストウィンドウと num_ctx</a></h2>
+    <p>エージェントは、モデルが受け付けるリクエストの長さを前提に会話を組み立てます。Claude Code は知らないモデルを 200K とみなし、Codex は伝えられたウィンドウの 90% で会話を圧縮します。magpie は Ollama のチャットモデルのウィンドウを読まないので、実際の値を伝えてください。プロバイダの編集画面の <span class="ui">詳細設定</span> にある <span class="ui">コンテキストウィンドウ</span> で、全モデルにも個別のモデルにも設定できます。magpie がそれをエージェントに伝えます。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-window">コピー</button><pre id="ex-window">magpie provider set ollama context=32k
+magpie provider set ollama context.qwen3=128k</pre></div>
+    <ul>
+      <li><b><code>num_ctx</code>。</b>クライアントによっては、Chat Completions のフィールドと並べて <code>{"num_ctx": …}</code> のような Ollama のリクエストごとのオプションを送ります。magpie は転送するすべてのリクエストからそれを外します。Ollama 自身の <code>/v1</code> も含め、Chat Completions API はこれを読まないためです。モデルが実際に使うウィンドウは Ollama 側で決まるので、magpie にも同じ数を設定してください。</li>
+      <li><b>長すぎる場合。</b>会話がウィンドウを超えると、Ollama は “exceeded max context length” を返します。magpie はそれをツールが理解できる形、つまり <code>context_length_exceeded</code> か Anthropic の “prompt is too long” で伝えるので、ツールは圧縮してやり直します。</li>
+    </ul>
+
+    <h2 id="reasoning"><a class="anchor" href="#reasoning">推論</a></h2>
+    <ul>
+      <li><b>推論の強さ。</b>ツールが求める強さは、カタログにあるそのモデルのレベルのうち最も近いものに合わせます。レベルがわからないモデルには、ツールの指定どおりに送ります。</li>
+      <li><b>推論オフ。</b>magpie が変換するツール（Codex や Gemini CLI）が推論をオフにし、モデルのレベルに <code>none</code> があれば、magpie は none を指定します。</li>
+      <li><b>レベルを自分で決める。</b><code>magpie model efforts</code> で、指定したレベルだけを出すことも、推論のフィールドをまったく送らないこともできます。</li>
+    </ul>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-efforts">コピー</button><pre id="ex-efforts">magpie model efforts ollama/qwen3 low,medium,high
+magpie model efforts ollama/qwen3 off</pre></div>
+
+    <h2 id="tools"><a class="anchor" href="#tools">ツール呼び出し</a></h2>
+    <p>Claude Code と OpenCode のツール呼び出しは、ツールが書いたとおりに Ollama へ届きます。Codex と Gemini CLI では、ツールの定義、モデルからの呼び出し、その結果を magpie が Chat Completions に変換して戻します。ストリーミングの返答でも同じです。</p>
+
+    <h2 id="masking"><a class="anchor" href="#masking">プライバシーマスク</a></h2>
+    <p>magpie の <a href="/docs/ja/masking">プライバシーマスク</a> は、リクエストがゲートウェイを出る前にキーやトークンなどの秘密をプレースホルダーに置き換えます。ローカルの Ollama へのリクエストも同じです。モデルが自分のマシンやネットワーク内で動いているなら、編集画面で <span class="ui">リクエストをマスクしない</span> をオンにするか、<code>magpie provider set ollama unmasked=yes</code> を実行します。</p>
+    <ul>
+      <li><b>クラウドモデル。</b>Ollama のクラウドモデルは、アドレスに関係なくリクエストをベンダーへ送ります。判断はあなた次第です。ローカルでないプロバイダ（Ollama Cloud など）でオンにしている間は、編集画面に注意が出ます。</li>
+      <li><b>ツールの引数。</b>Ollama 自身の形式のリクエストでも、ツール呼び出しの引数は他の API と同じくツールの引数としてマスクします。</li>
+      <li><b>匿名の統計。</b>magpie の日次統計は、models.dev が知っている Ollama のモデルだけを名前で記録し、それ以外は “other” とします。<a href="/docs/ja/privacy">プライバシー</a> を見てください。</li>
+    </ul>
+
+    <h2 id="cost"><a class="anchor" href="#cost">使用量と費用</a></h2>
+    <ul>
+      <li><b>使用量。</b><span class="ui">使用量</span> タブは Ollama の呼び出しごとにトークンを数えます。価格は magpie がそのモデルの ID で見つけたもので、ローカルモデルではモデルの開発元の定価になることがあります。ローカルモデルを無料として数えるには、自分で価格を設定してください。</li>
+      <li><b>無料優先。</b><code>free=yes</code> にすると、そのプロバイダのモデルはすべて無料として扱われ、<span class="ui">無料優先</span> のルーティングは有料のものより先に使います。価格と使用量の費用は定価のまま表示されます。</li>
+      <li><b>Ollama Cloud の枠。</b>magpie は Ollama Cloud からアカウントの残高を読みます。プランに含まれる枠はプランとして、使った金額（ドル）とリセットの時期つきで表示されます。古いプランではセッションの上限と週の上限が表示されます。購入したクレジットは残高として表示されます。枠を超えると Ollama Cloud はクレジットから引くので、枠を使い切ってもクレジットが残っていればキーは止まりません。</li>
+      <li><b>ピーク時間帯。</b>Ollama Cloud の <code>deepseek-v4.1-flash</code> と <code>deepseek-v4-pro</code>（タグ付きのものも）は、月曜から金曜の UTC 12:00〜18:00 に 2 倍の料金になります。models.dev にあるのはオフピークの価格で、使用量タブはこの時間帯に 2 倍で計算し、<span class="ui">最安優先</span> のルーティングもそれを考慮します。</li>
+      <li><b>枠を使い切ったとき。</b>Ollama Cloud がキーの枠切れを伝えても回復の時期を言わない場合（週の上限など）、magpie はそのキーを 15 分休ませます。<code>quota-rest</code> で最長 8 日まで変えられます。キーが複数あれば（<span class="ui">別のキーを追加</span>）次のキーが引き継ぎ、すべて使い切ったときはゲートウェイがすぐに Retry-After つきで返します。</li>
+    </ul>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-cost">コピー</button><pre id="ex-cost">magpie model price ollama/qwen3 0,0,0,0
+magpie provider set ollama free=yes
+magpie provider quota-rest ollama-cloud 7d
+magpie provider fallback ollama-cloud ollama/qwen3</pre></div>
+
+    <h2 id="server"><a class="anchor" href="#server">magpie を Ollama サーバーとして使う</a></h2>
+    <p>カスタムモデルを Ollama サーバーとしてしか受け付けないアプリがあります。VS Code の Copilot の Ollama プロバイダ、Visual Studio の Copilot BYOK、Zed の Ollama プロバイダ、そして <code>ollama</code> CLI です。これらを magpie のゲートウェイ <code>http://127.0.0.1:3425</code> に向ければ、Ollama のものだけでなく、すべてのプロバイダの magpie のモデルが見えます。</p>
+    <ul>
+      <li><b>ルート。</b>magpie は <code>/api/version</code>・<code>/api/tags</code>・<code>/api/show</code>・<code>/api/chat</code>・<code>/api/generate</code> に応答します。</li>
+      <li><b>同じ経路。</b>ここでのチャットは <code>/v1/chat/completions</code> と同じ処理を通るので、キーの制限・ルーティング・フォールバック・使用量の集計も同じです。一部のモデルに限ったゲートウェイキーには、そのモデルだけが表示されます。</li>
+      <li><b>伝える情報。</b><code>/api/tags</code> と <code>/api/show</code> は、ツール、画像を読めるモデルなら vision、推論するモデルなら thinking を示します。<code>/api/show</code> はモデルのウィンドウも伝え、magpie が知らないモデルは 32768 とします。<code>ollama</code> CLI の <code>name:latest</code> は <code>name</code> という名前のモデルに当たります。</li>
+    </ul>
+
+    <h2 id="trouble"><a class="anchor" href="#trouble">うまくいかないとき</a></h2>
+    <ul>
+      <li><b>pull したモデルが一覧にない。</b>一覧はサーバーから取ります。<span class="ui">モデルを取得</span> を押すか <code>magpie provider refresh ollama</code> を実行し、プロバイダのモデル一覧で選んでください。名前は Ollama が表示するとおり、タグ込みで指定します。</li>
+      <li><b>Ollama が動いていない。</b><code>magpie provider test ollama</code> は各エンドポイント、または指定したモデルに小さなリクエストを送ります。<code>--as codex</code> や <code>--as claude-code</code> をつけると、そのツールと同じ形で送ります。Ollama を起動するか、<span class="ui">サーバーアドレス</span> を確かめてください。止まっている間のリクエストの行き先は <code>fallback</code> で決められます。</li>
+      <li><b>“exceeded max context length”。</b>会話がモデルを読み込んだときの長さを超えています。プロバイダに実際の <span class="ui">コンテキストウィンドウ</span> を設定すれば、ツールはそこに届く前に圧縮します。</li>
+      <li><b>別のマシンにつながらない。</b><span class="ui">サーバーアドレス</span> のアドレスとポートを確かめてください。自己署名証明書の HTTPS なら <span class="ui">証明書を検証しない</span> をオンにします。</li>
+    </ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
+    <h3>Claude Code で Ollama のローカルモデルを使うには？</h3>
+    <p>magpie に Ollama を追加し（プロバイダ → プロバイダを追加 → このマシン上の Ollama）、Claude Code の行でそのモデルを選ぶか、<code>magpie claude ollama/qwen3</code> を実行します。Claude Code のリクエストは magpie のゲートウェイを通り、<code>http://localhost:11434</code> にある Ollama の Anthropic Messages API へそのまま届きます。</p>
+    <h3>Codex で Ollama は使えますか？</h3>
+    <p>使えます。Codex は Responses API しか話さないので、magpie がリクエストを Chat Completions に変換して Ollama に送り、返答を元に戻します。ツール呼び出しも含みます。<code>magpie codex ollama/qwen3</code> を実行してください。</p>
+    <h3>Gemini CLI や OpenCode でも Ollama は使えますか？</h3>
+    <p>使えます。Gemini CLI は Google の API を話すので、magpie がリクエストを Ollama の Chat Completions に変換し、返答を元に戻します。OpenCode は Chat Completions を話すので、リクエストはそのまま Ollama に届きます。<code>magpie gemini model ollama/qwen3</code> か <code>magpie opencode ollama/qwen3</code> を実行してください。</p>
+    <h3>Ollama の qwen3-coder を Claude Code で使うには？</h3>
+    <p>Ollama で pull してから、magpie のプロバイダ編集画面で「モデルを取得」を押し（または <code>magpie provider refresh ollama</code> を実行し）、Claude Code の行で選びます。magpie での ID は <code>ollama/</code> に Ollama が表示する名前（タグ込み）を続けたものです。コンテキストウィンドウも設定してください。Claude Code は知らないモデルを 200K とみなします。</p>
+    <h3>別のマシンの Ollama を使えますか？</h3>
+    <p>使えます。プロバイダのサーバーアドレスをそのマシンに変えます。たとえば <code>magpie provider set ollama address=192.168.1.20:11434</code> です。自分のネットワーク内のサーバーには、設定やシステムのプロキシを通さず直接つなぎます。</p>
+    <h3>Ollama Cloud にも対応していますか？</h3>
+    <p>対応しています。<code>ollama.com/settings/keys</code> で作ったキーで Ollama Cloud を追加すると、magpie はそのキーで使えるモデルを一覧にし、models.dev の価格で計算し、アカウントのプランに含まれる枠と購入したクレジットを表示します。</p>
+    <h3>ローカルの Ollama に API キーは要りますか？</h3>
+    <p>要りません。Ollama のプリセットはキーなしで使えます。Ollama Cloud にはキーが要ります。</p>
+
+    <p>LM Studio・oMLX・vLLM・llama.cpp など他のローカルサーバーは <a href="/docs/ja/local-models">ローカルモデル</a> を見てください。ローカルモデルにリクエストを分類させてルーティングを決めるには <a href="/docs/ja/intent">インテントルーティング</a> を見てください。</p>
+    <p><b>プロバイダ別：</b><a href="/docs/ja/deepseek">DeepSeek</a> · <a href="/docs/ja/kimi">Kimi と Kimi Code</a> · <a href="/docs/ja/glm">GLM Coding Plan</a> · <a href="/docs/ja/qwen">Qwen</a> · <a href="/docs/ja/minimax">MiniMax</a> · <a href="/docs/ja/gemini">Gemini</a> · <a href="/docs/ja/grok">Grok</a> · <a href="/docs/ja/mistral">Mistral</a> · <a href="/docs/ja/openrouter">OpenRouter</a> · <a href="/docs/ja/copilot">GitHub Copilot</a></p>
+    <p style="margin-top:48px">ツールごとのガイド：<a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>、<a href="/docs/ja/codex-models">Codex で他のモデル</a>、<a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>、<a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>。困ったときは <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> で質問してください。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a href="/docs/ja/remote">リモート magpie</a>
+    <a href="/docs/ja/docker">Docker</a>
+    <a href="/docs/ja/privacy">プライバシー</a>
+    <a href="/docs/ja/masking">プライバシーマスキング</a>
+    <a href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a href="/docs/ja/library">ライブラリ</a>
+    <a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a href="/docs/ja/local-models">ローカルモデル</a>
+    <a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/ja/contributors">コントリビューター</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "コピーしました"; setTimeout(() => (b.textContent = "コピー"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
