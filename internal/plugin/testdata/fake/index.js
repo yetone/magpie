@@ -81,6 +81,9 @@ export const FakePlugin = async ({ client }) => ({
         "fake-gemini": { name: "Fake Gemini", provider: { npm: "@ai-sdk/google" }, reasoning: true, modalities: { input: ["text"], output: ["text"] }, limit: { context: 3000, output: 300 } },
       },
     }
+    // $FAKE_KIRO: a Claude model named as Kiro's plugin names it, on
+    // Anthropic's Messages API
+    if (process.env.FAKE_KIRO) cfg.provider[ID].models["claude-opus-5.5"] = { name: "Claude Opus 5.5", provider: { npm: "@ai-sdk/anthropic" }, reasoning: true, modalities: { input: ["text", "image"], output: ["text"] }, limit: { context: 200000, output: 32000 } }
     // $FAKE_RESPONSES: one model more, on OpenAI's Responses (Grok's)
     // $FAKE_FAST=1: fake-1 has a fast one, as Cursor's plugin 0.1.x lists
     // a model's -fast (=tier: see the models hook)

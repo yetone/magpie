@@ -298,7 +298,7 @@ func deepSeekThenClaude(t *testing.T, stream bool) {
 }
 
 // Only an upstream serving Claude is sent the body without DeepSeek's
-// blocks; Claude's own, an unsigned one and a redacted one stay, and
+// blocks and those signed empty; Claude's own and a redacted one stay, and
 // DeepSeek's endpoint and another vendor's get it byte for byte.
 func TestWithoutForeignThinking(t *testing.T) {
 	fresh(t)
@@ -329,8 +329,20 @@ func TestWithoutForeignThinking(t *testing.T) {
 	if s := gjson.GetBytes(got, "messages.1.content.#.type").Raw; s != `["text"]` {
 		t.Errorf("Claude's message 1 = %s, want DeepSeek's thinking out", s)
 	}
-	if s := gjson.GetBytes(got, "messages.3.content").Raw; s != gjson.GetBytes(conv("claude-opus-5-5"), "messages.3.content").Raw {
-		t.Errorf("Claude's message 3 = %s, want it as it was", s)
+	// an empty signature is none Claude made (citricdu: Grok's thinking
+	// after a compaction): out too, Claude's own and redacted ones kept
+	want3 := `[{"type":"thinking","thinking":"b","signature":"CAQS8gcKEAgTGAI4AUqAAQ=="},{"type":"redacted_thinking","data":"EmwKAhgB"},{"type":"text","text":"Ok"}]`
+	if s := gjson.GetBytes(got, "messages.3.content").Raw; s != want3 {
+		t.Errorf("Claude's message 3 = %s, want %s", s, want3)
+	}
+	// on Bedrock's and Vertex AI's ids too, and a block with no signature
+	// field at all; an assistant message of nothing else goes
+	for _, model := range []string{"us.anthropic.claude-opus-5-5-v1:0", "claude-opus-5-5@20261001"} {
+		body := []byte(`{"model":"` + model + `","messages":[{"role":"user","content":"go"},{"role":"assistant","content":[{"type":"thinking","thinking":"grok"}]},{"role":"assistant","content":[{"type":"thinking","thinking":"x","signature":" "},{"type":"tool_use","id":"t1","name":"Read","input":{}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}]}`)
+		got := withoutForeignThinking(find("claude-api"), body)
+		if n, s := len(gjson.GetBytes(got, "messages").Array()), gjson.GetBytes(got, "messages.1.content.#.type").Raw; n != 3 || s != `["tool_use"]` {
+			t.Errorf("%s: messages = %s", model, gjson.GetBytes(got, "messages").Raw)
+		}
 	}
 	for _, c := range []struct{ id, model string }{{"deepseek", "deepseek-v4-pro"}, {"kimi", "kimi-k2.6"}} {
 		if got := withoutForeignThinking(find(c.id), conv(c.model)); string(got) != string(conv(c.model)) {
