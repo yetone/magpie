@@ -2505,10 +2505,10 @@ node --test internal/gui/tests/cli-path.test.cjs
 ```
 
 `update-mirror.test.cjs` checks Settings › About › Download source (#893):
-the row says updates come from GitHub; Use a mirror… opens an address field,
+the row says updates come from usemagpie.ai, then GitHub; Use a mirror… opens an address field,
 an http:// address is refused with the reason in red and the draft kept, an
 https:// one saved with Enter posts `/api/settings/update-mirror` and is
-shown, and Use GitHub posts an empty mirror. A download that failed through
+shown, and Remove mirror posts an empty mirror. A download that failed through
 the mirror says so on the Version row and offers Download from GitHub, which
 posts the empty mirror then `/api/update/install`. No native select, no left
 border, no click scrolls. English and Chinese, Chromium and WebKit; the API
