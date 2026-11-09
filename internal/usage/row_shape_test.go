@@ -84,7 +84,10 @@ func TestRowTokensAndZoneKept(t *testing.T) {
 		if got.Input != math.MaxInt32 || got.Output != math.MinInt32 || got.CacheRead != 7 {
 			t.Fatalf("read back Input %d, Output %d, CacheRead %d; want %d, %d, 7", got.Input, got.Output, got.CacheRead, math.MaxInt32, math.MinInt32)
 		}
-		if !got.Time.Equal(at) || got.Time.Location() != zone || got.Time.Format(time.RFC3339Nano) != at.Format(time.RFC3339Nano) {
+		// the zone by its name and offset, as rowZones knows it: a run
+		// before this one in the process (-count) made the zone kept
+		name, offset := got.Time.Zone()
+		if !got.Time.Equal(at) || name != "IST" || offset != 5*3600+1800 || got.Time.Format(time.RFC3339Nano) != at.Format(time.RFC3339Nano) {
 			t.Fatalf("read back time %v in %v, want %v", got.Time, got.Time.Location(), at)
 		}
 		if z := c.row(1).Time; !z.IsZero() {
