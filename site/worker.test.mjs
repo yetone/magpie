@@ -729,6 +729,17 @@ test("seo: llms.txt lists every English docs page and links only to listed pages
   for (const f of docs) assert.ok(links.includes(`https://usemagpie.ai/docs/${f.slice(0, -5)}`), `llms.txt misses docs/${f}`);
 });
 
+test("seo: llms-full.txt is current and holds every English docs page", async () => {
+  const { readFile, readdir } = await import("node:fs/promises");
+  const { build } = await import("./llms-full.mjs");
+  const pub = new URL("./public/", import.meta.url);
+  const txt = await readFile(new URL("llms-full.txt", pub), "utf8");
+  assert.equal(txt, await build(), "public/llms-full.txt is stale: run `node llms-full.mjs` in site/");
+  const docs = (await readdir(new URL("docs/", pub))).filter((f) => f.endsWith(".html") && f !== "contributors.html");
+  for (const f of docs) assert.ok(txt.includes(`Source: https://usemagpie.ai/docs/${f.slice(0, -5)}\n`), `llms-full.txt misses docs/${f}`);
+  assert.doesNotMatch(txt.replace(/^```\n[\s\S]*?\n```$/gm, ""), /<\/?(p|div|span|li|td|code|a)\b/, "llms-full.txt has HTML left outside its code blocks");
+});
+
 test("seo: the home page's structured data parses and its title is in every language", async () => {
   const { readFile } = await import("node:fs/promises");
   const { LANGS } = await import("./i18n.js");
