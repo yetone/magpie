@@ -14163,11 +14163,11 @@ function windowCapOf(p, user, w) {
   if (own) return own >= 100 ? 0 : own;
   return w?.ownCap ? 0 : accountCapOf(p, user);
 }
-// capHeldOf: the fullest window at its cap, its cap and when it renews, or null
+// capHeldOf: the fullest window at its cap, its cap and renewal, or null
 function capHeldOf(q, capFor) {
   if (!q || q.error || !q.windows?.length) return null;
   const now = Date.now();
-  // a window of some models only holds the account for those alone (#760)
+  // a window of some models holds only for those (#760)
   const all = { used: 0, cap: 0, back: 0, unknown: false, n: 0 }, some = { used: 0, cap: 0, back: 0, unknown: false, n: 0, names: [] };
   for (const w of q.windows) {
     const cap = w.capped ? capFor(w) : 0;
@@ -14184,7 +14184,7 @@ function capHeldOf(q, capFor) {
   const h = all.n ? all : some.n ? some : null;
   return h && { used: h.used, cap: Math.ceil(h.cap), back: h.unknown ? 0 : h.back, all: h === all, some: some.names };
 }
-// directNote: why the cap can't stop an agent signed in to the account itself
+// directNote: why the cap can't stop an agent signed in itself
 function directNote(agent) {
   return t("{agent} is signed in to this account and asks its vendor itself, not through magpie, so with no other account on to move it to, {agent} goes on using it past the cap. Add another account, or pick {agent}'s models via magpie, for the cap to hold it", { agent });
 }
@@ -14219,7 +14219,7 @@ function capMark(track, w, cap) {
   track.classList.add("capped");
   track.append(mk);
 }
-// a number typed where a pill was: Enter or blur saves parse's, Escape keeps own
+// a number typed in a pill: Enter or blur saves, Escape keeps
 const capOf = (v) => { v = parseInt(v.replace("%", ""), 10); return v >= 1 && v <= 99 ? v : null; };
 function pillNumber(at, val, ph, cls, label, parse, bad, own, set) {
   const i = input(val, ph, "text");
@@ -14241,12 +14241,12 @@ function pillNumber(at, val, ph, cls, label, parse, bad, own, set) {
   i.focus(NO_SCROLL);
 }
 
-// windowCapMeter: a window's meter as the button setting its own cap (tiers: a family's)
+// windowCapMeter: a window's meter as the button setting its own cap
 function windowCapMeter(m, p, user, w) {
   const ids = (w.tiers || [w]).map((x) => x.capId), owns = ids.map((capId) => windowOwnCapOf(p, user, { capId }));
   const amounts = ids.map((capId) => windowAmountOf(p, user, { capId }));
   const amount = new Set(amounts).size > 1 ? 0 : amounts[0];
-  if (!ids.every(Boolean) || w.ownCap && !(owns[0] % 100) && !amount) return m;
+  if (!ids.every(Boolean) || w.ownCap && !(owns[0] % 100) && !amount && !(w.limit > 0)) return m;
   const own = new Set(owns).size > 1 ? 0 : owns[0], cap = accountCapOf(p, user);
   const name = t(w.name);
   const unit = w.limit > 0 && w.unit ? t(w.unit) : "";
@@ -14263,8 +14263,8 @@ function windowCapMeter(m, p, user, w) {
   b.setAttribute("aria-haspopup", "menu");
   b.setAttribute("aria-expanded", "false");
   const set = (v) => accountAction("provider/windowcap", { id: p.id, account: user, window: w.capId, ...w.tiers && { windows: ids }, cap: v },
-    v === 0 ? t("{window} of {who} follows the account's cap", { window: name, who: user })
-      : v >= 100 ? t("{window} of {who} has no cap", { window: name, who: user })
+    v === 0 && !w.ownCap ? t("{window} of {who} follows the account's cap", { window: name, who: user })
+      : !(v % 100) ? t("{window} of {who} has no cap", { window: name, who: user })
       : t("{who} stops at {n}% of {window}", { who: user, n: v, window: name }));
   const other = () => pillNumber(b, own && own < 100 ? String(own) : "", "1–99", "acap-in", t("Cap for {window}, in percent", { window: name }), capOf, t("A cap is a share from 1% to 99%"), own, set);
   const setAmount = (v) => accountAction("provider/windowcap", { id: p.id, account: user, window: w.capId, ...w.tiers && { windows: ids }, amount: v },
@@ -14277,13 +14277,13 @@ function windowCapMeter(m, p, user, w) {
     const mine = own && own < 100 ? own : 0;
     const shares = CAP_SHARES.includes(mine) || !mine ? CAP_SHARES : [...CAP_SHARES, mine].sort((a, c) => a - c);
     const opts = [
-      { v: 0, name: cap ? t("Account's cap · {n}%", { n: cap }) : t("Account's cap · none"), note: t("As the account's other windows"), literalName: true },
-      { v: 100, name: "No cap on this window", note: "Use this window to 100%" },
+      ...w.ownCap ? [] : [{ v: 0, name: cap ? t("Account's cap · {n}%", { n: cap }) : t("Account's cap · none"), note: t("As the account's other windows"), literalName: true }],
+      { v: w.ownCap ? 0 : 100, name: "No cap on this window", note: "Use this window to 100%" },
     ];
     for (const n of shares) opts.push({ v: n, name: n + "%", note: "", literalName: true });
     opts.push({ v: -1, name: "Other…", note: "A share of your own, 1–99%" });
     if (unit) opts.push({ v: -2, name: t("Amount…"), note: amount ? amountText(amount) : t("At most this much {unit}", { unit }), literalName: true });
-    openProtoMenu(b, opts, amount ? -2 : own, (v) => {
+    openProtoMenu(b, opts, amount ? -2 : w.ownCap ? own % 100 : own, (v) => {
       if (v === -1) return other();
       if (v === -2) return otherAmount();
       if (v !== own || amount) set(v);

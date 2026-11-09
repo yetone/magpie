@@ -51,6 +51,10 @@ const past = () => ({
 const aside = (name, used) => ({ ...win(name, used, 600), ownCap: true });
 const credits = (plan) => ({ provider: "codex", windows: [aside("Credits", plan), aside("Extra credits", 0), win("Total credits", plan / 4, 600)] });
 const split = () => ({ "me@example.com": credits(60), "Friend@Example.com": credits(60) });
+// counted of a total (WorkBuddy's credits, 9won_25273 on Discord), a
+// window set aside takes a new cap of its own too
+const counted = (name, used) => ({ ...aside(name, used), amount: used * 10, limit: 1000, unit: "credits" });
+const totals = () => ({ "me@example.com": { provider: "codex", windows: [counted("Credits", 30), counted("Extra credits", 0), win("Total credits", 15, 600)] }, "Friend@Example.com": credits(60) });
 // a window counted in a unit with its total (9won_25273 on Discord: a
 // day's credits) can be capped at an amount of it instead: me has used 120
 // of the day's 1000 credits
@@ -206,10 +210,27 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await still(page, "Friend@Example.com", meter(page, "Friend@Example.com", 0));
         await menu(page).waitFor();
         const n = posts.length;
-        await item(page, w.account).click();
+        // set aside, it counts no account's cap: no such item
+        assert.equal(await menu(page).locator(".pm-name").filter({ hasText: w.account }).count(), 0);
+        await item(page, w.off).click();
         assert.deepEqual(await posted(posts, n), { id: "codex", account: "Friend@Example.com", window: "credits", cap: 0 });
         await page.waitForFunction(() => !document.querySelector('.editor .acc[data-account-id="Friend@Example.com"] .acap-held'));
         assert.equal(await row(page, "Friend@Example.com").locator('.aq-set[role="button"]').count(), 0);
+        assert.deepEqual(errors, []);
+      });
+
+      test(`${label}: a window set aside, counted of a total, takes a new cap of its own`, async (t) => {
+        const { page, errors, posts } = await open(t, "aside-new", totals);
+        await still(page, "me@example.com", meter(page, "me@example.com", 0));
+        await menu(page).waitFor();
+        const names = await menu(page).locator(".pm-name").allTextContents();
+        assert.equal(names[0], w.off);
+        assert.equal(names.filter((x) => x === w.account).length, 0);
+        assert.equal(names.at(-1), w.amount);
+        const n = posts.length;
+        await item(page, "50%").click();
+        assert.deepEqual(await posted(posts, n), { id: "codex", account: "me@example.com", window: "credits", cap: 50 });
+        await row(page, "me@example.com").locator(".aq-own").first().waitFor();
         assert.deepEqual(errors, []);
       });
 
