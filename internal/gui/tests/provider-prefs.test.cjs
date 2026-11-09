@@ -70,9 +70,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const box = page.locator(".editor .prov-prefs");
         await box.locator("#codexWarmList #warmSegs .opt").first().waitFor();
         assert.equal(await box.locator("#codexResetList").count(), 1, "Codex's resets");
+        // the editor's own fields under Advanced, not cards over the
+        // editor's first fields (the owner, 11-09)
+        assert.equal(await page.locator(".editor details.advanced .prov-prefs #codexWarmList, .editor details.advanced .prov-prefs #codexResetList").count(), 2, "under Advanced");
+        assert.equal(await page.locator(".editor .prov-prefs").evaluateAll((bs) => bs.length > 0 && bs.every((b) => b.closest("details.advanced"))), true, "every field under Advanced");
         assert.equal(await box.locator("#claudeWarmList, #wbList, .ci-plugin").count(), 0, "only Codex's own");
-        const fits = await box.evaluate((b) => { const r = b.getBoundingClientRect(); return r.width > 0 && r.right <= innerWidth; });
-        assert.equal(fits, true, "the box fits the window");
+        const fits = await box.evaluateAll((bs) => bs.filter((b) => b.offsetParent).every((b) => { const r = b.getBoundingClientRect(); return r.width > 0 && r.right <= innerWidth; }));
+        assert.equal(fits, true, "each field fits the window");
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "no sideways scroll");
         if (process.env.ARTIFACT_DIR) await page.locator(".editor").first().screenshot({ path: path.join(process.env.ARTIFACT_DIR, `provider-prefs-${engine}-${width}-${lang}-codex.png`) });
         // written from the editor as from Settings

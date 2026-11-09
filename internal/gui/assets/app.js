@@ -4623,13 +4623,8 @@ function updateStuck(u) {
 // that one's notes first.
 const ISSUES = "https://github.com/yetone/magpie/issues/";
 let whatsNewAsked = false;
-// cliBehindOnce: the terminal's magpie is a copied file rather than the
-// installer's link, so it can't follow the app's updates (#531's lesson: a
-// stale command wedged the WebDAV sync). The window can't tell a stale copy
-// from a current one — that would mean running the old binary, whose
-// start-up migrates settings — so this is advice, shown once per load, only
-// in the window (the panel is too small), and dismissable until the next
-// version.
+// cliBehindOnce: the terminal's magpie is a copy, not the installer's
+// link, so it can't follow updates (#531); advice once per load, window only
 let cliBehindAsked = false;
 function cliBehindOnce() {
   if (cliBehindAsked || mode === "panel" || !$("#modal").hidden) return; // another dialog owns the screen: the advice waits for the next load
@@ -4670,13 +4665,8 @@ async function whatsNewOnce() {
   showWhatsNew(w.releases, true, { total: w.total });
 }
 
-// openWhatsNew is Settings' way back to the notes: the current version's (or
-// those since the last update), after those of every release up to the
-// waiting update (pending), which the app puts first. The notes that
-// couldn't be had (the site failing, #661) say so, with a retry and the
-// release page, apart from a version that has none.
-// last: the range picked (wnRange), "" since the last update; a failed ask
-// keeps the notes last shown (wnKept).
+// openWhatsNew: Settings' way back to the notes, up to the waiting update;
+// last: the range picked (wnRange); a failed ask keeps the last shown
 let wnKept = null;
 async function openWhatsNew(b, last = "") {
   if (b) { b.disabled = true; b.classList.add("busy"); }
@@ -9568,7 +9558,6 @@ function drawEditor(p, presetID) {
       ed.append(...pluginOptionsField(subOf(a.agent), true));
       if ((a.logins || []).filter((l) => l.active || l.on).length > 1) ed.append(...renderRouting(p));
       if (p.move) ed.append(...renderMove(p));
-      ed.append(...provPrefsField(a.agent));
     } else {
       const acct = el("div", "acct");
       acct.append(icon(a.agentIcon), el("span", "n", a.user), hideAccounts.eye(a.user, p.id), el("span", "plan", accountPlan(a)));
@@ -9577,6 +9566,8 @@ function drawEditor(p, presetID) {
     ed.append(...field(t("Models"), renderModels(p), pluginFilterNote(subOf(a.agent))));
     if (p.drawIds?.length) ed.append(...renderDrawers(p));
     if (p.filmIds?.length) ed.append(...renderVideomakers(p));
+    // the subscription's own warm-up, check-in and resets first
+    if (subOf(a.agent)) advIn.append(...provPrefsField(a.agent));
     // a subscription's window too: Codex's backend says 272K for models
     // that take 872K (#120)
     const cx = input(draft.contexts || "", t("e.g. 128k · or gpt-6=1m, comma separated"));
@@ -14429,13 +14420,8 @@ function quotaText(w) {
   const count = quotaCount(w);
   return count ? count + " · " + pct : pct;
 }
-// quotaPace: how far a window is from an even pace through it, as a
-// number (fflake33 on Discord): the figure the meter shows less what an
-// even pace would show by now, in points of the window, rounded — used
-// 60% halfway through is +10, and left it is −10; null where the window's
-// start or reset isn't known (startsAt is the gateway's,
-// provider.WithWindowStarts). over says more is used than an even pace
-// would have, whichever way the meter reads.
+// quotaPace: a window's distance from an even pace, in points (fflake33);
+// null with no known start or reset; over: more used than even
 function quotaPace(w, now = Date.now()) {
   if (w.unlimited || quotaNoShare(w) || w.historyMissing || !w.startsAt || !w.resetsAt) return null;
   const s = Date.parse(w.startsAt), e = Date.parse(w.resetsAt);
@@ -15642,13 +15628,8 @@ function localAddress(s) {
     return u.protocol + "//" + u.host;
   } catch { return null; }
 }
-// hostSite is the page the editor's head links to for a provider with no
-// website: the origin of the base its host is shown from, under that base's
-// own scheme, so a local server at http://127.0.0.1:7863/v1 opens over http
-// (#2377). https only when no base of its own spells the host (a moved
-// subscription shows the host it had). A plugin's provider has
-// plugin://<id> for its base, and its id is no address to open: only a host
-// with a dot or a port makes a link.
+// hostSite: the head's link for a provider with no website, its base's
+// origin and scheme (#2377); only a host with a dot or a port links
 function hostSite(p) {
   const h = (p?.host || "").toLowerCase();
   if (!/[.:]/.test(h)) return "";
@@ -17005,13 +16986,8 @@ function quotaWindowLine(q, w) {
   if (!w) return null;
   return quotaLines({ ...q, windows: [w.window ? { ...w, name: w.window } : w] })[0] || null;
 }
-// quotaSpark: the tray card's line of a window's current cycle, the even
-// burn faint under it; none while the curves are off. In a card's width a
-// month drawn in a few pixels' height read as one straight line, its dashes
-// all but on it (#2079): it is taller, and the gap between what was left and
-// the even burn is shaded, green where it is above (it lasts) and amber
-// where it is below (it runs out first), so which side it is on shows
-// without reading an angle.
+// quotaSpark: the tray card's line of a window's cycle over the even burn,
+// the gap shaded green above, amber below (#2079); none while curves are off
 let sparkClips = 0;
 function quotaSpark(q, w) {
   if (quotaRange === "off") return null;
@@ -19642,6 +19618,9 @@ const PROV_PREFS = {
   "minimax-code": ["minimaxList"], "minimax-code-global": ["minimaxList"],
   qoder: ["qoderList"], "qoder-cn": ["qoderList"],
 };
+// each list's label in the editor's Advanced, the plugins' check-ins
+// under Check in
+const PROV_PREF_LABEL = { codexResetList: "Resets", codexWarmList: "Warm up", claudeWarmList: "Warm up" };
 let provPrefListEls = null, provPrefMount = null;
 // homeProvPrefRows: an editor's lists back in the page
 function homeProvPrefRows() {
@@ -19655,29 +19634,44 @@ function provPrefsOf(agent) {
   const g = [...$("#pluginCheckinList").children].find((x) => x.dataset.provider === agent);
   return g ? [...lists, g] : lists;
 }
-// mountProvPrefs: the agent's into an editor's box, again after a draw
-function mountProvPrefs(box, agent) {
+const provPrefKey = (x) => x.classList.contains("ci-plugin") ? "ci-plugin" : x.id;
+// mountProvPrefs: the agent's lists into an editor's fields, each beside
+// its label, again after a draw; a field with nothing shown goes
+function mountProvPrefs(slots, agent) {
   homeProvPrefRows();
   const own = provPrefsOf(agent);
-  provPrefMount = { box, agent, own };
-  box.replaceChildren(...own);
-  box.hidden = !own.some((x) => !x.hidden);
+  provPrefMount = { slots, agent, own };
+  for (const slot of slots) {
+    const mine = own.filter((x) => provPrefKey(x) === slot.dataset.list);
+    slot.replaceChildren(...mine);
+    const off = !mine.some((x) => !x.hidden);
+    slot.hidden = off;
+    for (const n of slot.fieldRow) n.hidden = off;
+  }
 }
 function remountProvPrefs() {
   const m = provPrefMount;
-  if (m?.box.isConnected) return mountProvPrefs(m.box, m.agent);
+  if (m?.slots[0].isConnected) return mountProvPrefs(m.slots, m.agent);
   homeProvPrefRows();
   provPrefMount = null;
 }
+// provPrefsField: a subscription's warm-up, check-in and resets as the
+// editor's own fields, under Advanced (the owner, 11-09: a block of cards
+// under Routing took most of the editor)
 function provPrefsField(agent) {
   if (gatewayMode && agent != "claude" || !PROV_PREFS[agent] && !(prefs?.checkinPlugins || []).some((x) => x.id === agent) && prefs) return [];
-  const box = edAligned(el("div", "prov-prefs"));
-  if (prefs) mountProvPrefs(box, agent);
-  else {
-    box.hidden = true;
-    loadSettings().then(() => box.isConnected && mountProvPrefs(box, agent), () => {});
-  }
-  return [box];
+  const keys = [...(PROV_PREFS[agent] || []).filter((id) => !gatewayMode || id == "claudeRunList"), "ci-plugin"];
+  const slots = keys.map((k) => {
+    const slot = el("div", "prov-prefs");
+    slot.dataset.list = k;
+    slot.fieldRow = field(k == "claudeRunList" ? "Claude Code" : t(PROV_PREF_LABEL[k] || "Check in"), slot);
+    for (const n of slot.fieldRow) n.hidden = true;
+    slot.hidden = true;
+    return slot;
+  });
+  if (prefs) mountProvPrefs(slots, agent);
+  else loadSettings().then(() => slots[0].isConnected && mountProvPrefs(slots, agent), () => {});
+  return slots.flatMap((x) => x.fieldRow);
 }
 // a provider's settings found by Settings' search, drawn by provlinks.js
 // once a search wants them
@@ -19915,13 +19909,8 @@ function renderCLI(r) {
   cliAsk?.then((v) => { if (r.isConnected) paint(v); }, () => { if (!cliView) sub.textContent = t("Couldn't tell"); });
 }
 
-// Settings' Download source (#893): where an update's file is downloaded
-// from — usemagpie.ai (R2), and github.com when that fails, or a GitHub
-// download mirror put before github.com's URL, the same setting `magpie
-// update mirror` writes. magpie names no mirror of its own; the feed and
-// each file's SHA-256 still come from usemagpie.ai, and a file that doesn't
-// match is never installed. A draft and its error are
-// kept across the page being drawn again.
+// Settings' Download source (#893): a GitHub mirror before github.com, as
+// `magpie update mirror` writes; the feed and SHA-256 stay usemagpie.ai's
 let mirrorEditing = false, mirrorDraft = "", mirrorErr = "";
 function setUpdateMirror(mirror) {
   return writingPrefs(api("settings/update-mirror", { mirror }))
@@ -20495,10 +20484,8 @@ const IN_USE = "|*";
 // renderTrayUsage: the subscriptions and plans whose windows show beside
 // the tray icon, side by side. The cards are the Usage page's, asked for
 // when the menu opens; any number are ticked in it.
-// suffixSegs: how the agents' lists name a model: with its provider's
-// after it, all but the user's own (#92), or none (#335). Set on its own;
-// drawn(mode) redraws where it was picked (#868). Read from the state's
-// settings, not Settings' own read (#1433).
+// suffixSegs: a model named with its provider's after it, but the user's
+// own (#92), or none (#335); from the state's settings (#1433)
 function suffixMode(s = state.settings || {}) { return s.plainNames ? "off" : s.plainOwnNames ? "own" : "on"; }
 function suffixSegs(drawn) {
   const mode = suffixMode();

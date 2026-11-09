@@ -129,7 +129,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         // every row fits: nothing runs past the editor
         const over = await page.evaluate(() => {
-          const view = document.querySelector(".editor .prov-prefs").getBoundingClientRect();
+          const view = document.querySelector(".editor .prov-prefs[data-list=codexResetList]").getBoundingClientRect();
           return [...document.querySelectorAll("#codexAutoResetRow, .ar-own, .ar-own-case, .ar-own-say, .ar-own .opt")]
             .filter((e) => { const r = e.getBoundingClientRect(); return r.right > view.right + 1 || r.left < view.left - 1; })
             .map((e) => e.className + " " + e.textContent.slice(0, 30));

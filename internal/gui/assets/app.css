@@ -4963,19 +4963,30 @@ body .row.agent .ag-prefs .row.pref .who { display: block; }
 :is(.ag-prefs, .agent-prefs) .row.pref { flex-wrap: wrap; row-gap: 8px; }
 :is(.ag-prefs, .agent-prefs) .row.pref .who { flex: 1 1 240px; min-width: 0; }
 :is(.ag-prefs, .agent-prefs) .compact-at { flex: 0 1 auto; min-width: 0; flex-wrap: wrap; row-gap: 6px; }
-/* a subscription's warm-ups, check-in and resets (PROV_PREFS), in its
-   provider's editor across both columns from where the fields start, a
-   card each, their lines wrapped as an agent's are */
-.editor .prov-prefs { grid-column: 1 / -1; margin-left: var(--ed-at, 86px); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.editor .prov-prefs[hidden] { display: none; }
-.prov-prefs .list.prefs { margin: 0; }
-.prov-prefs .list.prefs[hidden] { display: none; }
+/* a subscription's warm-ups, check-in and resets (PROV_PREFS): fields of
+   its provider's editor under Advanced, drawn as the editor's own rows
+   (a name, its line as a hint, the control at the end), not Settings'
+   cards */
+.editor .prov-prefs { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding-top: 2px; }
+.editor .prov-prefs .list.prefs { margin: 0; background: none; border: 0; border-radius: 0; overflow: visible; display: flex; flex-direction: column; gap: 10px; }
+/* the name and its control on the first line, its line under both: a line
+   that grows (a check-in's outcome, a longer state) never moves the
+   control just pressed, which the editor can't scroll back as a view does */
+.editor .prov-prefs .row.pref { display: grid; grid-template-columns: minmax(min(40%, 9em), 1fr) auto; align-items: start; min-height: 0; padding: 0; gap: 2px 12px; border: 0; }
+.editor .prov-prefs .row.pref[hidden] { display: none; }
+.editor .prov-prefs .row.pref > .who { display: contents; }
+.editor .prov-prefs .row.pref > .who > * { grid-column: 1 / -1; }
+.editor .prov-prefs .row.pref > .who > .name { grid-column: 1; grid-row: 1; }
+.editor .prov-prefs .row.pref > :not(.who) { grid-column: 2; grid-row: 1; justify-self: end; min-width: 0; margin-left: 0; }
+.editor .prov-prefs .row.pref .name { font-size: 12.5px; font-weight: 400; line-height: 24px; white-space: normal; }
+.editor .prov-prefs .row.pref .sub { font-size: 11px; line-height: 16px; color: var(--fg-2); margin-top: 0; white-space: normal; }
+/* a time and its picks fit the editor's narrower column: they wrap, at its end */
+.editor .prov-prefs .warm-at { flex: 0 1 auto; min-width: 0; max-width: 100%; flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
+/* an account's own time goes under its picks, not above them: a pick pressed stays where it was */
+.editor .prov-prefs .warm-at:not(.times) { flex-wrap: wrap-reverse; }
 /* the editor's Claude Code runs as row switches it; magpie web as a
    gateway has that row's switch off, so this one shows there */
 .prov-prefs #claudeRunList:not(.gw) #claudeTuiRow { display: none; }
-.prov-prefs .row.pref .sub { white-space: normal; }
-.prov-prefs .row.pref { flex-wrap: wrap; row-gap: 8px; }
-.prov-prefs .row.pref .who { flex: 1 1 240px; min-width: 0; }
 /* Settings' search finds them; not searching, the links stay out */
 #view-settings:not(.set-searching) :is(#agentPrefLinks, #provPrefLinks) { display: none; }
 

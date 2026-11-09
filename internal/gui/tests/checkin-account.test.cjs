@@ -61,7 +61,6 @@ const words = {
   de: { on: "Einmal täglich eingecheckt, solange der tägliche Check-in an ist", off: "Vom täglichen Check-in ausgenommen", card: "Automatischer Check-in ist für dieses Konto aus" },
 };
 
-const scrolls = (page) => page.evaluate(() => [scrollY, ...[...document.querySelectorAll("*")].filter((e) => e.scrollTop).map((e) => e.scrollTop)].join(","));
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const width of [1100, 420]) {
@@ -96,13 +95,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         const on = rows.nth(1).locator(".segs .opt").nth(1);
         await inEditor(page, on);
-        const y = await scrolls(page);
+        // in the editor, what was pressed stays under the pointer: the
+        // editor scrolls to hold a row drawn again (modalHold)
+        const top = () => on.evaluate((e) => e.getBoundingClientRect().top);
+        const y = await top();
         const saved = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/settings/checkin-account");
         await on.click();
         await saved;
         assert.deepEqual(asked, [{ key: "workbuddy|u2", on: true }]);
         await page.waitForFunction((want) => document.querySelectorAll("#wbList .ci-acct .sub")[1]?.textContent.trim() === want, w.on);
-        assert.equal(await scrolls(page), y, "the switch moved the page");
+        await page.evaluate(() => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))));
+        const now = await top();
+        assert(Math.abs(now - y) <= 1, `the switch moved from ${y} to ${now}`);
+        assert.equal(await page.evaluate(() => scrollY), 0, "the page itself never scrolls");
         assert.equal(await page.locator("select").count(), 0);
         assert.deepEqual(errors, []);
       });

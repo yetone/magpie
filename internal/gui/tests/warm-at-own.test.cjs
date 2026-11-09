@@ -52,7 +52,6 @@ const W = {
   de: { same: "Wie oben, 06:00", own: "Täglich zu seiner eigenen Uhrzeit", off: "Nicht zu einer Uhrzeit gestartet", segs: ["Gleich", "Eigene", "Aus"] },
 };
 
-const scrolls = (page) => page.evaluate(() => [scrollY, ...[...document.querySelectorAll("*")].filter((e) => e.scrollTop).map((e) => e.scrollTop)].join(","));
 const sideways = (page) => page.evaluate(() => {
   const out = [];
   const de = document.documentElement, v = document.querySelector(".editor .ebody") || document.querySelector(".editor");
@@ -96,9 +95,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await inEditor(page, rows.last().locator(".segs"));
         await inEditor(page, rows.first().locator(".segs"));
         if (process.env.ARTIFACT_DIR) await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `warm-at-own-${engine}-${lang}-${width}.png`) });
-        const y = await scrolls(page);
-        await rows.first().locator(".segs .opt").nth(1).click();
+        // each pick stays under the pointer: the editor scrolls to hold a
+        // row drawn again (modalHold)
+        const top = (loc) => loc.evaluate((e) => e.getBoundingClientRect().top);
+        const settled = () => page.evaluate(() => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))));
+        let pressed, y;
+        const press = async (loc) => { await inEditor(page, loc); pressed = loc; y = await top(loc); await loc.click(); }; // in sight first, so the click itself scrolls nothing
+        const stayed = async () => { await settled(); const now = await top(pressed); assert(Math.abs(now - y) <= 1, `a click moved from ${y} to ${now}`); };
+        await press(rows.first().locator(".segs .opt").nth(1));
         await page.locator('.warm-own[data-user="a@example.com"] input').waitFor();
+        await stayed();
         assert.deepEqual(asked, [["a@example.com", "06:00"]]);
         const a = page.locator('.warm-own[data-user="a@example.com"]');
         assert.equal((await a.locator(".sub").innerText()).trim(), w.own);
@@ -108,16 +114,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(asked[1], ["a@example.com", "09:00"]);
         // B off, by its name as it is; then back to the time above
         const b = page.locator('.warm-own[data-user="B@Example.com"]');
-        await b.locator(".segs .opt").nth(2).click();
+        await press(b.locator(".segs .opt").nth(2));
         for (let i = 0; i < 50 && asked.length < 3; i++) await page.waitForTimeout(40);
         assert.deepEqual(asked[2], ["B@Example.com", "off"]);
         await page.waitForFunction((s) => document.querySelector('.warm-own[data-user="B@Example.com"] .sub')?.textContent === s, w.off);
-        await b.locator(".segs .opt").nth(0).click();
+        await stayed();
+        await press(b.locator(".segs .opt").nth(0));
         for (let i = 0; i < 50 && asked.length < 4; i++) await page.waitForTimeout(40);
         assert.deepEqual(asked[3], ["B@Example.com", ""]);
         await page.waitForFunction((s) => document.querySelector('.warm-own[data-user="B@Example.com"] .sub')?.textContent === s, w.same);
         assert.equal(await page.locator('.warm-own[data-user="a@example.com"] input').inputValue(), "09:00");
-        assert.equal(await scrolls(page), y, "a click moved the page");
+        await stayed();
+        assert.equal(await page.evaluate(() => scrollY), 0, "the page itself never scrolls");
         assert.deepEqual(await sideways(page), []);
         assert.equal(await page.locator("select").count(), 0);
         assert.deepEqual(errors, []);

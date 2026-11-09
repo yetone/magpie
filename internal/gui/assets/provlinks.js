@@ -35,7 +35,13 @@ window.provPrefLinksDraw = function () {
       go.onclick = async () => {
         if (!await show("providers")) return;
         const p = providers?.providers.find((x) => agents.includes(x.account?.agent));
-        if (p) openProvider(p.id);
+        if (!p) return;
+        // its field is under the editor's Advanced: opened, and the row lit
+        advanced = { of: p.id, open: true };
+        await openProvider(p.id);
+        if (!r.isConnected) return;
+        r.scrollIntoView({ block: "center" });
+        r.classList.add("flash");
       };
       row.append(who, go);
       box.append(row);

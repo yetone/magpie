@@ -18,8 +18,10 @@ const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
 const { watchSettingsReads, settingsDrawn, provPrefsProviders, openProvPrefs, inEditor } = require("./reader.cjs");
 
-// scrolls: where every box that scrolls is, so a click that moved one shows
-const scrolls = (page) => page.evaluate(() => [scrollY, ...[...document.querySelectorAll("*")].filter((e) => e.scrollTop).map((e) => e.scrollTop)].join(","));
+// scrolls: the page's scroll and where the lead's row is on the screen. In
+// the editor a click holds what was pressed where it was (modalHold), so
+// the editor's own scrollTop may change to keep the row still.
+const scrolls = (page) => page.evaluate(() => [scrollY, Math.round(document.querySelector("#codexResetLeadRow .name").getBoundingClientRect().top)].join(","));
 
 const assets = path.resolve(__dirname, "../assets");
 
@@ -171,7 +173,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await ownField();
         assert.equal(await own.inputValue(), "3", "it starts at the lead");
         assert.equal(await own.getAttribute("inputmode"), "numeric");
-        const r = await own.boundingBox(), v = await page.locator(".editor .prov-prefs").boundingBox();
+        const r = await own.boundingBox(), v = await page.locator(".editor .prov-prefs[data-list=codexResetList]").boundingBox();
         assert(r.x >= v.x && r.x + r.width <= v.x + v.width + 1, "the field fits");
         assert.equal(await scrolls(page), top, "opening the field moved nothing");
         await own.fill("7");
@@ -197,15 +199,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // leaving the field saves it
         await ownField();
         await own.fill("12");
-        await page.locator("#codexResetLeadRow .name").click();
+        const name = page.locator("#codexResetLeadRow .name");
+        await inEditor(page, name); // in sight first, so the click itself scrolls nothing
+        const before = await scrolls(page);
+        await name.click();
         for (let i = 0; i < 100 && posts.length < 4; i++) await page.waitForTimeout(20);
         assert.deepEqual(posts.at(-1), { minutes: 12 });
         await page.waitForFunction((want) => document.querySelector("#codexResetLeadRow button.reset-lead .rl-say > .on")?.textContent.trim() === want, await say(page, lang, 12));
-        assert.equal(await scrolls(page), top, "no click moved the page");
+        assert.equal(await scrolls(page), before, "no click moved the page");
 
         // fits, no sideways scroll, no native select, no left border
         const over = await page.evaluate(() => {
-          const view = document.querySelector(".editor .prov-prefs").getBoundingClientRect();
+          const view = document.querySelector(".editor .prov-prefs[data-list=codexResetList]").getBoundingClientRect();
           return [...document.querySelectorAll("#codexResetLeadRow, #codexResetLeadRow *")]
             .filter((e) => { const r = e.getBoundingClientRect(); return r.width && (r.right > view.right + 1 || r.left < view.left - 1); })
             .map((e) => e.className + " " + e.textContent.slice(0, 30));
@@ -224,7 +229,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const { page, errors } = await open(t, engine, "en", 900, 45, posts);
     const pick = page.locator("#codexResetLeadRow button.reset-lead");
     assert.equal((await pick.locator(".rl-say > .on").textContent()).trim(), "45 min before");
+    await inEditor(page, pick);
     await pick.click();
+    await page.locator(".proto-menu .pm-item").first().waitFor();
     assert.equal(await page.locator(".proto-menu .pm-item").count(), 13);
     assert.equal(await page.locator(".proto-menu .pm-item.on .pm-name").textContent(), "45 min before");
     await page.keyboard.press("Escape");
