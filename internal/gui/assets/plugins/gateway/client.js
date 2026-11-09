@@ -93,6 +93,7 @@ function renderGatewayView() {
 // feature lead to each other (netube99 on X)
 function renderGatewayOwn() {
   const box = $("#gwOwn");
+  if (!box) return; // the page isn't drawn (yet, or any more)
   const f = prefs?.builtins?.find((x) => x.id === "gateway");
   if (!f) {
     box.replaceChildren();
