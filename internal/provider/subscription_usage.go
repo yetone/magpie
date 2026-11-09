@@ -58,8 +58,16 @@ type QuotaWindow struct {
 	// (SuperMagic's points, #3950). Used is then no reading (0); the GUI
 	// says the figure left, and routing knows the account by it and puts
 	// the one with the most left first among a provider's accounts in the
-	// same unit (Allowance.Left). nil when not told.
+	// same unit (Allowance.Left). nil when not told. On an account with a
+	// usage cap, Amount of Limit and Used are what the wallet spent in the
+	// cap's period instead (wallet_spend.go, #5770), for the cap to hold.
 	Balance *float64 `json:"balance,omitempty"`
+	// Spent is, on a wallet's window (Balance), how much of it magpie saw
+	// go since SpentSince, the first reading of the period a cap counts it
+	// over: the window's own until its reset, else the local day
+	// (wallet_spend.go). nil when not counted.
+	Spent      *float64   `json:"spent,omitempty"`
+	SpentSince *time.Time `json:"spentSince,omitempty"`
 	// Family is the model family a per-model window belongs to (Antigravity's
 	// "Gemini 3.1 Pro (High)" is Gemini's), for the GUI to show one figure a
 	// family, the tightest; each window is still here, and routing reads

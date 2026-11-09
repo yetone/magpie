@@ -124,7 +124,8 @@ func pluginLoginQuota(ctx context.Context, l Login) SubscriptionQuota {
 		notePluginLapseSince(pp, key, http.StatusOK, began)
 	}
 	keepPluginPlan(pp, key, u.Plan)
-	return quotaOfPlugin(q, u)
+	// a wallet's spend counted, for a cap to hold it (#5770)
+	return withWalletSpend(quotaOfPlugin(q, u), l.User, time.Now())
 }
 
 // quotaOfPlugin fills q with what the plugin told.

@@ -74,7 +74,9 @@ func holdsBounds(q provider.SubscriptionQuota, w provider.QuotaWindow, at time.T
 	// Discord); the models' own windows drawing on it, and a pool whose
 	// models aren't known, aren't.
 	pool := w.PoolWindow() && len(provider.PoolMembers(q.Windows, w)) > 0
-	if w.Unlimited || w.Aside && !pool || w.Family != "" || w.Pool != "" && !pool || math.IsNaN(w.Used) {
+	// a wallet (Balance) has no whole: its Used, on a capped account, is
+	// what it spent in the cap's period (provider's wallet_spend.go)
+	if w.Unlimited || w.Aside && !pool || w.Family != "" || w.Pool != "" && !pool || w.Balance != nil || math.IsNaN(w.Used) {
 		return time.Time{}, time.Time{}, "-"
 	}
 	if w.Used < provider.HoldsFloor {

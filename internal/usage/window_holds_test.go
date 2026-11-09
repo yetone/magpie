@@ -548,3 +548,25 @@ func TestHoldsPriceTheModelTheReplyNamed(t *testing.T) {
 		t.Fatalf("5 hours: %+v, a priced reply left the dollar whole out", h)
 	}
 }
+
+// A wallet's window (#5770) tells what is left and no whole; on a capped
+// account its Used is what magpie counted it spending in the cap's
+// period, and nothing is reckoned from that as the window's whole.
+func TestWindowHoldsLeavesAWalletOut(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	reset := now.Add(12 * time.Hour)
+	left := 9500.0
+	qs := []provider.SubscriptionQuota{{Provider: "astudio", User: "9won@example.com", Windows: []provider.QuotaWindow{
+		{Name: "通用积分", Balance: &left, Used: 40, Amount: 500, Limit: 10000, ResetsAt: &reset, Span: 24 * time.Hour}}}}
+	recs := []Record{{Time: now.Add(-time.Hour), Provider: "astudio", ProviderAccount: "9won@example.com", Model: "claude-opus-4-7", Input: 100, Output: 100, Status: 200}}
+	read := func(fn func(Record)) {
+		for _, r := range recs {
+			fn(r)
+		}
+	}
+	priceOf := func(Record) *catalog.Price { return nil }
+	got := windowHolds(qs, now, now.Add(-30*24*time.Hour), priceOf, provider.Renames{}, nil, nil, read)
+	if w := got[0].Windows[0]; w.Holds != nil || w.HoldsWhy != "" {
+		t.Fatalf("a wallet reckoned a whole: %+v, why %q", w.Holds, w.HoldsWhy)
+	}
+}
