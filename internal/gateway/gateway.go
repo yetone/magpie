@@ -2280,6 +2280,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	var clientResponseID string // only a reply released to the client owns this ID
 	call := Call{Time: start, From: from, Model: unprefixed(modelOf(body)), Agent: who.agent, Via: who.via, Kind: requestCallKind(r.Header, metadata),
 		wire: archiving(r, capture, start, nil), headers: headerLogOf(r.Context())}
+	// an agent compacting its conversation is recorded as the compaction
+	// it is, as Codex's are by their header: Claude Code's compaction is a
+	// call its transcript never records (skipTranscript), so this row is
+	// the only place it is counted, and as a plain turn it read as no
+	// compaction at all (shangyuan0818 on Discord), the OTel export left
+	// it to that transcript, and its reply ended the agent's turn
+	if call.Kind == "" && factsOf(from, plain).compact {
+		call.Kind = KindCompact
+	}
 	// the reply counted as it reaches the agent, for the Routing page
 	// while it is out (#4951); learned from once it ends
 	capture.live = liveBegin(inflightOf(r.Context()), call.Model, from)

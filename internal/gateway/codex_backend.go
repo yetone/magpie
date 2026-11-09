@@ -2055,7 +2055,7 @@ func callKind(h http.Header) string {
 		v = threadSource(h.Get("x-codex-turn-metadata"))
 	}
 	if v == "" && dshCompacts(h) {
-		v = "compact" // DSH's compaction of its context
+		v = KindCompact // DSH's compaction of its context
 	}
 	if v == "" && h.Get("User-Agent") == SearchAgent {
 		v = "web_search"
