@@ -364,8 +364,9 @@ helper presses ↓ until "Yes" is the last choice drawn and Enter only once
 it has stayed so for 300ms (`ready`, `trustSettle`). Pressing Enter blind
 chose "No, exit" in the real gateway, and no run started.
 
-Every run is `-p` only when Settings › Models › Replies › Claude Code's
-interactive mode is Off (`claudePrintMode`), or in the gateway's own
+Every run is `-p` only when the Claude Code editor's "Claude Code runs
+as" row is on claude -p (`claudePrintMode`; magpie web as a gateway
+switches it with the editor's *Claude Code's interactive mode* row), or in the gateway's own
 tests, whose fake Claude Codes are `-p` ones (`claudeTUIRuns`, code
 `no-shim`). With it On, nothing ever runs as `-p` (the owner, 11-01): the
 plan counts a `-p` request as another client's, at about twice the
@@ -868,8 +869,8 @@ fails the request or delays an ordinary request's keepalives.
 Every run is the real Claude Code. By default it keeps Claude Code's own
 system prompt, and the caller's instructions go after it in the
 interactive mode (below), and in the run's first user message inside
-`<external_system_instructions>` in `-p` or with client cache marks. Settings › Models ›
-Replies › Short Claude system prompt (`claudeLeanPrompt`, off by default)
+`<external_system_instructions>` in `-p` or with client cache marks. The Claude Code
+editor's Short Claude system prompt (`claudeLeanPrompt`, off by default)
 starts a run with `--system-prompt-file` instead. The file is `system.md`
 in the run's temp folder, under the distro's mount in WSL (`claudeCLI.file`).
 It holds `leanSystem`: the caller's instructions without a client Claude

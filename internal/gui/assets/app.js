@@ -19613,7 +19613,7 @@ const DISCORD_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="curre
 // in #provPrefRows, shown in its provider's editor (the owner, 11-07)
 const PROV_PREFS = {
   codex: ["codexResetList", "codexWarmList"],
-  claude: ["claudeWarmList"],
+  claude: ["claudeRunList", "claudeWarmList"],
   workbuddy: ["wbList"],
   "trae-cn": ["traeList"],
   "minimax-code": ["minimaxList"], "minimax-code-global": ["minimaxList"],
@@ -19628,7 +19628,7 @@ function homeProvPrefRows() {
   for (const g of provPrefMount?.own || []) if (g.classList.contains("ci-plugin") && g.parentElement !== plugins) plugins.append(g);
 }
 function provPrefsOf(agent) {
-  const lists = (PROV_PREFS[agent] || []).map((id) => $("#" + id));
+  const lists = (PROV_PREFS[agent] || []).filter((id) => !gatewayMode || id == "claudeRunList").map((id) => $("#" + id));
   const g = [...$("#pluginCheckinList").children].find((x) => x.dataset.provider === agent);
   return g ? [...lists, g] : lists;
 }
@@ -19647,7 +19647,7 @@ function remountProvPrefs() {
   provPrefMount = null;
 }
 function provPrefsField(agent) {
-  if (gatewayMode || !PROV_PREFS[agent] && !(prefs?.checkinPlugins || []).some((x) => x.id === agent) && prefs) return [];
+  if (gatewayMode && agent != "claude" || !PROV_PREFS[agent] && !(prefs?.checkinPlugins || []).some((x) => x.id === agent) && prefs) return [];
   const box = edAligned(el("div", "prov-prefs"));
   if (prefs) mountProvPrefs(box, agent);
   else {
@@ -21677,7 +21677,10 @@ function renderReplies(s, keep) {
   const u = segRow("claudeTuiRow", t("Claude Code's interactive mode"),
     t("A Claude subscription runs Claude Code as a person does, in its interactive mode, where the plan counts a request at about half of what -p uses. On, a request runs as -p only when Anthropic refuses its agent's prompt there. Off runs every request as claude -p"),
     onOff, s.claudePrintMode ? "off" : "on", (v) => { claudeMode = null; savePrefs({ ...keep, claudePrintMode: v === "off" }); });
-  box.append(r, l, c, u);
+  box.append(r, l);
+  // a Claude run's, in its provider's editor (PROV_PREFS)
+  $("#claudeRunList").replaceChildren(c, u);
+  $("#claudeRunList").classList.toggle("gw", gatewayMode);
   $("#routeList").replaceChildren(f, a, k, $("#busyLoadRow"));
 }
 

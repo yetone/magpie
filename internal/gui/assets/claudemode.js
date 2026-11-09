@@ -11,7 +11,7 @@
 // why the interactive mode can't run here, or is off, by the gateway's
 // code (claudeMachineWhy)
 const CC_WHY = {
-  off: "the interactive mode is off in Settings",
+  off: "the interactive mode is turned off",
   os: "this system can't run the interactive mode",
   missing: "Claude Code isn't installed on this computer",
 };
@@ -40,7 +40,7 @@ function ccTip(anchor, tui) {
       t("Claude Code's print mode, the one scripts and the Agent SDK use: a request in, its reply out."),
       t("It starts at once, with no terminal of its own to open first."),
       t("The plan counts a -p request at about twice the interactive mode's.")),
-    el("div", "foot", t("Switched here or in Settings › Models › Replies. With the interactive mode on, a request it can't take, or one it fails to start for, fails saying why. A turn Anthropic refuses there as a third-party app's runs as -p.")));
+    el("div", "foot", t("Switched here. With the interactive mode on, a request it can't take, or one it fails to start for, fails saying why. A turn Anthropic refuses there as a third-party app's runs as -p.")));
   document.body.append(tip);
   const a = anchor.getBoundingClientRect(), b = tip.getBoundingClientRect();
   tip.style.left = Math.max(8, Math.min(a.left, innerWidth - b.width - 8)) + "px";

@@ -127,7 +127,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         { on: false, name: "claude -p", now: "", good: 1, bad: 1 },
       ]);
       // nothing in the card says a request falls back to -p (the owner, 11-01)
-      assert.equal((await tip.locator(".foot").textContent()).trim(), await tr("Switched here or in Settings › Models › Replies. With the interactive mode on, a request it can't take, or one it fails to start for, fails saying why. A turn Anthropic refuses there as a third-party app's runs as -p."));
+      assert.equal((await tip.locator(".foot").textContent()).trim(), await tr("Switched here. With the interactive mode on, a request it can't take, or one it fails to start for, fails saying why. A turn Anthropic refuses there as a third-party app's runs as -p."));
       assert.equal((await tip.locator(".cc-m").nth(1).locator("p.good").textContent()).trim(), await tr("It starts at once, with no terminal of its own to open first."));
       const box = await tip.boundingBox();
       assert(box.x >= 0 && box.y >= 0 && box.x + box.width <= width && box.y + box.height <= 760, `the card is inside the window: ${JSON.stringify(box)}`);

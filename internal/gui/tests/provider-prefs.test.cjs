@@ -2,7 +2,8 @@
 // The owner, 11-07: "这些配置难道不是应该在对应的Provider那个弹窗里面吗？为什么会散落在Settings里？"
 // A subscription's warm-up, daily check-in and Codex's auto-use resets are
 // in its provider's editor (PROV_PREFS), not in Settings › Allowances:
-// Codex's has its resets and warm-up, Claude's its warm-up, WorkBuddy's its
+// Codex's has its resets and warm-up, Claude's its warm-up and short
+// system prompt, WorkBuddy's its
 // check-in, a plugin's that checks in itself its own row; Settings' search
 // still finds them, each a row that opens the editor. Chromium and WebKit,
 // at 1100 and 420, in every language; the API is faked here.
@@ -85,6 +86,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         await openProvPrefs(page, "claude");
         assert.equal(await box.locator("#claudeWarmList").count(), 1, "Claude's warm-up");
+        assert(await box.locator("#claudeRunList #claudeLeanRow").isVisible(), "Claude's short system prompt");
         assert.equal(await box.locator("#codexWarmList, #codexResetList").count(), 0);
 
         await openProvPrefs(page, "workbuddy");

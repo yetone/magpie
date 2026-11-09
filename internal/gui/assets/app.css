@@ -4947,6 +4947,9 @@ body .row.agent .ag-prefs .row.pref .who { display: block; }
 .editor .prov-prefs[hidden] { display: none; }
 .prov-prefs .list.prefs { margin: 0; }
 .prov-prefs .list.prefs[hidden] { display: none; }
+/* the editor's Claude Code runs as row switches it; magpie web as a
+   gateway has that row's switch off, so this one shows there */
+.prov-prefs #claudeRunList:not(.gw) #claudeTuiRow { display: none; }
 .prov-prefs .row.pref .sub { white-space: normal; }
 .prov-prefs .row.pref { flex-wrap: wrap; row-gap: 8px; }
 .prov-prefs .row.pref .who { flex: 1 1 240px; min-width: 0; }
