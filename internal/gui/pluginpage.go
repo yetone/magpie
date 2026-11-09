@@ -413,6 +413,8 @@ func apiFramed(r *http.Request) bool {
 // can 127.0.0.1 be another computer than this one.
 func pluginPageRoutes(mux *http.ServeMux, web bool) {
 	mux.HandleFunc(pluginPagePrefix, func(rw http.ResponseWriter, r *http.Request) { servePluginPage(rw, r, web) })
+	// a picture a page drew, to the clipboard or to Downloads (pageimage.go)
+	pageImageRoutes(mux)
 	mux.HandleFunc("GET /api/plugin-pages", func(rw http.ResponseWriter, r *http.Request) {
 		out := pluginPages()
 		if out == nil {
@@ -539,6 +541,9 @@ func pageRead(read string, params map[string]any) (any, error) {
 			out = append(out, prov{ID: p.ID, Name: p.Name})
 		}
 		return out, nil
+	case "usage:day":
+		// one day, by agent and model (pageday.go)
+		return pageDay(params)
 	case "usage:summary":
 		period := usage.Today
 		if s, _ := params["period"].(string); s != "" {

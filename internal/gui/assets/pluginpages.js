@@ -7,14 +7,10 @@
 // from that frame only, and the window answers only what the page may:
 // the theme, its own options, and the reads its package declared
 // (magpie.permissions), which /api/plugin-pages/read checks again.
-// A page that throws, or never says hello, shows the kernel's "This
-// page stopped working" with its Try again.
 //
 // Panels (magpie.panels, P5) are framed the same way in a page's
-// .plugin-slot, as tall as they draw, and one that breaks says so in its
-// place. A page may take a built-in one's place (magpie.page.replaces),
-// and its actions (magpie.actions, P6) are row menu items that open it:
-// plugin-runtime.md says the rest.
+// .plugin-slot, as tall as they draw. plugin-runtime.md says the rest:
+// a page broken, in a built-in one's place, opened by an action, shared.
 (() => {
   if (mode !== "window") return;
   // how long a page has to say hello before it is taken as broken
@@ -145,6 +141,9 @@
         if (!e.reads.includes(name)) throw new Error(t("{name} doesn't ask to read {what}", { name: titled(e), what: name }));
         return api("plugin-pages/read", { spec: e.spec, read: name, params: m.params?.params || {} });
       }
+      case "image.copy":
+      case "image.save":
+        return import("./pageshare.js").then(() => pageShare(e.spec, m.method === "image.save", m.params));
     }
     throw new Error(t("No such call: {what}", { what: String(m.method) }));
   }

@@ -10,6 +10,12 @@
 //   await magpie.options.set(o)   sets them, and answers with them
 //   await magpie.read(name, p)    a read its package.json's
 //                                 magpie.permissions declares
+//   await magpie.image.copy(png)  puts a PNG (a Blob, as a canvas's
+//                                 toBlob makes it) on the clipboard
+//   await magpie.image.save(png, name)
+//                                 saves it in Downloads as name.png, and
+//                                 answers { path } ("" in magpie web,
+//                                 where the browser downloads it)
 //   magpie.context                where a panel is (P5): { provider: {
 //                                 id, name } } in a provider's editor,
 //                                 else {}; set once magpie.ready is
@@ -128,6 +134,10 @@
       set: (options) => call("options.set", { options }),
     },
     read: (name, params) => call("read", { name, params }),
+    image: {
+      copy: (png) => call("image.copy", { png }),
+      save: (png, name) => call("image.save", { png, name }),
+    },
   };
   api.ready = call("hello").then(({ context, service, visible, ...theme }) => {
     api.theme = theme;

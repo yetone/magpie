@@ -1499,7 +1499,7 @@
 
   // what a plugin's page may read of magpie's: what its package.json's
   // magpie.permissions declares, each a read with no secret in it
-  const READS = { "usage:summary": "your usage totals, by model", "providers:list": "your providers' names" };
+  const READS = { "usage:summary": "your usage totals, by model", "usage:day": "your usage by day, agent and model", "providers:list": "your providers' names" };
   const PAGES = { sessions: "Sessions", library: "Library", routing: "Routing", usage: "Usage" };
   function pageLine(p) {
     const d = el("div", "sub pm-mw pm-page");
