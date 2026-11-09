@@ -25,6 +25,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/yetone/magpie/internal/appdir"
@@ -270,7 +271,7 @@ func run(ctx context.Context, st State, model string, complete Complete) (ran, e
 		}
 		r.Read++
 		r.done[key(s)] = s.Last
-		r.Added += keep(parse(reply), s, proj)
+		r.Added += keep(parse(reply), s, proj, said(tr))
 	}
 	return r, nil
 }
@@ -332,6 +333,28 @@ func known(proj *memory.Project) []string {
 	return out
 }
 
+// said is everything the user wrote, as letters and digits alone, for
+// telling a quote of theirs from words they never wrote.
+func said(t sessions.Transcript) string {
+	var b strings.Builder
+	for _, p := range t.Parts {
+		if p.Kind == "text" && p.Role == "user" {
+			b.WriteString(bare(p.Text))
+		}
+	}
+	return b.String()
+}
+
+// bare is s lower-cased with everything but letters and digits taken out.
+func bare(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return unicode.ToLower(r)
+		}
+		return -1
+	}, s)
+}
+
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 // prompt names neither the app reading nor any vendor: it goes to the
@@ -347,10 +370,12 @@ Keep only what stays true beyond this conversation and that a later assistant co
 - procedure: steps that worked for a task likely to come again
 - episode: a decision that was made, and why
 
+Each item rests on words the user wrote in this conversation: quote them exactly. Leave out what only the assistant said, such as rules it follows from its own instructions or notes.
+
 Leave out: the task itself and its progress, anything about this conversation alone, code details visible in the repository, secrets (keys, tokens, passwords), and anything already in "Already known". When nothing is worth keeping, answer [].
 
 Answer with a JSON array alone, at most 5 items:
-[{"text": "one short sentence, in the language the user wrote in", "kind": "preference", "scope": "global or project", "why": "what in the conversation shows it", "quote": "the user's words that show it, short"}]
+[{"text": "one short sentence, in the language the user wrote in", "kind": "preference", "scope": "global or project", "why": "what in the conversation shows it", "quote": "the user's own words that show it, copied exactly, short"}]
 scope is "project" when it holds only in this project, "global" when it holds for the user everywhere.`
 
 func request(text string, known []string, proj *memory.Project) string {
@@ -394,9 +419,11 @@ func parse(reply string) []found {
 }
 
 // keep saves what was found as candidates, each from s, and counts the
-// new ones. A kind not known is a fact; a project scope without a project
-// is everyone's.
-func keep(fs []found, s sessions.Session, proj *memory.Project) int {
+// new ones. Each rests on words the user wrote (in their, as bare gives
+// it): one without is the assistant's own instructions or notes said back,
+// or made up, and is dropped. A kind not known is a fact; a project scope
+// without a project is everyone's.
+func keep(fs []found, s sessions.Session, proj *memory.Project, their string) int {
 	n := 0
 	for i, f := range fs {
 		if i >= MaxPerSession {
@@ -404,6 +431,9 @@ func keep(fs []found, s sessions.Session, proj *memory.Project) int {
 		}
 		text := strings.TrimSpace(f.Text)
 		if text == "" || utf8.RuneCountInString(text) > 400 {
+			continue
+		}
+		if q := bare(f.Quote); q == "" || !strings.Contains(their, q) {
 			continue
 		}
 		kind := strings.ToLower(strings.TrimSpace(f.Kind))

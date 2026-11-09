@@ -126,7 +126,9 @@ further (`State.Since`).
   `gateway.AutoVision()`.
 - Each proposal is saved as an inferred candidate (To review) with its
   conversation as the source and the quote it rests on; at most 5 per
-  conversation. A text the user deleted or archived is never proposed
+  conversation. A proposal whose quote isn't in what the user wrote
+  (letters and digits compared, `bare`) is dropped: on real
+  conversations those were the assistant's own instructions said back. A text the user deleted or archived is never proposed
   again (`memory.Dismissed`, `TestDeletedNotProposedAgain`).
 - A failed request stops the run, records the error for the row, and
   leaves the conversation to be read again next time

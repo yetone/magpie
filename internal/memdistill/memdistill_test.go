@@ -101,8 +101,10 @@ func TestOffReadsNothing(t *testing.T) {
 
 // Only a main session that has been quiet for Quiet, is readable, isn't
 // magpie's own, said enough and is newer than Since is read; what it
-// proposes waits as a candidate with where it came from; it isn't read
-// again until it goes on.
+// proposes waits as a candidate with where it came from, when it quotes
+// the user (case, spaces and punctuation aside), and is dropped when the
+// quote is missing or words the user never wrote; it isn't read again
+// until it goes on.
 func TestReadsQuietSessionsOnce(t *testing.T) {
 	sb := newSandbox(t)
 	on(t, "")
@@ -117,9 +119,11 @@ func TestReadsQuietSessionsOnce(t *testing.T) {
 	sb.reply = func(user string) (string, error) {
 		return "Here they are:\n```json\n" + `[
 			{"text":"Use pnpm, never npm","kind":"rule","scope":"project","why":"said so","quote":"never use npm here, pnpm only"},
-			{"text":"Deploys go out with make ship","kind":"nonsense","scope":"project"},
-			{"text":"Prefers short answers","kind":"preference","scope":"global"},
-			{"text":"","kind":"fact"}
+			{"text":"Deploys go out with make ship","kind":"nonsense","scope":"project","quote":"We deploy with  Make ship."},
+			{"text":"Prefers short answers","kind":"preference","scope":"global","quote":"pnpm only"},
+			{"text":"Runs tests on mote","kind":"rule","scope":"global","quote":"heavy commands run on mote"},
+			{"text":"Uses tabs","kind":"preference","scope":"global"},
+			{"text":"","kind":"fact","quote":"pnpm"}
 		]` + "\n```", nil
 	}
 	res, err := Run(context.Background(), "auto/m", sb.complete)
@@ -260,7 +264,7 @@ func TestDeletedNotProposedAgain(t *testing.T) {
 	sb := newSandbox(t)
 	on(t, "")
 	sb.reply = func(string) (string, error) {
-		return `[{"text":"Likes tabs","kind":"preference","scope":"global"}]`, nil
+		return `[{"text":"Likes tabs","kind":"preference","scope":"global","quote":"x"}]`, nil
 	}
 	sb.session("a", time.Hour, "x", "y")
 	if res, err := Run(context.Background(), "a/m", sb.complete); err != nil || res.Added != 1 {
