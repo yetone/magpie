@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Known issues
+    url: https://github.com/yetone/magpie/issues?q=is%3Aissue+is%3Aopen+label%3Abug
+    about: Check whether it's already reported before filing.
+  - name: Discord
+    url: https://discord.gg/vGSnD3ZKQF
+    about: Questions and quick help.

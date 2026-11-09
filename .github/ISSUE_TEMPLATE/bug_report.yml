@@ -1,0 +1,53 @@
+name: Bug report
+description: Something in magpie doesn't work as expected
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: magpie version
+      description: Settings → About, or `magpie version`.
+      placeholder: v0.1.3471
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      options: [GUI, TUI, CLI, Gateway only]
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: macOS 26 / Windows 11 / Ubuntu 24.04 (WSL)
+    validations:
+      required: true
+  - type: input
+    id: setup
+    attributes:
+      label: Agent, provider and model
+      placeholder: Claude Code → Codex subscription → gpt-6.1
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error text or logs
+      description: Paste the exact error. Remove keys and tokens first.
+      render: text
