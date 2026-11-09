@@ -3,7 +3,8 @@
 // creation beside in and out, at every width — not only where a narrow
 // window leaves the row's cache columns out — and 0 as 0, so a prompt that
 // missed the cache reads as that. A failure that spent nothing says no
-// tokens. No click moves the page, nothing spills out of the details, in
+// tokens. Back from a request's page is the list where it was, nothing
+// spills out of the details, in
 // every language, in Chromium and WebKit at 1100 and 390 wide; the API is
 // faked.
 const assert = require("node:assert/strict");
@@ -99,19 +100,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
                 await page.waitForTimeout(300);
               }
               const was = await top(), at = await page.evaluate(() => [scrollX, scrollY]);
-              await rows.nth(i).click();
-              await page.waitForTimeout(150);
-              assert.equal(await top(), was, "a click moved the page");
+              const box = await reader.openRequest(page, rows.nth(i));
               assert.deepEqual(await page.evaluate(() => [scrollX, scrollY]), at);
-              const box = page.locator(".led-detail").last();
-              await box.waitFor();
               const got = await box.evaluate((b, dt) => {
                 const d = [...b.querySelectorAll("dt")].find((x) => x.textContent === dt);
                 if (!d) return null;
                 const dd = d.nextElementSibling, r = dd.getBoundingClientRect(), wrap = b.querySelector(".led-box").getBoundingClientRect();
                 return { text: dd.textContent, shown: r.width > 0 && r.height > 0 && getComputedStyle(dd).display !== "none", inside: r.left >= wrap.left - 0.5 && r.right <= wrap.right + 0.5, border: getComputedStyle(dd).borderLeftWidth };
               }, W[lang].dt);
-              await rows.nth(i).click(); // closed again
+              await reader.closeRequest(page);
+              assert.equal(await top(), was, "back to the list where it was left");
               return got;
             };
             const cached = await detail(0);

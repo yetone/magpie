@@ -5,8 +5,8 @@
 // for one translated from the agent's own, Gemini for one on Gemini's
 // streamGenerateContent (Gemini CLI's, Vertex AI's), and a request's
 // details name it beside the upstream's own stop reason. A row read from
-// a session file, which has no path, has no tag. No click moves the page,
-// no left-border accent. English and Chinese; the API is faked.
+// a session file, which has no path, has no tag. Back from a request's page
+// is the list where it was, no left-border accent. English and Chinese; the API is faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -108,14 +108,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await reader.inView(page, rows.nth(i));
         const was = await top();
         const scrolled = await page.evaluate(() => [scrollX, scrollY]);
-        await rows.nth(i).click();
-        await page.waitForTimeout(200);
-        assert.equal(await top(), was, "a click moved the page");
+        const box = await reader.openRequest(page, rows.nth(i));
         assert.deepEqual(await page.evaluate(() => [scrollX, scrollY]), scrolled);
-        const box = page.locator(".led-detail").last();
-        await box.waitFor();
         const v = await box.evaluate((b, dts) => dts.map((dt) => [...b.querySelectorAll("dt")].find((d) => d.textContent === dt)?.nextElementSibling?.textContent || ""), dt);
-        await rows.nth(i).click(); // closed again
+        await reader.closeRequest(page);
+        assert.equal(await top(), was, "back to the list where it was left");
         return v;
       };
       assert.deepEqual(await dd(0, [want[lang].proto, want[lang].stop]), ["Chat → Anthropic", "end_turn"]);

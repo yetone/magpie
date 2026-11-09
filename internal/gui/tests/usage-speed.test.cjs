@@ -143,12 +143,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await p.locator("#ledHScroll").isVisible(), false, "no sideways scrollbar");
         assert.equal((await p.locator("#ledTight").textContent()).trim(), w.hint);
         assert(await p.locator("#ledTight").isVisible(), "says where the columns went");
-        await reader.click(p, p.locator(".led tbody tr.led-row").nth(0).locator("td").nth(2));
-        const d = p.locator(".led tbody tr.led-detail");
+        const d = await reader.openRequest(p, p.locator(".led tbody tr.led-row").nth(0));
         const shown = await d.locator("dt").evaluateAll((dts) => dts.filter((x) => x.offsetParent).map((x) => x.textContent));
         assert(shown.includes(w.sent), "the details say what was sent: " + shown.join(", "));
         assert(shown.includes(w.speed), "and the speed: " + shown.join(", "));
-        await reader.click(p, p.locator(".led tbody tr.led-row").nth(0).locator("td").nth(2));
+        await reader.closeRequest(p);
 
         // the period's speed and its first-token time
         const kpi = p.locator("#ledKpi .blk").filter({ hasText: w.kpi });

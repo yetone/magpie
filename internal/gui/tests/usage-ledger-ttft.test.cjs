@@ -92,9 +92,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // it says what the details say, "≈" for a session file's
         const detail = async (i) => {
           await reader.click(p, rows.nth(i).locator("td").nth(2));
-          const d = p.locator(".led tbody tr.led-detail");
+          const d = p.locator("#ledReqPane .led-detail");
+          await d.waitFor();
           const dts = await d.locator("dt").allTextContents(), dds = await d.locator("dd").allTextContents();
-          await reader.click(p, rows.nth(i).locator("td").nth(2));
+          await reader.closeRequest(p);
           return dds[dts.indexOf(w.detail)];
         };
         const first = await detail(0);
@@ -151,10 +152,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(look, { small: true, block: "block", color: true }, "a small second line, muted");
         assert(await rows.nth(0).evaluate((r) => r.getBoundingClientRect().height) < 60, "the row stays a row");
         await reader.click(p, rows.nth(0).locator("td").nth(2));
-        const shown = await p.locator(".led tbody tr.led-detail dt").evaluateAll((dts) => dts.filter((x) => x.offsetParent).map((x) => x.textContent));
+        await p.locator("#ledReqPane .led-detail").waitFor();
+        const shown = await p.locator("#ledReqPane .led-detail dt").evaluateAll((dts) => dts.filter((x) => x.offsetParent).map((x) => x.textContent));
         assert(shown.includes(w.detail), "the details still say it: " + shown.join(", "));
         assert.equal(await p.locator("#view-usage").evaluate((v) => v.scrollWidth <= v.clientWidth + 1), true, "the page doesn't scroll sideways");
-        await reader.click(p, rows.nth(0).locator("td").nth(2));
+        await reader.closeRequest(p);
 
         // a phone-narrow window: still under the duration, the page not sideways
         await p.setViewportSize({ width: 420, height: 800 });

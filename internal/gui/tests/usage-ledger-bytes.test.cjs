@@ -99,9 +99,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(await io.getAttribute("title"), `${w.up}: 1,288,567 B\n${w.down}: 35,000 B`.replace(/,/g, lang === "de" ? "." : ","));
 
           const rows = p.locator(".led tbody tr.led-row");
-          const pairs = (n) => p.locator(".led-detail").nth(n).evaluate((d) => Object.fromEntries([...d.querySelectorAll("dt")].map((dt) => [dt.textContent, dt.nextElementSibling.textContent])));
-          await reader.click(p, rows.nth(0));
-          const got = await pairs(0);
+          // a row opens its request's own page; back first if one is open
+          const openRow = async (n) => {
+            if (await p.locator("#ledReqPane").isVisible()) await reader.closeRequest(p);
+            await reader.click(p, rows.nth(n));
+            await p.locator("#ledReqPane .led-detail").waitFor();
+          };
+          const pairs = () => p.locator("#ledReqPane .led-detail").evaluate((d) => Object.fromEntries([...d.querySelectorAll("dt")].map((dt) => [dt.textContent, dt.nextElementSibling.textContent])));
+          await openRow(0);
+          const got = await pairs();
           assert.equal(got[w.up], "1.2 MB");
           assert.equal(got[w.down], "34 KB");
           assert.equal(got[w.saved], "72 KB");
@@ -111,21 +117,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal((await rows.nth(0).locator(".proto").textContent()).trim(), "Responses · WS");
           assert.equal((await rows.nth(1).locator(".proto").textContent()).trim(), "Chat");
           // a row from before: none of them, not 0
-          await reader.click(p, rows.nth(1));
-          const old = await pairs(1);
+          await openRow(1);
+          const old = await pairs();
           for (const k of [w.up, w.down, w.saved]) assert(!(k in old), `an old row shows ${k}: ${old[k]}`);
           assert.equal(old[w.proto], "Chat");
           // an upload that cost more than it saved says nothing saved
-          await reader.click(p, rows.nth(2));
-          const upload = await pairs(2);
+          await openRow(2);
+          const upload = await pairs();
           assert.equal(upload[w.up], "54 KB");
           assert.equal(upload[w.down], "900 B");
           assert(!(w.saved in upload), "nothing saved is shown for a loss");
           // a row that kept its count: how many images, in the language's unit
-          await reader.click(p, rows.nth(3));
-          assert.equal((await pairs(3))[w.saved], w.three);
-          await reader.click(p, rows.nth(4));
-          assert.equal((await pairs(4))[w.saved], w.one, "one image, singular");
+          await openRow(3);
+          assert.equal((await pairs())[w.saved], w.three);
+          await openRow(4);
+          assert.equal((await pairs())[w.saved], w.one, "one image, singular");
 
           const sideways = await p.evaluate(() => [document.documentElement.scrollWidth - innerWidth, ...[...document.querySelectorAll("#ledKpi .blk")].map((b) => b.scrollWidth - b.clientWidth)]);
           assert(sideways.every((n) => n <= 1), `scrolls sideways: ${sideways}`);

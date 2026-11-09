@@ -1562,21 +1562,16 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .led .faint { color: var(--faint); }
 .led .muted { color: var(--muted); }
 .led th, .led .when, .led .model-value { color: var(--fg-2); }
-.led .when .text { padding: 0; font: inherit; }
-.led .when .led-route-link { text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
-.led .when .led-route-link:hover { text-decoration-style: solid; }
 #ledRoute { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
 #ledRoute[hidden] { display: none; }
 #ledRouteClear { font-size: 18px; padding: 2px 6px; }
 .led .model, .led .where { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
-/* a window too narrow for every column leaves out those the row's details
-   say (#860), and narrows the names */
-.led.tight .lc-opt, .led:not(.tight) .led-dl .lc-opt { display: none; }
-.led.tight .led-dl .lc-opt { display: block; }
+/* a window too narrow for every column leaves out those the request's
+   page says (#860), and narrows the names */
+.led.tight .lc-opt { display: none; }
 .led.tight .model, .led.tight .where { max-width: 160px; }
 .led.tight th, .led.tight td { padding-left: 6px; padding-right: 6px; }
-.led.tighter .price-reference, .led.tight2 .lc-opt2, .led:not(.tight2) .led-dl .lc-opt2 { display: none; }
-.led.tight2 .led-dl .lc-opt2 { display: block; }
+.led.tighter .price-reference, .led.tight2 .lc-opt2 { display: none; }
 /* the first token, under the duration while its own column is left out */
 .led.tight2 td.duration[data-ttft]::after { content: attr(data-ttft); display: block; margin-top: 1px; font-size: 10.5px; font-weight: 400; color: var(--muted); }
 /* the account's name is cut at 110px, but its column keeps room for the
@@ -1627,10 +1622,23 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .led .duration.faint { font-weight: 400; }
 .led tr.led-row { cursor: pointer; }
 .led tr.led-row:focus-visible { outline: 2px solid var(--accent, var(--fg-2)); outline-offset: -2px; }
-.led tr.open td { background: var(--card-2, var(--pill)); }
-.led tr.led-detail td { padding: 0; white-space: normal; background: var(--card-2, var(--pill)); }
-.led-box { position: sticky; left: 0; box-sizing: border-box; width: min(100%, calc(var(--ledw, 720px) - 2px), 900px); padding: 8px 12px 11px; }
-.led-dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0; font-size: 11.5px; }
+/* one request on a page of its own, pushed over the list (geesehowardt7) */
+.led-req-bar { display: flex; align-items: center; min-height: 28px; }
+.led-req-back { display: inline-flex; align-items: center; gap: 2px; margin-left: -4px; }
+.led-req-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin: 6px 0 10px; }
+.led-req-title { margin: 0; min-width: 0; font-size: 17px; font-weight: 650; color: var(--fg); overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+.led-req-head .st { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
+.led-req-head .st .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex: none; }
+.led-req-head.bad .st { color: var(--red); font-weight: 600; }
+.led-req-head.bad .st .dot { background: var(--red); -webkit-mask: var(--x-mark) center / contain no-repeat; mask: var(--x-mark) center / contain no-repeat; border-radius: 0; transform: scale(1.5); }
+.led-req-head.gone .st .dot { background: var(--muted); }
+.led-req .led-box { box-sizing: border-box; max-width: 900px; padding: 14px 18px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); }
+.led-req .who { display: inline-flex; align-items: center; gap: 6px; }
+.led-req .who .ic { width: 14px; height: 14px; flex: none; }
+.led-req:not([hidden]) { animation: led-req-in 200ms cubic-bezier(.23, 1, .32, 1); }
+@keyframes led-req-in { from { opacity: 0; transform: translateX(12px); } }
+@media (prefers-reduced-motion: reduce) { @keyframes led-req-in { from { opacity: 0; } } }
+.led-dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 0; font-size: 12px; }
 .led-dl dt { color: var(--muted); }
 .led-dl dd { margin: 0; min-width: 0; color: var(--fg); overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
 .led-dl dd.bad { color: var(--red); font-weight: 600; }

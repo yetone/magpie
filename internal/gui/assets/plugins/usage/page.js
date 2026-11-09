@@ -1237,6 +1237,7 @@ window.openUsageRoute = (route) => {
   if (!ledBeforeRoute) ledBeforeRoute = { period, ledOffset, ledPurpose, ledAgent, ledProvider, ledAccount, ledCallerKey, ledFailed, ledRetried, ledQuery, ledModel, ledComputer, ledDay, ledVia, lent: [...ledLent] };
   ledRoute = route.id;
   ledRouteInfo = route;
+  ledReq = null;
   ledOffset = 0; ledPurpose = ""; ledAgent = ""; ledProvider = ""; ledAccount = ""; ledCallerKey = ""; ledFailed = false; ledRetried = false; ledQuery = ""; ledModel = ""; ledComputer = ""; ledVia = "";
   ledDay = "";
   ledLent.clear();
@@ -1267,7 +1268,16 @@ function ledRouteOff() {
 }
 // ledLeave: the reader leaves the Requests; what a click lent them goes
 // (the rows drawn for them aren't shown again on the way back)
-function ledLeave() {
+function ledLeave(away) {
+  // a request's own page goes with the list it was opened from; leaving
+  // the page, the list keeps its place for the way back (Routing's View
+  // usage)
+  if (ledReq) {
+    ledReq = null;
+    $("#ledReqPane").replaceChildren();
+    ledReqShown();
+    if (away) { const v = $("#view-usage"); v.scrollTop = ledReqAt; window.arrived?.(v); }
+  }
   const routed = !!ledRoute;
   if (routed) ledRouteOff();
   if (!ledLent.size && !routed) return;
@@ -1438,16 +1448,117 @@ function ledProtoBadge(r) {
 // while it came) saw no error, and is no failure
 const ledFailed_ = (r) => !r.canceled && (r.status >= 400 || !!r.err);
 const ledKey = (r) => [r.t, r.agent, r.model, r.rid, r.session, r.computer || ""].join("|");
-const ledOpen = new Set(); // the rows opened, kept across a refresh
+// the address a request came from, as the gateway's connection gave it:
+// loopback is this computer
+const ledFromHere = (ip) => /^(127\.|::1$|::ffff:127\.)/.test(ip);
+const ledSource = (ip) => ledFromHere(ip) ? t("This computer") + " · " + ip : ip;
 
-// what is known of one request beyond its row: the id its vendor gave it,
-// the path it went to, and, if it failed, what the vendor said
-function ledDetail(r, cols) {
+// One request on a page of its own (geesehowardt7 on X: a click on a
+// request took them to Routing, which wasn't what they asked; they wanted
+// that request's own record, and where it came from). A row's click or
+// Enter pushes the page over the list, as a Mac app's list pushes an
+// item's, with Requests ‹ (or Escape) back to the list where it was left.
+// Routing is a link inside it. It lasts across a refresh, and goes with
+// the Requests (ledLeave).
+let ledReq = null; // { key, r }
+let ledReqAt = 0; // where the page was scrolled in the list
+function ledReqShown() {
+  const on = usageTab === "requests" && !!ledReq;
+  $("#ledgerPane").hidden = usageTab !== "requests" || on;
+  $("#ledReqPane").hidden = !on;
+  $("#view-usage").classList.toggle("led-req-on", on);
+  if (usageTab === "requests") $("#period").hidden = on;
+  // the list's sideways scrollbar at once, not a frame later: the room
+  // it takes is in the place the list goes back to
+  if (usageTab === "requests" && !on) ledHScroll();
+}
+function ledReqOpen(r, e) {
+  const v = $("#view-usage");
+  ledReqAt = v.scrollTop;
+  ledReq = { key: ledKey(r), r };
+  renderLedReq();
+  ledReqShown();
+  // the page starts at its top, the list's place kept for the way back
+  if (window.scrollOnPurpose?.(e)) { v.scrollTop = 0; window.arrived?.(v); }
+  $("#ledReqPane .led-req-back")?.focus({ preventScroll: true });
+}
+function ledReqClose(e) {
+  if (!ledReq) return;
+  const key = ledReq.key;
+  ledReq = null;
+  $("#ledReqPane").replaceChildren();
+  ledReqShown();
+  const v = $("#view-usage");
+  if (e && window.scrollOnPurpose?.(e)) {
+    v.scrollTop = ledReqAt;
+    window.arrived?.(v);
+  }
+  // the row it was opened from has the keyboard again
+  const row = [...document.querySelectorAll("#ledWrap .led-row")].find((x) => x.dataset.key === key);
+  row?.focus({ preventScroll: true });
+}
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || e.defaultPrevented || e.repeat || !ledReq || $("#view-usage").hidden || $("#ledReqPane").hidden) return;
+  // a menu, a dialog or a field takes its own Escape first
+  if (document.querySelector(".proto-menu, dialog[open]") || e.target.closest?.("input, textarea, [contenteditable]")) return;
+  e.preventDefault();
+  ledReqClose(e);
+});
+function renderLedReq() {
+  const pane = $("#ledReqPane");
+  if (!pane || !ledReq) return;
+  const r = ledReq.r;
+  const bar = el("div", "led-req-bar");
+  const back = el("button", "text led-req-back");
+  back.type = "button";
+  back.append(svg("m9.5 3.5-4.5 4.5 4.5 4.5", 12, 1.7), el("span", "", t("Requests")));
+  back.onclick = (e) => ledReqClose(e);
+  bar.append(back);
+  const head = el("div", "led-req-head");
+  const title = el("h2", "led-req-title", r.served || r.model || r.req || t(r.agentName || r.agent || "—"));
+  const bad = ledFailed_(r);
+  head.classList.toggle("bad", bad);
+  head.classList.toggle("gone", !bad && !!r.canceled);
+  const st = el("span", "st");
+  st.append(el("i", "dot"), document.createTextNode(r.status ? String(r.status) : bad ? t("Failed") : t("Succeeded")));
+  head.append(title, st);
+  pane.replaceChildren(bar, head, ledDetail(r));
+}
+
+// what is known of one request: when, who sent it and from where, what
+// it asked for and what answered, what it cost and took, the id its
+// vendor gave it, the path it went to, and, if it failed, what the vendor
+// said
+function ledDetail(r) {
   const dl = el("dl", "led-dl");
   const add = (name, value, cls) => {
     if (value === "" || value == null) return;
     dl.append(el("dt", "", t(name)), el("dd", cls || "", value));
   };
+  add("Time", new Date(r.t).toLocaleString(intlLang(), { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }), "led-when");
+  {
+    const name = r.agentName || r.agent;
+    const at = r.computerName ? t("{agent} · on {computer}", { agent: name, computer: r.computerName }) : name;
+    const who = el("span", "who");
+    who.append(icon(r.icon || "generic"), el("span", "", [r.via ? t("{agent} · via {host}", { agent: at, host: r.via }) : at, r.callerKeyLabel || r.callerKeyName].filter(Boolean).join(" · ")));
+    add("Agent", who);
+  }
+  // where it came from: kept by the gateway since this version; a row from
+  // before, or one read from a session file or reported, has none
+  if (r.client_ip) add("Source IP", ledSource(r.client_ip), "led-ip");
+  else if (!r.source && !r.computer && !r.via && r.agent !== "magpie") add("Source IP", t("Not recorded"), "muted led-ip");
+  add("Requested", r.req);
+  {
+    const local = r.source === "log";
+    const where = local ? (r.session_account || r.session_provider || t("Local session"))
+      : [r.providerName && t(r.providerName), r.host].filter(Boolean).join(" · ");
+    add("Provider", where);
+  }
+  // the subscription account that answered, or the key it was sent with
+  if (r.source !== "log") add("Account", r.providerAccount || r.providerKeyName);
+  add("Sent", r.model);
+  if (r.served) add("Served", ledServed(r));
+  add("Effort", r.effort);
   if (ledFailed_(r)) {
     add("Status", r.status ? String(r.status) : "—", "bad");
     add("Error type", r.err_type, "bad");
@@ -1458,8 +1569,7 @@ function ledDetail(r, cols) {
     add("Status", r.canceled ? `${r.status} · ${t("canceled")}` : r.status ? String(r.status) : r.source === "log" ? t("Succeeded") : "");
   }
   if (Number.isFinite(r.ms) && r.ms > 0) add("Duration", (r.source === "log" ? "≈" : "") + ledTook(r.ms));
-  // the way it was routed: the row's time links there too, which reads as
-  // a time rather than a link (#799)
+  // the way it was routed, the one link to Routing a request has
   // (with the Routing page switched off there is nowhere to see it)
   if (r.route_id && !featuresOff.has("routing")) {
     const go = el("button", "text led-route-link", t("View routing"));
@@ -1471,18 +1581,7 @@ function ledDetail(r, cols) {
   if (r.computerName) add("Computer", r.computerName);
   // the client's own name, for one the user counts as an agent (#1958)
   add("Client", r.client);
-  // the columns a narrow window leaves out, shown only while it does (#860)
-  const opt = (name, value, cls = "lc-opt") => {
-    if (!value) return;
-    add(name, value);
-    dl.lastChild.classList.add(cls);
-    dl.lastChild.previousSibling.classList.add(cls);
-  };
-  opt("Sent", r.model);
-  opt("Effort", r.effort);
-  // the cache hit rate's column stays while the raw cache columns go, and
-  // goes only with the first token's
-  opt("Cache hit rate", ledHitText(ledCacheHit(r)), "lc-opt2");
+  add("Cache hit rate", ledHitText(ledCacheHit(r)));
   // its tokens at every width, the cache's beside in and out: a prompt read
   // from the cache is told from one that missed it, whose input is the
   // whole of it, where the row's cache columns are out of sight (#1839).
@@ -1490,6 +1589,7 @@ function ledDetail(r, cols) {
   if (r.in || r.out || r.cache_read || r.cache_write || !ledFailed_(r)) {
     add("Tokens", t("{i} in · {o} out · {r} cache read · {w} cache creation", { i: ledNum(r.in || 0), o: ledNum(r.out || 0), r: ledNum(r.cache_read || 0), w: ledNum(r.cache_write || 0) }) + cacheTTLs(r, ledNum) + (r.cache_unknown ? " · " + t("The vendor doesn't count the cache") : ""), "led-tokens");
   }
+  if (r.priced) add("Cost", "≈" + fmtCost({ cost: r.cost, unpriced: 0 }));
   if (r.credits != null) add("Credits", ledCredits({ credits: r.credits, credited: 1 }).textContent);
   if (ledRowSpeed(r)) add("Speed", t("{n} tok/s", { n: ledNum(Math.round(ledRowSpeed(r))) }));
   else if (ledFloorSpeed(r)) add("Speed", "≥" + t("{n} tok/s", { n: ledNum(Math.round(ledFloorSpeed(r))) }));
@@ -1547,9 +1647,7 @@ function ledDetail(r, cols) {
   // it was on, or not through the gateway
   if (!r.archive && !r.computer && (providers?.gateway?.archive?.on ?? state.settings?.requestArchive)) add("Request archive", t("Not archived"), "muted");
   if (r.source === "log") add("Data source", t("Read from the agent's session file. The account is shown only when local metadata identifies it; no service provider is inferred."), "muted");
-  const tr = el("tr", "led-detail");
-  const td = el("td");
-  td.colSpan = cols;
+  const detail = el("div", "led-detail");
   const box = el("div", "led-box");
   box.append(dl.childElementCount ? dl : el("span", "faint", t("Nothing more was kept of this request")));
   // the call as the request archive kept it, when it was on (#447)
@@ -1570,9 +1668,8 @@ function ledDetail(r, cols) {
     ledLoadContent(r).then((c) => { if (cx.isConnected) cx.replaceChildren(ledContentBox(c)); });
   }
   box.append(cx);
-  td.append(box);
-  tr.append(td);
-  return tr;
+  detail.append(box);
+  return detail;
 }
 
 // What was said in a request — what its agent was given, and what came back —
@@ -2583,9 +2680,9 @@ function renderLedger() {
     const bad = ledFailed_(r);
     const key = ledKey(r);
     // one its agent canceled is neither: muted, not the answered green
-    const tr = el("tr", "led-row" + (bad ? " bad" : r.canceled ? " gone" : "") + (ledOpen.has(key) ? " open" : ""));
+    const tr = el("tr", "led-row" + (bad ? " bad" : r.canceled ? " gone" : ""));
     tr.tabIndex = 0;
-    tr.setAttribute("aria-expanded", ledOpen.has(key) ? "true" : "false");
+    tr.dataset.key = key;
     const td = (child, cls, title) => {
       const c = el("td", (cls || "") + optCls(LED_COLS[tr.childElementCount]?.[2]));
       if (typeof child === "string") c.textContent = child; else c.append(child);
@@ -2593,14 +2690,9 @@ function renderLedger() {
       tr.append(c);
       return c;
     };
-    const routed = r.route_id && !featuresOff.has("routing"); // the Routing page there to open it on
-    const when = routed ? el("button", "text led-route-link", ledTime(r.t)) : ledTime(r.t);
-    if (routed) {
-      when.title = t("View routing");
-      // the link opens the route, not the row's details as well
-      when.onclick = (e) => { e.stopPropagation(); window.openRoute(r.route_id, r.t).catch((err) => status(err.message, "err")); };
-    }
-    td(when, "when", new Date(r.t).toLocaleString(intlLang()));
+    // the time is the row's like every cell: a click opens the request
+    // (it opened Routing, which the reader hadn't asked for: geesehowardt7)
+    td(ledTime(r.t), "when", new Date(r.t).toLocaleString(intlLang()));
     const who = el("span", "who");
     // an agent on another computer, whose magpie passed the request on
     const name = r.agentName || r.agent;
@@ -2760,19 +2852,10 @@ function renderLedger() {
     td(st, "", [r.handed_on && t("This try failed and the request was handed on to the next: the request is counted by how it ended, not by this try"),
       r.canceled && t("Canceled by the agent before an answer came: a reply stopped, or a message sent while it was coming. Not counted as failed."),
       bad ? (r.err || t("Failed: the agent was answered {status}", { status: r.status })) : ""].filter(Boolean).join("\n"));
-    const detail = ledOpen.has(key) ? ledDetail(r, LED_COLS.length) : null;
-    const toggle = () => {
-      if (ledOpen.delete(key)) { tr.classList.remove("open"); tr.setAttribute("aria-expanded", "false"); tr.nextElementSibling?.classList.contains("led-detail") && tr.nextElementSibling.remove(); return; }
-      ledOpen.add(key);
-      tr.classList.add("open");
-      tr.setAttribute("aria-expanded", "true");
-      tr.after(ledDetail(r, LED_COLS.length));
-    };
     // a click that ends a text selection is the reader copying, not asking
-    tr.onclick = () => { if (!String(getSelection() || "")) toggle(); };
-    tr.onkeydown = (e) => { if (e.target === tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggle(); } };
+    tr.onclick = (e) => { if (!String(getSelection() || "")) ledReqOpen(r, e); };
+    tr.onkeydown = (e) => { if (e.target === tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); ledReqOpen(r, e); } };
     table.tBodies[0].append(tr);
-    if (detail) table.tBodies[0].append(detail);
   }
   wrap.replaceChildren(table);
   wrap.style.setProperty("--ledw", wrap.clientWidth + "px");
@@ -3043,6 +3126,7 @@ function renderUsageTab() {
   $("#usagePane").hidden = usageTab !== "usage";
   $("#ledgerPane").hidden = usageTab !== "requests";
   $("#sessionsPane").hidden = !on;
+  ledReqShown();
   $("#contextPane").hidden = usageTab !== "context";
 }
 

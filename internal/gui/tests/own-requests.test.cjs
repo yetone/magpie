@@ -199,9 +199,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
               await page.waitForTimeout(300);
             }
             const top = await page.locator("#view-usage").evaluate((v) => v.scrollTop), at = await page.evaluate(() => [scrollX, scrollY]);
+            // the request opens on a page of its own, and its way back is
+            // to the same place in the list
             await rows.nth(1).click();
-            await page.waitForTimeout(150);
-            assert.equal(await page.locator("#view-usage").evaluate((v) => v.scrollTop), top, "a click moved the page");
+            await page.locator("#ledReqPane .led-req-back").waitFor();
+            await page.locator("#ledReqPane .led-req-back").click();
+            await page.locator("#ledReqPane").waitFor({ state: "hidden" });
+            assert.equal(await page.locator("#view-usage").evaluate((v) => v.scrollTop), top, "the way back lost the list's place");
             assert.deepEqual(await page.evaluate(() => [scrollX, scrollY]), at);
             assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "the ledger scrolls the page sideways");
             assert.deepEqual(errors, []);

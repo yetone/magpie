@@ -139,18 +139,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await rows.nth(1).waitFor();
       const top = () => page.locator("#view-usage").evaluate((v) => v.scrollTop);
       const dd = async (i) => {
-        // brought into view by the wheel; the click itself moves nothing
+        // brought into view by the wheel; back from the request's page is
+        // the list where it was
         await reader.inView(page, rows.nth(i));
         const was = await top();
-        await rows.nth(i).click();
-        await page.waitForTimeout(200);
-        assert.equal(await top(), was, "a click moved the page");
-        const box = page.locator(".led-detail").nth(i);
-        await box.waitFor();
-        return box.evaluate((b, dt) => [...b.querySelectorAll("dt")].find((d) => d.textContent === dt)?.nextElementSibling?.textContent || "", want[lang].dt);
+        const box = await reader.openRequest(page, rows.nth(i));
+        const said = await box.evaluate((b, dt) => [...b.querySelectorAll("dt")].find((d) => d.textContent === dt)?.nextElementSibling?.textContent || "", want[lang].dt);
+        if (i === 0) return said; // the next looks at the page's border
+        await reader.closeRequest(page);
+        assert.equal(await top(), was, "back to the list where it was left");
+        return said;
       };
-      assert.equal(await dd(0), "DeepInfra");
       assert.equal(await dd(1), "");
+      assert.equal(await dd(0), "DeepInfra");
       const border = await page.evaluate(() => [...document.querySelectorAll(".rt-req .upstream, .led-detail dd")].map((e) => getComputedStyle(e).borderLeftWidth).filter((b) => parseFloat(b) > 1));
       assert.deepEqual(border, [], "no left-border accent");
       for (const l of ["zh", "ja", "de"]) {

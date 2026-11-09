@@ -16,6 +16,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+const reader = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const tot = (calls, tokens, cost) => ({ calls, errors: 0, input: tokens * 0.2, output: tokens * 0.1, cache_write: 0, cache_read: tokens * 0.7, cost });
@@ -120,8 +121,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert((await failed.locator(".st").textContent()).startsWith(w.bad));
           // its details: the route it went by, and the archive of what it
           // sent the API and what came back
-          await asked.click();
-          const detail = p.locator(".led-detail").first();
+          const detail = await reader.openRequest(p, asked);
           await detail.locator(".led-route-link").waitFor();
           const box = detail.locator(".led-archive .call-archive");
           assert.equal(await box.locator(".call-archive-id").innerText(), KEPT);
@@ -129,7 +129,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await box.locator(".call-details").waitFor();
           const kept = await box.innerText();
           assert(kept.includes("POST /search") && kept.includes("latest go") && kept.includes("go.dev/dl") && kept.includes("[REDACTED]"), kept);
-          await asked.click(); // closed again
+          await reader.closeRequest(p); // back to the list
           await detail.waitFor({ state: "detached" });
           // the purpose picker names it in the page's language
           assert.equal(await p.evaluate(() => purposeOptions(["kind:web_search"], "")[0].name), w.purpose);

@@ -112,6 +112,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await p.locator(":is(#usageTab .opt, .nav-s):visible").nth(1).click();
         await p.locator("#ledWrap .led tbody tr").first().waitFor();
         const rows = p.locator(".led tbody tr.led-row");
+        // a row opens its request's own page; back first if one is open
+        const openRow = async (n) => {
+          if (await p.locator("#ledReqPane").isVisible()) await reader.closeRequest(p);
+          await reader.click(p, rows.nth(n));
+          await p.locator("#ledReqPane .led-detail").waitFor();
+        };
 
         // opened: loading first, then the input and the output
         await reader.click(p, rows.nth(0));
@@ -155,8 +161,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal((await p.locator(".led-cx .cx-part .cx-t").last().textContent()).replace(/\s+/g, " ").trim(), "the end of a part " + w.cut);
         assert.equal((await p.locator(".led-cx .cx-none").textContent()).trim(), w.whole);
         assert.equal((await p.locator(".led-cx .cx-src").textContent()).trim(), w.src);
-        // the details are inside the table's box
-        const box = await p.locator(".led-box").boundingBox(), wrap = await p.locator("#ledWrap").boundingBox();
+        // the details are inside the page's box
+        const box = await p.locator(".led-box").boundingBox(), wrap = await p.locator("#ledReqPane").boundingBox();
         assert(box.x >= wrap.x - 1 && box.x + box.width <= wrap.x + wrap.width + 1, "within the box");
         // asked for by its session and the span the request took, a little either side
         const g = asked.at(-1);
@@ -167,33 +173,35 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(Date.parse(g.to), t0 + 3100 + 30e3);
 
         // a call of a session file: at its own time
-        await reader.click(p, rows.nth(1));
-        await p.locator(".led-detail").nth(1).locator(".cx-sec").first().waitFor();
+        await openRow(1);
+        await p.locator(".led-detail").locator(".cx-sec").first().waitFor();
         const l = asked.at(-1);
         assert.equal(l.session, "sess-log");
         assert.equal(Date.parse(l.to) - Date.parse(l.from), 2, "at its own time");
-        const logged = p.locator(".led-detail").nth(1);
+        const logged = p.locator(".led-detail");
         assert.deepEqual(await logged.locator(".cx-role").allTextContents(), [w.tool, w.out[1]]);
         assert.equal((await logged.locator(".cx-t").last().textContent()).trim(), "There are two files.");
 
         // and those the files can't tell, each saying why
         for (const [i, why] of [[2, w.why[0]], [3, w.why[1]], [4, w.why[2]]]) {
-          await reader.click(p, rows.nth(i));
-          await p.locator(".led-detail").nth(i).locator(".cx-none", { hasText: why.slice(0, 20) }).waitFor();
-          assert.equal((await p.locator(".led-detail").nth(i).locator(".cx-none").textContent()).trim(), why);
+          await openRow(i);
+          await p.locator(".led-detail").locator(".cx-none", { hasText: why.slice(0, 20) }).waitFor();
+          assert.equal((await p.locator(".led-detail").locator(".cx-none").textContent()).trim(), why);
         }
 
         // opened again, or the list read anew, asks no more
         const n = asked.length;
-        await reader.click(p, rows.nth(0)); // closed
-        await reader.click(p, rows.nth(0)); // opened
+        await openRow(0);
         await p.locator(".led-detail").first().locator(".cx-sec").first().waitFor();
+        await reader.closeRequest(p);
         const r = refreshed.n;
         await reader.click(p, p.locator("#ledStatus .opt").nth(1));
         await reader.click(p, p.locator("#ledStatus .opt").nth(0));
         for (let i = 0; i < 60 && refreshed.n < r + 2; i++) await p.waitForTimeout(40);
         await p.waitForTimeout(200);
+        await openRow(0);
         await p.locator(".led-detail").first().locator(".cx-sec").first().waitFor();
+        for (const i of [2, 3, 4]) await openRow(i);
         assert.equal(asked.filter((q) => q.session === "sess-gw").length, 1, "successful content stays cached");
         assert(asked.length > n, "missing content is retried after a refresh");
         // A source that appears later can be read on reopening the detail.
@@ -202,8 +210,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           if (q.get("session") === ROWS[4].session) return route.fulfill({ json: { found: true, input: [], output: [{role:"assistant",text:"Written later"}] } });
           return route.fallback();
         });
-        await reader.click(p, rows.nth(4));
-        await reader.click(p, rows.nth(4));
+        await openRow(4);
         await p.getByText("Written later", { exact: true }).waitFor();
 
         if (shots) await p.screenshot({ path: path.join(shots, `content-${engine}-${lang}.png`) });
@@ -224,8 +231,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await p.locator("#ledWrap .led tbody tr").first().waitFor();
       await reader.click(p, p.locator(".led tbody tr.led-row").nth(0));
       await p.locator(".led-cx .cx-sec").first().waitFor();
-      const box = await p.locator(".led-box").boundingBox(), wrap = await p.locator("#ledWrap").boundingBox();
-      assert(box.x >= wrap.x - 1 && box.x + box.width <= wrap.x + wrap.width + 1, `the details fit the box at 560: ${box.width} in ${wrap.width}`);
+      const box = await p.locator(".led-box").boundingBox(), wrap = await p.locator("#ledReqPane").boundingBox();
+      assert(box.x >= wrap.x - 1 && box.x + box.width <= wrap.x + wrap.width + 1, `the details fit the page at 560: ${box.width} in ${wrap.width}`);
       assert(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "the page doesn't scroll sideways");
       assert.deepEqual(errors, []);
     });

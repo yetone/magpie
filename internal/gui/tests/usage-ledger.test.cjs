@@ -14,7 +14,8 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
-const { click, inView } = require("./reader.cjs");
+const reader = require("./reader.cjs");
+const { click, inView } = reader;
 
 const assets = path.resolve(__dirname, "../assets");
 const now = Date.now();
@@ -346,12 +347,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const originalPeriod = asked.at(-1).get("period");
         const routeTitle = lang === "en" ? "View routing" : "查看路由";
         const usageTitle = lang === "en" ? "View usage" : "查看用量";
-        assert.equal(await page.locator(".led tbody tr").nth(3).locator("button").count(), 0, "old rows have no route link");
+        // a row is no link of its own: its click opens the request's page,
+        // and Routing is a link there (geesehowardt7 on X)
+        assert.equal(await page.locator(".led tbody tr").first().locator("button").count(), 0, "the row's time is no link");
+        const old = await reader.openRequest(page, page.locator(".led tbody tr").nth(3));
+        assert.equal(await old.locator(".led-route-link").count(), 0, "old rows have no route link");
+        assert.equal(lookups.length, 0, "opening a request asks Routing nothing");
+        await reader.closeRequest(page);
         // the dashboard above the table can leave its first row below the fold:
         // bring it up first, and the return must come back to where it was
-        const link = page.locator(".led tbody tr").first().getByTitle(routeTitle);
-        await wheelTo(page, link);
+        const row = page.locator(".led tbody tr").first();
+        await wheelTo(page, row);
         const left = await scrolled(page);
+        const link = (await reader.openRequest(page, row)).getByText(routeTitle, { exact: true });
         await link.click();
         await page.locator("#view-routing").waitFor({ state: "visible" });
         await page.locator(".rt-log-head").getByText(usageTitle, { exact: true }).waitFor();
@@ -379,8 +387,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await lastAsked(page, asked, (q) => !q.has("route") && q.get("period") === originalPeriod);
         await page.waitForFunction(() => document.querySelectorAll(".led tbody tr").length === 100);
         // A pruned request stays in Usage and explains why its route cannot open.
-        const pruned = page.locator(".led tbody tr").nth(1).getByTitle(routeTitle);
-        await wheelTo(page, pruned);
+        await wheelTo(page, page.locator(".led tbody tr").nth(1));
+        const pruned = (await reader.openRequest(page, page.locator(".led tbody tr").nth(1))).getByText(routeTitle, { exact: true });
         await pruned.click();
         await page.waitForFunction((msg) => document.querySelector("#status").textContent === msg,
           lang === "en" ? "Routing history for this request is no longer available." : "此请求的路由历史已不可用。");
@@ -417,8 +425,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await route.fulfill({json:{mine:true, seq:1, routes:[{id:123,time:ROWS[0].t,agent:"codex",model:"gpt-6-sol",provider:"relay",order:[],tries:[],done:true,status:200}],totals:{requests:1,rerouted:0,errors:0},now:new Date().toISOString()}}).catch(()=>{});
         });
         await page.waitForTimeout(5500);
-        const link = page.locator(".led tbody tr").first().getByTitle(lang === "en" ? "View routing" : "查看路由");
-        await wheelTo(page, link);
+        await wheelTo(page, page.locator(".led tbody tr").first());
+        const link = (await reader.openRequest(page, page.locator(".led tbody tr").first())).getByText(lang === "en" ? "View routing" : "查看路由", { exact: true });
         await link.click();
         await page.locator("#view-routing").waitFor({state:"visible"});
         assert.equal(await page.locator(".rt-log-head").getByText(lang === "en" ? "Back to live" : "回到实时", {exact:true}).count(), 0);

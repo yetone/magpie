@@ -11,6 +11,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
+const reader = require("./reader.cjs");
 const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
@@ -130,8 +131,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(cells[0][1].title, await p.evaluate(() => ledNum(9000)));
           assert.deepEqual(cells[1], [{ text: "—", title: notCounted }, { text: "—", title: notCounted }]);
           // its details say so beside its tokens
-          await rows.nth(1).click();
-          const tokens = await p.locator(".led-detail").last().evaluate((b) => b.querySelector(".led-tokens")?.textContent || b.textContent);
+          const tokens = await (await reader.openRequest(p, rows.nth(1))).evaluate((b) => b.querySelector(".led-tokens")?.textContent || b.textContent);
           assert(tokens.includes(notCounted), tokens);
           assert(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "the page scrolls sideways");
 

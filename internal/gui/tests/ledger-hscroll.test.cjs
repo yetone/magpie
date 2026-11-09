@@ -3,8 +3,8 @@
 // scrollbar is at its foot, fifty rows down (mintonight, #799): a scrollbar
 // stands in for it at the bottom of the window while the table is in sight,
 // moves the table sideways and follows it, and is gone when the table fits.
-// A row's details say how it went and how long it took, and link to its
-// routing, so neither needs the columns out of sight. English and Chinese;
+// A request's own page says how it went and how long it took, and links to
+// its routing, so neither needs the columns out of sight. English and Chinese;
 // no backend, the API is faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -99,19 +99,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await p.waitForTimeout(150);
         assert.equal(await bar.evaluate((e) => Math.round(e.scrollLeft)), 30, "the bar followed the table");
 
-        // a row's details: how it went, how long, and its routing
+        // a request's page: how it went, how long, and its routing
         await reader.click(p, p.locator(".led tbody tr.led-row").nth(2).locator("td").nth(2));
-        const d = p.locator(".led tbody tr.led-detail");
-        assert.deepEqual((await d.locator("dt").allTextContents()).slice(0, 3), w.labels);
-        assert.deepEqual((await d.locator("dd").allTextContents()).slice(0, 3), w.values);
-        // brought above the bar, which covers the window's last few pixels
+        const d = p.locator("#ledReqPane .led-detail");
+        await d.waitFor();
+        assert.deepEqual(asked, [], "the row's click is not Routing's");
+        const pairs = await d.evaluate((b) => [...b.querySelectorAll("dt")].map((dt) => [dt.textContent, dt.nextElementSibling.textContent]));
+        assert.deepEqual(pairs.filter(([k]) => w.labels.includes(k)), w.labels.map((k, i) => [k, w.values[i]]));
         await reader.inView(p, d.locator(".led-route-link"));
-        await p.mouse.wheel(0, 80);
-        await p.waitForTimeout(300);
         await d.locator(".led-route-link").click();
         for (let i = 0; i < 40 && !asked.length; i++) await p.waitForTimeout(25);
         assert.deepEqual(asked, ["502"], "the link asks for the row's route");
-        assert.equal(await p.locator(".led tbody tr.led-detail").count(), 1, "the link didn't close the row");
+        await p.locator('[data-view="usage"]').first().click();
+        await reader.closeRequest(p).catch(() => {});
+        await wrap.waitFor();
 
         // a window wide enough for the table has no bar
         await p.setViewportSize({ width: 2200, height: 640 });

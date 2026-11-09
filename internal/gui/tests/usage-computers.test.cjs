@@ -136,15 +136,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(await top(), at, "a click moved the page");
         };
         // the other computer's details: named, and nothing read here
-        await press(rows.nth(1));
-        const detail = p.locator(".led-detail").first();
-        await detail.waitFor();
+        await reader.inView(p, rows.nth(1));
+        const detail = await reader.openRequest(p, rows.nth(1));
         const text = await detail.innerText();
         assert(text.includes(w.key) && text.includes("studio"), text);
         assert(text.includes(w.stays), text);
         await p.waitForTimeout(200);
         assert.deepEqual(contents, [], "no session file asked for another computer's call");
-        await press(rows.nth(1));
+        await reader.closeRequest(p);
 
         // this computer alone
         await press(pick);

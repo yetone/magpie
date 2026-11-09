@@ -120,11 +120,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             await p.waitForTimeout(200);
             assert.equal(await top(), at, "a click moved the page");
           };
+          // a row opens its request's own page; back is the list where it was
+          const open = async (n) => {
+            if (await p.locator("#ledReqPane").isVisible()) await reader.closeRequest(p);
+            await reader.inView(p, rows.nth(n));
+            return reader.openRequest(p, rows.nth(n));
+          };
           const wait = async (n) => { for (let i = 0; i < 60 && seen.length < n; i++) await p.waitForTimeout(50); };
 
           // a request the archive kept: its name, fetched back
-          await press(rows.nth(0));
-          const box = p.locator(".led-detail").nth(0).locator(".led-archive .call-archive");
+          const box = (await open(0)).locator(".led-archive .call-archive");
           await box.waitFor();
           assert.equal(await box.locator(".call-body-label").first().innerText(), w.name);
           assert.equal(await box.locator(".call-archive-id").innerText(), KEPT);
@@ -161,16 +166,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           }
 
           // one too large to read here: said so, still downloadable
-          await press(rows.nth(1));
-          const big = p.locator(".led-detail").nth(1).locator(".call-archive");
+          const big = (await open(1)).locator(".call-archive");
           await press(big.getByRole("button", { name: w.fetch }));
           await big.locator(".call-archive-big").waitFor();
           assert.equal(await big.locator(".call-archive-big").innerText(), w.large);
           assert(await big.getByRole("button", { name: w.download }).isVisible());
 
           // one with no copy, the archive on: said so
-          await press(rows.nth(2));
-          const plain = p.locator(".led-detail").nth(2);
+          const plain = await open(2);
           await plain.locator("dd", { hasText: w.not }).waitFor();
           assert.equal(await plain.locator(".call-archive").count(), 0);
 

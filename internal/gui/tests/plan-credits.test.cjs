@@ -245,7 +245,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert(c.includes("$") && c.includes(priced), "a priced row says both: " + c);
         // its details say it, at a narrow width too, where the row is cut
         await rows.nth(0).click();
-        const det = p.locator("#ledWrap .led-detail").first();
+        const det = p.locator("#ledReqPane .led-detail");
         await det.waitFor();
         const text = await det.innerText();
         assert(text.includes(dt) && text.includes(one), "the details: " + text);

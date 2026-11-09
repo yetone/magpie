@@ -11,6 +11,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
+const reader = require("./reader.cjs");
 const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
@@ -108,27 +109,28 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(col.cells[2].title, notCounted, "a vendor that counts no cache says so, not 0%");
           assert(col.cells[2].faint && col.cells[3].faint);
 
-          // while it is there the details don't say it again
-          await rows.nth(0).click();
-          const dt = p.locator(".led-detail").first().locator("dt", { hasText: label });
+          // the request's own page says it too, at every width
+          const dt = (await reader.openRequest(p, rows.nth(0))).locator("dt", { hasText: label });
           assert.equal(await dt.count(), 1);
-          assert.equal(await dt.isVisible(), false, "said once, in its column");
+          assert.equal(await dt.evaluate((d) => d.nextElementSibling.textContent), "90%");
+          await reader.closeRequest(p);
           // the cache columns go before it does
           // (these model names are too long for every column in 1200px)
           assert(await p.locator(".led").evaluate((tb) => tb.classList.contains("tight")), "the fixture is too wide for every column");
           assert.equal(await p.locator(".led thead th").filter({ hasText: await say("Cache read") }).isVisible(), false);
           assert(await p.locator(".led thead th").filter({ hasText: label }).isVisible());
 
-          // narrow: the column goes with the first token's, and the row's
-          // details say the rate
+          // narrow: the column goes with the first token's, and the request's
+          // page says the rate
           await p.setViewportSize({ width: 760, height: 900 });
           await p.waitForFunction(() => document.querySelector(".led")?.classList.contains("tight2"));
           assert.equal(await p.locator(".led thead th").filter({ hasText: label }).isVisible(), false, "left out narrow");
+          await reader.openRequest(p, rows.nth(0));
           await dt.waitFor();
           assert.equal(await dt.evaluate((d) => d.nextElementSibling.textContent), "90%");
+          await reader.closeRequest(p);
           // a request without one says nothing of it
-          await rows.nth(2).click();
-          assert.equal(await p.locator(".led-detail").nth(1).locator("dt", { hasText: label }).count(), 0);
+          assert.equal(await (await reader.openRequest(p, rows.nth(2))).locator("dt", { hasText: label }).count(), 0);
           assert(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "the page scrolls sideways");
           assert.deepEqual(errors, []);
         } finally {

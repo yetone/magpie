@@ -163,9 +163,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         // the row's details say it too
         // the first cell, not the time's link: at a narrow window the row is brought into sight first
-        await reader.click(p, p.locator(".led tbody tr.led-row").first().locator("td").nth(1));
-        const detail = p.locator(".led tbody tr.led-detail").first();
-        await detail.waitFor();
+        const detail = await reader.openRequest(p, p.locator(".led tbody tr.led-row").first());
         const pairs = await detail.locator("dt").evaluateAll((dts) => dts.map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]));
         assert.deepEqual(pairs.find(([k]) => k === w.speed), [w.speed, w.floor], JSON.stringify(pairs));
 

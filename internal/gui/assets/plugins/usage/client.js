@@ -106,6 +106,7 @@ magpie.plugin("usage", (ctx) => {
     <div class="led-pager" id="ledPager" hidden></div>
     <p class="usage-note" id="ledNote"></p>
   </div>
+  <div class="usage-pane led-req" id="ledReqPane" hidden></div>
   <div class="usage-pane ctx-pane" id="contextPane" hidden></div>
   <div class="usage-pane sess-pane" id="sessionsPane" hidden>
     <div class="sess-tools">
@@ -146,6 +147,6 @@ magpie.plugin("usage", (ctx) => {
     tab() { return usageTab; },
     // the reader goes to another page: the Requests give back what a
     // click lent them (ledLeave)
-    leave() { if (usageTab === "requests") ledLeave(); },
+    leave() { if (usageTab === "requests") ledLeave(true); },
   });
 });

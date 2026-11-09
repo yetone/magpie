@@ -265,4 +265,18 @@ async function inEditor(page, locator) {
   }));
 }
 
-module.exports = { provPrefsProviders, openProvPrefs, inEditor, settled, inView, reach, wheelTo, click, openPart, watchSettingsReads, settingsDrawn, agentRow, openAgentSettings, pickItem };
+// The Usage page's Requests: a row's click opens that one request on a page
+// of its own (#ledReqPane, geesehowardt7 on X), and Requests ‹ goes back to
+// the list where it was left. openRequest gives the page's .led-detail.
+async function openRequest(page, row) {
+  await row.click();
+  const d = page.locator("#ledReqPane .led-detail");
+  await d.waitFor();
+  return d;
+}
+async function closeRequest(page) {
+  await page.locator("#ledReqPane .led-req-back").click();
+  await page.locator("#ledReqPane").waitFor({ state: "hidden" });
+}
+
+module.exports = { openRequest, closeRequest, provPrefsProviders, openProvPrefs, inEditor, settled, inView, reach, wheelTo, click, openPart, watchSettingsReads, settingsDrawn, agentRow, openAgentSettings, pickItem };

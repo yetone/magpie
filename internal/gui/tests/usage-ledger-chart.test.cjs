@@ -252,7 +252,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const global = new Set();
           for (const sel of rules) for (const part of sel.split(",")) { const m = part.trim().match(/^\.([\w-]+)$/); if (m) global.add(m[1]); }
           const used = new Set();
-          for (const e of document.querySelectorAll("#ledDash *, #ledWrap .led-detail *")) for (const c of e.classList) used.add(c);
+          for (const e of document.querySelectorAll("#ledDash *, #ledReqPane .led-detail *")) for (const c of e.classList) used.add(c);
           const ok = new Set(["segs", "opt", "grow", "text", "sess-pick", "skeleton", "thumb", "on", "ic"]); // the page's shared parts, used as meant
           // the new parts' own, prefixed names are theirs; a short bare one may be anyone's
           const own = /^(led|pu|cx|rk|usage)-/;
