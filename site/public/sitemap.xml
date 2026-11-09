@@ -23,6 +23,9 @@
 <url><loc>https://usemagpie.ai/docs/local-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/opencode-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/alternatives</loc></url>
+<url><loc>https://usemagpie.ai/docs/deepseek</loc></url>
+<url><loc>https://usemagpie.ai/docs/kimi</loc></url>
+<url><loc>https://usemagpie.ai/docs/glm</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/claude-code-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/codex-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/contributors</loc></url>
@@ -42,6 +45,9 @@
 <url><loc>https://usemagpie.ai/docs/zh/local-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/opencode-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/alternatives</loc></url>
+<url><loc>https://usemagpie.ai/docs/zh/deepseek</loc></url>
+<url><loc>https://usemagpie.ai/docs/zh/kimi</loc></url>
+<url><loc>https://usemagpie.ai/docs/zh/glm</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/claude-code-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/codex-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/contributors</loc></url>
@@ -60,4 +66,7 @@
 <url><loc>https://usemagpie.ai/docs/ja/local-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/opencode-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/alternatives</loc></url>
+<url><loc>https://usemagpie.ai/docs/ja/deepseek</loc></url>
+<url><loc>https://usemagpie.ai/docs/ja/kimi</loc></url>
+<url><loc>https://usemagpie.ai/docs/ja/glm</loc></url>
 </urlset>
