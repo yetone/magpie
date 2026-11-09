@@ -31,6 +31,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/maphash"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -2458,13 +2459,13 @@ var dshSumSeed = maphash.MakeSeed()
 func dshFilesSum(dir string, files []string) uint64 {
 	var h maphash.Hash
 	h.SetSeed(dshSumSeed)
+	bp := dshSumBufs.Get().(*[]byte)
+	defer dshSumBufs.Put(bp)
 	sum := func(f string) {
 		h.WriteString(f)
 		h.WriteByte(0)
-		switch b, err := os.ReadFile(f); {
+		switch err := dshSumFile(&h, f, *bp); {
 		case err == nil:
-			h.WriteByte(1)
-			h.Write(b)
 		case errors.Is(err, os.ErrNotExist):
 			h.WriteByte(2)
 		default:
@@ -2480,6 +2481,32 @@ func dshFilesSum(dir string, files []string) uint64 {
 	}
 	return h.Sum64()
 }
+
+// dshSumFile writes 1 and f's bytes into h, read through buf rather than
+// whole: a patch list names every model magpie serves, and each round of
+// both dsh homes read every file of them into memory again only to hash
+// it. The sum is the same as for the bytes written at once.
+func dshSumFile(h *maphash.Hash, f string, buf []byte) error {
+	r, err := os.Open(f)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	h.WriteByte(1)
+	for {
+		n, err := r.Read(buf)
+		h.Write(buf[:n])
+		switch {
+		case err == io.EOF:
+			return nil
+		case err != nil:
+			return err
+		}
+	}
+}
+
+// dshSumBufs are dshFilesSum's read buffers.
+var dshSumBufs = sync.Pool{New: func() any { b := make([]byte, 32<<10); return &b }}
 
 // dshModelsSum sums the models a round writes the route from.
 func dshModelsSum(models []catalog.Model) uint64 {
