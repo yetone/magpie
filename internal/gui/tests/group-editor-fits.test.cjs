@@ -72,6 +72,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await card.waitFor();
           await card.locator("button.text").first().click();
           await page.locator(".rt-gedit .rt-pats input").waitFor();
+          // the advanced fold takes the label column from a ResizeObserver
+          // (edAlign), a frame or two after the editor opens: wait for it
+          // to settle rather than measure the frame before (a red 1 in 3
+          // on a busy machine); one that never settles is still red below
+          await page.waitForFunction(() => {
+            const ed = document.querySelector(".rt-gedit");
+            const m = ed.querySelector(".fallback:not(.rt-pats):not(.rt-rules)"), p = ed.querySelector(".rt-pats .rt-patadd");
+            return m && p && Math.round(m.getBoundingClientRect().left) === Math.round(p.getBoundingClientRect().left);
+          }, null, { timeout: 2000 }).catch(() => {});
           const got = await page.evaluate(() => {
             const box = (e) => e.getBoundingClientRect();
             const ed = document.querySelector(".rt-gedit"), er = box(ed);
