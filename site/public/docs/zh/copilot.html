@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GitHub Copilot 接入 Claude Code、Codex、Gemini CLI 和 OpenCode · magpie</title>
+<meta name="description" content="用 magpie 把 GitHub Copilot 订阅接入 Claude Code、Codex、Gemini CLI 和 OpenCode：登录方式（编辑器、Copilot CLI、GHE.com 上的 GitHub Enterprise）、你的席位能用哪些模型、Copilot Auto、高级请求与费用、多账号，以及常见报错是什么意思。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/copilot">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/copilot">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/copilot">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/copilot">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/copilot">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="GitHub Copilot 接入 Claude Code、Codex、Gemini CLI 和 OpenCode">
+<meta property="og:description" content="用 magpie 把 GitHub Copilot 订阅接入 Claude Code、Codex、Gemini CLI 和 OpenCode：登录方式（编辑器、Copilot CLI、GHE.com 上的 GitHub Enterprise）、你的席位能用哪些模型、Copilot Auto、高级请求与费用、多账号，以及常见报错是什么意思。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/copilot">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "GitHub Copilot 接入 Claude Code、Codex、Gemini CLI 和 OpenCode",
+   "description": "用 magpie 把 GitHub Copilot 订阅接入 Claude Code、Codex、Gemini CLI 和 OpenCode：登录方式（编辑器、Copilot CLI、GHE.com 上的 GitHub Enterprise）、你的席位能用哪些模型、Copilot Auto、高级请求与费用、多账号，以及常见报错是什么意思。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/copilot",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Claude Code 怎么用 Copilot 订阅？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "先在 magpie 里登录 Copilot（供应商 → 添加供应商 → Copilot，GitHub 会给你一个验证码去输入），然后在 Claude Code 那一行选一个 copilot/… 模型，比如 copilot/claude-opus-5.5，或者运行 magpie claude copilot/claude-opus-5.5。magpie 会写好 Claude Code 的 settings.json。Copilot 的 Claude 模型直接接收 Claude Code 的 Anthropic 请求，GPT 和 Gemini 模型则由 magpie 转换协议。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex 能用 Copilot 的模型吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。Codex 说的是 OpenAI Responses，magpie 也用 Responses 去问 Copilot 的 OpenAI 模型，所以请求直接转过去，联网搜索也能用。Copilot 的 Claude 和 Gemini 模型由 magpie 转换。在 Codex 那一行选模型，或运行 magpie codex copilot/gpt-5.4，模型会出现在 Codex 的 /model 里。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Gemini CLI 和 OpenCode 能用 Copilot 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。运行 magpie gemini model copilot/gpt-5.4-mini 或 magpie opencode copilot/claude-opus-5.5，或者在对应那一行选模型。magpie 会转换 Gemini CLI 的请求，并把模型写进 OpenCode 的 opencode.json。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "一定要在 VS Code 之类的编辑器里登录 Copilot 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "不用。magpie 自己用设备验证码登录 GitHub。如果这台电脑上 Copilot 的编辑器插件或 Copilot CLI 已经登录，magpie 也会读取那个登录，但从不改动它。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "会消耗我的高级请求吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "请求是用你的账号发给 Copilot 的，所以按 Copilot 的方式计入你的套餐。你输入的一轮按一次请求计费，接着这一轮的工具结果不另算。magpie 会显示每个账号的高级请求、聊天请求和代码补全用了多少。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Copilot Business、Enterprise 和 GHE.com 能用吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。magpie 从 GitHub 读出套餐：Free、Pro、Pro+、Max、Education、Business 或 Enterprise。GHE.com 上的企业用 magpie accounts add copilot --host <name>.ghe.com 登录。Business 或 Enterprise 席位的额度用完后会被暂停，magpie 会把这个账号当作已用完，直到额度重置。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "为什么我的列表里少了某个 Copilot 模型？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie 列出的是 Copilot 的 /models 给这个账号的模型：只有对话模型，不含任何模型选择器都不提供的，也不含这个账号无法开启的。被 Copilot 用“The requested model is not supported.”拒绝的模型会被隐藏 6 小时，之后再试，以防你的套餐已经变了。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/copilot" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/copilot" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/copilot" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>本页内容</p>
+    <a href="#add">登录</a>
+    <a href="#models">席位里的模型</a>
+    <a href="#agents">在各个工具里用</a>
+    <a href="#apis">请求怎么到 Copilot</a>
+    <a href="#auto">Copilot Auto</a>
+    <a href="#usage">高级请求与费用</a>
+    <a href="#accounts">多账号</a>
+    <a href="#trouble">常见报错</a>
+    <a href="#faq">常见问题</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 供应商</p>
+    <h1>GitHub Copilot 接入 Claude Code、Codex、Gemini CLI 和 OpenCode</h1>
+    <p class="lede">Copilot 的席位里有 Claude、GPT、Gemini 等模型。在 magpie 里登录一次 Copilot，Claude Code、Codex、Gemini CLI、OpenCode 以及你接入的其他工具，都能通过 magpie 的本地网关 <code>127.0.0.1:3425</code> 用上你套餐里的模型，不需要 API Key。</p>
+
+    <h2 id="add"><a class="anchor" href="#add">登录 Copilot</a></h2>
+    <ol class="steps">
+      <li><b>打开添加供应商</b>在 magpie 的 <span class="ui">供应商</span> 页点 <span class="ui">＋ 添加供应商</span>，再点 Copilot 卡片。</li>
+      <li><b>在 GitHub 上输入验证码</b>magpie 会显示一个验证码，并打开 GitHub 的设备登录页 <code>github.com/login/device</code>。输入验证码并授权后，magpie 会向 GitHub 确认这是谁的账号、是什么套餐，账号随即出现在 Copilot 下面。</li>
+      <li><b>给工具选上</b>在 <span class="ui">Agent</span> 页点工具那一行的模型，选一个 <code>copilot/…</code> 模型。</li>
+    </ol>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-add">复制</button><pre id="ex-add">magpie accounts add copilot                        # github.com
+magpie accounts add copilot --host acme.ghe.com    # GHE.com 上的 GitHub Enterprise
+magpie accounts copilot                            # 每个账号及其用量</pre></div>
+    <p>magpie 会从三个地方拿到 Copilot 登录：</p>
+    <ul>
+      <li><b>Copilot 的编辑器插件。</b>它们存在 <code>~/.config/github-copilot</code> 里的登录（<code>apps.json</code> 或 <code>hosts.json</code>）。</li>
+      <li><b>Copilot CLI。</b>它在 <code>~/.copilot/config.json</code> 里的登录，令牌在系统钥匙串里，或以明文存在这个文件里。Windows 上的 magpie 还会读取正在运行的 WSL 发行版里的 Copilot CLI 登录，只读 <code>config.json</code>。</li>
+      <li><b>magpie 自己登录的。</b>你在 magpie 里用验证码登录的每个账号，令牌保存在 magpie 自己的 <code>logins.json</code> 里。</li>
+    </ul>
+    <p>编辑器和 CLI 的登录 magpie 只读不写。两者都有时，先用编辑器的 github.com 登录，再用 CLI 的，最后是编辑器的 GHE.com 登录。如果 GitHub 拒绝了编辑器的令牌，magpie 会改用 CLI 里同一个账号的登录，绝不会换成别人的账号。</p>
+    <div class="callout"><b>GHE.com 上的 GitHub Enterprise。</b>使用数据驻留的企业要在自己的 <code>&lt;name&gt;.ghe.com</code> 登录，所以添加账号时加上 <code>--host</code>（或者在登录面板里回答“账号在 GHE.com 上？”）。magpie 只接受 github.com 或 <code>&lt;name&gt;.ghe.com</code> 地址，GitHub 令牌不会被发到你随手填的其他主机。这类账号走企业自己的 <code>copilot-api.&lt;name&gt;.ghe.com</code>。同一个用户名在 github.com 和 GHE.com 上算两个账号：<code>you</code> 和 <code>you@acme.ghe.com</code>。</div>
+
+    <h2 id="models"><a class="anchor" href="#models">你的席位能用哪些模型</a></h2>
+    <p>magpie 会为每个账号请求 Copilot 的 <code>/models</code>，列出返回的模型，所以列表跟着你的套餐走，而不是一张写死的表。模型名是 <code>copilot/</code> 加上 Copilot 自己的 ID，比如 <code>copilot/claude-opus-5.5</code>、<code>copilot/gpt-5.4</code>、<code>copilot/gpt-5.3-codex</code>。<code>magpie models</code> 会全部列出来。</p>
+    <ul>
+      <li><b>只列对话模型。</b>Copilot 的内部模型、任何模型选择器都不提供的模型，以及这个账号无权开启的模型，都不会列出。</li>
+      <li><b>需要同意条款的模型。</b>条款还没同意的模型照样列出，第一次请求它时 magpie 会替你同意，效果和在 Copilot 编辑器里开启它一样。</li>
+      <li><b>推理强度</b>取自 Copilot 给每个模型列出的档位，会显示在各个工具的模型选择里。</li>
+      <li><b>Auto</b> 总在列表里，见 <a href="#auto">Copilot Auto</a>。</li>
+      <li><b>图像模型</b>比如 GPT Image 2.5 Flare，只用来画图（<span class="ui">设置 → 模型 → 图像</span>），不会作为对话模型出现。</li>
+      <li><b>较老的模型。</b>Copilot 没有标明接口的模型，比如学生套餐里的 GPT-4.1 和 GPT-4o，只走 Chat Completions。</li>
+    </ul>
+    <p>Claude Code 会把带小数点的 Claude 版本号当成更老的模型，所以 magpie 给它的 Copilot Claude 模型用短横线写法（<code>claude-opus-5-5</code>），请求到 Copilot 之前再换回原名。其他工具看到的是 Copilot 原本的写法。</p>
+
+    <h2 id="agents"><a class="anchor" href="#agents">在各个工具里用</a></h2>
+    <p>在 <span class="ui">Agent</span> 页里点某个工具那一行的模型来选，或者在终端里选。每篇指南都写了 magpie 在那个工具的配置里改了什么、怎么换回去。</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-agents">复制</button><pre id="ex-agents">magpie claude copilot/claude-opus-5.5
+magpie codex copilot/gpt-5.4
+magpie gemini model copilot/gpt-5.4-mini
+magpie opencode copilot/claude-opus-5.5</pre></div>
+    <ul>
+      <li><b>Claude Code</b> 说的是 Anthropic Messages。Copilot 的 Claude 模型也提供 Messages 接口，所以请求原样转过去；选 GPT 或 Gemini 模型时由 magpie 转换。<a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>。</li>
+      <li><b>Codex</b> 只说 OpenAI Responses，magpie 也用 Responses 去问 Copilot 的 OpenAI 模型，所以请求直接转过去。这些模型上，Codex 的联网搜索由 Copilot 那边执行，Codex 的原生上下文压缩也能用；Copilot 的 Claude 模型则不支持原生压缩。<a href="/docs/zh/codex-models">Codex 接入其他模型</a>。</li>
+      <li><b>Gemini CLI</b> 说 Gemini 的 API。magpie 把它指向本地网关并做转换。<a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>。</li>
+      <li><b>OpenCode</b>：magpie 把模型写进 <code>opencode.json</code>，带上推理档位。<a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>。</li>
+    </ul>
+    <p>Copilot CLI 本身也是 magpie 支持的工具。它那一行可以选 <code>auto</code>（让 Copilot 挑）和 Copilot 自己的模型，也可以选你在 magpie 里添加的任何其他模型，这些模型通过 Copilot CLI 的 <code>providers.json</code> 接进去。</p>
+
+    <h2 id="apis"><a class="anchor" href="#apis">请求怎么到 Copilot</a></h2>
+    <p>Copilot 并不是每个模型都开放所有接口：最新的 OpenAI 模型只走 Responses，Claude 模型走 Chat Completions 和 Anthropic Messages，Gemini 模型和较老的模型只走 Chat Completions。magpie 会把每个请求发到这个模型可用的接口上，和工具的接口不一致时做转换，流式输出和工具调用都保留。</p>
+    <ul>
+      <li><b>接口不对。</b>Copilot 回复说这个模型不在当前接口上时，magpie 会把请求改写成下一个接口的格式重发，并记住哪个能用。</li>
+      <li><b>自己指定。</b><code>magpie model api copilot/&lt;model&gt; chat</code>（或 <code>responses</code>、<code>anthropic</code>）让这个模型只走该接口；<code>auto</code> 交还给 magpie 来选。</li>
+      <li><b>Gemini 的工具定义。</b>Copilot 的 Gemini 模型曾用 400 “invalid request body” 拒绝 Codex 的部分工具定义。magpie 会改写其中能确定安全改写的部分，让这些工具能用。</li>
+    </ul>
+
+    <h2 id="auto"><a class="anchor" href="#auto">Copilot Auto</a></h2>
+    <p><code>copilot/auto</code> 是 Copilot 替你的账号挑的模型。它不在 Copilot 的 <code>/models</code> 里，所以 magpie 总会补上。学生套餐只能选它。</p>
+    <ul>
+      <li>magpie 带着这一轮的提示词，按 Copilot Chat 的默认档位向 Copilot 要一个选择，同一个选择最多沿用一小时。</li>
+      <li>如果 Copilot 不给这个账号提供 Auto，或者挑了这个账号被拒的模型，就用账号可以手动选的模型顶替 10 分钟，顺序是：Copilot 的基础模型、它的默认模型、<code>gpt-4.1</code>、非高级模型，然后是其余的。</li>
+      <li>如果 Copilot 随后拒绝了 Auto 挑的模型，magpie 会另挑一个，把请求重发。</li>
+      <li>Auto 最终用了哪个模型会记在请求的路由里，能看到是谁回答的。</li>
+    </ul>
+
+    <h2 id="usage"><a class="anchor" href="#usage">高级请求、用量与费用</a></h2>
+    <p>每个 Copilot 账号都有一张卡片，按 GitHub 给出的数据显示三项额度：<span class="ui">高级请求</span>、<span class="ui">聊天请求</span> 和 <span class="ui">代码补全</span>，格式是“已用 / 额度”。<code>magpie accounts copilot</code> 输出的也是这些。</p>
+    <ul>
+      <li><b>按月。</b>额度每月在 GitHub 给出的日期重置。</li>
+      <li><b>不限量</b>的显示为 <span class="ui">无限</span>。GitHub 没给出数字的那一项不显示，绝不当成无限。</li>
+      <li><b>一轮算一次。</b>你输入的一轮按一次请求计费，接着这一轮的工具结果不另算。</li>
+      <li><b>Business 和 Enterprise。</b>席位额度用完会被暂停，所以 magpie 把这个账号当作已用完，转去用下一个。组织共享的高级请求额度用光后，也显示为已用完。</li>
+      <li><b>其他套餐。</b>套餐允许超出高级请求额度后付费时，额度用完不会让账号停用。代码补全也会统计，但经过 magpie 的请求不会用到它。</li>
+      <li><b>不占额度。</b>Copilot 的基础模型 <code>gpt-4.1</code> 在任何套餐上都不计入额度。</li>
+    </ul>
+    <p><span class="ui">用量</span> 页会统计经过 magpie 的每个工具和模型的 token、缓存命中和费用。订阅的费用是按模型厂商的公开价估算的，你给模型设了价格就按你的价格算。和 Anthropic 官方计价有一处不同：Copilot 的缓存写入不论保留多久都是同一个价，所以 magpie 把 1 小时缓存写入按 5 分钟的价格算。以 <code>claude-opus-5.5</code> 为例，是每百万 token 5 美元，而按 Anthropic 的 2 倍输入价是 8 美元。</p>
+
+    <h2 id="accounts"><a class="anchor" href="#accounts">多账号与自动切换</a></h2>
+    <ul>
+      <li><b>再加一个账号。</b>再点一次 Copilot 卡片，或再运行一次 <code>magpie accounts add copilot</code>。正在用的账号排第一，其余按添加顺序排列。</li>
+      <li><b>指定先用哪个。</b><code>magpie accounts switch copilot &lt;login&gt;</code>；<code>magpie accounts forget copilot &lt;login&gt;</code> 删除一个。同一个用户名在 github.com 和 GHE.com 上都有时，写全名（<code>you@acme.ghe.com</code>）或加上 <code>--host</code>。</li>
+      <li><b>把请求分给多个账号。</b>在 Copilot 那一行勾选要用的账号。<span class="ui">路由</span> 决定请求怎么分，默认是 <span class="ui">智能</span>；供应商的 <span class="ui">备用</span> 列出所有账号额度用完、被限流或不可用时改用的模型。详见 <a href="/docs/zh/subscriptions#accounts">订阅用于任意 Agent</a>。</li>
+      <li><b>两个订阅里的同一个模型。</b>Claude 订阅和 Copilot 里的 Claude Opus 会自动合成一个组 <code>auto/&lt;model&gt;</code>。想自己定顺序：<code>magpie group add "Opus anywhere" models=claude/claude-opus-5-5,copilot/claude-opus-5.5 routing=order</code>。</li>
+      <li><b>编辑器登录失效。</b>GitHub 拒绝了 Copilot 编辑器保存的令牌时，你在 magpie 里用同一个用户名登录的账号会保留下来继续用。</li>
+    </ul>
+
+    <h2 id="trouble"><a class="anchor" href="#trouble">常见报错</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>看到的提示</th><th>意思</th></tr>
+      <tr><td>GitHub 拒绝了这个 Copilot 登录，请重新登录</td><td>GitHub 不再接受这个账号的令牌。在它那一行重新登录即可，账号原地更新，设置都保留。网络错误或 GitHub 的 5xx 不会让账号被标记，请求成功一次标记就会消失。</td></tr>
+      <tr><td>the GitHub token Copilot’s editors keep in … was refused</td><td>编辑器里的登录失效了。在编辑器或 magpie 里重新登录 Copilot，或者把那个文件挪走。</td></tr>
+      <tr><td>&lt;login&gt; has no Copilot subscription</td><td>你授权的 GitHub 账号没有 Copilot 套餐。换有席位的账号登录。</td></tr>
+      <tr><td>Copilot doesn’t serve this model on Anthropic’s Messages API; it isn’t about your plan</td><td>Copilot 只在其他接口上提供这个模型，和套餐无关。<code>magpie model api copilot/&lt;model&gt; chat</code> 让它走 Chat Completions。</td></tr>
+      <tr><td>The requested model is not supported.</td><td>Copilot 目前不给这个账号用这个模型。magpie 会在账号的模型列表和各工具的选择里把它隐藏 6 小时，然后再试。用 Auto 时会另挑一个模型重发。</td></tr>
+      <tr><td>Copilot doesn’t offer Auto to this account …</td><td>Copilot 没有给出选择，账号也没有可以手动选的模型。到 <code>github.com/settings/copilot</code> 看看套餐。</td></tr>
+      <tr><td>the code expired; start again · the sign-in was declined on GitHub</td><td>验证码在输入前过期了，或者在 GitHub 页面上点了拒绝。重新登录一次。</td></tr>
+      <tr><td>Copilot signs in on github.com or an enterprise’s &lt;name&gt;.ghe.com, not …</td><td><code>--host</code> 填的既不是 github.com 也不是 GHE.com 地址。</td></tr>
+      <tr><td>subscription accounts are off in magpie</td><td><span class="ui">设置 → 隐私 → 订阅账号</span> 是关着的（或运行过 <code>magpie accounts discovery off</code>），magpie 不读取任何登录，也不提供任何订阅，Copilot 也一样。打开它，或运行 <code>magpie accounts discovery on</code>。</td></tr>
+    </table></div>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>Claude Code 怎么用 Copilot 订阅？</h3>
+    <p>先在 magpie 里登录 Copilot（供应商 → 添加供应商 → Copilot，GitHub 会给你一个验证码去输入），然后在 Claude Code 那一行选一个 <code>copilot/…</code> 模型，比如 <code>copilot/claude-opus-5.5</code>，或者运行 <code>magpie claude copilot/claude-opus-5.5</code>。magpie 会写好 Claude Code 的 <code>settings.json</code>。Copilot 的 Claude 模型直接接收 Claude Code 的 Anthropic 请求，GPT 和 Gemini 模型则由 magpie 转换协议。</p>
+    <h3>Codex 能用 Copilot 的模型吗？</h3>
+    <p>能。Codex 说的是 OpenAI Responses，magpie 也用 Responses 去问 Copilot 的 OpenAI 模型，所以请求直接转过去，联网搜索也能用。Copilot 的 Claude 和 Gemini 模型由 magpie 转换。在 Codex 那一行选模型，或运行 <code>magpie codex copilot/gpt-5.4</code>，模型会出现在 Codex 的 <code>/model</code> 里。</p>
+    <h3>Gemini CLI 和 OpenCode 能用 Copilot 吗？</h3>
+    <p>能。运行 <code>magpie gemini model copilot/gpt-5.4-mini</code> 或 <code>magpie opencode copilot/claude-opus-5.5</code>，或者在对应那一行选模型。magpie 会转换 Gemini CLI 的请求，并把模型写进 OpenCode 的 <code>opencode.json</code>。</p>
+    <h3>一定要在 VS Code 之类的编辑器里登录 Copilot 吗？</h3>
+    <p>不用。magpie 自己用设备验证码登录 GitHub。如果这台电脑上 Copilot 的编辑器插件或 Copilot CLI 已经登录，magpie 也会读取那个登录，但从不改动它。</p>
+    <h3>会消耗我的高级请求吗？</h3>
+    <p>请求是用你的账号发给 Copilot 的，所以按 Copilot 的方式计入你的套餐。你输入的一轮按一次请求计费，接着这一轮的工具结果不另算。magpie 会显示每个账号的高级请求、聊天请求和代码补全用了多少。</p>
+    <h3>Copilot Business、Enterprise 和 GHE.com 能用吗？</h3>
+    <p>能。magpie 从 GitHub 读出套餐：Free、Pro、Pro+、Max、Education、Business 或 Enterprise。GHE.com 上的企业用 <code>magpie accounts add copilot --host &lt;name&gt;.ghe.com</code> 登录。Business 或 Enterprise 席位的额度用完后会被暂停，magpie 会把这个账号当作已用完，直到额度重置。</p>
+    <h3>为什么我的列表里少了某个 Copilot 模型？</h3>
+    <p>magpie 列出的是 Copilot 的 <code>/models</code> 给这个账号的模型：只有对话模型，不含任何模型选择器都不提供的，也不含这个账号无法开启的。被 Copilot 用“The requested model is not supported.”拒绝的模型会被隐藏 6 小时，之后再试，以防你的套餐已经变了。</p>
+
+    <p style="margin-top:48px"><b>按供应商：</b><a href="/docs/zh/deepseek">DeepSeek</a> · <a href="/docs/zh/kimi">Kimi 与 Kimi Code</a> · <a href="/docs/zh/glm">GLM 编程套餐</a> · <a href="/docs/zh/qwen">通义千问</a> · <a href="/docs/zh/minimax">MiniMax</a> · <a href="/docs/zh/openrouter">OpenRouter</a> · <a href="/docs/zh/subscriptions">Claude、ChatGPT 等订阅</a></p>
+    <p>各个工具的指南：<a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>、<a href="/docs/zh/codex-models">Codex 接入其他模型</a>、<a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>、<a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>。遇到问题可以在 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

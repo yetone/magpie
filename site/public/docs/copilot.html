@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GitHub Copilot in Claude Code, Codex, Gemini CLI and OpenCode · magpie</title>
+<meta name="description" content="Use your GitHub Copilot subscription in Claude Code, Codex, Gemini CLI and OpenCode with magpie: signing in (editors, Copilot CLI, GitHub Enterprise on GHE.com), the models your seat gets, Copilot Auto, premium requests and cost, several accounts, and what each error means.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/copilot">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/copilot">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/copilot">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/copilot">
+<link rel="canonical" href="https://usemagpie.ai/docs/copilot">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="GitHub Copilot in Claude Code, Codex, Gemini CLI and OpenCode">
+<meta property="og:description" content="Use your GitHub Copilot subscription in Claude Code, Codex, Gemini CLI and OpenCode with magpie: signing in (editors, Copilot CLI, GitHub Enterprise on GHE.com), the models your seat gets, Copilot Auto, premium requests and cost, several accounts, and what each error means.">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/copilot">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "GitHub Copilot in Claude Code, Codex, Gemini CLI and OpenCode",
+   "description": "Use your GitHub Copilot subscription in Claude Code, Codex, Gemini CLI and OpenCode with magpie: signing in (editors, Copilot CLI, GitHub Enterprise on GHE.com), the models your seat gets, Copilot Auto, premium requests and cost, several accounts, and what each error means.",
+   "inLanguage": "en",
+   "url": "https://usemagpie.ai/docs/copilot",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "How do I use GitHub Copilot in Claude Code?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Sign in to Copilot in magpie (Providers, Add provider, Copilot; GitHub gives you a code to enter), then pick a copilot/… model such as copilot/claude-opus-5.5 on Claude Code’s row, or run magpie claude copilot/claude-opus-5.5. magpie writes Claude Code’s settings.json. Copilot’s Claude models get Claude Code’s Anthropic requests as they are; its GPT and Gemini models get them translated."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can Codex use Copilot’s models?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Codex speaks OpenAI Responses, and magpie asks Copilot’s OpenAI models on Responses too, so they pass through, web search included. Copilot’s Claude and Gemini models are translated. Pick one on Codex’s row or run magpie codex copilot/gpt-5.4; it shows in Codex’s /model list."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can I use Copilot in Gemini CLI and OpenCode?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Run magpie gemini model copilot/gpt-5.4-mini or magpie opencode copilot/claude-opus-5.5, or pick the model on the agent’s row. magpie translates Gemini CLI’s requests, and writes the model into OpenCode’s opencode.json."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Do I need VS Code or another editor signed in to Copilot?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "No. magpie signs in to GitHub itself with a device code. If Copilot’s editor plugins or the Copilot CLI are already signed in on this computer, magpie reads that sign-in too, and never changes it."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Does it spend my premium requests?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Requests go to Copilot on your account, so they count against your plan as Copilot counts them. A turn you type is billed as one request; the tool replies that carry it on are not. magpie shows each account’s Premium requests, Chat requests and Completions as used out of the allowance."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Does it work with Copilot Business, Enterprise and GHE.com?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. magpie reads the plan from GitHub: Free, Pro, Pro+, Max, Education, Business or Enterprise. An enterprise on GHE.com signs in with magpie accounts add copilot --host <name>.ghe.com. A Business or Enterprise seat that uses up its allowance is paused, and magpie counts the account as used up until it renews."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Why is a Copilot model missing from my list?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie lists what Copilot’s /models gives the account: chat models only, without the ones no model picker offers or the account can’t turn on. A model Copilot answered with “The requested model is not supported.” is left out for 6 hours, then tried again in case your plan changed."
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>Docs</small></a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/start">Get started</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a class="toc-only" href="/docs/remote">Remote magpie</a>
+    <a class="toc-only" href="/docs/docker">Docker</a>
+    <a class="toc-only" href="/docs/privacy">Privacy</a>
+    <a class="toc-only" href="/docs/masking">Privacy masking</a>
+    <a class="toc-only" href="/docs/mcp-router">MCP router</a>
+    <a class="toc-only" href="/docs/library">Library</a>
+    <a class="toc-only" href="/docs/claude-code-models">Models in Claude Code</a>
+    <a class="toc-only" href="/docs/codex-models">Models in Codex</a>
+    <a class="toc-only" href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a class="toc-only" href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a class="toc-only" href="/docs/local-models">Local models</a>
+    <a class="toc-only" href="/docs/opencode-models">Models in OpenCode</a>
+    <a class="toc-only" href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/copilot" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/copilot" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/copilot" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">Download</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>On this page</p>
+    <a href="#add">Sign in</a>
+    <a href="#models">Your seat’s models</a>
+    <a href="#agents">In each agent</a>
+    <a href="#apis">How requests reach Copilot</a>
+    <a href="#auto">Copilot Auto</a>
+    <a href="#usage">Premium requests and cost</a>
+    <a href="#accounts">Several accounts</a>
+    <a href="#trouble">Troubleshooting</a>
+    <a href="#faq">FAQ</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">Docs · Provider</p>
+    <h1>GitHub Copilot in Claude Code, Codex, Gemini CLI and OpenCode</h1>
+    <p class="lede">A Copilot seat comes with Claude, GPT and Gemini models, among others. Sign in to Copilot once in magpie, and Claude Code, Codex, Gemini CLI, OpenCode and every other agent you connect can use the models your plan gets, through magpie’s gateway at <code>127.0.0.1:3425</code>. No API key.</p>
+
+    <h2 id="add"><a class="anchor" href="#add">Sign in to Copilot</a></h2>
+    <ol class="steps">
+      <li><b>Open Add provider</b>In magpie’s <span class="ui">Providers</span> tab, press <span class="ui">＋ Add provider</span> and click the Copilot tile.</li>
+      <li><b>Enter the code on GitHub</b>magpie shows a code and opens GitHub’s device page, <code>github.com/login/device</code>. Enter the code and approve. magpie then asks GitHub whose account it is and which plan it has, and the account shows under Copilot.</li>
+      <li><b>Pick a model for an agent</b>In the <span class="ui">Agents</span> tab, click the model on the agent’s row and choose a <code>copilot/…</code> model.</li>
+    </ol>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-add">Copy</button><pre id="ex-add">magpie accounts add copilot                        # github.com
+magpie accounts add copilot --host acme.ghe.com    # GitHub Enterprise on GHE.com
+magpie accounts copilot                            # each account and what it has used</pre></div>
+    <p>magpie serves a Copilot sign-in from three places:</p>
+    <ul>
+      <li><b>Copilot’s editor plugins.</b> The sign-in they keep in <code>~/.config/github-copilot</code> (<code>apps.json</code> or <code>hosts.json</code>).</li>
+      <li><b>The Copilot CLI.</b> Its sign-in in <code>~/.copilot/config.json</code>, with the token in the system keychain or in that file. magpie on Windows also reads the Copilot CLI sign-in of a running WSL distro, from <code>config.json</code> only.</li>
+      <li><b>magpie’s own.</b> Each account you sign in with a code in magpie. Its token is kept in magpie’s own <code>logins.json</code>.</li>
+    </ul>
+    <p>The editors’ and the CLI’s sign-ins are only read; magpie never writes them. When both are there, the editors’ github.com sign-in comes first, then the CLI’s, then an editor’s GHE.com sign-in. If GitHub turns away the editors’ token, magpie uses the CLI’s sign-in of the same account instead, never another account’s.</p>
+    <div class="callout"><b>GitHub Enterprise on GHE.com.</b> An enterprise with data residency signs in at its own <code>&lt;name&gt;.ghe.com</code>, so add the account with <code>--host</code> (or answer the GHE.com question in the sign-in sheet). magpie accepts github.com or a <code>&lt;name&gt;.ghe.com</code> address and nothing else, so a GitHub token is never sent to a host of your choosing. The account is served at its enterprise’s <code>copilot-api.&lt;name&gt;.ghe.com</code>. One login on github.com and on GHE.com is two accounts: <code>you</code> and <code>you@acme.ghe.com</code>.</div>
+
+    <h2 id="models"><a class="anchor" href="#models">The models your seat gets</a></h2>
+    <p>magpie asks Copilot’s <code>/models</code> for each account and lists what comes back, so the list follows your plan rather than a fixed table. The models are named <code>copilot/</code> and Copilot’s own id: <code>copilot/claude-opus-5.5</code>, <code>copilot/gpt-5.4</code>, <code>copilot/gpt-5.3-codex</code>. <code>magpie models</code> prints them all.</p>
+    <ul>
+      <li><b>Chat models only.</b> Copilot’s internal models and the ones no model picker offers are left out, and so is a model the account isn’t allowed to turn on.</li>
+      <li><b>Terms to accept.</b> A model whose terms are still waiting is listed anyway. The first request for it accepts them, as turning it on in Copilot’s editor would.</li>
+      <li><b>Reasoning efforts</b> come from what Copilot lists for each model, and show in each agent’s picker.</li>
+      <li><b>Auto</b> is always on the list; see <a href="#auto">Copilot Auto</a>.</li>
+      <li><b>Image models</b> such as GPT Image 2.5 Flare are listed for drawing (<span class="ui">Settings → Models → Images</span>), and are never offered as a chat model.</li>
+      <li><b>Older models.</b> A model for which Copilot names no API, such as GPT-4.1 and GPT-4o on a Student plan, is asked on Chat Completions only.</li>
+    </ul>
+    <p>Claude Code reads a Claude version written with a dot as an older model, so magpie gives it Copilot’s Claude models with dashes (<code>claude-opus-5-5</code>) and turns the name back before the request reaches Copilot. Other agents see Copilot’s own spelling.</p>
+
+    <h2 id="agents"><a class="anchor" href="#agents">In each agent</a></h2>
+    <p>Pick the model on an agent’s row in the <span class="ui">Agents</span> tab, or from a terminal. Each guide says what magpie writes in that agent’s config and how to switch back.</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-agents">Copy</button><pre id="ex-agents">magpie claude copilot/claude-opus-5.5
+magpie codex copilot/gpt-5.4
+magpie gemini model copilot/gpt-5.4-mini
+magpie opencode copilot/claude-opus-5.5</pre></div>
+    <ul>
+      <li><b>Claude Code</b> speaks Anthropic Messages. Copilot serves its Claude models on Messages too, so Claude Code’s requests go to them as they are; a GPT or Gemini model gets them translated. <a href="/docs/claude-code-models">Models in Claude Code</a>.</li>
+      <li><b>Codex</b> speaks only OpenAI Responses, and magpie asks Copilot’s OpenAI models on Responses, so they pass through. Codex’s web search runs on Copilot’s side for those models, and Codex’s native compaction works with them too, but not with Copilot’s Claude models. <a href="/docs/codex-models">Models in Codex</a>.</li>
+      <li><b>Gemini CLI</b> speaks Gemini’s API. magpie points it at its gateway and translates. <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>.</li>
+      <li><b>OpenCode</b> gets the model in <code>opencode.json</code>, with its reasoning variants. <a href="/docs/opencode-models">Models in OpenCode</a>.</li>
+    </ul>
+    <p>The Copilot CLI is one of the agents magpie connects, too. Its row offers <code>auto</code> (Copilot picks) and Copilot’s own models, plus every other model you have added to magpie, which reach it through the Copilot CLI’s <code>providers.json</code>.</p>
+
+    <h2 id="apis"><a class="anchor" href="#apis">How requests reach Copilot</a></h2>
+    <p>Copilot doesn’t serve every model on every API. Its newest OpenAI models answer only on Responses; its Claude models on Chat Completions and Anthropic Messages; its Gemini models and the older ones on Chat Completions only. magpie sends each request on an API the model is served on, and translates between that API and the agent’s when they differ, streaming and tool calls included.</p>
+    <ul>
+      <li><b>Wrong API.</b> When Copilot answers that a model isn’t served on the API it was asked on, magpie rebuilds the request for the next one and remembers which one worked.</li>
+      <li><b>Pin one yourself.</b> <code>magpie model api copilot/&lt;model&gt; chat</code> (or <code>responses</code>, <code>anthropic</code>) asks the model on that API only; <code>auto</code> hands the choice back to magpie.</li>
+      <li><b>Tool schemas for Gemini.</b> Copilot turned some of Codex’s tool schemas away for its Gemini models with 400 “invalid request body”. magpie rewrites the ones it can prove safe to rewrite, so those tools reach the model.</li>
+    </ul>
+
+    <h2 id="auto"><a class="anchor" href="#auto">Copilot Auto</a></h2>
+    <p><code>copilot/auto</code> is the model Copilot chooses for your account. It isn’t in Copilot’s <code>/models</code>, so magpie always adds it. On a Student plan it is the only model you may choose.</p>
+    <ul>
+      <li>magpie asks Copilot for a pick with the turn’s prompt, at Copilot Chat’s default setting, and keeps a pick for at most an hour.</li>
+      <li>If Copilot has no Auto for the account, or picks a model the account was refused, a model the account may pick by hand stands in for 10 minutes: Copilot’s base model, its default, <code>gpt-4.1</code>, a model that isn’t premium, then the rest.</li>
+      <li>If Copilot then refuses the model Auto picked, magpie picks another and sends the request again.</li>
+      <li>The model Auto chose is noted on the request’s route, so you can see what answered.</li>
+    </ul>
+
+    <h2 id="usage"><a class="anchor" href="#usage">Premium requests, usage and cost</a></h2>
+    <p>Each Copilot account has a card with three allowances, as GitHub reports them: <span class="ui">Premium requests</span>, <span class="ui">Chat requests</span> and <span class="ui">Completions</span>, each as used / allowance. <code>magpie accounts copilot</code> prints the same.</p>
+    <ul>
+      <li><b>Monthly.</b> The allowances renew each month, on the date GitHub gives.</li>
+      <li><b>Unlimited</b> shows as <span class="ui">Unlimited</span>. A window GitHub gives no figure for is left off the card, never shown as unlimited.</li>
+      <li><b>One request a turn.</b> A turn you type is billed as one request; the tool replies that carry it on are not.</li>
+      <li><b>Business and Enterprise.</b> A seat that uses up its allowance is paused, so magpie counts the account as used up and moves on to the next one. An organization’s pooled premium allowance shows as used up once the pool is spent.</li>
+      <li><b>Other plans.</b> When your plan lets you pay past the premium allowance, using it up doesn’t stop the account. Completions are counted too, but no request through magpie uses them.</li>
+      <li><b>No allowance.</b> Copilot’s base model, <code>gpt-4.1</code>, is billed to no allowance on any plan.</li>
+    </ul>
+    <p>The <span class="ui">Usage</span> tab counts tokens, cache hits and cost for each agent and model that went through magpie. Cost on a subscription is an estimate at the model maker’s list price, or at the price you set for the model. One difference from Anthropic’s own pricing: Copilot bills a cache write at one price however long it is kept, so magpie prices a 1-hour write at the 5-minute rate. For <code>claude-opus-5.5</code> that is $5 per million tokens, where Anthropic’s 2× input would be $8.</p>
+
+    <h2 id="accounts"><a class="anchor" href="#accounts">Several accounts and failover</a></h2>
+    <ul>
+      <li><b>Add another.</b> Click the Copilot tile again, or run <code>magpie accounts add copilot</code> again. The one in use is listed first, then the rest in the order you added them.</li>
+      <li><b>Choose which goes first.</b> <code>magpie accounts switch copilot &lt;login&gt;</code>; <code>magpie accounts forget copilot &lt;login&gt;</code> removes one. With the same login on github.com and GHE.com, name it in full (<code>you@acme.ghe.com</code>) or add <code>--host</code>.</li>
+      <li><b>Spread requests.</b> Tick the accounts to use on Copilot’s row. <span class="ui">Routing</span> sets how requests spread over them, <span class="ui">Smart</span> by default; the provider’s <span class="ui">Fallback</span> lists models to use when every account is out, rate limited or down. See <a href="/docs/subscriptions#accounts">Subscriptions in any agent</a>.</li>
+      <li><b>One model from two subscriptions.</b> Claude Opus from your Claude subscription and from Copilot become one group by themselves, <code>auto/&lt;model&gt;</code>. To set the order yourself: <code>magpie group add "Opus anywhere" models=claude/claude-opus-5-5,copilot/claude-opus-5.5 routing=order</code>.</li>
+      <li><b>A stale editor sign-in.</b> When GitHub refuses the token Copilot’s editors keep, an account you signed in to magpie with the same login is kept and used.</li>
+    </ul>
+
+    <h2 id="trouble"><a class="anchor" href="#trouble">Troubleshooting</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>What you see</th><th>What it means</th></tr>
+      <tr><td>GitHub refused this Copilot sign-in; sign in again</td><td>GitHub turned the account’s token away. Sign in again from its row: the account is signed in again in place, and its settings stay. A network error or a 5xx from GitHub never marks an account, and the mark goes when a request is served.</td></tr>
+      <tr><td>the GitHub token Copilot’s editors keep in … was refused</td><td>The editors’ sign-in has lapsed. Sign in to Copilot again in your editor or in magpie, or move that file aside.</td></tr>
+      <tr><td>&lt;login&gt; has no Copilot subscription</td><td>The GitHub account you approved has no Copilot plan. Sign in with the account that has the seat.</td></tr>
+      <tr><td>Copilot doesn’t serve this model on Anthropic’s Messages API; it isn’t about your plan</td><td>Copilot serves that model on other APIs only. <code>magpie model api copilot/&lt;model&gt; chat</code> sends it on Chat Completions.</td></tr>
+      <tr><td>The requested model is not supported.</td><td>Copilot won’t serve that model to this account now. magpie leaves it out of the account’s models and the agents’ pickers for 6 hours, then tries it again. Under Auto, another model is picked and the request is sent again.</td></tr>
+      <tr><td>Copilot doesn’t offer Auto to this account …</td><td>Copilot made no pick and the account lists no model it may pick by hand. Check the plan at <code>github.com/settings/copilot</code>.</td></tr>
+      <tr><td>the code expired; start again · the sign-in was declined on GitHub</td><td>The device code ran out before it was entered, or the request was declined on GitHub’s page. Start the sign-in again.</td></tr>
+      <tr><td>Copilot signs in on github.com or an enterprise’s &lt;name&gt;.ghe.com, not …</td><td>The <code>--host</code> given isn’t github.com or a GHE.com address.</td></tr>
+      <tr><td>subscription accounts are off in magpie</td><td><span class="ui">Settings → Privacy → Subscription accounts</span> is off (or <code>magpie accounts discovery off</code> was run), so magpie reads no sign-in and serves no subscription, Copilot included. Turn it on, or run <code>magpie accounts discovery on</code>.</td></tr>
+    </table></div>
+
+    <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
+    <h3>How do I use GitHub Copilot in Claude Code?</h3>
+    <p>Sign in to Copilot in magpie (Providers, Add provider, Copilot; GitHub gives you a code to enter), then pick a <code>copilot/…</code> model such as <code>copilot/claude-opus-5.5</code> on Claude Code’s row, or run <code>magpie claude copilot/claude-opus-5.5</code>. magpie writes Claude Code’s <code>settings.json</code>. Copilot’s Claude models get Claude Code’s Anthropic requests as they are; its GPT and Gemini models get them translated.</p>
+    <h3>Can Codex use Copilot’s models?</h3>
+    <p>Yes. Codex speaks OpenAI Responses, and magpie asks Copilot’s OpenAI models on Responses too, so they pass through, web search included. Copilot’s Claude and Gemini models are translated. Pick one on Codex’s row or run <code>magpie codex copilot/gpt-5.4</code>; it shows in Codex’s <code>/model</code> list.</p>
+    <h3>Can I use Copilot in Gemini CLI and OpenCode?</h3>
+    <p>Yes. Run <code>magpie gemini model copilot/gpt-5.4-mini</code> or <code>magpie opencode copilot/claude-opus-5.5</code>, or pick the model on the agent’s row. magpie translates Gemini CLI’s requests, and writes the model into OpenCode’s <code>opencode.json</code>.</p>
+    <h3>Do I need VS Code or another editor signed in to Copilot?</h3>
+    <p>No. magpie signs in to GitHub itself with a device code. If Copilot’s editor plugins or the Copilot CLI are already signed in on this computer, magpie reads that sign-in too, and never changes it.</p>
+    <h3>Does it spend my premium requests?</h3>
+    <p>Requests go to Copilot on your account, so they count against your plan as Copilot counts them. A turn you type is billed as one request; the tool replies that carry it on are not. magpie shows each account’s Premium requests, Chat requests and Completions as used out of the allowance.</p>
+    <h3>Does it work with Copilot Business, Enterprise and GHE.com?</h3>
+    <p>Yes. magpie reads the plan from GitHub: Free, Pro, Pro+, Max, Education, Business or Enterprise. An enterprise on GHE.com signs in with <code>magpie accounts add copilot --host &lt;name&gt;.ghe.com</code>. A Business or Enterprise seat that uses up its allowance is paused, and magpie counts the account as used up until it renews.</p>
+    <h3>Why is a Copilot model missing from my list?</h3>
+    <p>magpie lists what Copilot’s <code>/models</code> gives the account: chat models only, without the ones no model picker offers or the account can’t turn on. A model Copilot answered with “The requested model is not supported.” is left out for 6 hours, then tried again in case your plan changed.</p>
+
+    <p style="margin-top:48px"><b>By provider:</b> <a href="/docs/deepseek">DeepSeek</a> · <a href="/docs/kimi">Kimi and Kimi Code</a> · <a href="/docs/glm">GLM Coding Plan</a> · <a href="/docs/qwen">Qwen</a> · <a href="/docs/minimax">MiniMax</a> · <a href="/docs/openrouter">OpenRouter</a> · <a href="/docs/subscriptions">Claude, ChatGPT and other subscriptions</a></p>
+    <p>Every agent: <a href="/docs/claude-code-models">Models in Claude Code</a>, <a href="/docs/codex-models">Models in Codex</a>, <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>, <a href="/docs/opencode-models">Models in OpenCode</a>. Ask on <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> if you get stuck.</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a href="/docs/remote">Remote magpie</a>
+    <a href="/docs/docker">Docker</a>
+    <a href="/docs/privacy">Privacy</a>
+    <a href="/docs/masking">Privacy masking</a>
+    <a href="/docs/mcp-router">MCP router</a>
+    <a href="/docs/library">Library</a>
+    <a href="/docs/claude-code-models">Models in Claude Code</a>
+    <a href="/docs/codex-models">Models in Codex</a>
+    <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a href="/docs/local-models">Local models</a>
+    <a href="/docs/opencode-models">Models in OpenCode</a>
+    <a href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/contributors">Contributors</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

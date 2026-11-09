@@ -49,6 +49,8 @@ DeepSeek, Kimi (Moonshot), GLM (Zhipu), Qwen, MiniMax, Anthropic (Claude), OpenA
 - [GLM Coding Plan in every agent](https://usemagpie.ai/docs/glm): Zhipu GLM and Z.ai, pay as you go or Coding Plan, each plan's endpoints, the 1113 "insufficient balance" fix, thinking and plan windows.
 - [Qwen in every agent](https://usemagpie.ai/docs/qwen): Alibaba Cloud Model Studio (DashScope), Bailian, the Qwen and Bailian Token Plans and Qwen Cloud in Claude Code, Codex, Gemini CLI and OpenCode; which endpoint each key works on, thinking and images.
 - [MiniMax and the Coding Plan in every agent](https://usemagpie.ai/docs/minimax): MiniMax M3 and M2.7, pay as you go or Coding Plan keys, global and China endpoints, interleaved thinking, effort and the plan's usage windows.
+- [OpenRouter in every agent](https://usemagpie.ai/docs/openrouter): one OpenRouter key for Claude Code, Codex, Gemini CLI and OpenCode; which endpoint each agent's requests use, the model list, reasoning, Claude's prompt cache, cost and credits, several keys and free models.
+- [GitHub Copilot in every agent](https://usemagpie.ai/docs/copilot): a Copilot seat's models in Claude Code, Codex, Gemini CLI and OpenCode; signing in (editors, Copilot CLI, GHE.com), Copilot Auto, premium requests, several accounts and errors.
 - [Intent routing](https://usemagpie.ai/docs/intent): how a turn is routed by what the user asks for.
 - [Privacy masking](https://usemagpie.ai/docs/masking): what is masked before a request leaves the computer and how values come back.
 - [Library](https://usemagpie.ai/docs/library): instructions, MCP servers, skills, hooks and subagents for each agent.

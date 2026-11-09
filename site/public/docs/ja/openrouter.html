@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenRouter を Claude Code・Codex・Gemini CLI・OpenCode で使う · magpie</title>
+<meta name="description" content="magpie で OpenRouter を Claude Code・Codex・Gemini CLI・OpenCode から使う方法：キーは一度追加するだけ。ツールごとに OpenRouter のモデルを選べて、API の変換、Claude のプロンプトキャッシュ、費用と残高の集計、複数キーと無料モデルへの振り分けは magpie が受け持ちます。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/openrouter">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/openrouter">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/openrouter">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/openrouter">
+<link rel="canonical" href="https://usemagpie.ai/docs/ja/openrouter">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="OpenRouter を Claude Code・Codex・Gemini CLI・OpenCode で使う">
+<meta property="og:description" content="magpie で OpenRouter を Claude Code・Codex・Gemini CLI・OpenCode から使う方法：キーは一度追加するだけ。ツールごとに OpenRouter のモデルを選べて、API の変換、Claude のプロンプトキャッシュ、費用と残高の集計、複数キーと無料モデルへの振り分けは magpie が受け持ちます。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/ja/openrouter">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "OpenRouter を Claude Code・Codex・Gemini CLI・OpenCode で使う",
+   "description": "magpie で OpenRouter を Claude Code・Codex・Gemini CLI・OpenCode から使う方法：キーは一度追加するだけ。ツールごとに OpenRouter のモデルを選べて、API の変換、Claude のプロンプトキャッシュ、費用と残高の集計、複数キーと無料モデルへの振り分けは magpie が受け持ちます。",
+   "inLanguage": "ja",
+   "url": "https://usemagpie.ai/docs/ja/openrouter",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Claude Code で OpenRouter を使うには？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie に OpenRouter のキーを追加し（プロバイダ、プロバイダを追加、OpenRouter）、Claude Code の行で anthropic/claude-opus-5.5 などのモデルを選ぶか、magpie claude openrouter/anthropic/claude-opus-5.5 を実行します。magpie が Claude Code の settings.json を書き、リクエストはそのまま OpenRouter の Anthropic エンドポイントに渡されます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex で OpenRouter のモデルは使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。Codex が話すのは Responses API だけで、magpie は OpenRouter の Responses API を使いません。そこで magpie が Codex のリクエストを一つずつ変換します。Claude のモデルは OpenRouter の Anthropic エンドポイントへ、それ以外は Chat Completions へ送り、返答は Responses に戻して Codex に渡します。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Gemini CLI と OpenCode で OpenRouter は使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。Gemini CLI のリクエストは Codex と同じように変換されます。OpenCode は Chat Completions を話すので、リクエストはそのまま OpenRouter に渡ります。ただし Claude のモデルだけは、プロンプトキャッシュが効くように magpie が Anthropic エンドポイントへ送ります。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "OpenRouter の無料モデルだけを使うには？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "openrouter/*:free というパターンでルーティンググループを作ります。たとえば magpie group add my-free-pool models='openrouter/*:free' routing=order。OpenRouter が載せている無料モデルがすべて入り、あとから載ったものも加わります。0 ドルのモデルには magpie のモデル選択で「無料」と表示されます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "OpenRouter の無料モデルが 429 を返すのはなぜ？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "OpenRouter の無料モデルは 1 分あたり 20 リクエストまでです。magpie provider rpm openrouter 20 を実行すると、magpie がリクエストをその速さに抑えます。429 が無料モデルを提供しているプロバイダの共有プールから来た場合、magpie はそのモデルだけを休ませ、ほかの無料モデルは使い続けます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie で OpenRouter の残高は見られますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "見られます。magpie は OpenRouter の credits エンドポイントを読み、残りをドルで表示します。チャージ総額から使用総額を引いた額です。アカウント全体の数字なので、同じアカウントのキーはどれも同じ額になります。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie が OpenRouter のモデル一覧を /api/v1 から取るのはなぜ？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Anthropic のベース URL で一覧を求めると、OpenRouter は anthropic/ の下に並べたカタログを返しますが、その ID では提供していません。magpie は Chat Completions のベース URL https://openrouter.ai/api/v1 から一覧を取り、OpenRouter の Anthropic のベース URL しかないプロバイダには、この Chat の URL を足すよう案内します。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/ja/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>ドキュメント</small></a>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/start">はじめに</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a class="toc-only" href="/docs/ja/remote">リモート magpie</a>
+    <a class="toc-only" href="/docs/ja/docker">Docker</a>
+    <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
+    <a class="toc-only" href="/docs/ja/masking">プライバシーマスキング</a>
+    <a class="toc-only" href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a class="toc-only" href="/docs/ja/library">ライブラリ</a>
+    <a class="toc-only" href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a class="toc-only" href="/docs/ja/local-models">ローカルモデル</a>
+    <a class="toc-only" href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="言語" title="言語" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/openrouter" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/openrouter" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/openrouter" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="Discord の magpie" title="Discord に参加"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="GitHub の magpie" title="GitHub のソースコード"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">ダウンロード</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>このページ</p>
+    <a href="#add">追加する</a>
+    <a href="#endpoints">エンドポイント</a>
+    <a href="#models">モデル一覧</a>
+    <a href="#agents">ツールごとの使い方</a>
+    <a href="#reasoning">推論</a>
+    <a href="#cost">キャッシュ・費用・残高</a>
+    <a href="#keys">複数のキーと無料モデル</a>
+    <a href="#trouble">うまくいかないとき</a>
+    <a href="#faq">よくある質問</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">ドキュメント · プロバイダ</p>
+    <h1>OpenRouter を Claude Code・Codex・Gemini CLI・OpenCode で使う</h1>
+    <p class="lede">OpenRouter は多くのベンダーのモデルを一つのキーで提供していて、OpenAI Chat Completions と Anthropic Messages を話します。キーを magpie に一度追加すれば、Claude Code・Codex・Gemini CLI・OpenCode などつないだすべてのツールが、magpie のゲートウェイ <code>127.0.0.1:3425</code> 経由で OpenRouter のどのモデルでも使えます。ツールごとに別のモデルを選べます。</p>
+
+    <h2 id="add"><a class="anchor" href="#add">OpenRouter を追加する</a></h2>
+    <ol class="steps">
+      <li><b>キーを取得</b><a href="https://openrouter.ai/keys">openrouter.ai/keys</a> で作ります。</li>
+      <li><b>プロバイダを追加</b>magpie の <span class="ui">プロバイダ</span> で <span class="ui">＋ プロバイダを追加</span> を押し、<span class="ui">OpenRouter</span> を選んでキーを貼り付け、保存します。magpie が OpenRouter に提供モデルを問い合わせます。</li>
+      <li><b>ツールで選ぶ</b><span class="ui">エージェント</span> タブで、ツールの行の <code>anthropic/claude-opus-5.5</code> などの OpenRouter モデルを選びます。</li>
+    </ol>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-add">コピー</button><pre id="ex-add">magpie provider add openrouter sk-…
+magpie provider test openrouter</pre></div>
+    <p>magpie のモデル ID は <code>プロバイダ/モデル</code> の形なので、OpenRouter のモデルは <code>openrouter/anthropic/claude-opus-5.5</code> のようになります。前がプロバイダ、後ろが OpenRouter 自身の ID です。キーは magpie の設定に保存され、magpie がシェルから読むことはありません。</p>
+    <p>OpenRouter のドキュメントには、ランキングにアプリ名を載せるための任意のヘッダー <code>HTTP-Referer</code> と <code>X-OpenRouter-Title</code> があります。magpie は送りません。リクエストをアプリとして記録させたいときは、プロバイダ編集画面の <span class="ui">ヘッダー</span> に候補として出るので、そこで追加します。</p>
+
+    <h2 id="endpoints"><a class="anchor" href="#endpoints">エンドポイント</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>API</th><th>ベース URL</th><th>用途</th></tr>
+      <tr><td>Chat Completions</td><td><code>https://openrouter.ai/api/v1</code></td><td>モデル一覧、Claude 以外のモデルへのリクエスト、画像モデル</td></tr>
+      <tr><td>Anthropic Messages</td><td><code>https://openrouter.ai/api</code></td><td>Claude Code のリクエストと、どのツールからでも Claude のモデル</td></tr>
+      <tr><td>Decisions</td><td><code>https://openrouter.ai/api/v1</code></td><td><a href="/docs/ja/intent">インテントルーティング</a>用の判定モデル</td></tr>
+    </table></div>
+    <p>magpie は OpenRouter の Responses API を使いません。Codex のように Responses を話すツールは、上の二つのどちらかに変換されます。</p>
+
+    <h2 id="models"><a class="anchor" href="#models">モデル一覧</a></h2>
+    <ul>
+      <li><b>一覧の出どころ。</b>magpie は <code>https://openrouter.ai/api/v1/models</code> から一覧を取ります。各モデルのコンテキスト長もここから読みます。モデル名・推論レベル・価格は models.dev の <code>openrouter</code> カタログから来ます。</li>
+      <li><b>ツールに見えるモデル。</b>OpenRouter のモデルは何百もあります。自分で選ばない限り、magpie は OpenRouter の一覧の先頭 24 個（新しい順）をツールに見せます。残りはプロバイダのモデル一覧で選ぶか、<span class="ui">系列の最新のみ</span> をオンにして各系列の最新だけに絞ります。</li>
+      <li><b>新しいモデル。</b><code>auto-include</code> のルールに合うモデルはすぐに加わり、あとで一覧に初めて載ったものも加わります。<code>refresh-every</code> を設定すると、magpie が一覧を自分で取り直します。</li>
+      <li><b>画像モデル。</b>OpenRouter の <code>/models</code> にはテキストモデルしか載らないので、FLUX・Seedream・Riverflow・Recraft・GPT Image などの画像モデルは <code>/api/v1/images/models</code> から読みます。<span class="ui">設定 → モデル → 画像</span> で選びます。</li>
+      <li><b>判定モデル。</b>OpenRouter の判定モデル（<code>liquid/d1</code>、<code>cloudflare/clef</code>、<code>~typesafe/jev-latest</code> など）も一覧に入るので、ルーティンググループは同じキーで各ターンを分類できます。</li>
+    </ul>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-models">コピー</button><pre id="ex-models">magpie provider models openrouter +anthropic/claude-opus-5.5   # 一つ追加で見せる
+magpie provider models openrouter best                          # 各系列の最新のみ
+magpie provider auto-include openrouter '*:free'               # 無料モデルを今後の分も含めてすべて
+magpie provider refresh-every openrouter 1d</pre></div>
+
+    <h2 id="agents"><a class="anchor" href="#agents">ツールごとの使い方</a></h2>
+    <p><span class="ui">エージェント</span> タブでツールの行のモデルを選ぶか、ターミナルで切り替えます。各ガイドに、magpie がそのツールの設定に何を書くか、どう戻すかがあります。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-agents">コピー</button><pre id="ex-agents">magpie claude openrouter/anthropic/claude-opus-5.5
+magpie codex openrouter/anthropic/claude-opus-5.5
+magpie gemini model openrouter/google/gemini-3-pro
+magpie opencode openrouter/anthropic/claude-opus-5.5</pre></div>
+    <ul>
+      <li><b>Claude Code</b> は Anthropic Messages を話し、OpenRouter も <code>https://openrouter.ai/api</code> で同じものを話すので、リクエストはそのまま渡されます。<a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>。</li>
+      <li><b>Codex</b> が話すのは OpenAI Responses だけです。magpie がリクエストと返答を変換し、ストリーミングとツール呼び出しもそのまま使えます。Claude のモデルは OpenRouter の Anthropic エンドポイントへ、それ以外は Chat Completions へ送ります。<a href="/docs/ja/codex-models">Codex で他のモデル</a>。</li>
+      <li><b>Gemini CLI</b> は Gemini の API を話します。magpie が Codex と同じように変換します。<a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>。</li>
+      <li><b>OpenCode</b> は Chat Completions を話すので、リクエストはそのまま OpenRouter に渡ります。ただし Claude のモデルは、プロンプトキャッシュのために magpie が Anthropic エンドポイントへ送ります（下を参照）。<a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>。</li>
+    </ul>
+    <p>magpie が選んだエンドポイントでそのモデルは提供していないと OpenRouter が答えた場合、magpie はもう一方のエンドポイント向けにリクエストを作り直し、そのモデルについて覚えておきます。</p>
+
+    <h2 id="reasoning"><a class="anchor" href="#reasoning">推論</a></h2>
+    <ul>
+      <li><b>推論を切れないモデル。</b>OpenRouter には推論をオフにできないモデルがあります（“reasoning is mandatory for this endpoint and cannot be disabled”）。ツールがオフを求めると、magpie はその指定を外し、レベルをモデルに任せてもう一度問い合わせます。Chat Completions でも Messages でも同じです。</li>
+      <li><b>会話途中の推論の強さ。</b>Claude Code はターンごとの推論の強さを会話の中で送ります。OpenRouter の Anthropic エンドポイントは DeepSeek や GLM などのモデルでこれを拒否します。magpie はすぐにそれを外して問い合わせ直し、magpie を再起動するまで OpenRouter には送りません。</li>
+      <li><b>前の思考。</b>OpenRouter の Anthropic エンドポイントは署名のない思考ブロックを受け付けないので、magpie は必ず署名を付けて送ります。Chat Completions では、ツールが送り返す OpenRouter の <code>reasoning</code> や <code>reasoning_details</code> を、モデルの前の思考として読みます。</li>
+    </ul>
+
+    <h2 id="cost"><a class="anchor" href="#cost">キャッシュ・費用・残高</a></h2>
+    <ul>
+      <li><b>Claude のプロンプトキャッシュ。</b>両方の API を提供する中継サービスは Chat Completions で <code>cache_control</code> を落とすため、毎ターンがキャッシュなしで課金されます。そこで magpie は、どのツールからでも Claude のモデルは OpenRouter の Messages エンドポイントに、変換時に加えるキャッシュのブレークポイント付きで送ります。</li>
+      <li><b>キャッシュのトークン。</b>magpie は返答ごとにキャッシュの読み出しと OpenRouter の <code>cache_write_tokens</code> を読み、<span class="ui">使用量</span> タブでキャッシュのヒットと書き込みを分けて数えます。</li>
+      <li><b>費用。</b>使用量タブは、models.dev にある OpenRouter の価格で呼び出しごとの費用を出します。カタログにない場合はモデルのメーカーの定価を使います。<code>:free</code> で終わるモデルなど 0 ドルのモデルには、magpie のモデル選択で <span class="ui">無料</span> と表示されます。</li>
+      <li><b>どこが答えたか。</b>OpenRouter は返答ごとに、それを処理したプロバイダを示します。magpie はそれを記録し、使用量タブの呼び出しの詳細に <span class="ui">上流プロバイダー</span> として表示します。</li>
+      <li><b>残高。</b>OpenRouter の行に、アカウントの残りがドルで表示されます。<code>/api/v1/credits</code> から読んだ、チャージ総額から使用総額を引いた額です。アカウント全体の数字なので、同じアカウントのキーはどれも同じ額になります。</li>
+    </ul>
+
+    <h2 id="keys"><a class="anchor" href="#keys">複数のキーと無料モデル</a></h2>
+    <p>一つの OpenRouter プロバイダに複数のキーを入れられます。その下の <span class="ui">別のキーを追加</span> を押すか、まとめて貼り付けます。リクエストはオンになっている最初のキーに行き、そのキーが尽きるかレート制限にかかると次のキーが引き継ぎます。プロバイダのルーティングを、順番に回す・重みで分ける・一つを使い切ってから次へ、に変えることもできます。プリセットをもう一度追加すると OpenRouter プロバイダが二つになります。複数のキーにリクエストを分けたいときは、すべて同じプロバイダに入れてください。</p>
+    <ul>
+      <li><b>支出上限。</b><code>spend-cap</code> で、キーごとに 1 日・1 か月・累計のドル上限を決められます。金額は使用量タブの計算で数え、上限に達するとルーティングはほかのキーとフォールバックに移ります。</li>
+      <li><b>フォールバック。</b><code>fallback</code> で、OpenRouter の枠が尽きたときや落ちたときの行き先を決めます。別のプロバイダのモデルか、ルーティンググループです。</li>
+      <li><b>無料モデル。</b>OpenRouter の無料モデルは 1 分あたり 20 リクエストまでです。<code>rpm</code> でキーごとの速さを抑えられます。超えた分は空きを待ち、2 分待っても空かなければ <code>Retry-After</code> 付きの 429 になります。</li>
+      <li><b>無料モデルの 429。</b>無料モデルを提供しているプロバイダの共有プールに断られた場合、magpie はそのモデルだけを休ませ、ほかの無料モデルは使い続けます。無料モデルのそれ以外の 429 は OpenRouter のアカウント全体の無料枠によるもので、キーが休みます。</li>
+      <li><b>無料モデルのプール。</b>ルーティンググループに <code>openrouter/*:free</code> というパターンを入れると、OpenRouter が載せている無料モデルがすべて入ります。あとから載ったものも加わります。</li>
+    </ul>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-keys">コピー</button><pre id="ex-keys">magpie provider rpm openrouter 20
+magpie provider spend-cap openrouter &lt;key&gt; 20 month
+magpie provider fallback openrouter deepseek/deepseek-v4-pro
+magpie group add my-free-pool models='openrouter/*:free' routing=order
+magpie group set opus-anywhere stays=session models+=openrouter/anthropic/claude-opus-5.5</pre></div>
+
+    <h2 id="trouble"><a class="anchor" href="#trouble">うまくいかないとき</a></h2>
+    <ul>
+      <li><b>モデル一覧が <code>anthropic/</code> で始まる ID ばかり、または取得できない。</b><code>https://openrouter.ai/api</code> だけを持つプロバイダには、OpenRouter が <code>anthropic/</code> の下に並べたカタログが返りますが、その ID では提供していません。Chat Completions のベース URL <code>https://openrouter.ai/api/v1</code> を足すか、両方を持つ OpenRouter プリセットを使ってください。</li>
+      <li><b>“Mid-conversation reasoning effort (configuration_update) is not supported”。</b>DeepSeek や GLM などのモデルで、Claude Code のターンごとの推論の強さを OpenRouter が拒否したときのエラーです。magpie はすぐにそれを外して問い合わせ直すのでツールには返答が届き、magpie を再起動するまで OpenRouter には送りません。</li>
+      <li><b>402 で “can only afford” や “fewer max_tokens”。</b>OpenRouter が断ったのはリクエストの大きさか処理中のリクエストの予算で、残高切れではありません。magpie はそのキーを 30 分休ませてから試します。残高切れのキーと違い、断られるたびに休みが長くなることはありません。</li>
+      <li><b>Web 検索で選んでいないモデルが使われる？</b>使われません。magpie の Web 検索に OpenRouter が答えるときは、選んである OpenRouter のモデルだけを使います。OpenRouter は地域によってほかのモデルを断ることがあるからです。その検索では OpenRouter 自身の <code>web</code> プラグインをオンにし、これはどのモデルでも使えます。</li>
+      <li><b>キーの確認。</b><code>magpie provider test openrouter</code> は各エンドポイントに、または指定した各モデルに小さなリクエストを送ります。<code>--as codex</code> や <code>--as claude-code</code> を付けると、そのツールと同じ形で送ります。</li>
+    </ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
+    <h3>Claude Code で OpenRouter を使うには？</h3>
+    <p>magpie に OpenRouter のキーを追加し（プロバイダ、プロバイダを追加、OpenRouter）、Claude Code の行で <code>anthropic/claude-opus-5.5</code> などのモデルを選ぶか、<code>magpie claude openrouter/anthropic/claude-opus-5.5</code> を実行します。magpie が Claude Code の <code>settings.json</code> を書き、リクエストはそのまま OpenRouter の Anthropic エンドポイントに渡されます。</p>
+    <h3>Codex で OpenRouter のモデルは使えますか？</h3>
+    <p>使えます。Codex が話すのは Responses API だけで、magpie は OpenRouter の Responses API を使いません。そこで magpie が Codex のリクエストを一つずつ変換します。Claude のモデルは OpenRouter の Anthropic エンドポイントへ、それ以外は Chat Completions へ送り、返答は Responses に戻して Codex に渡します。</p>
+    <h3>Gemini CLI と OpenCode で OpenRouter は使えますか？</h3>
+    <p>使えます。Gemini CLI のリクエストは Codex と同じように変換されます。OpenCode は Chat Completions を話すので、リクエストはそのまま OpenRouter に渡ります。ただし Claude のモデルだけは、プロンプトキャッシュが効くように magpie が Anthropic エンドポイントへ送ります。</p>
+    <h3>OpenRouter の無料モデルだけを使うには？</h3>
+    <p><code>openrouter/*:free</code> というパターンでルーティンググループを作ります。たとえば <code>magpie group add my-free-pool models='openrouter/*:free' routing=order</code>。OpenRouter が載せている無料モデルがすべて入り、あとから載ったものも加わります。0 ドルのモデルには magpie のモデル選択で <span class="ui">無料</span> と表示されます。</p>
+    <h3>OpenRouter の無料モデルが 429 を返すのはなぜ？</h3>
+    <p>OpenRouter の無料モデルは 1 分あたり 20 リクエストまでです。<code>magpie provider rpm openrouter 20</code> を実行すると、magpie がリクエストをその速さに抑えます。429 が無料モデルを提供しているプロバイダの共有プールから来た場合、magpie はそのモデルだけを休ませ、ほかの無料モデルは使い続けます。</p>
+    <h3>magpie で OpenRouter の残高は見られますか？</h3>
+    <p>見られます。magpie は OpenRouter の credits エンドポイントを読み、残りをドルで表示します。チャージ総額から使用総額を引いた額です。アカウント全体の数字なので、同じアカウントのキーはどれも同じ額になります。</p>
+    <h3>magpie が OpenRouter のモデル一覧を /api/v1 から取るのはなぜ？</h3>
+    <p>Anthropic のベース URL で一覧を求めると、OpenRouter は <code>anthropic/</code> の下に並べたカタログを返しますが、その ID では提供していません。magpie は Chat Completions のベース URL <code>https://openrouter.ai/api/v1</code> から一覧を取り、OpenRouter の Anthropic のベース URL しかないプロバイダには、この Chat の URL を足すよう案内します。</p>
+
+    <p><b>プロバイダ別：</b><a href="/docs/ja/deepseek">DeepSeek</a> · <a href="/docs/ja/kimi">Kimi と Kimi Code</a> · <a href="/docs/ja/glm">GLM Coding Plan</a> · <a href="/docs/ja/qwen">Qwen</a> · <a href="/docs/ja/minimax">MiniMax</a> · <a href="/docs/ja/copilot">GitHub Copilot</a></p>
+    <p style="margin-top:48px">ツールごとのガイド：<a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>、<a href="/docs/ja/codex-models">Codex で他のモデル</a>、<a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>、<a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>。困ったときは <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> で質問してください。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a href="/docs/ja/remote">リモート magpie</a>
+    <a href="/docs/ja/docker">Docker</a>
+    <a href="/docs/ja/privacy">プライバシー</a>
+    <a href="/docs/ja/masking">プライバシーマスキング</a>
+    <a href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a href="/docs/ja/library">ライブラリ</a>
+    <a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a href="/docs/ja/local-models">ローカルモデル</a>
+    <a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/ja/contributors">コントリビューター</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "コピーしました"; setTimeout(() => (b.textContent = "コピー"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

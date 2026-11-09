@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GitHub Copilot を Claude Code・Codex・Gemini CLI・OpenCode で使う · magpie</title>
+<meta name="description" content="magpie で GitHub Copilot のサブスクリプションを Claude Code・Codex・Gemini CLI・OpenCode から使う方法：サインイン（エディタ、Copilot CLI、GHE.com の GitHub Enterprise）、シートで使えるモデル、Copilot Auto、プレミアムリクエストと費用、複数アカウント、エラーの意味。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/copilot">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/copilot">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/copilot">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/copilot">
+<link rel="canonical" href="https://usemagpie.ai/docs/ja/copilot">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="GitHub Copilot を Claude Code・Codex・Gemini CLI・OpenCode で使う">
+<meta property="og:description" content="magpie で GitHub Copilot のサブスクリプションを Claude Code・Codex・Gemini CLI・OpenCode から使う方法：サインイン（エディタ、Copilot CLI、GHE.com の GitHub Enterprise）、シートで使えるモデル、Copilot Auto、プレミアムリクエストと費用、複数アカウント、エラーの意味。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/ja/copilot">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "GitHub Copilot を Claude Code・Codex・Gemini CLI・OpenCode で使う",
+   "description": "magpie で GitHub Copilot のサブスクリプションを Claude Code・Codex・Gemini CLI・OpenCode から使う方法：サインイン（エディタ、Copilot CLI、GHE.com の GitHub Enterprise）、シートで使えるモデル、Copilot Auto、プレミアムリクエストと費用、複数アカウント、エラーの意味。",
+   "inLanguage": "ja",
+   "url": "https://usemagpie.ai/docs/ja/copilot",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Claude Code で Copilot のサブスクリプションを使うには？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie で Copilot にサインインし（プロバイダ → プロバイダを追加 → Copilot。GitHub で入力するコードが表示されます）、Claude Code の行で copilot/claude-opus-5.5 などの copilot/… モデルを選ぶか、magpie claude copilot/claude-opus-5.5 を実行します。magpie が Claude Code の settings.json を書きます。Copilot の Claude モデルには Claude Code の Anthropic リクエストがそのまま届き、GPT と Gemini のモデルには magpie が変換して渡します。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex で Copilot のモデルを使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。Codex は OpenAI Responses を話し、magpie も Copilot の OpenAI モデルには Responses で問い合わせるので、リクエストはそのまま渡り、Web 検索も使えます。Copilot の Claude と Gemini のモデルは magpie が変換します。Codex の行で選ぶか magpie codex copilot/gpt-5.4 を実行すると、Codex の /model に並びます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Gemini CLI や OpenCode でも Copilot を使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。magpie gemini model copilot/gpt-5.4-mini か magpie opencode copilot/claude-opus-5.5 を実行するか、そのツールの行でモデルを選びます。magpie が Gemini CLI のリクエストを変換し、OpenCode の opencode.json にモデルを書きます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "VS Code などのエディタで Copilot にサインインしておく必要はありますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "ありません。magpie はデバイスコードで自分で GitHub にサインインします。このコンピュータで Copilot のエディタプラグインや Copilot CLI がすでにサインインしていれば、そのサインインも読みますが、書き換えることはありません。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "プレミアムリクエストを消費しますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "リクエストはあなたのアカウントで Copilot に送られるので、Copilot の数え方でプランに計上されます。入力した 1 ターンは 1 リクエストとして課金され、そのターンを続けるツールの結果は数えられません。magpie は各アカウントのプレミアムリクエスト、チャットリクエスト、補完の使用量を表示します。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Copilot Business・Enterprise・GHE.com でも使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。magpie は GitHub からプラン（Free、Pro、Pro+、Max、Education、Business、Enterprise）を読みます。GHE.com のエンタープライズは magpie accounts add copilot --host <name>.ghe.com でサインインします。Business や Enterprise のシートは利用枠を使い切ると一時停止されるので、magpie は更新までそのアカウントを使い切ったものとして扱います。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Copilot のモデルが一覧にないのはなぜですか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie が並べるのは、Copilot の /models がそのアカウントに返すモデルです。チャットモデルだけで、どのモデルピッカーにも出ないものと、そのアカウントで有効にできないものは除きます。Copilot が「The requested model is not supported.」で断ったモデルは 6 時間外し、プランが変わった場合に備えてその後もう一度試します。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/ja/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>ドキュメント</small></a>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/start">はじめに</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a class="toc-only" href="/docs/ja/remote">リモート magpie</a>
+    <a class="toc-only" href="/docs/ja/docker">Docker</a>
+    <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
+    <a class="toc-only" href="/docs/ja/masking">プライバシーマスキング</a>
+    <a class="toc-only" href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a class="toc-only" href="/docs/ja/library">ライブラリ</a>
+    <a class="toc-only" href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a class="toc-only" href="/docs/ja/local-models">ローカルモデル</a>
+    <a class="toc-only" href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="言語" title="言語" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/copilot" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/copilot" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/copilot" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="Discord の magpie" title="Discord に参加"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="GitHub の magpie" title="GitHub のソースコード"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">ダウンロード</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>このページ</p>
+    <a href="#add">サインイン</a>
+    <a href="#models">シートのモデル</a>
+    <a href="#agents">ツールごとの使い方</a>
+    <a href="#apis">リクエストの流れ</a>
+    <a href="#auto">Copilot Auto</a>
+    <a href="#usage">プレミアムリクエストと費用</a>
+    <a href="#accounts">複数アカウント</a>
+    <a href="#trouble">トラブルシューティング</a>
+    <a href="#faq">よくある質問</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">ドキュメント · プロバイダ</p>
+    <h1>GitHub Copilot を Claude Code・Codex・Gemini CLI・OpenCode で使う</h1>
+    <p class="lede">Copilot のシートには Claude、GPT、Gemini などのモデルが含まれています。magpie で一度 Copilot にサインインすれば、Claude Code・Codex・Gemini CLI・OpenCode などつないだすべてのツールが、magpie のゲートウェイ <code>127.0.0.1:3425</code> 経由でプランのモデルを使えます。API キーは要りません。</p>
+
+    <h2 id="add"><a class="anchor" href="#add">Copilot にサインインする</a></h2>
+    <ol class="steps">
+      <li><b>プロバイダを追加を開く</b>magpie の <span class="ui">プロバイダ</span> で <span class="ui">＋ プロバイダを追加</span> を押し、Copilot のタイルをクリックします。</li>
+      <li><b>GitHub でコードを入力</b>magpie がコードを表示し、GitHub のデバイスページ <code>github.com/login/device</code> を開きます。コードを入力して承認すると、magpie が GitHub にどのアカウントか、どのプランかを確かめ、アカウントが Copilot の下に表示されます。</li>
+      <li><b>ツールで選ぶ</b><span class="ui">エージェント</span> タブで、ツールの行のモデルをクリックし、<code>copilot/…</code> のモデルを選びます。</li>
+    </ol>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-add">コピー</button><pre id="ex-add">magpie accounts add copilot                        # github.com
+magpie accounts add copilot --host acme.ghe.com    # GHE.com の GitHub Enterprise
+magpie accounts copilot                            # 各アカウントと使用量</pre></div>
+    <p>magpie は次の 3 か所の Copilot サインインを使います。</p>
+    <ul>
+      <li><b>Copilot のエディタプラグイン。</b><code>~/.config/github-copilot</code>（<code>apps.json</code> か <code>hosts.json</code>）にあるサインイン。</li>
+      <li><b>Copilot CLI。</b><code>~/.copilot/config.json</code> にあるサインインで、トークンはシステムのキーチェーンか、このファイルに平文で入っています。Windows の magpie は、起動中の WSL ディストリビューションにある Copilot CLI のサインインも <code>config.json</code> からだけ読みます。</li>
+      <li><b>magpie 自身のもの。</b>magpie でコードを使ってサインインした各アカウント。トークンは magpie 自身の <code>logins.json</code> に保存されます。</li>
+    </ul>
+    <p>エディタと CLI のサインインは読むだけで、magpie が書き換えることはありません。両方あるときは、エディタの github.com のサインイン、CLI のサインイン、エディタの GHE.com のサインインの順に使います。GitHub がエディタのトークンを拒否したときは、CLI にある同じアカウントのサインインに切り替え、別人のアカウントに替わることはありません。</p>
+    <div class="callout"><b>GHE.com の GitHub Enterprise。</b>データレジデンシーを使うエンタープライズは自社の <code>&lt;name&gt;.ghe.com</code> でサインインするので、アカウントは <code>--host</code> を付けて追加します（サインイン画面の「GHE.com のアカウント？」に答えても同じです）。magpie が受け付けるのは github.com か <code>&lt;name&gt;.ghe.com</code> のアドレスだけなので、GitHub のトークンが任意のホストに送られることはありません。このアカウントはエンタープライズの <code>copilot-api.&lt;name&gt;.ghe.com</code> で提供されます。同じログイン名でも github.com と GHE.com では別のアカウント（<code>you</code> と <code>you@acme.ghe.com</code>）になります。</div>
+
+    <h2 id="models"><a class="anchor" href="#models">シートで使えるモデル</a></h2>
+    <p>magpie はアカウントごとに Copilot の <code>/models</code> に問い合わせ、返ってきたモデルを並べます。決まった表ではなく、プランに合わせた一覧になります。モデル名は <code>copilot/</code> に Copilot 自身の ID を付けたもので、たとえば <code>copilot/claude-opus-5.5</code>、<code>copilot/gpt-5.4</code>、<code>copilot/gpt-5.3-codex</code> です。<code>magpie models</code> ですべて表示できます。</p>
+    <ul>
+      <li><b>チャットモデルだけ。</b>Copilot の内部用モデル、どのモデルピッカーにも出ないモデル、そのアカウントで有効にできないモデルは除きます。</li>
+      <li><b>規約の同意が要るモデル。</b>規約に未同意のモデルも一覧に出ます。最初のリクエストで magpie が同意し、Copilot のエディタで有効にしたのと同じ状態になります。</li>
+      <li><b>推論レベル</b>は Copilot がモデルごとに示すものを使い、各ツールのピッカーに表示されます。</li>
+      <li><b>Auto</b> は必ず一覧にあります。<a href="#auto">Copilot Auto</a> を参照してください。</li>
+      <li><b>画像モデル</b>（GPT Image 2.5 Flare など）は画像生成用として並び（<span class="ui">設定 → モデル → 画像</span>）、チャットモデルとしては出ません。</li>
+      <li><b>古いモデル。</b>学生プランの GPT-4.1 や GPT-4o のように Copilot が API を示さないモデルは、Chat Completions だけで問い合わせます。</li>
+    </ul>
+    <p>Claude Code はバージョンにドットを含む Claude の名前を古いモデルとして読むので、magpie は Copilot の Claude モデルをハイフン表記（<code>claude-opus-5-5</code>）で渡し、Copilot に届く前に元の名前に戻します。他のツールには Copilot の表記のまま見えます。</p>
+
+    <h2 id="agents"><a class="anchor" href="#agents">ツールごとの使い方</a></h2>
+    <p><span class="ui">エージェント</span> タブで各ツールの行のモデルをクリックして選ぶか、ターミナルで選びます。各ガイドに、magpie がそのツールの設定に何を書くか、どう元に戻すかがあります。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-agents">コピー</button><pre id="ex-agents">magpie claude copilot/claude-opus-5.5
+magpie codex copilot/gpt-5.4
+magpie gemini model copilot/gpt-5.4-mini
+magpie opencode copilot/claude-opus-5.5</pre></div>
+    <ul>
+      <li><b>Claude Code</b> は Anthropic Messages を話します。Copilot の Claude モデルも Messages で提供されているので、リクエストはそのまま渡ります。GPT や Gemini のモデルには magpie が変換して渡します。<a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>。</li>
+      <li><b>Codex</b> が話すのは OpenAI Responses だけで、magpie も Copilot の OpenAI モデルには Responses で問い合わせるので、リクエストはそのまま渡ります。これらのモデルでは Codex の Web 検索を Copilot 側が実行し、Codex のネイティブなコンパクションも使えます。Copilot の Claude モデルではネイティブなコンパクションは使えません。<a href="/docs/ja/codex-models">Codex で他のモデル</a>。</li>
+      <li><b>Gemini CLI</b> は Gemini の API を話します。magpie がゲートウェイに向けて変換します。<a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>。</li>
+      <li><b>OpenCode</b> には、magpie が <code>opencode.json</code> にモデルを推論バリアントつきで書きます。<a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>。</li>
+    </ul>
+    <p>Copilot CLI も magpie がつなぐエージェントの一つです。その行では <code>auto</code>（Copilot が選ぶ）と Copilot 自身のモデルに加えて、magpie に追加した他のどのモデルも選べます。それらは Copilot CLI の <code>providers.json</code> を通じて届きます。</p>
+
+    <h2 id="apis"><a class="anchor" href="#apis">リクエストが Copilot に届くまで</a></h2>
+    <p>Copilot はすべてのモデルをすべての API で提供しているわけではありません。最新の OpenAI モデルは Responses だけ、Claude モデルは Chat Completions と Anthropic Messages、Gemini モデルと古いモデルは Chat Completions だけです。magpie はリクエストをそのモデルが使える API に送り、ツールの API と違えば変換します。ストリーミングとツール呼び出しもそのままです。</p>
+    <ul>
+      <li><b>API が違うとき。</b>Copilot がそのモデルはこの API では提供していないと答えたら、magpie はリクエストを次の API 向けに組み直して送り、どれが通ったかを覚えます。</li>
+      <li><b>自分で固定する。</b><code>magpie model api copilot/&lt;model&gt; chat</code>（または <code>responses</code>、<code>anthropic</code>）で、そのモデルをその API だけで問い合わせます。<code>auto</code> で magpie の選択に戻ります。</li>
+      <li><b>Gemini のツール定義。</b>Copilot の Gemini モデルは、Codex のツール定義の一部を 400「invalid request body」で断っていました。magpie は安全に書き換えられると確かめられたものを書き換え、それらのツールが届くようにします。</li>
+    </ul>
+
+    <h2 id="auto"><a class="anchor" href="#auto">Copilot Auto</a></h2>
+    <p><code>copilot/auto</code> は、Copilot があなたのアカウント向けに選ぶモデルです。Copilot の <code>/models</code> には出ないので、magpie が必ず追加します。学生プランで選べるのはこれだけです。</p>
+    <ul>
+      <li>magpie はそのターンのプロンプトを付けて、Copilot Chat の既定の設定で Copilot に選択を求めます。選ばれたモデルは最長 1 時間使い回します。</li>
+      <li>Copilot がそのアカウントに Auto を提供していないか、アカウントが断られたモデルを選んだときは、アカウントが手動で選べるモデルが 10 分間代わりを務めます。順番は Copilot のベースモデル、その既定モデル、<code>gpt-4.1</code>、プレミアムでないモデル、残りのモデルです。</li>
+      <li>Auto が選んだモデルをその後 Copilot が断ったら、magpie は別のモデルを選んでリクエストを送り直します。</li>
+      <li>Auto が選んだモデルはリクエストのルートに記録されるので、どのモデルが答えたかがわかります。</li>
+    </ul>
+
+    <h2 id="usage"><a class="anchor" href="#usage">プレミアムリクエスト、使用量、費用</a></h2>
+    <p>Copilot の各アカウントには、GitHub が報告する 3 つの利用枠を示すカードがあります。<span class="ui">プレミアムリクエスト</span>、<span class="ui">チャットリクエスト</span>、<span class="ui">補完</span> で、それぞれ「使用量 / 利用枠」の形です。<code>magpie accounts copilot</code> も同じ内容を表示します。</p>
+    <ul>
+      <li><b>毎月。</b>利用枠は毎月、GitHub が示す日に更新されます。</li>
+      <li><b>無制限</b>の枠は <span class="ui">無制限</span> と表示されます。GitHub が数字を示さない枠はカードに出さず、無制限とはみなしません。</li>
+      <li><b>1 ターン 1 リクエスト。</b>入力した 1 ターンは 1 リクエストとして課金され、そのターンを続けるツールの結果は数えられません。</li>
+      <li><b>Business と Enterprise。</b>利用枠を使い切ったシートは一時停止されるので、magpie はそのアカウントを使い切ったものとして次のアカウントに移ります。組織で共有するプレミアム利用枠も、使い切ると使い切りと表示されます。</li>
+      <li><b>その他のプラン。</b>プレミアム利用枠を超えて支払えるプランなら、使い切ってもアカウントは止まりません。補完も数えますが、magpie を通るリクエストは補完を使いません。</li>
+      <li><b>利用枠を使わないモデル。</b>Copilot のベースモデル <code>gpt-4.1</code> は、どのプランでも利用枠に計上されません。</li>
+    </ul>
+    <p><span class="ui">使用量</span> タブは、magpie を通った各ツールとモデルのトークン、キャッシュヒット、費用を数えます。サブスクリプションの費用はモデル提供元の定価による見積もりで、モデルに価格を設定していればその価格を使います。Anthropic 自身の価格と違う点が一つあります。Copilot はキャッシュ書き込みを保持時間にかかわらず同じ価格で課金するので、magpie は 1 時間のキャッシュ書き込みを 5 分の価格で計算します。<code>claude-opus-5.5</code> なら 100 万トークンあたり 5 ドルで、Anthropic の入力 2 倍なら 8 ドルになるところです。</p>
+
+    <h2 id="accounts"><a class="anchor" href="#accounts">複数アカウントとフォールバック</a></h2>
+    <ul>
+      <li><b>アカウントを追加する。</b>Copilot のタイルをもう一度クリックするか、<code>magpie accounts add copilot</code> をもう一度実行します。使用中のアカウントが先頭に、残りは追加した順に並びます。</li>
+      <li><b>どれを先に使うか決める。</b><code>magpie accounts switch copilot &lt;login&gt;</code> で切り替え、<code>magpie accounts forget copilot &lt;login&gt;</code> で削除します。同じログイン名が github.com と GHE.com の両方にあるときは、フルネーム（<code>you@acme.ghe.com</code>）で指定するか <code>--host</code> を付けます。</li>
+      <li><b>リクエストを分散する。</b>Copilot の行で使うアカウントにチェックを入れます。<span class="ui">ルーティング</span> で分散方法を決め、既定は <span class="ui">スマート</span> です。プロバイダの <span class="ui">フォールバック</span> には、すべてのアカウントがクォータ切れ、レート制限、障害のときに使うモデルを並べます。<a href="/docs/ja/subscriptions#accounts">サブスクを任意のエージェントで</a>を参照してください。</li>
+      <li><b>2 つのサブスクリプションで同じモデル。</b>Claude サブスクリプションの Claude Opus と Copilot の Claude Opus は、自動で 1 つのグループ <code>auto/&lt;model&gt;</code> になります。順番を自分で決めるなら <code>magpie group add "Opus anywhere" models=claude/claude-opus-5-5,copilot/claude-opus-5.5 routing=order</code> です。</li>
+      <li><b>エディタのサインインが切れたとき。</b>Copilot のエディタが持つトークンを GitHub が拒否しても、同じログイン名で magpie にサインインしたアカウントは残り、そのまま使われます。</li>
+    </ul>
+
+    <h2 id="trouble"><a class="anchor" href="#trouble">トラブルシューティング</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>表示</th><th>意味</th></tr>
+      <tr><td>GitHub がこの Copilot のサインインを拒否しました。再度サインインしてください</td><td>GitHub がアカウントのトークンを受け付けなくなりました。その行からサインインし直すと、アカウントはその場で更新され、設定は残ります。ネットワークエラーや GitHub の 5xx で印が付くことはなく、リクエストが一度通れば印は消えます。</td></tr>
+      <tr><td>the GitHub token Copilot’s editors keep in … was refused</td><td>エディタのサインインが切れています。エディタか magpie で Copilot にサインインし直すか、そのファイルを別の場所に移してください。</td></tr>
+      <tr><td>&lt;login&gt; has no Copilot subscription</td><td>承認した GitHub アカウントに Copilot のプランがありません。シートのあるアカウントでサインインしてください。</td></tr>
+      <tr><td>Copilot doesn’t serve this model on Anthropic’s Messages API; it isn’t about your plan</td><td>Copilot はそのモデルを他の API でだけ提供しています。プランの問題ではありません。<code>magpie model api copilot/&lt;model&gt; chat</code> で Chat Completions に送れます。</td></tr>
+      <tr><td>The requested model is not supported.</td><td>Copilot が今このアカウントにそのモデルを提供していません。magpie はアカウントのモデル一覧と各ツールの選択肢から 6 時間外し、その後もう一度試します。Auto なら別のモデルを選んで送り直します。</td></tr>
+      <tr><td>Copilot doesn’t offer Auto to this account …</td><td>Copilot が選択を返さず、アカウントにも手動で選べるモデルがありません。<code>github.com/settings/copilot</code> でプランを確認してください。</td></tr>
+      <tr><td>the code expired; start again · the sign-in was declined on GitHub</td><td>入力前にコードの期限が切れたか、GitHub のページで拒否されました。サインインをやり直してください。</td></tr>
+      <tr><td>Copilot signs in on github.com or an enterprise’s &lt;name&gt;.ghe.com, not …</td><td><code>--host</code> に github.com でも GHE.com でもないアドレスが指定されました。</td></tr>
+      <tr><td>subscription accounts are off in magpie</td><td><span class="ui">設定 → プライバシー → サブスクリプションアカウント</span> がオフ（または <code>magpie accounts discovery off</code> を実行済み）なので、magpie はどのサインインも読まず、Copilot を含めどのサブスクリプションも提供しません。オンにするか、<code>magpie accounts discovery on</code> を実行してください。</td></tr>
+    </table></div>
+
+    <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
+    <h3>Claude Code で Copilot のサブスクリプションを使うには？</h3>
+    <p>magpie で Copilot にサインインし（プロバイダ → プロバイダを追加 → Copilot。GitHub で入力するコードが表示されます）、Claude Code の行で <code>copilot/claude-opus-5.5</code> などの <code>copilot/…</code> モデルを選ぶか、<code>magpie claude copilot/claude-opus-5.5</code> を実行します。magpie が Claude Code の <code>settings.json</code> を書きます。Copilot の Claude モデルには Claude Code の Anthropic リクエストがそのまま届き、GPT と Gemini のモデルには magpie が変換して渡します。</p>
+    <h3>Codex で Copilot のモデルを使えますか？</h3>
+    <p>使えます。Codex は OpenAI Responses を話し、magpie も Copilot の OpenAI モデルには Responses で問い合わせるので、リクエストはそのまま渡り、Web 検索も使えます。Copilot の Claude と Gemini のモデルは magpie が変換します。Codex の行で選ぶか <code>magpie codex copilot/gpt-5.4</code> を実行すると、Codex の <code>/model</code> に並びます。</p>
+    <h3>Gemini CLI や OpenCode でも Copilot を使えますか？</h3>
+    <p>使えます。<code>magpie gemini model copilot/gpt-5.4-mini</code> か <code>magpie opencode copilot/claude-opus-5.5</code> を実行するか、そのツールの行でモデルを選びます。magpie が Gemini CLI のリクエストを変換し、OpenCode の <code>opencode.json</code> にモデルを書きます。</p>
+    <h3>VS Code などのエディタで Copilot にサインインしておく必要はありますか？</h3>
+    <p>ありません。magpie はデバイスコードで自分で GitHub にサインインします。このコンピュータで Copilot のエディタプラグインや Copilot CLI がすでにサインインしていれば、そのサインインも読みますが、書き換えることはありません。</p>
+    <h3>プレミアムリクエストを消費しますか？</h3>
+    <p>リクエストはあなたのアカウントで Copilot に送られるので、Copilot の数え方でプランに計上されます。入力した 1 ターンは 1 リクエストとして課金され、そのターンを続けるツールの結果は数えられません。magpie は各アカウントのプレミアムリクエスト、チャットリクエスト、補完の使用量を表示します。</p>
+    <h3>Copilot Business・Enterprise・GHE.com でも使えますか？</h3>
+    <p>使えます。magpie は GitHub からプラン（Free、Pro、Pro+、Max、Education、Business、Enterprise）を読みます。GHE.com のエンタープライズは <code>magpie accounts add copilot --host &lt;name&gt;.ghe.com</code> でサインインします。Business や Enterprise のシートは利用枠を使い切ると一時停止されるので、magpie は更新までそのアカウントを使い切ったものとして扱います。</p>
+    <h3>Copilot のモデルが一覧にないのはなぜですか？</h3>
+    <p>magpie が並べるのは、Copilot の <code>/models</code> がそのアカウントに返すモデルです。チャットモデルだけで、どのモデルピッカーにも出ないものと、そのアカウントで有効にできないものは除きます。Copilot が「The requested model is not supported.」で断ったモデルは 6 時間外し、プランが変わった場合に備えてその後もう一度試します。</p>
+
+    <p style="margin-top:48px"><b>プロバイダ別：</b><a href="/docs/ja/deepseek">DeepSeek</a> · <a href="/docs/ja/kimi">Kimi と Kimi Code</a> · <a href="/docs/ja/glm">GLM Coding Plan</a> · <a href="/docs/ja/qwen">Qwen</a> · <a href="/docs/ja/minimax">MiniMax</a> · <a href="/docs/ja/openrouter">OpenRouter</a> · <a href="/docs/ja/subscriptions">Claude・ChatGPT などのサブスク</a></p>
+    <p>ツールごとのガイド：<a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>、<a href="/docs/ja/codex-models">Codex で他のモデル</a>、<a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>、<a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>。困ったときは <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> で質問してください。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a href="/docs/ja/remote">リモート magpie</a>
+    <a href="/docs/ja/docker">Docker</a>
+    <a href="/docs/ja/privacy">プライバシー</a>
+    <a href="/docs/ja/masking">プライバシーマスキング</a>
+    <a href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a href="/docs/ja/library">ライブラリ</a>
+    <a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a href="/docs/ja/local-models">ローカルモデル</a>
+    <a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/ja/contributors">コントリビューター</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "コピーしました"; setTimeout(() => (b.textContent = "コピー"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
