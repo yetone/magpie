@@ -23508,8 +23508,7 @@ if (mode === "window") { $("#open").remove(); $("#openMain").remove(); $("#quit"
 else { $("#nav").remove(); $("#side").remove(); }
 if (mode !== "window" || !document.body.classList.contains("linux")) $("#winclose").remove();
 
-// Config files may change underneath us (another magpie, an editor); reload when
-// the panel comes back into view.
+// reload the config files when the panel comes back into view
 // The magpie in the corner flaps and wags its tail as the window opens and
 // when the pointer comes over it.
 function wag() {
