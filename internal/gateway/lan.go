@@ -223,8 +223,12 @@ var ifaceNames = func() []string {
 // other containers on the NAS needed 172.17.0.1); host.docker.internal is
 // not there on Linux unless a container is given it. "" when magpie is
 // not in a container, is on the host's network, or has no default route.
+//
+// In a LazyCat app it is "" too: the bridge's gateway there is LazyCat's
+// own, where no container port is published, and other LazyCat apps reach
+// magpie at its domain.
 func ContainerHostURL() string {
-	if !inThisContainer() || hostNetwork(ifaceNames()) {
+	if lazyCatURL() != "" || !inThisContainer() || hostNetwork(ifaceNames()) {
 		return ""
 	}
 	gw := defaultGateway(routeTable())
@@ -333,10 +337,27 @@ func overlayRoot(mountinfo string) bool {
 
 // LANURLs are the addresses other machines on the network reach the
 // gateway at: MAGPIE_PUBLIC_URL when set, else one per IPv4 address this
-// computer has there.
+// computer has there. In a LazyCat app on the box's network, the box's
+// LAN addresses come first, before the app's domain, which only devices
+// with LazyCat's client reach; a MAGPIE_PUBLIC_URL of the user's own
+// (another domain, an address) stays first.
 func LANURLs() []string {
 	if u := publicURL(); u != "" {
-		return []string{u}
+		lc := lazyCatURL()
+		if lc == "" || pinnedHost() != "" {
+			return []string{u}
+		}
+		var box []string
+		for _, h := range lazyCatBoxHosts() {
+			box = append(box, Scheme()+"://"+net.JoinHostPort(h, Port()))
+		}
+		if len(box) == 0 {
+			return []string{u}
+		}
+		if u == lc {
+			return append(box, lc)
+		}
+		return slices.Concat([]string{u}, box, []string{lc})
 	}
 	// a gateway MAGPIE_ADDR keeps on one host is reached there alone; on
 	// loopback, only through a proxy, whose address MAGPIE_PUBLIC_URL says
@@ -369,9 +390,12 @@ func LANURLs() []string {
 // Settings offered http://198.18.0.1 instead of 192.168.110.x (coeo91 on
 // Discord). It goes by the address, not the interface's name: Tailscale's
 // is a utun too, and its address is reached.
-func LANHosts() []string {
+func LANHosts() []string { return lanHostsOf(hostIPs()) }
+
+// lanHostsOf is LANHosts of the addresses ips.
+func lanHostsOf(ips []net.IP) []string {
 	var home, near, far []string
-	for _, ip := range hostIPs() {
+	for _, ip := range ips {
 		if ip.To4() == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() || fakeIP(ip) {
 			continue
 		}

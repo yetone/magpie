@@ -294,7 +294,19 @@ try { lanWant = localStorage.getItem("magpie.lanAddress") || ""; } catch {}
 // on the host reach it at the host's Docker bridge address, the
 // container's default route (jiezhengj on Discord: other containers on a
 // NAS needed http://172.17.0.1:3425), which follows, said to be theirs.
-function lanShown(urls, container, bridge) {
+//
+// In a LazyCat app (lazy: its domain, and whether the box's LAN addresses
+// are listed), the domain serves only devices with LazyCat's client, and
+// on a bridge network the box's LAN address isn't known, nor is the port
+// there: the line says how to get it there (mtoolstec on X wanted
+// http://192.168.0.100:3425/v1 and was offered the domain and the
+// container bridge's 172.28.3.65).
+function lanShown(urls, container, bridge, lazy = {}) {
+  if (lazy.url && !lazy.box) {
+    const port = lazyPort();
+    return { urls, others: [], head: t("LazyCat"),
+      sub: t("Only devices with the LazyCat client reach this address. For other devices to use the box’s LAN IP on port {port}, forward port {port} to Magpie in LazyCat’s LAN port forwarding app", { port }) };
+  }
   const others = bridge ? [bridge] : [];
   if (!container) return { urls: [...urls, ...others.filter((u) => !urls.includes(u))], others, sub: "" };
   const host = location.hostname, at = urls[0] || bridge ? new URL(urls[0] || bridge) : null;
@@ -310,7 +322,14 @@ function lanShown(urls, container, bridge) {
 // which says whether its addresses are a container's and where other
 // containers reach it
 function gwLAN(g) {
-  return lanShown(g?.lan && g.lanURLs || [], !!g?.container, g?.lan && g.containerHost || "");
+  return lanShown(g?.lan && g.lanURLs || [], !!g?.container, g?.lan && g.containerHost || "",
+    { url: g?.lazyCat || "", box: !!g?.lazyCatBox });
+}
+// lazyPort: the gateway's port, for the LazyCat line: its listen address'
+// (bootPrefs or Settings' gateway), 3425 when it names none
+function lazyPort() {
+  const at = prefs?.gateway || sideGwAt?.url || "";
+  return /:(\d+)\/?$/.exec(at)?.[1] || "3425";
 }
 // addrWho: the words every list of the gateway's addresses names one by,
 // for g (providers' gateway, or Settings' read as one): this computer's,
@@ -322,6 +341,7 @@ function gwLAN(g) {
 function addrWho(g, u, others = []) {
   if (u === g.url) return t("This computer");
   if (others.includes(u)) return t("Other containers on this host");
+  if (u && u === g.lazyCat) return t("LazyCat client");
   if ((g.lanPublic || []).includes(u) || u === g.publicURL && g.publicKind === "internet") return t("On the internet");
   if (u === g.publicURL && g.publicKind !== "local") return t("Public address");
   return t("Local network");
@@ -329,7 +349,7 @@ function addrWho(g, u, others = []) {
 // pubWho: About's MAGPIE_PUBLIC_URL row, from /api/settings, by addrWho
 // (a private address is the local network's; jiezhengj on Discord)
 function pubWho(s) {
-  return addrWho({ url: s.gateway, publicURL: s.publicURL, publicKind: s.publicKind, lanPublic: s.lanPublic }, s.publicURL,
+  return addrWho({ url: s.gateway, publicURL: s.publicURL, publicKind: s.publicKind, lanPublic: s.lanPublic, lazyCat: s.lanLazyCat }, s.publicURL,
     s.lanContainerHost ? [s.lanContainerHost] : []);
 }
 // gwFar: where other machines reach the gateway, for the sidebar and the
@@ -343,7 +363,10 @@ function gwFar(g) {
 // address picked here, else the first
 function sideLAN(g) {
   const u = gwFar(g);
-  return u[0] && (g.publicURL || (u.includes(lanWant) ? lanWant : u[0]));
+  // a LazyCat app's domain is MAGPIE_PUBLIC_URL's too, and the box's LAN
+  // address before it is the one other devices use
+  const pub = g.publicURL && !(g.lazyCatBox && g.publicURL === g.lazyCat) ? g.publicURL : "";
+  return u[0] && (pub || (u.includes(lanWant) ? lanWant : u[0]));
 }
 // the line was drawn from boot.js before this script came
 if (sideGwAt) renderSideGw();
@@ -372,7 +395,8 @@ function renderLAN(s) {
   row(t("Share on local network"), t("Agents on other computers on this network, or through a tunnel to this one such as Cloudflare Tunnel, can use magpie’s models with a gateway key from Gateway"), "",
     segs([["off", t("Off")], ["on", t("On")]], s.lan ? "on" : "off", (v) => set({ on: v === "on" })));
   if (!s.lan) return;
-  const { urls, others, sub } = lanShown(s.lanURLs || [], s.lanContainer, s.lanContainerHost);
+  const { urls, others, sub, head } = lanShown(s.lanURLs || [], s.lanContainer, s.lanContainerHost,
+    { url: s.lanLazyCat || "", box: !!s.lanLazyCatBox });
   if (!urls.length) row(t("Address"), t("This computer has no local network address right now"), "");
   else {
     lanSelectedURL = urls.includes(lanWant) ? lanWant : urls[0];
@@ -389,7 +413,7 @@ function renderLAN(s) {
         e.stopPropagation();
         if (address.classList.contains("open")) return closeProtoMenu();
         const suffix = lanProtocol === "openai" ? "/v1" : "";
-        openProtoMenu(address, urls.map((u) => ({ v: u, name: u + suffix, note: far.has(u) ? t("On the internet") : others.includes(u) ? t("Other containers on this host") : "" })), lanSelectedURL,
+        openProtoMenu(address, urls.map((u) => ({ v: u, name: u + suffix, note: far.has(u) ? t("On the internet") : others.includes(u) ? t("Other containers on this host") : u === s.lanLazyCat ? t("LazyCat client") : "" })), lanSelectedURL,
           (v) => { lanSelectedURL = lanWant = v; keepPick("magpie.lanAddress", v); update(); renderSideGw(); }, "Address", "lan-address-menu");
       };
     }
@@ -417,7 +441,7 @@ function renderLAN(s) {
     addressRow.classList.add("lan-address-row");
     update();
   }
-  if (sub) row(t("In a container"), sub, "").classList.add("lan-container");
+  if (sub) row(head || t("In a container"), sub, "").classList.add("lan-container");
 }
 
 // renderWebPage: Browser access, the app's own page served to a browser

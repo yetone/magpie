@@ -325,7 +325,7 @@ function renderGatewayLan() {
     // (the host's Docker bridge address), then one on the internet (an
     // ISP's static one); a name said once for the lines it heads
     const said = [addrWho(g, shown, others)], rest = urls.filter((u) => u !== shown);
-    const order = [t("Local network"), t("Public address"), t("Other containers on this host"), t("On the internet")];
+    const order = [t("Local network"), t("Public address"), t("LazyCat client"), t("Other containers on this host"), t("On the internet")];
     rest.map((u) => [addrWho(g, u, others), u]).sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
       .forEach(([who, u]) => { line(said.at(-1) === who ? "" : who, u); said.push(who); });
     if (!urls.length) list.append(el("div", "gw-url-none", t("This computer has no local network address right now")));

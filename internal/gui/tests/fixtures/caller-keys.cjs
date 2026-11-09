@@ -35,11 +35,15 @@ function fixture(lang, theme, events, options = {}) {
   // options.container: magpie runs in a container, and lanURLs are its
   // own; options.containerHost is where other containers on the host
   // reach the gateway (the host's Docker bridge address)
+  // options.lazyCat: a LazyCat app's domain, and options.lazyCatBox that
+  // magpie is on the box's network, so lanURLs are the box's
   const container = () => ({ ...(lan && options.container ? { container: true } : {}),
-    ...(lan && options.containerHost ? { containerHost: options.containerHost } : {}) });
+    ...(lan && options.containerHost ? { containerHost: options.containerHost } : {}),
+    ...(options.lazyCat ? { lazyCat: options.lazyCat, ...(options.lazyCatBox ? { lazyCatBox: true } : {}) } : {}) });
   const lanState = () => ({ lang, theme, lan,
     lanURLs: lan ? lanURLs : [], ...lanPublic(), ...(container().container ? { lanContainer: true } : {}),
-    ...(container().containerHost ? { lanContainerHost: container().containerHost } : {}), fx: { rate: 7.2, at: new Date().toISOString() },
+    ...(container().containerHost ? { lanContainerHost: container().containerHost } : {}),
+    ...(lan && options.lazyCat ? { lanLazyCat: options.lazyCat, ...(options.lazyCatBox ? { lanLazyCatBox: true } : {}) } : {}), fx: { rate: 7.2, at: new Date().toISOString() },
     ...(options.publicURL ? { gateway: "http://127.0.0.1:3999", ...publicURL() } : {}) });
   const rows = [
     { callerKeyId: "laptop", callerKeyName: "Laptop", in: 100, out: 10, cost: 0.1 },

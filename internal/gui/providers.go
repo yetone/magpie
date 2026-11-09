@@ -605,6 +605,10 @@ type gatewayJSON struct {
 	// ContainerHost: where other containers on this host reach the
 	// gateway while magpie runs in one (gateway.ContainerHostURL)
 	ContainerHost string `json:"containerHost,omitempty"`
+	// LazyCat: a LazyCat app's domain, which only devices with LazyCat's
+	// client reach; LazyCatBox: the box's LAN addresses are listed too
+	LazyCat    string `json:"lazyCat,omitempty"`
+	LazyCatBox bool   `json:"lazyCatBox,omitempty"`
 	// OnNetwork: MAGPIE_ADDR puts it beyond loopback (a server, a Docker
 	// image), so every caller is shown a gateway key, and LAN is true too:
 	// callers from elsewhere, a container's host among them, need one
@@ -1313,6 +1317,7 @@ func providersState() providersJSON {
 		s.Gateway.LANURLs = gateway.LANURLs()
 		s.Gateway.LANPublic = gateway.PublicURLs(s.Gateway.LANURLs)
 		s.Gateway.Container, s.Gateway.ContainerHost = gateway.ContainerAddrs(), gateway.ContainerHostURL()
+		s.Gateway.LazyCat, s.Gateway.LazyCatBox = gateway.LazyCatURL(), gateway.LazyCatBox()
 		if u := gateway.PublicURL(); slices.Contains(s.Gateway.LANURLs, u) {
 			s.Gateway.PublicURL, s.Gateway.PublicKind = u, gateway.URLKind(u)
 		}

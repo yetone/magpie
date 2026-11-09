@@ -228,6 +228,9 @@ func TestInContainer(t *testing.T) {
 // MAGPIE_PUBLIC_URL template a system didn't render is no address, and
 // LazyCat's is used instead.
 func TestLazyCatPublicURL(t *testing.T) {
+	// an app's container on the box's bridge (lazycat_test.go)
+	lazyCatNet(t, []string{"lo", "eth0"}, map[string][]string{"eth0": {"172.28.3.66"}}, bridgeRoutes, "172.28.3.65")
+	inThisContainer = func() bool { return inContainer("/") }
 	t.Setenv("MAGPIE_ADDR", "0.0.0.0:3425")
 	t.Setenv("MAGPIE_PUBLIC_URL", "")
 	t.Setenv("LAZYCAT_APP_DOMAIN", "")
