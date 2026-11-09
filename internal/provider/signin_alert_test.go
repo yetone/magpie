@@ -161,3 +161,18 @@ func TestDueSignIns(t *testing.T) {
 		t.Fatalf("a mark kept past alertKeep: %v", marks)
 	}
 }
+
+// A look at the accounts builds the plugins' list once, not once for each
+// account (PluginOf) and again for the list of accounts: it ran twice
+// every two minutes, all day.
+func TestSignInLookBuildsPluginsOnce(t *testing.T) {
+	claudeAuthFixture(t, claudeAuthLapse)
+	forgetAccountCaches()
+	before := pluginsBuilt.Load()
+	if len(signInStates()) == 0 {
+		t.Fatal("no account looked at")
+	}
+	if n := pluginsBuilt.Load() - before; n != 1 {
+		t.Errorf("the plugins' list built %d times in one look, want 1", n)
+	}
+}

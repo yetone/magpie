@@ -402,8 +402,15 @@ func holdingNow() bool {
 // heldPlugins is plugin.Cached, which reads the plugins' list and
 // sign-ins each time, and PluginOf asks for every model.
 func heldPlugins() []plugin.Provider {
-	return heldOf("plugins", func() []plugin.Provider { return slices.Clip(plugin.Cached()) })
+	return heldOf("plugins", func() []plugin.Provider {
+		pluginsBuilt.Add(1)
+		return slices.Clip(plugin.Cached())
+	})
 }
+
+// pluginsBuilt counts the plugins' list built, for the test that a look at
+// the accounts builds it once.
+var pluginsBuilt atomic.Int64
 
 // fromEntries is what was built from a catalog, and which catalog: its
 // first entry and its length.

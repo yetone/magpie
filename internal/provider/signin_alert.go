@@ -82,6 +82,11 @@ type signInState struct {
 // whether it has to be signed in again, and when a Claude one's sign-in
 // ends.
 func signInStates() []signInState {
+	// one look, held: each account's PluginOf and Logins built the
+	// plugins' list and every login again, 2.5 MB a look with real
+	// accounts, twice every two minutes (the app's alert and the
+	// gateway's hooks each look)
+	defer Hold()()
 	ends := map[string]time.Time{}
 	var out []signInState
 	for _, p := range Accounts() {
