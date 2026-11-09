@@ -68,6 +68,28 @@ func arkDecides(base string) bool {
 	return strings.HasPrefix(h, "ark.") && strings.HasSuffix(h, ".volces.com")
 }
 
+// arkSystemOne is the System One base of a key's provider asked at
+// Volcengine Ark's pay as you go (ark.<region>.volces.com/api/v3, as chat
+// completions or Responses): …/api/v1 on the same host, where
+// volcengine-decision asks it; "" for any other provider. The Coding and
+// Agent Plans' paths answer System One nothing, and a signed-in account,
+// a plugin, a remote magpie and Vertex say their own.
+func (p Provider) arkSystemOne() string {
+	if p.Account != nil || p.IsRemoteMagpie() || p.IsVertex() {
+		return ""
+	}
+	for _, raw := range []string{p.Chat, p.Responses} {
+		if !arkDecides(raw) {
+			continue
+		}
+		u, err := url.Parse(raw)
+		if err == nil && strings.TrimRight(u.Path, "/") == "/api/v3" {
+			return u.Scheme + "://" + u.Host + "/api/v1"
+		}
+	}
+	return ""
+}
+
 // vendorDecision is the decision model of the vendor whose System One
 // API base is, Bailian's or Ark's, which its model list never names.
 func vendorDecision(base string) (catalog.Model, bool) {
@@ -649,13 +671,15 @@ func Deciders() []Entry {
 
 // OfferedDeciders are the Deciders a routing group's pickers and templates
 // offer: of a provider whose decision models are listed beside its chat
-// models (OpenRouter's, a Bailian plan's, a plugin's, a remote magpie's),
-// with picks saved, those among the picks alone, as its editor shows the
+// models (OpenRouter's, a plugin's, a remote magpie's), with picks saved,
+// those among the picks alone, as its editor shows the
 // rest unpicked (coeo91 on Discord: two OpenRouter models picked, and a
 // new group's picker listed OpenRouter's twenty-odd decision models after
 // them). With none picked every one is offered, as before. keep, when
 // given, says a decision model a group names already, offered whatever
-// the picks, so a group made of one before reads as it did.
+// the picks, so a group made of one before reads as it did. A vendor's
+// own one decision model beside its chat models (a Bailian plan's, Ark's
+// pay as you go) is offered whatever the picks.
 func OfferedDeciders(keep func(id string) bool) []Entry {
 	if keep == nil {
 		keep = func(string) bool { return false }
@@ -676,7 +700,10 @@ func deciders(keep func(id string) bool) []Entry {
 		ms := p.Exposed()
 		if !p.DecideOnly() && (len(p.Models) == 0 || p.listsDecisions() || p.bailianApart() || p.IsRemoteMagpie() || p.IsPlugin()) {
 			ms = p.decideModels() // the conversation picker's limit does not hide Jev
-			if keep != nil && len(p.Models) > 0 {
+			// a vendor's own one decision model (Bailian's, Ark's) is no
+			// list to pick from: its chat models picked, it is offered
+			// still, as nothing in the picks says it isn't wanted
+			if keep != nil && len(p.Models) > 0 && !p.bailianApart() {
 				ms = slices.DeleteFunc(slices.Clone(ms), func(m catalog.Model) bool {
 					return !slices.Contains(p.Models, m.ID) && !keep(p.ID+"/"+m.ID)
 				})

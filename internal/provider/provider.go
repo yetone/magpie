@@ -1755,6 +1755,13 @@ func normalize(p Provider) Provider {
 	if (p.Preset == OMLXPreset || p.Preset == MLXServePreset || p.Preset == "ollama" || p.Preset == "ollama-cloud") && p.Decide == "" && p.Chat != "" {
 		p.Decide = p.Chat
 	}
+	// one asked at Volcengine Ark's pay as you go, its preset's or a
+	// custom one of either protocol, answers System One on the same key:
+	// its decision model is offered with no URL to type (a user on
+	// Discord found no System One endpoint for Ark, custom or preset)
+	if p.Decide == "" {
+		p.Decide = p.arkSystemOne()
+	}
 	if p.Routing != Ordered && p.Routing != Rotate && p.Routing != LeastUsed && p.Routing != Pace && p.Routing != Weighted && p.Routing != FreeFirst && p.Routing != Fastest && p.Routing != Drain && !PluginRouting(p.Routing) {
 		p.Routing = ""
 	}

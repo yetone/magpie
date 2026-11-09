@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -156,5 +157,48 @@ func TestArkHeaderScopedToArk(t *testing.T) {
 	}
 	if ms := mixed.DecisionModels(); len(ms) != 1 || ms[0].ID != ArkDecision {
 		t.Fatalf("decision models: %+v", ms)
+	}
+}
+
+// A user on Discord found no System One endpoint for Volcengine Ark, its
+// preset's or a custom one (OpenAI Responses), and none of its models in
+// a routing group's classifier picker. Ark's pay as you go answers System
+// One on the same key at …/api/v1: a provider asked there, of either
+// protocol, offers Ark's decision model with no URL typed, its chat models
+// picked or not. The Coding and Agent Plans answer it nothing, and a URL
+// the user gave is kept.
+func TestArkPayAsYouGoDecides(t *testing.T) {
+	arkHome(t)
+	const v3, v1 = "https://ark.cn-beijing.volces.com/api/v3", "https://ark.cn-beijing.volces.com/api/v1"
+	for _, p := range []Provider{
+		{ID: "ark-responses", Name: "Ark Responses", Responses: v3 + "/", Key: "ark-1", Models: []string{"doubao-seed-2-1-pro-260628"}},
+		{ID: "ark-chat", Name: "Ark Chat", Chat: v3, Key: "ark-1"},
+		{ID: "ark-preset", Name: "Volcengine Ark", Preset: "volcengine", Chat: v3, Responses: v3, Key: "ark-1", Models: []string{"glm-4-7-251222"}},
+		{ID: "ark-coding", Name: "Ark Coding", Preset: "volcengine", Chat: "https://ark.cn-beijing.volces.com/api/coding/v3", Responses: "https://ark.cn-beijing.volces.com/api/coding/v3", Key: "ark-1", Models: []string{"glm-4-7-251222"}},
+		{ID: "ark-agent", Name: "Ark Agent", Chat: "https://ark.cn-beijing.volces.com/api/plan/v3", Key: "ark-1"},
+		{ID: "ark-own", Name: "Ark Own", Chat: v3, Decide: "https://ark.ap-southeast.volces.com/api/v3", Key: "ark-1"},
+		{ID: "other", Name: "Other", Responses: "https://api.example.com/api/v3", Key: "k"},
+	} {
+		if err := Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := map[string]string{"ark-responses": v1, "ark-chat": v1, "ark-preset": v1, "ark-coding": "", "ark-agent": "", "ark-own": "https://ark.ap-southeast.volces.com/api/v3", "other": ""}
+	for id, d := range want {
+		p, err := Find(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.Decide != d {
+			t.Errorf("%s: System One at %q, want %q", id, p.Decide, d)
+		}
+	}
+	var got []string
+	for _, e := range OfferedDeciders(nil) {
+		got = append(got, e.ID)
+	}
+	slices.Sort(got)
+	if w := []string{"ark-chat/" + ArkDecision, "ark-own/" + ArkDecision, "ark-preset/" + ArkDecision, "ark-responses/" + ArkDecision}; !slices.Equal(got, w) {
+		t.Fatalf("classifiers offered: %q, want %q", got, w)
 	}
 }

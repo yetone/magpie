@@ -149,7 +149,12 @@ func (s *Server) serveDecisionGroup(w http.ResponseWriter, r *http.Request, body
 // out of quota was asked on every turn, the next never).
 func (s *Server) decideKeys(p provider.Provider, model string) ([]candidate, planned) {
 	p.Fallback = nil
-	return s.plan(p, model, provider.Chat)
+	cs, pl := s.plan(p, model, provider.Chat)
+	// a key on another of its preset's plans is asked at that plan's
+	// endpoints, where there may be no System One (Volcengine's Coding
+	// Plan beside its pay as you go): never there
+	cs = slices.DeleteFunc(cs, func(c candidate) bool { return !c.p.Decides() })
+	return cs, pl
 }
 
 // serveDecideTries answers a System One request with cs, a decision

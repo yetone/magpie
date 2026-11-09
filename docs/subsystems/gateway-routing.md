@@ -811,7 +811,9 @@ A single decision provider of several keys or accounts (TypeSafe Jev with
 a key out of quota, fflake33 on Discord) is asked the same way, at
 `/v1/systemone` (`serveSystemOne`) and as a classifier (`askClassifier` →
 `askDecider`): `decideKeys` plans its keys in its routing's order (Smart,
-In order), `probeOne` leaves out all but the resting one back soonest, and
+In order), leaving out a key whose plan has no System One (a Volcengine
+Coding Plan key beside pay as you go), `probeOne` leaves out all but the
+resting one back soonest, and
 `serveDecideTries` / `askDecideTries` ask each in turn as for a group, a
 refused one resting. Before, every call went to its first key, whatever the
 others' state. As a classifier, every try shares the one classifier's wait

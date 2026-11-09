@@ -8050,7 +8050,8 @@ function asTyped() {
   const body = { typed: true, key: keys.length > 1 ? keys[0] : (draft.key || "").trim(), chat: (draft.chat || "").trim(), responses: (draft.responses || "").trim(), anthropic: (draft.anthropic || "").trim(), gemini: (draft.gemini || "").trim(), modelsURL: (draft.modelsURL || "").trim() };
   Object.assign(body, movedURLs(draft));
   // a System One base is asked at POST …/systemone, not on the three APIs
-  if (draft.api === "decide") body.decide = (draft.decide || "").trim();
+  // and one given beside a conversation URL, under More endpoints
+  if (draft.api === "decide" || !draft.preset && (draft.decide || "").trim()) body.decide = (draft.decide || "").trim();
   // a Vertex AI provider is asked at the project typed, with the
   // credentials typed, as a pasted key is
   if (draft.vertex) body.vertex = vertexOfDraft();
@@ -10008,7 +10009,13 @@ function drawEditor(p, presetID) {
     };
     wsIn.oninput = () => { draft.workspace = wsIn.value; fill(); };
     du.oninput = () => { draft.decide = du.value; };
-    onRegion = (r) => { draft.region = r.id; if (r.decide) { draft.decide = du.value = r.decide; fill(); } };
+    // a plan with none of its own (Volcengine's Coding Plan) drops the
+    // one of the plan it was at; the gateway finds pay as you go's itself
+    onRegion = (r) => {
+      draft.region = r.id;
+      if (r.decide) { draft.decide = du.value = r.decide; fill(); }
+      else if (!pr?.decide) draft.decide = du.value = r.chat && r.chat === p?.chat ? p?.decide || "" : "";
+    };
     ed.append(...wsRow);
     fill();
     // Jev's own presets name it; the others ask their own decision models
@@ -10021,7 +10028,7 @@ function drawEditor(p, presetID) {
     const row = field(t("Endpoints"), ebox, "");
     refreshEndpoints = () => {
       const base = p || pr || {};
-      const src = { chat: draft.chat || base.chat || "", responses: draft.responses || base.responses || "", anthropic: draft.anthropic || base.anthropic || "", decide: base.decide || "" };
+      const src = { chat: draft.chat || base.chat || "", responses: draft.responses || base.responses || "", anthropic: draft.anthropic || base.anthropic || "", decide: (pr && !pr.decide ? draft.decide ?? base.decide : base.decide) || "" };
       // Vertex AI's is the address its project and location make, shown
       // with its Test once a project is typed, saved one or not: with none
       // there is nowhere to ask
@@ -10049,13 +10056,16 @@ function drawEditor(p, presetID) {
       const add = (label, key, ph, hint) => {
         if (apiField[draft.api] === key) return;
         const i = input(draft[key], ph, "url");
-        i.oninput = () => { draft[key] = i.value; if (carried?.from === key) carried = null; showSearch(); showLocal(); showTLS(); showAuth(); showCompaction(); };
+        i.oninput = () => { draft[key] = i.value; if (carried?.from === key) carried = null; showSearch(); showLocal(); showTLS(); showAuth(); showCompaction(); draft.onModelPrefs?.(); };
         eps.append(...field(t(label), i, t(hint)));
       };
       add("OpenAI URL", "chat", "https://…/v1", "if the vendor also serves chat completions");
       add("Anthropic URL", "anthropic", "https://…", "if the vendor also serves Anthropic messages");
       add("Responses URL", "responses", "https://…/v1", "if the vendor serves the OpenAI Responses API (Codex uses it natively)");
       add("Gemini URL", "gemini", "https://…/v1beta", "if the vendor serves Google's Gemini API (generateContent)");
+      // beside a conversation URL: a model can then be set to System One
+      // under Model settings, for a routing group to ask
+      add("System One URL", "decide", "https://…/v1", "if the vendor also serves a decision API, POST …/systemone under it; a model set to System One under Model settings is asked there");
     };
     fillEndpoints();
     inner.append(eps);
@@ -10153,7 +10163,7 @@ function drawEditor(p, presetID) {
     const ph = replyHeadersOf(draft.passHeaders, true);
     if (ph.error) { shown(ed.querySelector(".pass-headers"))?.focus(NO_SCROLL); return editorError(t("Request headers to pass: {why}", { why: ph.error }), "warn"); }
     body.passHeaders = ph.value;
-    if (decides || custom) body.decide = (custom && draft.api !== "decide" && !p?.decide ? "" : draft.decide || "").trim();
+    if (decides || custom) body.decide = (draft.decide || "").trim();
     if ((body.decide || "").includes(WORKSPACE)) { ed.querySelector(".workspace-id")?.focus(NO_SCROLL); return editorError(t("Give the workspace ID your API key belongs to, or pick the Token Plan"), "warn"); }
     if (custom) {
       // the API picked for the Base URL is saved with it, and one left with

@@ -67,3 +67,35 @@ func (u *arkUp) got() []string {
 	defer u.mu.Unlock()
 	return slices.Clone(u.asked)
 }
+
+// An Ark provider at pay as you go answers System One there, on its own
+// key; a key of it on the Coding Plan is asked at the plan's endpoints,
+// which have none, so a decision is never sent with it.
+func TestArkDecisionSkipsPlanKeys(t *testing.T) {
+	fresh(t)
+	const v3 = "https://ark.cn-beijing.volces.com/api/v3"
+	if err := provider.Save(provider.Provider{ID: "volc", Name: "Volc", Preset: "volcengine", Chat: v3, Responses: v3,
+		Key: "k-api", KeyName: "API", Models: []string{"glm-4-7-251222"},
+		Keys: []provider.KeyAccount{{Name: "Coding", Key: "k-coding", Plan: "coding"}}}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := provider.Find("volc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Decide != "https://ark.cn-beijing.volces.com/api/v1" {
+		t.Fatalf("System One at %q", p.Decide)
+	}
+	// the vendor's decision model, and one both plans serve (the Coding
+	// Plan's list has it, so PlanServing keeps its key)
+	for _, m := range []string{provider.ArkDecision, "doubao-seed-2.1-lite"} {
+		cs, _ := New().decideKeys(*p, m)
+		var keys []string
+		for _, c := range cs {
+			keys = append(keys, c.p.Key+" "+c.p.Decide)
+		}
+		if !slices.Equal(keys, []string{"k-api https://ark.cn-beijing.volces.com/api/v1"}) {
+			t.Fatalf("%s asked with: %q", m, keys)
+		}
+	}
+}

@@ -115,7 +115,10 @@ conversation picks omit them. What a routing group's pickers, templates and
 the TUI offer is `OfferedDeciders`: with picks saved, only the picked
 decision models plus any a group names already, as the provider editor
 shows the rest unpicked (coeo91 on Discord: two free OpenRouter models
-picked, OpenRouter's decision models still offered beside them). Only remote decision entries use `entryFor`
+picked, OpenRouter's decision models still offered beside them). A
+vendor's own one decision model beside its chat models (`bailianApart`: a
+Bailian plan's, Ark's pay as you go) is no list to pick from, and is
+offered whatever the picks. Only remote decision entries use `entryFor`
 to apply user model names and limits; other decision providers retain their
 previous entry formatting. The editor's `providerInfo` in
 [`providers.go`](../../internal/gui/providers.go) sends `deciders: []` when
@@ -134,7 +137,18 @@ for it; `decideModels` lists it first, and `resolveDecideModel` asks
 System One by its own name (axelburks on Discord: an Ark endpoint id).
 `apisAmong` ignores `decide`, so it never picks a conversation URL. The GUI
 offers it when `providerInfo`'s `decideAPIKind` is set and a System One URL
-is saved.
+is saved or typed. A custom provider of any base URL API gives one under More
+endpoints (*System One URL*, saved with any API; before, only a System One
+base URL kept it, so a Responses provider had nowhere to give it). A
+provider asked at Volcengine Ark's pay as you go (`ark.<region>.volces.com/api/v3`,
+chat completions or Responses, its preset's or a custom one) needs none:
+`normalize` sets its System One to `…/api/v1` on the same host
+(`arkSystemOne`), where the same key answers with Ark's beta header, so
+`ArkDecision` is a routing group's classifier with no URL typed. Ark's
+Coding and Agent Plans answer System One nothing (404) and get none; a
+key of another plan is never asked it (`decideKeys`). A URL the user gave
+is kept. `TestArkPayAsYouGoDecides`, `TestArkDecisionSkipsPlanKeys`,
+`custom-systemone-url.test.cjs`.
 Refresh replaces the list: removed decisions stop routing, and an empty
 remote list never gains a fabricated Jev alias.
 An older peer without the decision-list extension continues serving its
