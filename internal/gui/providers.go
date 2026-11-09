@@ -736,6 +736,27 @@ func agentUses(agents []*agent.Agent, findGroup func(string) (provider.Group, []
 	return out
 }
 
+// groupsOnce is find with each group's members found once: every agent
+// on a group, and the gateway's list after them, asked for the same
+// group's again, a Member over a kilobyte each (8 MB of forty polls of
+// the Providers page with real accounts). The page only reads them.
+func groupsOnce(find func(string) (provider.Group, []provider.Member, bool)) func(string) (provider.Group, []provider.Member, bool) {
+	type found struct {
+		g  provider.Group
+		ms []provider.Member
+		ok bool
+	}
+	seen := map[string]found{}
+	return func(id string) (provider.Group, []provider.Member, bool) {
+		if f, ok := seen[id]; ok {
+			return f.g, f.ms, f.ok
+		}
+		g, ms, ok := find(id)
+		seen[id] = found{g, ms, ok}
+		return g, ms, ok
+	}
+}
+
 // presetOwnClient says a provider added from pr goes as a client of its
 // vendor's own (provider.OwnClient): OpenCode's, Cline's, Kilo's, another
 // magpie.
@@ -1237,7 +1258,7 @@ func providersState() providersJSON {
 		}
 		s.Excluded = append(s.Excluded, e)
 	}
-	findGroup := provider.GroupFinder()
+	findGroup := groupsOnce(provider.GroupFinder())
 	uses := agentUses(agents, findGroup)
 	desktop := desktopNumbers(uses)
 	have := map[string]bool{}
