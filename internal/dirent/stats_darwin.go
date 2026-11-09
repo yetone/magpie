@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -117,7 +116,7 @@ func entry(b []byte, out *Listing, old Listing) bool {
 		if len(p) < 16 {
 			return false
 		}
-		s.Mod = time.Unix(int64(binary.NativeEndian.Uint64(p)), int64(binary.NativeEndian.Uint64(p[8:])))
+		s.Mod = int64(binary.NativeEndian.Uint64(p))*1e9 + int64(binary.NativeEndian.Uint64(p[8:]))
 		p = p[16:]
 	}
 	if file&attrFileDataLen != 0 {

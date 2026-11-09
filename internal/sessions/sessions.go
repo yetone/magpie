@@ -646,7 +646,7 @@ func statFiles(files []file, follow bool) []file {
 				return
 			}
 			if s.Mode == 0 {
-				f.size, f.mod, ok[i] = s.Size, s.Mod, true
+				f.size, f.mod, ok[i] = s.Size, s.ModTime(), true
 				return
 			}
 		}
@@ -1162,12 +1162,12 @@ func listedRollouts(root string) (out []file, ok bool) {
 				}
 				if len(seen) > 0 && filepath.Base(seen[0].path) == name {
 					f := seen[0]
-					f.size, f.mod = e.Size, e.Mod
+					f.size, f.mod = e.Size, e.ModTime()
 					out = append(out, f)
 					continue
 				}
 				if m := rolloutName.FindStringSubmatch(name); m != nil {
-					out = append(out, file{agent: "codex", key: "codex:" + m[1], path: filepath.Join(shown, name), main: true, size: e.Size, mod: e.Mod})
+					out = append(out, file{agent: "codex", key: "codex:" + m[1], path: filepath.Join(shown, name), main: true, size: e.Size, mod: e.ModTime()})
 					made = true
 				}
 			}

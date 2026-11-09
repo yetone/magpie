@@ -69,7 +69,7 @@ func TestStatsAsLstat(t *testing.T) {
 				t.Errorf("%q: not in Stats", e.Name())
 				continue
 			}
-			if s.Mode != fi.Mode().Type() || !s.Mod.Equal(fi.ModTime()) || fi.Mode().IsRegular() && s.Size != fi.Size() {
+			if s.Mode != fi.Mode().Type() || !s.ModTime().Equal(fi.ModTime()) || fi.Mode().IsRegular() && s.Size != fi.Size() {
 				t.Errorf("%q: Stats says %v %d %v, Lstat %v %d %v", e.Name(), s.Mode, s.Size, s.Mod, fi.Mode().Type(), fi.Size(), fi.ModTime())
 			}
 		}

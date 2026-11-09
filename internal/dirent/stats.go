@@ -10,12 +10,17 @@ import (
 
 // Stat is what a folder's listing says of one entry: its kind (Mode's type
 // bits, 0 for a regular file), and a regular file's size and modification
-// time, as os.Lstat gives them.
+// time, as os.Lstat gives them. Mod is unix nanoseconds, not a time.Time:
+// what is kept of a history's listings is ~130k entries, and its 24 bytes
+// made an entry 56 bytes where it is now 40 (#2278).
 type Stat struct {
-	Mode fs.FileMode
 	Size int64
-	Mod  time.Time
+	Mod  int64
+	Mode fs.FileMode
 }
+
+// ModTime is Mod as a time, as os.Lstat's ModTime has it.
+func (s Stat) ModTime() time.Time { return time.Unix(0, s.Mod) }
 
 // Entry is one entry of a Listing.
 type Entry struct {
