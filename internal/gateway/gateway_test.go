@@ -105,6 +105,9 @@ func noRests() {
 	restingUntil.m = map[string]time.Time{}
 	restingUntil.note = map[string]Rest{}
 	restingUntil.Unlock()
+	codexHolds.Lock()
+	codexHolds.m = nil
+	codexHolds.Unlock()
 }
 
 func post(t *testing.T, path, body string) (int, string) {

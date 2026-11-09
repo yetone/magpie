@@ -3388,10 +3388,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			continue
 		}
 		if i < len(cands)-1 {
-			if _, _, ok := quotaHeld(cands[i:]); ok {
+			_, _, spent := quotaHeld(cands[i:])
+			if _, _, timed := timedHeld(cands[i:]); spent || timed {
 				// every key left is out of its allowance, resting until it
-				// is back: none is asked, and the agent is told so at once
-				// (#1772)
+				// is back, or every one left is limited till a time its
+				// vendor named: none is asked, and the agent is told so at
+				// once (#1772; hsjzg58958 on X)
 				cands = cands[:i+1]
 			}
 		}
@@ -3875,6 +3877,38 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// using this one rests that model of it alone (remoteModelRest)
 			noteMember(hw, r, c.p, c.model)
 			writeError(hw, from, call.Status, msg)
+		} else if rested, back, ok := timedHeld(cands[i:]); ok && last {
+			// it rests on a 429 till the time its vendor named, and so
+			// does every one that was left (hsjzg58958 on X: limited for
+			// 300 seconds, each account was asked again about every half a
+			// second as the agent retried, until the vendor flagged them):
+			// the agent is answered here, with when the first of them is
+			// back as Retry-After. Set on the held answer too, so it isn't
+			// taken for a moment's limit and asked again in a second
+			// (passing) or in the patience's rounds (busy)
+			said := rested.Error
+			if said == "" {
+				said = http.StatusText(rested.Status)
+			}
+			what := "rate limited"
+			if rested.Why != failRate {
+				what = "out of its allowance"
+			}
+			msg := fmt.Sprintf("%s (%s: not asked again before %s)", said, what, heldClock(back, time.Now()))
+			held, heldBack, call.Status, call.Error = true, back, rested.Status, c.p.Name+": "+msg
+			if wait := time.Until(back); wait > 0 {
+				hw.Header().Set("Retry-After", strconv.Itoa(int((wait+time.Second-1)/time.Second)))
+			}
+			noteMember(hw, r, c.p, c.model)
+			if rested.out != nil && from == provider.Responses {
+				// a ChatGPT account used up: Codex is told as the backend
+				// told it, usage_limit_reached with its plan, reset and
+				// windows, which it shows and doesn't retry
+				// (TestCodexEveryAccountOutToldAsTheBackend)
+				writeCodexOut(hw, rested.outHeader, call.Status, msg, rested.out)
+			} else {
+				writeError(hw, from, call.Status, msg)
+			}
 		} else {
 			// a stream that fails before anything is said is let go at
 			// once (hw.stop), not read on until the vendor hangs up
@@ -5048,6 +5082,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// quota or credit (not Antigravity's 429 to a prompt).
 			// quotaHeld still holds keys alone, and autoReset lifts the
 			// rest of an account it spends a reset of
+			rest := s.restAfterMarked(c, hw.code(), hw.header, hw.errBody(), hw.sharedPool)
+			try.Fail, try.Rest = rest.Why, &rest
+		} else if last && !held && !hw.passing && hw.failed() && hw.code() == http.StatusTooManyRequests && !hw.turnedAway && try.Fail != failPrompt && failure(hw.code(), hw.errBody()) == failRate && vendorSaidWhen(hw.header, hw.errBody()) {
+			// the last one left is rate limited till a time its vendor
+			// named: it rests till then too, for the agent's retries to be
+			// answered from the rest (timedHeld) rather than sent on to
+			// the vendor, which flags an account asked so (hsjzg58958 on
+			// X). A 429 naming no time rests nobody, as before: a relay's
+			// moment of saturation is asked again
 			rest := s.restAfterMarked(c, hw.code(), hw.header, hw.errBody(), hw.sharedPool)
 			try.Fail, try.Rest = rest.Why, &rest
 		}

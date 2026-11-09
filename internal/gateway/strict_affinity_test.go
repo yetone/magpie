@@ -87,9 +87,12 @@ func TestStrictAffinityPassesTheErrorOn(t *testing.T) {
 	if why := lastWhy(t, srv); why != "strict" {
 		t.Fatalf("traced as %q", why)
 	}
-	// resting now, it is still the one asked
-	if code, _, tried := strictPost(t, srv, b, "s1"); code != 429 || tried != "acct-1" {
-		t.Fatalf("strict, its account resting: %d tried %s", code, tried)
+	// resting now till the time ChatGPT named, it is still its account's
+	// error the agent gets, not another's answer, but given from the rest:
+	// asked again on every retry, an account is flagged (timedHeld,
+	// hsjzg58958 on X)
+	if code, body, tried := strictPost(t, srv, b, "s1"); code != 429 || !strings.Contains(body, "usage limit") || tried != "" {
+		t.Fatalf("strict, its account resting: %d %s tried %s", code, body, tried)
 	}
 	if code, body, tried := strictPost(t, srv, b, "s2"); code != 200 || !strings.Contains(body, "pong") || tried != "acct-2" {
 		t.Fatalf("a new conversation: %d %s tried %s", code, body, tried)

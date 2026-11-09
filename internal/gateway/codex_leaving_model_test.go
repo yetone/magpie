@@ -83,8 +83,15 @@ func TestCodexLeavingModelCompactsLocally(t *testing.T) {
 		if code != 200 {
 			t.Fatalf("%s (header %v): %d %s", c.reason, c.header, code, out)
 		}
-		if strings.Join(tried, ",") != "acct-1" {
-			t.Fatalf("%s: the old model was asked of %v, want acct-1 once", c.reason, tried)
+		// asked once; refused with the time it is back, it is held till
+		// then, and the next compactions are answered from that refusal
+		// without asking it again (timedHeld, hsjzg58958 on X)
+		want := "acct-1"
+		if c.reason != "model_downshift" || !c.header {
+			want = ""
+		}
+		if strings.Join(tried, ",") != want {
+			t.Fatalf("%s: the old model was asked of %v, want %q", c.reason, tried, want)
 		}
 		if s := summary(out); !strings.Contains(s, "build the parser") || !strings.Contains(s, "the parser is built") {
 			t.Fatalf("%s: no local summary of the thread: %q\n%s", c.reason, s, out)

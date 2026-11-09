@@ -43,6 +43,9 @@ func fresh(t *testing.T) {
 	restingUntil.Lock()
 	restingUntil.m = map[string]time.Time{}
 	restingUntil.Unlock()
+	codexHolds.Lock()
+	codexHolds.m = nil
+	codexHolds.Unlock()
 	sticks.Lock()
 	sticks.m = map[string]stick{}
 	sticks.Unlock()

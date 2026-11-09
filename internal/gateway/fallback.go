@@ -1380,6 +1380,56 @@ func quotaHeld(cs []candidate) (Rest, time.Time, bool) {
 	return first, back, len(cs) > 0
 }
 
+// timedHeld is, when every candidate of cs rests on a 429 for as long as
+// its vendor said (vendorTimed), the rest of the first, and when the first
+// of them is back. Asked before then, each is refused the same, and asked
+// every time the agent tries again it is the vendor's to judge: hsjzg58958
+// on X, two accounts each limited for 300 seconds were asked again about
+// every half a second, as the agent retried, until the vendor flagged them
+// both. A key or an account alike, out of its rate or its allowance: the
+// time is the vendor's own, not one magpie guessed (quotaHeld's first
+// refusal asked again). Not a subscription account that spends its resets
+// by itself (autoReset), nor another computer's model (Rest.there).
+func timedHeld(cs []candidate) (Rest, time.Time, bool) {
+	var first Rest
+	var back time.Time
+	now := time.Now()
+	for i, c := range cs {
+		r, ok := restingOf(c)
+		if !ok || !vendorTimed(c, r) {
+			return Rest{}, time.Time{}, false
+		}
+		at := r.asksAt(now)
+		if !now.Before(at) {
+			return Rest{}, time.Time{}, false
+		}
+		if i == 0 {
+			first = r
+		}
+		if back.IsZero() || at.Before(back) {
+			back = at
+		}
+	}
+	return first, back, len(cs) > 0
+}
+
+// vendorTimed says whether r, c's rest, is a 429's for the time its vendor
+// named: its Retry-After or rate-limit reset headers, or the reset its
+// refusal gave (rateRest, Rest.By "retry-after" or "resets").
+func vendorTimed(c candidate, r Rest) bool {
+	if r.there || r.Status != http.StatusTooManyRequests || r.By != "retry-after" && r.By != "resets" {
+		return false
+	}
+	switch r.Why {
+	case failRate:
+		return true
+	case failQuota, failCredit:
+		a := c.p.Account
+		return a == nil || !provider.AutoResetsWeek(a.Agent, a.User)
+	}
+	return false
+}
+
 // quotaStatus is a status a vendor says a key is out of its allowance with.
 func quotaStatus(status int) bool {
 	return status == http.StatusTooManyRequests || status == http.StatusPaymentRequired
