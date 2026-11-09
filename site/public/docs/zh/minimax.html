@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiniMax 与编程套餐接入 Claude Code、Codex、Gemini CLI 和 OpenCode · magpie</title>
+<meta name="description" content="用 magpie 把 MiniMax M3 和 M2.7 接入 Claude Code、Codex、Gemini CLI 和 OpenCode：按量付费或编程套餐（Coding Plan）的 Key，国际和国内接口地址，交错思考，M3.1 Flash 的推理强度，以及编程套餐的用量窗口。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/minimax">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/minimax">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/minimax">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/minimax">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/minimax">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="MiniMax 与编程套餐接入 Claude Code、Codex、Gemini CLI 和 OpenCode">
+<meta property="og:description" content="用 magpie 把 MiniMax M3 和 M2.7 接入 Claude Code、Codex、Gemini CLI 和 OpenCode：按量付费或编程套餐（Coding Plan）的 Key，国际和国内接口地址，交错思考，M3.1 Flash 的推理强度，以及编程套餐的用量窗口。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/minimax">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "MiniMax 与编程套餐接入 Claude Code、Codex、Gemini CLI 和 OpenCode",
+   "description": "用 magpie 把 MiniMax M3 和 M2.7 接入 Claude Code、Codex、Gemini CLI 和 OpenCode：按量付费或编程套餐（Coding Plan）的 Key，国际和国内接口地址，交错思考，M3.1 Flash 的推理强度，以及编程套餐的用量窗口。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/minimax",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "MiniMax 怎么接入 Claude Code？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "在 magpie 里添加 MiniMax 的 Key（供应商 → 添加供应商 → MiniMax (China) 或 MiniMax），然后在 Claude Code 那一行选一个模型，比如 MiniMax-M3，或者运行 magpie claude minimax-cn/MiniMax-M3。magpie 会写好 Claude Code 的 settings.json，把请求转给 MiniMax 的 Anthropic 接口 https://api.minimaxi.com/anthropic。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "MiniMax 编程套餐怎么用？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "把编程套餐的 Key（sk-cp- 开头）添加到你购买套餐那个站点的 MiniMax 预设下，和按量付费的 Key 一样。magpie 根据 MiniMax 对这个 Key 的答复区分两者，并在编程套餐 Key 那一行显示用量窗口。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex 能用 MiniMax 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。MiniMax 提供 Chat Completions 和 Anthropic Messages，不提供 Responses，所以 magpie 会转换 Codex 的请求和 MiniMax 的回复。在 Codex 那一行选模型，或运行 magpie codex minimax-cn/MiniMax-M3，模型会出现在 Codex 的 /model 里。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "MiniMax Code 能用其他模型吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。MiniMax Code 是 magpie 支持的工具之一，在 Agent 页它那一行可以选你添加的任何模型，MiniMax 的或其他厂商的都行。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "为什么 MiniMax 的思考出现在正文里？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "MiniMax 的 Chat API 把模型的思考放在回复正文的 <think> 标签里。magpie 把它取出来作为思考交给工具，在之后的轮次再按 MiniMax 要求的方式放回去。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "能用多个 MiniMax Key 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。把它们都添加到 MiniMax 供应商下并逐个勾选。magpie 会把请求分摊到这些 Key 上，并按编程套餐 Key 的窗口来分配和让它休息：用完窗口的 Key 会等到重置后再用。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/minimax" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/minimax" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/minimax" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>本页内容</p>
+    <a href="#add">添加</a>
+    <a href="#endpoints">套餐与接口地址</a>
+    <a href="#agents">在各个工具里用</a>
+    <a href="#thinking">思考</a>
+    <a href="#usage">余额与用量</a>
+    <a href="#faq">常见问题</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 供应商</p>
+    <h1>MiniMax 与编程套餐接入 Claude Code、Codex、Gemini CLI 和 OpenCode</h1>
+    <p class="lede">MiniMax 提供兼容 OpenAI 的 Chat API 和兼容 Anthropic 的接口，有国际站和国内站，按量付费和编程套餐的 Key 都能用。在 magpie 里添加一次 Key，Claude Code、Codex、Gemini CLI、OpenCode 以及你接入的其他工具都能通过 magpie 的本地网关 <code>127.0.0.1:3425</code> 用上 <code>MiniMax-M3</code>、<code>MiniMax-M2.7</code> 等模型。</p>
+
+    <h2 id="add"><a class="anchor" href="#add">添加 MiniMax</a></h2>
+    <ol class="steps">
+      <li><b>拿到 Key</b>国内在 <a href="https://platform.minimaxi.com/user-center/basic-information/interface-key">platform.minimaxi.com</a> 创建，国际站在 <a href="https://platform.minimax.io/user-center/basic-information/interface-key">platform.minimax.io</a>。编程套餐的 Key 以 <code>sk-cp-</code> 开头。</li>
+      <li><b>添加供应商</b>在 magpie 的 <span class="ui">供应商</span> 页点 <span class="ui">＋ 添加供应商</span>，选 MiniMax (China) 或 MiniMax，粘贴 Key 并保存。按量付费和编程套餐的 Key 都这样添加。</li>
+      <li><b>给工具选上</b>在 <span class="ui">Agent</span> 页点工具那一行的模型，选一个 MiniMax 模型。</li>
+    </ol>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-add">复制</button><pre id="ex-add">magpie provider add minimax-cn sk-cp-…  # 编程套餐，platform.minimaxi.com
+magpie provider add minimax sk-…        # 国际站，platform.minimax.io</pre></div>
+
+    <h2 id="endpoints"><a class="anchor" href="#endpoints">套餐与接口地址</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>预设</th><th>平台</th><th>Chat Completions</th><th>Anthropic Messages</th></tr>
+      <tr><td>MiniMax <span class="ui">minimax</span></td><td>platform.minimax.io（国际）</td><td><code>https://api.minimax.io/v1</code></td><td><code>https://api.minimax.io/anthropic</code></td></tr>
+      <tr><td>MiniMax (China) <span class="ui">minimax-cn</span></td><td>platform.minimaxi.com（国内）</td><td><code>https://api.minimaxi.com/v1</code></td><td><code>https://api.minimaxi.com/anthropic</code></td></tr>
+    </table></div>
+    <p>编程套餐和按量付费用的是同一组接口地址，请求按哪种计费由 Key 决定。国际站和国内站是不同的账号，各自的 Key 放在各自站点的预设下。</p>
+
+    <h2 id="agents"><a class="anchor" href="#agents">在各个工具里用</a></h2>
+    <p>在 <span class="ui">Agent</span> 页里点某个工具那一行的模型来选，或者在终端里选。每篇指南都写了 magpie 在那个工具的配置里改了什么、怎么换回去。</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-agents">复制</button><pre id="ex-agents">magpie claude minimax-cn/MiniMax-M3
+magpie codex minimax-cn/MiniMax-M3
+magpie gemini model minimax-cn/MiniMax-M2.7
+magpie opencode minimax-cn/MiniMax-M3</pre></div>
+    <ul>
+      <li><b>Claude Code</b> 说的是 Anthropic Messages，MiniMax 的 Anthropic 接口也说这种协议，所以请求原样转过去。opus、sonnet、haiku 三档默认都用你选的模型，也可以给某一档单独指定。<a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>。</li>
+      <li><b>Codex</b> 只说 OpenAI Responses。MiniMax 提供 Chat Completions 和 Anthropic Messages，不提供 Responses，所以 magpie 会转换请求和回复，流式输出和工具调用都保留。模型会出现在 Codex 的 <code>/model</code> 里，带着推理强度。<a href="/docs/zh/codex-models">Codex 接入其他模型</a>。</li>
+      <li><b>Gemini CLI</b> 说 Gemini 的 API。magpie 把它指向本地网关并做转换。<a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>。</li>
+      <li><b>OpenCode</b>：magpie 把模型写进 <code>opencode.json</code>，带上推理档位和价格。<a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>。</li>
+    </ul>
+    <p>MiniMax Code 也是 magpie 支持的工具：它那一行可以选 MiniMax 的模型，也可以选其他厂商的。</p>
+
+    <h2 id="thinking"><a class="anchor" href="#thinking">思考与推理强度</a></h2>
+    <ul>
+      <li><b>交错思考。</b>MiniMax 的 Chat API 把模型的思考放在回复正文的 <code>&lt;think&gt;</code> 标签里，并要求之后的轮次原样带回。magpie 把它作为思考交给工具，再放回 MiniMax 要的位置。</li>
+      <li><b>推理强度。</b><code>MiniMax-M3.1-Flash</code> 及其预览版有从 low 到 max 的思考档位。magpie 像 MiniMax Code 一样把工具要的档位写进 <code>output_config.effort</code>，不会被 token 预算吃掉。</li>
+      <li><b>一直思考的模型。</b><code>MiniMax-M3.1-Flash-Preview</code> 不允许关掉思考。工具要求关掉时，magpie 会保持思考开启再问一次，工具拿到的是回答而不是报错。</li>
+    </ul>
+
+    <h2 id="usage"><a class="anchor" href="#usage">编程套餐窗口与用量</a></h2>
+    <ul>
+      <li><b>编程套餐窗口。</b>编程套餐 Key 那一行显示 MiniMax 告知的每个窗口还剩多少：一个滚动窗口和一个按周的窗口，从 MiniMax 读取。模型用的是通用额度；单独计量的额度（比如视频）显示为次数，例如 4 / 5。按量付费的 Key 没有窗口，也没有卡片。</li>
+      <li><b>路由。</b>有多个编程套餐 Key 时，magpie 按窗口分配请求，窗口用完的 Key 会休息到重置。</li>
+      <li><b>用量。</b><span class="ui">用量</span> 页会统计经过 magpie 的每个工具和模型的 token、缓存命中和费用。</li>
+    </ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>MiniMax 怎么接入 Claude Code？</h3>
+    <p>在 magpie 里添加 MiniMax 的 Key（供应商 → 添加供应商 → MiniMax (China) 或 MiniMax），然后在 Claude Code 那一行选一个模型，比如 <code>MiniMax-M3</code>，或者运行 <code>magpie claude minimax-cn/MiniMax-M3</code>。magpie 会写好 Claude Code 的 <code>settings.json</code>，把请求转给 MiniMax 的 Anthropic 接口 <code>https://api.minimaxi.com/anthropic</code>。</p>
+    <h3>MiniMax 编程套餐怎么用？</h3>
+    <p>把编程套餐的 Key（<code>sk-cp-</code> 开头）添加到你购买套餐那个站点的 MiniMax 预设下，和按量付费的 Key 一样。magpie 根据 MiniMax 对这个 Key 的答复区分两者，并在编程套餐 Key 那一行显示用量窗口。</p>
+    <h3>Codex 能用 MiniMax 吗？</h3>
+    <p>能。MiniMax 提供 Chat Completions 和 Anthropic Messages，不提供 Responses，所以 magpie 会转换 Codex 的请求和 MiniMax 的回复。在 Codex 那一行选模型，或运行 <code>magpie codex minimax-cn/MiniMax-M3</code>，模型会出现在 Codex 的 <code>/model</code> 里。</p>
+    <h3>MiniMax Code 能用其他模型吗？</h3>
+    <p>能。MiniMax Code 是 magpie 支持的工具之一，在 Agent 页它那一行可以选你添加的任何模型，MiniMax 的或其他厂商的都行。</p>
+    <h3>为什么 MiniMax 的思考出现在正文里？</h3>
+    <p>MiniMax 的 Chat API 把模型的思考放在回复正文的 <code>&lt;think&gt;</code> 标签里。magpie 把它取出来作为思考交给工具，在之后的轮次再按 MiniMax 要求的方式放回去。</p>
+    <h3>能用多个 MiniMax Key 吗？</h3>
+    <p>能。把它们都添加到 MiniMax 供应商下并逐个勾选。magpie 会把请求分摊到这些 Key 上，并按编程套餐 Key 的窗口来分配和让它休息：用完窗口的 Key 会等到重置后再用。</p>
+
+    <p style="margin-top:48px">各个工具的指南：<a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>、<a href="/docs/zh/codex-models">Codex 接入其他模型</a>、<a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>、<a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>。遇到问题可以在 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

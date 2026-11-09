@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>通义千问 Qwen 接入 Claude Code、Codex、Gemini CLI 和 OpenCode · magpie</title>
+<meta name="description" content="用 magpie 把通义千问 Qwen 接入 Claude Code、Codex、Gemini CLI 和 OpenCode：阿里云百炼（DashScope）与 Model Studio 的 Key、千问和百炼的 Token Plan 套餐、Qwen Cloud 的地域、每种 Key 用哪个接口地址，以及思考怎么处理。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/qwen">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/qwen">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/qwen">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/qwen">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/qwen">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="通义千问 Qwen 接入 Claude Code、Codex、Gemini CLI 和 OpenCode">
+<meta property="og:description" content="用 magpie 把通义千问 Qwen 接入 Claude Code、Codex、Gemini CLI 和 OpenCode：阿里云百炼（DashScope）与 Model Studio 的 Key、千问和百炼的 Token Plan 套餐、Qwen Cloud 的地域、每种 Key 用哪个接口地址，以及思考怎么处理。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/qwen">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "通义千问 Qwen 接入 Claude Code、Codex、Gemini CLI 和 OpenCode",
+   "description": "用 magpie 把通义千问 Qwen 接入 Claude Code、Codex、Gemini CLI 和 OpenCode：阿里云百炼（DashScope）与 Model Studio 的 Key、千问和百炼的 Token Plan 套餐、Qwen Cloud 的地域、每种 Key 用哪个接口地址，以及思考怎么处理。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/qwen",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "通义千问怎么接入 Claude Code？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "在 magpie 里添加 Key（供应商 → 添加供应商 → Key 所属的 Qwen 预设），然后在 Claude Code 那一行选一个千问模型，比如 qwen3.8-max，或者运行 magpie claude qwen-cn/qwen3.8-max。magpie 会写好 Claude Code 的 settings.json，把请求转给 DashScope 的 Anthropic 接口。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "百炼的编程套餐怎么接入？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "百炼的订阅套餐在 magpie 里是 Bailian Token Plan 预设：添加供应商时选它，填 sk-sp- 开头的套餐 Key。千问 AI 开放平台的套餐选 Qwen Token Plan，Qwen Cloud 的套餐选 Qwen Cloud Token Plan。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex 能用千问吗？Qwen3 Coder 也行吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。magpie 会列出 DashScope 给这个 Key 的所有模型，包括 Coder 模型，Codex 都能用：magpie 把 Codex 的 Responses 请求转成 Chat Completions，再把回复转回去。在 Codex 那一行选模型，或运行 magpie codex qwen-cn/qwen3.8-max，模型会出现在 Codex 的 /model 里。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "我的 Key 该选哪个预设？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Key 是在哪个平台创建的就选哪个。Token Plan 的 Key（sk-sp- 开头）只能用在自己套餐的地址，Qwen Cloud 按量付费的 Key（sk-ws- 开头）只能用在自己的地域，放到别的预设下会被 401 拒绝。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Qwen Code 能用其他模型吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。Qwen Code 是 magpie 支持的工具之一，在 Agent 页它那一行可以选你添加的任何模型，千问的或其他厂商的都行。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie 能显示 Token Plan 的额度吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "不能。两个 Token Plan 都没有查额度的 API，额度在阿里云控制台的套餐订阅页里看。magpie 的用量页仍会统计每个工具用掉的 token。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/qwen" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/qwen" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/qwen" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>本页内容</p>
+    <a href="#add">添加</a>
+    <a href="#endpoints">套餐与接口地址</a>
+    <a href="#agents">在各个工具里用</a>
+    <a href="#thinking">思考</a>
+    <a href="#usage">余额与用量</a>
+    <a href="#faq">常见问题</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 供应商</p>
+    <h1>通义千问 Qwen 接入 Claude Code、Codex、Gemini CLI 和 OpenCode</h1>
+    <p class="lede">阿里通过 DashScope 提供通义千问，有阿里云百炼、Model Studio 国际站和 Qwen Cloud，按量付费或 Token Plan 套餐。它们都提供 OpenAI Chat Completions 和 Anthropic Messages 接口。在 magpie 里添加一次 Key，Claude Code、Codex、Gemini CLI、OpenCode 以及你接入的其他工具都能通过 magpie 的本地网关 <code>127.0.0.1:3425</code> 用上千问。</p>
+
+    <h2 id="add"><a class="anchor" href="#add">添加千问</a></h2>
+    <ol class="steps">
+      <li><b>拿到 Key</b>按量付费：国内在 <a href="https://bailian.console.aliyun.com/?tab=model#/api-key">百炼控制台</a>，国际站在 <a href="https://modelstudio.console.alibabacloud.com/?tab=playground#/api-key">Model Studio</a>。Token Plan 的 Key 在各自套餐页里创建。</li>
+      <li><b>添加供应商</b>在 magpie 的 <span class="ui">供应商</span> 页点 <span class="ui">＋ 添加供应商</span>，选 Key 所属的 Qwen 预设（见下表），粘贴 Key 并保存。magpie 会向接口查询它提供哪些模型。</li>
+      <li><b>给工具选上</b>在 <span class="ui">Agent</span> 页点工具那一行的模型，选一个千问模型，比如 <code>qwen3.8-max</code>。</li>
+    </ol>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-add">复制</button><pre id="ex-add">magpie provider add qwen-cn sk-…                  # 百炼，国内
+magpie provider add bailian-token-plan sk-sp-…    # 百炼 Token Plan
+magpie provider add qwen-token-plan sk-sp-…       # 千问 AI 开放平台 Token Plan
+magpie provider add qwencloud sk-ws-… region=us-east-1</pre></div>
+    <div class="callout"><b>每种 Key 只能用在自己的地址。</b>Token Plan 的 Key（<code>sk-sp-…</code>）在按量付费接口和别的 Token Plan 上都会被拒绝，Qwen Cloud 的 Key 出了自己的地域也会被拒绝。请求返回 401 时，先看看 Key 是不是放在了它所属的预设下。</div>
+
+    <h2 id="endpoints"><a class="anchor" href="#endpoints">套餐与接口地址</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>预设</th><th>套餐与 Key</th><th>接口地址（Chat Completions、Anthropic Messages）</th></tr>
+      <tr><td>Qwen <span class="ui">qwen</span></td><td>按量付费，国际站（Model Studio）</td><td><code>https://dashscope-intl.aliyuncs.com/compatible-mode/v1</code><br><code>https://dashscope-intl.aliyuncs.com/apps/anthropic</code></td></tr>
+      <tr><td>Qwen (China) <span class="ui">qwen-cn</span></td><td>按量付费，国内（百炼）</td><td><code>https://dashscope.aliyuncs.com/compatible-mode/v1</code><br><code>https://dashscope.aliyuncs.com/apps/anthropic</code></td></tr>
+      <tr><td>Qwen Token Plan <span class="ui">qwen-token-plan</span></td><td>订阅套餐，<code>sk-sp-</code></td><td><code>https://token-plan.maas.qianwenaiapi.com/compatible-mode/v1</code><br><code>https://token-plan.maas.qianwenaiapi.com/apps/anthropic</code></td></tr>
+      <tr><td>Bailian Token Plan <span class="ui">bailian-token-plan</span></td><td>订阅套餐，<code>sk-sp-</code></td><td><code>https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1</code><br><code>https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic</code></td></tr>
+      <tr><td>Qwen Cloud <span class="ui">qwencloud</span></td><td>按量付费，<code>sk-ws-</code>，六个地域，默认新加坡</td><td><code>https://{region}.maas.qwencloudapi.com/compatible-mode/v1</code><br><code>https://{region}.maas.qwencloudapi.com/apps/anthropic</code></td></tr>
+      <tr><td>Qwen Cloud Token Plan <span class="ui">qwencloud-token-plan</span></td><td>订阅套餐，<code>sk-sp-</code>，仅新加坡</td><td><code>https://token-plan.maas.qwencloudapi.com/compatible-mode/v1</code><br><code>https://token-plan.maas.qwencloudapi.com/apps/anthropic</code></td></tr>
+    </table></div>
+    <p>Token Plan 的地址不给模型列表时，magpie 会按套餐概览列出它的文本模型：auto, qwen3.8-max, qwen3.8-flash, qwen3.7-max, qwen3.7-plus, qwen3.6-flash，以及套餐里的 DeepSeek 和 GLM 模型。百炼 Token Plan 还提供一个决策模型，可以给<a href="/docs/zh/intent">意图路由</a>判断每一轮该去哪。</p>
+
+    <h2 id="agents"><a class="anchor" href="#agents">在各个工具里用</a></h2>
+    <p>在 <span class="ui">Agent</span> 页里点某个工具那一行的模型来选，或者在终端里选。每篇指南都写了 magpie 在那个工具的配置里改了什么、怎么换回去。</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-agents">复制</button><pre id="ex-agents">magpie claude qwen-cn/qwen3.8-max
+magpie codex qwen-cn/qwen3.8-max
+magpie gemini model qwen-cn/qwen3.7-plus
+magpie opencode qwen-cn/qwen3.8-max</pre></div>
+    <ul>
+      <li><b>Claude Code</b> 说的是 Anthropic Messages，千问 的 Anthropic 接口也说这种协议，所以请求原样转过去。opus、sonnet、haiku 三档默认都用你选的模型，也可以给某一档单独指定。<a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>。</li>
+      <li><b>Codex</b> 只说 OpenAI Responses。DashScope 提供 Chat Completions 和 Anthropic Messages，不提供 Responses，所以 magpie 会转换请求和回复，流式输出和工具调用都保留。模型会出现在 Codex 的 <code>/model</code> 里，带着推理强度。<a href="/docs/zh/codex-models">Codex 接入其他模型</a>。</li>
+      <li><b>Gemini CLI</b> 说 Gemini 的 API。magpie 把它指向本地网关并做转换。<a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>。</li>
+      <li><b>OpenCode</b>：magpie 把模型写进 <code>opencode.json</code>，带上推理档位和价格。<a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>。</li>
+    </ul>
+    <p>Qwen Code 也是 magpie 支持的工具：它那一行可以选千问的模型，也可以选其他厂商的。</p>
+
+    <h2 id="thinking"><a class="anchor" href="#thinking">思考与图片</a></h2>
+    <ul>
+      <li><b>一次性返回的回复。</b>会思考的千问模型在 DashScope 上只能流式返回，要求一次性返回整个回复的请求会被拒绝。工具或路由分组的分类器要一次性回复时，magpie 向 DashScope 要流式回复，再把完整回复（含思考）交给工具。</li>
+      <li><b>一直思考的模型。</b>DashScope 上有的模型不允许关掉思考，比如它的 <code>glm-5.3</code>。工具要求关掉思考而模型拒绝时，magpie 会保持思考开启再问一次。</li>
+      <li><b>图片。</b>Qwen-Image 和 <code>wan2.7-image</code> 模型通过 DashScope 自己的图片接口生成图片，六个预设都可以。在 magpie 的 <span class="ui">设置 → 图像</span> 里选用。尺寸写成 <code>宽x高</code>，最大 2048×2048。</li>
+    </ul>
+
+    <h2 id="usage"><a class="anchor" href="#usage">余额与用量</a></h2>
+    <p>magpie 不显示千问的余额或套餐卡片：DashScope 没有查 Key 余额的 API，两个 Token Plan 也没有查额度的 API，额度在阿里云控制台的套餐订阅页里看。<span class="ui">用量</span> 页会统计经过 magpie 的每个工具和模型的 token、缓存命中和费用。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>通义千问怎么接入 Claude Code？</h3>
+    <p>在 magpie 里添加 Key（供应商 → 添加供应商 → Key 所属的 Qwen 预设），然后在 Claude Code 那一行选一个千问模型，比如 <code>qwen3.8-max</code>，或者运行 <code>magpie claude qwen-cn/qwen3.8-max</code>。magpie 会写好 Claude Code 的 <code>settings.json</code>，把请求转给 DashScope 的 Anthropic 接口。</p>
+    <h3>百炼的编程套餐怎么接入？</h3>
+    <p>百炼的订阅套餐在 magpie 里是 Bailian Token Plan 预设：添加供应商时选它，填 <code>sk-sp-</code> 开头的套餐 Key。千问 AI 开放平台的套餐选 Qwen Token Plan，Qwen Cloud 的套餐选 Qwen Cloud Token Plan。</p>
+    <h3>Codex 能用千问吗？Qwen3 Coder 也行吗？</h3>
+    <p>能。magpie 会列出 DashScope 给这个 Key 的所有模型，包括 Coder 模型，Codex 都能用：magpie 把 Codex 的 Responses 请求转成 Chat Completions，再把回复转回去。在 Codex 那一行选模型，或运行 <code>magpie codex qwen-cn/qwen3.8-max</code>，模型会出现在 Codex 的 <code>/model</code> 里。</p>
+    <h3>我的 Key 该选哪个预设？</h3>
+    <p>Key 是在哪个平台创建的就选哪个。Token Plan 的 Key（<code>sk-sp-</code> 开头）只能用在自己套餐的地址，Qwen Cloud 按量付费的 Key（<code>sk-ws-</code> 开头）只能用在自己的地域，放到别的预设下会被 401 拒绝。</p>
+    <h3>Qwen Code 能用其他模型吗？</h3>
+    <p>能。Qwen Code 是 magpie 支持的工具之一，在 Agent 页它那一行可以选你添加的任何模型，千问的或其他厂商的都行。</p>
+    <h3>magpie 能显示 Token Plan 的额度吗？</h3>
+    <p>不能。两个 Token Plan 都没有查额度的 API，额度在阿里云控制台的套餐订阅页里看。magpie 的用量页仍会统计每个工具用掉的 token。</p>
+
+    <p style="margin-top:48px">各个工具的指南：<a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>、<a href="/docs/zh/codex-models">Codex 接入其他模型</a>、<a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>、<a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>。遇到问题可以在 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

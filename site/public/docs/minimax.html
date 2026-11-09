@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiniMax and the MiniMax Coding Plan in Claude Code, Codex, Gemini CLI and OpenCode · magpie</title>
+<meta name="description" content="Use MiniMax M3 and M2.7 in Claude Code, Codex, Gemini CLI and OpenCode with magpie: a pay-as-you-go or Coding Plan key, the global and China endpoints, interleaved thinking, effort for M3.1 Flash, and the Coding Plan&#x27;s usage windows.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/minimax">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/minimax">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/minimax">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/minimax">
+<link rel="canonical" href="https://usemagpie.ai/docs/minimax">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="MiniMax and the MiniMax Coding Plan in Claude Code, Codex, Gemini CLI and OpenCode">
+<meta property="og:description" content="Use MiniMax M3 and M2.7 in Claude Code, Codex, Gemini CLI and OpenCode with magpie: a pay-as-you-go or Coding Plan key, the global and China endpoints, interleaved thinking, effort for M3.1 Flash, and the Coding Plan&#x27;s usage windows.">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/minimax">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "MiniMax and the MiniMax Coding Plan in Claude Code, Codex, Gemini CLI and OpenCode",
+   "description": "Use MiniMax M3 and M2.7 in Claude Code, Codex, Gemini CLI and OpenCode with magpie: a pay-as-you-go or Coding Plan key, the global and China endpoints, interleaved thinking, effort for M3.1 Flash, and the Coding Plan's usage windows.",
+   "inLanguage": "en",
+   "url": "https://usemagpie.ai/docs/minimax",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "How do I use MiniMax M2.7 or M3 in Claude Code?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Add your MiniMax key in magpie (Providers, Add provider, MiniMax or MiniMax (China)), then pick a model such as MiniMax-M3 on Claude Code’s row, or run magpie claude minimax/MiniMax-M3. magpie writes Claude Code’s settings.json and passes its requests to MiniMax’s Anthropic endpoint, https://api.minimax.io/anthropic."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "How do I use the MiniMax Coding Plan?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Add the Coding Plan key (sk-cp-…) to the MiniMax preset of the site you bought it on, the same as a pay-as-you-go key. magpie tells the two apart by what MiniMax says about the key, and shows a Coding Plan key’s usage windows on its row."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can Codex use MiniMax?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. MiniMax serves Chat Completions and Anthropic Messages but not Responses, so magpie translates Codex’s requests and MiniMax’s replies. Pick the model on Codex’s row or run magpie codex minimax/MiniMax-M3; it shows in Codex’s /model list."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can MiniMax Code use other models?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. MiniMax Code is one of the agents magpie connects, so its row in the Agents tab takes any model you have added, MiniMax’s or another vendor’s."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Why does MiniMax’s thinking show up in the text?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "MiniMax’s Chat API puts a model’s thinking in the reply text between <think> tags. magpie takes it out and gives it to the agent as thinking, then puts it back on the next turns, where MiniMax wants it."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can I use several MiniMax keys?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Add them all to the MiniMax provider and tick each one. magpie spreads requests over them, and weighs and rests Coding Plan keys by their windows, so a key that has used up its window sits out until it resets."
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>Docs</small></a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/start">Get started</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a class="toc-only" href="/docs/remote">Remote magpie</a>
+    <a class="toc-only" href="/docs/docker">Docker</a>
+    <a class="toc-only" href="/docs/privacy">Privacy</a>
+    <a class="toc-only" href="/docs/masking">Privacy masking</a>
+    <a class="toc-only" href="/docs/mcp-router">MCP router</a>
+    <a class="toc-only" href="/docs/library">Library</a>
+    <a class="toc-only" href="/docs/claude-code-models">Models in Claude Code</a>
+    <a class="toc-only" href="/docs/codex-models">Models in Codex</a>
+    <a class="toc-only" href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a class="toc-only" href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a class="toc-only" href="/docs/local-models">Local models</a>
+    <a class="toc-only" href="/docs/opencode-models">Models in OpenCode</a>
+    <a class="toc-only" href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/minimax" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/minimax" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/minimax" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">Download</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>On this page</p>
+    <a href="#add">Add it</a>
+    <a href="#endpoints">Plans and endpoints</a>
+    <a href="#agents">In each agent</a>
+    <a href="#thinking">Thinking</a>
+    <a href="#usage">Balance and usage</a>
+    <a href="#faq">FAQ</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">Docs · Provider</p>
+    <h1>MiniMax and the MiniMax Coding Plan in Claude Code, Codex, Gemini CLI and OpenCode</h1>
+    <p class="lede">MiniMax serves an OpenAI-compatible Chat API and an Anthropic-compatible one, on a global site and a China site, for pay-as-you-go keys and Coding Plan keys alike. Add your key to magpie once, and Claude Code, Codex, Gemini CLI, OpenCode and every other agent you connect can use models such as <code>MiniMax-M3</code> and <code>MiniMax-M2.7</code> through magpie’s gateway at <code>127.0.0.1:3425</code>.</p>
+
+    <h2 id="add"><a class="anchor" href="#add">Add MiniMax</a></h2>
+    <ol class="steps">
+      <li><b>Get a key</b>Create one at <a href="https://platform.minimax.io/user-center/basic-information/interface-key">platform.minimax.io</a>, or <a href="https://platform.minimaxi.com/user-center/basic-information/interface-key">platform.minimaxi.com</a> for the China site. A Coding Plan key starts with <code>sk-cp-</code>.</li>
+      <li><b>Add the provider</b>In magpie’s <span class="ui">Providers</span> tab, press <span class="ui">＋ Add provider</span>, pick MiniMax or MiniMax (China), paste the key and save. A pay-as-you-go key and a Coding Plan key go in the same way.</li>
+      <li><b>Pick it for an agent</b>In the <span class="ui">Agents</span> tab, click the model on the agent’s row and choose a MiniMax model.</li>
+    </ol>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-add">Copy</button><pre id="ex-add">magpie provider add minimax sk-…        # platform.minimax.io
+magpie provider add minimax-cn sk-cp-…  # Coding Plan, platform.minimaxi.com</pre></div>
+
+    <h2 id="endpoints"><a class="anchor" href="#endpoints">Plans and endpoints</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>Preset</th><th>Site</th><th>Chat Completions</th><th>Anthropic Messages</th></tr>
+      <tr><td>MiniMax <span class="ui">minimax</span></td><td>platform.minimax.io</td><td><code>https://api.minimax.io/v1</code></td><td><code>https://api.minimax.io/anthropic</code></td></tr>
+      <tr><td>MiniMax (China) <span class="ui">minimax-cn</span></td><td>platform.minimaxi.com</td><td><code>https://api.minimaxi.com/v1</code></td><td><code>https://api.minimaxi.com/anthropic</code></td></tr>
+    </table></div>
+    <p>The Coding Plan uses the same endpoints as pay as you go; the key decides which one a request is billed to. A global key and a China key are different accounts, so each goes under its own site’s preset.</p>
+
+    <h2 id="agents"><a class="anchor" href="#agents">In each agent</a></h2>
+    <p>Pick the model on an agent’s row in the <span class="ui">Agents</span> tab, or from a terminal. Each guide says what magpie writes in that agent’s config and how to switch back.</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-agents">Copy</button><pre id="ex-agents">magpie claude minimax/MiniMax-M3
+magpie codex minimax/MiniMax-M3
+magpie gemini model minimax/MiniMax-M2.7
+magpie opencode minimax/MiniMax-M3</pre></div>
+    <ul>
+      <li><b>Claude Code</b> speaks Anthropic Messages, and so does MiniMax’s Anthropic endpoint, so its requests are passed on as they are. Every tier (opus, sonnet, haiku) runs on the model you pick unless you give one its own. <a href="/docs/claude-code-models">Models in Claude Code</a>.</li>
+      <li><b>Codex</b> speaks only OpenAI Responses. MiniMax serves Chat Completions and Anthropic Messages but not Responses, so magpie translates each request and the reply, streaming and tool calls included. The model shows in Codex’s <code>/model</code> with its reasoning efforts. <a href="/docs/codex-models">Models in Codex</a>.</li>
+      <li><b>Gemini CLI</b> speaks Gemini’s API. magpie points it at its gateway and translates. <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>.</li>
+      <li><b>OpenCode</b> gets the model in <code>opencode.json</code>, with its reasoning variants and cost. <a href="/docs/opencode-models">Models in OpenCode</a>.</li>
+    </ul>
+    <p>MiniMax Code is one of the agents magpie connects too: its row takes MiniMax’s models or any other vendor’s.</p>
+
+    <h2 id="thinking"><a class="anchor" href="#thinking">Thinking and effort</a></h2>
+    <ul>
+      <li><b>Interleaved thinking.</b> MiniMax’s Chat API gives a model’s thinking in the reply text, between <code>&lt;think&gt;</code> tags, and wants it back there on later turns. magpie hands it to the agent as thinking and puts it back where MiniMax expects it.</li>
+      <li><b>Effort.</b> <code>MiniMax-M3.1-Flash</code> and its preview think at levels from low to max. magpie sends the level an agent asks for in <code>output_config.effort</code>, as MiniMax Code does, so it isn’t lost to a token budget.</li>
+      <li><b>Models that always think.</b> <code>MiniMax-M3.1-Flash-Preview</code> refuses to have thinking turned off. When an agent asks for it off, magpie asks again with thinking left on, so the agent gets an answer rather than the error.</li>
+    </ul>
+
+    <h2 id="usage"><a class="anchor" href="#usage">Coding Plan windows and usage</a></h2>
+    <ul>
+      <li><b>Coding Plan windows.</b> A Coding Plan key’s row shows what is left of each window MiniMax reports, a rolling one and a weekly one, read from MiniMax. Models draw on the general bucket; a bucket metered apart, such as video, shows as a count, like 4 / 5. A pay-as-you-go key has no windows and no card.</li>
+      <li><b>Routing.</b> With several Coding Plan keys, magpie weighs them by their windows and rests one that has used a window up until it resets.</li>
+      <li><b>Usage.</b> The <span class="ui">Usage</span> tab counts tokens, cache hits and cost for each agent and model that went through magpie.</li>
+    </ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
+    <h3>How do I use MiniMax M2.7 or M3 in Claude Code?</h3>
+    <p>Add your MiniMax key in magpie (Providers, Add provider, MiniMax or MiniMax (China)), then pick a model such as <code>MiniMax-M3</code> on Claude Code’s row, or run <code>magpie claude minimax/MiniMax-M3</code>. magpie writes Claude Code’s <code>settings.json</code> and passes its requests to MiniMax’s Anthropic endpoint, <code>https://api.minimax.io/anthropic</code>.</p>
+    <h3>How do I use the MiniMax Coding Plan?</h3>
+    <p>Add the Coding Plan key (<code>sk-cp-…</code>) to the MiniMax preset of the site you bought it on, the same as a pay-as-you-go key. magpie tells the two apart by what MiniMax says about the key, and shows a Coding Plan key’s usage windows on its row.</p>
+    <h3>Can Codex use MiniMax?</h3>
+    <p>Yes. MiniMax serves Chat Completions and Anthropic Messages but not Responses, so magpie translates Codex’s requests and MiniMax’s replies. Pick the model on Codex’s row or run <code>magpie codex minimax/MiniMax-M3</code>; it shows in Codex’s <code>/model</code> list.</p>
+    <h3>Can MiniMax Code use other models?</h3>
+    <p>Yes. MiniMax Code is one of the agents magpie connects, so its row in the Agents tab takes any model you have added, MiniMax’s or another vendor’s.</p>
+    <h3>Why does MiniMax’s thinking show up in the text?</h3>
+    <p>MiniMax’s Chat API puts a model’s thinking in the reply text between <code>&lt;think&gt;</code> tags. magpie takes it out and gives it to the agent as thinking, then puts it back on the next turns, where MiniMax wants it.</p>
+    <h3>Can I use several MiniMax keys?</h3>
+    <p>Yes. Add them all to the MiniMax provider and tick each one. magpie spreads requests over them, and weighs and rests Coding Plan keys by their windows, so a key that has used up its window sits out until it resets.</p>
+
+    <p style="margin-top:48px">Every agent: <a href="/docs/claude-code-models">Models in Claude Code</a>, <a href="/docs/codex-models">Models in Codex</a>, <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>, <a href="/docs/opencode-models">Models in OpenCode</a>. Ask on <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> if you get stuck.</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a href="/docs/remote">Remote magpie</a>
+    <a href="/docs/docker">Docker</a>
+    <a href="/docs/privacy">Privacy</a>
+    <a href="/docs/masking">Privacy masking</a>
+    <a href="/docs/mcp-router">MCP router</a>
+    <a href="/docs/library">Library</a>
+    <a href="/docs/claude-code-models">Models in Claude Code</a>
+    <a href="/docs/codex-models">Models in Codex</a>
+    <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a href="/docs/local-models">Local models</a>
+    <a href="/docs/opencode-models">Models in OpenCode</a>
+    <a href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/contributors">Contributors</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

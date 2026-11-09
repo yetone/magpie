@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiniMax と Coding Plan を Claude Code・Codex・Gemini CLI・OpenCode で使う · magpie</title>
+<meta name="description" content="magpie で MiniMax M3・M2.7 を Claude Code・Codex・Gemini CLI・OpenCode から使う方法：従量課金と Coding Plan のキー、国際版と中国版のエンドポイント、インターリーブ思考、M3.1 Flash の推論レベル、Coding Plan の使用量ウィンドウ。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/minimax">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/minimax">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/minimax">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/minimax">
+<link rel="canonical" href="https://usemagpie.ai/docs/ja/minimax">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="MiniMax と Coding Plan を Claude Code・Codex・Gemini CLI・OpenCode で使う">
+<meta property="og:description" content="magpie で MiniMax M3・M2.7 を Claude Code・Codex・Gemini CLI・OpenCode から使う方法：従量課金と Coding Plan のキー、国際版と中国版のエンドポイント、インターリーブ思考、M3.1 Flash の推論レベル、Coding Plan の使用量ウィンドウ。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/ja/minimax">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "MiniMax と Coding Plan を Claude Code・Codex・Gemini CLI・OpenCode で使う",
+   "description": "magpie で MiniMax M3・M2.7 を Claude Code・Codex・Gemini CLI・OpenCode から使う方法：従量課金と Coding Plan のキー、国際版と中国版のエンドポイント、インターリーブ思考、M3.1 Flash の推論レベル、Coding Plan の使用量ウィンドウ。",
+   "inLanguage": "ja",
+   "url": "https://usemagpie.ai/docs/ja/minimax",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Claude Code で MiniMax M2.7 や M3 を使うには？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie に MiniMax のキーを追加し（プロバイダ → プロバイダを追加 → MiniMax か MiniMax (China)）、Claude Code の行で MiniMax-M3 などのモデルを選ぶか、magpie claude minimax/MiniMax-M3 を実行します。magpie が Claude Code の settings.json を書き、リクエストを MiniMax の Anthropic エンドポイント https://api.minimax.io/anthropic に渡します。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "MiniMax Coding Plan はどう使いますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Coding Plan のキー（sk-cp-…）を、購入したサイトの MiniMax プリセットに従量課金のキーと同じように追加します。magpie は MiniMax がそのキーについて返す情報で両者を見分け、Coding Plan のキーの行に使用量ウィンドウを表示します。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex で MiniMax を使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。MiniMax は Chat Completions と Anthropic Messages を提供し、Responses は提供していないので、magpie が Codex のリクエストと MiniMax の返答を変換します。Codex の行で選ぶか magpie codex minimax/MiniMax-M3 を実行すると、Codex の /model に並びます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "MiniMax Code で他のモデルを使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。MiniMax Code は magpie がつなぐエージェントの一つなので、エージェント タブのその行で、追加したどのモデルでも選べます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "MiniMax の思考が本文に出るのはなぜ？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "MiniMax の Chat API はモデルの思考を返答本文の <think> タグに入れて返します。magpie はそれを取り出して思考としてツールに渡し、次のターンからは MiniMax が求める位置に戻します。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "MiniMax のキーを複数使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。すべて MiniMax プロバイダに追加してそれぞれにチェックを入れます。magpie はリクエストを分散し、Coding Plan のキーはウィンドウで重みづけして、使い切ったキーはリセットまで休ませます。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/ja/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>ドキュメント</small></a>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/start">はじめに</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a class="toc-only" href="/docs/ja/remote">リモート magpie</a>
+    <a class="toc-only" href="/docs/ja/docker">Docker</a>
+    <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
+    <a class="toc-only" href="/docs/ja/masking">プライバシーマスキング</a>
+    <a class="toc-only" href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a class="toc-only" href="/docs/ja/library">ライブラリ</a>
+    <a class="toc-only" href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a class="toc-only" href="/docs/ja/local-models">ローカルモデル</a>
+    <a class="toc-only" href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="言語" title="言語" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/minimax" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/minimax" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/minimax" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="Discord の magpie" title="Discord に参加"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="GitHub の magpie" title="GitHub のソースコード"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">ダウンロード</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>このページ</p>
+    <a href="#add">追加する</a>
+    <a href="#endpoints">プランとエンドポイント</a>
+    <a href="#agents">ツールごとの使い方</a>
+    <a href="#thinking">思考</a>
+    <a href="#usage">残高と使用量</a>
+    <a href="#faq">よくある質問</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">ドキュメント · プロバイダ</p>
+    <h1>MiniMax と Coding Plan を Claude Code・Codex・Gemini CLI・OpenCode で使う</h1>
+    <p class="lede">MiniMax は OpenAI 互換の Chat API と Anthropic 互換の API を、国際版と中国版のサイトで、従量課金と Coding Plan のどちらのキーにも提供しています。キーを magpie に一度追加すれば、Claude Code・Codex・Gemini CLI・OpenCode などつないだすべてのツールが、magpie のゲートウェイ <code>127.0.0.1:3425</code> 経由で <code>MiniMax-M3</code> や <code>MiniMax-M2.7</code> などのモデルを使えます。</p>
+
+    <h2 id="add"><a class="anchor" href="#add">MiniMax を追加する</a></h2>
+    <ol class="steps">
+      <li><b>キーを取得</b><a href="https://platform.minimax.io/user-center/basic-information/interface-key">platform.minimax.io</a> で作ります（中国版は <a href="https://platform.minimaxi.com/user-center/basic-information/interface-key">platform.minimaxi.com</a>）。Coding Plan のキーは <code>sk-cp-</code> で始まります。</li>
+      <li><b>プロバイダを追加</b>magpie の <span class="ui">プロバイダ</span> で <span class="ui">＋ プロバイダを追加</span> を押し、MiniMax か MiniMax (China) を選んでキーを貼り付け、保存します。従量課金のキーも Coding Plan のキーも同じ手順です。</li>
+      <li><b>ツールで選ぶ</b><span class="ui">エージェント</span> タブで、ツールの行の MiniMax モデルを選びます。</li>
+    </ol>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-add">コピー</button><pre id="ex-add">magpie provider add minimax sk-…        # platform.minimax.io
+magpie provider add minimax-cn sk-cp-…  # Coding Plan、platform.minimaxi.com</pre></div>
+
+    <h2 id="endpoints"><a class="anchor" href="#endpoints">プランとエンドポイント</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>プリセット</th><th>サイト</th><th>Chat Completions</th><th>Anthropic Messages</th></tr>
+      <tr><td>MiniMax <span class="ui">minimax</span></td><td>platform.minimax.io（国際）</td><td><code>https://api.minimax.io/v1</code></td><td><code>https://api.minimax.io/anthropic</code></td></tr>
+      <tr><td>MiniMax (China) <span class="ui">minimax-cn</span></td><td>platform.minimaxi.com（中国）</td><td><code>https://api.minimaxi.com/v1</code></td><td><code>https://api.minimaxi.com/anthropic</code></td></tr>
+    </table></div>
+    <p>Coding Plan も従量課金と同じエンドポイントを使い、どちらで課金されるかはキーで決まります。国際版と中国版は別のアカウントなので、キーはそれぞれのサイトのプリセットに入れます。</p>
+
+    <h2 id="agents"><a class="anchor" href="#agents">ツールごとの使い方</a></h2>
+    <p><span class="ui">エージェント</span> タブで各ツールの行のモデルをクリックして選ぶか、ターミナルで選びます。各ガイドに、magpie がそのツールの設定に何を書くか、どう元に戻すかがあります。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-agents">コピー</button><pre id="ex-agents">magpie claude minimax/MiniMax-M3
+magpie codex minimax/MiniMax-M3
+magpie gemini model minimax/MiniMax-M2.7
+magpie opencode minimax/MiniMax-M3</pre></div>
+    <ul>
+      <li><b>Claude Code</b> は Anthropic Messages を話し、MiniMax の Anthropic エンドポイントも同じなので、リクエストはそのまま渡されます。opus・sonnet・haiku の各ティアは、個別に指定しない限り選んだモデルで動きます。<a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>。</li>
+      <li><b>Codex</b> が話すのは OpenAI Responses だけです。MiniMax は Chat Completions と Anthropic Messages を提供し、Responses は提供していないので、magpie がリクエストと返答を変換します。ストリーミングとツール呼び出しもそのままです。モデルは推論レベル付きで Codex の <code>/model</code> に並びます。<a href="/docs/ja/codex-models">Codex で他のモデル</a>。</li>
+      <li><b>Gemini CLI</b> は Gemini の API を話します。magpie がゲートウェイに向けて変換します。<a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>。</li>
+      <li><b>OpenCode</b> には、magpie が <code>opencode.json</code> にモデルを推論バリアントと価格つきで書きます。<a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>。</li>
+    </ul>
+    <p>MiniMax Code も magpie がつなぐエージェントの一つで、その行では MiniMax のモデルも他社のモデルも選べます。</p>
+
+    <h2 id="thinking"><a class="anchor" href="#thinking">思考と推論レベル</a></h2>
+    <ul>
+      <li><b>インターリーブ思考。</b>MiniMax の Chat API はモデルの思考を返答本文の <code>&lt;think&gt;</code> タグに入れて返し、次のターン以降もそこに戻すよう求めます。magpie はそれを思考としてツールに渡し、MiniMax が求める位置に戻します。</li>
+      <li><b>推論レベル。</b><code>MiniMax-M3.1-Flash</code> とそのプレビューは low から max までの思考レベルを持ちます。magpie は MiniMax Code と同じように、ツールが求めるレベルを <code>output_config.effort</code> で送るので、トークン予算に置き換わって失われることはありません。</li>
+      <li><b>常に思考するモデル。</b><code>MiniMax-M3.1-Flash-Preview</code> は思考をオフにできません。ツールがオフを求めたとき、magpie は思考をオンのまま聞き直すので、ツールにはエラーではなく返答が届きます。</li>
+    </ul>
+
+    <h2 id="usage"><a class="anchor" href="#usage">Coding Plan のウィンドウと使用量</a></h2>
+    <ul>
+      <li><b>Coding Plan のウィンドウ。</b>Coding Plan のキーの行に、MiniMax から読んだ各ウィンドウ（ローリングのものと週単位のもの）の残りが表示されます。モデルは汎用の枠を使い、動画など別に数える枠は 4 / 5 のように回数で表示されます。従量課金のキーにはウィンドウもカードもありません。</li>
+      <li><b>ルーティング。</b>Coding Plan のキーが複数あるとき、magpie はウィンドウで重みづけし、ウィンドウを使い切ったキーはリセットまで休ませます。</li>
+      <li><b>使用量。</b><span class="ui">使用量</span> タブは、magpie を通った各ツールとモデルのトークン、キャッシュヒット、費用を数えます。</li>
+    </ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
+    <h3>Claude Code で MiniMax M2.7 や M3 を使うには？</h3>
+    <p>magpie に MiniMax のキーを追加し（プロバイダ → プロバイダを追加 → MiniMax か MiniMax (China)）、Claude Code の行で <code>MiniMax-M3</code> などのモデルを選ぶか、<code>magpie claude minimax/MiniMax-M3</code> を実行します。magpie が Claude Code の <code>settings.json</code> を書き、リクエストを MiniMax の Anthropic エンドポイント <code>https://api.minimax.io/anthropic</code> に渡します。</p>
+    <h3>MiniMax Coding Plan はどう使いますか？</h3>
+    <p>Coding Plan のキー（<code>sk-cp-…</code>）を、購入したサイトの MiniMax プリセットに従量課金のキーと同じように追加します。magpie は MiniMax がそのキーについて返す情報で両者を見分け、Coding Plan のキーの行に使用量ウィンドウを表示します。</p>
+    <h3>Codex で MiniMax を使えますか？</h3>
+    <p>使えます。MiniMax は Chat Completions と Anthropic Messages を提供し、Responses は提供していないので、magpie が Codex のリクエストと MiniMax の返答を変換します。Codex の行で選ぶか <code>magpie codex minimax/MiniMax-M3</code> を実行すると、Codex の <code>/model</code> に並びます。</p>
+    <h3>MiniMax Code で他のモデルを使えますか？</h3>
+    <p>使えます。MiniMax Code は magpie がつなぐエージェントの一つなので、エージェント タブのその行で、追加したどのモデルでも選べます。</p>
+    <h3>MiniMax の思考が本文に出るのはなぜ？</h3>
+    <p>MiniMax の Chat API はモデルの思考を返答本文の <code>&lt;think&gt;</code> タグに入れて返します。magpie はそれを取り出して思考としてツールに渡し、次のターンからは MiniMax が求める位置に戻します。</p>
+    <h3>MiniMax のキーを複数使えますか？</h3>
+    <p>使えます。すべて MiniMax プロバイダに追加してそれぞれにチェックを入れます。magpie はリクエストを分散し、Coding Plan のキーはウィンドウで重みづけして、使い切ったキーはリセットまで休ませます。</p>
+
+    <p style="margin-top:48px">ツールごとのガイド：<a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>、<a href="/docs/ja/codex-models">Codex で他のモデル</a>、<a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>、<a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>。困ったときは <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> で質問してください。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a href="/docs/ja/remote">リモート magpie</a>
+    <a href="/docs/ja/docker">Docker</a>
+    <a href="/docs/ja/privacy">プライバシー</a>
+    <a href="/docs/ja/masking">プライバシーマスキング</a>
+    <a href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a href="/docs/ja/library">ライブラリ</a>
+    <a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a href="/docs/ja/local-models">ローカルモデル</a>
+    <a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/ja/contributors">コントリビューター</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "コピーしました"; setTimeout(() => (b.textContent = "コピー"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
