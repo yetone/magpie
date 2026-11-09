@@ -2767,7 +2767,13 @@ function routingPage(part) {
     const g = r.group;
     const routing = g ? g.routing || "" : f?.routing || "";
     const m = modeOf(routing);
-    const on = r.order.filter((x) => !x.fallback).length;
+    // a group is said by its members on as the request came (GroupRef's
+    // members, those ready), not by who this request was weighed among:
+    // a conversation held to one member (native compaction, Strict, a
+    // sealed task, a key's models) read as the group having one on
+    // (adorable_piglet on Discord: three of five on, "1 on"); why it went
+    // to that one alone is the first line's to say
+    const on = g?.members?.length || r.order.filter((x) => !x.fallback).length;
     const pool = !g && f ? poolOf(f.provider) : null;
     // none weighed: a request magpie holds before routing it (masked
     // first, or still read), or one nothing took. It says so, not "0 on"
