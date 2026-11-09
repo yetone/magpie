@@ -6,7 +6,8 @@
 // under To review, and a memory added, edited through the app's menu (never
 // a <select>), kept and deleted. Conversations read into memory: switched
 // on, a model picked through the app's menu, read now, and a run that
-// stopped says why. Every language, wide and narrow, Chromium
+// stopped says why. The nightly tidy: switched on, with the model picked
+// on its row while conversations aren't read, tidied now and undone. Every language, wide and narrow, Chromium
 // and WebKit; no backend, the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -55,7 +56,21 @@ function server(lang, state, sent, dist) {
       sent.push({ path: url.pathname, body: route.request().postDataJSON() });
       return route.fulfill({ json: { ...library, result: { changed: [] } } });
     }
+    if (url.pathname.startsWith("/api/memory/dream")) {
+      const body = route.request().postDataJSON();
+      sent.push({ path: url.pathname, body });
+      const m9 = state.memories.find((m) => m.id === "m9");
+      if (url.pathname === "/api/memory/dream") dist.dream = body.on;
+      else if (url.pathname === "/api/memory/dream/run") Object.assign(dist, { dreaming: true, dgets: 0 });
+      else if (url.pathname === "/api/memory/dream/undo") { dist.undone = true; if (m9) m9.status = "candidate"; }
+      return route.fulfill({ json: dist });
+    }
     if (url.pathname.startsWith("/api/memory/distill")) {
+      if (route.request().method() === "GET" && dist.dreaming && ++dist.dgets > 1) {
+        // the tidy ends: it set aside the one read in, unreviewed
+        Object.assign(dist, { dreaming: false, dreamt: new Date().toISOString(), undone: false, changes: [{ action: "aside", ids: ["m9"], was: ["candidate"], text: "Ships on Tuesdays", why: "unreviewed" }] });
+        state.memories.find((m) => m.id === "m9").status = "archived";
+      }
       if (route.request().method() === "POST") {
         const body = route.request().postDataJSON();
         sent.push({ path: url.pathname, body });
@@ -64,7 +79,7 @@ function server(lang, state, sent, dist) {
       } else if (dist.running && ++dist.gets > 1) {
         // the run ends: it read three and proposed one
         Object.assign(dist, { running: false, last: new Date().toISOString(), read: 3, added: 1 });
-        state.memories.push({ id: "m9", text: "Ships on Tuesdays", kind: "fact", scope: "global", origin: "inferred", status: "candidate", created: at(7), updated: at(7) });
+        if (!state.memories.some((m) => m.id === "m9")) state.memories.push({ id: "m9", text: "Ships on Tuesdays", kind: "fact", scope: "global", origin: "inferred", status: "candidate", created: at(7), updated: at(7) });
       }
       return route.fulfill({ json: dist });
     }
@@ -91,11 +106,11 @@ function server(lang, state, sent, dist) {
 
 const view = "#view-library";
 const words = {
-  en: { tab: "Memory", review: "To review", rule: "Rule", fact: "Fact", learn: "Learn from conversations", now: "Read now" },
-  zh: { tab: "记忆", review: "待确认", rule: "规则", fact: "事实", learn: "从对话中学习", now: "立即读取" },
-  "zh-TW": { tab: "記憶", review: "待確認", rule: "規則", fact: "事實", learn: "從對話中學習", now: "立即讀取" },
-  ja: { tab: "メモリ", review: "確認待ち", rule: "ルール", fact: "事実", learn: "会話から学ぶ", now: "今すぐ読む" },
-  de: { tab: "Memory", review: "Zu prüfen", rule: "Regel", fact: "Fakt", learn: "Aus Unterhaltungen lernen", now: "Jetzt lesen" },
+  en: { tab: "Memory", review: "To review", rule: "Rule", fact: "Fact", learn: "Learn from conversations", now: "Read now", tidy: "Tidy up every night" },
+  zh: { tab: "记忆", review: "待确认", rule: "规则", fact: "事实", learn: "从对话中学习", now: "立即读取", tidy: "每晚整理" },
+  "zh-TW": { tab: "記憶", review: "待確認", rule: "規則", fact: "事實", learn: "從對話中學習", now: "立即讀取", tidy: "每晚整理" },
+  ja: { tab: "メモリ", review: "確認待ち", rule: "ルール", fact: "事実", learn: "会話から学ぶ", now: "今すぐ読む", tidy: "毎晩整理する" },
+  de: { tab: "Memory", review: "Zu prüfen", rule: "Regel", fact: "Fakt", learn: "Aus Unterhaltungen lernen", now: "Jetzt lesen", tidy: "Jede Nacht aufräumen" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -143,6 +158,23 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.match(await drow.locator(".name").textContent(), new RegExp(w.learn));
         assert.equal(await drow.locator("button.lib-switch").getAttribute("aria-checked"), "false");
         assert.equal(await drow.locator(".lib-distmodel, .lib-distnow").count(), 0);
+        // nor is memory tidied; switched on, it picks its model on its own row while conversations aren't read
+        const trow = page.locator(`${view} .lib-memdream`);
+        assert.match(await trow.locator(".name").textContent(), new RegExp(w.tidy));
+        assert.equal(await trow.locator("button.lib-switch").getAttribute("aria-checked"), "false");
+        assert.equal(await trow.locator(".lib-distmodel, .lib-dreamnow, .lib-dreamundo").count(), 0);
+        await trow.locator("button.lib-switch").click();
+        await trow.locator(".lib-dreamnow").waitFor();
+        assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/dream").body, { on: true });
+        assert.match(await trow.locator(".lib-distmodel").textContent(), /Small/);
+        assert.equal(await drow.locator(".lib-distmodel").count(), 0);
+        {
+          const card = await page.locator(`${view} .lib-memcard`).boundingBox();
+          for (const b of await trow.locator(".lib-acts > *").all()) {
+            const r = await b.boundingBox();
+            assert.ok(r.x + r.width <= card.x + card.width + 1, "a control of the tidy row is cut off");
+          }
+        }
 
         // in use: the pinned one first, then the newer one; the one guessed waits
         assert.equal(await rows.count(), 2);
@@ -218,6 +250,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction(() => document.querySelector("#view-library .lib-memdistill button.lib-switch")?.getAttribute("aria-checked") === "true");
         assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/distill").body, { on: true, model: "" });
         assert.match(await drow.locator(".lib-distmodel").textContent(), /Small/);
+        assert.equal(await trow.locator(".lib-distmodel").count(), 0, "a model picked on both rows");
         assert.equal(await drow.locator(".lib-distnow").count(), 0, "Read now while reading");
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "the row scrolls sideways");
         const card = await page.locator(`${view} .lib-memcard`).boundingBox();
@@ -246,6 +279,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.match(await drow.locator(".sub.err").textContent(), /429: too many requests/);
           assert.ok(sent.some((x) => x.path === "/api/memory/distill/run"));
         }
+
+        // tidied now: what it set aside leaves To review, and is undone once
+        await page.locator(`${view} .lib-memstatus .opt`, { hasText: w.review }).click();
+        await page.locator(`${view} .lib-mems .lib-mem`, { hasText: "Ships on Tuesdays" }).waitFor();
+        await trow.locator(".lib-dreamnow").click();
+        await trow.locator(".lib-dreamundo").waitFor({ timeout: 8000 });
+        assert.ok(sent.some((x) => x.path === "/api/memory/dream/run"));
+        assert.match(await trow.locator(".sub").textContent(), /1/);
+        await page.locator(`${view} .lib-mems .lib-mem`, { hasText: "Ships on Tuesdays" }).waitFor({ state: "detached" });
+        await trow.locator(".lib-dreamundo").click();
+        await page.locator(`${view} .lib-mems .lib-mem`, { hasText: "Ships on Tuesdays" }).waitFor();
+        assert.equal(await trow.locator(".lib-dreamundo").count(), 0);
+        assert.ok(sent.some((x) => x.path === "/api/memory/dream/undo"));
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "the page scrolls sideways");
         await ctx.close();
       });
     }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/yetone/magpie/internal/filelock"
@@ -30,6 +31,11 @@ const (
 	// perAsk caps the memories one request is shown
 	perAsk = 120
 )
+
+var dreaming atomic.Bool
+
+// Dreaming says a tidy is going in this process (Running says so too).
+func Dreaming() bool { return dreaming.Load() }
 
 // SetDream switches the nightly tidy on or off. Switched on, the first is
 // due at the next DreamHour; Tidy now does one at once.
@@ -66,6 +72,8 @@ func Dream(ctx context.Context, auto string, complete Complete) ([]memory.Change
 	defer running.Unlock()
 	busy.Store(true)
 	defer busy.Store(false)
+	dreaming.Store(true)
+	defer dreaming.Store(false)
 	unlock, held := filelock.Lock(Path()+".run", 0)
 	if !held {
 		return nil, ErrRunning
@@ -242,7 +250,7 @@ const dreamPrompt = `You tidy a list of notes kept about a user and their projec
 
 Find two things:
 - merge: notes that say the same thing, or where one says all another does. Give their names and one text that keeps everything they say, short, in the language they are written in, and its kind. A fixed note's words can't change: when one is in a merge, it is the note kept, and the others go into it.
-- stale: notes no longer true or no longer useful: one a later note contradicts, one about work that is finished, one about a date that has passed. Never a fixed note.
+- stale: notes no longer true: one a later note contradicts, one about a date that has passed, one about a one-off task that is done. A decision, a direction or a preference stays even when the work it came from is done. Never a fixed note.
 
 When unsure, leave a note as it is. Most notes stay.
 

@@ -1052,7 +1052,7 @@ magpie.plugin("library", (ctx) => {
     const sw = toggle(mem.digest, t("In the agents' instructions"), (on) => memChange("memory/digest", { on }, on ? t("The agents read the memories' summary") : t("The memories' summary is taken out of the agents' instructions")));
     row.append(glyph(GLYPH.doc), who, sw);
     card.append(row);
-    if (dist) card.append(distillRow());
+    if (dist) card.append(distillRow(), dreamRow());
     if (!lib.servers.some((s) => s.name === "magpie-memory")) {
       const r = el("div", "row lib-row lib-memtools");
       const w = el("div", "who");
@@ -1098,6 +1098,17 @@ magpie.plugin("library", (ctx) => {
     }
     body.append(list);
   }
+  // the model conversations are read and memory tidied with: the
+  // automatic one or one picked, shared by both rows
+  function memModelPick(d) {
+    const modelName = (id) => { const m = d.models.find((x) => x.id === id); return m ? (m.name || m.id) : id; };
+    const auto = d.auto ? t("Automatic") + " · " + modelName(d.auto) : t("Automatic");
+    const pick = menuButton(d.model ? modelName(d.model) : auto, "lib-distmodel", () => openProtoMenu(pick, [
+      { v: "", name: t("Automatic"), note: d.auto ? modelName(d.auto) : t("No models"), literalName: true },
+      ...d.models.map((m) => ({ v: m.id, name: m.name || m.id, note: m.providerName || "", literalName: true }))],
+    d.model || "", (v) => distChange("memory/distill", { on: d.on, model: v }), "Model", "", "left", false, d.models.length > 8 ? "Search models" : ""));
+    return pick;
+  }
   // Conversations read into memory (internal/memdistill): what the
   // agents' finished sessions say worth keeping waits under To review.
   // Off until switched on; the model is the automatic one or one picked.
@@ -1106,7 +1117,6 @@ magpie.plugin("library", (ctx) => {
     const r = el("div", "row lib-row lib-memdistill");
     const w = el("div", "who");
     w.append(el("div", "name", t("Learn from conversations")));
-    const modelName = (id) => { const m = d.models.find((x) => x.id === id); return m ? (m.name || m.id) : id; };
     let line = t("Reads each finished conversation for what to remember. You review each one before agents see it.");
     let err = false;
     if (d.on && d.running) line = t("Reading conversations…");
@@ -1116,21 +1126,43 @@ magpie.plugin("library", (ctx) => {
     w.append(el("div", "sub" + (err ? " err" : ""), line));
     const acts = el("div", "lib-acts");
     if (d.on) {
-      const auto = d.auto ? t("Automatic") + " · " + modelName(d.auto) : t("Automatic");
-      const pick = menuButton(d.model ? modelName(d.model) : auto, "lib-distmodel", () => openProtoMenu(pick, [
-        { v: "", name: t("Automatic"), note: d.auto ? modelName(d.auto) : t("No models"), literalName: true },
-        ...d.models.map((m) => ({ v: m.id, name: m.name || m.id, note: m.providerName || "", literalName: true }))],
-      d.model || "", (v) => distChange("memory/distill", { on: true, model: v }), "Model", "", "left", false, d.models.length > 8 ? "Search models" : ""));
-      acts.append(pick);
+      acts.append(memModelPick(d));
       if (!d.running) acts.append(button(t("Read now"), "action lib-distnow", () => distChange("memory/distill/run", {})));
     }
     acts.append(toggle(d.on, t("Learn from conversations"), (on) => distChange("memory/distill", { on, model: d.model || "" })));
     r.append(glyph(GLYPH.search), w, acts);
     return r;
   }
-  async function distChange(path, body) {
+  // The nightly tidy (memdistill's Dream): memories that repeat are
+  // merged, ones out of date set aside, the last night's undone at once.
+  // The model is the one picked above; with reading off, it is picked here.
+  function dreamRow() {
+    const d = dist;
+    const r = el("div", "row lib-row lib-memdream");
+    const w = el("div", "who");
+    w.append(el("div", "name", t("Tidy up every night")));
+    const ch = d.changes || [];
+    const merged = ch.filter((c) => c.action === "merge").length, aside = ch.length - merged;
+    let line = t("Merges memories that repeat and sets aside ones out of date. What you wrote or pinned stays.");
+    let err = false;
+    if (d.dreaming) line = t("Tidying…");
+    else if (d.dreamError) { line = t("Couldn't tidy: {error}", { error: d.dreamError }); err = true; }
+    else if (d.dreamt && d.undone) line = t("Tidied {when} · undone", { when: ago(d.dreamt) });
+    else if (d.dreamt && ch.length) line = t("Tidied {when} · {m} merged, {a} set aside", { when: ago(d.dreamt), m: merged, a: aside });
+    else if (d.dreamt) line = t("Nothing to tidy {when}", { when: ago(d.dreamt) });
+    w.append(el("div", "sub" + (err ? " err" : ""), line));
+    const acts = el("div", "lib-acts");
+    if (ch.length && !d.undone && !d.dreaming) acts.append(button(t("Undo"), "action lib-dreamundo", () => distChange("memory/dream/undo", {}, true)));
+    if (d.dream && !d.on) acts.append(memModelPick(d));
+    if (d.dream && !d.dreaming && !d.running) acts.append(button(t("Tidy now"), "action lib-dreamnow", () => distChange("memory/dream/run", {})));
+    acts.append(toggle(d.dream, t("Tidy up every night"), (on) => distChange("memory/dream", { on })));
+    r.append(glyph(GLYPH.backup), w, acts);
+    return r;
+  }
+  async function distChange(path, body, reload) {
     try {
       dist = await api(path, body);
+      if (reload) mem = await api("memory");
     } catch (e) {
       status(e.message, "err", 6000);
     }
@@ -1141,12 +1173,12 @@ magpie.plugin("library", (ctx) => {
   // memories are too, for what it proposed
   function distWatch() {
     clearTimeout(distPoll);
-    if (!dist?.running) return;
+    if (!dist?.running && !dist?.dreaming) return;
     distPoll = setTimeout(async () => {
       if (tab !== "memory") return;
       try {
         dist = await api("memory/distill");
-        if (!dist.running) mem = await api("memory");
+        if (!dist.running && !dist.dreaming) mem = await api("memory");
       } catch {}
       render();
       distWatch();

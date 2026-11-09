@@ -138,17 +138,51 @@ further (`State.Since`).
   `POST /api/memory/distill/run`. The row polls every 2s while a run
   goes and reloads the memories when it ends.
 
+### Dreaming
+
+The nightly tidy (`internal/memdistill/dream.go`, `internal/memory/tidy.go`):
+a model is shown each scope's memories and names the ones that say the
+same thing, merged into one, and the ones no longer true, set aside. It is
+off until switched on under Memory → Tidy up every night.
+
+- Due once a day from 03:00 local (`DreamHour`), never before the first
+  03:00 after it was switched on (`Dreams`, `TestDreamsOnceANight`). `Keep`
+  runs it after the hourly distill run; Tidy now runs it at once. It
+  shares distillation's model, run lock and `distill.json`.
+- What is sent: per scope with two or more active or candidate memories
+  and at least one not fixed, up to 120 (`perAsk`) a request, each as
+  `nN | kind | date | used N× | [fixed |] text — why`. Ids are replaced by
+  the short names, and a name not shown is ignored. The prompt names
+  neither magpie nor the vendor.
+- What the user wrote or pinned (`memory.Fixed`) is never rewritten or
+  set aside. Merged with others, it is the one kept and the others go into
+  it; two fixed ones are never merged (`TestTidyNeverChangesTheUsers`).
+  A merge across scopes or of a memory no longer in use isn't done.
+- A merge makes a new inferred memory carrying every member's tags and
+  sources, active when any member was. The members are kept, superseded
+  by it. A stale memory is archived with the model's reason.
+- An inferred candidate left unreviewed for 30 days (`Unreviewed`) is
+  archived as well, with no request needed.
+- A failed request changes nothing and is kept to show
+  (`TestDreamFailureChangesNothing`).
+- What the last tidy did is kept in `distill.json` (`changes`). Undo puts
+  it back once (`Untidy`), leaving what the user changed since: a memory
+  they brought back or archived, or a merged one they edited
+  (`TestUntidyKeepsWhatTheUserChanged`).
+- Routes: `POST /api/memory/dream` `{on}`, `POST /api/memory/dream/run`
+  and `POST /api/memory/dream/undo`; `GET /api/memory/distill` carries
+  `dreaming`.
+
 ## Not built yet
 
-A nightly pass that archives stale memories and merges duplicates, and
-semantic search, are planned; today search is by words (`Search`, CJK
+Semantic search is planned; today search is by words (`Search`, CJK
 split per character, `TestSearch`).
 
 ## Verification
 
 ```sh
 mote-run go test ./internal/memory ./internal/memdistill ./internal/library
-mote-run go test -run Distill ./internal/gui
+mote-run go test -run 'Distill|Dream' ./internal/gui
 mote-run go test -tags nogui -run 'MemoryMCP|OwnMCP' ./internal/gateway
 mote-run go test ./internal/browsermcp ./internal/cli
 mote-run node --test internal/gui/tests/library-memory.test.cjs

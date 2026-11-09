@@ -11,6 +11,7 @@ import (
 
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/memdistill"
+	"github.com/yetone/magpie/internal/memory"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -63,5 +64,54 @@ func TestDistillCompleteThroughGateway(t *testing.T) {
 	refuse = true
 	if _, err := distillComplete(context.Background(), "dt/m1", "s", "u"); err == nil || !strings.Contains(err.Error(), "model not allowed on this plan") {
 		t.Fatalf("refused: %v", err)
+	}
+}
+
+// The nightly tidy's routes: switched on and off, and the last tidy
+// undone once, the memories it set aside back where they were.
+func TestDreamRoutes(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	mux := http.NewServeMux()
+	memoryDistillRoutes(mux)
+	post := func(path, body string) distillView {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest("POST", path, strings.NewReader(body)))
+		var v distillView
+		if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &v) != nil {
+			t.Fatalf("%s: %d %s", path, rec.Code, rec.Body)
+		}
+		return v
+	}
+	if v := post("/api/memory/dream", `{"on":true}`); !v.Dream || v.On {
+		t.Fatalf("on: %+v", v.State)
+	}
+	text, kind, scope, st := "Old", memory.Fact, memory.Global, memory.Candidate
+	m, _, err := memory.Save(memory.Input{Text: &text, Kind: &kind, Scope: &scope, Status: &st}, memory.FromInferred, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text2 := "Other"
+	if _, _, err := memory.Save(memory.Input{Text: &text2, Kind: &kind, Scope: &scope, Status: &st}, memory.FromInferred, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	cs, err := memdistill.Dream(context.Background(), "a/m", func(context.Context, string, string, string) (string, error) {
+		return `{"stale":[{"id":"n1"}]}`, nil
+	})
+	if err != nil || len(cs) != 1 {
+		t.Fatal(cs, err)
+	}
+	if got, _ := memory.Get(m.ID); got.Status != memory.Archived {
+		t.Fatalf("not set aside: %s", got.Status)
+	}
+	if v := post("/api/memory/dream/undo", `{}`); !v.Undone {
+		t.Fatalf("undo: %+v", v.State)
+	}
+	if got, _ := memory.Get(m.ID); got.Status != memory.Candidate {
+		t.Fatalf("not back: %s", got.Status)
+	}
+	if v := post("/api/memory/dream", `{"on":false}`); v.Dream {
+		t.Fatalf("off: %+v", v.State)
 	}
 }

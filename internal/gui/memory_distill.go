@@ -23,6 +23,8 @@ type distillView struct {
 	Auto    string     `json:"auto"`
 	Models  []modelRef `json:"models"`
 	Running bool       `json:"running"`
+	// Dreaming is a tidy going (Running is conversations being read)
+	Dreaming bool `json:"dreaming"`
 }
 
 func readDistill() (*distillView, error) {
@@ -31,7 +33,7 @@ func readDistill() (*distillView, error) {
 		return nil, err
 	}
 	st.Done = nil // the marks are the run's, not the page's
-	v := &distillView{State: st, Auto: distillAuto(), Models: []modelRef{}, Running: memdistill.Running()}
+	v := &distillView{State: st, Auto: distillAuto(), Models: []modelRef{}, Running: memdistill.Running() && !memdistill.Dreaming(), Dreaming: memdistill.Dreaming()}
 	for _, e := range provider.Served() {
 		if e.Group != "" || e.Provider.Ready() && !e.Provider.DecideOnly() {
 			m := modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon}
@@ -168,4 +170,51 @@ func memoryDistillRoutes(mux *http.ServeMux) {
 		v.Running = true
 		writeJSON(rw, v)
 	})
+	// {on}: the nightly tidy switched; the first is due at the next night
+	mux.HandleFunc("POST /api/memory/dream", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			On bool `json:"on"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if _, err := memdistill.SetDream(in.On); err != nil {
+			fail(rw, err)
+			return
+		}
+		v, err := readDistill()
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, v)
+	})
+	mux.HandleFunc("POST /api/memory/dream/run", func(rw http.ResponseWriter, r *http.Request) {
+		dreamNow()
+		v, err := readDistill()
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		v.Dreaming, v.Running = true, false
+		writeJSON(rw, v)
+	})
+	mux.HandleFunc("POST /api/memory/dream/undo", func(rw http.ResponseWriter, r *http.Request) {
+		if _, err := memdistill.Undo(); err != nil {
+			fail(rw, err)
+			return
+		}
+		v, err := readDistill()
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, v)
+	})
+}
+
+// dreamNow tidies memory in the background, for the Tidy now button.
+var dreamNow = func() {
+	go memdistill.Dream(backendCtx, distillAuto(), distillComplete)
 }
