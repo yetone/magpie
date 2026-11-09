@@ -320,6 +320,7 @@ func statsKept(ranges []int, now time.Time, wantNative bool) ([]Stats, map[strin
 		keepRange(ranges[i], st, ranges)
 		out[i] = st
 	}
+	keptStats.titles.settle()
 	return out, keptStats.native
 }
 

@@ -21,7 +21,7 @@ var keptList struct {
 	// the answers the listing got from the prices, Codex's names and
 	// Claude Desktop's, asked again before it is given out
 	prices  map[string]*catalog.Price
-	titles  map[string]string
+	titles  titleAnswers
 	desktop map[string]string
 	// the command an agy row resumes with (AgyStart), when one is listed:
 	// it changes when agy is wired to magpie's gateway or let go of
@@ -43,7 +43,7 @@ var listKeptFor = time.Minute
 func keptListing(files []file, limit int, price func(string) *catalog.Price, titles func(string) string) ([]Session, bool) {
 	k := &keptList
 	if k.out == nil || k.gen != cacheGeneration || k.limit != limit || time.Since(k.at) >= listKeptFor ||
-		!keptStill(k.files, files, k.prices, k.titles, k.desktop, price, titles) || k.agy && agyStart() != k.agyStart {
+		!keptStill(k.files, files, k.prices, &k.titles, k.desktop, price, titles) || k.agy && agyStart() != k.agyStart {
 		forgetKeptList()
 		return nil, false
 	}
@@ -59,14 +59,14 @@ func keepListing(files []file, limit int, price func(string) *catalog.Price, tit
 	for i, f := range files {
 		k.files[i] = keptFileOf(f)
 	}
-	k.prices, k.titles, k.desktop = map[string]*catalog.Price{}, map[string]string{}, map[string]string{}
+	k.prices, k.titles, k.desktop = map[string]*catalog.Price{}, titleAnswers{}, map[string]string{}
 	return func(model string) *catalog.Price {
 			p := price(model)
 			k.prices[model] = p
 			return p
 		}, func(id string) string {
 			t := titles(id)
-			k.titles[id] = t
+			k.titles.note(id, t)
 			return t
 		}
 }
@@ -90,6 +90,7 @@ func keepList(out []Session) {
 	if i := slices.IndexFunc(out, func(s Session) bool { return s.Agent == "agy" && s.WSL == "" }); i >= 0 {
 		keptList.agy, keptList.agyStart = true, agyStart()
 	}
+	keptList.titles.settle()
 	keptList.out = slices.Clone(out)
 }
 
@@ -103,5 +104,5 @@ func agyStart() string {
 
 func forgetKeptList() {
 	keptList.files, keptList.out = nil, nil
-	keptList.prices, keptList.titles, keptList.desktop = nil, nil, nil
+	keptList.prices, keptList.titles, keptList.desktop = nil, titleAnswers{}, nil
 }

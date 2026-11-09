@@ -1,9 +1,11 @@
 package sessions
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -23,7 +25,7 @@ func statsOutput(st Stats) (n int, cost float64) {
 // the ranges the last one read, not each put together again (#2278), and a
 // file that changed, or a price, is read into them.
 func TestStatsKeptBetweenPolls(t *testing.T) {
-	claude, _ := setup(t)
+	claude, codex := setup(t)
 	ranges := []int{0, 7, 30}
 	first, native := StatsAndNativeAll(ranges)
 	if len(first[0].Sessions) == 0 || len(native) == 0 {
@@ -59,6 +61,41 @@ func TestStatsKeptBetweenPolls(t *testing.T) {
 	repriced, _ := StatsAndNativeAll(ranges)
 	if _, c := statsOutput(repriced[0]); c <= cost {
 		t.Fatalf("cost %v after the prices went up, %v before", c, cost)
+	}
+
+	// a thread with no name when the ranges were read, named in Codex since
+	const cx = "01a0bdc9-b5fd-7e63-9658-68bc8dce5ecd"
+	line := fmt.Sprintf("{\"id\":%q,\"thread_name\":\"Named in Codex\",\"updated_at\":%q}\n", cx, time.Now().UTC().Format(time.RFC3339Nano))
+	if err := os.WriteFile(filepath.Join(codex, "session_index.jsonl"), []byte(line), 0600); err != nil {
+		t.Fatal(err)
+	}
+	named, _ := StatsAndNativeAll(ranges)
+	i := slices.IndexFunc(named[0].Sessions, func(s Summary) bool { return s.ID == cx })
+	if i < 0 || named[0].Sessions[i].Title != "Named in Codex" {
+		t.Fatalf("Codex's thread after it was named: %d %+v", i, named[0].Sessions)
+	}
+}
+
+// TestTitleAnswersSettled: the ids a title was asked for and none given are
+// held once each, at their length, and asked again.
+func TestTitleAnswersSettled(t *testing.T) {
+	var a titleAnswers
+	for _, id := range []string{"c", "a", "b", "a", "c", "c"} {
+		a.note(id, "")
+	}
+	a.note("n", "Named")
+	a.settle()
+	if !slices.Equal(a.none, []string{"a", "b", "c"}) || cap(a.none) != len(a.none) {
+		t.Fatalf("none %v, cap %d", a.none, cap(a.none))
+	}
+	if !a.still(func(id string) string { return map[string]string{"n": "Named"}[id] }) {
+		t.Fatal("unchanged answers read as changed")
+	}
+	if a.still(func(id string) string { return map[string]string{"n": "Named", "b": "B"}[id] }) {
+		t.Fatal("an id named since read as unchanged")
+	}
+	if a.still(func(string) string { return "" }) {
+		t.Fatal("a name taken away read as unchanged")
 	}
 }
 
