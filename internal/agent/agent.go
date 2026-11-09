@@ -494,8 +494,8 @@ var leftover = map[string]bool{"logs": true, "log": true, "debug": true, "diagno
 // p, or one it is in, would be: nothing can be written under it.
 func Taken(p string) bool {
 	for d := filepath.Clean(p); ; {
-		if st, err := os.Stat(d); err == nil {
-			return !st.IsDir()
+		if dir, ok := statKind(d); ok {
+			return !dir
 		}
 		up := filepath.Dir(d)
 		if up == d {

@@ -518,8 +518,8 @@ func exe(name string) string {
 	return name
 }
 
-func isFile(p string) bool { st, err := os.Stat(p); return err == nil && !st.IsDir() }
-func isDir(p string) bool  { st, err := os.Stat(p); return err == nil && st.IsDir() }
+func isFile(p string) bool { dir, ok := statKind(p); return ok && !dir }
+func isDir(p string) bool  { dir, ok := statKind(p); return ok && dir }
 
 // ---- versions --------------------------------------------------------------
 
