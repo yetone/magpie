@@ -434,3 +434,71 @@ func TestCustomProviderVideoKeepsTheCallersFields(t *testing.T) {
 		t.Fatalf("sent %s", b)
 	}
 }
+
+// Settings › Images › Video generation (the reporter's "custom providers
+// still can't pick a video model"): a custom provider's model the user
+// marked a video model, picked there, makes the video a request that names
+// none gets, and is generate_video's default, though Automatic would take
+// the provider's listed one. One no longer marked is said missing, and
+// Automatic's makes the video in its place; Image generation's Off turns
+// it off with the rest.
+func TestVideoGenPicksAMarkedModel(t *testing.T) {
+	fresh(t)
+	up := newOpenAIVideos(t)
+	saveFetched(t, provider.Provider{ID: "studio", Name: "Studio", Chat: up.URL + "/v1", Key: "sk-studio", Models: []string{"gpt-5.5", "agnes-video-2.5-flash"}})
+	const pick = "studio/agnes-video-2.5-flash"
+	if err := provider.SetModelKind(pick, provider.KindVideo); err != nil {
+		t.Fatal(err)
+	}
+	h := New().Handler()
+	made := func() string {
+		t.Helper()
+		n := len(up.bodies)
+		code, _, raw := asKey(t, h, "", "POST", "/v1/videos", `{"prompt":"waves on a rock"}`)
+		if code != 200 || len(up.bodies) != n+1 {
+			t.Fatalf("%d %s", code, raw)
+		}
+		var sent map[string]any
+		json.Unmarshal([]byte(up.bodies[n]), &sent)
+		return "studio/" + sent["model"].(string)
+	}
+	if a := AutoVideomaker(); a != "studio/vid-1" {
+		t.Fatalf("automatic %q", a)
+	}
+	if m := made(); m != "studio/vid-1" {
+		t.Fatalf("with none picked, made with %s", m)
+	}
+
+	st := settings.Load()
+	st.VideoGen = pick
+	if err := settings.Save(st); err != nil {
+		t.Fatal(err)
+	}
+	if m := made(); m != pick {
+		t.Fatalf("picked %s, made with %s", pick, m)
+	}
+	if _, def := mediaModels(true); def != pick {
+		t.Fatalf("generate_video's default %q", def)
+	}
+	if v := VideomakerMissing(); v != "" {
+		t.Fatalf("a marked pick said missing: %q", v)
+	}
+
+	if err := provider.SetModelKind(pick, ""); err != nil {
+		t.Fatal(err)
+	}
+	if v := VideomakerMissing(); v != pick {
+		t.Fatalf("unmarked, missing %q", v)
+	}
+	if m := made(); m != "studio/vid-1" {
+		t.Fatalf("a missing pick made with %s, not Automatic's", m)
+	}
+
+	st.ImageGen = "off"
+	if err := settings.Save(st); err != nil {
+		t.Fatal(err)
+	}
+	if m, ok := videomaker(); ok || m != "" {
+		t.Fatalf("image generation off, videomaker %q", m)
+	}
+}

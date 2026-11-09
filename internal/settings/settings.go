@@ -500,6 +500,11 @@ type Settings struct {
 	// "off" turns the video a request that names no model gets off too
 	// (gateway.videomaker).
 	ImageGen string `json:"imageGen,omitempty"`
+	// VideoGen is the model a video request that names none is made with
+	// (generate_video, the gateway's /v1/videos): a model's id, or empty
+	// for one magpie picks (gateway.videomaker). ImageGen's "off" turns it
+	// off too.
+	VideoGen string `json:"videoGen,omitempty"`
 	// ImageTimeout is how long, in minutes, a vendor is given to draw an
 	// image and send it (neighbads on X: a slow image endpoint needs more
 	// than 5): from 1 to ImageTimeoutMost, 0 for ImageTimeoutDefault.
@@ -2298,6 +2303,10 @@ func saveOwn(s Settings, recording, reads bool) error {
 	s.ImageGen = strings.TrimSpace(s.ImageGen)
 	if s.ImageGen != "" && s.ImageGen != "off" && !strings.Contains(s.ImageGen, "/") {
 		return fmt.Errorf("the image generation model must be a model's id such as openai/gpt-image-2, or off, not %q", s.ImageGen)
+	}
+	s.VideoGen = strings.TrimSpace(s.VideoGen)
+	if s.VideoGen != "" && !strings.Contains(s.VideoGen, "/") {
+		return fmt.Errorf("the video generation model must be a model's id such as grok/grok-imagine-video, not %q", s.VideoGen)
 	}
 	rules, err := redact.CheckRules(s.RedactRules)
 	if err != nil {

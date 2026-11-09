@@ -488,6 +488,14 @@ type settingsJSON struct {
 	// editor since (provider.HiddenDrawers): it still draws, and is
 	// listed, as picked, with the row saying it is hidden
 	ImageGenHidden bool `json:"imageGenHidden,omitempty"`
+	// the model a video request that names none is made with when
+	// VideoGen names none (gateway.AutoVideomaker), the VideoGen picked
+	// when magpie can't find it any more, and those that can be picked:
+	// each provider's video models, a custom provider's the user marked
+	// (#1399) among them, less those unticked in its editor
+	VideoGenAuto    string     `json:"videoGenAuto,omitempty"`
+	VideoGenMissing string     `json:"videoGenMissing,omitempty"`
+	VideoGenModels  []modelRef `json:"videoGenModels"`
 	// the web search APIs a model's search goes to when no provider can
 	// search (#419), their keys masked; the ones that can be added; and
 	// the provider that searches first, if one does
@@ -925,6 +933,19 @@ func settingsState() settingsJSON {
 		s.ImageGenShown = v
 	}
 	s.ImageGenHidden = gateway.DrawerHidden(s.ImageGen)
+	s.VideoGenAuto, s.VideoGenModels, s.VideoGenMissing = gateway.AutoVideomaker(), []modelRef{}, gateway.VideomakerMissing()
+	for _, p := range provider.All() {
+		if !p.On() || p.DecideOnly() {
+			continue
+		}
+		// one unticked in its editor is left out, but the one picked here
+		for _, m := range gateway.Videomakers(p) {
+			if p.VideomakerHidden(m.ID) && s.VideoGen != p.ID+"/"+m.ID {
+				continue
+			}
+			s.VideoGenModels = append(s.VideoGenModels, modelRef{ID: p.ID + "/" + m.ID, Name: cmp.Or(m.Name, m.ID), Provider: p.ID, PName: p.Name, Icon: p.Icon})
+		}
+	}
 	// the Codex subagents row's warning: magpie's multi-agent V1 doesn't reach
 	// Codex where its own multi_agent_v2 is on in the config magpie routes, and
 	// magpie writes nothing there — the setting is the user's to turn off

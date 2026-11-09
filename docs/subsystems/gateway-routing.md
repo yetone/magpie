@@ -2420,6 +2420,27 @@ hidden ones, read by `AutoVideomaker`, `videomakerObjects` and
 `mediaModels(true)`. A hidden one still makes its video when named:
 `bareVideomaker`, `videosCreate` and `arkFilms` read `Videomakers`.
 
+Settings › Models › Images › Video generation (`#videoGenRow`, under
+Image generation, gone while that is Off) picks the model a video
+request that names none is made with, the Magpie Image MCP's
+`generate_video` and `/v1/videos` alike (Discord #feedback: a custom
+provider's model marked a video model by hand was made with only when
+Automatic happened to take it). `settings.VideoGen` holds a
+provider/model or a group ref; `videomaker` takes it while
+`VideomakerMissingOf` finds it among its provider's `Videomakers` (on,
+not decide-only; a group through `mediaGroupFirst`), and
+`AutoVideomaker` otherwise. A save of a model that makes no videos is
+refused (settingsapi), a save that doesn't send `videoGen` keeps it, and
+a pick that stops making videos is `videoGenMissing`: the row says so
+and Automatic makes them meanwhile. The list (`videoGenModels`) is every
+`Videomakers` model of such providers, a hidden one only when it is the
+pick. With none, the row says how to mark one (right-click in the
+provider's Model settings, Makes › Video model; kept in sight). The
+row is drawn by `videogen.js`, imported when Settings draws Image
+generation, so it weighs nothing on the core.
+`TestVideoGenPicksAMarkedModel`, `TestVideoGenCheckedAndKept`,
+`TestVideoGenModelsListed`, `video-gen-pick.test.cjs`.
+
 An Ark key's list marks its video and image models by `domain`
 (`VideoGeneration`, `ImageGeneration`) and
 `modalities.output_modalities`, with no `kind`; `catalog`'s live parse

@@ -3897,7 +3897,7 @@ input.words.compact-num { flex: none; width: 76px; font-variant-numeric: tabular
    sends, who the allow list lets in), a line with a button or link in
    it. A touch screen, with no hover, keeps them all. */
 @media (hover: hover) {
-  #view-settings:not(.set-searching) .row.pref > .who > .sub:not(.err, .bad, .say, .proxy-check, .lib-way, .image-gen-hidden, .sync-sign-in, .no-names, .pv-hits, .feat-why, .vision-not-marked, .font-note, .acts, [role="status"], #proxySub):not(#otelSessionsRow *, #allowList *, .disabled-model *) {
+  #view-settings:not(.set-searching) .row.pref > .who > .sub:not(.err, .bad, .say, .proxy-check, .lib-way, .image-gen-hidden, .sync-sign-in, .no-names, .pv-hits, .feat-why, .vision-not-marked, .video-gen-how, .font-note, .acts, [role="status"], #proxySub):not(#otelSessionsRow *, #allowList *, .disabled-model *) {
     --hint: 1; position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
   /* a row left with its name alone is as tall as any other: its control
