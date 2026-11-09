@@ -90,9 +90,13 @@ const KEPT = ["sessions", "library", "providers", "routing", "groups", "gateway"
 // the tabs shown, the page shown
 const tabs = (page) => page.evaluate(() => [...document.querySelectorAll("#nav button[data-view]")].filter((b) => !b.hidden && b.offsetParent).map((b) => b.dataset.view));
 const viewShown = (page) => page.evaluate(() => [...document.querySelectorAll("main.view")].filter((v) => !v.hidden).map((v) => v.id));
-// the rows gateway mode leaves out of Settings, each shown or not
+// the rows gateway mode leaves out of Settings, each shown or not: the
+// alerts go with their Alerts list and heading, hidden as one
 const agentRows = (page) => page.evaluate(() => ["#plainNamesSegs", "#usageAlertSegs", "#balanceAlertSegs", "#resetReminderSegs", "#turnDoneSegs"]
-  .map((s) => !document.querySelector(s).closest(".row").hidden));
+  .map((s) => {
+    const r = document.querySelector(s).closest(".row"), list = r.closest("#alertList");
+    return !r.hidden && (!list || (!list.hidden && !document.querySelector("#alertHead").hidden));
+  }));
 
 async function noSelectNoBorder(page, where) {
   const bad = await page.evaluate(() => {
