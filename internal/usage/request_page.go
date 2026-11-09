@@ -1585,7 +1585,7 @@ func visibleLocal(chunks []*rowChunk) refSet {
 	// a message id seen is kept as two 64-bit hashes of it, not a copy of
 	// the decoded chunk's string: a long history's ~400k ids held ~7MB of
 	// copies at the start's peak, and a key of these is a string header's
-	// size. Two ids alike in both are ~1e-28 likely.
+	// size (msgKey).
 	// made to size, as many as the rows that can have an id (a Codex call
 	// has none): grown an id at a time, it was ~250 MB of a minute and a
 	// third of polls (#2278)
@@ -1615,10 +1615,10 @@ func visibleLocal(chunks []*rowChunk) refSet {
 			k = &read
 		}
 		for _, k := range k.keys {
-			if _, ok := seen.ids[k.k]; ok {
+			if _, ok := seen.ids[k.id()]; ok {
 				duplicates.add(rowRef{c, int(k.at)})
 			} else {
-				seen.ids[k.k] = struct{}{}
+				seen.ids[k.id()] = struct{}{}
 			}
 		}
 	}
@@ -1658,10 +1658,16 @@ type chunkMsgKeys struct {
 	turn uint64
 }
 
+// msgKey is 16 bytes: a hash of 64 bits and one of 32, ~1e-18 likely
+// alike for two of the ~300k ids a long history has, where a second 64
+// made it 24 with the row (#2278)
 type msgKey struct {
-	k  [2]uint64
+	k  uint64
+	k2 uint32
 	at int32
 }
+
+func (k msgKey) id() [2]uint64 { return [2]uint64{k.k, uint64(k.k2)} }
 
 // msgKeysOpening, in tests, is told each chunk msgKeysOf decodes.
 var msgKeysOpening func(*rowChunk)
@@ -1725,7 +1731,7 @@ func appendMsgKeys(keys []msgKey, open *rowChunk) []msgKey {
 		if msg == "" {
 			continue
 		}
-		keys = append(keys, msgKey{[2]uint64{maphash.String(msgSeeds[0], msg), maphash.String(msgSeeds[1], msg)}, int32(j)})
+		keys = append(keys, msgKey{maphash.String(msgSeeds[0], msg), uint32(maphash.String(msgSeeds[1], msg)), int32(j)})
 	}
 	return keys
 }
