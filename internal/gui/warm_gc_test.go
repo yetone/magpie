@@ -144,19 +144,20 @@ func TestTightGCRetunesAfterACollection(t *testing.T) {
 	}
 }
 
-// TestSteadyPercent: between reads the heap grows by half of what it
-// holds, by 32 MB when that is more, and never by more than Go's default.
+// TestSteadyPercent: between reads the heap grows by a quarter of what it
+// holds, by 16 MB when that is more, and never by more than Go's default.
 func TestSteadyPercent(t *testing.T) {
 	for _, c := range []struct {
 		live int64
 		want int
 	}{
-		{0, 50},
-		{60 << 20, 53},
-		{64 << 20, 50},
+		{0, 25},
+		{60 << 20, 26},
+		{64 << 20, 25},
+		{8 << 20, 100},
 		{16 << 20, 100},
-		{32 << 20, 100},
-		{500 << 20, 50},
+		{32 << 20, 50},
+		{500 << 20, 25},
 	} {
 		if got := steadyPercent(c.live); got != c.want {
 			t.Errorf("steadyPercent(%d MB) = %d, want %d", c.live>>20, got, c.want)
