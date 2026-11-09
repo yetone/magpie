@@ -1282,6 +1282,9 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 /* the last label can be wider than its bar's column: let it spill left, not off the card */
 .chart .labels span:last-child { display: flex; justify-content: flex-end; }
 .row.stat .who { flex: 0 0 180px; }
+/* the line under a name (a sign-in's id, its calls, credits and speed) is
+   read whole at every width, not cut where the column ends */
+.row.stat .who .sub { white-space: normal; overflow-wrap: anywhere; }
 .row.stat .who .name.faint { color: var(--faint); font-weight: 400; }
 .row.stat .share { flex: 1 1 auto; height: 4px; border-radius: 2px; background: var(--pill); overflow: hidden; margin: 0 6px; }
 .row.stat .share i { display: block; height: 100%; border-radius: 2px; background: var(--accent); opacity: .7; }
@@ -4284,7 +4287,6 @@ body.panel .modal { padding: 16px 12px; }
   body.web .kpi small { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
   body.web .row.stat { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 6px 8px; }
   body.web .row.stat .who { grid-column: 2; grid-row: 1; }
-  body.web .row.stat .who .sub { white-space: normal; }
   body.web .row.stat .cost { grid-column: 3; grid-row: 1; }
   body.web .row.stat .num { grid-column: 2 / 4; grid-row: 2; min-width: 0; align-items: flex-start; }
   body.web .row.stat .num small { max-width: 100%; white-space: normal; }
