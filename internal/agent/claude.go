@@ -217,9 +217,10 @@ func claudeEffortsFor(model string) []string {
 
 // claudeTopEffort is the models the effortLevel at the top of the user's
 // settings.json applies to: Opus 5, Fable 5.1 and those before them. Opus
-// 5.5 and every Claude model after it (any Claude Code doesn't know) read
-// only modelSettings.<model>.effortLevel (2.1.251 on); another vendor's
-// reads the top one.
+// 5.5, Fable 5.2 and every Claude model after them (any Claude Code doesn't
+// know) read only modelSettings.<model>.effortLevel (2.1.251 on; 2.1.321's
+// list of models that read the top one ends at Fable 5.1 and Mythos 5.1);
+// another vendor's reads the top one.
 var claudeTopEffort = []string{
 	"claude-opus-4", "claude-sonnet-4", "claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-4-5",
 	"claude-opus-4-6", "claude-sonnet-4-6", "claude-opus-4-7", "claude-opus-4-8",

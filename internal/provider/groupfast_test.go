@@ -16,7 +16,7 @@ func fastHome(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	for _, p := range []Provider{
 		{ID: "oa", Name: "OpenAI", Key: "k", Responses: "https://api.openai.com/v1", Models: []string{"gpt-6.1-sol", "text-embedding-3"}},
-		{ID: "an", Name: "Anthropic", Key: "k", Anthropic: "https://api.anthropic.com", Models: []string{"claude-opus-5-5", "claude-opus-4-8-20260501", "claude-sonnet-5"}},
+		{ID: "an", Name: "Anthropic", Key: "k", Anthropic: "https://api.anthropic.com", Models: []string{"claude-opus-5-5", "claude-opus-4-8-20260501", "claude-sonnet-5", "claude-fable-5-2", "claude-fable-5-1"}},
 		{ID: "rl", Name: "Relay", Key: "k", Chat: "https://relay.example/v1", Anthropic: "https://relay.example", Models: []string{"gpt-6.1-sol", "claude-opus-5-5", "odd:fast"}},
 	} {
 		if err := Save(p); err != nil {
@@ -45,6 +45,8 @@ func TestCanFast(t *testing.T) {
 		{*an, "claude-opus-5-5", true},
 		{*an, "claude-opus-4-8-20260501", true},
 		{*an, "claude-sonnet-5", false},
+		{*an, "claude-fable-5-2", true}, // fast mode from its launch
+		{*an, "claude-fable-5-1", false},
 		{*rl, "claude-opus-5-5", false}, // Claude's speed isn't asked of a relay
 	} {
 		if got := CanFast(c.p, c.model); got != c.want {

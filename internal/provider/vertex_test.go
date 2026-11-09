@@ -1681,7 +1681,7 @@ func TestVertexClaudeModels(t *testing.T) {
 		t.Fatalf("Claude at %q, want %q", p.Base(Anthropic), base)
 	}
 	listed := modelIDs(p.Available())
-	for _, m := range []string{"claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1"} {
+	for _, m := range []string{"claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-2", "claude-fable-5-1"} {
 		if !slices.Contains(listed, m) {
 			t.Errorf("%s not listed at global: %v", m, listed)
 		}

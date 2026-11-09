@@ -119,6 +119,7 @@ func TestClaudeEffortPerModel(t *testing.T) {
 		"claude-opus-5-5":             "low medium high xhigh max",
 		"claude-sonnet-5-5":           "low medium high xhigh max",
 		"claude-fable-5-1":            "low medium high xhigh max",
+		"claude-fable-5-2":            "low medium high xhigh max",
 		"claude-opus-5-6":             "low medium high xhigh max",
 		"deepseek/pro":                "low medium high xhigh max",
 		"":                            "low medium high xhigh max",

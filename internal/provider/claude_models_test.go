@@ -169,3 +169,42 @@ func TestClaudePicksOfEveryModelTakeOnesListedSince(t *testing.T) {
 		t.Fatalf("listed after a Save of the same picks: %v", p.PickedFrom)
 	}
 }
+
+// mdFable52 is models.dev's anthropic row for Claude Fable 5.2, as it
+// served it on 2026-11-10, the day after the launch.
+const mdFable52 = `"claude-fable-5-2":{"id":"claude-fable-5-2","name":"Claude Fable 5.2","description":"Claude model for demanding reasoning and long-horizon agentic work","family":"claude-fable","attachment":true,"reasoning":true,"reasoning_options":[{"type":"effort","values":["low","medium","high","xhigh","max"]}],"tool_call":true,"structured_output":true,"temperature":false,"knowledge":"2026-06","release_date":"2026-11-09","last_updated":"2026-11-09","modalities":{"input":["text","image","pdf"],"output":["text"]},"open_weights":false,"limit":{"context":1000000,"output":128000},"experimental":{"modes":{"fast":{"cost":{"input":16,"output":80,"cache_read":0.4,"cache_write":20},"provider":{"body":{"speed":"fast"}}}}},"cost":{"input":8,"output":40,"cache_read":0.2,"cache_write":10},"canonical_model_id":"anthropic/claude-fable-5-2"}`
+
+// Claude Fable 5.2, once the catalog sync has models.dev's row, is on a
+// Claude account's list first (newest), at Anthropic's price, window and
+// efforts, and served beside picks that held every model listed before
+// it (thelegendof2414 on X: Fable 5.2 not in magpie's list).
+func TestClaudeAccountListsFable52(t *testing.T) {
+	home := claudeHome(t)
+	claudeSignIn(t, home, time.Now().Add(time.Hour))
+	t.Cleanup(catalog.Reset)
+	writeAnthropicCatalog(t, mdOpus55, mdHaiku55)
+	if err := store(file{Providers: []Provider{{ID: "claude", Models: claudeAllPicked}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := claudeExposed(t); slices.Contains(got, "claude-fable-5-2") {
+		t.Fatalf("listed before models.dev had it: %v", got)
+	}
+
+	writeAnthropicCatalog(t, mdOpus55, mdHaiku55, mdFable52)
+	p, _ := find(All(), "claude")
+	av := p.Available()
+	if len(av) == 0 || av[0].ID != "claude-fable-5-2" {
+		t.Fatalf("Fable 5.2 not first: %v", modelIDs(av))
+	}
+	f := av[0]
+	if f.Name != "Claude Fable 5.2" || f.Context != 1_000_000 || f.Output != 128_000 || !f.Reasoning ||
+		!slices.Equal(f.Efforts, []string{"low", "medium", "high", "xhigh", "max"}) {
+		t.Fatalf("Fable 5.2: %+v", f)
+	}
+	if f.Price == nil || f.Price.Input != 8 || f.Price.Output != 40 || f.Price.CacheRead != 0.2 || f.Price.CacheWrite != 10 {
+		t.Fatalf("Fable 5.2's price: %+v", f.Price)
+	}
+	if got := claudeExposed(t); !slices.Contains(got, "claude-fable-5-2") {
+		t.Fatalf("not served beside picks of every model listed before: %v", got)
+	}
+}

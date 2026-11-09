@@ -173,8 +173,10 @@ var (
 )
 
 // claudeFastModels are the Claude models with fast mode (speed "fast",
-// beta fast-mode-2026-02-01).
-var claudeFastModels = []string{"claude-opus-4-8", "claude-opus-5", "claude-opus-5-5"}
+// beta fast-mode-2026-02-01). Fable 5.2 has it from its launch
+// (2026-11-09, $16/$80 per Mtok; Claude Code 2.1.321 offers it on Fable
+// 5.2 and Mythos 5.2); Fable 5.1 and before never had it.
+var claudeFastModels = []string{"claude-opus-4-8", "claude-opus-5", "claude-opus-5-5", "claude-fable-5-2"}
 
 // ClaudeFast reports whether a Claude model has fast mode.
 func ClaudeFast(model string) bool {

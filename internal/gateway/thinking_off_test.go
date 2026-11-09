@@ -52,6 +52,9 @@ func TestThinkingOffAsTheModelTakesIt(t *testing.T) {
 		{"Fable 5.1 is sent no thinking", "/v1/messages",
 			`{"model":"claude-fable-5-1","max_tokens":256,"thinking":{"type":"disabled"},"messages":[]}`,
 			"", "low", 256 + classifierRoom},
+		{"Fable 5.2 is sent no thinking", "/v1/messages",
+			`{"model":"claude-fable-5-2","max_tokens":256,"thinking":{"type":"disabled"},"messages":[]}`,
+			"", "low", 256 + classifierRoom},
 		{"Mythos 5.1 is sent no thinking", "/v1/messages",
 			`{"model":"claude-mythos-5-1","max_tokens":4096,"thinking":{"type":"disabled"},"messages":[]}`,
 			"", "low", 4096},
@@ -262,7 +265,7 @@ func TestSamplingAsTheModelTakesIt(t *testing.T) {
 	sampled := `{"model":"%s","max_tokens":64,"temperature":0,"top_p":0.5,"top_k":5,"stop_sequences":["</block>"],"messages":[{"role":"user","content":"a <b> & c"}]}`
 	for _, m := range []string{"claude-haiku-5-5", "claude-haiku-5.5", "anthropic.claude-haiku-5-5-20261001-v1:0",
 		"claude-sonnet-5-5", "claude-sonnet-5", "claude-sonnet-5-20260801", "claude-opus-5-5", "claude-opus-5",
-		"claude-opus-4-8", "claude-opus-4-7", "claude-fable-5-1", "claude-fable-5", "claude-mythos-5-1"} {
+		"claude-opus-4-8", "claude-opus-4-7", "claude-fable-5-2", "claude-fable-5-1", "claude-fable-5", "claude-mythos-5-1"} {
 		got := samplingAsTaken([]byte(strings.ReplaceAll(sampled, "%s", m)), "/v1/messages")
 		if hasSampling(got) {
 			t.Errorf("%s: sampling still sent: %s", m, got)

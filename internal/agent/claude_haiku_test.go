@@ -181,4 +181,9 @@ func TestClaudeLightHaiku55(t *testing.T) {
 	if claudeReadsTop("claude-haiku-5-5[1m]") {
 		t.Error("claude-haiku-5-5 should read only modelSettings' effort, as every Claude after Opus 5.5")
 	}
+	// Claude Code 2.1.321 reads the top effortLevel for Fable 5.1 and
+	// none after it.
+	if !claudeReadsTop("claude-fable-5-1") || claudeReadsTop("claude-fable-5-2[1m]") {
+		t.Error("claude-fable-5-1 reads the top effortLevel, claude-fable-5-2 only modelSettings'")
+	}
 }

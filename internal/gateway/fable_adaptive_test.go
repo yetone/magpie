@@ -59,7 +59,7 @@ func (v *alwaysAdaptiveVendor) last() map[string]any {
 // reasoning_effort, goes as thinking.type=adaptive with the effort in
 // output_config, and agents told how to ask a model are told so.
 func TestFableAndMythosNeverGetABudget(t *testing.T) {
-	for _, model := range []string{"claude-fable-5-1", "claude-fable-5", "claude-mythos-5-1", "claude-mythos-5", "anthropic.claude-fable-5-1"} {
+	for _, model := range []string{"claude-fable-5-2", "global.anthropic.claude-fable-5-2", "claude-fable-5-1", "claude-fable-5", "claude-mythos-5-1", "claude-mythos-5", "anthropic.claude-fable-5-1"} {
 		if !adaptiveOnly(model) {
 			t.Errorf("adaptiveOnly(%q) = false", model)
 		}

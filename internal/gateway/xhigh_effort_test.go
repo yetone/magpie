@@ -17,7 +17,7 @@ func TestXhighStaysXhighWhereClaudeTakesIt(t *testing.T) {
 	srv := httptest.NewServer(up)
 	t.Cleanup(srv.Close)
 	if err := provider.Save(provider.Provider{ID: "anth", Name: "Anth", Key: "k", Anthropic: srv.URL,
-		Models: []string{"claude-opus-5-5", "claude-opus-4-7", "claude-sonnet-5", "claude-haiku-5-5", "claude-fable-5-1", "claude-opus-4-6", "claude-sonnet-4-6"}}); err != nil {
+		Models: []string{"claude-opus-5-5", "claude-opus-4-7", "claude-sonnet-5", "claude-haiku-5-5", "claude-fable-5-2", "claude-fable-5-1", "claude-opus-4-6", "claude-sonnet-4-6"}}); err != nil {
 		t.Fatal(err)
 	}
 	for _, c := range []struct{ model, path, body, want string }{
@@ -26,6 +26,7 @@ func TestXhighStaysXhighWhereClaudeTakesIt(t *testing.T) {
 		{"claude-opus-4-7", "/v1/chat/completions", `"reasoning_effort":"xhigh"`, "xhigh"},
 		{"claude-sonnet-5", "/v1/chat/completions", `"reasoning_effort":"xhigh"`, "xhigh"},
 		{"claude-haiku-5-5", "/v1/chat/completions", `"reasoning_effort":"xhigh"`, "xhigh"},
+		{"claude-fable-5-2", "/v1/chat/completions", `"reasoning_effort":"xhigh"`, "xhigh"},
 		{"claude-fable-5-1", "/v1/chat/completions", `"reasoning_effort":"xhigh"`, "xhigh"},
 		{"claude-opus-4-6", "/v1/chat/completions", `"reasoning_effort":"xhigh"`, "max"},
 		{"claude-sonnet-4-6", "/v1/chat/completions", `"reasoning_effort":"xhigh"`, "max"},

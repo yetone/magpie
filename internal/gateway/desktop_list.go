@@ -29,13 +29,17 @@ import (
 // drop the rest (2.7032's entry is a zod object, which strips unknown
 // keys).
 
-// desktopBehavesAs is the newest Claude model of each tier in Claude
-// Desktop's own model catalog (v3739), which Claude Code 2.1.316 knows.
+// desktopBehavesAs is the newest Claude model of each tier as Claude Code
+// 2.1.321 knows them (its latest_per_family; Fable 5.2 has a prompt bundle
+// of its own there). The Desktop catalog that build carries (v4371,
+// 2026-11-09) still ends the fable tier at Fable 5.1, and a Claude Code
+// older than 2.1.321 doesn't know Fable 5.2, so on one the fable tier runs
+// with the generic prompt until it updates.
 var desktopBehavesAs = map[string]string{
 	"opus":   "claude-opus-5-5",
 	"sonnet": "claude-sonnet-5-5",
 	"haiku":  "claude-haiku-5-5",
-	"fable":  "claude-fable-5-1",
+	"fable":  "claude-fable-5-2",
 }
 
 // DesktopBehavesAs is the Claude model each picked tier's model runs as in
