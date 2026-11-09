@@ -347,10 +347,6 @@
         <div class="who"><div class="name" data-t>Model ids without the provider</div><div class="sub" data-t>The gateway’s model list also names each model by its own id, as gpt-5.6-sol beside codex/gpt-5.6-sol, for apps moved from another proxy. One that several providers serve goes to them in the Providers order</div></div>
         <div id="bareIdsSegs"></div>
       </div>
-      <div class="row pref" id="busyLoadRow">
-        <div class="who"><div class="name" data-t>Busy models last</div><div class="sub" data-t>A model its plugin says is busier than this goes after the others a request could go to, as its vendor makes it wait. One with no load reported in the last 5 minutes keeps its place</div></div>
-        <div id="busyLoadSegs"></div>
-      </div>
     </div>
     <div class="row-head"><span class="label" data-t>Local network</span></div>
     <div class="list prefs" id="lanList"></div>
@@ -367,6 +363,13 @@
     <div class="list prefs" id="searchList"></div>
     <div class="row-head"><span class="label" data-t>Replies</span></div>
     <div class="list prefs" id="replyList"></div>
+    <div class="row-head"><span class="label" data-t>Routing</span></div>
+    <div class="list prefs" id="routeList">
+      <div class="row pref" id="busyLoadRow">
+        <div class="who"><div class="name" data-t>Busy models last</div><div class="sub" data-t>A model its plugin says is busier than this goes after the others a request could go to, as its vendor makes it wait. One with no load reported in the last 5 minutes keeps its place</div></div>
+        <div id="busyLoadSegs"></div>
+      </div>
+    </div>
     <div class="row-head"><span class="label" data-t>Disabled models</span></div>
     <div class="list prefs" id="disabledModelsList"></div>
   </section>

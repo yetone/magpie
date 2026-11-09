@@ -1,7 +1,8 @@
 // Settings › Network and sharing's gateway rows (the gateway plugin's part
 // of Settings): its port, model ids without the provider, sharing on the
 // local network and the addresses let in, and the web pages that may call
-// it. Run after app.js, whose helpers it shares (el, segs, input, api,
+// it; and a busy model's place, drawn into Settings › Models › Routing.
+// Run after app.js, whose helpers it shares (el, segs, input, api,
 // writingPrefs), and before start.js draws Settings.
 
 // renderPort: the gateway's address on this computer (Magic_zero on Discord:
@@ -78,13 +79,14 @@ function renderPort(s) {
 // lists each model by its own id as well, gpt-5.6-sol beside
 // codex/gpt-5.6-sol. Posted on its own; off by default.
 function renderBareIds(s) {
-  renderBusyLoad(s); // the row under it
+  renderBusyLoad(s); // Models › Routing's row
   $("#bareIdsSegs").replaceChildren(segs([[false, t("Off")], [true, t("On")]], !!s.bareModelIDs, (on) =>
     writingPrefs(api("settings/bare-ids", { on })).then((ns) => { prefs = state.settings = ns; renderSettings(); })
       .catch((e) => { status(t(e.message), "err"); renderSettings(); })));
 }
 
-// renderBusyLoad: the load past which a model its plugin says is busy
+// renderBusyLoad, in Settings › Models › Routing with the other rows on
+// where a request goes: the load past which a model its plugin says is busy
 // (magpie.load) goes behind the others (settings.BusyLoad, axelburks on
 // Discord). Custom… opens a field for any other number, 1 to 9999, which
 // is then shown as its own choice; Enter or Apply saves it, Escape closes

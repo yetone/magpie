@@ -2,7 +2,10 @@
 // Settings' rows where their feature is (the scattered settings audit after
 // netube99 on X): magpie web draws no empty Menu bar cost row, as it has no
 // menu bar; the alerts (allowance, balance, reset, task done) sit under
-// their own Alerts heading, not among the allowances' display. Every
+// their own Alerts heading, not among the allowances' display; what routing
+// does when an account refuses or every one rests, and a busy model's place
+// (from Network), sit under Models › Routing, which the Routing page opens.
+// Every
 // language, Chromium and WebKit, at 1100 and 420 wide, nothing past the
 // window's edge. No backend, the API is faked here.
 const assert = require("node:assert/strict");
@@ -79,6 +82,31 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator("#currencySegs .opt").first().waitFor();
         assert.equal(await page.locator("#trayCostRow").isVisible(), false, "no Menu bar cost row in magpie web");
         assert(await fits(page), "fits in magpie web");
+        assert.deepEqual(page.errors, []);
+
+        // Models › Routing: the rows about where a request goes, after the
+        // replies' own rows, and the busy model's place out of Network
+        page = await open(false, "settings&tab=models");
+        const rhead = page.locator("#routeList").locator("xpath=preceding-sibling::*[1]");
+        await rhead.waitFor();
+        assert.equal((await rhead.textContent()).trim(), await tr(page, "Routing"));
+        for (const id of ["refusalRetriesRow", "retryAfterCapRow", "classifyTimeoutRow", "busyLoadRow"]) {
+          assert.equal(await page.locator(`#routeList > #${id}`).count(), 1, id + " under Routing");
+        }
+        assert(await page.evaluate(() => document.querySelector("#replyList").compareDocumentPosition(document.querySelector("#routeList")) & Node.DOCUMENT_POSITION_FOLLOWING), "after the replies' rows");
+        assert.equal(await page.locator("#busyLoadRow").count(), 1, "one busy model row, not one in Network too");
+        assert(await page.locator("#busyLoadRow").isVisible(), "shown on the Models tab");
+        assert(await fits(page), "fits");
+        assert.deepEqual(page.errors, []);
+
+        // the Routing page leads there
+        page = await open(false, "routing");
+        const go = page.locator("#rtToSet");
+        await go.waitFor();
+        assert.equal((await go.textContent()).trim(), (await tr(page, "Settings")) + " ›");
+        assert(await fits(page), "the Routing page fits");
+        await go.click();
+        await page.locator("#view-settings #routeList .row.flash").waitFor();
         assert.deepEqual(page.errors, []);
       });
     }

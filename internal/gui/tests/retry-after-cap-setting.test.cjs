@@ -15,11 +15,11 @@ const { reach, watchSettingsReads, settingsDrawn } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const words = {
-  en: { name: "Longest wait an agent is told", head: "Replies", min: (n) => `${n} min`, none: "No limit", sub: "The accounts rest as long either way" },
-  zh: { name: "告诉智能体的最长等待", head: "回复", min: (n) => `${n} 分钟`, none: "不限制", sub: "账号休息的时长不变" },
-  "zh-TW": { name: "告訴智慧體的最長等待", head: "回覆", min: (n) => `${n} 分鐘`, none: "不限制", sub: "帳號休息的時長不變" },
-  ja: { name: "エージェントに伝える最長の待ち時間", head: "応答", min: (n) => `${n} 分`, none: "上限なし", sub: "アカウントの休止時間は変わりません" },
-  de: { name: "Längste Wartezeit für einen Agenten", head: "Antworten", min: (n) => `${n} min`, none: "Kein Limit", sub: "Die Konten ruhen in beiden Fällen gleich lange" },
+  en: { name: "Longest wait an agent is told", head: "Routing", min: (n) => `${n} min`, none: "No limit", sub: "The accounts rest as long either way" },
+  zh: { name: "告诉智能体的最长等待", head: "路由", min: (n) => `${n} 分钟`, none: "不限制", sub: "账号休息的时长不变" },
+  "zh-TW": { name: "告訴智慧體的最長等待", head: "路由", min: (n) => `${n} 分鐘`, none: "不限制", sub: "帳號休息的時長不變" },
+  ja: { name: "エージェントに伝える最長の待ち時間", head: "ルーティング", min: (n) => `${n} 分`, none: "上限なし", sub: "アカウントの休止時間は変わりません" },
+  de: { name: "Längste Wartezeit für einen Agenten", head: "Weiterleitung", min: (n) => `${n} min`, none: "Kein Limit", sub: "Die Konten ruhen in beiden Fällen gleich lange" },
 };
 
 function serve(lang, saved) {
@@ -63,7 +63,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await watchSettingsReads(page);
       await page.goto("http://magpie.test/?view=settings&tab=models");
       await settingsDrawn(page); // rows found are the ones that stay (#1659)
-      const row = page.locator("#replyList #retryAfterCapRow");
+      const row = page.locator("#routeList #retryAfterCapRow");
       await row.waitFor();
       // scrolled to as a reader does, with the wheel: WebKit at 420 put
       // back a scroll made from script
@@ -86,7 +86,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         });
         assert(fit, `${part} fits at ${width}`);
       }
-      assert.equal(await page.locator("#replyList").evaluate((l) => l.previousElementSibling.textContent.trim()), w.head);
+      assert.equal(await page.locator("#routeList").evaluate((l) => l.previousElementSibling.textContent.trim()), w.head);
       const opts = row.locator(".segs button");
       assert.deepEqual(await opts.allTextContents(), [w.min(1), w.min(5), w.min(15), w.none]);
       const none = row.locator(".segs button", { hasText: w.none });

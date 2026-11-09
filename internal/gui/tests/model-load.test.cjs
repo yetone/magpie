@@ -148,7 +148,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.route("**/*", server(lang, posted));
         await watchSettingsReads(page);
         if (!web) await page.route("**/boot.js", (r) => r.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light"};` }));
-        await page.goto("http://magpie.test/?view=settings&tab=network");
+        await page.goto("http://magpie.test/?view=settings&tab=models");
         await settingsDrawn(page);
         const segs = page.locator("#busyLoadSegs .opt");
         await segs.first().waitFor();
@@ -188,7 +188,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", server(lang, posted));
         await watchSettingsReads(page);
-        await page.goto("http://magpie.test/?view=settings&tab=network");
+        await page.goto("http://magpie.test/?view=settings&tab=models");
         await settingsDrawn(page);
         const row = page.locator("#busyLoadRow"), sub = row.locator(".sub"), field = row.locator("input.busy-load-at");
         const custom = row.locator(".opt", { hasText: w.custom }), apply = row.locator("#busyLoadSegs .val button").first();
@@ -256,7 +256,7 @@ test("a threshold past 100 set by hand is shown as picked", async (t) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.route("**/*", server("en", [], { busyLoad: 150 }));
-  await page.goto("http://magpie.test/?view=settings&tab=network");
+  await page.goto("http://magpie.test/?view=settings&tab=models");
   const segs = page.locator("#busyLoadSegs .opt");
   await segs.first().waitFor();
   assert.deepEqual((await segs.allTextContents()).map((s) => s.trim()), ["Off", "Over 50%", "Over 70%", "Over 80%", "Over 90%", "Over 150%", "Custom…"]);
@@ -271,7 +271,7 @@ test("a threshold set by hand is shown as picked", async (t) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.route("**/*", server("en", [], { busyLoad: 75 }));
-  await page.goto("http://magpie.test/?view=settings&tab=network");
+  await page.goto("http://magpie.test/?view=settings&tab=models");
   const segs = page.locator("#busyLoadSegs .opt");
   await segs.first().waitFor();
   assert.deepEqual((await segs.allTextContents()).map((s) => s.trim()), ["Off", "Over 50%", "Over 70%", "Over 75%", "Over 80%", "Over 90%", "Custom…"]);

@@ -22,6 +22,7 @@ magpie.plugin("routing", (ctx) => {
     html: `
     <div class="row-head"><span class="label" data-t>Routing</span><span class="rt-livedot" aria-hidden="true"></span><span class="note" data-t>live, as the gateway decides</span><span class="grow"></span>
       <button class="text rt-togroups" type="button" id="rtToGroups" data-feature="groups"><span data-t>Routing groups</span> ›</button>
+      <button class="text rt-toset" type="button" id="rtToSet"><span data-t>Settings</span> ›</button>
       <button class="text rt-mask" id="rtMask" aria-pressed="false" data-tt="Mask the accounts on every page — email addresses and account names — for a screenshot to share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.2A10.4 10.4 0 0 1 12 4c6.5 0 10 8 10 8a17.6 17.6 0 0 1-2.2 3.2M6.6 6.6C3.9 8.4 2 12 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20"/></svg><span data-t>Hide accounts</span></button></div>
     <section class="rt" id="rt"></section>
     <div class="rt-more" id="rtMore"></div>
@@ -55,6 +56,10 @@ function routingPage(part) {
   // the groups' way in where the header's row has no tab for them (markNav)
   const toGroups = $("#rtToGroups");
   if (toGroups) toGroups.onclick = async () => { if (await window.show("groups")) openedFrom(toGroups); };
+  // what routing does when an account refuses or every one rests, and a
+  // busy model's place, are set in Settings › Models › Routing
+  const toSet = $("#rtToSet");
+  if (toSet) toSet.onclick = (e) => openSettingsAt(e, "models", "#routeList .row");
   const NS = "http://www.w3.org/2000/svg";
   const still = calm;
   const shown = () => !$("#view-routing").hidden && !document.hidden;

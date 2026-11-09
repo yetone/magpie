@@ -2184,7 +2184,7 @@ it as above.
 refuses before any of it is said rests nobody: it is about what was asked,
 not the account. By default the same request is asked of the model's other
 accounts, then the routing group's other members, until one answers.
-Settings › Models › Replies › *Ask again after a refusal* sets how many more
+Settings › Models › Routing › *Ask again after a refusal* sets how many more
 are asked: 1, 2 or 3, or *Never ask again*. When nobody else is asked, an
 agent on Anthropic's Messages API (Claude Code) gets the refusal as the
 vendor said it, `stop_reason` `refusal` with its category, which Claude Code
