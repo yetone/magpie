@@ -2038,8 +2038,7 @@ function appOutSaid(a) {
 }
 
 // appBackSaid: Codex back on its ChatGPT account after the reset, its app
-// still on the app-server it started while magpie was its provider, which
-// reads the account only as it starts (a bug report by mail, 11-04)
+// on the app-server that read no account as it started (mail, 11-04)
 function appBackSaid(a) {
   return t("magpie gave {agent} back its ChatGPT account after the reset. The {agent} app still runs on the app-server it started while magpie served it, so it shows no account, no usage and none of its ChatGPT projects or chats until that restarts. Restart does it now; its window stays.", { agent: a.name });
 }
