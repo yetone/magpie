@@ -78,6 +78,16 @@ type State struct {
 	Read      int       `json:"read,omitempty"`
 	Added     int       `json:"added,omitempty"`
 	Error     string    `json:"error,omitempty"`
+	// Dream is the nightly tidy switched on (dream.go), DreamSince when
+	Dream      bool      `json:"dream,omitempty"`
+	DreamSince time.Time `json:"dreamSince,omitzero"`
+	// the last tidy that went through: when, with which model, and what it
+	// changed, undone or not; DreamError is what stopped the last one tried
+	Dreamt     time.Time       `json:"dreamt,omitzero"`
+	DreamModel string          `json:"dreamModel,omitempty"`
+	DreamError string          `json:"dreamError,omitempty"`
+	Changes    []memory.Change `json:"changes,omitempty"`
+	Undone     bool            `json:"undone,omitempty"`
 }
 
 // Path is distill.json; a variable for tests.
@@ -454,8 +464,9 @@ func keep(fs []found, s sessions.Session, proj *memory.Project, their string) in
 	return n
 }
 
-// Keep runs Run first after first, then every interval, until ctx ends;
-// auto gives the automatic model at each run.
+// Keep runs Run first after first, then every interval, until ctx ends,
+// and Dream after it when one is due (Dreams); auto gives the automatic
+// model at each run.
 func Keep(ctx context.Context, first, interval time.Duration, auto func() string, complete Complete) {
 	t := time.NewTimer(first)
 	defer t.Stop()
@@ -468,6 +479,11 @@ func Keep(ctx context.Context, first, interval time.Duration, auto func() string
 		t.Reset(interval)
 		if _, err := Run(ctx, auto(), complete); err != nil && !errors.Is(err, ErrRunning) {
 			log.Println("memory: reading conversations:", err) // and in the Memory tab
+		}
+		if st, err := Load(); err == nil && Dreams(st, now()) {
+			if _, err := Dream(ctx, auto(), complete); err != nil && !errors.Is(err, ErrRunning) {
+				log.Println("memory: tidying:", err)
+			}
 		}
 	}
 }
