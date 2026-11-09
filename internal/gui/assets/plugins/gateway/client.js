@@ -104,6 +104,9 @@ function renderGatewayOwn() {
   const box = $("#gwOwn");
   if (!box) return; // the page isn't drawn (yet, or any more)
   const f = prefs?.builtins?.find((x) => x.id === "gateway");
+  // a section of its own, not a second card against the calls' (the
+  // owner, 11-09)
+  $("#gwOwnHead").hidden = !f;
   if (!f) {
     box.replaceChildren();
     if (!prefs) loadSettings().then(() => view === "gateway" && providers && box.isConnected && renderGatewayView(), () => {});
@@ -845,6 +848,7 @@ magpie.plugin("gateway", (ctx) => {
 <div class="list" id="gwModels"></div>
 <div class="row-head"><span class="label" data-t>Recent calls</span><span class="grow"></span><span class="note" id="callsNote"></span></div>
 <div class="list activity" id="activity"></div>
+<div class="row-head" id="gwOwnHead" hidden><span class="label" data-t>Settings</span></div>
 <div class="list prefs gw-own" id="gwOwn"></div>
 `,
     mount() {

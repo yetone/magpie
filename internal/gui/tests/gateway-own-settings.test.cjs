@@ -4,7 +4,8 @@
 // didn't say where its port and allow list are (the scattered settings
 // audit after netube99 on X). It is now under the calls, drawn from the
 // plugin's schema and saved as picked, with a row that opens Settings ›
-// Network and sharing at the gateway's rows. Every language, Chromium and
+// Network and sharing at the gateway's rows, under a Settings head of its
+// own. Every language, Chromium and
 // WebKit, at 1100 and 420 wide, nothing past the window's edge.
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
@@ -56,6 +57,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal((await set.locator(".name").textContent()).trim(), tr(lang, "Recent calls at a time"));
         // under the calls it is about
         assert.ok(await page.evaluate(() => document.querySelector("#activity").compareDocumentPosition(document.querySelector("#gwOwn")) & Node.DOCUMENT_POSITION_FOLLOWING));
+        // a section of its own under a Settings head, not a card against the
+        // calls' (the owner, 11-09)
+        const head = page.locator("#gwOwnHead");
+        assert.equal((await head.textContent()).trim(), tr(lang, "Settings"));
+        const gap = await page.evaluate(() => document.querySelector("#gwOwnHead").getBoundingClientRect().top - document.querySelector("#activity").getBoundingClientRect().bottom);
+        assert.ok(gap >= 10, "a gap above the head: " + gap);
         assert.equal((await set.locator(".proto.pick").textContent()).trim(), "20");
         await set.locator(".proto.pick").click();
         await page.locator(".proto-menu .pm-item", { hasText: "50" }).click();
