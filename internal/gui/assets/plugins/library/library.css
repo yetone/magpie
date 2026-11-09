@@ -861,3 +861,20 @@ body.window .lib-list .lib-row { --lib-indent: 38px; }
 .lib-pi-head > .lib-path { flex: 0 1 auto; min-width: 0; }
 .lib-pi-row > .lib-pi-copy { flex: none; }
 .lib-pi + .lib-pi-head { margin-top: 18px; }
+
+/* Memory: the digest switch, a search with its filters, and the memories */
+.lib-memcard { margin-bottom: 12px; }
+.lib-membar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 2px 8px; }
+.lib-membar .lib-memq { flex: 1 1 180px; min-width: 0; max-width: 320px; height: 28px; }
+.lib-membar .lib-menu { height: 28px; max-width: 220px; color: var(--fg); }
+.lib-membar .lib-menu > span:first-child, .lib-memline .lib-menu > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-mems .lib-mem > .who .name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-weight: 400; }
+.lib-mems .lib-mem.open > .who .name { -webkit-line-clamp: unset; }
+.lib-mems .lib-mem > .who .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-memdetail { padding-left: 12px; }
+.lib-memline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.lib-memline .lib-menu { height: 28px; max-width: 220px; color: var(--fg); }
+.lib-memline .lib-memtags { flex: 1 1 160px; min-width: 0; height: 28px; }
+.lib-memdetail .lib-memwhy { height: 28px; }
+input.lib-memq, input.lib-memtags, input.lib-memwhy { padding: 0 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font-size: 12.5px; outline: none; box-sizing: border-box; transition: border-color .12s, box-shadow .12s; }
+input.lib-memq:focus, input.lib-memtags:focus, input.lib-memwhy:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }

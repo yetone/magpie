@@ -1,0 +1,191 @@
+// Run with Node's test runner and Playwright on the module path; see README.md.
+// The Library's Memory tab (internal/memory, /api/memory): the switch that
+// gives the agents ticked for instructions the memories' summary, the
+// Magpie Memory server offered while it isn't in the library, the memories
+// in use pinned first, a search, the ones an agent only guessed waiting
+// under To review, and a memory added, edited through the app's menu (never
+// a <select>), kept and deleted. Every language, wide and narrow, Chromium
+// and WebKit; no backend, the API is faked here.
+const assert = require("node:assert/strict");
+const fs = require("node:fs/promises");
+const path = require("node:path");
+const { test } = require("node:test");
+const { chromium, webkit } = require("playwright");
+
+const assets = path.resolve(__dirname, "../assets");
+const HOME = "/Users/mem";
+const library = {
+  dir: `${HOME}/.magpie/library`, backups: `${HOME}/.magpie/backups`, home: HOME,
+  agents: [{ id: "claude", name: "Claude Code", icon: "", instructions: `${HOME}/.claude/CLAUDE.md` }, { id: "codex", name: "Codex", icon: "", instructions: `${HOME}/.codex/AGENTS.md` }],
+  instructions: { shared: "", sets: [{ id: "default", name: "", active: true, text: "" }], agents: [] },
+  foundServers: [], projects: [], foundSkills: [], skills: [], servers: [],
+};
+const at = (d) => `2026-11-0${d}T10:00:00Z`;
+function memories() {
+  return {
+    memories: [
+      { id: "m1", text: "Use pnpm, never npm, in this repo", kind: "rule", scope: "project:p1", origin: "user", status: "active", created: at(1), updated: at(5) },
+      { id: "m2", text: "Answers in Chinese, code comments in English", kind: "preference", scope: "global", origin: "user", status: "active", pinned: true, created: at(1), updated: at(2) },
+      { id: "m3", text: "Deploys go out on Fridays", kind: "fact", scope: "global", origin: "inferred", status: "candidate", sources: [{ agent: "codex", at: at(3) }], created: at(3), updated: at(3) },
+    ],
+    projects: { p1: { key: "p1", name: "magpie", roots: [`${HOME}/magpie`] } },
+    digest: true,
+    agents: ["claude"],
+  };
+}
+
+function server(lang, state, sent) {
+  return async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true};` });
+    if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
+    if (url.pathname === "/api/state") return route.fulfill({ json: { agents: [], profiles: [], settings: { lang, theme: "light" } } });
+    if (url.pathname === "/api/plugins") return route.fulfill({ json: { plugins: [] } });
+    if (url.pathname === "/api/library") return route.fulfill({ json: library });
+    if (url.pathname.startsWith("/api/library/")) {
+      sent.push({ path: url.pathname, body: route.request().postDataJSON() });
+      return route.fulfill({ json: { ...library, result: { changed: [] } } });
+    }
+    if (url.pathname.startsWith("/api/memory")) {
+      if (route.request().method() === "POST") {
+        const body = route.request().postDataJSON();
+        sent.push({ path: url.pathname, body });
+        if (url.pathname === "/api/memory/digest") state.digest = body.on;
+        else if (url.pathname === "/api/memory/remove") state.memories = state.memories.filter((m) => !body.ids.includes(m.id));
+        else if (body.id) Object.assign(state.memories.find((m) => m.id === body.id), body, { id: body.id });
+        else state.memories.push({ id: "m" + (state.memories.length + 1), kind: "preference", scope: "global", origin: "user", status: "active", created: at(6), updated: at(6), ...body });
+      }
+      return route.fulfill({ json: state });
+    }
+    if (url.pathname === "/api/usage/quotas") return route.fulfill({ json: [] });
+    if (url.pathname === "/api/groups") return route.fulfill({ json: { groups: [] } });
+    if (url.pathname === "/api/providers") return route.fulfill({ json: { providers: [], gateway: { running: true } } });
+    if (url.pathname.startsWith("/api/")) return route.fulfill({ json: {} });
+    const file = path.join(assets, url.pathname === "/" ? "index.html" : url.pathname);
+    const contentType = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png" }[path.extname(file)];
+    await route.fulfill({ body: await fs.readFile(file), contentType });
+  };
+}
+
+const view = "#view-library";
+const words = {
+  en: { tab: "Memory", review: "To review", rule: "Rule", fact: "Fact" },
+  zh: { tab: "记忆", review: "待确认", rule: "规则", fact: "事实" },
+  "zh-TW": { tab: "記憶", review: "待確認", rule: "規則", fact: "事實" },
+  ja: { tab: "メモリ", review: "確認待ち", rule: "ルール", fact: "事実" },
+  de: { tab: "Memory", review: "Zu prüfen", rule: "Regel", fact: "Fakt" },
+};
+
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(engine + ": the Library's Memory tab lists, searches, adds, edits, keeps and deletes memories", async (t) => {
+    assert(["chromium", "webkit"].includes(engine), "BROWSER must be chromium or webkit");
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    const errors = [];
+    t.after(async () => {
+      if (errors.length) console.log(errors);
+      await browser.close();
+    });
+    for (const lang of Object.keys(words)) for (const width of [980, 420]) {
+      await t.test(`${lang} ${width}`, async () => {
+        const w = words[lang];
+        const ctx = await browser.newContext({ viewport: { width, height: 860 }, reducedMotion: "reduce" });
+        await ctx.addInitScript(() => { try { localStorage.setItem("magpie.libTab", "memory"); } catch {} });
+        const page = await ctx.newPage();
+        page.setDefaultTimeout(5000);
+        page.setDefaultNavigationTimeout(60000);
+        page.on("pageerror", (e) => errors.push(e.message));
+        const sent = [];
+        const state = memories();
+        await page.route("**/*", server(lang, state, sent));
+        await page.goto("http://magpie.test/");
+        await page.locator('button[data-view="library"]').click();
+        const rows = page.locator(`${view} .lib-mems .lib-mem`);
+        await rows.first().waitFor();
+
+        // the tab is named, after Instructions
+        const tabs = await page.locator(`${view} .lib-tabs .opt`).allTextContents();
+        assert.equal(tabs[1].trim(), w.tab);
+        assert.ok((await page.locator(`${view} .lib-tabs .opt.on`).textContent()).includes(w.tab));
+        // the page is in the reader's language and fits the window
+        if (lang !== "en") assert.doesNotMatch(await page.locator(`${view} .lib-intro`).textContent(), /What your agents know/);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "the page scrolls sideways");
+        const body = await page.locator(`${view} .lib-body`).boundingBox();
+        for (const b of await page.locator(`${view} .lib-membar > *`).all()) {
+          const r = await b.boundingBox();
+          assert.ok(r.x + r.width <= body.x + body.width + 1, "a control of the bar is cut off");
+        }
+
+        // in use: the pinned one first, then the newer one; the one guessed waits
+        assert.equal(await rows.count(), 2);
+        assert.match(await rows.nth(0).textContent(), /Answers in Chinese/);
+        assert.match(await rows.nth(1).textContent(), /Use pnpm/);
+        assert.match(await rows.nth(1).textContent(), /magpie/);
+        assert.match(await rows.nth(1).textContent(), new RegExp(w.rule));
+        // Magpie Memory isn't in the library: it is offered
+        assert.equal(await page.locator(`${view} .lib-memtools`).count(), 1);
+
+        // the search narrows the list
+        await page.locator(`${view} input.lib-memq`).fill("pnpm");
+        await page.waitForFunction(() => document.querySelectorAll("#view-library .lib-mems .lib-mem").length === 1);
+        await page.locator(`${view} input.lib-memq`).fill("");
+        await page.waitForFunction(() => document.querySelectorAll("#view-library .lib-mems .lib-mem").length === 2);
+
+        if (width === 980) {
+          // edited: the kind through the app's menu
+          await rows.nth(1).click();
+          const ta = page.locator(`${view} textarea[data-lib="mem:m1"]`);
+          await ta.waitFor();
+          assert.equal(await page.locator(`${view} select`).count(), 0, "a native select");
+          await ta.fill("Use pnpm in this repo");
+          await page.locator(`${view} .lib-memdetail .lib-mempick`).first().click();
+          await page.locator(".proto-menu .pm-item", { hasText: w.fact }).click();
+          await page.locator(`${view} .lib-memdetail .primary`).click();
+          await page.waitForFunction(() => !document.querySelector("#view-library .lib-memdetail"));
+          let s = sent.findLast((x) => x.path === "/api/memory");
+          assert.deepEqual({ id: s.body.id, text: s.body.text, kind: s.body.kind, scope: s.body.scope }, { id: "m1", text: "Use pnpm in this repo", kind: "fact", scope: "project:p1" });
+
+          // added: everywhere by default, the user's own
+          await page.locator(`${view} .lib-memadd`).click();
+          const nt = page.locator(`${view} textarea[data-lib="mem:new"]`);
+          await nt.waitFor();
+          await nt.fill("Never push to main");
+          await page.locator(`${view} input.lib-memtags`).fill("git, 规则");
+          await page.locator(`${view} .lib-memdetail .primary`).click();
+          await page.waitForFunction(() => document.querySelectorAll("#view-library .lib-mems .lib-mem").length === 3);
+          s = sent.findLast((x) => x.path === "/api/memory");
+          assert.equal(s.body.id, undefined);
+          assert.deepEqual([s.body.text, s.body.scope, s.body.tags], ["Never push to main", "global", ["git", "规则"]]);
+
+          // the one guessed is kept
+          await page.locator(`${view} .lib-memstatus .opt`, { hasText: w.review }).click();
+          await page.waitForFunction(() => document.querySelectorAll("#view-library .lib-mems .lib-mem").length === 1);
+          const guessed = page.locator(`${view} .lib-mems .lib-mem`).first();
+          assert.match(await guessed.textContent(), /Codex/);
+          await guessed.click();
+          await page.locator(`${view} .lib-memdetail .lib-acts button`).nth(1).click();
+          await page.waitForFunction(() => document.querySelectorAll("#view-library .lib-mems .lib-mem").length === 0);
+          s = sent.findLast((x) => x.path === "/api/memory");
+          assert.deepEqual(s.body, { id: "m3", status: "active" });
+
+          // deleted, on a second click
+          await page.locator(`${view} .lib-memstatus .opt`).first().click();
+          await page.waitForFunction(() => document.querySelectorAll("#view-library .lib-mems .lib-mem").length === 4);
+          await page.locator(`${view} .lib-mems .lib-mem`, { hasText: "Never push" }).click();
+          const del = page.locator(`${view} .lib-memdetail .danger`);
+          await del.click();
+          assert.equal(sent.filter((x) => x.path === "/api/memory/remove").length, 0);
+          await page.locator(`${view} .lib-memdetail .danger-fill`).click();
+          await page.waitForFunction(() => document.querySelectorAll("#view-library .lib-mems .lib-mem").length === 3);
+          assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/remove").body, { ids: ["m4"] });
+
+          // the summary switched off
+          await page.locator(`${view} .lib-memcard button.lib-switch`).click();
+          await page.waitForFunction(() => document.querySelector("#view-library .lib-memcard button.lib-switch")?.getAttribute("aria-checked") === "false");
+          assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/digest").body, { on: false });
+        }
+        await ctx.close();
+      });
+    }
+    assert.deepEqual(errors, []);
+  });
+}

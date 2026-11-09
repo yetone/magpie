@@ -810,6 +810,8 @@ magpie.plugin("library", (ctx) => {
       box.append(card, head("60px"), rows(6, true));
     } else if (which === "rtk") {
       box.append(rows(1, false), head("60px"), rows(5, true));
+    } else if (which === "memory") {
+      box.append(rows(1, true), rows(6, false));
     } else if (which === "pi") {
       box.append(head("60px"), rows(4, true));
     } else {
@@ -826,6 +828,8 @@ magpie.plugin("library", (ctx) => {
     if (id === "rtk" && rtk) loadRTK();
     // Pi's extensions too: one installed or changed outside magpie since
     if (id === "pi" && piView) loadPi();
+    // memory too: agents save to it while the page is open
+    if (id === "memory" && mem) loadMemory();
     if (!lib) return page.querySelector(":scope > .lib-skel")?.replaceWith(skeleton(id));
     render(); syncLists();
   }
@@ -837,6 +841,7 @@ magpie.plugin("library", (ctx) => {
     const n = (k) => (counts?.[k] ? " · " + counts[k] : "");
     const tabs = segs(agentless() ? [["mcp", t("MCP servers") + n("mcp")]] : [
       ["instructions", t("Instructions")],
+      ["memory", t("Memory")],
       ["mcp", t("MCP servers") + n("mcp")],
       ["skills", t("Skills") + n("skills")],
       ["hooks", t("Hooks") + n("hooks")],
@@ -910,6 +915,7 @@ magpie.plugin("library", (ctx) => {
     if (tab === "instructions") renderInstructions(body);
     else if (tab === "mcp") renderServers(body);
     else if (tab === "rtk") renderRTK(body);
+    else if (tab === "memory") renderMemory(body);
     else if (tab === "pi") renderPi(body);
     else if (tab === "hooks") renderHooks(body);
     else if (tab === "subagents") renderSubagents(body);
@@ -933,6 +939,227 @@ magpie.plugin("library", (ctx) => {
   }
 
   function intro(text) { return el("p", "lib-intro", text); }
+
+  // ---------- memory ----------
+
+  // What the agents know about the user and their projects, shared by all
+  // of them (internal/memory): agents search it and save to it through the
+  // Magpie Memory server, and the ones ticked for instructions read its
+  // digest. A memory an agent only guessed waits under Suggested until the
+  // user keeps it.
+  let mem = null;        // /api/memory
+  let memLoading = false;
+  let memQ = "";         // the search typed
+  let memStatus = "active";
+  let memScope = "";     // "" every scope
+  let memOpen = null;    // the memory open to edit, or "new"
+  let memDraft = null;   // its fields as typed
+  let memRemoving = null; // the memory whose Delete was clicked once
+  const MEM_KINDS = ["profile", "preference", "rule", "reference", "fact", "procedure", "episode"];
+  const kindName = (k) => ({ profile: t("About you"), preference: t("Preference"), rule: t("Rule"), reference: t("Reference"), fact: t("Fact"), procedure: t("How-to"), episode: t("Decision") })[k] || k;
+  function scopeName(s) {
+    if (!s || s === "global") return t("Everywhere");
+    if (s.startsWith("project:")) {
+      const k = s.slice(8), p = mem?.projects?.[k];
+      return p?.name || k;
+    }
+    if (s.startsWith("agent:")) return t("Only {agent}", { agent: nameOf(s.slice(6)) });
+    return s;
+  }
+  async function loadMemory() {
+    if (memLoading) return;
+    memLoading = true;
+    try {
+      mem = await api("memory");
+    } catch (e) {
+      status(e.message, "err");
+    }
+    memLoading = false;
+    if (tab === "memory" && mem) render();
+  }
+  function memDirty() {
+    if (!memOpen || !memDraft) return false;
+    const m = mem?.memories.find((x) => x.id === memOpen);
+    if (!m) return !!memDraft.text.trim();
+    return memDraft.text !== m.text || memDraft.why !== (m.why || "") || memDraft.tags !== (m.tags || []).join(", ") || memDraft.kind !== m.kind || memDraft.scope !== m.scope;
+  }
+  let memBusy = false;
+  async function memChange(path, body, done) {
+    if (memBusy) return false;
+    memBusy = true;
+    page.setAttribute("aria-busy", "true");
+    try {
+      const v = await api(path, body);
+      mem = v;
+      if (v.problem) status(v.problem, "err", 10000);
+      else if (done) status(done, "", 4000);
+      return true;
+    } catch (e) {
+      status(e.message, "err", 6000);
+      return false;
+    } finally {
+      memBusy = false;
+      page.removeAttribute("aria-busy");
+      render();
+    }
+  }
+  // a picker: the app's menu, never a <select>
+  function menuButton(text, cls, onclick) {
+    const b = el("button", "sess-pick lib-menu " + cls);
+    b.type = "button";
+    b.setAttribute("aria-haspopup", "menu");
+    b.append(el("span", "", text), svg(CHEV, 11, 1.6));
+    b.onclick = (e) => { e.stopPropagation(); onclick(e); };
+    return b;
+  }
+  const memTags = (s) => s.split(/[,，]/).map((x) => x.trim()).filter(Boolean);
+  function openMemory(m) {
+    memRemoving = null;
+    if (!m) { memOpen = "new"; memDraft = { text: "", why: "", tags: "", kind: "preference", scope: memScope || "global" }; return; }
+    memOpen = m.id;
+    memDraft = { text: m.text, why: m.why || "", tags: (m.tags || []).join(", "), kind: m.kind, scope: m.scope };
+  }
+  async function saveMemory() {
+    if (!memDraft || !memDraft.text.trim()) return;
+    const isNew = memOpen === "new";
+    const body = { text: memDraft.text.trim(), why: memDraft.why.trim(), tags: memTags(memDraft.tags), kind: memDraft.kind, scope: memDraft.scope };
+    if (!isNew) body.id = memOpen;
+    if (await memChange("memory", body, isNew ? t("Remembered") : t("Saved"))) { memOpen = null; memDraft = null; render(); }
+  }
+  // every scope a memory is kept in, and the places one can be put
+  function memScopes(withAgents) {
+    const out = ["global"];
+    for (const k of Object.keys(mem.projects || {})) out.push("project:" + k);
+    for (const m of mem.memories) if (!out.includes(m.scope) && (withAgents || !m.scope.startsWith("agent:"))) out.push(m.scope);
+    if (withAgents) for (const a of shownAgents()) if (!out.includes("agent:" + a.id.split("@")[0])) out.push("agent:" + a.id.split("@")[0]);
+    return out;
+  }
+  function renderMemory(body) {
+    body.append(intro(t("What your agents know about you and your projects, shared by all of them. They search it and save to it with Magpie Memory, and the agents switched on under Instructions read a summary of it.")));
+    if (!mem) {
+      loadMemory();
+      body.append(skeleton("memory").lastChild);
+      return;
+    }
+    const card = el("div", "list lib-list lib-memcard");
+    const row = el("div", "row lib-row");
+    const who = el("div", "who");
+    who.append(el("div", "name", t("In the agents' instructions")));
+    who.append(el("div", "sub", mem.agents.length ? mem.agents.map(nameOf).join(", ") : t("No agent is switched on under Instructions")));
+    const sw = toggle(mem.digest, t("In the agents' instructions"), (on) => memChange("memory/digest", { on }, on ? t("The agents read the memories' summary") : t("The memories' summary is taken out of the agents' instructions")));
+    row.append(glyph(GLYPH.doc), who, sw);
+    card.append(row);
+    if (!lib.servers.some((s) => s.name === "magpie-memory")) {
+      const r = el("div", "row lib-row lib-memtools");
+      const w = el("div", "who");
+      w.append(el("div", "name", "Magpie Memory"), el("div", "sub", t("Add it for agents to search and save memories")));
+      r.append(glyph(GLYPH.search), w, button(t("Add"), "action", () => change("market/server", { id: "magpie-memory", values: {} }, t("{name} is in the library now", { name: "Magpie Memory" }))));
+      card.append(r);
+    }
+    body.append(card);
+
+    const all = mem.memories;
+    const count = (st) => all.filter((m) => st === "archived" ? m.status === "archived" || m.status === "superseded" : m.status === st).length;
+    const bar = el("div", "lib-membar");
+    const q = input(memQ, t("Search memories"));
+    q.type = "search";
+    q.className = "lib-memq";
+    q.dataset.lib = "memq";
+    q.oninput = () => { memQ = q.value; render(); };
+    q.onkeydown = (e) => e.stopPropagation();
+    const sugg = count("candidate");
+    const st = segs([
+      ["active", t("In use") + (count("active") ? " · " + count("active") : "")],
+      ...(sugg || memStatus === "candidate" ? [["candidate", t("To review") + (sugg ? " · " + sugg : "")]] : []),
+      ["archived", t("Archived") + (count("archived") ? " · " + count("archived") : "")],
+    ], memStatus, (v) => { memStatus = v; memOpen = null; render(); });
+    st.classList.add("lib-memstatus");
+    const sc = menuButton(memScope ? scopeName(memScope) : t("All"), "lib-memscope", () => openProtoMenu(sc, [{ v: "", name: t("Everywhere and every project"), literalName: true, note: "" }, ...memScopes(true).filter((s) => all.some((m) => m.scope === s)).map((s) => ({ v: s, name: scopeName(s), literalName: true, note: "" }))], memScope, (v) => { memScope = v; render(); }, "Where it applies"));
+    bar.append(q, sc, st, el("span", "grow"), button("+ " + t("Add"), "action lib-memadd", () => { openMemory(null); render(); }));
+    body.append(bar);
+
+    const words = memQ.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const shown = all.filter((m) => (memStatus === "archived" ? m.status === "archived" || m.status === "superseded" : m.status === memStatus)
+      && (!memScope || m.scope === memScope)
+      && words.every((w) => [m.text, m.why || "", ...(m.tags || []), kindName(m.kind), scopeName(m.scope)].join(" ").toLowerCase().includes(w)))
+      .sort((a, b) => (!!b.pinned - !!a.pinned) || (b.updated > a.updated ? 1 : b.updated < a.updated ? -1 : 0));
+    const list = el("div", "list lib-list lib-mems");
+    if (memOpen === "new") list.append(memDetail(null));
+    for (const m of shown) list.append(...memRow(m));
+    if (!shown.length && memOpen !== "new") {
+      list.append(el("div", "lib-none", words.length || memScope ? t("No memory matches.")
+        : memStatus === "candidate" ? t("Nothing to review.")
+        : memStatus === "archived" ? t("Nothing archived.")
+        : t("Nothing remembered yet. Tell an agent “remember that…”, or add one here.")));
+    }
+    body.append(list);
+  }
+  function memRow(m) {
+    const isOpen = memOpen === m.id;
+    const row = el("div", "row lib-row click lib-mem" + (isOpen ? " open" : ""));
+    row.dataset.id = m.id;
+    const who = el("div", "who");
+    who.append(el("div", "name", m.text));
+    const sub = [scopeName(m.scope), ...(m.tags || []).map((x) => "#" + x)];
+    const from = m.origin === "agent" || m.origin === "inferred" ? (m.sources || []).find((s) => s.agent)?.agent : "";
+    if (from) sub.push(t("from {agent}", { agent: nameOf(from) }));
+    who.append(el("div", "sub", sub.join(" · ")));
+    const tags = el("div", "lib-tags");
+    if (m.pinned) tags.append(tag(t("Pinned"), "", t("Given to the agents first")));
+    tags.append(tag(kindName(m.kind)));
+    const chev = el("span", "chev");
+    chev.append(svg(CHEV_R, 11, 1.7));
+    row.append(who, tags, chev);
+    row.onclick = () => { if (isOpen) { memOpen = null; memDraft = null; } else openMemory(m); render(); };
+    return isOpen ? [row, memDetail(m)] : [row];
+  }
+  function memDetail(m) {
+    const d = memDraft;
+    const det = el("div", "lib-detail lib-memdetail");
+    const ta = el("textarea", "lib-text small");
+    ta.dataset.lib = "mem:" + (m ? m.id : "new");
+    ta.value = d.text;
+    ta.placeholder = t("What to remember, in a sentence — e.g. Use pnpm, never npm, in this repo");
+    ta.oninput = () => { d.text = ta.value; };
+    ta.onkeydown = (e) => { e.stopPropagation(); if ((e.metaKey || e.ctrlKey) && (e.key === "s" || e.key === "Enter")) { e.preventDefault(); saveMemory(); } };
+    autosize(ta, 52);
+    if (!m) queueMicrotask(() => ta.focus());
+    const pick = (label, value, opts, head, set) => {
+      const b = menuButton(label(value), "lib-mempick", () => openProtoMenu(b, opts.map((v) => ({ v, name: label(v), literalName: true, note: "" })), value, (v) => { set(v); render(); }, head));
+      return b;
+    };
+    const line = el("div", "lib-memline");
+    line.append(pick(kindName, d.kind, MEM_KINDS, "Kind", (v) => { d.kind = v; }), pick(scopeName, d.scope, memScopes(true), "Where it applies", (v) => { d.scope = v; }));
+    const tg = input(d.tags, t("Tags, separated by commas"));
+    tg.className = "lib-memtags grow";
+    tg.dataset.lib = "memtags:" + (m ? m.id : "new");
+    tg.oninput = () => { d.tags = tg.value; };
+    tg.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") saveMemory(); };
+    line.append(tg);
+    const why = input(d.why, t("Why (optional)"));
+    why.className = "lib-memwhy";
+    why.dataset.lib = "memwhy:" + (m ? m.id : "new");
+    why.oninput = () => { d.why = why.value; };
+    why.onkeydown = tg.onkeydown;
+    det.append(ta, line, why);
+    const acts = el("div", "lib-acts");
+    if (m) {
+      acts.append(button(m.pinned ? t("Unpin") : t("Pin"), "action", () => memChange("memory", { id: m.id, pinned: !m.pinned })));
+      if (m.status === "candidate") acts.append(button(t("Keep"), "action", () => memChange("memory", { id: m.id, status: "active" }, t("Kept"))));
+      else if (m.status === "active") acts.append(button(t("Archive"), "action", () => { memOpen = null; memChange("memory", { id: m.id, status: "archived" }, t("Archived")); }));
+      else acts.append(button(t("Restore"), "action", () => { memOpen = null; memChange("memory", { id: m.id, status: "active" }, t("Restored")); }));
+      const sure = memRemoving === m.id;
+      acts.append(button(sure ? t("Delete for good") : t("Delete"), sure ? "primary danger-fill" : "action danger", () => {
+        if (!sure) { memRemoving = m.id; render(); return; }
+        memRemoving = null; memOpen = null; memDraft = null;
+        memChange("memory/remove", { ids: [m.id] }, t("Deleted"));
+      }));
+    }
+    acts.append(el("span", "grow"), button(t("Cancel"), "", () => { memOpen = null; memDraft = null; memRemoving = null; render(); }), button(m ? t("Save") : t("Remember"), "primary", saveMemory));
+    det.append(acts);
+    det.onclick = (e) => e.stopPropagation();
+    return det;
+  }
 
   // ---------- RTK ----------
 
@@ -1475,6 +1702,7 @@ magpie.plugin("library", (ctx) => {
   }
   async function discard(force = false) {
     if (force !== true && dirty() && !(await confirmDiscard())) return;
+    if (force === true) { memOpen = null; memDraft = null; }
     for (const k of Object.keys(texts)) delete texts[k];
     for (const k of Object.keys(extras)) delete extras[k];
     render();
@@ -6968,7 +7196,9 @@ magpie.plugin("library", (ctx) => {
   // unsaved text, or a lookup under way.
   // What changed there changes what the market calls added, too: take asks it again.
   async function quietLoad() {
-    if (page.hidden || modal || dirty() || probing) return;
+    if (page.hidden || modal || dirty() || memDirty() || probing) return;
+    // what agents saved meanwhile
+    if (tab === "memory" && mem) loadMemory();
     await load(true);
   }
   const shelf = () => JSON.stringify([lib?.servers?.map((x) => x.name), lib?.skills?.map((x) => x.name)]);
@@ -6988,7 +7218,7 @@ magpie.plugin("library", (ctx) => {
         if (!confirmationPending && modal && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); closeLibModal(); }
       }, true);
       // leaving the page with the shared text not saved asks first
-      window.addEventListener("beforeunload", (e) => { if (lib && dirty()) e.preventDefault(); });
+      window.addEventListener("beforeunload", (e) => { if (lib && (dirty() || memDirty())) e.preventDefault(); });
       page.addEventListener("scroll", () => page.querySelector(".lib-head")?.classList.toggle("stuck", page.scrollTop > 0), { passive: true });
       document.addEventListener("visibilitychange", () => { if (!document.hidden) quietLoad(); });
       window.addEventListener("focus", quietLoad);
@@ -7016,7 +7246,7 @@ magpie.plugin("library", (ctx) => {
     redraw: () => { if (lib) render(); },
     // the reader leaving the page: its dialog closed, and what isn't saved
     close: () => { if (modal) closeLibModal(true); else closeModal(); },
-    dirty: () => !!lib && dirty(),
+    dirty: () => !!lib && (dirty() || memDirty()),
     discard: () => discard(true),
   });
 });
