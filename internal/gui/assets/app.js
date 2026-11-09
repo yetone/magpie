@@ -22972,7 +22972,10 @@ function hold(h) {
     // on its Save, the list it had in it), and scrolled to `want` not one row of
     // the view would be in sight, only the room — a blank page. The browser's own
     // clamp after the content shrank stands instead.
-    if (want > max && contentEnd(v) <= want) want = max;
+    // A sliver is as blank: with the group editor's rows folded under
+    // Advanced, its Save left the last settings card, 88px of a 594px window,
+    // above the room. So a third of the window is content, or no room.
+    if (want > max && contentEnd(v) - want < v.clientHeight / 3) want = max;
     if (want > max) setRoom(v, want + v.clientHeight - contentEnd(v));
     v.scrollTop = want;
   }
