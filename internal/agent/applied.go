@@ -62,12 +62,21 @@ func appliedSave(m map[string]applied) {
 	b, _ := json.MarshalIndent(m, "", "  ")
 	os.MkdirAll(filepath.Dir(appliedPath()), 0o755)
 	os.WriteFile(appliedPath(), b, 0o600)
+	filememo.Look(appliedPath())
 }
 
+// appliedOf is what magpie set on agent id. Every look at an agent's
+// drift asks it, for every agent a poll lists, so the file is parsed once
+// a change and the map is shared: callers only read it.
 func appliedOf(id string) applied {
 	appliedMu.Lock()
 	defer appliedMu.Unlock()
-	return appliedLoad()[id]
+	m, _ := filememo.Read("applied", appliedPath(), func(b []byte) (map[string]applied, error) {
+		out := map[string]applied{}
+		json.Unmarshal(b, &out)
+		return out, nil
+	})
+	return m[id]
 }
 
 // record keeps what a field reads after magpie set it; a field put back to
