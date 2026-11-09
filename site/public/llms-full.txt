@@ -413,7 +413,7 @@ With several keys or accounts, magpie can spread Claude Code’s requests over t
 
 The routing modes are in [Get started](https://usemagpie.ai/docs/start#routing).
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot)
 
 ## FAQ
 
@@ -545,7 +545,7 @@ Requests on a Claude subscription run through the Claude Code installed on your 
 
 The routing modes are in [Get started](https://usemagpie.ai/docs/start#routing).
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot)
 
 ## FAQ
 
@@ -662,7 +662,7 @@ Gemini CLI still speaks the Gemini API; magpie translates each request for the m
 
 The routing modes and rules are in [Get started](https://usemagpie.ai/docs/start#routing).
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot)
 
 ## FAQ
 
@@ -995,7 +995,7 @@ magpie opencode default
 
 It puts back the `model` and `small_model` OpenCode had before magpie, and takes the `magpie` provider out of the file.
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot)
 
 ## FAQ
 
@@ -1667,7 +1667,7 @@ Yes. magpie reads OpenRouter’s credits endpoint and shows what is left in doll
 
 Asked at the Anthropic base, OpenRouter answers with its catalog under `anthropic/` names it doesn’t serve. magpie fetches the list from the Chat Completions base, `https://openrouter.ai/api/v1`, and a provider given only OpenRouter’s Anthropic base is told to add that Chat base.
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [GitHub Copilot](https://usemagpie.ai/docs/copilot)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [GitHub Copilot](https://usemagpie.ai/docs/copilot)
 
 Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
 
@@ -1814,7 +1814,301 @@ Yes. magpie reads the plan from GitHub: Free, Pro, Pro+, Max, Education, Busines
 
 magpie lists what Copilot’s `/models` gives the account: chat models only, without the ones no model picker offers or the account can’t turn on. A model Copilot answered with “The requested model is not supported.” is left out for 6 hours, then tried again in case your plan changed.
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [Claude, ChatGPT and other subscriptions](https://usemagpie.ai/docs/subscriptions)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [OpenRouter](https://usemagpie.ai/docs/openrouter)
+
+Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
+
+---
+
+Source: https://usemagpie.ai/docs/gemini
+
+# Gemini in Claude Code, Codex, Gemini CLI and OpenCode
+
+Google serves Gemini on the Gemini Developer API, the one an AI Studio key opens, and on Vertex AI in your own Google Cloud project. Add either to magpie once, and Claude Code, Codex, Gemini CLI, OpenCode and every other agent you connect can use Gemini 3 models such as `gemini-3.1-pro-preview` through magpie’s gateway at `127.0.0.1:3425`, each agent on a model of its own.
+
+## Add a Gemini API key
+
+1. **Get a key.** Make one on [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
+2. **Add the provider.** In magpie’s Providers tab, press ＋ Add provider, pick Google Gemini, paste the key and save. magpie asks Google which models it serves.
+3. **Pick it for an agent.** In the Agents tab, click the model on the agent’s row and choose a Gemini model such as `gemini-3.1-pro-preview`.
+
+```
+magpie provider add google AIza…
+magpie provider test google
+```
+
+Model ids in magpie are `provider/model`, so the Gemini API’s read `google/gemini-3.1-pro-preview`: the provider, then Google’s own id. The key is kept in magpie’s settings; magpie doesn’t take it from your shell.
+
+## Endpoints
+
+| API | Base URL | Used for |
+| --- | --- | --- |
+| Chat Completions (OpenAI-compatible) | `https://generativelanguage.googleapis.com/v1beta/openai` | the model list, and requests from Claude Code, Codex, OpenCode and other agents |
+| Gemini API | `https://generativelanguage.googleapis.com/v1beta` | Gemini CLI’s requests, Google Search, image models |
+
+The preset fills in the Gemini API URL once. If you clear it, it stays empty. Every request that doesn’t come from a Gemini client goes to Chat Completions.
+
+## Model list
+
+- **Where it comes from..** magpie asks the OpenAI-compatible endpoint for the list once. It is the Gemini API’s list too, so magpie doesn’t ask twice. Names, reasoning levels and prices come from the `google` catalog on models.dev.
+- **Image models..** At Google, a Gemini image model draws on the Gemini API. Choose one in Settings → Models → Images.
+
+## In each agent
+
+Pick the model on an agent’s row in the Agents tab, or from a terminal. Each guide says what magpie writes in that agent’s config and how to switch back.
+
+```
+magpie claude google/gemini-3.1-pro-preview
+magpie codex google/gemini-3.1-pro-preview
+magpie gemini model google/gemini-3.8-flash
+magpie opencode google/gemini-3.1-pro-preview
+```
+
+- **Claude Code.** speaks Anthropic Messages. magpie translates each request to Gemini’s Chat Completions and the reply back to Messages, streaming and tool calls included. [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models).
+- **Codex.** speaks only OpenAI Responses. magpie translates it to Chat Completions the same way, and the reply comes back to Codex as Responses. [Models in Codex](https://usemagpie.ai/docs/codex-models).
+- **Gemini CLI.** speaks Gemini’s own API, so its requests go to the Gemini API as it sends them, and its Google Search runs there. [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models).
+- **OpenCode.** speaks Chat Completions, so its requests go to Google as they are. [Models in OpenCode](https://usemagpie.ai/docs/opencode-models).
+
+## Thinking
+
+- **Visible thoughts..** Gemini’s OpenAI-compatible API gives the model’s thoughts only when asked in `thinking_config`. When an agent asks for visible reasoning, magpie asks for the thoughts with `include_thoughts`, so a long think shows as thinking instead of a first word that comes late.
+- **Levels and budgets..** Gemini 3 and later are sent a thinking level. Gemini 2 models are sent a budget instead: 1024 tokens for minimal and low, 8192 for medium and 24576 for high. xhigh and max are sent as high, and an effort with no level is left to the model.
+- **Reasoning off..** Gemini 3 can’t stop thinking. When an agent turns reasoning off, magpie asks for the model’s lowest level instead.
+- **A level the model doesn’t have..** Not every Gemini 3 has every level: `gemini-3.8-flash` has no minimal. When Google turns a level away with a 400, magpie asks again at the nearest level the model has and remembers it until magpie restarts.
+- **`thinking_config` turned away..** That is a different 400: a server in front of Gemini that refuses the field itself. magpie asks again with `reasoning_effort` alone and stops sending `thinking_config` there.
+- **Proxies..** A Gemini model behind a proxy on this computer or your network, such as one on `localhost` or a private address, is handled the same way.
+
+## Thought signatures and tools
+
+- **Thought signatures..** Gemini 3 signs the first function call of each step, and the next request fails with 400 “Function call is missing a thought_signature in functionCall parts” if the signature is gone. Agents don’t keep it. magpie carries it in the call id the agent gets, as a short reference to a file in magpie’s folder, and puts it back on the way to Gemini. Signatures are kept for 90 days.
+- **Calls Gemini didn’t sign..** A call from another model earlier in the conversation, or one whose id an agent shortened, goes with Google’s documented `skip_thought_signature_validator`, so a conversation can move to Gemini halfway.
+- **One provider’s signature..** A signature goes back only to the provider that gave it. In a routing group of Vertex AI and the Gemini API, the other provider gets the call as unsigned history instead of answering “Corrupted thought signature”.
+- **Tool schemas..** magpie gives each untyped schema in an agent’s tools a type, which Vertex AI needs, and removes boolean schemas and `x-` keywords such as MCP’s `x-mcp-header`. Tools that need none of this go as they came.
+- **The end of a stream..** Gemini’s OpenAI-compatible API sends a whole function call in one chunk and its `finish_reason` in the next. If that reason is lost after the usage arrived, magpie fills it in; without the usage, the reply is reported as cut off rather than passed on as complete.
+
+## Cache, cost and search
+
+- **Prompt cache..** Gemini keeps a prompt cached without saying so on that turn. magpie counts such a turn as a cache write and keeps the next turn on the same provider and key, and remembers which one answered across restarts.
+- **Cached and thinking tokens..** magpie reads cached tokens and reasoning tokens from each reply, on Chat Completions and on the Gemini API alike, and the Usage tab counts them.
+- **Cost..** The Usage tab prices each call from the `google` catalog on models.dev.
+- **Web search..** Gemini runs Google Search on the Gemini API only for a request that declares no function tools. Claude Code’s and Codex’s requests declare tools, so their web search is magpie’s own, which the Google provider answers itself on your key: those searches spend your Gemini API credit.
+
+## Several keys and rate limits
+
+One Google Gemini provider can hold several keys: press Add another key under it, or paste several at once. Requests go to the first key that’s on, and when it runs out or is rate limited the next one takes over. The provider’s routing can also rotate, weight or drain them instead.
+
+- **Per-minute 429s..** Gemini’s 429 “You exceeded your current quota … Please retry in 33s” for a per-minute limit is read as a rate limit, not a used-up plan, and so is Vertex AI’s `requests_per_minute_per_project`. The key rests from a minute, doubling, up to `rest-cap`.
+- **Holding to a rate..** `rpm` holds each key to a number of requests a minute: one request more waits for room, up to 2 minutes, then gets a 429.
+- **Out of quota..** `quota-rest` sets how long a key rests once its quota is spent: 15 minutes by default, up to 8 days, or until a time of day.
+- **Spend caps and fallbacks..** `spend-cap` stops a key at a dollar amount a day, a month or in all, and `fallback` names where requests go when Gemini is out of quota or down.
+
+```
+magpie provider rpm google 10
+magpie provider spend-cap google <key> 20 month
+magpie provider fallback google google-vertex/gemini-3.1-pro-preview
+```
+
+## Vertex AI
+
+The Google Vertex AI preset asks Gemini in your Google Cloud project, with no API key. Give it the project’s id; the project in each request is the one billed.
+
+```
+gcloud auth application-default login
+magpie provider add google-vertex project=my-project
+magpie claude google-vertex/gemini-3.1-pro-preview
+```
+
+- **Credentials..** magpie signs with gcloud’s Application Default Credentials, or with the file `credentials=` names by its full path: a user sign-in, a service account key or an impersonated service account. `impersonate=` takes a service account’s email, and needs `roles/iam.serviceAccountTokenCreator` on it. The metadata server, workload identity federation and Vertex AI’s express-mode API keys aren’t read.
+- **Location..** `location=` is `global` (the default), `us`, `eu` or a region such as `us-central1`.
+- **Models..** The preset has its own list, among them `gemini-3.8-flash`, `gemini-3.1-pro-preview`, `gemini-2.5-pro`, partner models such as `zai-org/glm-5.2-maas`, and Claude models such as `claude-opus-5-5`. Gemini goes to Vertex AI’s Gemini API, a partner model to its OpenAI-compatible chat completions, and Claude to Anthropic’s Messages API, all in your project.
+- **Thinking on Vertex AI..** A Gemini 3 level is fitted to the levels that model has, and reasoning off asks for its lowest. Gemini 2.5 takes a budget: Pro from 128 to 32768 tokens (128 when off), Flash up to 24576 (0 when off), Flash-Lite from 512 to 24576 (0 when off).
+
+## Google sign-ins
+
+Two Google sign-ins give Gemini models without a key. They are subscriptions, set up as on [Subscriptions in any agent](https://usemagpie.ai/docs/subscriptions).
+
+- **Gemini (Code Assist)..** Gemini CLI’s Google sign-in, as `gemini/…`: `magpie accounts add gemini`. Google answers it only for a Code Assist Standard or Enterprise account with a Google Cloud project of its own; `magpie accounts project gemini <email> <project>` names the project.
+- **Antigravity..** As `antigravity/…`: `magpie accounts add antigravity`. Its sign-in gives Antigravity’s Claude and Gemini models.
+
+## Troubleshooting
+
+- **“Thinking level MINIMAL is not supported for this model”..** The model has no minimal level. magpie asks again at the nearest level it has, so the agent gets its answer, and remembers the level until magpie restarts. Only when no level is left does the error reach the agent as Google sent it.
+- **“Function call is missing a thought_signature in functionCall parts”..** A Gemini 3 call lost its signature. Through magpie the signature rides in the call id and is put back, and a call with none goes with `skip_thought_signature_validator`.
+- **“Corrupted thought signature”..** The signature was cut short or came from another provider. magpie sends a signature only to the provider that gave it.
+- **429 with “Please retry in 33s”..** A per-minute limit, not a spent plan. The key rests for a short while, and `rpm` keeps requests under the limit from then on.
+- **Vertex AI: a schema “didn’t specify the schema type field”..** magpie types every untyped tool schema it sends to Gemini, so this shouldn’t reach the agent.
+- **Vertex AI won’t save..** “Google Vertex AI needs the id of your Google Cloud project”: add `project=`. A credentials file has to be given by its full path.
+- **Checking a key..** `magpie provider test google` sends a tiny request through each endpoint, or to each model you name. Add `--as codex` or `--as claude-code` to send it the way that agent would.
+
+## FAQ
+
+### How do I use Gemini in Claude Code?
+
+Add a Gemini API key in magpie (Providers, Add provider, Google Gemini), then pick a model such as `gemini-3.1-pro-preview` on Claude Code’s row, or run `magpie claude google/gemini-3.1-pro-preview`. magpie writes Claude Code’s `settings.json` and translates each Messages request to Gemini’s Chat Completions, tool calls and streaming included.
+
+### Can Codex use Gemini models?
+
+Yes. Codex speaks only the Responses API. magpie translates each Codex request to Gemini’s Chat Completions and the reply back to Responses. Run `magpie codex google/gemini-3.1-pro-preview`, or pick the model on Codex’s row.
+
+### Does Gemini 3 Pro keep working across tool calls in Claude Code?
+
+Yes. Gemini 3 signs its function calls and refuses the next request without the signature. magpie carries each signature in the call id the agent gets and puts it back on the way to Gemini, so tool loops keep going, and a call from another model is sent as unsigned.
+
+### Can Gemini CLI and OpenCode use my Gemini key through magpie?
+
+Yes. Gemini CLI’s requests go to the Gemini API as it sends them, Google Search included. OpenCode speaks Chat Completions, so its requests go to Gemini’s OpenAI-compatible API as they are.
+
+### Why does Gemini answer 429 with “Please retry in 33s”?
+
+That is a per-minute limit, not a spent quota. magpie reads it as a rate limit and rests the key briefly. Run `magpie provider rpm google 10`, with your own limit, and magpie holds requests to that rate.
+
+### Can I use Gemini through Vertex AI instead of an API key?
+
+Yes. Add the Google Vertex AI preset with your project’s id, for example `magpie provider add google-vertex project=my-project`. magpie signs with gcloud’s Application Default Credentials or a credentials file, and your project is billed.
+
+### Can I use my Gemini Code Assist or Antigravity sign-in instead?
+
+Yes. Both are subscriptions: `magpie accounts add gemini` or `magpie accounts add antigravity`, then pick a `gemini/…` or `antigravity/…` model. Code Assist needs a Standard or Enterprise account with a Google Cloud project of its own.
+
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Grok](https://usemagpie.ai/docs/grok) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot)
+
+Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
+
+---
+
+Source: https://usemagpie.ai/docs/grok
+
+# Grok in Claude Code, Codex, Gemini CLI and OpenCode
+
+xAI serves its Grok models on three APIs at once: OpenAI Chat Completions, OpenAI Responses and Anthropic Messages. Add an xAI API key to magpie once, and Claude Code, Codex, Gemini CLI, OpenCode and every other agent you connect can use Grok through magpie’s local gateway at `127.0.0.1:3425`, each agent with a model of its own.
+
+## Add xAI
+
+1. **Get a key.** Make one on [console.x.ai](https://console.x.ai).
+2. **Add the provider.** In magpie’s Providers tab, press ＋ Add provider, pick xAI, paste the key and save. magpie asks xAI which models the key can use.
+3. **Pick it for an agent.** In the Agents tab, click the model on the agent’s row and choose a Grok model such as `grok-4.7`.
+
+```
+magpie provider add xai xai-…
+magpie provider test xai
+```
+
+Model ids in magpie are `provider/model`, so xAI’s read `xai/grok-4.7`: the provider, then xAI’s own id. The key is kept in magpie’s settings; magpie doesn’t take it from your shell.
+
+## Endpoints
+
+| API | Base URL | Used for |
+| --- | --- | --- |
+| Chat Completions | `https://api.x.ai/v1` | the model list, OpenCode’s requests, and every request magpie translates, Gemini CLI’s among them |
+| Responses | `https://api.x.ai/v1` | Codex’s requests, and web search that xAI runs itself |
+| Anthropic Messages | `https://api.x.ai` | Claude Code’s requests |
+
+An agent whose API xAI serves is passed on to that API. When magpie has to translate, it uses Chat Completions: it keeps Responses first only for OpenAI’s own models at OpenAI, and Messages first only for Claude models, and Grok is neither.
+
+## Model list
+
+magpie fetches the list from xAI, at `https://api.x.ai/v1/models`, so agents see the models your key can use. Names, reasoning levels and prices come from models.dev’s `xai` catalog. Pick the models agents see in the provider’s model list, or from the terminal:
+
+```
+magpie provider models xai +grok-4.7
+magpie provider refresh-every xai 1d
+```
+
+## In each agent
+
+```
+magpie claude xai/grok-4.7
+magpie codex xai/grok-4.7
+magpie gemini model xai/grok-4.7
+magpie opencode xai/grok-4.7
+```
+
+- **Claude Code.** speaks Anthropic Messages, and so does xAI at `https://api.x.ai`, so its requests go there as they are, with the fixes below. [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models).
+- **Codex.** speaks OpenAI Responses, which xAI serves at `https://api.x.ai/v1`, so its requests go there as they are too. If xAI turns away Codex’s custom tools (“unknown variant `custom`”), magpie translates that model’s Codex requests from then on and offers those tools as ordinary functions. [Models in Codex](https://usemagpie.ai/docs/codex-models).
+- **Gemini CLI.** speaks Google’s Gemini API, which xAI doesn’t serve. magpie translates each request to Chat Completions and the reply back, streaming and tool calls included. [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models).
+- **OpenCode.** speaks Chat Completions, so its requests go to xAI as they are. [Models in OpenCode](https://usemagpie.ai/docs/opencode-models).
+
+Grok Build, xAI’s own CLI, can take magpie’s models too: magpie adds them to `~/.grok/config.toml`, so they join its `/model` picker.
+
+## What magpie fixes for xAI
+
+xAI’s API turns away a few things that agents send. magpie changes them on the way, on requests it passes on and on those it translates alike, so the agent never sees these errors:
+
+- **Tool patterns..** xAI reads a tool’s `pattern` with a different regex engine, so a pattern such as Claude Code’s `^[^\s[\]]+$` on Windows failed with “Schema validation failed: … is not a "regex"”. magpie escapes it so xAI reads it as JavaScript does.
+- **Tool roots..** A tool whose parameters start with `anyOf`, `oneOf` or `allOf`, such as a Codex desktop automation tool, is folded into an object from the first request. xAI otherwise answers “tool parameter root must be an object type”.
+- **Empty fields..** `"required": null` in a tool’s schema, and `"content": null` on a Codex reasoning item, are left out. xAI otherwise answers “/required: null is not of type "array"” or “Could not decode the compaction blob”.
+- **System turns..** Claude Code’s system turns in the middle of a conversation are folded into the top-level system prompt. xAI otherwise answers “Invalid request content: Invalid message role.”
+- **A tool choice with no tools..** A request that sets `tool_choice` but offers no tools, such as Codex’s compaction summary, goes without it. xAI otherwise answers “A tool_choice was set on the request but no tools were specified”.
+- **Codex’s added tools..** xAI’s Responses API doesn’t know Codex’s `additional_tools` items, so magpie puts their tools in the request’s `tools`.
+- **Whole numbers..** Grok writes whole numbers in tool-call arguments with a fraction, such as `2500.0`, which Codex’s whole-number fields refuse. magpie writes `2500`, in streamed replies too.
+
+## Reasoning
+
+- **Effort..** The effort an agent asks for is fitted to the nearest level the model has, as the catalog lists them. A model whose levels aren’t known is asked as the agent asked.
+- **Reasoning off..** When an agent whose requests magpie translates, such as Gemini CLI, turns reasoning off and the model lists `none` among its levels, magpie asks for none.
+- **Switching models mid-conversation..** xAI reads only the sealed reasoning it wrote itself. When a Codex conversation moves to Grok from GPT or from another account, xAI answers “Could not decrypt the provided encrypted_content”. magpie asks again without those items at once, and leaves them out for the rest of that conversation.
+
+## Web search
+
+- **Codex..** xAI runs web search itself on its Responses API, so Codex’s `web_search` is done by xAI.
+- **Claude Code, Gemini CLI and OpenCode..** xAI’s Messages and Chat Completions APIs don’t search, so magpie gives the model its own search tool, answered by the searcher chosen in Settings, or by one magpie picks when none is chosen.
+- **xAI as the searcher..** Because xAI searches by itself, magpie can pick an xAI key to search for models that can’t.
+
+## Cache, cost and usage
+
+- **Cache tokens..** magpie reads the cached tokens xAI reports in each reply, so the Usage tab counts cache hits apart from the rest of the prompt.
+- **Keeping the cache..** With several keys, a conversation stays on its key while its cache is worth keeping, 1,024 tokens or more, and still warm, read within the last five minutes, so a turn isn’t sent to a key with a cold cache.
+- **Cost..** The Usage tab prices each Grok call with xAI’s prices from models.dev.
+- **Balance..** magpie reads no balance from xAI. Type it in yourself with `key-balance`, and the Usage page shows it less what magpie has priced the key’s calls at since.
+
+## Several keys and failover
+
+One xAI provider can hold several keys: press Add another key under it, or paste several at once. Requests go to the first key that’s on, and when it runs out or is rate limited the next one takes over.
+
+- **Spend caps..** `spend-cap` stops a key at a dollar amount a day, a month or in all, as the Usage tab prices its calls; routing then goes on to the other keys and the fallbacks.
+- **Fallbacks..** `fallback` names where requests go when xAI is out of quota or down: another provider’s model or a routing group.
+- **A request xAI can’t read..** When xAI answers 422 “Failed to deserialize the JSON body … unknown item type”, the request goes to the next member of the routing group, and the key isn’t rested for it.
+
+```
+magpie provider spend-cap xai <key> 20 month
+magpie provider key-balance xai <key> 25
+magpie provider fallback xai deepseek/deepseek-v4-pro
+```
+
+## Troubleshooting
+
+- **“maximum prompt length is …”..** The conversation is longer than the model takes. magpie tells the agent so the way it understands, `context_length_exceeded` or Anthropic’s “prompt is too long”, so the agent compacts and tries again.
+- **“Could not decrypt the provided encrypted_content”..** Codex moved to Grok mid-conversation with another vendor’s reasoning in it. magpie asks again without it; see Reasoning.
+- **“unknown variant `custom`”..** xAI turned away Codex’s custom tools. magpie translates that model’s Codex requests from then on; the first refusal is the last.
+- **Checking a key..** `magpie provider test xai` sends a tiny request through each endpoint, or to each model you name. Add `--as codex` or `--as claude-code` to send it the way that agent would.
+
+## FAQ
+
+### How do I use Grok in Claude Code?
+
+Add your xAI API key in magpie (Providers, Add provider, xAI), then pick a Grok model such as `grok-4.7` on Claude Code’s row, or run `magpie claude xai/grok-4.7`. Claude Code’s requests go through magpie’s gateway to xAI’s Anthropic Messages endpoint, `https://api.x.ai`.
+
+### Can Codex use Grok 4?
+
+Yes. xAI serves the Responses API that Codex speaks, so `magpie codex xai/grok-4.7` sends Codex’s requests to `https://api.x.ai/v1` as they are, with what xAI would refuse fixed on the way: tool schemas, a tool choice with no tools, and whole numbers Grok writes as `2500.0`.
+
+### Can Gemini CLI and OpenCode use Grok?
+
+Yes. Gemini CLI speaks Google’s API, so magpie translates its requests to xAI’s Chat Completions and the replies back. OpenCode speaks Chat Completions, so its requests go to xAI as they are. Run `magpie gemini model xai/grok-4.7` or `magpie opencode xai/grok-4.7`.
+
+### Does web search work with Grok?
+
+Yes. Codex’s web search is run by xAI itself on its Responses API. For Claude Code, Gemini CLI and OpenCode, magpie gives the model its own search tool, answered by the searcher chosen in Settings, or by one magpie picks.
+
+### Why did Codex fail after switching from GPT to Grok mid-conversation?
+
+xAI can’t read reasoning that another vendor sealed, and answers “Could not decrypt the provided encrypted_content”. magpie asks again without those items and leaves them out for the rest of the conversation.
+
+### Does magpie show my xAI balance?
+
+No. The Usage tab counts tokens, cache and cost for every Grok call, priced from models.dev, but magpie reads no balance from xAI. You can type the balance in with `magpie provider key-balance`, and the Usage page shows it less what magpie has priced since.
+
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Gemini](https://usemagpie.ai/docs/gemini) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot)
 
 Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
 

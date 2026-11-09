@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemini 接入 Claude Code、Codex、Gemini CLI 和 OpenCode · magpie</title>
+<meta name="description" content="用 magpie 在 Claude Code、Codex、Gemini CLI 和 OpenCode 里使用 Google 的 Gemini 模型：Gemini API Key 或 Vertex AI 项目只添加一次，每个工具各选一个 Gemini 模型，magpie 负责协议转换、Gemini 3 的思考档位和思维签名，还能在多个 Key 之间分配请求。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/gemini">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/gemini">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/gemini">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/gemini">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/gemini">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Gemini 接入 Claude Code、Codex、Gemini CLI 和 OpenCode">
+<meta property="og:description" content="用 magpie 在 Claude Code、Codex、Gemini CLI 和 OpenCode 里使用 Google 的 Gemini 模型：Gemini API Key 或 Vertex AI 项目只添加一次，每个工具各选一个 Gemini 模型，magpie 负责协议转换、Gemini 3 的思考档位和思维签名，还能在多个 Key 之间分配请求。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/gemini">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Gemini 接入 Claude Code、Codex、Gemini CLI 和 OpenCode",
+   "description": "用 magpie 在 Claude Code、Codex、Gemini CLI 和 OpenCode 里使用 Google 的 Gemini 模型：Gemini API Key 或 Vertex AI 项目只添加一次，每个工具各选一个 Gemini 模型，magpie 负责协议转换、Gemini 3 的思考档位和思维签名，还能在多个 Key 之间分配请求。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/gemini",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Claude Code 怎么用 Gemini？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "在 magpie 里添加 Gemini API Key（供应商页，添加供应商，选 Google Gemini），然后在 Claude Code 那一行选一个模型，比如 gemini-3.1-pro-preview，或者运行 magpie claude google/gemini-3.1-pro-preview。magpie 会写好 Claude Code 的 settings.json，把每个 Messages 请求转换成 Gemini 的 Chat Completions，工具调用和流式输出都保留。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex 能用 Gemini 模型吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。Codex 只说 Responses API，magpie 会把每个 Codex 请求转换成 Gemini 的 Chat Completions，回复再转回 Responses。运行 magpie codex google/gemini-3.1-pro-preview，或者在 Codex 那一行选模型。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Gemini 3 Pro 在 Claude Code 里连续调用工具会出错吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "不会。Gemini 3 会给函数调用签名，下一个请求缺了签名就会被拒。magpie 把每个签名放进交给工具的调用 id 里，发往 Gemini 时再放回去，所以工具循环能一直进行；其他模型发出的调用会按无签名发送。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Gemini CLI 和 OpenCode 能通过 magpie 用我的 Gemini Key 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。Gemini CLI 的请求按原样发给 Gemini API，Google 搜索也一样。OpenCode 说 Chat Completions，请求原样发给 Gemini 的 OpenAI 兼容接口。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Gemini 为什么返回 429 并提示 “Please retry in 33s”？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "这是每分钟的限额，不是额度用完。magpie 把它当作限流，让 Key 短暂暂停。运行 magpie provider rpm google 10（换成你自己的限额），magpie 就会把请求压在这个速度以内。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "不用 API Key，能通过 Vertex AI 用 Gemini 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。用项目 id 添加 Google Vertex AI 预设，比如 magpie provider add google-vertex project=my-project。magpie 用 gcloud 的应用默认凭据或凭据文件签名，费用记在你的项目上。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "能用 Gemini Code Assist 或 Antigravity 的登录吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。两者都是订阅：运行 magpie accounts add gemini 或 magpie accounts add antigravity，然后选 gemini/… 或 antigravity/… 模型。Code Assist 需要有自己 Google Cloud 项目的 Standard 或 Enterprise 账号。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/gemini" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/gemini" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/gemini" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>本页内容</p>
+    <a href="#add">添加</a>
+    <a href="#endpoints">接口地址</a>
+    <a href="#models">模型列表</a>
+    <a href="#agents">在各个工具里用</a>
+    <a href="#thinking">思考</a>
+    <a href="#signatures">思维签名与工具</a>
+    <a href="#cost">缓存、费用与搜索</a>
+    <a href="#keys">多个 Key 与限流</a>
+    <a href="#vertex">Vertex AI</a>
+    <a href="#signins">Google 登录</a>
+    <a href="#trouble">常见报错</a>
+    <a href="#faq">常见问题</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 供应商</p>
+    <h1>Gemini 接入 Claude Code、Codex、Gemini CLI 和 OpenCode</h1>
+    <p class="lede">Google 通过两条路提供 Gemini：一是 Gemini Developer API，也就是 AI Studio 的 Key 能用的那个；二是你自己 Google Cloud 项目里的 Vertex AI。任选一个添加到 magpie 一次，Claude Code、Codex、Gemini CLI、OpenCode 以及你接入的其他工具，都能通过 magpie 的本地网关 <code>127.0.0.1:3425</code> 使用 <code>gemini-3.1-pro-preview</code> 等 Gemini 3 模型，每个工具各用各的模型。</p>
+
+    <h2 id="add"><a class="anchor" href="#add">添加 Gemini API Key</a></h2>
+    <ol class="steps">
+      <li><b>拿到 Key</b>在 <a href="https://aistudio.google.com/apikey">aistudio.google.com/apikey</a> 创建。</li>
+      <li><b>添加供应商</b>在 magpie 的 <span class="ui">供应商</span> 页点 <span class="ui">＋ 添加供应商</span>，选 <span class="ui">Google Gemini</span>，粘贴 Key 并保存。magpie 会向 Google 查询它提供哪些模型。</li>
+      <li><b>给工具选上</b>在 <span class="ui">Agent</span> 页点工具那一行的模型，选一个 Gemini 模型，比如 <code>gemini-3.1-pro-preview</code>。</li>
+    </ol>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-add">复制</button><pre id="ex-add">magpie provider add google AIza…
+magpie provider test google</pre></div>
+    <p>magpie 里的模型 id 是 <code>供应商/模型</code>，所以 Gemini API 的模型写作 <code>google/gemini-3.1-pro-preview</code>：前面是供应商，后面是 Google 自己的 id。Key 保存在 magpie 的设置里，magpie 不会从 shell 里读取它。</p>
+
+    <h2 id="endpoints"><a class="anchor" href="#endpoints">接口地址</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>接口</th><th>Base URL</th><th>用途</th></tr>
+      <tr><td>Chat Completions（OpenAI 兼容）</td><td><code>https://generativelanguage.googleapis.com/v1beta/openai</code></td><td>模型列表，以及 Claude Code、Codex、OpenCode 等工具的请求</td></tr>
+      <tr><td>Gemini API</td><td><code>https://generativelanguage.googleapis.com/v1beta</code></td><td>Gemini CLI 的请求、Google 搜索、图像模型</td></tr>
+    </table></div>
+    <p>预设只会自动填一次 Gemini API 的地址；你清空之后，它就一直空着。不是 Gemini 客户端发来的请求，都走 Chat Completions。</p>
+
+    <h2 id="models"><a class="anchor" href="#models">模型列表</a></h2>
+    <ul>
+      <li><b>列表从哪来。</b>magpie 只向 OpenAI 兼容接口拉一次列表，这份列表同样适用于 Gemini API，不用再拉第二次。模型名、推理档位和价格来自 models.dev 上的 <code>google</code> 目录。</li>
+      <li><b>图像模型。</b>在 Google 这里，Gemini 的图像模型通过 Gemini API 出图。在 <span class="ui">设置 → 模型 → 图像</span> 里选用。</li>
+    </ul>
+
+    <h2 id="agents"><a class="anchor" href="#agents">在各个工具里用</a></h2>
+    <p>在 <span class="ui">Agent</span> 页点工具那一行选模型，或者在终端里切换。每篇指南都写了 magpie 会改工具配置里的哪些内容，以及怎么切回去。</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-agents">复制</button><pre id="ex-agents">magpie claude google/gemini-3.1-pro-preview
+magpie codex google/gemini-3.1-pro-preview
+magpie gemini model google/gemini-3.8-flash
+magpie opencode google/gemini-3.1-pro-preview</pre></div>
+    <ul>
+      <li><b>Claude Code</b> 说的是 Anthropic Messages。magpie 把每个请求转换成 Gemini 的 Chat Completions，回复再转回 Messages，流式输出和工具调用都保留。<a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>。</li>
+      <li><b>Codex</b> 只说 OpenAI Responses。magpie 同样把它转换成 Chat Completions，回复再转回 Responses 交给 Codex。<a href="/docs/zh/codex-models">Codex 接入其他模型</a>。</li>
+      <li><b>Gemini CLI</b> 说 Gemini 自己的 API，请求按原样发给 Gemini API，它的 Google 搜索也在那里执行。<a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>。</li>
+      <li><b>OpenCode</b> 说 Chat Completions，请求原样发给 Google。<a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>。</li>
+    </ul>
+
+    <h2 id="thinking"><a class="anchor" href="#thinking">思考</a></h2>
+    <ul>
+      <li><b>显示思考过程。</b>Gemini 的 OpenAI 兼容接口只有在 <code>thinking_config</code> 里明确要求时才返回模型的思考内容。工具要求显示推理时，magpie 会带上 <code>include_thoughts</code> 去要，这样长时间的思考会显示成思考中，而不是迟迟等不到第一个字。</li>
+      <li><b>档位与预算。</b>Gemini 3 及之后的模型收到的是思考档位；Gemini 2 系列收到的是预算：minimal 和 low 为 1024 个 token，medium 为 8192，high 为 24576。xhigh 和 max 按 high 发送；没有对应档位的强度交给模型自己决定。</li>
+      <li><b>关闭推理。</b>Gemini 3 没法完全不思考。工具关闭推理时，magpie 改为要求该模型最低的档位。</li>
+      <li><b>模型没有的档位。</b>不是每个 Gemini 3 都有全部档位，比如 <code>gemini-3.8-flash</code> 就没有 minimal。Google 用 400 拒绝某个档位时，magpie 会换成该模型最接近的档位再问一次，并在 magpie 重启前一直记住。</li>
+      <li><b><code>thinking_config</code> 被拒。</b>这是另一种 400：挡在 Gemini 前面的服务不认这个字段本身。magpie 会只带 <code>reasoning_effort</code> 再问一次，之后不再向它发送 <code>thinking_config</code>。</li>
+      <li><b>代理。</b>放在本机或局域网代理后面的 Gemini 模型，比如 <code>localhost</code> 或内网地址上的，也按同样的方式处理。</li>
+    </ul>
+
+    <h2 id="signatures"><a class="anchor" href="#signatures">思维签名与工具</a></h2>
+    <ul>
+      <li><b>思维签名。</b>Gemini 3 会给每一步的第一个函数调用签名；签名丢了，下一个请求就会失败，报 400 “Function call is missing a thought_signature in functionCall parts”。工具本身不会保存签名，magpie 把它放进交给工具的调用 id 里（一个指向 magpie 目录中某个文件的简短引用），发往 Gemini 时再放回去。签名保留 90 天。</li>
+      <li><b>Gemini 没签名的调用。</b>对话前面其他模型发出的调用，或者 id 被工具截短的调用，会带上 Google 文档里写明的 <code>skip_thought_signature_validator</code> 发送，所以对话中途换成 Gemini 也没问题。</li>
+      <li><b>签名只回到原供应商。</b>签名只会发回给出它的那个供应商。在同时有 Vertex AI 和 Gemini API 的路由分组里，另一个供应商收到的是不带签名的历史调用，而不会报 “Corrupted thought signature”。</li>
+      <li><b>工具的 schema。</b>magpie 会给工具里没写类型的 schema 补上类型（Vertex AI 要求必须有），并去掉布尔型 schema 和 <code>x-</code> 开头的关键字，比如 MCP 的 <code>x-mcp-header</code>。不需要处理的工具原样发送。</li>
+      <li><b>流的结尾。</b>Gemini 的 OpenAI 兼容接口会把整个函数调用放在一个 chunk 里，<code>finish_reason</code> 放在下一个。如果用量已经收到而这个结束原因丢了，magpie 会补上；连用量都没收到，就把回复报告为被截断，而不是当作完整的交出去。</li>
+    </ul>
+
+    <h2 id="cost"><a class="anchor" href="#cost">缓存、费用与搜索</a></h2>
+    <ul>
+      <li><b>提示缓存。</b>Gemini 缓存了提示，却不会在当轮说出来。magpie 把这样的一轮记为缓存写入，让下一轮继续走同一个供应商和 Key；是谁回答的也会记下来，重启后依然有效。</li>
+      <li><b>缓存与思考 token。</b>无论走 Chat Completions 还是 Gemini API，magpie 都会从每个回复里读取缓存 token 和推理 token，<span class="ui">用量</span> 页会统计它们。</li>
+      <li><b>费用。</b>用量页按 models.dev 上的 <code>google</code> 目录给每次调用计价。</li>
+      <li><b>联网搜索。</b>Gemini API 只对没有声明函数工具的请求执行 Google 搜索。Claude Code 和 Codex 的请求都带工具，所以它们的联网搜索用的是 magpie 自己的搜索，由 Google 供应商用你的 Key 来回答：这些搜索会消耗你的 Gemini API 额度。</li>
+    </ul>
+
+    <h2 id="keys"><a class="anchor" href="#keys">多个 Key 与限流</a></h2>
+    <p>一个 Google Gemini 供应商可以放多个 Key：在它下面点 <span class="ui">添加另一个密钥</span>，也可以一次粘贴好几个。请求先走第一个开着的 Key，它用完或被限流时由下一个接替。也可以把供应商的路由方式改成轮流、按权重或用完一个再换下一个。</p>
+    <ul>
+      <li><b>每分钟限流的 429。</b>Gemini 因每分钟限额返回的 429 “You exceeded your current quota … Please retry in 33s”，magpie 视为限流而不是额度用完；Vertex AI 的 <code>requests_per_minute_per_project</code> 也一样。Key 先暂停一分钟，之后每次翻倍，最长到 <code>rest-cap</code>。</li>
+      <li><b>控制速度。</b><code>rpm</code> 给每个 Key 限定每分钟的请求数：超出的请求排队等空位，最多等 2 分钟，再等不到就返回 429。</li>
+      <li><b>额度用完。</b><code>quota-rest</code> 设定额度用完后 Key 暂停多久：默认 15 分钟，最长 8 天，也可以暂停到某个时刻。</li>
+      <li><b>花费上限与备用模型。</b><code>spend-cap</code> 给 Key 设一个每天、每月或总计的美元上限；<code>fallback</code> 指定 Gemini 额度用完或挂掉时请求去哪。</li>
+    </ul>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-keys">复制</button><pre id="ex-keys">magpie provider rpm google 10
+magpie provider spend-cap google &lt;key&gt; 20 month
+magpie provider fallback google google-vertex/gemini-3.1-pro-preview</pre></div>
+
+    <h2 id="vertex"><a class="anchor" href="#vertex">Vertex AI</a></h2>
+    <p><span class="ui">Google Vertex AI</span> 预设在你自己的 Google Cloud 项目里调用 Gemini，不需要 API Key。填上项目 id 即可，费用记在请求里的这个项目上。</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-vertex">复制</button><pre id="ex-vertex">gcloud auth application-default login
+magpie provider add google-vertex project=my-project
+magpie claude google-vertex/gemini-3.1-pro-preview</pre></div>
+    <ul>
+      <li><b>凭据。</b>magpie 用 gcloud 的应用默认凭据（Application Default Credentials）签名，或者用 <code>credentials=</code> 以完整路径指定的文件：用户登录、服务账号密钥或模拟的服务账号都行。<code>impersonate=</code> 填服务账号的邮箱，需要你在该账号上有 <code>roles/iam.serviceAccountTokenCreator</code>。元数据服务器、工作负载身份联合以及 Vertex AI 快速模式的 API Key 都不会读取。</li>
+      <li><b>区域。</b><code>location=</code> 可以是 <code>global</code>（默认）、<code>us</code>、<code>eu</code>，或 <code>us-central1</code> 这样的具体区域。</li>
+      <li><b>模型。</b>这个预设有自己的模型列表，包括 <code>gemini-3.8-flash</code>、<code>gemini-3.1-pro-preview</code>、<code>gemini-2.5-pro</code>，<code>zai-org/glm-5.2-maas</code> 这类合作方模型，以及 <code>claude-opus-5-5</code> 这类 Claude 模型。Gemini 走 Vertex AI 的 Gemini API，合作方模型走它的 OpenAI 兼容 Chat Completions，Claude 走 Anthropic 的 Messages API，全都在你的项目里。</li>
+      <li><b>Vertex AI 上的思考。</b>Gemini 3 的档位会对齐到该模型实际有的档位，关闭推理时用最低档。Gemini 2.5 用预算：Pro 为 128 到 32768 个 token（关闭时 128），Flash 最多 24576（关闭时 0），Flash-Lite 为 512 到 24576（关闭时 0）。</li>
+    </ul>
+
+    <h2 id="signins"><a class="anchor" href="#signins">Google 登录</a></h2>
+    <p>另有两种 Google 登录不用 Key 也能用 Gemini 模型。它们属于订阅，设置方法见 <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>。</p>
+    <ul>
+      <li><b>Gemini（Code Assist）。</b>这是 Gemini CLI 的 Google 登录，模型为 <code>gemini/…</code>：<code>magpie accounts add gemini</code>。Google 只对有自己 Google Cloud 项目的 Code Assist Standard 或 Enterprise 账号提供服务；用 <code>magpie accounts project gemini &lt;邮箱&gt; &lt;项目&gt;</code> 指定项目。</li>
+      <li><b>Antigravity。</b>模型为 <code>antigravity/…</code>：<code>magpie accounts add antigravity</code>。登录后可以用 Antigravity 的 Claude 和 Gemini 模型。</li>
+    </ul>
+
+    <h2 id="trouble"><a class="anchor" href="#trouble">常见报错</a></h2>
+    <ul>
+      <li><b>“Thinking level MINIMAL is not supported for this model”。</b>这个模型没有 minimal 档位。magpie 会换成它最接近的档位再问一次，工具照样拿到回复，并在 magpie 重启前记住这个档位。只有在没有档位可换时，报错才会原样交给工具。</li>
+      <li><b>“Function call is missing a thought_signature in functionCall parts”。</b>某个 Gemini 3 调用丢了签名。经过 magpie 时，签名放在调用 id 里并会被放回去，没有签名的调用会带上 <code>skip_thought_signature_validator</code>。</li>
+      <li><b>“Corrupted thought signature”。</b>签名不完整，或者来自另一个供应商。magpie 只把签名发回给出它的供应商。</li>
+      <li><b>429，提示 “Please retry in 33s”。</b>这是每分钟的限额，不是额度用完。Key 会短暂暂停；用 <code>rpm</code> 可以让之后的请求保持在限额以内。</li>
+      <li><b>Vertex AI 报 schema “didn’t specify the schema type field”。</b>magpie 发给 Gemini 的每个工具 schema 都会补上类型，这个报错不应再传到工具那里。</li>
+      <li><b>Vertex AI 保存不了。</b>提示 “Google Vertex AI needs the id of your Google Cloud project” 时，加上 <code>project=</code>。凭据文件必须写完整路径。</li>
+      <li><b>检查 Key。</b><code>magpie provider test google</code> 会向每个接口发一个很小的请求，或者发给你指定的每个模型。加上 <code>--as codex</code> 或 <code>--as claude-code</code>，就按那个工具的方式发送。</li>
+    </ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>Claude Code 怎么用 Gemini？</h3>
+    <p>在 magpie 里添加 Gemini API Key（供应商页，添加供应商，选 Google Gemini），然后在 Claude Code 那一行选一个模型，比如 <code>gemini-3.1-pro-preview</code>，或者运行 <code>magpie claude google/gemini-3.1-pro-preview</code>。magpie 会写好 Claude Code 的 <code>settings.json</code>，把每个 Messages 请求转换成 Gemini 的 Chat Completions，工具调用和流式输出都保留。</p>
+    <h3>Codex 能用 Gemini 模型吗？</h3>
+    <p>能。Codex 只说 Responses API，magpie 会把每个 Codex 请求转换成 Gemini 的 Chat Completions，回复再转回 Responses。运行 <code>magpie codex google/gemini-3.1-pro-preview</code>，或者在 Codex 那一行选模型。</p>
+    <h3>Gemini 3 Pro 在 Claude Code 里连续调用工具会出错吗？</h3>
+    <p>不会。Gemini 3 会给函数调用签名，下一个请求缺了签名就会被拒。magpie 把每个签名放进交给工具的调用 id 里，发往 Gemini 时再放回去，所以工具循环能一直进行；其他模型发出的调用会按无签名发送。</p>
+    <h3>Gemini CLI 和 OpenCode 能通过 magpie 用我的 Gemini Key 吗？</h3>
+    <p>能。Gemini CLI 的请求按原样发给 Gemini API，Google 搜索也一样。OpenCode 说 Chat Completions，请求原样发给 Gemini 的 OpenAI 兼容接口。</p>
+    <h3>Gemini 为什么返回 429 并提示 “Please retry in 33s”？</h3>
+    <p>这是每分钟的限额，不是额度用完。magpie 把它当作限流，让 Key 短暂暂停。运行 <code>magpie provider rpm google 10</code>（换成你自己的限额），magpie 就会把请求压在这个速度以内。</p>
+    <h3>不用 API Key，能通过 Vertex AI 用 Gemini 吗？</h3>
+    <p>能。用项目 id 添加 Google Vertex AI 预设，比如 <code>magpie provider add google-vertex project=my-project</code>。magpie 用 gcloud 的应用默认凭据或凭据文件签名，费用记在你的项目上。</p>
+    <h3>能用 Gemini Code Assist 或 Antigravity 的登录吗？</h3>
+    <p>能。两者都是订阅：运行 <code>magpie accounts add gemini</code> 或 <code>magpie accounts add antigravity</code>，然后选 <code>gemini/…</code> 或 <code>antigravity/…</code> 模型。Code Assist 需要有自己 Google Cloud 项目的 Standard 或 Enterprise 账号。</p>
+
+    <p><b>按供应商：</b><a href="/docs/zh/deepseek">DeepSeek</a> · <a href="/docs/zh/kimi">Kimi 与 Kimi Code</a> · <a href="/docs/zh/glm">GLM 编程套餐</a> · <a href="/docs/zh/qwen">通义千问</a> · <a href="/docs/zh/minimax">MiniMax</a> · <a href="/docs/zh/grok">Grok</a> · <a href="/docs/zh/openrouter">OpenRouter</a> · <a href="/docs/zh/copilot">GitHub Copilot</a></p>
+    <p style="margin-top:48px">各个工具的指南：<a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>、<a href="/docs/zh/codex-models">Codex 接入其他模型</a>、<a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>、<a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>。遇到问题可以在 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemini を Claude Code・Codex・Gemini CLI・OpenCode で使う · magpie</title>
+<meta name="description" content="magpie で Google の Gemini モデルを Claude Code・Codex・Gemini CLI・OpenCode で使えます。Gemini API キーか Vertex AI のプロジェクトを一度追加し、ツールごとに Gemini モデルを選ぶだけ。API の変換、Gemini 3 の思考レベルと思考シグネチャ、複数キーへの振り分けは magpie が受け持ちます。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/gemini">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/gemini">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/gemini">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/gemini">
+<link rel="canonical" href="https://usemagpie.ai/docs/ja/gemini">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Gemini を Claude Code・Codex・Gemini CLI・OpenCode で使う">
+<meta property="og:description" content="magpie で Google の Gemini モデルを Claude Code・Codex・Gemini CLI・OpenCode で使えます。Gemini API キーか Vertex AI のプロジェクトを一度追加し、ツールごとに Gemini モデルを選ぶだけ。API の変換、Gemini 3 の思考レベルと思考シグネチャ、複数キーへの振り分けは magpie が受け持ちます。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/ja/gemini">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Gemini を Claude Code・Codex・Gemini CLI・OpenCode で使う",
+   "description": "magpie で Google の Gemini モデルを Claude Code・Codex・Gemini CLI・OpenCode で使えます。Gemini API キーか Vertex AI のプロジェクトを一度追加し、ツールごとに Gemini モデルを選ぶだけ。API の変換、Gemini 3 の思考レベルと思考シグネチャ、複数キーへの振り分けは magpie が受け持ちます。",
+   "inLanguage": "ja",
+   "url": "https://usemagpie.ai/docs/ja/gemini",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Claude Code で Gemini を使うには？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie に Gemini API キーを追加し（プロバイダ、プロバイダを追加、Google Gemini）、Claude Code の行で gemini-3.1-pro-preview などのモデルを選ぶか、magpie claude google/gemini-3.1-pro-preview を実行します。magpie が Claude Code の settings.json を書き、Messages のリクエストを一つずつ Gemini の Chat Completions に変換します。ツール呼び出しもストリーミングもそのまま使えます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex で Gemini のモデルは使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。Codex が話すのは Responses API だけなので、magpie が Codex のリクエストを一つずつ Gemini の Chat Completions に変換し、返答を Responses に戻します。magpie codex google/gemini-3.1-pro-preview を実行するか、Codex の行でモデルを選びます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Claude Code で Gemini 3 Pro にツールを続けて呼ばせても大丈夫ですか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "大丈夫です。Gemini 3 は関数呼び出しに署名し、シグネチャのない次のリクエストを断ります。magpie はシグネチャをツールに渡す呼び出し ID に入れて運び、Gemini に送るときに戻すので、ツールのループは止まりません。別のモデルが出した呼び出しは署名なしとして送ります。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Gemini CLI や OpenCode でも magpie 経由で Gemini のキーを使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。Gemini CLI のリクエストは Google 検索も含めてそのまま Gemini API に渡ります。OpenCode は Chat Completions を話すので、リクエストはそのまま Gemini の OpenAI 互換 API に渡ります。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Gemini が 429 で “Please retry in 33s” と返すのはなぜですか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "1 分あたりの上限で、クォータを使い切ったわけではありません。magpie はレート制限として扱い、キーを少し休ませます。magpie provider rpm google 10 のように自分の上限で実行すれば、magpie がリクエストをその速さに抑えます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "API キーではなく Vertex AI で Gemini を使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。プロジェクト ID を付けて Google Vertex AI プリセットを追加します。たとえば magpie provider add google-vertex project=my-project。magpie は gcloud のアプリケーションのデフォルト認証情報か認証情報ファイルで署名し、課金はあなたのプロジェクトに入ります。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Gemini Code Assist や Antigravity のサインインは使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。どちらもサブスクです。magpie accounts add gemini か magpie accounts add antigravity を実行し、gemini/… か antigravity/… のモデルを選びます。Code Assist には、専用の Google Cloud プロジェクトを持つ Standard または Enterprise のアカウントが必要です。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/ja/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>ドキュメント</small></a>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/start">はじめに</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a class="toc-only" href="/docs/ja/remote">リモート magpie</a>
+    <a class="toc-only" href="/docs/ja/docker">Docker</a>
+    <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
+    <a class="toc-only" href="/docs/ja/masking">プライバシーマスキング</a>
+    <a class="toc-only" href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a class="toc-only" href="/docs/ja/library">ライブラリ</a>
+    <a class="toc-only" href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a class="toc-only" href="/docs/ja/local-models">ローカルモデル</a>
+    <a class="toc-only" href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="言語" title="言語" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/gemini" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/gemini" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/gemini" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="Discord の magpie" title="Discord に参加"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="GitHub の magpie" title="GitHub のソースコード"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">ダウンロード</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>このページ</p>
+    <a href="#add">追加する</a>
+    <a href="#endpoints">エンドポイント</a>
+    <a href="#models">モデル一覧</a>
+    <a href="#agents">ツールごとの使い方</a>
+    <a href="#thinking">思考</a>
+    <a href="#signatures">思考シグネチャとツール</a>
+    <a href="#cost">キャッシュ・費用・検索</a>
+    <a href="#keys">複数のキーとレート制限</a>
+    <a href="#vertex">Vertex AI</a>
+    <a href="#signins">Google のサインイン</a>
+    <a href="#trouble">うまくいかないとき</a>
+    <a href="#faq">よくある質問</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">ドキュメント · プロバイダ</p>
+    <h1>Gemini を Claude Code・Codex・Gemini CLI・OpenCode で使う</h1>
+    <p class="lede">Google は Gemini を二つの形で提供しています。AI Studio のキーで使う Gemini Developer API と、自分の Google Cloud プロジェクトで使う Vertex AI です。どちらかを magpie に一度追加すれば、Claude Code・Codex・Gemini CLI・OpenCode などつないだすべてのツールが、magpie のゲートウェイ <code>127.0.0.1:3425</code> 経由で <code>gemini-3.1-pro-preview</code> などの Gemini 3 モデルを使えます。ツールごとに別のモデルを選べます。</p>
+
+    <h2 id="add"><a class="anchor" href="#add">Gemini API キーを追加する</a></h2>
+    <ol class="steps">
+      <li><b>キーを取得</b><a href="https://aistudio.google.com/apikey">aistudio.google.com/apikey</a> で作ります。</li>
+      <li><b>プロバイダを追加</b>magpie の <span class="ui">プロバイダ</span> で <span class="ui">＋ プロバイダを追加</span> を押し、<span class="ui">Google Gemini</span> を選んでキーを貼り付け、保存します。magpie が Google に提供モデルを問い合わせます。</li>
+      <li><b>ツールで選ぶ</b><span class="ui">エージェント</span> タブで、ツールの行の <code>gemini-3.1-pro-preview</code> などの Gemini モデルを選びます。</li>
+    </ol>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-add">コピー</button><pre id="ex-add">magpie provider add google AIza…
+magpie provider test google</pre></div>
+    <p>magpie のモデル ID は <code>プロバイダ/モデル</code> の形なので、Gemini API のモデルは <code>google/gemini-3.1-pro-preview</code> のようになります。前がプロバイダ、後ろが Google 自身の ID です。キーは magpie の設定に保存され、magpie がシェルから読むことはありません。</p>
+
+    <h2 id="endpoints"><a class="anchor" href="#endpoints">エンドポイント</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>API</th><th>ベース URL</th><th>用途</th></tr>
+      <tr><td>Chat Completions（OpenAI 互換）</td><td><code>https://generativelanguage.googleapis.com/v1beta/openai</code></td><td>モデル一覧、Claude Code・Codex・OpenCode などのリクエスト</td></tr>
+      <tr><td>Gemini API</td><td><code>https://generativelanguage.googleapis.com/v1beta</code></td><td>Gemini CLI のリクエスト、Google 検索、画像モデル</td></tr>
+    </table></div>
+    <p>プリセットが Gemini API の URL を入れるのは一度だけです。消すと空のままになります。Gemini のクライアント以外から来たリクエストは、すべて Chat Completions に送られます。</p>
+
+    <h2 id="models"><a class="anchor" href="#models">モデル一覧</a></h2>
+    <ul>
+      <li><b>一覧の取得元。</b>magpie は OpenAI 互換エンドポイントに一覧を一度だけ問い合わせます。これは Gemini API の一覧でもあるので、二度は聞きません。モデル名・推論レベル・価格は models.dev の <code>google</code> カタログから取ります。</li>
+      <li><b>画像モデル。</b>Google では、Gemini の画像モデルは Gemini API で画像を作ります。<span class="ui">設定 → モデル → 画像</span> で選びます。</li>
+    </ul>
+
+    <h2 id="agents"><a class="anchor" href="#agents">ツールごとの使い方</a></h2>
+    <p><span class="ui">エージェント</span> タブでツールの行からモデルを選ぶか、ターミナルで切り替えます。各ガイドには、magpie がそのツールの設定に何を書き込むか、元に戻す方法が書いてあります。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-agents">コピー</button><pre id="ex-agents">magpie claude google/gemini-3.1-pro-preview
+magpie codex google/gemini-3.1-pro-preview
+magpie gemini model google/gemini-3.8-flash
+magpie opencode google/gemini-3.1-pro-preview</pre></div>
+    <ul>
+      <li><b>Claude Code</b> は Anthropic Messages を話します。magpie がリクエストを一つずつ Gemini の Chat Completions に変換し、返答を Messages に戻します。ストリーミングもツール呼び出しもそのまま使えます。<a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>。</li>
+      <li><b>Codex</b> が話すのは OpenAI Responses だけです。magpie が同じように Chat Completions に変換し、返答は Responses に戻して Codex に渡します。<a href="/docs/ja/codex-models">Codex で他のモデル</a>。</li>
+      <li><b>Gemini CLI</b> は Gemini 自身の API を話すので、リクエストはそのまま Gemini API に渡り、Google 検索もそこで動きます。<a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>。</li>
+      <li><b>OpenCode</b> は Chat Completions を話すので、リクエストはそのまま Google に渡ります。<a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>。</li>
+    </ul>
+
+    <h2 id="thinking"><a class="anchor" href="#thinking">思考</a></h2>
+    <ul>
+      <li><b>思考の表示。</b>Gemini の OpenAI 互換 API は、<code>thinking_config</code> で求めたときだけモデルの思考を返します。ツールが推論の表示を求めると、magpie は <code>include_thoughts</code> を付けて思考を求めます。長く考えている間も、最初の一文字が遅れて届くのではなく、考え中として表示されます。</li>
+      <li><b>レベルと予算。</b>Gemini 3 以降には思考レベルを送ります。Gemini 2 のモデルにはレベルの代わりに予算を送ります。minimal と low は 1024 トークン、medium は 8192、high は 24576 です。xhigh と max は high として送り、対応するレベルのない強さはモデルに任せます。</li>
+      <li><b>推論オフ。</b>Gemini 3 は考えるのを止められません。ツールが推論をオフにすると、magpie はそのモデルのいちばん低いレベルを求めます。</li>
+      <li><b>モデルにないレベル。</b>どの Gemini 3 にもすべてのレベルがあるわけではなく、<code>gemini-3.8-flash</code> には minimal がありません。Google がレベルを 400 で断ると、magpie はそのモデルにあるいちばん近いレベルで問い合わせ直し、magpie を再起動するまで覚えておきます。</li>
+      <li><b><code>thinking_config</code> を断られたとき。</b>これは別の 400 で、Gemini の前に立つサーバーがこのフィールド自体を受け付けない場合です。magpie は <code>reasoning_effort</code> だけで問い合わせ直し、以後そこには <code>thinking_config</code> を送りません。</li>
+      <li><b>プロキシ。</b>このコンピューターや LAN のプロキシ（<code>localhost</code> やプライベートアドレス上のものなど）の後ろにある Gemini モデルも、同じように扱います。</li>
+    </ul>
+
+    <h2 id="signatures"><a class="anchor" href="#signatures">思考シグネチャとツール</a></h2>
+    <ul>
+      <li><b>思考シグネチャ。</b>Gemini 3 は各ステップの最初の関数呼び出しに署名し、それがないと次のリクエストは 400 “Function call is missing a thought_signature in functionCall parts” で失敗します。ツールはシグネチャを保持しません。magpie はそれをツールに渡す呼び出し ID の中に入れて運び（magpie のフォルダにあるファイルへの短い参照です）、Gemini に送るときに戻します。シグネチャは 90 日間保存されます。</li>
+      <li><b>Gemini が署名していない呼び出し。</b>会話の前のほうで別のモデルが出した呼び出しや、ツールが ID を短くした呼び出しは、Google がドキュメントに載せている <code>skip_thought_signature_validator</code> を付けて送ります。会話の途中から Gemini に切り替えても続けられます。</li>
+      <li><b>シグネチャは出したプロバイダにだけ。</b>シグネチャは、それを出したプロバイダにだけ返します。Vertex AI と Gemini API を含むルーティンググループでは、もう一方のプロバイダには署名なしの履歴として送るので、“Corrupted thought signature” にはなりません。</li>
+      <li><b>ツールのスキーマ。</b>magpie は、ツールのスキーマのうち型のないものに型を付け（Vertex AI では必須です）、真偽値のスキーマと、MCP の <code>x-mcp-header</code> のような <code>x-</code> キーワードを取り除きます。手を入れる必要のないツールはそのまま送ります。</li>
+      <li><b>ストリームの終わり。</b>Gemini の OpenAI 互換 API は、関数呼び出しを一つのチャンクで丸ごと送り、<code>finish_reason</code> を次のチャンクで送ります。使用量が届いたあとにその終了理由が失われた場合、magpie が補います。使用量も届いていなければ、完了した返答として渡さず、途中で切れたと報告します。</li>
+    </ul>
+
+    <h2 id="cost"><a class="anchor" href="#cost">キャッシュ・費用・検索</a></h2>
+    <ul>
+      <li><b>プロンプトキャッシュ。</b>Gemini はプロンプトをキャッシュしても、そのターンではそう報告しません。magpie はそのターンをキャッシュ書き込みとして数え、次のターンも同じプロバイダとキーに送ります。どれが答えたかは再起動しても覚えています。</li>
+      <li><b>キャッシュと思考のトークン。</b>Chat Completions でも Gemini API でも、magpie は返答ごとにキャッシュされたトークンと推論トークンを読み、<span class="ui">使用量</span> タブで数えます。</li>
+      <li><b>費用。</b>使用量タブは、models.dev の <code>google</code> カタログの価格で呼び出しごとの費用を計算します。</li>
+      <li><b>Web 検索。</b>Gemini API で Google 検索が動くのは、関数ツールを宣言していないリクエストだけです。Claude Code と Codex のリクエストはツールを宣言しているので、その Web 検索は magpie 自身の検索になり、Google プロバイダがあなたのキーで答えます。その検索は Gemini API の利用分になります。</li>
+    </ul>
+
+    <h2 id="keys"><a class="anchor" href="#keys">複数のキーとレート制限</a></h2>
+    <p>一つの Google Gemini プロバイダに複数のキーを入れられます。その下の <span class="ui">別のキーを追加</span> を押すか、まとめて貼り付けます。リクエストはオンになっている最初のキーに行き、そのキーが尽きるかレート制限にかかると次のキーが引き継ぎます。プロバイダのルーティングを、順番に回す・重みで分ける・一つを使い切ってから次へ、に変えることもできます。</p>
+    <ul>
+      <li><b>1 分あたりの制限による 429。</b>1 分あたりの上限で返る Gemini の 429 “You exceeded your current quota … Please retry in 33s” は、プランの使い切りではなくレート制限として扱います。Vertex AI の <code>requests_per_minute_per_project</code> も同じです。キーは 1 分休み、そのたびに倍になり、<code>rest-cap</code> まで延びます。</li>
+      <li><b>速さを抑える。</b><code>rpm</code> はキーごとに 1 分あたりのリクエスト数を抑えます。超えた分は空きを待ち、2 分待っても空かなければ 429 を返します。</li>
+      <li><b>クォータ切れ。</b><code>quota-rest</code> は、クォータを使い切ったキーを休ませる長さです。既定は 15 分、最長 8 日で、時刻を指定してそこまで休ませることもできます。</li>
+      <li><b>支出上限とフォールバック。</b><code>spend-cap</code> はキーを 1 日・1 か月・合計のドル額で止め、<code>fallback</code> は Gemini がクォータ切れや停止のときのリクエストの行き先を決めます。</li>
+    </ul>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-keys">コピー</button><pre id="ex-keys">magpie provider rpm google 10
+magpie provider spend-cap google &lt;key&gt; 20 month
+magpie provider fallback google google-vertex/gemini-3.1-pro-preview</pre></div>
+
+    <h2 id="vertex"><a class="anchor" href="#vertex">Vertex AI</a></h2>
+    <p><span class="ui">Google Vertex AI</span> プリセットは、API キーなしで、自分の Google Cloud プロジェクトの Gemini を呼びます。プロジェクト ID を指定すれば、リクエストに入ったそのプロジェクトに課金されます。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-vertex">コピー</button><pre id="ex-vertex">gcloud auth application-default login
+magpie provider add google-vertex project=my-project
+magpie claude google-vertex/gemini-3.1-pro-preview</pre></div>
+    <ul>
+      <li><b>認証情報。</b>magpie は gcloud のアプリケーションのデフォルト認証情報（Application Default Credentials）で署名します。<code>credentials=</code> にフルパスでファイルを指定すれば、そちらを使います。ユーザーのサインイン、サービスアカウントキー、なりすましのサービスアカウントのどれでも構いません。<code>impersonate=</code> にはサービスアカウントのメールアドレスを指定し、そのアカウントに対する <code>roles/iam.serviceAccountTokenCreator</code> が必要です。メタデータサーバー、Workload Identity 連携、Vertex AI のエクスプレスモードの API キーは読みません。</li>
+      <li><b>ロケーション。</b><code>location=</code> は <code>global</code>（既定）、<code>us</code>、<code>eu</code>、または <code>us-central1</code> などのリージョンです。</li>
+      <li><b>モデル。</b>このプリセットには独自のモデル一覧があり、<code>gemini-3.8-flash</code>、<code>gemini-3.1-pro-preview</code>、<code>gemini-2.5-pro</code>、<code>zai-org/glm-5.2-maas</code> のようなパートナーモデル、<code>claude-opus-5-5</code> のような Claude モデルが入っています。Gemini は Vertex AI の Gemini API へ、パートナーモデルは OpenAI 互換の Chat Completions へ、Claude は Anthropic の Messages API へ送られ、どれもあなたのプロジェクトで動きます。</li>
+      <li><b>Vertex AI での思考。</b>Gemini 3 のレベルはそのモデルにあるレベルに合わせ、推論オフではいちばん低いレベルを求めます。Gemini 2.5 は予算で、Pro は 128〜32768 トークン（オフで 128）、Flash は 24576 まで（オフで 0）、Flash-Lite は 512〜24576（オフで 0）です。</li>
+    </ul>
+
+    <h2 id="signins"><a class="anchor" href="#signins">Google のサインイン</a></h2>
+    <p>キーなしで Gemini モデルを使える Google のサインインが二つあります。どちらもサブスクで、設定は <a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a> のとおりです。</p>
+    <ul>
+      <li><b>Gemini（Code Assist）。</b>Gemini CLI の Google サインインで、モデルは <code>gemini/…</code> です。<code>magpie accounts add gemini</code> で追加します。Google が応じるのは、専用の Google Cloud プロジェクトを持つ Code Assist Standard または Enterprise のアカウントだけです。プロジェクトは <code>magpie accounts project gemini &lt;email&gt; &lt;project&gt;</code> で指定します。</li>
+      <li><b>Antigravity。</b>モデルは <code>antigravity/…</code> で、<code>magpie accounts add antigravity</code> で追加します。サインインすると Antigravity の Claude と Gemini のモデルが使えます。</li>
+    </ul>
+
+    <h2 id="trouble"><a class="anchor" href="#trouble">うまくいかないとき</a></h2>
+    <ul>
+      <li><b>“Thinking level MINIMAL is not supported for this model”。</b>そのモデルには minimal がありません。magpie がいちばん近いレベルで問い合わせ直すのでツールには返答が届き、magpie を再起動するまでそのレベルを覚えておきます。試せるレベルが残っていないときだけ、Google のエラーがそのままツールに届きます。</li>
+      <li><b>“Function call is missing a thought_signature in functionCall parts”。</b>Gemini 3 の呼び出しがシグネチャを失っています。magpie を通るときは、シグネチャは呼び出し ID に入って運ばれ、送るときに戻されます。シグネチャのない呼び出しには <code>skip_thought_signature_validator</code> が付きます。</li>
+      <li><b>“Corrupted thought signature”。</b>シグネチャが途中で切れているか、別のプロバイダのものです。magpie はシグネチャを、それを出したプロバイダにだけ送ります。</li>
+      <li><b>429 で “Please retry in 33s”。</b>1 分あたりの上限で、プランを使い切ったわけではありません。キーは少し休みます。<code>rpm</code> を使えば、それ以降のリクエストを上限の内に抑えられます。</li>
+      <li><b>Vertex AI でスキーマが “didn’t specify the schema type field”。</b>magpie は Gemini に送るツールのスキーマすべてに型を付けるので、このエラーがツールまで届くことはないはずです。</li>
+      <li><b>Vertex AI が保存できない。</b>“Google Vertex AI needs the id of your Google Cloud project” と出たら <code>project=</code> を付けます。認証情報のファイルはフルパスで指定してください。</li>
+      <li><b>キーの確認。</b><code>magpie provider test google</code> は各エンドポイントに、または指定した各モデルに小さなリクエストを送ります。<code>--as codex</code> や <code>--as claude-code</code> を付けると、そのツールと同じ形で送ります。</li>
+    </ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
+    <h3>Claude Code で Gemini を使うには？</h3>
+    <p>magpie に Gemini API キーを追加し（プロバイダ、プロバイダを追加、Google Gemini）、Claude Code の行で <code>gemini-3.1-pro-preview</code> などのモデルを選ぶか、<code>magpie claude google/gemini-3.1-pro-preview</code> を実行します。magpie が Claude Code の <code>settings.json</code> を書き、Messages のリクエストを一つずつ Gemini の Chat Completions に変換します。ツール呼び出しもストリーミングもそのまま使えます。</p>
+    <h3>Codex で Gemini のモデルは使えますか？</h3>
+    <p>使えます。Codex が話すのは Responses API だけなので、magpie が Codex のリクエストを一つずつ Gemini の Chat Completions に変換し、返答を Responses に戻します。<code>magpie codex google/gemini-3.1-pro-preview</code> を実行するか、Codex の行でモデルを選びます。</p>
+    <h3>Claude Code で Gemini 3 Pro にツールを続けて呼ばせても大丈夫ですか？</h3>
+    <p>大丈夫です。Gemini 3 は関数呼び出しに署名し、シグネチャのない次のリクエストを断ります。magpie はシグネチャをツールに渡す呼び出し ID に入れて運び、Gemini に送るときに戻すので、ツールのループは止まりません。別のモデルが出した呼び出しは署名なしとして送ります。</p>
+    <h3>Gemini CLI や OpenCode でも magpie 経由で Gemini のキーを使えますか？</h3>
+    <p>使えます。Gemini CLI のリクエストは Google 検索も含めてそのまま Gemini API に渡ります。OpenCode は Chat Completions を話すので、リクエストはそのまま Gemini の OpenAI 互換 API に渡ります。</p>
+    <h3>Gemini が 429 で “Please retry in 33s” と返すのはなぜですか？</h3>
+    <p>1 分あたりの上限で、クォータを使い切ったわけではありません。magpie はレート制限として扱い、キーを少し休ませます。<code>magpie provider rpm google 10</code> のように自分の上限で実行すれば、magpie がリクエストをその速さに抑えます。</p>
+    <h3>API キーではなく Vertex AI で Gemini を使えますか？</h3>
+    <p>使えます。プロジェクト ID を付けて Google Vertex AI プリセットを追加します。たとえば <code>magpie provider add google-vertex project=my-project</code>。magpie は gcloud のアプリケーションのデフォルト認証情報か認証情報ファイルで署名し、課金はあなたのプロジェクトに入ります。</p>
+    <h3>Gemini Code Assist や Antigravity のサインインは使えますか？</h3>
+    <p>使えます。どちらもサブスクです。<code>magpie accounts add gemini</code> か <code>magpie accounts add antigravity</code> を実行し、<code>gemini/…</code> か <code>antigravity/…</code> のモデルを選びます。Code Assist には、専用の Google Cloud プロジェクトを持つ Standard または Enterprise のアカウントが必要です。</p>
+
+    <p><b>プロバイダ別：</b><a href="/docs/ja/deepseek">DeepSeek</a> · <a href="/docs/ja/kimi">Kimi と Kimi Code</a> · <a href="/docs/ja/glm">GLM Coding Plan</a> · <a href="/docs/ja/qwen">Qwen</a> · <a href="/docs/ja/minimax">MiniMax</a> · <a href="/docs/ja/grok">Grok</a> · <a href="/docs/ja/openrouter">OpenRouter</a> · <a href="/docs/ja/copilot">GitHub Copilot</a></p>
+    <p style="margin-top:48px">ツールごとのガイド：<a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>、<a href="/docs/ja/codex-models">Codex で他のモデル</a>、<a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>、<a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>。困ったときは <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> で質問してください。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a href="/docs/ja/remote">リモート magpie</a>
+    <a href="/docs/ja/docker">Docker</a>
+    <a href="/docs/ja/privacy">プライバシー</a>
+    <a href="/docs/ja/masking">プライバシーマスキング</a>
+    <a href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a href="/docs/ja/library">ライブラリ</a>
+    <a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a href="/docs/ja/local-models">ローカルモデル</a>
+    <a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/ja/contributors">コントリビューター</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "コピーしました"; setTimeout(() => (b.textContent = "コピー"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
