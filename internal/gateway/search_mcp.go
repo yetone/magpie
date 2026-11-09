@@ -40,6 +40,7 @@ var OwnMCPServers = []struct{ Name, Path string }{
 	{"image", ImageMCPPath},
 	{"vision", VisionMCPPath},
 	{"web-search", SearchMCPPath},
+	{"memory", MemoryMCPPath},
 	{"tools", ToolsMCPPath},
 }
 

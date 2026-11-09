@@ -715,6 +715,44 @@ func TestHubGivesMagpieImage(t *testing.T) {
 	}
 }
 
+// magpie's memory server is told the calling agent's roots and name, as
+// the image server is, so a memory is kept for the agent's project and
+// the agent; another server is told neither.
+func TestHubTellsMagpieMemoryItsCaller(t *testing.T) {
+	h := hubSandbox(t)
+	write(t, filepath.Join(h, ".claude.json"), `{"mcpServers": {}}`)
+	mem := fakeStdio(t, "ok", nil)
+	mem.Name, mem.Args, mem.Agents = memoryServerName, []string{"mcp", "memory"}, []string{"claude"}
+	ok(t)(SaveServer("", *mem))
+	other := fakeStdio(t, "ok", nil)
+	other.Agents = []string{"claude"}
+	ok(t)(SaveServer("", *other))
+	ok(t)(SetMCPHub(true))
+	hub := theHub{}
+	ctx := context.Background()
+
+	for _, x := range hub.Tools(ctx, "claude") {
+		if x.Roots != (x.Server == memoryServerName) {
+			t.Errorf("%s/%s: roots asked %v", x.Server, x.Tool, x.Roots)
+		}
+	}
+	caller := gateway.WithHubCaller(ctx, gateway.HubCaller{Roots: []string{"file:///work/proj"}, Client: "codex-mcp-client"})
+	res, err := hub.Call(caller, "claude", memoryServerName, "a", json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := hubText(t, res); !strings.Contains(got, `meta={"magpie/client":"codex-mcp-client","magpie/roots":["file:///work/proj"]}`) {
+		t.Errorf("memory called as %q", got)
+	}
+	res, err = hub.Call(caller, "claude", "fake", "a", json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := hubText(t, res); strings.Contains(got, "meta=") {
+		t.Errorf("another server was told the caller: %q", got)
+	}
+}
+
 // The router runs one Magpie Browser for every agent behind it, so each
 // call names its caller's session in _meta, for the browser to keep each
 // caller in a tab of its own; another server is sent no session, and a
@@ -836,6 +874,7 @@ func TestHubKeepsThisComputersOwnServersHere(t *testing.T) {
 	}{
 		{Server{Transport: "stdio", Command: "magpie", Args: []string{"mcp", "browser"}}, true, true},
 		{Server{Transport: "stdio", Command: "magpie", Args: []string{"mcp", "image"}}, true, true},
+		{Server{Transport: "stdio", Command: "magpie", Args: []string{"mcp", "memory"}}, true, true},
 		{Server{Transport: "http", URL: "http://10.0.0.2:3425/mcp/magpie/hub"}, true, false},
 		{Server{Transport: "stdio", Command: "npx", Args: []string{"server-filesystem"}}, false, true},
 		{Server{Transport: "http", URL: "https://mcp.example.com/mcp"}, false, false},

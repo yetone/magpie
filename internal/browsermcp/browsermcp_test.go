@@ -241,3 +241,60 @@ func TestBridgeTakesTheRoutersCaller(t *testing.T) {
 		}
 	}
 }
+
+// magpie mcp memory relays each line to the gateway's memory server with
+// the folder the agent started it in, and, from initialize on, the client
+// name the agent gave, so the gateway knows the project and the agent.
+func TestMemoryBridgeSendsFolderAndClient(t *testing.T) {
+	var mu sync.Mutex
+	type seen struct{ path, method, cwd, client string }
+	var got []seen
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		var m struct {
+			ID     json.RawMessage
+			Method string
+		}
+		json.Unmarshal(b, &m)
+		mu.Lock()
+		got = append(got, seen{r.URL.Path, m.Method, r.Header.Get(gateway.MemoryCwdHeader), r.Header.Get(gateway.MemoryClientHeader)})
+		mu.Unlock()
+		if len(m.ID) == 0 {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": m.ID, "result": map[string]any{}})
+	}))
+	defer srv.Close()
+	in := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"claude-code","version":"2"}}}` + "\n" +
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}` + "\n" +
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"memory_search","arguments":{"query":"x"}}}` + "\n")
+	var out bytes.Buffer
+	if err := serveMemory(in, &out, srv.URL, "/work/repo"); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %+v", got)
+	}
+	for _, g := range got {
+		if g.path != gateway.MemoryMCPPath || g.cwd != "/work/repo" || g.client != "claude-code" {
+			t.Fatalf("%s sent %+v", g.method, g)
+		}
+	}
+	if n := strings.Count(strings.TrimSpace(out.String()), "\n") + 1; n != 2 {
+		t.Fatalf("out: %q", out.String())
+	}
+}
+
+func TestClientName(t *testing.T) {
+	for in, want := range map[string]string{
+		`{"method":"initialize","params":{"clientInfo":{"name":" codex-mcp-client "}}}`: "codex-mcp-client",
+		`{"method":"tools/call","params":{"clientInfo":{"name":"codex"}}}`:              "",
+		`{"method":"initialize","params":{"clientInfo":{"name":"a\nb"}}}`:               "",
+		`not json`: "",
+	} {
+		if got := clientName([]byte(in)); got != want {
+			t.Errorf("clientName(%s) = %q, want %q", in, got, want)
+		}
+	}
+}

@@ -52,7 +52,7 @@ var readOnlyRefused = []string{
 	// MCP servers, plugins' and Codex's backends, Gemini, everything else
 	"POST " + claudeMCPPath + "{token}", "/mcp/{name}", "/mcp/run/{name}",
 	SearchMCPPath, VisionMCPPath, ImageMCPPath, ImageMCPFiles + "{name}",
-	BrowserMCPPath, "GET " + BrowserExtensionPath, "GET " + BrowserStatusPath, ToolsMCPPath, ToolsMCPOne + "{plugin}",
+	BrowserMCPPath, MemoryMCPPath, "GET " + BrowserExtensionPath, "GET " + BrowserStatusPath, ToolsMCPPath, ToolsMCPOne + "{plugin}",
 	HubMCPPath + "{agent}", HubMCPAll, CodexPath + "/", "GET " + CodexCatalogPath,
 	"GET /v1beta/models", "POST /v1beta/models/{call...}", "/",
 }

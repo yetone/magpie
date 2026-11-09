@@ -13,7 +13,7 @@ import (
 )
 
 // OwnMCPPath lists the MCP servers magpie serves itself (web search,
-// image recognition, image generation, the plugins' tools) that are on
+// image recognition, image generation, memory, the plugins' tools) that are on
 // now, for an app that gives a model the Library's servers and wants
 // magpie's own beside them: the community chat page (ferock on Discord),
 // which read only library.json. A server is listed while an agent that
@@ -49,6 +49,8 @@ func ownMCP() []OwnMCP {
 	if _, ok := drawer(); ok {
 		out = append(out, OwnMCP{imageServerName, "Magpie Image", ImageMCPPath})
 	}
+	// memory is always there: it needs no model
+	out = append(out, OwnMCP{memoryServerName, "Magpie Memory", MemoryMCPPath})
 	if gwtool.Served(gwtool.PluginTools) {
 		// a note that can't be read says nothing: the server is listed,
 		// and its tools/list tells
@@ -82,6 +84,8 @@ func OwnMCPTools(ctx context.Context) []OwnMCPServer {
 			s.Tools = []string{visionMCPTool}
 		case imageServerName:
 			s.Tools = []string{GenerateImageTool, GenerateVideoTool, GenerationResultTool}
+		case memoryServerName:
+			s.Tools = []string{memorySearchTool, memorySaveTool, memoryForgetTool}
 		case "magpie-tools":
 			ts, _ := servedTools(ctx)
 			for _, t := range ts {

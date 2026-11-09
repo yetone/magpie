@@ -473,3 +473,30 @@ func TestMagpieImageRecognitionIsOptIn(t *testing.T) {
 		t.Fatal("vision and search share a key")
 	}
 }
+
+// Magpie Memory is offered beside magpie's other servers and, being there
+// to be shared, is given to every agent that can take it when added; a
+// copy at another path is the same server.
+func TestMemoryServerInDiscover(t *testing.T) {
+	sandbox(t)
+	list, err := MarketServers("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(list, func(m MarketServer) bool { return m.ID == memoryServerName && !m.OptIn }) {
+		t.Fatalf("%s not in Discover for everyone: %+v", memoryServerName, list)
+	}
+	ok(t)(InstallServer(memoryServerName, nil, nil))
+	l, err := load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := l.server(memoryServerName)
+	if s == nil || len(s.Agents) == 0 || !filepath.IsAbs(s.Command) || strings.Join(s.Args, " ") != "mcp memory" {
+		t.Fatalf("added as %+v", s)
+	}
+	other := Server{Name: "mem", Transport: "stdio", Command: "/opt/other/magpie", Args: []string{"mcp", "memory"}}
+	if serverKey(&other) != serverKey(s) {
+		t.Fatalf("keys %q and %q", serverKey(&other), serverKey(s))
+	}
+}

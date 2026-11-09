@@ -28,7 +28,7 @@ var keySlotFree = []string{
 	"DELETE " + KeysPath + "/{id}", "POST " + OIDCKeysPath, "POST " + provider.RemoteProvePath,
 	"POST " + RestartPath, "POST " + provider.RemoteUpdatePath, "POST /v1/messages/count_tokens",
 	"POST " + claudeMCPPath + "{token}", "/mcp/{name}", "/mcp/run/{name}", SearchMCPPath, VisionMCPPath,
-	ImageMCPPath, BrowserMCPPath, ImageMCPFiles + "{name}", ToolsMCPPath, ToolsMCPOne + "{plugin}",
+	ImageMCPPath, BrowserMCPPath, MemoryMCPPath, ImageMCPFiles + "{name}", ToolsMCPPath, ToolsMCPOne + "{plugin}",
 	HubMCPPath + "{agent}", HubMCPAll, "/",
 }
 

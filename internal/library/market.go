@@ -99,6 +99,7 @@ var featured = []MarketServer{
 	browserServer(),
 	searchServer(),
 	visionServer(),
+	memoryServer(),
 	remoteServer("context7", "Context7", "Upstash", gh("upstash"), "https://mcp.context7.com/mcp",
 		"Up-to-date documentation and code examples for any library, straight into the prompt.", false,
 		Input{Key: "CONTEXT7_API_KEY", Where: "header", Label: "API key", Description: "Optional — raises the rate limit. From context7.com/dashboard", Secret: true, format: "{}"}),
@@ -232,6 +233,21 @@ func visionServer() MarketServer {
 		"Read an image (a file, a URL, a screenshot) with the image recognition model set in Magpie (Settings → Models → Images), for a model that can't see.", magpieCommand, []string{"mcp", "vision"})
 	m.OptIn = true
 	return m
+}
+
+// memoryServerName is the name Magpie Memory's server is written under,
+// the name the gateway's own memory server goes by (ownMCP).
+const memoryServerName = "magpie-memory"
+
+// memoryServer is Magpie Memory: what is known about the user, kept by
+// magpie for every agent, as memory_search, memory_save and memory_forget,
+// through `magpie mcp memory`, which passes each call to the gateway's
+// MemoryMCPPath with the folder the agent started it in. It is there to be
+// shared and costs nothing, so, unlike magpie's other servers, it is given
+// to every agent that can take it.
+func memoryServer() MarketServer {
+	return localServer(memoryServerName, "Magpie Memory", "Magpie", "https://usemagpie.ai/favicon.png", "https://usemagpie.ai",
+		"Memory shared by every agent: your preferences, rules and what each project needs, kept in Magpie. Agents search it before asking again, and save what you ask them to remember.", magpieCommand, []string{"mcp", "memory"})
 }
 
 // selfCommand is the server's command and env for this magpie: its binary
@@ -394,7 +410,7 @@ func serverKey(s *Server) string {
 	if s.Remote() {
 		return strings.TrimSuffix(strings.ToLower(s.URL), "/")
 	}
-	if len(s.Args) == 2 && s.Args[0] == "mcp" && (s.Args[1] == "image" || s.Args[1] == "browser" || s.Args[1] == "search" || s.Args[1] == "vision") {
+	if len(s.Args) == 2 && s.Args[0] == "mcp" && (s.Args[1] == "image" || s.Args[1] == "browser" || s.Args[1] == "search" || s.Args[1] == "vision" || s.Args[1] == "memory") {
 		return "magpie mcp " + s.Args[1] // magpie's own, wherever its binary is
 	}
 	for _, a := range s.Args {
