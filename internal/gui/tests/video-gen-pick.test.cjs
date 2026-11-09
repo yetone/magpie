@@ -68,11 +68,11 @@ function server(lang, cur, posted) {
 }
 
 const want = {
-  en: { name: "Video generation", auto: "Automatic", how: /^To make videos with a provider's model, right-click it/, none: "no model that makes videos", missing: "missing", gone: /^studio\/kling-v3, picked here, no longer makes videos/ },
-  zh: { name: "视频生成", auto: "自动", how: /类型：视频模型/, none: "没有能生成视频的模型", missing: "已失效", gone: /studio\/kling-v3[^]*Grok Imagine Video · Grok/ },
-  "zh-TW": { name: "影片生成", auto: "自動", how: /類型：影片模型/, none: "沒有能生成影片的模型", missing: "已失效", gone: /studio\/kling-v3[^]*Grok Imagine Video · Grok/ },
-  ja: { name: "動画生成", auto: "自動", how: /種類：動画モデル/, none: "動画を生成できるモデルがありません", missing: "見つかりません", gone: /studio\/kling-v3[^]*Grok Imagine Video · Grok/ },
-  de: { name: "Videoerzeugung", auto: "Automatisch", how: /Videomodell/, none: "kein Modell zur Videoerzeugung", missing: "fehlt", gone: /studio\/kling-v3[^]*Grok Imagine Video · Grok/ },
+  en: { providers: "Providers", name: "Video generation", auto: "Automatic", how: /^To make videos with a provider's model, right-click it/, none: "no model that makes videos", missing: "missing", gone: /^studio\/kling-v3, picked here, no longer makes videos/ },
+  zh: { providers: "供应商", name: "视频生成", auto: "自动", how: /类型：视频模型/, none: "没有能生成视频的模型", missing: "已失效", gone: /studio\/kling-v3[^]*Grok Imagine Video · Grok/ },
+  "zh-TW": { providers: "供應商", name: "影片生成", auto: "自動", how: /類型：影片模型/, none: "沒有能生成影片的模型", missing: "已失效", gone: /studio\/kling-v3[^]*Grok Imagine Video · Grok/ },
+  ja: { providers: "プロバイダ", name: "動画生成", auto: "自動", how: /種類：動画モデル/, none: "動画を生成できるモデルがありません", missing: "見つかりません", gone: /studio\/kling-v3[^]*Grok Imagine Video · Grok/ },
+  de: { providers: "Anbieter", name: "Videoerzeugung", auto: "Automatisch", how: /Videomodell/, none: "kein Modell zur Videoerzeugung", missing: "fehlt", gone: /studio\/kling-v3[^]*Grok Imagine Video · Grok/ },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -166,6 +166,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(await fits(page), 0);
           shots.push([`${lang}-${width}-none`, await page.screenshot({ fullPage: true })]);
           assert.deepEqual(posted, []);
+          // and the way there is a click away
+          const go = how.locator("button.video-gen-go");
+          assert.equal((await go.textContent()).trim(), `${w.providers} ›`);
+          await go.click();
+          await page.locator("#view-providers").waitFor({ state: "visible" });
           assert.deepEqual(page.errors, []);
           await page.context().close();
         });

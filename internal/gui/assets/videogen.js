@@ -1,7 +1,8 @@
 // Settings › Models › Images' Video generation: the model a video request
 // that names none is made with, generate_video's — the one magpie picks or
 // one named. A custom provider's model makes videos once marked so in its
-// Model settings (#1399), which the row says while no model makes any.
+// Model settings (#1399), which the row says while no model makes any,
+// with a way to the Providers page.
 // Image generation's Off turns it off too. app.js imports this when
 // Settings draws Image generation, so it weighs nothing on the core.
 
@@ -16,7 +17,15 @@ window.videoGenFill = function (r, s, keep) {
   r.hidden = false;
   const who = el("div", "who");
   who.append(el("div", "name", t("Video generation")), el("div", "sub wraps", t("The model Magpie Image makes videos with")));
-  if (!models.length && !v) who.append(el("div", "sub wraps video-gen-how", t("To make videos with a provider's model, right-click it in the provider's Model settings and choose Makes › Video model")));
+  if (!models.length && !v) {
+    // the way there: the Providers page, where a provider's models are
+    const how = el("div", "sub wraps video-gen-how", t("To make videos with a provider's model, right-click it in the provider's Model settings and choose Makes › Video model"));
+    const go = el("button", "text video-gen-go", t("Providers") + " ›");
+    go.type = "button";
+    go.onclick = () => show("providers");
+    how.append(" ", go);
+    who.append(how);
+  }
   if (gone) who.append(el("div", "sub err video-gen-missing", s.videoGenAuto
     ? t("{model}, picked here, no longer makes videos: its provider was removed or turned off, or the model isn't marked a video model any more. {auto}, the automatic choice, makes videos in its place. Pick another model here.", { model: v, auto: named(s.videoGenAuto) })
     : t("{model}, picked here, no longer makes videos: its provider was removed or turned off, or the model isn't marked a video model any more. No other model makes videos. Pick another model here.", { model: v })));
