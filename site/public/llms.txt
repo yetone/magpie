@@ -12,6 +12,7 @@ Key facts:
 - Install from a terminal (macOS, Linux): `curl -fsSL https://usemagpie.ai/install.sh | sh`
 - Community: Discord, linked from the website
 - Price: free
+- Full text of every docs page in one file: https://usemagpie.ai/llms-full.txt
 
 ## What it does
 
