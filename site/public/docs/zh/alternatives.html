@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>magpie、CC Switch 与 Claude Code Router 对比 · magpie</title>
+<meta name="description" content="客观对比 magpie、CC Switch 和 claude-code-router（CCR）：支持哪些工具、改写配置还是本地代理、协议转换、订阅登录、路由与故障转移、图形界面与命令行、平台和许可证，以及哪个更适合你。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/alternatives">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/alternatives">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/alternatives">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/alternatives">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/alternatives">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="magpie、CC Switch 与 Claude Code Router 对比">
+<meta property="og:description" content="客观对比 magpie、CC Switch 和 claude-code-router（CCR）：支持哪些工具、改写配置还是本地代理、协议转换、订阅登录、路由与故障转移、图形界面与命令行、平台和许可证，以及哪个更适合你。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/alternatives">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "magpie、CC Switch 与 Claude Code Router 对比",
+   "description": "客观对比 magpie、CC Switch 和 claude-code-router（CCR）：支持哪些工具、改写配置还是本地代理、协议转换、订阅登录、路由与故障转移、图形界面与命令行、平台和许可证，以及哪个更适合你。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/alternatives",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "CC Switch 有什么替代？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie 和 Claude Code Router 都覆盖了 CC Switch 的一部分功能。magpie 给每个工具切换模型，让所有工具走同一个会转换协议的网关，并支持订阅登录和故障转移；Claude Code Router 是可编程的本地网关，有路由规则和请求日志。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "claude-code-router 有什么替代？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "如果主要想给每个工具切换服务商、保持配置原样，可以用 CC Switch；如果想要一个服务多个工具、支持 Claude、ChatGPT、Copilot 或 Gemini 登录且账号能自动转移的转换网关，可以用 magpie。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "CC Switch 和 claude-code-router 有什么区别？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "据它们的 README，CC Switch 是桌面管理工具，改写每个工具的配置，并提供可选的本地路由代理；Claude Code Router 是位于 127.0.0.1:3456 的本地网关，工具通过 Agent 配置接入，按规则路由每个请求。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie 会像 CC Switch 一样改写工具的配置吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "它只改每个工具配置文件里需要改的那一项，保留注释和顺序，让工具指向 127.0.0.1:3425 的网关。重新选回工具自己的模型，原来的值就会恢复。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie 是像 claude-code-router 那样的代理吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "是的，magpie 也运行本地网关。它支持 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 和 Gemini 并在它们之间转换，所以只支持 Responses 的 Codex 和只支持 Messages 的 Claude Code 都能用任何服务商的模型。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "三个都是免费开源的吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "是的。magpie、CC Switch 和 Claude Code Router 都以 MIT 许可证发布。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/alternatives" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/alternatives" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/alternatives" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>对比</p>
+    <a href="#overview">三个工具</a>
+    <a href="#table">对比表</a>
+    <a href="#fit">怎么选</a>
+    <a href="#faq">常见问题</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 对比</p>
+    <h1>magpie、CC Switch 与 Claude Code Router 对比</h1>
+    <p class="lede">magpie、<a href="https://github.com/farion1231/cc-switch">CC Switch</a> 和 <a href="https://github.com/musistudio/claude-code-router">Claude Code Router</a>（CCR）都能让 AI 编程工具用上你选的服务商和模型。三者有重叠，也各有所长。本页把它们放在一起比较：另外两个工具的信息只取自它们自己的 README，magpie 的信息取自它的源码。</p>
+
+    <div class="cards">
+      <div><h3>CC Switch</h3><p>基于 Tauri 2 的桌面应用，管理 Claude Code、Codex、Gemini CLI、OpenCode、OpenClaw、Hermes、Pi、Kimi Code 等十二个工具。切换服务商时只改写配置里的关键字段，首次写入前先备份；各工具的 MCP、Skills 和提示词也在同一处管理。可选的本地路由模式会转换 API 格式，并按队列故障转移。内置 90 多个服务商预设。</p></div>
+      <div><h3>Claude Code Router</h3><p>本地模型网关和控制台，地址 <code>127.0.0.1:3456</code>。Claude Code、Codex、Kimi CLI、Kilo Code、OpenCode、Pi 等通过 Agent 配置接入同一个稳定端点，再由路由规则决定每个请求的去向：按请求头和请求体的条件、改写、重试、凭据池和有序的备用模型。它还能给模型加上视觉、联网搜索、MCP、浏览器自动化等能力，并记录每个请求及其费用。有桌面应用、带网页界面的 npm 命令行和 Docker 三种形式。</p></div>
+      <div><h3>magpie</h3><p>菜单栏（托盘）应用，带主窗口、TUI 和命令行。它让每个工具连到本机 <code>127.0.0.1:3425</code> 的网关，网关支持 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 和 Gemini 并双向转换，所以任何工具都能用任何模型，包括 Claude、ChatGPT、GitHub Copilot 或 Gemini 的订阅登录。一个模型背后可以放多个密钥和账号，在工具看到报错前就切到下一个。</p></div>
+    </div>
+
+    <h2 id="table"><a class="anchor" href="#table">对比表</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th></th><th>magpie</th><th>CC Switch<br><small>据其 README，2026 年 11 月</small></th><th>Claude Code Router<br><small>据其 README，2026 年 11 月</small></th></tr>
+      <tr><td>支持的工具</td><td>20 多个，包括 Claude Code、Codex、Gemini CLI、OpenCode、Pi、Goose、Crush、GitHub Copilot CLI、VS Code、Kimi Code、Hermes Agent、Snow CLI</td><td>12 个：Claude Code、Claude Desktop、Codex、Gemini CLI、Grok Build、OpenCode、OpenClaw、Hermes、Pi、MiniMax Code、Kimi Code、Oh My Pi</td><td>Claude Code、Claude Design、Codex、Grok CLI、Kimi CLI、Kilo Code、OpenCode、Pi、ZCode、WorkBuddy，以及兼容的 API 客户端</td></tr>
+      <tr><td>切换方式</td><td>只改每个工具配置里需要改的那一项，让工具指向本机网关</td><td>直连：改写工具配置的关键字段。路由（可选）：本地代理，默认端口 15721</td><td>本地网关；工具通过 Agent 配置接入</td></tr>
+      <tr><td>协议转换</td><td>OpenAI Chat Completions、OpenAI Responses、Anthropic Messages、Gemini，双向</td><td>路由模式下，用于 Claude Code、Codex、Gemini CLI 和 Grok Build</td><td>OpenAI Chat / Responses、Anthropic Messages、Gemini 格式的服务商接在同一个端点后</td></tr>
+      <tr><td>订阅登录</td><td>Claude Pro/Max、ChatGPT Plus/Pro、GitHub Copilot、Gemini Code Assist、Antigravity</td><td>账号（Beta）：GitHub Copilot、ChatGPT、xAI（Grok）、Kimi Code</td><td>未说明（服务商可在支持时导入本地登录）</td></tr>
+      <tr><td>路由与故障转移</td><td>一个模型背后放多个密钥和账号；按意图、顺序、轮询、最少使用或额度挑选；限流的账号暂停使用并转移</td><td>每个工具一个故障转移队列，带熔断（路由模式）；聚合模式把多家的模型放进一个列表</td><td>按请求头和请求体的条件、前缀、改写、重试、凭据池、密钥轮换、有序备用模型</td></tr>
+      <tr><td>图形界面与命令行</td><td>菜单栏 / 托盘应用和主窗口、TUI、命令行；Docker</td><td>桌面应用，带托盘菜单；命令行未说明</td><td>桌面应用；带网页界面的 npm 命令行；Docker</td></tr>
+      <tr><td>平台</td><td>macOS（已签名并公证）、Windows、Linux</td><td>Windows 10+、macOS 12+（已签名并公证）、Linux（glibc 2.35+、WebKitGTK 4.1）</td><td>Windows、Linux（AppImage）、macOS（Apple Silicon、Intel）；签名未说明</td></tr>
+      <tr><td>许可证</td><td>MIT</td><td>MIT</td><td>MIT</td></tr>
+    </table></div>
+    <p>CC Switch 和 Claude Code Router 两列只写它们的 README 在 2026 年 11 月说过的内容；README 没写的，格子里写“未说明”。两个项目更新都很快，最新情况请看它们自己的页面。</p>
+
+    <h2 id="fit"><a class="anchor" href="#fit">怎么选</a></h2>
+    <ul>
+      <li><b>CC Switch</b> 适合主要手动给每个工具切换服务商、希望配置保持自己写的样子的人，也适合想在一个应用里管理所有工具的 MCP、Skills 和提示词的人。它的服务商预设是三者里最多的，还支持另外两个没列出的 Claude Desktop、OpenClaw 和 Oh My Pi。</li>
+      <li><b>Claude Code Router</b> 适合想要一个可编程网关的人：按请求头和请求体的规则、改写请求、凭据池、带独立额度的客户端密钥，以及每个请求的日志和费用。它还能给缺少能力的模型加上联网搜索、浏览器自动化等工具，并可通过 npm 或 Docker 无界面运行。</li>
+      <li><b>magpie</b> 适合同时用多个工具、想让每个工具用不同模型的人，比如 Codex 用 DeepSeek、Claude Code 用 Kimi，或者在别的工具里用 Claude、ChatGPT 订阅。所有工具都走同一个会转换协议的网关，一个模型可以由多个账号轮流服务并自动转移。</li>
+    </ul>
+    <p>它们也可以同时使用。magpie 的网关是兼容 OpenAI、Anthropic 和 Gemini 的端点，支持自定义 Base URL 的工具都能把它当作一个服务商。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>CC Switch 有什么替代？</h3>
+    <p>magpie 和 Claude Code Router 都覆盖了 CC Switch 的一部分功能。magpie 给每个工具切换模型，让所有工具走同一个会转换协议的网关，并支持订阅登录和故障转移；Claude Code Router 是可编程的本地网关，有路由规则和请求日志。</p>
+    <h3>claude-code-router 有什么替代？</h3>
+    <p>如果主要想给每个工具切换服务商、保持配置原样，可以用 CC Switch；如果想要一个服务多个工具、支持 Claude、ChatGPT、Copilot 或 Gemini 登录且账号能自动转移的转换网关，可以用 magpie。</p>
+    <h3>CC Switch 和 claude-code-router 有什么区别？</h3>
+    <p>据它们的 README，CC Switch 是桌面管理工具，改写每个工具的配置，并提供可选的本地路由代理；Claude Code Router 是位于 <code>127.0.0.1:3456</code> 的本地网关，工具通过 Agent 配置接入，按规则路由每个请求。</p>
+    <h3>magpie 会像 CC Switch 一样改写工具的配置吗？</h3>
+    <p>它只改每个工具配置文件里需要改的那一项，保留注释和顺序，让工具指向 <code>127.0.0.1:3425</code> 的网关。重新选回工具自己的模型，原来的值就会恢复。</p>
+    <h3>magpie 是像 claude-code-router 那样的代理吗？</h3>
+    <p>是的，magpie 也运行本地网关。它支持 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 和 Gemini 并在它们之间转换，所以只支持 Responses 的 Codex 和只支持 Messages 的 Claude Code 都能用任何服务商的模型。</p>
+    <h3>三个都是免费开源的吗？</h3>
+    <p>是的。magpie、CC Switch 和 Claude Code Router 都以 MIT 许可证发布。</p>
+
+    <p style="margin-top:48px">指南：<a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>、<a href="/docs/zh/codex-models">Codex 接入其他模型</a>、<a href="/docs/zh/subscriptions">在任意工具里用订阅</a>。遇到问题可以在 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
