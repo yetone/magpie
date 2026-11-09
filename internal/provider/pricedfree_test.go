@@ -2,9 +2,11 @@ package provider
 
 import (
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -60,6 +62,7 @@ func TestPricedFreeIsTheProvidersOwnZero(t *testing.T) {
 		if got := c.p.PricedFree(none, c.model); got != c.want {
 			t.Errorf("%s's %s: PricedFree %v, want %v", c.p.ID, c.model, got, c.want)
 		}
+		samePricer(t, c.p, none, c.model)
 	}
 
 	zero, one := 0.0, 1.0
@@ -83,6 +86,50 @@ func TestPricedFreeIsTheProvidersOwnZero(t *testing.T) {
 	} {
 		if got := c.p.PricedFree(s, c.model); got != c.want {
 			t.Errorf("with the user's prices, %s's %s: PricedFree %v, want %v", c.p.ID, c.model, got, c.want)
+		}
+		samePricer(t, c.p, s, c.model)
+	}
+}
+
+// samePricer checks that the Providers page's Pricer gives model the
+// price and the free mark ListPrice and PricedFree do.
+func samePricer(t *testing.T, p Provider, s settings.Settings, model string) {
+	t.Helper()
+	list, listed, free := p.Pricer().Prices(s, model)
+	want, wantListed := p.ListPrice(model)
+	if listed != wantListed || !reflect.DeepEqual(list, want) {
+		t.Errorf("%s's %s: Pricer's list price %+v %v, ListPrice's %+v %v", p.ID, model, list, listed, want, wantListed)
+	}
+	if wantFree := p.PricedFree(s, model); free != wantFree {
+		t.Errorf("%s's %s: Pricer's free %v, PricedFree's %v", p.ID, model, free, wantFree)
+	}
+}
+
+// The Providers page prices every model of every provider on each ask.
+// A Pricer works the provider's catalogs out once and prices each model
+// once for both its list price and its free mark, so a model priced on
+// it allocates nothing, where ListPrice and PricedFree asked apart
+// worked the catalogs out, and made the names to look up, twice.
+func TestPricerAllocatesNothingPerModel(t *testing.T) {
+	prefsHome(t)
+	data := `{"zfree":{"models":{
+		"foo:free":{"id":"foo:free","cost":{"input":0,"output":0}},
+		"foo":{"id":"foo","cost":{"input":1,"output":2}}
+	}}}`
+	if err := os.WriteFile(catalog.CachePath(), []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalog.Reset()
+	p := Provider{ID: "zf", Name: "ZF", Catalog: "zfree", Key: "k", Chat: "http://127.0.0.1:9/v1"}
+	none := settings.Settings{}
+	// as the page asks: under the request's holds (gui's held)
+	defer Hold()()
+	defer filememo.Hold()()
+	r := p.Pricer()
+	for _, model := range []string{"foo:free", "foo", "nobody-lists-this"} {
+		r.Prices(none, model) // the catalog's memo filled
+		if n := testing.AllocsPerRun(50, func() { r.Prices(none, model) }); n != 0 {
+			t.Errorf("%s: a Pricer allocated %v times for one model, want 0", model, n)
 		}
 	}
 }

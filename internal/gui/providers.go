@@ -982,6 +982,9 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 	// Discord, Windows)
 	set := held
 	noAPI := p.NoAPI()
+	// the provider's catalogs worked out once, and each model priced once
+	// for its list price and whether it is free
+	pricer := p.Pricer()
 	// each model's provider/model ref, made once: the settings' maps and
 	// every agent's hidden list are looked up by it
 	var refs []string
@@ -999,7 +1002,8 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		}
 		window := p.WindowOf(m)
 		j := modelJSON{ID: m.ID, Name: m.Name, Efforts: provider.EffortsOf(m), On: on, Context: window, Output: provider.OutputWithin(window, p.ReplyLimitIn(m, set)), Listed: provider.ListedWindow(m), ListedOutput: provider.OutputWithin(provider.ListedWindow(m), p.ReplyLimitIn(m, settings.Settings{})), Max: m.MaxContext, Free: m.Free, Rate: m.Rate, RateWas: m.RateWas, Images: images, ImageSet: imageSet, Own: own, Best: newest[m.ID]}
-		j.Zero = !m.Free && p.PricedFree(set, m.ID)
+		list, listed, free := pricer.Prices(set, m.ID)
+		j.Zero = !m.Free && free
 		// a plugin reports a model's load by its own id, not one the user
 		// lists it by (axelburks on Discord)
 		ownID := p.OwnModelID(m.ID)
@@ -1040,8 +1044,8 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 				j.Price = &pr
 			}
 		}
-		if pr, ok := p.ListPrice(m.ID); ok {
-			j.List, j.RemoteList = &pr, p.RemotePriced(m.ID)
+		if listed {
+			j.List, j.RemoteList = &list, p.RemotePriced(m.ID)
 		} else if pr, ok := provider.MakerPrice(m.ID); ok {
 			j.List = &pr
 		}
