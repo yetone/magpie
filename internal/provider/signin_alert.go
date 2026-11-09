@@ -207,3 +207,14 @@ func WatchSignIns(ctx context.Context, send func(SignInAlert)) {
 		t.Reset(signInAlertEvery)
 	}
 }
+
+// SignInHooksPath keeps what the gateway's request hooks were told, apart
+// from the app's notifications' marks (signInAlertPath): the magpie
+// serving the gateway tells its hooks, and the app the user, each once.
+func SignInHooksPath() string { return filepath.Join(filepath.Dir(Path()), "signin-hooks.json") }
+
+// SignInAlertsAt is one look at the accounts: the sign-in alerts due, as
+// WatchSignIns tells them, with what was told kept in path.
+func SignInAlertsAt(path string) []SignInAlert {
+	return checkSignIns(path, signInStates(), time.Now())
+}

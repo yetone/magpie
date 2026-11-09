@@ -258,3 +258,45 @@ func (r *GatewayRun) Close() {
 	defer cancel()
 	_ = r.h.call(ctx, "gatewayRequest", map[string]any{"operation": "close", "id": r.id, "token": r.token}, nil)
 }
+
+// SignInEvent is a subscription account that has to be signed in again
+// (State "signed-out"), or whose sign-in ends at EndsAt (State "ending",
+// Claude's), as magpie's own sign-in alert tells it. Account is the
+// account's label as the Providers page shows it; no token, mark or
+// vendor text is sent.
+type SignInEvent struct {
+	Provider     string     `json:"provider"`
+	ProviderName string     `json:"providerName"`
+	Account      string     `json:"account"`
+	State        string     `json:"state"`
+	EndsAt       *time.Time `json:"endsAt,omitempty"`
+}
+
+// GatewaySignIn hands ev to every request hook's onSignIn, without waiting
+// for them: the host is started if it isn't, within the request hooks'
+// eleven seconds. Nothing is done for a user with no hooks.
+func GatewaySignIn(ctx context.Context, ev SignInEvent) {
+	if !HasGateway() {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 11*time.Second)
+		defer cancel()
+		checkList()
+		wait := time.NewTicker(10 * time.Millisecond)
+		defer wait.Stop()
+		for !hostMu.TryLock() {
+			select {
+			case <-ctx.Done():
+				return
+			case <-wait.C:
+			}
+		}
+		h, err := getLocked(ctx)
+		hostMu.Unlock()
+		if err != nil {
+			return
+		}
+		_ = h.call(ctx, "gatewayRequest", map[string]any{"operation": "signIn", "event": ev}, nil)
+	}()
+}

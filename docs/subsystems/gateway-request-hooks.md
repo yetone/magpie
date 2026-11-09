@@ -103,6 +103,40 @@ reply). This is best-effort delivery, not a durable queue: shutdown, host
 retirement and capacity limits may discard notifications. Hooks must not blindly
 retry non-idempotent external writes.
 
+## Sign-in notification
+
+`export async function onSignIn(event, ctx)` is optional, and a hooks file may
+export it alone, with no `onRequest` (a hook without `onRequest` is passed by
+for requests). It hears of a subscription account that has to be signed in
+again, or whose sign-in ends soon (shannnnnks on X: of several Codex accounts
+behind the gateway, one is signed out now and then). `event` is
+`{provider, providerName, account, state, endsAt?}`: the provider's id and
+name, the account's label as the Providers page shows it (its email for most
+sign-ins), and `state` `signed-out`, or `ending` with `endsAt` (an ISO time)
+for a Claude sign-in within three days of its end. No token, credential mark
+or vendor text is sent. `ctx` has the package `options` and an `AbortSignal`;
+each hook gets its own timeout (`gatewayTimeoutMs`) within the chain's budget,
+and one that throws or times out is logged and holds up none after it.
+
+The accounts and the test are the app's sign-in alert's
+([providers-accounts](providers-accounts.md), `provider.WatchSignIns`): an
+account in use of a subscription switched on whose row says Sign in again
+(any mark on a Claude, Copilot or plugin account; a built-in's revoked or
+refused sign-in, ChatGPT's `token_revoked` and refused refresh among them),
+told once until it is usable again. The magpie serving the gateway looks a
+minute after it starts and every two minutes after
+(`keepHooksToldOfSignIns`, `tellHooksOfSignIns` in
+`internal/gateway/signin_hooks.go`), reading magpie's own files only. What
+the hooks were told is kept in `signin-hooks.json` beside `providers.json`,
+apart from the app's `signin-alerts.json`, so the desktop notification and
+the hooks are each told, and a restart tells neither again. With no hook
+installed (`plugin.HasGateway`) nothing is looked at or marked, so a hook
+installed later hears of an account already signed out. Delivery
+(`plugin.GatewaySignIn`) is fire-and-forget and best-effort like
+`onResponse`: the mark is set as it is handed over, and a host that fails
+to start loses it. An older host never calls `onSignIn`, and fails
+to load a hooks file without `onRequest`.
+
 Host request state is limited to 128 runs and expires after 15 minutes. The
 response RPC has an eleven-second limit; each callback uses the configured
 bounded hook timeout. Request-owned state is released after notification.
@@ -121,8 +155,14 @@ bounded hook timeout. Request-owned state is released after notification.
   cap is fitted in the gateway itself, not by a hook (`body_cap.go`).
 - `internal/gateway/gateway_hooks.go`: bounded response observation and
   `gatewayReply`, a stream made one reply.
+- `internal/gateway/signin_hooks.go`: sign-in events, and
+  `internal/plugin/gateway.go`'s `GatewaySignIn` and host.js's
+  `gatewaySignIn` that deliver them.
 - `internal/plugin/gateway_test.go` and `internal/gateway/gateway_hook_test.go`:
   failures, cancellation, ownership and real HTTP streaming.
+  `TestGatewaySignInHook` (a sign-in-only hook, options, a throwing hook)
+  and `TestRevokedAccountToldToHooksOnce` (a revoked ChatGPT account told
+  once, not before a hook is installed, with no token) guard sign-ins.
 
 Follow [provider plugin verification](provider-plugins.md#verification) to use
 isolated HOME and resolved Go/Bun executables. Targeted race acceptance:

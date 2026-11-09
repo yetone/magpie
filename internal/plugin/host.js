@@ -1508,7 +1508,8 @@ async function loadPlugins(list) {
     let gateway
     if (p.gateway) {
       gateway = await import(pathToFileURL(p.gateway).href)
-      if (typeof gateway.onRequest !== "function") throw new Error("magpie.hooks exports no onRequest")
+      // a hook that only listens for sign-ins needs no onRequest
+      if (typeof gateway.onRequest !== "function" && typeof gateway.onSignIn !== "function") throw new Error("magpie.hooks exports no onRequest")
     }
     let fns = []
     // A gateway-only package needs no OpenCode entry. Mixed packages
@@ -1541,7 +1542,7 @@ async function loadPlugins(list) {
     }
     for (const x of r.got) hooks.push(x)
     if (r.gateway) gatewayHooks.push({ spec: p.spec, options: p.options ?? {}, onRequest: r.gateway.onRequest,
-      onResponse: r.gateway.onResponse,
+      onResponse: r.gateway.onResponse, onSignIn: r.gateway.onSignIn,
       state: { calls: 0, failures: 0, totalMillis: 0, lastOutcome: "idle", lastBytes: 0 } })
     if (!isPi) loaded.push({ spec: p.spec })
   }
@@ -1625,6 +1626,7 @@ async function gatewayBegin(p, signal) {
   const total = AbortSignal.any([signal, run.controller.signal, AbortSignal.timeout(gatewayBudget())])
   for (const h of gatewayHooks) {
     if (total.aborted) break
+    if (typeof h.onRequest !== "function") continue
     const ctl = new AbortController()
     const timer = setTimeout(() => ctl.abort(), gatewayTimeout(h))
     const ownSignal = AbortSignal.any([total, ctl.signal])
@@ -1708,8 +1710,34 @@ async function gatewayFinish(run, p, signal) {
   return null
 }
 
+// An account that has to be signed in again, or whose sign-in ends soon,
+// told to each hook's onSignIn once, as magpie's own alert is. The event
+// holds the provider, the account's label and the state, never a token.
+async function gatewaySignIn(p, signal) {
+  const ev = p.event
+  if (!ev || typeof ev !== "object") return null
+  const total = AbortSignal.any([signal, AbortSignal.timeout(gatewayBudget())])
+  for (const h of gatewayHooks) {
+    if (total.aborted) break
+    if (typeof h.onSignIn !== "function") continue
+    const ctl = new AbortController()
+    const timer = setTimeout(() => ctl.abort(), gatewayTimeout(h))
+    const ctx = { options: structuredClone(h.options), signal: AbortSignal.any([total, ctl.signal]) }
+    try {
+      await bounded(Promise.resolve().then(() => h.onSignIn(structuredClone(ev), ctx)), ctx.signal)
+    } catch {
+      if (!signal.aborted) send({ event: "log", level: "warn", message: `${h.spec}: gateway sign-in hook failed or timed out` })
+    } finally {
+      clearTimeout(timer)
+      ctl.abort()
+    }
+  }
+  return null
+}
+
 async function gatewayRequest(p, signal) {
   if (p.operation === "begin") return gatewayBegin(p, signal)
+  if (p.operation === "signIn") return gatewaySignIn(p, signal)
   const run = gatewayRuns.get(p.id)
   if (!run || run.closed || run.token !== p.token) return null
   if (p.operation === "close") { closeGateway(run); return null }
