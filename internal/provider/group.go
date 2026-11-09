@@ -791,7 +791,13 @@ func mergeKey(pid, model string, same map[string]string) string {
 // provider. ok is false for any other id, a group the user has of that id,
 // one they removed, and while found groups are on, one there is or that
 // isn't gone for a provider kept out.
-func AutoStandIn(id string) (string, bool) {
+func AutoStandIn(id string) (string, bool) { return AutoStandInFor("", id) }
+
+// AutoStandInFor is AutoStandIn for a request of agent's: the agent's own
+// subscription first when it serves the model (freefcw on X: off, Codex's
+// gpt-6-astra went to Devin, the first provider in the order), then the
+// first provider as AutoStandIn picks.
+func AutoStandInFor(agent, id string) (string, bool) {
 	gid, ok := GroupIDOf(id)
 	if !ok || !strings.HasPrefix(gid, "auto-") {
 		return "", false
@@ -810,17 +816,23 @@ func AutoStandIn(id string) (string, bool) {
 			return "", false
 		}
 	}
-	var first string
+	var first, kept string
 	for _, e := range entries {
 		if AutoGroupOf(e.Provider.ID, e.Model) != gid {
 			continue
 		}
-		if !slices.Contains(f.AutoGroupSkip, e.Provider.ID) {
+		if ownAgent(e.Provider, agent) {
 			return e.ID, true
+		}
+		if kept == "" && !slices.Contains(f.AutoGroupSkip, e.Provider.ID) {
+			kept = e.ID
 		}
 		if first == "" {
 			first = e.ID
 		}
+	}
+	if kept != "" {
+		return kept, true
 	}
 	return first, first != ""
 }

@@ -128,6 +128,39 @@ func startedByAgent(r *http.Request, agent string) bool {
 // "" leaves the model as asked. Set by main.
 var StandIn func(agent, model string) string
 
+// SetToGroup reports whether magpie set one of agent's fields to the
+// routing group gid ("group/<id>"): the user picked that found group for
+// the agent, so a bare model's name it asks for by (#750) stays on the
+// group rather than going to the agent's own subscription (ownFirst). Set
+// by main; nil reads as no.
+var SetToGroup func(agent, gid string) bool
+
+// ownFirst is where a bare model's id agent asks for goes when the agent's
+// own subscription in magpie serves it (provider.OwnRoute; freefcw on X:
+// Codex's gpt-6-astra went to Devin through the group magpie found, and
+// with found groups off to the first provider in the order). ok is false
+// for a key held to some models, whose own rules pick, and for a found
+// group magpie set the agent to.
+func ownFirst(r *http.Request, agent, m string) (string, bool) {
+	if _, held := keyHolds(r); held {
+		return "", false
+	}
+	to, group, ok := provider.OwnRoute(agent, m)
+	if !ok {
+		return "", false
+	}
+	if group != "" && SetToGroup != nil && SetToGroup(agent, group) {
+		return "", false
+	}
+	return to, true
+}
+
+// offSpreadRefused is the error for a bare model's id several providers
+// serve, none the agent's own, while found groups are off (provider.OffSpread).
+func offSpreadRefused(model string, ids []string) string {
+	return fmt.Sprintf("%q is served by %s in Magpie and auto groups are off, so Magpie picks none of them: ask for one by its provider/model id, or turn auto groups on (magpie group auto on)", model, strings.Join(ids, ", "))
+}
+
 // wiresKey carries the upstream names in force on a request's context: read
 // once where the request comes in rather than once per place a name is
 // looked up, since settings.Load reads and parses the whole file every call
@@ -1840,7 +1873,9 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	}
 	model, _ = askedAt(model) // counted as the model, whatever its effort
 	id := unprefixed(model)
-	if sid, ok := provider.AutoStandIn(id); ok {
+	if own, ok := ownFirst(r, agentOf(r), id); ok {
+		id = own // counted where serve sends it
+	} else if sid, ok := provider.AutoStandInFor(agentOf(r), id); ok {
 		id = sid
 	}
 	pick := desktopSubagentPick(r, agentOf(r), named, id, body)
@@ -2409,10 +2444,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// spelling of a group's model (#750) — is that group, as asked for or
 	// as an agent's config names its stand-in
 	grouped := func(m string) string {
+		if id, ok := ownFirst(r, agent, m); ok {
+			// a bare name the agent's own subscription serves: there,
+			// before a group magpie found or another vendor
+			return id
+		}
 		if id, ok := keyGroupFor(r, m); ok {
 			return id
 		}
-		if id, ok := provider.AutoStandIn(m); ok {
+		if id, ok := provider.AutoStandInFor(agent, m); ok {
 			// a group magpie found, while the user has those off: its
 			// model from one provider, rather than refused
 			return id
@@ -2467,6 +2507,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	}
 	// any Claude Code subagent's turn, moved or not, for the Routing page's tag
 	subagentID := subagentTurnOf(r, call.Kind, body, desktopPick != nil || subagentEffort != "")
+	if _, held := keyHolds(r); !held {
+		// auto groups off: a bare name several vendors serve, none the
+		// agent's own, goes to none of them (freefcw on X)
+		if ids := provider.OffSpread(agent, asked); len(ids) > 0 {
+			call.Status, call.Error = 400, "model on several providers"
+			writeError(w, from, 400, offSpreadRefused(call.Model, ids))
+			turnedAway()
+			return
+		}
+	}
 	p, model, ok := provider.Resolve(asked)
 	// a model the user disabled (#1867) — asked by its id, the model a
 	// sub-agent was put on, a group with every model in it disabled — is

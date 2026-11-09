@@ -1069,3 +1069,26 @@ func whatsOff(name, file, k, v, want string) string {
 		return where + " was changed, so magpie's gateway won't take its requests"
 	}
 }
+
+// SetToGroup reports whether magpie set one of the agent's fields to the
+// routing group gid ("group/<id>"), by its id or its model's name (#750),
+// at an effort or not: the user picked that group for the agent. The
+// gateway then keeps a bare name the agent asks for by on the group,
+// rather than on the agent's own subscription. For gateway.SetToGroup.
+func SetToGroup(agent, gid string) bool {
+	if agent == "" || gid == "" {
+		return false
+	}
+	gid = provider.CanonicalRef(gid)
+	for _, v := range appliedOf(agent).Fields {
+		if g := groupNamed(v); g != "" && provider.CanonicalRef(g) == gid {
+			return true
+		}
+		if i := strings.LastIndex(v, ":"); i > 0 && slices.Contains(provider.MemberEfforts, strings.ToLower(v[i+1:])) {
+			if g := groupNamed(v[:i]); g != "" && provider.CanonicalRef(g) == gid {
+				return true
+			}
+		}
+	}
+	return false
+}

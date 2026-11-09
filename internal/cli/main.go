@@ -418,6 +418,9 @@ func run(args []string) error {
 	// a model Claude Code names that magpie doesn't serve goes to the one
 	// it is set to use for that tier
 	gateway.StandIn = agent.StandIn
+	// a bare name an agent asks for goes to its own subscription, unless
+	// magpie set the agent to the group magpie found by that name
+	gateway.SetToGroup = agent.SetToGroup
 	// and its auto mode classifier, on a sonnet tier that follows a main
 	// model /model has moved, to the model it moved to
 	gateway.ClassifierStandIn = agent.ClassifierStandIn

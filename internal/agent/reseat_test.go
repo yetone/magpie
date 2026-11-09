@@ -45,15 +45,15 @@ func TestSameModelTakesTheOneMMarkOffAGroupRef(t *testing.T) {
 		}
 	}
 	opts := []Option{{Value: "magpie/group/auto-gpt-5", Ref: "group/auto-gpt-5"}, {Value: "other/gpt-5", Ref: "other/gpt-5"}}
-	if got := sameModel(opts, "group/auto-gpt-5[1m]"); got.Ref != "other/gpt-5" {
+	if got := sameModel(opts, "group/auto-gpt-5[1m]", ""); got.Ref != "other/gpt-5" {
 		t.Errorf("[1m] on the group: %+v", got)
 	}
-	if got := sameModel(opts, "group/auto-gpt-5"); got.Ref != "other/gpt-5" {
+	if got := sameModel(opts, "group/auto-gpt-5", ""); got.Ref != "other/gpt-5" {
 		t.Errorf("the bare group: %+v", got)
 	}
 	// a group that is nobody else's still gives nothing (nothing to move to)
 	none := []Option{{Value: "magpie/group/mine", Ref: "group/mine"}, {Value: "other/gpt-5", Ref: "other/gpt-5"}}
-	if got := sameModel(none, "group/mine[1m]"); got.Ref != "" {
+	if got := sameModel(none, "group/mine[1m]", ""); got.Ref != "" {
 		t.Errorf("a group of the user's own: %+v", got)
 	}
 }
