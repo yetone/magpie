@@ -1001,6 +1001,25 @@ func FallbackModels(p Provider) []Member {
 	return out
 }
 
+// GroupsAfter are the routing groups the user built that have id
+// ("provider/model") in them as a member and another member to go on to,
+// as "group/<id>", in the user's order; one magpie found (Auto), hidden
+// or switched off is none. A request for the model that its own accounts
+// can't take (every one held at its usage cap, or Codex's own sign-in out
+// of its allowance) goes on to these when nothing set as its fallback
+// takes it (adorable_piglet on Discord, v0.1.3354): the Codex app asks
+// Codex's own model, never the group built around it.
+func GroupsAfter(id string) []string {
+	var out []string
+	for _, gid := range MemberGroups()[id] {
+		g, ms, ok := FallbackGroup(gid)
+		if ok && !g.Auto && slices.ContainsFunc(ms, func(m Member) bool { return m.Provider.ID+"/"+m.Model != id }) {
+			out = append(out, gid)
+		}
+	}
+	return out
+}
+
 // GroupFor is the group a model's id without a provider in it names, as
 // "group/<id>": the group of that id, else the group of that model however
 // a vendor spells it ("grok-4.7" is the group grok-4-7 or auto-grok-4-7).

@@ -89,6 +89,24 @@ func TestCodexOneAccountSpentNoFallbackRelayed(t *testing.T) {
 	}
 }
 
+// With no fallback set but a routing group of the user's with the Codex
+// subscription's model first and an API after it, the spent turn goes on
+// to the group's API (adorable_piglet on Discord, v0.1.3354: the Codex app
+// asks its own model, never the group).
+func TestCodexOneAccountSpentGoesToItsGroup(t *testing.T) {
+	b := &spentBackend{refuse: codexSpent[0].refuse}
+	spentAccount(t, b, false)
+	a := &scripted{replies: []reply{{200, "", chatSSEReply("from the group")}}}
+	scriptedOn(t, "a", provider.Chat, a)
+	if err := provider.SaveGroup(provider.Group{Name: "G", Members: []string{"codex/gpt-5.5", "a/m"}}); err != nil {
+		t.Fatal(err)
+	}
+	code, body := codexPost(t, oneAccountTurn)
+	if code != 200 || !strings.Contains(body, "from the group") || b.n.Load() != 1 || a.n != 1 {
+		t.Fatalf("%d %q, ChatGPT asked %d, the group's API %d", code, body, b.n.Load(), a.n)
+	}
+}
+
 // A sign-in the backend refuses (401) goes to Codex as it came, fallback
 // or not: Codex renews its own token on it, which a fallback's answer
 // would keep it from doing.

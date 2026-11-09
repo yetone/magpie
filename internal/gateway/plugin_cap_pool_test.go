@@ -26,6 +26,8 @@ import (
 // answered 429 and nothing reaches the vendor; off, the last reading is
 // used as before; once usage reads again, A serves. With Stop at the caps
 // on, both at their caps, the fallback isn't sent the request either.
+// With no fallback, a routing group of the user's that has the plugin's
+// model first goes on to its next member, Stop at the caps off.
 func TestPluginCarefulPool(t *testing.T) {
 	bun := testenv.Bun(t)
 	fresh(t)
@@ -225,5 +227,28 @@ func TestPluginCarefulPool(t *testing.T) {
 	fb.tried = nil
 	if code, body, seen := ask(t); code != 429 || len(seen) != 0 || len(fb.tried) != 0 || !strings.Contains(body, "usage cap reached") {
 		t.Fatalf("stop on: %d %s (tried %v, fallback %v)", code, body, seen, fb.tried)
+	}
+
+	// no fallback, but a routing group of the user's with the plugin's
+	// model first and an API after it: asked for the plugin's own model,
+	// both accounts at their caps, the API takes it; Stop at the caps
+	// still ends there
+	p, _ = provider.Find("factory")
+	p.Fallback = nil
+	if err := provider.Save(*p); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SaveGroup(provider.Group{Name: "Pool", Members: []string{"factory/fake-1", "spare/m2"}}); err != nil {
+		t.Fatal(err)
+	}
+	fb.tried = nil
+	if code, body, seen := ask(t); code != 429 || len(seen) != 0 || len(fb.tried) != 0 {
+		t.Fatalf("group, stop on: %d %s (tried %v, group's API %v)", code, body, seen, fb.tried)
+	}
+	if err := provider.SetCapStop("factory", false); err != nil {
+		t.Fatal(err)
+	}
+	if code, body, seen := ask(t); code != 200 || !strings.Contains(body, "from kf") || len(seen) != 0 {
+		t.Fatalf("group, stop off: %d %s (tried %v)", code, body, seen)
 	}
 }

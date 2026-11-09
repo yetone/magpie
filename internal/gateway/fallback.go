@@ -578,6 +578,23 @@ func (s *Server) planPaused(p provider.Provider, model string, from provider.Pro
 	return restLast(out, pl)
 }
 
+// groupsAfter is p with the routing groups the user built that have p's
+// model in them (provider.GroupsAfter) added after its own fallbacks,
+// those it has already left out; ok is false when there are none to add.
+func groupsAfter(p provider.Provider, model string) (provider.Provider, bool) {
+	var add []string
+	for _, id := range provider.GroupsAfter(p.ID + "/" + model) {
+		if !slices.Contains(p.Fallback, id) {
+			add = append(add, id)
+		}
+	}
+	if len(add) == 0 {
+		return p, false
+	}
+	p.Fallback = append(slices.Clone(p.Fallback), add...)
+	return p, true
+}
+
 // planFallbackGroup is planGroup for a routing group a provider falls back
 // to, its rows added to pl as fallbacks reached through g: the group's
 // keys and accounts in its own order, sunk by its own Sink, those set

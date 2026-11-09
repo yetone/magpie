@@ -2804,14 +2804,25 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	} else {
 		// a routing group among the fallbacks is routed as a request to it
 		// would be, its pause rules too (pausedOut's)
-		cands, pl = s.planPaused(p, model, from, func(fg provider.Group, fms []provider.Member) []provider.Member {
+		pausedIn := func(fg provider.Group, fms []provider.Member) []provider.Member {
 			folder := ""
 			if provider.PausesByFolder(fg, fms) {
 				folder = factsOf(from, body).dir
 			}
 			kept, _ := provider.PausedOut(fg, fms, agent, folder, ruleClock())
 			return kept
-		})
+		}
+		cands, pl = s.planPaused(p, model, from, pausedIn)
+		if len(cands) == 0 && len(pl.capped) > 0 && !p.CapStop || handedOnOf(r) != nil {
+			// every account held at the usage cap the user set, or Codex's
+			// own sign-in handed on (codexFallBack), and no fallback left:
+			// the groups the user built with this model in them go on from
+			// it, as a request to the group would (the Codex app asks
+			// Codex's own model, never the group)
+			if q, ok := groupsAfter(p, model); ok {
+				cands, pl = s.planPaused(q, model, from, pausedIn)
+			}
+		}
 		if handedOnOf(r) != nil {
 			// Codex's own sign-in, asked as often as it is asked: only
 			// the fallbacks are left (codexFallBack)
