@@ -8820,7 +8820,9 @@ $("#modal").addEventListener("keydown", (e) => {
 });
 // A dialog stays centred while it fills in, until the reader's first press
 // or key (the owner 10-24); then it holds what was last pressed in place.
-const modalHold = { off: 0, at: null, y: 0, cap: null, capSet: "", touched: false };
+const modalHold = { off: 0, at: null, y: 0, cap: null, capSet: "", touched: false, copy: null };
+// openModal giving a redraw's focus back: not a new place to hold
+let modalRefocus = false;
 // how far down the dialog an element sits, its animation left out: one
 // that scales by its own top (the owner, 10-23), one that turns by its holder.
 function modalDepth(a, d) {
@@ -8885,6 +8887,11 @@ function holdModal(later) {
   // what was pressed, or failing that what has the focus (a redraw swaps
   // the pressed element for its copy, and gives that copy the focus)
   let y = modalDepth(modalHold.at, d), stood = false;
+  // a redraw's copy openModal found (the pressed one of several alike, a
+  // refresh button it put back), held as one standIn finds
+  const copy = modalHold.copy;
+  modalHold.copy = null;
+  if (copy?.isConnected && d.contains(copy)) { const c = modalDepth(copy, d); if (c != null) { modalHold.at = copy; y = c; stood = true; } }
   if (y == null && !modalHold.at?.isConnected) {
     const s = modalStandIn(d);
     if (s) { modalHold.at = s; y = modalDepth(s, d); stood = y != null; }
@@ -8951,9 +8958,24 @@ function holdModal(later) {
   // the reader's own press or key: from here the dialog holds its place
   m.addEventListener("pointerdown", (e) => { modalHold.touched = true; modalMark(e.target); }, true);
   m.addEventListener("keydown", () => { modalHold.touched = true; }, true);
-  m.addEventListener("focusin", (e) => modalMark(e.target), true);
-  // a scroll moves the marked element, not the dialog
-  m.addEventListener("scroll", () => modalMark(modalHold.at), true);
+  m.addEventListener("focusin", (e) => { if (!modalRefocus) modalMark(e.target); }, true);
+  // a scroll moves the marked element, not the dialog; one held low with
+  // its fields cut short takes the room above as they scroll
+  m.addEventListener("scroll", (e) => { modalClimb(e.target); modalMark(modalHold.at); }, true);
+}
+// A dialog held low rises as its fields scroll, its foot staying, to the room it needs.
+function modalClimb(body) {
+  const m = $("#modal"), d = m.firstElementChild;
+  if (!body?.classList?.contains("ebody") || body.parentElement?.parentElement !== d) return;
+  if (m.hidden || !m.classList.contains("held") || !modalHold.touched || modalHold.cap != null || modalHold.off <= 0) return;
+  const space = m.clientHeight - parseFloat(getComputedStyle(m).paddingTop) - parseFloat(getComputedStyle(m).paddingBottom);
+  const need = d.offsetHeight + body.scrollHeight - body.clientHeight;
+  const by = Math.min(modalHold.off - Math.max(0, (space - Math.min(need, space)) / 2), body.scrollTop);
+  if (by < 1) return;
+  modalHold.off -= by;
+  d.style.top = modalHold.off + "px";
+  d.style.maxHeight = modalHold.capSet = modalCap();
+  body.scrollTop -= by;
 }
 function openModal(content, quiet) {
   const m = $("#modal"), d = m.firstElementChild;
@@ -8973,6 +8995,10 @@ function openModal(content, quiet) {
   const focusID = active?.id;
   const focusLabel = active?.getAttribute("aria-label");
   const focusIndex = active ? [...d.querySelectorAll("input, textarea, select, button")].indexOf(active) : -1;
+  // several alike (each account's Refresh this card): the same one of them
+  const labelled = (n) => [...n.querySelectorAll("[aria-label]")].filter((element) => element.getAttribute("aria-label") === focusLabel);
+  const focusNth = focusLabel ? labelled(d).indexOf(active) : -1;
+  const held = !fresh && d.contains(modalHold.at) ? modalHold.at : null;
   if (fresh) modalReturnFocus = document.activeElement;
   d.replaceChildren(content);
   d.setAttribute("role", "dialog");
@@ -8985,9 +9011,14 @@ function openModal(content, quiet) {
   if (fresh) modalBackground(true);
   if (fresh) markModalSaved();
   const focus = focusID && content.querySelector("#" + CSS.escape(focusID))
-    || focusLabel && [...content.querySelectorAll("[aria-label]")].find((element) => element.getAttribute("aria-label") === focusLabel)
+    || focusLabel && labelled(content)[Math.max(0, focusNth)]
     || focusIndex >= 0 && content.querySelectorAll("input, textarea, select, button")[focusIndex];
-  (focus || content.querySelector("input:not([disabled]), textarea, select, button:not([disabled])") || d).focus(NO_SCROLL);
+  // the focus given back is not a press: what was pressed stays held, by
+  // the element a redraw put back or by the focused copy of it
+  modalRefocus = !fresh;
+  try { (focus || content.querySelector("input:not([disabled]), textarea, select, button:not([disabled])") || d).focus(NO_SCROLL); }
+  finally { modalRefocus = false; }
+  if (held) modalHold.copy = content.contains(held) ? held : held === active && focus || null;
   const body = content.querySelector(":scope > .ebody");
   if (body) body.scrollTop = top; // a re-render keeps the place
   const nextNames = content.querySelector(".mnames:not([hidden])");
@@ -13626,14 +13657,9 @@ function codexNote(cls, n, s) {
   return box;
 }
 
-// Accounts brought in from another tool's export instead of signing in
-// again: the files' text (or what is pasted) goes to magpie, which checks
-// each account with the vendor before keeping it, and says what became of
-// each. What is read stays here only until it is sent; the box masks it.
-// A sign-in waiting for its browser's address is kept behind the import
-// rather than canceled: that address pasted into the import box finishes
-// it there (LuvLetter, magpie in Docker, pasted it into this box instead of
-// the sign-in's Callback URL field), and closing the box ends it.
+// Accounts brought in from another tool's export: magpie checks each with
+// the vendor and says what became of it. A sign-in waiting for its address
+// is kept behind the import; that address pasted here finishes it.
 function startImport(agent) {
   const behind = signingOpen() && signing.pasteCallback ? signing.id : signing?.behind;
   if (signingOpen() && signing.id !== behind) api("signin/" + signing.id + "/cancel", {}).catch(() => {});
@@ -15186,16 +15212,10 @@ function scrollCloses(box, e) {
   if (e.target.matches?.("input, textarea")) return false;
   return !e.target.classList?.contains("view") || performance.now() < purposeUntil && purposeUntil !== guardUntil;
 }
-// openProtoMenu picks one of opts, or several when value is a list: each
-// ticked or unticked in turn with the menu kept open, choose given the
-// ticked ones, in the menu's order, once it closes (and only if they
-// changed). With live, choose runs after each tick instead; "" is none
-// of them and closes it, "\x00" a note to read.
-// placeMenu puts an app menu (box, already in the page) under its anchor,
-// or over it when the window runs out below. One that fits neither way goes
-// where there is more room, its height held to that room, and scrolls inside
-// itself, so its last item can be reached in a short window (#1437). align
-// "right" lines its right edge up with the anchor's; dx nudges it sideways.
+// openProtoMenu picks one of opts, or several when value is a list (ticked
+// in turn, menu kept open; live: choose after each tick).
+// placeMenu puts an app menu under its anchor, or over it, or where there
+// is more room, scrolling inside itself (#1437)
 function placeMenu(box, anchor, align = "left", dx = 0) {
   const r = anchor.getBoundingClientRect(), h = box.offsetHeight, pad = 8, top = popTop(pad);
   let y = r.bottom + 5;
@@ -23025,15 +23045,9 @@ function hold(h) {
   if (Math.abs(d) >= 1) {
     let want = v.scrollTop + d;
     const max = v.scrollHeight - v.clientHeight;
-    // a view at its top when clicked stays at its top: what comes in above
-    // what was clicked moves it down rather than scrolling the view to follow
-    // it. Turning automatic updates off grew the Version row above the
-    // switch once the save answered, and the view slid 2px off its top (#2134).
-    // Only while what was clicked moved by less than its height, a line come
-    // in above it: a day picked on Routing brings its stage in above the bar
-    // (~138px), and the bar is held where it was clicked (#961). Half its
-    // height was too little once a settings row kept 12px above and below its
-    // words: the Version row's line grew it 12px past a 22px switch (10-22)
+    // a view at its top when clicked stays there: a line come in above what
+    // was clicked (less than its height) moves it down, not the view (#2134,
+    // #961, 10-22)
     if (h.top && want > 0 && Math.abs(d) < a[0].getBoundingClientRect().height) want = 0;
     // a view at its top when clicked stays there rather than be given room
     // to scroll down: a chip saved in the panel's Profiles came in above the
@@ -23108,15 +23122,8 @@ addEventListener("click", (e) => {
   const at = protoMenu?.box.contains(e.target) ? protoMenu.anchor : e.target;
   const v = at.closest?.(".view");
   if (!v || v.hidden) { held = null; return; }
-  // a click before a frame has held the one before it (a tab list's keys
-  // pressed in quick turn) holds that one first: the page it shrank is put
-  // back, so this one is taken where the reader left it, not at the top.
-  // So is a scroll the page hasn't heard of yet: the browser tells of a
-  // scroll at the next frame, and a scroll made just before the click and
-  // not the reader's (a field focused on the press, scrolled to; a scroll by
-  // code; a test's click scrolling what it clicks into view while the view
-  // slides in) would be heard of only after it, and kept as where the reader
-  // was (#1554).
+  // a click before a frame holds the one before it first, and a scroll the
+  // page hasn't heard of yet is put back, not kept as the reader's (#1554)
   if (held?.v === v) hold(held);
   else if (!readers && barDrag !== v) backToReader(v);
   const chain = [];
@@ -23732,15 +23739,9 @@ function toggleSideNav() {
   try { localStorage.setItem("magpie.navLayout", navPick); } catch { /* this time only */ }
   navMorph(layoutNav);
 }
-// the two layouts trade places as one motion (app.css .nav-morph): the old
-// drawn and the new laid out, the sidebar sliding and each tab flying to
-// its place in the other; a webview without view transitions, or a reader
-// who asked for less motion, has the new at once. So does the Linux app:
-// WebKitGTK with compositing off (webkit_linux.go turns it off under
-// Wayland) crashes in a view transition, the click on the sidebar's button
-// taking the window down (depravity_wings on X). Anywhere else, a transition
-// still going well past its half second is cut short, so a webview that
-// never ends one can't leave the window on the old layout's picture
+// the layouts trade places as one motion (.nav-morph); at once without view
+// transitions, for less motion, and on Linux (WebKitGTK crashes in one);
+// a transition past MORPH_MAX is cut short
 var MORPH_MAX = 1500;
 function navMorph(change) {
   if (navCalm() || !document.startViewTransition || document.body.classList.contains("linux")) { change(); return; }
