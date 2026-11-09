@@ -153,3 +153,65 @@ func TestCleanTags(t *testing.T) {
 		t.Fatalf("tags %q", got)
 	}
 }
+
+// A memory distilled from a conversation that the user deleted or
+// archived isn't proposed again; an agent's own save of the same text
+// still is kept, and one the user archived stays set aside.
+func TestDismissedNotProposedAgain(t *testing.T) {
+	fresh(t)
+	cand := Candidate
+	propose := func(text, scope string) (*Memory, bool) {
+		t.Helper()
+		k := Preference
+		m, added, err := Save(Input{Text: &text, Kind: &k, Scope: &scope, Status: &cand}, FromInferred, &Source{Agent: "codex", Session: "s1"}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m, added
+	}
+	a, added := propose("Prefers pnpm.", Global)
+	if !added || a.Status != Candidate || a.Origin != FromInferred {
+		t.Fatalf("first proposal: %+v %v", a, added)
+	}
+	if err := Remove(a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if m, added := propose("prefers  PNPM", Global); added || m != nil {
+		t.Fatalf("deleted, then proposed again: %+v", m)
+	}
+	if m, added := propose("Prefers pnpm.", "project:p1"); added || m != nil {
+		t.Fatalf("deleted, then proposed again in another scope: %+v", m)
+	}
+	// the user's or an agent's own save is theirs to make
+	if m := save(t, "Prefers pnpm.", Preference, Global); m == nil || m.Status != Active {
+		t.Fatalf("an agent's save of a dismissed text: %+v", m)
+	}
+
+	// archived by the user: dismissed too
+	b, _ := propose("Answers in Chinese.", Global)
+	if _, err := Edit(b.ID, Input{Status: str(Archived)}, true); err != nil {
+		t.Fatal(err)
+	}
+	if m, added := propose("Answers in Chinese.", Global); added || m != nil {
+		t.Fatalf("archived, then proposed again: %+v", m)
+	}
+	// archived by an agent (memory_forget): set aside, not proposed again
+	// in that scope, but not dismissed
+	c, _ := propose("Runs tests on mote.", Global)
+	if _, err := Forget(c.ID); err != nil {
+		t.Fatal(err)
+	}
+	if m, added := propose("Runs tests on mote.", Global); added || m == nil || m.ID != c.ID || m.Status != Archived {
+		t.Fatalf("set aside, then proposed again: %+v %v", m, added)
+	}
+	if m, added := propose("Runs tests on mote.", "project:p1"); !added || m == nil {
+		t.Fatalf("set aside by an agent in one scope, not proposed in another: %+v", m)
+	}
+	f, err := view()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Dismissed) != 2 {
+		t.Fatalf("dismissed: %q", f.Dismissed)
+	}
+}

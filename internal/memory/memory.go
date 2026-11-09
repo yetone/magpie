@@ -122,6 +122,29 @@ type file struct {
 	// agent's save doesn't rewrite every agent's instructions mid-session
 	Digest    map[string]string `json:"digest,omitempty"`
 	Published time.Time         `json:"published,omitzero"`
+	// Dismissed are the texts (norm) of memories distilled from
+	// conversations that the user deleted or archived, the last
+	// maxDismissed: never proposed again
+	Dismissed []string `json:"dismissed,omitempty"`
+}
+
+// maxDismissed is how many dismissed texts are kept.
+const maxDismissed = 1000
+
+// dismiss notes that the user threw m away, when it was distilled: the
+// same text isn't proposed again.
+func dismiss(f *file, m *Memory) {
+	if m.Origin != FromInferred {
+		return
+	}
+	n := norm(m.Text)
+	if slices.Contains(f.Dismissed, n) {
+		return
+	}
+	f.Dismissed = append(f.Dismissed, n)
+	if len(f.Dismissed) > maxDismissed {
+		f.Dismissed = f.Dismissed[len(f.Dismissed)-maxDismissed:]
+	}
 }
 
 // Path is memory.json; a variable for tests.
@@ -327,6 +350,10 @@ func norm(s string) string {
 // not added again: it gets the source, the tags it lacked and the newer
 // kind and why, and is returned with added false. A project scope's
 // project is recorded when proj is given.
+//
+// One distilled from a conversation (FromInferred) is not added when the
+// user threw the same text away before (dismissed), or set it aside in
+// that scope: m is nil then, or the one set aside, and added false.
 func Save(in Input, origin string, src *Source, proj *Project) (m *Memory, added bool, err error) {
 	t := now().UTC()
 	m = &Memory{Kind: Fact, Scope: Global, Origin: origin, Status: Active, Created: t, Updated: t}
@@ -342,6 +369,19 @@ func Save(in Input, origin string, src *Source, proj *Project) (m *Memory, added
 		m.Sources = []Source{s}
 	}
 	err = change(func(f *file) error {
+		if origin == FromInferred {
+			n := norm(m.Text)
+			if slices.Contains(f.Dismissed, n) {
+				m = nil
+				return errSkip
+			}
+			for _, o := range f.Memories {
+				if o.Scope == m.Scope && (o.Status == Archived || o.Status == Superseded) && norm(o.Text) == n {
+					m = o
+					return errSkip
+				}
+			}
+		}
 		if proj != nil && proj.Key != "" && m.Scope == "project:"+proj.Key {
 			notePro(f, proj)
 		}
@@ -373,11 +413,17 @@ func Save(in Input, origin string, src *Source, proj *Project) (m *Memory, added
 		added = true
 		return nil
 	})
+	if errors.Is(err, errSkip) {
+		return m, false, nil
+	}
 	if err != nil {
 		return nil, false, err
 	}
 	return m, added, nil
 }
+
+// errSkip ends a change without writing it.
+var errSkip = errors.New("nothing to change")
 
 // keepSources keeps a memory's last 20 sources.
 func keepSources(s []Source) []Source {
@@ -432,6 +478,9 @@ func Edit(id string, in Input, byUser bool) (*Memory, error) {
 		if err := check(&c); err != nil {
 			return err
 		}
+		if byUser && c.Status == Archived && m.Status != Archived {
+			dismiss(f, m)
+		}
 		if byUser && (in.Text != nil || in.Kind != nil || in.Scope != nil || in.Why != nil) {
 			c.Origin = FromUser
 		}
@@ -454,7 +503,13 @@ func Forget(id string) (*Memory, error) {
 func Remove(ids ...string) error {
 	return change(func(f *file) error {
 		n := len(f.Memories)
-		f.Memories = slices.DeleteFunc(f.Memories, func(m *Memory) bool { return slices.Contains(ids, m.ID) })
+		f.Memories = slices.DeleteFunc(f.Memories, func(m *Memory) bool {
+			if slices.Contains(ids, m.ID) {
+				dismiss(f, m)
+				return true
+			}
+			return false
+		})
 		if len(f.Memories) == n {
 			return ErrNotFound
 		}
