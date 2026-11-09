@@ -1068,7 +1068,19 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 	}
 	// picks the vendor list does not know go first, so they are visible,
 	// the last one picked foremost
+	// counted first: a catalog.Model is large, and growing the list by
+	// append for a provider whose picks the vendor list lacks was 6 MB of
+	// what forty polls of the Providers page allocated with real accounts
+	nFront := 0
+	for _, m := range exposedList {
+		if !seen[m.ID] {
+			nFront++
+		}
+	}
 	var front []catalog.Model
+	if nFront > 0 {
+		front = make([]catalog.Model, 0, nFront)
+	}
 	for _, m := range exposedList {
 		if !seen[m.ID] {
 			front = append(front, m)
@@ -1230,7 +1242,13 @@ func providersState() providersJSON {
 	desktop := desktopNumbers(uses)
 	have := map[string]bool{}
 	var remoteMCP map[string]bool // read once, at the first Remote magpie
-	for _, p := range provider.All() {
+	all := provider.All()
+	// both lists made once at their size: each grown by append was 6 MB of
+	// what forty polls of the Providers page allocated with real accounts
+	s.Providers = make([]providerJSON, 0, len(all))
+	partners, presets := provider.Partners(), provider.Presets()
+	s.Presets = make([]presetJSON, 0, len(partners)+len(presets))
+	for _, p := range all {
 		// a preset is added once any provider is its, whatever its id
 		have[p.ID], have[p.Preset] = true, true
 		info := providerInfoWith(p, provider.KeptListing(p), uses, desktop)
@@ -1244,10 +1262,10 @@ func providersState() providersJSON {
 		s.Providers = append(s.Providers, info)
 	}
 	// partners first, as the add sheet lists them
-	for _, pa := range provider.Partners() {
+	for _, pa := range partners {
 		s.Presets = append(s.Presets, presetJSON{PresetDef: pa.PresetDef, Added: have[pa.ID], Notes: pa.Notes, Langs: pa.Langs, New: !have[pa.ID] && !provider.PartnerNoticed(pa.ID), OwnClient: presetOwnClient(pa.PresetDef)})
 	}
-	for _, pr := range provider.Presets() {
+	for _, pr := range presets {
 		bases := provider.Provider{Chat: pr.Chat, Responses: pr.Responses, Anthropic: pr.Anthropic}
 		team := provider.TakesZhipuTeam(bases)
 		vendor, keyRegions := presetAccessKey(pr)
