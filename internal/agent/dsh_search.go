@@ -125,7 +125,7 @@ func dshSearchesHere(dir string) bool {
 	if len(files) == 0 {
 		return false
 	}
-	_, items, err := dshRead(files[0])
+	_, items, err := dshLook(files[0])
 	if err != nil {
 		return false
 	}

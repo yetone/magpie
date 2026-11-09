@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"hash/maphash"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -48,6 +49,7 @@ import (
 	"github.com/yetone/magpie/internal/beat"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -453,7 +455,7 @@ func dshHomePatch(dir string) string { return filepath.Join(dir, "cordis.patch.y
 // replaces the fields it supplies: config replaces the whole config, but
 // disabled:false alone leaves the profile's config intact. For reading only.
 func dshOver(dir string, items []dshItem) []dshItem {
-	_, home, err := dshRead(dshHomePatch(dir))
+	_, home, err := dshLook(dshHomePatch(dir))
 	if err != nil || len(home) == 0 {
 		return items
 	}
@@ -646,6 +648,27 @@ func dshRead(path string) ([]string, []dshItem, error) {
 		return nil, nil, err
 	}
 	return dshParse(path, string(b))
+}
+
+// dshParsed is a patch list as dshParse gave it.
+type dshParsed struct {
+	head  []string
+	items []dshItem
+}
+
+// dshLook is dshRead for a look that writes nothing: parsed once each time
+// the file changes and shared, so read only. The window's 15s drift poll
+// read and parsed every profile's list again on each ask, a third of what
+// forty asks allocated with real accounts.
+func dshLook(path string) ([]string, []dshItem, error) {
+	d, err := filememo.Read("dsh list", path, func(b []byte) (dshParsed, error) {
+		head, items, err := dshParse(path, string(edit.TrimBOM(b)))
+		return dshParsed{head, items}, err
+	})
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil, nil // as dshRead, whose edit.Read gives no bytes
+	}
+	return d.head, d.items, err
 }
 
 // dshWrite puts a patch list back together.
@@ -909,7 +932,7 @@ func dshGet(dir, lead string) string {
 	if f == "" {
 		return dshGetLegacy(filepath.Join(dir, "config.yaml"))
 	}
-	_, items, err := dshRead(f)
+	_, items, err := dshLook(f)
 	if err != nil {
 		return ""
 	}
@@ -950,7 +973,7 @@ func dshStartSel(dir string, items []dshItem) map[string]string {
 
 // dshGetLegacy reads agent-loop's model from a config.yaml before 0.1.5.
 func dshGetLegacy(path string) string {
-	_, items, err := dshRead(path)
+	_, items, err := dshLook(path)
 	if err != nil {
 		return ""
 	}
@@ -981,7 +1004,7 @@ func dshCheck(dir, gw string) string {
 	files := dshProfiles(dir)
 	if len(files) == 0 {
 		path := filepath.Join(dir, "config.yaml")
-		_, items, _ := dshRead(path)
+		_, items, _ := dshLook(path)
 		base := ""
 		if i := dshFind(items, "llm-deepseek"); i >= 0 {
 			for _, l := range items[i].lines {
@@ -993,7 +1016,7 @@ func dshCheck(dir, gw string) string {
 		get := func(string) (string, bool) { return base, base != "" }
 		return wiringOff("DeepSeek Harness", path, get, "baseURL", gw+"/v1")
 	}
-	_, items, _ := dshRead(files[0])
+	_, items, _ := dshLook(files[0])
 	routeFile := files[0]
 	if dshHomeHas(dir, dshPiRow) {
 		routeFile = dshHomePatch(dir)
@@ -1012,7 +1035,7 @@ func dshCheck(dir, gw string) string {
 	// wiring, which dshSync moves rather than this round writing beside.
 	canWriteBack := len(sharedModels(dshListFor(dir))) > 0
 	for _, f := range files[1:] {
-		_, items, err := dshRead(f)
+		_, items, err := dshLook(f)
 		if err != nil || dshWired(dshOver(dir, items)) {
 			continue
 		}
@@ -1064,7 +1087,7 @@ func dshCheck(dir, gw string) string {
 	// way. Every profile carries a route of its own, and dsh runs whichever
 	// one its session names, so every profile is asked.
 	for _, f := range files {
-		_, it, err := dshRead(f)
+		_, it, err := dshLook(f)
 		if err != nil {
 			continue
 		}
@@ -2784,13 +2807,13 @@ func DshPatchFiles(dir string) []string { return dshFiles(dir) }
 func dshGetEffort(dir, lead string) string {
 	f := dshLead(dir, lead)
 	if f == "" {
-		_, items, err := dshRead(filepath.Join(dir, "config.yaml"))
+		_, items, err := dshLook(filepath.Join(dir, "config.yaml"))
 		if err != nil {
 			return ""
 		}
 		return dshEffortIn(items)
 	}
-	_, items, err := dshRead(f)
+	_, items, err := dshLook(f)
 	if err != nil {
 		return ""
 	}
