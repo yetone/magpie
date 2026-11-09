@@ -29,6 +29,9 @@ type gathered struct {
 	h      http.Header
 	status int
 	buf    bytes.Buffer
+	// capped: the max_output_tokens the client asked, for a reply that
+	// stopped at it with no end said (endsAtProbeCap)
+	capped int
 }
 
 func (g *gathered) Header() http.Header         { return g.h }
@@ -40,7 +43,9 @@ func (g *gathered) Write(b []byte) (int, error) { return g.buf.Write(b) }
 // stream's items, or else its text, when the event left it empty.
 // A reply that came whole goes as it came. A stream that failed, or ended
 // before saying its reply had, is a 502, as a translated one is
-// (TestNonStreamEndedShort), never an empty 200.
+// (TestNonStreamEndedShort), never an empty 200 — unless a short probe's
+// reply stopped at its own small limit (endsAtProbeCap): its response as
+// the stream began it, incomplete at max_output_tokens.
 func (g *gathered) finish(w http.ResponseWriter, p provider.Provider, sse bool, cut string, failed string) (int, string) {
 	if !sse {
 		for k, vs := range g.h {
@@ -50,7 +55,8 @@ func (g *gathered) finish(w http.ResponseWriter, p provider.Provider, sse bool, 
 		w.Write(g.buf.Bytes())
 		return g.status, failed
 	}
-	var resp json.RawMessage
+	var resp, begun json.RawMessage // begun: the response as the stream began it
+	spent := false                  // a delta of the reply's came (endsAtProbeCap)
 	items := map[int]json.RawMessage{}
 	var text strings.Builder // the reply's text, for a stream with no items
 	streamErr := ""
@@ -68,7 +74,12 @@ func (g *gathered) finish(w http.ResponseWriter, p provider.Provider, sse bool, 
 		if e.Type == "" {
 			e.Type = event
 		}
+		if strings.HasSuffix(e.Type, ".delta") {
+			spent = true
+		}
 		switch e.Type {
+		case "response.created", "response.in_progress":
+			begun = e.Response
 		case "response.output_text.delta":
 			text.WriteString(e.Delta)
 		case "response.output_item.done":
@@ -82,6 +93,10 @@ func (g *gathered) finish(w http.ResponseWriter, p provider.Provider, sse bool, 
 		}
 		return nil
 	})
+	if (len(resp) == 0 || resp[0] != '{') && streamErr == "" && cut == "" && failed == "" &&
+		len(begun) > 0 && begun[0] == '{' && endsAtProbeCap(provider.Responses, g.capped, spent) {
+		resp = incompleteAtLength(begun)
+	}
 	if len(resp) == 0 || resp[0] != '{' {
 		msg := failed
 		switch {
@@ -109,6 +124,22 @@ func (g *gathered) finish(w http.ResponseWriter, p provider.Provider, sse bool, 
 	w.WriteHeader(http.StatusOK)
 	w.Write(resp)
 	return http.StatusOK, ""
+}
+
+// incompleteAtLength is a response as its stream began it, made the
+// response.incomplete a reply stopped at its max_output_tokens ends with.
+func incompleteAtLength(begun json.RawMessage) json.RawMessage {
+	var m map[string]json.RawMessage
+	if json.Unmarshal(begun, &m) != nil {
+		return nil
+	}
+	m["status"] = json.RawMessage(`"incomplete"`)
+	m["incomplete_details"] = json.RawMessage(`{"reason":"max_output_tokens"}`)
+	b, err := json.Marshal(m)
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 // withStreamedOutput is resp with the stream's items as its output when

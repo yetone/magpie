@@ -78,6 +78,35 @@ var errStreamCut = errors.New("stream cut mid-reply")
 // and be whole, so Chat is not one.
 var errEndedShort = errors.New("the reply ended before it was complete")
 
+// endsAtProbeCap says whether a reply that stopped short of its end, its
+// connection closed cleanly, is taken as one that ended at its length:
+// the request capped it at a short probe's worth (cutVoidTokens) and the
+// reply spent some of it, thinking or saying something. A vendor that
+// ends a reply at max_tokens with no closing event looks the same as one
+// that cut it, and a reply asked for 16 tokens that thought them all is
+// what such an ending most likely is: Open Design's glm-5.3-flash always
+// thinks, spent a model test's 16 tokens on it and ended after
+// content_block_stop, with no message_delta or message_stop, so every
+// plain test of it through a remote magpie was a 502 waited out through
+// the patience (plugins#827). A larger reply that ends so is still a cut,
+// and so is a Gemini or Code Assist one of any size: Gemini ends every
+// reply with its finishReason, MAX_TOKENS included, so one without it was
+// cut (vertexCut, asked for 256, TestGeminiUpstreamEndedShort).
+func endsAtProbeCap(proto provider.Protocol, capped int, spent bool) bool {
+	return (proto == provider.Anthropic || proto == provider.Responses) &&
+		spent && capped > 0 && capped <= cutVoidTokens
+}
+
+// spends says whether an event spent some of a reply's tokens: text,
+// a call, reasoning, a search or an image.
+func spends(ev Event) bool {
+	switch ev.Kind {
+	case KThink, KSealed:
+		return true
+	}
+	return saysSomething(ev)
+}
+
 // geminiEnds says whether a Gemini chunk ends the reply, as replyEnds
 // does for events that name their type. Gemini's and Code Assist's chunks
 // name none and there is no [DONE]: the last one is the one whose
@@ -439,6 +468,8 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 	// try's reasoning was found stuck in a loop before it had, and it is
 	// let go to ask again (loopReasks)
 	var spoke, relooped bool
+	// spent: this try spent some of the reply's tokens (endsAtProbeCap)
+	var spent bool
 	var summaryUpstream bool
 	reasks := 0
 	if h, ok := w.(*holdWriter); ok {
@@ -460,6 +491,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 			return // the rest of a try let go for its loop
 		}
 		spoke = spoke || saysSomething(ev)
+		spent = spent || spends(ev)
 		switch ev.Kind {
 		case KThink, KSealed:
 			if ev.Kind == KThink && !summaryUpstream {
@@ -526,7 +558,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 		// continuation's prefill away
 		cutBy, cutCode, cutErr := failed, failedCode, serr
 		failed, failedCode, failedStatus, cut, serr = "", "", 0, false, nil
-		errNamed = 0
+		errNamed, spent = 0, false
 		var held func() // what a textCallSee of this try holds back
 		req := request
 		if cont.resume {
@@ -657,6 +689,14 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 						// finish_reason after its generation was done
 						u.add(Usage{Stop: fin})
 						serr = dec(string(finishChunk(fin)), attemptSee)
+					} else if endsAtProbeCap(actual, req.MaxTokens, spent) {
+						// a short probe's reply that stopped at its own
+						// small limit with no end said (plugins#827):
+						// ended at its length, as the vendor should have
+						// said
+						u.add(Usage{Stop: "length"})
+						serr = nil
+						attemptSee(Event{Kind: KStop, Stop: "length"})
 					}
 				}
 			}

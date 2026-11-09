@@ -3089,6 +3089,9 @@ type keptAlive struct {
 	// 40 MB upload asked four times) failed 502 instead of being made
 	// without a model (#4862)
 	whole bool
+	// clientEnd is when the client said it stops waiting (clientEnd),
+	// zero when it said nothing
+	clientEnd time.Time
 	// Only opted-in Claude cache reporting can defer initial keepalives.
 	// Selection releases it before process startup; expiry keeps the stream alive.
 	cacheReportUntil time.Time
@@ -3123,6 +3126,32 @@ func (a *keptAlive) compactsInStream(status int, msg string) bool {
 // reply would go agentQuietMost without one after d more.
 func (a *keptAlive) tooQuiet(d time.Duration) bool {
 	return a != nil && a.streams && a.proto == provider.Responses && !a.told.IsZero() && time.Since(a.told)+d >= agentQuietMost
+}
+
+// clientRoom is how long a client that said how long it waits is left,
+// after a pause, for the try the pause is for to answer and the reply or
+// its error to reach it.
+const clientRoom = 10 * time.Second
+
+// clientEnd is when a request's client stops waiting, from the seconds
+// it named in provider.WaitHeader (a model test asking a remote magpie),
+// counted from start; zero when it named none, or nothing readable.
+func clientEnd(h http.Header, start time.Time) time.Time {
+	n, err := strconv.Atoi(strings.TrimSpace(h.Get(provider.WaitHeader)))
+	if err != nil || n <= 0 {
+		return time.Time{}
+	}
+	return start.Add(time.Duration(min(n, 3600)) * time.Second)
+}
+
+// outlives says whether a pause of d, with clientRoom after it, would end
+// past the time the client said it waits: its pause isn't taken, and the
+// client has the error while it still waits for one (plugins#827: a
+// remote magpie's model test waited 20s while the server kept its 502
+// through the provider's patience, 45s and more, and the test said only
+// that no answer came).
+func (a *keptAlive) outlives(d time.Duration) bool {
+	return a != nil && !a.clientEnd.IsZero() && time.Now().Add(d+clientRoom).After(a.clientEnd)
 }
 
 // keepAlive tells the agent of a stream held past keepHeldAfter for its

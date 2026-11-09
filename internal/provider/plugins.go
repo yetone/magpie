@@ -55,6 +55,13 @@ const (
 // (host.js), as it does the two above.
 const FallbackHeader = "X-Magpie-Fallback"
 
+// WaitHeader tells a magpie's gateway how many seconds its client waits
+// for the answer: a model test asking a remote magpie sends its own wait,
+// and the gateway takes no retry pause or patience round that would end
+// past it, so the test is told the error rather than running out of time
+// (plugins#827). Like every X-Magpie- header it goes no further.
+const WaitHeader = "X-Magpie-Wait"
+
 // SessionToPluginHeader and SubagentToPluginHeader tell a plugin's fetch
 // the session the agent named (sessionOf: Claude Code's
 // x-claude-code-session-id and the rest) and the Claude Code subagent the

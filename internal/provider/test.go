@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -265,7 +266,9 @@ func tinyBody(q Provider, proto Protocol, model string) (url, body string) {
 // sign-in or ask its vendor more than once before it answers, as it does
 // for the gateway, which gives it no such bound (mingxia_16024 on
 // Discord: every Qoder and WorkBuddy model's test ended at 20s while
-// agents were answered).
+// agents were answered), and for a remote magpie, whose gateway serves
+// such plugins' models in turn and asks again where its own retries do
+// (plugins#827: a plugin model tested in 60s here had 20s through it).
 // connectWait is how long a probe waits for its connection (a TLS
 // handshake done, through any proxy) before it gives up on the host: an
 // address nothing answers at is said in that time, not the whole wait's
@@ -806,6 +809,11 @@ func probeOnce(ctx context.Context, p Provider, proto Protocol, url string, body
 		p.warmPlugin(ctx)
 		wait = max(wait, pluginTestWait)
 	}
+	if p.IsRemoteMagpie() {
+		// it serves plugins' models too, and retries for them
+		// (pluginTestWait)
+		wait = max(wait, pluginTestWait)
+	}
 	ctx, cancel := context.WithTimeout(probelog.WithModel(ctx, model), wait)
 	defer cancel()
 	rctx := ctx
@@ -853,6 +861,11 @@ func probeOnce(ctx context.Context, p Provider, proto Protocol, url string, body
 		// a model its vendor has queued is said so at once, not waited
 		// out for minutes as an agent's turn is (Qoder's free models)
 		req.Header.Set(FallbackHeader, "1")
+	}
+	if p.IsRemoteMagpie() {
+		// its gateway takes no pause that ends past the test's wait, and
+		// the test is told the error (WaitHeader, plugins#827)
+		req.Header.Set(WaitHeader, strconv.Itoa(int(wait/time.Second)))
 	}
 	if err := p.Sign(ctx, req, proto, body); err != nil {
 		r.Error = err.Error()
