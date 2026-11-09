@@ -65,7 +65,7 @@ func (s *Server) stoppedToolLoop(w http.ResponseWriter, r *http.Request, from pr
 	}
 	why := loop.why()
 	s.answeredHere(r, from, body, toolLoopWho, why, func() {
-		writeLocalText(w, from, req, loop.notice())
+		writeLocalText(w, from, req, loop.notice(conversationLang(from, body)))
 	})
 	return true
 }
@@ -382,10 +382,28 @@ func (l toolLoop) why() string {
 	return fmt.Sprintf("tool loop: the same tool call got the same result %d turns in a row (%s); answered by magpie, sent nowhere", l.turns, l.called())
 }
 
-// notice is what the agent shows the user, as the turn's answer.
-func (l toolLoop) notice() string {
-	return fmt.Sprintf("magpie stopped this turn before it reached the model: the agent ran the same tool call %d times in a row and got the same result every time (%s). The model is stuck repeating it, and each further turn would spend your quota with no progress, so this turn was sent nowhere. Tell the agent how to go on and the conversation continues; Settings › Models › Replies › Stop looping replies turns this check off.",
-		l.turns, l.called())
+// notice is what the agent shows the user, as the turn's answer, in lang
+// (conversationLang). It goes to the vendor with the conversation's next
+// turn, so it names neither magpie nor a vendor's limits; the setting is
+// named as the GUI in that language names it (Korean, which the GUI
+// hasn't, as English does).
+func (l toolLoop) notice(lang string) string {
+	f, ok := toolLoopNotices[lang]
+	if !ok {
+		f = toolLoopNotices[langEN]
+	}
+	return fmt.Sprintf(f, l.turns, l.called())
+}
+
+// toolLoopNotices are the notice in each language, given the turns and
+// the calls.
+var toolLoopNotices = map[string]string{
+	langEN:   "This turn was stopped before it reached the model: the agent ran the same tool call %d times in a row and got the same result every time (%s). The model is stuck repeating it, and each further turn would be one more request with no progress, so this turn was sent nowhere. Tell the agent how to go on and the conversation continues; Settings › Models › Replies › Stop looping replies turns this check off.",
+	langZH:   "这一轮在发给模型之前已被停止：Agent 连续 %d 次调用了同一个工具，每次得到的结果都一样（%s）。模型陷入了重复，再继续每一轮都只是多一次请求而没有进展，所以这一轮没有发出。告诉 Agent 接下来怎么做，对话就会继续；在 设置 › 模型 › 回复 › 停止循环的回复 中可以关闭这项检查。",
+	langZHTW: "這一輪在送給模型之前已被停止：Agent 連續 %d 次呼叫了同一個工具，每次得到的結果都一樣（%s）。模型陷入了重複，再繼續每一輪都只是多一次請求而沒有進展，所以這一輪沒有送出。告訴 Agent 接下來怎麼做，對話就會繼續；在 設定 › 模型 › 回覆 › 停止循環的回覆 中可以關閉這項檢查。",
+	langJA:   "このターンはモデルに送る前に止めました：エージェントが同じツール呼び出しを %d 回続けて実行し、毎回同じ結果を受け取りました（%s）。モデルが同じことを繰り返しており、続けても進展のないリクエストが増えるだけなので、このターンはどこにも送っていません。次にどうするかをエージェントに伝えれば会話は続きます。設定 › モデル › 応答 › ループする応答を止める でこのチェックをオフにできます。",
+	langKO:   "이 턴은 모델에 보내기 전에 중단되었습니다: 에이전트가 같은 도구 호출을 %d번 연속으로 실행했고 매번 같은 결과를 받았습니다(%s). 모델이 같은 일을 반복하고 있어 계속해도 진전 없이 요청만 늘어나므로, 이 턴은 어디에도 보내지 않았습니다. 에이전트에게 어떻게 진행할지 알려 주면 대화가 이어집니다. Settings › Models › Replies › Stop looping replies 에서 이 검사를 끌 수 있습니다.",
+	langDE:   "Dieser Zug wurde angehalten, bevor er das Modell erreichte: Der Agent hat denselben Tool-Aufruf %d-mal hintereinander ausgeführt und jedes Mal dasselbe Ergebnis erhalten (%s). Das Modell wiederholt sich, und jeder weitere Zug wäre eine weitere Anfrage ohne Fortschritt, daher wurde dieser Zug nirgendwohin gesendet. Sag dem Agenten, wie es weitergeht, und das Gespräch läuft weiter; Einstellungen › Modelle › Antworten › Schleifende Antworten beenden schaltet diese Prüfung aus.",
 }
 
 // writeLocalText answers req with text in from's API, as a whole reply or
