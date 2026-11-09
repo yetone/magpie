@@ -90,15 +90,38 @@ jobs:
           gh release download "$REF" -R yetone/magpie-releases -D dist
           gh release view "$REF" -R yetone/magpie-releases --json body -q .body > notes.md
           printf '\n\n---\nThe same release, and the feed magpie updates from: https://github.com/yetone/magpie-releases/releases/tag/%s\n' "$REF" >> notes.md
+          # GitHub marks the release published last Latest unless told
+          # otherwise. v0.1.3360's mac signing failed and its rerun was
+          # copied here after 3361 and 3362, so it took the mark (11-09):
+          # a release is Latest only when no published one here is higher,
+          # and the highest has the mark once this one is out.
+          newest() {
+            gh release list -R "$GITHUB_REPOSITORY" -L 100 --exclude-drafts --exclude-pre-releases --json tagName -q '.[].tagName' |
+              { grep -E '^v[0-9]+(\.[0-9]+)*$' || true; } | sort -V | tail -1
+          }
+          top=$(newest)
+          if [ -z "$top" ] || [ "$(printf '%s\n%s\n' "$top" "$REF" | sort -V | tail -1)" = "$REF" ]; then
+            latest=true
+          else
+            latest=false
+            echo "$top is newer: $REF is copied without the Latest mark"
+          fi
           if gh release view "$REF" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release edit "$REF" -R "$GITHUB_REPOSITORY" --notes-file notes.md
+            gh release edit "$REF" -R "$GITHUB_REPOSITORY" --notes-file notes.md --latest="$latest"
             gh release upload "$REF" dist/* -R "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$REF" dist/* -R "$GITHUB_REPOSITORY" --verify-tag --title "magpie $REF" --notes-file notes.md
+            gh release create "$REF" dist/* -R "$GITHUB_REPOSITORY" --verify-tag --title "magpie $REF" --notes-file notes.md --latest="$latest"
           fi
           n=$(gh release view "$REF" -R "$GITHUB_REPOSITORY" --json assets -q '.assets | length')
           echo "$REF has $n assets here"
           [ "$n" -ge "$ASSETS" ]
+          # two copies at once can each decide before the other is out
+          top=$(newest)
+          now=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" -q .tag_name 2>/dev/null || true)
+          if [ -n "$top" ] && [ "$now" != "$top" ]; then
+            echo "Latest here was ${now:-none}: giving the mark to $top"
+            gh release edit "$top" -R "$GITHUB_REPOSITORY" --latest >/dev/null
+          fi
 
       # The Chinese notes are written by magpie-releases' DeepSeek call, and
       # when that call fails the release goes out in English alone: a spent
