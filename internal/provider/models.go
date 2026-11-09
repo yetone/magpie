@@ -3159,6 +3159,23 @@ func catalogKeeping(keep func(Entry) bool) []Entry {
 	return out
 }
 
+// CatalogGroups is Catalog's routing groups, the caller's own, and how
+// many entries Catalog has, without copying the providers' models: the
+// Providers page reads only these, on every poll, and a whole Catalog
+// was ~0.3 MB of each poll's garbage with real accounts.
+func CatalogGroups() ([]Entry, int) {
+	entries := providerEntries()
+	groups := slices.Clone(groupEntries(entries))
+	n := len(groups)
+	kept := unlistedByGroups(entries)
+	for _, e := range entries {
+		if !e.Provider.Unlisted && len(kept[e.ID]) == 0 {
+			n++
+		}
+	}
+	return groups, n
+}
+
 // unlistedByGroups are the models, by "provider/model", that a group
 // keeps out of the lists (Group.Unlists), with the names of the groups
 // that do: those it names, a member fixed at an effort counting as its

@@ -1253,8 +1253,8 @@ func providersState() providersJSON {
 		vendor, keyRegions := presetAccessKey(pr)
 		s.Presets = append(s.Presets, presetJSON{PresetDef: pr, Added: have[pr.ID], ZhipuTeam: team, AccessKey: vendor != "", AccessKeyVendor: vendor, AccessKeyRegions: keyRegions, Vertex: pr.ID == provider.VertexPreset, OwnClient: presetOwnClient(pr)})
 	}
-	cat := provider.Catalog()
-	s.Gateway = gatewayJSON{URL: gateway.URL(), OnNetwork: gateway.OnNetwork(), Models: len(cat), Calls: []gateway.Call{}, Groups: []gwGroupJSON{}}
+	cat, models := provider.CatalogGroups()
+	s.Gateway = gatewayJSON{URL: gateway.URL(), OnNetwork: gateway.OnNetwork(), Models: models, Calls: []gateway.Call{}, Groups: []gwGroupJSON{}}
 	s.Gateway.LAN = settings.Load().LAN || s.Gateway.OnNetwork
 	if s.Gateway.LAN {
 		s.Gateway.LANURLs = gateway.LANURLs()

@@ -77,3 +77,51 @@ func TestGroupUnlistsItsModels(t *testing.T) {
 		t.Fatalf("listed again: %v, unlisted %v", got, ids(Unlisted()))
 	}
 }
+
+// CatalogGroups, which the Providers page reads on every poll, is
+// Catalog's groups and Catalog's length, with a group listing alone and
+// a provider kept unlisted, and with neither.
+func TestCatalogGroupsIsCatalogs(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	for _, p := range []Provider{
+		{ID: "a", Name: "a", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"m1", "m2", "m3"}},
+		{ID: "b", Name: "b", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"n1", "n2"}},
+		{ID: "c", Name: "c", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"o1"}, Unlisted: true},
+	} {
+		if err := Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	same := func(when string) {
+		t.Helper()
+		cat := Catalog()
+		groups, n := CatalogGroups()
+		var want []string
+		for _, e := range cat {
+			if e.Group != "" {
+				want = append(want, e.ID)
+			}
+		}
+		var got []string
+		for _, e := range groups {
+			got = append(got, e.ID)
+		}
+		if n != len(cat) || !slices.Equal(got, want) {
+			t.Errorf("%s: CatalogGroups %v, %d; Catalog's groups %v of %d", when, got, n, want, len(cat))
+		}
+	}
+	same("no groups")
+	if err := SaveGroup(Group{Name: "Inner", Members: []string{"a/m3"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveGroup(Group{Name: "G", Members: []string{"a/m1:high", "group/inner"}, Match: []string{"b/*"}, Unlists: true}); err != nil {
+		t.Fatal(err)
+	}
+	same("a group listing alone")
+	if err := SwitchGroup("g", false); err != nil {
+		t.Fatal(err)
+	}
+	same("that group off")
+}
