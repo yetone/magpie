@@ -39,10 +39,13 @@ and refuses empty or over-long text, an unknown kind and a bad scope
 
 [internal/gateway/memory_mcp.go](../../internal/gateway/memory_mcp.go):
 `memory_search`, `memory_save`, `memory_forget`, Streamable HTTP at
-`MemoryMCPPath` (`/mcp/magpie/memory`), served and guarded like the search
-server (`serveMCP`): another computer reaches it only while magpie is
-shared, with a gateway key, and has no folder here for a project
-(`TestMemoryMCPGuarded`).
+`MemoryMCPPath` (`/mcp/magpie/memory`), served like the search server
+(`serveMCP`) but to the agents on this computer alone, as the hub gives it
+(`HereOnly`): memory is what is known about this computer's user, and its
+digest goes into every agent's instructions here, so another computer's
+gateway key (which may be a friend's, and may use every MCP server unless
+it is held to some) and a web page, even one Settings lists, are turned
+away (`TestMemoryMCPGuarded`).
 
 - The Library offers it in the market as `magpie-memory`
   ([market.go](../../internal/library/market.go)), run as

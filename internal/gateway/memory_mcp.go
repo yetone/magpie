@@ -17,8 +17,8 @@ import (
 // magpie's memory (internal/memory) is an MCP server every agent can mount,
 // so what one agent learns of the user, another knows: memory_search,
 // memory_save and memory_forget, Streamable HTTP at MemoryMCPPath, served
-// and guarded as SearchMCPPath is (serveMCP). The Library gives it as
-// `magpie mcp memory`, which passes each message on with the folder the
+// as SearchMCPPath is (serveMCP), to the agents on this computer alone.
+// The Library gives it as `magpie mcp memory`, which passes each message on with the folder the
 // agent started it in (MemoryCwdHeader) and the client's name from its
 // initialize (MemoryClientHeader); behind the hub, the call's _meta names
 // the agent's roots and client (HubRootsMeta, HubClientMeta).
@@ -47,6 +47,15 @@ const (
 const memoryServerName = "magpie-memory"
 
 func (s *Server) memoryMCP(w http.ResponseWriter, r *http.Request) {
+	// what is known about this computer's user, and what goes into every
+	// agent's instructions here (the digest): only an agent on this
+	// computer reads or writes it, as the hub gives it (HereOnly). Another
+	// computer's gateway key, which may be a friend's, and a web page,
+	// even one Settings lists, are turned away.
+	if !local(r) || fromBrowser(r) {
+		http.Error(w, "magpie's memory MCP server answers the agents on this computer alone", http.StatusForbidden)
+		return
+	}
 	serveMCP(w, r, "magpie's memory", memoryServerName, 1<<20, s.memoryMCPCall)
 }
 
