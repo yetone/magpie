@@ -5,6 +5,7 @@ import (
 	"math"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -87,25 +88,15 @@ func EachMerged(native []Session, external []ExternalSession, each func(*Session
 // externalAdded are the external sessions MergeExternal adds to native, in
 // external's order.
 func externalAdded(native []Session, external []ExternalSession) []Session {
-	// keyed by the pair, not "agent|id": a string made for each of ~5000
-	// sessions on each of a poll's listings, and the set and the list grown
-	// an append at a time, were ~200 MB in 80s of polls (#2278)
+	// keyed by the pair: the set grown an append at a time was ~200 MB in
+	// 80s of polls (#2278)
 	type agentID struct{ agent, id string }
 	seen := make(map[agentID]struct{}, len(native))
 	for _, s := range native {
-		// GatewayKeys, as pairs
-		seen[agentID{s.Agent, s.ID}] = struct{}{}
-		if s.Agent == "raft" {
-			seen[agentID{"pi", s.ID}] = struct{}{}
-		}
-		if s.App != "" {
-			seen[agentID{s.App, s.ID}] = struct{}{}
-		}
-		for _, id := range s.Copies {
-			seen[agentID{s.Agent, id}] = struct{}{}
-		}
-		for _, id := range s.Subs {
-			seen[agentID{s.Agent, id}] = struct{}{}
+		for _, k := range GatewayKeys(s) {
+			if agent, id, ok := strings.Cut(k, "|"); ok {
+				seen[agentID{agent, id}] = struct{}{}
+			}
 		}
 	}
 	var not []ExternalSession

@@ -222,10 +222,13 @@ func readFor(want, all []file, quick bool) (pending map[string]bool, done func()
 }
 
 // idInFile says which agents' session ids are read from inside the
-// session's file, not taken from its name (as assemble does).
+// session's file, not taken from its name (as assemble does). ZCode's are:
+// its database rows are the files, a fork's and a subagent's filed under
+// the session they ran in (ocRoots), which a request names by their own ids
+// (subIDs, zcodeBareID).
 func idInFile(agent string) bool {
 	switch agent {
-	case "codex", "pi", "raft", "cindy", "omp", "dsh", "grok", "droid":
+	case "codex", "pi", "raft", "cindy", "omp", "dsh", "grok", "droid", "zcode":
 		return true
 	}
 	return false

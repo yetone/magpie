@@ -52,6 +52,11 @@ func raftFilesIn(dir string) []file {
 // knows its requests by Desktop's user agent; the ids of the copies of its
 // conversation (ccCopies); and its subagents' own ids (subIDs), whose calls
 // it counts already. MergeExternal keeps the same keys as pairs.
+//
+// A ZCode request names its session by the id its database gives it with a
+// prefix — sess_…, a subagent's sess_subagent_agent_… (zcodeBareID) — so the
+// bare id is a key too: without it the same session was a row under its
+// folder and again a row under "Seen through the gateway".
 func GatewayKeys(s Session) []string {
 	k := []string{s.Agent + "|" + s.ID}
 	if s.Agent == "raft" {
@@ -65,6 +70,16 @@ func GatewayKeys(s Session) []string {
 	}
 	for _, id := range s.Subs {
 		k = append(k, s.Agent+"|"+id)
+	}
+	if s.Agent == "zcode" {
+		if bare := zcodeBareID(s.ID); bare != s.ID {
+			k = append(k, "zcode|"+bare)
+		}
+		for _, id := range s.Subs {
+			if bare := zcodeBareID(id); bare != id {
+				k = append(k, "zcode|"+bare)
+			}
+		}
 	}
 	return k
 }

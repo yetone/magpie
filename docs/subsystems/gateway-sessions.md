@@ -91,7 +91,14 @@ the gateway's `omp|<sub id>` is its own in the same places as Raft's `pi|`
 key, and is never a second session counted again (Jumy, Discord 10-30:
 `TestOmpSubagentsAreTheSessionsToTheGateway`,
 `TestOmpSubagentCountedOnceWithTheGateway`). A Claude Code session's
-copies (`Copies`) are among its keys the same way. A Claude Code
+copies (`Copies`) are among its keys the same way. A ZCode session stands
+for its bare id too: a request names it by the id its database gives with
+a prefix stripped (`sess_…`, a subagent's `sess_subagent_agent_…`:
+`zcodeBareID`), its own as well as its forks' and subagents' (their files
+are in its group, `Subs`, and `idInFile` reads their ids). Without it a
+ZCode session whose files are here was a row under its folder and again a
+row under Seen through the gateway (flandern1211_58540 on Discord;
+`TestZCodeGatewayRowIsTheSessionItself`). A Claude Code
 session Claude Desktop's Code tab ran is in Claude Code's folder, and only its lines' `entrypoint`
 (`claude-desktop`, `claude-desktop-3p`) tells it apart: its parse keeps the
 entrypoint of the line its folder came from (`state.Entry`), and the
