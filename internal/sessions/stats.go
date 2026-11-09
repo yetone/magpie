@@ -493,9 +493,18 @@ func statsOfRange(days int, today time.Time, files []file, copies map[string]str
 		}
 	}
 
+	// each day's rows made to size: grown by append, every range kept
+	// held the slack of each doubling (#2278)
+	nUse, nAct := map[string]int{}, map[string]int{}
+	for k := range use {
+		nUse[k.date]++
+	}
+	for k := range act {
+		nAct[k.date]++
+	}
 	byDate := map[string]*Day{}
 	for date := range dates {
-		byDate[date] = &Day{Date: date, Usage: []Usage{}, Active: []Active{}}
+		byDate[date] = &Day{Date: date, Usage: make([]Usage, 0, nUse[date]), Active: make([]Active, 0, nAct[date])}
 	}
 	for k, t := range use {
 		u := Usage{Agent: k.agent, Cwd: k.cwd, Model: k.model, Tokens: t}
