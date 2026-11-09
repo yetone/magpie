@@ -205,3 +205,40 @@ func TestChatTidyGivesCallsAnIndex(t *testing.T) {
 		t.Fatalf("a stream with its indexes changed: %q", out)
 	}
 }
+
+// A second parallel call sent on the first one's index (jiezhengj on
+// Discord: OpenDesign's amr-link numbered three calls 0,0,1) goes by an
+// index of its own, with every later fragment at that index, and the
+// call after it by the next: 0,1,2. A client that adds fragments up by
+// index wrote the two calls' arguments into one and ended the turn. A
+// fragment that only carries arguments keeps its index's call whatever
+// id it has.
+func TestChatTidyRenumbersAReusedIndex(t *testing.T) {
+	var tidy chatTidy
+	frames := []string{
+		`{"index":0,"id":"call_00_a","type":"function","function":{"name":"read_file","arguments":""}}`,
+		`{"index":0,"function":{"arguments":"{\"path\":\"/etc/hostname\"}"}}`,
+		`{"index":0,"id":"call_01_b","type":"function","function":{"name":"list_dir","arguments":""}}`,
+		`{"index":0,"function":{"arguments":"{\"path\":"}}`,
+		`{"index":0,"id":"rotated","function":{"arguments":"\"/etc\"}"}}`,
+		`{"index":1,"id":"call_02_c","type":"function","function":{"name":"write_file","arguments":""}}`,
+		`{"index":1,"function":{"arguments":"{}"}}`,
+	}
+	want := []float64{0, 0, 1, 1, 1, 2, 2}
+	for i, f := range frames {
+		out := tidy.write([]byte(`data: {"id":"resp_02","choices":[{"index":0,"delta":{"tool_calls":[` + f + `]}}]}` + "\n"))
+		var chunk struct {
+			Choices []struct {
+				Delta struct {
+					ToolCalls []map[string]any `json:"tool_calls"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal(bytes.TrimPrefix(bytes.TrimSpace(out), []byte("data:")), &chunk); err != nil {
+			t.Fatalf("frame %d unreadable %q: %v", i, out, err)
+		}
+		if got := chunk.Choices[0].Delta.ToolCalls[0]["index"]; got != want[i] {
+			t.Errorf("frame %d: index %v, want %v: %s", i, got, want[i], out)
+		}
+	}
+}

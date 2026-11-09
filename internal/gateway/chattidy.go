@@ -453,6 +453,41 @@ type openCall struct {
 	open        bool
 	id          string
 	index, next int
+	// an upstream index's call: the index it goes by and its id, and the
+	// indexes given, for a stream that sends a new call on an index an
+	// earlier call has (renumber)
+	up   map[int]int
+	upID map[int]string
+	used map[int]bool
+}
+
+// renumber is the index a fragment the upstream sent at n goes by. An
+// upstream that turns Responses into Chat itself (OpenDesign's
+// amr-link, jiezhengj on Discord) sometimes sends a second parallel call
+// on the first one's index, 0,0,1 for three: a client that adds up a
+// call's fragments by index (OpenAI's and Vercel's SDKs) wrote the two
+// calls' arguments into one, invalid JSON, and the turn ended. A new id
+// on an index another call has, and each later fragment at that index,
+// goes by the next free one; the calls after it, by one of their own.
+// Only a fragment that names its function starts a call: one that
+// carries only arguments goes on with its index's call, whatever id it
+// has. A stream whose calls each have their own index goes as it came.
+func (o *openCall) renumber(n int, id string, starts bool) int {
+	if o.up == nil {
+		o.up, o.upID, o.used = map[int]int{}, map[int]string{}, map[int]bool{}
+	}
+	out, known := o.up[n]
+	if !known || starts && id != "" && o.upID[n] != "" && id != o.upID[n] {
+		out = n
+		if known || o.used[n] {
+			out = o.next
+		}
+		o.up[n], o.used[out] = out, true
+	}
+	if id != "" {
+		o.upID[n] = id
+	}
+	return out
 }
 
 // give gives each fragment of a delta's tool_calls with no index (none,
@@ -462,7 +497,8 @@ type openCall struct {
 // call with a new id; any other goes on with the open one. So two calls
 // in chunks of their own are 0 and 1: given both 0, by their place, OpenAI's
 // node SDK merged them into one call. A fragment with an index keeps it,
-// and the next one given comes after it.
+// unless another call had it first (renumber), and the next one given
+// comes after it.
 func (s streamCallIndexes) give(choice int, raw json.RawMessage) (json.RawMessage, bool) {
 	var calls []map[string]json.RawMessage
 	if decodeJSON(raw, &calls) != nil {
@@ -479,14 +515,23 @@ func (s streamCallIndexes) give(choice int, raw json.RawMessage) (json.RawMessag
 		if v, ok := c["index"]; ok && string(v) != "null" {
 			var n int
 			if decodeJSON(v, &n) == nil {
-				o.open, o.id, o.index = true, cmp.Or(id, o.id), n
-				o.next = max(o.next, n+1)
+				out := o.renumber(n, id, namesFunction(c["function"]))
+				o.open, o.id, o.index = true, cmp.Or(id, o.id), out
+				o.next = max(o.next, n+1, out+1)
+				if out != n {
+					c["index"], _ = marshalPlain(out)
+					changed = true
+				}
 			}
 			continue
 		}
 		if !o.open || k > 0 || id != "" && id != o.id {
 			o.open, o.id, o.index = true, id, o.next
 			o.next++
+			if o.used == nil {
+				o.up, o.upID, o.used = map[int]int{}, map[int]string{}, map[int]bool{}
+			}
+			o.used[o.index] = true
 		}
 		c["index"], _ = marshalPlain(o.index)
 		changed = true
@@ -499,6 +544,14 @@ func (s streamCallIndexes) give(choice int, raw json.RawMessage) (json.RawMessag
 		return raw, false
 	}
 	return out, true
+}
+
+// namesFunction reports whether a call fragment's function has a name.
+func namesFunction(raw json.RawMessage) bool {
+	var fn struct {
+		Name string `json:"name"`
+	}
+	return decodeJSON(raw, &fn) == nil && fn.Name != ""
 }
 
 // nameless drops the fragments of a streamed call whose first one names
