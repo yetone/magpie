@@ -196,7 +196,7 @@ func TestKimiCodeSessionCounts(t *testing.T) {
 				}
 			}
 			if f.main {
-				custom, named = s.Custom, s.Named
+				custom, named = s.more().Custom, s.more().Named
 			}
 		}
 		return

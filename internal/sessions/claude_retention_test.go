@@ -87,7 +87,7 @@ func TestClaudeLargeWindowSurvivesIdleAndSmallFiles(t *testing.T) {
 				t.Fatal(err)
 			}
 			snapshot := cache[path]
-			snapshot.Named = "must resume this summary"
+			snapshot.own().Named = "must resume this summary"
 			// Cross the old hard cutoff without sleeping. The cutoff used source
 			// mtime, so advancing only the eviction clock reproduces idle expiry.
 			later := time.Now().Add(2 * revisionIdle)
@@ -118,7 +118,7 @@ func TestClaudeLargeWindowSurvivesIdleAndSmallFiles(t *testing.T) {
 			}
 			appendText(t, path, string(claudeUsageLine(at.Add(time.Hour), "new", "", "m", Tokens{Input: 1, Output: 2}, "", true))+"\n")
 			read()
-			if cache[path].Named != "must resume this summary" {
+			if cache[path].more().Named != "must resume this summary" {
 				t.Fatal("summary reparsed the large prefix")
 			}
 			if got := cache[path].Models.of("m"); got != (Tokens{Input: 4001, Output: 8002}) {

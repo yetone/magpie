@@ -153,9 +153,19 @@ func encodeCache(w io.Writer, c cacheFile) error {
 // history's 23.7k copies of one ~420-byte title, with its cwds and model
 // names, were 11 of the 54 MB its kept parses held.
 func (st *state) share() {
-	for _, s := range []*string{&st.Title, &st.Cwd, &st.First, &st.Named, &st.Model, &st.Provider, &st.MsgModel, &st.MsgDay, &st.CodexNickname} {
+	if st.StateMore.zero() {
+		st.StateMore = nil // an old cache's, or one Unmarshal made for an empty value
+	}
+	for _, s := range []*string{&st.Title, &st.Cwd, &st.Model, &st.Provider, &st.MsgModel, &st.MsgDay} {
 		if *s != "" {
 			*s = unique.Make(*s).Value()
+		}
+	}
+	if m := st.StateMore; m != nil {
+		for _, s := range []*string{&m.First, &m.Named, &m.CodexNickname} {
+			if *s != "" {
+				*s = unique.Make(*s).Value()
+			}
 		}
 	}
 	if id := st.CodexIdentity; id != nil {

@@ -148,8 +148,8 @@ func TestGrokReadsOnlyWhatWasAppended(t *testing.T) {
 	summary := filepath.Join(dir, "summary.json")
 	b, _ := os.ReadFile(summary)
 	os.WriteFile(summary, bytes.Replace(b, []byte(`"generated_title": "Parser port"`), []byte(`"generated_title": "Port of the parser"`), 1), 0o644)
-	if at, end := g.read(), g.size(); at != end || g.old.Named != "Port of the parser" {
-		t.Fatalf("summary changed: read from %d of %d, named %q", at, end, g.old.Named)
+	if at, end := g.read(), g.size(); at != end || g.old.more().Named != "Port of the parser" {
+		t.Fatalf("summary changed: read from %d of %d, named %q", at, end, g.old.more().Named)
 	}
 	// the model its turns are counted under changed: read whole
 	b, _ = os.ReadFile(summary)
@@ -252,8 +252,8 @@ func TestKimiReadsOnlyWhatWasAppended(t *testing.T) {
 
 	g.read()
 	kimiSetState(t, sessions, slug, kimiCancel, map[string]any{"title": "Cancelled twice", "isCustomTitle": true})
-	if at, end := g.read(), g.size(); at != end || g.old.Custom != "Cancelled twice" {
-		t.Fatalf("state.json changed: read from %d of %d, custom %q", at, end, g.old.Custom)
+	if at, end := g.read(), g.size(); at != end || g.old.more().Custom != "Cancelled twice" {
+		t.Fatalf("state.json changed: read from %d of %d, custom %q", at, end, g.old.more().Custom)
 	}
 	// the session now says it was forked: what it counted is read again
 	kimiSetState(t, sessions, slug, kimiCancel, map[string]any{"forkedFrom": kimiJune})
@@ -477,8 +477,8 @@ func TestClineReadsMessagesOnlyWhenTheyChange(t *testing.T) {
 		t.Fatal("manifest touched: messages read again")
 	}
 	edit(manifest, `"status": "x"`, `"title": "Faster importer"`)
-	if read() || old.Named != "Faster importer" || old.Title != "Speed up the importer" {
-		t.Fatalf("manifest titled: named %q, title %q", old.Named, old.Title)
+	if read() || old.more().Named != "Faster importer" || old.Title != "Speed up the importer" {
+		t.Fatalf("manifest titled: named %q, title %q", old.more().Named, old.Title)
 	}
 	// a message more: read again
 	edit(path, `"content": "done",`, `"content": "done, all of it",`)

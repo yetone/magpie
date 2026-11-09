@@ -335,17 +335,17 @@ func mergeCodexIdentity(old, next CodexIdentity) (CodexIdentity, bool) {
 func noteCodexIdentity(s *state, identity CodexIdentity, conflict bool) {
 	if s.CodexIdentity == nil {
 		copy := identity
-		s.CodexIdentity, s.CodexIdentityConflict = &copy, conflict
+		s.CodexIdentity, s.own().CodexIdentityConflict = &copy, conflict
 		return
 	}
-	if s.CodexIdentityConflict {
+	if s.more().CodexIdentityConflict {
 		return
 	}
 	old := *s.CodexIdentity
 	merged, conflictFound := mergeCodexIdentity(old, identity)
 	if conflict || conflictFound {
 		s.CodexIdentity = &CodexIdentity{ID: old.ID, Role: codexRoleUnknown}
-		s.CodexIdentityConflict = true
+		s.own().CodexIdentityConflict = true
 		return
 	}
 	s.CodexIdentity = &merged
@@ -401,7 +401,7 @@ func codexSubagentTaskTitles(files []file) map[codexTaskTitle]string {
 		st := cache[f.path]
 		// most threads spawn no agent: four maps for each of them on every
 		// poll were ~140 MB in 80s of polls over ~34k sessions (#2278)
-		if len(st.CodexSpawnConflicts) == 0 && len(st.CodexAgentConflicts) == 0 && len(st.CodexSpawnNames) == 0 && len(st.CodexAgentIDs) == 0 {
+		if len(st.more().CodexSpawnConflicts) == 0 && len(st.more().CodexAgentConflicts) == 0 && len(st.more().CodexSpawnNames) == 0 && len(st.more().CodexAgentIDs) == 0 {
 			continue
 		}
 		calls := parents[f.key]
@@ -409,19 +409,19 @@ func codexSubagentTaskTitles(files []file) map[codexTaskTitle]string {
 			calls = &parentCalls{names: map[string]string{}, children: map[string]string{}, badNames: map[string]bool{}, badChildren: map[string]bool{}}
 			parents[f.key] = calls
 		}
-		for id := range st.CodexSpawnConflicts {
+		for id := range st.more().CodexSpawnConflicts {
 			calls.badNames[id] = true
 		}
-		for id := range st.CodexAgentConflicts {
+		for id := range st.more().CodexAgentConflicts {
 			calls.badChildren[id] = true
 		}
-		for id, name := range st.CodexSpawnNames {
+		for id, name := range st.more().CodexSpawnNames {
 			if old := calls.names[id]; old != "" && old != name {
 				calls.badNames[id] = true
 			}
 			calls.names[id] = name
 		}
-		for id, child := range st.CodexAgentIDs {
+		for id, child := range st.more().CodexAgentIDs {
 			if old := calls.children[id]; old != "" && old != child {
 				calls.badChildren[id] = true
 			}
@@ -457,7 +457,7 @@ func codexTaskParentFiles(children, all []file) []file {
 			continue
 		}
 		st := cache[f.path]
-		if st != nil && !st.CodexIdentityConflict && st.CodexIdentity != nil && st.CodexIdentity.Role == codexRoleSubagent && st.CodexIdentity.ParentSession != "" {
+		if st != nil && !st.more().CodexIdentityConflict && st.CodexIdentity != nil && st.CodexIdentity.Role == codexRoleSubagent && st.CodexIdentity.ParentSession != "" {
 			parents[st.CodexIdentity.ParentSession] = true
 		}
 	}
@@ -475,16 +475,16 @@ func (s *state) codexAgentStarted(id, thread string) {
 	if id == "" || thread == "" {
 		return
 	}
-	if s.CodexAgentIDs == nil {
-		s.CodexAgentIDs = map[string]string{}
+	if s.more().CodexAgentIDs == nil {
+		s.own().CodexAgentIDs = map[string]string{}
 	}
-	if old, ok := s.CodexAgentIDs[id]; ok && old != thread {
-		if s.CodexAgentConflicts == nil {
-			s.CodexAgentConflicts = map[string]bool{}
+	if old, ok := s.more().CodexAgentIDs[id]; ok && old != thread {
+		if s.more().CodexAgentConflicts == nil {
+			s.own().CodexAgentConflicts = map[string]bool{}
 		}
-		s.CodexAgentConflicts[id] = true
+		s.own().CodexAgentConflicts[id] = true
 	} else {
-		s.CodexAgentIDs[id] = thread
+		s.own().CodexAgentIDs[id] = thread
 	}
 }
 
@@ -528,7 +528,7 @@ type codexIdentityFrom struct {
 func codexIdentityFromOf(f file) codexIdentityFrom {
 	from := codexIdentityFrom{key: f.key}
 	if s := cache[f.path]; s != nil && s.CodexIdentity != nil {
-		from.identity, from.known, from.conflict = *s.CodexIdentity, true, s.CodexIdentityConflict
+		from.identity, from.known, from.conflict = *s.CodexIdentity, true, s.more().CodexIdentityConflict
 	}
 	return from
 }
@@ -588,7 +588,7 @@ func codexIdentitiesBuilt(files []file) map[string]CodexIdentity {
 		conflict := false
 		if s := cache[f.path]; s != nil && s.CodexIdentity != nil {
 			identity = *s.CodexIdentity
-			conflict = s.CodexIdentityConflict
+			conflict = s.more().CodexIdentityConflict
 			if identity.ID == "" {
 				identity.ID = id
 			}
@@ -737,21 +737,21 @@ func codexBody(s *state, b []byte, main bool) {
 			s.Cwd = p.Cwd
 		}
 		if p.AgentNickname != "" {
-			s.CodexNickname = p.AgentNickname
+			s.own().CodexNickname = p.AgentNickname
 		}
 	case l.Type == "response_item" && p.Type == "function_call" && p.Name == "spawn_agent":
 		if p.CallID != "" {
 			if name := title(gjson.Get(p.Arguments, "task_name").String()); name != "" {
-				if s.CodexSpawnNames == nil {
-					s.CodexSpawnNames = map[string]string{}
+				if s.more().CodexSpawnNames == nil {
+					s.own().CodexSpawnNames = map[string]string{}
 				}
-				if old, ok := s.CodexSpawnNames[p.CallID]; ok && old != name {
-					if s.CodexSpawnConflicts == nil {
-						s.CodexSpawnConflicts = map[string]bool{}
+				if old, ok := s.more().CodexSpawnNames[p.CallID]; ok && old != name {
+					if s.more().CodexSpawnConflicts == nil {
+						s.own().CodexSpawnConflicts = map[string]bool{}
 					}
-					s.CodexSpawnConflicts[p.CallID] = true
+					s.own().CodexSpawnConflicts[p.CallID] = true
 				} else {
-					s.CodexSpawnNames[p.CallID] = name
+					s.own().CodexSpawnNames[p.CallID] = name
 				}
 			}
 		}
@@ -781,8 +781,8 @@ func codexBody(s *state, b []byte, main bool) {
 		if s.Title == "" {
 			s.Title = cxPrompt(p.Message)
 		}
-		if s.Title == "" && s.First == "" {
-			s.First = untagged(p.Message)
+		if s.Title == "" && s.more().First == "" {
+			s.own().First = untagged(p.Message)
 		}
 	case l.Type == "response_item" && p.Type == "message" && p.Role == "user":
 		typed := false

@@ -84,7 +84,7 @@ func TestHermesUnreadFingerprintsParseAgain(t *testing.T) {
 	// the same size and time as what was parsed: only the fingerprint can
 	// tell it changed, and it is unknown
 	f := file{agent: "hermes", path: path + "#s", more: &fileMore{hermes: h}, mod: time.Unix(1790000000, 0)}
-	s := state{Mod: f.mod.UnixNano(), DBRevision: ""}
+	s := state{Mod: f.mod.UnixNano()}
 	cache = map[string]*state{f.path: &s}
 	t.Cleanup(func() { cache = nil })
 	parsed := 0

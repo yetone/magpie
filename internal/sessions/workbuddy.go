@@ -181,7 +181,7 @@ func workbuddyLine(s *state, b []byte, main bool) {
 	at := numTS(b)
 	s.saw(at, main)
 	want := bytes.Contains(b, wbUsage) ||
-		main && (bytes.Contains(b, wbTitle) || s.First == "" && bytes.Contains(b, wbUser)) ||
+		main && (bytes.Contains(b, wbTitle) || s.more().First == "" && bytes.Contains(b, wbUser)) ||
 		s.Cwd == "" && bytes.Contains(b, wbCwd)
 	if !want {
 		return
@@ -204,15 +204,15 @@ func workbuddyLine(s *state, b []byte, main bool) {
 	case "custom-title":
 		// named by the user: before the one WorkBuddy made
 		if main && l.CustomTitle != "" {
-			s.Custom = title(l.CustomTitle)
+			s.own().Custom = title(l.CustomTitle)
 		}
 	case "ai-title":
 		if main && l.AITitle != "" {
-			s.Named = title(l.AITitle)
+			s.own().Named = title(l.AITitle)
 		}
 	case "message":
-		if main && l.Role == "user" && s.First == "" {
-			s.First = wbPrompt(l.Content)
+		if main && l.Role == "user" && s.more().First == "" {
+			s.own().First = wbPrompt(l.Content)
 		}
 	}
 	u := p.Usage

@@ -235,7 +235,7 @@ func TestClaudeCopyAfterCompactIsOneRow(t *testing.T) {
 	var compacts []string
 	for p, st := range cache {
 		if strings.HasSuffix(p, ccCompacted+".jsonl") {
-			compacts = st.Compacts
+			compacts = st.more().Compacts
 		}
 	}
 	mu.Unlock()

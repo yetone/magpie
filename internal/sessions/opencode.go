@@ -560,7 +560,7 @@ func parseOpenCode(f file) *state {
 	}
 	s.ID, s.Cwd = info.ID, info.Directory
 	if t := title(info.Title); t != "" && !ocDefaultTitle(t) {
-		s.Named = t
+		s.own().Named = t
 	}
 	var msgs []ocMessage
 	for _, b := range f.m().oc.messages(f.m().sid) {
@@ -584,7 +584,7 @@ func parseOpenCode(f file) *state {
 		}
 		switch m.Role {
 		case "user":
-			if typed := m.Semantics == nil || m.Semantics.Origin == "" || m.Semantics.Origin == "real_user"; typed && f.main && s.Title == "" && s.First == "" {
+			if typed := m.Semantics == nil || m.Semantics.Origin == "" || m.Semantics.Origin == "real_user"; typed && f.main && s.Title == "" && s.more().First == "" {
 				ocTitle(s, f.m().oc.parts(m.ID))
 			}
 		case "assistant":
@@ -627,12 +627,12 @@ func ocTitle(s *state, parts [][]byte) {
 		}
 	}
 	if t := strings.Join(typed, " "); strings.HasPrefix(strings.TrimSpace(t), "<") {
-		s.First = untagged(t)
+		s.own().First = untagged(t)
 	} else {
 		s.Title = title(t)
 	}
-	if s.Title == "" && s.First == "" {
-		s.First = untagged(strings.Join(other, " "))
+	if s.Title == "" && s.more().First == "" {
+		s.own().First = untagged(strings.Join(other, " "))
 	}
 }
 

@@ -55,7 +55,7 @@ func TestHistoricalClaudeFilesDoNotDisplaceActiveWindows(t *testing.T) {
 				if cache[path].revisionWeight() == 0 {
 					t.Fatal("history displaced active summary", path)
 				}
-				cache[path].Named = "incremental marker"
+				cache[path].own().Named = "incremental marker"
 				st, err := os.Stat(callCachePath(path))
 				if err != nil {
 					t.Fatal(err)
@@ -67,7 +67,7 @@ func TestHistoricalClaudeFilesDoNotDisplaceActiveWindows(t *testing.T) {
 				appendText(t, codex, tokenCountLine(i+2, cxUse(100*(i+2), 0, 0, i+2, 0), cxUse(100, 0, 0, 1, 0))+"\n")
 				read()
 				for _, path := range []string{claude, codex} {
-					if cache[path].Named != "incremental marker" {
+					if cache[path].more().Named != "incremental marker" {
 						t.Fatal("reparsed active summary", path)
 					}
 					st, err := os.Stat(callCachePath(path))

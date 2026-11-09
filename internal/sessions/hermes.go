@@ -629,7 +629,7 @@ func parseHermes(f file) *state {
 			s.Last = at
 		}
 	}
-	s.DBRevision = f.m().rev
+	s.own().DBRevision = f.m().rev
 	return s
 }
 

@@ -59,13 +59,13 @@ func TestLargeClaudeFileKeepsAppendContinuation(t *testing.T) {
 	}
 	// A cold reparse cannot preserve this in-memory marker. This proves List
 	// clones its old summary and resumes at Off instead of replaying the prefix.
-	cache[path].Named = "append continuation marker"
+	cache[path].own().Named = "append continuation marker"
 	old := cache[path].Claude.clone()
 	for i := 0; i < 3; i++ {
 		line := string(claudeUsageLine(at.Add(time.Duration(count+i)*time.Second), fmt.Sprint(count+i), "", "m", Tokens{Input: 1, Output: 2}, "", true))
 		appendText(t, path, line+"\n")
 		check(count + i + 1)
-		if cache[path].Named != "append continuation marker" {
+		if cache[path].more().Named != "append continuation marker" {
 			t.Fatal("summary reparsed the prefix")
 		}
 		after, err := os.Stat(callCachePath(path))
@@ -279,7 +279,7 @@ func TestClaudeSummaryReadOnAfterRestart(t *testing.T) {
 	// after the restart went on from the kept parse
 	mu.Lock()
 	marked := *cache[path]
-	marked.Named = "read on marker"
+	marked.own().Named = "read on marker"
 	cache[path] = &marked
 	saveCache()
 	mu.Unlock()
@@ -287,7 +287,7 @@ func TestClaudeSummaryReadOnAfterRestart(t *testing.T) {
 	appendText(t, path, line(count, "2990", 9)+"\n"+lines[count-1]+"\n"+line(count+1, "new", 2)+"\n")
 	got := List(0)
 	mu.Lock()
-	named := cache[path].Named
+	named := cache[path].more().Named
 	mu.Unlock()
 	if named != "read on marker" {
 		t.Fatal("the grown file was parsed again from its start")

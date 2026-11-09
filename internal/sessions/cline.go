@@ -133,10 +133,10 @@ func parseCline(f file, old *state) *state {
 	}
 	name := func(s *state, prompt string) *state {
 		s.Size, s.Mod = f.size, f.mod.UnixNano()
-		s.ID, s.Cwd, s.Named, s.Title, s.First = "", "", "", "", ""
+		s.ID, s.Cwd, s.own().Named, s.Title, s.own().First = "", "", "", "", ""
 		if hasM {
 			s.ID, s.Cwd = m.SessionID, m.Cwd
-			s.Named = title(m.Metadata.Title)
+			s.own().Named = title(m.Metadata.Title)
 			clineTitle(s, m.Prompt)
 		}
 		if f.main {
@@ -148,9 +148,9 @@ func parseCline(f file, old *state) *state {
 	if err != nil {
 		return name(&state{}, "")
 	}
-	if o := old; o != nil && o.Cline != nil && o.Cline.Size == fi.Size() && o.Cline.Mod == fi.ModTime().UnixNano() && o.Cline.Since.Equal(since) && o.Cline.Start.Equal(start) {
+	if o := old; o != nil && o.more().Cline != nil && o.more().Cline.Size == fi.Size() && o.more().Cline.Mod == fi.ModTime().UnixNano() && o.more().Cline.Since.Equal(since) && o.more().Cline.Start.Equal(start) {
 		s := o.clone()
-		return name(s, o.Cline.Prompt) // the title its messages gave, when the manifest gives none
+		return name(s, o.more().Cline.Prompt) // the title its messages gave, when the manifest gives none
 
 	}
 	s := &state{}
@@ -176,7 +176,7 @@ func parseCline(f file, old *state) *state {
 			// the first prompt that names the session by itself
 			var t state
 			text := ccText(m.Content)
-			if clineTitle(&t, text); t.Title != "" || t.First != "" {
+			if clineTitle(&t, text); t.Title != "" || t.more().First != "" {
 				c.Prompt, named = text, true
 			}
 		}
@@ -194,7 +194,7 @@ func parseCline(f file, old *state) *state {
 			s.use(dateOf(at), m.ModelInfo.ID, Tokens{Input: max(0, u.Input-u.CacheRead-u.CacheWrite), Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite})
 		}
 	}
-	s.Cline = c
+	s.own().Cline = c
 	return name(s, c.Prompt)
 }
 
@@ -241,12 +241,12 @@ var (
 // clineTitle takes a session's title from a prompt: the words typed, out of
 // the tags Cline wraps them in (<user_input mode="act">) and its notices.
 func clineTitle(s *state, prompt string) {
-	if s.Title != "" || s.First != "" {
+	if s.Title != "" || s.more().First != "" {
 		return
 	}
 	t := strings.TrimSpace(clineInput.ReplaceAllString(clineNotice.ReplaceAllString(prompt, " "), " "))
 	if strings.HasPrefix(t, "<") {
-		s.First = untagged(t)
+		s.own().First = untagged(t)
 	} else {
 		s.Title = title(t)
 	}

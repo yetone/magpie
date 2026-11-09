@@ -66,8 +66,8 @@ func subagentsOf(s Session, fs []file) []Subagent {
 			if f.m().parent != s.ID {
 				sa.Parent = f.m().parent
 			}
-			sa.Title, sa.Kind = ocSubagentTitle(st.Named)
-			sa.Title = cmp.Or(sa.Title, st.Title, st.First)
+			sa.Title, sa.Kind = ocSubagentTitle(st.more().Named)
+			sa.Title = cmp.Or(sa.Title, st.Title, st.more().First)
 			// OpenCode 2 names the agent in the session's row, and its
 			// titles no longer do (#2290)
 			if v2, ok := f.m().oc.(ocV2DB); ok {

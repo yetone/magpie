@@ -44,8 +44,8 @@ func TestDshResponseIDsSkipTheSeed(t *testing.T) {
 		dshReplyWithID(4, "own-1"),
 		dshReplyWithID(5, "own-2"),
 	})
-	if want := []string{"own-1", "own-2"}; !slices.Equal(s.ResponseIDs, want) {
-		t.Fatalf("fork's own replies: %v, want %v", s.ResponseIDs, want)
+	if want := []string{"own-1", "own-2"}; !slices.Equal(s.more().ResponseIDs, want) {
+		t.Fatalf("fork's own replies: %v, want %v", s.more().ResponseIDs, want)
 	}
 }
 
@@ -59,8 +59,8 @@ func TestDshResponseIDsSkipTheSeedLength(t *testing.T) {
 		dshReplyWithID(1, "inherited-2"),
 		dshReplyWithID(2, "own"),
 	})
-	if want := []string{"own"}; !slices.Equal(s.ResponseIDs, want) {
-		t.Fatalf("fork's own replies: %v, want %v", s.ResponseIDs, want)
+	if want := []string{"own"}; !slices.Equal(s.more().ResponseIDs, want) {
+		t.Fatalf("fork's own replies: %v, want %v", s.more().ResponseIDs, want)
 	}
 }
 
@@ -72,8 +72,8 @@ func TestDshResponseIDsOfASession(t *testing.T) {
 		dshReplyWithID(1, "a"),
 		dshReplyWithID(2, "b"),
 	})
-	if want := []string{"a", "b"}; !slices.Equal(s.ResponseIDs, want) {
-		t.Fatalf("replies: %v, want %v", s.ResponseIDs, want)
+	if want := []string{"a", "b"}; !slices.Equal(s.more().ResponseIDs, want) {
+		t.Fatalf("replies: %v, want %v", s.more().ResponseIDs, want)
 	}
 }
 
@@ -86,8 +86,8 @@ func TestDshResponseIDsOnlyFromTheGateway(t *testing.T) {
 		`{"type":"assistant/message","seq":1,"time":1000,"data":{"message":{"source":{"provider":"deepseek","model":"deepseek-v4","replayState":{"response":{"provider":"deepseek","responseId":"vendor-1"}}}}}}`,
 		dshReplyWithID(2, "gw-1"),
 	})
-	if want := []string{"gw-1"}; !slices.Equal(s.ResponseIDs, want) {
-		t.Fatalf("replies: %v, want %v", s.ResponseIDs, want)
+	if want := []string{"gw-1"}; !slices.Equal(s.more().ResponseIDs, want) {
+		t.Fatalf("replies: %v, want %v", s.more().ResponseIDs, want)
 	}
 }
 
@@ -119,13 +119,13 @@ func TestDshResponseIDsEndSeedAcrossReads(t *testing.T) {
 	}
 	write(head, dshReplyWithID(1, "inherited"))
 	first := parseDsh(f(), nil)
-	if len(first.ResponseIDs) != 1 {
-		t.Fatalf("before the marker: %v", first.ResponseIDs)
+	if len(first.more().ResponseIDs) != 1 {
+		t.Fatalf("before the marker: %v", first.more().ResponseIDs)
 	}
 	write(`{"type":"session/end-seed","seq":2,"time":1000,"data":{"inherited":true}}`, dshReplyWithID(3, "own"))
 	next := parseDsh(f(), first)
-	if want := []string{"own"}; !slices.Equal(next.ResponseIDs, want) {
-		t.Fatalf("after the marker: %v, want %v", next.ResponseIDs, want)
+	if want := []string{"own"}; !slices.Equal(next.more().ResponseIDs, want) {
+		t.Fatalf("after the marker: %v, want %v", next.more().ResponseIDs, want)
 	}
 }
 
@@ -204,13 +204,13 @@ func TestDshForkWithoutAParentKeepsItsSeedOpenings(t *testing.T) {
 	if len(want) == 0 {
 		t.Fatal("the fixture opens no conversation")
 	}
-	if !slices.Equal(s.SeedConvs, want) {
-		t.Fatalf("seed openings %v, want %v", s.SeedConvs, want)
+	if !slices.Equal(s.more().SeedConvs, want) {
+		t.Fatalf("seed openings %v, want %v", s.more().SeedConvs, want)
 	}
-	if len(s.Convs) != 0 {
-		t.Fatalf("the fork keeps its source's opening as its own: %v", s.Convs)
+	if len(s.more().Convs) != 0 {
+		t.Fatalf("the fork keeps its source's opening as its own: %v", s.more().Convs)
 	}
-	if !slices.Equal(s.ResponseIDs, []string{"own"}) {
-		t.Fatalf("replies %v, want [own]", s.ResponseIDs)
+	if !slices.Equal(s.more().ResponseIDs, []string{"own"}) {
+		t.Fatalf("replies %v, want [own]", s.more().ResponseIDs)
 	}
 }

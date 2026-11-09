@@ -441,7 +441,7 @@ func parseCursor(f file) *state {
 	if m, ok := readCursorMetaFile(dir); ok {
 		s.Cwd = m.Cwd
 		if f.main {
-			s.Named = cursorTitle(m.Title)
+			s.own().Named = cursorTitle(m.Title)
 		}
 		s.saw(ms(m.Created), f.main)
 		if u := ms(m.Updated); !u.IsZero() {
@@ -460,8 +460,8 @@ func parseCursor(f file) *state {
 		return s
 	}
 	s.ID = filepath.Base(dir)
-	if s.Named == "" && f.main {
-		s.Named = cursorTitle(meta.Name)
+	if s.more().Named == "" && f.main {
+		s.own().Named = cursorTitle(meta.Name)
 	}
 	s.saw(ms(meta.CreatedAt), f.main)
 	s.saw(cursorStarted(db, meta.Root), f.main)
@@ -475,8 +475,8 @@ func parseCursor(f file) *state {
 		case "user":
 			typed, other := cursorTyped(parts)
 			if typed == "" {
-				if f.main && s.Title == "" && s.First == "" && other != "" {
-					s.First = untagged(other)
+				if f.main && s.Title == "" && s.more().First == "" && other != "" {
+					s.own().First = untagged(other)
 				}
 				continue
 			}

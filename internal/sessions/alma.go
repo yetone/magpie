@@ -232,7 +232,7 @@ func almaModel(model, providerID string) string {
 // parseAlma reads one chat in a read transaction, a snapshot while Alma
 // writes on.
 func parseAlma(f file) *state {
-	s := &state{Size: f.size, Mod: f.mod.UnixNano(), DBRevision: f.m().rev}
+	s := &state{Size: f.size, Mod: f.mod.UnixNano(), StateMore: moreOf(StateMore{DBRevision: f.m().rev})}
 	st := f.m().alma
 	if st == nil {
 		return s
@@ -343,7 +343,7 @@ func parseAlma(f file) *state {
 	if s.Title == "" {
 		s.Title = first
 	}
-	s.First = first
+	s.own().First = first
 
 	for _, table := range []struct {
 		name string

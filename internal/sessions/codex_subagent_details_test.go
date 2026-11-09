@@ -228,7 +228,7 @@ func TestCodexSubagentNicknameInvalidatesOldParseCache(t *testing.T) {
 		codexDetailsUsage(t, "child", 1),
 	)
 	writeCache(&save{cacheFile: cacheFile{Version: cacheVersion - 1, Zone: zone(), Files: map[string]*state{path: {
-		ID: "child", CodexNickname: "stale nickname", Size: 1, Mod: 1,
+		ID: "child", StateMore: &StateMore{CodexNickname: "stale nickname"}, Size: 1, Mod: 1,
 	}}}, path: CachePath()})
 	Reset()
 	if got := codexDetailsSession(t, "child"); got.Nickname != "Fresh nickname" {

@@ -33,8 +33,8 @@ func TestDshTurnConvsAreTheNewestTurns(t *testing.T) {
 		dshUserTurn(4, "second"),
 		dshUserTurn(5, "context"),
 	})
-	if want := []string{dshTurnID("second"), dshTurnID("context")}; !slices.Equal(s.TurnConvs, want) {
-		t.Fatalf("newest turn's messages %v, want %v", s.TurnConvs, want)
+	if want := []string{dshTurnID("second"), dshTurnID("context")}; !slices.Equal(s.more().TurnConvs, want) {
+		t.Fatalf("newest turn's messages %v, want %v", s.more().TurnConvs, want)
 	}
 }
 
@@ -50,8 +50,8 @@ func TestDshTurnConvsSkipTheSeed(t *testing.T) {
 		dshTurnStart(4, 2),
 		dshUserTurn(5, "own"),
 	})
-	if want := []string{dshTurnID("own")}; !slices.Equal(s.TurnConvs, want) {
-		t.Fatalf("fork's newest turn %v, want %v", s.TurnConvs, want)
+	if want := []string{dshTurnID("own")}; !slices.Equal(s.more().TurnConvs, want) {
+		t.Fatalf("fork's newest turn %v, want %v", s.more().TurnConvs, want)
 	}
 }
 
@@ -66,7 +66,7 @@ func TestDshTurnConvsKeepTheNewestFew(t *testing.T) {
 		want = append(want, dshTurnID(text))
 	}
 	s := dshSessionFile(t, lines)
-	if want = want[len(want)-dshTurnKept:]; !slices.Equal(s.TurnConvs, want) {
-		t.Fatalf("turn messages %v, want the newest %d %v", s.TurnConvs, dshTurnKept, want)
+	if want = want[len(want)-dshTurnKept:]; !slices.Equal(s.more().TurnConvs, want) {
+		t.Fatalf("turn messages %v, want the newest %d %v", s.more().TurnConvs, dshTurnKept, want)
 	}
 }

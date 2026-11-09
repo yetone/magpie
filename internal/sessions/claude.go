@@ -144,10 +144,10 @@ func (s *state) link(uuid string) {
 	if !ccRandomUUID(uuid) {
 		return
 	}
-	if s.Root == "" {
-		s.Root = uuid
+	if s.more().Root == "" {
+		s.own().Root = uuid
 	}
-	s.Leaf = uuid
+	s.own().Leaf = uuid
 }
 
 // ccRandomUUID reports whether u is a version 4 uuid, as Claude Code's
@@ -388,23 +388,23 @@ func claudeFull(s *state, b []byte, main bool) {
 	}
 	if main && !l.IsSidechain && (l.Type == "user" || l.Type == "assistant") {
 		s.link(l.UUID)
-		if l.IsCompactSummary && l.Type == "user" && ccRandomUUID(l.UUID) && !slices.Contains(s.Compacts, l.UUID) {
-			s.Compacts = append(s.Compacts, l.UUID)
+		if l.IsCompactSummary && l.Type == "user" && ccRandomUUID(l.UUID) && !slices.Contains(s.more().Compacts, l.UUID) {
+			s.own().Compacts = append(s.more().Compacts, l.UUID)
 		}
 	}
 	switch l.Type {
 	case "ai-title":
 		if l.AITitle != "" {
-			s.Named = title(l.AITitle)
+			s.own().Named = title(l.AITitle)
 		}
 	case "custom-title":
 		// named by the user (/rename): before the one Claude Code made
 		if main && l.CustomTitle != "" {
-			s.Custom = title(l.CustomTitle)
+			s.own().Custom = title(l.CustomTitle)
 		}
 	case "summary":
-		if l.Summary != "" && s.Named == "" {
-			s.Named = title(l.Summary)
+		if l.Summary != "" && s.more().Named == "" {
+			s.own().Named = title(l.Summary)
 		}
 	case "user":
 		if main && !l.IsMeta && !l.IsSidechain {
@@ -414,8 +414,8 @@ func claudeFull(s *state, b []byte, main bool) {
 			}
 			if s.Title == "" {
 				s.Title = p
-				if s.Title == "" && s.First == "" {
-					s.First = untagged(ccText(l.Message.Content))
+				if s.Title == "" && s.more().First == "" {
+					s.own().First = untagged(ccText(l.Message.Content))
 				}
 			}
 		}

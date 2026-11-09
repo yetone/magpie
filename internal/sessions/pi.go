@@ -168,7 +168,7 @@ func piParse(s *state, b []byte, main bool) {
 	at := tsAt(b, false)
 	header := s.ID == "" && bytes.Contains(b, piHeader)
 	// a forked session's copy of the entries it was forked from
-	copied := !s.Since.IsZero() && !at.IsZero() && at.Before(s.Since)
+	copied := !s.more().Since.IsZero() && !at.IsZero() && at.Before(s.more().Since)
 	if !copied {
 		s.saw(at, main)
 	}
@@ -187,18 +187,18 @@ func piParse(s *state, b []byte, main bool) {
 		if s.ID == "" {
 			s.ID, s.Cwd = l.ID, l.Cwd
 			if l.ParentSession != "" {
-				s.Since = at
+				s.own().Since = at
 			}
 			if l.Title != "" {
-				s.Named = title(l.Title)
+				s.own().Named = title(l.Title)
 			}
 		}
 	case "session_info":
-		s.Named = title(l.Name)
+		s.own().Named = title(l.Name)
 	case "title_change":
 		// omp's, one with each new title
 		if l.Title != "" {
-			s.Named = title(l.Title)
+			s.own().Named = title(l.Title)
 		}
 	case "model_change":
 		if l.ModelID != "" {
@@ -230,8 +230,8 @@ func piParse(s *state, b []byte, main bool) {
 				s.tool(at, "", skill)
 			}
 			if main && s.Title == "" {
-				if s.Title = piPrompt(text); s.Title == "" && s.First == "" {
-					s.First = untagged(text)
+				if s.Title = piPrompt(text); s.Title == "" && s.more().First == "" {
+					s.own().First = untagged(text)
 				}
 			}
 		case "assistant":

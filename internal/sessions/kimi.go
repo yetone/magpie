@@ -235,8 +235,8 @@ func parseKimi(f file, old *state) *state {
 	}
 	var s *state
 	var off int64
-	if o := old; o != nil && o.Kimi != nil && o.Kimi.Created.Equal(c.Created) && o.Kimi.Forked == c.Forked && o.Kimi.Tail.holds(f.path) {
-		s, c, off = o.clone(), *o.Kimi, o.Kimi.Tail.Off
+	if o := old; o != nil && o.more().Kimi != nil && o.more().Kimi.Created.Equal(c.Created) && o.more().Kimi.Forked == c.Forked && o.more().Kimi.Tail.holds(f.path) {
+		s, c, off = o.clone(), *o.more().Kimi, o.more().Kimi.Tail.Off
 	} else {
 		s = fresh()
 	}
@@ -260,10 +260,10 @@ func parseKimi(f file, old *state) *state {
 	s.Size, s.Mod = f.size, f.mod.UnixNano()
 	if hasSt && f.main {
 		s.Cwd = cmp.Or(st.Cwd, st.WorkDir, kimiIndexedWorkDir(f.path))
-		s.Custom, s.Named = st.names()
-		s.Custom, s.Named = title(s.Custom), title(s.Named)
+		s.own().Custom, s.own().Named = st.names()
+		s.own().Custom, s.own().Named = title(s.more().Custom), title(s.more().Named)
 	}
-	s.Kimi = &c
+	s.own().Kimi = &c
 	return s
 }
 

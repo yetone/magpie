@@ -170,9 +170,9 @@ func cursorEditorHasMessages(path string) bool {
 }
 
 func parseCursorEditor(f file) *state {
-	s := &state{ID: f.m().sid, Size: f.size, Mod: f.mod.UnixNano(), DBRevision: f.m().rev}
+	s := &state{ID: f.m().sid, Size: f.size, Mod: f.mod.UnixNano(), StateMore: moreOf(StateMore{DBRevision: f.m().rev})}
 	if m := f.m().editor; m != nil {
-		s.Named = cursorTitle(m.Name)
+		s.own().Named = cursorTitle(m.Name)
 		s.Cwd = m.Workspace.URI.Path
 		s.saw(ms(m.Created), false)
 		s.saw(ms(m.Updated), false)
@@ -206,7 +206,7 @@ func parseCursorEditor(f file) *state {
 	if len(s.Days) == 0 {
 		// A failed transcript export may contain only an error record,
 		// while the editor metadata still has a name for the empty chat.
-		s.Named = ""
+		s.own().Named = ""
 	}
 	return s
 }

@@ -295,9 +295,9 @@ const agyModel = "agy"
 // the file has only grown (agy appends a step at a time).
 func parseAgy(f file, old *state) *state {
 	if agyRowOnly(f.path) {
-		s := &state{Size: f.size, Mod: f.mod.UnixNano(), DBRevision: f.m().rev}
+		s := &state{Size: f.size, Mod: f.mod.UnixNano(), StateMore: moreOf(StateMore{DBRevision: f.m().rev})}
 		if f.m().agy != nil {
-			s.Named, s.Cwd = title(f.m().agy.Title), f.m().agy.Cwd
+			s.own().Named, s.Cwd = title(f.m().agy.Title), f.m().agy.Cwd
 			// no transcript to read the prompt from: what the row lists
 			// it as until it has a title
 			s.Title = title(f.m().agy.Preview)
@@ -310,8 +310,8 @@ func parseAgy(f file, old *state) *state {
 	var s *state
 	c := agyCarry{Last: -1}
 	var off int64
-	if old != nil && old.Agy != nil && old.Agy.Tail.holds(f.path) {
-		s, c, off = old.clone(), *old.Agy, old.Agy.Tail.Off
+	if old != nil && old.more().Agy != nil && old.more().Agy.Tail.holds(f.path) {
+		s, c, off = old.clone(), *old.more().Agy, old.more().Agy.Tail.Off
 		steps := make(map[int]agyCounted, len(c.Steps))
 		for k, v := range c.Steps {
 			steps[k] = v
@@ -328,12 +328,12 @@ func parseAgy(f file, old *state) *state {
 	if err == nil {
 		c.Tail = markTail(f.path, end, 0, end)
 	}
-	s.Size, s.Mod, s.DBRevision = f.size, f.mod.UnixNano(), f.m().rev
-	s.Named, s.Cwd = "", ""
+	s.Size, s.Mod, s.own().DBRevision = f.size, f.mod.UnixNano(), f.m().rev
+	s.own().Named, s.Cwd = "", ""
 	if f.m().agy != nil {
-		s.Named, s.Cwd = title(f.m().agy.Title), f.m().agy.Cwd
+		s.own().Named, s.Cwd = title(f.m().agy.Title), f.m().agy.Cwd
 	}
-	s.Agy = &c
+	s.own().Agy = &c
 	return s
 }
 
