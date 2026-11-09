@@ -278,8 +278,8 @@ func TestCloseMatches(t *testing.T) {
 	}
 }
 
-// magpie group set <id> id=<new>: a found group loses its auto- prefix and
-// stays removed under the old id.
+// magpie group set <id> id=<new>: a found group loses its auto- prefix,
+// and its old id finds it under the new one, never as a second group.
 func TestGroupSetID(t *testing.T) {
 	groupsHome(t)
 	if _, err := setGroup("auto-m", []string{"id=Not Slug!"}); err == nil {
@@ -295,8 +295,10 @@ func TestGroupSetID(t *testing.T) {
 	if _, _, ok := provider.Resolve("group/m"); !ok {
 		t.Fatal("group/m not in the catalog")
 	}
-	if _, _, ok := provider.FindGroup("group/auto-m"); ok {
-		t.Fatal("auto-m is back beside m")
+	// the old id still answers, with the renamed group (00af08e7b), never
+	// a found auto-m of its own beside it
+	if old, _, ok := provider.FindGroup("group/auto-m"); !ok || old.ID != "m" {
+		t.Fatalf("group/auto-m: %v %+v", ok, old)
 	}
 	if _, err := addGroup("Other", []string{"models=a/only-a"}); err != nil {
 		t.Fatal(err)
