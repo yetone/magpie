@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"maps"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -87,6 +88,9 @@ const providerUsage = `usage:
   magpie provider account-cap <id> <account> --window <name> [percent|none|default]
                                           a share for one window alone (e.g. "5 hours" 50): none is no cap on it,
                                           default has it follow the account's cap
+  magpie provider account-cap <id> <account> --window <name> --amount <n|off>
+                                          a fixed amount of a window counted in a unit (e.g. "Daily credits" 300),
+                                          by the vendor's count, spending outside magpie included
   magpie provider pool <id> [--accounts a,b,…] [--cap percent|off] [--stop on|off] [--careful on|off]
                                           a subscription's accounts as one pool: which are in use and in what order,
                                           each one's cap, --stop: answer 429 at the caps rather than go on to the
@@ -1665,28 +1669,37 @@ func accountModelsCmd(rest []string) error {
 // accountCapCmd shows, or sets with a share or off, the usage cap of a
 // subscription's accounts: the share of each window one is used to at most
 // (provider.AccountCaps); with --window <name>, the share of that window
-// alone (provider.AccountWindowCaps).
+// alone (provider.AccountWindowCaps); with --amount too, a fixed amount of
+// that window's own unit, credits or requests (provider.AccountWindowAmounts).
 func accountCapCmd(rest []string) error {
-	usage := fmt.Errorf("magpie provider account-cap <id> [account [percent|off]]\n       magpie provider account-cap <id> <account> --window <name> [percent|none|default]")
+	usage := fmt.Errorf("magpie provider account-cap <id> [account [percent|off]]\n       magpie provider account-cap <id> <account> --window <name> [percent|none|default]\n       magpie provider account-cap <id> <account> --window <name> --amount <n|off>")
 	window, windowSet := "", false
+	amount, amountSet := "", false
 	for i := 0; i < len(rest); i++ {
 		a := rest[i]
-		if v, ok := strings.CutPrefix(a, "--window="); ok {
-			window, windowSet = v, true
-			rest = slices.Delete(slices.Clone(rest), i, i+1)
-			i--
-			continue
-		}
-		if a == "--window" {
-			if i+1 >= len(rest) {
-				return usage
+		for _, f := range []struct {
+			name string
+			v    *string
+			set  *bool
+		}{{"--window", &window, &windowSet}, {"--amount", &amount, &amountSet}} {
+			if v, ok := strings.CutPrefix(a, f.name+"="); ok {
+				*f.v, *f.set = v, true
+				rest = slices.Delete(slices.Clone(rest), i, i+1)
+				i--
+				break
 			}
-			window, windowSet = rest[i+1], true
-			rest = slices.Delete(slices.Clone(rest), i, i+2)
-			i--
+			if a == f.name {
+				if i+1 >= len(rest) {
+					return usage
+				}
+				*f.v, *f.set = rest[i+1], true
+				rest = slices.Delete(slices.Clone(rest), i, i+2)
+				i--
+				break
+			}
 		}
 	}
-	if len(rest) < 1 || windowSet && (len(rest) < 2 || strings.TrimSpace(window) == "") {
+	if len(rest) < 1 || windowSet && (len(rest) < 2 || strings.TrimSpace(window) == "") || amountSet && (!windowSet || len(rest) != 2) {
 		return usage
 	}
 	p, err := provider.Find(rest[0])
@@ -1695,6 +1708,18 @@ func accountCapCmd(rest []string) error {
 	}
 	if p.Account == nil {
 		return fmt.Errorf("%s has keys, not subscription accounts with usage windows to cap", p.Name)
+	}
+	if amountSet {
+		n, err := parseWindowAmount(amount)
+		if err != nil {
+			return err
+		}
+		if err := provider.SetWindowAmount(p.ID, rest[1], []string{window}, n); err != nil {
+			return err
+		}
+		if p, err = provider.Find(p.ID); err != nil {
+			return err
+		}
 	}
 	if len(rest) > 2 {
 		if windowSet {
@@ -1736,7 +1761,7 @@ func accountCapCmd(rest []string) error {
 		caps := p.CapsOf(r)
 		if caps.All > 0 {
 			fmt.Printf("%s · capped at %d%% of each usage window\n", r, caps.All)
-		} else if len(caps.Windows) > 0 {
+		} else if len(caps.Windows) > 0 || len(caps.Amounts) > 0 {
 			fmt.Println(r, muted.Render("· no cap on its other windows: used to 100%"))
 		} else {
 			fmt.Println(r, muted.Render("· no cap: used to 100%"))
@@ -1748,8 +1773,25 @@ func accountCapCmd(rest []string) error {
 				fmt.Printf("  %s · capped at %d%%\n", w, c)
 			}
 		}
+		for _, w := range slices.Sorted(maps.Keys(caps.Amounts)) {
+			fmt.Printf("  %s · capped at %s of its unit\n", w, strconv.FormatFloat(caps.Amounts[w], 'f', -1, 64))
+		}
 	}
 	return nil
+}
+
+// parseWindowAmount reads a window's fixed amount as the CLI takes it: a
+// number above 0, "300" or "1,000", or off (0) to lift it.
+func parseWindowAmount(s string) (float64, error) {
+	t := strings.ToLower(strings.TrimSpace(s))
+	if t == "off" || t == "none" || t == "default" || t == "0" {
+		return 0, nil
+	}
+	n, err := strconv.ParseFloat(strings.ReplaceAll(t, ",", ""), 64)
+	if err != nil || !(n > 0) || math.IsInf(n, 0) {
+		return 0, fmt.Errorf("a window's amount is a number above 0, in the window's own unit, or off, not %q", s)
+	}
+	return n, nil
 }
 
 // parseWindowCap reads a window's own share as the CLI takes it: "50",

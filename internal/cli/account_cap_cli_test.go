@@ -94,6 +94,28 @@ func TestAccountCapCmd(t *testing.T) {
 	if c := provider.AccountCapsOf("codex", "me@example.com"); c.Windows != nil {
 		t.Fatalf("default left %+v", c)
 	}
+	// a fixed amount of a window's unit (9won_25273 on Discord): 300
+	// credits a day, then off; a bad amount, or one with no window, refused
+	if err := providerCmd([]string{"provider", "account-cap", "codex", "me@example.com", "--window", "Daily credits", "--amount", "1,000"}); err != nil {
+		t.Fatal(err)
+	}
+	if c := provider.AccountCapsOf("codex", "me@example.com"); c.Amounts["daily credits"] != 1000 {
+		t.Fatalf("amount %+v", c)
+	}
+	for _, bad := range [][]string{{"--window", "Daily credits", "--amount", "-3"}, {"--window", "Daily credits", "--amount", "lots"}, {"--amount", "300"}, {"--window", "Daily credits", "--amount", "300", "50"}} {
+		if err := providerCmd(append([]string{"provider", "account-cap", "codex", "me@example.com"}, bad...)); err == nil {
+			t.Errorf("%q taken", bad)
+		}
+	}
+	if c := provider.AccountCapsOf("codex", "me@example.com"); c.Amounts["daily credits"] != 1000 {
+		t.Fatalf("a refused amount changed it: %+v", c)
+	}
+	if err := providerCmd([]string{"provider", "account-cap", "codex", "me@example.com", "--window=Daily credits", "--amount=off"}); err != nil {
+		t.Fatal(err)
+	}
+	if c := provider.AccountCapsOf("codex", "me@example.com"); c.Amounts != nil {
+		t.Fatalf("off left %+v", c)
+	}
 	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k1", Chat: "http://127.0.0.1:1/v1"}); err != nil {
 		t.Fatal(err)
 	}

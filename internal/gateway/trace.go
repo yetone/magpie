@@ -401,6 +401,11 @@ type Weighed struct {
 	// share, CapBack when the last window at or past it renews
 	Capped  int        `json:"capped,omitempty"`
 	CapBack *time.Time `json:"capBack,omitempty"`
+	// CapAmount: held (Capped) at a window's fixed amount of its own unit
+	// rather than a share: CapCount of it used, in CapUnit
+	CapAmount float64 `json:"capAmount,omitempty"`
+	CapCount  float64 `json:"capCount,omitempty"`
+	CapUnit   string  `json:"capUnit,omitempty"`
 	// NoCredits: held at 100% (Capped), a Codex account the user set not
 	// to spend its credits once its allowance is used up
 	NoCredits bool `json:"noCredits,omitempty"`

@@ -96,6 +96,7 @@ func unhold(order, left []Weighed, c candidate) ([]Weighed, []Weighed) {
 	}
 	w := left[i]
 	w.Unlisted, w.Capped, w.CapBack, w.NoCredits = false, 0, nil, false
+	w.CapAmount, w.CapCount, w.CapUnit = 0, 0, ""
 	return append(slices.Clip(order), w), slices.Delete(slices.Clone(left), i, i+1)
 }
 

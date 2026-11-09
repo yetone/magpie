@@ -394,8 +394,8 @@ func roomLeft(q SubscriptionQuota, share float64, caps WindowCaps, now time.Time
 			continue
 		}
 		line := share
-		if c, _ := caps.Of(w.Name); c > 0 && float64(c) < line {
-			line = float64(c)
+		if c, _, _ := caps.limitShare(w.Name, w.Limit, false); c > 0 && c < line {
+			line = c
 		}
 		room = min(room, line-w.Used)
 	}

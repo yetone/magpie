@@ -484,6 +484,12 @@ type Provider struct {
 	// and then the window's WindowCapID: 1–99, or 100 for none on it. A
 	// window not in it takes the account's AccountCaps.
 	AccountWindowCaps map[string]map[string]int `json:"accountWindowCaps,omitempty"`
+	// AccountWindowAmounts is, for a subscription, the fixed amount of a
+	// window's own unit (credits, requests, tokens) an account is used to
+	// at most where the user set one in place of a share (9won_25273 on
+	// Discord), by account and window as AccountWindowCaps. A window has
+	// one or the other.
+	AccountWindowAmounts map[string]map[string]float64 `json:"accountWindowAmounts,omitempty"`
 	// CapStop, for a subscription whose accounts are capped, ends there
 	// (plugins#349): while every account is held at its cap, a request is
 	// answered 429, as the vendor would, rather than sent on to Fallback.
@@ -905,6 +911,13 @@ func (p Provider) clone() Provider {
 		}
 		p.AccountWindowCaps = m
 	}
+	if p.AccountWindowAmounts != nil {
+		m := make(map[string]map[string]float64, len(p.AccountWindowAmounts))
+		for k, v := range p.AccountWindowAmounts {
+			m[k] = maps.Clone(v)
+		}
+		p.AccountWindowAmounts = m
+	}
 	p.AccountConcurrency = maps.Clone(p.AccountConcurrency)
 	p.AccountWeights = maps.Clone(p.AccountWeights)
 	p.Contexts = maps.Clone(p.Contexts)
@@ -1011,7 +1024,7 @@ func accountSettings(a, pk Provider) Provider {
 	// plugin's provider too (isee1_1 on Discord)
 	a.Unredacted = pk.Unredacted
 	a.Proxy, a.AccountProxies, a.AccountModels, a.AccountModelsAll = pk.Proxy, pk.AccountProxies, pk.AccountModels, pk.AccountModelsAll
-	a.AccountCaps, a.AccountWindowCaps = pk.AccountCaps, pk.AccountWindowCaps
+	a.AccountCaps, a.AccountWindowCaps, a.AccountWindowAmounts = pk.AccountCaps, pk.AccountWindowCaps, pk.AccountWindowAmounts
 	a.CapStop, a.CapCareful = pk.CapStop, pk.CapCareful
 	a.UseFirst = pk.UseFirst
 	a.AccountNames = pk.AccountNames
@@ -1677,6 +1690,7 @@ func normalize(p Provider) Provider {
 	p.AccountModelsAll = normalModelsAll(p.AccountModelsAll, p.AccountModels)
 	p.AccountCaps = normalAccountCaps(p.AccountCaps)
 	p.AccountWindowCaps = normalWindowCaps(p.AccountWindowCaps)
+	p.AccountWindowAmounts = normalWindowAmounts(p.AccountWindowAmounts)
 	p.AccountNames = normalAccountNames(p.AccountNames)
 	p.KeySpendCaps = normalKeySpendCaps(p.KeySpendCaps)
 	p.KeyOwnBalances = normalKeyOwnBalances(p.KeyOwnBalances)

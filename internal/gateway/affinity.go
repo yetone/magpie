@@ -462,6 +462,7 @@ func strictKeep(scope, mode string, in http.Header, body []byte, cs []candidate,
 		}
 		w := pl.left[i]
 		w.Unlisted, w.Capped, w.CapBack = false, 0, nil
+		w.CapAmount, w.CapCount, w.CapUnit = 0, 0, ""
 		pl.left = slices.Delete(slices.Clone(pl.left), i, i+1)
 		back, order = append(back, c), append(order, w)
 	}

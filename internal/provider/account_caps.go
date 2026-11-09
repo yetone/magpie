@@ -22,6 +22,20 @@ package provider
 // while any window is at or past its own share. The on-demand windows
 // (Aside) are not the allowance and never count.
 //
+// A window whose reading counts it in a unit, with its total (WorkBuddy's
+// credits, a plan's requests or tokens), can instead be capped at a fixed
+// amount of that unit (9won_25273 on Discord: at most N credits a day of a
+// daily-credits window, then the next account), kept per account and
+// window (AccountWindowAmounts). The account is held once the window's
+// count is at or past the amount, as at a share; a window read without a
+// total leaves the amount aside and takes the account's share. A window
+// has a share of its own or an amount, never both: setting one clears the
+// other.
+//
+// The cap reads the vendor's own count of the window, so what the account
+// spent outside magpie (the vendor's app, another machine) counts toward
+// it as the vendor reports it; magpie can only hold back its own requests.
+//
 // The cap is the user's, not the vendor's: what it holds back never spends
 // a Codex reset. The resets are spent on the vendor's own 100% (weekUsedUp,
 // usedUp, BackAt, heldUp), which the cap doesn't touch.
@@ -29,6 +43,7 @@ package provider
 import (
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -71,6 +86,9 @@ func AccountCapOf(id, user string) int {
 type WindowCaps struct {
 	All     int
 	Windows map[string]int
+	// Amounts are the windows capped at a fixed amount of their own unit
+	// instead, by WindowCapID (AccountWindowAmounts)
+	Amounts map[string]float64
 	Credits bool
 }
 
@@ -94,6 +112,34 @@ func (c WindowCaps) Of(name string) (share int, credits bool) {
 	return share, false
 }
 
+// limitShare is the share at which a window holds the account, as Of
+// (own when aside), with an amount cap on it read against the window's
+// count: amount is then the cap in the window's unit, and share that
+// amount as a share of the window's total of. A window read without a
+// total (of 0) leaves its amount aside.
+func (c WindowCaps) limitShare(name string, of float64, aside bool) (share float64, credits bool, amount float64) {
+	if a := c.Amounts[WindowCapID(name)]; a > 0 && of > 0 {
+		return a / of * 100, false, a
+	}
+	if aside {
+		return float64(c.own(name)), false, 0
+	}
+	n, credits := c.Of(name)
+	return float64(n), credits, 0
+}
+
+// past says whether a window at used percent, count of its unit, is at or
+// past the cap limitShare gave: by its count when the cap is an amount.
+func past(share, amount, used, count float64) bool {
+	if share <= 0 {
+		return false
+	}
+	if amount > 0 {
+		return count >= amount
+	}
+	return used >= share
+}
+
 // own is the share at which a window set aside holds the account (Limit's
 // aside): only a cap the user set on that window itself, never the
 // account's or the credits', 0 for none.
@@ -110,6 +156,11 @@ func (c WindowCaps) Holds() bool {
 	if c.All > 0 || c.Credits {
 		return true
 	}
+	for _, v := range c.Amounts {
+		if v > 0 {
+			return true
+		}
+	}
 	for _, v := range c.Windows {
 		if v >= MinCap && v <= MaxCap {
 			return true
@@ -122,21 +173,21 @@ func (c WindowCaps) Holds() bool {
 // and its windows' own. As with AccountCap, an account made afresh beside
 // the agent's own reads them from providers.json.
 func (p Provider) CapsOf(user string) WindowCaps {
-	caps, wins := p.AccountCaps, p.AccountWindowCaps
-	if caps == nil && wins == nil {
+	caps, wins, amts := p.AccountCaps, p.AccountWindowCaps, p.AccountWindowAmounts
+	if caps == nil && wins == nil && amts == nil {
 		if s, ok := storedPicks(p.ID); ok {
-			caps, wins = s.AccountCaps, s.AccountWindowCaps
+			caps, wins, amts = s.AccountCaps, s.AccountWindowCaps, s.AccountWindowAmounts
 		}
 	}
 	k := accountKey(user)
-	return WindowCaps{All: caps[k], Windows: wins[k]}
+	return WindowCaps{All: caps[k], Windows: wins[k], Amounts: amts[k]}
 }
 
 // AccountCapsOf is CapsOf of the provider id.
 func AccountCapsOf(id, user string) WindowCaps {
 	if s, ok := storedPicks(id); ok {
 		k := accountKey(user)
-		return WindowCaps{All: s.AccountCaps[k], Windows: s.AccountWindowCaps[k]}
+		return WindowCaps{All: s.AccountCaps[k], Windows: s.AccountWindowCaps[k], Amounts: s.AccountWindowAmounts[k]}
 	}
 	return WindowCaps{}
 }
@@ -177,9 +228,10 @@ func SetWindowCaps(id, ref string, windows []string, cap int) error {
 		return fmt.Errorf("%s has no account %q", p.Name, ref)
 	}
 	k := accountKey(r)
-	if !slices.ContainsFunc(ws, func(w string) bool { return p.AccountWindowCaps[k][w] != cap }) {
+	if !slices.ContainsFunc(ws, func(w string) bool { return p.AccountWindowCaps[k][w] != cap || p.AccountWindowAmounts[k][w] > 0 }) {
 		return nil
 	}
+	p.AccountWindowAmounts = withoutAmounts(p.AccountWindowAmounts, k, ws)
 	all := map[string]map[string]int{}
 	for u, m := range p.AccountWindowCaps {
 		all[u] = maps.Clone(m)
@@ -199,6 +251,96 @@ func SetWindowCaps(id, ref string, windows []string, cap int) error {
 	}
 	p.AccountWindowCaps = all
 	return Save(*p)
+}
+
+// SetWindowAmount caps the windows named windows of the account ref of the
+// subscription id at amount of their own unit (credits, requests, tokens),
+// in place of a share of their own; 0 lifts it, and the windows follow the
+// account's cap again.
+func SetWindowAmount(id, ref string, windows []string, amount float64) error {
+	if amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
+		return fmt.Errorf("a window's cap is an amount above 0, not %v", amount)
+	}
+	var ws []string
+	for _, w := range windows {
+		if w = WindowCapID(w); w == "" {
+			return fmt.Errorf("name the usage window to cap")
+		}
+		ws = append(ws, w)
+	}
+	if len(ws) == 0 {
+		return fmt.Errorf("name the usage window to cap")
+	}
+	p, err := Find(id)
+	if err != nil {
+		return err
+	}
+	if p.Account == nil {
+		return fmt.Errorf("%s has keys, not subscription accounts with usage windows to cap", p.Name)
+	}
+	r, ok := p.accountRef(ref)
+	if !ok {
+		return fmt.Errorf("%s has no account %q", p.Name, ref)
+	}
+	k := accountKey(r)
+	if !slices.ContainsFunc(ws, func(w string) bool {
+		_, own := p.AccountWindowCaps[k][w]
+		return p.AccountWindowAmounts[k][w] != amount || own
+	}) {
+		return nil
+	}
+	amts := withoutAmounts(p.AccountWindowAmounts, k, nil)
+	if amount > 0 {
+		if amts == nil {
+			amts = map[string]map[string]float64{}
+		}
+		if amts[k] == nil {
+			amts[k] = map[string]float64{}
+		}
+		for _, w := range ws {
+			amts[k][w] = amount
+		}
+	} else {
+		amts = withoutAmounts(amts, k, ws)
+	}
+	p.AccountWindowAmounts = amts
+	// an amount stands in for the window's own share
+	if own := p.AccountWindowCaps[k]; own != nil {
+		all := map[string]map[string]int{}
+		for u, m := range p.AccountWindowCaps {
+			all[u] = maps.Clone(m)
+		}
+		for _, w := range ws {
+			delete(all[k], w)
+		}
+		if len(all[k]) == 0 {
+			delete(all, k)
+		}
+		p.AccountWindowCaps = all
+	}
+	return Save(*p)
+}
+
+// withoutAmounts is a copy of m with account k's amounts on windows ws
+// left out (none for a nil ws); nil for none left.
+func withoutAmounts(m map[string]map[string]float64, k string, ws []string) map[string]map[string]float64 {
+	var out map[string]map[string]float64
+	for u, as := range m {
+		c := maps.Clone(as)
+		if u == k {
+			for _, w := range ws {
+				delete(c, w)
+			}
+		}
+		if len(c) == 0 {
+			continue
+		}
+		if out == nil {
+			out = map[string]map[string]float64{}
+		}
+		out[u] = c
+	}
+	return out
 }
 
 // SetAccountCap caps the account ref of the subscription id at cap percent
@@ -289,6 +431,29 @@ func normalWindowCaps(m map[string]map[string]int) map[string]map[string]int {
 	return out
 }
 
+// normalWindowAmounts is m as it is kept: accounts and windows in lower
+// case, amounts above 0, empty ones left out; nil for none.
+func normalWindowAmounts(m map[string]map[string]float64) map[string]map[string]float64 {
+	var out map[string]map[string]float64
+	for u, ws := range m {
+		u = accountKey(u)
+		for w, a := range ws {
+			w = WindowCapID(w)
+			if u == "" || w == "" || !(a > 0) || math.IsInf(a, 0) {
+				continue
+			}
+			if out == nil {
+				out = map[string]map[string]float64{}
+			}
+			if out[u] == nil {
+				out[u] = map[string]float64{}
+			}
+			out[u][w] = a
+		}
+	}
+	return out
+}
+
 // CapHold is how an account is held by its caps for a model: the share
 // used of the fullest window holding it, that window's cap, when the last
 // of those windows renews (zero when one doesn't say), and Credits when
@@ -298,6 +463,11 @@ type CapHold struct {
 	Cap     int
 	Back    time.Time
 	Credits bool
+	// Amount is the cap when the fullest window holding it is capped at a
+	// fixed amount (AccountWindowAmounts): Count of it used, in Unit. Cap
+	// is then that amount as a share, rounded up.
+	Amount, Count float64
+	Unit          string
 }
 
 // CapHeld says how an allowance, as last known, holds the account for
@@ -312,11 +482,8 @@ func (a Allowance) CapHeld(model string, caps WindowCaps, now time.Time) *CapHol
 	var h *CapHold
 	unknown, byCap := false, false
 	for _, l := range a.capLimits(model) {
-		share, credits := caps.Of(l.Name)
-		if l.aside {
-			share, credits = caps.own(l.Name), false
-		}
-		if share <= 0 || l.Used < float64(share) {
+		share, credits, amount := caps.limitShare(l.Name, l.Of, l.aside)
+		if !past(share, amount, l.Used, l.Amount) {
 			continue
 		}
 		if !l.Resets.IsZero() && !l.Resets.After(now) {
@@ -326,7 +493,11 @@ func (a Allowance) CapHeld(model string, caps WindowCaps, now time.Time) *CapHol
 			h = &CapHold{}
 		}
 		if l.Used > h.Used || h.Cap == 0 {
-			h.Used, h.Cap = l.Used, share
+			h.Used, h.Cap = l.Used, min(int(math.Ceil(share)), 100)
+			h.Amount, h.Count, h.Unit = 0, 0, ""
+			if amount > 0 {
+				h.Amount, h.Count, h.Unit = amount, l.Amount, l.Unit
+			}
 		}
 		byCap = byCap || !credits
 		if l.Resets.IsZero() {
@@ -356,11 +527,8 @@ func (a Allowance) NearCap(model string, caps WindowCaps, points float64, now ti
 	}
 	model = strings.ToLower(model)
 	for _, l := range a.capLimits(model) {
-		share, _ := caps.Of(l.Name)
-		if l.aside {
-			share = caps.own(l.Name)
-		}
-		if share <= 0 || l.Used < float64(share)-points {
+		share, _, amount := caps.limitShare(l.Name, l.Of, l.aside)
+		if share <= 0 || l.Used < share-points && (amount <= 0 || l.Amount < amount) {
 			continue
 		}
 		if !l.Resets.IsZero() && !l.Resets.After(now) {
@@ -377,8 +545,8 @@ func (a Allowance) NearCap(model string, caps WindowCaps, points float64, now ti
 // caps reach nothing.
 func capReached(q SubscriptionQuota, caps WindowCaps, now time.Time) bool {
 	for _, w := range q.Windows {
-		share, _ := caps.Of(w.Name)
-		if share <= 0 || w.Aside || w.Model != "" || w.Used < float64(share) {
+		share, _, amount := caps.limitShare(w.Name, w.Limit, false)
+		if w.Aside || w.Model != "" || !past(share, amount, w.Used, w.Amount) {
 			continue
 		}
 		if w.ResetsAt != nil && !w.ResetsAt.After(now) {

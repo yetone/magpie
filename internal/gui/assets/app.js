@@ -14125,9 +14125,18 @@ function accountCapOf(p, user) { return p?.accountCaps?.[String(user).toLowerCas
 function windowOwnCapOf(p, user, w) {
   return (w?.capId && p?.accountWindowCaps?.[String(user).toLowerCase()]?.[w.capId]) || 0;
 }
-function windowCapsOf(p, user) { return Object.keys(p?.accountWindowCaps?.[String(user).toLowerCase()] || {}).length; }
-// windowCapOf: the share the window holds the account at, 0 for none
+function windowCapsOf(p, user) { const k = String(user).toLowerCase(); return Object.keys({ ...p?.accountWindowCaps?.[k], ...p?.accountWindowAmounts?.[k] }).length; }
+// A window's cap at a fixed amount of its own unit (provider.AccountWindowAmounts,
+// 9won_25273 on Discord), by capId: 0 when it has none.
+function windowAmountOf(p, user, w) {
+  return (w?.capId && p?.accountWindowAmounts?.[String(user).toLowerCase()]?.[w.capId]) || 0;
+}
+// windowCapOf: the share the window holds the account at, 0 for none; an
+// amount as a share of the window's total, which a window read without one
+// leaves aside
 function windowCapOf(p, user, w) {
+  const amount = windowAmountOf(p, user, w);
+  if (amount && w?.limit > 0) return amount / w.limit * 100;
   const own = windowOwnCapOf(p, user, w);
   if (own) return own >= 100 ? 0 : own;
   return w?.ownCap ? 0 : accountCapOf(p, user);
@@ -14156,7 +14165,7 @@ function capHeldOf(q, capFor) {
     if (!r) h.unknown = true; else h.back = Math.max(h.back, r);
   }
   const h = all.n ? all : some.n ? some : null;
-  return h && { used: h.used, cap: h.cap, back: h.unknown ? 0 : h.back, all: h === all, some: some.names };
+  return h && { used: h.used, cap: Math.ceil(h.cap), back: h.unknown ? 0 : h.back, all: h === all, some: some.names };
 }
 // directNote: why the cap can't stop agent, signed in to the account and
 // asking its vendor itself, with no other account on to move it to
@@ -14192,7 +14201,7 @@ function capMark(track, w, cap) {
   if (!cap || !w.capped) return;
   const mk = el("span", "aq-cap");
   mk.style.left = (quotaLeft ? 100 - cap : cap) + "%";
-  mk.title = t("Usage cap {n}%", { n: cap });
+  mk.title = t("Usage cap {n}%", { n: Math.round(cap) });
   track.classList.add("capped");
   track.append(mk);
 }
@@ -14223,14 +14232,22 @@ function pillNumber(at, val, ph, cls, label, parse, bad, own, set) {
 // sets the window's own cap, a family's its models' (tiers); not on-demand's.
 function windowCapMeter(m, p, user, w) {
   const ids = (w.tiers || [w]).map((x) => x.capId), owns = ids.map((capId) => windowOwnCapOf(p, user, { capId }));
-  if (!ids.every(Boolean) || w.ownCap && !(owns[0] % 100)) return m;
+  const amounts = ids.map((capId) => windowAmountOf(p, user, { capId }));
+  const amount = new Set(amounts).size > 1 ? 0 : amounts[0];
+  if (!ids.every(Boolean) || w.ownCap && !(owns[0] % 100) && !amount) return m;
   const own = new Set(owns).size > 1 ? 0 : owns[0], cap = accountCapOf(p, user);
   const name = t(w.name);
-  const b = spanBtn(el("span", m.className + " aq-set" + (own ? " own" : "")));
+  // a window counted in a unit, with its total, can be capped at an amount
+  // of it in place of a share
+  const unit = w.limit > 0 && w.unit ? t(w.unit) : "";
+  const amountText = (v) => (countFormat.format(v) + " " + unit).trim();
+  const b = spanBtn(el("span", m.className + " aq-set" + (own || amount ? " own" : "")));
   b.append(...m.childNodes);
-  if (own) b.append(el("span", "aq-own", own >= 100 ? t("No cap") : t("Cap {n}%", { n: own })));
+  if (amount) b.append(el("span", "aq-own", t("Cap {n}", { n: amountText(amount) })));
+  else if (own) b.append(el("span", "aq-own", own >= 100 ? t("No cap") : t("Cap {n}%", { n: own })));
   const reset = m.title || (w.resetsAt ? resetText(new Date(w.resetsAt), new Date(w.resetsAt).toLocaleString(intlLang())) : "");
-  b.title = [reset, own >= 100 ? t("No cap on {window}: it is used to 100%, whatever this account's cap. Click to change", { window: name })
+  b.title = [reset, amount ? t("{window} has a cap of its own: magpie counts this account as used up once it has used {n} of {window}, until it renews. Click to change", { window: name, n: amountText(amount) })
+    : own >= 100 ? t("No cap on {window}: it is used to 100%, whatever this account's cap. Click to change", { window: name })
     : own ? t("{window} has a cap of its own: magpie counts this account as used up once {window} is at {n}%, until it renews. Click to change", { window: name, n: own })
     : t("Click to give {window} a cap of its own, apart from this account's", { window: name })].filter(Boolean).join("\n");
   b.setAttribute("aria-haspopup", "menu");
@@ -14240,6 +14257,10 @@ function windowCapMeter(m, p, user, w) {
       : v >= 100 ? t("{window} of {who} has no cap", { window: name, who: user })
       : t("{who} stops at {n}% of {window}", { who: user, n: v, window: name }));
   const other = () => pillNumber(b, own && own < 100 ? String(own) : "", "1–99", "acap-in", t("Cap for {window}, in percent", { window: name }), capOf, t("A cap is a share from 1% to 99%"), own, set);
+  const setAmount = (v) => accountAction("provider/windowcap", { id: p.id, account: user, window: w.capId, ...w.tiers && { windows: ids }, amount: v },
+    t("{who} stops at {n} of {window}", { who: user, n: amountText(v), window: name }));
+  const amountOf = (v) => { v = Number(v.replace(/[\s,]/g, "")); return v > 0 && Number.isFinite(v) ? v : null; };
+  const otherAmount = () => pillNumber(b, amount ? String(amount) : "", unit, "acap-in", t("Cap for {window}, in {unit}", { window: name, unit }), amountOf, t("An amount above 0"), amount, setAmount);
   b.onclick = (e) => {
     e.stopPropagation();
     if (b.classList.contains("open")) return closeProtoMenu();
@@ -14251,9 +14272,11 @@ function windowCapMeter(m, p, user, w) {
     ];
     for (const n of shares) opts.push({ v: n, name: n + "%", note: "", literalName: true });
     opts.push({ v: -1, name: "Other…", note: "A share of your own, 1–99%" });
-    openProtoMenu(b, opts, own, (v) => {
+    if (unit) opts.push({ v: -2, name: t("Amount…"), note: amount ? amountText(amount) : t("At most this much {unit}", { unit }), literalName: true });
+    openProtoMenu(b, opts, amount ? -2 : own, (v) => {
       if (v === -1) return other();
-      if (v !== own) set(v);
+      if (v === -2) return otherAmount();
+      if (v !== own || amount) set(v);
     }, t("Cap for {window}", { window: name }), "sess-menu");
   };
   return b;
