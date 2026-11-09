@@ -931,6 +931,10 @@ body.window .field.solo { grid-column: auto; }
 .field .chev { color: var(--faint); display: inline-flex; margin-left: auto; padding-left: 1px; }
 .field:hover .chev, .field.open .chev { color: var(--muted); }
 .field.flash, .subscription-card.flash, .pq-card.flash, .row.pref.flash { animation: flash 1.2s ease-out; }
+/* a lit row's ring keeps its corners: the list's rounded clip cut them off
+   (the owner, 11-10), so it is rounded as the list is inside its border */
+.row.pref.flash { border-radius: 11px; }
+body.panel .row.pref.flash { border-radius: 10px; }
 @keyframes flash { 0%, 35% { box-shadow: inset 0 0 0 1px var(--green); background: var(--green-soft); } 100% {} }
 
 /* ---- usage ---------------------------------------------------------------- */

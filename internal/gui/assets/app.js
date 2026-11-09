@@ -81,6 +81,7 @@ let state = { agents: [], profiles: [], catalog: "", settings: {} };
 let prefs = null; // the settings page: theme, lang, version, dir, gateway
 let providers = null; // { providers, presets, gateway }
 let view = "agents";
+let backTo = null, jumpNext = false; // Back (jumpFrom)
 let showAllAgents = false; // the agents no one has set anything on, folded away
 let showHiddenAgents = false; // under them, the ones hidden by hand: a fold of their own, shut until asked
 let period = "today"; // usage window
@@ -23080,11 +23081,8 @@ addEventListener("resize", () => {
   relaid.observe(v);
   for (const c of v.children) if (!c.classList.contains("view-room")) relaid.observe(c);
 });
-// A part that grows or shrinks as it plays (the agents' scroll unrolling
-// above the button that unrolls it) is held again as soon as it is laid out,
-// before it's painted: a frame's loop sees it only as the frame before left
-// it, a frame late, so what was clicked would tremble by as much as it grew
-// in a frame.
+// A part that grows as it plays is held again once laid out, before paint,
+// or what was clicked trembles a frame late
 const heldSizes = new ResizeObserver(() => { if (held) hold(held); });
 function keepHeld() {
   const h = held;
@@ -23141,6 +23139,8 @@ addEventListener("scroll", () => import("./scrollends.js"), { capture: true, pas
 
 let settingsLoad = Promise.resolve(); // show()'s read of Settings, for openSettingsAt
 async function show(v) {
+  const jump = jumpNext;
+  jumpNext = false;
   // a built-in page a plugin's page replaces (magpie.page.replaces) opens that
   v = magpie.replacing?.(v) || v;
   // a page gateway mode leaves out (a link to it, an address kept) opens Providers
@@ -23169,11 +23169,13 @@ async function show(v) {
     // the page left lets go of what was only for this visit
     magpie.call(view, "leave");
   }
+  if (v !== view && !jump) backTo = null;
   view = v;
+  renderBack();
   window.hideAccounts?.page();
   // the page the reader leaves is the one the window opens on next (keptView)
   if (mode === "window") { try { localStorage.setItem("magpie.lastView", v); } catch { /* not kept */ } }
-  const title = magpie.page(v)?.title ?? ({ agents: "Agents", providers: "Providers", plugins: "Plugins", settings: "Settings" })[v];
+  const title = pageName(v);
   $("#pageTitle").dataset.en = title;
   $("#pageTitle").textContent = t(title);
   if (mode === "window") {
@@ -23268,12 +23270,8 @@ function applyFeatures(list) {
   setSetTab(setTab);
   navSubs();
 }
-// Plugins › Built-in: a row each, its name, what it is and a switch, kept
-// in plugins.yml (builtins.go). One in use can't be switched off, and says
-// what uses it; a plugins.yml that doesn't parse says so, and none can be
-// switched until it is fixed. done gets the list after a switch. One on
-// with settings has them under it, a row each, drawn from their schema
-// (kernel.js's ui.form) and saved as each is changed.
+// Plugins › Built-in: a row and a switch each (plugins.yml, builtins.go);
+// one in use can't be switched off; its settings under it (ui.form)
 function renderBuiltins(box, list, done) {
   const broken = list.find((f) => f.broken)?.broken;
   const rows = list.flatMap((f) => {
@@ -23342,7 +23340,7 @@ function featGo(line, f) {
   // not to settings hidden while it is off (Observability, warm-ups)
   if (tab && (f.on || !$(row)?.closest("[data-feature]"))) to.push([t("Settings") + " › " + $("#setTab-" + tab).textContent, (e) => openSettingsAt(e, tab, row + " .row")]);
   const nav = f.on && $(`#nav [data-view="${f.page || f.opens}"]`);
-  if (nav && !nav.hidden) to.push([nav.textContent, () => nav.click()]);
+  if (nav && !nav.hidden) to.push([nav.textContent, () => { jumpFrom(nav.dataset.view); nav.click(); }]);
   for (const [say, go] of to) {
     const b = el("button", "link", say);
     b.type = "button";
@@ -23381,11 +23379,42 @@ function openSettings() {
   closeAgentMenu();
   show("settings");
 }
+// Back to the page a settings link came from (the owner, 11-10)
+function jumpFrom(to) {
+  if (to === view) return;
+  backTo = { view, edit: view === "providers" && typeof editing == "string" ? editing : null,
+    tab: view === "settings" ? setShown : null, q: view === "settings" ? $("#setQ").value : "" };
+  jumpNext = true;
+}
+function pageName(v) {
+  return magpie.page(v)?.title ?? ({ agents: "Agents", providers: "Providers", plugins: "Plugins", settings: "Settings" })[v];
+}
+function renderBack() {
+  const b = $("#navBack"), on = !!backTo && backTo.view !== view;
+  if (on) {
+    const say = t("Back to {page}", { page: t(pageName(backTo.view)) });
+    b.dataset.tt = say;
+    b.setAttribute("aria-label", say);
+  }
+  if (b.hidden === !on) return;
+  b.hidden = !on;
+  fitTop();
+}
+$("#navBack").onclick = async () => {
+  const b = backTo;
+  if (!b) return;
+  if (b.edit) await openProvider(b.edit);
+  else if (!await show(b.view)) return;
+  if (!b.tab) return;
+  setSetTab(b.tab);
+  if (b.q) { $("#setQ").value = b.q; searchSettings(b.q); }
+};
 // openSettingsAt: Settings at a row, in sight and lit; e is the click
 async function openSettingsAt(e, tab, row) {
   const go = scrollOnPurpose(e, 3000);
   closeProtoMenu();
   closeAgentMenu();
+  jumpFrom("settings");
   if (!await show("settings")) return;
   if (setQuery) { $("#setQ").value = ""; searchSettings(""); }
   setSetTab(tab, true);
@@ -23399,11 +23428,7 @@ async function openSettingsAt(e, tab, row) {
 }
 $("#prefs").onclick = () => { openSettings(); $("#prefs").blur(); };
 
-// The header's refresh reads again what the page shown draws (#844): on
-// Agents it looks for the agents on this computer again (one just installed
-// or removed, or its settings changed outside magpie), on Usage it reads the
-// usage and the allowances now, and elsewhere it refreshes the model lists.
-// A newer magpie is looked for on its own, and from Settings › About's Check.
+// The header's refresh reads again what the page shown draws (#844)
 function refreshKind() {
   if (mode === "panel") return { agents: "agents", usage: "allowances", stats: "requests" }[panelTab] || "models";
   return { agents: "agents", usage: "usage" }[view] || "models";
@@ -23458,12 +23483,7 @@ $("#sync").onclick = async () => {
     status(kind === "models" ? t("Sync failed: {e}", { e: e.message }) : e.message, "err");
   } finally {
     b.blur();
-    // stop at the end of a turn, not wherever the reply caught it (#16).
-    // The turn itself is told to be the last, so it ends on the compositor's
-    // clock: waiting for animationiteration and then dropping the class
-    // jumped the icon back by however far it had turned while the page was
-    // busy drawing the reply — the twitch at the end of every refresh.
-    // The svg's drawing turns, not the svg (app.css), one animation a part.
+    // stop at the end of a turn, on the compositor's clock (#16)
     const spins = b.querySelector("svg").getAnimations({ subtree: true });
     const stop = () => b.classList.remove("spin");
     if (spins.length && spins.every((a) => a.effect?.updateTiming)) {
@@ -23530,7 +23550,7 @@ function fitTop() {
     // the buttons sit against the padding; under a page zoom (the text size)
     // their edge can measure a hair past it, which isn't running off (#457)
     if (a.right > top.getBoundingClientRect().right - parseFloat(getComputedStyle(top).paddingRight) + 0.5) return false;
-    const lead = brand.offsetParent ? brand : $("#sideToggle");
+    const lead = $("#navBack").offsetParent ? $("#navBack") : brand.offsetParent ? brand : $("#sideToggle");
     const left = lead.offsetParent ? lead.getBoundingClientRect().right
       : top.getBoundingClientRect().left + parseFloat(getComputedStyle(top).paddingLeft);
     if (!nav?.offsetParent) return left + 8 <= a.left;
