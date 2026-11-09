@@ -51,11 +51,12 @@ func stubCodexApp(t *testing.T) *codexAppStub {
 		codexApp.crashSince, codexApp.crashBy, codexApp.snag, codexApp.snagPids = time.Time{}, time.Time{}, false, nil
 		codexApp.Unlock()
 	}
-	oldCrashed, oldRelaunch := CodexAppCrashed, CodexAppRelaunch
+	oldCrashed, oldRelaunch, oldOff := CodexAppCrashed, CodexAppRelaunch, CodexTakeoverOff
+	CodexTakeoverOff = nil
 	t.Cleanup(func() {
 		CodexAppRoute, codexAppServersOn, endCodexAppServer, codexTurnRunning = oldOn, oldList, oldEnd, oldTurn
 		CodexAppOpen, CodexAppReopen, codexSessionsQuiet, codexRestartsApp = oldOpen, oldReopen, oldQuiet, oldRestarts
-		CodexAppCrashed, CodexAppRelaunch = oldCrashed, oldRelaunch
+		CodexAppCrashed, CodexAppRelaunch, CodexTakeoverOff = oldCrashed, oldRelaunch, oldOff
 		reset()
 	})
 	// the app's logs as tests find them: no error page, and never reopened
@@ -1286,5 +1287,77 @@ func TestCodexAppBackSaidTillItRestarts(t *testing.T) {
 	step()
 	if !CodexAppBack() {
 		t.Fatal("a failed listing read as the app-server gone")
+	}
+}
+
+// The takeover turned off by the user (the takeover note's Keep on
+// ChatGPT, the sign-in's Always ChatGPT, a Disconnect) restarts the Codex
+// app's app-server with Restart the Codex app to follow off too, once no
+// Codex turn runs: the one the takeover started shows no account, so the
+// app's ChatGPT projects and chats stayed gone after the user turned it
+// off to have them back (Herzz____ on X, the Windows app). The reset,
+// magpie's own end of it, still leaves the app running and says so
+// (CodexAppBack). Whether it was turned off is asked only as the takeover
+// ends, not at every look.
+func TestCodexAppRestartedWhenTheTakeoverIsTurnedOff(t *testing.T) {
+	signIn(t)
+	s := stubCodexApp(t)
+	codexRestartsApp = func() bool { return false }
+	off, asked := false, 0
+	CodexTakeoverOff = func() bool { asked++; return off }
+	now := time.Now()
+	idle := func() (int, time.Time) { return 0, now.Add(-time.Minute) }
+	step := func(busy func() (int, time.Time)) []int { return codexAppStep(context.Background(), now, busy) }
+
+	s.running = []int{60}
+	for range 3 {
+		if got := step(idle); got != nil {
+			t.Fatalf("on its account: ended %v", got)
+		}
+	}
+	s.on = true
+	if got := step(idle); !slices.Equal(got, []int{60}) {
+		t.Fatalf("the takeover: ended %v, want [60]", got)
+	}
+	step(idle)
+	if asked != 0 {
+		t.Fatalf("asked whether the takeover is off %d times while it ran", asked)
+	}
+
+	// Keep on ChatGPT, with a Codex request in flight: held till it ends
+	off, s.on = true, false
+	if got := step(func() (int, time.Time) { return 1, now.Add(-time.Minute) }); got != nil {
+		t.Fatalf("a Codex request in flight: ended %v", got)
+	}
+	if got := step(idle); !slices.Equal(got, []int{100}) {
+		t.Fatalf("the takeover turned off by hand: ended %v, want [100]", got)
+	}
+	if CodexAppBack() {
+		t.Fatal("restarted, and still said to be left on the takeover")
+	}
+	if asked != 1 {
+		t.Fatalf("asked %d times, want once as the takeover ended", asked)
+	}
+	for range 3 {
+		if got := step(idle); got != nil {
+			t.Fatalf("after: ended %v", got)
+		}
+	}
+	if asked != 1 {
+		t.Fatalf("asked %d times after the takeover ended, want once in all", asked)
+	}
+
+	// taken over again, and ended by the reset: left running, and said
+	off = false
+	s.on = true
+	if got := step(idle); !slices.Equal(got, []int{101}) {
+		t.Fatalf("the takeover again: ended %v, want [101]", got)
+	}
+	s.on = false
+	if got := step(idle); got != nil {
+		t.Fatalf("the reset with Restart off: ended %v", got)
+	}
+	if !CodexAppBack() {
+		t.Fatal("the app left on the takeover's app-server at the reset isn't said")
 	}
 }

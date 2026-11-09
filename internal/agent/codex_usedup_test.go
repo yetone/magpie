@@ -165,6 +165,10 @@ func TestCodexOwnModelGoesThroughMagpieWhileUsedUp(t *testing.T) {
 	if cx.AppOut() || !cx.Joined() {
 		t.Fatalf("allowance back: AppOut %v, Joined %v", cx.AppOut(), cx.Joined())
 	}
+	// the reset ended the takeover, not the user (CodexTakeoverOff)
+	if cx.AppOutOff() {
+		t.Fatal("allowance back: the takeover reads as turned off by the user")
+	}
 
 	// a model the user picked while out stays theirs when room comes back
 	codexUsedUp = func() bool { return true }
@@ -180,6 +184,22 @@ func TestCodexOwnModelGoesThroughMagpieWhileUsedUp(t *testing.T) {
 	}
 	if cfg := read(); !strings.Contains(cfg, `model = "fake/m1"`) {
 		t.Fatalf("picked while out, allowance back:\n%s", cfg)
+	}
+
+	// taken over again, then Codex disconnected: the user's end of it
+	codexUsedUp = func() bool { return true }
+	t.Cleanup(func() { codexUsedUp = func() bool { return false } })
+	if err := cx.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if !cx.AppOut() || cx.AppOutOff() {
+		t.Fatalf("taken over again: AppOut %v, AppOutOff %v:\n%s", cx.AppOut(), cx.AppOutOff(), read())
+	}
+	if err := cx.Disconnect(); err != nil {
+		t.Fatal(err)
+	}
+	if cx.AppOut() || !cx.AppOutOff() {
+		t.Fatalf("disconnected: AppOut %v, AppOutOff %v:\n%s", cx.AppOut(), cx.AppOutOff(), read())
 	}
 }
 
@@ -351,8 +371,16 @@ func TestCodexOwnModelOutThenKeptOnChatGPT(t *testing.T) {
 	if !cx.AppOut() {
 		t.Fatalf("used up: not AppOut:\n%s", read())
 	}
+	if cx.AppOutOff() {
+		t.Fatal("taken over: the takeover reads as turned off")
+	}
 	if err := cx.Field("login").Set("chatgpt"); err != nil {
 		t.Fatal(err)
+	}
+	// the user's own end of the takeover, which restarts the Codex app's
+	// app-server so its ChatGPT projects come back (CodexTakeoverOff)
+	if !cx.AppOutOff() {
+		t.Fatal("kept on ChatGPT: the takeover doesn't read as turned off by the user")
 	}
 	onSignIn := func(when string) {
 		t.Helper()

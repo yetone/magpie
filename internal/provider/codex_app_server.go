@@ -70,6 +70,19 @@ var CodexAppRoute func() (route string, out, known bool)
 // switch restarts none of them. false when it can't be told.
 var CodexNoAccount func() bool
 
+// CodexTakeoverOff is set by the agent package: whether the user has
+// turned off magpie's takeover of Codex's used-up account (AppOutOff):
+// its sign-in set to Always ChatGPT, as the takeover note's Keep on
+// ChatGPT does, or Codex not connected. The takeover ending while it says
+// so is the user's change, and the Codex app's app-server is restarted
+// for it as for a Connect, Restart the Codex app to follow off too: the
+// one the takeover started answers account/read with no account, so the
+// app shows none of its ChatGPT projects or chats till it restarts, which
+// the user who turned the takeover off to have them back can't tell
+// (Herzz____ on X, the Windows app's project list empty). Asked only as
+// the takeover ends; false while it isn't set.
+var CodexTakeoverOff func() bool
+
 // codexNoAccount is CodexNoAccount, false while it isn't set.
 func codexNoAccount() bool {
 	return CodexNoAccount != nil && CodexNoAccount()
@@ -427,7 +440,11 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 	c := &codexApp
 	c.Lock()
 	switched := c.switched
+	wasOut := c.seen && c.out
 	c.Unlock()
+	// the takeover ending now: by the user's hand (CodexTakeoverOff), or
+	// by the reset, which is magpie's own change
+	offByHand := wasOut && !out && CodexTakeoverOff != nil && CodexTakeoverOff()
 	// an account switch is nothing to an app-server on a provider that
 	// takes no ChatGPT account (CodexNoAccount): it is forgotten, and a
 	// route change later restarts it all the same
@@ -453,13 +470,14 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 	// it unless they asked magpie to (RestartApp; atom0964 on Discord: both
 	// of Codex's sign-in ticks off, and magpie still restarted the app to
 	// switch accounts). A switch the user made, a Connect or a Disconnect
-	// is theirs, and restarts it. So does whatever leaves the app-server on
+	// is theirs, and restarts it, and so does the takeover turned off by
+	// hand (CodexTakeoverOff). So does whatever leaves the app-server on
 	// a used-up account: the takeover in, the first look on one and a
 	// switch off one. The app greys Send for every model while that
 	// account's rate limit says not allowed and reads the account only as
 	// its app-server starts (8b0132b3d), so nothing magpie serves would
 	// reach it until a restart.
-	byHand := c.switched && !c.auto || c.seen && c.route != route && c.out == out
+	byHand := c.switched && !c.auto || c.seen && c.route != route && c.out == out || offByHand
 	needed := into || c.switched && c.spent
 	// left on the takeover: the app-servers it started while magpie was
 	// Codex's provider, which show no account till they restart

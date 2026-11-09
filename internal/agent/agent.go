@@ -201,6 +201,11 @@ type Agent struct {
 	// its sign-in only as it opens, sends nothing on it till it is opened
 	// again (MasterYi on Discord).
 	AppOut func() bool
+	// AppOutOff reports the user has turned the takeover (AppOut) off:
+	// Codex's sign-in set to Always ChatGPT, or Codex not connected. The
+	// takeover ending so is the user's change, not the reset's, and the
+	// Codex app's app-server is restarted for it (CodexTakeoverOff).
+	AppOutOff func() bool
 	// HoldMatters reports Codex takes magpie's models beside a ChatGPT
 	// sign-in, so that magpie is its provider while the Codex app holds
 	// the account (out), or is that already: what the app holds is read
