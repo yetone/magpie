@@ -985,7 +985,7 @@ func codexRekey(cfg, hooksPath string, moved map[string]map[int]int) (func() err
 			State map[string]any `toml:"state"`
 		} `toml:"hooks"`
 	}
-	if err := toml.Unmarshal(raw, &whole); err != nil {
+	if err := toml.Unmarshal(edit.TOMLWithout(raw, "projects"), &whole); err != nil {
 		return nil, fmt.Errorf("%s: %w", cfg, err)
 	}
 	labels := map[string]map[int]int{}

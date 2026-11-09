@@ -1128,7 +1128,8 @@ func (f *mcpFile) parseEntries(raw []byte) (map[string]map[string]any, error) {
 	var err error
 	switch f.Format {
 	case fmtCodex, fmtGrok:
-		err = toml.Unmarshal(raw, &doc)
+		// only the servers' tables are read: not Codex's thousands of projects
+		err = toml.Unmarshal(edit.TOMLWithout(raw, "projects"), &doc)
 	case fmtGoose, fmtHermes:
 		err = yaml.Unmarshal(raw, &doc)
 	default:

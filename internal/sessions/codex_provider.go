@@ -23,6 +23,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/filelock"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/settings"
@@ -114,7 +115,7 @@ type codexConfig struct {
 func readCodexConfig(home string) codexConfig {
 	c, _ := filememo.Read("sessions codex config", filepath.Join(home, "config.toml"), func(b []byte) (codexConfig, error) {
 		var c codexConfig
-		toml.Unmarshal(b, &c)
+		toml.Unmarshal(edit.TOMLWithout(b, "projects"), &c)
 		return c, nil
 	})
 	return c

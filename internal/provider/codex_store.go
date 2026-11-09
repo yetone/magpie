@@ -36,6 +36,7 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
+	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/proc"
 )
@@ -200,7 +201,7 @@ func readCodexStoreSetting(home string) (codexStoreSetting, error) {
 			Store    string         `toml:"cli_auth_credentials_store"`
 			Features map[string]any `toml:"features"`
 		}
-		if err := toml.Unmarshal(b, &c); err != nil {
+		if err := toml.Unmarshal(edit.TOMLWithout(b, "projects"), &c); err != nil {
 			return codexStoreSetting{}, fmt.Errorf("%s doesn't read as TOML", path)
 		}
 		s := codexStoreSetting{Mode: c.Store, Secrets: secretAuthStorageDefault}

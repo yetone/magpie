@@ -683,8 +683,7 @@ func validateTOML(data []byte) error {
 	if err := p.Error(); err != nil {
 		return tomlParseError(&p, err)
 	}
-	var decoded map[string]any
-	if err := toml.Unmarshal(data, &decoded); err != nil {
+	if err := validateTOMLDefinitions(data); err != nil {
 		if de, ok := err.(*toml.DecodeError); ok {
 			line, column := de.Position()
 			return fmt.Errorf("line %d, column %d: %w", line, column, err)

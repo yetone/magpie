@@ -176,7 +176,7 @@ type codexTop struct {
 func codexTopOf(path string) (*codexTop, error) {
 	doc, err := filememo.ReadNow("codex top", path, func(b []byte) (*codexTop, error) {
 		var doc codexTop
-		if err := toml.Unmarshal(edit.TrimBOM(b), &doc); err != nil {
+		if err := toml.Unmarshal(edit.TOMLWithout(edit.TrimBOM(b), "projects"), &doc); err != nil {
 			return nil, err
 		}
 		return &doc, nil

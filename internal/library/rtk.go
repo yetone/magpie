@@ -960,7 +960,7 @@ func codexSandboxIn(raw []byte) string {
 		} `toml:"windows"`
 		Features map[string]any `toml:"features"`
 	}
-	if toml.Unmarshal(raw, &c) != nil || c.SandboxMode == "danger-full-access" {
+	if toml.Unmarshal(edit.TOMLWithout(raw, "projects"), &c) != nil || c.SandboxMode == "danger-full-access" {
 		return ""
 	}
 	switch {
