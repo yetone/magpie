@@ -96,7 +96,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             assert(await tabs.isHidden(), "overflowing tabs give way to the menu");
             assert(await picker.isVisible());
           }
-          const boxes = await view.locator(".sm-switch, .sm-filter, .sm-trash-btn").evaluateAll((els) => els.map((e) => {
+          const boxes = await view.locator(".sm-switch, .sm-filter, .sm-trash-btn, .sm-toset").evaluateAll((els) => els.map((e) => {
             const b = e.getBoundingClientRect();
             return { name: e.className, left: b.left, right: b.right, top: b.top, bottom: b.bottom, width: b.width };
           }));

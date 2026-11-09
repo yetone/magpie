@@ -88,7 +88,10 @@ function renderSessionReads(s) {
     rw.dataset.agent = a.agent;
     rows.push(rw);
   }
+  // a row lit by a link (openSettingsAt) keeps its light through the read
+  const lit = [...box.children].findIndex((e) => e.classList.contains("flash"));
   box.replaceChildren(...rows);
+  if (lit >= 0) rows[lit]?.classList.add("flash");
 }
 function loadSessionReads() {
   const n = ++sessionReadsSeq;

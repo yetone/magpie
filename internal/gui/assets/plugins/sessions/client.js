@@ -284,22 +284,31 @@ magpie.plugin("sessions", (ctx) => {
     const wrap = page.querySelector(".sm-switch");
     const tabs = wrap.querySelector(".sm-agents");
     const pick = wrap.querySelector(".sm-agent-pick");
+    const filter = page.querySelector(".sm-filter");
     const fit = () => {
+      filter.style.flexBasis = "";
       const room = parseFloat(getComputedStyle(wrap).width);
       if (!room) return;
       const focused = document.activeElement;
       // Measure the actual labels, including language, font and text zoom,
       // rather than guessing a breakpoint or a number of agents.
       tabs.hidden = false;
-      const compact = tabs.scrollWidth > Math.floor(room);
+      // the search gives way to the tabs, down to its least, before the menu
+      // takes them (Settings › came into the head beside them)
+      // (a narrow window's head is a grid, where it can't)
+      const over = tabs.scrollWidth - Math.floor(room);
+      const fw = getComputedStyle(filter.parentElement).display === "flex" ? filter.offsetWidth : 0;
+      const compact = over > 0 && (!fw || fw - over < 110);
+      if (over > 0 && !compact) filter.style.flexBasis = Math.ceil(fw - over) + "px";
       tabs.hidden = compact || !data?.agents.length;
       pick.hidden = !compact || !current();
       if (!compact && pick.classList.contains("open")) closeProtoMenu();
       if (compact && tabs.contains(focused)) pick.focus({ preventScroll: true });
       else if (!compact && focused === pick) tabs.querySelector(".on")?.focus({ preventScroll: true });
     };
+    // the head, not the tabs' box, which the search's width changes
     fitObserver = new ResizeObserver(fit);
-    fitObserver.observe(wrap);
+    fitObserver.observe(page.querySelector(".sm-head"));
     fit();
     if (keepFocus) (pick.hidden ? tabs.querySelector(".on") : pick)?.focus({ preventScroll: true });
   }
@@ -513,7 +522,14 @@ magpie.plugin("sessions", (ctx) => {
     tr.append(svg(TRASH, 13, 1.4), el("span", "", t("Trash")));
     if (data?.trash.length) tr.append(el("em", "", String(data.trash.length)));
     tr.onclick = () => { trashOn = !trashOn; selecting = false; picked.clear(); draw(); };
-    h.append(q, sel, tr);
+    // which agents' history is read is Settings › Privacy's (the scattered
+    // settings audit after netube99 on X); gateway mode reads none there
+    const go = el("button", "text sm-toset");
+    go.type = "button";
+    go.append(el("span", "", t("Settings")), " ›");
+    go.hidden = !!data?.reads?.gateway;
+    go.onclick = (e) => openSettingsAt(e, "privacy", "#sessionReadsList .row");
+    h.append(q, sel, tr, go);
     return h;
   }
 

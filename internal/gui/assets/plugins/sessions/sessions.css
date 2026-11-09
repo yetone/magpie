@@ -19,6 +19,7 @@
 .sm-filter { width: 200px; flex: 0 1 200px; min-width: 110px; }
 .sm-trash-btn { display: inline-flex; align-items: center; gap: 5px; flex: none; }
 .sm-trash-btn.on { background: var(--pill); color: var(--fg); }
+.sm-toset { flex: none; white-space: nowrap; }
 .sm-body { display: flex; flex-direction: column; gap: 8px; flex: none; }
 .sm-note { margin: 0 2px; }
 /* where a session said what was searched for, the words themselves marked */
@@ -114,12 +115,13 @@ body.window .sm-group .row.sm-sess { padding-left: 32px; }
   .row.sm-sess .cost { min-width: 58px; }
 }
 @media (max-width: 420px) {
-  .sm-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; row-gap: 6px; }
+  .sm-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; row-gap: 6px; }
   .sm-switch { grid-column: 1 / -1; }
   .sm-agent-pick { max-width: 100%; }
   .sm-filter { grid-column: 1; grid-row: 2; width: 100%; min-width: 0; }
   .sm-select { grid-column: 2; grid-row: 2; }
   .sm-trash-btn { grid-column: 3; grid-row: 2; justify-self: end; }
+  .sm-toset { grid-column: 4; grid-row: 2; }
 }
 /* Codex sessions made with another provider, hidden from Codex's history (#887) */
 .row.sm-provider { gap: 10px; min-height: 40px; padding: 8px 11px; height: auto; }
