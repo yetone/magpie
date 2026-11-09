@@ -11,3 +11,5 @@ func runGUI(bool, string) error { return errors.New("this build has no GUI; run 
 func runPanel() error { return runGUI(false, "") }
 
 func runWindow(string) error { return runGUI(true, "") }
+
+func runUninstallWindow() error { return runGUI(true, "") }

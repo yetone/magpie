@@ -42,6 +42,26 @@ async function setup(t, engine, lang, width, { web = false, reply = { failed: fa
   return { page, errors, posts };
 }
 
+// the window as `magpie uninstall --window` opens it
+async function opened(t, engine, lang, width, { web = false }) {
+  const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+  t.after(() => browser.close());
+  const page = await (await browser.newContext({ viewport: { width, height: 700 }, reducedMotion: "reduce" })).newPage();
+  page.setDefaultTimeout(6000);
+  page.setDefaultNavigationTimeout(60000);
+  const errors = [], posts = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.route("**/*", fixture(lang, "light", [], { web }));
+  await page.route("**/api/uninstall**", (route) => {
+    const p = new URL(route.request().url()).pathname;
+    posts.push(p);
+    if (p === "/api/uninstall/finish") return route.fulfill({ status: 204 });
+    return route.fulfill({ json: { agents: [], system: [], data: [], failed: false, says: [] } });
+  });
+  await page.goto("http://magpie.test/?view=settings&tab=about&uninstall=1");
+  return { page, errors, posts };
+}
+
 const dialog = (page) => page.locator("dialog.action-confirm");
 const scrolled = (page) => page.evaluate(() => document.querySelector("#view-settings").scrollTop);
 
@@ -100,6 +120,42 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await dialog(page).getByRole("button", { name: "Quit magpie", exact: true }).click();
     await waitFor(() => posts.length === 2);
     assert.deepEqual(posts, ["/api/uninstall", "/api/uninstall/finish"]);
+    assert.deepEqual(errors, []);
+  });
+
+  // Windows' Installed apps › Uninstall runs `magpie uninstall --window`,
+  // which opens the window here (uninstallView): the question is asked at
+  // once, once, and nothing goes before the reader says Uninstall.
+  for (const lang of ["en", "zh"]) {
+    for (const width of [1100, 420]) {
+      test(`${engine} ${lang} ${width}: opened from Installed apps, it asks at once`, async (t) => {
+        const { page, errors, posts } = await opened(t, engine, lang, width, {});
+        const w = words[lang];
+        await dialog(page).waitFor();
+        assert.equal(await dialog(page).locator("h2").textContent(), w.title);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "wider than the window");
+        await dialog(page).getByRole("button", { name: w.cancel, exact: true }).click();
+        await dialog(page).waitFor({ state: "detached" });
+        // Settings drawn again (a text size change) doesn't ask again
+        await page.evaluate(() => renderSettings());
+        await page.waitForTimeout(300);
+        assert.equal(await dialog(page).count(), 0, "asked again");
+        assert.deepEqual(posts, []);
+        await page.locator("#uninstallRow button").click();
+        await dialog(page).getByRole("button", { name: w.go, exact: true }).click();
+        await waitFor(() => posts.length === 2);
+        assert.deepEqual(posts, ["/api/uninstall", "/api/uninstall/finish"]);
+        assert.deepEqual(errors, []);
+      });
+    }
+  }
+
+  test(`${engine}: magpie web opened at the uninstall link asks nothing`, async (t) => {
+    const { page, errors, posts } = await opened(t, engine, "en", 1100, { web: true });
+    await page.locator("#about .row").first().waitFor();
+    await page.waitForTimeout(300);
+    assert.equal(await dialog(page).count(), 0);
+    assert.deepEqual(posts, []);
     assert.deepEqual(errors, []);
   });
 

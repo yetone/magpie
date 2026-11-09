@@ -20178,6 +20178,7 @@ function renderSettings() {
     const go = el("button", "text danger", t("Uninstall…"));
     go.onclick = () => uninstallMagpie(go);
     row(t("Uninstall magpie"), t("Disconnects every agent, putting back what each had, then removes magpie's service and files"), "", go).id = "uninstallRow";
+    if (mode === "window" && params.has("uninstall")) params.delete("uninstall"), uninstallMagpie(go);
   }
   // gateway mode leaves out what is written into this computer's agents'
   // files, and the alerts its desktop would show

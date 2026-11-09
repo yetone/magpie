@@ -16,8 +16,8 @@ import (
 )
 
 // appPath is where Win+R and `start magpie` look magpie.exe up: the user's
-// own, no administrator needed
-const appPath = `Software\Microsoft\Windows\CurrentVersion\App Paths\magpie.exe`
+// own, no administrator needed. A var so the test writes a key of its own.
+var appPath = `Software\Microsoft\Windows\CurrentVersion\App Paths\magpie.exe`
 
 func registerAppPath(exe string) {
 	if k, _, err := registry.CreateKey(registry.CURRENT_USER, appPath, registry.SET_VALUE); err == nil {
@@ -25,6 +25,57 @@ func registerAppPath(exe string) {
 		_ = k.SetStringValue("Path", filepath.Dir(exe))
 		k.Close()
 	}
+	registerUninstall(exe)
+}
+
+// uninstallKey is magpie's entry in Settings › Apps › Installed apps (and
+// Control Panel's Programs and Features), the user's own. With none,
+// Windows' own way to remove a program didn't list magpie, so it was
+// deleted by hand, which runs no code: Codex kept openai_base_url on a
+// gateway that was gone (Jevik_AI on X). Its Uninstall runs magpie's own
+// (UninstallCommand), which puts every agent back first. A var so the
+// test writes a key of its own.
+var uninstallKey = `Software\Microsoft\Windows\CurrentVersion\Uninstall\magpie`
+
+// registerUninstall writes the entry for exe, at every start, so it
+// follows an exe that was moved.
+func registerUninstall(exe string) {
+	k, _, err := registry.CreateKey(registry.CURRENT_USER, uninstallKey, registry.SET_VALUE)
+	if err != nil {
+		return
+	}
+	defer k.Close()
+	for name, v := range map[string]string{
+		"DisplayName":     Name,
+		"DisplayIcon":     exe + ",0",
+		"Publisher":       Name,
+		"InstallLocation": filepath.Dir(exe),
+		"UninstallString": UninstallCommand(exe),
+		"URLInfoAbout":    "https://usemagpie.ai",
+	} {
+		_ = k.SetStringValue(name, v)
+	}
+	// Uninstall is the one button: there is nothing to modify or repair
+	_ = k.SetDWordValue("NoModify", 1)
+	_ = k.SetDWordValue("NoRepair", 1)
+}
+
+// unregisterUninstall takes the entry out while it is exe's, or its exe
+// is gone; another magpie's stays.
+func unregisterUninstall(exe string) error {
+	k, err := registry.OpenKey(registry.CURRENT_USER, uninstallKey, registry.QUERY_VALUE)
+	if err != nil {
+		return nil // none
+	}
+	v, _, err := k.GetStringValue("DisplayIcon")
+	k.Close()
+	v = strings.TrimSuffix(v, ",0")
+	if err == nil && v != "" && !strings.EqualFold(filepath.Clean(v), filepath.Clean(exe)) {
+		if _, err := os.Stat(v); err == nil {
+			return nil // another magpie's
+		}
+	}
+	return registry.DeleteKey(registry.CURRENT_USER, uninstallKey)
 }
 
 func registeredAppPath() bool {
@@ -124,18 +175,19 @@ func write(lnk, exe string) (bool, error) {
 }
 
 // unregisterAppPath takes magpie's App Paths entry out while it opens exe,
-// or an exe that is gone.
+// or an exe that is gone, and its Installed apps entry the same way.
 func unregisterAppPath(exe string) error {
+	uerr := unregisterUninstall(exe)
 	k, err := registry.OpenKey(registry.CURRENT_USER, appPath, registry.QUERY_VALUE)
 	if err != nil {
-		return nil // none
+		return uerr // none
 	}
 	v, _, err := k.GetStringValue("")
 	k.Close()
 	if err == nil && v != "" && !strings.EqualFold(filepath.Clean(v), filepath.Clean(exe)) {
 		if _, err := os.Stat(v); err == nil {
-			return nil // another magpie's
+			return uerr // another magpie's
 		}
 	}
-	return registry.DeleteKey(registry.CURRENT_USER, appPath)
+	return errors.Join(uerr, registry.DeleteKey(registry.CURRENT_USER, appPath))
 }

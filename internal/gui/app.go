@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -677,7 +678,11 @@ func Run(version string, showMain bool, link string) error {
 		h.whenReady(h.applyZoom)
 	}
 	if showMain {
-		h.whenReady(func() { h.ShowMain(argView(OpenView)) })
+		view := argView(OpenView)
+		if OpenUninstall {
+			view = uninstallView
+		}
+		h.whenReady(func() { h.ShowMain(view) })
 	} else if quiet && settings.Load().Dock {
 		// kept out of the Dock to start (Mac options above), it joins
 		// now without coming to the front
@@ -741,6 +746,8 @@ func singleInstance(h *host) *application.SingleInstanceOptions {
 			case len(args) == 1 && args[0] == "tray":
 			case len(args) == 1 && args[0] == "panel":
 				h.whenReady(func() { application.InvokeAsync(h.togglePanel) })
+			case slices.Equal(args, shortcut.UninstallArgs):
+				h.whenReady(func() { h.ShowMain(uninstallView) })
 			case len(args) == 2 && (args[0] == "gui" || args[0] == "app"):
 				h.whenReady(func() { h.ShowMain(argView(args[1])) })
 			default:
@@ -845,6 +852,14 @@ func panelOptions(goos, theme string) application.WebviewWindowOptions {
 // does; a second `magpie panel` toggles it in the running one. Omarchy's bar
 // icon runs it (see omarchy.AddWidget).
 var OpenPanel bool
+
+// OpenUninstall opens the window on Settings › Uninstall magpie, asking
+// (Windows' Installed apps, shortcut.UninstallArgs).
+var OpenUninstall bool
+
+// uninstallView is Settings' About part with Uninstall magpie's question
+// open (uninstallMagpie in app.js).
+const uninstallView = "settings&tab=about&uninstall=1"
 
 // OpenView is the tab the window opens on, as `magpie gui settings` asks:
 // a restart to update comes back where it was asked for.

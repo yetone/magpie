@@ -34,6 +34,14 @@ func runWindow(view string) error {
 	return runGUI(true, "")
 }
 
+// runUninstallWindow starts the app with its window on Settings ›
+// Uninstall magpie, asking, or brings the running one's there: what
+// Windows' Installed apps runs for magpie's Uninstall.
+func runUninstallWindow() error {
+	gui.OpenUninstall = true
+	return runGUI(true, "")
+}
+
 // runPanel starts the app with its quick panel open, or toggles the panel
 // of the one already running.
 func runPanel() error {

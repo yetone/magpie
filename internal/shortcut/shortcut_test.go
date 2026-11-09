@@ -38,3 +38,13 @@ func TestStale(t *testing.T) {
 		}
 	}
 }
+
+// Installed apps runs the exe it names, quoted, with the arguments the
+// CLI opens the window on (the path has spaces under a user's name).
+func TestUninstallCommand(t *testing.T) {
+	got := UninstallCommand(`C:\Users\Ann Lee\AppData\Local\Programs\magpie\magpie.exe`)
+	want := `"C:\Users\Ann Lee\AppData\Local\Programs\magpie\magpie.exe" uninstall --window`
+	if got != want {
+		t.Fatalf("UninstallCommand = %s, want %s", got, want)
+	}
+}
