@@ -1546,15 +1546,42 @@ async function loadPlugins(list) {
     if (!isPi) loaded.push({ spec: p.spec })
   }
   config = { provider: {}, ...structuredClone(userConfig) }
+  ownConfig = new Map()
   for (const h of hooks) {
     if (typeof h.hooks.config !== "function") continue
+    // a provider the plugin signs in to is built from the user's own
+    // entry, or what this plugin made of it before, never from another
+    // plugin's that signs in to it too: a third party's that set it
+    // first (models: {}) left the other's `??=` nothing to add, and the
+    // provider no models (豆包工作, two plugins of doubao-work)
+    const ids = signsIn(h.spec)
+    for (const id of ids) {
+      const own = ownConfig.get(ownKey(h.spec, id)) ?? structuredClone(userConfig.provider?.[id])
+      if (own === undefined) delete config.provider[id]
+      else config.provider[id] = own
+    }
     try {
       // one at a time, as each may build on the last, but none for long
       await inTime(() => h.hooks.config(config), loadWait, "config hook")
     } catch (e) {
       send({ event: "log", level: "error", message: `${h.spec}: config hook: ${e?.message ?? e}` })
     }
+    for (const id of ids) ownConfig.set(ownKey(h.spec, id), config.provider?.[id])
   }
+}
+
+// ownConfig is each provider's config entry as the config hook of each
+// plugin that signs in to it made it, by ownKey(spec, id). The plugin
+// serving the provider (auths) is the one whose entry counts.
+let ownConfig = new Map()
+const ownKey = (spec, id) => spec + "\0" + id
+
+// providerConfig is the config entry of provider id: the serving plugin's
+// own, or what the config hooks made of it when no plugin signs in to it.
+function providerConfig(id) {
+  const server = auths().get(id)?.spec
+  const k = server && ownKey(server, id)
+  return k && ownConfig.has(k) ? ownConfig.get(k) : config.provider?.[id]
 }
 
 // A bounded await detaches its listener even when the plugin ignores the
@@ -2094,7 +2121,7 @@ function fromModelsDev(p, m) {
 // its own options' signal too (#4678).
 async function info(id, key, strict, limit, quiet, signal) {
   const md = mdev()[id]
-  const cfg = config.provider?.[id]
+  const cfg = providerConfig(id)
   const out = {
     id,
     name: cfg?.name ?? md?.name ?? id,
