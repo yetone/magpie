@@ -9002,10 +9002,11 @@ function openModal(content, quiet) {
     || focusIndex >= 0 && content.querySelectorAll("input, textarea, select, button")[focusIndex];
   // the focus given back is not a press: what was pressed stays held, by
   // the element a redraw put back or by the focused copy of it
-  modalRefocus = !fresh;
+  const copy = held && (content.contains(held) ? held : held === active && focus) || null;
+  modalRefocus = !!copy;
   try { (focus || content.querySelector("input:not([disabled]), textarea, select, button:not([disabled])") || d).focus(NO_SCROLL); }
   finally { modalRefocus = false; }
-  if (held) modalHold.copy = content.contains(held) ? held : held === active && focus || null;
+  modalHold.copy = copy;
   const body = content.querySelector(":scope > .ebody");
   if (body) body.scrollTop = top; // a re-render keeps the place
   const nextNames = content.querySelector(".mnames:not([hidden])");
