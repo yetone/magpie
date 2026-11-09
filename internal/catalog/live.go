@@ -42,6 +42,16 @@ type liveFile struct {
 	// Kinded is set on a list saved since lists keep the models made for
 	// another API, tagged (Model.Serves): LiveKinded.
 	Kinded bool `json:"kinded,omitempty"`
+	// Since is when each model of the list was first in it, as the saves
+	// before this one had it: what tells a list fetched before a model
+	// came (another account's list has had it only since) from one that
+	// leaves it out (LiveSince).
+	Since map[string]time.Time `json:"since,omitempty"`
+	// Asked is what the list was asked as, where the vendor's answer
+	// depends on it: the Codex client version a ChatGPT account's list
+	// was asked for (the backend lists a model only to a client new
+	// enough for it). "" when not said, or saved before it was kept.
+	Asked string `json:"asked,omitempty"`
 	// byID is the chat models by their id, in the list's order, made
 	// once a read: asked for every model of a list, a copy and a scan of
 	// the list each time cost 2,500 models' /v1/models seconds (K.Liu on
@@ -224,7 +234,59 @@ func Chat(ms []Model) []Model {
 
 // SaveLive stores a fetched list; an empty list forgets it.
 func SaveLive(provider, base string, models []Model) error {
-	return SaveLiveSides(provider, base, models, nil)
+	return saveLive(provider, base, "", models, nil)
+}
+
+// SaveLiveAsked is SaveLive for a list whose answer depends on what it was
+// asked as (liveFile.Asked), kept beside it for LiveAsked.
+func SaveLiveAsked(provider, base, asked string, models []Model) error {
+	return saveLive(provider, base, asked, models, nil)
+}
+
+// LiveAsked is what the provider's fetched list was asked as
+// (SaveLiveAsked): "" when it wasn't said, or there is no list.
+func LiveAsked(provider string) string {
+	f, err := readLive(provider)
+	if err != nil {
+		return ""
+	}
+	return f.Asked
+}
+
+// LiveSince is when the provider's fetched list first had model, as far
+// as magpie kept it: since the first save that listed it, or, for a list
+// saved before that was kept, since that list's own fetch (no earlier
+// one is known). ok is false when the list doesn't have it, or there is
+// none.
+func LiveSince(provider, model string) (since time.Time, ok bool) {
+	f, err := readLive(provider)
+	if err != nil || !slices.ContainsFunc(f.Models, func(m Model) bool { return m.ID == model }) {
+		return time.Time{}, false
+	}
+	if t, ok := f.Since[model]; ok {
+		return t, true
+	}
+	return f.Fetched, true
+}
+
+// LiveNewest is when the newest model in provider's list was first in it
+// (LiveSince); zero when there is no list.
+func LiveNewest(provider string) time.Time {
+	f, err := readLive(provider)
+	if err != nil {
+		return time.Time{}
+	}
+	var newest time.Time
+	for _, m := range f.Models {
+		t, ok := f.Since[m.ID]
+		if !ok {
+			t = f.Fetched
+		}
+		if t.After(newest) {
+			newest = t
+		}
+	}
+	return newest
 }
 
 // SaveLiveSides is SaveLive, keeping what each endpoint answered with beside
@@ -232,6 +294,10 @@ func SaveLive(provider, base string, models []Model) error {
 // their own asks every base, and a base that can't be asked next time has to
 // know which of the models were its own to keep (#904).
 func SaveLiveSides(provider, base string, models []Model, sides map[string][]Model) error {
+	return saveLive(provider, base, "", models, sides)
+}
+
+func saveLive(provider, base, asked string, models []Model, sides map[string][]Model) error {
 	p := LivePath(provider)
 	if len(models) == 0 {
 		err := os.Remove(p)
@@ -246,12 +312,38 @@ func SaveLiveSides(provider, base string, models []Model, sides map[string][]Mod
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}
-	b, _ := json.MarshalIndent(liveFile{Fetched: time.Now(), Base: base, Models: models, Sides: sides, Kinded: true}, "", "  ")
+	now := time.Now()
+	b, _ := json.MarshalIndent(liveFile{Fetched: now, Base: base, Models: models, Sides: sides, Kinded: true,
+		Since: liveSince(provider, models, now), Asked: asked}, "", "  ")
 	if err := os.WriteFile(p, b, 0o644); err != nil {
 		return err
 	}
 	Touched()
 	return nil
+}
+
+// liveSince is Since for models about to be saved for provider at now:
+// what the list saved before said of each model it had too, now for one it
+// didn't. A list saved before Since was kept had each of its models since
+// its fetch at least.
+func liveSince(provider string, models []Model, now time.Time) map[string]time.Time {
+	prev, err := readLive(provider)
+	out := make(map[string]time.Time, len(models))
+	for _, m := range models {
+		if _, ok := out[m.ID]; ok || m.ID == "" {
+			continue
+		}
+		out[m.ID] = now
+		if err != nil {
+			continue
+		}
+		if t, ok := prev.Since[m.ID]; ok {
+			out[m.ID] = t
+		} else if slices.ContainsFunc(prev.Models, func(o Model) bool { return o.ID == m.ID }) {
+			out[m.ID] = prev.Fetched
+		}
+	}
+	return out
 }
 
 // Changed, when set, is told that the models magpie offers may be others

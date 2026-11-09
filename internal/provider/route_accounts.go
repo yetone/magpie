@@ -58,7 +58,9 @@ func (p Provider) AccountsOn() []AccountOn {
 // back (the gateway's usage caps; nil holds none). An account whose list
 // lacks the model would only answer 400, so it is in out only when no
 // account lists it (by the vendor's own id: an account's list names its
-// models by theirs, not by one the user lists one by).
+// models by theirs, not by one the user lists one by). A list older than
+// the model, as magpie knows it (Account.listLags), is unknown, not a
+// plan without it: that account is in out.
 func (p Provider) AccountsFor(model string, held func(AccountOn) bool) (out, left, barred []AccountOn) {
 	all := slices.DeleteFunc(p.AccountsOn(), func(a AccountOn) bool {
 		if p.AccountServes(a.Account.User, model) {
@@ -77,15 +79,32 @@ func (p Provider) AccountsFor(model string, held func(AccountOn) bool) (out, lef
 		})
 	}
 	own := p.OwnModelID(model)
+	var lacking []AccountOn
 	for _, a := range all {
 		if a.Account.Lists(own) {
 			out = append(out, a)
 		} else {
-			left = append(left, a)
+			lacking = append(lacking, a)
 		}
 	}
 	if len(out) == 0 {
 		return all, nil, barred
+	}
+	// a list older than the model says nothing of it (listLags): such an
+	// account is asked as one that lists it, at its own place in the order
+	listing := slices.Clone(out)
+	lags := map[int]bool{}
+	for _, a := range lacking {
+		if a.Account.listLags(own, listing) {
+			lags[a.Rank] = true
+		} else {
+			left = append(left, a)
+		}
+	}
+	if len(lags) > 0 {
+		out = slices.DeleteFunc(slices.Clone(all), func(a AccountOn) bool {
+			return !lags[a.Rank] && !slices.ContainsFunc(listing, func(o AccountOn) bool { return o.Rank == a.Rank })
+		})
 	}
 	return out, left, barred
 }

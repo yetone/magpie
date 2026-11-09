@@ -1074,11 +1074,11 @@ func codexAccount(home string) (Provider, bool) {
 	acct.models = catalog.Codex
 	acct.listedOnly = true
 	acct.fetch = func(ctx context.Context) ([]catalog.Model, error) {
-		ms, err := codexModels(ctx, acct.sign)
+		ms, ver, err := codexModelsAsked(ctx, acct.sign)
 		if err != nil {
 			return nil, err
 		}
-		catalog.SaveLive(accountModels("codex", acct.User), CodexBase, ms)
+		catalog.SaveLiveAsked(accountModels("codex", acct.User), CodexBase, ver, ms)
 		codexFetchSaved(ctx)
 		ms = codexPoolModels(ms)
 		return ms, catalog.SaveLive("codex", CodexBase, ms)
