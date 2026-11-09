@@ -1,7 +1,6 @@
 package catalog
 
 import (
-	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -34,28 +33,24 @@ var pricedRuns atomic.Uint64
 // the memo when it has it. find runs without the memo's lock held:
 // PricedBy calls itself for a renamed id.
 func pricedOnce(at int, kind byte, providers []string, id string, find func() (Price, bool)) (Price, bool) {
-	var k strings.Builder
-	n := 2 + len(id)
+	// the key is made on the stack and looked up without a copy (Go reads
+	// m[string(b)] in place): made into a string for every price asked,
+	// it was ~0.6 MB of a provider list's ~5 MB of garbage an ask
+	var buf [160]byte
+	k := append(buf[:0], kind)
 	for _, p := range providers {
-		n += len(p) + 1
+		k = append(append(k, p...), 0)
 	}
-	k.Grow(n) // one allocation, not one a doubling: it is made for every price asked
-	k.WriteByte(kind)
-	for _, p := range providers {
-		k.WriteString(p)
-		k.WriteByte(0)
-	}
-	k.WriteByte(1)
-	k.WriteString(id)
-	key := k.String()
+	k = append(append(k, 1), id...)
 	pricedMemo.Lock()
 	if pricedMemo.gen == at && pricedMemo.by != nil {
-		if f, ok := pricedMemo.by[key]; ok {
+		if f, ok := pricedMemo.by[string(k)]; ok {
 			pricedMemo.Unlock()
 			return f.pr, f.ok
 		}
 	}
 	pricedMemo.Unlock()
+	key := string(k)
 	pricedRuns.Add(1)
 	pr, ok := find()
 	pricedMemo.Lock()

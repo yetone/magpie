@@ -251,3 +251,21 @@ func ageProbes(t *testing.T, d time.Duration) {
 		probed.m[k] = f
 	}
 }
+
+// TestHostnameOfKept: the provider list asks each provider's base URL's
+// hostname on every poll; it is parsed once, then answered without
+// garbage, and an unparsable one is "".
+func TestHostnameOfKept(t *testing.T) {
+	const raw = "https://api.example.com:8443/v1"
+	if h := hostnameOf(raw); h != "api.example.com" {
+		t.Fatalf("hostnameOf(%q) = %q", raw, h)
+	}
+	if n := testing.AllocsPerRun(100, func() { hostnameOf(raw) }); n != 0 {
+		t.Errorf("a hostname parsed before made %v allocations, want 0", n)
+	}
+	for range 2 {
+		if h := hostnameOf("http://[::1"); h != "" {
+			t.Errorf("an unparsable URL's hostname = %q", h)
+		}
+	}
+}

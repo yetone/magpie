@@ -135,11 +135,30 @@ func notProbed(host string) bool {
 }
 
 func hostnameOf(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return ""
+	hostnames.Lock()
+	h, ok := hostnames.m[raw]
+	hostnames.Unlock()
+	if ok {
+		return h
 	}
-	return u.Hostname()
+	if u, err := url.Parse(raw); err == nil {
+		h = u.Hostname()
+	}
+	hostnames.Lock()
+	if hostnames.m == nil || len(hostnames.m) >= 512 {
+		hostnames.m = map[string]string{}
+	}
+	hostnames.m[raw] = h
+	hostnames.Unlock()
+	return h
+}
+
+// hostnames are the base URLs hostnameOf has parsed: the provider list
+// asks every provider's on each poll, and parsing them again was ~0.4 MB
+// of its garbage an ask. A URL's hostname is the same every time.
+var hostnames struct {
+	sync.Mutex
+	m map[string]string
 }
 
 // probedBalanceURL is the query found for p, without asking: "" when none
