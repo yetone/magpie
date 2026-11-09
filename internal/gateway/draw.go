@@ -1134,6 +1134,12 @@ func viaFor(p provider.Provider, model string) drawVia {
 		return viaImages
 	case isGoogle(p) && strings.Contains(strings.ToLower(model), "gemini"):
 		return viaGemini
+	case p.ModelKind(model) == provider.KindImage:
+		// one the user said is an image model is asked at the images API
+		// first, as the editor's Makes: Image model says (a relay's
+		// jimeng-4.0 isn't named for one); a provider without that API
+		// (404, 405) has it drawn on chat completions, as draw falls back
+		return viaImages
 	case isOpenRouter(p):
 		if catalog.ImagesAPI(model) || answersInImages(p, model) {
 			return viaImages
