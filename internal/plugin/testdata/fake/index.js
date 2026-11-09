@@ -99,6 +99,13 @@ export const FakePlugin = async ({ client }) => ({
       cfg.provider[ID].models["sensenova-u1.5-lite"] = { name: "sensenova-u1.5-lite", limit: { context: 131072, output: 32768 } }
       cfg.provider[ID].models["flux-2"] = { name: "Flux 2", provider: { npm: "@ai-sdk/anthropic" }, limit: { context: 1000, output: 100 } }
     }
+    // $FAKE_DECLARED_DRAWS: image models whose names say nothing, on the
+    // provider's openai-compatible: one that says it gives images alone,
+    // and one that answers in text and images, which chats (maonekone)
+    if (process.env.FAKE_DECLARED_DRAWS) {
+      cfg.provider[ID].models["jimeng-4.0"] = { name: "Jimeng 4.0", modalities: { input: ["text", "image"], output: ["image"] }, limit: { context: 1000, output: 100 } }
+      cfg.provider[ID].models["fake-canvas"] = { name: "Fake Canvas", modalities: { input: ["text"], output: ["text", "image"] }, limit: { context: 1000, output: 100 } }
+    }
     // $FAKE_LOOMY: iFlytek's Loomy gateway's three image generators as its
     // /v1/models lists them (#4913), on the provider's openai-compatible;
     // all three draw on its images API

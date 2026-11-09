@@ -168,3 +168,36 @@ func TestSenseNovaPluginDraws(t *testing.T) {
 		t.Fatalf("edit was sent %v", sent)
 	}
 }
+
+// A plugin's model that says it gives images alone (modalities.output
+// ["image"]) is an image model whatever its name: Settings' picker lists
+// it, and it draws on the images API through the plugin's fetch, never on
+// chat. One that answers in text and images stays a chat model
+// (maonekone on Discord).
+func TestPluginDeclaredDrawerDraws(t *testing.T) {
+	t.Setenv("FAKE_DECLARED_DRAWS", "1")
+	v := &senseNova{}
+	pid := besideFake(t, "sensenova", v)
+	p, err := provider.Find(pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var drawers []string
+	for _, m := range Drawers(*p) {
+		drawers = append(drawers, m.ID)
+	}
+	if !slices.Equal(drawers, []string{"jimeng-4.0"}) {
+		t.Fatalf("drawers %v, want jimeng-4.0 alone", drawers)
+	}
+	s := New()
+	code, a, raw := postImages(t, s, "/v1/images/generations", "application/json", `{"model":"`+pid+`/jimeng-4.0","prompt":"a magpie","size":"1024x1024"}`)
+	if code != 200 || len(a.Data) != 1 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	if sent := v.got("/v1/images/generations"); len(sent) != 1 || !strings.Contains(sent[0], `"model":"jimeng-4.0"`) {
+		t.Fatalf("generation was sent %v", sent)
+	}
+	if sent := v.got("/v1/chat/completions"); len(sent) != 0 {
+		t.Fatalf("an image model was asked on chat: %v", sent)
+	}
+}

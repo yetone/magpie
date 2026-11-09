@@ -373,7 +373,9 @@ func DrawersOf(p provider.Provider, avail func() []catalog.Model) []catalog.Mode
 			if p.ModelKind(m.ID) == provider.KindVideo {
 				continue
 			}
-			if catalog.DrawsID(m.ID) && catalog.ImagesAPI(m.ID) && p.PluginOpenAICompatible(m.ID) ||
+			// or one the plugin says gives images alone, whatever its name
+			// (maonekone on Discord)
+			if (catalog.DrawsID(m.ID) && catalog.ImagesAPI(m.ID) || imagesOnly(m.OutputModalities)) && p.PluginOpenAICompatible(m.ID) ||
 				pluginDrawsGemini(p, m.ID) && (catalog.DrawsID(m.ID) || slices.Contains(m.OutputModalities, "image")) {
 				m.Provider = p.ID
 				out = append(out, m)
@@ -1145,10 +1147,21 @@ func viaFor(p provider.Provider, model string) drawVia {
 			return viaImages
 		}
 		return viaChat
-	case catalog.ImagesAPI(model):
+	case catalog.ImagesAPI(model), p.IsPlugin() && pluginImagesOnly(p, model):
 		return viaImages
 	}
 	return viaChat
+}
+
+// imagesOnly is whether a model's output modalities are images and no text.
+func imagesOnly(out []string) bool {
+	return slices.Contains(out, "image") && !slices.Contains(out, "text")
+}
+
+// pluginImagesOnly is whether p, a plugin, lists model as giving images
+// alone: it draws at the images API, as one named for it does.
+func pluginImagesOnly(p provider.Provider, model string) bool {
+	return slices.ContainsFunc(p.Available(), func(m catalog.Model) bool { return m.ID == model && imagesOnly(m.OutputModalities) })
 }
 
 // answersInImages is whether p's fetched list says model answers with images
