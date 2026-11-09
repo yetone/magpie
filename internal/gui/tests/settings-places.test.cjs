@@ -4,8 +4,8 @@
 // menu bar; the alerts (allowance, balance, reset, task done) sit under
 // their own Alerts heading, not among the allowances' display; what routing
 // does when an account refuses or every one rests, and a busy model's place
-// (from Network), sit under Models › Routing, which the Routing page opens.
-// Every
+// (from Network), sit under Models › Routing, which the Routing page opens;
+// the Usage page's allowances open Settings › Allowances. Every
 // language, Chromium and WebKit, at 1100 and 420 wide, nothing past the
 // window's edge. No backend, the API is faked here.
 const assert = require("node:assert/strict");
@@ -33,7 +33,7 @@ function server(lang, web) {
     if (url.pathname === "/api/settings") return json(cur);
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
     if (url.pathname === "/api/providers") return json({ providers: [] });
-    if (url.pathname === "/api/usage/quotas") return json([]);
+    if (url.pathname === "/api/usage/quotas") return json([{ provider: "codex", name: "Codex", icon: "openai", plan: "Plus", user: "dev.one@example.com", windows: [{ name: "5 hours", used: 20 }] }]);
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
     if (url.pathname === "/api/window/fit") return route.fulfill({ status: 204 });
     if (url.pathname.startsWith("/api/")) return json({});
@@ -107,6 +107,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert(await fits(page), "the Routing page fits");
         await go.click();
         await page.locator("#view-settings #routeList .row.flash").waitFor();
+        assert.deepEqual(page.errors, []);
+
+        // the Usage page's allowances lead to how they are shown
+        page = await open(false, "usage");
+        const uset = page.locator("#quotaHead #usageToSet");
+        await uset.waitFor();
+        assert.equal((await uset.textContent()).trim(), (await tr(page, "Settings")) + " ›");
+        assert(await fits(page), "the Usage page fits");
+        const box = await page.locator("#quotaHead").boundingBox(), ub = await uset.boundingBox();
+        assert(ub.x >= box.x - 1 && ub.x + ub.width <= box.x + box.width + 1, "inside the allowances' head");
+        await uset.click();
+        await page.locator("#view-settings #setPage-usage #quotaLeftRow.flash").waitFor();
         assert.deepEqual(page.errors, []);
       });
     }

@@ -609,6 +609,10 @@ const USAGE_FOLD_TITLES = {
   keys: ["Show the gateway keys", "Fold the gateway keys away"],
 };
 function mountUsageFolds() {
+  // how the allowances are shown, and their alerts, are set in
+  // Settings › Allowances
+  const toSet = $("#usageToSet");
+  if (toSet) toSet.onclick = (e) => openSettingsAt(e, "usage", "#quotaLeftRow");
   for (const b of $$("#usagePane .row-head .fold[data-fold]")) {
     b.prepend(svg(CHEV_R, 11, 1.6));
     b.onclick = () => {

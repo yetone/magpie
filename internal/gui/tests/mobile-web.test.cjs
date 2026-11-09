@@ -385,6 +385,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
                 await current.locator("#rtToSet").evaluate((b) => b.remove());
                 await current.waitForTimeout(350);
               }
+              // So is the Usage page's, in the allowances' head.
+              if (view === "usage" && !baselineFile("plugins/usage/client.js").toString().includes("usageToSet")) {
+                await current.locator("#usageToSet").evaluateAll((bs) => bs.forEach((b) => b.remove()));
+                await current.waitForTimeout(350);
+              }
               // A setting row's line wraps whole (arculongus on Discord):
               // until BASE_REF has that, the page is compared with the lines
               // held to one line as they were; settings-lines-wrap.test.cjs
