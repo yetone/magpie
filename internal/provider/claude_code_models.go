@@ -129,8 +129,14 @@ func readClaudeCodeModels(path string) (claudeCodeModels, bool) {
 
 // claudeCodeFiles are the state files of every Claude Code magpie knows of
 // an account in: the one Claude Code itself is signed in to, then each
-// saved account's own config directory (claude_dirs.go).
+// saved account's own config directory (claude_dirs.go). Listed once
+// while a request holds the catalog: each Claude model's price asked for
+// them, so a build of an agent's models read the folder once per model.
 func claudeCodeFiles() []string {
+	return slices.Clip(heldOf("claude code files", listClaudeCodeFiles))
+}
+
+func listClaudeCodeFiles() []string {
 	if settings.AccountDiscoveryOff() {
 		return nil
 	}
