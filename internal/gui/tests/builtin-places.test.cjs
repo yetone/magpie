@@ -7,6 +7,8 @@
 // (featOff); Masking's head goes back to Settings › Privacy, and its row
 // says so when nothing is chosen to mask. Settings
 // hidden while their plugin is off (Observability) get no link then.
+// Routing groups on while Routing is off have no page (theirs is
+// Routing's): their row says so and turns Routing on.
 // Every language, Chromium and WebKit, at 1100 and 420 wide, nothing
 // running off to the side; no backend, the API is faked here.
 const assert = require("node:assert/strict");
@@ -21,8 +23,8 @@ const { I18N } = strings();
 const LANGS = ["en", "zh", "zh-TW", "ja", "de"];
 const tr = (lang, s) => (lang === "en" ? s : I18N[lang]?.[s] ?? s);
 
-function fixture(lang, { redact = true, otel = true, masks = true } = {}) {
-  const st = { redact, otel };
+function fixture(lang, { redact = true, otel = true, masks = true, routing = true } = {}) {
+  const st = { redact, otel, routing, groups: true };
   const posts = [];
   const row = (id, name, sub, on, more) => ({ id, name, sub, on, chosen: on, source: "preset", state: on ? "active" : "off", inUse: 0, ...more });
   const builtins = () => [
@@ -30,6 +32,8 @@ function fixture(lang, { redact = true, otel = true, masks = true } = {}) {
       { setAt: "privacy #redactList", page: "masking", ...(st.redact ? { inUse: 1, use: "Masking is on" } : {}) }),
     row("otel", "Observability", "Send each request's trace to an OpenTelemetry collector", st.otel, { setAt: "otel #otelList" }),
     row("library", "Library", "Instructions, MCP servers, skills and hooks, kept once and given to every agent", true, { page: "library" }),
+    row("routing", "Routing", "Each request as the gateway routes it", st.routing, {}),
+    row("groups", "Routing groups", "Several models agents pick as one", st.groups, { opens: "groups" }),
   ];
   const settings = () => ({
     theme: "light", lang, tray: "panel", currency: "usd", textSize: 100,
@@ -142,6 +146,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal((await line.textContent()).trim(), w("Nothing is masked yet") + " · " + w("Settings") + " › " + w("Privacy") + " · " + w("Masking"));
           assert.equal(await wide(page), 0);
           assert.deepEqual(await past(featRow(page, "redact")), []);
+          assert.deepEqual(page.errors, []);
+          await page.context().close();
+        });
+        await t.test(`${lang} at ${width}px: groups on with Routing off say their page went with it, and turn it on`, async () => {
+          const { page, posts } = await open(lang, width, "?view=plugins", { routing: false });
+          await builtinTab(page);
+          const line = featRow(page, "groups").locator(".who .feat-go");
+          assert.equal((await line.textContent()).trim(), w("Their page is on Routing, which is off") + " · " + w("Turn on Routing"));
+          assert.equal(await wide(page), 0);
+          assert.deepEqual(await past(featRow(page, "groups")), []);
+          if (width === 420) shots.push([`${lang}-groups-routing-off`, await featRow(page, "groups").screenshot()]);
+          await line.locator("button.link").click();
+          await featRow(page, "groups").locator(".feat-go .warn").waitFor({ state: "detached" });
+          assert.deepEqual(posts, [{ id: "routing", on: true }]);
+          assert.equal(await featRow(page, "routing").locator(".lib-switch").getAttribute("aria-checked"), "true");
           assert.deepEqual(page.errors, []);
           await page.context().close();
         });

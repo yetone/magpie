@@ -1817,7 +1817,7 @@ function guideCard(g) {
   const three = guideStep(3, g.routing, t("Set up routing (optional)"),
     g.routing ? g.own.map((x) => x.name || x.id).join(", ") : t("A routing group sends each request to the right model, and to the next one when a model fails"));
   three.li.dataset.step = "routing";
-  three.li.dataset.feature = "groups";
+  three.li.dataset.feature = "routing groups";
   three.li.classList.add("optional");
   if (!g.routing && g.source) {
     guideLoadGroups();
