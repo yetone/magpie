@@ -17,10 +17,15 @@ import (
 // byte for byte what the Encoder of the whole gave: the page's tag rests
 // on those bytes. A field added to Stats shows here as a difference.
 func TestStatsAnswerWritesWhatEncodeDid(t *testing.T) {
+	// Active's hours are sessions' own type, so they come in as JSON does.
+	var active sessions.Active
+	if err := json.Unmarshal([]byte(`{"agent":"claude","cwd":"引号\"","seconds":61,"hours":[1,2]}`), &active); err != nil {
+		t.Fatal(err)
+	}
 	day := func(date string) sessions.Day {
 		return sessions.Day{Date: date,
 			Usage:  []sessions.Usage{{Agent: "codex", Cwd: "/a<b>&c", Model: "gpt x", Tokens: sessions.Tokens{Input: 3, CacheWrite1h: 1}, Cost: 1e21, Priced: true}},
-			Active: []sessions.Active{{Agent: "claude", Cwd: "引号\"", Seconds: 61, Hours: []int64{1, 2}}}}
+			Active: []sessions.Active{active}}
 	}
 	for _, c := range []struct {
 		st     sessions.Stats
