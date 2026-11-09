@@ -187,6 +187,13 @@ test("docs: the bare docs paths open each language's guide", async () => {
   }
 });
 
+test("site: /favicon.ico goes to the icon the pages link", async () => {
+  const env = { ASSETS: { fetch: async () => new Response("asset") } };
+  const res = await worker.fetch(new Request("https://usemagpie.ai/favicon.ico"), env, ctx);
+  assert.equal(res.status, 301);
+  assert.equal(res.headers.get("Location"), "https://usemagpie.ai/favicon.png");
+});
+
 test("docs: the MCP hub's old pages go to the MCP router's, keeping the query", async () => {
   const env = { ASSETS: { fetch: async () => new Response("asset") } };
   for (const [from, to] of [["/docs/mcp-hub", "/docs/mcp-router"], ["/docs/mcp-hub.html", "/docs/mcp-router"], ["/docs/zh/mcp-hub/", "/docs/zh/mcp-router"], ["/docs/ja/mcp-hub.html?x=1", "/docs/ja/mcp-router?x=1"]]) {

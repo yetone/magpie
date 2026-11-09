@@ -149,6 +149,8 @@ export default {
       if (req.method === "GET") ctx.waitUntil(capture("magpie site download", { link: want, file: SHORT[want] || want, client: client(req), country: country(req) }));
       return Response.redirect(asset.url, 302);
     }
+    // crawlers and old browsers ask for /favicon.ico whatever the page links
+    if (url.pathname === "/favicon.ico") return Response.redirect(new URL("/favicon.png", url).toString(), 301);
     const guide = DOCS[url.pathname.replace(/\/+$/, "")];
     if (guide) return Response.redirect(new URL(guide, url).toString(), 302);
     const moved = MOVED[url.pathname.replace(/(\.html)?\/*$/, "")];
