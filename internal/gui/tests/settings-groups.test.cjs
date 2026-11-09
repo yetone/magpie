@@ -145,11 +145,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // each editor shows its own service's rows alone
         const visibleRows = () => page.locator(".editor .prov-prefs .row.pref:visible .who .name").allTextContents();
         // each pill shown has its thumb under the option picked, drawn
-        // while its list was in the hidden holder or not
-        const thumbsUnderPicks = async (k) => assert.equal(await page.locator("#" + LISTS[k]).evaluate((l) => [...l.querySelectorAll(".segs")].filter((s) => {
+        // while its list was in the hidden holder or not. A ResizeObserver
+        // refits a thumb after the editor sizes its pill, so wait for that
+        // (on a busy machine it lands after the editor shows, #5839)
+        const thumbsOff = (l) => [...l.querySelectorAll(".segs")].filter((s) => {
           const th = s.querySelector(":scope > .thumb").getBoundingClientRect(), on = s.querySelector(":scope > .on").getBoundingClientRect();
           return !(Math.abs(th.left - on.left) <= 1 && Math.abs(th.width - on.width) <= 1);
-        }).length), 0, k + ": the pills' thumbs under their picks");
+        }).length;
+        const thumbsUnderPicks = async (k) => {
+          const list = await page.locator("#" + LISTS[k]).elementHandle();
+          await page.waitForFunction((l) => [...l.querySelectorAll(".segs")].every((s) => {
+            const th = s.querySelector(":scope > .thumb").getBoundingClientRect(), on = s.querySelector(":scope > .on").getBoundingClientRect();
+            return Math.abs(th.left - on.left) <= 1 && Math.abs(th.width - on.width) <= 1;
+          }), list, { timeout: 3000 }).catch(() => {});
+          assert.equal(await list.evaluate(thumbsOff), 0, k + ": the pills' thumbs under their picks");
+        };
         // no coloured stripe down a list's or a row's left side
         const stripes = () => page.evaluate(() => [...document.querySelectorAll(".editor .prov-prefs .list, .editor .prov-prefs .row")]
           .filter((e) => { const c = getComputedStyle(e); return c.borderLeftWidth !== c.borderRightWidth || c.borderLeftColor !== c.borderRightColor; }).length);
