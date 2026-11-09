@@ -269,3 +269,18 @@ func TestHostnameOfKept(t *testing.T) {
 		}
 	}
 }
+
+// hostOf shares hostnameOf's parsed URLs: the provider list asks it of
+// every base URL on each poll too.
+func TestHostOfKept(t *testing.T) {
+	const raw = "https://API.Example.com:8443/v1"
+	if h := hostOf(raw); h != "api.example.com:8443" {
+		t.Fatalf("hostOf(%q) = %q", raw, h)
+	}
+	if n := testing.AllocsPerRun(100, func() { hostOf(raw) }); n != 0 {
+		t.Errorf("a host parsed before made %v allocations, want 0", n)
+	}
+	if h := hostOf("http://[::1"); h != "" {
+		t.Errorf("an unparsable URL's host = %q", h)
+	}
+}

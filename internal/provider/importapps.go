@@ -360,13 +360,7 @@ func sameProvider(a, b Provider) bool {
 	return false
 }
 
-func hostOf(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return ""
-	}
-	return strings.ToLower(u.Host)
-}
+func hostOf(raw string) string { return hostParts(raw).host }
 
 // endpoints are the base URLs an entry names, by protocol.
 type endpoints struct{ chat, responses, anthropic, gemini string }
