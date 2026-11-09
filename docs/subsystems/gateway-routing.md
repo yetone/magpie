@@ -2442,7 +2442,8 @@ a pick that stops making videos is `videoGenMissing`: the row says so
 and Automatic makes them meanwhile. The list (`videoGenModels`) is every
 `Videomakers` model of such providers, a hidden one only when it is the
 pick. With none, the row says how to mark one (right-click in the
-provider's Model settings, Makes › Video model; kept in sight). The
+provider's Model settings, Makes › Video model; kept in sight), with
+a Providers › link to that page. The
 row is drawn by `videogen.js`, imported when Settings draws Image
 generation, so it weighs nothing on the core.
 `TestVideoGenPicksAMarkedModel`, `TestVideoGenCheckedAndKept`,
