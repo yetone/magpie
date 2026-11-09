@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"slices"
 	"sync"
+	"sync/atomic"
 )
 
 // Two magpies can each be the other's Remote magpie (cdredfox on Discord:
@@ -35,11 +36,30 @@ const MaxVia = 8
 
 // Self is this run of magpie's name in magpie_via: random, made up once a
 // run, and told only to a magpie that asks for its list.
-var Self = sync.OnceValue(func() string {
+func Self() string {
+	if s := selfForTest.Load(); s != nil {
+		return *s
+	}
+	return self()
+}
+
+var self = sync.OnceValue(func() string {
 	b := make([]byte, 8)
 	rand.Read(b)
 	return hex.EncodeToString(b)
 })
+
+// selfForTest stands for Self while a test plays another magpie
+// (SetSelfForTest).
+var selfForTest atomic.Pointer[string]
+
+// SetSelfForTest has Self be s, for a test that plays several magpies
+// in one process one after another, until the returned func puts it
+// back.
+func SetSelfForTest(s string) (restore func()) {
+	was := selfForTest.Swap(&s)
+	return func() { selfForTest.Store(was) }
+}
 
 // loops reports whether a model another magpie lists by way of via leaves
 // this magpie and comes back to it.
@@ -49,6 +69,11 @@ func loops(via []string) bool {
 	}
 	return len(via) > 1 && slices.Contains(via, Self())
 }
+
+// Loops reports whether what another magpie passes on by way of via (a
+// model's magpie_via, a quota card's Via) leaves this magpie and comes
+// back to it, or has passed through more magpies than MaxVia.
+func Loops(via []string) bool { return loops(via) }
 
 // ViaHere is the magpie_via a model goes out with in this magpie's list
 // to another: the way it came here by, when it came from another magpie,

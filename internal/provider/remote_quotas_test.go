@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/catalog"
 )
 
 // fakePeer is another magpie's gateway as RemoteCards asks it: its kept
@@ -102,8 +104,10 @@ func remoteQuotaHome(t *testing.T, peer http.Handler) {
 // 莫 on Discord: a computer whose providers are another's magpie showed
 // no quota at all. It now shows the other magpie's cards, named with it
 // and kept apart from its own by id, in their kinds; what a card's
-// buttons would do to this computer's accounts is left off, and a card
-// the other magpie has from a third isn't passed on.
+// buttons would do to this computer's accounts is left off. A card the
+// other magpie has from a third is shown too, named after both
+// (yuyong_id on Discord), with no reset to spend from here; one that has
+// been through this magpie before is left out (a loop).
 func TestRemoteMagpieCards(t *testing.T) {
 	peer := &fakePeer{cards: []SubscriptionQuota{
 		{Provider: "codex", Name: "Codex", Icon: "codex", User: "a@x.com", Kind: "subscription", Windows: []QuotaWindow{{Name: "5h", Used: 40}},
@@ -111,7 +115,9 @@ func TestRemoteMagpieCards(t *testing.T) {
 		{Provider: "zhipu", Name: "GLM Coding", Kind: "plan", Windows: []QuotaWindow{{Name: "5h", Used: 10}},
 			Resets: &ResetCredits{Count: 2, ByWindow: true}},
 		{Provider: "deepseek", Name: "DeepSeek", Kind: "balance", Balance: "¥12.00"},
-		{Provider: "home/codex", Name: "Codex · Home", Kind: "subscription", From: "Home"},
+		{Provider: "home/codex", Name: "Codex · Home", Kind: "subscription", From: "Home", User: "b@x.com", Via: []string{"home-self", "office-self"},
+			Windows: []QuotaWindow{{Name: "5h", Used: 20}}, Resets: &ResetCredits{Count: 1}},
+		{Provider: "back/codex", Name: "Codex · Back", Kind: "subscription", From: "Back", User: "c@x.com", Via: []string{catalog.Self(), "office-self"}},
 	}}
 	remoteQuotaHome(t, peer)
 	ctx := context.Background()
@@ -139,10 +145,14 @@ func TestRemoteMagpieCards(t *testing.T) {
 	if b := find(balances, "office/deepseek"); b == nil || b.Balance != "¥12.00" {
 		t.Errorf("balance: %+v", balances)
 	}
+	h := find(subs, "office/home/codex")
+	if h == nil || h.Name != "Codex · Home · Office" || h.From != "Office" || h.User != "b@x.com" || len(h.Windows) != 1 || h.Windows[0].Used != 20 || h.Resets != nil {
+		t.Errorf("a third magpie's card: %+v", h)
+	}
 	for _, qs := range [][]SubscriptionQuota{subs, plans, balances} {
 		for _, q := range qs {
-			if strings.Contains(q.Provider, "home") {
-				t.Errorf("a third magpie's card passed on: %+v", q)
+			if strings.Contains(q.Provider, "back") {
+				t.Errorf("a card that came back through this magpie: %+v", q)
 			}
 		}
 	}
@@ -233,8 +243,7 @@ func TestRemoteMagpieUnreachable(t *testing.T) {
 }
 
 // The cards told to another magpie are this one's as last read: nothing
-// is read for it, however old they are, and another magpie's aren't
-// passed on.
+// is read for it, however old they are.
 func TestCachedCardsAskNobody(t *testing.T) {
 	azureHome(t)
 	c := &subscriptionUsageCache

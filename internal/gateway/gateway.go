@@ -1207,8 +1207,12 @@ func (s *Server) quotaCardsRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, user := r.URL.Query().Get("provider"), r.URL.Query().Get("user")
-	if strings.Contains(id, "/") || provider.IsRemoteCard(id) { // a card this magpie has from another: not passed on
-		writeError(w, provider.Chat, http.StatusBadRequest, "this magpie reads only its own cards again")
+	// a card this magpie has from a Remote magpie of its own, which it
+	// passes on (provider.CachedCards), is read again there; the card
+	// standing for that remote itself, and any other id with a "/", is
+	// none this magpie tells
+	if remote := provider.IsRemoteCard(id); strings.Contains(id, "/") && !remote || remote && !strings.Contains(id, "/") {
+		writeError(w, provider.Chat, http.StatusBadRequest, "this magpie reads again only the cards it tells")
 		return
 	}
 	// a key told only some cards (#2216) has only those read again: a
