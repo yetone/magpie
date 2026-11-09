@@ -36,7 +36,9 @@ func pricedOnce(at int, kind byte, providers []string, id string, find func() (P
 	// the key is made on the stack and looked up without a copy (Go reads
 	// m[string(b)] in place): made into a string for every price asked,
 	// it was ~0.6 MB of a provider list's ~5 MB of garbage an ask
-	var buf [160]byte
+	// (1 KB: a maker price names every maker catalog, past 160 bytes;
+	// TestMakerPriceKnownAllocatesNothing holds the bound)
+	var buf [1024]byte
 	k := append(buf[:0], kind)
 	for _, p := range providers {
 		k = append(append(k, p...), 0)

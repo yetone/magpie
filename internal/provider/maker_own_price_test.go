@@ -103,3 +103,24 @@ func TestMakerPriceIsTheMakersOwn(t *testing.T) {
 		t.Errorf("MakerPrice(inkling) = %+v; want unpriced, no catalog lists it", pr)
 	}
 }
+
+// TestMakerPriceKnownAllocatesNothing: the Providers list asks the maker's
+// price of every model on each poll, under every maker catalog's name.
+// A price asked before is answered without garbage; its memo key, longer
+// than the memo's first buffer, was a new allocation on every ask.
+func TestMakerPriceKnownAllocatesNothing(t *testing.T) {
+	useMakerOwnCatalog(t)
+	n := 2
+	for _, c := range makerPriceCatalogs() {
+		n += len(c) + 1
+	}
+	if n > 1024 {
+		t.Errorf("a maker price's memo key is %d bytes, past pricedOnce's 1 KB buffer", n)
+	}
+	for _, id := range []string{"glm-5-2", "meta/muse-spark-1.2"} {
+		makerListPrice(id)
+		if a := testing.AllocsPerRun(50, func() { catalog.MakerPriced(makerPriceCatalogs(), id) }); a != 0 {
+			t.Errorf("MakerPriced(%q) asked again made %v allocations, want 0", id, a)
+		}
+	}
+}
