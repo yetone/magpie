@@ -66,10 +66,15 @@ func secret(key, label, value string) bool {
 // follows: Claude Code's four tiers are all there, one that follows the main
 // model saying so (#480: opus and fable, following it, were missing, and
 // read as not set). What applying the profile writes is unchanged.
-func Details(p Profile) []Group {
-	known := map[string]*agent.Agent{}
-	var order []string
-	for _, a := range agent.All() {
+func Details(p Profile) []Group { return DetailsIn(p, agent.All()) }
+
+// DetailsIn is Details over all, the agents a page already built for its
+// request: the state route lists every profile, and building the agents
+// again for each one was the page's largest single cost after its own.
+func DetailsIn(p Profile, all []*agent.Agent) []Group {
+	known := make(map[string]*agent.Agent, len(all))
+	order := make([]string, 0, len(all))
+	for _, a := range all {
 		known[a.ID] = a
 		order = append(order, a.ID)
 	}

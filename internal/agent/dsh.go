@@ -207,7 +207,7 @@ func dshOn(at place, dir, list string, fresh, lead func() string) *Agent {
 			if len(files) == 0 {
 				return false
 			}
-			_, items, err := dshRead(files[0])
+			_, items, err := dshLook(files[0]) // dshOver changes a copy
 			return err == nil && dshWired(dshOver(dir, items))
 		},
 		// connected so, Disconnect takes the route out, the start magpie
@@ -728,9 +728,12 @@ func dshNode(it dshItem) (*yaml.Node, error) {
 // An entry's text is parsed once and its node shared, so whoever gets it
 // only reads it; a caller changing the node takes dshNode's own copy.
 func dshNodeShared(it dshItem) (*yaml.Node, error) {
-	text := strings.Join(it.lines, "\n")
+	// keyed by a hash of the lines, checked against a copy of them, so a
+	// look that finds the entry allocates nothing: joining the lines into a
+	// key each time was most of what the drift poll's dsh check still made
+	key := dshLinesHash(it.lines)
 	dshNodes.Lock()
-	n, ok := dshNodes.m[text]
+	n, ok := dshNodes.find(key, it.lines)
 	dshNodes.Unlock()
 	if !ok {
 		var err error
@@ -738,10 +741,13 @@ func dshNodeShared(it dshItem) (*yaml.Node, error) {
 			n = nil
 		}
 		dshNodes.Lock()
-		if dshNodes.m == nil || len(dshNodes.m) >= dshNodesMax {
-			dshNodes.m = map[string]*yaml.Node{}
+		if dshNodes.m == nil || dshNodes.size >= dshNodesMax {
+			dshNodes.m, dshNodes.size = map[uint64][]dshNodeEntry{}, 0
 		}
-		dshNodes.m[text] = n
+		if _, there := dshNodes.find(key, it.lines); !there {
+			dshNodes.m[key] = append(dshNodes.m[key], dshNodeEntry{slices.Clone(it.lines), n})
+			dshNodes.size++
+		}
 		dshNodes.Unlock()
 	}
 	if n == nil {
@@ -754,10 +760,41 @@ func dshNodeShared(it dshItem) (*yaml.Node, error) {
 // entries, with room for the old text of ones just changed.
 const dshNodesMax = 512
 
-var dshNodes struct {
-	sync.Mutex
-	m map[string]*yaml.Node
+var dshNodeSeed = maphash.MakeSeed()
+
+// dshLinesHash hashes an entry's lines as the text they make.
+func dshLinesHash(lines []string) uint64 {
+	var h maphash.Hash
+	h.SetSeed(dshNodeSeed)
+	for _, l := range lines {
+		h.WriteString(l)
+		h.WriteByte('\n')
+	}
+	return h.Sum64()
 }
+
+type dshNodeEntry struct {
+	lines []string // a copy: a caller may change its own slice later
+	n     *yaml.Node
+}
+
+type dshNodeCache struct {
+	sync.Mutex
+	m    map[uint64][]dshNodeEntry
+	size int
+}
+
+// find is the node parsed from these lines; the caller holds the lock.
+func (c *dshNodeCache) find(key uint64, lines []string) (*yaml.Node, bool) {
+	for _, e := range c.m[key] {
+		if slices.Equal(e.lines, lines) {
+			return e.n, true
+		}
+	}
+	return nil, false
+}
+
+var dshNodes dshNodeCache
 
 // dshNodeLines writes an entry read with dshNode back as lines.
 func dshNodeLines(n *yaml.Node) ([]string, error) {

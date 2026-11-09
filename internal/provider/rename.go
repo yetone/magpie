@@ -14,6 +14,7 @@ import (
 	"golang.org/x/net/publicsuffix"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -407,8 +408,23 @@ func (r Renames) Key() string {
 // every renamed provider would be shown split until it read again.
 var lastRenames atomic.Pointer[Renames]
 
-// UsageRenames are the renames of providers.json as it is now.
+// UsageRenames are the renames of providers.json as it is now, worked
+// out once each time the file changes and shared, so read only: each
+// profile's in-use check on every state poll parsed the whole file again
+// for them, 5 MB of forty polls with real accounts.
 func UsageRenames() Renames {
+	if r, err := filememo.Read("provider renames", Path(), func(b []byte) (Renames, error) {
+		f, err := parseProviders(b)
+		if err != nil {
+			return Renames{}, err
+		}
+		return renamesOf(f.Providers, f.Deleted), nil
+	}); err == nil {
+		lastRenames.Store(&r)
+		return r
+	}
+	// missing, or a file that doesn't decode: read's own way, its last
+	// good generation
 	f, err := read()
 	if err != nil {
 		if r := lastRenames.Load(); r != nil {

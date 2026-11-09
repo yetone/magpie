@@ -21,6 +21,21 @@ func TestDshLookParsesAnEntryOnce(t *testing.T) {
 	if n := testing.AllocsPerRun(20, func() { dshConfig(it); dshConfigIndex([]dshItem{it}, dshPiRow) }); n > 50 {
 		t.Errorf("a look at an unchanged entry: %.0f allocations, want a few", n)
 	}
+	// the lookup itself: no key built from the 1200 lines
+	if n := testing.AllocsPerRun(20, func() { dshNodeShared(it) }); n != 0 {
+		t.Errorf("finding a parsed entry: %.0f allocations, want 0", n)
+	}
+	// the cache keeps its own copy of the lines: a caller changing its
+	// slice in place gets the new text, not the node of the old
+	own := append([]string{}, lines...)
+	mine := dshItem{id: dshPiRow, lines: own}
+	if got := dshConfig(mine)["model"]; got != "m1" {
+		t.Fatalf("copy: %q", got)
+	}
+	own[3] = "    model: m3"
+	if got := dshConfig(mine)["model"]; got != "m3" {
+		t.Errorf("lines changed in place: %q, want m3", got)
+	}
 	w, err := dshNode(it)
 	if err != nil {
 		t.Fatal(err)
