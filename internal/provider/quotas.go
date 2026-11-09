@@ -147,6 +147,10 @@ type QuotaSpan struct {
 	// Balance is how much is left in Unit, a prepaid wallet's reading
 	// (QuotaWindow.Balance, #3950): Used and Remaining are then no share.
 	Balance *float64 `json:"balance,omitempty"`
+	// Spent is what magpie counted such a wallet spending since
+	// SpentSince, its period's first reading (QuotaWindow.Spent, #5770).
+	Spent      *float64   `json:"spent,omitempty"`
+	SpentSince *time.Time `json:"spentSince,omitempty"`
 	// Holds and HoldsWhy are the window's whole as the Usage page's card
 	// tells it (QuotaWindow.Holds, #2333): reckoned when ReckonHolds is
 	// set, else left out.
@@ -203,7 +207,8 @@ func quotaReport(subs, plans, balances []SubscriptionQuota, now time.Time) []Quo
 			// as the usage page shows them
 			for _, w := range PooledWindows(q.Windows) {
 				s := QuotaSpan{Unlimited: w.Unlimited, Name: w.Name, Used: w.Used, Remaining: max(0, 100-w.Used), ResetsAt: w.ResetsAt, Display: w.Display, Text: w.Text,
-					Amount: w.Amount, Limit: w.Limit, Unit: w.Unit, Pool: w.Pool, RunsOutAt: w.RunsOutAt, RunsOut: w.RunsOut, Balance: w.Balance, Holds: w.Holds, HoldsWhy: w.HoldsWhy}
+					Amount: w.Amount, Limit: w.Limit, Unit: w.Unit, Pool: w.Pool, RunsOutAt: w.RunsOutAt, RunsOut: w.RunsOut, Balance: w.Balance,
+					Spent: w.Spent, SpentSince: w.SpentSince, Holds: w.Holds, HoldsWhy: w.HoldsWhy}
 				if s.ResetsAt == nil && w.ResetSecs > 0 {
 					t := now.Add(time.Duration(w.ResetSecs) * time.Second)
 					s.ResetsAt = &t
