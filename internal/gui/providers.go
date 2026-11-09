@@ -67,6 +67,9 @@ type modelJSON struct {
 	// Headers are the request headers the user gave the model, sent after
 	// the provider's (provider.SetModelHeaders)
 	Headers map[string]string `json:"headers,omitempty"`
+	// System is the system prompt the user gave the model, added after the
+	// agent's own (provider.SetModelSystemPrompt)
+	System string `json:"system,omitempty"`
 	// Vendor is the provider's own id of a model the user lists by
 	// another (provider.SetModelID), "" for one listed by its own; IDs
 	// says the provider's models can be given ids at all (a key's)
@@ -1043,6 +1046,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		if p.Account == nil {
 			j.Headers = held.ModelHeaders[ref]
 		}
+		j.System = held.ModelSystemPrompts[ref]
 		j.Merge = provider.MergeName(m.ID)
 		j.Desktop = desktop[ref]
 		if mp, ok := held.ModelPrices[ref]; ok {

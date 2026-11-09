@@ -1938,6 +1938,10 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 func (s *Server) countOn(w http.ResponseWriter, r *http.Request, p provider.Provider, model string, ok bool, body []byte) {
 	// the headers the user gave the model, on its count as on its turns
 	r = r.WithContext(provider.WithModel(r.Context(), p.ID, model))
+	// the model's own system prompt is counted as it is sent
+	if ok {
+		body = withModelSystem(r, p, model, provider.Anthropic, body)
+	}
 	// Claude Subscription generations run through the Claude Code binary. Its
 	// OAuth token must not take a direct HTTP side path just for token counting.
 	if ok && p.Account != nil && (p.Account.Agent == "claude" || p.Account.Agent == "cursor" || p.Account.Agent == "grok" || p.Account.Agent == "devin" || p.Account.Agent == "kiro" || p.Account.Agent == "qoder" || p.Account.Agent == provider.QoderCNID || p.Account.Agent == "zed" || p.Account.Agent == "factory" || p.Account.Agent == "gemini" || p.Account.Agent == "antigravity" ||
@@ -3631,6 +3635,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		// a middleware's onProvider changes what this provider is sent
 		attemptBody = triedOn(r.Context(), c.p, c.model, attemptBody)
+		// the system prompt the user gave this model goes after the
+		// agent's own (model_system.go)
+		attemptBody = withModelSystem(r, c.p, c.model, from, attemptBody)
 		if !s.fits(c.p.ID, webpRefused, from) {
 			// a provider that took a webp picture for one it can't read
 			// (webp.go) has every one of its requests' webps written again

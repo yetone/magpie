@@ -2780,6 +2780,40 @@ whole conversation every turn. Codex says `store: false`, so
   over the answer the other magpie kept. Tools and instructions still go
   every turn. The other magpie's kept turns are in memory only.
 
+## A model's own system prompt
+
+The system prompt the user gave one model (`provider.ModelSystemPrompt`,
+liucl on X) is added to every request for that model, after the agent's own
+(`withModelSystem` in
+[`model_system.go`](../../internal/gateway/model_system.go)). It is added
+in the agent's protocol in `serve`'s candidate loop, after `triedOn` and
+before any translation or a plugin's fetch, so chat, Messages, Responses,
+Gemini and a plugin's model all get it once, on the candidate that serves
+it: a fallback to another model gets that model's own, or none.
+`count_tokens` adds it too (`countOn`), so the count is of what is sent.
+
+It is only ever appended. Codex's `base_instructions`, Claude Code's
+identity block and any agent's own prompt stay first and unchanged:
+
+- Anthropic: a string `system` gets it after a blank line; a block array
+  gets one more text block; none gets `system`.
+- Chat: the last of the leading system or developer messages gets it after
+  a blank line (or one more text part); none gets a system message first.
+- Responses: a developer message goes after the leading system or developer
+  items, `instructions` untouched; a string `input` becomes that message
+  and the user's. A request that names `previous_response_id` gets none,
+  since the turn it follows had it.
+- Gemini: `systemInstruction` (or `system_instruction`) gets one more part.
+
+Empty is the default and sends the body byte for byte as before. magpie's
+own asks (search and vision side calls, Codex titles, the router's
+classifier) get none. `TestModelSystemAfterTheAgentsPrompt`,
+`TestModelSystemNoneLeavesTheBody`, `TestModelSystemNotOnMagpiesOwnAsks`,
+`TestModelSystemReachesItsModelOnEveryRoute`,
+`TestModelSystemOtherModelSentAsBefore`,
+`TestModelSystemReachesAPluginsModel` in
+[`model_system_test.go`](../../internal/gateway/model_system_test.go).
+
 ## Verification
 
 ```sh
@@ -2798,6 +2832,8 @@ go test -tags nogui ./internal/gateway ./internal/gui -run 'TestBareModelIDs'
 node --test internal/gui/tests/bare-ids.test.cjs
 go test -tags nogui ./internal/gateway -run 'TestTextWritten|TestGLMTextCall|TestPluginTextWrittenCall|TestQuietWholeReplyStreamed|TestDSMLAlma'
 go test -tags nogui ./internal/gateway -run 'TestAutoMode|TestClaudeBridgeSafeguard|TestSafeguardsRefused'
+go test -tags nogui ./internal/gateway ./internal/gui -run 'TestModelSystem|TestProviderSaveModelPrefs'
+node --test internal/gui/tests/model-system-prompt.test.cjs
 go test -tags nogui ./internal/gateway -run 'TestCreditsExhaustedIsOutOfCredit|TestOutOfCreditLeavesFreeModels'
 go test -tags nogui ./internal/gateway ./internal/usage -run 'TestRetriedRequestCountsOnce|TestRequestsCountedOnceWithTheirRetries'
 go test -tags nogui ./internal/gateway -run 'TestRemoteMagpie|TestRedactedKinds|TestKeyLimitTellsOnlyTheCaller'

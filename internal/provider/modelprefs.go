@@ -602,6 +602,9 @@ type ModelPref struct {
 	// Headers are the model's own request headers, as SetModelHeaders
 	// takes them, in place of those it had: none takes them away
 	Headers *map[string]string `json:"headers,omitempty"`
+	// System is the model's own system prompt, as SetModelSystemPrompt
+	// takes it, in place of the one it had: "" takes it away
+	System *string `json:"system,omitempty"`
 }
 
 // SetModelPrefs makes the changes to a provider's models, by model id, as
@@ -655,6 +658,13 @@ func SetModelPrefs(pid string, prefs map[string]ModelPref) error {
 			// nor are a model's headers, which go on its requests alone
 			if m.Headers != nil {
 				if _, err := setModelHeaders(ref, *m.Headers); err != nil {
+					return err
+				}
+			}
+			// nor is its own system prompt, which the gateway adds to
+			// its requests
+			if m.System != nil {
+				if _, err := setModelSystemPrompt(ref, *m.System); err != nil {
 					return err
 				}
 			}

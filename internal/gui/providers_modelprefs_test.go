@@ -69,4 +69,24 @@ func TestProviderSaveModelPrefs(t *testing.T) {
 	if got := settings.Load().ModelHeaders["relay/sol"]; got != nil {
 		t.Fatalf("cleared: %v", got)
 	}
+	// the model's own system prompt (liucl on X), trimmed, shown back on
+	// the model, kept by a save that leaves it out, cleared by ""
+	if w := post(`{"id":"relay","from":"relay","name":"Relay","chat":"http://127.0.0.1:1/v1","models":["sol"],"modelPrefs":{"sol":{"system":"  Answer in Chinese.\n"}}}`); w.Code != 200 {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	if got := settings.Load().ModelSystemPrompts["relay/sol"]; got != "Answer in Chinese." {
+		t.Fatalf("system %q", got)
+	}
+	if w := post(`{"id":"relay","from":"relay","name":"Relay","chat":"http://127.0.0.1:1/v1","models":["sol"],"modelPrefs":{"sol":{"name":"Sol"}}}`); w.Code != 200 || !strings.Contains(w.Body.String(), `"system":"Answer in Chinese."`) {
+		t.Fatalf("kept and shown: %d %s", w.Code, w.Body)
+	}
+	if w := post(`{"id":"relay","from":"relay","name":"Relay","chat":"http://127.0.0.1:1/v1","models":["sol"],"modelPrefs":{"nova":{"system":"x"}}}`); w.Code == 200 || !strings.Contains(w.Body.String(), "nova") {
+		t.Fatalf("a model it doesn't serve: %d %s", w.Code, w.Body)
+	}
+	if w := post(`{"id":"relay","from":"relay","name":"Relay","chat":"http://127.0.0.1:1/v1","models":["sol"],"modelPrefs":{"sol":{"system":""}}}`); w.Code != 200 {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	if got, ok := settings.Load().ModelSystemPrompts["relay/sol"]; ok {
+		t.Fatalf("cleared: %q", got)
+	}
 }
