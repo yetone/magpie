@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -168,6 +169,9 @@ func sessionManageRoutes(mux *http.ServeMux, w Windows) {
 		out.Home, _ = os.UserHomeDir()
 		want := r.URL.Query().Get("agent")
 		gateway := listedGateway(usage.GatewaySessions(time.Time{}, nil))
+		// one that spent nothing, with no file of the agent's here either,
+		// has nothing to show (SpentNothing)
+		gateway = slices.DeleteFunc(gateway, usage.GatewaySession.SpentNothing)
 		// a gateway session its agent keeps too is counted once; only the
 		// agents with gateway sessions, and the one shown, are read (#2776)
 		of := map[string]bool{}
@@ -260,6 +264,13 @@ func sessionManageRoutes(mux *http.ServeMux, w Windows) {
 			sort.SliceStable(out.Sessions, func(i, j int) bool {
 				return out.Sessions[i].Last.After(out.Sessions[j].Last)
 			})
+			// the agent's tab counts the rows it lists: a Codex subagent
+			// thread whose parent is gone is no row (keptSubagents)
+			for i := range out.Agents {
+				if out.Agents[i].Agent == out.Agent {
+					out.Agents[i].Count = len(out.Sessions)
+				}
+			}
 		}
 		writeJSON(rw, out)
 	})

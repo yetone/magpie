@@ -97,8 +97,9 @@ func listedExternal(nativeKeys map[string]bool, n int) []sessions.ExternalSessio
 		if len(ext) == n {
 			return false
 		}
-		// one a list leaves out (externalSessions) takes no room
-		if g.Agent != "" && g.ID != "" && !hidden(g.Agent, g.ID, g.Last) {
+		// one a list leaves out (externalSessions) takes no room; nor does
+		// one that spent nothing, with no file behind it (SpentNothing)
+		if g.Agent != "" && g.ID != "" && !hidden(g.Agent, g.ID, g.Last) && !g.SpentNothing() {
 			ext = append(ext, gatewayListed(g, title))
 		}
 		return true

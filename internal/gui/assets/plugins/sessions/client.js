@@ -106,8 +106,13 @@ magpie.plugin("sessions", (ctx) => {
   const DRAFTS = "\x00drafts";
   const zcodeDraft = (s) => {
     const home = (data?.home || "").replace(/\\/g, "/").replace(/\/+$/, "");
-    if (!home || s.agent !== "zcode" || !s.cwd) return false;
+    if (!s.cwd) return false;
     const c = s.cwd.replace(/\\/g, "/");
+    // Codex Desktop makes ~/Documents/Codex/<date>/<name> for every chat
+    // started without a project (its outputs/ and work/), and Codex also
+    // runs in temp folders and worktrees
+    if (s.agent === "codex") return /\/Documents\/Codex\/\d{4}-\d{2}-\d{2}\//i.test(c) || scratch(s.cwd);
+    if (!home || s.agent !== "zcode") return false;
     return c === home + "/.zcode/workspace" || c.startsWith(home + "/.zcode/workspace/");
   };
   const groupOf = (s) => zcodeDraft(s) ? DRAFTS : s.cwd || (s.gateway ? GW : "");
@@ -600,7 +605,10 @@ magpie.plugin("sessions", (ctx) => {
 
   function providerBar() {
     if (data.agent !== "codex") return null;
-    const hidden = data.sessions.filter(otherProvider);
+    // Codex's own threads only: its review and title threads (role
+    // subagent) never show in its history, so they are no conversations
+    // to move
+    const hidden = data.sessions.filter((s) => otherProvider(s) && s.role !== "subagent");
     const undo = lastMove?.agent === data.agent && lastMove.moved.length ? lastMove : null;
     if (!hidden.length && !undo) return null;
     const bar = el("div", "row sm-provider");

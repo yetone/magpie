@@ -48,6 +48,20 @@ type GatewaySession struct {
 	sessions.Tokens
 	Cost     float64 `json:"cost"`
 	Unpriced int     `json:"unpriced"`
+	// Answered: calls of it the provider answered (a 2xx or 3xx). A
+	// session with none that spent nothing is no conversation of the
+	// reader's (SpentNothing).
+	Answered int `json:"-"`
+}
+
+// SpentNothing reports whether a gateway session has nothing to show: no
+// call of it was answered and none spent a token. Codex's title and review
+// threads do that when they fail — their ids are the thread's, no file of
+// the agent's has them — and such a session was a row with nothing in it
+// (flandern: three empty rows under "Seen through the gateway").
+func (s GatewaySession) SpentNothing() bool {
+	return s.Answered == 0 && s.Cost == 0 &&
+		s.Input == 0 && s.Output == 0 && s.CacheRead == 0 && s.CacheWrite == 0
 }
 
 type GatewayModel struct {
@@ -129,7 +143,7 @@ func gatewaySessionFrom(s GatewaySession, date string) (GatewaySession, bool) {
 	if i == 0 {
 		return s, true
 	}
-	w := GatewaySession{Agent: s.Agent, ID: s.ID, Models: []GatewayModel{}, Daily: s.Daily[i:]}
+	w := GatewaySession{Agent: s.Agent, ID: s.ID, Models: []GatewayModel{}, Daily: s.Daily[i:], Answered: s.Answered}
 	models := map[string]int{} // index in w.Models, which grows
 	for _, d := range w.Daily {
 		if w.Start.IsZero() || d.first.Before(w.Start) {
@@ -510,6 +524,9 @@ func countGateway(blocks []*rowChunk, since time.Time, nativeKeys map[string]boo
 		s.CacheRead += r.CacheRead
 		s.CacheWrite += r.CacheWrite
 		s.CacheWrite1h += r.CacheWrite1h
+		if r.Status >= 200 && r.Status < 400 {
+			s.Answered++
+		}
 		m := acc.models[model]
 		if m == nil {
 			m = &GatewayModel{Model: model, Priced: true}

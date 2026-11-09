@@ -332,6 +332,7 @@ func listAgentWith(agent string, all []file, quick bool) []Managed {
 	}
 	if agent == "codex" {
 		codexProviders(out, groups)
+		out = keptSubagents(out)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if !out[i].Last.Equal(out[j].Last) {
@@ -340,6 +341,35 @@ func listAgentWith(agent string, all []file, quick bool) []Managed {
 		return out[i].ID < out[j].ID
 	})
 	return out
+}
+
+// keptSubagents drops a Codex subagent thread whose parent thread is not
+// listed: deleting a thread in Codex leaves its review, title and other
+// subagent rollouts behind, and each was a row of its own, titled by the
+// prompt Codex asked it (the guardian's "The following is the Codex agent
+// history whose request action you are assessing…", flandern). Their calls
+// are still counted by Usage.
+func keptSubagents(out []Managed) []Managed {
+	ids := make(map[string]bool, len(out))
+	for _, m := range out {
+		ids[m.ID] = true
+	}
+	for {
+		kept := make([]Managed, 0, len(out))
+		dropped := false
+		for _, m := range out {
+			if m.Role == codexRoleSubagent && !ids[m.ParentSession] {
+				delete(ids, m.ID)
+				dropped = true
+				continue
+			}
+			kept = append(kept, m)
+		}
+		out = kept
+		if !dropped {
+			return out
+		}
+	}
 }
 
 // listed fills in what assemble leaves out of a session nothing was said
