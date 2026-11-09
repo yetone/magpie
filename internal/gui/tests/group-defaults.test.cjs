@@ -12,6 +12,12 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+// the rows a group's editor folds under Advanced, opened
+const openAdvanced = async (page) => {
+  const d = page.locator(".rt-gedit .rt-gadv");
+  await d.waitFor({ state: "attached" });
+  if (!(await d.evaluate((e) => e.open))) await d.locator(":scope > summary").click();
+};
 
 const assets = path.resolve(__dirname, "../assets");
 const models = [
@@ -128,6 +134,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       // a group that sets none opens on Default, its hint saying what it follows
       await (await reach(card.locator("button", { hasText: await tr("Edit") }))).click();
+      await openAdvanced(page);
       const ed = page.locator(".rt-gedit");
       const field = (label) => ed.locator("label", { hasText: new RegExp(`^${label}$`) }).locator("xpath=following-sibling::div[1]");
       const eSink = field(await tr("Rate limited")), eFirst = field(await tr("Slow to start")), ePat = field(await tr("Every member busy"));
@@ -152,6 +159,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       // opened again, it shows its own; Default sends none of them
       await (await reach(card.locator("button", { hasText: await tr("Edit") }))).click();
+      await openAdvanced(page);
       await eSink.waitFor();
       assert.equal(await on(eSink), await tr("Keeps its place"));
       assert.equal(await on(eFirst), await tr("Wait"));

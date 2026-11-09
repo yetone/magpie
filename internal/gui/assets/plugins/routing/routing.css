@@ -685,6 +685,11 @@ button.rt-session { cursor: pointer; }
 .rt-group.rt-gpick { cursor: default; }
 .rt-group.rt-gpick.on { background: var(--card-2); }
 .rt-gedit { cursor: default; scroll-margin-top: 12px; }
+/* the rows folded under Advanced keep the editor's own columns, so their
+   fields start where the ones above do; a label longer than the column
+   wraps in it, as one above the fold does */
+.rt-gedit .rt-gadv .inner { grid-template-columns: var(--ed-lab, 72px) minmax(0, 1fr); }
+.rt-gedit .rt-gadv .inner label { white-space: normal; }
 /* the group being edited reads as selected among the others: a soft tint
    and an accent ring, as a list marks its selected row; its Save and
    Cancel stay at the bottom of the window while its rows scroll by, at a
@@ -741,6 +746,7 @@ body.window .rt-gedit > .bar { --vfoot: 8px; }
   body.web .rt-pick { flex-wrap: wrap; }
   body.web .rt-gedit { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 12px; }
   body.web .rt-gedit label { text-align: left; padding-top: 8px; }
+  body.web .rt-gedit .rt-gadv .inner { grid-template-columns: minmax(0, 1fr); gap: 6px; }
   body.web .rt-gedit .segs { flex-wrap: wrap; }
   body.web .rt-gedit .fbrow { flex-wrap: wrap; justify-content: normal; }
   body.web .rt-gedit .fbrow .n { flex: 1 1 calc(100% - 60px); white-space: normal; overflow-wrap: anywhere; }
@@ -764,6 +770,7 @@ body.window .rt-gedit > .bar { --vfoot: 8px; }
 :where(.rt-gpage.max520) .rt-gsec .rt-gfilter { flex: 1 1 auto; width: auto; }
 :where(.rt-gpage.max520) .rt-gedit { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 :where(.rt-gpage.max520) .rt-gedit label { text-align: left; padding-top: 8px; }
+:where(.rt-gpage.max520) .rt-gedit .rt-gadv .inner { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 :where(.rt-gpage.max520) .rt-gedit .segs .opt { padding-left: 9px; padding-right: 9px; }
 /* the models and patterns take the column's width and no more: a grid's
    auto track grows to its widest row's content, so a long model name with

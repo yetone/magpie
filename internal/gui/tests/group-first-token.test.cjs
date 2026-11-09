@@ -12,6 +12,12 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+// the rows a group's editor folds under Advanced, opened
+const openAdvanced = async (page) => {
+  const d = page.locator(".rt-gedit .rt-gadv");
+  await d.waitFor({ state: "attached" });
+  if (!(await d.evaluate((e) => e.open))) await d.locator(":scope > summary").click();
+};
 
 const assets = path.resolve(__dirname, "../assets");
 const models = [
@@ -109,6 +115,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         return posts.filter((p) => p.path === "/api/groups/save").at(-1).body;
       };
       await (await reach(card.locator("button", { hasText: w.edit }))).click();
+      await openAdvanced(page);
       const ed = page.locator(".rt-gedit");
       const row = ed.locator("label", { hasText: w.label }).locator("xpath=following-sibling::div[1]");
       await row.waitFor();
@@ -122,6 +129,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await card.locator(".tag", { hasText: w.tag }).waitFor();
 
       await (await reach(card.locator("button", { hasText: w.edit }))).click();
+      await openAdvanced(page);
       await row.waitFor();
       await reach(row);
       assert.equal(await row.locator(".opt.on").textContent(), w.min, "the editor opens at what was saved");
@@ -131,6 +139,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       // Custom: as many minutes as are typed, from 5 when it was Wait
       await (await reach(card.locator("button", { hasText: w.edit }))).click();
+      await openAdvanced(page);
       await row.waitFor();
       await reach(row);
       const minutes = row.locator("input.first-in");
@@ -160,6 +169,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await card.locator(".tag", { hasText: tag150 }).waitFor();
 
       await (await reach(card.locator("button", { hasText: w.edit }))).click();
+      await openAdvanced(page);
       await row.waitFor();
       await reach(row);
       assert.equal(await row.locator(".opt.on").textContent(), custom[lang], "a time of its own opens as Custom");
@@ -169,6 +179,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal((await save()).firstToken, 60);
 
       await (await reach(card.locator("button", { hasText: w.edit }))).click();
+      await openAdvanced(page);
       await row.waitFor();
       await reach(row);
       await row.locator(".opt", { hasText: w.dflt }).click();

@@ -7515,20 +7515,32 @@ function routingPage(part) {
     drawPats();
     const pw = el("div");
     pw.append(pbox, el("div", "hint", t("Every model a pattern matches is in the group, now and as providers list new ones, after the models above: * is any run of characters in provider/model, re: starts a regular expression.")));
-    ed.append(el("label", "", t("Patterns")), pw);
+    // what few change — patterns, the lists, routing, the waits, the
+    // window, how long a conversation stays, reasoning — folded under
+    // Advanced below the rules, as a provider's editor folds its own (the
+    // owner: the form was too much at once). Open when one of them is set,
+    // or as it was left while this group is being edited
+    const adv = edAligned(el("details", "more advanced rt-gadv"));
+    adv.open = gEdit.adv ?? !!(d.match.length || d.unlists || d.routing || d.sink === "sink" || d.sink === "" || d.firstToken || d.patience || d.context || d.affinity || d.effort || d.levels?.length);
+    const advOf = gEdit;
+    adv.onfold = (open) => { advOf.adv = open; };
+    adv.append(el("summary", "", t("Advanced")));
+    const advIn = el("div", "inner");
+    adv.append(advIn);
+    advIn.append(el("label", "", t("Patterns")), pw);
     // its models in the lists agents see too, or the group alone (#1783)
     const listHint = el("div", "hint", t(LIST_HINT[d.unlists ? "unlists" : ""])), listW = el("div");
     const listPick = segs(LIST_OPTS.map(([id, n]) => [id, t(n)]), d.unlists ? "unlists" : "", (v) => { d.unlists = v === "unlists"; listHint.textContent = t(LIST_HINT[v]); });
     listPick.classList.add("list-pick");
     listW.append(listPick, listHint);
-    ed.append(el("label", "", t("Model lists")), listW);
+    advIn.append(el("label", "", t("Model lists")), listW);
 
     const gHint = (v) => GROUP_HINT[v] ? t(GROUP_HINT[v]) : MODES[v] || !v ? t(GROUP_HINT[""]) : modeOf(v)[1];
     const rHint = el("div", "hint", gHint(d.routing));
     const rw = el("div");
     rw.append(routingSegs(withJS(GROUP_ROUTE_OPTS, d.routing).map(([id, n, js]) => [id, t(n), , js]), d.routing, (v) => { d.routing = v; rHint.textContent = gHint(v); draw(); drawRules(); drawSink(); }), rHint);
     rw.append(el("div", "hint", t(GROUP_NEST)));
-    ed.append(el("label", "", t("Routing")), rw);
+    advIn.append(el("label", "", t("Routing")), rw);
     // one rate limited with quota left: its place, or the back
     const kHint = el("div", "hint"), kw = el("div", "sink-wrap"), kLab = el("label", "", t("Rate limited"));
     // Default follows the setting for every group, under the list
@@ -7541,7 +7553,7 @@ function routingPage(part) {
     const kPick = segs(G_SINK_OPTS.map(([id, n]) => [id, t(n)]), d.sink ?? "def", (v) => { d.sink = v; drawSink(); });
     kPick.classList.add("sink-pick");
     kw.append(kPick, kHint);
-    ed.append(kLab, kw);
+    advIn.append(kLab, kw);
     drawSink();
     // a member slow to begin its answer: waited for, or the next asked
     // or after as many minutes as the user types (Kismet Alan on Discord)
@@ -7584,7 +7596,7 @@ function routingPage(part) {
       if (n > 0) d.firstToken = n;
       drawFirst();
     };
-    ed.append(el("label", "", t("Slow to start")), fw);
+    advIn.append(el("label", "", t("Slow to start")), fw);
     drawFirst();
     // every member busy at once: the agent told, or the members asked
     // again within a budget (#1418)
@@ -7596,7 +7608,7 @@ function routingPage(part) {
       : t("When every member has failed with an error that may pass — overloaded, unavailable, rate limited for a moment — and nothing of the reply has reached the agent, each is asked again after a pause, longer each time and never shorter than the vendor asks, for up to {n} more. A streaming agent is kept waiting meanwhile.", { n: patienceWord(pat) }));
     };
     patW.append(segs(G_PATIENCE_OPTS.map(([n, l]) => [n, t(l)]), d.patience || 0, (v) => { d.patience = +v; drawPatience(); }), patHint);
-    ed.append(el("label", "", t("Every member busy")), patW);
+    advIn.append(el("label", "", t("Every member busy")), patW);
     drawPatience();
     // the window agents are told: the largest member's, the smallest's, or
     // one the user names (Mikan on Discord)
@@ -7641,12 +7653,12 @@ function routingPage(part) {
       if (n > 0) d.context = n;
       drawCtx();
     };
-    ed.append(el("label", "", t("Context")), ctxW);
+    advIn.append(el("label", "", t("Context")), ctxW);
     drawCtx();
     const aHint = el("div", "hint", t(AFF_HINT[d.affinity] || AFF_HINT[""]));
     const aw = el("div");
     aw.append(segs(AFF_OPTS.map(([id, n]) => [id, t(n)]), d.affinity, (v) => { d.affinity = v; aHint.textContent = t(AFF_HINT[v] || AFF_HINT[""]); }), aHint);
-    ed.append(el("label", "", t("Stays")), aw);
+    advIn.append(el("label", "", t("Stays")), aw);
 
     // rules: which member a turn goes to first, by what the request shows.
     // A rule reads as one line, a sentence: the conditions it has, then →
@@ -8271,7 +8283,7 @@ function routingPage(part) {
       drawEffort(); drawClassifier();
     }), eHint);
     drawEffort();
-    ed.append(el("label", "", t("Effort")), ew);
+    advIn.append(el("label", "", t("Effort")), ew);
     ed.append(clabel, cw);
     drawRules();
     // the levels agents are offered: those every model has, or ones the
@@ -8307,7 +8319,8 @@ function routingPage(part) {
       drawLevels();
     }), chips, lHint);
     drawLevels();
-    ed.append(el("label", "", t("Levels")), lw);
+    advIn.append(el("label", "", t("Levels")), lw);
+    ed.append(adv);
 
     const bar = el("div", "bar view-foot");
     if (g) {
@@ -8320,7 +8333,7 @@ function routingPage(part) {
     cancel.onclick = cancelGroup;
     const saveBtn = el("button", "text primary", t(g ? "Save" : "Add"));
     const save = () => {
-      if (addPattern() === null) return pin.focus({ preventScroll: true }); // typed, not added: it is meant
+      if (addPattern() === null) return adv.open = true, pin.focus({ preventScroll: true }); // typed, not added: it is meant
       if (!d.members.length && !d.match.length) { addBtn.focus({ preventScroll: true }); return status(t("A group needs a model in it"), "warn"); }
       d.rules.forEach((r) => { r.intent = (r.intent || "").trim(); });
       // hours: both times, or none and no days; days alone are all day

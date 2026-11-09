@@ -8981,8 +8981,16 @@ const edAlign = new ResizeObserver((es) => {
     if (!n.isConnected) { edAlign.unobserve(n); continue; }
     const cs = getComputedStyle(n.parentElement), cols = cs.gridTemplateColumns.split(" ");
     const lab = cols.length > 1 ? parseFloat(cols[0]) || 0 : 0;
-    n.style.setProperty("--ed-lab", lab + "px");
-    n.style.setProperty("--ed-at", (lab && lab + parseFloat(cs.columnGap)) + "px");
+    // only when changed, and in an open fold a change after the first a
+    // frame later: its rows take the column, so set while the observer is
+    // delivering, the fold's own height changes with it (a label wrapping)
+    // and the browser reports a loop as a page error (a group's editor
+    // narrowed with the window). A closed fold only moves its chevron, so
+    // it follows at once, never a frame out of line
+    const at = (lab && lab + parseFloat(cs.columnGap)) + "px";
+    if (n.style.getPropertyValue("--ed-lab") === lab + "px" && n.style.getPropertyValue("--ed-at") === at) continue;
+    const set = () => { n.style.setProperty("--ed-lab", lab + "px"); n.style.setProperty("--ed-at", at); };
+    if (n.open && n.style.getPropertyValue("--ed-at")) requestAnimationFrame(set); else set();
   }
 });
 const edAligned = (n) => (edAlign.observe(n), n);

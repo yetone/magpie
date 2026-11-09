@@ -17,6 +17,12 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+// the rows a group's editor folds under Advanced, opened
+const openAdvanced = async (page) => {
+  const d = page.locator(".rt-gedit .rt-gadv");
+  await d.waitFor({ state: "attached" });
+  if (!(await d.evaluate((e) => e.open))) await d.locator(":scope > summary").click();
+};
 
 const assets = path.resolve(__dirname, "../assets");
 const MODEL = "workbuddy/hy4-preview";
@@ -121,7 +127,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // column on purpose (plugins/routing/routing.css), so the label is above its field
         // there — beside is only what a wide window can ask for.
         const oneColumn = width <= 760;
-        const rows = await ed.evaluate((e, oneColumn) => [...e.children].filter((c) => c.matches("label") && !c.hidden && c.offsetParent).map((l) => {
+        await openAdvanced(page); // Levels and the rest folded under it, measured too
+        const rows = await ed.evaluate((e, oneColumn) => [...e.children, ...(e.querySelector(":scope > .rt-gadv > .inner")?.children || [])].filter((c) => c.matches("label") && !c.hidden && c.offsetParent).map((l) => {
           const f = l.nextElementSibling, a = l.getBoundingClientRect(), b = f.getBoundingClientRect();
           const beside = a.right <= b.left + 1 && Math.abs(a.top - b.top) < 12;
           const above = a.bottom <= b.top + 1 && a.left <= b.left + 1;

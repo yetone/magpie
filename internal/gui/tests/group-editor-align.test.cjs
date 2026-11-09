@@ -12,6 +12,12 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+// the rows a group's editor folds under Advanced, opened
+const openAdvanced = async (page) => {
+  const d = page.locator(".rt-gedit .rt-gadv");
+  await d.waitFor({ state: "attached" });
+  if (!(await d.evaluate((e) => e.open))) await d.locator(":scope > summary").click();
+};
 
 const assets = path.resolve(__dirname, "../assets");
 const members = ["a/m1", "a/m2"];
@@ -70,7 +76,7 @@ const measure = () => {
     }
     return null;
   };
-  return [...ed.querySelectorAll(":scope > label")].filter(shown).map((l) => {
+  return [...ed.querySelectorAll(":scope > label, :scope > .rt-gadv > .inner > label")].filter(shown).map((l) => {
     const ctl = l.nextElementSibling, a = firstLine(l), c = firstLine(ctl);
     const gaps = [...ctl.querySelectorAll(".hint")].filter(shown).flatMap((h) => {
       let p = h.previousElementSibling;
@@ -100,6 +106,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         if (withOne) await page.locator(".rt-group", { hasText: "Glim" }).locator("button", { hasText: w.Edit }).click();
         else await page.locator("button", { hasText: w["New group"] }).first().click();
         await page.locator(".rt-gedit").waitFor();
+        await openAdvanced(page); // its rows are measured too
         if (withOne) await page.locator(".rt-gedit .rt-pats .fbrow").first().waitFor();
         const rows = await page.evaluate(measure);
         assert.ok(rows.length >= 10, `the editor's rows: ${JSON.stringify(rows)}`);

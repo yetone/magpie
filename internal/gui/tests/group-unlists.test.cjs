@@ -10,6 +10,12 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+// the rows a group's editor folds under Advanced, opened
+const openAdvanced = async (page) => {
+  const d = page.locator(".rt-gedit .rt-gadv");
+  await d.waitFor({ state: "attached" });
+  if (!(await d.evaluate((e) => e.open))) await d.locator(":scope > summary").click();
+};
 
 const assets = path.resolve(__dirname, "../assets");
 const members = ["a/m1", "a/m2"];
@@ -101,6 +107,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         };
 
         await card.locator("button", { hasText: w.Edit }).click();
+        await openAdvanced(page);
         await label.waitFor();
         assert.match(await opt("Its models too").getAttribute("class"), /\bon\b/, "its models too by default");
         assert.equal(await field.locator(".hint").last().textContent(), w[H0]);
