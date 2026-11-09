@@ -61,3 +61,63 @@ func TestPickedDaysArePeriod(t *testing.T) {
 		}
 	}
 }
+
+// Either end of a picked range can name its minute (blrbrzkj on Discord):
+// the calls from that minute up to, not including, the end's, under an
+// hour each of the time for two days or less, a day each past that.
+func TestPickedMinutesArePeriod(t *testing.T) {
+	pageHome(t)
+	now := holdClock(t, time.Date(2026, 10, 10, 12, 0, 0, 0, time.Local))
+	at := func(d, h, m int) time.Time { return time.Date(2026, 10, d, h, m, 0, 0, time.Local) }
+	for _, ts := range []time.Time{
+		at(1, 9, 29), // a minute before the start
+		at(1, 9, 30), // the start
+		at(1, 12, 0),
+		at(2, 17, 59), // the last minute
+		at(2, 18, 0),  // the end, not included
+		at(3, 9, 0),
+	} {
+		Append(Record{Time: ts, Agent: "claude", Provider: "openai", Model: "m", Input: 10, Status: 200})
+	}
+	p, ok := RangeOf("2026-10-02T18:00", "2026-10-01T09:30") // either order
+	if !ok || p != "2026-10-01T09:30..2026-10-02T18:00" || !p.Known() || !p.IsRange() {
+		t.Fatalf("RangeOf: %q %v", p, ok)
+	}
+	if !p.Since(now).Equal(at(1, 9, 30)) || !p.Until(now).Equal(at(2, 18, 0)) {
+		t.Errorf("%s: from %v until %v", p, p.Since(now), p.Until(now))
+	}
+	s := Summarize(p)
+	// 09:00 on the 1st to 18:00 on the 2nd: 33 hours
+	if s.Calls != 3 || s.Period != p || s.Bucket != "hour" || len(s.Series) != 33 || !s.Series[0].Time.Equal(at(1, 9, 0)) {
+		t.Errorf("Summarize(%s): %d calls, period %q, %d %s points from %v; want 3 calls in 33 hours from 09:00", p, s.Calls, s.Period, len(s.Series), s.Bucket, s.Series[0].Time)
+	}
+	if pg := QueryPage(p, Filter{}, 0, 10); pg.Total != 3 {
+		t.Errorf("QueryPage(%s): %d rows, want 3", p, pg.Total)
+	}
+	if l := LedgerOf(p, Filter{}); len(l.Rows) != 3 {
+		t.Errorf("LedgerOf(%s): %d rows, want 3", p, len(l.Rows))
+	}
+
+	// a minute to the end of a whole day: that day's last call counts
+	mixed, ok := RangeOf("2026-10-02T12:00", "2026-10-03")
+	if !ok || !mixed.Until(now).Equal(at(4, 0, 0)) {
+		t.Errorf("RangeOf mixed: %q %v until %v", mixed, ok, mixed.Until(now))
+	}
+	if s := Summarize(mixed); s.Calls != 3 || s.Bucket != "hour" || len(s.Series) != 36 {
+		t.Errorf("Summarize(%s): %d calls, %d %s points; want 3 in 36 hours", mixed, s.Calls, len(s.Series), s.Bucket)
+	}
+	// more than two days of minutes: a day each from the first day
+	wide, _ := RangeOf("2026-10-01T09:30", "2026-10-09T08:00")
+	if s := Summarize(wide); s.Calls != 5 || s.Bucket != "day" || len(s.Series) != 9 || !s.Series[0].Time.Equal(at(1, 0, 0)) {
+		t.Errorf("Summarize(%s): %d calls, %d %s points; want 5 in 9 days", wide, s.Calls, len(s.Series), s.Bucket)
+	}
+
+	for _, bad := range []string{"2026-10-01T09:30..2026-10-01T09:30", "2026-10-01T10:00..2026-10-01T09:00", "2026-10-01T25:00..2026-10-02", "2026-10-01 09:30..2026-10-02"} {
+		if Period(bad).Known() {
+			t.Errorf("%q is known", bad)
+		}
+	}
+	if _, ok := RangeOf("2026-10-01T09:30", "2026-10-01T09:30"); ok {
+		t.Error("RangeOf took a range of no time")
+	}
+}

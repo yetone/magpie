@@ -55,7 +55,9 @@ func csvStamp(p usage.Period, day string, now time.Time) string {
 		return "magpie-requests-day-" + day
 	}
 	if p.IsRange() { // the days picked, which already say when
-		return "magpie-requests-" + strings.Replace(string(p), "..", "-to-", 1)
+		// a minute an end names ("T09:30") without the colon Windows
+		// doesn't take in a file name
+		return "magpie-requests-" + strings.ReplaceAll(strings.Replace(string(p), "..", "-to-", 1), ":", "")
 	}
 	// a rolling window ("last:24h0m0s") without the colon, which Windows
 	// doesn't take in a file name (#2075)

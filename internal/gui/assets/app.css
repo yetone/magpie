@@ -3087,6 +3087,13 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .range-menu .rm-day.in { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 0; }
 .range-menu .rm-day.end { background: var(--accent); color: var(--accent-fg, #fff); }
 .range-menu .rm-day:disabled { color: var(--faint); opacity: .5; }
+/* the minutes the first day begins at and the last ends at */
+.range-menu .rm-times { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding: 7px 2px 0; border-top: 1px solid var(--line-2); color: var(--muted); }
+.range-menu .rm-times svg { flex: none; }
+.range-menu .rm-time { width: 52px; height: 24px; padding: 0 6px; border: 1px solid var(--line-2); border-radius: 6px; background: transparent; color: var(--fg); font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; text-align: center; }
+.range-menu .rm-time:focus { outline: none; border-color: var(--accent); }
+.range-menu .rm-time[aria-invalid="true"] { border-color: var(--red); }
+.range-menu .rm-dash { color: var(--faint); }
 @media (max-width: 640px) { .range-opt:not(.on) > span { display: none; } }
 /* a subscription's allowance, under its name */
 .accts .acc.with-aq { flex-wrap: wrap; row-gap: 3px; padding-top: 7px; padding-bottom: 8px; }

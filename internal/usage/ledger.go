@@ -233,8 +233,8 @@ func (f Filter) keepsRecord(r *Record, codexIdentity bool, subagent, parentAgent
 
 // Since is when the period began, as of now; zero for all.
 func (p Period) Since(now time.Time) time.Time {
-	if first, _, ok := p.days(now.Location()); ok {
-		return first
+	if since, _, ok := p.bounds(now.Location()); ok {
+		return since
 	}
 	// a rolling window ends now, so it began that long ago (#2075)
 	if d := p.Last(); d > 0 {
@@ -752,7 +752,7 @@ func WriteCSV(w io.Writer, rows []Row) error {
 func timeline(p Period, now, first time.Time) (since time.Time, bucket string, pts []Point) {
 	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	bucket, pts = "day", []Point{}
-	var n int
+	var n, hours int
 	// a rolling window ends now: an hour each of two days or less, else a
 	// day each from when it began (#2075)
 	if d := p.Last(); d > 0 {
@@ -772,11 +772,22 @@ func timeline(p Period, now, first time.Time) (since time.Time, bucket string, p
 		}
 		return since, bucket, pts
 	}
-	if first, last, ok := p.days(now.Location()); ok {
+	if first, until, ok := p.bounds(now.Location()); ok {
 		// a picked range: an hour each of a single day, else a day each,
-		// a week each (from a Monday) past 60 days as All has
+		// a week each (from a Monday) past 60 days as All has. One that
+		// names its minutes is an hour each from the hour it begins in,
+		// up to two days of them, else a day each from its first day.
+		last := until.Add(-time.Nanosecond)
 		since, n = first, calendarDays(first, last)+1
-		if n == 1 {
+		if p.timed() {
+			hour := time.Date(first.Year(), first.Month(), first.Day(), first.Hour(), 0, 0, 0, first.Location())
+			if h := int((until.Sub(hour) + time.Hour - 1) / time.Hour); h <= 48 {
+				since, bucket, hours = hour, "hour", h
+			} else {
+				since = time.Date(first.Year(), first.Month(), first.Day(), 0, 0, 0, 0, first.Location())
+			}
+		}
+		if n == 1 && !p.timed() {
 			bucket = "hour"
 		} else if n > 60 {
 			bucket = "week"
@@ -810,7 +821,11 @@ func timeline(p Period, now, first time.Time) (since time.Time, bucket string, p
 	}
 	switch bucket {
 	case "hour":
-		for h := 0; since.Add(time.Duration(h) * time.Hour).Before(since.AddDate(0, 0, 1)); h++ {
+		end := since.AddDate(0, 0, 1)
+		if hours > 0 {
+			end = since.Add(time.Duration(hours) * time.Hour)
+		}
+		for h := 0; since.Add(time.Duration(h) * time.Hour).Before(end); h++ {
 			t := since.Add(time.Duration(h) * time.Hour)
 			pts = append(pts, Point{Label: t.Format("15"), Time: t})
 		}

@@ -15909,12 +15909,11 @@ function keepRefreshedQuotas(next, began) {
   return out.concat([...kept.values()]);
 }
 
-// A period of picked days is "2026-10-01..2026-10-07", both included, in
-// this computer's time zone, as the backend reads it (usage.RangeOf).
-// periodDays is its two days, or null for a preset.
+// Picked days, "2026-10-01..2026-10-07T18:00", both in, in this computer's
+// zone (usage.RangeOf): periodDays is their days and minutes, or null.
 function periodDays(p) {
-  const m = /^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$/.exec(p || "");
-  return m ? { from: m[1], to: m[2] } : null;
+  const m = /^([\d-]{10})(?:T([\d:]{5}))?\.\.([\d-]{10})(?:T([\d:]{5}))?$/.exec(p || "");
+  return m ? { from: m[1], to: m[3], fromAt: m[2] || "", toAt: m[4] || "" } : null;
 }
 const dayOfKey = (k) => new Date(k + "T12:00:00");
 // a count as a short number: 133M, and 1.33 亿, 68.1 万 in Chinese with

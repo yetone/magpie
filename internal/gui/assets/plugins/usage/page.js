@@ -245,9 +245,10 @@ function renderPeriod(loading) {
     if (b.classList.contains("open")) return closeProtoMenu();
     // on a phone the strip is hidden behind the head's menu, which opens it
     openRangeMenu(b.offsetParent ? b : $("#usageRangeMenu"), range, (from, to) => {
+      const picked = periodDays(from + ".." + to);
       for (const x of seg.querySelectorAll(".opt")) x.classList.toggle("on", x === b);
-      b.lastChild.textContent = rangeName({ from, to });
-      b.title = t("Days picked: {days}", { days: rangeName({ from, to }) });
+      b.lastChild.textContent = rangeName(picked);
+      b.title = t("Days picked: {days}", { days: rangeName(picked) });
       b.setAttribute("aria-label", b.title);
       slide(seg, "period");
       pickPeriod(from + ".." + to);
@@ -298,11 +299,23 @@ function pickPeriod(id) {
 
 const dayKeyOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 // rangeName says picked days short: "Oct 1 – Oct 7", the year only when it
-// isn't this one, one day alone as itself
-function rangeName({ from, to }) {
+// isn't this one, one day alone as itself, and the minutes an end names
+// after its day: "Oct 1 09:30 – 18:00" within one day
+function rangeName({ from, to, fromAt = "", toAt = "" }) {
   const year = new Date().getFullYear();
   const name = (k) => dayOfKey(k).toLocaleDateString(intlLang(), { month: "short", day: "numeric", ...(dayOfKey(k).getFullYear() !== year ? { year: "numeric" } : {}) });
-  return from === to ? name(from) : name(from) + " – " + name(to);
+  if (!fromAt && !toAt) return from === to ? name(from) : name(from) + " – " + name(to);
+  const end = from === to ? toAt || "24:00" : name(to) + (toAt ? " " + toAt : "");
+  return name(from) + " " + (fromAt || "00:00") + " – " + end;
+}
+// typedTime reads a time typed into the range menu, "9:30", "0930" or "09:30",
+// as "09:30"; "" when empty, null when it isn't one. The end's "24:00" is
+// its day's end, which is no minute of its own.
+function typedTime(v, end) {
+  v = v.trim();
+  if (!v || (end && /^24:?00$/.test(v))) return "";
+  const m = /^([01]?\d|2[0-3]):?([0-5]\d)$/.exec(v);
+  return m ? m[1].padStart(2, "0") + ":" + m[2] : null;
 }
 // noCallsIn is what an empty page says of the period it is on
 function noCallsIn(p) {
@@ -351,7 +364,37 @@ function openRangeMenu(anchor, current, choose) {
   nav.append(prev, month, next);
   const grid = el("div", "rm-grid");
   grid.setAttribute("role", "grid");
-  box.append(head, quick, nav, grid);
+  // the minutes the first day begins at and the last ends at, a whole day
+  // each when left empty; Enter applies them to the days already picked
+  const times = el("div", "rm-times");
+  const timeIn = (v, hint, label) => {
+    const i = el("input", "rm-time");
+    Object.assign(i, { type: "text", inputMode: "numeric", maxLength: 5, placeholder: hint, value: v || "", spellcheck: false, autocomplete: "off" });
+    i.setAttribute("aria-label", t(label));
+    i.oninput = () => i.removeAttribute("aria-invalid");
+    i.onkeydown = (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const r = start ? null : current;
+      if (r) withTimes(r.from, r.to);
+    };
+    return i;
+  };
+  const fromT = timeIn(current?.fromAt, "00:00", "Start time"), toT = timeIn(current?.toAt, "24:00", "End time");
+  times.append(svg("M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zM8 5v3.2l2 1.3", 12, 1.4), fromT, el("span", "rm-dash", "–"), toT);
+  // the two days with the minutes typed, chosen; false when a time isn't
+  // one or the range would end before it begins
+  const withTimes = (fromDay, toDay) => {
+    const a = typedTime(fromT.value, false), z = typedTime(toT.value, true);
+    if (a == null) fromT.setAttribute("aria-invalid", "true");
+    if (z == null) toT.setAttribute("aria-invalid", "true");
+    if (a == null || z == null) return false;
+    if (fromDay === toDay && z && (a || "00:00") >= z) { toT.setAttribute("aria-invalid", "true"); return false; }
+    closeProtoMenu();
+    choose(fromDay + (a ? "T" + a : ""), toDay + (z ? "T" + z : ""));
+    return true;
+  };
+  box.append(head, quick, nav, grid, times);
   const draw = (focusDay) => {
     head.textContent = start ? t("Now the last day") : t("Pick the first day, then the last");
     month.textContent = shown.toLocaleDateString(intlLang(), { year: "numeric", month: "long" });
@@ -377,8 +420,7 @@ function openRangeMenu(anchor, current, choose) {
         e.stopPropagation();
         if (!start) { start = k; draw(k); return; }
         const [from, to] = start <= k ? [start, k] : [k, start];
-        closeProtoMenu();
-        choose(from, to);
+        if (!withTimes(from, to)) { start = null; draw(); }
       };
       cells.push(b);
     }

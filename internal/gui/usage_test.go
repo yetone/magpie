@@ -331,6 +331,11 @@ func TestCSVStamp(t *testing.T) {
 	if got := csvStamp(p, "", now); strings.ContainsAny(got, `:/\\`) {
 		t.Errorf("rolling window: %s", got)
 	}
+	// nor has a range whose ends name their minutes
+	r, _ := usage.RangeOf("2026-09-29T09:30", "2026-09-30T18:00")
+	if got := csvStamp(r, "", now); got != "magpie-requests-2026-09-29T0930-to-2026-09-30T1800" {
+		t.Errorf("range of minutes: %s", got)
+	}
 }
 
 // midnightUsageClock sets usage.Clock to read a tenth of a second before
