@@ -16678,7 +16678,8 @@ function quotaCycle(l, now) {
     while (i > 0 && !quotaCycleBreak(l.points[i - 1], l.points[i])) i--;
     start = l.points[i].at;
   }
-  if (reset === last.reset) start = Math.max(start, quotaRecordedCycles(l).at(-1).start);
+  // minutes apart is one deadline: history keeps whole seconds
+  if (reset === last.reset || Math.abs(reset - last.reset) <= 3e5) start = Math.max(start, quotaRecordedCycles(l).at(-1).start);
   if (reset != null && reset <= now) reset = null;
   return { start: Math.min(start, now), reset };
 }
