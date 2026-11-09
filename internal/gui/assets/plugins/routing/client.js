@@ -21,7 +21,7 @@ magpie.plugin("routing", (ctx) => {
     title: "Routing",
     html: `
     <div class="row-head"><span class="label" data-t>Routing</span><span class="rt-livedot" aria-hidden="true"></span><span class="note" data-t>live, as the gateway decides</span><span class="grow"></span>
-      <button class="text rt-togroups" type="button" id="rtToGroups"><span data-t>Routing groups</span> ›</button>
+      <button class="text rt-togroups" type="button" id="rtToGroups" data-feature="groups"><span data-t>Routing groups</span> ›</button>
       <button class="text rt-mask" id="rtMask" aria-pressed="false" data-tt="Mask the accounts on every page — email addresses and account names — for a screenshot to share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.2A10.4 10.4 0 0 1 12 4c6.5 0 10 8 10 8a17.6 17.6 0 0 1-2.2 3.2M6.6 6.6C3.9 8.4 2 12 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20"/></svg><span data-t>Hide accounts</span></button></div>
     <section class="rt" id="rt"></section>
     <div class="rt-more" id="rtMore"></div>
@@ -2832,19 +2832,21 @@ function routingPage(part) {
   async function goRouting(e, go) {
     const i = go.indexOf(":"), kind = go.slice(0, i), id = CSS.escape(go.slice(i + 1));
     const row = kind === "group" ? gList.querySelector(`.rt-group[data-id="${id}"]`) : pList.querySelector(`.rt-pool[data-provider="${id}"]`);
-    if (!row) return;
-    // they are on the Routing groups page: it opens, and the row comes
+    if (!row || featureHides(row)) return;
+    // they are on the Routing groups page (on Routing with the groups
+    // off: groupsHome): it opens, and the row comes
     // into sight as the reader's click asked. A page just opened is at the
     // row at once, and that is where the reader is in it (arrived): else
     // the page put itself back where the reader last left it
-    const asked = window.scrollOnPurpose?.(e), opens = gView().hidden;
-    if (opens && !(await window.show("groups"))) return;
+    const home = gsec.closest("main") || gView();
+    const asked = window.scrollOnPurpose?.(e), opens = home.hidden;
+    if (opens && !(await window.show(home.id.slice("view-".length)))) return;
     // from Routing: its toolbar leads back to the request (gBack)
-    if (opens && e.target.closest?.("#view-routing")) openedFrom(e.target.closest(".rt-go"));
+    if (opens && home === gView() && e.target.closest?.("#view-routing")) openedFrom(e.target.closest(".rt-go"));
     if (asked) {
       readerScrolls(1000);
       row.scrollIntoView({ block: "center", behavior: opens || still() ? "auto" : "smooth" });
-      if (opens) window.arrived?.(gView());
+      if (opens) window.arrived?.(home);
     }
     row.classList.remove("rt-found");
     void row.offsetWidth;
@@ -5816,6 +5818,8 @@ function routingPage(part) {
       applyFeatures(next);
       status(t("Routing groups are on"), "ok", 1500);
       loadGroups();
+      // the note was on Routing (groupsHome): the groups are on their page
+      if (!$("#view-routing").hidden && document.body.classList.contains("window")) window.show("groups");
     } catch (err) {
       status(t(err.message), "err");
     } finally {
@@ -5824,7 +5828,8 @@ function routingPage(part) {
   };
   const gOffBox = el("div", "list rt-goffbox");
   gOffBox.append(el("div", "rt-goffwhy", t("Routing groups are off in Plugins › Built-in: the groups magpie finds, one model several providers serve, still route, but your own can't be made or changed here.")), gOn);
-  gOff.append(gOffBox);
+  // on Routing then (groupsHome), under its requests, named as before 11-06
+  gOff.append(el("div", "row-head", el("span", "label", t("Routing groups"))), gOffBox);
   // the settings that hold for every group, under the list (11-06)
   const sHead = el("div", "row-head rt-gset-head");
   sHead.dataset.feature = "groups";
@@ -5834,9 +5839,16 @@ function routingPage(part) {
   gSet.append(gFound, gNames, ...gDefs);
   gsec.append(gHead, gList, gOff, sHead, gSet, pHead, pList);
   // on the Routing groups page, a page of their own; Try again on it puts
-  // them back in its markup made anew
+  // them back in its markup made anew. With the groups off, that page's
+  // tab leaves the sidebar (yyddbds on Discord: it stayed), and what is
+  // left of it, the note that turns them on and the providers' own
+  // accounts, goes under Routing's requests, where it was before 11-06.
+  // app.js asks again when a built-in is switched (applyFeatures).
   const gHome = () => $("#rtGroups");
-  window.routingGroupsHome = (main) => (main?.querySelector("#rtGroups") || gHome())?.append(gsec);
+  window.routingGroupsHome = (main) => {
+    const to = featuresOff.has("groups") ? more : main?.querySelector("#rtGroups") || gHome();
+    if (to && gsec.parentElement !== to) to.append(gsec);
+  };
   window.routingGroupsHome();
   if (gHome()) byWidth(gHome(), { max520: (w) => w <= 520 });
   const ROUTE_OPTS = [["", "Smart"], ["order", "In order"], ["drain", "Until used up"], ["rotate", "In turn"], ["usage", "Least used"], ["pace", "Use before expiry"], ["free", "Free first"], ["fast", "Speed first"]];

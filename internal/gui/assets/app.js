@@ -5640,7 +5640,7 @@ function keptNote(m) {
   } else {
     words.append(el("span", "", t("{provider} is used only through routing groups, and {model} is in none, so no agent can use it. Make a group of it, or untick “Only through routing groups” in {provider}'s models.", { provider: m.provider, model })));
     act.textContent = t("Make a routing group of it");
-    act.dataset.feature = "routing"; // made on the Routing page
+    act.dataset.feature = "routing groups";
     act.onclick = (ev) => {
       ev.stopPropagation();
       closePicker();
@@ -11509,7 +11509,7 @@ function renderModels(p) {
     if (!p.unlisted) { lost.append(" " + t("Once saved, make a group of them in Routing groups.")); return; }
     for (const id of none.slice(0, 4)) {
       const b = el("button", "text action", t("Make a routing group of {model}", { model: id }));
-      b.dataset.feature = "routing"; // made on the Routing page
+      b.dataset.feature = "routing groups";
       b.onclick = (ev) => { if (mode !== "window") api("window/main?view=groups&newgroup=" + encodeURIComponent(p.id + "/" + id), {}); else window.newGroupWith?.(p.id + "/" + id, "", ev); };
       lost.append(b);
     }
@@ -23144,8 +23144,8 @@ async function show(v) {
   v = magpie.replacing?.(v) || v;
   // a page gateway mode leaves out (a link to it, an address kept) opens Providers
   if (gatewayMode && GATEWAY_HIDES.includes(v)) v = "providers";
-  // and one a built-in plugin switched off has, Agents
-  if (featureHides($(`#nav button[data-view="${v}"]`))) v = gatewayMode ? "providers" : "agents";
+  // and one a built-in plugin switched off has, offView
+  v = offView(v);
   if (v !== view) {
     if (v === "plugins" && pluginUpdates) window.pluginTabTo?.("installed");
     if (view === "providers" && (editing !== null || importing || importingApps)) {
@@ -23234,6 +23234,12 @@ function setGatewayMode(on) {
   else if (!sideNav()) slide($("#nav"), "nav");
   navSubs();
 }
+// offView: v, or the page a plugin switched off sends it to (yyddbds)
+function offView(v) {
+  if (!featureHides($(`#nav button[data-view="${v}"]`))) return v;
+  if (v === "groups" && !featureHides($('#nav button[data-view="routing"]'))) return "routing";
+  return gatewayMode ? "providers" : "agents";
+}
 // navHides leaves out the tabs of the pages gateway mode or a built-in
 // plugin switched off leaves out
 function navHides() {
@@ -23255,7 +23261,8 @@ function applyFeatures(list) {
   if (mode === "panel" && panelTab !== "agents") setPanelTab(panelTab); // its tab may be gone
   if (mode !== "window") return;
   navHides();
-  if (featureHides($(`#nav button[data-view="${view}"]`))) show(gatewayMode ? "providers" : "agents");
+  window.routingGroupsHome?.();
+  if (offView(view) !== view) show(offView(view));
   else if (!sideNav()) slide($("#nav"), "nav");
   setSetTab(setTab);
   navSubs();
