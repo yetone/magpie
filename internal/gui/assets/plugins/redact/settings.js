@@ -236,6 +236,22 @@ function redactWordsHidden(r) {
     if (at) at.before(words); else $("#redactList").append(words);
     redactWordsHidden(words);
     const acts = $("#maskActList");
+    // the Masking alert (Must2333 on X) first, with what else happens when
+    // a value is found: it was on the Masking page, away from every other
+    // masking setting (the scattered settings audit after netube99 on X),
+    // and in Settings › Usage before that (nb5p). Gateway mode leaves it
+    // out, as it does the other alerts its desktop would show
+    if (acts && !gatewayMode) {
+      const r = el("div", "row pref");
+      r.id = "maskAlertRow";
+      const who = el("div", "who");
+      who.append(el("div", "name", t("Masking alert")), el("div", "sub wraps", t("A notification when masking swaps a value for the first time: its kind and how many, never the value itself")));
+      const v = el("div", "val");
+      v.id = "maskAlertSegs";
+      v.append(segs([["off", t("Off")], ["on", t("On")]], s.maskAlert ? "on" : "off", (x) => savePrefs({ ...keep, maskAlert: x === "on" })));
+      r.append(who, v);
+      acts.prepend(r);
+    }
     if (acts) {
       const al = wordList("allow", s.redactAllow || [], t("ops@company.com, build-01"), t("Never mask"), (allow) => writingPrefs(api("settings/redact-allow", { allow }))
         .then((ns) => { prefs = ns; renderSettings(); status(t("Saved"), "ok", 1500); })
@@ -246,3 +262,13 @@ function redactWordsHidden(r) {
     if (s.redact || s.redactPersonal || (s.redactWords || []).length) redactRouteRow(s);
   };
 }
+
+// Plugins › Built-in › Masking's own line (featGo): on, with nothing
+// chosen to mask, it says so beside the way to Settings › Privacy, where
+// what to mask is chosen (the scattered settings audit after netube99 on X)
+featWho.redact = (line, f) => {
+  if (!f.on) return;
+  // Settings' own read: /api/state's has no masking fields
+  const say = () => { const s = prefs; if (s && !(s.redact || s.redactPersonal || s.redactWords?.length)) line.prepend(el("span", "warn", t("Nothing is masked yet")), line.childNodes.length ? " · " : ""); };
+  if (prefs) say(); else loadSettings().then(say, () => {});
+};

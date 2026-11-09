@@ -7,9 +7,8 @@
 // list under it each request (or each value) masking changed (between
 // them, folded, demo.js's 小鹊 shows how masking works), and a
 // request opened says what it carried, what the vendor got instead, and
-// how each value was found and put back. The Masking alert closes the
-// page (it sat in Settings › Usage, where nb5p looked for it in vain),
-// after the list, so the requests still start in the first screen. The
+// how each value was found and put back. The Masking alert is with
+// masking's other settings, in Settings › Privacy (settings.js). The
 // hooks are what the shell asks of it: open, refresh (the window came
 // back), reload (Refresh in the sidebar), leave, and focus (a masked
 // call's badge opens its request).
@@ -29,12 +28,6 @@ magpie.plugin("redact", (ctx) => {
     <div class="md-body" id="mdBody" hidden></div>
   </section>
   <section class="msk-list" id="maskList"></section>
-  <div class="list prefs msk-prefs" id="maskPrefs">
-    <div class="row pref" id="maskAlertRow">
-      <div class="who"><div class="name" data-t>Masking alert</div><div class="sub wraps" data-t>A notification when masking swaps a value for the first time: its kind and how many, never the value itself</div></div>
-      <div id="maskAlertSegs"></div>
-    </div>
-  </div>
   <section class="msk-one" id="maskOne" hidden></section>
 `,
     open() { return maskPageOpen(); },

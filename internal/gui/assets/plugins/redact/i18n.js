@@ -3,6 +3,7 @@
 magpie.strings({
   zh: {
     "Turn on masking": "打开脱敏",
+    "Nothing is masked yet": "还没有要脱敏的内容",
     "Turn off masking": "关闭脱敏",
     "Turn off in Settings": "去设置里关闭",
     "Your own masked words still mask until you take them out, in Settings › Privacy": "你自己加的脱敏词会一直脱敏，要在「设置 › 隐私」里删掉",
@@ -114,6 +115,7 @@ magpie.strings({
   },
   "zh-TW": {
     "Turn on masking": "開啟脫敏",
+    "Nothing is masked yet": "還沒有要脫敏的內容",
     "Turn off masking": "關閉脫敏",
     "Turn off in Settings": "到設定裡關閉",
     "Your own masked words still mask until you take them out, in Settings › Privacy": "你自己加的脫敏詞會一直脫敏，要在「設定 › 隱私」裡刪掉",
@@ -225,6 +227,7 @@ magpie.strings({
   },
   ja: {
     "Turn on masking": "マスクをオンにする",
+    "Nothing is masked yet": "まだ何もマスクしていません",
     "Turn off masking": "マスクをオフにする",
     "Turn off in Settings": "設定でオフにする",
     "Your own masked words still mask until you take them out, in Settings › Privacy": "自分で追加したマスクする語は、設定 › プライバシーで削除するまでマスクされ続けます",
@@ -336,6 +339,7 @@ magpie.strings({
   },
   de: {
     "Turn on masking": "Maskierung einschalten",
+    "Nothing is masked yet": "Noch wird nichts maskiert",
     "Turn off masking": "Maskierung ausschalten",
     "Turn off in Settings": "In den Einstellungen ausschalten",
     "Your own masked words still mask until you take them out, in Settings › Privacy": "Ihre eigenen maskierten Wörter werden weiter maskiert, bis Sie sie unter Einstellungen › Datenschutz entfernen",

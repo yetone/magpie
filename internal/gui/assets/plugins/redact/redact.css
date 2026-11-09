@@ -88,7 +88,6 @@
 
 /* the list: a bar, facets that narrow it, a day at a time */
 .msk-list { margin-top: 14px; }
-.msk-prefs { margin-top: 14px; border-radius: 14px; }
 .msk-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .msk-live { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); }
 .msk-live i { width: 6px; height: 6px; border-radius: 50%; background: var(--green, var(--accent)); animation: msk-live 2.4s ease-in-out; }

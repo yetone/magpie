@@ -4,7 +4,8 @@
 // leads to the others. A built-in with settings (its manifest's SetAt) now
 // has, under its row, Settings › <tab> and its page while it is on
 // (featGo); its settings, while it is off, say so first and turn it on
-// (featOff); Masking's head goes back to Settings › Privacy. Settings
+// (featOff); Masking's head goes back to Settings › Privacy, and its row
+// says so when nothing is chosen to mask. Settings
 // hidden while their plugin is off (Observability) get no link then.
 // Every language, Chromium and WebKit, at 1100 and 420 wide, nothing
 // running off to the side; no backend, the API is faked here.
@@ -20,7 +21,7 @@ const { I18N } = strings();
 const LANGS = ["en", "zh", "zh-TW", "ja", "de"];
 const tr = (lang, s) => (lang === "en" ? s : I18N[lang]?.[s] ?? s);
 
-function fixture(lang, { redact = true, otel = true } = {}) {
+function fixture(lang, { redact = true, otel = true, masks = true } = {}) {
   const st = { redact, otel };
   const posts = [];
   const row = (id, name, sub, on, more) => ({ id, name, sub, on, chosen: on, source: "preset", state: on ? "active" : "off", inUse: 0, ...more });
@@ -32,7 +33,7 @@ function fixture(lang, { redact = true, otel = true } = {}) {
   ];
   const settings = () => ({
     theme: "light", lang, tray: "panel", currency: "usd", textSize: 100,
-    redact: st.redact, redactPersonal: false, redactWords: [], redactRules: [], redactKinds: {},
+    redact: st.redact && masks, redactPersonal: false, redactWords: [], redactRules: [], redactKinds: {},
     version: "0.1.400", dir: "~/.config/magpie", gateway: "http://127.0.0.1:3999", port: 3999,
     proxyNow: "none", proxySource: "none", vision: "", imageGen: "", lanURLs: [],
     visionModels: [], imageGenModels: [], workbuddyCheckins: [], searchChoices: [], searchAPIs: [],
@@ -133,6 +134,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             await page.context().close();
           }
         });
+        await t.test(`${lang} at ${width}px: on with nothing to mask, masking's Built-in row says so`, async () => {
+          const { page } = await open(lang, width, "?view=plugins", { masks: false });
+          await builtinTab(page);
+          const line = featRow(page, "redact").locator(".who .feat-go");
+          await line.locator(".warn").waitFor();
+          assert.equal((await line.textContent()).trim(), w("Nothing is masked yet") + " · " + w("Settings") + " › " + w("Privacy") + " · " + w("Masking"));
+          assert.equal(await wide(page), 0);
+          assert.deepEqual(await past(featRow(page, "redact")), []);
+          assert.deepEqual(page.errors, []);
+          await page.context().close();
+        });
         await t.test(`${lang} at ${width}px: off, Built-in goes to its settings only, and they say it is off`, async () => {
           const { page, posts } = await open(lang, width, "?view=plugins", { redact: false, otel: false });
           await builtinTab(page);
@@ -169,6 +181,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await set.waitFor();
           assert.equal(await wide(page), 0);
           assert.deepEqual(await past(head), []);
+          // its alert is in Settings › Privacy now, not on this page
+          assert.equal(await page.locator("#maskPrefs, #maskAlertRow:visible").count(), 0);
           shots.push([`${lang}-${width}-masking`, await head.screenshot()]);
           await set.click();
           await page.locator("#view-settings #redactList .row.flash").waitFor();
