@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -313,13 +314,43 @@ func saveLive(provider, base, asked string, models []Model, sides map[string][]M
 		return err
 	}
 	now := time.Now()
-	b, _ := json.MarshalIndent(liveFile{Fetched: now, Base: base, Models: models, Sides: sides, Kinded: true,
-		Since: liveSince(provider, models, now), Asked: asked}, "", "  ")
+	f := liveFile{Fetched: now, Base: base, Models: models, Sides: sides, Kinded: true,
+		Since: liveSince(provider, models, now), Asked: asked}
+	same := sameLive(p, f)
+	b, _ := json.MarshalIndent(f, "", "  ")
 	if err := os.WriteFile(p, b, 0o644); err != nil {
 		return err
 	}
+	if same {
+		// the list as it was, fetched again (an account's each 45
+		// minutes, KeepAccountsListed): only when it was fetched is other.
+		// Its next read looks at the file, and nothing else is told:
+		// Touched had every agent's lists built and compared again, and
+		// Forget moved the stamp dsh's rounds build magpie's models by,
+		// ~40 MB of allocations a time in a magpie at rest.
+		filememo.Look(p)
+		return nil
+	}
 	Touched()
 	return nil
+}
+
+// sameLive is whether the list saved at p is f but for when it was
+// fetched: the bytes on the disk are f's, written at the time they say.
+func sameLive(p string, f liveFile) bool {
+	old, err := os.ReadFile(p)
+	if err != nil {
+		return false
+	}
+	var at struct {
+		Fetched time.Time `json:"fetched"`
+	}
+	if json.Unmarshal(old, &at) != nil {
+		return false
+	}
+	f.Fetched = at.Fetched
+	b, err := json.MarshalIndent(f, "", "  ")
+	return err == nil && bytes.Equal(b, old)
 }
 
 // liveSince is Since for models about to be saved for provider at now:
