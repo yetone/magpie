@@ -2618,12 +2618,8 @@ async function updateCLI(a, btn, quiet = false) {
 const versionChange = (name, from, to) => from && to && from !== to ? `${name} ${from} → ${to}` : [name, to].filter(Boolean).join(" ");
 
 // ---------- Update all (#727) ----------
-// With two or more agents' CLIs behind, a line above the list updates them
-// all, one after another (two global npm installs at once can trip over
-// each other's folders), each row's pill turning busy in its turn. Once
-// shown, the line stays until the agents are read again (a reload, the
-// window coming back), saying how the run went or what is left, so the
-// list under it never jumps for a click — Update all's or a row's pill's.
+// Two or more agents' CLIs behind: a line updates them all, one at a time
+// (parallel npm installs collide); it stays until the agents are read again.
 
 let cliAll = null; // { n, done, now, failed: [{ name, msg }], changed: ["Pi 1.0.9 → 1.1.0"] } once Update all is clicked
 
@@ -6529,7 +6525,9 @@ function renderMovable() {
   try { hid = localStorage.getItem("magpie.deprecatedHidden") || ""; } catch {}
   const ids = ps.map((p) => p.id).join(",");
   const unmoved = providers.unmoved || [];
-  box.hidden = (!ps.length || hid === ids) && !unmoved.length;
+  const noSubs = !!(state?.settings?.noAccountDiscovery || prefs?.noAccountsEnv);
+  box.hidden = (!ps.length || hid === ids) && !unmoved.length && !noSubs;
+  if (noSubs) box.append(discoveryOffLine());
   for (const p of unmoved) box.append(unmovedLine(p));
   if (!ps.length || hid === ids) return;
   const names = ps.map((p) => p.name).join(t(", "));
@@ -6554,6 +6552,22 @@ function renderMovable() {
   acts.append(hide, review);
   card.append(el("span", "dep-dot"), body, acts);
   box.append(card);
+}
+
+// discoveryOffLine: subscription accounts are off in Settings › Privacy,
+// so none of them works; said here, with the way to the switch
+function discoveryOffLine() {
+  const card = el("div", "deprecation discovery-off");
+  card.setAttribute("role", "note");
+  const body = el("div", "dep-body");
+  body.append(el("div", "dep-head", t("Subscription accounts are off")),
+    el("p", "dep-why", prefs?.noAccountsEnv ? t("Off for this run: MAGPIE_NO_ACCOUNTS is set") : t("magpie reads none of your agents' sign-ins, so no subscription works. API-key providers work as before.")));
+  const acts = el("div", "dep-acts");
+  const go = el("button", "text action", t("Settings › Privacy"));
+  go.onclick = (e) => openSettingsAt(e, "privacy", "#discoveryList .row");
+  acts.append(go);
+  card.append(el("span", "dep-dot"), body, acts);
+  return card;
 }
 
 // unmovedLine: a retired built-in whose accounts haven't moved to its
@@ -15834,13 +15848,8 @@ function quotasOpened() {
   return loadQuotas(performance.now() - quotasAskedAt >= QUOTAS_OPEN_GAP);
 }
 
-// A load is never swallowed by a lesser one on its way (asked over none,
-// "all" over both): it goes after it.
-// An answer said to be read while the accounts' usage is being read again
-// (X-Magpie-Reading) can be the stale copy that read replaces: it is asked
-// for again, every 1.5s for half a minute at most, until the new one has
-// landed, so the tray panel, opened, shows what the window does without a
-// refresh by hand (#959). An answer the same as the last isn't drawn again.
+// A load is never swallowed by a lesser one on its way. A stale answer
+// (X-Magpie-Reading) is asked again every 1.5s, 30s at most (#959).
 let quotasLoading = null, quotasLater = 0, quotasTries = 0;
 let quotaRefreshVersion = 0;
 const quotaRefreshVersions = new Map();
@@ -19760,13 +19769,8 @@ function setSetTab(tab, remember) {
   setSetTab(setTab);
 }
 
-// Settings' search (sgfvdsg86265 on X: "配置界面太多了，找不到了"): the
-// words typed show every part's rows that say them, in the language shown
-// or in English, each part under its name, and the tabs step aside. A row
-// matches on its own text, its section's heading and its part's name, so
-// "GitHub" or "隐私" brings the whole section or part. Cleared, or Escape, the
-// part picked comes back as it was. Rows a part draws later are looked
-// at as they come.
+// Settings' search (sgfvdsg86265 on X): rows matching the words, shown or
+// English, by their text, section heading or part name; Escape restores.
 const setText = (n) => [n.textContent, ...[...n.querySelectorAll("[data-en]")].map((e) => e.dataset.en)].join(" ").toLowerCase();
 function findSettings() {
   if (!provLinksDrawn && setQuery) provLinksDraw();
