@@ -228,3 +228,64 @@ func TestUpdateFeedBehindKeepsDownload(t *testing.T) {
 		t.Fatalf("feed behind: %+v, staged %q, %d downloads", j, staged, downloads.Load())
 	}
 }
+
+// Stable's "up to date" names the newest release out (ylspcm on X). The
+// app from the site, installed by hand, is newer than Stable's version,
+// so every check said up to date while newer releases were out, and it
+// read as the check being wrong. On Stable, with nothing newer there, the
+// Version row is told the channel and the newest version on every version;
+// on every version, and on Stable once this one is the newest, nothing.
+func TestStableUpToDateNamesNewest(t *testing.T) {
+	sandboxHome(t)
+	var asked atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked.Add(1)
+		v := "0.1.13"
+		if r.URL.Query().Get("channel") == "stable" {
+			v = "0.1.11"
+		}
+		json.NewEncoder(w).Encode(update.Release{Version: v})
+	}))
+	defer srv.Close()
+	t.Setenv("MAGPIE_UPDATE_FEED", srv.URL)
+	oldV := Version
+	defer func() { Version = oldV }()
+	o := updates
+	defer func() { updates = o }()
+	channel := func(c string) {
+		t.Helper()
+		s := settings.Load()
+		s.UpdateChannel = c
+		if err := settings.Save(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// what the Version row reads, as the page reads it
+	row := func() map[string]any {
+		t.Helper()
+		updates = &updater{}
+		updates.check()
+		rec := httptest.NewRecorder()
+		Handler(nil, nil).ServeHTTP(rec, httptest.NewRequest("GET", "/api/update?fresh=1", nil))
+		var j map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &j); err != nil {
+			t.Fatalf("%d %s", rec.Code, rec.Body)
+		}
+		return j
+	}
+
+	channel(settings.UpdateStable)
+	Version = "0.1.12" // installed from the site, ahead of Stable's 0.1.11
+	if j := row(); j["state"] != "latest" || j["channel"] != "stable" || j["newest"] != "0.1.13" {
+		t.Fatalf("stable, 0.1.13 out: %v", j)
+	}
+	Version = "0.1.13"
+	if j := row(); j["state"] != "latest" || j["channel"] != "stable" || j["newest"] != nil {
+		t.Fatalf("stable, the newest installed: %v", j)
+	}
+	channel("")
+	before := asked.Load()
+	if j := row(); j["state"] != "latest" || j["channel"] != nil || j["newest"] != nil || asked.Load()-before != 1 {
+		t.Fatalf("every version: %v, asked %d times", j, asked.Load()-before)
+	}
+}

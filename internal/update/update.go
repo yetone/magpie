@@ -104,7 +104,17 @@ func Latest(ctx context.Context) (*Release, error) { return LatestIn(ctx, "") }
 // InLang): the app's language, which What's new follows. On Settings'
 // Stable channel it is Stable's release (see Stable).
 func LatestIn(ctx context.Context, lang string) (*Release, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", withChannel(withLang(Feed(), lang)), nil)
+	return latestAt(ctx, withChannel(withLang(Feed(), lang)), lang)
+}
+
+// LatestEvery is LatestIn on every version, whatever Settings' channel:
+// what Stable's "up to date" leaves out, the newest release out.
+func LatestEvery(ctx context.Context, lang string) (*Release, error) {
+	return latestAt(ctx, withLang(Feed(), lang), lang)
+}
+
+func latestAt(ctx context.Context, feed, lang string) (*Release, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", feed, nil)
 	if err != nil {
 		return nil, err
 	}

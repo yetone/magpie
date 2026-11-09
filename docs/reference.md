@@ -3156,6 +3156,11 @@ version channel first. A release marked urgent goes to Stable at once.
 When Stable moves past several versions, What's new lists the notes of
 every version since yours as one list.
 
+A version installed from the site can be newer than Stable's; the app
+keeps it and waits until Stable passes it. While it waits, the Version
+row says *Up to date on Stable*, names the newest version out on Every
+version, and offers to switch to Every version.
+
 The update feed works this out from the release list
 (`https://usemagpie.ai/api/latest?channel=stable`); nothing is promoted
 by hand. A release is urgent when its notes have a line that starts with

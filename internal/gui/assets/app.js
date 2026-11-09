@@ -22380,15 +22380,13 @@ async function renderUpdate(r, u) {
   sub.classList.add("say");
   sub.title = "";
   sub.classList.remove("wraps");
-  // the release page's button outlives a redraw: a download redraws every
-  // 700ms, and a button made again under the pointer loses its click
+  // the release page's button outlives a redraw (every 700ms downloading)
   const kept = val.querySelector("button.update-page");
   for (const b of val.querySelectorAll("button")) if (b !== kept) b.remove();
   let pageShown = false;
   const open = () => (web ? window.open(u.url, "_blank", "noopener") : api("open", { url: u.url }).catch(() => {}));
   const dim = () => { for (const b of val.querySelectorAll("button")) { b.disabled = true; b.classList.add("busy"); } };
-  // where GitHub is slow to magpie, the update can be fetched in the
-  // browser instead, through its own proxy or accelerator (PapainTea on X)
+  // GitHub slow to magpie: the browser's page (PapainTea on X)
   const page = () => {
     if (!u.url) return;
     const b = kept || el("button", "text update-page");
@@ -22406,8 +22404,7 @@ async function renderUpdate(r, u) {
     val.append(b);
     return b;
   };
-  // one check at a time. The button stays; the click only dims it until the
-  // answer, and a second click is ignored rather than drawn as "checking".
+  // one check at a time; a click dims the button till the answer
   const check = async () => {
     if (updateBusy) return;
     updateBusy = true;
@@ -22430,8 +22427,7 @@ async function renderUpdate(r, u) {
   switch (u.state) {
     case "ready": {
       sub.textContent = t("{v} is downloaded", { v: u.latest }) + (u.error ? " · " + u.error : "");
-      // a failed install says why in full, and offers the release page to
-      // put the new version in by hand
+      // a failed install says why, and offers the release page
       sub.title = u.error || "";
       if (u.error) sub.classList.add("wraps");
       // back with an answer only when it didn't restart: a busy gateway
@@ -22510,7 +22506,9 @@ async function renderUpdate(r, u) {
       again(1000);
       break;
     case "latest":
-      sub.textContent = t("Up to date");
+      // Stable's says the newest out (ylspcm on X)
+      sub.textContent = u.newest ? t("Up to date on Stable · {v} is out on Every version", { v: u.newest }) : t(u.channel ? "Up to date on Stable" : "Up to date");
+      if (u.newest) btn(t("Switch to Every version"), () => savePrefs({ ...prefsKeep(prefs), updateChannel: "" }));
       btn(t("Check"), check);
       break;
     case "error":
