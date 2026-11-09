@@ -130,13 +130,15 @@ func Publish() (changed bool, err error) {
 }
 
 // PublishDue publishes when the digest was last published more than a day
-// ago and memory changed since. It reports whether any digest changed.
+// ago, and memory holds something or held something then. It reports
+// whether any digest changed.
 func PublishDue() (bool, error) {
 	f, err := view()
 	if err != nil {
 		return false, err
 	}
-	if now().Sub(f.Published) < 24*time.Hour {
+	if now().Sub(f.Published) < 24*time.Hour || (len(f.Memories) == 0 && len(f.Digest) == 0) {
+		// nothing kept yet: no file written for it
 		return false, nil
 	}
 	return Publish()

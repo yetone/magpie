@@ -107,6 +107,9 @@ type Instructions struct {
 	// there is the one magpie always had, "default"
 	Sets   []InstrSet `json:"sets,omitempty"`
 	Active string     `json:"active,omitempty"` // the set agents get; "" is "default"
+	// NoMemory leaves memory's digest (memory.Digest) out of what the
+	// agents are written; by default it follows the shared text
+	NoMemory bool `json:"noMemory,omitempty"`
 }
 
 // InstrSet is one set of shared instructions: its text is in its own file.
