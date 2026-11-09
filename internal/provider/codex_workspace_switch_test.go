@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -74,6 +75,10 @@ func workspaceSwitchReadsApart(t *testing.T, reclaimed, backHome bool) {
 		resets int
 	}
 	seats := map[string]seat{"ws-personal": {"prolite", 25, 2}, "ws-team": {"team", 60, 0}}
+	// LoginUsage reads the accounts at once, so the fake is asked from two
+	// handlers together: unguarded, a write could be lost (#5819, only
+	// ws-personal counted) or the map broken ("concurrent map writes")
+	var askedMu sync.Mutex
 	asked := map[string]int{}
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ws := r.Header.Get("chatgpt-account-id")
@@ -87,7 +92,9 @@ func workspaceSwitchReadsApart(t *testing.T, reclaimed, backHome bool) {
 			w.WriteHeader(404)
 			return
 		}
+		askedMu.Lock()
 		asked[ws]++
+		askedMu.Unlock()
 		body := map[string]any{"plan_type": s.plan, "rate_limit": map[string]any{
 			"secondary_window": map[string]any{"used_percent": s.used, "limit_window_seconds": 604800}}}
 		if s.resets > 0 {
@@ -130,9 +137,11 @@ func workspaceSwitchReadsApart(t *testing.T, reclaimed, backHome bool) {
 				user, wsOf[user], q.Plan, q.Windows, resets, q.Error, want.plan, want.used, want.resets)
 		}
 	}
+	askedMu.Lock()
 	if asked["ws-team"] == 0 || asked["ws-personal"] == 0 {
 		t.Errorf("workspaces read: %v", asked)
 	}
+	askedMu.Unlock()
 
 	// carried to another machine, each account keeps its own workspace:
 	// Codex's sign-in here goes only on the record it is
