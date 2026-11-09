@@ -125,7 +125,14 @@ Each operation holds the sync lock, so configuration changes cannot race a
 sync's state write.
 
 A first computer creates a remote backup. Another computer joining takes
-the remote setup and keeps displaced local parts in its sync folder.
+the remote setup and keeps displaced local parts in its sync folder. A
+part the file holds nothing of its own in (`unset`: no providers or
+routing groups, the default settings, no profiles, an empty library) is
+the folder never having had one, not a removal: on a join, a computer
+with that part set up keeps it and sends it up (#5642: an empty computer
+that synced first emptied the next one's providers and groups). After the
+join an emptied part is a removal and spreads as before
+(`TestSyncEmptyFirstKeepsLaterSetups`).
 Subsequent syncs compare each part with the hashes from the previous sync:
 local-only changes go up, remote-only changes come down, and a part changed
 on both sides keeps the newer version while retaining the replaced copy.
