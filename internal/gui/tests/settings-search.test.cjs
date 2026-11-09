@@ -6,7 +6,9 @@
 // of it; a setting that moved to its provider's editor (the warm-ups, the
 // owner on 11-07) is found as a link per provider, Codex's and Claude
 // Code's alike, whose Open takes the reader to that editor; nothing found
-// says so; a link needs its provider, and its plugin on. Escape, or clearing the box, brings back the part
+// says so; a link needs its provider, and its plugin on; a built-in
+// whose name, words or settings match is listed after them, off or on, and
+// Open goes to its row in Plugins › Built-in. Escape, or clearing the box, brings back the part
 // picked as it was. Nothing is posted and the page doesn't scroll. In the
 // smallest window (560 x 420) and magpie web on a phone (390 wide), nothing
 // runs off to the side. Every language; no backend, the API is faked here.
@@ -20,7 +22,7 @@ const { openPart, provPrefsProviders } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 
-function server(lang, posts, web, { provs = ["codex", "claude"], off = [] } = {}) {
+function server(lang, posts, web, { provs = ["codex", "claude"], off = [], builtins = undefined } = {}) {
   const cur = {
     theme: "light", lang, tray: "panel", quotaLeft: false, currency: "usd", textSize: 100,
     dock: false, dockWindow: false, proxy: "", redact: false, redactPersonal: false, redactWords: [],
@@ -29,7 +31,7 @@ function server(lang, posts, web, { provs = ["codex", "claude"], off = [] } = {}
     version: "0.1.400", dir: "~/.config/magpie", gateway: "http://127.0.0.1:3425",
     proxyNow: "none", proxySource: "none", login: false,
     visionModels: [], imageGenModels: [], workbuddyCheckins: [], lanURLs: [],
-    fx: { rate: 7.2, at: new Date().toISOString(), stale: false },
+    fx: { rate: 7.2, at: new Date().toISOString(), stale: false }, builtins,
   };
   return async (route) => {
     const req = route.request(), url = new URL(req.url());
@@ -40,6 +42,7 @@ function server(lang, posts, web, { provs = ["codex", "claude"], off = [] } = {}
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme: "light", textSize: 100 }, fx: cur.fx });
     if (url.pathname === "/api/settings") return json(cur);
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
+    if (url.pathname === "/api/plugins/builtin" && builtins) return json(builtins);
     if (url.pathname === "/api/providers") return json(provPrefsProviders(provs, { codex: "ChatGPT", claude: "Claude" }));
     if (url.pathname === "/api/usage/quotas") return json([]);
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
@@ -198,6 +201,50 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await type(page, "warm up on reset");
         const links = page.locator("#provPrefLinks .agent-pref-link:visible");
         assert.deepEqual((await links.locator(".sub").allTextContents()).map((s) => s.replace(/^In (.*)'s editor.*$/, "$1")), want, JSON.stringify(set));
+        assert.deepEqual(page.errors, []);
+        await page.context().close();
+      }
+    });
+
+    // the built-ins are found too, with what they set on their own page or
+    // in Plugins › Built-in, and one switched off (its Settings tab gone
+    // with it), and Open goes to its row in Plugins › Built-in
+    await t.test("built-ins are found, and Open goes to their row", async () => {
+      const row = (id, name, sub, on, more) => ({ id, name, sub, on, chosen: on, source: "preset", state: on ? "active" : "off", inUse: 0, ...more });
+      const builtins = [
+        row("otel", "Observability", "Send each request's trace to an OpenTelemetry collector", false, { setAt: "otel #otelList" }),
+        row("gateway", "Gateway page", "", true, { page: "gateway", setAt: "network #portList", config: { callsPage: 20 },
+          schema: { type: "object", properties: { callsPage: { type: "integer", title: "Recent calls at a time", description: "How many of the gateway's recent calls the page shows, and how many more each Show more adds", enum: [10, 20, 50, 100], default: 20 } } } }),
+      ];
+      for (const lang of LANGS) {
+        const posts = [];
+        const page = await open(lang, posts, { builtins, off: ["otel"] });
+        const tr = (s, vars) => page.evaluate(([s, vars]) => t(s, vars), [s, vars]);
+        const found = page.locator("#setFeats .feat-find:visible");
+        for (const [words, want] of [
+          [await tr("Recent calls at a time"), [[await tr("Gateway page"), ""]]],
+          ["recent calls", [[await tr("Gateway page"), ""]]],
+          [await tr("Observability"), [[await tr("Observability"), await tr("Off") + " · " + await tr("Send each request's trace to an OpenTelemetry collector")]]],
+          ["zzqqxx", []],
+        ]) {
+          await type(page, words.toLowerCase());
+          await page.waitForFunction((n) => document.querySelectorAll("#setFeats .feat-find").length === n || (!n && !document.querySelector("#setFeats:not([hidden])")), want.length);
+          const got = [];
+          for (const r of await found.all()) got.push([(await r.locator(".name").textContent()).trim(), (await r.locator(".sub").count() ? (await r.locator(".sub").textContent()).trim() : "")]);
+          assert.deepEqual(got, want, lang + " " + words);
+          const s = await state(page);
+          assert.equal(s.none, want.length ? "" : await tr("No setting matches “{q}”", { q: words.toLowerCase() }), "no 'nothing matches' over a built-in found");
+          if (want.length) assert.equal(await page.locator("#setFeats").getAttribute("data-part"), await tr("Plugins") + " › " + await tr("Built-in"));
+          assert.deepEqual(await overflow(page), []);
+        }
+        await type(page, await tr("Observability"));
+        shots.push([lang + "-builtins", await page.screenshot()]);
+        await type(page, "");
+        assert.equal(await seen(page, "#setFeats"), false, "put away with the search");
+        await type(page, "recent calls");
+        await found.first().locator("button", { hasText: await tr("Open") }).click();
+        await page.locator('#builtinList .feat-row.flash[data-id="gateway"]').waitFor();
+        assert.deepEqual(posts, [], "finding and opening posts nothing");
         assert.deepEqual(page.errors, []);
         await page.context().close();
       }

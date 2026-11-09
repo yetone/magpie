@@ -19796,6 +19796,9 @@ function findSettings() {
     page.hidden = !hits;
     any ||= hits > 0;
   }
+  // the built-ins that match (setfeats.js)
+  if (window.setFeatsFind) any = setFeatsFind(words) > 0 || any;
+  else import("./setfeats.js").then(() => setQuery && findSettings(), () => {});
   const none = $("#setNone");
   none.hidden = any;
   none.textContent = t("No setting matches “{q}”", { q: $("#setQ").value.trim() });
@@ -19807,6 +19810,7 @@ function searchSettings(q) {
   v.classList.remove("set-searching");
   for (const n of v.querySelectorAll(".set-miss")) n.classList.remove("set-miss");
   $("#setNone").hidden = true;
+  window.setFeatsFind?.([]);
   setSetTab(setTab);
 }
 {
