@@ -18371,7 +18371,7 @@ const I18N = {
     "{who} stops at {n}% of {window}": "{who} stoppt bei {n} % von {window}",
     "Cap for {window}, in percent": "Limit für {window}, in Prozent",
     "Cap {n}": "Limit {n}",
-    "{window} has a cap of its own: magpie counts this account as used up once it has used {n} of {window}, until it renews. Click to change": "{window} hat ein eigenes Limit: Sobald dieses Konto {n} von {window} verbraucht hat, gilt es für magpie als aufgebraucht, bis {window} sich erneuert. Klicke zum Ändern",
+    "{window} has a cap of its own: magpie counts this account as used up once it has used {n} of {window}, until it renews. Click to change": "{window} hat ein eigenes Limit: Sobald dieses Konto {n} von {window} verbraucht hat, gilt es für magpie als aufgebraucht, bis es sich erneuert. Klicken zum Ändern",
     "{who} stops at {n} of {window}": "{who} stoppt bei {n} von {window}",
     "Cap for {window}, in {unit}": "Limit für {window}, in {unit}",
     "An amount above 0": "Eine Menge über 0",
