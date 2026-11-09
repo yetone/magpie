@@ -16347,7 +16347,7 @@ function packUsage() {
   };
   const heights = () => {
     for (const c of cards) c.style.minHeight = "";
-    for (const g of list.querySelectorAll(".quota-windows")) fitQuota(g);
+    fitQuota([...list.querySelectorAll(".quota-windows")]);
     return cards.map((c) => c.getBoundingClientRect().height);
   };
   const columns = (n) => { list.style.gridTemplateColumns = `repeat(${n}, minmax(0, 1fr))`; };
@@ -18375,20 +18375,31 @@ const quotaFit = new ResizeObserver((es) => {
   for (const { target } of es) quotaFitting.add(target);
 });
 function fitQuotas() {
-  for (const g of quotaFitting) fitQuota(g);
+  fitQuota([...quotaFitting]);
   quotaFitting.clear();
 }
-function fitQuota(g) {
+// fitQuota fits the groups of windows given, every one's sizes read before
+// any is changed: a read after a change lays the page out again, and a card
+// of hundreds of accounts, each group's names reset and then read, was laid
+// out once a group, in WebKit seconds a render at 600 (#5310).
+function fitQuota(groups) {
   const wide = (e) => [...e.children].reduce((w, c) => w + c.getBoundingClientRect().width, 0) + 4 * (e.children.length - 1);
-  const wraps = [...g.querySelectorAll(".quota-labels")].some((l) => {
+  const wraps = groups.map((g) => [...g.querySelectorAll(".quota-labels")].some((l) => {
     const [name, n] = l.children;
     return name.getBoundingClientRect().width + 6 + wide(n) > l.clientWidth;
+  }));
+  const labels = groups.map((g) => [...g.querySelectorAll(":scope > .quota > .quota-labels")]);
+  groups.forEach((g, i) => {
+    g.classList.toggle("stacked", wraps[i]);
+    for (const l of labels[i]) l.style.minHeight = "";
   });
-  g.classList.toggle("stacked", wraps);
-  const ls = g.querySelectorAll(":scope > .quota > .quota-labels"), top = {}, h = (l) => l.getBoundingClientRect().height;
-  for (const l of ls) l.style.minHeight = "";
-  for (const l of ls) top[l.offsetTop] = Math.max(top[l.offsetTop] || 0, h(l));
-  for (const l of ls) if (top[l.offsetTop] > h(l) + 0.5) l.style.minHeight = top[l.offsetTop] + "px";
+  // each name's row and height, then the tallest of each row's to each
+  const read = labels.map((ls) => ls.map((l) => [l.offsetTop, l.getBoundingClientRect().height]));
+  labels.forEach((ls, i) => {
+    const top = {};
+    for (const [y, h] of read[i]) top[y] = Math.max(top[y] || 0, h);
+    ls.forEach((l, j) => { const [y, h] = read[i][j]; if (top[y] > h + 0.5) l.style.minHeight = top[y] + "px"; });
+  });
 }
 
 // balanceRow: what is left, a line per amount, the first the one that
