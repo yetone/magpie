@@ -394,11 +394,22 @@ func turnOf(from provider.Protocol, body []byte) (turn int, within bool) {
 // todo nudge, an agent list, Codex's context — begins none: after an
 // answer it carries the turn on, and right after the user's own message
 // it leaves that as it was.
+//
+// An image beside the turn's tool results is the result's, as the bridge
+// tells it (match): a client whose tool messages hold text only sends it
+// in a user message after (pi's "Attached image(s) from tool result:").
+// It carries the turn on, a turn of the user's own begun none (#5767):
+// counted one, the router re-decided the conversation's account at every
+// image result, and the bridge let the waiting run go under the other
+// owner ("tool results account changed"), a new Claude Code told the
+// whole conversation, the prompt cache rewritten each time.
 func turnIn(req *Request) (turn int, within bool) {
-	answered := false
+	answered, results := false, false
 	for _, m := range req.Messages {
 		if m.Role == "assistant" {
 			answered = true
+			results = false
+			continue
 		}
 		if m.Role != "user" {
 			continue
@@ -414,6 +425,9 @@ func turnIn(req *Request) (turn int, within bool) {
 		}
 		switch {
 		case result:
+			within = true
+			results = true
+		case said && results:
 			within = true
 		case said:
 			turn++

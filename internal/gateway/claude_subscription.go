@@ -6494,6 +6494,26 @@ func (r *subscriptionRun) owned() string {
 	return ""
 }
 
+// ownerSaid is an owner as the log tells it (#5767): the provider, and
+// whose account it is, its own sign-in marked, a plan-named one unnamed.
+// "account changed" alone left a reporter guessing at image hashes, when
+// the router had served the request from another account.
+func ownerSaid(owner string) string {
+	f := strings.Split(owner, "\x00")
+	said := f[0]
+	if len(f) < 2 || f[1] == "" {
+		return said
+	}
+	said += " (" + f[1]
+	if len(f) > 2 && f[2] == ownHome {
+		said += ", Claude Code's own sign-in"
+		if len(f) > 3 && f[3] == unnamedOwner {
+			said += ", unnamed"
+		}
+	}
+	return said + ")"
+}
+
 // takeNamedOwner has a run started on Claude Code's own sign-in while it
 // was known by no name (unnamedOwner) go on as owner, that sign-in named
 // since: a run in Claude Code's own home runs as whatever it is signed in
@@ -6855,8 +6875,9 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 	// Claude Code's config, so its tool results come back on the same
 	// sign-in named by its email, and the run goes on under that name.
 	if run != nil && run.owned() != owner && !run.takeNamedOwner(owner) {
+		was := run.owned()
 		run.abort()
-		run, how = nil, accountChanged
+		run, how = nil, accountChanged+": the run was on "+ownerSaid(was)+", this request goes to "+ownerSaid(owner)
 	}
 	// the request's conversation was rewritten since the run's last reply —
 	// the client's own, as Pi does compacting it mid-turn, or another
