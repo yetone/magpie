@@ -20182,7 +20182,7 @@ function renderSettings() {
   }
   // gateway mode leaves out what is written into this computer's agents'
   // files, and the alerts its desktop would show
-  for (const r of [$("#plainNamesSegs").parentElement, $("#usageAlertRow"), $("#balanceAlertRow"), $("#resetReminderRow"), $("#turnDoneRow")]) r.hidden = gatewayMode;
+  for (const r of [$("#plainNamesSegs").parentElement, $("#alertHead"), $("#alertList")]) r.hidden = gatewayMode;
   // the parts' tabs, one gone whose rows are all hidden here
   setSetTab(setTab);
 }

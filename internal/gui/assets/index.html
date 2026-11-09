@@ -285,7 +285,7 @@
         <div class="who"><div class="name" data-t>Menu bar pace</div><div class="sub" data-t>Each window's Pace number beside its figure, as on the Usage page: +12% is 12% more of the window used than an even pace would have used by now, −8% that much less</div></div>
         <div id="trayPaceSegs"></div>
       </div>
-      <div class="row pref" id="trayCostRow">
+      <div class="row pref app-only" id="trayCostRow">
         <div class="who"><div class="name" data-t>Menu bar cost</div><div class="sub" data-t>What magpie's requests cost, beside their tokens in the menu bar and its tooltip; off, the tokens alone</div></div>
         <div id="trayCostSegs"></div>
       </div>
@@ -309,6 +309,10 @@
         <div class="who"><div class="name" data-t>Number units</div><div class="sub" data-t>How a large count of tokens or requests is shortened on the Usage page and the panel</div></div>
         <div id="unitsSegs"></div>
       </div>
+      <div id="provPrefLinks"></div>
+    </div>
+    <div class="row-head" id="alertHead"><span class="label" data-t>Alerts</span></div>
+    <div class="list prefs" id="alertList">
       <div class="row pref" id="usageAlertRow">
         <div class="who"><div class="name" data-t>Allowance alert</div><div class="sub" id="usageAlertSub"></div></div>
         <div id="usageAlertSegs" class="warm-at"></div>
@@ -325,7 +329,6 @@
         <div class="who"><div class="name" data-t>Task done alert</div><div class="sub" id="turnDoneSub"></div></div>
         <div id="turnDoneSegs"></div>
       </div>
-      <div id="provPrefLinks"></div>
     </div>
   </section>
   <section class="set-page" id="setPage-network" role="tabpanel" aria-labelledby="setTab-network">

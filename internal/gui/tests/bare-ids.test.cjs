@@ -99,7 +99,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const segs = page.locator("#bareIdsSegs .opt");
         await segs.first().waitFor();
         const row = page.locator("#bareIdsRow");
-        assert.equal(await page.locator("#usageAlertRow").evaluate((r) => r.hidden), gateway, "gateway mode as faked");
+        assert.equal(await page.locator("#alertList").evaluate((r) => r.hidden), gateway, "gateway mode as faked");
         assert(await row.isVisible(), "the row is drawn");
         assert.equal((await row.locator(".name").textContent()).trim(), w.name);
         assert((await row.locator(".sub").textContent()).includes(w.sub), "the sub says what it does");
