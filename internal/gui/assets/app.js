@@ -6076,13 +6076,7 @@ function providersWhileFetching() {
   }, 2500);
 }
 
-// What the vendors' own status pages say of the APIs the providers call
-// (#971, emo172): a vendor's API degraded or down is marked on its
-// providers' rows and usage cards, so its outage isn't taken for a sign-in
-// or quota problem. The gateway reads each page at most once in five
-// minutes; it is asked when the Providers or Usage page loads, and again
-// every five minutes while one stays open. A page that couldn't be read
-// marks nothing: unknown is not "all well", and not an outage either.
+// vendors' status pages (#971): an API down is marked on its rows; unread marks nothing
 let upstream = null, upstreamAsking = null;
 function loadUpstream() {
   if (upstreamAsking) return upstreamAsking;
@@ -7979,7 +7973,7 @@ function advancedSet(d, p) {
     !!d.proxyMode || Object.values(d.accountProxies || {}).some((x) => x?.mode) ||
     [d.concurrency, d.maxAccounts, d.queueLimit, d.queueWait, d.maxRPM, d.priceRate, d.contexts, d.outputs, d.compacts].some((v) => String(v ?? "").trim()) ||
     !!d.rateWindows?.length ||
-    !!(d.searches || d.authHeader || d.passUserAgent === false || d.unredacted || d.countFree || d.pinUpstream || d.nativeCompaction || d.balanceToken || d.limitRestOff || d.http1 || d.imageFilesOff || d.passErrors) ||
+    !!(d.searches || d.authHeader || d.passUserAgent === false || d.unredacted || d.countFree || d.pinUpstream || d.nativeCompaction || d.balanceToken || d.limitRestOff || d.http1 || d.socket || d.imageFilesOff || d.passErrors) ||
     !!d.fallback?.length || !!p?.balanceToken?.set;
 }
 function priceRateError(ed) {
@@ -8179,13 +8173,7 @@ function accountProxiesOfDraft() {
   return { map: out };
 }
 
-// Custom request headers: the draft keeps them as an ordered [name, value,
-// json?] list so a half-typed row (and its open JSON editor) survives a
-// re-render; headersOf folds that back into the object the backend stores,
-// dropping rows with an empty name or value (a suggested header left unfilled
-// is not sent), keeping the last of two rows that name one header in any
-// case, and minifying any value that parses as JSON — a header value is one
-// line, so pretty-printing is display-only.
+// headers as ordered [name, value, json?] rows that survive a redraw; headersOf folds them back
 function headerRows(obj) {
   return Object.entries(obj || {}).map(([k, v]) => [k, v, false]);
 }
@@ -9265,7 +9253,7 @@ function baseAPIOf(p) {
 
 // draftOf is a saved provider as its editor's form holds it.
 function draftOf(p) {
-  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, best: !!p.bestInFamily, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), replyHeaders: (p.replyHeaders || []).join(", "), passHeaders: (p.passHeaders || []).join(", "), icon: p.icon || "", iconFrom: p.iconFrom || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, hiddenDrawers: [...(p.hiddenDrawers || [])], hiddenVideomakers: [...(p.hiddenVideomakers || [])], searches: !!p.searches, unredacted: !!p.unredacted, countFree: !!p.countFree, insecureTLS: !!p.insecureTLS, http1: !!p.http1, limitRestOff: !!p.limitRestOff, passErrors: !!p.passErrors, imageFilesOff: !!p.imageFilesOff, nativeCompaction: !!p.nativeCompaction, passUserAgent: p.passUserAgent !== false, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", balanceMethod: p.balanceMethod || "", modelsURL: p.modelsURL || "", listOff: !!p.listOff, contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p), rateWindows: (p.rateWindows || []).map((w) => ({ ...w })) };
+  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, best: !!p.bestInFamily, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), replyHeaders: (p.replyHeaders || []).join(", "), passHeaders: (p.passHeaders || []).join(", "), icon: p.icon || "", iconFrom: p.iconFrom || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, hiddenDrawers: [...(p.hiddenDrawers || [])], hiddenVideomakers: [...(p.hiddenVideomakers || [])], searches: !!p.searches, unredacted: !!p.unredacted, countFree: !!p.countFree, insecureTLS: !!p.insecureTLS, http1: !!p.http1, socket: p.socket || "", limitRestOff: !!p.limitRestOff, passErrors: !!p.passErrors, imageFilesOff: !!p.imageFilesOff, nativeCompaction: !!p.nativeCompaction, passUserAgent: p.passUserAgent !== false, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", balanceMethod: p.balanceMethod || "", modelsURL: p.modelsURL || "", listOff: !!p.listOff, contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p), rateWindows: (p.rateWindows || []).map((w) => ({ ...w })) };
 }
 
 // duplicateProvider opens the Add form on a copy of p, its key p's unless another is pasted (#268).
@@ -9433,6 +9421,7 @@ function drawEditor(p, presetID) {
   // the Compaction row, shown while the provider has a Responses API
   // (Provider.CarriesCompaction): Codex's own compaction can go only there
   let showCompaction = () => {};
+  let showSocket = () => {};
   const carriesCompaction = () => !!((draft.responses ?? (isNew && pr ? pr.responses : "")) || "").trim();
   if (custom) {
     name = input(draft.name, t("e.g. My Relay"));
@@ -9474,6 +9463,7 @@ function drawEditor(p, presetID) {
       showTLS();
       showAuth();
       showCompaction();
+      showSocket();
     };
     queueMicrotask(() => slide(seg, "api"));
     url = input(draft[apiField[draft.api]], urlHint(draft.api), "url");
@@ -9481,7 +9471,7 @@ function drawEditor(p, presetID) {
     url.oninput = () => {
       draft[apiField[draft.api]] = url.value;
       if (carried) { draft[carried.from] = carried.value; carried = null; fillEndpoints(); }
-      showSearch(); showLocal(); showTLS(); showAuth(); showCompaction();
+      showSearch(); showLocal(); showTLS(); showAuth(); showCompaction(); showSocket();
     };
     const urlWrap = el("div", "stack");
     urlWrap.append(seg, url);
@@ -9639,7 +9629,7 @@ function drawEditor(p, presetID) {
     if (draft.chat === undefined) { draft.chat = p?.chat || ""; draft.responses = p?.responses || ""; }
     endpoint = input(draft.chat || draft.responses || "", pr.endpoint, "url");
     endpoint.classList.add("endpoint");
-    endpoint.oninput = () => { draft.chat = draft.responses = endpoint.value.trim(); refreshEndpoints(); showCompaction(); };
+    endpoint.oninput = () => { draft.chat = draft.responses = endpoint.value.trim(); refreshEndpoints(); showCompaction(); showSocket(); };
     ed.append(...field(t("Endpoint"), endpoint, pr.endpointHint ? t(pr.endpointHint) : ""));
   }
 
@@ -9876,6 +9866,17 @@ function drawEditor(p, presetID) {
     showTLS();
     ed.append(...row);
     advIn.append(...hrow);
+  }
+  // Responses over WebSocket (#5781): auto, or the CLI's on kept
+  const socketable = () => !p?.account && (p?.preset || pr?.id) !== "google-vertex" && /^\s*https?:\/\//i.test(addressOf("responses"));
+  {
+    const [stk, scb] = tick(t("Send Responses turns over WebSocket"), !!draft.socket);
+    stk.classList.add("socket-tick");
+    scb.onchange = () => { draft.socket = scb.checked ? (p?.socket || "auto") : ""; };
+    const srow = field(t("WebSocket"), stk);
+    showSocket = () => { for (const e of srow) e.style.display = socketable() ? "" : "none"; };
+    showSocket();
+    advIn.append(...srow);
   }
   // off, a 429 or quota refusal rests none of its keys (LimitRestOff, zoecats)
   if (custom) {
@@ -10128,7 +10129,7 @@ function drawEditor(p, presetID) {
       const add = (label, key, ph, hint) => {
         if (apiField[draft.api] === key) return;
         const i = input(draft[key], ph, "url");
-        i.oninput = () => { draft[key] = i.value; if (carried?.from === key) carried = null; showSearch(); showLocal(); showTLS(); showAuth(); showCompaction(); draft.onModelPrefs?.(); };
+        i.oninput = () => { draft[key] = i.value; if (carried?.from === key) carried = null; showSearch(); showLocal(); showTLS(); showAuth(); showCompaction(); showSocket(); draft.onModelPrefs?.(); };
         eps.append(...field(t(label), i, t(hint)));
       };
       add("OpenAI URL", "chat", "https://…/v1", "if the vendor also serves chat completions");
@@ -10256,6 +10257,7 @@ function drawEditor(p, presetID) {
     body.unredacted = !!draft.unredacted && unmaskable();
     body.countFree = !!draft.countFree;
     if (tlsTakes()) { body.insecureTLS = !!draft.insecureTLS && onHTTPS(); body.http1 = !!draft.http1 && onHTTPS(); }
+    if (socketable()) body.socket = draft.socket || "";
     if (custom) body.limitRestOff = !!draft.limitRestOff;
     if (p?.takesImageFiles) body.imageFilesOff = !!draft.imageFilesOff;
     if (p ? p.takesPassErrors : custom) body.passErrors = !!draft.passErrors;
@@ -15435,14 +15437,7 @@ function moveWhy(m, p) {
   return m.error || "";
 }
 
-// renderMove: which runs the subscription, magpie's built-in or its
-// community plugin, and the move onto the plugin; the built-ins are
-// retired, so a moved one has no way back. The editor stays open
-// through it: the button says what it is doing, a failure is said under
-// it, and on success the field turns over where the reader is.
-// moveSaid keeps both through a redraw mid-move (an allowance landing):
-// drawn from the provider alone, the button took presses again and the
-// failure was said into a field drawn over.
+// renderMove: the move onto the plugin; moveSaid keeps its state through a redraw
 const moveSaid = {}; // provider id → { busy } or { why }
 function renderMove(p) {
   const m = p.move;

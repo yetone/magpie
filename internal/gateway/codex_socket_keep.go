@@ -109,7 +109,9 @@ func codexKeepKey(req *http.Request, body []byte) string {
 	}
 	h := sha256.New()
 	for _, v := range []string{
-		req.URL.Host, req.URL.Path, req.Header.Get("Authorization"), req.Header.Get("Chatgpt-Account-Id"),
+		req.URL.Scheme, req.URL.Host, req.URL.Path, req.Header.Get("Authorization"), req.Header.Get("Chatgpt-Account-Id"),
+		// a Responses provider's key may be said in either (#5781)
+		req.Header.Get("X-Api-Key"), req.Header.Get("Api-Key"),
 		sid, tid, req.Header.Get("X-Openai-Subagent"), req.Header.Get("X-Codex-Parent-Thread-Id"),
 	} {
 		h.Write([]byte(v))

@@ -381,6 +381,16 @@ type Provider struct {
 	// group's own.
 	Patience int `json:"patience,omitempty"`
 
+	// Socket has a Responses API provider's turns go over the Responses
+	// WebSocket magpie speaks to chatgpt.com (#5781, matrix0487 on
+	// Discord): SocketAuto tries it and falls back to HTTP, and leaves the
+	// host to HTTP for a while once it refuses the handshake, as
+	// chatgpt.com is; SocketOn tries it every time and falls back without
+	// that. "", the default, is HTTP alone. Only a provider of a key with a
+	// Responses URL takes it (TakesSocket). Set with `magpie provider set
+	// <id> socket=`.
+	Socket string `json:"socket,omitempty"`
+
 	// NativeCompaction has Codex's compaction_trigger go to the provider
 	// as Codex sent it, and the compaction the provider writes back go to
 	// Codex as it came (#1099), where magpie otherwise asks the model for
@@ -1453,6 +1463,9 @@ func AddCopy(p Provider, from string) (string, error) {
 	p.Unredacted = p.Unredacted || src.Unredacted
 	p.CountFree = p.CountFree || src.CountFree
 	p.NativeCompaction = p.NativeCompaction || src.NativeCompaction
+	if p.Socket == "" {
+		p.Socket = src.Socket
+	}
 	p.MagpieUserAgent = p.MagpieUserAgent || src.MagpieUserAgent
 	if p.Website == "" {
 		p.Website = src.Website
@@ -1683,6 +1696,11 @@ func normalize(p Provider) Provider {
 		p.Patience = PatienceOff
 	}
 	p.Patience = min(p.Patience, PatienceLongest)
+	if v, ok := ParseSocket(p.Socket); ok {
+		p.Socket = v
+	} else {
+		p.Socket = ""
+	}
 	p.Key = strings.TrimSpace(p.Key)
 	p.Proxy = strings.TrimSpace(p.Proxy)
 	p.AccountProxies = normalAccountProxies(p.AccountProxies)

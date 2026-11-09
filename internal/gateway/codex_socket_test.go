@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"cmp"
 	"errors"
 	"io"
 	"net/http"
@@ -45,10 +46,14 @@ type fakeSocketBackend struct {
 	// keep reads the socket's next turn after a reply, as the backend
 	// does, until the client closes it
 	keep bool
+	// path is the Responses path it answers at, chatgpt.com's when "";
+	// whole has its HTTP reply run to response.completed
+	path  string
+	whole bool
 }
 
 func (f *fakeSocketBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if !strings.HasSuffix(r.URL.Path, "/backend-api/codex/responses") {
+	if !strings.HasSuffix(r.URL.Path, cmp.Or(f.path, "/backend-api/codex/responses")) {
 		http.NotFound(w, r)
 		return
 	}
@@ -102,6 +107,14 @@ func (f *fakeSocketBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	f.posts++
 	f.mu.Unlock()
+	if f.whole {
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, sse(
+			`event: response.created`+"\n"+`data: {"type":"response.created","response":{"id":"h1"}}`,
+			`event: response.output_text.delta`+"\n"+`data: {"type":"response.output_text.delta","delta":"pong"}`,
+			`event: response.completed`+"\n"+`data: {"type":"response.completed","response":{"id":"h1","usage":{"input_tokens":7,"output_tokens":1}}}`))
+		return
+	}
 	w.Header()["Content-Type"] = nil
 	io.WriteString(w, sse(
 		`event: response.created`+"\n"+`data: {"type":"response.created","response":{"id":"r1"}}`,

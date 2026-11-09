@@ -16,7 +16,9 @@ import (
 // its own proxy (ProxyChoice), or the global one when it has none. A
 // provider the user added and asked not to have its certificate checked
 // (InsecureTLS) has its own hosts' taken as they are, no other host's;
-// one asked to be spoken HTTP/1.1 to (HTTP1) is, at its own hosts alone.
+// one asked to be spoken HTTP/1.1 to (HTTP1) is, at its own hosts alone;
+// one whose turns go over the Responses WebSocket (Socket) has them go
+// there, at its Responses URL alone (SocketTurn).
 func (p Provider) Via(ctx context.Context) context.Context {
 	ctx = netproxy.With(ctx, p.ProxyChoice())
 	if p.InsecureTLS && p.TakesInsecureTLS() {
@@ -25,7 +27,7 @@ func (p Provider) Via(ctx context.Context) context.Context {
 	if p.HTTP1 && p.TakesInsecureTLS() {
 		ctx = netproxy.WithHTTP1(ctx, p.UncheckedHosts()...)
 	}
-	return ctx
+	return withSocket(ctx, p)
 }
 
 // ProxyChoice is the proxy requests made on the provider's behalf go

@@ -62,6 +62,9 @@ const providerUsage = `usage:
                                           while it is busy or briefly rate limited, asking again after a pause
                                           (at most 4m); patience=off hands the agent the error at once;
                                           patience=default, 1m
+                                          socket=auto sends its Responses turns over the Responses WebSocket,
+                                          over HTTP when it can't, and over HTTP alone for 10m once the host
+                                          refuses it; socket=on tries it every turn; socket=off, the default
                                           errors=pass sends the agent its errors as the vendor sent them:
                                           asked once, nothing read into them, no other provider tried;
                                           errors=magpie, the default, has magpie handle them
@@ -905,6 +908,9 @@ func showProviderAsking(p provider.Provider, ask bool) error {
 	if p.NativeCompaction {
 		kv("compaction", "native"+muted.Render("  Codex's own, sealed by the key or account that answers it"))
 	}
+	if p.Socket != "" {
+		kv("socket", p.Socket)
+	}
 	switch {
 	case p.Account != nil:
 		who := p.AccountShown(p.Account.User)
@@ -1229,6 +1235,15 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			default:
 				return fmt.Errorf("additional-tools=on|off|default, not %q", v)
 			}
+		case "socket":
+			// its Responses turns over the Responses WebSocket magpie
+			// speaks to chatgpt.com (#5781): auto leaves a host that
+			// refuses it to HTTP for a while, on tries it every turn
+			s, ok := provider.ParseSocket(v)
+			if !ok {
+				return fmt.Errorf("socket=auto|on|off, not %q", v)
+			}
+			p.Socket = s
 		case "patience":
 			// how long a request to the provider alone is kept while it
 			// is busy, as a group's Patience (zoecats on Discord)
@@ -1373,6 +1388,9 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			}
 			return fmt.Errorf("unknown field %q\n\n%s", k, providerUsage)
 		}
+	}
+	if p.Socket != "" && !p.TakesSocket() {
+		return fmt.Errorf("socket=%s: %s has no Responses API of its own to speak a WebSocket to; only a provider with responses= and a key can", p.Socket, p.Name)
 	}
 	if p.NativeCompaction && !p.CarriesCompaction() {
 		return fmt.Errorf("compaction=native: %s can't carry Codex's own compaction; only a provider with a Responses API (responses=), a ChatGPT account or GitHub Copilot can", p.Name)

@@ -133,14 +133,32 @@ func shunCodexSocket(host string, why string) {
 }
 
 // codexSocket sends a streamed turn to the ChatGPT backend over its
-// WebSocket, and every other request through next.
+// WebSocket, and one to a Responses provider whose Socket is set over
+// the same WebSocket at its Responses URL (#5781); every other request
+// goes through next.
 type codexSocket struct{ next http.RoundTripper }
 
 func (t codexSocket) RoundTrip(req *http.Request) (*http.Response, error) {
-	if codexSocketOff.Load() || req.Method != http.MethodPost || req.GetBody == nil ||
-		!provider.CodexTurnURL(req.URL) || codexShunned(req.URL.Host) {
+	if codexSocketOff.Load() || req.Method != http.MethodPost || req.GetBody == nil {
 		return t.next.RoundTrip(req)
 	}
+	turn, shun := provider.SocketTurn(req)
+	if !turn || (shun && codexShunned(req.URL.Host)) {
+		return t.next.RoundTrip(req)
+	}
+	res, err := t.overSocket(req, shun)
+	if res != nil && res.StatusCode == http.StatusOK && res.Header.Get("Content-Type") == "" &&
+		!provider.CodexTurnURL(req.URL) {
+		// what a Responses provider's stream is said to be over HTTP;
+		// chatgpt.com's turns go on as they always have
+		res.Header.Set("Content-Type", "text/event-stream")
+	}
+	return res, err
+}
+
+// overSocket is RoundTrip for a turn that may go over the socket; shun
+// says a refused handshake leaves the host to HTTP for a while.
+func (t codexSocket) overSocket(req *http.Request, shun bool) (*http.Response, error) {
 	body, ok := codexSocketMessage(req)
 	if !ok {
 		return t.next.RoundTrip(req)
@@ -172,7 +190,7 @@ func (t codexSocket) RoundTrip(req *http.Request) (*http.Response, error) {
 	if codexMessageTooBig(req.URL.Host, len(msg)) {
 		return t.next.RoundTrip(req)
 	}
-	res, err := t.socket(req, msg, key, shape)
+	res, err := t.socket(req, msg, key, shape, shun)
 	if errors.Is(err, errCodexSocketFallBack) {
 		return t.next.RoundTrip(req)
 	}
@@ -299,8 +317,10 @@ func codexSocketHeaders(req *http.Request) http.Header {
 }
 
 // socket opens a socket for the turn and sends msg on it; one that
-// carries on with key's conversation is kept for its next turn.
-func (t codexSocket) socket(req *http.Request, msg []byte, key string, shape *codexTurnShape) (*http.Response, error) {
+// carries on with key's conversation is kept for its next turn. A host
+// that refuses the handshake is left to HTTP for a while when shun says
+// so (a provider's Socket "on" never is).
+func (t codexSocket) socket(req *http.Request, msg []byte, key string, shape *codexTurnShape, shun bool) (*http.Response, error) {
 	// the socket may outlive the request, kept for the next turn: only
 	// the handshake ends with it
 	ctx, cancel := context.WithCancel(context.WithoutCancel(req.Context()))
@@ -320,6 +340,8 @@ func (t codexSocket) socket(req *http.Request, msg []byte, key string, shape *co
 			return nil, req.Context().Err()
 		}
 		switch {
+		case !shun:
+			// tried again next turn
 		case hs == nil:
 			shunCodexSocket(u.Host, err.Error())
 		case hs.StatusCode == http.StatusUnauthorized || hs.StatusCode == http.StatusTooManyRequests ||
