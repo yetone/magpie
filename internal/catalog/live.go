@@ -3,6 +3,8 @@ package catalog
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -58,6 +60,8 @@ type liveFile struct {
 	// the list each time cost 2,500 models' /v1/models seconds (K.Liu on
 	// Discord)
 	byID map[string][]Model
+	// key names what the file holds but for when it was fetched (LiveKey)
+	key string
 }
 
 func readLive(provider string) (liveFile, error) {
@@ -66,6 +70,7 @@ func readLive(provider string) (liveFile, error) {
 		if err := json.Unmarshal(b, &f); err != nil {
 			return f, err
 		}
+		f.key = liveKey(b, f.Since != nil)
 		mendKinds(f.Models)
 		for _, side := range f.Sides {
 			mendKinds(side)
@@ -94,6 +99,40 @@ func mendKinds(ms []Model) {
 			m.ImageInput, m.Images = &yes, true
 		}
 	}
+}
+
+// LiveKey names the list saved for provider by what it holds, not by
+// when it was fetched: each account's list is fetched again every 45
+// minutes and on every start, and saved again with only its fetch time
+// moved (saveLive). Usage keyed its whole index on the file's mtime, so
+// each of those saves dropped it, and every start and every refresh read
+// the whole session history again (~1.5 GB allocated, seconds of CPU).
+// "missing" when there is no list; ok is false when it can't be read.
+func LiveKey(provider string) (key string, ok bool) {
+	f, err := readLive(provider)
+	if errors.Is(err, os.ErrNotExist) {
+		return "missing", true
+	}
+	if err != nil {
+		return "", false
+	}
+	return f.key, true
+}
+
+// liveKey hashes a saved list's bytes without its fetch time, the first
+// key saveLive writes. A list saved before Since was kept is dated by its
+// fetch (LiveSince), so its fetch time is part of what it holds.
+func liveKey(b []byte, dropFetched bool) string {
+	h := sha256.New()
+	if i := bytes.Index(b, []byte(`"fetched":`)); dropFetched && i >= 0 {
+		if j := bytes.IndexByte(b[i:], '\n'); j >= 0 {
+			h.Write(b[:i])
+			h.Write(b[i+j:])
+			return hex.EncodeToString(h.Sum(nil))
+		}
+	}
+	h.Write(b)
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // LiveByID are the models of Live with this id, in the list's order

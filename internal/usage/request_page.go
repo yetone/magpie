@@ -796,6 +796,20 @@ func statKey(path string) string {
 	}
 	return fmt.Sprintf("%s:%d:%d", path, s.Size(), s.ModTime().UnixNano())
 }
+
+// liveListKey names a provider's fetched model list by what it holds
+// (catalog.LiveKey), not its mtime: the list is saved again, unchanged
+// but for its fetch time, on every start and every 45 minutes, and each
+// save dropped every chunk and summary built on it. A list that can't be
+// read is named by its stat, as before.
+func liveListKey(id string) string {
+	p := catalog.LivePath(id)
+	if k, ok := catalog.LiveKey(id); ok {
+		return p + ":" + k
+	}
+	return statKey(p)
+}
+
 func recordHash(path string, n int64) string {
 	f, e := os.Open(path)
 	if e != nil {
@@ -844,7 +858,7 @@ func readRequestState(now time.Time) requestState {
 	h := sha256.New()
 	for _, current := range provider.All() {
 		fmt.Fprintf(h, "%q:%q:%v:%t:%t:%t;", current.ID, current.Where(), current.Catalogs(), current.IsPlugin(), current.Account == nil, current.Key != "")
-		fmt.Fprint(h, statKey(catalog.LivePath(current.ID)))
+		fmt.Fprint(h, liveListKey(current.ID))
 	}
 	for _, root := range sessions.DesktopDataDirs() {
 		for _, kind := range []string{"local-agent-mode-sessions", "claude-code-sessions"} {
@@ -854,7 +868,7 @@ func readRequestState(now time.Time) requestState {
 			}
 		}
 	}
-	meta += fmt.Sprintf("|%x|%s", h.Sum(nil), statKey(catalog.LivePath("antigravity")))
+	meta += fmt.Sprintf("|%x|%s", h.Sum(nil), liveListKey("antigravity"))
 	h.Reset()
 	snapshot := readLogSnapshot()
 	fmt.Fprint(h, meta, snapshot.version, now.In(time.Local).Format("2006-01-02 MST"))
