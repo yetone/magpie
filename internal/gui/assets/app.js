@@ -13075,6 +13075,13 @@ function renderSigning(sub) {
       : signing.code && sub.agent === "codex" ? t("magpie opened ChatGPT's device page. Enter this code there; the account shows up here as soon as you're done.")
       : signing.code && sub.agent === "factory" ? t("magpie opened Factory's sign-in page. Check it shows this code and confirm it; the account shows up here as soon as you're done.")
       : signing.code ? t("magpie opened GitHub's device page. Enter this code there; the account shows up here as soon as you're done.") : t("magpie opened the sign-in page. The account shows up here as soon as you're done.")));
+  // "as set in Settings" leads there: Privacy's Sign-in pages
+  if (signing.state !== "starting" && signing.linkOnly && !signing.opened) {
+    const go = el("button", "text", t("Settings") + " ›");
+    go.type = "button";
+    go.onclick = (e) => openSettingsAt(e, "privacy", "#signInOpenRow");
+    tt.lastChild.append(" ", go);
+  }
   if (signing.code) {
     const code = el("span", "devcode");
     code.append(el("code", "", signing.code), copyBtn(signing.code, t("Code")));
@@ -13082,8 +13089,7 @@ function renderSigning(sub) {
   }
   box.append(tt);
   if (signing.url) {
-    // the link itself, to select or copy into another browser or profile
-    // than the one magpie opened it in
+    // the link, to copy into another browser or profile
     const link = el("span", "signlink");
     const u = el("code", "", signing.url);
     u.title = t("Open it in another browser or profile: copy it there");
