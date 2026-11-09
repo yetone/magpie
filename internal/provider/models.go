@@ -3199,7 +3199,8 @@ func unlistedByGroups(entries []Entry) map[string][]string {
 // groupsKeeping is unlistedByGroups with the groups themselves, by the
 // models, "provider/model", they keep out of the lists.
 func groupsKeeping(entries []Entry) map[string][]Group {
-	if !slices.ContainsFunc(heldOf("file", load).Groups, func(g Group) bool { return g.Unlists }) {
+	// read only: the file parsed once until it changes (storedFile)
+	if !slices.ContainsFunc(storedFile().Groups, func(g Group) bool { return g.Unlists }) {
 		return nil
 	}
 	out := map[string][]Group{}

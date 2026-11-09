@@ -126,3 +126,24 @@ func TestStoreReplacesAtomically(t *testing.T) {
 		t.Fatalf("temp files left: %v", left)
 	}
 }
+
+// A look at whether providers.json reads (each Providers page asks) uses
+// the parse kept until the file changes, not a whole parse of its own.
+func TestFileErrorReadsParsedFileOnce(t *testing.T) {
+	providerFileHome(t)
+	writeProviderFile(t, originalProviderFile)
+	_ = storedFile()
+	before := fileReads.Load()
+	for range 3 {
+		if err := FileError(); err != nil {
+			t.Fatalf("a file that reads: %v", err)
+		}
+	}
+	if n := fileReads.Load() - before; n != 0 {
+		t.Fatalf("FileError parsed the file %d more times, want none while it is unchanged", n)
+	}
+	writeProviderFile(t, originalProviderFile[:40])
+	if err := FileError(); !errors.Is(err, ErrUnreadable) {
+		t.Fatalf("a file cut short: %v", err)
+	}
+}

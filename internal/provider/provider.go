@@ -760,7 +760,12 @@ func (e *unreadableError) Unwrap() []error { return []error{ErrUnreadable, e.err
 
 // Reads used for an edit must keep errors: a broken file is not an empty
 // catalog to write over. Only a missing file is a first use.
+// fileReads counts read, for the test that a page's look at whether the
+// file parses doesn't parse it again.
+var fileReads atomic.Int64
+
 func read() (file, error) {
+	fileReads.Add(1)
 	var f file
 	b, err := steady.ReadFile(Path())
 	if errors.Is(err, os.ErrNotExist) {
@@ -798,6 +803,11 @@ var utf8BOM = []byte("\xef\xbb\xbf")
 // FileError is why providers.json can't be read, nil when it can or isn't
 // there: for what lists the providers to say so, not "none yet".
 func FileError() error {
+	// a file that parses, parsed once until it changes (storedFile): each
+	// Providers page parsed the whole of it again only to see it does
+	if _, err := filememo.Read("providers", Path(), parseProviders); err == nil {
+		return nil
+	}
 	_, err := read()
 	return err
 }
