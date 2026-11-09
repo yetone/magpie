@@ -3489,6 +3489,14 @@ func Resolve(id string) (Provider, string, bool) {
 		if e, ok := entryIn(Catalog(), id); ok {
 			return e.Provider, e.Model, true
 		}
+		// a group renamed from it (Former) answers for it, as routing does
+		if gid, ok := GroupIDOf(id); ok {
+			if g, ok := routedGroupOf(sharedGroupsIn(entries), gid); ok && g.ID != gid {
+				if e, ok := entryIn(groupEntries(entries), "group/"+g.ID); ok {
+					return e.Provider, e.Model, true
+				}
+			}
+		}
 		return Provider{}, "", false
 	}
 	return resolveIn(providerEntries(), id)
