@@ -4745,6 +4745,7 @@ function routingPage(part) {
     return by;
   }
   const provBoxes = new Map(); // a provider → its box in the accounts' list (renderActs)
+  const provHeads = new Map(); // a provider → its heading there, and what it said (renderActs)
   function renderActs(rs) {
     // a rest lifted by hand since the request that found it (#1869): the
     // kept requests still say it, until the next one asks it again. By the
@@ -4777,10 +4778,12 @@ function routingPage(part) {
     const meta = new Map();
     const put = (e, leads, keep = false) => {
       if (leads) return lead.push(e);
-      const b = lead.length ? el("div", "rt-lead") : e;
-      if (lead.length) b.append(...lead.splice(0), e);
+      // a block is its nodes in a list, never a box they are moved
+      // into: a heading or a keys' row kept from the last drawing stays
+      // where it is in the page until patch finds it in place
+      const b = [...lead.splice(0), e];
       out.push(b);
-      meta.set(b, { prov, keep, n: b === e ? 1 : b.querySelectorAll(".rt-act").length });
+      meta.set(b, { prov, keep, head: b[0].classList.contains("rt-prov"), n: b.length === 1 ? 1 : b.reduce((n, x) => n + x.matches(".rt-act") + x.querySelectorAll(".rt-act").length, 0) });
     };
     // refused for its sign-in, and not answered since
     const needsSignIn = (a) => a.w.kind === "account" && a.authAt > a.last;
@@ -4802,15 +4805,26 @@ function routingPage(part) {
       let opened = false;
       if (w.provider !== prov) {
         prov = w.provider;
-        const h = el("div", "rt-prov");
-        h.append(icon(w.icon || w.preset || "generic"), el("b", "", w.name || w.provider));
         // how it routes, only where it routes over several, and a way to
         // where that is set
-        if (poolOf(prov)) {
-          const m = modeOf(list.find((x) => x.w.provider === prov && !x.w.fallback)?.w.routing || "");
-          const s = el("span", "", t(w.kind === "key" && !w.routing ? "Smart" : m[0]));
-          goTo(s, "pool:" + prov, w.name || w.provider);
-          h.append(s);
+        const ic = w.icon || w.preset || "generic", nm = w.name || w.provider;
+        const mode = poolOf(prov) ? t(w.kind === "key" && !w.routing ? "Smart" : modeOf(list.find((x) => x.w.provider === prov && !x.w.fallback)?.w.routing || "")[0]) : null;
+        // kept from one drawing to the next while it says the same: this
+        // runs each second (countdown), and a new heading's <img> asks
+        // for its icon again whether or not patch keeps the old one, five
+        // icons a second over the app's asset server, each a new SVG
+        // document in the webview (freefcw on X, 11-09)
+        const key = [ic, nm, mode].join("\u0000");
+        let h = provHeads.get(prov)?.key === key ? provHeads.get(prov).h : null;
+        if (!h) {
+          h = el("div", "rt-prov");
+          h.append(icon(ic), el("b", "", nm));
+          if (mode !== null) {
+            const s = el("span", "", mode);
+            goTo(s, "pool:" + prov, nm);
+            h.append(s);
+          }
+          provHeads.set(prov, { key, h });
         }
         put(h, true);
       }
@@ -4958,7 +4972,7 @@ function routingPage(part) {
     }
     // a provider's heading, in one block with its first row, goes with
     // the rows of it shown
-    for (const b of out) if (hide.has(b) && seen.has(meta.get(b).prov) && b.querySelector(":scope > .rt-prov")) hide.delete(b);
+    for (const b of out) if (hide.has(b) && seen.has(meta.get(b).prov) && meta.get(b).head) hide.delete(b);
     for (const b of hide) hidden += meta.get(b).n;
     if (hidden <= 2) hide.clear();
     // written only when changed: a redraw with nothing new writes nothing
@@ -4983,7 +4997,7 @@ function routingPage(part) {
       let g = provBoxes.get(p);
       if (!g) provBoxes.set(p, (g = el("div", "rt-pgrp")));
       // its heading's block opened into it: each row no deeper than before
-      patch(g, bs.flatMap((b) => (b.classList.contains("rt-lead") ? [...b.children] : [b])));
+      patch(g, bs.flat());
       // hundreds of keys opened (#3164) in one unbroken box would be one
       // column as long as all of them: a long one breaks between its rows
       const long = bs.reduce((x, b) => x + meta.get(b).n, 0) > 12;
