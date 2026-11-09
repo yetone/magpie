@@ -38,6 +38,41 @@ func TOMLTables(path string) ([]string, error) {
 	return doc.names, nil
 }
 
+// TOMLTable is one ordinary table of a file EachTOMLTable read, shared
+// with the file's kept parse, so read only.
+type TOMLTable struct{ span *tomlTableSpan }
+
+// Name is the table's name as TOMLTables lists it.
+func (t TOMLTable) Name() string { return t.span.name }
+
+// Scalar is the value of one scalar key as GetTOMLTable has it, "" when
+// the table has none: the last of a key written twice, as the map holds.
+func (t TOMLTable) Scalar(key string) string {
+	for i := len(t.span.keys) - 1; i >= 0; i-- {
+		if kv := &t.span.keys[i]; kv.scalar && kv.name == key {
+			return kv.value
+		}
+	}
+	return ""
+}
+
+// EachTOMLTable calls fn with each ordinary table, in the order
+// TOMLTables lists them, from one look at the file and nothing built: an
+// agent listing its config's tables asked GetTOMLTable for each, a stat
+// and a map a table on every look.
+func EachTOMLTable(path string, fn func(TOMLTable)) error {
+	tables, err := tomlTablesOf(path)
+	if err != nil {
+		return err
+	}
+	for i := range tables {
+		if !tables[i].array {
+			fn(TOMLTable{&tables[i]})
+		}
+	}
+	return nil
+}
+
 // GetTOMLTable returns the scalar keys of one table, or (nil, nil) when
 // the file or table is absent. Read and parse errors are returned with the path.
 // Strings are decoded; other scalars (booleans, numbers, dates, and times)

@@ -231,7 +231,7 @@ func grokIn(at place) *Agent {
 		if !ok {
 			return nil
 		}
-		return catalog.Efforts(magpieModels("grok"), ref)
+		return catalog.Efforts(sharedModels("grok"), ref) // only read
 	}
 	return atomic(&Agent{
 		ID: "grok", Name: "Grok Build", Icon: "xai", Aliases: []string{"grok-build", "grok-cli"}, Spelled: prefixed,
@@ -425,23 +425,20 @@ func grokOwnOptions(dir, path, cur string) []Option {
 	}
 	// the user's own [model."<id>"] tables, each on its own endpoint
 	if path != "" {
-		if tables, err := edit.TOMLTables(path); err == nil {
-			for _, t := range tables {
-				id, ok := strings.CutPrefix(t, "model.")
-				if !ok {
-					continue
-				}
-				if u, err := strconv.Unquote(id); err == nil {
-					id = u
-				}
-				kv, _ := edit.GetTOMLTable(path, t)
-				direct := "xAI"
-				if h := hostOf(kv["base_url"]); h != "" {
-					direct = h
-				}
-				add(id, kv["name"], direct)
+		_ = edit.EachTOMLTable(path, func(t edit.TOMLTable) {
+			id, ok := strings.CutPrefix(t.Name(), "model.")
+			if !ok {
+				return
 			}
-		}
+			if u, err := strconv.Unquote(id); err == nil {
+				id = u
+			}
+			direct := "xAI"
+			if h := hostOf(t.Scalar("base_url")); h != "" {
+				direct = h
+			}
+			add(id, t.Scalar("name"), direct)
+		})
 	}
 	if cur != "" && !seen[cur] && !strings.HasPrefix(cur, magpieID+"/") {
 		out = append([]Option{{Value: cur, Icon: modelIcon("", cur), Direct: "xAI"}}, out...)
