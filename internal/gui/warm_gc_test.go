@@ -4,6 +4,7 @@ import (
 	"math"
 	"runtime"
 	"runtime/debug"
+	"runtime/metrics"
 	"testing"
 	"time"
 )
@@ -194,10 +195,11 @@ func TestSteadyGCKeepsTheUsersGOGC(t *testing.T) {
 	}
 }
 
-// TestSteadyGCRetunesAfterACollection: from the start GOGC is half, each
-// collection sets it for the heap it left (a test's heap is under the
-// room: Go's 100), a read under a tight GC still sets its tenth, and after
-// the read the next collection sets it for the heap again.
+// TestSteadyGCRetunesAfterACollection: from the start GOGC is a quarter,
+// each collection sets it for the heap it left (steadyPercent: a whole
+// package's test heap is over 16 MB, so not always Go's 100), a read
+// under a tight GC still sets its tenth, and after the read the next
+// collection sets it for the heap again.
 func TestSteadyGCRetunesAfterACollection(t *testing.T) {
 	steadyOff(t)
 	t.Setenv("GOGC", "")
@@ -206,18 +208,29 @@ func TestSteadyGCRetunesAfterACollection(t *testing.T) {
 	if got := gcPercent(); got != steadyGCPercent {
 		t.Fatalf("GOGC before a collection = %d, want %d", got, steadyGCPercent)
 	}
-	collectUntil := func(want int) {
+	// retuned: GOGC is steadyPercent of the heap the last collection left,
+	// which a test's heap of under 64 MB tells from the quarter set before
+	retuned := func() {
 		t.Helper()
 		deadline := time.Now().Add(10 * time.Second)
-		for gcPercent() != want {
-			if time.Now().After(deadline) {
-				t.Fatalf("GOGC after collections = %d, want %d", gcPercent(), want)
-			}
+		for {
 			runtime.GC()
 			time.Sleep(time.Millisecond)
+			s := []metrics.Sample{{Name: "/gc/heap/live:bytes"}}
+			metrics.Read(s)
+			live := int64(s[0].Value.Uint64())
+			want := steadyPercent(live)
+			if want == steadyGCPercent {
+				t.Skipf("a live heap of %d MB is retuned to the quarter it starts at", live>>20)
+			}
+			if got := gcPercent(); got == want {
+				return
+			} else if time.Now().After(deadline) {
+				t.Fatalf("GOGC after collections = %d, want %d for %d MB live", got, want, live>>20)
+			}
 		}
 	}
-	collectUntil(100)
+	retuned()
 	debug.SetGCPercent(steadyGCPercent)
 	undo := tightenGC()
 	if got := gcPercent(); got != tightGCPercent {
@@ -229,5 +242,5 @@ func TestSteadyGCRetunesAfterACollection(t *testing.T) {
 		t.Fatalf("a read under a tight GC runs under %d after collections, want %d", got, tightGCPercent)
 	}
 	undo()
-	collectUntil(100)
+	retuned()
 }
