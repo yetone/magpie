@@ -248,7 +248,8 @@ func renewSaved(ctx context.Context, agent, user string, force bool, stale strin
 		// (万贤凯 on Discord). So it is renewed where Codex keeps it, as
 		// Codex's own (codexTokenRenewing), and the copy is left as it is:
 		// a switch away saves it afresh from Codex's.
-		return codexTokenRenewing(ctx, codexHome(), stale)
+		tok, accountID, err := codexTokenRenewing(ctx, codexHome(), stale)
+		return tok, codexOwnWorkspace(*l, accountID), err
 	}
 	if home := codexHeldIn(*l); home != "" {
 		// the same for an account Codex is signed in to in another of
@@ -267,7 +268,7 @@ func renewSaved(ctx context.Context, agent, user string, force bool, stale strin
 			}
 			return "", "", err
 		}
-		return tok, accountID, nil
+		return tok, codexOwnWorkspace(*l, accountID), nil
 	}
 	var auth []byte
 	switch agent {
@@ -329,6 +330,21 @@ func heldByCodex(l savedLogin) bool {
 		return true
 	}
 	return sameRefresh(live.Auth, l.Auth)
+}
+
+// codexOwnWorkspace is the workspace the saved ChatGPT account l is, for
+// a token read where Codex holds its sign-in (heldByCodex, codexHeldIn),
+// whose own workspace is held: one sign-in reaches every workspace of its
+// login, one refresh token for all, and the Codex app's workspace switch
+// rewrites only which one auth.json routes to. Taken as it was, the
+// account not in use read the one in use's plan, allowance and resets,
+// and spent them (JdAZzzzzz on X: a Team seat read as the personal
+// Prolite). held when l doesn't say.
+func codexOwnWorkspace(l savedLogin, held string) string {
+	if _, ws := codexWho(l.Auth); ws != "" {
+		return ws
+	}
+	return held
 }
 
 // codexHeldRefusal is a refresh OpenAI refused for an account Codex is

@@ -305,7 +305,7 @@ func liveCodex(l savedLogin, auth []byte) bool {
 	if w == "" {
 		in.User = "\x00" // a name alone doesn't match: unknown
 	}
-	return sameLogin(l, in) || sameRefresh(l.Auth, auth)
+	return sameLogin(l, in) || sameRefresh(l.Auth, auth) && !codexWorkspacesApart(l.Auth, auth)
 }
 
 // SignInPlan is what a sync puts in and takes away here (MergeSignIns),
@@ -507,7 +507,7 @@ func applyLogins(put []signInRec, gone map[string]bool, seen map[string]string, 
 		}
 		var at []int
 		for i, l := range ls {
-			if l.Agent == in.Agent && (sameLogin(l, in) || in.Agent == "codex" && sameRefresh(l.Auth, in.Auth) || loginRecID(l) == r.id) {
+			if l.Agent == in.Agent && (sameLogin(l, in) || in.Agent == "codex" && sameRefresh(l.Auth, in.Auth) && !codexWorkspacesApart(l.Auth, in.Auth) || loginRecID(l) == r.id) {
 				at = append(at, i)
 			}
 		}

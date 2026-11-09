@@ -875,6 +875,15 @@ func codexHeldIn(l savedLogin) string {
 	return ""
 }
 
+// codexWorkspacesApart says two Codex auth.json are for two workspaces,
+// each known: one sign-in, its refresh token the same, can be routed to
+// either (the Codex app's workspace switch), and is two accounts then.
+func codexWorkspacesApart(x, y json.RawMessage) bool {
+	_, a := codexWho(x)
+	_, b := codexWho(y)
+	return a != "" && b != "" && a != b
+}
+
 // sameRefresh says two Codex auth.json hold one refresh token.
 func sameRefresh(x, y json.RawMessage) bool {
 	var a, b codexAuth
