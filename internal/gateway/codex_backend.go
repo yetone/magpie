@@ -977,7 +977,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	usage.Saw(agentOf(r))
 	// Codex's own turns come here from the mux, not through serve: the
 	// row written below sums this call's tries in its own context (#4456)
-	r = r.WithContext(context.WithValue(r.Context(), upBytesKey{}, &upBytes{}))
+	r = r.WithContext(s.countBytes(r.Context()))
 	w0, body0 := w, body // as they came, for the fallbacks (codexFallBack)
 	// Claude's blocks magpie gave Codex (claudeseal) are Claude's alone:
 	// to OpenAI each item is its summary, as before magpie carried them

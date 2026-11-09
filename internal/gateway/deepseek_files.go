@@ -455,7 +455,7 @@ func (s *Server) dsResolve(ctx context.Context, p provider.Provider, to provider
 			up += len(im.b64) / 4 * 3
 		}
 		if u := upBytesOf(ctx); u != nil {
-			u.wire += up
+			u.addUp(up)
 			u.saved -= up // and are what the files cost it
 		}
 	}

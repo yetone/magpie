@@ -1145,6 +1145,10 @@ type Part struct {
 	TTFT      int64 `json:"ttft_ms,omitempty"`
 	DecodeMs  int64 `json:"decode_ms,omitempty"`
 	DecodeOut int   `json:"decode_out,omitempty"`
+	// the bytes its requests sent up and read back (Totals.UpBytes), for
+	// a chart of the traffic over time
+	UpBytes   int64 `json:"up_bytes,omitempty"`
+	DownBytes int64 `json:"down_bytes,omitempty"`
 }
 
 // add counts a row in the part.
@@ -1156,6 +1160,8 @@ func (p *Part) add(r Row) {
 	if r.Priced {
 		p.Cost += r.Cost
 	}
+	p.UpBytes += int64(r.UpBytes)
+	p.DownBytes += int64(r.DownBytes)
 	if r.TTFT > 0 && r.Answered() {
 		p.Timed++
 		p.TTFT += r.TTFT
@@ -1176,6 +1182,8 @@ func (p *Part) plus(d *Totals) {
 	p.TTFT += d.TTFT
 	p.DecodeMs += d.DecodeMs
 	p.DecodeOut += d.DecodeOut
+	p.UpBytes += d.UpBytes
+	p.DownBytes += d.DownBytes
 }
 
 // SeriesPoint is a point of the timeline with its calls told apart, by each

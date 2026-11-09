@@ -4,6 +4,7 @@ magpie.strings({
   zh: {
     "Saved by image files": "图片文件省下",
     "{n} saved by image files": "图片文件省下 {n}",
+    "{n}/s": "{n}/s",
     "{size} ({n} image)": "{size}（{n} 张）",
     "{size} ({n} images)": "{size}（{n} 张）",
     "Show in Overview": "在概览中显示",
@@ -252,6 +253,7 @@ magpie.strings({
   "zh-TW": {
     "Saved by image files": "圖片檔案省下",
     "{n} saved by image files": "圖片檔案省下 {n}",
+    "{n}/s": "{n}/s",
     "{size} ({n} image)": "{size}（{n} 張）",
     "{size} ({n} images)": "{size}（{n} 張）",
     "Show in Overview": "在概覽中顯示",
@@ -500,6 +502,7 @@ magpie.strings({
   ja: {
     "Saved by image files": "画像ファイルで節約",
     "{n} saved by image files": "画像ファイルで {n} 節約",
+    "{n}/s": "{n}/s",
     "{size} ({n} image)": "{size}（{n} 枚）",
     "{size} ({n} images)": "{size}（{n} 枚）",
     "Show in Overview": "概要に表示",
@@ -748,6 +751,7 @@ magpie.strings({
   de: {
     "Saved by image files": "Durch Bilddateien gespart",
     "{n} saved by image files": "{n} durch Bilddateien gespart",
+    "{n}/s": "{n}/s",
     "{size} ({n} image)": "{size} ({n} Bild)",
     "{size} ({n} images)": "{size} ({n} Bilder)",
     "Show in Overview": "In der Übersicht einblenden",

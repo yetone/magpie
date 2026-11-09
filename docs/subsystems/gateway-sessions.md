@@ -661,6 +661,28 @@ cards only, and a scope with no card answers the cards routes as held.
 a key with some of a provider's models, an account-held key, a provider's
 only key, and a key told nothing, each red when its check is removed.
 
+### Bandwidth
+
+Each gateway request's row keeps `UpBytes` (the bytes its tries put on the
+wire, `sentUp`) and `DownBytes` (the bytes read from the vendors' replies,
+counted per `Read` by `downCount`, so a stream is counted as it arrives and
+nothing is buffered). The same two places add to the gateway's running
+totals (`Server.Traffic`, atomic, in
+[`upbytes.go`](../../internal/gateway/upbytes.go)), so the totals and the rows
+count the same bytes once. Rows sum into `Totals` and into each chart
+point's `Part` (`add` from rows, `plus` from the request page's cells).
+The Requests chart's Traffic metric draws them per hour/day by model,
+provider or agent. `GET /api/usage/traffic` answers the totals with the
+requests in flight (`{}` when another magpie serves the gateway); the
+Requests card reads it a second apart while it is shown and says
+"↑ x/s · ↓ y/s" over the last ~3s while requests are in flight. Not counted:
+Claude bridge turns (no HTTP to the vendor), and a plugin's row counts the
+local hop to the plugin host. An upload is counted when its try is sent, so
+a large body shows as a burst. `TestTrafficCountsWhatRowsCount`,
+`TestTrafficCountsAStreamAsItFlows`, `TestSeriesPartsKeepBytes`,
+`TestUsageTrafficSaysWhatTheGatewayCounted` and `usage-traffic.test.cjs`
+cover it.
+
 ### Calls read from the agents' own files
 
 A call an agent made without magpie reaches Usage only when its own files

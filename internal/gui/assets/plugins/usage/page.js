@@ -1203,7 +1203,7 @@ const LED_PAGE = 100;
 let ledMetric = "tokens", ledSplit = "model";
 try {
   const m = localStorage.getItem("magpie.ledMetric");
-  if (["tokens", "cost", "calls", "speed"].includes(m)) ledMetric = m;
+  if (["tokens", "cost", "calls", "speed", "traffic"].includes(m)) ledMetric = m;
 } catch {}
 // Columns or lines (molvqingtai on Discord), kept per viewer as the metric
 // is; anything but "line", or a read that fails, is columns.
@@ -1732,7 +1732,9 @@ function ledContentBox(c) {
 // tab draws the same from the same answer.
 
 // the window's chart can also say how fast the replies came (#860)
-const LED_TREND = [...LED_METRICS, ["speed", "Speed"]];
+// and how many bytes went up to the vendors and came back (songlairui on
+// X: a lot of calls with base64 images weigh on the network)
+const LED_TREND = [...LED_METRICS, ["speed", "Speed"], ["traffic", "Traffic"]];
 // "modelAt" is a model at the provider it went to, so one model's speed at
 // each provider is ranked side by side (inaction on Discord); "callerKey"
 // the gateway key that made it, "none" for calls with none, offered while
@@ -1847,6 +1849,8 @@ function renderLedgerDash(l) {
     io.title = t("Sent upstream") + ": " + ledNum(l.up_bytes || 0) + " B\n" + t("Received") + ": " + ledNum(l.down_bytes || 0) + " B";
     strip.lastChild.append(io);
   }
+  // and how fast it flows now, while requests are in flight (ledFlow)
+  strip.lastChild.append(ledFlowLine());
   const c = fmtCost(l);
   // the count in the words the quick panel uses too, the whole sentence on
   // hover (tenacious_eagle on Discord)
@@ -1867,6 +1871,64 @@ function renderLedgerDash(l) {
   speedCard.append(Object.assign(line(ttft), { className: "sub ttft" }));
   drawLedTrend();
 }
+
+// ---- how fast the gateway's traffic flows now
+//
+// Under the period's "↑ up · ↓ down", while requests are in flight: the
+// bytes the gateway's requests sent up and read back in the last few
+// seconds, a second apart, as "↑ 1.2 MB/s · ↓ 40 KB/s" (songlairui on X).
+// The gateway counts them as they go (/api/usage/traffic), a stream's
+// reply as it comes, so nothing waits for a request to end. Read only
+// while the Requests are looked at; nothing shown when another magpie
+// serves the gateway, or when nothing is in flight and nothing flowed.
+const LED_FLOW_EVERY = 1000, LED_FLOW_SPAN = 3000;
+const ledFlow = { samples: [], timer: 0, text: "", reading: false };
+function ledFlowLine() {
+  const s = el("span", "sub led-rate");
+  s.hidden = !ledFlow.text;
+  s.textContent = ledFlow.text;
+  ledFlowStart();
+  return s;
+}
+function ledFlowShow(text) {
+  ledFlow.text = text;
+  for (const s of document.querySelectorAll("#ledKpi .led-rate")) {
+    if (s.textContent !== text) s.textContent = text;
+    s.hidden = !text;
+  }
+}
+const ledFlowOn = () => view === "usage" && usageTab === "requests" && !document.hidden;
+function ledFlowStart() {
+  if (ledFlow.timer || !ledFlowOn()) return;
+  ledFlow.timer = setInterval(ledFlowTick, LED_FLOW_EVERY);
+  ledFlowTick();
+}
+function ledFlowStop() {
+  clearInterval(ledFlow.timer);
+  ledFlow.timer = 0;
+  ledFlow.samples = [];
+  ledFlowShow("");
+}
+async function ledFlowTick() {
+  if (!ledFlowOn()) return ledFlowStop();
+  if (ledFlow.reading) return;
+  ledFlow.reading = true;
+  let x;
+  try { x = await api("usage/traffic"); } catch { x = null; } finally { ledFlow.reading = false; }
+  if (!ledFlow.timer) return;
+  if (!(x?.up >= 0 && x?.down >= 0)) { ledFlow.samples = []; return ledFlowShow(""); }
+  const now = performance.now(), ss = ledFlow.samples;
+  // a gateway started again counts from 0: what came before is gone
+  if (ss.length && (x.up < ss.at(-1).up || x.down < ss.at(-1).down)) ss.length = 0;
+  ss.push({ at: now, up: x.up, down: x.down });
+  while (ss.length > 2 && now - ss[1].at >= LED_FLOW_SPAN) ss.shift();
+  const a = ss[0], dt = (now - a.at) / 1000;
+  const up = dt > 0 ? (x.up - a.up) / dt : 0, down = dt > 0 ? (x.down - a.down) / dt : 0;
+  if (!(x.requests > 0) && !(up > 0) && !(down > 0)) return ledFlowShow("");
+  const rate = (v) => t("{n}/s", { n: fmtBytes(Math.round(v)) });
+  ledFlowShow(dt > 0 ? "↑ " + rate(up) + " · ↓ " + rate(down) : "");
+}
+document.addEventListener("visibilitychange", () => { if (document.hidden) ledFlowStop(); else if ($("#ledKpi .led-rate")) ledFlowStart(); });
 
 // the chart's two looks, as a pair of icons beside the metrics: columns
 // (the default) or lines

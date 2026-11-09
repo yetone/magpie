@@ -160,8 +160,12 @@ func (t codexSocket) RoundTrip(req *http.Request) (*http.Response, error) {
 // says a refused handshake leaves the host to HTTP for a while.
 func (t codexSocket) overSocket(req *http.Request, shun bool) (*http.Response, error) {
 	overHTTP := false
+	toSocket(req.Context())
 	defer func() { sentOnSocket(req.Context(), !overHTTP) }()
 	viaHTTP := func() (*http.Response, error) {
+		if !overHTTP {
+			toHTTP(req.Context())
+		}
 		overHTTP = true
 		return t.next.RoundTrip(req)
 	}

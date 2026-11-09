@@ -601,6 +601,8 @@ type Server struct {
 	requestLimits requestLimits
 	// what a restart would cut short (busy.go)
 	busyCounters
+	// every request's bytes up and down, as they go (Traffic)
+	traffic traffic
 	// when Antigravity last turned away the system prompt it refuses
 	// (UnixNano, 0 for never): while that is recent, a group skips it for
 	// such a request when someone is left after it (antigravityForeseen)
@@ -2355,7 +2357,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// what the request's tries send up to the vendor is summed in its
 	// context, where forwardOnce and codexBackend add each try's bytes,
 	// for the ledger row to read (#4456)
-	r = r.WithContext(context.WithValue(r.Context(), upBytesKey{}, &upBytes{}))
+	r = r.WithContext(s.countBytes(r.Context()))
 	defer func() { watched.end(call, time.Since(start).Milliseconds()) }()
 	switch call.Kind {
 	case "web_search":

@@ -1374,6 +1374,9 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .led-strip .sub.parts > span, .kpi small.parts > span { display: inline-block; max-width: 100%; vertical-align: bottom; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* the traffic line's parts read whole: one wider than the card wraps in itself, never cut (matrix0487) */
 .led-strip .sub.led-io > span { white-space: normal; }
+/* how fast the traffic flows now, while requests are in flight */
+.led-strip .sub.led-rate { color: var(--fg-2); }
+.led-strip .sub.led-rate[hidden] { display: none; }
 /* not the tile's label: .kpi span is its small capitals */
 .kpi small.parts > span { margin-top: 0; font: inherit; letter-spacing: normal; text-transform: none; color: inherit; }
 .led-strip .led-jump { text-align: start; font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
@@ -1420,6 +1423,8 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .led-chart .tip i { width: 7px; height: 7px; border-radius: 2px; flex: none; }
 .led-chart .tip em { margin-left: auto; padding-left: 12px; font-style: normal; font-variant-numeric: tabular-nums; }
 .led-chart .tip .sum { margin-top: 3px; padding-top: 3px; border-top: 1px solid var(--line-2); color: var(--muted); }
+/* traffic: under its total, what went up and what came back */
+.led-chart .tip .io { color: var(--muted); }
 /* speed: name, speed and first token in columns, the name whole (#2343) */
 .led-chart .tip.speed { display: grid; grid-template-columns: 7px minmax(0, 1fr) auto auto; column-gap: 6px; align-items: center; max-width: min(400px, 100%); }
 .led-chart .tip.speed b { grid-column: 1 / -1; }

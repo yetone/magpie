@@ -18845,16 +18845,19 @@ function ledGroupSpeed(x) {
 }
 // their mean wait for the first token, 0 for none
 const ledTTFT = (x) => x?.timed > 0 ? x.ttft_ms / x.timed : 0;
+// the bytes a point, a share or a part sent up and read back
+const ledBytes = (x) => (+x?.up_bytes || 0) + (+x?.down_bytes || 0);
 // a metric's value of a point or a share, as the chart counts it
-const ledValue = (m, x) => m === "speed" ? ledSpeed(x) : m === "cost" ? +x.cost || 0 : m === "calls" ? +x.calls || 0 : allTokens(x);
+const ledValue = (m, x) => m === "speed" ? ledSpeed(x) : m === "traffic" ? ledBytes(x) : m === "cost" ? +x.cost || 0 : m === "calls" ? +x.calls || 0 : allTokens(x);
 // of a share in the ranking: a speed is what its row says first, the one of
 // more replies (ledGroupSpeed)
 const ledRankValue = (m, x) => m === "speed" ? ledGroupSpeed(x)?.v || 0 : ledValue(m, x);
 // of a point's part, which has its calls, tokens, cost and speed
-const ledPart = (m, x) => m === "speed" ? ledSpeed(x) : m === "cost" ? +x.cost || 0 : m === "calls" ? +x.calls || 0 : +x.tokens || 0;
-// a metric as its axis and its values say it
-const ledFormat = (m, v) => m === "cost" ? ledMoney(v) : (m === "speed" ? ledNum : fmtN)(Math.round(v));
-const ledFormatLong = (m, v) => m === "speed" ? (v > 0 ? t("{n} tok/s", { n: ledNum(Math.round(v)) }) : "—") : m === "cost" ? (fmtCost({ cost: v, unpriced: 0 }) || "—") : ledNum(Math.round(v));
+const ledPart = (m, x) => m === "speed" ? ledSpeed(x) : m === "traffic" ? ledBytes(x) : m === "cost" ? +x.cost || 0 : m === "calls" ? +x.calls || 0 : +x.tokens || 0;
+// a metric as its axis and its values say it: bytes as "2.5 MB", an
+// axis's round "4 MB" without its ".0"
+const ledFormat = (m, v) => m === "cost" ? ledMoney(v) : m === "traffic" ? fmtBytes(Math.round(v)).replace(/\.0 /, " ") : (m === "speed" ? ledNum : fmtN)(Math.round(v));
+const ledFormatLong = (m, v) => m === "speed" ? (v > 0 ? t("{n} tok/s", { n: ledNum(Math.round(v)) }) : "—") : m === "cost" ? (fmtCost({ cost: v, unpriced: 0 }) || "—") : m === "traffic" ? fmtBytes(Math.round(v)) : ledNum(Math.round(v));
 
 // an axis's top with four steps under it: round numbers, the top at least the largest value
 function ledAxis(max) {
@@ -18916,7 +18919,7 @@ function drawLedColumns(box, l, split, metric, compact, chooseDay, focusDay) {
   const speed = metric === "speed";
   const max = Math.max(0, ...totals, ...(speed ? pts.flatMap((p) => Object.values(p.by?.[split] || {}).map(ledSpeed)) : []));
   if (!(max > 0)) {
-    plot.append(el("div", "none", t(metric === "cost" ? "No known price for these requests" : speed ? "No streamed replies timed in this period" : "Nothing in this period")));
+    plot.append(el("div", "none", t(metric === "cost" ? "No known price for these requests" : speed ? "No streamed replies timed in this period" : metric === "traffic" ? "No traffic counted in this period" : "Nothing in this period")));
     return;
   }
   const topV = ledAxis(max);
@@ -19002,7 +19005,7 @@ function drawLedColumns(box, l, split, metric, compact, chooseDay, focusDay) {
   plot.append(g, tip);
   const name = (c) => t(c.name || c.id || "—");
   // counts short, as the axis says them (skyhuang1994)
-  const val = (v) => speed || metric === "cost" ? ledFormatLong(metric, v) : ledFormat(metric, v);
+  const val = (v) => speed || metric === "cost" || metric === "traffic" ? ledFormatLong(metric, v) : ledFormat(metric, v);
   const at = (e) => {
     const r = g.getBoundingClientRect();
     const i = Math.max(0, Math.min(n - 1, Math.floor(((e.clientX - r.left) / r.width * W - M.l) / slot)));
@@ -19033,6 +19036,12 @@ function drawLedColumns(box, l, split, metric, compact, chooseDay, focusDay) {
       sum.append(el("span", "", t("Total")), el("em", "", val(totals[i]) + (calls ? " · " + calls : "")));
     }
     tip.append(sum);
+    // traffic: of it, what went up and what came back
+    if (metric === "traffic" && totals[i] > 0) {
+      const io = el("div", "io");
+      io.append(el("span", ""), el("em", "", "↑ " + fmtBytes(p.up_bytes || 0) + " · ↓ " + fmtBytes(p.down_bytes || 0)));
+      tip.append(io);
+    }
     tip.hidden = false;
     const x = M.l + slot * (i + 0.5), w = tip.offsetWidth;
     tip.style.left = Math.max(0, x + 14 + w > W ? x - w - 14 : x + 14) + "px";
@@ -19082,7 +19091,7 @@ function drawLedRank(box, l, split, metric, picked, choose, compact) {
     if (x.icon && split !== "model") l1.append(icon(x.icon));
     const nm = el("span", "rk-nm", t(x.name || x.id || "—"));
     nm.title = t(x.name || x.id || "");
-    const long = ledFormatLong(metric, v), val = el("span", "rk-val", metric == "speed" ? gs?.text || "—" : metric == "cost" ? long : ledFormat(metric, v));
+    const long = ledFormatLong(metric, v), val = el("span", "rk-val", metric == "speed" ? gs?.text || "—" : metric == "cost" || metric == "traffic" ? long : ledFormat(metric, v));
     val.title = metric == "speed" ? gs?.title || "" : long;
     l1.append(nm, val);
     const bar = el("div", "rk-bar"), fill = el("i");
@@ -19090,6 +19099,7 @@ function drawLedRank(box, l, split, metric, picked, choose, compact) {
     fill.style.background = color;
     bar.append(fill);
     const more = [];
+    if (metric === "traffic") more.push("↑ " + fmtBytes(x.up_bytes || 0) + " · ↓ " + fmtBytes(x.down_bytes || 0));
     if (metric !== "calls") more.push(t(x.calls === 1 ? "{n} request" : "{n} requests", { n: fmtN(x.calls) }));
     if (metric !== "tokens") more.push(t("{n} tokens", { n: fmtN(allTokens(x)) }));
     if (metric !== "cost" && x.cost) more.push("≈" + fmtCost(x));
@@ -19115,7 +19125,7 @@ function drawLedRank(box, l, split, metric, picked, choose, compact) {
   for (const x of top) box.append(one(x, x.color));
   if (rest.length) {
     const tot = rest.reduce((acc, x) => {
-      for (const k of ["calls", "errors", "loops", "input", "output", "cache_read", "cache_write", "cache_unknown", "cache_unknown_calls", "cost", "credits", "credited", "timed", "ttft_ms", "decode_ms", "decode_out", "decode_n", "floor_out", "floor_ms", "floor_n"]) acc[k] = (acc[k] || 0) + (x[k] || 0);
+      for (const k of ["calls", "errors", "loops", "input", "output", "cache_read", "cache_write", "cache_unknown", "cache_unknown_calls", "cost", "credits", "credited", "timed", "ttft_ms", "decode_ms", "decode_out", "decode_n", "floor_out", "floor_ms", "floor_n", "up_bytes", "down_bytes"]) acc[k] = (acc[k] || 0) + (x[k] || 0);
       return acc;
     }, { id: "\0other", name: t("Other ({n})", { n: rest.length }) });
     box.append(one(tot, "var(--faint)", true));
