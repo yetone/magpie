@@ -14011,8 +14011,6 @@ function accountQuota(data, user, capFor = () => 0, settable = null, prov) {
     if (w.resetsAt) {
       const at = new Date(w.resetsAt);
       m.title = resetText(at, at.toLocaleString(intlLang()));
-      // every window's, not only a nearly used one's: the week's at 23%
-      // is what the user plans by too (rosarobertist on X)
       m.append(el("span", "aq-r", resetInText(at)));
     }
     const out = runsOutText(w, (at) => at.toLocaleString(intlLang()));
@@ -14042,7 +14040,6 @@ function poolLine(line, ws, q, capFor = () => 0, settable = null) {
       fill.style.width = quotaFill(w) + "%";
       track.append(fill);
       capMark(track, w, capFor(w));
-      // each of a pool's windows is set apart: its own part of the meter
       const part = el("span", "aq-win");
       part.append(el("span", "aq-k", w.window ? shortWindow(w.window) : ""), ...(quotaNoShare(w) ? [] : [track]), el("b", "", quotaText(w)));
       m.append(settable ? settable(part, w) : part);
@@ -14058,18 +14055,13 @@ function poolLine(line, ws, q, capFor = () => 0, settable = null) {
 // An account's usage cap (provider.AccountCaps): the share of each window
 // it is used to at most; past it routing goes on to the others.
 const CAP_SHARES = [50, 60, 70, 80, 90];
-// An account's name of the user's own (#1515), kept by magpie
-// (provider.AccountNames), never in a sign-in; accountSeatOf, the key plan
-// it stands in for; accountUserOf, its plugin usage's name (#4416).
+// an account's own name (provider.AccountNames, #1515); accountUserOf, its plugin usage's (#4416)
 function acctIn(m, user) { return m?.[String(user).toLowerCase()] || ""; }
 function accountNameOf(p, user) { return acctIn(p?.accountNames, user); }
 function accountSeatOf(p, user) { return acctIn(p?.accountSeats, user); }
 function accountUserOf(p, user) { return acctIn(p?.accountUsers, user); }
 function accountShownOf(p, user) { return accountNameOf(p, user) || accountUserOf(p, user) || user; }
-// renameIn edits a name in place of at: Enter saves it changed, Escape
-// keeps it. Once: Enter or Escape draws the editor again, and the blur
-// that follows (Chromium's, as the redraw takes the input out) does nothing,
-// rather than draw it again inside that draw or save on Escape (#3944)
+// renameIn: Enter saves, Escape keeps; the blur after a redraw does nothing (#3944)
 function renameIn(at, own, hint, save) {
   const i = input(own, hint);
   let over = false;
@@ -14086,14 +14078,11 @@ function renameIn(at, own, hint, save) {
   i.focus();
   return i;
 }
-// accountNameButton is the account's name on its editor row: the name of
-// its own, the account beside it, and a click renames it.
+// accountNameButton: the account's name on its row; a click renames it
 function accountNameButton(p, user) {
   const own = accountNameOf(p, user), seat = accountSeatOf(p, user), vend = accountUserOf(p, user);
   if (!p) return el("span", "n", user);
   const wrap = el("span", "acct-who");
-  // a span, not a button: the address stays selectable, and a drag that
-  // selects it renames nothing
   const name = el("span", "n rename" + (own ? " own-name" : ""), accountShownOf(p, user));
   name.tabIndex = 0;
   name.setAttribute("role", "button");
@@ -14128,14 +14117,11 @@ function windowOwnCapOf(p, user, w) {
   return (w?.capId && p?.accountWindowCaps?.[String(user).toLowerCase()]?.[w.capId]) || 0;
 }
 function windowCapsOf(p, user) { const k = String(user).toLowerCase(); return Object.keys({ ...p?.accountWindowCaps?.[k], ...p?.accountWindowAmounts?.[k] }).length; }
-// A window's cap at a fixed amount of its own unit (provider.AccountWindowAmounts,
-// 9won_25273 on Discord), by capId: 0 when it has none.
+// a window's cap at an amount of its unit (provider.AccountWindowAmounts), 0 for none
 function windowAmountOf(p, user, w) {
   return (w?.capId && p?.accountWindowAmounts?.[String(user).toLowerCase()]?.[w.capId]) || 0;
 }
-// windowCapOf: the share the window holds the account at, 0 for none; an
-// amount as a share of the window's total, which a window read without one
-// leaves aside
+// windowCapOf: the share the window holds the account at, 0 for none
 function windowCapOf(p, user, w) {
   const amount = windowAmountOf(p, user, w);
   if (amount && w?.limit > 0) return amount / w.limit * 100;
@@ -14143,16 +14129,11 @@ function windowCapOf(p, user, w) {
   if (own) return own >= 100 ? 0 : own;
   return w?.ownCap ? 0 : accountCapOf(p, user);
 }
-// capHeldOf: how the account is held at cap, as the gateway reads it —
-// a window at or past its cap (capFor: its own, else the account's), not
-// yet renewed — or null: the fullest such window's share and its cap, and
-// when the last of them renews (0 when one doesn't say).
+// capHeldOf: the fullest window at its cap, its cap and when it renews, or null
 function capHeldOf(q, capFor) {
   if (!q || q.error || !q.windows?.length) return null;
   const now = Date.now();
-  // a window of some models only (Opus's week, a pool's) holds the account
-  // for those alone (#760): the account's own windows say when it is back
-  // when one of them holds it, else those windows do and are named
+  // a window of some models only holds the account for those alone (#760)
   const all = { used: 0, cap: 0, back: 0, unknown: false, n: 0 }, some = { used: 0, cap: 0, back: 0, unknown: false, n: 0, names: [] };
   for (const w of q.windows) {
     const cap = w.capped ? capFor(w) : 0;
@@ -14169,16 +14150,13 @@ function capHeldOf(q, capFor) {
   const h = all.n ? all : some.n ? some : null;
   return h && { used: h.used, cap: Math.ceil(h.cap), back: h.unknown ? 0 : h.back, all: h === all, some: some.names };
 }
-// directNote: why the cap can't stop agent, signed in to the account and
-// asking its vendor itself, with no other account on to move it to
+// directNote: why the cap can't stop an agent signed in to the account itself
 function directNote(agent) {
   return t("{agent} is signed in to this account and asks its vendor itself, not through magpie, so with no other account on to move it to, {agent} goes on using it past the cap. Add another account, or pick {agent}'s models via magpie, for the cap to hold it", { agent });
 }
 function capHeldNote(held, cap, several, direct) {
   const back = held.back ? " · " + resetText(new Date(held.back), new Date(held.back).toLocaleString(intlLang())) : "";
   if (direct) {
-    // the account is held for what goes through magpie, but the agent
-    // signed in to it isn't: the note doesn't say it is safe at its cap
     const n = el("span", "using acap-held acap-direct", t("At its cap · {agent} still uses it", { agent: direct }));
     n.title = t("A usage window is at {n}%, past this account's {cap}% cap: requests through magpie are refused with a usage-cap error until it renews", { n: Math.round(held.used), cap })
       + back
@@ -14207,8 +14185,7 @@ function capMark(track, w, cap) {
   track.classList.add("capped");
   track.append(mk);
 }
-// a number typed where a pill was: Enter or leaving saves what parse makes
-// of it (null: not one, said in bad), Escape keeps own
+// a number typed where a pill was: Enter or blur saves parse's, Escape keeps own
 const capOf = (v) => { v = parseInt(v.replace("%", ""), 10); return v >= 1 && v <= 99 ? v : null; };
 function pillNumber(at, val, ph, cls, label, parse, bad, own, set) {
   const i = input(val, ph, "text");
@@ -14230,8 +14207,7 @@ function pillNumber(at, val, ph, cls, label, parse, bad, own, set) {
   i.focus(NO_SCROLL);
 }
 
-// windowCapMeter: a window's meter on an account's row as the button that
-// sets the window's own cap, a family's its models' (tiers); not on-demand's.
+// windowCapMeter: a window's meter as the button setting its own cap (tiers: a family's)
 function windowCapMeter(m, p, user, w) {
   const ids = (w.tiers || [w]).map((x) => x.capId), owns = ids.map((capId) => windowOwnCapOf(p, user, { capId }));
   const amounts = ids.map((capId) => windowAmountOf(p, user, { capId }));
@@ -14239,8 +14215,6 @@ function windowCapMeter(m, p, user, w) {
   if (!ids.every(Boolean) || w.ownCap && !(owns[0] % 100) && !amount) return m;
   const own = new Set(owns).size > 1 ? 0 : owns[0], cap = accountCapOf(p, user);
   const name = t(w.name);
-  // a window counted in a unit, with its total, can be capped at an amount
-  // of it in place of a share
   const unit = w.limit > 0 && w.unit ? t(w.unit) : "";
   const amountText = (v) => (countFormat.format(v) + " " + unit).trim();
   const b = spanBtn(el("span", m.className + " aq-set" + (own || amount ? " own" : "")));
@@ -14313,10 +14287,7 @@ function accountCapPill(p, user, cap, direct) {
   return pill;
 }
 
-// An account's or key's limit on requests at once (#892): its own, else
-// the provider's Concurrency. The pill says it, and how many run and wait
-// (the lanes, read every 2s while one is in sight: refreshLanes), and opens
-// the app's menu: the provider's, none, a number, or the user's own.
+// an account's or key's limit on requests at once (#892), its pill opening the menu
 const LANE_LIMITS = [1, 2, 3, 5, 10];
 let lanesNow = {}, lanesRead = false, lanesTick;
 function laneOwnOf(p, ref) {
@@ -14328,7 +14299,6 @@ function laneLimitOf(p, ref) {
   const own = laneOwnOf(p, ref);
   return own != null ? own : p?.maxConcurrency != null ? p.maxConcurrency : p?.pluginConcurrency || 0;
 }
-// laneText sets the pill's words and marks for the lane as it stands
 function laneText(pill) {
   const p = providers?.providers?.find((x) => x.id === pill.dataset.provider);
   const own = laneOwnOf(p, pill.dataset.ref), limit = laneLimitOf(p, pill.dataset.ref);
@@ -14339,7 +14309,6 @@ function laneText(pill) {
   if (pill.textContent !== text) pill.textContent = text;
   lanesTick ||= setInterval(refreshLanes, 2e3);
   pill.classList.toggle("set", own != null || limit + busy > 0);
-  // set or running on its account's line, else under ⋯, not while open
   const row = pill.closest(".acc"), tools = row?.querySelector(".acc-tools"), line = row?.querySelector(".acc-line"), on = pill.classList.contains("set");
   if (tools && line && !pill.classList.contains("open") && pill !== document.activeElement && pill.parentElement === (on ? tools : line)) on ? line.querySelector(".grow").before(pill) : tools.insertBefore(pill, tools.querySelector(".text.quiet"));
   pill.classList.toggle("busy-lane", !!(limit && busy >= limit));
@@ -14384,8 +14353,7 @@ function keySpend(row, p, k) {
   if (window.keySpendFill) return keySpendFill(row, p, k);
   import("./keyspend.js").then(() => keySpendFill(row, p, k), () => {});
 }
-// refreshLanes rewrites the pills in place, so nothing moves; with none
-// in sight its tick stops (#3185) until one is drawn
+// refreshLanes rewrites the pills in place; with none in sight its tick stops (#3185)
 async function refreshLanes() {
   if (document.hidden || view !== "providers" || !document.querySelector(".alane")) return lanesTick = clearInterval(lanesTick);
   let lanes;
