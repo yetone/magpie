@@ -76,15 +76,24 @@ function renderGatewayView() {
   renderGateway();
   renderGatewayLan();
   renderGatewayOwn();
-  $("#gatewayKeysBlock").hidden = !providers.gateway.lan;
-  // not shared, the keys are left out; this line says where they come from,
-  // as a tunnel to loopback is refused until sharing is on (DD on Discord)
-  $("#gatewayKeysOff").hidden = !!providers.gateway.lan;
-  if (!providers.gateway.lan) gatewayKeyDraft = null;
+  const shown = gwKeysShown();
+  $("#gatewayKeysBlock").hidden = !shown;
+  // with no use for them, the keys are left out; this line says where
+  // they come from, as a tunnel to loopback is refused until sharing is
+  // on (DD on Discord)
+  $("#gatewayKeysOff").hidden = shown;
+  if (!shown) gatewayKeyDraft = null;
   if (gatewayKeyDraft === null && gatewayLimit === null && !$("#gatewayKeys .rename-in")) renderGatewayKeys();
   renderConnect();
   renderGatewayModels();
   renderActivity();
+}
+
+// Gateway keys are wanted while shared, and by a web page listed in
+// Settings, which is refused without one, shared or not: such a page's
+// user was sent here for a key and found none
+function gwKeysShown() {
+  return !!(providers?.gateway.lan || prefs?.corsOrigins?.length);
 }
 
 // The page's own settings, under the calls they are about (Recent calls at
@@ -97,7 +106,7 @@ function renderGatewayOwn() {
   const f = prefs?.builtins?.find((x) => x.id === "gateway");
   if (!f) {
     box.replaceChildren();
-    if (!prefs) loadSettings().then(() => view === "gateway" && renderGatewayOwn(), () => {});
+    if (!prefs) loadSettings().then(() => view === "gateway" && providers && box.isConnected && renderGatewayView(), () => {});
     return;
   }
   const rows = f.schema ? magpie.ui.form(f.schema, f.config, async (change) => {
@@ -829,7 +838,7 @@ magpie.plugin("gateway", (ctx) => {
   <p class="usage-note" data-t>Create a gateway key for each client. Usage is counted separately for each key.</p>
   <section id="gatewayKeys"></section>
 </section>
-<p class="usage-note gw-keys-off" id="gatewayKeysOff" hidden data-t>Gateway keys are for other computers, and for a tunnel to this one such as Cloudflare Tunnel: they are added here once Share on local network is on. Agents on this computer need none.</p>
+<p class="usage-note gw-keys-off" id="gatewayKeysOff" hidden data-t>Gateway keys are for other computers, a tunnel to this one such as Cloudflare Tunnel, and web pages: they are added here once Share on local network is on, or a web page is listed in Settings. Agents on this computer need none.</p>
 <div class="row-head"><button class="fold" id="foldConnect" aria-expanded="true" aria-controls="connect"><span class="label" data-t>Connect</span></button><span class="grow"></span><span class="note" id="connectNote"></span></div>
 <section class="list connect" id="connect"></section>
 <div class="row-head"><button class="fold" id="foldModels" aria-expanded="true" aria-controls="gwModels"><span class="label" data-t>Models</span><span class="note" id="modelsCount"></span></button><span class="grow"></span><button class="text" id="copyModels" data-t>Copy all ids</button></div>

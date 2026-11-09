@@ -204,7 +204,8 @@ function renderGatewayKeys() {
   // a drag in progress keeps its rows: the list is drawn when it ends
   if (gatewayKeysArranging) { gatewayKeysRenderPending = true; return; }
   const box = $("#gatewayKeys");
-  $("#gatewayKeysBlock").hidden = !providers?.gateway.lan;
+  $("#gatewayKeysBlock").hidden = !gwKeysShown();
+  $("#gatewayKeysOff").hidden = gwKeysShown();
   box.replaceChildren();
   $("#addGatewayKey").onclick = () => { gatewayKeyDraft = ""; renderGatewayKeys(); };
   // keys: a badge left unset folds away until the row is pointed at, as

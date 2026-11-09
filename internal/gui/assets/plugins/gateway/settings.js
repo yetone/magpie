@@ -167,6 +167,16 @@ function renderCORS(s) {
   const who = el("div", "who");
   who.append(el("div", "name", t("Web pages that may call magpie")),
     el("div", "sub" + (d.err ? " err" : ""), d.err || t("Scripts on these origins can call the gateway from a browser, each request with a gateway key from Gateway. A page from any other site is refused; pages on this computer are not")));
+  // where those keys are: the Gateway page shows them once a page is listed
+  const nav = $('#nav [data-view="gateway"]');
+  if (origins.length && nav && !nav.hidden) {
+    const go = el("button", "link", t("Gateway keys"));
+    go.type = "button";
+    go.onclick = () => nav.click();
+    const line = el("div", "sub feat-go");
+    line.append(go);
+    who.append(line);
+  }
   const val = el("div", "val rule-add");
   val.append(field, add);
   r.append(who, val);

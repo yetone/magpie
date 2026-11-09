@@ -128,7 +128,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal((await head.textContent()).trim(), w.head);
         const row = box.locator(".rule-row");
         assert.equal((await row.locator(".name").textContent()).trim(), w.name);
-        assert.equal((await row.locator(".sub").textContent()).trim(), w.sub);
+        assert.equal((await row.locator(".sub:not(.feat-go)").textContent()).trim(), w.sub);
 
         // every row fits the panel: nothing cut, nothing past the edge
         const fits = async () => {
@@ -188,6 +188,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         // refused, in the page's language, and nothing saved
         for (const [bad, says] of [["*", w.wildcard], ["localhost:4000/v1", w.notOrigin], ["chrome-extension://abc", w.notOrigin], ["chrome-extension://*", w.wildcard]]) {
+          // wheeled to the window's middle first, as a reader would: the row
+          // grows with each refusal (and with its Gateway keys line), and a
+          // click on a button under the view's floating foot is Playwright
+          // scrolling to it, not the page moving
+          for (let i = 0; i < 20; i++) {
+            const r = await add.boundingBox();
+            if (r && r.y + r.height < 400) break;
+            await page.mouse.wheel(0, 80);
+            await scroll();
+          }
           await row.locator("input").fill(bad);
           before = await scroll();
           await row.locator("button", { hasText: w.add }).click();
@@ -205,7 +215,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction(() => document.querySelectorAll("#corsList .row:not(.rule-row)").length === 2);
         assert.deepEqual(posts.at(-1), ["https://app.example.com", "chrome-extension://abcdefghijklmnopabcdefghijklmnop"]);
         assert.equal(await scroll(), before, "Remove moved the page");
-        assert.equal((await row.locator(".sub").textContent()).trim(), w.sub, "a save clears the refusal");
+        assert.equal((await row.locator(".sub:not(.feat-go)").textContent()).trim(), w.sub, "a save clears the refusal");
 
         const border = await box.locator(".row").first().evaluate((r) => getComputedStyle(r).borderLeftWidth);
         assert(border === "0px" || border === "", "no left border accent: " + border);
