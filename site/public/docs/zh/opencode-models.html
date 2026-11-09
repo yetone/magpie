@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenCode 接入 DeepSeek、Kimi、GLM，或用 Claude、ChatGPT 订阅 · magpie</title>
+<meta name="description" content="让 OpenCode 用上 DeepSeek、Kimi、GLM、Qwen，或 Claude Pro/Max、ChatGPT Plus/Pro、GitHub Copilot 订阅里的模型。magpie 在 opencode.json 里加一个供应商，所有模型都会出现在 OpenCode 的模型列表里。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/opencode-models">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/opencode-models">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/opencode-models">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/opencode-models">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/opencode-models">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="OpenCode 接入 DeepSeek、Kimi、GLM，或用 Claude、ChatGPT 订阅">
+<meta property="og:description" content="让 OpenCode 用上 DeepSeek、Kimi、GLM、Qwen，或 Claude Pro/Max、ChatGPT Plus/Pro、GitHub Copilot 订阅里的模型。magpie 在 opencode.json 里加一个供应商，所有模型都会出现在 OpenCode 的模型列表里。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/opencode-models">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "OpenCode 接入 DeepSeek、Kimi、GLM，或用 Claude、ChatGPT 订阅",
+   "description": "让 OpenCode 用上 DeepSeek、Kimi、GLM、Qwen，或 Claude Pro/Max、ChatGPT Plus/Pro、GitHub Copilot 订阅里的模型。magpie 在 opencode.json 里加一个供应商，所有模型都会出现在 OpenCode 的模型列表里。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/opencode-models",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "OpenCode 怎么用 DeepSeek？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "在 magpie 里用 API Key 添加 DeepSeek，然后在 Agent 页给 OpenCode 选一个 DeepSeek 模型，或运行 magpie opencode deepseek/deepseek-v4-pro。magpie 会在 opencode.json 里加上 magpie 供应商并设好模型。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "OpenCode 能用 Kimi 或智谱 GLM 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。在 magpie 里添加 Kimi 或智谱 GLM，给 OpenCode 选它的模型即可。GLM Coding Plan 的 Key 有专用接口，添加时记得选 Coding Plan。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "OpenCode 能用 Claude Pro/Max 订阅吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。在 magpie 里登录 Claude（magpie accounts add claude），给 OpenCode 选一个 claude/… 模型。Claude 订阅的请求经由你电脑上安装的 Claude Code 发出，请保留它。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "OpenCode 能用 ChatGPT Plus/Pro 订阅吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。在 magpie 里登录 ChatGPT（magpie accounts add codex），选一个 codex/… 模型，比如 codex/gpt-5.5。它的推理档位会显示为 OpenCode 里的模型变体。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie 改的是哪个文件？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "OpenCode 在 ~/.config/opencode（或 $OPENCODE_CONFIG_DIR）下的配置：opencode.jsonc、opencode.json、config.json 中第一个存在的，都没有就新建 opencode.json。它设置 model 和 small_model，加上 provider.magpie，其他设置不动。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "怎么换回 OpenCode 自己的模型？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "在 magpie 里 OpenCode 那一行选回它自己的模型，或运行 magpie opencode default。之前的 model 和 small_model 会恢复，magpie 的供应商会被删掉。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/opencode-models" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/opencode-models" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/opencode-models" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>OpenCode 接入其他模型</p>
+    <a href="#overview">原理</a>
+    <a href="#setup">配置步骤</a>
+    <a href="#subs">订阅</a>
+    <a href="#config">opencode.json 里改了什么</a>
+    <a href="#variants">推理档位与费用</a>
+    <a href="#narrow">精简模型列表</a>
+    <a href="#back">恢复原样</a>
+    <a href="#faq">常见问题</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 指南</p>
+    <h1>OpenCode 接入 DeepSeek、Kimi、GLM，或用 Claude、ChatGPT 订阅</h1>
+    <p class="lede">OpenCode 通过配置里的供应商（provider）来调用模型。magpie 会加一个名为 <code>magpie</code> 的供应商，指向你电脑上的本地网关。你在 magpie 里有的模型都列在它下面：DeepSeek、Kimi、GLM、Qwen 的 Key，以及 Claude、ChatGPT、Copilot 订阅里的模型。</p>
+
+    <p>网关运行在 <code>127.0.0.1:3425</code>。OpenCode 用 OpenAI Chat Completions 协议发请求，magpie 再按各供应商自己的协议转发；协议不同时，请求和回复都会转换，流式输出和工具调用都不受影响。OpenCode 自己的供应商保持原样，和 magpie 的并列。</p>
+
+    <div class="cards">
+      <div><h3>国产模型</h3><p>DeepSeek、Kimi 与 Kimi Code、智谱 GLM（按量付费或 Coding Plan）、Z.ai、MiniMax、通义千问。</p></div>
+      <div><h3>订阅</h3><p>Claude Pro/Max、ChatGPT Plus/Pro、GitHub Copilot，在 magpie 里登录一次即可。</p></div>
+      <div><h3>其他</h3><p>任何 OpenAI 或 Anthropic 兼容的地址和 Key，以及 Ollama、LM Studio。</p></div>
+    </div>
+
+    <h2 id="setup"><a class="anchor" href="#setup">配置步骤</a></h2>
+    <ol class="steps">
+      <li><b>添加供应商</b>在 magpie 的 <span class="ui">供应商</span> 页点 <span class="ui">＋ 添加供应商</span>，选 DeepSeek、Kimi、智谱 GLM、MiniMax 或通义千问，粘贴 API Key 后保存。magpie 会向厂商查询可用的模型。</li>
+      <li><b>给 OpenCode 选模型</b>在 <span class="ui">Agent</span> 页点 OpenCode 那一行的模型，选一个，比如 <code>deepseek/deepseek-v4-pro</code>。magpie 会在 OpenCode 的配置里写入 <code>"model": "magpie/deepseek/deepseek-v4-pro"</code>，并加上 <code>magpie</code> 供应商。</li>
+      <li><b>或者在 OpenCode 里切换</b>供应商加好之后，magpie 的模型会出现在 OpenCode 自己的 <code>/models</code> 列表里的 <code>magpie</code> 下面，也可以直接在那里切。</li>
+    </ol>
+    <p>用命令行也一样：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-oc-cli">复制</button><pre id="ex-oc-cli">magpie provider add deepseek sk-…
+magpie models                                    # 所有模型（供应商/模型）
+magpie opencode deepseek/deepseek-v4-pro         # OpenCode 的主模型
+magpie opencode small deepseek/deepseek-v4-flash # 它的 small_model</pre></div>
+    <p>OpenCode 的 <code>small_model</code> 在那一行里单独可选，可以给它配一个比主模型便宜的模型。</p>
+    <div class="callout"><b>智谱 GLM Coding Plan。</b>添加智谱 GLM 或 Z.ai 时，要选和 Key 对应的套餐。Coding Plan 的 Key 有专用接口，发到按量付费的接口会提示余额不足。</div>
+
+    <h2 id="subs"><a class="anchor" href="#subs">订阅</a></h2>
+    <p>在 magpie 里登录一次（<span class="ui">＋ 添加供应商</span> 或命令行），订阅里的模型就会和其他模型一样列在 OpenCode 的 <code>magpie</code> 下面，不需要 API Key。</p>
+    <div class="table-wrap"><table>
+      <tr><th>订阅</th><th>模型名</th><th>命令行</th></tr>
+      <tr><td>Claude（Pro、Max、Team）</td><td><code>claude/…</code></td><td><code>magpie accounts add claude</code><br><code>magpie opencode claude/claude-opus-5-5</code></td></tr>
+      <tr><td>ChatGPT（Plus、Pro、Business）</td><td><code>codex/…</code></td><td><code>magpie accounts add codex</code><br><code>magpie opencode codex/gpt-5.5</code></td></tr>
+      <tr><td>GitHub Copilot</td><td><code>copilot/…</code></td><td><code>magpie accounts add copilot</code></td></tr>
+    </table></div>
+    <p>Claude 订阅的请求经由你电脑上安装的 Claude Code 发出，请保留它。Copilot 登录时会给你一个验证码，在 GitHub 页面输入即可。同一订阅的多个账号可以分摊请求、自动切换，见 <a href="/docs/zh/subscriptions#accounts">订阅用于任意 Agent</a>。</p>
+
+    <h2 id="config"><a class="anchor" href="#config">opencode.json 里改了什么</a></h2>
+    <p>magpie 写的是 OpenCode 从配置目录读取的配置文件。配置目录是 <code>$OPENCODE_CONFIG_DIR</code>（如果设置了），否则是 <code>~/.config/opencode</code>；文件是 <code>opencode.jsonc</code>、<code>opencode.json</code>、<code>config.json</code> 中第一个存在的，都没有就新建 <code>opencode.json</code>。只改下面这些键，其他设置不动。</p>
+    <div class="table-wrap"><table>
+      <tr><th>键</th><th>值</th></tr>
+      <tr><td><code>model</code></td><td><code>magpie/&lt;供应商&gt;/&lt;模型&gt;</code></td></tr>
+      <tr><td><code>small_model</code></td><td>同样的格式，设置了才写</td></tr>
+      <tr><td><code>provider.magpie.npm</code></td><td><code>@ai-sdk/openai-compatible</code></td></tr>
+      <tr><td><code>provider.magpie.options.baseURL</code></td><td><code>http://127.0.0.1:3425/v1</code></td></tr>
+      <tr><td><code>provider.magpie.options.apiKey</code></td><td>网关的 Key</td></tr>
+      <tr><td><code>provider.magpie.models</code></td><td>magpie 给 OpenCode 列出的所有模型</td></tr>
+    </table></div>
+    <p>每个模型都带上下文窗口和输出上限（OpenCode 据此判断何时压缩），是否支持图片、推理档位和价格。你添加供应商或账号后，magpie 会同步更新这份列表。如果文件里在 <code>providers</code> 下也有这个供应商（OpenCode 2 的写法），magpie 会一并写入。Windows 上 WSL 发行版里的 OpenCode 也同样配置，写在该发行版的 <code>~/.config/opencode</code>。</p>
+
+    <h2 id="variants"><a class="anchor" href="#variants">推理档位与费用</a></h2>
+    <ul>
+      <li><b>推理档位。</b>模型支持的推理强度会写成它在 OpenCode 里的变体（variant），每个变体请求对应的 <code>reasoningEffort</code>。支持快速处理的模型（比如 ChatGPT 订阅里的 GPT 模型）每个档位还会多一个 <code>fast</code> 变体。</li>
+      <li><b>费用。</b>magpie 会写入每个模型每百万 Token 的价格（输入、输出、缓存读取、缓存写入），OpenCode 的会话费用才能算出来；不写的话所有模型都显示 0。</li>
+      <li><b>提示缓存。</b>magpie 会为它的供应商打开 OpenCode 的 prompt cache key，按这个键做缓存的供应商就能在多轮对话间命中缓存。</li>
+    </ul>
+
+    <h2 id="narrow"><a class="anchor" href="#narrow">精简模型列表</a></h2>
+    <p>默认情况下，OpenCode 能看到你在 magpie 里的全部模型。只想给它看部分供应商或分组：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-oc-vis">复制</button><pre id="ex-oc-vis">magpie visible opencode deepseek,claude   # 只显示这些供应商
+magpie visible opencode all               # 恢复显示全部</pre></div>
+    <p>没列出来的模型，OpenCode 按名字请求时依然可用。</p>
+
+    <h2 id="back"><a class="anchor" href="#back">恢复原样</a></h2>
+    <p>magpie 里 OpenCode 那一行的模型选择器也会列出 OpenCode 自己的供应商（它 <code>auth.json</code> 里已登录的那些）。选其中一个，或者运行：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-oc-back">复制</button><pre id="ex-oc-back">magpie opencode default</pre></div>
+    <p>它会恢复接入 magpie 之前的 <code>model</code> 和 <code>small_model</code>，并把 <code>magpie</code> 供应商从文件里删掉。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>OpenCode 怎么用 DeepSeek？</h3>
+    <p>在 magpie 里用 API Key 添加 DeepSeek，然后在 Agent 页给 OpenCode 选一个 DeepSeek 模型，或运行 magpie opencode deepseek/deepseek-v4-pro。magpie 会在 <code>opencode.json</code> 里加上 magpie 供应商并设好模型。</p>
+    <h3>OpenCode 能用 Kimi 或智谱 GLM 吗？</h3>
+    <p>能。在 magpie 里添加 Kimi 或智谱 GLM，给 OpenCode 选它的模型即可。GLM Coding Plan 的 Key 有专用接口，添加时记得选 Coding Plan。</p>
+    <h3>OpenCode 能用 Claude Pro/Max 订阅吗？</h3>
+    <p>能。在 magpie 里登录 Claude（magpie accounts add claude），给 OpenCode 选一个 claude/… 模型。Claude 订阅的请求经由你电脑上安装的 Claude Code 发出，请保留它。</p>
+    <h3>OpenCode 能用 ChatGPT Plus/Pro 订阅吗？</h3>
+    <p>能。在 magpie 里登录 ChatGPT（magpie accounts add codex），选一个 codex/… 模型，比如 codex/gpt-5.5。它的推理档位会显示为 OpenCode 里的模型变体。</p>
+    <h3>magpie 改的是哪个文件？</h3>
+    <p>OpenCode 在 ~/.config/opencode（或 $OPENCODE_CONFIG_DIR）下的配置：<code>opencode.json</code>c、<code>opencode.json</code>、config.json 中第一个存在的，都没有就新建 <code>opencode.json</code>。它设置 model 和 <code>small_model</code>，加上 provider.magpie，其他设置不动。</p>
+    <h3>怎么换回 OpenCode 自己的模型？</h3>
+    <p>在 magpie 里 OpenCode 那一行选回它自己的模型，或运行 <code>magpie opencode default</code>。之前的 model 和 <code>small_model</code> 会恢复，magpie 的供应商会被删掉。</p>
+
+    <p style="margin-top:48px">其他 Agent：<a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>、<a href="/docs/zh/codex-models">Codex 接入其他模型</a>、<a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>。遇到问题可以到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
