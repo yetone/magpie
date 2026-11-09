@@ -1,0 +1,435 @@
+// Package memdistill reads the agents' finished conversations and asks a
+// model what in them is worth remembering: a preference the user stated,
+// a rule learned from a correction, a fact of the project the code
+// doesn't say. What it finds waits in memory as a candidate (To review)
+// until the user keeps it; nothing it proposes reaches an agent before.
+//
+// It runs when switched on (State.On), on sessions quiet for Quiet, at
+// most PerRun of them a run, each once for what it held when read: a
+// session that goes on is read again later, whole. The model is the one
+// picked, else the caller's automatic choice. The request goes through
+// magpie's own gateway (Complete), so masking and routing apply as to any
+// agent's request.
+package memdistill
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
+	"time"
+	"unicode/utf8"
+
+	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/filelock"
+	"github.com/yetone/magpie/internal/lastgood"
+	"github.com/yetone/magpie/internal/memory"
+	"github.com/yetone/magpie/internal/sessions"
+)
+
+// Complete sends one request to model: a system text and one user
+// message, and returns the reply's text.
+type Complete func(ctx context.Context, model, system, user string) (string, error)
+
+const (
+	// Quiet is how long a session has had no turn before it is read: one
+	// still going is read when it stops
+	Quiet = 30 * time.Minute
+	// PerRun caps the sessions one run sends to the model
+	PerRun = 10
+	// Back is how far back a run looks the first time it is switched on
+	Back = 7 * 24 * time.Hour
+	// MinTurns is the fewest things the user said for a session to be read
+	MinTurns = 2
+	// MaxPerSession caps what one session may propose
+	MaxPerSession = 5
+	// budget is the transcript's size sent, in characters
+	budget = 24_000
+	// keepMarks is how long a read session's mark is kept
+	keepMarks = 30 * 24 * time.Hour
+)
+
+// Agent is the agent id the model requests are made as (gateway.TokenFor),
+// so Usage counts them apart, and whose sessions are never read.
+const Agent = "memory"
+
+// State is distill.json.
+type State struct {
+	On bool `json:"on,omitempty"`
+	// Model is the model picked; "" is the automatic choice
+	Model string `json:"model,omitempty"`
+	// Since is when it was switched on, less Back: older sessions aren't read
+	Since time.Time `json:"since,omitzero"`
+	// Done is each read session's last turn when it was read, by
+	// agent/id
+	Done map[string]time.Time `json:"done,omitempty"`
+	// the last run: when, with which model, how many sessions read, how
+	// many memories proposed, and what stopped it
+	Last      time.Time `json:"last,omitzero"`
+	LastModel string    `json:"lastModel,omitempty"`
+	Read      int       `json:"read,omitempty"`
+	Added     int       `json:"added,omitempty"`
+	Error     string    `json:"error,omitempty"`
+}
+
+// Path is distill.json; a variable for tests.
+var Path = func() string { return appdir.Join(appdir.Config(), "distill.json") }
+
+var (
+	now  = time.Now
+	list = func() []sessions.Session { return sessions.List(400) }
+	read = sessions.TranscriptOf
+	// running is held through a run in this process, and the file lock
+	// across magpies
+	running sync.Mutex
+)
+
+// ErrRunning is a run asked for while one is going.
+var ErrRunning = errors.New("already reading conversations")
+
+// Load reads distill.json; a missing file is the default (off). One that
+// can't be read is an error, never the default: a run doesn't start, and
+// a change isn't written over it.
+func Load() (State, error) {
+	var s State
+	b, err := lastgood.Read(Path(), lastgood.Into[State])
+	if errors.Is(err, os.ErrNotExist) {
+		return s, nil
+	}
+	if err != nil {
+		return s, err
+	}
+	if err := json.Unmarshal(b, &s); err != nil {
+		return s, err
+	}
+	return s, nil
+}
+
+func save(s State) error {
+	b, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		return err
+	}
+	p := Path()
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return err
+	}
+	tmp := p + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, p); err != nil {
+		return err
+	}
+	return lastgood.Keep(p, lastgood.Into[State], 0o600)
+}
+
+// change applies fn to distill.json under its lock.
+func change(fn func(*State)) (State, error) {
+	unlock, held := filelock.Lock(Path()+".lock", 10*time.Second)
+	if !held {
+		return State{}, errors.New("distill.json is held by another magpie")
+	}
+	defer unlock()
+	s, err := Load()
+	if err != nil {
+		return s, err
+	}
+	fn(&s)
+	return s, save(s)
+}
+
+// Set switches distilling on or off and picks its model ("" automatic).
+// Switched on from off, it looks back Back from now.
+func Set(on bool, model string) (State, error) {
+	return change(func(s *State) {
+		if on && !s.On {
+			s.Since = now().Add(-Back).UTC()
+		}
+		s.On, s.Model = on, strings.TrimSpace(model)
+	})
+}
+
+// Result is what one run did.
+type Result struct {
+	Read  int
+	Added int
+}
+
+// Run reads the sessions due, if switched on, with model when the state
+// names none. A model that fails stops the run: the sessions not read
+// yet are read next time.
+func Run(ctx context.Context, auto string, complete Complete) (Result, error) {
+	if !running.TryLock() {
+		return Result{}, ErrRunning
+	}
+	defer running.Unlock()
+	unlock, held := filelock.Lock(Path()+".run", 0)
+	if !held {
+		return Result{}, ErrRunning
+	}
+	defer unlock()
+	st, err := Load()
+	if err != nil || !st.On {
+		return Result{}, err
+	}
+	model := st.Model
+	if model == "" {
+		model = auto
+	}
+	var res ran
+	var runErr error
+	if model == "" {
+		runErr = errors.New("no model to read conversations with: pick one")
+	} else {
+		res, runErr = run(ctx, st, model, complete)
+	}
+	_, err = change(func(s *State) {
+		s.Last, s.LastModel, s.Read, s.Added, s.Error = now().UTC(), model, res.Read, res.Added, ""
+		if runErr != nil {
+			s.Error = runErr.Error()
+		}
+		if s.Done == nil {
+			s.Done = map[string]time.Time{}
+		}
+		for k, at := range res.done {
+			s.Done[k] = at
+		}
+		for k, at := range s.Done {
+			if now().Sub(at) > keepMarks {
+				delete(s.Done, k)
+			}
+		}
+	})
+	return res.Result, errors.Join(runErr, err)
+}
+
+type ran struct {
+	Result
+	done map[string]time.Time
+}
+
+// due are the sessions to read now, the latest first.
+func due(st State, t time.Time) []sessions.Session {
+	var out []sessions.Session
+	for _, s := range list() {
+		switch {
+		case s.Agent == Agent, s.Gateway, s.ReadOnly, !s.Transcript,
+			s.ParentSession != "",
+			t.Sub(s.Last) < Quiet, s.Last.Before(st.Since):
+			continue
+		}
+		if at, ok := st.Done[key(s)]; ok && !s.Last.After(at) {
+			continue
+		}
+		out = append(out, s)
+	}
+	slices.SortStableFunc(out, func(a, b sessions.Session) int { return b.Last.Compare(a.Last) })
+	return out
+}
+
+func key(s sessions.Session) string { return s.Agent + "/" + s.ID }
+
+func run(ctx context.Context, st State, model string, complete Complete) (ran, error) {
+	r := ran{done: map[string]time.Time{}}
+	for _, s := range due(st, now()) {
+		if r.Read >= PerRun {
+			break
+		}
+		if ctx.Err() != nil {
+			return r, ctx.Err()
+		}
+		tr, err := read(s)
+		if err != nil {
+			// one that can't be read now is tried again when it changes
+			r.done[key(s)] = s.Last
+			continue
+		}
+		text, turns := transcript(tr)
+		if turns < MinTurns {
+			r.done[key(s)] = s.Last
+			continue
+		}
+		proj := memory.ProjectOf(s.Cwd)
+		reply, err := complete(ctx, model, prompt, request(text, known(proj), proj))
+		if err != nil {
+			return r, fmt.Errorf("%s: %w", model, err)
+		}
+		r.Read++
+		r.done[key(s)] = s.Last
+		r.Added += keep(parse(reply), s, proj)
+	}
+	return r, nil
+}
+
+// transcript is what was said, user and assistant text alone (no tool
+// calls, results or thinking), each turn named, within budget: the start
+// and the end kept when it is longer. turns counts the user's.
+func transcript(t sessions.Transcript) (string, int) {
+	var lines []string
+	turns := 0
+	for _, p := range t.Parts {
+		if p.Kind != "text" || p.Role != "user" && p.Role != "assistant" {
+			continue
+		}
+		who, max := "User", 4000
+		if p.Role == "assistant" {
+			who, max = "Assistant", 1200
+		} else {
+			turns++
+		}
+		lines = append(lines, who+": "+cut(p.Text, max))
+	}
+	s := strings.Join(lines, "\n\n")
+	if len(s) > budget {
+		head, tail := budget/3, budget-budget/3
+		s = cutBytes(s[:head]) + "\n\n[…]\n\n" + strings.ToValidUTF8(s[len(s)-tail:], "")
+	}
+	return s, turns
+}
+
+func cut(s string, max int) string {
+	if utf8.RuneCountInString(s) <= max {
+		return s
+	}
+	return string([]rune(s)[:max]) + "…"
+}
+
+func cutBytes(s string) string { return strings.ToValidUTF8(s, "") }
+
+// known are the memories the model is shown, so it proposes none of them
+// again: the active and waiting ones everyone has, and the project's.
+func known(proj *memory.Project) []string {
+	ms, _, err := memory.All()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, m := range ms {
+		if m.Status != memory.Active && m.Status != memory.Candidate {
+			continue
+		}
+		if m.Scope == memory.Global || proj != nil && m.Scope == "project:"+proj.Key {
+			out = append(out, "- "+oneLine(m.Text))
+		}
+	}
+	if len(out) > 80 {
+		out = out[len(out)-80:]
+	}
+	return out
+}
+
+func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+// prompt names neither the app reading nor any vendor: it goes to the
+// model's vendor as written.
+const prompt = `You read a conversation between a user and a coding assistant and write down what is worth remembering in later conversations, with this user or in this project.
+
+Keep only what stays true beyond this conversation and that a later assistant couldn't learn by reading the code:
+- profile: who the user is (role, languages they speak, what they know)
+- preference: how the user wants things done, stated or shown by a correction
+- rule: a rule learned from a mistake the user corrected, with why
+- fact: something true of the project that the code doesn't say
+- reference: where something is (a host, a dashboard, a URL, a document)
+- procedure: steps that worked for a task likely to come again
+- episode: a decision that was made, and why
+
+Leave out: the task itself and its progress, anything about this conversation alone, code details visible in the repository, secrets (keys, tokens, passwords), and anything already in "Already known". When nothing is worth keeping, answer [].
+
+Answer with a JSON array alone, at most 5 items:
+[{"text": "one short sentence, in the language the user wrote in", "kind": "preference", "scope": "global or project", "why": "what in the conversation shows it", "quote": "the user's words that show it, short"}]
+scope is "project" when it holds only in this project, "global" when it holds for the user everywhere.`
+
+func request(text string, known []string, proj *memory.Project) string {
+	var b strings.Builder
+	if proj != nil {
+		fmt.Fprintf(&b, "Project: %s\n\n", proj.Name)
+	}
+	b.WriteString("Already known:\n")
+	if len(known) == 0 {
+		b.WriteString("(nothing)\n")
+	}
+	for _, k := range known {
+		b.WriteString(k + "\n")
+	}
+	b.WriteString("\nConversation:\n\n")
+	b.WriteString(text)
+	return b.String()
+}
+
+// found is one memory the model proposed.
+type found struct {
+	Text  string `json:"text"`
+	Kind  string `json:"kind"`
+	Scope string `json:"scope"`
+	Why   string `json:"why"`
+	Quote string `json:"quote"`
+}
+
+// parse reads the reply's JSON array, in a code fence or after words; a
+// reply without one is nothing found.
+func parse(reply string) []found {
+	i, j := strings.Index(reply, "["), strings.LastIndex(reply, "]")
+	if i < 0 || j < i {
+		return nil
+	}
+	var out []found
+	if json.Unmarshal([]byte(reply[i:j+1]), &out) != nil {
+		return nil
+	}
+	return out
+}
+
+// keep saves what was found as candidates, each from s, and counts the
+// new ones. A kind not known is a fact; a project scope without a project
+// is everyone's.
+func keep(fs []found, s sessions.Session, proj *memory.Project) int {
+	n := 0
+	for i, f := range fs {
+		if i >= MaxPerSession {
+			break
+		}
+		text := strings.TrimSpace(f.Text)
+		if text == "" || utf8.RuneCountInString(text) > 400 {
+			continue
+		}
+		kind := strings.ToLower(strings.TrimSpace(f.Kind))
+		if !slices.Contains(memory.Kinds, kind) {
+			kind = memory.Fact
+		}
+		scope, p := memory.Global, (*memory.Project)(nil)
+		if strings.EqualFold(strings.TrimSpace(f.Scope), "project") && proj != nil {
+			scope, p = "project:"+proj.Key, proj
+		}
+		why, status := cut(strings.TrimSpace(f.Why), 300), memory.Candidate
+		src := &memory.Source{Agent: s.Agent, Session: s.ID, Dir: s.Cwd, Quote: cut(strings.TrimSpace(f.Quote), 300)}
+		_, added, err := memory.Save(memory.Input{Text: &text, Kind: &kind, Scope: &scope, Why: &why, Status: &status}, memory.FromInferred, src, p)
+		if err == nil && added {
+			n++
+		}
+	}
+	return n
+}
+
+// Keep runs Run every interval until ctx ends; auto gives the automatic
+// model at each run.
+func Keep(ctx context.Context, interval time.Duration, auto func() string, complete Complete) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		if _, err := Run(ctx, auto(), complete); err != nil && !errors.Is(err, ErrRunning) {
+			log.Println("memory: reading conversations:", err) // and in the Memory tab
+		}
+	}
+}

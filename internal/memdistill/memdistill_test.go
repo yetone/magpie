@@ -1,0 +1,294 @@
+package memdistill
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/yetone/magpie/internal/memory"
+	"github.com/yetone/magpie/internal/sessions"
+)
+
+// sandbox points distill.json and memory.json at the test's own files,
+// holds the clock, and lists the sessions given, each read as the
+// transcript named for it.
+type sandbox struct {
+	at    time.Time
+	list  []sessions.Session
+	trs   map[string]sessions.Transcript
+	asked []string // the sessions the model was asked about, by the first user line
+	reply func(user string) (string, error)
+	dir   string
+}
+
+func newSandbox(t *testing.T) *sandbox {
+	t.Helper()
+	dir := t.TempDir()
+	sb := &sandbox{at: time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC), trs: map[string]sessions.Transcript{}, dir: dir}
+	oldPath, oldMem, oldNow, oldList, oldRead := Path, memory.Path, now, list, read
+	Path = func() string { return filepath.Join(dir, "distill.json") }
+	memory.Path = func() string { return filepath.Join(dir, "memory.json") }
+	now = func() time.Time { return sb.at }
+	list = func() []sessions.Session { return sb.list }
+	read = func(s sessions.Session) (sessions.Transcript, error) {
+		tr, ok := sb.trs[s.ID]
+		if !ok {
+			return tr, sessions.ErrNoTranscript
+		}
+		return tr, nil
+	}
+	t.Cleanup(func() { Path, memory.Path, now, list, read = oldPath, oldMem, oldNow, oldList, oldRead })
+	return sb
+}
+
+// session adds a readable session of codex's, last active ago, whose
+// user said each of said.
+func (sb *sandbox) session(id string, ago time.Duration, said ...string) *sessions.Session {
+	sb.list = append(sb.list, sessions.Session{Agent: "codex", ID: id, Cwd: filepath.Join(sb.dir, "proj"), Last: sb.at.Add(-ago), Transcript: true})
+	var parts []sessions.Part
+	for _, s := range said {
+		parts = append(parts, sessions.Part{Role: "user", Kind: "text", Text: s},
+			sessions.Part{Role: "assistant", Kind: "thinking", Text: "secret thoughts"},
+			sessions.Part{Role: "assistant", Kind: "tool_use", Name: "shell", Text: "rm -rf build"},
+			sessions.Part{Role: "assistant", Kind: "text", Text: "Done."})
+	}
+	sb.trs[id] = sessions.Transcript{Parts: parts}
+	return &sb.list[len(sb.list)-1]
+}
+
+func (sb *sandbox) complete(_ context.Context, model, system, user string) (string, error) {
+	_, conv, _ := strings.Cut(user, "Conversation:\n\n")
+	first, _, _ := strings.Cut(conv, "\n")
+	sb.asked = append(sb.asked, model+" "+first)
+	if sb.reply == nil {
+		return "[]", nil
+	}
+	return sb.reply(user)
+}
+
+func on(t *testing.T, model string) {
+	t.Helper()
+	if _, err := Set(true, model); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func memories(t *testing.T) []*memory.Memory {
+	t.Helper()
+	ms, _, err := memory.All()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ms
+}
+
+// Off by default: nothing is read, and nothing is written.
+func TestOffReadsNothing(t *testing.T) {
+	sb := newSandbox(t)
+	sb.session("s1", time.Hour, "use pnpm", "always pnpm")
+	if res, err := Run(context.Background(), "auto/m", sb.complete); err != nil || res.Read != 0 || len(sb.asked) != 0 {
+		t.Fatalf("%+v %v %v", res, err, sb.asked)
+	}
+	if _, err := os.Stat(Path()); err == nil {
+		t.Fatal("off, but distill.json was written")
+	}
+}
+
+// Only a main session that has been quiet for Quiet, is readable, isn't
+// magpie's own, said enough and is newer than Since is read; what it
+// proposes waits as a candidate with where it came from; it isn't read
+// again until it goes on.
+func TestReadsQuietSessionsOnce(t *testing.T) {
+	sb := newSandbox(t)
+	on(t, "")
+	sb.session("quiet", time.Hour, "quiet: we deploy with make ship", "never use npm here, pnpm only")
+	sb.session("going", 5*time.Minute, "going: one", "two")
+	sb.session("short", time.Hour, "short: hi")
+	sb.session("sub", time.Hour, "sub: one", "two").ParentSession = "quiet"
+	sb.session("gw", time.Hour, "gw: one", "two").Gateway = true
+	sb.session("old", 8*24*time.Hour, "old: one", "two")
+	sb.session("own", time.Hour, "own: one", "two").Agent = Agent
+	sb.session("unread", time.Hour).Transcript = false
+	sb.reply = func(user string) (string, error) {
+		return "Here they are:\n```json\n" + `[
+			{"text":"Use pnpm, never npm","kind":"rule","scope":"project","why":"said so","quote":"never use npm here, pnpm only"},
+			{"text":"Deploys go out with make ship","kind":"nonsense","scope":"project"},
+			{"text":"Prefers short answers","kind":"preference","scope":"global"},
+			{"text":"","kind":"fact"}
+		]` + "\n```", nil
+	}
+	res, err := Run(context.Background(), "auto/m", sb.complete)
+	if err != nil || res.Read != 1 || res.Added != 3 {
+		t.Fatalf("%+v %v", res, err)
+	}
+	if len(sb.asked) != 1 || sb.asked[0] != "auto/m User: quiet: we deploy with make ship" {
+		t.Fatalf("asked about %q", sb.asked)
+	}
+	ms := memories(t)
+	proj := memory.ProjectOf(filepath.Join(sb.dir, "proj"))
+	want := map[string]string{"Use pnpm, never npm": "rule project:" + proj.Key, "Deploys go out with make ship": "fact project:" + proj.Key, "Prefers short answers": "preference global"}
+	for _, m := range ms {
+		if want[m.Text] != m.Kind+" "+m.Scope || m.Origin != memory.FromInferred || m.Status != memory.Candidate || len(m.Sources) != 1 || m.Sources[0].Session != "quiet" || m.Sources[0].Agent != "codex" {
+			t.Errorf("%+v", m)
+		}
+		delete(want, m.Text)
+	}
+	if len(want) != 0 {
+		t.Fatalf("not kept: %v", want)
+	}
+	for _, m := range ms {
+		if m.Text == "Use pnpm, never npm" && (m.Sources[0].Quote != "never use npm here, pnpm only" || m.Why != "said so") {
+			t.Fatalf("%+v", m)
+		}
+	}
+	st, _ := Load()
+	if st.Read != 1 || st.Added != 3 || st.LastModel != "auto/m" || st.Error != "" {
+		t.Fatalf("%+v", st)
+	}
+
+	// read once
+	if res, err := Run(context.Background(), "auto/m", sb.complete); err != nil || res.Read != 0 || len(sb.asked) != 1 {
+		t.Fatalf("read again: %+v %v %q", res, err, sb.asked)
+	}
+	// it went on: read again, once quiet, with the model picked; the same
+	// memories aren't added twice
+	sb.at = sb.at.Add(time.Hour)
+	sb.list[0].Last = sb.at.Add(-40 * time.Minute)
+	on(t, "picked/m")
+	if res, err := Run(context.Background(), "auto/m", sb.complete); err != nil || res.Read != 2 || res.Added != 0 {
+		t.Fatalf("%+v %v %q", res, err, sb.asked)
+	}
+	if got := sb.asked[1:]; got[0] != "picked/m User: quiet: we deploy with make ship" || got[1] != "picked/m User: going: one" {
+		t.Fatalf("%q", got)
+	}
+	if n := len(memories(t)); n != 3 {
+		t.Fatalf("%d memories", n)
+	}
+}
+
+// What the model is sent: the user's and the assistant's words, not
+// thinking or tool calls; the memories already known; and instructions
+// that name neither the app nor a vendor.
+func TestWhatIsSent(t *testing.T) {
+	sb := newSandbox(t)
+	on(t, "")
+	text, kind, scope := "Answers in Chinese", memory.Preference, memory.Global
+	if _, _, err := memory.Save(memory.Input{Text: &text, Kind: &kind, Scope: &scope}, memory.FromUser, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	sb.session("s", time.Hour, "first", "second")
+	var sys, user string
+	complete := func(_ context.Context, _, s, u string) (string, error) { sys, user = s, u; return "[]", nil }
+	if _, err := Run(context.Background(), "a/m", complete); err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range []string{"User: first", "Assistant: Done.", "User: second", "- Answers in Chinese", "Project: proj"} {
+		if !strings.Contains(user, w) {
+			t.Errorf("not sent: %q\n%s", w, user)
+		}
+	}
+	for _, w := range []string{"secret thoughts", "rm -rf"} {
+		if strings.Contains(user, w) {
+			t.Errorf("sent: %q", w)
+		}
+	}
+	for _, w := range []string{"magpie", "claude", "codex", "openai", "anthropic", "gpt", "gemini"} {
+		if strings.Contains(strings.ToLower(sys+strings.Split(user, "Conversation:")[0]), w) {
+			t.Errorf("names %q", w)
+		}
+	}
+}
+
+// A long conversation is cut to its start and end within budget, never
+// mid-rune.
+func TestLongConversationCut(t *testing.T) {
+	var parts []sessions.Part
+	for i := range 200 {
+		parts = append(parts, sessions.Part{Role: "user", Kind: "text", Text: fmt.Sprintf("turn %d 用中文回答", i)}, sessions.Part{Role: "assistant", Kind: "text", Text: strings.Repeat("长", 3000)})
+	}
+	s, turns := transcript(sessions.Transcript{Parts: parts})
+	if turns != 200 || len(s) > budget+20 || !strings.Contains(s, "turn 0 ") || !strings.Contains(s, "turn 199 ") || !strings.Contains(s, "[…]") || !strings.ContainsRune(s, '长') {
+		t.Fatalf("%d %d", turns, len(s))
+	}
+	if !strings.Contains(s, "…") || strings.ContainsRune(s, '�') {
+		t.Fatal("cut badly")
+	}
+}
+
+// A model that fails stops the run and says why; the session is read
+// next time. At most PerRun are read in one run, the latest first.
+func TestFailureAndCap(t *testing.T) {
+	sb := newSandbox(t)
+	on(t, "")
+	for i := range PerRun + 2 {
+		sb.session(fmt.Sprint("s", i), time.Hour+time.Duration(i)*time.Minute, fmt.Sprint("n", i), "more")
+	}
+	sb.reply = func(string) (string, error) { return "", errors.New("429 out of allowance") }
+	if _, err := Run(context.Background(), "a/m", sb.complete); err == nil || !strings.Contains(err.Error(), "429") {
+		t.Fatal(err)
+	}
+	if st, _ := Load(); !strings.Contains(st.Error, "a/m: 429 out of allowance") || len(st.Done) != 0 {
+		t.Fatalf("%+v", st)
+	}
+	sb.reply, sb.asked = nil, nil
+	if res, err := Run(context.Background(), "a/m", sb.complete); err != nil || res.Read != PerRun || sb.asked[0] != "a/m User: n0" {
+		t.Fatalf("%+v %v %q", res, err, sb.asked)
+	}
+	if st, _ := Load(); st.Error != "" {
+		t.Fatalf("%+v", st)
+	}
+	if res, _ := Run(context.Background(), "a/m", sb.complete); res.Read != 2 {
+		t.Fatalf("%+v", res)
+	}
+	// no model at all: said, nothing read
+	sb.session("late", time.Hour, "x", "y")
+	if _, err := Run(context.Background(), "", sb.complete); err == nil {
+		t.Fatal("no model, no error")
+	}
+	if st, _ := Load(); !strings.Contains(st.Error, "pick one") {
+		t.Fatalf("%+v", st)
+	}
+}
+
+// One the user deleted isn't proposed again from another conversation.
+func TestDeletedNotProposedAgain(t *testing.T) {
+	sb := newSandbox(t)
+	on(t, "")
+	sb.reply = func(string) (string, error) {
+		return `[{"text":"Likes tabs","kind":"preference","scope":"global"}]`, nil
+	}
+	sb.session("a", time.Hour, "x", "y")
+	if res, err := Run(context.Background(), "a/m", sb.complete); err != nil || res.Added != 1 {
+		t.Fatalf("%+v %v", res, err)
+	}
+	if err := memory.Remove(memories(t)[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	sb.session("b", time.Hour, "x", "y")
+	if res, err := Run(context.Background(), "a/m", sb.complete); err != nil || res.Read != 1 || res.Added != 0 || len(memories(t)) != 0 {
+		t.Fatalf("%+v %v", res, err)
+	}
+}
+
+// distill.json that can't be read is never written over, and nothing runs.
+func TestUnreadableStateRunsNothing(t *testing.T) {
+	sb := newSandbox(t)
+	sb.session("s", time.Hour, "x", "y")
+	if err := os.WriteFile(Path(), []byte(`{"on":tru`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(context.Background(), "a/m", sb.complete); err == nil || len(sb.asked) != 0 {
+		t.Fatalf("%v %q", err, sb.asked)
+	}
+	if _, err := Set(false, ""); err == nil {
+		t.Fatal("written over")
+	}
+	if b, _ := os.ReadFile(Path()); string(b) != `{"on":tru` {
+		t.Fatalf("%s", b)
+	}
+}
