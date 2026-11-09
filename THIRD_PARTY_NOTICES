@@ -4,7 +4,7 @@ magpie third-party notices
 magpie is built with moejs (https://github.com/MoeForge/moejs,
 Apache License 2.0), a JavaScript engine that runs gateway plugins. moejs
 compiles the material below into every magpie binary, and its notices,
-sections 1 to 4 of moejs's THIRD_PARTY_NOTICES at v0.1.0-alpha.11,
+sections 1 to 4 of moejs's THIRD_PARTY_NOTICES at v0.1.0,
 follow verbatim.
 
 ------------------------------------------------------------------------
