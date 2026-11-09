@@ -66,6 +66,10 @@ type desktopPaths struct {
 	// %APPDATA%\Claude on Windows) and in Claude-3p, its userData in 3p
 	// mode. magpie only ever adds the language to the second.
 	app, app3p string
+	// mcpFrom is the claude_desktop_config.json whose MCP servers the 3p
+	// mode is given (desktopCarryMCP): config, but for the isolated
+	// Desktop, whose own file is Claude-Magpie-3p's, Claude's
+	mcpFrom string
 }
 
 func desktopPathsOf(dir, dir3p string) desktopPaths {
@@ -76,6 +80,7 @@ func desktopPathsOf(dir, dir3p string) desktopPaths {
 		config3p: filepath.Join(dir3p, "claude_desktop_config.json"),
 		library:  lib, meta: filepath.Join(lib, "_meta.json"), prof: filepath.Join(lib, desktopProfileID+".json"),
 		app: filepath.Join(dir, "config.json"), app3p: filepath.Join(dir3p, "config.json"),
+		mcpFrom: filepath.Join(dir, "claude_desktop_config.json"),
 	}
 }
 
@@ -86,10 +91,20 @@ func desktopDirs(goos, home string, getenv func(string) string) (string, string)
 	return d.Mode, d.ThreeP
 }
 
-// desktopSets are those of every set of Desktop's folders, Find's first:
-// for a packaged Desktop the package's and the real ones, each with its
-// own stash.
+// desktopSets are the sets of Desktop's folders magpie wires: the
+// isolated Desktop's alone while it is on (desktopIsolatedOn), else
+// desktopUsualSets.
 func desktopSets(goos, home string, getenv func(string) string) []desktopPaths {
+	if p, ok := desktopIsolatedSet(goos, home, getenv); ok && desktopIsolatedOn() {
+		return []desktopPaths{p}
+	}
+	return desktopUsualSets(goos, home, getenv)
+}
+
+// desktopUsualSets are those of every set of Desktop's folders, Find's
+// first: for a packaged Desktop the package's and the real ones, each with
+// its own stash.
+func desktopUsualSets(goos, home string, getenv func(string) string) []desktopPaths {
 	var out []desktopPaths
 	for _, d := range desktopdir.Sets(goos, home, getenv) {
 		p := desktopPathsOf(d.Mode, d.ThreeP)
@@ -105,10 +120,15 @@ func desktopSets(goos, home string, getenv func(string) string) []desktopPaths {
 // DesktopConfigs3p are the claude_desktop_config.json files Claude Desktop
 // reads in its 3p mode: there its whole userData is Claude-3p, its MCP
 // servers too (%LOCALAPPDATA%\Claude-3p on Windows, and the MSIX package's;
-// Claude-3p beside Claude elsewhere).
+// Claude-3p beside Claude elsewhere), and the isolated Desktop's
+// Claude-Magpie-3p on a Mac, whose only file it is (the library gives it
+// the servers where that folder is).
 func DesktopConfigs3p(home string) []string {
 	var out []string
-	for _, p := range desktopSets(desktopdir.OS, home, os.Getenv) {
+	for _, p := range desktopUsualSets(desktopdir.OS, home, os.Getenv) {
+		out = append(out, p.config3p)
+	}
+	if p, ok := desktopIsolatedSet(desktopdir.OS, home, os.Getenv); ok {
 		out = append(out, p.config3p)
 	}
 	return out
@@ -117,7 +137,10 @@ func DesktopConfigs3p(home string) []string {
 func claudeDesktop(home string) *Agent {
 	sets := desktopdir.Sets(desktopdir.OS, home, os.Getenv)
 	ps := desktopSets(desktopdir.OS, home, os.Getenv)
-	p := ps[0]
+	// its row shows the usual folder's file, the library's too, whichever
+	// Desktop magpie wires
+	p := desktopUsualSets(desktopdir.OS, home, os.Getenv)[0]
+	iso := ps[0].key == desktopIsolatedKey
 	return &Agent{
 		ID: "claude-desktop", Name: "Claude Desktop", Icon: "claude-color", Aliases: []string{"claude-app"},
 		Dir: p.dir, Path: p.config,
@@ -131,10 +154,20 @@ func claudeDesktop(home string) *Agent {
 					}
 				}
 			}
+			// the isolated Desktop's folder
+			if iso && isDir(ps[0].dir3p) {
+				return true
+			}
 			// installed on Windows and not yet opened: none of them yet
 			return desktopdir.Installed(desktopdir.OS, home, os.Getenv)
 		},
 		Notice: func() string {
+			if iso {
+				if desktopWiredAny(ps) {
+					return noticeClaudedesktopIsolated.String()
+				}
+				return noticeClaudedesktopIsolatedOff.String()
+			}
 			if desktopWiredAny(ps) {
 				return noticeClaudedesktop1.String() + " " + noticeClaudedesktop3.String()
 			}
@@ -788,8 +821,8 @@ func desktopServers(path string) map[string]json.RawMessage {
 // (/api/organizations/<org>/mcp/servers/…), and 3p mode has none.
 func desktopCarryMCP(p desktopPaths) error {
 	stash(map[string]string{desktopMCPSeen + p.key: "1"})
-	own := desktopServers(p.config)
-	if len(own) == 0 || desktopObject(p.config3p) != nil {
+	own := desktopServers(p.mcpFrom)
+	if p.mcpFrom == p.config3p || len(own) == 0 || desktopObject(p.config3p) != nil {
 		return nil
 	}
 	if _, has := edit.GetJSONRaw(p.config3p, "mcpServers"); has && desktopServers(p.config3p) == nil {
@@ -1094,4 +1127,8 @@ var (
 	// (xgddm88 on X: 之前的工程和会话记录全没了).
 	noticeClaudedesktop3 = newNotice("Chats and projects from your Anthropic sign-in stay in Desktop's own profile, not shown on magpie; nothing is deleted, and turning this off brings them back.")
 	noticeClaudedesktop4 = newNotice("Your chats and projects from before are back there.")
+	// the isolated Desktop (#5671): magpie's is its own app, and the
+	// user's Claude.app stays signed in with Anthropic
+	noticeClaudedesktopIsolated    = newNotice("Open Claude Magpie from Applications to use Claude Desktop on magpie. Your own Claude Desktop stays signed in with Anthropic.")
+	noticeClaudedesktopIsolatedOff = newNotice("Quit Claude Magpie if it is open: it no longer runs on magpie.")
 )

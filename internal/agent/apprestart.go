@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -36,6 +37,10 @@ type restartable struct {
 	mac    desktopApp
 	winExe string
 	win    func(image string) bool
+	// macCmd, when set, says a main process of the bundle is the copy
+	// magpie wires: Claude Desktop runs twice with the isolated one on
+	// (desktopInstance)
+	macCmd func(cmd string) bool
 }
 
 // claudeDesktopApp is Claude Desktop's bundle (Claude 2.7032's Info.plist:
@@ -54,7 +59,7 @@ var claudeDesktopApp = desktopApp{id: "com.anthropic.claudefordesktop", names: [
 // no Restart there. Only OpenMausBot ships a Linux app; magpie doesn't
 // restart it there.
 var restartApps = map[string]restartable{
-	"claude-desktop": {mac: claudeDesktopApp, winExe: "claude.exe", win: func(image string) bool {
+	"claude-desktop": {mac: claudeDesktopApp, macCmd: desktopInstance, winExe: "claude.exe", win: func(image string) bool {
 		return winBase(image, "claude.exe") && (winHas(image, `\AnthropicClaude\`) || winHas(image, `\WindowsApps\Claude_`) || winHas(image, `\WindowsApps\AnthropicPBC.Claude_`))
 	}},
 	"workbuddy": {mac: workbuddyApp, winExe: "WorkBuddy.exe", win: func(image string) bool {
@@ -250,7 +255,11 @@ func findRestartable(r restartable) (appRunning, bool) {
 			continue
 		}
 		main := filepath.Join(b, "Contents", "MacOS", exe)
-		ps := appProcs(running("^"+regexp.QuoteMeta(main)+"( |$)"), main)
+		found := running("^" + regexp.QuoteMeta(main) + "( |$)")
+		if r.macCmd != nil {
+			found = slices.DeleteFunc(found, func(p runningProc) bool { return !r.macCmd(p.cmd) })
+		}
+		ps := appProcs(found, main)
 		if len(ps) == 0 {
 			continue
 		}
@@ -413,6 +422,9 @@ func (a *Agent) RestartApp(ctx context.Context) error {
 	c, ok := findRestartable(r)
 	if !ok {
 		return restartErr(noticeRestartCurrent, a)
+	}
+	if c.bundle != "" && a.ID == "claude-desktop" && desktopIsolatedOn() {
+		return reopenIsolated(ctx, a, r, c.exe)
 	}
 	if c.bundle != "" {
 		return reopenBundle(ctx, a, c.bundle, c.exe)

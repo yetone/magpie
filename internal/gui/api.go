@@ -232,6 +232,9 @@ type agentJSON struct {
 	// what it read before magpie's last change, for the row's Restart
 	// (agent.AppBehind)
 	AppRestart *agent.AppRun `json:"appRestart,omitempty"`
+	// Isolated: Claude Desktop's Claude Magpie app (#5671), only where it
+	// can be (macOS): whether it is on, and the app
+	Isolated *agent.DesktopIsolated `json:"isolated,omitempty"`
 	// Joined: connected with its own models still in its list (Codex
 	// signed in with ChatGPT, agent.Agent.Join)
 	Joined bool `json:"joined,omitempty"`
@@ -1278,6 +1281,21 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	})
 	// quits the agent's desktop app and opens it again, so it reads what
 	// magpie wrote: the row's Restart, after the user said yes to it
+	// Claude Desktop's Claude Magpie app on or off (#5671): the app made or
+	// taken away, and a Desktop on magpie moved into its folder or back
+	mux.HandleFunc("POST /api/settings/desktop-isolated", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ On bool }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		home, _ := os.UserHomeDir()
+		if _, err := agent.SetDesktopIsolated(home, in.On); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, state())
+	})
 	mux.HandleFunc("POST /api/agents/restart/{id}", func(rw http.ResponseWriter, r *http.Request) {
 		a, err := agent.Find(r.PathValue("id"))
 		if err != nil {
@@ -2902,6 +2920,11 @@ func state() stateJSON {
 			aj.AppSnag = provider.CodexAppSnagged()
 		}
 		aj.AppRestart = a.AppBehind()
+		if a.ID == "claude-desktop" && a.WSL == "" {
+			if iso, ok := agent.DesktopIsolatedHere(); ok {
+				aj.Isolated = &iso
+			}
+		}
 		if a.Import != nil {
 			aj.Import = a.Import()
 			if a.Added != nil {

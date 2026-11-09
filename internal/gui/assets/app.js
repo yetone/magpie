@@ -1937,29 +1937,24 @@ async function addProviderFromAgents() {
   if (!adding) $("#addProvider")?.click();
 }
 
-// desktopLongestLine: Desktop lists a 1M model twice; on, magpie lists its
-// 1M id alone (#1272)
-function desktopLongestLine() {
-  const on = !!state.settings?.desktopLongest;
-  const l = el("label", "ag-vl ag-longest");
+// a switch line in Claude Desktop's row: #1272's largest windows, #5671's
+// Claude Magpie app; go posts the new value and says what came of it
+function agSwitchLine(cls, on, say, hint, go) {
+  const l = el("label", "ag-vl " + cls);
   const b = el("button", "lib-switch use-credits" + (on ? " on" : ""));
   b.type = "button";
   b.setAttribute("role", "switch");
   b.setAttribute("aria-checked", String(on));
+  b.setAttribute("aria-label", say);
   b.append(el("i"));
-  const say = el("span", "ag-longest-say", t("Only each model's largest window"));
-  b.setAttribute("aria-label", say.textContent);
-  const hint = el("span", "ag-hint", t("A model of 1M or more is listed once, as its 1M entry. Quit and reopen Claude Desktop after a change."));
-  l.append(b, say, hint);
+  l.append(b, el("span", cls + "-say", say), el("span", "ag-hint", hint));
   b.onclick = async (e) => {
     e.stopPropagation();
     e.preventDefault();
     if (b.disabled) return;
     b.disabled = true;
     try {
-      prefs = await writingPrefs(api("settings/desktop-longest", { on: !on }));
-      state.settings = prefs;
-      status(t("Saved — quit and reopen Claude Desktop to see it"), "ok");
+      await go(!on);
       renderAgents();
     } catch (err) {
       b.disabled = false;
@@ -1968,6 +1963,17 @@ function desktopLongestLine() {
   };
   return l;
 }
+
+const desktopIsolatedLine = (iso) => agSwitchLine("ag-isolated", !!iso.on, "Claude Magpie", t("Your own Claude Desktop stays signed in with Anthropic. macOS only."), async (on) => {
+  state = await api("settings/desktop-isolated", { on });
+  status(on ? t("Open Claude Magpie from Applications") : t("Claude Magpie removed"), "ok");
+});
+
+const desktopLongestLine = () => agSwitchLine("ag-longest", !!state.settings?.desktopLongest, t("Only each model's largest window"), t("A model of 1M or more is listed once, as its 1M entry. Quit and reopen Claude Desktop after a change."), async (on) => {
+  prefs = await writingPrefs(api("settings/desktop-longest", { on }));
+  state.settings = prefs;
+  status(t("Saved — quit and reopen Claude Desktop to see it"), "ok");
+});
 
 // daemonRestart: the button that restarts Codex's background app-server
 // left on the old list, then shows the row as it is after
@@ -2188,6 +2194,8 @@ function connectPanel(a, { fields, fieldBtn }) {
     if (a.id === "claude-desktop" && /^zh/.test(locale)) p.push(el("div", "ag-vl ag-warn ag-desktop-lang")), p[1].append(el("span", "ag-dot"), el("span", "", t("On magpie, Desktop shows Anthropic's gateway window, which has no Chinese; disconnect it for Chinese.")));
     kv(t("In {agent}", { agent: a.name }), ...p);
   } else if (AIR_KINDS.has(kindOf(a))) kv(t("In {agent}", { agent: a.name }), ...airSaid(a, line));
+  // Claude Magpie.app (#5671), macOS only
+  if (a.id === "claude-desktop" && a.isolated) kv(t("Separate app"), desktopIsolatedLine(a.isolated));
   // Hermes' other profiles, each on its own model
   const bots = a.fields.filter(hermesBot);
   if (bots.length) kv(t("Other profiles"), ...bots.map((f) => line(el("span", "ag-tier", f.label), fieldBtn(f, "ag-pick"), el("span", "ag-hint", "hermes -p " + f.label))));
@@ -4176,25 +4184,17 @@ function tierMenu(a) {
   const omp = ompAgent(a);
   const tiers = a.fields.filter((f) => menuRoles(a).includes(f.label));
   if (!tiers.length || !tiers.some((f) => f.options.length)) return null;
-  // Claude Desktop has no model of its own here: a tier unset runs on the
-  // chat's model, or, for a chat on a Claude model, its provider's model of
-  // that tier
   const main = a.fields.find((f) => f.key === "model");
   const mainName = main && (optionFor(main, main.value)?.label || main.value);
   const unset = (f) => omp && OMP_OWN_PICK.includes(f.label) ? t(OMP_UNSET[f.label])
     : main ? t("same as model ({model})", { model: mainName }) : t("the chat's model; for a Claude chat, its provider's model of the tier");
-  // a tier's effort, offered while there are levels to pick (Claude Code
-  // through magpie); unset, the tier runs at the effort Claude Code asks.
-  // An omp role's thinking level, while the role is on one model; unset,
-  // it runs at the session's level
+  // a tier's effort, or an omp role's thinking level
   const effortOf = (f) => a.fields.find((e) => (e.label === f.label + " effort" || e.label === f.label + " thinking") && (e.options.length || e.value));
   const level = (e) => e?.value ? effortName(optionFor(e, e.value) || { value: e.value }) : "";
   const custom = tiers.filter((f) => f.value || effortOf(f)?.value);
   const name = (f) => optionFor(f, f.value)?.label || f.value;
   return {
     key: "tiers", label: omp ? "roles" : "tiers", value: "", menu: true, custom: custom.length > 0,
-    // Desktop reads magpie's list of its models, a pick's prompt with it,
-    // only as it starts
     foot: a.id === "claude-desktop" ? DESKTOP_TIERS_FOOT : "",
     summary: custom.length ? custom.map((f) => level(effortOf(f)) ? `${t(f.label)} (${level(effortOf(f))})` : t(f.label)).join(", ") : main ? t("same as model") : t("not set"),
     options: tiers.flatMap((f) => {

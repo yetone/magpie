@@ -828,11 +828,17 @@ func desktopDefault(asked string) string {
 }
 
 // desktopSelectorRoots are the Claude-3p folders Desktop keeps its model
-// menus' choices in (desktopChosen): every set desktopdir finds. A test
-// sets its own.
+// menus' choices in (desktopChosen): every set desktopdir finds, and the
+// isolated Desktop's folder (#5671) when it is there (the newest choice
+// counts). A test sets its own.
 var desktopSelectorRoots = func() []string {
 	home, _ := os.UserHomeDir()
 	var out []string
+	if iso := desktopdir.Isolated(desktopdir.OS, home); iso != "" {
+		if fi, err := os.Stat(iso); err == nil && fi.IsDir() {
+			out = append(out, iso)
+		}
+	}
 	for _, d := range desktopdir.Sets(desktopdir.OS, home, appdir.Getenv) {
 		if d.ThreeP != "" {
 			out = append(out, d.ThreeP)

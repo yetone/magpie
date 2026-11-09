@@ -139,6 +139,9 @@ func agentHelp(a *agent.Agent) string {
 		fmt.Fprintf(&b, "  magpie %s run [args…]      start Claude Code through magpie, a plain claude left as it is (what claude-magpie runs)\n", id)
 		fmt.Fprintf(&b, "  magpie %s launcher [add|remove]   the claude-magpie command\n", id)
 	}
+	if a.ID == "claude-desktop" {
+		fmt.Fprintf(&b, "  magpie %s launcher [add|remove]   Claude Magpie.app (macOS): Desktop on magpie in a folder of its own, your own Claude Desktop left signed in\n", id)
+	}
 	var keys []string
 	for _, f := range a.Fields {
 		keys = append(keys, f.Key)

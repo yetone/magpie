@@ -324,6 +324,10 @@ func run(args []string) error {
 	if ok, err := claudeLaunchCmd(args); ok {
 		return err
 	}
+	// Claude Magpie.app (claude_desktop_launch_cli.go), --help too
+	if ok, err := claudeDesktopLaunchCmd(args); ok {
+		return err
+	}
 	// before anything is read, moved or started: --help on any command
 	// prints its usage and does nothing else
 	if helpAsked(args) {

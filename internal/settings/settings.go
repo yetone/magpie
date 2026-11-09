@@ -761,6 +761,13 @@ type Settings struct {
 	// "[1m]", and adds none to one whose id has it. Off, as before, it shows
 	// both, the plain one compacting at Claude Code's 200K.
 	DesktopLongest bool `json:"desktopLongest,omitempty"`
+	// DesktopIsolated runs Claude Desktop on magpie in a folder of its own
+	// (#5671): magpie's 3p mode goes into
+	// ~/Library/Application Support/Claude-Magpie-3p instead of Claude and
+	// Claude-3p, and ~/Applications/Claude Magpie.app starts Desktop with
+	// --user-data-dir set to it, beside the user's own signed-in Desktop,
+	// which is left as it is. macOS only (desktopdir.Isolated).
+	DesktopIsolated bool `json:"desktopIsolated,omitempty"`
 	// GuideHidden: the user put away the Agents page's Get started card
 	// (wangye1644294 on X) before finishing it. Kept here, not in the
 	// page's storage, so the panel, the window and a reload agree.

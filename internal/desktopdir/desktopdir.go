@@ -128,6 +128,35 @@ func Sets(goos, home string, getenv func(string) string) []Dirs {
 	return []Dirs{{Data: filepath.Join(d, "Claude"), Mode: filepath.Join(d, "Claude"), ThreeP: filepath.Join(d, "Claude-3p")}}
 }
 
+// IsolatedName is the folder of the Claude Desktop magpie can start on
+// its own (#5671): Desktop run with --user-data-dir set to it keeps all its
+// data there, its 3p mode's too, beside the user's own Claude and Claude-3p.
+const IsolatedName = "Claude-Magpie-3p"
+
+// Isolated is that folder on goos for home, "" where Desktop can't run in
+// it: only macOS has it. Desktop's 3p folder there is its userData with
+// "-3p" added unless it ends so already (GY in 2.7032's and 4.4212's
+// index.pre.js), so --user-data-dir=…/Claude-Magpie-3p is that folder
+// itself. On Windows the 3p folder is %LOCALAPPDATA%\Claude-3p whatever
+// the userData, and Desktop sets its userData to it in 3p mode, so a
+// second one would share the first's; Linux has no Desktop of
+// Anthropic's to try it on.
+func Isolated(goos, home string) string {
+	if goos != "darwin" || home == "" {
+		return ""
+	}
+	return filepath.Join(home, "Library", "Application Support", IsolatedName)
+}
+
+// isolatedHere is Isolated on this computer when it is there.
+func isolatedHere(goos, home string) string {
+	d := Isolated(goos, home)
+	if fi, err := os.Stat(d); d == "" || err != nil || !fi.IsDir() {
+		return ""
+	}
+	return d
+}
+
 // Installed says whether Desktop's program is installed on goos, whatever
 // it has written: on Windows, Squirrel's setup puts it in
 // %LOCALAPPDATA%\AnthropicClaude\claude.exe, and the MSIX's has its
@@ -149,7 +178,8 @@ func Installed(goos, home string, getenv func(string) string) bool {
 }
 
 // Everywhere are the folders of every set on this computer (Sets), each
-// once: where the readers look for Desktop's sessions and skills.
+// once, and Isolated when it is there: where the readers look for
+// Desktop's sessions and skills.
 func Everywhere() []string {
 	home, _ := os.UserHomeDir()
 	var out []string
@@ -159,6 +189,9 @@ func Everywhere() []string {
 				out = append(out, p)
 			}
 		}
+	}
+	if iso := isolatedHere(OS, home); iso != "" && !slices.Contains(out, iso) {
+		out = append(out, iso)
 	}
 	return out
 }
@@ -236,7 +269,8 @@ func windowsDir(local string, threep bool) string {
 }
 
 // ClaudeCode are the versions of Claude Code that Desktop keeps for its
-// Code tab, in any set's userData (Data, or ThreeP in its 3p mode):
+// Code tab, in any set's userData (Data, or ThreeP in its 3p mode, or
+// Isolated):
 // <userData>/claude-code/<version>/ holding claude.exe on Windows, claude
 // elsewhere, or claude.app on a Mac (Desktop 2.7032's CCD storageDir and
 // getBinaryPathForTarget). That copy reads ~/.claude as Claude Code does.
@@ -247,7 +281,11 @@ func ClaudeCode(goos, home string, getenv func(string) string) []string {
 		names = []string{"claude.exe"}
 	}
 	var out []string
-	for _, d := range Sets(goos, home, getenv) {
+	sets := Sets(goos, home, getenv)
+	if iso := isolatedHere(goos, home); iso != "" {
+		sets = append(sets, Dirs{Data: iso, ThreeP: iso})
+	}
+	for _, d := range sets {
 		for _, data := range []string{d.Data, d.ThreeP} {
 			ents, _ := os.ReadDir(filepath.Join(data, "claude-code"))
 			for _, e := range ents {

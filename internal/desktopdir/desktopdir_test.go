@@ -154,3 +154,30 @@ func TestClaudeCode(t *testing.T) {
 		t.Fatalf("Mac: %v, want %v", got, want)
 	}
 }
+
+// The isolated Desktop's folder (#5671) is a Mac's alone, and ends in -3p:
+// Desktop adds "-3p" to a userData that doesn't, and would read its 3p
+// mode from a folder beside it.
+func TestIsolated(t *testing.T) {
+	home := t.TempDir()
+	want := filepath.Join(home, "Library", "Application Support", "Claude-Magpie-3p")
+	if got := Isolated("darwin", home); got != want {
+		t.Fatalf("darwin: %q", got)
+	}
+	for _, goos := range []string{"windows", "linux"} {
+		if got := Isolated(goos, home); got != "" {
+			t.Errorf("%s: %q", goos, got)
+		}
+	}
+	if isolatedHere("darwin", home) != "" {
+		t.Fatal("here before it is made")
+	}
+	os.MkdirAll(filepath.Join(want, "claude-code", "2.1.0"), 0o755)
+	os.WriteFile(filepath.Join(want, "claude-code", "2.1.0", "claude"), []byte("x"), 0o755)
+	if isolatedHere("darwin", home) != want {
+		t.Fatal("not here once made")
+	}
+	if got := ClaudeCode("darwin", home, env(nil)); !reflect.DeepEqual(got, []string{"2.1.0"}) {
+		t.Errorf("its Claude Code copy: %v", got)
+	}
+}

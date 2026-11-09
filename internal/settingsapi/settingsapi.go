@@ -337,6 +337,8 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	in.CodexAsyncCompact, in.CodexAsyncCompactPercent = cur.CodexAsyncCompact, cur.CodexAsyncCompactPercent
 	// Claude Desktop's list, set in its row on the Agents page
 	in.DesktopLongest = cur.DesktopLongest
+	// and whether it runs in a folder of its own, set there too (#5671)
+	in.DesktopIsolated = cur.DesktopIsolated
 	// and the Get started card put away, from the card itself
 	in.GuideHidden = cur.GuideHidden
 
