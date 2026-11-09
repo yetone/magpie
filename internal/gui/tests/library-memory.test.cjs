@@ -4,7 +4,9 @@
 // Magpie Memory server offered while it isn't in the library, the memories
 // in use pinned first, a search, the ones an agent only guessed waiting
 // under To review, and a memory added, edited through the app's menu (never
-// a <select>), kept and deleted. Every language, wide and narrow, Chromium
+// a <select>), kept and deleted. Conversations read into memory: switched
+// on, a model picked through the app's menu, read now, and a run that
+// stopped says why. Every language, wide and narrow, Chromium
 // and WebKit; no backend, the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -34,7 +36,14 @@ function memories() {
   };
 }
 
-function server(lang, state, sent) {
+function distill() {
+  return {
+    on: false, model: "", auto: "dt/small", running: false, gets: 0,
+    models: [{ id: "dt/small", name: "Small", providerName: "DT" }, { id: "dt/m1", name: "Model One", providerName: "DT" }],
+  };
+}
+
+function server(lang, state, sent, dist) {
   return async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true};` });
@@ -45,6 +54,19 @@ function server(lang, state, sent) {
     if (url.pathname.startsWith("/api/library/")) {
       sent.push({ path: url.pathname, body: route.request().postDataJSON() });
       return route.fulfill({ json: { ...library, result: { changed: [] } } });
+    }
+    if (url.pathname.startsWith("/api/memory/distill")) {
+      if (route.request().method() === "POST") {
+        const body = route.request().postDataJSON();
+        sent.push({ path: url.pathname, body });
+        if (url.pathname === "/api/memory/distill/run") Object.assign(dist, { running: false, error: "429: too many requests", last: new Date().toISOString() });
+        else Object.assign(dist, { on: body.on, model: body.model, running: body.on, gets: 0, error: "" });
+      } else if (dist.running && ++dist.gets > 1) {
+        // the run ends: it read three and proposed one
+        Object.assign(dist, { running: false, last: new Date().toISOString(), read: 3, added: 1 });
+        state.memories.push({ id: "m9", text: "Ships on Tuesdays", kind: "fact", scope: "global", origin: "inferred", status: "candidate", created: at(7), updated: at(7) });
+      }
+      return route.fulfill({ json: dist });
     }
     if (url.pathname.startsWith("/api/memory")) {
       if (route.request().method() === "POST") {
@@ -69,11 +91,11 @@ function server(lang, state, sent) {
 
 const view = "#view-library";
 const words = {
-  en: { tab: "Memory", review: "To review", rule: "Rule", fact: "Fact" },
-  zh: { tab: "记忆", review: "待确认", rule: "规则", fact: "事实" },
-  "zh-TW": { tab: "記憶", review: "待確認", rule: "規則", fact: "事實" },
-  ja: { tab: "メモリ", review: "確認待ち", rule: "ルール", fact: "事実" },
-  de: { tab: "Memory", review: "Zu prüfen", rule: "Regel", fact: "Fakt" },
+  en: { tab: "Memory", review: "To review", rule: "Rule", fact: "Fact", learn: "Learn from conversations", now: "Read now" },
+  zh: { tab: "记忆", review: "待确认", rule: "规则", fact: "事实", learn: "从对话中学习", now: "立即读取" },
+  "zh-TW": { tab: "記憶", review: "待確認", rule: "規則", fact: "事實", learn: "從對話中學習", now: "立即讀取" },
+  ja: { tab: "メモリ", review: "確認待ち", rule: "ルール", fact: "事実", learn: "会話から学ぶ", now: "今すぐ読む" },
+  de: { tab: "Memory", review: "Zu prüfen", rule: "Regel", fact: "Fakt", learn: "Aus Unterhaltungen lernen", now: "Jetzt lesen" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -96,7 +118,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         page.on("pageerror", (e) => errors.push(e.message));
         const sent = [];
         const state = memories();
-        await page.route("**/*", server(lang, state, sent));
+        const dist = distill();
+        await page.route("**/*", server(lang, state, sent, dist));
         await page.goto("http://magpie.test/");
         await page.locator('button[data-view="library"]').click();
         const rows = page.locator(`${view} .lib-mems .lib-mem`);
@@ -114,6 +137,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const r = await b.boundingBox();
           assert.ok(r.x + r.width <= body.x + body.width + 1, "a control of the bar is cut off");
         }
+
+        // conversations aren't read until switched on, and the row is named in the reader's language
+        const drow = page.locator(`${view} .lib-memdistill`);
+        assert.match(await drow.locator(".name").textContent(), new RegExp(w.learn));
+        assert.equal(await drow.locator("button.lib-switch").getAttribute("aria-checked"), "false");
+        assert.equal(await drow.locator(".lib-distmodel, .lib-distnow").count(), 0);
 
         // in use: the pinned one first, then the newer one; the one guessed waits
         assert.equal(await rows.count(), 2);
@@ -179,9 +208,43 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/remove").body, { ids: ["m4"] });
 
           // the summary switched off
-          await page.locator(`${view} .lib-memcard button.lib-switch`).click();
-          await page.waitForFunction(() => document.querySelector("#view-library .lib-memcard button.lib-switch")?.getAttribute("aria-checked") === "false");
+          await page.locator(`${view} .lib-memdigest button.lib-switch`).click();
+          await page.waitForFunction(() => document.querySelector("#view-library .lib-memdigest button.lib-switch")?.getAttribute("aria-checked") === "false");
           assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/digest").body, { on: false });
+        }
+
+        // conversations read: switched on, it reads at once with the automatic model
+        await drow.locator("button.lib-switch").click();
+        await page.waitForFunction(() => document.querySelector("#view-library .lib-memdistill button.lib-switch")?.getAttribute("aria-checked") === "true");
+        assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/distill").body, { on: true, model: "" });
+        assert.match(await drow.locator(".lib-distmodel").textContent(), /Small/);
+        assert.equal(await drow.locator(".lib-distnow").count(), 0, "Read now while reading");
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "the row scrolls sideways");
+        const card = await page.locator(`${view} .lib-memcard`).boundingBox();
+        for (const b of await drow.locator(".lib-acts > *").all()) {
+          const r = await b.boundingBox();
+          assert.ok(r.x + r.width <= card.x + card.width + 1, "a control of the row is cut off");
+        }
+        // the run ends: Read now is back, and what it proposed waits under To review
+        await drow.locator(".lib-distnow").waitFor({ timeout: 8000 });
+        assert.match(await drow.locator(".lib-distnow").textContent(), new RegExp(w.now));
+        assert.match(await drow.locator(".sub").textContent(), /1/);
+        await page.locator(`${view} .lib-memstatus .opt`, { hasText: w.review }).click();
+        await page.locator(`${view} .lib-mems .lib-mem`, { hasText: "Ships on Tuesdays" }).waitFor();
+
+        if (width === 980) {
+          // a model picked through the app's menu, not a <select>
+          await drow.locator(".lib-distmodel").click();
+          await page.locator(".proto-menu .pm-item", { hasText: "Model One" }).click();
+          await page.waitForFunction(() => /Model One/.test(document.querySelector("#view-library .lib-distmodel")?.textContent || ""));
+          assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/distill").body, { on: true, model: "dt/m1" });
+          assert.equal(await page.locator(`${view} select`).count(), 0, "a native select");
+          await drow.locator(".lib-distnow").waitFor({ timeout: 8000 });
+          // a run that stopped says why
+          await drow.locator(".lib-distnow").click();
+          await drow.locator(".sub.err").waitFor();
+          assert.match(await drow.locator(".sub.err").textContent(), /429: too many requests/);
+          assert.ok(sent.some((x) => x.path === "/api/memory/distill/run"));
         }
         await ctx.close();
       });

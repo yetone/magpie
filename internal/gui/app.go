@@ -570,6 +570,8 @@ func Run(version string, showMain bool, link string) error {
 		// one has handed the gateway to the new version (#4938)
 		library.KeepLinked(backendCtx, 30*time.Second)
 	}()
+	// conversations read into memory, when switched on (Memory tab)
+	go keepDistilling(backendCtx)
 
 	// before the item is made, which starts as hidden as AppKit kept it
 	hiddenAtStart := bringTrayBack()

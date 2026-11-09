@@ -23,6 +23,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -88,7 +89,11 @@ var (
 	// running is held through a run in this process, and the file lock
 	// across magpies
 	running sync.Mutex
+	busy    atomic.Bool
 )
+
+// Running says a run is going in this process.
+func Running() bool { return busy.Load() }
 
 // ErrRunning is a run asked for while one is going.
 var ErrRunning = errors.New("already reading conversations")
@@ -170,6 +175,8 @@ func Run(ctx context.Context, auto string, complete Complete) (Result, error) {
 		return Result{}, ErrRunning
 	}
 	defer running.Unlock()
+	busy.Store(true)
+	defer busy.Store(false)
 	unlock, held := filelock.Lock(Path()+".run", 0)
 	if !held {
 		return Result{}, ErrRunning
@@ -417,10 +424,10 @@ func keep(fs []found, s sessions.Session, proj *memory.Project) int {
 	return n
 }
 
-// Keep runs Run every interval until ctx ends; auto gives the automatic
-// model at each run.
-func Keep(ctx context.Context, interval time.Duration, auto func() string, complete Complete) {
-	t := time.NewTicker(interval)
+// Keep runs Run first after first, then every interval, until ctx ends;
+// auto gives the automatic model at each run.
+func Keep(ctx context.Context, first, interval time.Duration, auto func() string, complete Complete) {
+	t := time.NewTimer(first)
 	defer t.Stop()
 	for {
 		select {
@@ -428,6 +435,7 @@ func Keep(ctx context.Context, interval time.Duration, auto func() string, compl
 			return
 		case <-t.C:
 		}
+		t.Reset(interval)
 		if _, err := Run(ctx, auto(), complete); err != nil && !errors.Is(err, ErrRunning) {
 			log.Println("memory: reading conversations:", err) // and in the Memory tab
 		}

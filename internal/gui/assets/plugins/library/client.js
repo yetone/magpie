@@ -948,6 +948,8 @@ magpie.plugin("library", (ctx) => {
   // digest. A memory an agent only guessed waits under Suggested until the
   // user keeps it.
   let mem = null;        // /api/memory
+  let dist = null;       // /api/memory/distill: conversations read into memory
+  let distPoll = 0;
   let memLoading = false;
   let memQ = "";         // the search typed
   let memStatus = "active";
@@ -970,12 +972,13 @@ magpie.plugin("library", (ctx) => {
     if (memLoading) return;
     memLoading = true;
     try {
-      mem = await api("memory");
+      [mem, dist] = await Promise.all([api("memory"), api("memory/distill").catch(() => null)]);
     } catch (e) {
       status(e.message, "err");
     }
     memLoading = false;
     if (tab === "memory" && mem) render();
+    distWatch();
   }
   function memDirty() {
     if (!memOpen || !memDraft) return false;
@@ -1042,13 +1045,14 @@ magpie.plugin("library", (ctx) => {
       return;
     }
     const card = el("div", "list lib-list lib-memcard");
-    const row = el("div", "row lib-row");
+    const row = el("div", "row lib-row lib-memdigest");
     const who = el("div", "who");
     who.append(el("div", "name", t("In the agents' instructions")));
     who.append(el("div", "sub", mem.agents.length ? mem.agents.map(nameOf).join(", ") : t("No agent is switched on under Instructions")));
     const sw = toggle(mem.digest, t("In the agents' instructions"), (on) => memChange("memory/digest", { on }, on ? t("The agents read the memories' summary") : t("The memories' summary is taken out of the agents' instructions")));
     row.append(glyph(GLYPH.doc), who, sw);
     card.append(row);
+    if (dist) card.append(distillRow());
     if (!lib.servers.some((s) => s.name === "magpie-memory")) {
       const r = el("div", "row lib-row lib-memtools");
       const w = el("div", "who");
@@ -1093,6 +1097,60 @@ magpie.plugin("library", (ctx) => {
         : t("Nothing remembered yet. Tell an agent “remember that…”, or add one here.")));
     }
     body.append(list);
+  }
+  // Conversations read into memory (internal/memdistill): what the
+  // agents' finished sessions say worth keeping waits under To review.
+  // Off until switched on; the model is the automatic one or one picked.
+  function distillRow() {
+    const d = dist;
+    const r = el("div", "row lib-row lib-memdistill");
+    const w = el("div", "who");
+    w.append(el("div", "name", t("Learn from conversations")));
+    const modelName = (id) => { const m = d.models.find((x) => x.id === id); return m ? (m.name || m.id) : id; };
+    let line = t("Reads each finished conversation for what to remember. You review each one before agents see it.");
+    let err = false;
+    if (d.on && d.running) line = t("Reading conversations…");
+    else if (d.on && d.error) { line = t("Stopped {when}: {error}", { when: ago(d.last), error: d.error }); err = true; }
+    else if (d.on && d.last) line = t("Read {when} · {k} new to review", { when: ago(d.last), k: d.added || 0 });
+    else if (d.on) line = t("Reads conversations quiet for 30 minutes, every hour");
+    w.append(el("div", "sub" + (err ? " err" : ""), line));
+    const acts = el("div", "lib-acts");
+    if (d.on) {
+      const auto = d.auto ? t("Automatic") + " · " + modelName(d.auto) : t("Automatic");
+      const pick = menuButton(d.model ? modelName(d.model) : auto, "lib-distmodel", () => openProtoMenu(pick, [
+        { v: "", name: t("Automatic"), note: d.auto ? modelName(d.auto) : t("no model"), literalName: true },
+        ...d.models.map((m) => ({ v: m.id, name: m.name || m.id, note: m.providerName || "", literalName: true }))],
+      d.model || "", (v) => distChange("memory/distill", { on: true, model: v }), "Model", "", "left", false, d.models.length > 8 ? "Search models" : ""));
+      acts.append(pick);
+      if (!d.running) acts.append(button(t("Read now"), "action lib-distnow", () => distChange("memory/distill/run", {})));
+    }
+    acts.append(toggle(d.on, t("Learn from conversations"), (on) => distChange("memory/distill", { on, model: d.model || "" })));
+    r.append(glyph(GLYPH.search), w, acts);
+    return r;
+  }
+  async function distChange(path, body) {
+    try {
+      dist = await api(path, body);
+    } catch (e) {
+      status(e.message, "err", 6000);
+    }
+    render();
+    distWatch();
+  }
+  // while a run goes, the row is read again every 2s; when it ends the
+  // memories are too, for what it proposed
+  function distWatch() {
+    clearTimeout(distPoll);
+    if (!dist?.running) return;
+    distPoll = setTimeout(async () => {
+      if (tab !== "memory") return;
+      try {
+        dist = await api("memory/distill");
+        if (!dist.running) mem = await api("memory");
+      } catch {}
+      render();
+      distWatch();
+    }, 2000);
   }
   function memRow(m) {
     const isOpen = memOpen === m.id;

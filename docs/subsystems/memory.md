@@ -96,16 +96,57 @@ A reply after a change carries `problem` when publishing the digest
 failed. The tab is in [plugins/library/client.js](../../internal/gui/assets/plugins/library/client.js)
 (`renderMemory`), tested by `internal/gui/tests/library-memory.test.cjs`.
 
+### Distillation
+
+`internal/memdistill` reads finished conversations into candidate
+memories. It is off until switched on under Memory → Learn from
+conversations; switched on, it looks back seven days (`Back`) and no
+further (`State.Since`).
+
+- State is `distill.json` beside `memory.json` (`memdistill.Path`):
+  the switch, the model, the conversations done (kept 30 days), and the
+  last run's time, counts and error. It is written through temp-and-rename
+  under a file lock; an unreadable file runs nothing
+  (`TestUnreadableStateRunsNothing`).
+- `Keep` runs 5 minutes after the GUI backend starts, then hourly
+  (`keepDistilling` in `internal/gui/memory_distill.go`). `Run` takes at
+  most 10 conversations (`PerRun`) quiet for 30 minutes (`Quiet`) with at
+  least two turns, and skips the gateway's own records, read-only
+  agents, subagent sessions and its own agent (`memory`). One run at a
+  time, in this process and across processes (`.run` lock).
+- What is sent: the conversation's user and assistant text only (no
+  tools, no reasoning), cut to 24k characters keeping the head and the
+  tail, plus the memories already kept for that project, under neutral
+  instructions that name neither magpie nor the vendor
+  (`TestWhatIsSent`, `TestLongConversationCut`).
+- The request goes through the gateway this process serves
+  (`distillComplete`), as `x-api-key: magpie-memory`, so it is routed,
+  masked and counted in Usage under the agent `memory`
+  (`TestDistillCompleteThroughGateway`). With no model picked it uses
+  `gateway.AutoVision()`.
+- Each proposal is saved as an inferred candidate (To review) with its
+  conversation as the source and the quote it rests on; at most 5 per
+  conversation. A text the user deleted or archived is never proposed
+  again (`memory.Dismissed`, `TestDeletedNotProposedAgain`).
+- A failed request stops the run, records the error for the row, and
+  leaves the conversation to be read again next time
+  (`TestFailureAndCap`).
+- Routes: `GET /api/memory/distill`, `POST /api/memory/distill`
+  `{on, model}` (switching on, or a new model, reads at once) and
+  `POST /api/memory/distill/run`. The row polls every 2s while a run
+  goes and reloads the memories when it ends.
+
 ## Not built yet
 
-Distilling sessions into candidates, a nightly pass that archives stale
-memories and merges duplicates, and semantic search are planned; today
-search is by words (`Search`, CJK split per character, `TestSearch`).
+A nightly pass that archives stale memories and merges duplicates, and
+semantic search, are planned; today search is by words (`Search`, CJK
+split per character, `TestSearch`).
 
 ## Verification
 
 ```sh
-mote-run go test ./internal/memory ./internal/library
+mote-run go test ./internal/memory ./internal/memdistill ./internal/library
+mote-run go test -run Distill ./internal/gui
 mote-run go test -tags nogui -run 'MemoryMCP|OwnMCP' ./internal/gateway
 mote-run go test ./internal/browsermcp ./internal/cli
 mote-run node --test internal/gui/tests/library-memory.test.cjs
