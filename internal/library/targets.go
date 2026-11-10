@@ -349,6 +349,12 @@ func targetOf(a *agent.Agent) *Target {
 		// workspaces' own. Its MCP servers are sources of a workspace,
 		// which magpie doesn't write.
 		t.Skills = sharedSkillsDir()
+	case "tuanjie-cowork":
+		// Tuanjie Cowork counts ~/.agents/skills as the user's skills beside
+		// Codely's own ~/.codely-cli/skills (its core's skill scan, scope
+		// "user-alias", 2.1.6-stable). Its MCP servers are Codely's settings,
+		// which magpie doesn't write for it.
+		t.Skills = sharedSkillsDir()
 	case "openbot":
 		// OpenBot reads skills only from ~/.agents/skills (home-skills.ts,
 		// HOME_SKILL_FOLDER). Its MCP servers are rows in its SQLite

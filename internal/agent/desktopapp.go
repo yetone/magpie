@@ -114,7 +114,13 @@ var desktopApps = map[string]desktopApp{
 	// with its "/" taken out (getWindowsInstallationDirName; the README's
 	// own path); guid is the UUID v5 of the appId, as dsh's above.
 	"craft-agents": {id: "com.lukilabs.craft-agent", names: []string{"Craft Agents.app"}, win: filepath.Join("@craft-agentelectron", "Craft Agents.exe"), guid: "61dc82ee-e3b9-557b-98c4-20b9178a0f78"},
-	"penguin":      {id: "com.prismshadow.penguinharness", names: []string{"PenguinHarness.app"}, win: filepath.Join("PenguinHarness", "PenguinHarness.exe"), guid: "8bb9acb7-2bdc-596b-9669-7b014ab1c47f"},
+	// Tuanjie Cowork (2.1.6-stable: Tuanjie Cowork.app,
+	// dev.codelycowork.desktop, a Tauri app) reads ~/.codely on its own
+	// (tuanjiecowork.go). Its Windows build is a Tauri NSIS installer, whose
+	// per-user folder isn't under %LOCALAPPDATA%\Programs, so on Windows
+	// it is found by its ~/.codely folder alone.
+	"tuanjie-cowork": {id: "dev.codelycowork.desktop", names: []string{"Tuanjie Cowork.app"}},
+	"penguin":        {id: "com.prismshadow.penguinharness", names: []string{"PenguinHarness.app"}, win: filepath.Join("PenguinHarness", "PenguinHarness.exe"), guid: "8bb9acb7-2bdc-596b-9669-7b014ab1c47f"},
 	// The CodeBuddy IDE (Tencent's VS Code fork, 4.12.2: CodeBuddy.app,
 	// com.tencent.codebuddy, from codebuddy.ai; CodeBuddy CN.app,
 	// com.tencent.codebuddycn, from codebuddy.cn) reads the CodeBuddy Code

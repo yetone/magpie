@@ -318,6 +318,7 @@ func onMachine(home, cfg string) []*Agent {
 		openBot(home, cfg),
 		craftAgents(home),
 		obsidian(home, cfg),
+		tuanjieCowork(home),
 		newMax(home),
 		liveAgent(home),
 		raycast(home),
