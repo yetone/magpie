@@ -23,6 +23,7 @@ const libraryUsage = `magpie library                     what the library gives 
   magpie library mcp agents <name> <a,b…|none>
   magpie library mcp local <name> on|off   keep it to this computer: a sync or a backup never carries it, and one
                                      coming in neither takes it away nor puts another computer's in its place
+  magpie library mcp off|on <name>   take it from every agent, project and app, keeping its settings; on gives it back as it was
   magpie library mcp rm <name>
   magpie library mcp router on|off   give each agent one MCP server, magpie, in place of the library's (magpie runs them, once for every agent)
   magpie library mcp router <name> shared|direct   with the router on, share the server through it (the default) or keep it each
@@ -142,6 +143,9 @@ func libraryCmd(args []string) error {
 				}
 				return nil
 			}
+		case len(rest) == 2 && (rest[0] == "on" || rest[0] == "off") && !strings.HasPrefix(rest[1], "-"):
+			// off for everyone, kept with its settings; on again as it was
+			res, err = library.ServerOn(rest[1], rest[0] == "on")
 		case len(rest) == 2 && rest[0] == "rm":
 			res, err = library.RemoveServer(rest[1])
 		case len(rest) == 2 && (rest[0] == "router" || rest[0] == "hub") && (rest[1] == "on" || rest[1] == "off"):

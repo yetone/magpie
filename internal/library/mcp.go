@@ -64,10 +64,10 @@ type Server struct {
 	// gateway serves them at its URL, and the hub calls the plugin itself
 	// (plugin_tools.go)
 	Plugin string `json:"plugin,omitempty"`
-	// Hidden is a plugin's server whose tools were hidden from every
-	// agent on the Plugins page (PluginServerOn, chengming0v0 on
-	// Discord): no agent is given it, nor an app at the MCP router's
-	// address. Paused are the agents it had, given back when it is shown
+	// Hidden is a server turned off in the Library (ServerOn), or a
+	// plugin's whose tools were hidden from every agent on the Plugins
+	// page (PluginServerOn, chengming0v0 on Discord): no agent is given
+	// it, nor a project, nor an app at the MCP router's address. Paused are the agents it had, given back when it is shown
 	// again. Both go once the server has an agent again (save).
 	Hidden bool     `json:"hidden,omitempty"`
 	Paused []string `json:"paused,omitempty"`

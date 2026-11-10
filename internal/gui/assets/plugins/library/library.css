@@ -200,6 +200,11 @@ button.row.lib-hubfolded:hover { background: var(--pill); }
 /* off on this computer: its agents' ticks are the other computers', shown faded and not to be changed here */
 .lib-skill.offhere > .lib-glyph, .lib-skill.offhere > .lib-logo, .lib-skill.offhere .sub { opacity: .55; }
 .lib-skill.offhere > .lib-agents { opacity: .4; pointer-events: none; }
+/* a server off for everyone (serverSwitch): its switch turns it on again,
+   giving back the agents it had, so its chips wait for that */
+.lib-server.off > .lib-glyph, .lib-server.off > .lib-logo, .lib-server.off .name, .lib-server.off .sub { opacity: .55; }
+.lib-server.off > .lib-agents { opacity: .4; pointer-events: none; }
+.lib-server > .lib-switch { align-self: center; margin-left: 8px; }
 .lib-hereline { display: flex; margin-top: 3px; min-width: 0; }
 .lib-hereline > .lib-tag.lib-offhere { cursor: pointer; margin-left: 0; flex: 0 1 auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .lib-tag.lib-offhere:hover { color: var(--fg); }

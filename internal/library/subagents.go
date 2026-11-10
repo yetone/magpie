@@ -261,7 +261,7 @@ func (l *Library) subagent(name string) *Subagent {
 }
 
 // renderSubagent is s as an agent's file: of its skills and servers,
-// those the library still has.
+// those the library still has, a server turned off (ServerOn) left out.
 func (l *Library) renderSubagent(sp *subagentSpec, s *Subagent) []byte {
 	var skills, mcp []string
 	if sp.skills {
@@ -273,7 +273,7 @@ func (l *Library) renderSubagent(sp *subagentSpec, s *Subagent) []byte {
 	}
 	if sp.mcp {
 		for _, n := range s.MCP {
-			if l.server(n) != nil {
+			if x := l.server(n); x != nil && !x.Hidden {
 				mcp = append(mcp, n)
 			}
 		}

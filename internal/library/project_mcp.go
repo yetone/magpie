@@ -115,8 +115,10 @@ func (l *Library) syncProjectMCP(p *Project, fail func(what string, err error)) 
 			}
 		}
 	}) {
+		// one turned off (ServerOn) is off in every project too, and
+		// keeps the project's agents for when it is on again
 		s := l.server(name)
-		if s == nil {
+		if s == nil || s.Hidden {
 			continue
 		}
 		for _, id := range p.Servers[name] {

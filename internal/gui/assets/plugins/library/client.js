@@ -2250,7 +2250,8 @@ magpie.plugin("library", (ctx) => {
       // and again once it changed after that: a sign-in since isn't left
       // beside "needs sign-in" (新v学员 on Discord)
       // With no agent, the router is what starts them, so on it checks them too
-      const unchecked = lib.servers.filter((s) => (inUse(s) || (agentless() && lib.mcpHub && inHub(s)) || health.has(s.name)) && health.get(s.name)?.key !== healthKey(s));
+      // One turned off is started for nobody, and checked only on a click.
+      const unchecked = lib.servers.filter((s) => (!s.hidden && (inUse(s) || (agentless() && lib.mcpHub && inHub(s))) || health.has(s.name)) && health.get(s.name)?.key !== healthKey(s));
       queueMicrotask(() => checkHealth(unchecked));
     }
     // an agent's own servers (Codex's node_repl, added each time it starts)
@@ -2681,7 +2682,8 @@ magpie.plugin("library", (ctx) => {
   }
 
   function serverRow(s, all) {
-    const row = el("div", "row lib-row click lib-server");
+    const row = el("div", "row lib-row click lib-server" + (s.hidden ? " off" : ""));
+    row.dataset.server = s.name;
     const who = el("div", "who");
     const nm = el("div", "name mono", s.name);
     if (s.signIn?.dead) nm.append(tag(t("Sign-in ran out"), "warn", t("Open it to sign in again")));
@@ -2700,13 +2702,26 @@ magpie.plugin("library", (ctx) => {
     who.append(noteSub(s.note, sub, serverLine(s)), toolsEl(s.name));
     row.append(mark(s.icon, s.transport === "stdio" ? GLYPH.cmd : GLYPH.web), who, ...removeAct(() => confirmRemoveServer(s)),
       // no agent to give it to: other apps reach it through the router
-      ...(agentless() ? [] : [agentChips(withGone(all, s.agents), s.agents, chipsChange("servers/agents", s.name, "servers", (x) => serverRow(x, all)), { problems: s.problems, blocked: sseBlocked(s), all: true })]));
+      ...(agentless() ? [] : [agentChips(withGone(all, s.agents), s.agents, chipsChange("servers/agents", s.name, "servers", (x) => serverRow(x, all)), { problems: s.problems, blocked: sseBlocked(s), all: true })]),
+      ...serverSwitch(s));
     if (picking) return pickRow(row, s.name);
     // a line of its own under the row, not in the name's column (tao0194)
     if (s.name === "magpie-browser" && !s.agents?.length) row.append(browserAsk(row));
     row.onclick = () => editServer(s);
     row.title = t("Edit {name}", { name: s.name });
     return row;
+  }
+
+  // A server off for everyone, or on again as it was (swang20201 on X:
+  // an installed server could only be removed). Off, no agent, project or
+  // app at the router's address has it, and it keeps its settings, env
+  // and sign-in; on, the agents it had get it back. While picking, the
+  // bar is the one acting, as with Remove.
+  function serverSwitch(s) {
+    if (picking) return [];
+    const on = !s.hidden;
+    return [toggle(on, t("Turn {name} on or off", { name: s.name }), (v) => change("servers/on", { name: s.name, on: v },
+      v ? t("{name} is on again", { name: s.name }) : t("{name} is off; its settings are kept", { name: s.name })))];
   }
 
   // Magpie Browser connected and given to no agent: it is added opt-in, so

@@ -2,6 +2,9 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Turn {name} on or off": "开启或关闭 {name}",
+    "{name} is on again": "{name} 已重新开启",
+    "{name} is off; its settings are kept": "{name} 已关闭，设置都已保留",
     "Learn from conversations": "从对话中学习",
     "Reads each finished conversation for what to remember. You review each one before agents see it.": "读完成的对话，找出值得记住的内容。每条都要你确认后 Agent 才会看到。",
     "Reading conversations…": "正在读对话…",
@@ -897,6 +900,9 @@ magpie.strings({
     "billion-context is installed — switch it on for your agents below": "billion-context 已安装 — 在下方为你的 Agent 打开它",
   },
   "zh-TW": {
+    "Turn {name} on or off": "開啟或關閉 {name}",
+    "{name} is on again": "{name} 已重新開啟",
+    "{name} is off; its settings are kept": "{name} 已關閉，設定都已保留",
     "Learn from conversations": "從對話中學習",
     "Reads each finished conversation for what to remember. You review each one before agents see it.": "讀完成的對話，找出值得記住的內容。每條都要你確認後 Agent 才會看到。",
     "Reading conversations…": "正在讀對話…",
@@ -1792,6 +1798,9 @@ magpie.strings({
     "billion-context is installed — switch it on for your agents below": "billion-context 已安裝 — 在下方為你的 Agent 開啟它",
   },
   ja: {
+    "Turn {name} on or off": "{name} のオン/オフ",
+    "{name} is on again": "{name} を再びオンにしました",
+    "{name} is off; its settings are kept": "{name} をオフにしました。設定は残っています",
     "Learn from conversations": "会話から学ぶ",
     "Reads each finished conversation for what to remember. You review each one before agents see it.": "終わった会話を読み、覚えておく価値のあることを探します。エージェントに渡る前に、一つずつ確認します。",
     "Reading conversations…": "会話を読んでいます…",
@@ -2687,6 +2696,9 @@ magpie.strings({
     "billion-context is installed — switch it on for your agents below": "billion-context をインストールしました — 下でエージェントごとにオンにしてください",
   },
   de: {
+    "Turn {name} on or off": "{name} ein- oder ausschalten",
+    "{name} is on again": "{name} ist wieder an",
+    "{name} is off; its settings are kept": "{name} ist aus; seine Einstellungen bleiben",
     "Learn from conversations": "Aus Unterhaltungen lernen",
     "Reads each finished conversation for what to remember. You review each one before agents see it.": "Liest jede beendete Unterhaltung auf das, was sich zu merken lohnt. Du prüfst jede Erinnerung, bevor Agenten sie sehen.",
     "Reading conversations…": "Unterhaltungen werden gelesen…",
