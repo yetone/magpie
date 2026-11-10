@@ -391,6 +391,10 @@ func DrawersOf(p provider.Provider, avail func() []catalog.Model) []catalog.Mode
 		return nil
 	}
 	out := p.PlanDrawers()
+	if filmsMiniMax(p) {
+		// a MiniMax key's image-01 models, which no list names
+		out = append(out, minimaxDrawers(p)...)
+	}
 	have := make(map[string]bool, len(out))
 	for _, m := range out {
 		have[m.ID] = true
@@ -1140,6 +1144,9 @@ func viaFor(p provider.Provider, model string) drawVia {
 		// another magpie's images API asks the model's vendor the way
 		// that model draws there
 		return viaImages
+	case drawsMiniMax(p, model):
+		// MiniMax's image_generation, which drawImages asks (rocbomb123 on X)
+		return viaImages
 	case isGoogle(p) && strings.Contains(strings.ToLower(model), "gemini"):
 		return viaGemini
 	case p.ModelKind(model) == provider.KindImage:
@@ -1575,6 +1582,9 @@ func (s *Server) drawImages(ctx context.Context, p provider.Provider, model stri
 	}
 	if dashScopeDraws(p, model) {
 		return s.drawDashScope(ctx, p, model, d)
+	}
+	if drawsMiniMax(p, model) {
+		return s.drawMiniMax(ctx, p, model, d)
 	}
 	base := strings.TrimRight(p.Base(provider.Chat), "/")
 	if base == "" {
