@@ -43,6 +43,7 @@ import (
 
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/filememo"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // TelemetryState is an agent's telemetry as its config has it.
@@ -58,12 +59,19 @@ type TelemetryState struct {
 	// Error: why the config couldn't be read, when it couldn't (the
 	// state is then unknown)
 	Error string `json:"error,omitempty"`
+	// All: Settings › Privacy turns every agent's off, which holds this
+	// agent's row (telemetry_all.go); AllError why it couldn't here
+	All      bool   `json:"all,omitempty"`
+	AllError string `json:"allError,omitempty"`
 }
 
 // Telemetry is an agent's switch for its own telemetry.
 type Telemetry struct {
 	Get func() (TelemetryState, error)
 	Set func(off bool) error
+	// all: the stash key that says Settings › Privacy's switch for every
+	// agent turned this one off (telemetry_all.go)
+	all string
 }
 
 // telemetryKey is one key of a switch: name as the file spells it (a
@@ -214,7 +222,7 @@ func telemetrySwitch(at place, f telemetryFile, stashKey string, keys ...telemet
 		}
 		return nil
 	}
-	return &Telemetry{Get: get, Set: write}
+	return &Telemetry{Get: get, Set: write, all: stashKey + ".all"}
 }
 
 // jsonTelemetryFile is a JSON or JSONC config's keys, by dotted path.
@@ -323,6 +331,14 @@ var ErrNoTelemetry = errors.New("magpie knows no switch for this agent's telemet
 func (a *Agent) SetTelemetry(off bool) error {
 	if a.Telemetry == nil {
 		return ErrNoTelemetry
+	}
+	// the switch for every agent holds each one's row while it is on
+	telemetryAllMu.Lock()
+	defer telemetryAllMu.Unlock()
+	if s, err := settings.SharedChecked(); err != nil {
+		return err
+	} else if s.AgentTelemetryOff {
+		return ErrTelemetryAllOff
 	}
 	return a.Telemetry.Set(off)
 }

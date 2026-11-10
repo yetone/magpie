@@ -489,6 +489,11 @@ type Settings struct {
 	// NoUsageStats keeps which agents, providers and models magpie is
 	// used with out of that event, which then counts the user only.
 	NoUsageStats bool `json:"noUsageStats,omitempty"`
+	// AgentTelemetryOff turns off the telemetry of every agent with a
+	// switch for it, an agent found later too, over each agent's own
+	// Telemetry row (agent/telemetry_all.go; OipsAnthony on X). Set only
+	// by its route, which writes the agents' files as it changes.
+	AgentTelemetryOff bool `json:"agentTelemetryOff,omitempty"`
 	// NoUpdatePill keeps the header's Update pill away when a newer magpie
 	// is out; UpdateSkip is the one version it was hidden for, and a newer
 	// one brings it back. Either way magpie still downloads the version and
@@ -1517,6 +1522,7 @@ func (s Settings) Compact() int {
 // looked in, whether agents' sign-ins are read, when allowances are read, the terminal app a session resumes
 // in, the quick panel's shortcut, whether the local masking model is on
 // (it is downloaded on this computer alone), how many Claude Code processes may run (its memory),
+// whether every agent's telemetry is off (in this computer's files),
 // and what the menu bar or tray shows beside magpie's icon (yoooo on
 // Discord: usage turned off on a Mac came back from a Windows box that
 // shows it; Lullaby: sharing turned on at home came on at work).
@@ -1546,6 +1552,9 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.ClaudeRunsMost = cur.ClaudeRunsMost
 	s.RequestArchiveLocal, s.RequestArchiveLocalMB = cur.RequestArchiveLocal, cur.RequestArchiveLocalMB
 	s.AgentsHere = cur.AgentsHere
+	// the agents' telemetry is in this computer's files, turned off by
+	// this computer's switch
+	s.AgentTelemetryOff = cur.AgentTelemetryOff
 }
 
 // Wires is ModelWires with the provider's own id of each model the user

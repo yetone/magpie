@@ -21116,8 +21116,6 @@ const AGENT_PREFS = {
   claude: ["fullContextRow"],
   grok: ["fullContextRow"],
 };
-// an agent with a telemetry switch (agent/telemetry.go) has a sheet for it
-// when it has no other settings
 const agentPrefsOf = (a) => gatewayMode ? null : AGENT_PREFS[kindOf(a)] || (a.telemetry ? [] : null);
 
 // telemetryRow: the agent's own telemetry off in its config (OipsAnthony on X)
@@ -21128,6 +21126,7 @@ function telemetryRow(a) {
   who.append(el("div", "name", t("Telemetry")));
   who.title = t("Written in {file}: {keys}", { file: st.file, keys: (st.keys || []).join(", ") });
   if (st.error) who.append(el("div", "sub", t("{file} couldn't be read", { file: st.file })));
+  else if (st.all) who.append(el("div", "sub", st.allError || t("Off for all agents in Settings › Privacy")));
   else if (st.off && st.own?.length) who.append(el("div", "sub", t("Turned off in your own config too: {keys}", { keys: st.own.join(", ") })));
   const again = () => {
     const now = state.agents.find((x) => x.id === a.id);
@@ -21142,7 +21141,7 @@ function telemetryRow(a) {
       again();
     }, (e) => { status(t(e.message), "err"); again(); });
   });
-  if (st.error) for (const b of box.querySelectorAll("button")) b.disabled = true;
+  if (st.error || st.all) for (const b of box.querySelectorAll("button")) b.disabled = true;
   row.append(who, box);
   return row;
 }
@@ -21858,12 +21857,9 @@ function renderRedact(s, keep) {
     onOff(s.redactShape, (redactShape) => savePrefs({ ...keep, redactShape }))).id = "redactShapeRow";
   row(t("Mask personal data"), t("Emails, phone numbers, ID and bank card numbers too"),
     onOff(s.redactPersonal, (redactPersonal) => {
-      // turned on, the accounts on screen are hidden too
       if (redactPersonal) window.hideAccounts?.set(true, true);
       savePrefs({ ...keep, redactPersonal });
     }));
-  // each other kind of personal data, on or off of its own while personal
-  // data is masked; only the user's choices are kept (redactKinds)
   if (s.redactPersonal) for (const [id, name, sub, on] of REDACT_KINDS) {
     const kinds = s.redactKinds || {};
     const r = el("div", "row pref redact-kind");
@@ -21875,7 +21871,6 @@ function renderRedact(s, keep) {
     r.append(who, val);
     box.append(r);
   }
-  // Masked words go above this, a list of the redact plugin's (wordList)
   row(t("Masked words in any case"), t("A word also matches in other capitals: Nightjar masks NIGHTJAR and nightjar too"),
     onOff(s.redactWordsAnyCase, (redactWordsAnyCase) => savePrefs({ ...keep, redactWordsAnyCase }))).id = "redactWordsAnyCaseRow";
   row(t("Whole words only"), t("A word is not masked inside a longer one: ABC masks ABC and 'ABC' but not XABCD, and 123456 not 0.123456"),
@@ -21883,22 +21878,24 @@ function renderRedact(s, keep) {
   renderRedactRules(s, row);
   renderMaskActions(s);
   renderMaskTry(s);
-  // how it is found: the local model, for what no pattern can tell, over
-  // the rules on every request that masks anything
   const masking = s.redact || s.redactPersonal;
   const why = t("Turn on Mask secrets or Mask personal data first");
   privacyModelRow(find, masking ? "" : why);
   const always = el("span", "static-pill" + (masking ? " on" : ""), masking ? t("Always on") : t("Off"));
   rowIn(find, t("Rules"), masking ? t("Keys, tokens, emails and numbers whose checksum adds up: patterns that are certain, checked on every request") : why, always).id = "maskRulesRow";
-  // the pages' Hide accounts, here too, where privacy is looked for
   if (window.hideAccounts) rowIn(share, t("Hide accounts"), t("Email addresses and account names on every page are blurred, for a screenshot to share"),
     onOff(window.hideAccounts.on(), (on) => { window.hideAccounts.set(on); renderSettings(); }));
+  rowIn(share, t("Turn off telemetry for all agents"), t("Over each agent's own Telemetry switch, an agent found later too"),
+    onOff(s.agentTelemetryOff, (off) => writingPrefs(api("settings/agent-telemetry", { off })).then((ns) => {
+      prefs = state.settings = ns;
+      if (ns.refused) status(ns.refused, "err");
+      renderSettings();
+      refreshAfterSync();
+    }, settingsErr))).id = "agentTelemetryAllRow";
   rowIn(share, t("Count me as a user"), t("Once a day, a random id for this computer with magpie's version and system"),
     onOff(!s.noStats, (on) => savePrefs({ ...keep, noStats: !on })));
-  // rides on that event: nothing goes without it
   if (!s.noStats) rowIn(share, t("Share the agents, providers and models I use"), t("Sent with that event, by magpie's own ids, with how many of each, and how often each partner was shown, opened and added; a provider you added yourself is only “custom”. No names, addresses, accounts, keys or usage"),
     onOff(!s.noUsageStats, (on) => savePrefs({ ...keep, noUsageStats: !on })));
-  // what masking did is a page of its own, Insights › Masking
   if (!featureHides($('#nav button[data-view="masking"]'))) {
     const open = el("button", "", t("Open"));
     open.type = "button";
@@ -21917,7 +21914,6 @@ function privacyModelRow(box, why) {
   const sr = el("div", "row pref");
   sr.id = "pmScoreRow";
   const name = () => { const n = el("div", "name", t("Find with a local model")); n.append(el("span", "badge new", t("New"))); return n; };
-  // nothing is masked: the model has nothing to find more of
   if (why) {
     clearTimeout(pmTimer);
     const who = el("div", "who");

@@ -1692,6 +1692,31 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
+	// every agent's own telemetry off, over each agent's row (OipsAnthony
+	// on X): saved, the agents' files follow at once; an agent that
+	// couldn't is named in refused, the switch saved all the same
+	mux.HandleFunc("POST /api/settings/agent-telemetry", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Off bool `json:"off"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		var out struct {
+			settingsJSON
+			Refused string `json:"refused,omitempty"`
+		}
+		if err := agent.SetTelemetryAll(in.Off); err != nil {
+			if settings.Load().AgentTelemetryOff != in.Off {
+				fail(rw, err)
+				return
+			}
+			out.Refused = err.Error()
+		}
+		out.settingsJSON = settingsState()
+		writeJSON(rw, out)
+	})
 	// whether agents' sign-ins are read and served as subscriptions
 	// (#1535): saved, the accounts read before are forgotten at once
 	mux.HandleFunc("POST /api/settings/account-discovery", func(rw http.ResponseWriter, r *http.Request) {
@@ -3038,7 +3063,18 @@ func state() stateJSON {
 			}
 		}
 		if a.Telemetry != nil {
+			// Settings › Privacy's switch for every agent reaches one
+			// found since as it is seen
+			all := agent.TelemetryAllOff()
+			var allErr error
+			if all {
+				allErr = agent.KeepTelemetryOff(a)
+			}
 			st, err := a.Telemetry.Get()
+			st.All = all
+			if allErr != nil && err == nil {
+				st.AllError = allErr.Error()
+			}
 			if err != nil {
 				st.Error = err.Error()
 			}

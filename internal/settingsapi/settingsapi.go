@@ -307,6 +307,7 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	in.RedactActions = cur.RedactActions               // set on their own (redact-actions)
 	in.RedactAllow = cur.RedactAllow                   // set on its own (redact-allow)
 	in.DisabledModels = cur.DisabledModels             // set on their own (disabled-models, #1867)
+	in.AgentTelemetryOff = cur.AgentTelemetryOff       // set on its own (agent-telemetry), which writes the agents' files
 	// the request archive on this computer: the archive's switch while no
 	// S3 bucket, and its size in settings.json only
 	in.RequestArchiveLocal, in.RequestArchiveLocalMB = cur.RequestArchiveLocal, cur.RequestArchiveLocalMB

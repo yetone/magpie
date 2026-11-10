@@ -493,6 +493,9 @@ func run(args []string) error {
 	// and Claude Science's daemon, which a restart of the computer ends,
 	// started on the gateway again while it is connected
 	gateway.WhileServing = append(gateway.WhileServing, agent.KeepClaudeScience)
+	// and every agent's own telemetry off while Settings › Privacy says so,
+	// an agent found since too
+	gateway.WhileServing = append(gateway.WhileServing, agent.KeepTelemetryAllOff)
 	// and the Claude Code magpie downloaded for a machine with none (a
 	// server's, a container's), at Claude Code's newest release: its runs
 	// turn its own updater off
