@@ -16312,8 +16312,9 @@ function keyCards(list) {
 }
 
 // packUsage lays the Usage cards in 260px columns, the next card to the
-// column that ends highest, the order still the page's (#860); each
-// column's last reaches the tallest's end (ikunbots on X).
+// column that ends highest, the order still the page's (#860); each card
+// as tall as what it holds, none stretched down to the tallest's end
+// (jen_celeus on X: a Zen card with no windows stood as tall as Claude's).
 const USAGE_MIN = 260, USAGE_GAP = 7;
 let usagePacked = null, usagePackFrame = 0;
 function packUsage() {
@@ -16369,14 +16370,10 @@ function packUsage() {
   }
   usagePacked = { most, keys, n: best.n };
   list.classList.add("packed");
-  // the last card in each column, down to the end of the tallest
-  const last = new Map(best.at.map(([c], i) => [c, i]));
   best.at.forEach(([c, top, h], i) => {
-    if (last.get(c) === i) h = best.tall - top;
     const area = `${top + 1} / ${c + 1} / span ${Math.max(1, h)} / span 1`;
     if (cards[i].style.gridArea !== area) cards[i].style.gridArea = area;
-    const min = last.get(c) === i ? `${h}px` : "";
-    if (cards[i].style.minHeight !== min) cards[i].style.minHeight = min;
+    if (cards[i].style.minHeight) cards[i].style.minHeight = "";
   });
 }
 // a card's height or the page's width moved: packed again on the next frame

@@ -9,9 +9,11 @@
 // order on the page is still the user's (dragging and Alt+arrows are
 // usage-arrange's), no card overlaps another, and a card opened to its
 // accounts in full pushes the one under it down rather than over it.
-// The last card in each column reaches down to where the tallest ends
-// (ikunbots on X, "卡片可以对齐吗"): Claude Code, Codex and Antigravity side
-// by side end on one line, and DeepSeek under Antigravity ends with Codex.
+// Every card is as tall as what it holds, the last in a column too
+// (jen_celeus on X: "用量卡片…充分的占满整个高度留出很大的空白"): an OpenCode
+// Zen card with a plan and no windows beside Claude Code is a head's
+// height, not Claude's, and Claude Code, Codex and Antigravity side by side
+// (ikunbots on X) each end where their own content does.
 // Chromium and WebKit, English, Chinese, Japanese and German; no backend,
 // the API is faked here.
 const assert = require("node:assert/strict");
@@ -61,6 +63,13 @@ const ikun = (now) => {
     ] },
   ];
 };
+// jen_celeus on X: OpenCode Zen's free plan has no windows, its card a head
+const zen = (now) => [
+  { provider: "claude", name: "Claude Code", icon: "claude-color", user: "me@example.com", plan: "Max 5x", lastServedAt: iso(now),
+    windows: [{ name: "5 hours", used: 23, resetsAt: iso(now + 3 * H) }, { name: "7 days", used: 41, resetsAt: iso(now + 90 * H) }] },
+  { provider: "opencode-zen-free", name: "OpenCode Zen", icon: "opencode", plan: "OpenCode Zen Free", windows: [] },
+  { provider: "codex", name: "Codex", icon: "codex-color", user: "me@example.com", plan: "Plus", windows: [{ name: "5 hours", used: 8, resetsAt: iso(now + 2 * H) }] },
+];
 // cards of one height: one row, in their order
 const even = (now) => ["kimi", "zai", "minimax", "moonshot"].map((p) => ({ provider: p, name: p, icon: p, windows: [{ name: "5 hours", used: 30, resetsAt: iso(now + 2 * H) }] }));
 // several accounts, the second in brief until opened
@@ -104,12 +113,10 @@ const settle = (page) => page.evaluate(() => new Promise((r) => requestAnimation
 function sound(cards, what) {
   const end = Math.max(...cards.map((c) => c.bottom));
   for (const c of cards) {
-    // as tall as what is in it, its padding and border, but for the last in
-    // its column, which ends where the tallest column does (ikunbots on X)
-    const last = !cards.some((d) => d !== c && d.x === c.x && d.y > c.y);
+    // as tall as what is in it, its padding and border, the last in its
+    // column too: none reaches down to the tallest's end (jen_celeus on X)
     assert.ok(c.inner <= c.bottom, `${what}: ${c.key} holds what is in it: ${JSON.stringify(c)}`);
-    if (last) assert.ok(Math.abs(c.bottom - end) < 0.5, `${what}: ${c.key}, last in its column, ends with the others: ${JSON.stringify(cards)}`);
-    if (!last || c.bottom < end - 0.5) assert.ok(c.bottom - c.inner < 16, `${what}: ${c.key} is as tall as itself: ${JSON.stringify(c)}`);
+    assert.ok(c.bottom - c.inner < 16, `${what}: ${c.key} is as tall as itself (the tallest ends at ${end}): ${JSON.stringify(c)}`);
   }
   for (const a of cards) for (const b of cards) {
     if (a === b) continue;
@@ -145,14 +152,27 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       };
       const now = Date.now();
 
-      // ikunbots' row of three of different heights: as tall as each other,
-      // their bottoms lined up, each one's content at its top
+      // jen_celeus' case: Claude Code beside an OpenCode Zen with a plan and
+      // no windows, and Codex; the Zen card a head's height, not Claude's
+      for (const width of [1400, 897, 560]) {
+        const page = await open(`zen-${width}`, { quotas: zen(now) }, width);
+        const cards = await boxes(page);
+        assert.deepEqual(cards.map((c) => c.key), ["claude", "opencode-zen-free", "codex"], "the order on the page is the user's");
+        sound(cards, `zen ${width}px`);
+        const [claude, z] = cards;
+        assert.ok(z.h < 60, `${width}px: the Zen card is a head's height: ${JSON.stringify(z)}`);
+        assert.ok(claude.h > z.h + 40, `${width}px: Claude's card is taller than Zen's: ${JSON.stringify(cards)}`);
+        if (z.x !== claude.x) assert.ok(z.bottom < claude.bottom - 40, `${width}px: Zen beside Claude ends at its own content: ${JSON.stringify(cards)}`);
+      }
+
+      // ikunbots' row of three of different heights: each as tall as what
+      // it holds, the bottoms ragged
       for (const width of [1400, 1018]) {
         const page = await open(`ikun-${width}`, { quotas: ikun(now) }, width);
         const cards = await boxes(page);
         assert.deepEqual(cards.map((c) => c.key), ["claude", "codex", "antigravity"], "the order on the page is the user's");
         assert.ok(cards.every((c) => c.y === cards[0].y), `${width}px: one row: ${JSON.stringify(cards)}`);
-        assert.ok(cards.every((c) => Math.abs(c.bottom - cards[0].bottom) < 0.5), `${width}px: the cards' bottoms line up: ${JSON.stringify(cards)}`);
+        assert.ok(Math.max(...cards.map((c) => c.bottom)) - Math.min(...cards.map((c) => c.bottom)) > 20, `${width}px: none stretched to the tallest: ${JSON.stringify(cards)}`);
         assert.ok(Math.max(...cards.map((c) => c.inner)) - Math.min(...cards.map((c) => c.inner)) > 20, `${width}px: the fixture's cards hold different heights: ${JSON.stringify(cards)}`);
         sound(cards, `ikun ${width}px`);
         // a narrow window: one column, each card as tall as itself
@@ -161,11 +181,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const narrow = await boxes(page);
         assert.ok(narrow.every((c) => c.x === narrow[0].x), `one column: ${JSON.stringify(narrow)}`);
         for (const c of narrow) assert.ok(c.bottom - c.inner < 16, `narrow: ${c.key} is as tall as itself: ${JSON.stringify(c)}`);
-        // and wide again: lined up again
+        // and wide again: one row again, each as tall as itself
         await page.setViewportSize({ width, height: 900 });
         await settle(page);
         const back = await boxes(page);
-        assert.ok(back.every((c) => c.y === back[0].y && Math.abs(c.bottom - back[0].bottom) < 0.5), `${width}px again: one row, bottoms lined up: ${JSON.stringify(back)}`);
+        assert.ok(back.every((c) => c.y === back[0].y), `${width}px again: one row: ${JSON.stringify(back)}`);
+        sound(back, `ikun ${width}px again`);
       }
 
       // the reporter's three, at their window and wider
@@ -178,10 +199,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(ag.x, ds.x, `${width}px: DeepSeek under Antigravity: ${JSON.stringify(cards)}`);
         assert.ok(ag.x > codex.x && ag.y === codex.y, `${width}px: Antigravity beside Codex, at its top`);
         assert.ok(Math.abs(ds.y - (ag.y + ag.h) - 7) <= 1, `${width}px: the cards' own gap between them: ${JSON.stringify([ag, ds])}`);
-        // still stacked, not stretched: Antigravity as tall as itself, and
-        // DeepSeek, last in the column, ends where Codex does
+        // still stacked, not stretched: Antigravity and DeepSeek, last in
+        // the column, each as tall as itself
         assert.ok(ag.bottom - ag.inner < 16, `${width}px: Antigravity as tall as itself: ${JSON.stringify(ag)}`);
-        assert.ok(Math.abs(ds.bottom - codex.bottom) < 0.5, `${width}px: DeepSeek ends where Codex does: ${JSON.stringify(cards)}`);
+        assert.ok(ds.bottom - ds.inner < 16, `${width}px: DeepSeek as tall as itself: ${JSON.stringify(ds)}`);
       }
 
       // cards of a height: one row, in their order; a narrow window one column
@@ -210,9 +231,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await settle(fold);
       cards = await boxes(fold);
       const codex1 = cards.find((c) => c.key === "codex");
-      // what it holds grew; the card with it, unless it already reached
-      // down to the end of the stack beside it
-      assert.ok(codex1.inner > codex0.inner && codex1.h >= codex0.h, `the card grew: ${JSON.stringify([codex0, codex1])}`);
+      // what it holds grew, and the card with it
+      assert.ok(codex1.inner > codex0.inner && codex1.h > codex0.h, `the card grew: ${JSON.stringify([codex0, codex1])}`);
       assert.equal(codex1.x, codex0.x, "the card clicked stays where it was");
       assert.equal(codex1.y, codex0.y, "the card clicked stays where it was");
       sound(cards, "opened");
