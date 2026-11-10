@@ -7365,6 +7365,11 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 // never seen, and was written to it whole, its tools and system prompt
 // too (bbfatx on X: a title or a summary asked with tool_choice none, of
 // a long conversation). The turn may call none of them (allowedTools).
+// Each schema is folded to an object root (objectSchema), as a Messages
+// request magpie builds is: Claude Code leaves out an MCP tool whose
+// inputSchema has a oneOf, anyOf or allOf at its root, which Anthropic's
+// API refuses, so Codex desktop's browser tool mcp__cua_repl__js, a oneOf
+// of objects, never reached the model (Lee931018 on X).
 func bridgeTools(req *Request) []bridgeTool {
 	tools := make([]bridgeTool, 0, len(req.Tools))
 	for _, t := range req.Tools {
@@ -7375,6 +7380,7 @@ func bridgeTools(req *Request) []bridgeTool {
 		if len(schema) == 0 {
 			schema = json.RawMessage(`{"type":"object","properties":{}}`)
 		}
+		schema = objectSchema(schema)
 		tools = append(tools, bridgeTool{Name: bridgeToolName(t.Name), Description: t.Description, InputSchema: schema})
 	}
 	return tools

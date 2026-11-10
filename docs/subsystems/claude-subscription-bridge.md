@@ -74,6 +74,13 @@ stay apart), the same in every run, so a resumed session, the history
 run was offered it. `subscriptionRun.names` (`bridgeNames`) maps it back
 to the declared name in `toolStart`, for streamed and whole messages, and
 in `mcpCall` (#2649).
+Each tool's input schema is folded to an object root (`objectSchema`,
+`provider.ObjectRoot`), as a Messages request magpie builds is: Claude
+Code leaves out an MCP tool whose `inputSchema` has a `oneOf`, `anyOf` or
+`allOf` at its root, which Anthropic's API refuses, so Codex desktop's
+`mcp__cua_repl__js` (a `oneOf` of objects) never reached the model. The
+variants' fields are merged, and a field every variant requires stays
+required; a schema that already has an object root goes as it came.
 
 A client's MCP tool that it announced but hasn't loaded (Claude Code's
 tool search names deferred tools in a reminder and leaves them out of
