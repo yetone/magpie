@@ -1089,19 +1089,33 @@ function quotaCardMenus(card, subs) {
   const stop = () => { clearTimeout(press?.timer); press = null; };
   card.addEventListener("pointerdown", (e) => {
     stop();
-    if (e.pointerType !== "touch" || usageArranging || e.target.closest(".us-handle, input, textarea")) return;
+    if (e.pointerType !== "touch" || usageArranging || e.target.closest(".us-handle, .us-more, input, textarea")) return;
     const at = e.target;
     press = { x: e.clientX, y: e.clientY, timer: setTimeout(() => { press = null; quotaPressed = performance.now(); quotaCardMenu(at, card, subs); }, 550) };
   });
   card.addEventListener("pointermove", (e) => { if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 8) stop(); });
   for (const k of ["pointerup", "pointercancel", "pointerleave"]) card.addEventListener(k, stop);
 }
-function quotaCardMenu(target, card, subs) {
+// quotaCardMore: the card's ⋯ at its head's end, the same menu where it
+// is seen (jen_celeus on X: OpenCode Zen's card, with no usage to show,
+// wanted hiding, and a right-click is nowhere to be seen); shown as the
+// card is hovered, as an Agents row's is, and always where nothing hovers
+function quotaCardMore(card, subs) {
+  const b = el("button", "icon us-more");
+  b.type = "button";
+  b.setAttribute("aria-haspopup", "menu");
+  b.setAttribute("aria-label", t("Actions for {name}", { name: quotaName(subs[0]) }));
+  b.title = b.getAttribute("aria-label");
+  b.append(svg(DOTS, 14, 2.2));
+  b.onclick = (e) => { e.stopPropagation(); quotaCardMenu(b, card, subs, b); };
+  return b;
+}
+function quotaCardMenu(target, card, subs, from) {
   let part = [...card.children].find((c) => c.contains(target));
   while (part && !part.classList.contains("subscription-account") && !part.classList.contains("subscription-head")) part = part.previousElementSibling;
   const who = part?.classList.contains("subscription-account") && subs.find((q) => trayCardID(q) === part.dataset.card);
   const of = who ? [who] : subs;
-  const anchor = card.querySelector(".us-handle") || card.querySelector(".subscription-head");
+  const anchor = from || card.querySelector(".us-handle") || card.querySelector(".subscription-head");
   const again = agentMenu?.anchor === anchor;
   closeAgentMenu();
   if (again) return;

@@ -16127,6 +16127,7 @@ function renderQuotas(lazy) {
       // kept in its room: the strip stays put
       if (shut) { m.inert = true; m.style.visibility = "hidden"; }
     }
+    head.append(quotaCardMore(card, subs)); // its menu, where it is seen (page.js)
     if (keys && (folded.size || usageKeysAll.has(first.provider))) card.append(keysMore(first.provider, folded.size));
     if (accts && (folded.size || usageAcctsAll.has(first.provider))) card.append(acctsMore(first.provider, folded.size));
     subscriptions.append(card);

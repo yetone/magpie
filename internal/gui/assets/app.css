@@ -1310,6 +1310,19 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .row.stat .us-more:focus-visible { opacity: 1; }
 .row.stat .us-more.open { opacity: 1; background: var(--pill); color: var(--fg); }
 @media (hover: none) { .row.stat .us-more { opacity: 1; margin: 0 -4px 0 -2px; } }
+/* a Usage card's ⋯, its menu (jen_celeus on X): at the head's end, over what
+   ends there, on the card's colour, so the head at rest is laid out as it
+   was; where nothing hovers it is always shown, with room kept for it */
+.subscription-head { position: relative; }
+.subscription-head .us-more { position: absolute; top: 50%; right: -6px; width: 22px; height: 22px; margin-top: -11px; background: var(--card); opacity: 0; transition: opacity .12s, background .12s, color .12s; }
+.subscription-head .us-more:hover { background: var(--pill); }
+.subscription-card:hover .subscription-head .us-more { opacity: 1; }
+.subscription-head .us-more:focus-visible { opacity: 1; }
+.subscription-head .us-more.open { opacity: 1; background: var(--pill); color: var(--fg); }
+@media (hover: none) {
+  .subscription-head { padding-right: 18px; }
+  .subscription-head .us-more { opacity: 1; }
+}
 .row.stat .us-unhide { flex: none; margin-right: -4px; }
 /* the action's room comes out of the name's, which ends in "…" */
 .row.stat.acts .who { flex-shrink: 1; }
@@ -4246,6 +4259,9 @@ body.panel .modal { padding: 16px 12px; }
 @media (max-width: 760px), (pointer: coarse) and (max-width: 1024px) {
   body.web { height: 100%; font-size: 14px; }
   body.web .icon { width: 44px; height: 44px; }
+  /* a Usage card's ⋯ is drawn at its head's size and taken at 44 by its own ::after */
+  body.web .subscription-head .us-more { width: 22px; height: 22px; }
+  body.web .subscription-head .us-more::after { content: ""; position: absolute; inset: -11px -6px -11px -11px; } /* the card's edge, never past it */
   body.web .update { min-height: 36px; }
   body.web .view {
     --view-left: max(12px, env(safe-area-inset-left));
