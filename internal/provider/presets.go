@@ -602,6 +602,22 @@ var presets = []PresetDef{
 	{ID: "fireworks", Name: "Fireworks", Icon: "fireworks-color", Kind: KindRelay, Catalog: "fireworks-ai",
 		Chat:    "https://api.fireworks.ai/inference/v1",
 		Website: "https://fireworks.ai", KeysURL: "https://app.fireworks.ai/settings/users/api-keys"},
+	// Fireworks Nexus (CNSA0422 on X): an account and plan of its own at
+	// nexus.fireworks.ai, with keys made there, on the platform's
+	// /inference endpoints, which speak chat completions, Responses and
+	// messages alike (docs.fireworks.ai/nexus/apis-and-sdks). Pro and Team
+	// take only `auto`, Nexus Auto, and refuse an open model named directly
+	// with a 403 (nexus/open-models), so `auto` is the list; an Enterprise
+	// account's open models are typed in. Nexus Auto reaches Claude and GPT
+	// with the user's own keys in the two headers, or with Provider Keys
+	// set up on the account.
+	{ID: "fireworks-nexus", Name: "Fireworks Nexus", Short: "Nexus", Icon: "fireworks-color", Kind: KindRelay,
+		Chat: "https://api.fireworks.ai/inference/v1", Responses: "https://api.fireworks.ai/inference/v1", Anthropic: "https://api.fireworks.ai/inference",
+		Note:    "Nexus Auto · Pro, Team, Enterprise",
+		Website: "https://docs.fireworks.ai/nexus", KeysURL: "https://nexus.fireworks.ai/settings/api-keys",
+		NoList:      true,
+		Models:      []string{"auto"},
+		HeaderHints: []string{"x-anthropic-api-key", "x-openai-api-key"}},
 	{ID: "siliconflow", Name: "SiliconFlow", Icon: "siliconcloud-color", Kind: KindRelay, Catalog: "siliconflow",
 		Chat:    "https://api.siliconflow.cn/v1",
 		Website: "https://cloud.siliconflow.cn", KeysURL: "https://cloud.siliconflow.cn/account/ak",
