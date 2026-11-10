@@ -840,8 +840,10 @@ function maskActsOn(mark, x, o) {
 }
 // maskValueMenu: Copy puts the value itself on the clipboard; Never mask
 // adds it to Settings › Privacy's list of that name (/api/masking/allow,
-// the same list), so the next request sends it as written. A value of
-// the user's own Masked words, or one in the list already, can't be added.
+// the same list), so new messages send it as written while the ones sent
+// before stay masked and the vendor's cache of them still matches
+// (redact's allowkept.go, NicoleS76448271 on X). A value of the user's
+// own Masked words, or one in the list already, can't be added.
 function maskValueMenu(anchor, x, o) {
   const again = agentMenu?.anchor === anchor;
   closeAgentMenu();
@@ -856,7 +858,7 @@ function maskValueMenu(anchor, x, o) {
     { name: "Copy", icon: COPY_ICON, run: () => copy(v, "", null, t("Value copied")) },
     { name: "Never mask", icon: EYE, off: !!why, why, run: () => {
       writingPrefs(api("masking/allow", { p: x.p }))
-        .then((ns) => { prefs = ns; if (state) state.settings = ns; status(t("Sent as written from the next request on"), "ok"); })
+        .then((ns) => { prefs = ns; if (state) state.settings = ns; status(t("Sent as written in new messages; earlier ones stay masked, so the cache still holds"), "ok"); })
         .catch((e) => status(t(e.message), "err"));
     } },
   ]);

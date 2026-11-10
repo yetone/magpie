@@ -111,7 +111,7 @@ magpie.strings({
     "Value copied": "已复制这个值",
     "One of your Masked words": "这是你的脱敏词",
     "In Never mask already": "已在「从不脱敏」里",
-    "Sent as written from the next request on": "从下一条请求起按原样发送",
+    "Sent as written in new messages; earlier ones stay masked, so the cache still holds": "新消息起按原样发送；之前的消息仍脱敏，缓存不受影响",
   },
   "zh-TW": {
     "Turn on masking": "開啟脫敏",
@@ -223,7 +223,7 @@ magpie.strings({
     "Value copied": "已複製這個值",
     "One of your Masked words": "這是你的脫敏詞",
     "In Never mask already": "已在「從不脫敏」裡",
-    "Sent as written from the next request on": "從下一則請求起照原樣送出",
+    "Sent as written in new messages; earlier ones stay masked, so the cache still holds": "新訊息起照原樣送出；之前的訊息仍脫敏，快取不受影響",
   },
   ja: {
     "Turn on masking": "マスクをオンにする",
@@ -335,7 +335,7 @@ magpie.strings({
     "Value copied": "値をコピーしました",
     "One of your Masked words": "マスクする語に登録済みです",
     "In Never mask already": "「マスクしない」に登録済みです",
-    "Sent as written from the next request on": "次のリクエストからそのまま送信します",
+    "Sent as written in new messages; earlier ones stay masked, so the cache still holds": "新しいメッセージからそのまま送信します。以前のメッセージはマスクしたままなので、キャッシュは保たれます",
   },
   de: {
     "Turn on masking": "Maskierung einschalten",
@@ -447,6 +447,6 @@ magpie.strings({
     "Value copied": "Wert kopiert",
     "One of your Masked words": "Eines deiner maskierten Wörter",
     "In Never mask already": "Steht schon unter Nie maskieren",
-    "Sent as written from the next request on": "Ab der nächsten Anfrage unverändert gesendet",
+    "Sent as written in new messages; earlier ones stay masked, so the cache still holds": "Ab neuen Nachrichten unverändert gesendet; frühere bleiben maskiert, der Cache bleibt gültig",
   },
 });

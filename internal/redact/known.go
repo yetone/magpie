@@ -377,4 +377,5 @@ func resetSent() {
 	sentMemo.Lock()
 	defer sentMemo.Unlock()
 	sentMemo.cur, sentMemo.old = nil, nil
+	resetKept()
 }

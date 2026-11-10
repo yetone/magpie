@@ -1586,7 +1586,10 @@ func (r rule) takes(s string, a, b int, ok func(string) bool) bool {
 // masked, and so is a word inside a value Never mask lets go, since of
 // two things the user asked for the one that keeps the value from the
 // vendor is the safe one. Never mask wins over everything else, the
-// user's own rules too: a value it names is the exception to them.
+// user's own rules too: a value it names is the exception to them. It
+// holds from the next text on: a text sent masked on o.Route before
+// keeps its value masked, so a vendor's cache of it still matches
+// (allowkept.go).
 func apply(s string, found []span, put func(kind, v string) string, o Options) (string, int) {
 	if len(found) == 0 {
 		return s, 0
@@ -1613,12 +1616,22 @@ func apply(s string, found []span, put func(kind, v string) string, o Options) (
 	var b strings.Builder
 	last, next, n := 0, 0, 0 // next: where the next value may start
 	kept := 0                // the end of a value let go; only a word is masked before it
+	// a text sent on a route keeps what was masked in it before, Never
+	// mask added since or not (allowkept.go): its hash, once one is needed
+	remember := o.sent && o.Route != ""
+	var text uint64
+	textOf := func() uint64 {
+		if text == 0 {
+			text = keptText(o.Route, s) | 1
+		}
+		return text
+	}
 	for _, f := range found {
 		if f.start < next || f.start < kept && f.by != ByWord {
 			continue
 		}
 		v := s[f.start:f.end]
-		if f.by != ByWord && o.allows(v) {
+		if f.by != ByWord && o.allows(v) && (!remember || !maskedBefore(textOf(), v)) {
 			kept = max(kept, f.end)
 			continue
 		}
@@ -1642,6 +1655,9 @@ func apply(s string, found []span, put func(kind, v string) string, o Options) (
 			b.WriteString(`"` + h.Placeholder + `"`)
 		} else {
 			b.WriteString(h.Placeholder)
+		}
+		if remember {
+			keepMasked(textOf(), v)
 		}
 		if o.Seen != nil {
 			o.Seen(h)

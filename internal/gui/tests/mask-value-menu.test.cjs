@@ -87,7 +87,7 @@ const wide = (page) => page.evaluate(() => {
   const over = [...document.querySelectorAll("#view-masking *, .row-menu, .row-menu *")].filter((n) => n.getClientRects().length && n.getBoundingClientRect().right > innerWidth + 1 && !n.closest(".msk-text, .msk-same")).map((n) => n.className?.baseVal ?? n.className);
   return { page: document.documentElement.scrollWidth > document.documentElement.clientWidth, over };
 });
-const english = ["Copy", "Never mask", "Value copied", "One of your Masked words", "In Never mask already", "Sent as written from the next request on"];
+const english = ["Copy", "Never mask", "Value copied", "One of your Masked words", "In Never mask already", "Sent as written in new messages; earlier ones stay masked, so the cache still holds"];
 async function untranslated(page, lang, where) {
   if (lang === "en") return;
   const said = await page.locator(where).innerText();
@@ -136,7 +136,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await stillClick(page, menu.locator(".rm-item").nth(1));
         await until(() => asked.includes("allow " + KEY));
         await page.waitForFunction((s) => document.querySelector("#status")?.textContent && !document.querySelector("#status").textContent.includes(s), "copied");
-        if (lang === "en") await page.waitForFunction(() => document.querySelector("#status").textContent === "Sent as written from the next request on");
+        if (lang === "en") await page.waitForFunction(() => document.querySelector("#status").textContent === "Sent as written in new messages; earlier ones stay masked, so the cache still holds");
         await untranslated(page, lang, "#status");
         assert.equal(asked.filter((a) => a.startsWith("allow")).length, 1);
 
