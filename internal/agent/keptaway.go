@@ -132,7 +132,16 @@ func (k kept) away(path string, data []byte) []byte {
 	}
 	g := k.gateway
 	was, err := edit.Read(path)
-	if err != nil || len(was) == 0 || bytes.Contains(was, []byte(g)) {
+	if err != nil || len(was) == 0 {
+		return data
+	}
+	if p := chainPrefix(was, g); p != "" {
+		// behind a local proxy that names the gateway in its path
+		// (billion-context's /bili/, chainsToGateway): kept in front of it
+		pg := []byte(p + g)
+		return bytes.ReplaceAll(bytes.ReplaceAll(data, pg, []byte(g)), []byte(g), pg)
+	}
+	if bytes.Contains(was, []byte(g)) {
 		return data
 	}
 	elsewhere, local := false, false
@@ -205,6 +214,32 @@ func (k kept) away(path string, data []byte) []byte {
 		out = append(out[:kv.start:kv.start], append([]byte(v), out[kv.end:]...)...)
 	}
 	return out
+}
+
+// chainPrefix is what goes before the gateway's address g at every place
+// was has it, when that is one local proxy naming g as its upstream
+// (chainsToGateway: http://127.0.0.1:18787/bili/), "" otherwise: g
+// somewhere on its own, or behind two different proxies.
+func chainPrefix(was []byte, g string) string {
+	prefix := ""
+	n := 0
+	for _, u := range urlRE.FindAll(was, -1) {
+		s := string(u)
+		i := strings.Index(s, "/"+g)
+		if i < 0 {
+			continue
+		}
+		p := s[:i+1]
+		if !chainsToGateway(p+g, g) || prefix != "" && p != prefix {
+			return ""
+		}
+		prefix = p
+		n++
+	}
+	if prefix == "" || bytes.Count(was, []byte(g)) != bytes.Count(was, []byte(prefix+g)) || n == 0 {
+		return ""
+	}
+	return prefix
 }
 
 // urlRE is an http(s) URL with its path, as it is written in a file.
