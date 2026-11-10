@@ -31,6 +31,7 @@ the same job:
 
 | Subscription | id | Plugin (npm) | Mover |
 | --- | --- | --- | --- |
+| Antigravity | `antigravity` | `@magpie-community/opencode-antigravity-auth` | `internal/provider/migrate_antigravity.go` |
 | Command Code | `commandcode-plan` | `@magpie-community/opencode-commandcode-auth` | `internal/provider/migrate_side.go` |
 | Cursor | `cursor` | `@magpie-community/opencode-cursor-auth` | `internal/provider/migrate_side.go` |
 | Devin | `devin` | `@magpie-community/opencode-devin-auth` | `internal/provider/migrate_side.go` |
@@ -76,8 +77,11 @@ Two cases decide it:
   nothing; a line over the Providers list says so, with why and a Move
   (`providers.unmoved`, `unmovedLine` in app.js). With no row of its own,
   the Add sheet leaves it to the Plugins page (`unusedSub`). Every
-  subscription in the table above is retired (10-17); gates ask
-  `provider.PluginServes(id)` (moved or retired).
+  subscription in the table above is retired (10-17) except Antigravity,
+  which is moved but whose built-in code is still there until every
+  account has gone over (11-10); gates ask `provider.PluginServes(id)`
+  (moved or retired). Gemini CLI (`gemini`) and the agy agent stay built
+  in.
 
 The plugin does everything: sign-in, refresh, models, requests, usage and
 errors. It runs in the plugin host (`internal/plugin`). The built-ins'
