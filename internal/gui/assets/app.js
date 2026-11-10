@@ -17433,7 +17433,7 @@ function renderPanelUse() {
     const c = fmtCost(l);
     const u = l.unpriced, one = u === 1;
     blk("Cost", c ? "≈" + c : "—", u ? t(one ? "{n} call unpriced" : "{n} calls unpriced", { n: u }) : t("effective prices"), c ? "cost" : "", "", u ? t(one ? "{n} call had no known price and is not counted" : "{n} calls had no known price and are not counted", { n: u }) : "");
-    blk("Cache hit rate", hitRate === null ? "—" : Math.round(100 * hitRate) + "%", cacheLeftOut(l) || t("of the prompt"));
+    blk("Cache hit rate", hitRate === null ? "—" : hitPct(hitRate), cacheLeftOut(l) || t("of the prompt"));
     const card = el("div", "pu-card");
     const head = el("div", "led-bar");
     const met = el("div", "segs");
@@ -18799,8 +18799,7 @@ function computerOpts(cs) {
 let ledFmt, ledFmtLang;
 const ledNum = (n) => { const l = intlLang(); return typeof (n ||= 0) != "number" ? n.toLocaleString(l)
   : (l == ledFmtLang ? ledFmt : (ledFmtLang = l, ledFmt = new Intl.NumberFormat(l))).format(n); };
-// what x's credited requests cost in their plan's credits, as the replies
-// said (WorkBuddy's usage.credit, #2512): nothing when none said
+// x's requests' plan credits, as replies said (#2512)
 function ledCredits(x) {
   if (!x?.credited) return null;
   const n = x.credits || 0;
@@ -18822,21 +18821,24 @@ function ledMoney(v) {
 const LED_METRICS = [["tokens", "Tokens"], ["cost", "Cost"], ["calls", "Requests"]];
 const LED_SHOWN = 7; // told apart in a chart; the rest are "Other"
 const allTokens = (x) => x.input + x.output + x.cache_read + x.cache_write;
-// a total's cache hit rate, leaving out cache_unknown (calls whose vendor
-// counts no cache); null when nothing is left (#3464)
+// a total's hit rate without cache_unknown; null for none (#3464)
 const cacheHitOf = (x) => {
   const prompt = (x.input || 0) + (x.cache_read || 0) + (x.cache_write || 0) - (x.cache_unknown || 0);
   return prompt > 0 ? (x.cache_read || 0) / prompt : null;
+};
+// a hit rate, more decimals where d would round it to 100% or 0%
+const hitPct = (h, d = 0) => {
+  let s = (100 * h).toFixed(d);
+  while (d < 2 && h > 0 && h < 1 && (+s >= 100 || +s <= 0)) s = (100 * h).toFixed(++d);
+  return (h < 1 && +s >= 100 ? "99.99" : h > 0 && +s <= 0 ? "0.01" : s) + "%";
 };
 // what a hit rate leaves out, when it leaves anything out
 const cacheLeftOut = (x) => x.cache_unknown_calls
   ? t(x.cache_unknown_calls === 1 ? "{n} request left out: its vendor doesn't count the cache" : "{n} requests left out: their vendor doesn't count the cache", { n: ledNum(x.cache_unknown_calls) })
   : "";
-// how fast the timed replies of a point, a share or a part wrote, in tokens
-// a second after their first (usage.Totals.Speed): 0 for none timed
+// timed replies' tokens a second after their first (usage.Totals.Speed)
 const ledSpeed = (x) => x?.decode_ms > 0 ? (1000 * x.decode_out) / x.decode_ms : 0;
-// the least the replies of a group that has no first token wrote at
-// (usage.Totals.Floor, ledFloorSpeed's for each): 0 for none
+// the least untimed replies wrote at (usage.Totals.Floor)
 const ledFloor = (x) => x?.floor_ms > 0 ? (1000 * x.floor_out) / x.floor_ms : 0;
 // a group's speed by one rule (Fallmonkey): timed replies "125 tok/s · 1
 // timed reply", session-file floors "≥100 tok/s · 30 replies", both with
@@ -19123,7 +19125,7 @@ function drawLedRank(box, l, split, metric, picked, choose, compact) {
     if (metric !== "speed" && gs) more.push(Object.assign(el("span", "rk-speed", gs.text), { title: gs.title }));
     if (ledTTFT(x)) more.push(t("TTFT {ms}", { ms: ledTook(ledTTFT(x)) }));
     const hit = cacheHitOf(x);
-    if (hit !== null && !compact) more.push(t("hit rate {p}", { p: Math.round(100 * hit) + "%" }));
+    if (hit !== null && !compact) more.push(t("hit rate {p}", { p: hitPct(hit) }));
     // a speed is no one's share of all
     if (metric !== "speed") more.push(Math.round((100 * v) / sum) + "%");
     const l2 = el("div", "rk-b");

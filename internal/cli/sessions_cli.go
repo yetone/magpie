@@ -499,7 +499,7 @@ func rollupCost(c float64, unpriced []string) string {
 // leaves out both).
 func hitRate(t sessions.Tokens) string {
 	if p := t.Input + t.CacheRead + t.CacheWrite; t.CacheRead > 0 && p > 0 {
-		return muted.Render(fmt.Sprintf(" (%d%% hit)", 100*t.CacheRead/p))
+		return muted.Render(" (" + stats.HitPct(float64(t.CacheRead)/float64(p)) + " hit)")
 	}
 	return ""
 }

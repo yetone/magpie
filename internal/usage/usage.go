@@ -844,6 +844,26 @@ func (t Totals) HitRate() (float64, bool) {
 	return float64(t.CacheRead) / float64(p), true
 }
 
+// HitPct is a hit rate (0 to 1) as a percent, whole unless rounding would
+// say 100% or 0% of a prompt not all or none cached, then to one or two
+// decimals (ZhangXiaof48473 on X); the GUI's hitPct says it the same way.
+func HitPct(h float64) string {
+	s, v := "", 0.0
+	for d := 0; d <= 2; d++ {
+		s = strconv.FormatFloat(100*h, 'f', d, 64)
+		if v, _ = strconv.ParseFloat(s, 64); h <= 0 || h >= 1 || (v > 0 && v < 100) {
+			break
+		}
+	}
+	switch {
+	case h < 1 && v >= 100:
+		s = "99.99"
+	case h > 0 && v <= 0:
+		s = "0.01"
+	}
+	return s + "%"
+}
+
 func (t *Totals) add(r Record, price *catalog.Price) { t.addFrom(Row{Record: r}, price) }
 
 // addFrom is add for a ledger row, whose speed is told as Row.Decode tells

@@ -838,7 +838,7 @@
         const c = el("div", "ctx-stat ctx-cache" + (!known && shown ? " was" : shown ? "" : " none"));
         c.append(el("div", "ctx-k", t("Prompt cache")));
         const cb = el("div", "ctx-big");
-        cb.append(el("b", "", shown ? pct(shown.read / shown.total) : "—"), el("span", "", t("hit")));
+        cb.append(el("b", "", shown ? hitPct(shown.read / shown.total) : "—"), el("span", "", t("hit")));
         const bar = el("div", "ctx-bar");
         const fillBar = el("i");
         fillBar.style.width = (shown ? (shown.read / shown.total) * 100 : 0).toFixed(1) + "%";
@@ -998,8 +998,8 @@
     reliable: "Its requests that didn't fail: none at 20% failing",
   };
   const TAGS = {
-    "cache-friendly": ["Cache-friendly", (v) => t("{pct} of its prompts were read from the vendor's cache", { pct: pct(v) })],
-    "cache-misses": ["Cache misses", (v) => t("Only {pct} of its prompts were read from the cache: each request pays for most of its prompt again", { pct: pct(v) })],
+    "cache-friendly": ["Cache-friendly", (v) => t("{pct} of its prompts were read from the vendor's cache", { pct: hitPct(v) })],
+    "cache-misses": ["Cache misses", (v) => t("Only {pct} of its prompts were read from the cache: each request pays for most of its prompt again", { pct: hitPct(v) })],
     lean: ["Lean start", (v) => t("Every request starts with {tokens} of system prompt, tools and memory", { tokens: fmtK(v) })],
     "heavy-start": ["Heavy start", (v) => t("Every request starts with {tokens} of system prompt, tools and memory, before a word of yours", { tokens: fmtK(v) })],
     "mcp-heavy": ["MCP-heavy", (v) => t("MCP servers' tool definitions take {tokens} of every request", { tokens: fmtK(v) })],
@@ -1086,7 +1086,7 @@
     fact("Largest", fmtK(a.p90), "90% of its requests' prompts are this size or smaller");
     fact("Starts with", fmtK(a.baseline), "System prompt, tools and memory: what every request carries before the conversation");
     fact("Grows by", a.growth ? "+" + fmtK(a.growth) : "—", "How much a request's prompt adds to the one before it, the median");
-    fact("Cache hit", a.scores?.find((s) => s.key === "cache") && a.cache ? pct(a.cache) : "—", "Of its prompts, what the vendor read from its cache");
+    fact("Cache hit", a.scores?.find((s) => s.key === "cache") && a.cache ? hitPct(a.cache) : "—", "Of its prompts, what the vendor read from its cache");
     fact("Window size", a.window ? fmtK(a.window) : "—", "The largest context window of the models it used");
 
     const mix = el("div", "ctx-mix");

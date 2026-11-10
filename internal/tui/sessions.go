@@ -341,7 +341,7 @@ func sessLines(st sessions.Stats, rng int, model, folder string, byCost bool, wi
 	// of all the prompts came to: Input leaves out what was read from the
 	// cache and what was written to it
 	if p := r.Input + r.CacheRead + r.CacheWrite; r.CacheRead > 0 && p > 0 {
-		hit = sMuted.Render(fmt.Sprintf(" (%d%% hit)", 100*r.CacheRead/p))
+		hit = sMuted.Render(" (" + usage.HitPct(float64(r.CacheRead)/float64(p)) + " hit)")
 	}
 	active := sessions.Duration(r.Active)
 	if r.Active >= 0 {

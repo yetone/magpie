@@ -190,4 +190,8 @@ func TestHitRateCountsCacheWrites(t *testing.T) {
 	if got := hitRate(sessions.Tokens{Input: 10, CacheRead: 20, CacheWrite: 70}); !strings.Contains(got, "(20% hit)") {
 		t.Errorf("hitRate = %q, want 20%%", got)
 	}
+	// nearly all of it read is not all of it (ZhangXiaof48473 on X)
+	if got := hitRate(sessions.Tokens{Input: 300, CacheRead: 77200}); !strings.Contains(got, "(99.6% hit)") {
+		t.Errorf("hitRate = %q, want 99.6%%", got)
+	}
 }
