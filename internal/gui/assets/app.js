@@ -7590,9 +7590,14 @@ function partnerTile(pr) {
 }
 
 let fieldIDs = 0;
-function field(label, control, hint) {
+// A hint explains the field: where a pointer can rest (a mouse), app.css
+// keeps it out of sight and settingshints.js shows it in a card on
+// resting over the field, or on a key reaching it, as Settings does
+// (yujezhang on X, 11-10: "界面只保留完成操作必需的信息"). lead is the
+// one short line that stays in sight there: what turning it on costs.
+function field(label, control, hint, lead) {
   const l = el("label", control.classList?.contains("accts") ? "by-list" : "", label); // on a list's first row
-  const wrap = el("div");
+  const wrap = el("div", hint ? "fld" : "");
   wrap.append(control);
   const inputSelector = "input, select, textarea";
   const inputs = control.matches(inputSelector) ? [control] : [...control.querySelectorAll(inputSelector)];
@@ -7604,9 +7609,13 @@ function field(label, control, hint) {
     l.htmlFor = inputs[0].id;
   }
   if (hint) {
-    const help = el("div", "hint", hint);
-    help.id = "field-help-" + ++fieldIDs;
-    wrap.append(help);
+    const lines = [lead && el("div", "hint lead", lead), el("div", "hint expl", hint)].filter(Boolean);
+    for (const help of lines) {
+      help.id = "field-help-" + ++fieldIDs;
+      wrap.append(help);
+    }
+    // a screen reader reads the hint, not the lead it repeats
+    const help = lines[lines.length - 1];
     for (const input of inputs) input.setAttribute("aria-describedby", [input.getAttribute("aria-describedby"), help.id].filter(Boolean).join(" "));
   }
   return [l, wrap];
@@ -9888,7 +9897,7 @@ function drawEditor(p, presetID) {
     const [ctk, ccb] = tick(t("Don't check its certificate"), !!draft.insecureTLS);
     ctk.classList.add("insecure-tls");
     ccb.onchange = () => { draft.insecureTLS = ccb.checked; };
-    const row = field(t("Certificate"), ctk, t("For your own server with a self-signed certificate or one from your company's CA. magpie then can't tell it from another machine answering at its address: turn it on only on a network you trust."));
+    const row = field(t("Certificate"), ctk, t("For your own server with a self-signed certificate or one from your company's CA. magpie then can't tell it from another machine answering at its address: turn it on only on a network you trust."), t("Turn it on only on a network you trust."));
     const [htk, hcb] = tick(t("HTTP/1.1 only"), !!draft.http1);
     hcb.onchange = () => { draft.http1 = hcb.checked; };
     const hrow = field(t("HTTP version"), htk);
@@ -10472,7 +10481,7 @@ function nativeCompactionField(show) {
   const [ntk, ncb] = tick(t("Codex compacts on this provider"), !!draft.nativeCompaction);
   ntk.classList.add("native-compaction");
   ncb.onchange = () => { draft.nativeCompaction = ncb.checked; };
-  const row = field(t("Compaction"), ntk, t("Codex's compaction is asked of this provider as Codex sent it, and the summary it seals goes back to Codex unchanged. Off, magpie writes the summary. A conversation compacted this way continues only on this provider and account: another is refused with an error, never sent without the context."));
+  const row = field(t("Compaction"), ntk, t("Codex's compaction is asked of this provider as Codex sent it, and the summary it seals goes back to Codex unchanged. Off, magpie writes the summary. A conversation compacted this way continues only on this provider and account: another is refused with an error, never sent without the context."), t("A conversation compacted this way continues only on this provider and account."));
   const refresh = () => { for (const e of row) e.style.display = show() ? "" : "none"; };
   refresh();
   return [row, refresh];
@@ -12275,7 +12284,7 @@ function renderRouting(p) {
     u.title = t("Made when the provider is saved; Cancel drops it");
     return u;
   };
-  const rHint = el("div", "hint"), rUnsaved = unsaved();
+  const rHint = el("div", "hint expl"), rUnsaved = unsaved();
   const drawRouting = () => {
     const cur = routingsOf(p).find(([id]) => id === routingNow()) || ROUTINGS[0];
     rHint.textContent = (ROUTINGS.includes(cur) ? t(cur[2]) : cur[2]) + own(cur[0]);
@@ -12288,9 +12297,9 @@ function renderRouting(p) {
   const rPick = routingSegs(routingsOf(p).map(([id, name, , js]) => [id, ROUTINGS.some((r) => r[0] === id) ? t(name) : name, , js]), routingNow(), (routing) => { draft.routing = routing; drawRouting(); });
   const rRow = el("div", "route-pick");
   rRow.append(rPick, rUnsaved);
-  const rWrap = el("div");
+  const rWrap = el("div", "fld");
   rWrap.append(rRow, rHint);
-  const kHint = el("div", "hint"), kUnsaved = unsaved();
+  const kHint = el("div", "hint expl"), kUnsaved = unsaved();
   const drawSink = () => {
     kHint.textContent = t(SINKS[sinkNow() ? 1 : 0][2]);
     kUnsaved.hidden = sinkNow() === !!p.sink;
@@ -12299,9 +12308,9 @@ function renderRouting(p) {
   kPick.classList.add("sink-pick");
   const kRow = el("div", "route-pick");
   kRow.append(kPick, kUnsaved);
-  const kWrap = el("div", "sink-wrap"), kLabel = el("label", "", t("Rate limited"));
+  const kWrap = el("div", "sink-wrap fld"), kLabel = el("label", "", t("Rate limited"));
   kWrap.append(kRow, kHint);
-  const sHint = el("div", "hint"), sUnsaved = unsaved();
+  const sHint = el("div", "hint expl"), sUnsaved = unsaved();
   const drawStays = () => {
     const cur = STAYS.find(([id]) => id === affinityNow()) || STAYS[0];
     sHint.textContent = t(cur[2]);
@@ -12310,7 +12319,7 @@ function renderRouting(p) {
   const sPick = segs(STAYS.map(([id, name]) => [id, t(name)]), affinityNow(), (affinity) => { draft.affinity = affinity; drawStays(); });
   const sRow = el("div", "route-pick");
   sRow.append(sPick, sUnsaved);
-  const sWrap = el("div");
+  const sWrap = el("div", "fld");
   sWrap.append(sRow, sHint);
   drawRouting();
   drawSink();

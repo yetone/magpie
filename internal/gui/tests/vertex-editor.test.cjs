@@ -357,7 +357,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             const ir = inside(i, cls), lr = inside(l, cls + "'s label");
             inside(h, cls + "'s hint");
             if (l.scrollWidth > l.clientWidth || l.scrollHeight > l.clientHeight) out.push(`${cls}'s label cut: ${l.textContent}`);
-            if (h.scrollWidth > h.clientWidth) out.push(`${cls}'s hint cut`);
+            // a hint resting out of sight (--hint: 1) is read in its hover card, not cut
+            if (getComputedStyle(h).getPropertyValue("--hint").trim() !== "1" && h.scrollWidth > h.clientWidth) out.push(`${cls}'s hint cut`);
             if (lr.right > ir.left && lr.bottom > ir.top && lr.top < ir.bottom) out.push(`${cls}'s label over its box`);
             if (ir.width < 140) out.push(`${cls} ${ir.width}px wide`);
           }

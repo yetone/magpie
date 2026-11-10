@@ -5628,7 +5628,10 @@ function routingPage(part) {
     hubText();
     win = null; laid = []; gapOf = new Map();
     list.replaceChildren(el("li", "idle", t(purpose.length || day ? "No requests match these filters." : "No request yet")));
-    say(t("Every request an agent sends to magpie shows up here, routed for real."));
+    // the mode line above already says what plays here; a caption saying
+    // it again was one more line to read (yujezhang on X, 11-10)
+    capQ = [];
+    cap.textContent = "";
     log.hidden = true;
     renderHist(); // none live, but the days the history keeps are still there to look at
     layout();
@@ -5830,15 +5833,17 @@ function routingPage(part) {
   });
   // whether magpie finds groups on its own, by the list it fills (蓝猫 on
   // Discord: they could only be removed one at a time)
-  const gFound = el("div", "rt-gfound");
+  const gFound = el("div", "rt-gfound hint-row");
   // how the agents' lists name every group, one setting for them all (and
   // for the providers' models), so it sits over the groups rather than in
   // one group's editor (PAMI on Discord)
-  const gNames = el("div", "rt-gnames");
+  const gNames = el("div", "rt-gnames hint-row");
   // what every group does that sets none of its own when one is rate
   // limited, slow to start, or every member is busy (jiezhengj on Discord:
   // set once rather than in each group); a group's editor sets its own
-  const gDefs = [el("div", "rt-gdef rt-gdef-sink"), el("div", "rt-gdef rt-gdef-first"), el("div", "rt-gdef rt-gdef-patience")];
+  // (each a .hint-row: its line that explains it rests out of sight, shown
+  // in the hover card, settingshints.js)
+  const gDefs = [el("div", "rt-gdef rt-gdef-sink hint-row"), el("div", "rt-gdef rt-gdef-first hint-row"), el("div", "rt-gdef rt-gdef-patience hint-row")];
   // the groups go with the routing groups built-in plugin; the pools stay
   for (const n of [gHead, gFound, gNames, ...gDefs, gList]) n.dataset.feature = "groups";
   // and off (the Essentials preset leaves it off), where they were
@@ -6771,7 +6776,7 @@ function routingPage(part) {
     s.append(el("i"));
     s.onclick = (e) => { e.stopPropagation(); setFound(!on, s); };
     const txt = el("div", "txt");
-    txt.append(el("b", "", t("Find groups on their own")), el("small", "", on
+    txt.append(el("b", "", t("Find groups on their own")), el("small", "expl", on
       ? t("A model two or more of your providers serve becomes a group of them (auto/…). Switch it off to list and serve only the groups you made or changed.")
       : t("Off: only the groups you made or changed are listed and served. An agent set to a found group is moved to its model from one provider, and a request still naming one goes there too.")));
     if (on) txt.append(skipPick());
@@ -6813,7 +6818,7 @@ function routingPage(part) {
   }
   function drawNames() {
     const txt = el("div", "txt");
-    txt.append(el("b", "", t("Names in agents’ lists")), el("small", "", t("Whether “· routing group” follows a group’s name in the agents’ lists: one setting for every group, and for the provider after each model’s name, as on Settings.")));
+    txt.append(el("b", "", t("Names in agents’ lists")), el("small", "expl", t("Whether “· routing group” follows a group’s name in the agents’ lists: one setting for every group, and for the provider after each model’s name, as on Settings.")));
     // an agent the setting can't reach is named, not left to seem broken
     txt.append(noNamesLine("small", ""));
     // an open editor says what its group will be called: drawn again with it
@@ -6826,7 +6831,7 @@ function routingPage(part) {
     const def = groupDefaults();
     const row = (box, label, hint, opts, cur, key) => {
       const txt = el("div", "txt");
-      txt.append(el("b", "", t(label)), el("small", "", hint));
+      txt.append(el("b", "", t(label)), el("small", "expl", hint));
       // a value set elsewhere (magpie settings set) that no option names
       if (!opts.some(([v]) => v === cur)) opts = [...opts, [cur, key === "firstToken" ? firstWord(cur) : patienceWord(cur)]];
       const pick = segs(opts.map(([v, n]) => [v, t(n)]), cur, (v) => setDefaults({ ...def, [key]: v }));

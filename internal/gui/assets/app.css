@@ -3972,22 +3972,40 @@ input.words.compact-num { flex: none; width: 76px; font-variant-numeric: tabular
    sends, who the allow list lets in), a line with a button or link in
    it. A touch screen, with no hover, keeps them all. */
 @media (hover: hover) {
-  #view-settings:not(.set-searching) .row.pref > .who > .sub:not(.err, .bad, .say, .proxy-check, .lib-way, .image-gen-hidden, .sync-sign-in, .no-names, .pv-hits, .feat-why, .vision-not-marked, .video-gen-how, .font-note, .acts, [role="status"], #proxySub):not(#otelSessionsRow *, #allowList *, .disabled-model *) {
-    --hint: 1; position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  :is(#view-settings:not(.set-searching), .editor.roomy .prov-prefs) .row.pref > .who > .sub:not(.err, .bad, .say, .proxy-check, .lib-way, .image-gen-hidden, .sync-sign-in, .no-names, .pv-hits, .feat-why, .vision-not-marked, .video-gen-how, .font-note, .acts, [role="status"], #proxySub):not(#otelSessionsRow *, #allowList *, .disabled-model *) {
+    --hint: 1; position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
   /* a row left with its name alone is as tall as any other: its control
      (a switch, a field, a shortcut) no longer sets it apart */
   #view-settings .row.pref:not(.feat-set) { box-sizing: content-box; min-height: 27px; } /* 51 with its padding, a line above it outside */
+  /* the same in a provider's editor, field by field (yujezhang on X,
+     11-10: "界面只保留完成操作必需的信息"), and on Routing groups'
+     settings: the line that explains a field rests out of sight. A
+     field's lead, the short line of what turning it on costs, stays in
+     its place; so do a warning and a line with a link or control in it */
+  .editor.roomy .fld > .hint.expl:not(.acts, .warn, .err),
+  .hint-row > .txt > .expl {
+    --hint: 1; position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  .editor.roomy .fld > .hint.lead { display: block; }
+  /* the line held out of sight stays in its field's box: placed against
+     the page, deep in the editor's scroll it would grow the page a scrollbar */
+  .editor.roomy .fld, .hint-row > .txt { position: relative; }
   /* Check in now's result comes under its name and the row grows down,
      its button held where it was pressed */
   :is(#view-settings, .prov-prefs) .ci-now-row { align-items: flex-start; }
 }
-.set-hint { position: fixed; z-index: 60; max-width: min(380px, calc(100vw - 32px)); padding: 8px 11px; border-radius: 9px; background: var(--pop-bg); box-shadow: var(--shadow); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); font-size: 12px; line-height: 1.45; color: var(--fg-2); overflow-wrap: anywhere; pointer-events: none; opacity: 0; transform: translateY(-2px); transition: opacity .14s ease, transform .14s ease; }
+/* a field's lead says again, in short, what its hint says: in sight only
+   where the hint isn't (above, with a mouse) */
+.fld > .hint.lead { display: none; }
+/* the card comes from its row, a little smaller, on the strong ease-out
+   (UI motion rules: a tooltip 125-200ms, never from nothing) */
+.set-hint { position: fixed; z-index: 60; max-width: min(380px, calc(100vw - 32px)); padding: 8px 11px; border-radius: 9px; background: var(--pop-bg); box-shadow: var(--shadow); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); font-size: 12px; line-height: 1.45; color: var(--fg-2); overflow-wrap: anywhere; pointer-events: none; opacity: 0; transform: translateY(-2px) scale(.96); transition: opacity .15s ease, transform .15s cubic-bezier(.23, 1, .32, 1); }
 .set-hint.on { opacity: 1; transform: none; }
 .set-hint > p { margin: 0; }
 .set-hint > p + p { margin-top: 4px; }
-@media (prefers-reduced-motion: reduce) { .set-hint { transition: none; transform: none; } }
-:root[data-motion="reduce"] .set-hint { transition: none; transform: none; }
+@media (prefers-reduced-motion: reduce) { .set-hint { transition: opacity .15s ease; transform: none; } }
+:root[data-motion="reduce"] .set-hint { transition: opacity .15s ease; transform: none; }
 .prefs .val.rule-add { flex: 1 1 100%; max-width: none; margin-left: 0; gap: 6px; }
 input.words.rule-kind { flex: none; width: 110px; }
 input.words.gateway-port { flex: none; width: 110px; font-variant-numeric: tabular-nums; }input.words.rule-match { flex: 1 1 auto; width: auto; min-width: 0; }
