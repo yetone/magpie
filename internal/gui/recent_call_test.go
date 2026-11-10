@@ -90,7 +90,7 @@ func TestRecentCallBodiesOnDemand(t *testing.T) {
 	if s.Recent()[0].RequestBody == "" || s.Recent()[0].ResponseBody == "" {
 		t.Fatal("building a summary changed the gateway's captured bodies")
 	}
-	guard := webGuard("session", "fixture", 0, mux)
+	guard := webGuard("session", "fixture", 0, nil, mux)
 	w = httptest.NewRecorder()
 	guard.ServeHTTP(w, httptest.NewRequest("GET", query(first), nil))
 	if w.Code != http.StatusUnauthorized {

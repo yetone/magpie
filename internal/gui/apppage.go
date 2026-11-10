@@ -217,7 +217,7 @@ func (p *appPage) apply() {
 		p.page = p.mk()
 	}
 	if p.key != c.Key || p.cur.Load() == nil {
-		h := webServed(strconv.Itoa(c.port()), c.Key, webCookieAge, p.page)
+		h := webServed(strconv.Itoa(c.port()), c.Key, webCookieAge, nil, p.page)
 		p.cur.Store(&h)
 		p.key = c.Key
 	}

@@ -73,7 +73,7 @@ func TestRemoteOpensTheOtherMagpie(t *testing.T) {
 	onePortHome(t)
 	const key = "0123456789abcdef-remote"
 	reached := 0
-	other := httptest.NewServer(webHandler("3430", key, webCookieAge, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+	other := httptest.NewServer(webHandler("3430", key, webCookieAge, nil, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		reached++
 		rw.WriteHeader(http.StatusTeapot)
 	})))

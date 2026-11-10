@@ -215,7 +215,7 @@ func TestPluginPageServiceProxied(t *testing.T) {
 	t.Setenv("MAGPIE_ADDR", "127.0.0.1:3425")
 	page := serviceMux(true)
 	p := listed(t, page)
-	srv := httptest.NewServer(webHandler("3430", onePortWebKey, 0, page))
+	srv := httptest.NewServer(webHandler("3430", onePortWebKey, 0, nil, page))
 	t.Cleanup(srv.Close)
 	base := srv.URL + strings.TrimSuffix(p.URL, "index.html") + pageServicePath
 	get := func(target string, hdr ...string) *http.Response {

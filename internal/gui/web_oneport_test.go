@@ -179,7 +179,7 @@ func forwarded(t *testing.T, gw func(string, int, string, string, string, string
 const onePortWebKey = "0123456789abcdef0123456789abcdef"
 
 func onePortPage(reached *bool) http.Handler {
-	return webServed("3430", onePortWebKey, 0, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+	return webServed("3430", onePortWebKey, 0, nil, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		*reached = true
 		rw.WriteHeader(http.StatusTeapot)
 	}))

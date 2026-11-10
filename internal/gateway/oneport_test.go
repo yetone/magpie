@@ -3,6 +3,9 @@ package gateway
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -46,6 +49,40 @@ func TestClientPathOnlyClean(t *testing.T) {
 		if !ClientPath(p) {
 			t.Errorf("%q is not a client path", p)
 		}
+	}
+}
+
+// docs/reference.md's LazyCat manifest makes public (public_path) every
+// client route and nothing else. A route it leaves out sends an agent that
+// isn't signed in to the box to the box's login page; one of the page's
+// own made public there lets a browser that isn't signed in reach magpie
+// without being sent to the box's sign-in.
+func TestLazyCatManifestListsTheClientRoutes(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, doc, ok := strings.Cut(string(b), "\n#### LazyCat\n")
+	if !ok {
+		t.Fatal("docs/reference.md has no LazyCat section")
+	}
+	_, list, ok := strings.Cut(doc, "\n  public_path:\n")
+	if !ok {
+		t.Fatal("its manifest has no public_path")
+	}
+	var public []string
+	for _, l := range strings.Split(list, "\n") {
+		p, ok := strings.CutPrefix(strings.TrimSpace(l), "- ")
+		if !ok {
+			break
+		}
+		public = append(public, strings.TrimSuffix(p, "/"))
+	}
+	want := slices.Clone(clientPrefixes)
+	slices.Sort(public)
+	slices.Sort(want)
+	if !slices.Equal(public, want) {
+		t.Fatalf("public_path %v, the client routes %v", public, want)
 	}
 }
 

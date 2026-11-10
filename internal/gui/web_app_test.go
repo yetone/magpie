@@ -27,7 +27,7 @@ func TestWebAppAddsToHomeScreen(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
 	const key = "0123456789abcdef-key"
-	srv := webHandler("3430", key, 0, webPageHandler(t, webHost{}, nil))
+	srv := webHandler("3430", key, 0, nil, webPageHandler(t, webHost{}, nil))
 	do := func(method, path string, signedIn bool) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, path, nil)
 		if signedIn {

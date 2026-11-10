@@ -167,7 +167,7 @@ func TestProviderDetectDraft(t *testing.T) {
 
 	// magpie web: without its key a draft probe is turned away, and the
 	// vendor is never asked
-	guarded := webHandler("3999", "0123456789abcdef-1545", time.Hour, mux)
+	guarded := webHandler("3999", "0123456789abcdef-1545", time.Hour, nil, mux)
 	if w := post(guarded, "detect", `{"typed":true,"key":"sk-typed","base":"`+base+`","picked":["draft-m"]}`); w.Code != http.StatusUnauthorized {
 		t.Fatalf("no web key: %d %s", w.Code, w.Body)
 	}

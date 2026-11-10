@@ -83,7 +83,7 @@ func TestGatewayConversationAPI(t *testing.T) {
 	if _, ok := usage.GatewaySessionByID("opencode", "remote-only", nil); !ok {
 		t.Fatal("clear removed usage")
 	}
-	guard := webGuard("test-session", "secret", 0, mux)
+	guard := webGuard("test-session", "secret", 0, nil, mux)
 	w = httptest.NewRecorder()
 	guard.ServeHTTP(w, httptest.NewRequest("GET", "/api/sessions/transcript?agent=opencode&id=remote-only", nil))
 	if w.Code != http.StatusUnauthorized {
