@@ -136,7 +136,7 @@ function drawMaskCard() {
   } else {
     // back to its settings (netube99 on X), unless Turn off goes there
     if (!maskSettings().redactWords?.length) {
-      const set = el("button", "text", t("Settings") + " › " + $("#setTab-privacy").textContent);
+      const set = el("button", "link", t("Settings") + " › " + $("#setTab-privacy").textContent);
       set.type = "button";
       set.onclick = (e) => openSettingsAt(e, "privacy", "#redactList .row");
       head.append(set);

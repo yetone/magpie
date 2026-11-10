@@ -196,7 +196,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await t.test(`${lang} at ${width}px: Masking's head goes back to Settings › Privacy`, async () => {
           const { page } = await open(lang, width, "?view=masking");
           const head = page.locator("#maskCard .msk-head");
-          const set = head.locator("button.text", { hasText: w("Settings") + " › " + w("Privacy") });
+          const set = head.locator("button.link", { hasText: w("Settings") + " › " + w("Privacy") });
           await set.waitFor();
           assert.equal(await wide(page), 0);
           assert.deepEqual(await past(head), []);

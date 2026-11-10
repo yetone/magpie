@@ -6,10 +6,9 @@
 #view-masking .grow { flex: 1; }
 .msk-card { position: relative; padding: 16px 20px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); }
 .msk-card[hidden], .msk-list[hidden], .msk-one[hidden] { display: none; }
-.msk-head { display: flex; align-items: flex-start; gap: 8px 12px; }
-.msk-title { min-width: 0; }
-/* narrow, its buttons go under the words rather than off the side */
-@media (max-width: 600px) { .msk-head { flex-wrap: wrap; } .msk-title { flex-basis: 100%; } }
+.msk-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 12px; }
+/* its buttons go under the words before they squeeze them */
+.msk-title { flex: 1 1 16em; min-width: 0; }
 .msk-title h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--fg); }
 .msk-sub { display: block; margin-top: 3px; font-size: 12px; line-height: 1.4; color: var(--muted); }
 .msk-band { display: grid; grid-template-columns: minmax(0, 240px) minmax(0, 1fr); gap: 36px; align-items: center; margin-top: 12px; }
