@@ -6191,7 +6191,7 @@ function routingPage(part) {
   // there, rather than leaving the slot empty.
   const openGroupEditor = async (g) => {
     if (groupDirty() && !(await confirmDiscard())) return false;
-    gEdit = { id: g.id, draft: { name: g.name, members: [...g.members], match: [...(g.match || [])], matched: [...(g.matched || [])], fast: [...(g.fast || [])], off: [...(g.off || [])], weights: { ...(g.weights || {}) }, effortMaps: Object.fromEntries(Object.entries(g.effortMaps || {}).map(([id, m]) => [id, { ...m }])), accounts: [...(g.accounts || [])], keys: [...(g.keys || [])], routing: g.routing || "", pick: g.pick || "", affinity: g.affinity || "", sink: sinkModeOf(g), unlists: !!g.unlists, firstToken: g.firstToken || 0, patience: g.patience || 0, context: g.context || 0, classifier: g.classifier || "", intentSure: g.intentSure ?? null, effort: g.effort || "", levels: [...(g.levels || [])], rules: (g.rules || []).map((r) => ({ ...r, ...(r.more?.length ? { more: [...r.more] } : {}), intent: r.intent || "", agents: [...(r.agents || [])], folders: [...(r.folders || [])], exceptFolders: [...(r.exceptFolders || [])], where: (r.where || []).map((c) => ({ ...c })), time: r.time ? { ...r.time, days: [...(r.time.days || [])] } : null })) } };
+    gEdit = { id: g.id, draft: { name: g.name, note: g.note || "", members: [...g.members], match: [...(g.match || [])], matched: [...(g.matched || [])], fast: [...(g.fast || [])], off: [...(g.off || [])], weights: { ...(g.weights || {}) }, effortMaps: Object.fromEntries(Object.entries(g.effortMaps || {}).map(([id, m]) => [id, { ...m }])), accounts: [...(g.accounts || [])], keys: [...(g.keys || [])], routing: g.routing || "", pick: g.pick || "", affinity: g.affinity || "", sink: sinkModeOf(g), unlists: !!g.unlists, firstToken: g.firstToken || 0, patience: g.patience || 0, context: g.context || 0, classifier: g.classifier || "", intentSure: g.intentSure ?? null, effort: g.effort || "", levels: [...(g.levels || [])], rules: (g.rules || []).map((r) => ({ ...r, ...(r.more?.length ? { more: [...r.more] } : {}), intent: r.intent || "", agents: [...(r.agents || [])], folders: [...(r.folders || [])], exceptFolders: [...(r.exceptFolders || [])], where: (r.where || []).map((c) => ({ ...c })), time: r.time ? { ...r.time, days: [...(r.time.days || [])] } : null })) } };
     renderGroups();
     return true;
   };
@@ -6883,10 +6883,18 @@ function routingPage(part) {
     const nm = el("div", "nm");
     nm.append(el("b", "", g.name), el("code", "mdl", g.ref || "group/" + g.id));
     if (g.auto) nm.append(el("small", "auto", t("found by magpie")));
+    main.append(nm);
+    // the user's own word on it (ConatusMoon2222 on X), one quiet line,
+    // only when there is one; the whole of it on hover
+    if (g.note) {
+      const note = el("div", "rt-gnote", g.note);
+      note.title = g.note;
+      main.append(note);
+    }
     const manual = g.routing === "manual";
     const sep = g.routing === "order" ? " → " : " · ";
     const mem = manual ? pickRow(g) : el("div", "mem", shownMembers(g).map((id) => memberLabel(g, id) + (g.off?.includes(id) ? ` (${t("off")})` : "")).join(sep));
-    main.append(nm, mem);
+    main.append(mem);
     if (!g.decides) main.append(...groupQuota(g));
     for (const p of g.patterns || []) {
       const line = el("div", "mem pat" + (p.models ? "" : " none"));
@@ -6990,7 +6998,7 @@ function routingPage(part) {
         closeProtoMenu();
         if (v === cur || (groupDirty() && !(await confirmDiscard()))) return b.focus({ preventScroll: true });
         const n = opts.find(([id]) => id === v)?.[1] || v;
-        await groupAction("save", { id: g.id, name: g.name, members: namedOf(g), match: g.match || [], routing: v, pick: g.pick || "", affinity: g.affinity || "", sink: !!g.sink && sinkable(v), noSink: !!g.noSink, firstToken: g.firstToken || 0, patience: g.patience || 0, rules: g.rules || [], effort: g.effort || "", classifier: g.classifier || "", intentSure: g.intentSure ?? null, context: g.context || 0, levels: g.levels || [], family: g.family || "", fast: g.fast || [], off: g.off || [], weights: g.weights || {}, effortMaps: g.effortMaps || {}, accounts: g.accounts || [], unlists: !!g.unlists },
+        await groupAction("save", { id: g.id, name: g.name, note: g.note || "", members: namedOf(g), match: g.match || [], routing: v, pick: g.pick || "", affinity: g.affinity || "", sink: !!g.sink && sinkable(v), noSink: !!g.noSink, firstToken: g.firstToken || 0, patience: g.patience || 0, rules: g.rules || [], effort: g.effort || "", classifier: g.classifier || "", intentSure: g.intentSure ?? null, context: g.context || 0, levels: g.levels || [], family: g.family || "", fast: g.fast || [], off: g.off || [], weights: g.weights || {}, effortMaps: g.effortMaps || {}, accounts: g.accounts || [], unlists: !!g.unlists },
           t("{name}: {routing}", { name: g.name, routing: t(n) }));
         // the rows were drawn anew: the keyboard stays on this one's routing
         gList.querySelector(`.rt-group[data-id="${CSS.escape(g.id)}"] .rt-groute`)?.focus({ preventScroll: true });
@@ -7123,7 +7131,7 @@ function routingPage(part) {
       b.onclick = (e) => {
         e.stopPropagation(); // the card opens the editor; this picks
         if (on) return;
-        groupAction("save", { id: g.id, name: g.name, members: namedOf(g), match: g.match || [], routing: "manual", pick: id, affinity: g.affinity || "", sink: !!g.sink, noSink: !!g.noSink, firstToken: g.firstToken || 0, patience: g.patience || 0, rules: g.rules || [], effort: g.effort || "", classifier: g.classifier || "", intentSure: g.intentSure ?? null, context: g.context || 0, levels: g.levels || [], family: g.family || "", fast: g.fast || [], off: g.off || [], weights: g.weights || {}, effortMaps: g.effortMaps || {}, accounts: g.accounts || [], unlists: !!g.unlists },
+        groupAction("save", { id: g.id, name: g.name, note: g.note || "", members: namedOf(g), match: g.match || [], routing: "manual", pick: id, affinity: g.affinity || "", sink: !!g.sink, noSink: !!g.noSink, firstToken: g.firstToken || 0, patience: g.patience || 0, rules: g.rules || [], effort: g.effort || "", classifier: g.classifier || "", intentSure: g.intentSure ?? null, context: g.context || 0, levels: g.levels || [], family: g.family || "", fast: g.fast || [], off: g.off || [], weights: g.weights || {}, effortMaps: g.effortMaps || {}, accounts: g.accounts || [], unlists: !!g.unlists },
           t("{name}: every request to {model}", { name: g.name, model: memberName(id) }));
       };
       box.append(b);
@@ -7144,7 +7152,7 @@ function routingPage(part) {
     h.append(el("b", "", g ? g.name : t("New group")));
     if (g?.auto) h.append(el("span", "note", t("found by magpie — saving a change makes it yours")));
     ed.append(h);
-    const keys = (i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Escape") { cancelGroup(); } else if (e.key === "Enter" && i === name) saveBtn.onclick(); }; return i; };
+    const keys = (i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Escape") { cancelGroup(); } else if (e.key === "Enter" && (i === name || i === noteIn)) saveBtn.onclick(); }; return i; };
     const name = keys(input(d.name, t("e.g. Opus anywhere")));
     const idHint = el("div", "hint");
     // an existing group's id can change (an auto- one found by magpie too);
@@ -7198,6 +7206,12 @@ function routingPage(part) {
     nw.append(name);
     if (!g) nw.append(idHint);
     ed.append(el("label", "", t("Name")), nw);
+    // the user's own word on the group, shown under its name in the list
+    const noteIn = keys(input(d.note || "", t("e.g. for the work key")));
+    noteIn.classList.add("rt-gnote-in");
+    noteIn.maxLength = 200; // provider.NoteLongest
+    noteIn.oninput = () => { d.note = noteIn.value; };
+    ed.append(el("label", "", t("Note")), noteIn);
     const sw = el("div", "gsuffix");
     sw.append(sfxSaid);
     sayLabel();
@@ -8697,7 +8711,7 @@ function routingPage(part) {
       if (own && !d.levels.length) return status(t("Pick a level to offer, or leave them to its models"), "warn");
       saveBtn.classList.add("busy");
       // refused, Add can be pressed again (busy, it takes no clicks)
-      groupAction("save", { id: idOf(), from: g?.id, name: d.name.trim() || idOf(), members: namedOf(d), placed: d.members, match: d.match, routing: d.routing, pick: d.pick || "", affinity: d.affinity, sink: d.sink === "sink" && sinkable(d.routing), noSink: d.sink === "", firstToken: d.firstToken || 0, patience: d.patience || 0, rules: d.rules, effort: d.effort, classifier: d.rules.some((r) => r.intent) || d.effort === "auto" ? d.classifier : "", intentSure: d.intentSure ?? null, context: d.context || 0, levels: own ? d.levels : [], family: g?.family || "", fast: d.fast.filter((x) => d.members.includes(x)), off: d.off.filter((x) => d.members.includes(x)), weights: Object.fromEntries(Object.entries(d.weights).filter(([x, n]) => d.members.includes(x) && n > 1)), effortMaps: Object.fromEntries(Object.entries(d.effortMaps).filter(([x, m]) => d.members.includes(x) && Object.keys(m).length)), accounts: d.accounts.filter((a) => accountPids().includes(a.slice(0, a.indexOf("/")))), keys: d.keys, unlists: !!d.unlists }, t(g ? "{name} saved" : "{name} added", { name: d.name.trim() || idOf() }))
+      groupAction("save", { id: idOf(), from: g?.id, name: d.name.trim() || idOf(), note: (d.note || "").trim(), members: namedOf(d), placed: d.members, match: d.match, routing: d.routing, pick: d.pick || "", affinity: d.affinity, sink: d.sink === "sink" && sinkable(d.routing), noSink: d.sink === "", firstToken: d.firstToken || 0, patience: d.patience || 0, rules: d.rules, effort: d.effort, classifier: d.rules.some((r) => r.intent) || d.effort === "auto" ? d.classifier : "", intentSure: d.intentSure ?? null, context: d.context || 0, levels: own ? d.levels : [], family: g?.family || "", fast: d.fast.filter((x) => d.members.includes(x)), off: d.off.filter((x) => d.members.includes(x)), weights: Object.fromEntries(Object.entries(d.weights).filter(([x, n]) => d.members.includes(x) && n > 1)), effortMaps: Object.fromEntries(Object.entries(d.effortMaps).filter(([x, m]) => d.members.includes(x) && Object.keys(m).length)), accounts: d.accounts.filter((a) => accountPids().includes(a.slice(0, a.indexOf("/")))), keys: d.keys, unlists: !!d.unlists }, t(g ? "{name} saved" : "{name} added", { name: d.name.trim() || idOf() }))
         .then(() => saveBtn.classList.remove("busy"));
     };
     // what goes wrong is said where it is seen, never a click that does nothing

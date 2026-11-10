@@ -14,7 +14,19 @@ const { chromium, webkit } = require("playwright");
 const openAdvanced = async (page) => {
   const d = page.locator(".rt-gedit .rt-gadv");
   await d.waitFor({ state: "attached" });
-  if (!(await d.evaluate((e) => e.open))) await d.locator(":scope > summary").click();
+  if (await d.evaluate((e) => e.open)) return;
+  // WebKit doesn't scroll the page's own scroller to a click: wheel the
+  // summary above the view's foot bar, which sits over the page
+  const s = d.locator(":scope > summary");
+  const vw = page.viewportSize();
+  await page.mouse.move(vw.width / 2, vw.height / 2);
+  for (let i = 0; i < 20; i++) {
+    const b = await s.boundingBox(), foot = await page.evaluate(() => document.querySelector(".view-foot")?.getBoundingClientRect().top ?? innerHeight);
+    if (b && b.y >= 0 && b.y + b.height <= foot) break;
+    await page.mouse.wheel(0, b && b.y < 0 ? -300 : 300);
+    await page.waitForTimeout(100);
+  }
+  await s.click();
 };
 
 const assets = path.resolve(__dirname, "../assets");

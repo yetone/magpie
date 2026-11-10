@@ -88,7 +88,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.mouse.move(width / 2, 600);
         for (let i = 0; i < 30; i++) {
           const b = await loc.boundingBox();
-          if (b && b.y >= 0 && b.y + b.height <= 2000) return loc;
+          // in sight is above the view's foot bar, which sits over the page
+          const foot = await page.evaluate(() => document.querySelector(".view-foot")?.getBoundingClientRect().top ?? 2000);
+          if (b && b.y >= 0 && b.y + b.height <= Math.min(foot, 2000)) return loc;
           await page.mouse.wheel(0, b && b.y < 0 ? -400 : 400);
           await page.waitForTimeout(50);
         }

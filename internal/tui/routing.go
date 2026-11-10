@@ -495,6 +495,15 @@ func (m model) updateGroup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return saveGroup(g.ID, func(g *provider.Group) error { g.Family = v; return nil }, g.Name+" family "+dash(v))
 			}})
 		m.back = modeGroup
+	case "N":
+		in := newInput("your own word on it, e.g. office key only")
+		in.SetValue(g.Note)
+		m.openAsk(ask{crumbs: []string{"routing", g.Name, "note"}, input: in, empty: true,
+			hint: "shown under its name; empty clears it",
+			onEnter: func(v string) tea.Cmd {
+				return saveGroup(g.ID, func(g *provider.Group) error { g.Note = v; return nil }, g.Name+" note "+dash(provider.CleanNote(v)))
+			}})
+		m.back = modeGroup
 	case "x":
 		in := newInput("tokens, e.g. 200k · empty for its models' own")
 		if g.Context > 0 {
@@ -683,7 +692,11 @@ func (m model) viewGroup() string {
 	if g.Auto {
 		head = append(head, "found by magpie: a change makes it yours")
 	}
-	b.WriteString(pad + "  " + sMuted.Render(strings.Join(head, " · ")) + "\n\n")
+	b.WriteString(pad + "  " + sMuted.Render(strings.Join(head, " · ")) + "\n")
+	if g.Note != "" {
+		b.WriteString(pad + "  " + sText.Render(trunc(g.Note, max(m.w-8, 10))) + "\n")
+	}
+	b.WriteString("\n")
 	b.WriteString(pad + "  " + sFaint.Render("models · the first that can take a request gets it") + "\n")
 	hits := provider.PatternHits(g)
 	memFrom, memTo, ruleFrom, ruleTo := groupWindow(len(g.Members), len(g.Rules), m.gsel, m.groupRows(g, len(hits)))
@@ -757,6 +770,9 @@ func (m model) groupRows(g provider.Group, hits int) int {
 	}
 	if len(g.Rules) == 0 {
 		fixed++
+	}
+	if g.Note != "" {
+		fixed++ // its line under the head
 	}
 	if slices.ContainsFunc(g.Rules, func(r provider.Rule) bool { return r.Intent != "" }) {
 		fixed += 2

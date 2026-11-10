@@ -195,8 +195,13 @@ const ContextSmallest = -1
 
 // Group is a routing group.
 type Group struct {
-	ID      string   `json:"id"`
-	Name    string   `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Note is the user's own word on the group (ConatusMoon2222 on X:
+	// which key it is for, why it is ordered so): one line, shown under
+	// its name on the Routing page and by magpie group, never sent to an
+	// agent or a vendor. Empty shows nothing (CleanNote).
+	Note    string   `json:"note,omitempty"`
 	Members []string `json:"members"` // "provider/model[:effort]" or "group/<id>", in order (see MemberEffort)
 	// Former are the ids it had before a rename (RenameGroup), newest
 	// last: a request still asking group/<old> is routed to it, until a
@@ -1666,6 +1671,19 @@ func (e Entry) Quiet() bool {
 	return e.Reasonless || !e.Reasoning && len(e.Efforts) == 0 && !levelsUnknown(e)
 }
 
+// NoteLongest is how many characters a group's note keeps.
+const NoteLongest = 200
+
+// CleanNote is a group's note as stored: one line, its spaces and line
+// breaks run together, at most NoteLongest characters.
+func CleanNote(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if r := []rune(s); len(r) > NoteLongest {
+		s = strings.TrimSpace(string(r[:NoteLongest]))
+	}
+	return s
+}
+
 // SaveGroup adds or replaces a group of the user's. Changing one magpie
 // found makes it the user's.
 func SaveGroup(g Group) error {
@@ -1682,6 +1700,7 @@ func SaveGroup(g Group) error {
 	if g.Name == "" {
 		g.Name = g.ID
 	}
+	g.Note = CleanNote(g.Note)
 	g.FirstToken = max(g.FirstToken, FirstTokenWait)
 	if g.Sink {
 		g.NoSink = false

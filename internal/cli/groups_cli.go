@@ -23,7 +23,9 @@ const groupUsage = `usage:
   magpie group add <name> models=<m1>[,m2…] [routing=…] [stays=…]
                                           make a group; agents pick it as group/<id>, the id made from the name;
                                           a name in use replaces that group
-  magpie group set <id> k=v…              change one: name, models (the whole list, in order, patterns too),
+  magpie group set <id> k=v…              change one: name, note (your own word on it, shown under its name:
+                                          note='for the work key'; empty clears it),
+                                          models (the whole list, in order, patterns too),
                                           models+=<m>[,m2…] (append), models-=<m>[,m2…] (drop), routing, stays,
                                           context (how long a request agents are told it takes: 272k; smallest
                                           is its smallest model's; empty is its largest model's), levels (the reasoning levels agents are offered:
@@ -522,6 +524,8 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 			}
 		case "family", "tag":
 			g.Family = strings.TrimSpace(v)
+		case "note", "description", "desc", "remark":
+			g.Note = provider.CleanNote(v)
 		case "listed":
 			// no: the models in it leave the lists agents see (#1783)
 			switch strings.ToLower(strings.TrimSpace(v)) {
@@ -601,7 +605,7 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 			g.Pick, err = pickMember(g.Members, v)
 			g.Routing = provider.Manual
 		default:
-			return fmt.Errorf("unknown field %q (fields: name, models, models+, models-, routing, pick, stays, context, levels, family, effort, classifier, intent-sure, fast, weight, listed; magpie group help)", k)
+			return fmt.Errorf("unknown field %q (fields: name, note, models, models+, models-, routing, pick, stays, context, levels, family, effort, classifier, intent-sure, fast, weight, listed; magpie group help)", k)
 		}
 		if err != nil {
 			return err
@@ -1113,11 +1117,11 @@ func groups() error {
 			names[e.ID] = e // a group in a group is served when it is
 		}
 	}
-	type row struct{ name, id, how, members, uses string }
+	type row struct{ name, id, how, members, uses, note string }
 	var rows []row
 	w := [3]int{}
 	for _, g := range shown {
-		r := row{name: bold.Render(g.Name), id: muted.Render(g.Ref())}
+		r := row{name: bold.Render(g.Name), id: muted.Render(g.Ref()), note: g.Note}
 		if g.Auto {
 			r.name += " " + faint.Render("found")
 		}
@@ -1173,6 +1177,9 @@ func groups() error {
 	}
 	for _, r := range rows {
 		fmt.Printf("  %s  %s  %s  %s%s\n", pad(r.name, w[0]), pad(r.id, w[1]), pad(r.how, w[2]), r.members, r.uses)
+		if r.note != "" {
+			fmt.Printf("  %s\n", muted.Render(r.note)) // the user's own word on it, under its row
+		}
 	}
 	var ids []string
 	for _, g := range hidden {
@@ -1201,6 +1208,9 @@ func showGroup(g provider.Group) error {
 		head += amber.Render("  removed") + muted.Render(" · magpie group restore "+g.ID)
 	}
 	fmt.Println(" ", head)
+	if g.Note != "" {
+		kv("note", g.Note)
+	}
 	if g.Routing == provider.Manual {
 		kv("routing", "manual"+muted.Render("  every request to "+g.Picked()+"; magpie group pick "+g.ID+" <model> picks another"))
 	} else {

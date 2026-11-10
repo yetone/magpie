@@ -624,6 +624,7 @@ button.rt-session { cursor: pointer; }
    opens the editor (groupRow). Its controls stay controls. */
 .rt-groups:not(.sorting) > .rt-group :is(.nm b, .nm code.mdl, .mem),
 .rt-gedit .fallback:not(.rt-rules) > .fbl:not(.sorting) > .fbrow > .n, .rt-gaccts > .fbrow > .n { user-select: text; -webkit-user-select: text; }
+.rt-group .rt-gnote { margin-top: 1px; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rt-group .mem { margin-top: 2px; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* a pattern the group finds models by, and how many it matches now */
 .rt-group .mem.pat code, .rt-pats code { font: var(--code-style, normal) 500 11px/1.5 var(--code-font, var(--code)); font-stretch: var(--code-stretch, 100%); color: var(--fg-2); }
