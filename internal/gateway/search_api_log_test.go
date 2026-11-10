@@ -124,7 +124,8 @@ func TestSearchAPIAsksAreLogged(t *testing.T) {
 func TestSearchAPIFailureKeepsNoURL(t *testing.T) {
 	fresh(t)
 	// letters only: a number could be in the server's random port
-	// (127.0.0.1:44105 held "4410" on ubuntu CI, #5616)
+	// (127.0.0.1:44105 held "4410" on ubuntu CI, #5616) or in the row's
+	// route_id (1794294410888 did on 11-10)
 	const query = "wombat lattice numbatzor"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, _, err := w.(http.Hijacker).Hijack()
