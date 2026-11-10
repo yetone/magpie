@@ -4005,19 +4005,14 @@ function openRowMenu(anchor, acts) {
   items[0]?.focus(NO_SCROLL);
 }
 
-// Claude Code's opus/sonnet/haiku/fable can each have a model of their own
-// once it runs through magpie. They share one button, which lists the four;
-// picking one opens the model picker for it.
+// Claude Code's tiers, each a model of its own, in one button
 const TIERS = ["opus", "sonnet", "haiku", "fable"];
 // and each an effort of its own (#536), in the same menu, under its model
 const TIER_EFFORTS = TIERS.map((tier) => tier + " effort");
-// fields that fall back to the agent's model when unset: omp's smol and
-// slow roles take the session's, as its subagents do ("smol", not "small":
-// other agents' small model is a picker of its own)
+// fields that fall back to the agent's model when unset ("smol", not
+// "small", another agent's own picker)
 const FOLLOWS_MODEL = [...TIERS, "subagents", "smol", "slow"];
-// omp's roles share one square as Claude Code's tiers do (#1397), each
-// with its level ("…:high") under its model; the roles after slow say
-// what omp does when unset
+// omp's roles share one square (#1397); unset, what omp does
 const OMP_UNSET = {
   plan: "omp's own pick", vision: "omp's own pick", advisor: "the slow role's model, else omp's own pick",
   commit: "the smol role's model", tiny: "the smol role's model", memory: "the tiny role's model, else the smol role's",
@@ -4026,8 +4021,7 @@ const OMP_OWN_PICK = Object.keys(OMP_UNSET);
 const OMP_ROLES = ["subagents", "smol", "slow", ...OMP_OWN_PICK];
 // omp, a named profile of it (omp#<name>) or either in a WSL distro
 const ompAgent = (a) => kindOf(a).split("#")[0] === "omp";
-// the roles an agent's square lists, and whether a field is one of them or
-// one of their levels
+// the roles a square lists; a field one of their levels
 const menuRoles = (a) => ompAgent(a) ? OMP_ROLES : TIERS;
 const roleLevel = (label) => TIER_EFFORTS.includes(label) || OMP_ROLES.some((r) => label === r + " thinking");
 const grouped = (a, f) => menuRoles(a).includes(f.label) || roleLevel(f.label);
@@ -4037,20 +4031,12 @@ const ROLE_MODELS = [...FOLLOWS_MODEL, ...OMP_OWN_PICK];
 // to them (#709)
 const PICKS_ITSELF = ["pi", "omo", "prime-agent", "mu"];
 
-// A field that follows the model unless set — Codex's subagents, Claude
-// Code's tiers, omp's roles — is a small square after the pickers rather
-// than a third picker, which a row has no room for: it wrapped onto a line
-// of its own. So is Codex's sign-in, ChatGPT or magpie as its provider,
-// and the effort its subagents start at (#469), and the model Codex writes
-// its memories with (Yc on Discord).
+// A field that follows the model unless set is a small square after the
+// pickers, which a row has no room for (#469, Yc on Discord).
 const SUB_EFFORT = "subagent effort";
 const MEMORIES = "memories";
-// the model magpie puts every Codex subagent on, whatever its lead asked
-// for (willz on Discord): any model magpie serves (#1633); a subagent
-// whose task a ChatGPT-backed lead sealed stays on its own unless the one
-// set is a ChatGPT account's, the Routing page saying why. Claude
-// Desktop's subagent model is the same square: the gateway puts each of
-// its subagents' turns on it
+// the model magpie puts every Codex (or Claude Desktop) subagent on,
+// whatever its lead asked for (willz on Discord, #1633)
 const SUB_MODEL = "subagent model";
 // Claude Code's auto mode square: the model its client-side auto mode
 // classifier runs on (CLAUDE_CODE_AUTO_MODE_MODEL); unset, Claude Code's own
@@ -4079,10 +4065,8 @@ const codexOwnSub = (a, f) => f.label === "subagents" && codexSub(a);
 // named rows in Codex's settings: no square too (the owner, 10-25)
 const hermesBot = (f) => f.key.startsWith("profile:");
 const codexRowed = (a, f) => a.id === "codex" && !gatewayMode && (f.label === SUB_MODEL || f.label === MEMORIES);
-// Lead's pick ("") leaves each subagent on the model the lead names for it,
-// one of Codex's own as well; Same as the lead (CODEX_SUB_LEAD) holds every
-// subagent to the lead's own model, whatever it names (cleverpigo on X: a
-// lead on DeepSeek named gpt-5.6-sol under what read "same as the lead")
+// Lead's pick ("") takes the model the lead names; Same as the lead holds
+// every subagent to the lead's own (cleverpigo on X)
 const CODEX_SUB_LEAD = "lead";
 const LEADS_PICK = "Lead's pick";
 const SAME_AS_LEAD = "Same as the lead";
@@ -4141,7 +4125,11 @@ function extraField(a, f) {
     : t("{label}: {value}", { label: f.label === MEMORIES ? t("Codex memories model") : t(f.label), value: t(opt?.label || f.value || (f.label === MEMORIES ? MEMORIES_DEFAULT : f.label === SUB_MODEL ? "the model the lead asks for" : f.label === AUTO_MODE ? AUTO_MODE_UNSET : f.label === COMPACT_MODEL ? COMPACT_UNSET : leadPicks(a, f) ? "the lead's pick, else same as model" : "same as model")) }) + (opt?.note && !FOLLOWS_MODEL.includes(f.label) ? "\n" + t(opt.note) : "") + (leadPicks(a, f) ? "\n" + t(claudePicks(a, f) ? CLAUDE_PICKS : LEAD_PICKS) : "");
   b.setAttribute("aria-label", b.title);
   b.dataset.key = f.key;
-  b.onclick = (ev) => openPicker(a, f, b, ev);
+  // the menu as the state is now
+  b.onclick = (ev) => {
+    const now = f.key === "tiers" && state.agents.find((x) => x.id === a.id);
+    openPicker(now || a, (now && tierMenu(now)) || f, b, ev);
+  };
   return b;
 }
 
@@ -4229,12 +4217,13 @@ function tierMenu(a) {
     foot: a.id === "claude-desktop" ? DESKTOP_TIERS_FOOT : "",
     summary: custom.length ? custom.map((f) => level(effortOf(f)) ? `${t(f.label)} (${level(effortOf(f))})` : t(f.label)).join(", ") : main ? t("same as model") : t("not set"),
     options: tiers.flatMap((f) => {
+      const e = effortOf(f);
+      // an omp role: one line, its level picked after its model (hongzaitou on X)
       const model = {
         value: f.key, label: t(f.label), icon: optionFor(f, f.value)?.icon || (main && optionFor(main, main.value)?.icon),
-        note: f.value ? name(f) : unset(f),
+        note: (f.value ? name(f) : unset(f)) + (omp && level(e) ? " · " + level(e) : ""),
       };
-      const e = effortOf(f);
-      return e ? [model, { value: e.key, label: t(e.label), effortOf: e, note: level(e) || levelUnset(a) }] : [model];
+      return e && !omp ? [model, { value: e.key, label: t(e.label), effortOf: e, note: level(e) || levelUnset(a) }] : [model];
     }),
   };
 }
@@ -5682,7 +5671,7 @@ function move(d) {
 
 async function commit(value) {
   if (!pick || value == null) return;
-  const { agent, field, anchor } = pick;
+  const { agent, field, anchor, levelNext } = pick;
   const opt = pick.options.find((o) => o.value === value);
   if (field.multi && !opt?.run) {
     // a picker that takes several (a group's models, PAMI on Discord)
@@ -5698,10 +5687,15 @@ async function commit(value) {
   if (opt?.run) return opt.run(); // an act rather than a value (Disconnect from magpie)
   if (field.onPick) return field.onPick(value, opt); // a picker opened for something other than an agent's setting
   if (field.menu) {
-    // a tier chosen from the tiers menu: now its model
+    // a tier chosen: its model, then an omp role's level
     const tier = agent.fields.find((f) => f.key === value);
     if (tier) openPicker(agent, tier, anchor, { stopPropagation() {} });
+    if (tier && pick && ompAgent(agent)) pick.levelNext = true;
     return;
+  }
+  if (levelNext) {
+    const write = value === field.value ? null : setPick(agent, field, value, opt);
+    return Promise.resolve(write).then(() => roleLevelStep(agent.id, field.key, anchor));
   }
   if (value === field.value && (value || field.label !== SUB_MODEL || !codexSubSaid(agent, field).old)) return;
   if (agent.native) return setPick(agent, field, value, opt);
@@ -5711,6 +5705,16 @@ async function commit(value) {
   // (#726)
   if (leavesMagpie(agent, field, value, opt)) { askLeave(agent, field, value, opt); return; }
   return setPick(agent, field, value, opt);
+}
+
+// roleLevelStep: an omp role's level, once it is on a model
+function roleLevelStep(id, key, anchor) {
+  const a = state.agents.find((x) => x.id === id);
+  const lf = a?.fields.find((f) => f.key === key + "_thinking");
+  const role = a?.fields.find((f) => f.key === key);
+  if (!lf?.options.length || !role?.value || pick) return;
+  const at = anchor.isConnected ? anchor : document.querySelector(`.agent[data-id="${CSS.escape(id)}"] .field[data-key="tiers"]`);
+  if (at) openPicker(a, lf, at, { stopPropagation() {} });
 }
 
 // asideAccount: Aside's account field, which of its accounts (~/.aside/u/N)

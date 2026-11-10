@@ -1,14 +1,16 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // omp's roles share one square after the model picker, as Claude Code's
 // tiers do (#325, #1397): subagents, smol, slow, plan, vision, advisor,
-// commit, tiny and memory (every chat role omp 18.8 has), each with the model it is on or what it takes unset, and a role on one
-// model has its thinking level under it (KKKKKKKEM: the slow role at its
-// own level). Picking a role opens the model picker for it, "Same as model"
-// first for a role that follows the model; picking its level opens the
-// level slider, which writes that role's level. OpenCode's small model,
+// commit, tiny and memory (every chat role omp 18.8 has), each one line
+// with the model it is on, "· level" after it once a level is set
+// (KKKKKKKEM: the slow role at its own level), or what it takes unset.
+// Picking a role opens the model picker for it, "Same as model" first for
+// a role that follows the model; a model picked, the level slider comes
+// next and writes that role's level (hongzaitou on X: no line of its own
+// for the level). OpenCode's small model,
 // which doesn't follow the model, stays a picker; a named profile of omp
 // (omp#work) has the same square. In the connected agent's
-// opened row, in English, Chinese, Japanese and German, wide and at 390px.
+// opened row, in English, both Chinese, Japanese and German, wide and at 390px.
 // No backend: the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -83,26 +85,32 @@ function server(lang, sets) {
 // the words as i18n.js has them
 const W = {
   en: {
-    roles: ["subagents", "smol", "slow", "slow thinking", "plan", "vision", "advisor", "commit", "tiny", "memory"],
+    roles: ["subagents", "smol", "slow", "plan", "vision", "advisor", "commit", "tiny", "memory"],
     follows: "same as model (DeepSeek Pro)", own: "omp's own pick", advisor: "the slow role's model, else omp's own pick",
     smol: "the smol role's model", memory: "the tiny role's model, else the smol role's",
-    session: "the session's thinking level", same: "Same as model", summary: "roles: slow", high: "high", summarySet: "roles: slow (high)",
+    level: "slow thinking", smolLevel: "smol thinking", same: "Same as model", summary: "roles: slow", high: "high", summarySet: "roles: slow (high)",
   },
   zh: {
-    roles: ["子代理", "小模型", "慢模型", "慢模型思考", "规划", "视觉", "顾问", "提交", "微模型", "记忆"],
+    roles: ["子代理", "小模型", "慢模型", "规划", "视觉", "顾问", "提交", "微模型", "记忆"],
     follows: "同主模型（DeepSeek Pro）", own: "由 omp 自己挑选", advisor: "慢模型角色的模型，未设置时由 omp 自己挑选",
     smol: "小模型角色的模型", memory: "微模型角色的模型，未设置时用小模型角色的",
-    session: "跟随会话的思考强度", same: "同主模型", summary: "角色：慢模型", high: "高", summarySet: "角色：慢模型 (高)",
+    level: "慢模型思考", smolLevel: "小模型思考", same: "同主模型", summary: "角色：慢模型", high: "高", summarySet: "角色：慢模型 (高)",
+  },
+  "zh-TW": {
+    summary: "角色：慢模型",
+    roles: ["子代理", "小模型", "慢模型", "規劃", "視覺", "顧問", "提交", "微模型", "記憶"],
+    own: "由 omp 自己挑選", advisor: "慢模型角色的模型，未設定時由 omp 自己挑選",
+    smol: "小模型角色的模型", memory: "微模型角色的模型，未設定時用小模型角色的",
   },
   ja: {
     summary: "ロール：低速",
-    roles: ["サブエージェント", "小", "低速", "低速の思考", "プラン", "ビジョン", "アドバイザー", "コミット", "極小", "メモリー"],
+    roles: ["サブエージェント", "小", "低速", "プラン", "ビジョン", "アドバイザー", "コミット", "極小", "メモリー"],
     own: "omp が自分で選ぶ", advisor: "slow ロールのモデル、未設定なら omp が自分で選ぶ",
     smol: "smol ロールのモデル", memory: "tiny ロールのモデル、未設定なら smol ロールのモデル",
   },
   de: {
     summary: "Rollen: langsam",
-    roles: ["Subagenten", "klein (smol)", "langsam", "Thinking langsam", "Planung", "Vision", "Berater", "Commit", "winzig (tiny)", "Gedächtnis"],
+    roles: ["Subagenten", "klein (smol)", "langsam", "Planung", "Vision", "Berater", "Commit", "winzig (tiny)", "Gedächtnis"],
     own: "wählt omp selbst", advisor: "das Modell der Rolle slow, sonst wählt omp selbst",
     smol: "das Modell der Rolle smol", memory: "das Modell der Rolle tiny, sonst das der Rolle smol",
   },
@@ -112,7 +120,7 @@ const omp = '.row.agent[data-id="omp"]';
 const items = (page) => page.locator("#pop:not([hidden]) #list li").evaluateAll((es) => es.map((e) => [e.querySelector(".v")?.textContent, e.querySelector(".n")?.textContent || ""]));
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
-  for (const width of [1100, 390]) for (const lang of ["en", "zh", "ja", "de"]) {
+  for (const width of [1100, 390]) for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
     test(`${engine} ${lang} ${width}px: omp's roles and their thinking levels are one square, OpenCode's small model is a picker`, async (t) => {
       const w = W[lang];
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
@@ -144,17 +152,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "the row scrolls sideways");
       const y = await page.evaluate(() => scrollY);
 
-      // each role, with its model or what it takes unset; slow's level under it
+      // each role one line, with its model or what it takes unset
       await square.click();
       await page.locator("#pop:not([hidden]) #list li").first().waitFor();
       const rows = await items(page);
       assert.deepEqual(rows.map((r) => r[0]), w.roles);
-      assert.deepEqual(rows.slice(4).map((r) => r[1]), [w.own, w.own, w.advisor, w.smol, w.smol, w.memory]);
+      assert.deepEqual(rows.slice(3).map((r) => r[1]), [w.own, w.own, w.advisor, w.smol, w.smol, w.memory]);
       // commit's picker: Default says what omp takes unset, the smol
       // role's model, and no "Same as model"
       const commitPicker = async () => {
         if (!(await page.locator("#pop:not([hidden]) #list li").count())) await square.click();
-        const at = (await items(page)).findIndex((r) => r[0] === w.roles[7]);
+        const at = (await items(page)).findIndex((r) => r[0] === w.roles[6]);
         await page.locator("#pop:not([hidden]) #list li").nth(at).click();
         await page.locator("#pop:not([hidden]) #list li", { hasText: "DeepSeek Flash" }).first().waitFor();
         const top = await page.locator("#pop:not([hidden]) #list li").first().innerText();
@@ -169,34 +177,55 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(errors, []);
         return;
       }
-      assert.deepEqual(rows.slice(0, 4).map((r) => r[1]), [w.follows, w.follows, "DeepSeek Flash", w.session]);
+      assert.deepEqual(rows.slice(0, 3).map((r) => r[1]), [w.follows, w.follows, "DeepSeek Flash"]);
+      assert.equal(await page.locator("#pop:not([hidden]) #effortControl:not([hidden])").count(), 0);
 
-      // slow's level: the slider, which writes slow_thinking
-      await page.locator("#pop:not([hidden]) #list li").nth(3).click();
-      const range = page.locator("#effortRange");
-      await range.waitFor({ state: "attached" });
-      await page.waitForFunction(() => document.querySelector("#effortRange")?.offsetParent);
-      const at = await page.evaluate(() => Number(document.querySelector("#effortRange").max));
-      const high = LEVELS.findIndex((l) => l.value === "high") + (at === LEVELS.length ? 1 : 0);
-      await range.evaluate((r, i) => { r.value = String(i); r.dispatchEvent(new Event("input", { bubbles: true })); r.dispatchEvent(new Event("change", { bubbles: true })); }, high);
+      // the level slider, opened as the model's next step: it writes the role's level
+      const levelStep = async (title, value) => {
+        await page.waitForFunction(() => document.querySelector("#effortRange")?.offsetParent);
+        assert.equal(await page.locator("#effortTitle").textContent(), title);
+        const at = await page.evaluate(() => Number(document.querySelector("#effortRange").max));
+        const i = LEVELS.findIndex((l) => l.value === value) + (at === LEVELS.length ? 1 : 0);
+        await page.locator("#effortRange").evaluate((r, i) => { r.value = String(i); r.dispatchEvent(new Event("input", { bubbles: true })); r.dispatchEvent(new Event("change", { bubbles: true })); }, i);
+      };
+
+      // slow: its model picked again (no write), then its level
+      await page.locator("#pop:not([hidden]) #list li").nth(2).click();
+      await page.locator("#pop:not([hidden]) #list li", { hasText: "DeepSeek Flash" }).first().click();
+      await levelStep(w.level, "high");
       await page.waitForFunction(() => document.querySelector("#status")?.textContent);
       assert.deepEqual(sets, [{ agent: "omp", field: "slow_thinking", value: "high" }]);
       await page.keyboard.press("Escape");
       await page.waitForFunction((s) => document.querySelector('.row.agent[data-id="omp"] .field.extra[data-key="tiers"]')?.getAttribute("aria-label").startsWith(s), w.summarySet);
-
-      // smol: the model picker, following the model first
+      // and its line says both
       await square.click();
+      await page.locator("#pop:not([hidden]) #list li").first().waitFor();
+      assert.deepEqual((await items(page))[2], [w.roles[2], "DeepSeek Flash · " + w.high]);
+      assert.equal((await items(page)).length, w.roles.length, "a level kept a line of its own");
+
+      // smol: the model picker, following the model first; a model picked, its level next
       await page.locator("#pop:not([hidden]) #list li").nth(1).click();
       await page.locator("#pop:not([hidden]) #list li", { hasText: "DeepSeek Flash" }).first().waitFor();
       assert.match(await page.locator("#pop:not([hidden]) #list li").first().innerText(), new RegExp(`${w.same}[\\s\\S]*DeepSeek Pro`));
       await page.locator("#pop:not([hidden]) #list li", { hasText: "DeepSeek Flash" }).first().click();
-      await page.waitForFunction(() => document.querySelectorAll("#status").length && !document.querySelector("#pop:not([hidden])"));
-      assert.deepEqual(sets[1], { agent: "omp", field: "small", value: "magpie/deepseek/flash" });
+      await levelStep(w.smolLevel, "low");
+      for (let i = 0; sets.length < 3 && i < 100; i++) await page.waitForTimeout(50);
+      await page.keyboard.press("Escape");
+      assert.deepEqual(sets.slice(1), [{ agent: "omp", field: "small", value: "magpie/deepseek/flash" }, { agent: "omp", field: "small_thinking", value: "low" }]);
+
+      // Same as model: nothing to pick a level for, so no level step
+      await square.click();
+      await page.locator("#pop:not([hidden]) #list li").nth(1).click();
+      await page.locator("#pop:not([hidden]) #list li", { hasText: w.same }).first().click();
+      await page.waitForFunction((same) => document.querySelector("#status")?.textContent.includes(same), w.same);
+      await page.evaluate(() => new Promise(requestAnimationFrame));
+      assert.deepEqual(sets[3], { agent: "omp", field: "small", value: "" });
+      assert.equal(await page.locator("#pop:not([hidden])").count(), 0, "a level step for a role on no model of its own");
 
       // plan: no "Same as model", omp picks unset
       await square.click();
       await page.locator("#pop:not([hidden]) #list li").first().waitFor();
-      const planAt = (await items(page)).findIndex((r) => r[0] === w.roles[4]);
+      const planAt = (await items(page)).findIndex((r) => r[0] === w.roles[3]);
       await page.locator("#pop:not([hidden]) #list li").nth(planAt).click();
       await page.locator("#pop:not([hidden]) #list li", { hasText: "DeepSeek Flash" }).first().waitFor();
       const first = await page.locator("#pop:not([hidden]) #list li").first().innerText();
