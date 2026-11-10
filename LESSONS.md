@@ -192,6 +192,20 @@ protocol, never by a key's name.**
   looks most like what it lets through.
 - Seen 2× (2026-10-09, 2026-10-28).
 
+**When one access list must sit inside another, prove the containment
+for each pair of entry kinds; never try one entry on the other's text.**
+- bf4d8f3e5 (11-11) let a gateway key's model be a `re:` pattern and
+  judged an issued key's glob by matching the issuer's pattern against
+  the glob's text. `[^-]` and `.` take the `*`, so an issuer held to
+  `re:^openai/[^-]*$` issued `openai/*` and the issued key used
+  openai/gpt-4o; `re:^gr` covered `gr*` and with it group/… ids. Its body
+  said only that each test was red with the match switched off, and no
+  test put an issued glob under an issuer's pattern. Fixed in 08cca7311.
+- List the kinds (exact id, glob, pattern, group, account-derived) and
+  test each child kind under each issuer kind with an id the issuer may
+  not use. When containment can't be shown, refuse it.
+- Seen 1× (2026-11-11).
+
 **A security gap a doc names is an open bug, not a description.**
 - docs/subsystems/gateway-routing.md said "There is no `Host` check, so a
   page whose own name resolves to 127.0.0.1 (DNS rebinding) counts as
