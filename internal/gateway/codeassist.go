@@ -89,13 +89,14 @@ func antigravityTurnsAway(system string) bool {
 //     goes through, and so does today's "You are Hermes Agent, built by
 //     Nous Research."
 //
-// Each is broken up before it goes by a zero-width space after its first
-// letter (antigravityCloak), which Google lets through: each line so
-// broken ("Y", U+200B, "ou are Codex, an agent based on GPT-5"; "b",
-// U+200B, "uilt on Anthropic's Claude Agent SDK"; and so on) was answered
-// on a real account where the line as written was turned away. A mention
-// of the Claude Agent SDK elsewhere ("running within the Claude Agent
-// SDK") goes through as written, and is sent so.
+// Each is broken up before it goes by zero-width spaces (antigravityCloak),
+// which Google lets through. A break after only a line's first letter was
+// turned away again on 11-11 for Claude Code's two lines, so each word has
+// two. Codex's and Hermes' lines went through as written on 11-11 too, and
+// are still broken up: that costs nothing and a Codex thread that is
+// refused again says why. A mention of the Claude Agent SDK elsewhere
+// ("running within the Claude Agent SDK") goes through as written, and is
+// sent so.
 var agTurnedAway = []string{
 	"x-anthropic-billing-header:",
 	"built on anthropic's claude agent sdk",
@@ -123,11 +124,18 @@ func antigravityTurnsHermesAway(system string) bool {
 const zeroWidth = "\u200b"
 
 // antigravityCloak is system with each line of agTurnedAway in it broken up
-// by a zero-width space after its first letter, wherever and in whatever
-// case it is, and every other word as the agent wrote it: what an
-// Antigravity account's system instruction is sent as, unless the user has
-// it sent as written (Provider.PromptAsWritten). A line already broken up
-// (the antigravity-cloak plugin's) isn't one any more and is left alone.
+// by zero-width spaces, wherever and in whatever case it is, and every other
+// word as the agent wrote it: what an Antigravity account's system
+// instruction is sent as, unless the user has it sent as written
+// (Provider.PromptAsWritten). Inside a line, every run of three or more
+// letters or digits gets one after its first and one after its second
+// character. One after the first letter only (what this did until 11-11)
+// stopped working: Google's check then turned "x\u200b-anthropic-billing-
+// header:" and "b\u200built on Anthropic's Claude Agent SDK" away again
+// (a real account, Claude Code 2.1.316's prompt, @shzutbi1 on X), while the
+// same lines with two breaks in every word were answered.
+// A line already broken up (the antigravity-cloak plugin's) isn't one any
+// more and is left alone.
 func antigravityCloak(system string) string {
 	if !antigravityTurnsAway(system) {
 		return system
@@ -146,7 +154,7 @@ func antigravityCloak(system string) string {
 			if j < 0 {
 				break
 			}
-			at = append(at, i+j+1)
+			at = append(at, agBreaks(low, i+j, i+j+len(line))...)
 			i += j + len(line)
 		}
 	}
@@ -162,6 +170,31 @@ func antigravityCloak(system string) string {
 	}
 	b.WriteString(system[prev:])
 	return b.String()
+}
+
+// agBreaks are the offsets in s[from:to] a zero-width space goes at: after
+// the first and after the second character of every run of three or more
+// ASCII letters or digits.
+func agBreaks(s string, from, to int) []int {
+	var at []int
+	for i := from; i < to; {
+		j := i
+		for j < to && agAlnum(s[j]) {
+			j++
+		}
+		if j-i >= 3 {
+			at = append(at, i+1, i+2)
+		}
+		if j == i {
+			j++
+		}
+		i = j
+	}
+	return at
+}
+
+func agAlnum(c byte) bool {
+	return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
 }
 
 // asciiLower lower-cases only ASCII letters, keeping every byte where it is.
