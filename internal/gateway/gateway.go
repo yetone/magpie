@@ -6,7 +6,6 @@ import (
 	"cmp"
 	"context"
 	"crypto/sha256"
-	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -570,7 +569,7 @@ type Server struct {
 	// sockets are the Responses WebSockets being served (responses_ws.go)
 	sockets clientSockets
 	// what it serves other computers TLS with, nil without (tls.go)
-	tls *tls.Config
+	tls *tlsServer
 	// the images described for models that can't see them (vision.go);
 	// completed inline descriptions also survive a restart (vision_cache.go)
 	sightMu        sync.Mutex
@@ -781,7 +780,7 @@ var WhileServing []func(context.Context)
 func (s *Server) ListenAndServe(ctx context.Context) error {
 	migrateLANKeyBestEffort()
 	ScopeOwnBrowserKey()
-	cfg, err := tlsConfig()
+	cfg, err := serverTLS()
 	if err != nil {
 		return err
 	}

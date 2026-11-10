@@ -554,6 +554,12 @@ func (s *Server) Relisten() error {
 // including a stale named key.
 func lanGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// with mTLS on, another machine's request needs magpie's client
+		// certificate before anything else is looked at, a callback's
+		// token and a gateway key included (mtls.go)
+		if refuseWithoutClientCert(w, r) {
+			return
+		}
 		if ownCallback(r) {
 			next.ServeHTTP(w, r)
 			return

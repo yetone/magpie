@@ -43,9 +43,15 @@ func tlsLine() string {
 		return ""
 	}
 	cert, _ := gateway.TLSFiles()
+	if cert == "" {
+		cert = "magpie's own CA (mTLS)"
+	}
 	s := muted.Render("  TLS     ") + " " + cert
 	if sum := gateway.TLSSummary(); sum != "" {
 		s += muted.Render(" · " + sum)
+	}
+	if gateway.MTLSOn() {
+		s += "\n" + muted.Render("           other computers show a client certificate magpie issued (magpie mtls)")
 	}
 	return s + "\n" + muted.Render("           https:// from other computers, read again when the files change; this computer may call plain http://")
 }

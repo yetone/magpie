@@ -8005,7 +8005,7 @@ function advancedSet(d, p) {
     !!d.proxyMode || Object.values(d.accountProxies || {}).some((x) => x?.mode) ||
     [d.concurrency, d.maxAccounts, d.queueLimit, d.queueWait, d.maxRPM, d.priceRate, d.contexts, d.outputs, d.compacts].some((v) => String(v ?? "").trim()) ||
     !!d.rateWindows?.length ||
-    !!(d.searches || d.authHeader || d.passUserAgent === false || d.unredacted || d.countFree || d.pinUpstream || d.nativeCompaction || d.balanceToken || d.limitRestOff || d.http1 || d.socket || d.imageFilesOff || d.passErrors) ||
+    !!(d.searches || d.authHeader || d.passUserAgent === false || d.unredacted || d.countFree || d.pinUpstream || d.nativeCompaction || d.balanceToken || d.limitRestOff || d.http1 || d.socket || d.imageFilesOff || d.passErrors || d.clientCert || d.serverCA) ||
     !!d.fallback?.length || !!p?.balanceToken?.set;
 }
 function priceRateError(ed) {
@@ -8080,8 +8080,11 @@ function asTyped() {
   // provider of the user's own
   body.insecureTLS = !!draft.insecureTLS;
   body.http1 = !!draft.http1;
+  // a client certificate typed (#5596) is tried as it would be saved
+  for (const k of CERT_FIELDS) if (draft[k] != null) body[k] = draft[k].trim();
   return body;
 }
+const CERT_FIELDS = ["clientCert", "clientKey", "serverCA"];
 
 // proxyOfDraft is the draft's proxy as it is saved, or null when Custom
 // has no address yet.
@@ -8110,12 +8113,8 @@ const KEY_PROXY_HINT = "Each key can go through a proxy of its own; Provider's p
 function keyProxyPicker(p) {
   return proxyLines((p?.keyList || []).map((k) => ({ k: k.id, name: k.name || k.masked, key: k.id, info: k })), KEY_PROXY_HINT, true);
 }
-// proxyLines: a line for each account or key. A provider's keys fold as
-// its Accounts list folds them (keyFold): past KEYS_FOLD, the first
-// KEYS_FIRST and those with a proxy of their own, or, opened, those the
-// filter matches, KEYS_PAGE at most. A line for each of a thousand keys
-// took the editor a minute to open, five thousand three (@NetRozee on X).
-// A key not drawn keeps the proxy it has: only a line picked in changes it.
+// proxyLines: a line for each account or key, keys folded as keyFold
+// does (@NetRozee on X); a key not drawn keeps its proxy.
 function proxyLines(items, hint, foldKeys) {
   if (items.length < 2) return null;
   draft.accountProxies = draft.accountProxies || {};
@@ -9298,7 +9297,7 @@ function baseAPIOf(p) {
 
 // draftOf is a saved provider as its editor's form holds it.
 function draftOf(p) {
-  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, best: !!p.bestInFamily, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), replyHeaders: (p.replyHeaders || []).join(", "), passHeaders: (p.passHeaders || []).join(", "), icon: p.icon || "", iconFrom: p.iconFrom || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, hiddenDrawers: [...(p.hiddenDrawers || [])], hiddenVideomakers: [...(p.hiddenVideomakers || [])], searches: !!p.searches, unredacted: !!p.unredacted, countFree: !!p.countFree, insecureTLS: !!p.insecureTLS, http1: !!p.http1, socket: p.socket || "", limitRestOff: !!p.limitRestOff, passErrors: !!p.passErrors, imageFilesOff: !!p.imageFilesOff, nativeCompaction: !!p.nativeCompaction, passUserAgent: p.passUserAgent !== false, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", balanceMethod: p.balanceMethod || "", modelsURL: p.modelsURL || "", listOff: !!p.listOff, contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p), rateWindows: (p.rateWindows || []).map((w) => ({ ...w })) };
+  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, best: !!p.bestInFamily, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), replyHeaders: (p.replyHeaders || []).join(", "), passHeaders: (p.passHeaders || []).join(", "), icon: p.icon || "", iconFrom: p.iconFrom || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, hiddenDrawers: [...(p.hiddenDrawers || [])], hiddenVideomakers: [...(p.hiddenVideomakers || [])], searches: !!p.searches, unredacted: !!p.unredacted, countFree: !!p.countFree, insecureTLS: !!p.insecureTLS, http1: !!p.http1, clientCert: p.clientCert || "", clientKey: p.clientKey || "", serverCA: p.serverCA || "", socket: p.socket || "", limitRestOff: !!p.limitRestOff, passErrors: !!p.passErrors, imageFilesOff: !!p.imageFilesOff, nativeCompaction: !!p.nativeCompaction, passUserAgent: p.passUserAgent !== false, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", balanceMethod: p.balanceMethod || "", modelsURL: p.modelsURL || "", listOff: !!p.listOff, contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p), rateWindows: (p.rateWindows || []).map((w) => ({ ...w })) };
 }
 
 // duplicateProvider opens the Add form on a copy of p, its key p's unless another is pasted (#268).
@@ -9329,11 +9328,9 @@ function renderEditor(p, presetID) {
 function drawEditor(p, presetID) {
   const pr = presetID ? providers.presets.find((x) => x.id === presetID) : p?.preset ? providers.presets.find((x) => x.id === p.preset) : null;
   const isNew = !p, custom = !pr && !p?.account, decides = !!(p?.decide || pr?.decide);
-  // a preset already added is added again only through "Add another": one
-  // more provider of it, under a name and id of its own
+  // a preset added again only through "Add another"
   const another = isNew && !!pr?.added;
-  // an editor opened afresh has Model settings folded: it stayed open in
-  // every editor after, until magpie was restarted (Hu9956, #868)
+  // Model settings folded afresh (#868)
   if (!draft) naming = unpickedShown = picksLeft = null;
   draft = draft || (p
     ? draftOf(p)
@@ -9457,14 +9454,11 @@ function drawEditor(p, presetID) {
   // the Redaction row, shown while every address is on this computer or
   // the local network
   let showLocal = () => {};
-  // the Certificate row, shown while a provider of the user's own has an
-  // https:// address (#2383)
+  // the Certificate rows, shown over https:// (#2383, #5596)
   let showTLS = () => {};
-  // the Key header row, shown while the provider has a third-party
-  // Anthropic API, which is sent its key in both headers by default
+  // the Key header row, for a third-party Anthropic API
   let showAuth = () => {};
-  // the Compaction row, shown while the provider has a Responses API
-  // (Provider.CarriesCompaction): Codex's own compaction can go only there
+  // the Compaction row, for a Responses API (CarriesCompaction)
   let showCompaction = () => {};
   let showSocket = () => {};
   const carriesCompaction = () => !!((draft.responses ?? (isNew && pr ? pr.responses : "")) || "").trim();
@@ -9520,9 +9514,7 @@ function drawEditor(p, presetID) {
     };
     const urlWrap = el("div", "stack");
     urlWrap.append(seg, url);
-    // the APIs that answered a detection, taken for the provider: their
-    // URLs set, one that wasn't found there (404, 405) cleared, and the
-    // base URL's protocol one of those that answered
+    // the APIs a detection found: URLs set, a 404/405 one cleared
     const useDetected = (rs) => {
       carried = null;
       for (const x of rs) {
@@ -9664,9 +9656,7 @@ function drawEditor(p, presetID) {
     return ed;
   }
 
-  // a vendor reached at the user's own resource (Azure OpenAI): no URL of
-  // the preset's, the one the resource is at is typed or pasted here, and
-  // magpie puts it on the API the preset speaks when it is saved
+  // a vendor at the user's own resource (Azure OpenAI): its URL typed here
   let endpoint = null;
   if (pr?.endpoint) {
     if (draft.chat === undefined) { draft.chat = p?.chat || ""; draft.responses = p?.responses || ""; }
@@ -9680,8 +9670,7 @@ function drawEditor(p, presetID) {
   // (provider.AtAddress); shown first, never folded (mengxiangziyou on X)
   let address = null, addressField = null;
   if (pr?.kind === "local") {
-    // a saved provider's URLs (or a duplicate's) start it; a new one's are
-    // the preset's, sent as none unless moved, so the gateway takes them
+    // a saved provider's URLs start it; a new one's are the preset's
     const own = draft.chat !== undefined;
     // oMLX's decision API (#1641) is the same server's, and moves with it
     draft.addressFrom ??= { chat: draft.chat ?? pr.chat ?? "", responses: draft.responses ?? pr.responses ?? "", anthropic: draft.anthropic ?? pr.anthropic ?? "", decide: draft.decide ?? (p?.decide || pr.decide || "") };
@@ -9690,8 +9679,7 @@ function drawEditor(p, presetID) {
     address = input(draft.address, originOf(pr));
     address.inputMode = "url";
     address.classList.add("address");
-    // the Jev endpoint field shows where the decision API moved to, until
-    // one is typed there
+    // the Jev endpoint field follows the decision API until typed
     address.oninput = () => {
       draft.address = address.value;
       refreshEndpoints();
@@ -9909,6 +9897,23 @@ function drawEditor(p, presetID) {
     ed.append(...row);
     advIn.append(...hrow);
   }
+  // a client certificate and server CA (#5596, mTLS)
+  const certTakes = () => p ? !!p.takesClientCert : (custom || remote);
+  if (certTakes()) {
+    const box = el("div", "client-cert");
+    for (const [k, label, hold] of [["clientCert", t("Certificate"), "client.pem"], ["clientKey", t("Key"), "client-key.pem"], ["serverCA", t("Server CA"), "ca.pem"]]) {
+      const i = input(draft[k] || "", "~/magpie-laptop/" + hold);
+      i.className = "words cert-" + k;
+      i.setAttribute("aria-label", label);
+      i.oninput = () => { draft[k] = i.value; };
+      box.append(i);
+    }
+    const crow = field(t("Client certificate"), box, t("PEM files, for a server that asks for one (mTLS)"));
+    const was = showTLS;
+    showTLS = () => { was(); for (const e of crow) e.style.display = onHTTPS() ? "" : "none"; };
+    showTLS();
+    advIn.append(...crow);
+  }
   // Responses over WebSocket (#5781): auto, or the CLI's on kept
   const socketable = () => !p?.account && (p?.preset || pr?.id) !== "google-vertex" && /^\s*https?:\/\//i.test(addressOf("responses"));
   {
@@ -10102,8 +10107,7 @@ function drawEditor(p, presetID) {
     ed.append(...field(t("Models"), pick.box, t("Optional: Fetch models to pick from the vendor's list, or type ids; none picked, magpie asks for the list after saving.")));
   }
 
-  // Jev's endpoint can be the one its gateway's docs give — Cloudflare's
-  // names the account, …/accounts/<id>/ai/run — in place of the preset's
+  // Jev's endpoint may be its gateway's own (Cloudflare's …/ai/run)
   if (decides && !custom && (p?.preset || pr?.id) !== "remote-magpie") {
     if (draft.decide === undefined) draft.decide = p?.decide || pr?.decide || "";
     const du = input((address && movedURLs(draft)?.decide) || draft.decide, pr?.decide || "https://…", "url");
@@ -10144,9 +10148,7 @@ function drawEditor(p, presetID) {
     refreshEndpoints = () => {
       const base = p || pr || {};
       const src = { chat: draft.chat || base.chat || "", responses: draft.responses || base.responses || "", anthropic: draft.anthropic || base.anthropic || "", decide: (pr && !pr.decide ? draft.decide ?? base.decide : base.decide) || "" };
-      // Vertex AI's is the address its project and location make, shown
-      // with its Test once a project is typed, saved one or not: with none
-      // there is nowhere to ask
+      // Vertex AI's, from its project and location, once one is typed
       if (vertex) {
         src.gemini = vertexBase(draft.vertex);
         for (const x of row) x.hidden = !src.gemini;
@@ -10299,6 +10301,7 @@ function drawEditor(p, presetID) {
     body.unredacted = !!draft.unredacted;
     body.countFree = !!draft.countFree;
     if (tlsTakes()) { body.insecureTLS = !!draft.insecureTLS && onHTTPS(); body.http1 = !!draft.http1 && onHTTPS(); }
+    if (certTakes()) for (const k of CERT_FIELDS) body[k] = onHTTPS() ? (draft[k] || "").trim() : "";
     if (socketable()) body.socket = draft.socket || "";
     if (custom) body.limitRestOff = !!draft.limitRestOff;
     if (p?.takesImageFiles) body.imageFilesOff = !!draft.imageFilesOff;
@@ -20080,6 +20083,7 @@ function renderSettings() {
   renderBareIds(s);
   renderLAN(s);
   renderAllow(s);
+  renderMTLS(s);
   renderCORS(s);
   renderSync();
 

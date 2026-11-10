@@ -39,10 +39,11 @@ func TLSFiles() (cert, key string) {
 	return strings.TrimSpace(os.Getenv(TLSCertEnv)), strings.TrimSpace(os.Getenv(TLSKeyEnv))
 }
 
-// TLSOn: the gateway serves other computers over HTTPS.
+// TLSOn: the gateway serves other computers over HTTPS: with the files
+// set, or with mTLS on (mtls.go).
 func TLSOn() bool {
 	c, k := TLSFiles()
-	return c != "" && k != ""
+	return c != "" && k != "" || MTLSOn()
 }
 
 // Scheme is the gateway's scheme for other computers: https with TLS on.
@@ -102,7 +103,16 @@ func TLSSummary() string {
 	if !TLSOn() {
 		return ""
 	}
-	c, err := tls.LoadX509KeyPair(TLSFiles())
+	var c tls.Certificate
+	var err error
+	if cf, kf := TLSFiles(); cf != "" && kf != "" {
+		c, err = tls.LoadX509KeyPair(cf, kf)
+	} else {
+		var own *tls.Certificate
+		if own, err = ownServerCert(nil); own != nil {
+			c = *own
+		}
+	}
 	if err != nil || len(c.Certificate) == 0 {
 		return ""
 	}
@@ -168,36 +178,44 @@ func (f *certFiles) get(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 	return f.served, nil
 }
 
-// tlsConfig is the server's config for the files set, nil with TLS off.
-func tlsConfig() (*tls.Config, error) {
+// tlsConfig is the server's TLS for the files set, nil with none set.
+func tlsConfig() (*tlsServer, error) {
 	if err := CheckTLS(); err != nil {
 		return nil, err
 	}
-	if !TLSOn() {
+	cert, key := TLSFiles()
+	if cert == "" || key == "" {
 		return nil, nil
 	}
-	cert, key := TLSFiles()
 	f := &certFiles{cert: cert, key: key}
 	if _, err := f.get(nil); err != nil {
 		return nil, err
 	}
-	return &tls.Config{
-		GetCertificate: f.get,
-		MinVersion:     tls.VersionTLS12,
-		// HTTP/1.1 alone, as over plain HTTP: Codex's websocket and the
-		// streams' handling hijack the connection
-		NextProtos: []string{"http/1.1"},
-	}, nil
+	return &tlsServer{files: f}, nil
 }
 
-// ServeTLS wraps ln to serve TLS, with plain HTTP for this computer's own
-// connections, when the files are set; ln as it is otherwise.
+// serverTLS is what a listener serves with: the files set, or nothing
+// until mTLS is turned on (tlsServer.config asks on each connection).
+func serverTLS() (*tlsServer, error) {
+	t, err := tlsConfig()
+	if err != nil {
+		return nil, err
+	}
+	if t == nil {
+		t = &tlsServer{}
+	}
+	return t, nil
+}
+
+// ServeTLS wraps ln to serve TLS to other computers, with plain HTTP for
+// this computer's own connections, when the files are set or mTLS is on,
+// as each connection comes.
 func ServeTLS(ln net.Listener) (net.Listener, error) {
-	cfg, err := tlsConfig()
-	if err != nil || cfg == nil {
+	t, err := serverTLS()
+	if err != nil {
 		return ln, err
 	}
-	return newTLSListener(ln, cfg), nil
+	return newTLSListener(ln, t), nil
 }
 
 // fromThisComputer: the connection's peer is this computer — loopback, or
@@ -228,7 +246,7 @@ const sniffWait = 10 * time.Second
 // holds up the next.
 type tlsListener struct {
 	net.Listener
-	cfg     *tls.Config
+	serve   *tlsServer
 	conns   chan net.Conn
 	done    chan struct{}
 	stopped chan struct{}
@@ -236,8 +254,8 @@ type tlsListener struct {
 	once    sync.Once
 }
 
-func newTLSListener(ln net.Listener, cfg *tls.Config) *tlsListener {
-	l := &tlsListener{Listener: ln, cfg: cfg, conns: make(chan net.Conn), done: make(chan struct{}), stopped: make(chan struct{})}
+func newTLSListener(ln net.Listener, serve *tlsServer) *tlsListener {
+	l := &tlsListener{Listener: ln, serve: serve, conns: make(chan net.Conn), done: make(chan struct{}), stopped: make(chan struct{})}
 	go l.accept()
 	return l
 }
@@ -262,14 +280,31 @@ func (l *tlsListener) accept() {
 		}
 		wait = 0
 		if !fromThisComputer(c) {
-			l.hand(tls.Server(c, l.cfg))
+			// a WSL distro's agent may call over plain HTTP, and shows no
+			// client certificate: the guards judge it by its key
+			wsl := fromWSLNet(c)
+			cfg := l.serve.config(!wsl)
+			// (with --tls-cert alone, as before: TLS, and nothing asked)
+			switch {
+			case cfg == nil:
+				l.taken(c)
+			case wsl && MTLSOn():
+				go l.sniff(c, cfg)
+			default:
+				l.taken(tls.Server(c, cfg))
+			}
 			continue
 		}
-		go l.sniff(c)
+		cfg := l.serve.config(false)
+		if cfg == nil {
+			l.taken(c)
+			continue
+		}
+		go l.sniff(c, cfg)
 	}
 }
 
-func (l *tlsListener) sniff(c net.Conn) {
+func (l *tlsListener) sniff(c net.Conn, cfg *tls.Config) {
 	c.SetReadDeadline(time.Now().Add(sniffWait))
 	first := make([]byte, 1)
 	if _, err := io.ReadFull(c, first); err != nil {
@@ -279,7 +314,7 @@ func (l *tlsListener) sniff(c net.Conn) {
 	c.SetReadDeadline(time.Time{})
 	p := &peeked{Conn: c, r: io.MultiReader(bytes.NewReader(first), c)}
 	if first[0] == 0x16 { // a TLS record of type handshake
-		l.hand(tls.Server(p, l.cfg))
+		l.hand(tls.Server(p, cfg))
 		return
 	}
 	l.hand(p)
@@ -293,14 +328,31 @@ func (l *tlsListener) hand(c net.Conn) {
 	}
 }
 
+// taken hands the server a connection the listener's own Accept returned,
+// as a bare listener's Accept would, even when Close came while it was
+// being taken: the server's Accept waits for the loop to stop, so a
+// connection taken just before the end began (a handover's) is served,
+// not reset. It waits a second at most for a server no longer accepting.
+func (l *tlsListener) taken(c net.Conn) {
+	select {
+	case l.conns <- c:
+	case <-l.done:
+		select {
+		case l.conns <- c:
+		case <-time.After(time.Second):
+			c.Close()
+		}
+	}
+}
+
+// Accept returns the next connection, and an error only once the loop
+// taking them has stopped (Close ends it), so none it took is lost.
 func (l *tlsListener) Accept() (net.Conn, error) {
 	select {
 	case c := <-l.conns:
 		return c, nil
 	case <-l.stopped:
 		return nil, l.err
-	case <-l.done:
-		return nil, net.ErrClosed
 	}
 }
 

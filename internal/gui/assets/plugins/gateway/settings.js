@@ -279,6 +279,72 @@ function renderAllow(s) {
   }
 }
 
+// renderMTLS: client certificates (mTLS; hhdaxia on X, #5596), under
+// Allowed addresses. On, other computers reach magpie over https:// only
+// with a certificate issued here, a gateway key or not; this computer
+// always can. A device's certificate is issued by name and saved to
+// Downloads (client.pem, client-key.pem, ca.pem), one row each to revoke.
+let mtlsDraft = { value: "", err: "" };
+function mtlsSays(m) {
+  if (/^this page is open from another computer/.test(m)) return t("This page is open from another computer without a certificate, so turning this on would shut it out: turn it on from the computer magpie runs on");
+  if (/^this page came with that certificate/.test(m)) return t("This page uses that certificate, so it would be shut out: do this from another device, or from the computer magpie runs on");
+  if (/a name can.t hold/.test(m)) return t("A name can’t hold / \\ : * ? \" < > |");
+  return t(m);
+}
+function renderMTLS(s) {
+  const box = $("#mtlsList");
+  if (!box) return;
+  box.replaceChildren();
+  if (!s.lan && !s.onNetwork && !s.mtls) return;
+  const d = mtlsDraft;
+  const post = (what, body, done) => writingPrefs(api("settings/mtls" + what, body))
+    .then((ns) => {
+      prefs = ns; d.err = ""; done?.(); renderSettings();
+      if (ns.mtlsSaved) status(t("Saved to {path}", { path: ns.mtlsSaved }), "ok", 4000);
+    })
+    .catch((e) => { d.err = mtlsSays(e.message); status(d.err, "err"); renderSettings(); });
+  const row = (cls, name, sub, ...tools) => {
+    const r = el("div", "row pref " + cls);
+    const who = el("div", "who");
+    who.append(el("div", "name", name));
+    if (sub) who.append(sub instanceof Node ? sub : el("div", "sub", sub));
+    const val = el("div", "val");
+    val.append(...tools);
+    r.append(who, val);
+    box.append(r);
+    return r;
+  };
+  row("mtls-row", t("Require a client certificate"),
+    d.err ? el("div", "sub err", d.err) : t("Other computers reach magpie over HTTPS only with a certificate issued here, even with a gateway key; this computer always can"),
+    segs([["off", t("Off")], ["on", t("On")]], s.mtls ? "on" : "off", (v) => post("", { on: v === "on" })));
+  const field = input(d.value, t("Device name"));
+  field.className = "words rule-match mtls-name";
+  field.setAttribute("aria-label", t("Device name"));
+  field.autocomplete = "off";
+  field.spellcheck = false;
+  const issue = el("button", "text", t("Issue"));
+  issue.type = "button";
+  issue.onclick = () => {
+    d.value = field.value.trim();
+    if (!d.value) return field.focus();
+    post("/issue", { name: d.value }, () => { d.value = ""; });
+  };
+  field.oninput = () => { d.value = field.value; };
+  field.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") issue.onclick(); };
+  const add = el("div", "val rule-add");
+  add.append(field, issue);
+  const r = row("rule-row mtls-issue", t("Client certificates"),
+    s.mtlsError ? el("div", "sub err", t(s.mtlsError)) : t("Saved to Downloads for the device: the certificate, its key and magpie’s CA"));
+  r.querySelector(".val").replaceWith(add);
+  for (const c of s.mtlsCerts || []) {
+    const until = new Date(c.expires).toLocaleDateString(intlLang(), { year: "numeric", month: "short", day: "numeric" });
+    const x = el("button", "text", t("Revoke"));
+    x.type = "button";
+    x.onclick = () => post("/revoke", { serial: c.serial });
+    row("mtls-cert", c.name, t("Until {date}", { date: until }), x);
+  }
+}
+
 // renderLAN: the gateway shared on the local network, for agents on other
 // machines. Gateway keys and connection examples live together in Gateway.
 let lanSelectedURL = "", lanProtocol = "openai";

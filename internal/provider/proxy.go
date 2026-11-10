@@ -27,6 +27,9 @@ func (p Provider) Via(ctx context.Context) context.Context {
 	if p.HTTP1 && p.TakesInsecureTLS() {
 		ctx = netproxy.WithHTTP1(ctx, p.UncheckedHosts()...)
 	}
+	if (p.ClientCert != "" || p.ServerCA != "") && p.TakesClientCert() {
+		ctx = netproxy.WithClientCert(ctx, p.ClientCert, p.ClientKey, p.ServerCA, p.UncheckedHosts()...)
+	}
 	return withSocket(ctx, p)
 }
 

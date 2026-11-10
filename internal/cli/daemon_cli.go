@@ -141,7 +141,7 @@ func daemonCmd(args []string) error {
 		if err != nil {
 			return err
 		}
-		if noTLS && gateway.TLSOn() {
+		if c, _ := gateway.TLSFiles(); noTLS && c != "" {
 			return errors.New("magpie daemon install: --no-tls and a certificate both")
 		}
 		args = append([]string{"install"}, rest...)

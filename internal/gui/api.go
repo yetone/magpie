@@ -418,6 +418,12 @@ type settingsJSON struct {
 	AllowIPsEnv     string   `json:"allowIPsEnv,omitempty"`
 	AllowIPsFromEnv []string `json:"allowIPsFromEnv,omitempty"`
 	OnNetwork       bool     `json:"onNetwork,omitempty"`
+	// the client certificates issued and still good (mtls.go), while
+	// other computers can reach magpie or mTLS is on; MTLSSaved: the
+	// folder the one just issued was saved to
+	MTLSCerts []mtlsCert `json:"mtlsCerts,omitempty"`
+	MTLSErr   string     `json:"mtlsError,omitempty"`
+	MTLSSaved string     `json:"mtlsSaved,omitempty"`
 	// Dir is the data folder beside a portable magpie (#508)
 	Portable bool `json:"portable,omitempty"`
 	// Log is the log the desktop app writes (applog), as shown; "" for a
@@ -814,6 +820,9 @@ func settingsState() settingsJSON {
 	s.OnNetwork = gateway.OnNetwork()
 	if list, env := gateway.AllowIPs(); env {
 		s.AllowIPsEnv, s.AllowIPsFromEnv = os.Getenv(gateway.AllowIPsEnv), list
+	}
+	if s.LAN || s.OnNetwork || s.MTLS {
+		s.MTLSCerts, s.MTLSErr = mtlsCerts()
 	}
 	if s.LAN || gateway.OnNetwork() {
 		s.PublicURL = gateway.PublicURL()
@@ -1496,6 +1505,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	sessionManageRoutes(mux, w)
 	backupRoutes(mux, w)
 	dataFolderRoutes(mux, w)
+	mtlsRoutes(mux, w)
 	uninstallRoutes(mux, w)
 	archiveRoutes(mux)
 	libraryRoutes(mux, w)

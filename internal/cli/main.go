@@ -131,6 +131,8 @@ const usage = `magpie — one place to pick every agent's model
   magpie daemon web [on|off] [--lan] [--addr host:port]
                                   the service's page: its link, or turn it on or off
   magpie healthcheck              exit 0 when the gateway answers (a container's HEALTHCHECK)
+  magpie mtls [on|off|issue <device>|list|revoke <device>]
+                                  require a client certificate magpie issued from other computers (mTLS)
   magpie heap [<file>]            a Go heap profile of the running magpie, with its memory numbers, for a report of it using too much memory
   magpie cpu [<file>] [--seconds N]   a Go CPU profile of the running magpie over 30s (5..120) while you use it, for a report of it using too much CPU
   magpie goroutines [<file>]      every goroutine of the running magpie, its stack and how long it waited, for a report of it stuck at something
@@ -348,6 +350,11 @@ func run(args []string) error {
 	if len(args) > 0 && args[0] == "heap" {
 		// the running magpie's heap profile: asks it, and moves nothing here
 		return heapCmd(args[1:])
+	}
+	if len(args) > 0 && args[0] == "mtls" {
+		// magpie's CA and the client certificates it issued: nothing
+		// else is read or moved
+		return mtlsCmd(args[1:])
 	}
 	if len(args) > 0 && args[0] == "cpu" {
 		// the running magpie's CPU profile: asks it, and moves nothing here

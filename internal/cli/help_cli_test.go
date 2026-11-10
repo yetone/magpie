@@ -129,7 +129,7 @@ func runCommands(t *testing.T) []string {
 	if len(cmds) < 40 {
 		t.Fatalf("read %d commands from run's switch: %v", len(cmds), cmds)
 	}
-	return append(cmds, "healthcheck", "heap", "cpu", "goroutines")
+	return append(cmds, "healthcheck", "heap", "cpu", "goroutines", "mtls")
 }
 
 func types(ix *ast.IndexExpr) string {

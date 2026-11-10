@@ -950,6 +950,35 @@ since no certificate for the server's name covers loopback. A container or
 a WSL distro calling through its NAT address is another computer, and uses
 `https://`. Gateway keys, sharing and allowed addresses work as over HTTP.
 
+**Client certificates (mTLS).** A magpie open to the internet can also
+ask every other computer for a client certificate it issued itself
+(hhdaxia on X, #5596), so a stolen gateway key alone gets nowhere. Turn on
+Settings → Network and sharing → Require a client certificate (or `magpie
+mtls on`). magpie makes its own CA in `~/.config/magpie/mtls`; with no
+`--tls-cert` it serves other computers `https://` with a certificate that
+CA signs, so they need its `ca.pem`. Issue each device a certificate under
+Client certificates (or `magpie mtls issue laptop`): `client.pem`,
+`client-key.pem` and `ca.pem` are saved to Downloads/magpie-laptop, and the
+key is kept nowhere else. Issuing the same name again, or Revoke (`magpie
+mtls revoke laptop`), refuses the old one at once, on connections already
+open too. A request from another computer without a good certificate is
+refused 403 (or at the handshake), with a gateway key or without. This
+computer, and a WSL distro's agent with its key, are answered as before,
+over plain `http://127.0.0.1` too. A page open from another computer can't
+turn it on without a certificate, nor revoke or reissue its own.
+
+On the other computer, give a Remote magpie (or any provider of your own at
+an `https://` address, such as one behind an Nginx that checks client
+certificates) the three files under Advanced → Client certificate. They are
+shown only to that provider's own host. curl takes them as `--cert
+client.pem --key client-key.pem --cacert ca.pem`. Not covered yet: a proxy
+or tunnel in front of magpie can't pass a certificate on, so with mTLS on
+its requests are refused unless it checks certificates itself and
+`MAGPIE_TRUST_PROXY=1` is set; `magpie web`'s page port doesn't hand
+gateway calls on under mTLS (call the gateway's own port); there is no
+`.p12` for a browser yet (`openssl pkcs12 -export -in client.pem -inkey
+client-key.pem -out laptop.p12` makes one).
+
 Caddy is the alternative that also gets the certificate for you: run
 `relay.example.com { reverse_proxy 127.0.0.1:3425 }` with sharing on and a
 gateway key per client. A proxy on this computer adds forwarding headers,
@@ -3485,6 +3514,7 @@ magpie web                      # the app's window in a browser (WSL, a server o
                                 # (behind a reverse proxy, MAGPIE_WEB_URL=https://<the page there> prints the link through it)
 magpie serve                    # the gateway alone, no window; --web[=host:port] serves the page too, from the same process
                                 # --tls-cert <file> --tls-key <file>: https:// for other computers (see HTTPS under sharing)
+magpie mtls                     # other computers need a client certificate magpie issued: on, off, issue <device>, revoke <device>, list
 magpie daemon install           # run magpie serve as a service (systemd, launchd); --web, --lan, --addr serve the page too; --tls-cert/--tls-key, --no-tls
 magpie ls                       # list every agent and its current settings
 magpie claude opus              # set a model (agent names accept prefixes: cc, oc, gem …)
