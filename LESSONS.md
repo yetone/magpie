@@ -623,7 +623,15 @@ before the merge, are in the code standards.)
   (#2710). 17557132c met the same budget without a raise.
 - A raise moves something out first, or follows a growth rate the owner
   set.
-- Seen 1× (2026-10-17).
+- 11-10: the cap held, so it was met another way. The budget counts
+  comments, and five features that reached it (ecc16fe97, b72256b59,
+  b3a57b3d8, d374168d0 and the check-in time) each went red on CI and
+  were brought back under by deleting comments that say why the code is
+  as it is: 12 lines in b596da773, 44 in 0eac4e6aa (11-09). Nothing moved
+  out to a plugin (#5918). A budget that counts comments makes them the
+  cheapest thing to cut. Measure what the budget is about, and run the
+  sub-second guard before pushing a change near it.
+- Seen 2× (2026-10-17, 2026-11-10).
 
 **A release published after a newer one takes Latest, and with it the
 update feed and the tap, unless the publish step checks.**
