@@ -40,6 +40,7 @@ function memories() {
 function distill() {
   return {
     on: false, model: "", auto: "dt/small", running: false, gets: 0,
+    efforts: ["low", "medium", "high"], effort: "", effortNow: "", days: 0, ranges: [7, 30, 90, 365, -1],
     models: [{ id: "dt/small", name: "Small", providerName: "DT" }, { id: "dt/m1", name: "Model One", providerName: "DT" }],
   };
 }
@@ -75,6 +76,8 @@ function server(lang, state, sent, dist) {
         const body = route.request().postDataJSON();
         sent.push({ path: url.pathname, body });
         if (url.pathname === "/api/memory/distill/run") Object.assign(dist, { running: false, error: "429: too many requests", last: new Date().toISOString() });
+        else if ("effort" in body) Object.assign(dist, { effort: body.effort, effortNow: body.effort });
+        else if ("days" in body) Object.assign(dist, { days: body.days === 7 ? 0 : body.days, running: body.days === -1 || body.days > (dist.days || 7), gets: 0 });
         else Object.assign(dist, { on: body.on, model: body.model, running: body.on, gets: 0, error: "" });
       } else if (dist.running && ++dist.gets > 1) {
         // the run ends: it read three and proposed one
@@ -252,6 +255,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.match(await drow.locator(".lib-distmodel").textContent(), /Small/);
         assert.equal(await trow.locator(".lib-distmodel").count(), 0, "a model picked on both rows");
         assert.equal(await drow.locator(".lib-distnow").count(), 0, "Read now while reading");
+        assert.equal(await drow.locator(".lib-disteffort").count(), 1, "no reasoning level");
+        const rangeShown = await drow.locator(".lib-distrange").textContent();
+        assert.match(rangeShown, /7/);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "the row scrolls sideways");
         const card = await page.locator(`${view} .lib-memcard`).boundingBox();
         for (const b of await drow.locator(".lib-acts > *").all()) {
@@ -272,6 +278,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await page.waitForFunction(() => /Model One/.test(document.querySelector("#view-library .lib-distmodel")?.textContent || ""));
           assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/distill").body, { on: true, model: "dt/m1" });
           assert.equal(await page.locator(`${view} select`).count(), 0, "a native select");
+          await drow.locator(".lib-distnow").waitFor({ timeout: 8000 });
+          // a reasoning level picked: the model's own levels, Default first
+          assert.equal(await drow.locator(".lib-disteffort .effort-ic").count(), 1);
+          await drow.locator(".lib-disteffort").click();
+          assert.equal(await page.locator(".proto-menu .pm-item").count(), 4);
+          await page.locator(".proto-menu .pm-item").nth(3).click();
+          await page.waitForFunction(() => document.querySelector("#view-library .lib-disteffort")?.textContent.trim() !== "" && !document.querySelector(".proto-menu"));
+          assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/distill").body, { on: true, model: "dt/m1", effort: "high" });
+          // how far back: 7 days unless picked; All reads at once
+          await drow.locator(".lib-distrange").click();
+          assert.equal(await page.locator(".proto-menu .pm-item").count(), 5);
+          await page.locator(".proto-menu .pm-item").nth(4).click();
+          assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/distill").body, { on: true, model: "dt/m1", days: -1 });
+          await page.waitForFunction((was) => document.querySelector("#view-library .lib-distrange")?.textContent !== was, rangeShown);
           await drow.locator(".lib-distnow").waitFor({ timeout: 8000 });
           // a run that stopped says why
           await drow.locator(".lib-distnow").click();

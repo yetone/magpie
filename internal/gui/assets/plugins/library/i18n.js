@@ -2,6 +2,10 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "The model's own": "模型自己的默认",
+    "1 year": "1 年",
+    "How far back it reads": "读取多久以前的对话",
+    "The latest 400 conversations, read 10 an hour": "最近 400 个对话，每小时读 10 个",
     "Turn {name} on or off": "开启或关闭 {name}",
     "{name} is on again": "{name} 已重新开启",
     "{name} is off; its settings are kept": "{name} 已关闭，设置都已保留",
@@ -900,6 +904,10 @@ magpie.strings({
     "billion-context is installed — switch it on for your agents below": "billion-context 已安装 — 在下方为你的 Agent 打开它",
   },
   "zh-TW": {
+    "The model's own": "模型自己的預設",
+    "1 year": "1 年",
+    "How far back it reads": "讀取多久以前的對話",
+    "The latest 400 conversations, read 10 an hour": "最近 400 個對話，每小時讀 10 個",
     "Turn {name} on or off": "開啟或關閉 {name}",
     "{name} is on again": "{name} 已重新開啟",
     "{name} is off; its settings are kept": "{name} 已關閉，設定都已保留",
@@ -1798,6 +1806,10 @@ magpie.strings({
     "billion-context is installed — switch it on for your agents below": "billion-context 已安裝 — 在下方為你的 Agent 開啟它",
   },
   ja: {
+    "The model's own": "モデル自身の既定",
+    "1 year": "1 年",
+    "How far back it reads": "どこまで遡って読むか",
+    "The latest 400 conversations, read 10 an hour": "最新の 400 件の会話を 1 時間に 10 件ずつ読みます",
     "Turn {name} on or off": "{name} のオン/オフ",
     "{name} is on again": "{name} を再びオンにしました",
     "{name} is off; its settings are kept": "{name} をオフにしました。設定は残っています",
@@ -2696,6 +2708,10 @@ magpie.strings({
     "billion-context is installed — switch it on for your agents below": "billion-context をインストールしました — 下でエージェントごとにオンにしてください",
   },
   de: {
+    "The model's own": "Die Vorgabe des Modells",
+    "1 year": "1 Jahr",
+    "How far back it reads": "Wie weit zurück gelesen wird",
+    "The latest 400 conversations, read 10 an hour": "Die neuesten 400 Unterhaltungen, 10 pro Stunde",
     "Turn {name} on or off": "{name} ein- oder ausschalten",
     "{name} is on again": "{name} ist wieder an",
     "{name} is off; its settings are kept": "{name} ist aus; seine Einstellungen bleiben",

@@ -25,6 +25,13 @@ type distillView struct {
 	Running bool       `json:"running"`
 	// Dreaming is a tidy going (Running is conversations being read)
 	Dreaming bool `json:"dreaming"`
+	// Efforts are the reasoning levels of the model in use (picked or
+	// automatic), weakest first, none when they aren't known; EffortNow
+	// the picked Effort fitted to them
+	Efforts   []string `json:"efforts,omitempty"`
+	EffortNow string   `json:"effortNow,omitempty"`
+	// Ranges are the ranges, in days, reading can look back (All -1)
+	Ranges []int `json:"ranges"`
 }
 
 func readDistill() (*distillView, error) {
@@ -33,7 +40,14 @@ func readDistill() (*distillView, error) {
 		return nil, err
 	}
 	st.Done = nil // the marks are the run's, not the page's
-	v := &distillView{State: st, Auto: distillAuto(), Models: []modelRef{}, Running: memdistill.Running() && !memdistill.Dreaming(), Dreaming: memdistill.Dreaming()}
+	v := &distillView{State: st, Auto: distillAuto(), Models: []modelRef{}, Running: memdistill.Running() && !memdistill.Dreaming(), Dreaming: memdistill.Dreaming(), Ranges: memdistill.Ranges}
+	inUse := st.Model
+	if inUse == "" {
+		inUse = v.Auto
+	}
+	if inUse != "" {
+		v.Efforts, v.EffortNow = gateway.ModelEfforts(inUse), gateway.SideEffort(inUse, st.Effort)
+	}
 	for _, e := range provider.Served() {
 		if e.Group != "" || e.Provider.Ready() && !e.Provider.DecideOnly() {
 			m := modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon}
@@ -53,8 +67,9 @@ func distillAuto() string { return gateway.AutoVision() }
 
 // distillComplete sends one request through the gateway this process
 // serves, as any agent's goes: routed, masked and counted, under the
-// memory agent's name.
-func distillComplete(ctx context.Context, model, system, user string) (string, error) {
+// memory agent's name, asked to reason at effort when one is picked
+// (gateway.WithSideEffort; RealZeroP27 on X).
+func distillComplete(ctx context.Context, model, effort, system, user string) (string, error) {
 	gw := served.Load()
 	if gw == nil {
 		return "", errors.New("the gateway isn't served by this magpie")
@@ -66,6 +81,7 @@ func distillComplete(ctx context.Context, model, system, user string) (string, e
 	if err != nil {
 		return "", err
 	}
+	body = gateway.WithSideEffort(body, model, effort)
 	req, err := http.NewRequestWithContext(ctx, "POST", gateway.URL()+"/v1/messages", strings.NewReader(string(body)))
 	if err != nil {
 		return "", err
@@ -130,11 +146,16 @@ func memoryDistillRoutes(mux *http.ServeMux) {
 		}
 		writeJSON(rw, v)
 	})
-	// {on, model}: switched or a model picked; switched on, it reads at once
+	// {on, model, effort?, days?}: switched or a model picked; switched
+	// on, it reads at once. effort and days, when sent, pick the
+	// reasoning level and how far back it reads; a longer range reads at
+	// once too
 	mux.HandleFunc("POST /api/memory/distill", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
-			On    bool   `json:"on"`
-			Model string `json:"model"`
+			On     bool    `json:"on"`
+			Model  string  `json:"model"`
+			Effort *string `json:"effort"`
+			Days   *int    `json:"days"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)
@@ -145,11 +166,27 @@ func memoryDistillRoutes(mux *http.ServeMux) {
 			return
 		}
 		was, _ := memdistill.Load()
+		if in.Effort != nil {
+			if _, err := memdistill.SetEffort(*in.Effort); err != nil {
+				fail(rw, err)
+				return
+			}
+		}
+		longer := false
+		if in.Days != nil {
+			st, err := memdistill.SetRange(*in.Days)
+			if err != nil {
+				fail(rw, err)
+				return
+			}
+			longer = st.Since.Before(was.Since)
+		}
 		if _, err := memdistill.Set(in.On, in.Model); err != nil {
 			fail(rw, err)
 			return
 		}
-		if in.On && (!was.On || was.Model != in.Model) {
+		read := in.On && (!was.On || was.Model != in.Model || longer)
+		if read {
 			distillNow()
 		}
 		v, err := readDistill()
@@ -157,7 +194,7 @@ func memoryDistillRoutes(mux *http.ServeMux) {
 			fail(rw, err)
 			return
 		}
-		v.Running = v.Running || in.On && (!was.On || was.Model != in.Model)
+		v.Running = v.Running || read
 		writeJSON(rw, v)
 	})
 	mux.HandleFunc("POST /api/memory/distill/run", func(rw http.ResponseWriter, r *http.Request) {

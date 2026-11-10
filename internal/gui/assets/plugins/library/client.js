@@ -1116,6 +1116,29 @@ magpie.plugin("library", (ctx) => {
     d.model || "", (v) => distChange("memory/distill", { on: d.on, model: v }), "Model", "", "left", false, d.models.length > 8 ? "Search models" : ""));
     return pick;
   }
+  // the reasoning level the model reads and tidies at, when its levels
+  // are known: Default sends none (RealZeroP27 on X)
+  function memEffortPick(d) {
+    if (!d.efforts?.length) return null;
+    const shown = d.effort ? d.effortNow || d.effort : "";
+    const b = menuButton(shown ? t(shown) : t("Default"), "lib-disteffort", () => openProtoMenu(b,
+      [{ v: "", name: "Default", note: "The model's own" }, ...d.efforts.map((l) => ({ v: l, name: l, note: "" }))],
+      shown, (v) => v !== (d.effort || "") && distChange("memory/distill", { on: d.on, model: d.model || "", effort: v }), "Thinking"));
+    b.prepend(effortIcon({ options: d.efforts.map((l) => ({ value: l })), value: shown }));
+    b.title = t("How hard this model thinks");
+    return b;
+  }
+  // how far back conversations are read: 7 days unless picked, All the
+  // latest 400 (memdistill.Listed), PerRun an hour like any other
+  const rangeName = (n) => n === -1 ? t("All") : n === 365 ? t("1 year") : t("{n} days", { n });
+  function memRangePick(d) {
+    const cur = d.days || 7;
+    const b = menuButton(rangeName(cur), "lib-distrange", () => openProtoMenu(b,
+      (d.ranges || [7, 30, 90, 365, -1]).map((n) => ({ v: String(n), name: rangeName(n), literalName: true, note: n === -1 ? "The latest 400 conversations, read 10 an hour" : "" })),
+      String(cur), (v) => +v !== cur && distChange("memory/distill", { on: d.on, model: d.model || "", days: +v }), "How far back it reads"));
+    b.title = t("How far back it reads");
+    return b;
+  }
   // Conversations read into memory (internal/memdistill): what the
   // agents' finished sessions say worth keeping waits under To review.
   // Off until switched on; the model is the automatic one or one picked.
@@ -1133,7 +1156,7 @@ magpie.plugin("library", (ctx) => {
     w.append(el("div", "sub" + (err ? " err" : ""), line));
     const acts = el("div", "lib-acts");
     if (d.on) {
-      acts.append(memModelPick(d));
+      acts.append(memModelPick(d), ...[memEffortPick(d)].filter(Boolean), memRangePick(d));
       if (!d.running) acts.append(button(t("Read now"), "action lib-distnow", () => distChange("memory/distill/run", {})));
     }
     acts.append(toggle(d.on, t("Learn from conversations"), (on) => distChange("memory/distill", { on, model: d.model || "" })));
@@ -1160,7 +1183,7 @@ magpie.plugin("library", (ctx) => {
     w.append(el("div", "sub" + (err ? " err" : ""), line));
     const acts = el("div", "lib-acts");
     if (ch.length && !d.undone && !d.dreaming) acts.append(button(t("Undo"), "action lib-dreamundo", () => distChange("memory/dream/undo", {}, true)));
-    if (d.dream && !d.on) acts.append(memModelPick(d));
+    if (d.dream && !d.on) acts.append(memModelPick(d), ...[memEffortPick(d)].filter(Boolean));
     if (d.dream && !d.dreaming && !d.running) acts.append(button(t("Tidy now"), "action lib-dreamnow", () => distChange("memory/dream/run", {})));
     acts.append(toggle(d.dream, t("Tidy up every night"), (on) => distChange("memory/dream", { on })));
     r.append(glyph(GLYPH.backup), w, acts);

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -61,9 +62,12 @@ func (sb *sandbox) session(id string, ago time.Duration, said ...string) *sessio
 	return &sb.list[len(sb.list)-1]
 }
 
-func (sb *sandbox) complete(_ context.Context, model, system, user string) (string, error) {
+func (sb *sandbox) complete(_ context.Context, model, effort, system, user string) (string, error) {
 	_, conv, _ := strings.Cut(user, "Conversation:\n\n")
 	first, _, _ := strings.Cut(conv, "\n")
+	if effort != "" {
+		model += ":" + effort
+	}
 	sb.asked = append(sb.asked, model+" "+first)
 	if sb.reply == nil {
 		return "[]", nil
@@ -187,7 +191,7 @@ func TestWhatIsSent(t *testing.T) {
 	}
 	sb.session("s", time.Hour, "first", "second")
 	var sys, user string
-	complete := func(_ context.Context, _, s, u string) (string, error) { sys, user = s, u; return "[]", nil }
+	complete := func(_ context.Context, _, _, s, u string) (string, error) { sys, user = s, u; return "[]", nil }
 	if _, err := Run(context.Background(), "a/m", complete); err != nil {
 		t.Fatal(err)
 	}
@@ -294,5 +298,135 @@ func TestUnreadableStateRunsNothing(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(Path()); string(b) != `{"on":tru` {
 		t.Fatalf("%s", b)
+	}
+}
+
+// How far back reading looks is picked (RealZeroP27 on X: only the last
+// 7 days were read): 7 days by default, as before; a longer range reads
+// the older conversations in it, All every one listed, PerRun a run all
+// the same. What was read already isn't read again. A state written
+// before ranges could be picked keeps its own Since. A range or level not
+// offered is refused.
+func TestRangePicked(t *testing.T) {
+	sb := newSandbox(t)
+	// a state from before: switched on two days ago, so looking back to
+	// nine days ago, and nothing else
+	was := sb.at.Add(-9 * 24 * time.Hour).UTC()
+	if err := os.WriteFile(Path(), []byte(`{"on":true,"since":"`+was.Format(time.RFC3339)+`"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sb.session("d1", 24*time.Hour, "d1", "x")
+	sb.session("d8", 8*24*time.Hour, "d8", "x")
+	sb.session("d20", 20*24*time.Hour, "d20", "x")
+	sb.session("d200", 200*24*time.Hour, "d200", "x")
+	if _, err := Run(context.Background(), "a/m", sb.complete); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := Load(); !st.Since.Equal(was) || st.Days != 0 || !slices.Equal(sb.asked, []string{"a/m User: d1", "a/m User: d8"}) {
+		t.Fatalf("an old state read %q, since %v", sb.asked, st.Since)
+	}
+
+	sb.asked = nil
+	if _, err := SetRange(30); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(context.Background(), "a/m", sb.complete); err != nil || !slices.Equal(sb.asked, []string{"a/m User: d20"}) {
+		t.Fatalf("30 days read %q %v", sb.asked, err)
+	}
+	sb.asked = nil
+	if st, err := SetRange(All); err != nil || !st.Since.IsZero() || st.Days != All {
+		t.Fatalf("%+v %v", st, err)
+	}
+	if _, err := Run(context.Background(), "a/m", sb.complete); err != nil || !slices.Equal(sb.asked, []string{"a/m User: d200"}) {
+		t.Fatalf("all read %q %v", sb.asked, err)
+	}
+	// back to 7: nothing older is read, and switched off and on it looks
+	// back 7 days again
+	if st, _ := SetRange(7); st.Days != 0 || !st.Since.Equal(sb.at.Add(-Back)) {
+		t.Fatalf("%+v", st)
+	}
+	if _, err := SetRange(10); err == nil {
+		t.Fatal("10 days taken")
+	}
+	if _, err := SetEffort("hard"); err == nil {
+		t.Fatal("a level not known taken")
+	}
+	if st, _ := Load(); st.Days != 0 || st.Effort != "" {
+		t.Fatalf("a refusal changed %+v", st)
+	}
+
+	// a fresh switch-on with All picked reads everything
+	sb2 := newSandbox(t)
+	sb2.session("old", 300*24*time.Hour, "old", "x")
+	if _, err := SetRange(All); err != nil {
+		t.Fatal(err)
+	}
+	on(t, "")
+	if _, err := Run(context.Background(), "a/m", sb2.complete); err != nil || !slices.Equal(sb2.asked, []string{"a/m User: old"}) {
+		t.Fatalf("%q %v", sb2.asked, err)
+	}
+}
+
+// The reasoning level picked is what the model is asked at, reading and
+// tidying alike; none picked, it is asked at its own default.
+func TestEffortPicked(t *testing.T) {
+	sb := newSandbox(t)
+	on(t, "")
+	sb.session("a", time.Hour, "a", "x")
+	if _, err := Run(context.Background(), "a/m", sb.complete); err != nil || sb.asked[0] != "a/m User: a" {
+		t.Fatalf("%q %v", sb.asked, err)
+	}
+	if st, err := SetEffort(" High "); err != nil || st.Effort != "high" {
+		t.Fatalf("%+v %v", st, err)
+	}
+	sb.session("b", time.Hour, "b", "x")
+	if _, err := Run(context.Background(), "a/m", sb.complete); err != nil || sb.asked[1] != "a/m:high User: b" {
+		t.Fatalf("%q %v", sb.asked, err)
+	}
+	note(t, "One", memory.Global, memory.FromInferred)
+	note(t, "Two", memory.Global, memory.FromInferred)
+	var asked string
+	if _, err := Dream(context.Background(), "a/m", func(_ context.Context, _, effort, _, _ string) (string, error) {
+		asked = effort
+		return "{}", nil
+	}); err != nil || asked != "high" {
+		t.Fatalf("tidied at %q: %v", asked, err)
+	}
+}
+
+// A conversation read once isn't read again when it is more than a month
+// old but inside the range: its mark was kept 30 days, so a session
+// older than that, read when reading was switched on two months back,
+// was read again every hour.
+func TestOldConversationReadOnce(t *testing.T) {
+	sb := newSandbox(t)
+	if _, err := SetRange(90); err != nil {
+		t.Fatal(err)
+	}
+	on(t, "")
+	sb.session("old", 40*24*time.Hour, "old", "x")
+	sb.session("new", time.Hour, "new", "x")
+	for range 3 {
+		if _, err := Run(context.Background(), "a/m", sb.complete); err != nil {
+			t.Fatal(err)
+		}
+		sb.at = sb.at.Add(time.Hour)
+	}
+	if !slices.Equal(sb.asked, []string{"a/m User: new", "a/m User: old"}) {
+		t.Fatalf("read %q", sb.asked)
+	}
+	// a mark goes once its session is over a month old and has left the
+	// listing
+	if st, _ := Load(); len(st.Done) != 2 {
+		t.Fatalf("%+v", st.Done)
+	}
+	sb.at = sb.at.Add(60 * 24 * time.Hour)
+	sb.list = sb.list[1:]
+	sb.list[0].Last = sb.at.Add(-time.Hour)
+	if _, err := Run(context.Background(), "a/m", sb.complete); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := Load(); len(st.Done) != 1 || st.Done["codex/new"].IsZero() {
+		t.Fatalf("%+v", st.Done)
 	}
 }

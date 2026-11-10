@@ -87,7 +87,7 @@ func Dream(ctx context.Context, auto string, complete Complete) ([]memory.Change
 	if model == "" {
 		model = auto
 	}
-	plan, err := ask(ctx, model, complete)
+	plan, err := ask(ctx, model, st.Effort, complete)
 	var cs []memory.Change
 	if err == nil {
 		plan.Before = now().Add(-Unreviewed)
@@ -125,7 +125,7 @@ func Undo() (int, error) {
 // ask shows the model each scope's memories that could change, perAsk at
 // a time, and gathers what it names. A scope with fewer than two, or with
 // only the user's own, isn't sent.
-func ask(ctx context.Context, model string, complete Complete) (memory.Plan, error) {
+func ask(ctx context.Context, model, effort string, complete Complete) (memory.Plan, error) {
 	var p memory.Plan
 	all, _, err := memory.All()
 	if err != nil {
@@ -164,7 +164,7 @@ func ask(ctx context.Context, model string, complete Complete) (memory.Plan, err
 			if ctx.Err() != nil {
 				return p, ctx.Err()
 			}
-			reply, err := complete(ctx, model, dreamPrompt, listing(chunk))
+			reply, err := complete(ctx, model, effort, dreamPrompt, listing(chunk))
 			if err != nil {
 				return p, fmt.Errorf("%s: %w", model, err)
 			}

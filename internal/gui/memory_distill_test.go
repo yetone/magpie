@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tidwall/gjson"
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/memdistill"
 	"github.com/yetone/magpie/internal/memory"
@@ -42,13 +44,13 @@ func TestDistillCompleteThroughGateway(t *testing.T) {
 	}
 	prev := served.Swap(nil)
 	t.Cleanup(func() { served.Store(prev) })
-	if _, err := distillComplete(context.Background(), "dt/m1", "sys", "conv"); err == nil || !strings.Contains(err.Error(), "isn't served") {
+	if _, err := distillComplete(context.Background(), "dt/m1", "", "sys", "conv"); err == nil || !strings.Contains(err.Error(), "isn't served") {
 		t.Fatalf("no gateway: %v", err)
 	}
 	gw := gateway.New()
 	served.Store(gw)
 
-	reply, err := distillComplete(context.Background(), "dt/m1", "Write down what lasts.", "Conversation:\n\nUser: use tabs")
+	reply, err := distillComplete(context.Background(), "dt/m1", "", "Write down what lasts.", "Conversation:\n\nUser: use tabs")
 	if err != nil || reply != `[{"text":"Likes tabs"}]` {
 		t.Fatalf("%q %v", reply, err)
 	}
@@ -61,8 +63,35 @@ func TestDistillCompleteThroughGateway(t *testing.T) {
 		t.Fatalf("counted as %+v", rs)
 	}
 
+	// the gateway's own choice for a model it knows no levels of, as before
+	if gjson.GetBytes(b, "thinking.type").String() == "enabled" || got["max_tokens"] != float64(4096) {
+		t.Fatalf("no level picked, but sent %s", b)
+	}
+
+	// a level picked (RealZeroP27 on X) is asked for, fitted to the
+	// model's own, with room to think above the reply; none turns
+	// thinking off; one whose levels aren't known is sent as before
+	if err := catalog.SaveLive("dt", up.URL, []catalog.Model{{ID: "m1", Efforts: []string{"none", "low", "medium", "high"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if lv := gateway.ModelEfforts("dt/m1"); len(lv) != 4 {
+		t.Fatalf("levels %q", lv)
+	}
+	if _, err := distillComplete(context.Background(), "dt/m1", "xhigh", "s", "u"); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := json.Marshal(got); gjson.GetBytes(b, "thinking.type").String() != "enabled" || gjson.GetBytes(b, "thinking.budget_tokens").Int() != 24000 || gjson.GetBytes(b, "max_tokens").Int() != 4096+24000 {
+		t.Fatalf("high sent %s", b)
+	}
+	if _, err := distillComplete(context.Background(), "dt/m1", "none", "s", "u"); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := json.Marshal(got); gjson.GetBytes(b, "thinking.type").String() != "disabled" || gjson.GetBytes(b, "max_tokens").Int() != 4096 {
+		t.Fatalf("none sent %s", b)
+	}
+
 	refuse = true
-	if _, err := distillComplete(context.Background(), "dt/m1", "s", "u"); err == nil || !strings.Contains(err.Error(), "model not allowed on this plan") {
+	if _, err := distillComplete(context.Background(), "dt/m1", "", "s", "u"); err == nil || !strings.Contains(err.Error(), "model not allowed on this plan") {
 		t.Fatalf("refused: %v", err)
 	}
 }
@@ -96,7 +125,7 @@ func TestDreamRoutes(t *testing.T) {
 	if _, _, err := memory.Save(memory.Input{Text: &text2, Kind: &kind, Scope: &scope, Status: &st}, memory.FromInferred, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	cs, err := memdistill.Dream(context.Background(), "a/m", func(context.Context, string, string, string) (string, error) {
+	cs, err := memdistill.Dream(context.Background(), "a/m", func(context.Context, string, string, string, string) (string, error) {
 		return `{"stale":[{"id":"n1"}]}`, nil
 	})
 	if err != nil || len(cs) != 1 {
@@ -113,5 +142,49 @@ func TestDreamRoutes(t *testing.T) {
 	}
 	if v := post("/api/memory/dream", `{"on":false}`); v.Dream {
 		t.Fatalf("off: %+v", v.State)
+	}
+}
+
+// The row's route picks how far back reading looks and the level its
+// model is asked at, each only when sent: the switch's own {on, model}
+// keeps both. A longer range reads at once; a range or level not
+// offered is refused, and the view offers the ranges and the model's
+// levels.
+func TestDistillRangeAndEffortRoutes(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	reads := 0
+	prev := distillNow
+	distillNow = func() { reads++ }
+	t.Cleanup(func() { distillNow = prev })
+	mux := http.NewServeMux()
+	memoryDistillRoutes(mux)
+	post := func(body string) (int, distillView) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest("POST", "/api/memory/distill", strings.NewReader(body)))
+		var v distillView
+		json.Unmarshal(rec.Body.Bytes(), &v)
+		return rec.Code, v
+	}
+	if _, v := post(`{"on":true,"model":""}`); !v.On || v.Days != 0 || v.Effort != "" || reads != 1 || len(v.Ranges) != 5 {
+		t.Fatalf("on: %+v %d", v, reads)
+	}
+	if _, v := post(`{"on":true,"model":"","days":90,"effort":"high"}`); v.Days != 90 || v.Effort != "high" || reads != 2 || !v.Running {
+		t.Fatalf("90 days, high: %+v %d", v.State, reads)
+	}
+	if _, v := post(`{"on":true,"model":""}`); v.Days != 90 || v.Effort != "high" || reads != 2 {
+		t.Fatalf("the switch's body changed them: %+v %d", v.State, reads)
+	}
+	if _, v := post(`{"on":true,"model":"","days":30}`); v.Days != 30 || reads != 2 {
+		t.Fatalf("a shorter range read again: %+v %d", v.State, reads)
+	}
+	if _, v := post(`{"on":true,"model":"","effort":""}`); v.Effort != "" {
+		t.Fatalf("default: %+v", v.State)
+	}
+	for _, bad := range []string{`{"on":true,"days":12}`, `{"on":true,"effort":"hard"}`} {
+		if code, _ := post(bad); code == 200 {
+			t.Fatalf("%s taken", bad)
+		}
 	}
 }

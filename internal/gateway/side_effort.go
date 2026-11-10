@@ -117,3 +117,29 @@ func replyRoom(usual int, effort string) int {
 	}
 	return usual + budgetOf(effortOf(effort))
 }
+
+// SideEffort is the level a call magpie makes on its own with model is
+// asked at when want is picked for it: want fitted to the model's own
+// levels, "" when none is picked or its levels aren't known.
+func SideEffort(model, want string) string { return sideEffort(model, want) }
+
+// WithSideEffort is an Anthropic Messages request magpie makes on its own
+// with model (memory's reading of conversations and its nightly tidy)
+// asked to reason at want, fitted to the model's levels as SideEffort
+// fits it, as a group's member fixed at a level is asked (withFixedEffort):
+// none turns thinking off, any other level asks for it, with room above
+// the reply's usual limit to think in (replyRoom). Nothing picked, or a
+// model whose levels aren't known: the body as it was.
+func WithSideEffort(body []byte, model, want string) []byte {
+	e := sideEffort(model, want)
+	if e == "" {
+		return body
+	}
+	var v struct {
+		MaxTokens int `json:"max_tokens"`
+	}
+	if decodeJSON(body, &v) == nil && v.MaxTokens > 0 {
+		body = withFields(body, map[string]any{"max_tokens": replyRoom(v.MaxTokens, e)})
+	}
+	return withFixedEffort(provider.Anthropic, body, e)
+}

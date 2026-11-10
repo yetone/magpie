@@ -104,11 +104,21 @@ failed. The tab is in [plugins/library/client.js](../../internal/gui/assets/plug
 `internal/memdistill` reads finished conversations into candidate
 memories. It is off until switched on under Memory → Learn from
 conversations; switched on, it looks back seven days (`Back`) and no
-further (`State.Since`).
+further (`State.Since`), unless a range is picked.
 
+- How far back (`State.Days`, `SetRange`): 7, 30, 90 or 365 days, or All
+  (`memdistill.All`, -1); 0 is the 7-day default, so a state from before
+  the picker keeps its own `Since` until a range is picked
+  (`TestRangePicked`). Every range reads from the latest 400 conversations
+  (`Listed`) at 10 an hour (`PerRun`), so All costs at most ~240 requests
+  a day until the backlog is read; the picker's All says so.
 - State is `distill.json` beside `memory.json` (`memdistill.Path`):
-  the switch, the model, the conversations done (kept 30 days), and the
-  last run's time, counts and error. It is written through temp-and-rename
+  the switch, the model, the reasoning level, the range, the
+  conversations done, and the last run's time, counts and error. A
+  conversation's mark is dropped once it is before `Since`, or older
+  than 30 days and past the oldest conversation listed; before that a
+  conversation older than 30 days was read again every hour
+  (`TestOldConversationReadOnce`). It is written through temp-and-rename
   under a file lock; an unreadable file runs nothing
   (`TestUnreadableStateRunsNothing`).
 - `Keep` runs 5 minutes after the GUI backend starts, then hourly
@@ -126,7 +136,11 @@ further (`State.Since`).
   (`distillComplete`), as `x-api-key: magpie-memory`, so it is routed,
   masked and counted in Usage under the agent `memory`
   (`TestDistillCompleteThroughGateway`). With no model picked it uses
-  `gateway.AutoVision()`.
+  `gateway.AutoVision()`. A reasoning level picked (`State.Effort`,
+  `SetEffort`) is fitted to the model's levels and sent as thinking with
+  room for it (`gateway.WithSideEffort`, as Vision and Searcher do);
+  Default sends none. Run and the nightly tidy both use it
+  (`TestEffortPicked`).
 - Each proposal is saved as an inferred candidate (To review) with its
   conversation as the source and the quote it rests on; at most 5 per
   conversation. A proposal whose quote isn't in what the user wrote
@@ -137,7 +151,9 @@ further (`State.Since`).
   leaves the conversation to be read again next time
   (`TestFailureAndCap`).
 - Routes: `GET /api/memory/distill`, `POST /api/memory/distill`
-  `{on, model}` (switching on, or a new model, reads at once) and
+  `{on, model, effort?, days?}` (switching on, a new model, or a longer
+  range reads at once; a bad level or range is a 400,
+  `TestDistillRangeAndEffortRoutes`) and
   `POST /api/memory/distill/run`. The row polls every 2s while a run
   goes and reloads the memories when it ends.
 

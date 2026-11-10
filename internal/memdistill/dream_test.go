@@ -45,7 +45,7 @@ func TestDreamTidiesAndUndoes(t *testing.T) {
 	u := note(t, "Use tabs", memory.Global, memory.FromUser)
 	p := note(t, "Alone in its project", "project:github.com/a/b", memory.FromInferred)
 	var asked []string
-	cs, err := Dream(context.Background(), "auto/m", func(_ context.Context, model, system, user string) (string, error) {
+	cs, err := Dream(context.Background(), "auto/m", func(_ context.Context, model, _, system, user string) (string, error) {
 		asked = append(asked, model+"\n"+user)
 		return "Sure:\n```json\n" + `{"merge":[{"ids":["n1","n2","x9"],"text":"Releases ship on Tuesdays","kind":"FACT"}],"stale":[{"id":"n3","why":"date passed"},{"id":"n4"},{"id":"n99"}]}` + "\n```", nil
 	})
@@ -91,7 +91,7 @@ func TestDreamFailureChangesNothing(t *testing.T) {
 	if _, err := Dream(context.Background(), "", nil); err == nil || !strings.Contains(err.Error(), "no model") {
 		t.Fatalf("no model: %v", err)
 	}
-	_, err := Dream(context.Background(), "a/m", func(context.Context, string, string, string) (string, error) {
+	_, err := Dream(context.Background(), "a/m", func(context.Context, string, string, string, string) (string, error) {
 		return "", errors.New("429: slow down")
 	})
 	if err == nil || status(t, a.ID) != memory.Candidate {

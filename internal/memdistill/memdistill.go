@@ -35,9 +35,10 @@ import (
 	"github.com/yetone/magpie/internal/sessions"
 )
 
-// Complete sends one request to model: a system text and one user
-// message, and returns the reply's text.
-type Complete func(ctx context.Context, model, system, user string) (string, error)
+// Complete sends one request to model, asked to reason at effort ("" the
+// model's own default): a system text and one user message, and returns
+// the reply's text.
+type Complete func(ctx context.Context, model, effort, system, user string) (string, error)
 
 const (
 	// Quiet is how long a session has had no turn before it is read: one
@@ -45,8 +46,15 @@ const (
 	Quiet = 30 * time.Minute
 	// PerRun caps the sessions one run sends to the model
 	PerRun = 10
-	// Back is how far back a run looks the first time it is switched on
+	// Back is how far back a run looks the first time it is switched on,
+	// when no range is picked (State.Days 0)
 	Back = 7 * 24 * time.Hour
+	// All is State.Days for every conversation listed: the latest
+	// Listed, read PerRun an hour like any other, so a long history is
+	// read over days, not at once
+	All = -1
+	// Listed is how many of the latest sessions a run looks through
+	Listed = 400
 	// MinTurns is the fewest things the user said for a session to be read
 	MinTurns = 2
 	// MaxPerSession caps what one session may propose
@@ -66,7 +74,15 @@ type State struct {
 	On bool `json:"on,omitempty"`
 	// Model is the model picked; "" is the automatic choice
 	Model string `json:"model,omitempty"`
-	// Since is when it was switched on, less Back: older sessions aren't read
+	// Days is how far back reading looks, in days, from when it was
+	// switched on or the range was picked: 0 is Back, All every
+	// conversation listed (Ranges)
+	Days int `json:"days,omitempty"`
+	// Effort is the reasoning level the model is asked at, reading and
+	// tidying, fitted to its own levels as it is sent; "" its default
+	Effort string `json:"effort,omitempty"`
+	// Since is when it was switched on or the range picked, less the
+	// range: older sessions aren't read. Zero with All
 	Since time.Time `json:"since,omitzero"`
 	// Done is each read session's last turn when it was read, by
 	// agent/id
@@ -95,7 +111,7 @@ var Path = func() string { return appdir.Join(appdir.Config(), "distill.json") }
 
 var (
 	now  = time.Now
-	list = func() []sessions.Session { return sessions.List(400) }
+	list = func() []sessions.Session { return sessions.List(Listed) }
 	read = sessions.TranscriptOf
 	// running is held through a run in this process, and the file lock
 	// across magpies
@@ -161,16 +177,61 @@ func change(fn func(*State)) (State, error) {
 	return s, save(s)
 }
 
+// Ranges are the ranges, in days, reading can be set to look back: Back's
+// seven first, All last.
+var Ranges = []int{7, 30, 90, 365, All}
+
+// since is the oldest a session read may be when days is picked at t.
+func since(days int, t time.Time) time.Time {
+	switch days {
+	case All:
+		return time.Time{}
+	case 0:
+		return t.Add(-Back).UTC()
+	}
+	return t.Add(-time.Duration(days) * 24 * time.Hour).UTC()
+}
+
 // Set switches distilling on or off and picks its model ("" automatic).
-// Switched on from off, it looks back Back from now.
+// Switched on from off, it looks back the range picked (Back by default)
+// from now.
 func Set(on bool, model string) (State, error) {
 	return change(func(s *State) {
 		if on && !s.On {
-			s.Since = now().Add(-Back).UTC()
+			s.Since = since(s.Days, now())
 		}
 		s.On, s.Model = on, strings.TrimSpace(model)
 	})
 }
+
+// SetRange picks how far back reading looks: one of Ranges, from now. A
+// conversation read already isn't read again for a longer range; one
+// older than a shorter range isn't read.
+func SetRange(days int) (State, error) {
+	if !slices.Contains(Ranges, days) {
+		return State{}, fmt.Errorf("a range of %v days, not %d", Ranges, days)
+	}
+	return change(func(s *State) {
+		if days == 7 {
+			days = 0 // Back, kept as before a range could be picked
+		}
+		s.Days, s.Since = days, since(days, now())
+	})
+}
+
+// SetEffort picks the reasoning level the model is asked at, "" for its
+// own default. A level the model doesn't have is fitted to the nearest it
+// has when sent.
+func SetEffort(effort string) (State, error) {
+	effort = strings.ToLower(strings.TrimSpace(effort))
+	if effort != "" && !slices.Contains(efforts, effort) {
+		return State{}, fmt.Errorf("a reasoning level of %v, not %q", efforts, effort)
+	}
+	return change(func(s *State) { s.Effort = effort })
+}
+
+// efforts are the levels SetEffort takes (gateway's effortRank).
+var efforts = []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}
 
 // Result is what one run did.
 type Result struct {
@@ -206,7 +267,7 @@ func Run(ctx context.Context, auto string, complete Complete) (Result, error) {
 	if model == "" {
 		runErr = errors.New("no model to read conversations with: pick one")
 	} else {
-		res, runErr = run(ctx, st, model, complete)
+		res, runErr = run(ctx, st, model, st.Effort, complete)
 	}
 	_, err = change(func(s *State) {
 		s.Last, s.LastModel, s.Read, s.Added, s.Error = now().UTC(), model, res.Read, res.Added, ""
@@ -220,7 +281,7 @@ func Run(ctx context.Context, auto string, complete Complete) (Result, error) {
 			s.Done[k] = at
 		}
 		for k, at := range s.Done {
-			if now().Sub(at) > keepMarks {
+			if forget(at, s.Since, res.oldest) {
 				delete(s.Done, k)
 			}
 		}
@@ -231,12 +292,30 @@ func Run(ctx context.Context, auto string, complete Complete) (Result, error) {
 type ran struct {
 	Result
 	done map[string]time.Time
+	// oldest is the last turn of the oldest session listed, zero when
+	// none was
+	oldest time.Time
 }
 
-// due are the sessions to read now, the latest first.
-func due(st State, t time.Time) []sessions.Session {
+// forget says a read session's mark, its last turn at, can go: the
+// session is older than since, so it is never read again, or older than
+// keepMarks and than every session listed (oldest), so it was deleted or
+// fell off the listing, which it comes back to only with a turn after
+// the mark. A mark kept only keepMarks would have a session older than
+// that, inside the range, read again every hour.
+func forget(at, since, oldest time.Time) bool {
+	return at.Before(since) || now().Sub(at) > keepMarks && !oldest.IsZero() && at.Before(oldest)
+}
+
+// due are the sessions to read now, the latest first, and the last turn
+// of the oldest listed.
+func due(st State, t time.Time) ([]sessions.Session, time.Time) {
 	var out []sessions.Session
+	var oldest time.Time
 	for _, s := range list() {
+		if oldest.IsZero() || s.Last.Before(oldest) {
+			oldest = s.Last
+		}
 		switch {
 		case s.Agent == Agent, s.Gateway, s.ReadOnly, !s.Transcript,
 			s.ParentSession != "",
@@ -249,14 +328,16 @@ func due(st State, t time.Time) []sessions.Session {
 		out = append(out, s)
 	}
 	slices.SortStableFunc(out, func(a, b sessions.Session) int { return b.Last.Compare(a.Last) })
-	return out
+	return out, oldest
 }
 
 func key(s sessions.Session) string { return s.Agent + "/" + s.ID }
 
-func run(ctx context.Context, st State, model string, complete Complete) (ran, error) {
+func run(ctx context.Context, st State, model, effort string, complete Complete) (ran, error) {
 	r := ran{done: map[string]time.Time{}}
-	for _, s := range due(st, now()) {
+	ss, oldest := due(st, now())
+	r.oldest = oldest
+	for _, s := range ss {
 		if r.Read >= PerRun {
 			break
 		}
@@ -275,7 +356,7 @@ func run(ctx context.Context, st State, model string, complete Complete) (ran, e
 			continue
 		}
 		proj := memory.ProjectOf(s.Cwd)
-		reply, err := complete(ctx, model, prompt, request(text, known(proj), proj))
+		reply, err := complete(ctx, model, effort, prompt, request(text, known(proj), proj))
 		if err != nil {
 			return r, fmt.Errorf("%s: %w", model, err)
 		}
