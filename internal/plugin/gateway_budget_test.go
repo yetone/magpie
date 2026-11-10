@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -91,14 +92,20 @@ func TestGatewayHookDefaultBudgetStillCuts(t *testing.T) {
 }
 
 // TestGatewayHookChainStillTenSeconds: hooks of 10000 or less share the
-// chain's 10s as before. Two of 8000 that take 6s each: the first is kept,
-// the second is cut when the chain's 10s are up.
+// chain's 10s as before. Two of 8000: the first takes 4s and is kept (4s
+// to spare for the host's start on a busy CI machine, where 6s of 8 ran
+// out), the second takes 7s, inside its own 8s but past the ~6s the chain
+// has left, so only the chain's 10s can cut it.
 func TestGatewayHookChainStillTenSeconds(t *testing.T) {
 	sandbox(t)
 	var specs []string
-	for _, name := range []string{"first", "second"} {
+	for _, h := range []struct {
+		name string
+		ms   int
+	}{{"first", 4000}, {"second", 7000}} {
+		name := h.name
 		spec := gatewayFixture(t, `export async function onRequest(body) {
-  await new Promise(resolve => setTimeout(resolve, 6000));
+  await new Promise(resolve => setTimeout(resolve, `+strconv.Itoa(h.ms)+`));
   return {...body, `+name+`: true};
 }`)
 		if err := SetOptions(spec, map[string]any{"gatewayTimeoutMs": 8000}); err != nil {
