@@ -661,6 +661,28 @@ func CodexNativeHidden() map[string]bool {
 	return out
 }
 
+// CodexOwnLeftOut is the rule for Show Codex's own models turned off
+// (OwnModelsHidden, iiiiiimone on X): it says of a slug in the sign-in's
+// list whether Codex's list leaves it out, so the picker offers magpie's
+// models alone. A model magpie serves on a ChatGPT account of the user's
+// stays, as the Agents page's picker keeps it (Served), and so does keep,
+// the one Codex is set to, which Codex would otherwise run on fallback
+// metadata. nil while the switch is on. Hidden jobs (codex-auto-review) are
+// the caller's to leave.
+func CodexOwnLeftOut(keep string) func(slug string) bool {
+	if !OwnModelsHidden("codex") {
+		return nil
+	}
+	shown, _ := CatalogFor("codex")
+	served := map[string]bool{keep: true}
+	for _, e := range shown {
+		if CodexOwn(e) {
+			served[e.Model] = true
+		}
+	}
+	return func(slug string) bool { return !served[slug] }
+}
+
 // CodexOrder is where each model of Codex's list goes when the user put
 // them in an order of their own on the Agents page (#855), by the slug
 // Codex knows it by — a ChatGPT account's own by its bare one, as the
@@ -717,6 +739,10 @@ func buildCodexListTag(kind string) string {
 				ms = append(ms, catalog.Model{ID: "+" + e.ID})
 			}
 		}
+	}
+	// and Codex's own models left out of its list (OwnModelsHidden)
+	if OwnModelsHidden("codex") {
+		ms = append(ms, catalog.Model{ID: "~ownoff"})
 	}
 	off := slices.Sorted(maps.Keys(CodexNativeHidden()))
 	for _, slug := range off {

@@ -3058,6 +3058,16 @@ func CodexOwnOnly() bool {
 	return true
 }
 
+// CodexModelNow is the model this machine's Codex is set to, whoever's it
+// is (gateway.CodexModelNow); "" when it can't be read.
+func CodexModelNow() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return codex(home).Values()["model"]
+}
+
 // CodexSideModel is the model this machine's Codex is set to when it is
 // one of magpie's, picked beside its ChatGPT sign-in (SideModel), for the
 // gateway to answer the Codex app's side turns on (gateway.CodexSideModel).

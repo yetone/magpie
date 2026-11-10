@@ -469,6 +469,7 @@ func run(args []string) error {
 	// for on a model of its own, on the model of magpie's picked beside
 	// its ChatGPT sign-in rather than on that account (atom_Ray on X)
 	gateway.CodexSideModel = agent.CodexSideModel
+	gateway.CodexModelNow = agent.CodexModelNow
 	gateway.CodexSideSet = agent.CodexSideSet
 	// the list the Codex app reads from a file beside the ChatGPT sign-in,
 	// its picker showing magpie's models only so (laddieyao on Discord),

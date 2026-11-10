@@ -1399,3 +1399,64 @@ func TestCodexOwnSignInKeepsItsMaskingTime(t *testing.T) {
 		t.Fatalf("usage records %+v, route's masking %d", recs, st.Routes[0].Masking)
 	}
 }
+
+// Show Codex's own models turned off (iiiiiimone on X: with the Codex
+// subscription provider off, the switch left Codex's own models in its
+// picker) leaves them out of the list the gateway hands Codex, so the picker
+// offers magpie's alone. The model Codex is set to and a hidden job stay.
+func TestCodexListWithOwnModelsOff(t *testing.T) {
+	codexSignedIn(t)
+	if err := provider.Save(provider.Provider{ID: "codex", Off: true}); err != nil {
+		t.Fatal(err)
+	}
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"v1"`)
+		io.WriteString(w, `{"models":[{"slug":"gpt-6-sol","priority":1,"visibility":"list"},{"slug":"gpt-5.5","priority":2,"visibility":"list"},{"slug":"codex-auto-review","priority":3,"visibility":"hide"}]}`)
+	}))
+	defer up.Close()
+	was := provider.CodexBase
+	provider.CodexBase = up.URL + "/backend-api/codex"
+	defer func() { provider.CodexBase = was }()
+	list := func() (map[string]bool, string) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", CodexPath+"/models", nil)
+		req.Header.Set("Authorization", "Bearer chatgpt-token")
+		New().Handler().ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("%d %s", rec.Code, rec.Body)
+		}
+		var got struct {
+			Models []map[string]any `json:"models"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &got)
+		out := map[string]bool{}
+		for _, m := range got.Models {
+			slug, _ := m["slug"].(string)
+			out[slug] = true
+		}
+		return out, rec.Header().Get("ETag")
+	}
+	got, before := list()
+	if !got["gpt-6-sol"] || !got["gpt-5.5"] || !got["codex-auto-review"] {
+		t.Fatalf("listed: %v", got)
+	}
+	if err := provider.SetOwnModelsHidden("codex", true); err != nil {
+		t.Fatal(err)
+	}
+	got, after := list()
+	if got["gpt-6-sol"] || got["gpt-5.5"] || !got["codex-auto-review"] || after == before {
+		t.Errorf("own models off: %v, ETag %q then %q", got, before, after)
+	}
+	wasNow := CodexModelNow
+	CodexModelNow = func() string { return "gpt-5.5" }
+	defer func() { CodexModelNow = wasNow }()
+	if got, _ = list(); got["gpt-6-sol"] || !got["gpt-5.5"] {
+		t.Errorf("set to gpt-5.5: %v", got)
+	}
+	if err := provider.SetOwnModelsHidden("codex", false); err != nil {
+		t.Fatal(err)
+	}
+	if got, back := list(); !got["gpt-6-sol"] || !got["gpt-5.5"] || back != before {
+		t.Errorf("switched on again: %v, ETag %q, was %q", got, back, before)
+	}
+}
