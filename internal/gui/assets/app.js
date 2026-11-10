@@ -18123,9 +18123,6 @@ function creditsSwitch(q, cls, on, title, body, label, said) {
   return b;
 }
 
-// checkinRow: an account's daily check-in on its Usage card, today's
-// (Beijing) or why not; the vendor's first row holds its switch and press
-// (#694, #811)
 const CHECKINS = {
   "": {
     pref: "workbuddyCheckin", api: "workbuddy-checkin",
@@ -18152,8 +18149,6 @@ const CHECKINS = {
     off: "Claim each Qoder account's daily credits once a day, as its provider's Daily check-in does",
   },
 };
-// pluginCheckin is the check-in of a plugin that presses it itself
-// (auth.checkin; Lemon on Discord), by its provider: its switch is its own.
 function pluginCheckin(id, name) {
   return {
     plugin: id, api: "plugin-checkin",
@@ -18162,8 +18157,6 @@ function pluginCheckin(id, name) {
     off: t("Have the {name} plugin check each account in once a day, as its provider's Daily check-in does", { name }),
   };
 }
-// the built-in check-in a plugin's provider took over, whose switch it
-// follows until its own is set: provider.PluginCheckinOn's switch
 const PLUGIN_CHECKIN_INHERITS = {
   workbuddy: "workbuddyCheckin", "trae-cn": "traeCheckin",
   "minimax-code": "minimaxCheckin", "minimax-code-global": "minimaxCheckin",
@@ -18233,7 +18226,6 @@ function checkinRow(q, first, subs) {
     text = [t("Auto check-in is off for this account"), last].filter(Boolean).join(" · ");
   } else {
     kind = on ? "wait" : "";
-    // and when it will be, with a time of day set (times_ang on X)
     const at = on && state.settings?.checkinAt ? t("checks in from {at}", { at: state.settings.checkinAt }) : "";
     text = [t(on ? "Not checked in yet today" : "Auto check-in is off"), at, last].filter(Boolean).join(" · ");
   }
@@ -18284,8 +18276,6 @@ function checkinRow(q, first, subs) {
   return row;
 }
 
-// checkinDue: not in today and could be; a Qoder campaign can open later
-// (#2696), an answer asked again may be the vendor's day before (#3326)
 function checkinDue(x, today = wbToday()) {
   const later = /^(plugin:)?qoder(-cn)?$/.test(x.checkinBy || "");
   return x.checkins && !x.checkinOff && !(x.checkin?.day === today && x.checkin.outcome !== "failed" && !x.checkin.again && !(later && x.checkin.outcome === "inactive"));
@@ -18307,8 +18297,6 @@ function checkinPressSaid(rs) {
   return { bad, text: Object.keys(n).map((k) => t(k === "Claimed: {n}" && cr ? "Claimed: {n} (+{credits} credits)" : k, { n: n[k], credits: Math.round(cr * 100) / 100 })).join(" · ") || t("Check-in status refreshed") };
 }
 
-// checkinVendorName is the vendor of check-in r by name: a plugin's as
-// it says, a built-in check-in's own, else fallback.
 function checkinVendorName(r, fallback) {
   return r?.vendor || { trae: "Trae CN", minimax: "MiniMax Code", qoder: "Qoder", "": "WorkBuddy" }[r?.by || ""] || fallback || "";
 }
