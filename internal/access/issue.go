@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"regexp/syntax"
 	"slices"
 	"strings"
 	"time"
@@ -385,11 +386,66 @@ func identityOf(k Key, keys []Key, now time.Time) (Identity, error) {
 	return who, nil
 }
 
-// covered: every model the pattern m names is one of patterns' (none:
-// every model). A '*' in m is taken as written: a pattern that matches
-// it so matches whatever it stands for, as a pattern's '*' takes any run.
+// covered: every model the entry m names is one of patterns' (none:
+// every model). A '*' in m is taken as written by a glob, whose own '*'
+// takes any run. A regular expression is never tried on m's text: its '.'
+// or a class like [^-] takes the '*' too, so "re:^openai/[^-]*$" would
+// cover "openai/*" and hand an issued key openai/gpt-4o. It covers a
+// glob when it matches the glob's text before the first '*' and holds no
+// assertion on what follows ($, \z, \b, \B): a match there is a match in
+// every id that starts so, and the glob can't name a group. A regular
+// expression m is covered only by itself or by "*", as no glob can be
+// shown to take all it names.
 func covered(patterns []string, m string) bool {
-	return ModelAllowed(patterns, m)
+	if len(patterns) == 0 {
+		return true
+	}
+	if IsPattern(m) {
+		return slices.ContainsFunc(patterns, func(p string) bool { return p == "*" || strings.EqualFold(p, m) })
+	}
+	head, _, glob := strings.Cut(m, "*")
+	for _, p := range patterns {
+		if !IsPattern(p) {
+			if ModelAllowed([]string{p}, m) {
+				return true
+			}
+			continue
+		}
+		if !glob {
+			if patternMatches(p, m) {
+				return true
+			}
+			continue
+		}
+		// a pattern never names a group, and a glob that may starts so
+		g := strings.ToLower(head)
+		if strings.HasPrefix(g, "group/") || strings.HasPrefix("group/", g) {
+			continue
+		}
+		if prefixHolds(p) && patternMatches(p, head) {
+			return true
+		}
+	}
+	return false
+}
+
+// prefixHolds says the regular expression entry p has no assertion on the
+// text after a match, so a match in a string is a match in every string
+// that starts with it.
+func prefixHolds(p string) bool {
+	re, err := syntax.Parse("(?i)"+strings.TrimSpace(p[len(PatternPrefix):]), syntax.Perl)
+	if err != nil {
+		return false
+	}
+	var ok func(*syntax.Regexp) bool
+	ok = func(r *syntax.Regexp) bool {
+		switch r.Op {
+		case syntax.OpEndLine, syntax.OpEndText, syntax.OpWordBoundary, syntax.OpNoWordBoundary:
+			return false
+		}
+		return !slices.ContainsFunc(r.Sub, func(s *syntax.Regexp) bool { return !ok(s) })
+	}
+	return ok(re)
 }
 
 // foldModels is what both lists allow, as patterns: a child's pattern the
