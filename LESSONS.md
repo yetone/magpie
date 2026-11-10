@@ -945,6 +945,13 @@ each one.
     unrun. A vendor the maintainer declined is checked for before the
     diff is read: search the repo's closed issues and PRs and
     docs/contributors.md for the vendor's name.
+- **11-10, criteria still missed.**
+  - The suite: 6af54dc9a (internal/library) and b9f8548d2
+    (internal/provider) each added a package-level regexp.MustCompile.
+    Each ran its own packages, not the root package, whose
+    TestNoEagerPackageRegexps went red on ubuntu and macOS CI. It was
+    found by yinwu01 (#6020) and fixed in a68f114d9. A new package-level
+    var runs the guards in `.` too.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
