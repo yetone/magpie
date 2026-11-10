@@ -243,6 +243,7 @@ type heatSum struct {
 // it of every recent chunk, unpacked whole, on each read, ~120 MB of a
 // start's first 18s's allocations on a year's history (#2278).
 func heatBefore(cut time.Time, recent [3][]*rowChunk) heatSum {
+	derivedUsed()
 	priceStubs(recent[0])
 	heatBefores.Lock()
 	heatBefores.turn++

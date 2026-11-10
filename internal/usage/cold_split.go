@@ -188,6 +188,7 @@ func (b *blockPricer) alone() *blockPricer {
 // none. A named chunk's is kept by its serial: the page, the heatmap and
 // Codex's effort each ask it of every chunk.
 func chunkFirsts(sets [3][]*rowChunk) func(*rowChunk) time.Time {
+	derivedUsed()
 	firsts.Lock()
 	firsts.turn++
 	turn := firsts.turn

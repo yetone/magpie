@@ -43,6 +43,7 @@ var matchOpening func(*rowChunk)
 // hintsOf are chunks' hints, read from a chunk only when none are kept for
 // its serial.
 func hintsOf(chunks []*rowChunk, rows *chunkRows) []*chunkHints {
+	derivedUsed()
 	matchHints.Lock()
 	matchHints.turn++
 	turn := matchHints.turn

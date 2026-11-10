@@ -1699,6 +1699,7 @@ var msgKeysOpening func(*rowChunk)
 // cold start's pairing of the whole history kept all of them, ~67 MB of
 // its ~460 MB live heap, beside the period's that polls read (#2278).
 func msgKeysOf(chunks []*rowChunk) []*chunkMsgKeys {
+	derivedUsed()
 	settled := settledBefore(time.Now())
 	msgKeys.Lock()
 	msgKeys.turn++
