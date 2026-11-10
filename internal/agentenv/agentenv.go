@@ -98,6 +98,8 @@ var Vars = []string{
 	"ALMA_DATA_DIR",
 	// miniQ's data folder, its settings.json and daemon.json in it
 	"MINIQ_DATA_DIR",
+	// Paimon's config folder, its config.json in it
+	"PAIMON_CONFIG_HOME",
 	// Craft Agents' config folder, its config.json in it
 	"CRAFT_CONFIG_DIR",
 	// Reasonix Studio and its native CLI share this config home

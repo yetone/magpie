@@ -699,6 +699,8 @@ var wslKinds = []wslKind{
 	// no bin: nanobot is other tools' name too
 	{id: "nanobot", name: "nanobot", dir: ".nanobot", in: nanobotIn,
 		restart: newNotice("{agent} in WSL {distro}: its gateway and WebUI take this at their next reply; restart an open `nanobot agent` chat to use it there.")},
+	{id: "paimon", name: "Paimon", dir: ".config/paimon", bin: "paimon", in: paimonIn,
+		restart: newNotice("{agent} in WSL {distro} reads its model at start-up — restart open paimon sessions there to use this.")},
 	{id: "miniq", name: "miniQ", dir: ".local/share/miniq", bin: "miniq", in: miniqIn,
 		restart: newNotice("{agent} in WSL {distro}: magpie tells its running daemon; if it still answers with the old model, restart miniQ there.")},
 	// Ante ships macOS and Linux builds alone, and suggests WSL on Windows,

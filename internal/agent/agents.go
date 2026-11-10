@@ -296,6 +296,7 @@ func onMachine(home, cfg string) []*Agent {
 		empryo(home),
 		nanobot(home),
 		miniq(home),
+		paimon(home),
 		ante(home),
 		astrbot(home),
 		qwenpaw(home),
