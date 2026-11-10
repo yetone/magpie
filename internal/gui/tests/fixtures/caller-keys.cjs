@@ -22,6 +22,7 @@ function fixture(lang, theme, events, options = {}) {
   }
   let serial = 0;
   let lan = !!options.lan;
+  let accountGroups = structuredClone(options.accountGroups || []);
   let lanKeyID = "", rotations = 0, lanSecret = "";
   const secrets = new Map([["laptop", "fixture-laptop"], ["server", "fixture-server"], ["work", "fixture-work"]]);
   // options.lanURLs is the test's own list, so it can take the network away
@@ -111,7 +112,28 @@ function fixture(lang, theme, events, options = {}) {
     }
     // options.keysError: the list can't be read
     if (url.pathname === "/api/caller-keys" && options.keysError) return route.fulfill({ status: 500, json: { error: options.keysError } });
-    if (url.pathname === "/api/caller-keys") return json({ keys });
+    if (url.pathname === "/api/caller-keys") return json({ keys, accountGroups });
+    // options.accountGroups: named sets of accounts a key's list names as
+    // "@<id>" or "!@<id>" (LeiWang_2000 on X), saved and removed as
+    // access.SaveAccountGroup and RemoveAccountGroup do
+    if (url.pathname === "/api/account-groups") return json({ groups: accountGroups });
+    if (url.pathname.startsWith("/api/account-groups/")) {
+      const action = url.pathname.split("/").at(-1), body = req.postDataJSON();
+      events.push({ action: "group-" + action, body });
+      if (action === "save") {
+        const name = (body.name || "").trim();
+        if (accountGroups.some((g) => g.id !== body.id && g.name.toLowerCase() === name.toLowerCase())) return route.fulfill({ status: 400, json: { error: "There is an account group named " + name + " already" } });
+        const g = { id: body.id || "g" + (++serial), name, accounts: body.accounts || [] };
+        const i = accountGroups.findIndex((o) => o.id === g.id);
+        if (i < 0) accountGroups.push(g); else accountGroups[i] = g;
+      }
+      if (action === "remove") {
+        const users = keys.filter((k) => (k.accounts || []).some((a) => a === "@" + body.id || a === "!@" + body.id));
+        if (users.length) return route.fulfill({ status: 400, json: { error: "The account group is used by the gateway key " + users.map((k) => k.name).join(", ") + ": take it off the key first" } });
+        accountGroups = accountGroups.filter((g) => g.id !== body.id);
+      }
+      return json({ groups: accountGroups });
+    }
     if (url.pathname === "/api/caller-keys/models") return json({ models: [
       ...(options.groups ? [
         { id: "group/coding", name: "Coding", group: true },
@@ -129,7 +151,7 @@ function fixture(lang, theme, events, options = {}) {
       { id: "relay/me@example.com", name: "me@example.com", provider: "relay", providerName: "Relay", account: true, plan: "Pro" },
       { id: "relay/spare@example.com", name: "spare@example.com", provider: "relay", providerName: "Relay", account: true },
       { id: "openai/k-1a2b3c", name: "k-1a2b3c", provider: "openai", providerName: "OpenAI", key: true },
-    ] });
+    ], groups: accountGroups });
     // the MCP servers and tools a key may be held to: magpie's own, then
     // the Library's (wakaka on Discord)
     if (url.pathname === "/api/caller-keys/mcp") return json({ servers: [
@@ -210,7 +232,7 @@ function fixture(lang, theme, events, options = {}) {
         keys.splice(body.index, 0, ...keys.splice(keys.indexOf(k), 1));
       }
       if (action === "copy-key") secret = k.id === lanKeyID ? lanSecret : secrets.get(k.id);
-      return json({ keys, secret });
+      return json({ keys, accountGroups, secret });
     }
     if (url.pathname === "/api/copy") { events.push({ action: "clipboard", body: req.postDataJSON() }); return json({}); }
     if (url.pathname === "/api/usage") return json({ ...sum(rows), ...groups(), agents: [], models: [], series: [], bucket: "day", path: "~/.config/magpie/usage.jsonl" });

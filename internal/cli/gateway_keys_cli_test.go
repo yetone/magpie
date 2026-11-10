@@ -666,3 +666,76 @@ func TestGatewayKeyConcurrencyCLI(t *testing.T) {
 		t.Fatal(help)
 	}
 }
+
+// magpie gateway-key groups makes, changes and removes account groups,
+// and a key's accounts name one by its name (LeiWang_2000 on X).
+func TestGatewayKeyAccountGroupsCLI(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := settings.Save(settings.Settings{LAN: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Chat: "http://127.0.0.1:1/v1", Keys: []provider.KeyAccount{{Key: "sk-1", Name: "First"}, {Key: "sk-2", Name: "Second"}}}); err != nil {
+		t.Fatal(err)
+	}
+	k1, k2 := provider.KeyID("sk-1"), provider.KeyID("sk-2")
+	call := func(args ...string) (string, error) {
+		var out bytes.Buffer
+		err := gatewayKeysTo(&out, append([]string{"gateway-key"}, args...))
+		return out.String(), err
+	}
+	if got, err := call("groups"); err != nil || !strings.Contains(got, "No account groups") {
+		t.Fatal(got, err)
+	}
+	if got, err := call("groups", "add", "Work", "relay/First"); err != nil || !strings.Contains(got, "Added the account group Work") {
+		t.Fatal(got, err)
+	}
+	gs, _ := access.AccountGroups()
+	if len(gs) != 1 || !slices.Equal(gs[0].Accounts, []string{"relay/" + k1}) {
+		t.Fatal(gs)
+	}
+	if got, _ := call("groups", "list"); !strings.Contains(got, gs[0].ID) || !strings.Contains(got, "relay/First") {
+		t.Fatal(got)
+	}
+	if _, err := call("add", "Phone"); err != nil {
+		t.Fatal(err)
+	}
+	keys, _ := access.List()
+	id := keys[0].ID
+	if got, err := call("accounts", id, "@Work"); err != nil || got != "Phone: only group Work\n" {
+		t.Fatal(got, err)
+	}
+	if keys, _ = access.List(); !slices.Equal(keys[0].Accounts, []string{"@" + gs[0].ID}) {
+		t.Fatal("kept", keys[0].Accounts)
+	}
+	if got, err := call("groups", "set", "work", "relay/Second"); err != nil || got != "Work: relay/Second\n" {
+		t.Fatal(got, err)
+	}
+	if got, _ := call("groups", "list"); !strings.Contains(got, "relay/Second") || strings.Contains(got, "relay/First") {
+		t.Fatal(got)
+	}
+	if gs, _ = access.AccountGroups(); !slices.Equal(gs[0].Accounts, []string{"relay/" + k2}) {
+		t.Fatal(gs)
+	}
+	if _, err := call("groups", "remove", "Work"); err == nil || !strings.Contains(err.Error(), "Phone") {
+		t.Fatal("removed a group a key uses:", err)
+	}
+	if got, err := call("accounts", id, "!@Work"); err != nil || got != "Phone: every account but group Work\n" {
+		t.Fatal(got, err)
+	}
+	if got, err := call("groups", "rename", "Work", "Office"); err != nil || !strings.HasPrefix(got, "Office: ") {
+		t.Fatal(got, err)
+	}
+	for _, args := range [][]string{{"groups", "add"}, {"groups", "add", "Office"}, {"groups", "set", "nope"}, {"groups", "remove"}, {"groups", "bogus"}, {"accounts", id, "@Nope"}} {
+		if _, err := call(args...); err == nil {
+			t.Error("accepted", args)
+		}
+	}
+	if _, err := call("accounts", id, "all"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := call("groups", "remove", "Office"); err != nil || got != "Removed the account group Office\n" {
+		t.Fatal(got, err)
+	}
+}

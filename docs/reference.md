@@ -668,6 +668,9 @@ magpie gateway-key models <id> all     # every model
 magpie gateway-key accounts <id> codex/me@example.com   # only these accounts
 magpie gateway-key accounts <id> codex/!me@example.com  # every account but these, later ones too
 magpie gateway-key accounts <id> all    # every account
+magpie gateway-key groups add Work codex/me@example.com openai/<key id>   # a named account group
+magpie gateway-key accounts <id> @Work   # only the group's accounts (!@Work: every account but them)
+magpie gateway-key groups set Work codex/me@example.com   # every key naming Work follows at once
 magpie gateway-key mcp <id> github fs/read_file   # only these MCP servers and tools
 magpie gateway-key mcp <id> none        # no MCP server (all: every one)
 magpie gateway-key quotas <id> on      # told the quotas of what it may use
@@ -831,6 +834,15 @@ and before an account barred for the model's — and `/v1/models` lists the
 key only the models an account or key it may use serves, the Routing
 view's left-out list marking what the key held out. A key with no
 accounts listed may use every account, as keys always did.
+
+An **account group** names a set of accounts of any providers
+(LeiWang_2000 on X): made in the Gateway page's "Account groups" or with
+`magpie gateway-key groups add <name> <accounts…>`, and named in a key's
+accounts as `@<group>` to use them or `!@<group>` to keep them out, in the
+same menus. A key reads the group as it is on each request, so changing a
+group's accounts changes every key that names it; an account signed out
+since matches nothing, and a group a key names can't be removed. Groups
+are backed up and synced with the gateway keys.
 
 While LAN sharing is enabled, or `MAGPIE_ADDR` puts the gateway on the
 network (a host other than loopback or `localhost`: `0.0.0.0` in the Docker

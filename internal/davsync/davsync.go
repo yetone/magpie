@@ -842,6 +842,9 @@ func hashes(b backup.Bundle) map[string]string {
 	settingsHash := h(s)
 	if b.GatewayKeys != nil { // a missing store keeps older bundles' hash
 		settingsHash = h([]any{s, *b.GatewayKeys})
+		if b.AccountGroups != nil { // nor do older bundles without groups
+			settingsHash = h([]any{s, *b.GatewayKeys, *b.AccountGroups})
+		}
 	}
 	ps := slices.Clone(b.Providers)
 	for i := range ps { // this computer's own: kept by Mirror, never synced
@@ -1011,6 +1014,9 @@ func take(to *backup.Bundle, from backup.Bundle, part string) {
 		if keys && from.GatewayKeys != nil {
 			to.GatewayKeys = from.GatewayKeys // an explicit empty store clears it
 		}
+		if keys && from.AccountGroups != nil {
+			to.AccountGroups = from.AccountGroups
+		}
 		to.SettingsKeys = backup.Flag(keys || (to.SettingsKeys != nil && *to.SettingsKeys))
 	case "profiles":
 		to.Profiles = from.Profiles
@@ -1048,6 +1054,9 @@ func changed(part string, keys bool) time.Time {
 		m := mtime(settings.Path())
 		if k := mtime(access.Path()); keys && k.After(m) {
 			m = k
+		}
+		if g := mtime(access.GroupsPath()); keys && g.After(m) {
+			m = g
 		}
 		return m
 	case "profiles":
@@ -1136,6 +1145,18 @@ func bring(b backup.Bundle, part string) error {
 // This runs on the first sync alone: afterwards absence from a store this
 // computer has seen means a removal, which must go from every computer.
 func keepUnseenGatewayKeys(remote *backup.Bundle, local backup.Bundle) {
+	// the account groups this computer's keys may name, by id, the same
+	// way (LeiWang_2000 on X): one the folder holds is the folder's
+	if local.AccountGroups != nil && len(*local.AccountGroups) > 0 {
+		if remote.AccountGroups == nil {
+			remote.AccountGroups = &[]access.AccountGroup{}
+		}
+		for _, g := range *local.AccountGroups {
+			if !slices.ContainsFunc(*remote.AccountGroups, func(o access.AccountGroup) bool { return o.ID == g.ID }) {
+				*remote.AccountGroups = append(*remote.AccountGroups, g)
+			}
+		}
+	}
 	if local.GatewayKeys == nil || len(*local.GatewayKeys) == 0 || remote.GatewayKeys == nil {
 		return
 	}

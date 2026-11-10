@@ -2552,6 +2552,15 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .gw-keys.sorting > .acc { transition: transform .16s cubic-bezier(.22, 1, .36, 1); cursor: grabbing; }
 .gw-keys.sorting > .acc.dragging { z-index: 2; background: var(--card-2); box-shadow: 0 0 0 1px var(--line); transition: none; will-change: transform; }
 .gw-keys .gw-key-more { flex: none; color: var(--muted); }
+/* the account groups a key's accounts may name (LeiWang_2000 on X) */
+.editor.acct-groups { grid-template-columns: minmax(0, 1fr); }
+.acct-groups .agp-list { margin: 10px 0; }
+.acct-groups .agp-row + .agp-row { border-top: 1px solid var(--line-2); }
+.acct-groups .agp-name { flex: 1 1 8em; min-width: 0; height: 26px; }
+.acct-groups .agp-accounts { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acct-groups .agp-remove { flex: none; color: var(--muted); }
+.acct-groups .agp-add { display: flex; gap: 8px; align-items: center; }
+.acct-groups .agp-add input { flex: 1; min-width: 0; }
 .gw-keys .gw-key-more:is(:hover, .open) { color: var(--fg); }
 #view-gateway .row-head, #view-usage .row-head { margin: 14px 0 6px; padding: 0 2px; }
 #view-usage .row-head.quota-head { margin: 6px 0 6px; }

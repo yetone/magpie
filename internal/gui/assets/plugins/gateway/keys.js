@@ -6,6 +6,9 @@ let gatewayOwnDraft = "";
 // gatewayAccountNames maps a key's stored account entry ("<provider>/<id>",
 // #905) to how it is shown; what no provider has now is shown as it is kept
 let gatewayAccountNames = {};
+// the account groups a key's accounts may name, "@<id>" or "!@<id>"
+// (LeiWang_2000 on X), for the badges' words
+let gatewayAccountGroups = [];
 let gatewayKeysRead = 0;
 // gatewayKeysErr is why the list couldn't be read, said in its place until
 // a read works: a redraw of the page (the providers' poll) keeps it
@@ -62,6 +65,7 @@ async function loadGatewayKeys() {
     // A fresh list also refreshes a selected credential, which may have rotated.
     connectSecret = null;
     gatewayKeys = out.keys || [];
+    gatewayAccountGroups = out.accountGroups || gatewayAccountGroups;
     gatewayKeysErr = "";
     renderGatewayKeys();
     if (view === "gateway" && providers) selectConnectKey(connectKeyID);
@@ -91,6 +95,7 @@ async function refreshGatewayKeys() {
   if (JSON.stringify(keys) === JSON.stringify(gatewayKeys)) return;
   gatewayKeys = keys;
   gatewayAccountNames = out.accountNames || gatewayAccountNames;
+  gatewayAccountGroups = out.accountGroups || gatewayAccountGroups;
   if (gatewayKeyDraft === null && gatewayLimit === null && !$("#gatewayKeys .rename-in")) renderGatewayKeys();
 }
 // the timer: only while the Gateway page is in sight, as a look with
@@ -115,6 +120,7 @@ async function gatewayKeyAction(action, body) {
     connectSecret = null;
     gatewayKeys = out.keys || [];
     gatewayAccountNames = out.accountNames || gatewayAccountNames;
+    gatewayAccountGroups = out.accountGroups || gatewayAccountGroups;
     gatewayKeyDraft = null;
     if (action === "limit-key" || !gatewayKeys.some((k) => k.id === gatewayLimit?.id)) gatewayLimit = null;
     renderGatewayKeys();
@@ -208,6 +214,7 @@ function renderGatewayKeys() {
   $("#gatewayKeysOff").hidden = gwKeysShown();
   box.replaceChildren();
   $("#addGatewayKey").onclick = () => { gatewayKeyDraft = ""; renderGatewayKeys(); };
+  $("#accountGroups").onclick = () => gatewayAccountGroupsEditor();
   // keys: a badge left unset folds away until the row is pointed at, as
   // on a provider's keys, so nothing invisible holds a place in the row
   const list = el("div", "accts gw-keys");
@@ -407,11 +414,127 @@ function askGatewayKey(k, rotate) {
   cancel.focus({ preventScroll: true });
 }
 
+// ---- account groups (LeiWang_2000 on X) ----
+
+// gatewayAccountGroupsEditor lists the account groups, named sets of
+// accounts of any providers that a key's accounts may name (to use, in
+// the models badge's menu; to keep out, in "Keep accounts out"): each
+// renamed in place, its accounts picked in the app's menu, removed unless
+// a key names it. A change reaches every key naming the group at once.
+async function gatewayAccountGroupsEditor() {
+  let accounts = [], groups = [];
+  try { ({ accounts, groups } = await api("caller-keys/models")); } catch (err) { status(t(err.message), "err"); return; }
+  groups ||= [];
+  const ed = el("div", "editor acct-groups");
+  const head = el("div", "ehead");
+  head.append(el("b", "", t("Account groups")));
+  const list = el("div", "accts agp-list");
+  // one change at a time, in the order made: a rename typed while a pick
+  // is still being saved waits for it, and is made to the group as that
+  // save left it (body is a function of the groups then)
+  let queue = Promise.resolve();
+  const send = (action, body) => (queue = queue.then(async () => {
+    try {
+      const out = await api("account-groups/" + action, typeof body === "function" ? body(groups) : body);
+      groups = out.groups || [];
+      gatewayAccountGroups = groups;
+      draw();
+      renderGatewayKeys();
+      return true;
+    } catch (err) {
+      status(t(err.message), "err");
+      draw();
+      return false;
+    }
+  }));
+  // a group's change, made to it as it is when the change is sent
+  const change = (id, patch) => (gs) => ({ ...gs.find((g) => g.id === id), ...patch });
+  const draw = () => {
+    // a name being typed when a save comes back keeps its words and focus
+    const typing = list.contains(document.activeElement) && document.activeElement.classList.contains("agp-name")
+      ? { id: document.activeElement.closest(".agp-row").dataset.group, value: document.activeElement.value } : null;
+    list.replaceChildren();
+    for (const g of groups) {
+      const row = el("div", "acc agp-row");
+      row.dataset.group = g.id;
+      const name = input(g.name, t("Name"));
+      name.className = "agp-name";
+      name.setAttribute("aria-label", t("Account group name"));
+      const rename = () => { const v = name.value.trim(); if (v && v !== g.name) send("save", change(g.id, { name: v })); else name.value = g.name; };
+      // a redraw takes the input away: no rename from that
+      name.onblur = () => { if (name.isConnected) rename(); };
+      name.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") name.blur(); else if (e.key === "Escape") { name.value = g.name; name.blur(); } };
+      const pick = el("button", "amodels agp-accounts" + (g.accounts.length ? " set" : ""));
+      pick.type = "button";
+      pick.textContent = !g.accounts.length ? t("No accounts") : g.accounts.length === 1 ? accountShown(g.accounts[0]) : t("{n} accounts", { n: g.accounts.length });
+      pick.title = g.accounts.map(accountShown).join(", ");
+      pick.setAttribute("aria-label", t("Accounts in this group"));
+      pick.setAttribute("aria-haspopup", "menu");
+      pick.setAttribute("aria-expanded", "false");
+      pick.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (pick.classList.contains("open")) return closeProtoMenu();
+        const opts = (accounts || []).map((a) => ({ v: a.id, name: a.name, note: a.plan ? a.providerName + " · " + a.plan : a.providerName, literalName: true }));
+        // one signed out since stays, matching nothing, until it is unticked
+        for (const v of g.accounts) if (!opts.some((o) => o.v.toLowerCase() === v.toLowerCase())) opts.push({ v, name: v, note: "Not signed in now", literalName: true });
+        openProtoMenu(pick, opts, [...g.accounts], (picked) => {
+          if (picked.length === g.accounts.length && picked.every((v) => g.accounts.includes(v))) return;
+          send("save", change(g.id, { accounts: picked }));
+        }, "Accounts in this group", "sess-menu", "right");
+      };
+      const rm = el("button", "copy agp-remove");
+      rm.type = "button";
+      rm.title = t("Remove group");
+      rm.setAttribute("aria-label", rm.title);
+      rm.append(svg(REMOVE_GLYPH, 14, 1.6));
+      rm.onclick = (e) => { e.stopPropagation(); send("remove", { id: g.id }); };
+      row.append(name, el("span", "grow"), pick, rm);
+      list.append(row);
+      if (typing?.id === g.id) {
+        name.value = typing.value;
+        name.focus({ preventScroll: true });
+      }
+    }
+    if (!groups.length) list.append(el("div", "none", t("No account groups yet")));
+  };
+  draw();
+  const add = el("div", "agp-add");
+  const fresh = input("", t("New account group name"));
+  fresh.setAttribute("aria-label", t("New account group name"));
+  const addBtn = el("button", "text", t("Add group"));
+  addBtn.type = "button";
+  addBtn.onclick = async (e) => {
+    e.stopPropagation();
+    const v = fresh.value.trim();
+    if (!v) return fresh.focus({ preventScroll: true });
+    if (await send("save", { name: v, accounts: [] })) fresh.value = "";
+  };
+  fresh.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") addBtn.click(); else if (e.key === "Escape") closeConfirmAsk(); };
+  add.append(fresh, addBtn);
+  const bar = el("div", "bar");
+  const done = el("button", "text primary", t("Done"));
+  done.type = "button";
+  done.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
+  bar.append(el("span", "grow"), done);
+  ed.append(head, list, add, bar);
+  confirmAsk = ed;
+  openModal(ed);
+  $("#modal").classList.add("lib");
+  (groups.length ? done : fresh).focus({ preventScroll: true });
+}
+
 // ---- the models a gateway key may use (#882), and the accounts (#905) ----
 
 // accountShown is a stored account entry ("<provider>/<id>", #905) as the
 // badge says it: by who is signed in, the id itself when no provider has it.
-const accountShown = (a) => gatewayAccountNames[a] || a;
+// A group the list names, "@<id>", is said by its name.
+const accountShown = (a) => a.startsWith("@") ? groupShown(a) : gatewayAccountNames[a] || a;
+const groupShown = (a) => gatewayAccountGroups.find((g) => "@" + g.id === a)?.name || a;
+// groupOptions are the account groups as a menu's options: "@<id>" to use
+// one's accounts, or "!@<id>" (out) to keep them out
+const groupOptions = (groups, out) => (groups || []).map((g) => ({ v: (out ? "!@" : "@") + g.id, name: g.name, literalName: true,
+  note: t("Account group") + " · " + (g.accounts.length === 1 ? accountShown(g.accounts[0]) : t("{n} accounts", { n: g.accounts.length })) }));
 
 // the key whose models menu waits on its list: the badge drawn last opens
 // it, so a redraw of the keys while it loads (a rename's reply, the
@@ -441,7 +564,7 @@ function gatewayModelsBadge(k) {
   b.setAttribute("aria-label", t("Models this key may use"));
   b.setAttribute("aria-haspopup", "menu");
   b.setAttribute("aria-expanded", "false");
-  const open = (models, accounts) => {
+  const open = (models, accounts, groups) => {
     if (!b.isConnected) return;
     const opts = [{ v: "", name: "All models", note: "Any model and any account, now and later" }];
     const seen = new Set();
@@ -454,7 +577,7 @@ function gatewayModelsBadge(k) {
     // names (#905): a provider none of whose accounts is picked is used on
     // every one, and its unticked accounts say so (#2077: unticking all of
     // Codex's left Codex's models served)
-    const named = new Set(as.map((v) => v.split("/")[0].toLowerCase()));
+    const named = new Set(as.flatMap((v) => v.startsWith("@") ? (groups || []).find((g) => "@" + g.id === v)?.accounts || [] : [v]).map((v) => v.split("/")[0].toLowerCase()));
     // a provider the key's models leave out is used on none of its
     // accounts: with no model picked, every provider no account is
     // picked of (access.HeldModels)
@@ -509,11 +632,14 @@ function gatewayModelsBadge(k) {
     // a provider with accounts and no model in the list (one kept
     // unlisted, or serving none now) keeps its accounts after the models
     for (const os of ofProvider.values()) opts.push(...os);
+    // the account groups, each its accounts as they are now (LeiWang_2000
+    // on X): after every account
+    for (const o of groupOptions(groups)) accountsSet.add(o.v), opts.push(o);
     // what the CLI kept that the list hasn't, a pattern, a model gone or
     // an account signed out: behind every live entry, a model gone
     // before an account signed out
     for (const v of ms) if (!opts.some((o) => o.v === v)) opts.push({ v, name: v, note: "Not served now", literalName: true });
-    for (const v of as) if (!accountsSet.has(v)) { accountsSet.add(v); opts.push({ v, name: v, note: "Not signed in now", literalName: true }); }
+    for (const v of as) if (!accountsSet.has(v)) { accountsSet.add(v); opts.push({ v, name: v, note: v.startsWith("@") ? "Account group removed" : "Not signed in now", literalName: true }); }
     openProtoMenu(b, opts, [...ms, ...as], (picked) => {
       // one action at a time: gatewayKeyAction is busy while one is sent.
       // The accounts are sent only when they changed: a model picked says
@@ -539,15 +665,15 @@ function gatewayModelsBadge(k) {
     e.stopPropagation();
     if (b.classList.contains("open")) return closeProtoMenu();
     const loading = keyModelsLoading = { id: k.id, open };
-    let models = [], accounts = [];
-    try { ({ models, accounts } = await api("caller-keys/models")); } catch (err) {
+    let models = [], accounts = [], groups = [];
+    try { ({ models, accounts, groups } = await api("caller-keys/models")); } catch (err) {
       if (keyModelsLoading === loading) keyModelsLoading = null;
       status(t(err.message), "err");
       return;
     }
     if (keyModelsLoading !== loading) return;
     keyModelsLoading = null;
-    loading.open(models, accounts);
+    loading.open(models, accounts, groups);
   };
   if (keyModelsLoading?.id === k.id) keyModelsLoading.open = open;
   return b;
@@ -557,9 +683,9 @@ function gatewayModelsBadge(k) {
 
 // isKeptOut: an account entry "<provider>/!<id>" keeps that account out
 // (access.ExcludeMark): the key uses every other, those signed in later too
-const isKeptOut = (a) => /^[^/]+\/!./.test(a);
+const isKeptOut = (a) => /^[^/]+\/!./.test(a) || a.startsWith("!@");
 // keptIn is the account a kept-out entry names, "<provider>/<id>"
-const keptIn = (a) => a.replace("/!", "/");
+const keptIn = (a) => a.startsWith("!@") ? a.slice(1) : a.replace("/!", "/");
 
 // gatewayKeptOutPick picks the accounts a key keeps out, in the app's
 // menu, from the row's menu and from the key's badge once it keeps some
@@ -568,16 +694,18 @@ const keptIn = (a) => a.replace("/!", "/");
 async function gatewayKeptOutPick(k, anchor) {
   const as = k.accounts || [];
   const out = as.filter(isKeptOut);
-  let accounts = [];
-  try { ({ accounts } = await api("caller-keys/models")); } catch (err) { status(t(err.message), "err"); return; }
+  let accounts = [], groups = [];
+  try { ({ accounts, groups } = await api("caller-keys/models")); } catch (err) { status(t(err.message), "err"); return; }
   if (!anchor.isConnected) return;
   const opts = [{ v: "", name: "No account kept out", note: "" }];
   for (const a of accounts || []) {
     const slash = a.id.indexOf("/");
     opts.push({ v: a.id.slice(0, slash) + "/!" + a.id.slice(slash + 1), name: a.name, note: a.plan ? a.providerName + " · " + a.plan : a.providerName, literalName: true });
   }
+  // a group kept out, each of its accounts as they are now (LeiWang_2000 on X)
+  opts.push(...groupOptions(groups, true));
   // one kept out and signed out since stays kept out, as the CLI kept it
-  for (const v of out) if (!opts.some((o) => o.v === v)) opts.push({ v, name: keptIn(v), note: "Not signed in now", literalName: true });
+  for (const v of out) if (!opts.some((o) => o.v === v)) opts.push({ v, name: keptIn(v), note: v.startsWith("!@") ? "Account group removed" : "Not signed in now", literalName: true });
   openProtoMenu(anchor, opts, [...out], (picked) => {
     if (picked.length === out.length && picked.every((v) => out.includes(v))) return;
     const used = as.filter((a) => !isKeptOut(a) && !picked.some((v) => keptIn(v).toLowerCase() === a.toLowerCase()));

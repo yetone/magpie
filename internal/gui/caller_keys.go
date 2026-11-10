@@ -72,7 +72,7 @@ func callerKeyRoutes(mux *http.ServeMux) {
 			fail(w, err)
 			return
 		}
-		writeJSON(w, map[string]any{"keys": withLimits(keys), "accountNames": provider.AccountNames()})
+		writeJSON(w, map[string]any{"keys": withLimits(keys), "accountNames": provider.AccountNames(), "accountGroups": accountGroupsJSON()})
 	})
 	// the models a key may be held to (#882), and the accounts and keys
 	// (#905): the routing groups, then each provider's models, then its
@@ -145,7 +145,9 @@ func callerKeyRoutes(mux *http.ServeMux) {
 				accounts = append(accounts, keyModelJSON{ID: p.ID + "/" + a.ID, Name: a.Shown(p), Provider: p.ID, ProviderName: name, Account: !a.Key, Key: a.Key, Plan: a.Plan})
 			}
 		}
-		writeJSON(w, map[string]any{"models": out, "accounts": accounts})
+		// the account groups a key's accounts may name, "@<id>" or "!@<id>"
+		// (LeiWang_2000 on X), each with its accounts
+		writeJSON(w, map[string]any{"models": out, "accounts": accounts, "groups": accountGroupsJSON()})
 	})
 	// the MCP servers and tools a key may be held to (wakaka on Discord):
 	// magpie's own, then the Library's, each with its tools by name
@@ -186,6 +188,56 @@ func callerKeyRoutes(mux *http.ServeMux) {
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, map[string]any{"keys": withLimits(keys), "accountNames": provider.AccountNames(), "secret": secret})
+		writeJSON(w, map[string]any{"keys": withLimits(keys), "accountNames": provider.AccountNames(), "accountGroups": accountGroupsJSON(), "secret": secret})
 	})
+	// the account groups a key's accounts may name, "@<id>" or "!@<id>"
+	// (LeiWang_2000 on X): save adds one (no id) or changes it, remove
+	// takes one off unless a key names it
+	mux.HandleFunc("GET /api/account-groups", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		gs, err := access.AccountGroups()
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, map[string]any{"groups": gs})
+	})
+	mux.HandleFunc("POST /api/account-groups/{action}", func(w http.ResponseWriter, r *http.Request) {
+		var in access.AccountGroup
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(w, err)
+			return
+		}
+		var err error
+		switch r.PathValue("action") {
+		case "save":
+			_, err = access.SaveAccountGroup(in)
+		case "remove":
+			err = access.RemoveAccountGroup(in.ID)
+		default:
+			http.NotFound(w, r)
+			return
+		}
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		gs, err := access.AccountGroups()
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, map[string]any{"groups": gs})
+	})
+}
+
+// accountGroupsJSON are the account groups for the keys' rows, none when
+// they can't be read (a key naming one still holds: identityOf).
+func accountGroupsJSON() []access.AccountGroup {
+	gs, err := access.AccountGroups()
+	if err != nil || gs == nil {
+		return []access.AccountGroup{}
+	}
+	return gs
 }

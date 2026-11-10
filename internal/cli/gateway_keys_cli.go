@@ -38,6 +38,9 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		access.MigrateLegacyLANKeyBestEffort()
 		return gatewayKeyAccounts(out, args[1:])
 	}
+	if action == "groups" || action == "group" {
+		return gatewayKeyGroups(out, args[1:])
+	}
 	if action == "quotas" {
 		access.MigrateLegacyLANKeyBestEffort()
 		return gatewayKeyQuotas(out, args[1:])
@@ -135,7 +138,7 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 			// a key that names accounts and no model may use only its
 			// accounts' providers' models (access.HeldModels)
 			models := "all"
-			if ms := access.HeldModels(k.Models, k.Accounts); len(ms) > 0 {
+			if ms := access.HeldModels(k.Models, access.ExpandGroups(k.Accounts)); len(ms) > 0 {
 				models = strings.Join(ms, ",")
 			}
 			accounts := "all"
@@ -467,7 +470,7 @@ func gatewayKeyModels(out io.Writer, args []string) error {
 		return fmt.Errorf("Key not found")
 	}
 	k := keys[i]
-	if ms := access.HeldModels(nil, k.Accounts); len(k.Models) == 0 && len(ms) > 0 {
+	if ms := access.HeldModels(nil, access.ExpandGroups(k.Accounts)); len(k.Models) == 0 && len(ms) > 0 {
 		_, err = fmt.Fprintf(out, "%s: only its accounts' providers' models, %s\n", k.Name, strings.Join(ms, ", "))
 		return err
 	}
@@ -557,7 +560,7 @@ func limitWords(k access.Key, now time.Time) string {
 // key may use every other, those signed in later too.
 func gatewayKeyAccounts(out io.Writer, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: magpie gateway-key accounts <id> [all | <provider>/<account>|<provider>/<key id>|<provider>/!<account> ...]")
+		return fmt.Errorf("usage: magpie gateway-key accounts <id> [all | <provider>/<account>|<provider>/<key id>|<provider>/!<account>|@<group>|!@<group> ...]")
 	}
 	id := args[0]
 	if len(args) > 1 {
@@ -590,6 +593,93 @@ func gatewayKeyAccounts(out io.Writer, args []string) error {
 	}
 	_, err = fmt.Fprintf(out, "%s: %s\n", k.Name, shown)
 	return err
+}
+
+// gatewayKeyGroups lists and edits the account groups a key's accounts
+// may name, "@<group>" or "!@<group>" (LeiWang_2000 on X): a named set of
+// accounts of any providers, read by every key naming it as it is now.
+//
+//	magpie gateway-key groups                          each group
+//	magpie gateway-key groups add <name> <account>...  a new one
+//	magpie gateway-key groups set <group> <account>... its accounts
+//	magpie gateway-key groups rename <group> <name>
+//	magpie gateway-key groups remove <group>           unless a key names it
+func gatewayKeyGroups(out io.Writer, args []string) error {
+	usage := fmt.Errorf("usage: magpie gateway-key groups [list | add <name> <provider>/<account>... | set <group> <provider>/<account>... | rename <group> <name> | remove <group>]")
+	if len(args) == 0 {
+		args = []string{"list"}
+	}
+	switch args[0] {
+	case "list":
+		if len(args) != 1 {
+			return usage
+		}
+		gs, err := access.AccountGroups()
+		if err != nil {
+			return err
+		}
+		if len(gs) == 0 {
+			_, err = fmt.Fprintln(out, "No account groups. Add one: magpie gateway-key groups add <name> <provider>/<account>...")
+			return err
+		}
+		names := provider.AccountNames()
+		w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(w, "ID\tNAME\tACCOUNTS")
+		for _, g := range gs {
+			shown := "none"
+			if len(g.Accounts) > 0 {
+				shown = strings.ReplaceAll(access.AccountsShown(names, g.Accounts), ", ", ",")
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\n", g.ID, g.Name, shown)
+		}
+		return w.Flush()
+	case "add":
+		if len(args) < 2 {
+			return usage
+		}
+		g, err := access.SaveAccountGroup(access.AccountGroup{Name: args[1], Accounts: args[2:]})
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(out, "Added the account group %s (%s). Use it: magpie gateway-key accounts <id> @%s, or !@%s to keep it out\n", g.Name, g.ID, g.ID, g.ID)
+		return err
+	case "set", "rename":
+		if len(args) < 2 || (args[0] == "rename" && len(args) != 3) {
+			return usage
+		}
+		g, err := access.FindAccountGroup(args[1])
+		if err != nil {
+			return err
+		}
+		if args[0] == "rename" {
+			g.Name = args[2]
+		} else {
+			g.Accounts = args[2:]
+		}
+		if g, err = access.SaveAccountGroup(g); err != nil {
+			return err
+		}
+		shown := "no account"
+		if len(g.Accounts) > 0 {
+			shown = access.AccountsShown(provider.AccountNames(), g.Accounts)
+		}
+		_, err = fmt.Fprintf(out, "%s: %s\n", g.Name, shown)
+		return err
+	case "remove":
+		if len(args) != 2 {
+			return usage
+		}
+		g, err := access.FindAccountGroup(args[1])
+		if err != nil {
+			return err
+		}
+		if err := access.RemoveAccountGroup(g.ID); err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(out, "Removed the account group %s\n", g.Name)
+		return err
+	}
+	return usage
 }
 
 // gatewayKeyQuotas shows or sets whether a key held to a budget, models

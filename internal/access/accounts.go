@@ -22,11 +22,35 @@ import (
 // An entry "<provider>/!<account>" keeps that account out instead
 // (LeiWang_2000 on X): the key may use every other account, those signed
 // in later too. An account is never both kept out and named.
+//
+// An entry "@<group>" uses an account group's accounts, and "!@<group>"
+// keeps them out (AccountGroup, LeiWang_2000 on X): the group named by
+// its id or name, kept by its id, so a group renamed or changed is the
+// key's as it is then.
 func CleanAccounts(in []string) ([]string, error) {
 	var cleaned []string
+	var groups []AccountGroup
+	groupsRead := false
 	for _, a := range in {
 		a = strings.TrimSpace(a)
 		if a == "" {
+			continue
+		}
+		if rest, _ := strings.CutPrefix(a, ExcludeMark); strings.HasPrefix(rest, GroupMark) {
+			if !groupsRead {
+				var err error
+				if groups, err = loadGroups(); err != nil {
+					return nil, err
+				}
+				groupsRead = true
+			}
+			kept, err := cleanGroupEntry(groups, a)
+			if err != nil {
+				return nil, err
+			}
+			if !slices.ContainsFunc(cleaned, func(o string) bool { return strings.EqualFold(o, kept) }) {
+				cleaned = append(cleaned, kept)
+			}
 			continue
 		}
 		pid, ref, ok := strings.Cut(a, "/")
@@ -56,6 +80,13 @@ func CleanAccounts(in []string) ([]string, error) {
 	for _, a := range out {
 		if p, r, ok := excludedEntry(a); ok && slices.ContainsFunc(out, func(o string) bool { return strings.EqualFold(o, p+"/"+r) }) {
 			return nil, errors.New("A key's account is either used or kept out, not both: " + p + "/" + r)
+		}
+		if id, kept, ok := groupEntry(a); ok && kept && slices.Contains(out, GroupMark+id) {
+			name := id
+			if i := findGroup(groups, id); i >= 0 {
+				name = groups[i].Name
+			}
+			return nil, errors.New("An account group is either used or kept out, not both: " + name)
 		}
 	}
 	if len(out) > 500 {
@@ -103,6 +134,9 @@ func picksAccounts(accounts []string) bool {
 func (who Identity) AllowsAccount(pid, ref string) bool {
 	if len(who.Accounts) == 0 {
 		return true
+	}
+	if slices.Contains(who.Accounts, heldToNothing) {
+		return false // an account group gone, or with no account (expandGroups)
 	}
 	pid = strings.ToLower(strings.TrimSpace(pid))
 	ref = strings.ToLower(strings.TrimSpace(ref))
@@ -182,7 +216,20 @@ func (who Identity) HeldToGroup(group string, accounts []string) Identity {
 // those it keeps out as "every account but …" (LeiWang_2000 on X).
 func AccountsShown(names map[string]string, accounts []string) string {
 	var used, out []string
+	var groups map[string]string
 	for _, a := range accounts {
+		if id, kept, ok := groupEntry(a); ok {
+			if groups == nil {
+				groups = GroupNames()
+			}
+			g := "group " + cmp.Or(groups[GroupMark+id], GroupMark+id)
+			if kept {
+				out = append(out, g)
+			} else {
+				used = append(used, g)
+			}
+			continue
+		}
 		if p, r, ok := excludedEntry(a); ok {
 			out = append(out, cmp.Or(names[p+"/"+r], p+"/"+r))
 		} else {
@@ -203,7 +250,7 @@ func AccountsShown(names map[string]string, accounts []string) string {
 // HeldToGroup adds to name a provider with none of its accounts left out.
 // An account kept out stays "<provider>/!<ref>".
 func (who Identity) ShownAccounts() []string {
-	return slices.DeleteFunc(slices.Clone(who.Accounts), func(a string) bool { return strings.HasSuffix(a, "/"+heldToNone) })
+	return slices.DeleteFunc(slices.Clone(who.Accounts), func(a string) bool { return strings.HasSuffix(a, "/"+heldToNone) || a == heldToNothing })
 }
 
 // ReplaceAccount moves every key's account list from one of provider
@@ -235,8 +282,27 @@ func ReplaceAccount(pid, was, now string) (int, error) {
 			}
 		}
 	}
-	if moved == 0 {
-		return 0, nil
+	// and in the account groups, which keys name (LeiWang_2000 on X)
+	gs, err := loadGroups()
+	if err != nil {
+		return 0, err
 	}
-	return moved, save(keys)
+	inGroups := 0
+	for i := range gs {
+		for j, a := range gs[i].Accounts {
+			if strings.ToLower(strings.TrimSpace(a)) == old {
+				gs[i].Accounts[j] = pid + "/" + now
+				inGroups++
+			}
+		}
+	}
+	if inGroups > 0 {
+		if err := saveGroups(gs); err != nil {
+			return 0, err
+		}
+	}
+	if moved == 0 {
+		return inGroups, nil
+	}
+	return moved + inGroups, save(keys)
 }

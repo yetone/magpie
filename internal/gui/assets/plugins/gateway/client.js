@@ -837,7 +837,7 @@ magpie.plugin("gateway", (ctx) => {
   <div id="gatewayLan"></div>
 </div>
 <section id="gatewayKeysBlock" hidden>
-  <div class="row-head"><span class="label" data-t>Gateway keys</span><span class="grow"></span><button class="text" id="addGatewayKey" data-t>Add gateway key</button></div>
+  <div class="row-head"><span class="label" data-t>Gateway keys</span><span class="grow"></span><button class="text" id="accountGroups" data-t>Account groups</button><button class="text" id="addGatewayKey" data-t>Add gateway key</button></div>
   <p class="usage-note" data-t>Create a gateway key for each client. Usage is counted separately for each key.</p>
   <section id="gatewayKeys"></section>
 </section>
