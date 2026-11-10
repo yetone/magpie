@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anthropic を Claude Code・Codex・Gemini CLI・OpenCode で使う · magpie</title>
+<meta name="description" content="magpie で Anthropic の API キーを Claude Code・Codex・Gemini CLI・OpenCode から使う方法：キーは一度追加するだけ。ツールごとに Claude のモデルを選べて、各ツールのリクエストを Anthropic の Messages API に合わせる変換、プロンプトキャッシュと Claude の署名付きの思考の引き継ぎ、モデルごとの推論の強さの調整、キャッシュ書き込みと費用の集計、複数キーへの振り分けは magpie が受け持ちます。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/anthropic">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/anthropic">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/anthropic">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/anthropic">
+<link rel="canonical" href="https://usemagpie.ai/docs/ja/anthropic">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Anthropic を Claude Code・Codex・Gemini CLI・OpenCode で使う">
+<meta property="og:description" content="magpie で Anthropic の API キーを Claude Code・Codex・Gemini CLI・OpenCode から使う方法：キーは一度追加するだけ。ツールごとに Claude のモデルを選べて、各ツールのリクエストを Anthropic の Messages API に合わせる変換、プロンプトキャッシュと Claude の署名付きの思考の引き継ぎ、モデルごとの推論の強さの調整、キャッシュ書き込みと費用の集計、複数キーへの振り分けは magpie が受け持ちます。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/ja/anthropic">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Anthropic を Claude Code・Codex・Gemini CLI・OpenCode で使う",
+   "description": "magpie で Anthropic の API キーを Claude Code・Codex・Gemini CLI・OpenCode から使う方法：キーは一度追加するだけ。ツールごとに Claude のモデルを選べて、各ツールのリクエストを Anthropic の Messages API に合わせる変換、プロンプトキャッシュと Claude の署名付きの思考の引き継ぎ、モデルごとの推論の強さの調整、キャッシュ書き込みと費用の集計、複数キーへの振り分けは magpie が受け持ちます。",
+   "inLanguage": "ja",
+   "url": "https://usemagpie.ai/docs/ja/anthropic",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Claude Code で Anthropic の API キーを使うには？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie に Anthropic の API キーを追加し（プロバイダ、プロバイダを追加、Anthropic）、Claude Code の行で claude-opus-5-5 などの Claude モデルを選ぶか、magpie claude anthropic/claude-opus-5-5 を実行します。Claude Code は Anthropic Messages を話すので、リクエストは送ったとおりに https://api.anthropic.com へ届き、途中で直すのはモデルが拒否するものだけです。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex で Claude のモデルを使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。Codex が話す OpenAI Responses を Anthropic は提供していないので、magpie が各リクエストを Messages API に変換し、返答を戻します。プロンプトには 1 時間もつキャッシュの印を付け、ツール呼び出しのループのあいだ Claude の署名付きの思考を Codex の encrypted_content で引き継ぎます。magpie codex anthropic/claude-opus-5-5 を実行してください。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie 経由で OpenCode から Claude を使うには？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie でモデルを選ぶか、magpie opencode anthropic/claude-sonnet-5-5 を実行します。OpenCode は magpie に Chat Completions で話すので、magpie がリクエストを Anthropic の Messages API に変換し、プロンプトにキャッシュの印を付け、推論の強さをモデルに合わせます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Gemini CLI で Claude を使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。Gemini CLI は Google の Gemini API を話すので、magpie がリクエストを Anthropic の Messages API に変換し、返答を戻します。ストリーミングとツール呼び出しも含みます。magpie gemini model anthropic/claude-sonnet-5-5 を実行してください。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie が変換するリクエストでも Anthropic のプロンプトキャッシュは効きますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "効きます。Codex・Gemini CLI・OpenCode のリクエストには自前のキャッシュの印がないので、magpie がシステムプロンプトと会話の最後のブロックに多くて二つの印を付け、次のターンはそれまでの内容をキャッシュから読みます。自前の cache_control を持つリクエストはその印を残します。Codex の印は 1 時間、ほかは 5 分もちます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "思考をオフにすると Claude が 400 を返すのはなぜ？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "新しい Claude のモデルは、どれも thinking の disabled を受け付けるわけではありません。magpie は Sonnet 5.5 には between_tools を送り、常に思考する Opus 5.5 と Fable 5 には thinking を外し、Opus 5 と Haiku 5.5 には xhigh や max の代わりに high で求めます。それより前の Claude には送ったとおりに渡します。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/ja/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>ドキュメント</small></a>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/start">はじめに</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a class="toc-only" href="/docs/ja/remote">リモート magpie</a>
+    <a class="toc-only" href="/docs/ja/docker">Docker</a>
+    <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
+    <a class="toc-only" href="/docs/ja/masking">プライバシーマスキング</a>
+    <a class="toc-only" href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a class="toc-only" href="/docs/ja/library">ライブラリ</a>
+    <a class="toc-only" href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a class="toc-only" href="/docs/ja/local-models">ローカルモデル</a>
+    <a class="toc-only" href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="言語" title="言語" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/anthropic" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/anthropic" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/anthropic" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="Discord の magpie" title="Discord に参加"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="GitHub の magpie" title="GitHub のソースコード"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">ダウンロード</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>このページ</p>
+    <a href="#add">追加する</a>
+    <a href="#endpoints">エンドポイント</a>
+    <a href="#models">モデル一覧</a>
+    <a href="#agents">ツールごとの使い方</a>
+    <a href="#shaping">magpie がすること</a>
+    <a href="#reasoning">推論</a>
+    <a href="#search">Web 検索</a>
+    <a href="#cost">費用・使用量</a>
+    <a href="#keys">複数のキー</a>
+    <a href="#trouble">うまくいかないとき</a>
+    <a href="#faq">よくある質問</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">ドキュメント · プロバイダ</p>
+    <h1>Anthropic を Claude Code・Codex・Gemini CLI・OpenCode で使う</h1>
+    <p class="lede">Anthropic は Claude を <code>api.anthropic.com</code> の Messages API で提供しています。Anthropic の API キーを magpie に一度追加すれば、Claude Code・Codex・Gemini CLI・OpenCode などつないだすべてのツールが、magpie のゲートウェイ <code>127.0.0.1:3425</code> 経由で Claude のモデルを使えます。ツールごとに別のモデルを選べます。別の API を話すツールのリクエストは、途中で magpie が変換します。</p>
+
+    <h2 id="add"><a class="anchor" href="#add">Anthropic を追加する</a></h2>
+    <ol class="steps">
+      <li><b>キーを取得</b><a href="https://console.anthropic.com/settings/keys">console.anthropic.com</a> で作ります。API キーは <code>sk-ant-api</code> で始まります。</li>
+      <li><b>プロバイダを追加</b>magpie の <span class="ui">プロバイダ</span> で <span class="ui">＋ プロバイダを追加</span> を押し、<span class="ui">Anthropic</span> を選んでキーを貼り付け、保存します。magpie がそのキーで使えるモデルを Anthropic に問い合わせます。</li>
+      <li><b>ツールで選ぶ</b><span class="ui">エージェント</span> タブで、ツールの行のモデルを押し、<code>claude-opus-5-5</code> などの Claude モデルを選びます。</li>
+    </ol>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-add">コピー</button><pre id="ex-add">magpie provider add anthropic &lt;key&gt;
+magpie provider test anthropic</pre></div>
+    <p>magpie のモデル ID は <code>プロバイダ/モデル</code> の形なので、Anthropic のモデルは <code>anthropic/claude-opus-5-5</code> のようになります。前がプロバイダ、後ろが Anthropic 自身の ID です。キーは magpie の設定に保存され、magpie がシェルから読むことはありません。</p>
+    <p>OpenCode や Alma で Anthropic をもう設定してあるなら、magpie がそれらのアプリから取り込むときに Anthropic プロバイダとして入ります。</p>
+    <p>このページは API キーの話です。Claude Pro や Max のサブスクリプションは別にサインインします。<a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a> を見てください。</p>
+
+    <h2 id="endpoints"><a class="anchor" href="#endpoints">エンドポイント</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>API</th><th>アドレス</th><th>用途</th></tr>
+      <tr><td>Messages</td><td><code>https://api.anthropic.com/v1/messages</code></td><td>すべてのツールのリクエスト。Claude Code のものはそのまま、Codex・Gemini CLI・OpenCode のものは変換して</td></tr>
+      <tr><td>モデル</td><td><code>https://api.anthropic.com/v1/models</code></td><td>モデル一覧</td></tr>
+    </table></div>
+    <p>magpie の Anthropic プロバイダには Chat Completions や Responses のアドレスがないので、そのどちらか、または Google の Gemini API を話すツールのリクエストは Messages に変換し、返答も変換して戻します。ストリーミングとツール呼び出しも含みます。</p>
+
+    <h2 id="models"><a class="anchor" href="#models">モデル一覧</a></h2>
+    <p>magpie は一覧を Anthropic の <code>https://api.anthropic.com/v1/models</code> から、すべてのページを取得するので、ツールにはそのキーで使えるモデルが並びます。名前・コンテキストウィンドウ・価格は models.dev の <code>anthropic</code> カタログから取ります。ツールに見せるモデルは、プロバイダのモデル一覧かターミナルで選べます。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-models">コピー</button><pre id="ex-models">magpie provider models anthropic +claude-opus-5-5 +claude-sonnet-5-5 +claude-haiku-5-5
+magpie provider refresh-every anthropic 1d</pre></div>
+    <p>Claude Opus 5.5・Sonnet 5.5・Haiku 5.5 は 1M トークンを受け付けます。ここまで長いウィンドウでは、Codex は毎ターン会話をどんどん多く送る代わりに 272K で圧縮します。<code>magpie model compact off</code> にするとウィンドウ全体まで使います。Claude Code では、Claude のモデルは Anthropic と同じく自分のウィンドウで動きます。<code>[1m]</code> の付いたものを選ばない限り 200K です。</p>
+
+    <h2 id="agents"><a class="anchor" href="#agents">ツールごとの使い方</a></h2>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-agents">コピー</button><pre id="ex-agents">magpie claude anthropic/claude-opus-5-5
+magpie codex anthropic/claude-opus-5-5
+magpie gemini model anthropic/claude-sonnet-5-5
+magpie opencode anthropic/claude-sonnet-5-5</pre></div>
+    <ul>
+      <li><b>Claude Code</b> は Anthropic Messages を話すので、リクエストは Claude Code が送ったとおりに Anthropic へ届きます。自前のキャッシュの印・思考・beta もそのままで、直すのは下に挙げるものだけです。<a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>。</li>
+      <li><b>Codex</b> が話す OpenAI Responses を Anthropic は提供していません。magpie が各リクエストを Messages に変換して返答を戻し、プロンプトに Anthropic のキャッシュの印を付け、ツール呼び出しのループのあいだ Claude の署名付きの思考を引き継ぎます。<a href="/docs/ja/codex-models">Codex で他のモデル</a>。</li>
+      <li><b>Gemini CLI</b> は Google の Gemini API を話します。magpie が各リクエストを Messages に変換し、返答を戻します。<a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>。</li>
+      <li><b>OpenCode</b> は magpie に Chat Completions で話すので、そのリクエストも Messages に変換します。<a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>。</li>
+    </ul>
+
+    <h2 id="shaping"><a class="anchor" href="#shaping">magpie が Anthropic 向けにすること</a></h2>
+    <p>magpie が変換するリクエストは、Anthropic の Messages API が求める形で組み立てます。Anthropic が拒否するいくつかのものは、Claude Code のリクエストでも直します。</p>
+    <ul>
+      <li><b>プロンプトキャッシュ。</b>Anthropic は <code>cache_control</code> の印が付いたブロックまでしかキャッシュせず、ほかの API から来たリクエストには印がありません。magpie はシステムプロンプト（ないときは最後のツール）と会話の最後のブロックに、多くて二つの印を付けるので、次のターンはそれまでの内容をキャッシュから読めます。自前の <code>cache_control</code> を持つリクエストはその印を残し、magpie は何も足しません。</li>
+      <li><b>Codex には 1 時間のキャッシュ。</b>Codex のターンは 5 分以上空くことが多いので、magpie が Codex のリクエストに付ける印は 1 時間もちます。Codex が <code>prompt_cache_retention</code> に <code>in_memory</code> を求めたときは別です。1 時間の <code>ttl</code> を受け付けない上流には 5 分の印で問い合わせ直し、magpie はそれを覚えておきます。</li>
+      <li><b>署名付きの思考。</b>Claude は自分の思考に署名し、ツール呼び出しのループの次のターンでそれを送り返すよう求めます。Codex は推論項目の <code>encrypted_content</code> に、署名ごと思考ブロックを受け取り、magpie はそれを元のまま Anthropic に送り返します。伏せられた思考も封をしたまま戻します。署名のない思考は外し、ほかのベンダーが署名した思考（ルーティンググループで先に使った DeepSeek のものなど）も、Claude が拒否するので外します。</li>
+      <li><b>ツール呼び出し。</b>中断されたターンが答えのない呼び出しを残すと、結果が得られないと伝える答えを付けます。Anthropic が見たことのない呼び出しへの答えはテキストにします。どちらも、そのままでは Anthropic がリクエストを拒否します。呼び出しの履歴があるのにツールが宣言されていないときは、それらを宣言して <code>tool_choice</code> を none にします。ツール必須は <code>any</code>、名前指定は <code>tool</code>、並列呼び出しオフは <code>disable_parallel_tool_use</code> として送ります。</li>
+      <li><b>サンプリング。</b>Opus 4.7 以降・Sonnet 5 と 5.5・Haiku 5.5・Fable 5 は <code>temperature</code>・<code>top_p</code>・<code>top_k</code> を拒否しますが、Claude Code の自動モードの分類器はこれらを送ります。magpie はこれらのモデルにはそれらを送りません。</li>
+      <li><b>Beta。</b>ツールが <code>anthropic-beta</code> で求めた beta は Anthropic に渡します。ただし Claude Code 自身のサインイン用の beta（<code>oauth-…</code>）は除きます。それが指す資格情報は magpie の外に出ないからです。</li>
+      <li><b>構造化出力。</b>スキーマどおりの JSON を求めるリクエストは、<code>output_config.format</code> として Anthropic に送ります。</li>
+    </ul>
+
+    <h2 id="reasoning"><a class="anchor" href="#reasoning">推論</a></h2>
+    <ul>
+      <li><b>推論の強さ。</b>Claude 4.6 以降のモデルは適応的に思考します。変換したリクエストの強さは <code>output_config.effort</code> で送り、思考は適応型にして要約の表示（<code>display: summarized</code>）を求めます。Opus 4.7 以降は、求めないと思考の本文を返さないからです。Opus と Sonnet 4.6 には xhigh がないので、xhigh は max として求めます。</li>
+      <li><b>思考の予算。</b>それより前の Claude には思考の予算を送ります。low は 4,096 トークン、medium は 10,000、high は 24,000、xhigh と max は 32,000 で、リクエストの <code>max_tokens</code> に収まるように合わせます。</li>
+      <li><b>新しいモデルへの予算。</b>4.6 以降のモデルに思考の予算を付けたリクエスト（Claude Opus 5.5 は “requires adaptive thinking” で拒否します）は、適応型の思考にし、予算を最も近い強さに置き換えて送ります。</li>
+      <li><b>推論オフ。</b>Codex や Chat クライアントが強さを none にすると、低い予算ではなく思考オフになります。オフの受け付け方はモデルごとに違います。Sonnet 5.5 には <code>between_tools</code> を送り、high より上の強さは high で求めます。Opus 5.5 と Fable 5 は常に思考するので thinking を外します。Opus 5 と Haiku 5.5 は xhigh や max の代わりに high で求めます。それより前の Claude は送ったとおりに受け付けます。Claude Code の思考オフのリクエストも同じように合わせます。</li>
+    </ul>
+
+    <h2 id="search"><a class="anchor" href="#search">Web 検索</a></h2>
+    <p>Anthropic は自分で Web を検索します。Claude Code の WebSearch はそのまま Anthropic に届きます。Codex・Gemini CLI・Chat クライアントが検索を求めると、magpie は magpie の検索サービスではなく、Anthropic 自身の <code>web_search_20250305</code> ツールを Claude に渡します。検索はリクエストごとに 5 回までです。</p>
+
+    <h2 id="cost"><a class="anchor" href="#cost">費用・使用量</a></h2>
+    <ul>
+      <li><b>キャッシュのトークン。</b><span class="ui">使用量</span> タブは、Anthropic が報告するとおりに、キャッシュの読み込み・5 分のキャッシュ書き込み・1 時間のキャッシュ書き込みを、プロンプトの残りと分けて数えます。</li>
+      <li><b>費用。</b>使用量タブは、models.dev にある Anthropic の価格で呼び出しごとに費用を計算します。カタログに 1 時間の書き込みの価格がないときは、Anthropic の請求と同じく入力価格の 2 倍で数えます。magpie は Anthropic から残高を読みません。<code>key-balance</code> で自分で入力すると、使用量ページはそこから magpie がそれ以降のキーの呼び出しに付けた費用を引いて表示します。</li>
+      <li><b>キャッシュを生かす。</b>キーが複数あるとき、会話のキャッシュに残す価値があり（1,024 トークン以上）、まだ温かい（5 分以内に読まれた。1 時間で書いたものは 1 時間以内）あいだは、その会話は同じキーを使い続けます。</li>
+    </ul>
+
+    <h2 id="keys"><a class="anchor" href="#keys">複数のキーとフェイルオーバー</a></h2>
+    <p>一つの Anthropic プロバイダに複数のキーを入れられます。その下の <span class="ui">別のキーを追加</span> を押すか、まとめて貼り付けます。リクエストはオンになっている最初のキーに行き、そのキーが尽きるかレート制限にかかると次のキーが引き継ぎます。</p>
+    <ul>
+      <li><b>支出上限。</b><code>spend-cap</code> で、キーごとに 1 日・1 か月・累計のドル上限を決められます。金額は使用量タブの計算で数え、上限に達するとルーティングはほかのキーとフォールバックに移ります。</li>
+      <li><b>フォールバック。</b><code>fallback</code> で、Anthropic の枠が尽きたときや落ちたときの行き先を決めます。別のプロバイダのモデルか、ルーティンググループです。</li>
+      <li><b>ワークスペース。</b>複数のワークスペースに届くキーは、<code>anthropic-workspace-id</code> ヘッダでリクエストごとのワークスペースを指定します。別の ID でプロバイダをもう一度追加し、そのヘッダ欄かターミナルでヘッダを設定します。そのモデルは <code>anthropic-ws2/…</code> のようになります。</li>
+    </ul>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-keys">コピー</button><pre id="ex-keys">magpie provider spend-cap anthropic &lt;key&gt; 20 month
+magpie provider key-balance anthropic &lt;key&gt; 25
+magpie provider fallback anthropic deepseek/deepseek-v4-pro
+magpie provider add anthropic &lt;key&gt; id=anthropic-ws2 name="Anthropic WS2" header.anthropic-workspace-id=wrkspc_…</pre></div>
+
+    <h2 id="trouble"><a class="anchor" href="#trouble">うまくいかないとき</a></h2>
+    <ul>
+      <li><b>“requires adaptive thinking”。</b>4.6 以降のモデルに思考の予算を送りました。magpie は適応型の思考にして最も近い強さで送ります。<a href="#reasoning">推論</a> を見てください。</li>
+      <li><b>思考をオフにすると 400。</b>Sonnet 5.5・Opus 5.5・Fable 5 はどれも <code>disabled</code> を拒否し、Opus 5 と Haiku 5.5 は xhigh と max のときに拒否します。magpie はモデルごとに受け付ける形でオフにします。</li>
+      <li><b>“<code>temperature</code> is deprecated for this model”。</b>magpie は、<code>temperature</code>・<code>top_p</code>・<code>top_k</code> を拒否するモデルにはそれらを送りません。</li>
+      <li><b>“<code>tool_use</code> ids were found without <code>tool_result</code> blocks”。</b>中断されたターンが答えのない呼び出しを残しました。magpie が変換するリクエストでは、その呼び出しに結果が得られないと伝える答えを付けます。</li>
+      <li><b>“Invalid <code>signature</code> in <code>thinking</code> block”。</b>その会話は先にほかのベンダーで動いていました。magpie は、ほかのベンダーが署名した思考と署名のない思考を、Claude に送る内容から外します。</li>
+      <li><b><code>cache_control</code> と <code>ttl</code> についての 400。</b>上流が、magpie が Codex 用に付ける 1 時間の印を受け付けません。magpie は 5 分の印で問い合わせ直し、そのプロバイダには以後それを使います。</li>
+      <li><b>“this is an Anthropic API key, not a setup-token”。</b>キーを Claude サブスクリプションのサインインに入れました。代わりに Anthropic プロバイダとして追加してください。</li>
+      <li><b>キーの確認。</b><code>magpie provider test anthropic</code> は各エンドポイントに、または指定した各モデルに小さなリクエストを送ります。<code>--as codex</code> や <code>--as claude-code</code> を付けると、そのツールと同じ形で送ります。</li>
+    </ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
+    <h3>Claude Code で Anthropic の API キーを使うには？</h3>
+    <p>magpie に Anthropic の API キーを追加し（プロバイダ、プロバイダを追加、Anthropic）、Claude Code の行で <code>claude-opus-5-5</code> などの Claude モデルを選ぶか、<code>magpie claude anthropic/claude-opus-5-5</code> を実行します。Claude Code は Anthropic Messages を話すので、リクエストは送ったとおりに <code>https://api.anthropic.com</code> へ届き、途中で直すのはモデルが拒否するものだけです。</p>
+    <h3>Codex で Claude のモデルを使えますか？</h3>
+    <p>使えます。Codex が話す OpenAI Responses を Anthropic は提供していないので、magpie が各リクエストを Messages API に変換し、返答を戻します。プロンプトには 1 時間もつキャッシュの印を付け、ツール呼び出しのループのあいだ Claude の署名付きの思考を Codex の <code>encrypted_content</code> で引き継ぎます。<code>magpie codex anthropic/claude-opus-5-5</code> を実行してください。</p>
+    <h3>magpie 経由で OpenCode から Claude を使うには？</h3>
+    <p>magpie でモデルを選ぶか、<code>magpie opencode anthropic/claude-sonnet-5-5</code> を実行します。OpenCode は magpie に Chat Completions で話すので、magpie がリクエストを Anthropic の Messages API に変換し、プロンプトにキャッシュの印を付け、推論の強さをモデルに合わせます。</p>
+    <h3>Gemini CLI で Claude を使えますか？</h3>
+    <p>使えます。Gemini CLI は Google の Gemini API を話すので、magpie がリクエストを Anthropic の Messages API に変換し、返答を戻します。ストリーミングとツール呼び出しも含みます。<code>magpie gemini model anthropic/claude-sonnet-5-5</code> を実行してください。</p>
+    <h3>magpie が変換するリクエストでも Anthropic のプロンプトキャッシュは効きますか？</h3>
+    <p>効きます。Codex・Gemini CLI・OpenCode のリクエストには自前のキャッシュの印がないので、magpie がシステムプロンプトと会話の最後のブロックに多くて二つの印を付け、次のターンはそれまでの内容をキャッシュから読みます。自前の <code>cache_control</code> を持つリクエストはその印を残します。Codex の印は 1 時間、ほかは 5 分もちます。</p>
+    <h3>思考をオフにすると Claude が 400 を返すのはなぜ？</h3>
+    <p>新しい Claude のモデルは、どれも <code>thinking</code> の <code>disabled</code> を受け付けるわけではありません。magpie は Sonnet 5.5 には <code>between_tools</code> を送り、常に思考する Opus 5.5 と Fable 5 には thinking を外し、Opus 5 と Haiku 5.5 には xhigh や max の代わりに high で求めます。それより前の Claude には送ったとおりに渡します。</p>
+
+    <p><b>プロバイダ別：</b><a href="/docs/ja/deepseek">DeepSeek</a> · <a href="/docs/ja/kimi">Kimi と Kimi Code</a> · <a href="/docs/ja/glm">GLM Coding Plan</a> · <a href="/docs/ja/qwen">Qwen</a> · <a href="/docs/ja/minimax">MiniMax</a> · <a href="/docs/ja/openai">OpenAI</a> · <a href="/docs/ja/gemini">Gemini</a> · <a href="/docs/ja/grok">Grok</a> · <a href="/docs/ja/mistral">Mistral</a> · <a href="/docs/ja/openrouter">OpenRouter</a> · <a href="/docs/ja/copilot">GitHub Copilot</a> · <a href="/docs/ja/ollama">Ollama</a></p>
+    <p style="margin-top:48px">ツールごとのガイド：<a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>、<a href="/docs/ja/codex-models">Codex で他のモデル</a>、<a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>、<a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>。困ったときは <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> で質問してください。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a href="/docs/ja/remote">リモート magpie</a>
+    <a href="/docs/ja/docker">Docker</a>
+    <a href="/docs/ja/privacy">プライバシー</a>
+    <a href="/docs/ja/masking">プライバシーマスキング</a>
+    <a href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a href="/docs/ja/library">ライブラリ</a>
+    <a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a href="/docs/ja/local-models">ローカルモデル</a>
+    <a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/ja/contributors">コントリビューター</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "コピーしました"; setTimeout(() => (b.textContent = "コピー"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

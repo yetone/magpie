@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenAI を Claude Code・Codex・Gemini CLI・OpenCode で使う · magpie</title>
+<meta name="description" content="magpie で OpenAI の GPT モデルを Claude Code・Codex・Gemini CLI・OpenCode から使う方法：OpenAI の API キーは一度追加するだけ。ツールごとにモデルを選べて、各ツールのリクエストを OpenAI の Responses API へ送る変換、プロンプトキャッシュの維持、推論と優先処理の指定、費用の集計、複数キーへの振り分けは magpie が受け持ちます。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/openai">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/openai">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/openai">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/openai">
+<link rel="canonical" href="https://usemagpie.ai/docs/ja/openai">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="OpenAI を Claude Code・Codex・Gemini CLI・OpenCode で使う">
+<meta property="og:description" content="magpie で OpenAI の GPT モデルを Claude Code・Codex・Gemini CLI・OpenCode から使う方法：OpenAI の API キーは一度追加するだけ。ツールごとにモデルを選べて、各ツールのリクエストを OpenAI の Responses API へ送る変換、プロンプトキャッシュの維持、推論と優先処理の指定、費用の集計、複数キーへの振り分けは magpie が受け持ちます。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/ja/openai">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "OpenAI を Claude Code・Codex・Gemini CLI・OpenCode で使う",
+   "description": "magpie で OpenAI の GPT モデルを Claude Code・Codex・Gemini CLI・OpenCode から使う方法：OpenAI の API キーは一度追加するだけ。ツールごとにモデルを選べて、各ツールのリクエストを OpenAI の Responses API へ送る変換、プロンプトキャッシュの維持、推論と優先処理の指定、費用の集計、複数キーへの振り分けは magpie が受け持ちます。",
+   "inLanguage": "ja",
+   "url": "https://usemagpie.ai/docs/ja/openai",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Claude Code で OpenAI のモデルを使うには？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie に OpenAI の API キーを追加し（プロバイダ、プロバイダを追加、OpenAI）、Claude Code の行で gpt-6.1-sol などのモデルを選ぶか、magpie claude openai/gpt-6.1-sol を実行します。OpenAI は Anthropic Messages API を提供していないので、magpie が Claude Code のリクエストを変換して OpenAI の Responses API https://api.openai.com/v1 に送り、返答を戻します。推論の要約は思考として届きます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex で ChatGPT のサインインではなく OpenAI の API キーを使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。キーを追加して magpie codex openai/gpt-6.1-sol を実行します。Codex は Responses を話すので、リクエストはカスタムツールや推論も含めてそのまま OpenAI に送り、Fast は優先処理として送ります。ChatGPT Plus や Pro のサインインは、サブスクリプションで別に設定します。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "OpenCode で GPT モデルを使うには？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie でモデルを選ぶか、magpie opencode openai/gpt-6.1-sol を実行します。OpenCode は Chat Completions を話しますが、OpenAI 自身のモデルは Responses を先に使うので、magpie が OpenCode のリクエストをそちらに変換し、返答を戻します。Chat Completions で送りたいモデルには magpie model api openai/gpt-5.5 chat を実行してください。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Gemini CLI で OpenAI を使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。Gemini CLI は Google の Gemini API を話すので、magpie がリクエストを OpenAI の Responses API に変換し、返答を戻します。ストリーミングとツール呼び出しも含みます。magpie gemini model openai/gpt-6.1-sol を実行してください。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie は OpenAI のプロンプトキャッシュを生かせますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "生かせます。Codex 自身の prompt_cache_key はそのまま使います。キーのない変換リクエストには、セッションか最初のユーザーメッセージからハッシュで作ったキーを付けるので、ツールについては何も明かしません。キーが複数あるときは、キャッシュが温かいあいだ会話は同じキーを使い続けます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "OpenAI が encrypted content could not be verified と言うのはなぜ？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "OpenAI が読めるのは、同じキー・組織・アカウントで封印した推論だけです。よそで封印された推論が会話に含まれていると、magpie はそのアイテムを外して問い合わせ直し、その会話について覚えます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie は Azure OpenAI に対応していますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "対応しています。別のプロバイダ、Azure OpenAI として使います。リソースのエンドポイントとキーを入れると、magpie は /openai/v1 以下の v1 API を使い、キーを api-key ヘッダーで送り、リソースのデプロイをモデルとして並べます。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/ja/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>ドキュメント</small></a>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/start">はじめに</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a class="toc-only" href="/docs/ja/remote">リモート magpie</a>
+    <a class="toc-only" href="/docs/ja/docker">Docker</a>
+    <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
+    <a class="toc-only" href="/docs/ja/masking">プライバシーマスキング</a>
+    <a class="toc-only" href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a class="toc-only" href="/docs/ja/library">ライブラリ</a>
+    <a class="toc-only" href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a class="toc-only" href="/docs/ja/local-models">ローカルモデル</a>
+    <a class="toc-only" href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="言語" title="言語" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/openai" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/openai" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/openai" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="Discord の magpie" title="Discord に参加"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="GitHub の magpie" title="GitHub のソースコード"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">ダウンロード</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>このページ</p>
+    <a href="#add">追加する</a>
+    <a href="#endpoints">エンドポイント</a>
+    <a href="#models">モデル一覧</a>
+    <a href="#agents">ツールごとの使い方</a>
+    <a href="#shaping">magpie がすること</a>
+    <a href="#reasoning">推論</a>
+    <a href="#search">Web 検索</a>
+    <a href="#cost">費用・使用量</a>
+    <a href="#keys">複数のキー</a>
+    <a href="#trouble">うまくいかないとき</a>
+    <a href="#faq">よくある質問</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">ドキュメント · プロバイダ</p>
+    <h1>OpenAI を Claude Code・Codex・Gemini CLI・OpenCode で使う</h1>
+    <p class="lede">OpenAI は <code>api.openai.com</code> で二つの API、Responses と Chat Completions を提供しています。OpenAI 自身のモデルは Responses で使うのがよく、最新のモデルはそこでしか答えません。OpenAI の API キーを magpie に一度追加すれば、Claude Code・Codex・Gemini CLI・OpenCode などつないだすべてのツールが、magpie のゲートウェイ <code>127.0.0.1:3425</code> 経由で OpenAI のモデルを使えます。ツールごとに別のモデルを選べます。Codex のリクエストはそのまま OpenAI に送り、ほかのツールのリクエストは途中で magpie が変換します。</p>
+    <p>このページは platform.openai.com の API キーについてです。ChatGPT Plus や Pro のサブスクリプションは別にサインインします。<a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a> を見てください。</p>
+
+    <h2 id="add"><a class="anchor" href="#add">OpenAI を追加する</a></h2>
+    <ol class="steps">
+      <li><b>キーを取得</b><a href="https://platform.openai.com/api-keys">platform.openai.com</a> で作ります。<code>sk-</code> で始まります。</li>
+      <li><b>プロバイダを追加</b>magpie の <span class="ui">プロバイダ</span> で <span class="ui">＋ プロバイダを追加</span> を押し、<span class="ui">OpenAI</span> を選んでキーを貼り付け、保存します。magpie がそのキーで使えるモデルを OpenAI に問い合わせます。</li>
+      <li><b>ツールで選ぶ</b><span class="ui">エージェント</span> タブで、ツールの行のモデルを押し、<code>gpt-6.1-sol</code> などの OpenAI モデルを選びます。</li>
+    </ol>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-add">コピー</button><pre id="ex-add">magpie provider add openai &lt;key&gt;
+magpie provider test openai</pre></div>
+    <p>magpie のモデル ID は <code>プロバイダ/モデル</code> の形なので、OpenAI のモデルは <code>openai/gpt-6.1-sol</code> のようになります。前がプロバイダ、後ろが OpenAI 自身の ID です。キーは magpie の設定に保存され、magpie がシェルから読むことはありません。</p>
+    <p>OpenCode など magpie が取り込めるアプリで OpenAI をもう設定してあるなら、取り込むときに OpenAI プロバイダとして入ります。</p>
+
+    <h2 id="endpoints"><a class="anchor" href="#endpoints">エンドポイント</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>API</th><th>アドレス</th><th>用途</th></tr>
+      <tr><td>Responses</td><td><code>https://api.openai.com/v1</code></td><td>OpenAI 自身のモデル（ID が <code>gpt-</code>、<code>codex</code>、または <code>o</code> と数字で始まるもの）：Codex はそのまま、Claude Code・Gemini CLI・OpenCode は変換して</td></tr>
+      <tr><td>Chat Completions</td><td><code>https://api.openai.com/v1</code></td><td>モデル一覧と、キーで使えるそれ以外のモデル</td></tr>
+    </table></div>
+    <p>magpie の OpenAI プロバイダには Anthropic Messages のアドレスがないので、Claude Code のリクエストは常に変換します。OpenAI 自身のモデルは、Chat Completions を話すツールからでも magpie が Responses を先に使います。OpenAI があるモデルは <code>/v1/responses</code> でしか提供していないと答えると、magpie はそちらで問い合わせ直し、それを覚えます。モデルごとに API を自分で決めるには：</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-api">コピー</button><pre id="ex-api">magpie model api openai/gpt-5.5 chat
+magpie model api openai/gpt-5.5 --reset
+magpie model apis openai</pre></div>
+    <p><b>Azure OpenAI</b> は別のプロバイダ、<span class="ui">Azure OpenAI</span> です。リソースのエンドポイント <code>https://&lt;resource&gt;.openai.azure.com</code> とキーを入れます。magpie は <code>/openai/v1</code> 以下の v1 API で Chat Completions と Responses を使い、キーを <code>api-key</code> ヘッダーで送り、リソースのデプロイをモデルとして並べます。<code>gpt-5-codex</code> のようにモデル名を付けたデプロイも、Responses を先に使います。</p>
+
+    <h2 id="models"><a class="anchor" href="#models">モデル一覧</a></h2>
+    <p>magpie は一覧を OpenAI の <code>https://api.openai.com/v1/models</code> から取得するので、ツールにはそのキーで使えるモデルが並びます。名前・コンテキスト長・推論レベル・価格は models.dev の <code>openai</code> カタログから取ります。OpenAI が出したばかりでレベルがまだわからない推論モデルには、同じ系列の最新の推論モデルのレベルを使います。<code>gpt-6.1-sol</code> には <code>gpt-6-sol</code> のレベルが付きました。ツールに見せるモデルは、プロバイダのモデル一覧かターミナルで選べます。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-models">コピー</button><pre id="ex-models">magpie provider models openai +gpt-6.1-sol +gpt-6-luna +gpt-5.5
+magpie provider refresh-every openai 1d</pre></div>
+
+    <h2 id="agents"><a class="anchor" href="#agents">ツールごとの使い方</a></h2>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-agents">コピー</button><pre id="ex-agents">magpie claude openai/gpt-6.1-sol
+magpie codex openai/gpt-6.1-sol
+magpie gemini model openai/gpt-6.1-sol
+magpie opencode openai/gpt-6.1-sol</pre></div>
+    <ul>
+      <li><b>Claude Code</b> は Anthropic Messages を話しますが、OpenAI はこれを提供していません。magpie が各リクエストを Responses に変換し、返答を戻します。モデルの推論の要約は、Claude Code には思考として、続いて本文として届きます。<a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>。</li>
+      <li><b>Codex</b> は Responses を話すので、リクエストはそのまま OpenAI に送ります。<code>apply_patch</code> などのカスタムツール、推論のアイテム、Codex 自身の <code>prompt_cache_key</code> も含みます。ここでは Codex で Fast も選べます。<a href="#reasoning">推論</a> を見てください。<a href="/docs/ja/codex-models">Codex で他のモデル</a>。</li>
+      <li><b>Gemini CLI</b> は Google の Gemini API を話します。magpie が各リクエストを Responses に変換し、返答を戻します。<a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>。</li>
+      <li><b>OpenCode</b> は Chat Completions を話します。OpenAI 自身のモデルは Responses を先に使うので、magpie がリクエストをそちらに変換し、返答を戻します。キーで使えるそれ以外のモデルには、OpenCode のリクエストをそのまま送ります。<a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>。</li>
+    </ul>
+
+    <h2 id="shaping"><a class="anchor" href="#shaping">magpie が OpenAI のためにすること</a></h2>
+    <ul>
+      <li><b>プロンプトキャッシュのキー。</b>変換して OpenAI に送るリクエストに <code>prompt_cache_key</code> がなければ、magpie が付けます。ツールが示すセッション、なければ最初のユーザーメッセージからハッシュで作るので、ツールについては何も明かしません。Codex が送るキーはそのまま使い、自分で設定したキーがあればそれが優先です。OpenAI がこのフィールドで 400 を返すと、magpie は外して問い合わせ直します。</li>
+      <li><b>読み込んだ場所で渡すツール。</b>Claude Code のツール検索が会話の途中で読み込んだツールは、ツール一覧に足すのではなく、読み込んだ位置に <code>additional_tools</code> のアイテムとして OpenAI の Responses API に送ります。キャッシュ済みの先頭部分がそのまま残ります。<code>additional-tools=off</code> にすると、ほかのツールと一緒に並べます。</li>
+      <li><b>よそで封印された推論。</b>OpenAI が読めるのは自分で封印した推論（<code>encrypted_content</code>）だけです。別のキー・組織・アカウントで封印されたアイテムは拒否されます（“could not be verified”）。magpie はそのアイテムを外して問い合わせ直し、その会話について覚えます。Claude のモデルで一度動いたあとの Codex が推論アイテムに入れて持ち歩く Claude の思考は、リクエストが OpenAI に届く前に外します。</li>
+      <li><b>前の返答。</b>Responses のクライアントは、そのターンの新しい入力だけを送り、続く返答を指定できます（<code>previous_response_id</code>）。magpie はそうしたクライアントに返した返答をメモリに、呼び出し元のゲートウェイキーごとに保存します。OpenAI も返答を保存するので、指定された返答に同じキーで答えていれば、OpenAI には OpenAI 自身の ID のあとの新しい入力だけを送ります。HTTP で話す Codex は <code>store</code> を false にし、前の返答を指定しません。</li>
+      <li><b>Codex 自身の圧縮。</b><code>compaction=native</code> にすると、Codex の圧縮は Codex が送ったとおりに OpenAI に頼み、封印された圧縮アイテムはそのまま Codex に返します。読めるのは封印したキーだけなので、それを含むあとのリクエストはそのキーにだけ送ります。既定の <code>compaction=magpie</code> では magpie が要約します。</li>
+    </ul>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-set">コピー</button><pre id="ex-set">magpie provider set openai compaction=native
+magpie provider set openai additional-tools=off</pre></div>
+
+    <h2 id="reasoning"><a class="anchor" href="#reasoning">推論</a></h2>
+    <ul>
+      <li><b>推論の強さ。</b>ツールが求める推論の強さは、カタログにあるそのモデルのレベルのうち最も近いものに合わせます。<code>gpt-6-sol</code> には <code>none</code>・<code>low</code>・<code>medium</code>・<code>high</code>・<code>xhigh</code>・<code>max</code> があります。Responses では <code>reasoning.effort</code> として送り、<code>summary</code> を <code>auto</code> にするので、モデルの推論の要約も返ってきます。</li>
+      <li><b>推論オフ。</b>Gemini CLI のように magpie が変換するツールが推論をオフにし、モデルのレベルに <code>none</code> があるとき、magpie は none を求めます。</li>
+      <li><b>暗号化された推論。</b>ツールが include で求めるものは magpie がそのまま渡しますが、<code>reasoning.encrypted_content</code> を求めるのは推論があるときだけです。推論しないモデルにこれを付けると OpenAI が拒否します。Codex は封印されたアイテムを次のターンで送り返し、magpie はそれをそのまま渡します。</li>
+      <li><b>Fast。</b>OpenAI のキーでは、Codex で GPT と o シリーズのモデルに Fast を選べます。magpie はこれを <code>service_tier: "priority"</code>、つまり OpenAI の優先処理として送ります。magpie で Codex に設定したサービス階層は、Codex の指定より優先します。</li>
+    </ul>
+
+    <h2 id="search"><a class="anchor" href="#search">Web 検索</a></h2>
+    <p>OpenAI の Responses API は自分で Web を検索します。Codex や Claude Code のようにツールがモデルに Web 検索を渡すとき、magpie は Responses でモデルに OpenAI 自身の <code>web_search</code> ツールを渡し、検索は OpenAI が行います。</p>
+
+    <h2 id="cost"><a class="anchor" href="#cost">費用・使用量</a></h2>
+    <ul>
+      <li><b>費用。</b><span class="ui">使用量</span> タブは、models.dev にある OpenAI の価格で呼び出しごとに費用を計算します。</li>
+      <li><b>キャッシュのトークン。</b>返答がキャッシュ済みのプロンプトトークンを報告すると、使用量タブはそれをプロンプトの残りと分けて数えます。</li>
+      <li><b>キャッシュを生かす。</b>キーが複数あるとき、会話のキャッシュに残す価値があり（1,024 トークン以上）、まだ温かい（5 分以内に読まれた）あいだは、その会話は同じキーを使い続けます。</li>
+      <li><b>サービス階層。</b>呼び出しごとに、ツールが求めた階層、magpie が送った階層、OpenAI の返答が実際に使ったと言う階層を記録します。</li>
+      <li><b>残高。</b>magpie は OpenAI から残高を読みません。<code>key-balance</code> で自分で入力すると、使用量ページはそこから magpie がそれ以降のキーの呼び出しに付けた費用を引いて表示します。</li>
+    </ul>
+
+    <h2 id="keys"><a class="anchor" href="#keys">複数のキーとフェイルオーバー</a></h2>
+    <p>一つの OpenAI プロバイダに複数のキーを入れられます。その下の <span class="ui">別のキーを追加</span> を押すか、まとめて貼り付けます。リクエストはオンになっている最初のキーに行き、そのキーが尽きるかレート制限にかかると次のキーが引き継ぎます。二つの組織のキーのように分けておきたいときは、プロバイダをもう一度追加します。二つ目は <code>openai-2</code> になります。</p>
+    <ul>
+      <li><b>支出上限。</b><code>spend-cap</code> で、キーごとに 1 日・1 か月・累計のドル上限を決められます。金額は使用量タブの計算で数え、上限に達するとルーティングはほかのキーとフォールバックに移ります。</li>
+      <li><b>フォールバック。</b><code>fallback</code> で、OpenAI の枠が尽きたときや落ちたときの行き先を決めます。別のプロバイダのモデルか、ルーティンググループです。</li>
+    </ul>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-keys">コピー</button><pre id="ex-keys">magpie provider spend-cap openai &lt;key&gt; 20 month
+magpie provider key-balance openai &lt;key&gt; 25
+magpie provider fallback openai deepseek/deepseek-v4-pro</pre></div>
+
+    <h2 id="trouble"><a class="anchor" href="#trouble">うまくいかないとき</a></h2>
+    <ul>
+      <li><b>“The encrypted content for item rs_… could not be verified”。</b>会話に、別のキー・組織・アカウントで封印された推論が含まれています。magpie はそのアイテムを外して問い合わせ直します。<a href="#shaping">magpie がすること</a> を見てください。</li>
+      <li><b><code>/v1/responses</code> でしか答えないモデル。</b>magpie が Responses に移し、それを覚えます。<code>magpie model apis openai</code> で、各モデルがどの API で問い合わせられるかがわかります。</li>
+      <li><b><code>prompt_cache_key</code> で 400。</b>magpie は自分で付けたキーを外して問い合わせ直します。</li>
+      <li><b>キーの確認。</b><code>magpie provider test openai</code> は各エンドポイントに、または指定した各モデルに小さなリクエストを送ります。<code>--as codex</code> や <code>--as claude-code</code> を付けると、そのツールと同じ形で送ります。</li>
+    </ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
+    <h3>Claude Code で OpenAI のモデルを使うには？</h3>
+    <p>magpie に OpenAI の API キーを追加し（プロバイダ、プロバイダを追加、OpenAI）、Claude Code の行で <code>gpt-6.1-sol</code> などのモデルを選ぶか、<code>magpie claude openai/gpt-6.1-sol</code> を実行します。OpenAI は Anthropic Messages API を提供していないので、magpie が Claude Code のリクエストを変換して OpenAI の Responses API <code>https://api.openai.com/v1</code> に送り、返答を戻します。推論の要約は思考として届きます。</p>
+    <h3>Codex で ChatGPT のサインインではなく OpenAI の API キーを使えますか？</h3>
+    <p>使えます。キーを追加して <code>magpie codex openai/gpt-6.1-sol</code> を実行します。Codex は Responses を話すので、リクエストはカスタムツールや推論も含めてそのまま OpenAI に送り、Fast は優先処理として送ります。ChatGPT Plus や Pro のサインインは、サブスクリプションで別に設定します。</p>
+    <h3>OpenCode で GPT モデルを使うには？</h3>
+    <p>magpie でモデルを選ぶか、<code>magpie opencode openai/gpt-6.1-sol</code> を実行します。OpenCode は Chat Completions を話しますが、OpenAI 自身のモデルは Responses を先に使うので、magpie が OpenCode のリクエストをそちらに変換し、返答を戻します。Chat Completions で送りたいモデルには <code>magpie model api openai/gpt-5.5 chat</code> を実行してください。</p>
+    <h3>Gemini CLI で OpenAI を使えますか？</h3>
+    <p>使えます。Gemini CLI は Google の Gemini API を話すので、magpie がリクエストを OpenAI の Responses API に変換し、返答を戻します。ストリーミングとツール呼び出しも含みます。<code>magpie gemini model openai/gpt-6.1-sol</code> を実行してください。</p>
+    <h3>magpie は OpenAI のプロンプトキャッシュを生かせますか？</h3>
+    <p>生かせます。Codex 自身の <code>prompt_cache_key</code> はそのまま使います。キーのない変換リクエストには、セッションか最初のユーザーメッセージからハッシュで作ったキーを付けるので、ツールについては何も明かしません。キーが複数あるときは、キャッシュが温かいあいだ会話は同じキーを使い続けます。</p>
+    <h3>OpenAI が encrypted content could not be verified と言うのはなぜ？</h3>
+    <p>OpenAI が読めるのは、同じキー・組織・アカウントで封印した推論だけです。よそで封印された推論が会話に含まれていると、magpie はそのアイテムを外して問い合わせ直し、その会話について覚えます。</p>
+    <h3>magpie は Azure OpenAI に対応していますか？</h3>
+    <p>対応しています。別のプロバイダ、Azure OpenAI として使います。リソースのエンドポイントとキーを入れると、magpie は <code>/openai/v1</code> 以下の v1 API を使い、キーを <code>api-key</code> ヘッダーで送り、リソースのデプロイをモデルとして並べます。</p>
+
+    <p><b>プロバイダ別：</b><a href="/docs/ja/deepseek">DeepSeek</a> · <a href="/docs/ja/kimi">Kimi と Kimi Code</a> · <a href="/docs/ja/glm">GLM Coding Plan</a> · <a href="/docs/ja/qwen">Qwen</a> · <a href="/docs/ja/minimax">MiniMax</a> · <a href="/docs/ja/anthropic">Anthropic</a> · <a href="/docs/ja/gemini">Gemini</a> · <a href="/docs/ja/grok">Grok</a> · <a href="/docs/ja/mistral">Mistral</a> · <a href="/docs/ja/openrouter">OpenRouter</a> · <a href="/docs/ja/copilot">GitHub Copilot</a> · <a href="/docs/ja/ollama">Ollama</a></p>
+    <p style="margin-top:48px">ツールごとのガイド：<a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>、<a href="/docs/ja/codex-models">Codex で他のモデル</a>、<a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>、<a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>。困ったときは <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> で質問してください。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a href="/docs/ja/remote">リモート magpie</a>
+    <a href="/docs/ja/docker">Docker</a>
+    <a href="/docs/ja/privacy">プライバシー</a>
+    <a href="/docs/ja/masking">プライバシーマスキング</a>
+    <a href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a href="/docs/ja/library">ライブラリ</a>
+    <a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a href="/docs/ja/local-models">ローカルモデル</a>
+    <a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/ja/contributors">コントリビューター</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "コピーしました"; setTimeout(() => (b.textContent = "コピー"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

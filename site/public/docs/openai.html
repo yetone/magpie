@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenAI in Claude Code, Codex, Gemini CLI and OpenCode · magpie</title>
+<meta name="description" content="Use OpenAI&#x27;s GPT models in Claude Code, Codex, Gemini CLI and OpenCode with magpie: add your OpenAI API key once, pick a model per agent, and let magpie send each agent&#x27;s requests to OpenAI&#x27;s Responses API, keep the prompt cache warm, ask for reasoning and priority processing, count cost and spread requests over several keys.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/openai">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/openai">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/openai">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/openai">
+<link rel="canonical" href="https://usemagpie.ai/docs/openai">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="OpenAI in Claude Code, Codex, Gemini CLI and OpenCode">
+<meta property="og:description" content="Use OpenAI&#x27;s GPT models in Claude Code, Codex, Gemini CLI and OpenCode with magpie: add your OpenAI API key once, pick a model per agent, and let magpie send each agent&#x27;s requests to OpenAI&#x27;s Responses API, keep the prompt cache warm, ask for reasoning and priority processing, count cost and spread requests over several keys.">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/openai">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "OpenAI in Claude Code, Codex, Gemini CLI and OpenCode",
+   "description": "Use OpenAI's GPT models in Claude Code, Codex, Gemini CLI and OpenCode with magpie: add your OpenAI API key once, pick a model per agent, and let magpie send each agent's requests to OpenAI's Responses API, keep the prompt cache warm, ask for reasoning and priority processing, count cost and spread requests over several keys.",
+   "inLanguage": "en",
+   "url": "https://usemagpie.ai/docs/openai",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "How do I use OpenAI’s models in Claude Code?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Add your OpenAI API key in magpie (Providers, Add provider, OpenAI), then pick a model such as gpt-6.1-sol on Claude Code’s row, or run magpie claude openai/gpt-6.1-sol. OpenAI serves no Anthropic Messages API, so magpie translates Claude Code’s requests to OpenAI’s Responses API at https://api.openai.com/v1 and the replies back, the reasoning summary as thinking."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can Codex use an OpenAI API key instead of a ChatGPT sign-in?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Add the key, then run magpie codex openai/gpt-6.1-sol. Codex speaks Responses, so its requests go to OpenAI as they are, custom tools and reasoning included, and Fast is sent as priority processing. A ChatGPT Plus or Pro sign-in is set up separately, in Subscriptions."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "How do I use GPT models in OpenCode?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Pick the model in magpie, or run magpie opencode openai/gpt-6.1-sol. OpenCode speaks Chat Completions, but OpenAI’s own models go to Responses first, so magpie translates OpenCode’s requests there and the replies back. To send a model on Chat Completions instead, run magpie model api openai/gpt-5.5 chat."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can Gemini CLI use OpenAI?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Gemini CLI speaks Google’s Gemini API, so magpie translates its requests to OpenAI’s Responses API and the replies back, streaming and tool calls included. Run magpie gemini model openai/gpt-6.1-sol."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Does magpie keep OpenAI’s prompt cache?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Codex’s own prompt_cache_key goes on as it is. A translated request without one gets a key made from its session or first user message, hashed so it names nothing of the agent. With several keys, a conversation stays on its key while its cache is warm."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Why does OpenAI say the encrypted content could not be verified?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "OpenAI reads only reasoning it sealed for the same key, organization or account. When a conversation carries reasoning sealed elsewhere, magpie asks again without those items and remembers it for the conversation."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Does magpie support Azure OpenAI?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes, as its own provider, Azure OpenAI. Give it the resource’s endpoint and key; magpie uses the v1 API under /openai/v1, sends the key in the api-key header and lists the resource’s deployments as models."
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>Docs</small></a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/start">Get started</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a class="toc-only" href="/docs/remote">Remote magpie</a>
+    <a class="toc-only" href="/docs/docker">Docker</a>
+    <a class="toc-only" href="/docs/privacy">Privacy</a>
+    <a class="toc-only" href="/docs/masking">Privacy masking</a>
+    <a class="toc-only" href="/docs/mcp-router">MCP router</a>
+    <a class="toc-only" href="/docs/library">Library</a>
+    <a class="toc-only" href="/docs/claude-code-models">Models in Claude Code</a>
+    <a class="toc-only" href="/docs/codex-models">Models in Codex</a>
+    <a class="toc-only" href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a class="toc-only" href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a class="toc-only" href="/docs/local-models">Local models</a>
+    <a class="toc-only" href="/docs/opencode-models">Models in OpenCode</a>
+    <a class="toc-only" href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/openai" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/openai" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/openai" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">Download</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>On this page</p>
+    <a href="#add">Add it</a>
+    <a href="#endpoints">Endpoints</a>
+    <a href="#models">Model list</a>
+    <a href="#agents">In each agent</a>
+    <a href="#shaping">What magpie does</a>
+    <a href="#reasoning">Reasoning</a>
+    <a href="#search">Web search</a>
+    <a href="#cost">Cost and usage</a>
+    <a href="#keys">Several keys</a>
+    <a href="#trouble">Troubleshooting</a>
+    <a href="#faq">FAQ</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">Docs · Provider</p>
+    <h1>OpenAI in Claude Code, Codex, Gemini CLI and OpenCode</h1>
+    <p class="lede">OpenAI serves its models on two APIs at <code>api.openai.com</code>: Responses and Chat Completions. Its own models are best asked on Responses, and its newest answer only there. Add an OpenAI API key to magpie once, and Claude Code, Codex, Gemini CLI, OpenCode and every other agent you connect can use OpenAI’s models through magpie’s local gateway at <code>127.0.0.1:3425</code>, each agent with a model of its own. Codex’s requests go to OpenAI as they are; the other agents’ are translated on the way.</p>
+    <p>This page is about an API key from platform.openai.com. A ChatGPT Plus or Pro subscription is signed in to separately; see <a href="/docs/subscriptions">Subscriptions in any agent</a>.</p>
+
+    <h2 id="add"><a class="anchor" href="#add">Add OpenAI</a></h2>
+    <ol class="steps">
+      <li><b>Get a key</b>Make one on <a href="https://platform.openai.com/api-keys">platform.openai.com</a>. It starts with <code>sk-</code>.</li>
+      <li><b>Add the provider</b>In magpie’s <span class="ui">Providers</span> tab, press <span class="ui">＋ Add provider</span>, pick <span class="ui">OpenAI</span>, paste the key and save. magpie asks OpenAI which models the key can use.</li>
+      <li><b>Pick it for an agent</b>In the <span class="ui">Agents</span> tab, click the model on the agent’s row and choose an OpenAI model such as <code>gpt-6.1-sol</code>.</li>
+    </ol>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-add">Copy</button><pre id="ex-add">magpie provider add openai &lt;key&gt;
+magpie provider test openai</pre></div>
+    <p>Model ids in magpie are <code>provider/model</code>, so OpenAI’s read <code>openai/gpt-6.1-sol</code>: the provider, then OpenAI’s own id. The key is kept in magpie’s settings; magpie doesn’t take it from your shell.</p>
+    <p>Already set OpenAI up in OpenCode or another app magpie imports from? The import brings it in as the OpenAI provider.</p>
+
+    <h2 id="endpoints"><a class="anchor" href="#endpoints">Endpoints</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>API</th><th>Address</th><th>Used for</th></tr>
+      <tr><td>Responses</td><td><code>https://api.openai.com/v1</code></td><td>OpenAI’s own models, ids starting <code>gpt-</code>, <code>codex</code> or <code>o</code> and a digit: Codex’s requests as they are, Claude Code’s, Gemini CLI’s and OpenCode’s translated</td></tr>
+      <tr><td>Chat Completions</td><td><code>https://api.openai.com/v1</code></td><td>the model list, and any other model the key lists</td></tr>
+    </table></div>
+    <p>magpie’s OpenAI provider has no Anthropic Messages address, so Claude Code’s requests are always translated. For OpenAI’s own models magpie keeps Responses first even for an agent that speaks Chat Completions. When OpenAI answers that a model is served only on <code>/v1/responses</code>, magpie asks again there and remembers it. To send a model on one API yourself:</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-api">Copy</button><pre id="ex-api">magpie model api openai/gpt-5.5 chat
+magpie model api openai/gpt-5.5 --reset
+magpie model apis openai</pre></div>
+    <p><b>Azure OpenAI</b> is a provider of its own, <span class="ui">Azure OpenAI</span>. Give it your resource’s endpoint, <code>https://&lt;resource&gt;.openai.azure.com</code>, and its key. magpie uses the v1 API under <code>/openai/v1</code> for Chat Completions and Responses, sends the key in the <code>api-key</code> header, and lists the resource’s deployments as its models. A deployment named for its model, such as <code>gpt-5-codex</code>, goes to Responses first too.</p>
+
+    <h2 id="models"><a class="anchor" href="#models">Model list</a></h2>
+    <p>magpie fetches the list from OpenAI, at <code>https://api.openai.com/v1/models</code>, so agents see the models your key can use. Names, context windows, reasoning levels and prices come from models.dev’s <code>openai</code> catalog. A reasoning model OpenAI has just listed, before its levels are known, gets those of the newest reasoning model in its family: <code>gpt-6.1-sol</code> got <code>gpt-6-sol</code>’s. Pick the models agents see in the provider’s model list, or from the terminal:</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-models">Copy</button><pre id="ex-models">magpie provider models openai +gpt-6.1-sol +gpt-6-luna +gpt-5.5
+magpie provider refresh-every openai 1d</pre></div>
+
+    <h2 id="agents"><a class="anchor" href="#agents">In each agent</a></h2>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-agents">Copy</button><pre id="ex-agents">magpie claude openai/gpt-6.1-sol
+magpie codex openai/gpt-6.1-sol
+magpie gemini model openai/gpt-6.1-sol
+magpie opencode openai/gpt-6.1-sol</pre></div>
+    <ul>
+      <li><b>Claude Code</b> speaks Anthropic Messages, which OpenAI doesn’t serve. magpie translates each request to Responses and the reply back; the model’s reasoning summary reaches Claude Code as thinking, then the text. <a href="/docs/claude-code-models">Models in Claude Code</a>.</li>
+      <li><b>Codex</b> speaks Responses, so its requests go to OpenAI as they are: its custom tools such as <code>apply_patch</code>, its reasoning items and its own <code>prompt_cache_key</code> included. Codex is also offered Fast here; see <a href="#reasoning">Reasoning</a>. <a href="/docs/codex-models">Models in Codex</a>.</li>
+      <li><b>Gemini CLI</b> speaks Google’s Gemini API. magpie translates each request to Responses and the reply back. <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>.</li>
+      <li><b>OpenCode</b> speaks Chat Completions. OpenAI’s own models go to Responses first, so magpie translates its requests there and the replies back; any other model the key lists gets OpenCode’s requests as they are. <a href="/docs/opencode-models">Models in OpenCode</a>.</li>
+    </ul>
+
+    <h2 id="shaping"><a class="anchor" href="#shaping">What magpie does for OpenAI</a></h2>
+    <ul>
+      <li><b>A prompt cache key.</b> A translated request to OpenAI that carries no <code>prompt_cache_key</code> gets one, made from the session the agent names, or else its first user message, and hashed, so it names nothing of the agent. Codex sends its own, which goes on as it is, and one you set yourself wins. If OpenAI answers 400 over the field, magpie asks again without it.</li>
+      <li><b>Tools loaded where they were loaded.</b> A tool that Claude Code’s tool search loads mid-conversation is sent to OpenAI’s Responses API as an <code>additional_tools</code> item at that point, not added to the tool list, which keeps the cached prefix. <code>additional-tools=off</code> puts it with the other tools.</li>
+      <li><b>Sealed reasoning from elsewhere.</b> OpenAI reads only its own sealed reasoning (<code>encrypted_content</code>). An item sealed under another key, organization or account is refused (“could not be verified”); magpie asks again without those items and remembers it for the conversation. Claude’s thinking, which Codex carries in a reasoning item after a turn on a Claude model, is taken out before the request reaches OpenAI.</li>
+      <li><b>Earlier responses.</b> A Responses client may send only a turn’s new input and name the response it follows (<code>previous_response_id</code>). magpie keeps each response it gave such a client, in memory and under the caller’s gateway key. OpenAI keeps responses too, so when the same key answered the one named, OpenAI is sent only the new input after its own id. Codex over HTTP says <code>store</code> false and names none.</li>
+      <li><b>Codex’s own compaction.</b> With <code>compaction=native</code>, Codex’s compaction is asked of OpenAI as Codex sent it and the sealed item comes back to Codex as it came. Only the key that sealed it can read it, so later requests carrying it go only there. The default, <code>compaction=magpie</code>, has magpie summarise.</li>
+    </ul>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-set">Copy</button><pre id="ex-set">magpie provider set openai compaction=native
+magpie provider set openai additional-tools=off</pre></div>
+
+    <h2 id="reasoning"><a class="anchor" href="#reasoning">Reasoning</a></h2>
+    <ul>
+      <li><b>Effort.</b> The effort an agent asks for is fitted to the nearest level the model has, as the catalog lists them: <code>gpt-6-sol</code> has <code>none</code>, <code>low</code>, <code>medium</code>, <code>high</code>, <code>xhigh</code> and <code>max</code>. On Responses it is sent as <code>reasoning.effort</code>, with <code>summary</code> set to <code>auto</code>, so the model’s reasoning summary comes back.</li>
+      <li><b>Reasoning off.</b> When an agent whose requests magpie translates, such as Gemini CLI, turns reasoning off and the model lists <code>none</code> among its levels, magpie asks for none.</li>
+      <li><b>Encrypted reasoning.</b> magpie passes on what an agent asks to include, but asks for <code>reasoning.encrypted_content</code> only with reasoning: OpenAI refuses it of a model that doesn’t reason. Codex sends the sealed items back on the next turn, and magpie passes them on as they are.</li>
+      <li><b>Fast.</b> On an OpenAI key, Codex is offered Fast for GPT and o-series models. magpie sends it as <code>service_tier: "priority"</code>, OpenAI’s priority processing. A service tier set for Codex in magpie overrides what Codex asked.</li>
+    </ul>
+
+    <h2 id="search"><a class="anchor" href="#search">Web search</a></h2>
+    <p>OpenAI’s Responses API searches the web itself. When an agent offers its model web search, as Codex and Claude Code do, magpie gives the model OpenAI’s own <code>web_search</code> tool on Responses, and OpenAI runs the search.</p>
+
+    <h2 id="cost"><a class="anchor" href="#cost">Cost and usage</a></h2>
+    <ul>
+      <li><b>Cost.</b> The <span class="ui">Usage</span> tab prices each call with OpenAI’s prices from models.dev.</li>
+      <li><b>Cache tokens.</b> When a reply reports cached prompt tokens, the Usage tab counts them apart from the rest of the prompt.</li>
+      <li><b>Keeping the cache.</b> With several keys, a conversation stays on its key while its cache is worth keeping, 1,024 tokens or more, and still warm, read within the last five minutes.</li>
+      <li><b>Service tier.</b> Each call records the tier the agent asked for, the one magpie sent, and the one OpenAI’s reply says it ran at.</li>
+      <li><b>Balance.</b> magpie reads no balance from OpenAI; type it in with <code>key-balance</code>, and the Usage page shows it less what magpie has priced the key’s calls at since.</li>
+    </ul>
+
+    <h2 id="keys"><a class="anchor" href="#keys">Several keys and failover</a></h2>
+    <p>One OpenAI provider can hold several keys: press <span class="ui">Add another key</span> under it, or paste several at once. Requests go to the first key that’s on, and when it runs out or is rate limited the next one takes over. To keep keys apart instead, say from two organizations, add the provider again: the second is <code>openai-2</code>.</p>
+    <ul>
+      <li><b>Spend caps.</b> <code>spend-cap</code> stops a key at a dollar amount a day, a month or in all, as the Usage tab prices its calls; routing then goes on to the other keys and the fallbacks.</li>
+      <li><b>Fallbacks.</b> <code>fallback</code> names where requests go when OpenAI is out of quota or down: another provider’s model or a routing group.</li>
+    </ul>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="ex-keys">Copy</button><pre id="ex-keys">magpie provider spend-cap openai &lt;key&gt; 20 month
+magpie provider key-balance openai &lt;key&gt; 25
+magpie provider fallback openai deepseek/deepseek-v4-pro</pre></div>
+
+    <h2 id="trouble"><a class="anchor" href="#trouble">Troubleshooting</a></h2>
+    <ul>
+      <li><b>“The encrypted content for item rs_… could not be verified”.</b> The conversation carries reasoning sealed under another key, organization or account. magpie asks again without those items; see <a href="#shaping">What magpie does</a>.</li>
+      <li><b>A model that answers only on <code>/v1/responses</code>.</b> magpie moves it to Responses and remembers it. <code>magpie model apis openai</code> shows which API each model is asked on.</li>
+      <li><b>A 400 over <code>prompt_cache_key</code>.</b> magpie asks again without the key it added.</li>
+      <li><b>Checking a key.</b> <code>magpie provider test openai</code> sends a tiny request through each endpoint, or to each model you name. Add <code>--as codex</code> or <code>--as claude-code</code> to send it the way that agent would.</li>
+    </ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
+    <h3>How do I use OpenAI’s models in Claude Code?</h3>
+    <p>Add your OpenAI API key in magpie (Providers, Add provider, OpenAI), then pick a model such as <code>gpt-6.1-sol</code> on Claude Code’s row, or run <code>magpie claude openai/gpt-6.1-sol</code>. OpenAI serves no Anthropic Messages API, so magpie translates Claude Code’s requests to OpenAI’s Responses API at <code>https://api.openai.com/v1</code> and the replies back, the reasoning summary as thinking.</p>
+    <h3>Can Codex use an OpenAI API key instead of a ChatGPT sign-in?</h3>
+    <p>Yes. Add the key, then run <code>magpie codex openai/gpt-6.1-sol</code>. Codex speaks Responses, so its requests go to OpenAI as they are, custom tools and reasoning included, and Fast is sent as priority processing. A ChatGPT Plus or Pro sign-in is set up separately, in Subscriptions.</p>
+    <h3>How do I use GPT models in OpenCode?</h3>
+    <p>Pick the model in magpie, or run <code>magpie opencode openai/gpt-6.1-sol</code>. OpenCode speaks Chat Completions, but OpenAI’s own models go to Responses first, so magpie translates OpenCode’s requests there and the replies back. To send a model on Chat Completions instead, run <code>magpie model api openai/gpt-5.5 chat</code>.</p>
+    <h3>Can Gemini CLI use OpenAI?</h3>
+    <p>Yes. Gemini CLI speaks Google’s Gemini API, so magpie translates its requests to OpenAI’s Responses API and the replies back, streaming and tool calls included. Run <code>magpie gemini model openai/gpt-6.1-sol</code>.</p>
+    <h3>Does magpie keep OpenAI’s prompt cache?</h3>
+    <p>Yes. Codex’s own <code>prompt_cache_key</code> goes on as it is. A translated request without one gets a key made from its session or first user message, hashed so it names nothing of the agent. With several keys, a conversation stays on its key while its cache is warm.</p>
+    <h3>Why does OpenAI say the encrypted content could not be verified?</h3>
+    <p>OpenAI reads only reasoning it sealed for the same key, organization or account. When a conversation carries reasoning sealed elsewhere, magpie asks again without those items and remembers it for the conversation.</p>
+    <h3>Does magpie support Azure OpenAI?</h3>
+    <p>Yes, as its own provider, Azure OpenAI. Give it the resource’s endpoint and key; magpie uses the v1 API under <code>/openai/v1</code>, sends the key in the <code>api-key</code> header and lists the resource’s deployments as models.</p>
+
+    <p><b>By provider:</b> <a href="/docs/deepseek">DeepSeek</a> · <a href="/docs/kimi">Kimi and Kimi Code</a> · <a href="/docs/glm">GLM Coding Plan</a> · <a href="/docs/qwen">Qwen</a> · <a href="/docs/minimax">MiniMax</a> · <a href="/docs/anthropic">Anthropic</a> · <a href="/docs/gemini">Gemini</a> · <a href="/docs/grok">Grok</a> · <a href="/docs/mistral">Mistral</a> · <a href="/docs/openrouter">OpenRouter</a> · <a href="/docs/copilot">GitHub Copilot</a> · <a href="/docs/ollama">Ollama</a></p>
+    <p style="margin-top:48px">Every agent: <a href="/docs/claude-code-models">Models in Claude Code</a>, <a href="/docs/codex-models">Models in Codex</a>, <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>, <a href="/docs/opencode-models">Models in OpenCode</a>. Ask on <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> if you get stuck.</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a href="/docs/remote">Remote magpie</a>
+    <a href="/docs/docker">Docker</a>
+    <a href="/docs/privacy">Privacy</a>
+    <a href="/docs/masking">Privacy masking</a>
+    <a href="/docs/mcp-router">MCP router</a>
+    <a href="/docs/library">Library</a>
+    <a href="/docs/claude-code-models">Models in Claude Code</a>
+    <a href="/docs/codex-models">Models in Codex</a>
+    <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a href="/docs/local-models">Local models</a>
+    <a href="/docs/opencode-models">Models in OpenCode</a>
+    <a href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/contributors">Contributors</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

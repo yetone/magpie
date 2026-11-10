@@ -55,6 +55,8 @@ DeepSeek, Kimi (Moonshot), GLM (Zhipu), Qwen, MiniMax, Anthropic (Claude), OpenA
 - [Grok in every agent](https://usemagpie.ai/docs/grok): an xAI API key in Claude Code, Codex, Gemini CLI and OpenCode; which API each agent's requests use, what magpie fixes for xAI, reasoning effort, web search, prompt cache and several keys.
 - [Mistral in every agent](https://usemagpie.ai/docs/mistral): a Mistral API key in Claude Code, Codex, Gemini CLI and OpenCode; the model list, what magpie fixes for Mistral (thinking parts, refused fields), effort, search, cache and the plan card.
 - [Ollama in every agent](https://usemagpie.ai/docs/ollama): local Ollama, Ollama on another computer and Ollama Cloud in Claude Code, Codex, Gemini CLI and OpenCode; addresses, model list, context window, reasoning, tools, masking, pricing, and magpie as an Ollama server.
+- [Anthropic in every agent](https://usemagpie.ai/docs/anthropic): an Anthropic API key in Claude Code, Codex, Gemini CLI and OpenCode; endpoints, the model list and 1M context, prompt cache marks (5-minute and 1-hour), adaptive thinking and effort, web search, cost and workspaces.
+- [OpenAI in every agent](https://usemagpie.ai/docs/openai): an OpenAI API key (or Azure OpenAI) in Claude Code, Codex, Gemini CLI and OpenCode; Responses vs Chat Completions, prompt_cache_key, reasoning effort and Fast (priority tier), web search, cost and several keys.
 - [Intent routing](https://usemagpie.ai/docs/intent): how a turn is routed by what the user asks for.
 - [Privacy masking](https://usemagpie.ai/docs/masking): what is masked before a request leaves the computer and how values come back.
 - [Library](https://usemagpie.ai/docs/library): instructions, MCP servers, skills, hooks and subagents for each agent.

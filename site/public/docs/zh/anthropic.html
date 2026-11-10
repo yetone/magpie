@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anthropic 接入 Claude Code、Codex、Gemini CLI 和 OpenCode · magpie</title>
+<meta name="description" content="用 magpie 把 Anthropic API Key 接入 Claude Code、Codex、Gemini CLI 和 OpenCode：Key 只添加一次，每个工具各选一个 Claude 模型，magpie 负责把各工具的请求转换成 Anthropic Messages 接口能接受的样子，保住提示缓存和 Claude 签名的思考，按每个模型调整推理强度，统计缓存写入和费用，并在多个 Key 之间分配请求。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/anthropic">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/anthropic">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/anthropic">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/anthropic">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/anthropic">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Anthropic 接入 Claude Code、Codex、Gemini CLI 和 OpenCode">
+<meta property="og:description" content="用 magpie 把 Anthropic API Key 接入 Claude Code、Codex、Gemini CLI 和 OpenCode：Key 只添加一次，每个工具各选一个 Claude 模型，magpie 负责把各工具的请求转换成 Anthropic Messages 接口能接受的样子，保住提示缓存和 Claude 签名的思考，按每个模型调整推理强度，统计缓存写入和费用，并在多个 Key 之间分配请求。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/anthropic">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Anthropic 接入 Claude Code、Codex、Gemini CLI 和 OpenCode",
+   "description": "用 magpie 把 Anthropic API Key 接入 Claude Code、Codex、Gemini CLI 和 OpenCode：Key 只添加一次，每个工具各选一个 Claude 模型，magpie 负责把各工具的请求转换成 Anthropic Messages 接口能接受的样子，保住提示缓存和 Claude 签名的思考，按每个模型调整推理强度，统计缓存写入和费用，并在多个 Key 之间分配请求。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/anthropic",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "怎么在 Claude Code 里用 Anthropic API Key？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "在 magpie 里添加 Anthropic API Key（供应商、添加供应商、Anthropic），然后在 Claude Code 那一行选一个 Claude 模型，比如 claude-opus-5-5，或者运行 magpie claude anthropic/claude-opus-5-5。Claude Code 说的是 Anthropic Messages，所以请求按它发出的样子发到 https://api.anthropic.com，只在路上修掉模型会拒绝的内容。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex 能用 Claude 模型吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。Codex 说的是 OpenAI Responses 接口，Anthropic 不提供，所以 magpie 把每个请求转换成 Messages 接口，再把回复转换回来。它会给提示加上保留一小时的缓存标记，并通过 Codex 的 encrypted_content 在工具调用循环里保住 Claude 签过名的思考。运行 magpie codex anthropic/claude-opus-5-5 即可。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "怎么通过 magpie 在 OpenCode 里用 Claude？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "在 magpie 里选好模型，或者运行 magpie opencode anthropic/claude-sonnet-5-5。OpenCode 对 magpie 说的是 Chat Completions，所以 magpie 把它的请求转换成 Anthropic 的 Messages 接口，给提示加上缓存标记，并把推理强度换成这个模型能接受的样子。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Gemini CLI 能用 Claude 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。Gemini CLI 说的是 Google 的 Gemini 接口，magpie 会把它的请求转换成 Anthropic 的 Messages 接口，再把回复转换回来，流式输出和工具调用都包括在内。运行 magpie gemini model anthropic/claude-sonnet-5-5 即可。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie 转换的请求能用上 Anthropic 的提示缓存吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。Codex、Gemini CLI 和 OpenCode 的请求自己没有缓存标记，所以 magpie 标记系统提示和对话的最后一个块，最多两个标记，下一轮就能从缓存里读到之前的内容。自己带了 cache_control 的请求保留它自己的标记。Codex 的标记保留一小时，其他的五分钟。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "关掉思考时 Claude 为什么回 400？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "较新的 Claude 模型并不都接受 thinking disabled。magpie 给 Sonnet 5.5 发 between_tools；Opus 5.5 和 Fable 5 总是在思考，所以不发 thinking；Opus 5 和 Haiku 5.5 在 xhigh 或 max 时改按 high 请求。更早的 Claude 原样发送。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/anthropic" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/anthropic" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/anthropic" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>本页内容</p>
+    <a href="#add">添加</a>
+    <a href="#endpoints">接口地址</a>
+    <a href="#models">模型列表</a>
+    <a href="#agents">在各个工具里用</a>
+    <a href="#shaping">magpie 替你处理的请求</a>
+    <a href="#reasoning">推理</a>
+    <a href="#search">联网搜索</a>
+    <a href="#cost">费用与用量</a>
+    <a href="#keys">多个 Key</a>
+    <a href="#trouble">常见报错</a>
+    <a href="#faq">常见问题</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 供应商</p>
+    <h1>Anthropic 接入 Claude Code、Codex、Gemini CLI 和 OpenCode</h1>
+    <p class="lede">Anthropic 通过 <code>api.anthropic.com</code> 上的 Messages 接口提供 Claude。把 Anthropic 的 API Key 添加到 magpie 一次，Claude Code、Codex、Gemini CLI、OpenCode 以及你接入的其他工具，都能通过 magpie 的本地网关 <code>127.0.0.1:3425</code> 使用 Claude 模型，每个工具各用各的模型。说其他接口的工具，magpie 会在路上替它转换。</p>
+
+    <h2 id="add"><a class="anchor" href="#add">添加 Anthropic</a></h2>
+    <ol class="steps">
+      <li><b>拿到 Key</b>在 <a href="https://console.anthropic.com/settings/keys">console.anthropic.com</a> 创建。API Key 以 <code>sk-ant-api</code> 开头。</li>
+      <li><b>添加供应商</b>在 magpie 的 <span class="ui">供应商</span> 页点 <span class="ui">＋ 添加供应商</span>，选 <span class="ui">Anthropic</span>，粘贴 Key 并保存。magpie 会向 Anthropic 查询这个 Key 能用哪些模型。</li>
+      <li><b>给工具选上</b>在 <span class="ui">Agent</span> 页点工具那一行的模型，选一个 Claude 模型，比如 <code>claude-opus-5-5</code>。</li>
+    </ol>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-add">复制</button><pre id="ex-add">magpie provider add anthropic &lt;key&gt;
+magpie provider test anthropic</pre></div>
+    <p>magpie 里的模型 id 是 <code>供应商/模型</code>，所以 Anthropic 的模型写作 <code>anthropic/claude-opus-5-5</code>：前面是供应商，后面是 Anthropic 自己的 id。Key 保存在 magpie 的设置里，magpie 不会从 shell 里读取它。</p>
+    <p>已经在 OpenCode 或 Alma 里配好了 Anthropic？magpie 从这些应用导入时，会把它变成 Anthropic 供应商。</p>
+    <p>本页讲的是 API Key。Claude Pro 或 Max 订阅另有登录方式，见 <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>。</p>
+
+    <h2 id="endpoints"><a class="anchor" href="#endpoints">接口地址</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>接口</th><th>地址</th><th>用途</th></tr>
+      <tr><td>Messages</td><td><code>https://api.anthropic.com/v1/messages</code></td><td>所有工具的请求：Claude Code 的原样发送，Codex、Gemini CLI 和 OpenCode 的转换后发送</td></tr>
+      <tr><td>模型</td><td><code>https://api.anthropic.com/v1/models</code></td><td>模型列表</td></tr>
+    </table></div>
+    <p>magpie 的 Anthropic 供应商没有 Chat Completions 或 Responses 地址，所以说这两种接口的工具，以及说 Google Gemini 接口的工具，请求都会转换成 Messages，回复再转换回去，流式输出和工具调用都包括在内。</p>
+
+    <h2 id="models"><a class="anchor" href="#models">模型列表</a></h2>
+    <p>magpie 从 Anthropic 的 <code>https://api.anthropic.com/v1/models</code> 获取列表，每一页都会取到，所以工具里看到的就是你的 Key 能用的模型。名称、上下文窗口和价格来自 models.dev 的 <code>anthropic</code> 目录。工具能看到哪些模型，可以在供应商的模型列表里选，也可以在终端里选：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-models">复制</button><pre id="ex-models">magpie provider models anthropic +claude-opus-5-5 +claude-sonnet-5-5 +claude-haiku-5-5
+magpie provider refresh-every anthropic 1d</pre></div>
+    <p>Claude Opus 5.5、Sonnet 5.5 和 Haiku 5.5 能接受 1M token。窗口这么长时，Codex 会在 272K 处压缩对话，而不是每一轮都发送越来越多的内容；<code>magpie model compact off</code> 可以让它一直用到整个窗口。在 Claude Code 里，Claude 模型按它自己的窗口运行，和 Anthropic 一样：200K，除非选的是带 <code>[1m]</code> 的那个。</p>
+
+    <h2 id="agents"><a class="anchor" href="#agents">在各个工具里用</a></h2>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-agents">复制</button><pre id="ex-agents">magpie claude anthropic/claude-opus-5-5
+magpie codex anthropic/claude-opus-5-5
+magpie gemini model anthropic/claude-sonnet-5-5
+magpie opencode anthropic/claude-sonnet-5-5</pre></div>
+    <ul>
+      <li><b>Claude Code</b> 说的是 Anthropic Messages，所以请求按 Claude Code 发出的样子发给 Anthropic，它自己的缓存标记、思考和 beta 都保留，只做下面这些修正。<a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>。</li>
+      <li><b>Codex</b> 说的是 OpenAI Responses，Anthropic 不提供这个接口。magpie 把每个请求转换成 Messages，再把回复转换回来，给提示加上 Anthropic 的缓存标记，并在工具调用循环里保住 Claude 签过名的思考。<a href="/docs/zh/codex-models">Codex 接入其他模型</a>。</li>
+      <li><b>Gemini CLI</b> 说的是 Google 的 Gemini 接口。magpie 把每个请求转换成 Messages，再把回复转换回来。<a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>。</li>
+      <li><b>OpenCode</b> 对 magpie 说的是 Chat Completions，所以它的请求也会转换成 Messages。<a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>。</li>
+    </ul>
+
+    <h2 id="shaping"><a class="anchor" href="#shaping">magpie 替你处理的请求</a></h2>
+    <p>magpie 转换的请求，会按 Anthropic Messages 接口要求的样子来构造；Anthropic 会拒绝的几样东西，在 Claude Code 的请求里也会修正：</p>
+    <ul>
+      <li><b>提示缓存。</b>Anthropic 只缓存到标了 <code>cache_control</code> 的那个块为止，而从其他接口来的请求没有任何标记。magpie 会标记系统提示（没有系统提示时标记最后一个工具）和对话的最后一个块，最多两个标记，这样下一轮就能从缓存里读到之前的内容。自己带了 <code>cache_control</code> 的请求保留它自己的标记，magpie 不再添加。</li>
+      <li><b>Codex 的一小时缓存。</b>Codex 的两轮之间常常隔了五分钟以上，所以 magpie 给它的请求加的标记保留一小时，除非 Codex 请求了 <code>prompt_cache_retention</code> <code>in_memory</code>。上游不接受一小时的 <code>ttl</code> 时，magpie 改用五分钟的标记重新请求，并记住这一点。</li>
+      <li><b>签名的思考。</b>Claude 会给自己的思考签名，并要求在工具调用循环的下一轮原样传回。Codex 在推理条目的 <code>encrypted_content</code> 里拿到每个思考块，签名也在里面，magpie 再原样发回给 Anthropic；被遮蔽的思考也原封不动地传回。没有签名的思考会被去掉，其他厂商签名的思考也会被去掉（比如路由分组里先用 DeepSeek 时留下的），因为 Claude 会拒绝它们。</li>
+      <li><b>工具调用。</b>被中断的一轮留下没有回应的调用时，magpie 会补一个说明结果不可用的回应；回应了一个 Anthropic 从没见过的调用时，这个回应会变成文本，否则 Anthropic 会拒绝整个请求。历史里有调用、却没声明工具时，magpie 会声明这些工具，并设 <code>tool_choice</code> 为 none。必须调用工具时发 <code>any</code>，指定某个工具时发 <code>tool</code>，关掉并行调用时发 <code>disable_parallel_tool_use</code>。</li>
+      <li><b>采样参数。</b>Opus 4.7 及以后、Sonnet 5 和 5.5、Haiku 5.5 以及 Fable 5 会拒绝 <code>temperature</code>、<code>top_p</code> 和 <code>top_k</code>，而 Claude Code 的自动模式分类器会发送它们。magpie 对这些模型不发送这几项。</li>
+      <li><b>Beta。</b>工具在 <code>anthropic-beta</code> 里请求的 beta 会发给 Anthropic，只有 Claude Code 自己登录用的 beta（<code>oauth-…</code>）除外，它指向的凭据不会离开 magpie。</li>
+      <li><b>结构化输出。</b>要求按 schema 输出 JSON 的请求，会以 <code>output_config.format</code> 发给 Anthropic。</li>
+    </ul>
+
+    <h2 id="reasoning"><a class="anchor" href="#reasoning">推理</a></h2>
+    <ul>
+      <li><b>推理强度。</b>Claude 4.6 及以后的模型是自适应思考。转换后的请求，推理强度放在 <code>output_config.effort</code> 里，思考设为自适应并要求显示摘要（<code>display: summarized</code>），因为 Opus 4.7 及以后不要求就不返回思考文本。Opus 和 Sonnet 4.6 没有 xhigh，所以 xhigh 按 max 请求。</li>
+      <li><b>思考预算。</b>更早的 Claude 模型用思考预算：low 4,096 token，medium 10,000，high 24,000，xhigh 和 max 32,000，并且会控制在请求的 <code>max_tokens</code> 之内。</li>
+      <li><b>发给新模型的预算。</b>带思考预算的请求发给 4.6 及以后的模型时（Claude Opus 5.5 会以 “requires adaptive thinking” 拒绝），会改成自适应思考，预算换成最接近的推理强度。</li>
+      <li><b>关闭推理。</b>Codex 或 Chat 客户端把推理强度设为 none 时，思考会被关掉，而不是降成一个很低的预算。每个模型关闭的方式不同：Sonnet 5.5 发 <code>between_tools</code>，高于 high 的强度按 high 请求；Opus 5.5 和 Fable 5 总是在思考，所以不发 thinking；Opus 5 和 Haiku 5.5 在 xhigh 或 max 时改按 high 请求；更早的 Claude 原样接受。Claude Code 关掉思考的请求也按同样的方式处理。</li>
+    </ul>
+
+    <h2 id="search"><a class="anchor" href="#search">联网搜索</a></h2>
+    <p>Anthropic 自己就能联网搜索。Claude Code 的 WebSearch 原样发给 Anthropic。Codex、Gemini CLI 或 Chat 客户端要求搜索时，magpie 交给 Claude 的是 Anthropic 自己的 <code>web_search_20250305</code> 工具，每个请求最多搜索五次，而不是 magpie 的搜索器。</p>
+
+    <h2 id="cost"><a class="anchor" href="#cost">费用与用量</a></h2>
+    <ul>
+      <li><b>缓存 token。</b><span class="ui">用量</span> 页按 Anthropic 报告的数字，把缓存读取、五分钟的缓存写入和一小时的缓存写入，与其余的提示分开统计。</li>
+      <li><b>费用。</b>用量页按 models.dev 上 Anthropic 的价格给每次调用计价。目录里没给一小时写入价格时，按输入价格的两倍计，和 Anthropic 的计费一样。magpie 不会从 Anthropic 读取余额；可以用 <code>key-balance</code> 自己填上，用量页会显示它减去 magpie 此后给这个 Key 的调用算出的费用。</li>
+      <li><b>保住缓存。</b>有多个 Key 时，只要一段对话的缓存值得保留（1,024 个 token 以上），而且还热着（五分钟内读过，按一小时写入的则是一小时内），它就一直用同一个 Key。</li>
+    </ul>
+
+    <h2 id="keys"><a class="anchor" href="#keys">多个 Key 与故障切换</a></h2>
+    <p>一个 Anthropic 供应商可以放多个 Key：在它下面点 <span class="ui">添加另一个密钥</span>，也可以一次粘贴好几个。请求先走第一个开着的 Key，它用完或被限流时由下一个接替。</p>
+    <ul>
+      <li><b>花费上限。</b><code>spend-cap</code> 给某个 Key 设一个每天、每月或总计的美元上限，按用量页的计价算；到了上限，路由就转去其他 Key 和备用模型。</li>
+      <li><b>备用模型。</b><code>fallback</code> 指定 Anthropic 额度用完或挂掉时请求去哪：另一个供应商的模型，或一个路由分组。</li>
+      <li><b>工作区。</b>能访问多个工作区的 Key，用 <code>anthropic-workspace-id</code> 请求头指定每个请求用哪个工作区。用另一个 id 再添加一次这个供应商，在它的请求头一栏或终端里设好这个请求头；它的模型就写作 <code>anthropic-ws2/…</code>。</li>
+    </ul>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-keys">复制</button><pre id="ex-keys">magpie provider spend-cap anthropic &lt;key&gt; 20 month
+magpie provider key-balance anthropic &lt;key&gt; 25
+magpie provider fallback anthropic deepseek/deepseek-v4-pro
+magpie provider add anthropic &lt;key&gt; id=anthropic-ws2 name="Anthropic WS2" header.anthropic-workspace-id=wrkspc_…</pre></div>
+
+    <h2 id="trouble"><a class="anchor" href="#trouble">常见报错</a></h2>
+    <ul>
+      <li><b>“requires adaptive thinking”。</b>给 4.6 及以后的模型发了思考预算。magpie 会改成自适应思考，用最接近的推理强度，见 <a href="#reasoning">推理</a>。</li>
+      <li><b>关闭思考时报 400。</b>Sonnet 5.5、Opus 5.5 和 Fable 5 都拒绝 <code>disabled</code>，Opus 5 和 Haiku 5.5 在 xhigh 和 max 时拒绝。magpie 按每个模型接受的方式关闭思考。</li>
+      <li><b>“<code>temperature</code> is deprecated for this model”。</b>对拒绝 <code>temperature</code>、<code>top_p</code> 和 <code>top_k</code> 的模型，magpie 不发送这几项。</li>
+      <li><b>“<code>tool_use</code> ids were found without <code>tool_result</code> blocks”。</b>被中断的一轮留下了没有回应的调用。在 magpie 转换的请求里，这个调用会补上一个说明结果不可用的回应。</li>
+      <li><b>“Invalid <code>signature</code> in <code>thinking</code> block”。</b>这段对话之前在其他厂商的模型上跑过。magpie 会把其他厂商签名的、或没有签名的思考，从发给 Claude 的内容里去掉。</li>
+      <li><b>关于 <code>cache_control</code> 和 <code>ttl</code> 的 400。</b>上游不接受 magpie 给 Codex 加的一小时标记。magpie 会改用五分钟的标记重新请求，之后对这个供应商一直这样。</li>
+      <li><b>“this is an Anthropic API key, not a setup-token”。</b>这个 Key 被填进了 Claude 订阅的登录里。请把它添加成 Anthropic 供应商。</li>
+      <li><b>检查 Key。</b><code>magpie provider test anthropic</code> 会向每个接口发一个很小的请求，或者发给你指定的每个模型。加上 <code>--as codex</code> 或 <code>--as claude-code</code>，就按那个工具的方式发送。</li>
+    </ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>怎么在 Claude Code 里用 Anthropic API Key？</h3>
+    <p>在 magpie 里添加 Anthropic API Key（供应商、添加供应商、Anthropic），然后在 Claude Code 那一行选一个 Claude 模型，比如 <code>claude-opus-5-5</code>，或者运行 <code>magpie claude anthropic/claude-opus-5-5</code>。Claude Code 说的是 Anthropic Messages，所以请求按它发出的样子发到 <code>https://api.anthropic.com</code>，只在路上修掉模型会拒绝的内容。</p>
+    <h3>Codex 能用 Claude 模型吗？</h3>
+    <p>能。Codex 说的是 OpenAI Responses 接口，Anthropic 不提供，所以 magpie 把每个请求转换成 Messages 接口，再把回复转换回来。它会给提示加上保留一小时的缓存标记，并通过 Codex 的 <code>encrypted_content</code> 在工具调用循环里保住 Claude 签过名的思考。运行 <code>magpie codex anthropic/claude-opus-5-5</code> 即可。</p>
+    <h3>怎么通过 magpie 在 OpenCode 里用 Claude？</h3>
+    <p>在 magpie 里选好模型，或者运行 <code>magpie opencode anthropic/claude-sonnet-5-5</code>。OpenCode 对 magpie 说的是 Chat Completions，所以 magpie 把它的请求转换成 Anthropic 的 Messages 接口，给提示加上缓存标记，并把推理强度换成这个模型能接受的样子。</p>
+    <h3>Gemini CLI 能用 Claude 吗？</h3>
+    <p>能。Gemini CLI 说的是 Google 的 Gemini 接口，magpie 会把它的请求转换成 Anthropic 的 Messages 接口，再把回复转换回来，流式输出和工具调用都包括在内。运行 <code>magpie gemini model anthropic/claude-sonnet-5-5</code> 即可。</p>
+    <h3>magpie 转换的请求能用上 Anthropic 的提示缓存吗？</h3>
+    <p>能。Codex、Gemini CLI 和 OpenCode 的请求自己没有缓存标记，所以 magpie 标记系统提示和对话的最后一个块，最多两个标记，下一轮就能从缓存里读到之前的内容。自己带了 <code>cache_control</code> 的请求保留它自己的标记。Codex 的标记保留一小时，其他的五分钟。</p>
+    <h3>关掉思考时 Claude 为什么回 400？</h3>
+    <p>较新的 Claude 模型并不都接受 <code>thinking</code> <code>disabled</code>。magpie 给 Sonnet 5.5 发 <code>between_tools</code>；Opus 5.5 和 Fable 5 总是在思考，所以不发 thinking；Opus 5 和 Haiku 5.5 在 xhigh 或 max 时改按 high 请求。更早的 Claude 原样发送。</p>
+
+    <p><b>按供应商：</b><a href="/docs/zh/deepseek">DeepSeek</a> · <a href="/docs/zh/kimi">Kimi 与 Kimi Code</a> · <a href="/docs/zh/glm">GLM 编程套餐</a> · <a href="/docs/zh/qwen">通义千问</a> · <a href="/docs/zh/minimax">MiniMax</a> · <a href="/docs/zh/openai">OpenAI</a> · <a href="/docs/zh/gemini">Gemini</a> · <a href="/docs/zh/grok">Grok</a> · <a href="/docs/zh/mistral">Mistral</a> · <a href="/docs/zh/openrouter">OpenRouter</a> · <a href="/docs/zh/copilot">GitHub Copilot</a> · <a href="/docs/zh/ollama">Ollama</a></p>
+    <p style="margin-top:48px">各个工具的指南：<a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>、<a href="/docs/zh/codex-models">Codex 接入其他模型</a>、<a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>、<a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>。遇到问题可以在 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

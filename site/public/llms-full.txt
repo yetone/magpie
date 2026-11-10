@@ -416,7 +416,7 @@ With several keys or accounts, magpie can spread Claude Code’s requests over t
 
 The routing modes are in [Get started](https://usemagpie.ai/docs/start#routing).
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 ## FAQ
 
@@ -548,7 +548,7 @@ Requests on a Claude subscription run through the Claude Code installed on your 
 
 The routing modes are in [Get started](https://usemagpie.ai/docs/start#routing).
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 ## FAQ
 
@@ -665,7 +665,7 @@ Gemini CLI still speaks the Gemini API; magpie translates each request for the m
 
 The routing modes and rules are in [Get started](https://usemagpie.ai/docs/start#routing).
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 ## FAQ
 
@@ -998,7 +998,7 @@ magpie opencode default
 
 It puts back the `model` and `small_model` OpenCode had before magpie, and takes the `magpie` provider out of the file.
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 ## FAQ
 
@@ -1670,7 +1670,7 @@ Yes. magpie reads OpenRouter’s credits endpoint and shows what is left in doll
 
 Asked at the Anthropic base, OpenRouter answers with its catalog under `anthropic/` names it doesn’t serve. magpie fetches the list from the Chat Completions base, `https://openrouter.ai/api/v1`, and a provider given only OpenRouter’s Anthropic base is told to add that Chat base.
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
 
@@ -1817,7 +1817,7 @@ Yes. magpie reads the plan from GitHub: Free, Pro, Pro+, Max, Education, Busines
 
 magpie lists what Copilot’s `/models` gives the account: chat models only, without the ones no model picker offers or the account can’t turn on. A model Copilot answered with “The requested model is not supported.” is left out for 6 hours, then tried again in case your plan changed.
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
 
@@ -1973,7 +1973,7 @@ Yes. Add the Google Vertex AI preset with your project’s id, for example `magp
 
 Yes. Both are subscriptions: `magpie accounts add gemini` or `magpie accounts add antigravity`, then pick a `gemini/…` or `antigravity/…` model. Code Assist needs a Standard or Enterprise account with a Google Cloud project of its own.
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
 
@@ -2111,7 +2111,7 @@ xAI can’t read reasoning that another vendor sealed, and answers “Could not 
 
 No. The Usage tab counts tokens, cache and cost for every Grok call, priced from models.dev, but magpie reads no balance from xAI. You can type the balance in with `magpie provider key-balance`, and the Usage page shows it less what magpie has priced since.
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Gemini](https://usemagpie.ai/docs/gemini) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
 
@@ -2244,7 +2244,7 @@ Mistral turns away any field it doesn’t know. magpie sends an earlier turn’s
 
 Yes. A Vibe key from a Le Chat plan (Pro, Student or Team) shows how much of the month’s Vibe budget is used, in the currency Mistral bills in, and when it resets, with the plan’s name. A Studio key made in the console shows the organization’s API budget instead, as “API · Month”.
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
 
@@ -2428,7 +2428,302 @@ No. The Ollama preset takes none. Ollama Cloud needs one.
 
 Other local servers, such as LM Studio, oMLX, vLLM and llama.cpp’s server, are in [Local models](https://usemagpie.ai/docs/local-models). To let a local model classify each request for routing, see [Intent routing](https://usemagpie.ai/docs/intent).
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot)
+
+Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
+
+---
+
+Source: https://usemagpie.ai/docs/anthropic
+
+# Anthropic in Claude Code, Codex, Gemini CLI and OpenCode
+
+Anthropic serves Claude on its Messages API, at `api.anthropic.com`. Add an Anthropic API key to magpie once, and Claude Code, Codex, Gemini CLI, OpenCode and every other agent you connect can use Claude models through magpie’s local gateway at `127.0.0.1:3425`, each agent with a model of its own. Agents that speak another API are translated on the way.
+
+## Add Anthropic
+
+1. **Get a key.** Make one on [console.anthropic.com](https://console.anthropic.com/settings/keys). An API key starts with `sk-ant-api`.
+2. **Add the provider.** In magpie’s Providers tab, press ＋ Add provider, pick Anthropic, paste the key and save. magpie asks Anthropic which models the key can use.
+3. **Pick it for an agent.** In the Agents tab, click the model on the agent’s row and choose a Claude model such as `claude-opus-5-5`.
+
+```
+magpie provider add anthropic <key>
+magpie provider test anthropic
+```
+
+Model ids in magpie are `provider/model`, so Anthropic’s read `anthropic/claude-opus-5-5`: the provider, then Anthropic’s own id. The key is kept in magpie’s settings; magpie doesn’t take it from your shell.
+
+Already set Anthropic up in OpenCode or Alma? magpie’s import from those apps brings it in as the Anthropic provider.
+
+This page is about an API key. A Claude Pro or Max subscription is signed in to separately; see [Subscriptions in any agent](https://usemagpie.ai/docs/subscriptions).
+
+## Endpoints
+
+| API | Address | Used for |
+| --- | --- | --- |
+| Messages | `https://api.anthropic.com/v1/messages` | every agent’s requests: Claude Code’s as sent, Codex’s, Gemini CLI’s and OpenCode’s translated |
+| Models | `https://api.anthropic.com/v1/models` | the model list |
+
+magpie’s Anthropic provider has no Chat Completions or Responses address, so an agent that speaks either, or Google’s Gemini API, is translated to Messages and the reply translated back, streaming and tool calls included.
+
+## Model list
+
+magpie fetches the list from Anthropic, at `https://api.anthropic.com/v1/models`, every page of it, so agents see the models your key can use. Names, context windows and prices come from models.dev’s `anthropic` catalog. Pick the models agents see in the provider’s model list, or from the terminal:
+
+```
+magpie provider models anthropic +claude-opus-5-5 +claude-sonnet-5-5 +claude-haiku-5-5
+magpie provider refresh-every anthropic 1d
+```
+
+Claude Opus 5.5, Sonnet 5.5 and Haiku 5.5 take 1M tokens. On a window that long, Codex compacts a conversation at 272K rather than send ever more of it on every turn; `magpie model compact off` lets it run to the whole window. In Claude Code a Claude model runs to its own window, as Anthropic runs it: 200K unless a `[1m]` one is picked.
+
+## In each agent
+
+```
+magpie claude anthropic/claude-opus-5-5
+magpie codex anthropic/claude-opus-5-5
+magpie gemini model anthropic/claude-sonnet-5-5
+magpie opencode anthropic/claude-sonnet-5-5
+```
+
+- **Claude Code.** speaks Anthropic Messages, so its requests go to Anthropic as Claude Code sent them, its own cache marks, thinking and betas included, with the fixes below. [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models).
+- **Codex.** speaks OpenAI Responses, which Anthropic doesn’t serve. magpie translates each request to Messages and the reply back, marks the prompt for Anthropic’s cache, and keeps Claude’s signed thinking across a tool loop. [Models in Codex](https://usemagpie.ai/docs/codex-models).
+- **Gemini CLI.** speaks Google’s Gemini API. magpie translates each request to Messages and the reply back. [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models).
+- **OpenCode.** speaks Chat Completions to magpie, so its requests are translated to Messages too. [Models in OpenCode](https://usemagpie.ai/docs/opencode-models).
+
+## What magpie does for Anthropic
+
+A request magpie translates is built the way Anthropic’s Messages API wants it, and a few things Anthropic would refuse are fixed on Claude Code’s requests too:
+
+- **Prompt caching..** Anthropic caches a prompt only up to a block marked with `cache_control`, and a request from another API has no marks. magpie marks the system prompt (or the last tool, when there is no system prompt) and the conversation’s last block, two marks at most, so the next turn reads what came before from the cache. A request that brings `cache_control` of its own keeps its marks, and magpie adds none.
+- **An hour’s cache for Codex..** Codex’s turns are often more than five minutes apart, so the marks magpie adds to its requests last an hour, unless Codex asks `prompt_cache_retention` `in_memory`. An upstream that turns the hour’s `ttl` away is asked again with five-minute marks, and magpie remembers it.
+- **Signed thinking..** Claude signs its thinking and wants it back on a tool loop’s next turn. Codex gets each thinking block, signature included, in its reasoning item’s `encrypted_content`, and magpie sends it back to Anthropic as it was; redacted thinking goes back sealed. Thinking with no signature is left out, and so is thinking another vendor signed, such as DeepSeek’s earlier in a routing group, which Claude refuses.
+- **Tool calls..** A call an interrupted turn left unanswered gets a result saying it is unavailable, and a result for a call Anthropic never saw becomes text, where Anthropic would refuse the request. A history with calls but no tools declared declares them, with `tool_choice` none. A required tool goes as `any`, a named one as `tool`, and parallel calls turned off as `disable_parallel_tool_use`.
+- **Sampling..** Opus 4.7 and later, Sonnet 5 and 5.5, Haiku 5.5 and Fable 5 refuse `temperature`, `top_p` and `top_k`, which Claude Code’s auto mode classifier sends. magpie leaves them out for those models.
+- **Betas..** The betas an agent asks in `anthropic-beta` go on to Anthropic, save Claude Code’s own sign-in beta (`oauth-…`), which names a credential that never leaves magpie.
+- **Structured output..** A request for JSON in a schema goes to Anthropic as `output_config.format`.
+
+## Reasoning
+
+- **Effort..** Claude models from 4.6 on think adaptively. A translated request’s effort goes as `output_config.effort`, with thinking adaptive and its summary shown (`display: summarized`), since Opus 4.7 and later leave the thinking text out unless asked. Opus and Sonnet 4.6 have no xhigh, so xhigh is asked as max.
+- **Budgets..** Older Claude models get a thinking budget: 4,096 tokens at low, 10,000 at medium, 24,000 at high, 32,000 at xhigh and max, fitted under the request’s `max_tokens`.
+- **A budget to a newer model..** A request with a thinking budget to a model from 4.6 on, which Claude Opus 5.5 refuses (“requires adaptive thinking”), goes as adaptive thinking, the budget asked as the nearest effort.
+- **Reasoning off..** Codex’s or a Chat client’s effort none turns thinking off, not down to a low budget. Each model takes off its own way: Sonnet 5.5 is sent `between_tools`, an effort above high asked as high; Opus 5.5 and Fable 5 always think, so thinking is left out; Opus 5 and Haiku 5.5 are asked high in place of xhigh or max; older Claudes take it as sent. Claude Code’s requests with thinking off are fitted the same way.
+
+## Web search
+
+Anthropic searches the web itself. Claude Code’s WebSearch goes to Anthropic as it is. When Codex, Gemini CLI or a Chat client asks to search, magpie offers Claude Anthropic’s own `web_search_20250305` tool, up to five searches a request, rather than magpie’s searcher.
+
+## Cost and usage
+
+- **Cache tokens..** The Usage tab counts cache reads, five-minute cache writes and hour-long cache writes apart from the rest of the prompt, as Anthropic reports them.
+- **Cost..** The Usage tab prices each call with Anthropic’s prices from models.dev. An hour-long write is priced at twice the input price where the catalog gives none, as Anthropic bills it. magpie reads no balance from Anthropic; type it in with `key-balance`, and the Usage page shows it less what magpie has priced the key’s calls at since.
+- **Keeping the cache..** With several keys, a conversation stays on its key while its cache is worth keeping, 1,024 tokens or more, and still warm: read within the last five minutes, or within the hour when it was written for an hour.
+
+## Several keys and failover
+
+One Anthropic provider can hold several keys: press Add another key under it, or paste several at once. Requests go to the first key that’s on, and when it runs out or is rate limited the next one takes over.
+
+- **Spend caps..** `spend-cap` stops a key at a dollar amount a day, a month or in all, as the Usage tab prices its calls; routing then goes on to the other keys and the fallbacks.
+- **Fallbacks..** `fallback` names where requests go when Anthropic is out of quota or down: another provider’s model or a routing group.
+- **Workspaces..** A key that reaches several workspaces names the one each request is for with the `anthropic-workspace-id` header. Add the provider again under an id of its own, with the header set in its Headers field or from the terminal; its models then read `anthropic-ws2/…`.
+
+```
+magpie provider spend-cap anthropic <key> 20 month
+magpie provider key-balance anthropic <key> 25
+magpie provider fallback anthropic deepseek/deepseek-v4-pro
+magpie provider add anthropic <key> id=anthropic-ws2 name="Anthropic WS2" header.anthropic-workspace-id=wrkspc_…
+```
+
+## Troubleshooting
+
+- **“requires adaptive thinking”..** A thinking budget sent to a model from 4.6 on. magpie sends it as adaptive thinking with the nearest effort; see Reasoning.
+- **400 when thinking is turned off..** Sonnet 5.5, Opus 5.5 and Fable 5 each refuse `disabled`, and Opus 5 and Haiku 5.5 refuse it at xhigh and max. magpie sends each model off the way it takes it.
+- **“`temperature` is deprecated for this model”..** magpie leaves `temperature`, `top_p` and `top_k` out for the models that refuse them.
+- **“`tool_use` ids were found without `tool_result` blocks”..** An interrupted turn left a call unanswered. In a request magpie translates, the call gets a result saying it is unavailable.
+- **“Invalid `signature` in `thinking` block”..** The conversation ran on another vendor first. magpie leaves thinking another vendor signed, or left unsigned, out of what goes to Claude.
+- **A 400 about `cache_control` and `ttl`..** The upstream doesn’t take the hour-long marks magpie adds for Codex. magpie asks again with five-minute marks and keeps to them for that provider.
+- **“this is an Anthropic API key, not a setup-token”..** The key went to the Claude subscription’s sign-in. Add it as the Anthropic provider instead.
+- **Checking a key..** `magpie provider test anthropic` sends a tiny request through each endpoint, or to each model you name. Add `--as codex` or `--as claude-code` to send it the way that agent would.
+
+## FAQ
+
+### How do I use an Anthropic API key in Claude Code?
+
+Add your Anthropic API key in magpie (Providers, Add provider, Anthropic), then pick a Claude model such as `claude-opus-5-5` on Claude Code’s row, or run `magpie claude anthropic/claude-opus-5-5`. Claude Code speaks Anthropic Messages, so its requests go to `https://api.anthropic.com` as it sent them, with what the model would refuse fixed on the way.
+
+### Can Codex use Claude models?
+
+Yes. Codex speaks OpenAI Responses, which Anthropic doesn’t serve, so magpie translates each request to the Messages API and the reply back. It marks the prompt for Anthropic’s cache with marks that last an hour, and keeps Claude’s signed thinking across a tool loop in Codex’s `encrypted_content`. Run `magpie codex anthropic/claude-opus-5-5`.
+
+### How do I use Claude in OpenCode through magpie?
+
+Pick the model in magpie, or run `magpie opencode anthropic/claude-sonnet-5-5`. OpenCode speaks Chat Completions to magpie, so magpie translates its requests to Anthropic’s Messages API, marks the prompt for the cache and fits the reasoning effort to the model.
+
+### Can Gemini CLI use Claude?
+
+Yes. Gemini CLI speaks Google’s Gemini API, so magpie translates its requests to Anthropic’s Messages API and the replies back, streaming and tool calls included. Run `magpie gemini model anthropic/claude-sonnet-5-5`.
+
+### Does magpie keep Anthropic’s prompt cache for agents it translates?
+
+Yes. A request from Codex, Gemini CLI or OpenCode has no cache marks of its own, so magpie marks the system prompt and the conversation’s last block, two marks at most, and the next turn reads what came before from the cache. A request that brings its own `cache_control` keeps its marks. Codex’s marks last an hour, the rest five minutes.
+
+### Why does Claude answer 400 when thinking is turned off?
+
+Newer Claude models don’t all take `thinking` `disabled`. magpie sends Sonnet 5.5 `between_tools`, leaves thinking out for Opus 5.5 and Fable 5, which always think, and asks Opus 5 and Haiku 5.5 at high in place of xhigh or max. Older Claudes get it as sent.
+
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+
+Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
+
+---
+
+Source: https://usemagpie.ai/docs/openai
+
+# OpenAI in Claude Code, Codex, Gemini CLI and OpenCode
+
+OpenAI serves its models on two APIs at `api.openai.com`: Responses and Chat Completions. Its own models are best asked on Responses, and its newest answer only there. Add an OpenAI API key to magpie once, and Claude Code, Codex, Gemini CLI, OpenCode and every other agent you connect can use OpenAI’s models through magpie’s local gateway at `127.0.0.1:3425`, each agent with a model of its own. Codex’s requests go to OpenAI as they are; the other agents’ are translated on the way.
+
+This page is about an API key from platform.openai.com. A ChatGPT Plus or Pro subscription is signed in to separately; see [Subscriptions in any agent](https://usemagpie.ai/docs/subscriptions).
+
+## Add OpenAI
+
+1. **Get a key.** Make one on [platform.openai.com](https://platform.openai.com/api-keys). It starts with `sk-`.
+2. **Add the provider.** In magpie’s Providers tab, press ＋ Add provider, pick OpenAI, paste the key and save. magpie asks OpenAI which models the key can use.
+3. **Pick it for an agent.** In the Agents tab, click the model on the agent’s row and choose an OpenAI model such as `gpt-6.1-sol`.
+
+```
+magpie provider add openai <key>
+magpie provider test openai
+```
+
+Model ids in magpie are `provider/model`, so OpenAI’s read `openai/gpt-6.1-sol`: the provider, then OpenAI’s own id. The key is kept in magpie’s settings; magpie doesn’t take it from your shell.
+
+Already set OpenAI up in OpenCode or another app magpie imports from? The import brings it in as the OpenAI provider.
+
+## Endpoints
+
+| API | Address | Used for |
+| --- | --- | --- |
+| Responses | `https://api.openai.com/v1` | OpenAI’s own models, ids starting `gpt-`, `codex` or `o` and a digit: Codex’s requests as they are, Claude Code’s, Gemini CLI’s and OpenCode’s translated |
+| Chat Completions | `https://api.openai.com/v1` | the model list, and any other model the key lists |
+
+magpie’s OpenAI provider has no Anthropic Messages address, so Claude Code’s requests are always translated. For OpenAI’s own models magpie keeps Responses first even for an agent that speaks Chat Completions. When OpenAI answers that a model is served only on `/v1/responses`, magpie asks again there and remembers it. To send a model on one API yourself:
+
+```
+magpie model api openai/gpt-5.5 chat
+magpie model api openai/gpt-5.5 --reset
+magpie model apis openai
+```
+
+**Azure OpenAI** is a provider of its own, Azure OpenAI. Give it your resource’s endpoint, `https://<resource>.openai.azure.com`, and its key. magpie uses the v1 API under `/openai/v1` for Chat Completions and Responses, sends the key in the `api-key` header, and lists the resource’s deployments as its models. A deployment named for its model, such as `gpt-5-codex`, goes to Responses first too.
+
+## Model list
+
+magpie fetches the list from OpenAI, at `https://api.openai.com/v1/models`, so agents see the models your key can use. Names, context windows, reasoning levels and prices come from models.dev’s `openai` catalog. A reasoning model OpenAI has just listed, before its levels are known, gets those of the newest reasoning model in its family: `gpt-6.1-sol` got `gpt-6-sol`’s. Pick the models agents see in the provider’s model list, or from the terminal:
+
+```
+magpie provider models openai +gpt-6.1-sol +gpt-6-luna +gpt-5.5
+magpie provider refresh-every openai 1d
+```
+
+## In each agent
+
+```
+magpie claude openai/gpt-6.1-sol
+magpie codex openai/gpt-6.1-sol
+magpie gemini model openai/gpt-6.1-sol
+magpie opencode openai/gpt-6.1-sol
+```
+
+- **Claude Code.** speaks Anthropic Messages, which OpenAI doesn’t serve. magpie translates each request to Responses and the reply back; the model’s reasoning summary reaches Claude Code as thinking, then the text. [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models).
+- **Codex.** speaks Responses, so its requests go to OpenAI as they are: its custom tools such as `apply_patch`, its reasoning items and its own `prompt_cache_key` included. Codex is also offered Fast here; see Reasoning. [Models in Codex](https://usemagpie.ai/docs/codex-models).
+- **Gemini CLI.** speaks Google’s Gemini API. magpie translates each request to Responses and the reply back. [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models).
+- **OpenCode.** speaks Chat Completions. OpenAI’s own models go to Responses first, so magpie translates its requests there and the replies back; any other model the key lists gets OpenCode’s requests as they are. [Models in OpenCode](https://usemagpie.ai/docs/opencode-models).
+
+## What magpie does for OpenAI
+
+- **A prompt cache key..** A translated request to OpenAI that carries no `prompt_cache_key` gets one, made from the session the agent names, or else its first user message, and hashed, so it names nothing of the agent. Codex sends its own, which goes on as it is, and one you set yourself wins. If OpenAI answers 400 over the field, magpie asks again without it.
+- **Tools loaded where they were loaded..** A tool that Claude Code’s tool search loads mid-conversation is sent to OpenAI’s Responses API as an `additional_tools` item at that point, not added to the tool list, which keeps the cached prefix. `additional-tools=off` puts it with the other tools.
+- **Sealed reasoning from elsewhere..** OpenAI reads only its own sealed reasoning (`encrypted_content`). An item sealed under another key, organization or account is refused (“could not be verified”); magpie asks again without those items and remembers it for the conversation. Claude’s thinking, which Codex carries in a reasoning item after a turn on a Claude model, is taken out before the request reaches OpenAI.
+- **Earlier responses..** A Responses client may send only a turn’s new input and name the response it follows (`previous_response_id`). magpie keeps each response it gave such a client, in memory and under the caller’s gateway key. OpenAI keeps responses too, so when the same key answered the one named, OpenAI is sent only the new input after its own id. Codex over HTTP says `store` false and names none.
+- **Codex’s own compaction..** With `compaction=native`, Codex’s compaction is asked of OpenAI as Codex sent it and the sealed item comes back to Codex as it came. Only the key that sealed it can read it, so later requests carrying it go only there. The default, `compaction=magpie`, has magpie summarise.
+
+```
+magpie provider set openai compaction=native
+magpie provider set openai additional-tools=off
+```
+
+## Reasoning
+
+- **Effort..** The effort an agent asks for is fitted to the nearest level the model has, as the catalog lists them: `gpt-6-sol` has `none`, `low`, `medium`, `high`, `xhigh` and `max`. On Responses it is sent as `reasoning.effort`, with `summary` set to `auto`, so the model’s reasoning summary comes back.
+- **Reasoning off..** When an agent whose requests magpie translates, such as Gemini CLI, turns reasoning off and the model lists `none` among its levels, magpie asks for none.
+- **Encrypted reasoning..** magpie passes on what an agent asks to include, but asks for `reasoning.encrypted_content` only with reasoning: OpenAI refuses it of a model that doesn’t reason. Codex sends the sealed items back on the next turn, and magpie passes them on as they are.
+- **Fast..** On an OpenAI key, Codex is offered Fast for GPT and o-series models. magpie sends it as `service_tier: "priority"`, OpenAI’s priority processing. A service tier set for Codex in magpie overrides what Codex asked.
+
+## Web search
+
+OpenAI’s Responses API searches the web itself. When an agent offers its model web search, as Codex and Claude Code do, magpie gives the model OpenAI’s own `web_search` tool on Responses, and OpenAI runs the search.
+
+## Cost and usage
+
+- **Cost..** The Usage tab prices each call with OpenAI’s prices from models.dev.
+- **Cache tokens..** When a reply reports cached prompt tokens, the Usage tab counts them apart from the rest of the prompt.
+- **Keeping the cache..** With several keys, a conversation stays on its key while its cache is worth keeping, 1,024 tokens or more, and still warm, read within the last five minutes.
+- **Service tier..** Each call records the tier the agent asked for, the one magpie sent, and the one OpenAI’s reply says it ran at.
+- **Balance..** magpie reads no balance from OpenAI; type it in with `key-balance`, and the Usage page shows it less what magpie has priced the key’s calls at since.
+
+## Several keys and failover
+
+One OpenAI provider can hold several keys: press Add another key under it, or paste several at once. Requests go to the first key that’s on, and when it runs out or is rate limited the next one takes over. To keep keys apart instead, say from two organizations, add the provider again: the second is `openai-2`.
+
+- **Spend caps..** `spend-cap` stops a key at a dollar amount a day, a month or in all, as the Usage tab prices its calls; routing then goes on to the other keys and the fallbacks.
+- **Fallbacks..** `fallback` names where requests go when OpenAI is out of quota or down: another provider’s model or a routing group.
+
+```
+magpie provider spend-cap openai <key> 20 month
+magpie provider key-balance openai <key> 25
+magpie provider fallback openai deepseek/deepseek-v4-pro
+```
+
+## Troubleshooting
+
+- **“The encrypted content for item rs_… could not be verified”..** The conversation carries reasoning sealed under another key, organization or account. magpie asks again without those items; see What magpie does.
+- **A model that answers only on `/v1/responses`..** magpie moves it to Responses and remembers it. `magpie model apis openai` shows which API each model is asked on.
+- **A 400 over `prompt_cache_key`..** magpie asks again without the key it added.
+- **Checking a key..** `magpie provider test openai` sends a tiny request through each endpoint, or to each model you name. Add `--as codex` or `--as claude-code` to send it the way that agent would.
+
+## FAQ
+
+### How do I use OpenAI’s models in Claude Code?
+
+Add your OpenAI API key in magpie (Providers, Add provider, OpenAI), then pick a model such as `gpt-6.1-sol` on Claude Code’s row, or run `magpie claude openai/gpt-6.1-sol`. OpenAI serves no Anthropic Messages API, so magpie translates Claude Code’s requests to OpenAI’s Responses API at `https://api.openai.com/v1` and the replies back, the reasoning summary as thinking.
+
+### Can Codex use an OpenAI API key instead of a ChatGPT sign-in?
+
+Yes. Add the key, then run `magpie codex openai/gpt-6.1-sol`. Codex speaks Responses, so its requests go to OpenAI as they are, custom tools and reasoning included, and Fast is sent as priority processing. A ChatGPT Plus or Pro sign-in is set up separately, in Subscriptions.
+
+### How do I use GPT models in OpenCode?
+
+Pick the model in magpie, or run `magpie opencode openai/gpt-6.1-sol`. OpenCode speaks Chat Completions, but OpenAI’s own models go to Responses first, so magpie translates OpenCode’s requests there and the replies back. To send a model on Chat Completions instead, run `magpie model api openai/gpt-5.5 chat`.
+
+### Can Gemini CLI use OpenAI?
+
+Yes. Gemini CLI speaks Google’s Gemini API, so magpie translates its requests to OpenAI’s Responses API and the replies back, streaming and tool calls included. Run `magpie gemini model openai/gpt-6.1-sol`.
+
+### Does magpie keep OpenAI’s prompt cache?
+
+Yes. Codex’s own `prompt_cache_key` goes on as it is. A translated request without one gets a key made from its session or first user message, hashed so it names nothing of the agent. With several keys, a conversation stays on its key while its cache is warm.
+
+### Why does OpenAI say the encrypted content could not be verified?
+
+OpenAI reads only reasoning it sealed for the same key, organization or account. When a conversation carries reasoning sealed elsewhere, magpie asks again without those items and remembers it for the conversation.
+
+### Does magpie support Azure OpenAI?
+
+Yes, as its own provider, Azure OpenAI. Give it the resource’s endpoint and key; magpie uses the v1 API under `/openai/v1`, sends the key in the `api-key` header and lists the resource’s deployments as models.
+
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
 
