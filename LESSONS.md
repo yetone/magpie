@@ -920,8 +920,8 @@ each one.
     through its reward campaigns, installing a .dmg into /Applications
     and sending requests through a third-party relay. It was closed
     unrun. A vendor the maintainer declined is checked for before the
-    diff is read: grep the PR's package names against the memory of
-    declined vendors and docs/contributors.md.
+    diff is read: search the repo's closed issues and PRs and
+    docs/contributors.md for the vendor's name.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
