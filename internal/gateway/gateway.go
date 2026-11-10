@@ -1763,6 +1763,8 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 			data = append(data, m)
 		}
 	}
+	// the names the calling key gives models, where the models were
+	aliasNames(r, data)
 	// ?format=text: the ids one a line, to paste into a client that takes
 	// its models typed by hand, one a line, and asks no list of its own
 	// (ZCode's custom provider), from a browser on another computer with
@@ -1797,7 +1799,11 @@ func (s *Server) model(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, 200, scienceObject(e, provider.LabelsFor(ScienceID, []provider.Entry{e})[0]))
 				return
 			}
-			writeJSON(w, 200, pricedModelObject(r, e))
+			o := pricedModelObject(r, e)
+			if name, ok := access.Caller(r.Context()).AliasOf(e.ID); ok {
+				o["id"] = name
+			}
+			writeJSON(w, 200, o)
 			return
 		}
 	}

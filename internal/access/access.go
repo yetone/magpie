@@ -145,6 +145,11 @@ type Key struct {
 	// "<provider>/*" or a group's "group/<name>"; none for every model,
 	// unless it lists accounts: then its accounts' providers' (HeldModels).
 	Models []string `json:"models,omitempty"`
+	// Aliases are the names the key gives models (tsingchao on X): a name
+	// its client asks by, the model "<provider>/<model>" it stands for.
+	// /v1/models lists the name in the model's place and a request by it
+	// goes to the model, which the key's Models must allow.
+	Aliases map[string]string `json:"aliases,omitempty"`
 	// Accounts are the accounts and keys the key may use (#905), as
 	// "<provider>/<account>": a signed-in account by its stable id, a
 	// key by its fingerprint; none for every account, as keys always did.
@@ -200,6 +205,8 @@ type Identity struct {
 	Limit          *Limit
 	More           []Limit
 	Models         []string
+	// Aliases are Key.Aliases; an issued key has none.
+	Aliases map[string]string
 	// AccountModels says Models are only HeldModels' "<provider>/*" of
 	// a key that names accounts and no model, nor does the key it was
 	// issued under: every model of those accounts' providers is the
@@ -418,6 +425,8 @@ type Change struct {
 	Index *int `json:"index,omitempty"`
 	// Models is what "models-key" sets; none lets the key use every model.
 	Models []string `json:"models,omitempty"`
+	// Aliases is what "aliases-key" sets; none takes the names away.
+	Aliases map[string]string `json:"aliases,omitempty"`
 	// Accounts is what "accounts-key" sets (#905); none lets the key use
 	// every account and key.
 	Accounts []string `json:"accounts,omitempty"`
@@ -583,6 +592,18 @@ func Update(action string, in Change) (string, error) {
 				return "", err
 			}
 			keys[i].Models = ms
+		case "aliases-key":
+			as, err := CleanAliases(in.Aliases)
+			if err != nil {
+				return "", err
+			}
+			held := HeldModels(keys[i].Models, keys[i].Accounts)
+			for name, target := range as {
+				if !ModelAllowed(held, target) {
+					return "", fmt.Errorf("The key may not use %s, so it can't name it %s: add it to the key's models first", target, name)
+				}
+			}
+			keys[i].Aliases = as
 		case "accounts-key":
 			as, err := CleanAccounts(in.Accounts)
 			if err != nil {
@@ -647,7 +668,7 @@ func Update(action string, in Change) (string, error) {
 		default:
 			return "", fmt.Errorf("unknown key action %q", action)
 		}
-		if defaultKey && action != "remove-key" && action != "rename-key" && action != "limit-key" && action != "reset-limit-key" && action != "models-key" && action != "accounts-key" && action != "mcp-key" && action != "quotas-key" && action != "concurrency-key" && action != "access-key" && action != "issuer-key" && action != "move-key" {
+		if defaultKey && action != "remove-key" && action != "rename-key" && action != "limit-key" && action != "reset-limit-key" && action != "models-key" && action != "aliases-key" && action != "accounts-key" && action != "mcp-key" && action != "quotas-key" && action != "concurrency-key" && action != "access-key" && action != "issuer-key" && action != "move-key" {
 			mirror = &keys[i]
 		}
 	}

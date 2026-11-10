@@ -103,6 +103,9 @@ func IssueKey(in Issue) (Issued, error) {
 	if err != nil {
 		return Issued{}, err
 	}
+	if slices.ContainsFunc(models, IsPattern) {
+		return Issued{}, errors.New("An issued key's models are named one by one or with *: a re: pattern is for the keys you make yourself")
+	}
 	var accounts []string
 	if len(in.Accounts) > 0 {
 		if accounts, err = CleanAccounts(in.Accounts); err != nil {
@@ -349,7 +352,7 @@ func identityOf(k Key, keys []Key, now time.Time) (Identity, error) {
 		return Identity{}, &Refused{Why: fmt.Sprintf("the gateway key %q names an account group, and magpie can't read its account groups now: %v", k.Name, err)}
 	}
 	k.Accounts = accounts
-	who := Identity{KeyID: k.ID, KeyName: k.Name, Limit: k.Limit, More: k.More, Models: HeldModels(k.Models, k.Accounts), AccountModels: len(k.Models) == 0 && picksAccounts(k.Accounts), Accounts: k.Accounts, MCP: k.MCP, Quotas: k.Quotas, ReadOnly: k.ReadOnly, Browser: k.Browser, Expires: k.Expires, Issues: k.Issues && k.Issuer == "" && !k.Browser, MaxConcurrency: k.MaxConcurrency}
+	who := Identity{KeyID: k.ID, KeyName: k.Name, Limit: k.Limit, More: k.More, Models: HeldModels(k.Models, k.Accounts), Aliases: k.Aliases, AccountModels: len(k.Models) == 0 && picksAccounts(k.Accounts), Accounts: k.Accounts, MCP: k.MCP, Quotas: k.Quotas, ReadOnly: k.ReadOnly, Browser: k.Browser, Expires: k.Expires, Issues: k.Issues && k.Issuer == "" && !k.Browser, MaxConcurrency: k.MaxConcurrency}
 	// the default key as Default tells it: marked LAN, or the id the
 	// settings name (settings read only for an unmarked key)
 	who.Default = k.LAN || (k.ID != "" && settings.Load().LANKeyID == k.ID)

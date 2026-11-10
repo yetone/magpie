@@ -34,6 +34,10 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		access.MigrateLegacyLANKeyBestEffort()
 		return gatewayKeyModels(out, args[1:])
 	}
+	if action == "aliases" {
+		access.MigrateLegacyLANKeyBestEffort()
+		return gatewayKeyAliases(out, args[1:])
+	}
 	if action == "accounts" {
 		access.MigrateLegacyLANKeyBestEffort()
 		return gatewayKeyAccounts(out, args[1:])
@@ -102,7 +106,7 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		args = args[:2]
 	}
 	if (action == "list" && len(args) != 1) || (action != "list" && len(args) != 2) {
-		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] [--read-only] | rotate <id> [--key <value> | --key -] | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|<N>d|<N>h [--tokens N] [--cost USD] [--cache-reads] [--model <provider>/<model>|<provider>/* ...]] | models <id> [all | <provider>/<model>|<provider>/* ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off] | concurrency <id> [<n> | off] | mcp <id> [all | none | <server>|<server>/<tool> ...] | access <id> [read-only | full] | move <id> <place> | issue --ttl <duration> [--name <name>] [--models a,b] [--accounts a,b] [--tokens N] [--cost USD] [--read-only] [--from <id>] | issuer <id> [on | off] | oidc [list | add --key <id> --repo owner/name … | remove <rule id>]")
+		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] [--read-only] | rotate <id> [--key <value> | --key -] | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|<N>d|<N>h [--tokens N] [--cost USD] [--cache-reads] [--model <provider>/<model>|<provider>/* ...]] | models <id> [all | <provider>/<model>|<provider>/*|re:<regexp> ...] | aliases <id> [none | <name>=<provider>/<model> ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off] | concurrency <id> [<n> | off] | mcp <id> [all | none | <server>|<server>/<tool> ...] | access <id> [read-only | full] | move <id> <place> | issue --ttl <duration> [--name <name>] [--models a,b] [--accounts a,b] [--tokens N] [--cost USD] [--read-only] [--from <id>] | issuer <id> [on | off] | oidc [list | add --key <id> --repo owner/name … | remove <rule id>]")
 	}
 	switch action {
 	case "list", "add", "rotate", "remove":
@@ -480,6 +484,53 @@ func gatewayKeyModels(out io.Writer, args []string) error {
 	}
 	_, err = fmt.Fprintf(out, "%s: only %s\n", k.Name, strings.Join(k.Models, ", "))
 	return err
+}
+
+// gatewayKeyAliases shows or sets the names a key gives models
+// (tsingchao on X):
+//
+//	magpie gateway-key aliases <id>                          its names
+//	magpie gateway-key aliases <id> none                     no names
+//	magpie gateway-key aliases <id> fast=openai/gpt-5 ...    only these
+func gatewayKeyAliases(out io.Writer, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: magpie gateway-key aliases <id> [none | <name>=<provider>/<model> ...]")
+	}
+	id := args[0]
+	if len(args) > 1 {
+		as := map[string]string{}
+		if !(len(args) == 2 && args[1] == "none") {
+			for _, a := range args[1:] {
+				name, target, ok := strings.Cut(a, "=")
+				if !ok {
+					return fmt.Errorf("usage: magpie gateway-key aliases <id> [none | <name>=<provider>/<model> ...]: %q has no =", a)
+				}
+				as[name] = target
+			}
+		}
+		if _, err := access.Update("aliases-key", access.Change{Key: id, Aliases: as}); err != nil {
+			return err
+		}
+	}
+	keys, err := access.List()
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(keys, func(k access.Key) bool { return k.ID == id })
+	if i < 0 {
+		return fmt.Errorf("Key not found")
+	}
+	k := keys[i]
+	if len(k.Aliases) == 0 {
+		_, err = fmt.Fprintf(out, "%s: no model names\n", k.Name)
+		return err
+	}
+	for _, name := range slices.Sorted(maps.Keys(k.Aliases)) {
+		if _, err = fmt.Fprintf(out, "%s: %s = %s\n", k.Name, name, k.Aliases[name]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // gatewayKeyMCP shows or sets the MCP servers and tools a key may use
