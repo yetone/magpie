@@ -42,6 +42,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           return { inside: d.right <= innerWidth && d.bottom <= innerHeight, scrolls: body.scrollHeight > body.clientHeight, wide: document.documentElement.scrollWidth <= innerWidth };
         });
         assert.deepEqual(fits, { inside: true, scrolls: true, wide: true });
+        // the text takes the dialog's whole width, not the editor grid's narrow first column
+        const span = await page.evaluate(() => {
+          const p = document.querySelector("#modal .notices-text").getBoundingClientRect(), b = document.querySelector("#modal .ebody").getBoundingClientRect();
+          return p.width / b.width;
+        });
+        assert.ok(span > 0.85, `the notices take ${Math.round(span * 100)}% of the dialog's width`);
         await page.locator("#modal .bar button.primary").click();
         await page.locator("#modal").waitFor({ state: "hidden" });
         assert.deepEqual(errors, []);
