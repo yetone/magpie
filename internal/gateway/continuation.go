@@ -85,6 +85,14 @@ var errStreamCut = errors.New("stream cut mid-reply")
 // and be whole, so Chat is not one.
 var errEndedShort = errors.New("the reply ended before it was complete")
 
+// errDoneSaid ends a reply's read at the [DONE] a Chat upstream says its
+// reply over with: the reply is whole by its protocol, its usage in the
+// chunks before it, and a vendor that holds the connection after it — a
+// relay slow to hang up (#5936) — kept the client waiting on the
+// translated reply's end, said only when the reading gave up, until the
+// client gave up first.
+var errDoneSaid = errors.New("the stream said its reply over")
+
 // endsAtProbeCap says whether a reply that stopped short of its end, its
 // connection closed cleanly, is taken as one that ended at its length:
 // the request capped it at a short probe's worth (cutVoidTokens) and the
@@ -672,6 +680,11 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 					if cut || relooped {
 						return errStreamCut
 					}
+					if actual == provider.Chat && strings.TrimSpace(data) == "[DONE]" {
+						// the upstream's own end: what the reply has is
+						// whole, hold or not (#5936)
+						return errDoneSaid
+					}
 					return nil
 				}, func() {
 					wmu.Lock()
@@ -681,7 +694,9 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 				})
 				stopKeep()
 				res.Body.Close()
-				if errors.Is(serr, errStreamCut) {
+				if errors.Is(serr, errStreamCut) || errors.Is(serr, errDoneSaid) {
+					// a cut's error event is in hand; a [DONE] said
+					// the reply over: neither is the read's to fail on
 					serr = nil
 				}
 				if serr == nil && failed == "" && !ended && !relooped &&

@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -746,5 +747,127 @@ func TestBuildChatResumePrefillMarks(t *testing.T) {
 	m = lastOf(buildChat(r, "gpt-5", "api.openai.com", false))
 	if m["prefix"] != nil || m["partial"] != nil || m["reasoning_content"] != nil {
 		t.Errorf("an upstream without a prefill mode got one marked: %v", m)
+	}
+}
+
+// doneHold is a Chat upstream that streams a short reply, says it over
+// (finish_reason, usage, [DONE]) and then holds the connection open —
+// a relay that serves a reply whole and dawdles over the hangup (#5936):
+// the client reads the reply, then waits on the translated reply's end,
+// which only the hangup said, and gives up first. held closes once the
+// reply is over and the connection held.
+type doneHold struct {
+	mu   sync.Mutex
+	n    int
+	held chan struct{}
+}
+
+func (f *doneHold) serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
+	t.Helper()
+	io.ReadAll(r.Body)
+	f.mu.Lock()
+	f.n++
+	f.mu.Unlock()
+	w.Header().Set("Content-Type", "text/event-stream")
+	fl := w.(http.Flusher)
+	write := func(ev string) {
+		io.WriteString(w, "data: "+ev+"\n\n")
+		fl.Flush()
+	}
+	write(chatText("glm-5.2", "hello"))
+	write(chatStop("glm-5.2"))
+	write("[DONE]")
+	if f.held != nil {
+		close(f.held)
+	}
+	<-r.Context().Done() // the hangup never comes while the client waits
+}
+
+func doneHoldUp(t *testing.T, f *doneHold) *httptest.Server {
+	t.Helper()
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { f.serve(t, w, r) }))
+	t.Cleanup(up.Close)
+	return up
+}
+
+func (f *doneHold) calls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.n
+}
+
+// A Chat upstream that has said its reply over ([DONE]) and holds the
+// connection open leaves the client waiting on the translated reply's
+// end, which the hangup alone said (#5936, a Codex turn stuck in
+// progress on a Chat-only provider): the reply ends whole as soon as
+// [DONE] is read, its usage with it, while the upstream still holds.
+func TestChatDoneEndsTranslatedReply(t *testing.T) {
+	fresh(t)
+	f := &doneHold{held: make(chan struct{})}
+	up := doneHoldUp(t, f)
+	p := provider.Provider{ID: "up", Name: "UP", Key: "k", Models: []string{"glm-5.2"}, Chat: up.URL + "/v1"}
+	if err := provider.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(New().Handler())
+	t.Cleanup(srv.Close)
+	res, err := http.Post(srv.URL+"/v1/responses", "application/json",
+		strings.NewReader(`{"model":"up/glm-5.2","stream":true,"input":[{"role":"user","content":"hi"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("%d %s", res.StatusCode, b)
+	}
+	select {
+	case <-f.held:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the upstream never got to its hold")
+	}
+	done := make(chan string, 1)
+	var usage map[string]any
+	go func() {
+		var end string
+		var text strings.Builder
+		sc := bufio.NewScanner(res.Body)
+		for sc.Scan() {
+			data, ok := strings.CutPrefix(sc.Text(), "data: ")
+			if !ok {
+				continue
+			}
+			var ev struct {
+				Type     string         `json:"type"`
+				Delta    string         `json:"delta"`
+				Response map[string]any `json:"response"`
+			}
+			if json.Unmarshal([]byte(data), &ev) != nil {
+				continue
+			}
+			if ev.Type == "response.output_text.delta" {
+				text.WriteString(ev.Delta)
+			}
+			if ev.Type == "response.completed" || ev.Type == "response.failed" || ev.Type == "response.incomplete" {
+				end = ev.Type
+				usage, _ = ev.Response["usage"].(map[string]any)
+				break
+			}
+		}
+		if end == "response.completed" && text.String() != "hello" {
+			end = "text " + text.String()
+		}
+		done <- end
+	}()
+	select {
+	case end := <-done:
+		if end != "response.completed" {
+			t.Fatalf("the reply ended %q, want response.completed", end)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no end of the reply while the upstream holds its connection")
+	}
+	if usage == nil || usage["input_tokens"] != float64(9) || usage["output_tokens"] != float64(4) {
+		t.Errorf("completed's usage = %v, want 9 in and 4 out", usage)
 	}
 }
