@@ -683,6 +683,9 @@ var wslKinds = []wslKind{
 		}},
 	{id: "empryo", name: "Empryo", dir: ".empryo", bin: "empryo", in: empryoIn,
 		restart: newNotice("{agent} in WSL {distro} reads its config at start-up — restart open empryo sessions to use this.")},
+	// no bin: nanobot is other tools' name too
+	{id: "nanobot", name: "nanobot", dir: ".nanobot", in: nanobotIn,
+		restart: newNotice("{agent} in WSL {distro}: its gateway and WebUI take this at their next reply; restart an open `nanobot agent` chat to use it there.")},
 	// Ante ships macOS and Linux builds alone, and suggests WSL on Windows,
 	// so a Windows machine's Ante is usually this one
 	{id: "ante", name: "Ante", dir: ".ante", bin: "ante", in: anteIn,

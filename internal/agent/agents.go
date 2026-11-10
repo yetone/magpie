@@ -293,6 +293,7 @@ func onMachine(home, cfg string) []*Agent {
 		qwen(home),
 		muse(cfg),
 		empryo(home),
+		nanobot(home),
 		ante(home),
 		astrbot(home),
 		qwenpaw(home),
