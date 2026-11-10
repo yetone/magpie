@@ -25,6 +25,10 @@ func TestQuitKeepsTheMenuBarIconsPlace(t *testing.T) {
 	for _, c := range []struct{ keep, want string }{
 		{"0", "tray place: forgotten"}, // the cause, without the fix
 		{"1", "tray place: kept"},
+		// imty42 on X, #3873: the magpie handing over to the new version
+		// hides its item, and setVisible:NO forgets the place the new
+		// version's Item-0 shares
+		{"handover", "tray place: kept"},
 	} {
 		out, err := runAppKit(t, 30*time.Second, []string{"MAGPIE_TEST_TRAY_PLACE=" + c.keep})
 		if err != nil || !strings.Contains(string(out), c.want) {
@@ -66,6 +70,20 @@ func init() {
 			// what counts
 			if _, ok := trayPlace("Item-0"); !ok {
 				fail("the place set before the start is gone")
+			}
+			if keep == "handover" {
+				h := &host{app: app, tray: tray}
+				h.leaveMenuBar()
+				mainSettled()
+				mainSettled() // the hidden visibility forgotten after
+				if x, ok := trayPlace("Item-0"); !ok {
+					fmt.Println("tray place: forgotten")
+				} else if n := trayHidden(); n != 0 {
+					fail("handing over kept %d items hidden", n)
+				} else {
+					fmt.Printf("tray place: kept (%v)\n", x)
+				}
+				os.Exit(0)
 			}
 			// what the app's shutdown does: magpie's task, then Wails'
 			// removal of every tray

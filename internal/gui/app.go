@@ -876,9 +876,14 @@ var Started func()
 // version leaving the menu bar, panel, window and Dock to it while it
 // finishes its requests: one bird. Hidden, the item's visibility is kept by
 // AppKit for the app, the new version's item and every later one too, so it
-// is forgotten once the hide is made.
+// is forgotten once the hide is made. Hiding forgets where the item sits
+// too ("NSStatusItem Preferred Position Item-0"), the place the new
+// version's item shares, so the item is renamed first, as on a quit
+// (keepTrayPlace): every update put the icon back at the default spot,
+// in Ice's hidden section (imty42 on X, #3873).
 func (h *host) leaveMenuBar() {
 	application.InvokeSync(func() {
+		keepTrayPlace()
 		h.tray.Hide()
 		forgetTrayHiddenLater()
 		hideWebview(h.panel)
