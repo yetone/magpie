@@ -77,5 +77,23 @@ func dropDerived() int {
 	n += len(heatBefores.by)
 	heatBefores.by = nil
 	heatBefores.Unlock()
+	n += dropEffortPeriods()
+	return n
+}
+
+// dropEffortPeriods lets go of every period's kept CodexModelEffort answer
+// but one being built: each thread's consumption by model, ~7 MB of a real
+// history's idle heap after one visit to the Sessions page. The next ask
+// builds it again, waiting for it as a first ask does.
+func dropEffortPeriods() int {
+	codexEffort.Lock()
+	defer codexEffort.Unlock()
+	n := 0
+	for p, e := range codexEffort.periods {
+		if e.building == nil {
+			delete(codexEffort.periods, p)
+			n++
+		}
+	}
 	return n
 }

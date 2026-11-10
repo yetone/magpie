@@ -629,6 +629,7 @@ func keptCodexModelEffort(p Period) map[string][]sessions.ModelEffort {
 	if LogCalls != nil { // synthetic logs carry no state to key on
 		return codexModelEffort(codexEffortRows(p, Clock(), LogCalls))
 	}
+	derivedUsed() // the kept answers go with the chunks' caches when idle
 	codexEffort.Lock()
 	if e := codexEffort.periods[p]; e != nil && e.have && e.root == requestRoot() && time.Since(e.at) < effortFresh {
 		codexEffort.built++

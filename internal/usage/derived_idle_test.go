@@ -1,8 +1,11 @@
 package usage
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/sessions"
 )
 
 // What is kept of each chunk by its serial stays while it was read within
@@ -62,5 +65,38 @@ func TestDerivedLetGoWhenIdle(t *testing.T) {
 	}
 	if !derivedKept.armed.Load() {
 		t.Fatal("a read after the let-go did not arm the check again")
+	}
+}
+
+// Codex's model and effort answers go with the chunks' caches once nothing
+// asked for them for derivedIdle, and the next ask builds the same answer
+// again; an ask keeps them.
+func TestIdleCodexEffortLetGoAndBuiltAgain(t *testing.T) {
+	pageHome(t)
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC))
+	path := filepath.Join(sessions.CodexDir(), "sessions", "2026", "09", "30", "rollout-2026-09-30T10-00-00-main-a.jsonl")
+	writeCodexCall(t, path, "main-a", "main-a", `"vscode"`, "resp-1", "m", "low", now.Add(-time.Hour), 20, 3)
+	derivedKept.off = false
+	t.Cleanup(func() { derivedKept.off = true })
+	built := 0
+	effortBuilt = func() { built++ }
+	t.Cleanup(func() { effortBuilt = nil })
+
+	CodexModelEffort(All)
+	derivedIdleCheck() // asked just now: kept
+	if CodexModelEffort(All); built != 1 {
+		t.Fatalf("built %d times while asked; want the answer kept", built)
+	}
+	derivedKept.last.Store(time.Now().Add(-2 * derivedIdle).UnixNano())
+	derivedIdleCheck()
+	codexEffort.Lock()
+	kept := len(codexEffort.periods)
+	codexEffort.Unlock()
+	if kept != 0 {
+		t.Fatalf("%d periods' answers kept while idle", kept)
+	}
+	again := CodexModelEffort(All)
+	if got, ok := findModelEffort(again["main-a"], "m", "low"); built != 2 || !ok || got.Input != 20 {
+		t.Fatalf("after the let-go: built %d, %+v", built, again)
 	}
 }
