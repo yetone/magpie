@@ -423,13 +423,26 @@ func RemoveProject(dir string, keep bool) (*Result, error) {
 // ProjectSkill sets which agents get a library skill in a project; none
 // takes it out of the project.
 func ProjectSkill(dir, name string, agents []string) (*Result, error) {
+	return ProjectSkills(dir, []string{name}, agents)
+}
+
+// ProjectSkills sets which agents get each of some library skills in a
+// project, in one write: the skills a project's card picks from its menu
+// (POM_JUMPING on X). The project's other skills stay as they are; none
+// takes these out of it.
+func ProjectSkills(dir string, names, agents []string) (*Result, error) {
 	return change(func(l *Library) error {
 		p := l.project(dir)
 		if p == nil {
 			return fmt.Errorf("no project %s", dir)
 		}
-		if l.skill(name) == nil {
-			return fmt.Errorf("no skill called %s", name)
+		if len(names) == 0 {
+			return fmt.Errorf("no skills given")
+		}
+		for _, name := range names {
+			if l.skill(name) == nil {
+				return fmt.Errorf("no skill called %s", name)
+			}
 		}
 		var ids []string
 		for _, id := range agents {
@@ -438,14 +451,16 @@ func ProjectSkill(dir, name string, agents []string) (*Result, error) {
 			}
 			ids = set(ids, id, true)
 		}
-		if len(ids) == 0 {
-			delete(p.Skills, name)
-			return nil
+		for _, name := range names {
+			if len(ids) == 0 {
+				delete(p.Skills, name)
+				continue
+			}
+			if p.Skills == nil {
+				p.Skills = map[string][]string{}
+			}
+			p.Skills[name] = slices.Clone(ids)
 		}
-		if p.Skills == nil {
-			p.Skills = map[string][]string{}
-		}
-		p.Skills[name] = ids
 		return nil
 	})
 }

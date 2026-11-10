@@ -732,6 +732,8 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.RemoveProject(in.Dir, in.Keep)
 		case "projects/skill":
 			res, err = library.ProjectSkill(in.Dir, in.Name, in.Agents)
+		case "projects/skills":
+			res, err = library.ProjectSkills(in.Dir, in.Names, in.Agents)
 		case "projects/server":
 			res, err = library.ProjectServer(in.Dir, in.Name, in.Agents)
 		case "projects/copy":

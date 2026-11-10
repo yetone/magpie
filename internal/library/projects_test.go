@@ -82,6 +82,43 @@ func TestProjectSkillsLinked(t *testing.T) {
 	}
 }
 
+// A project's card picks some of the library's skills in one write
+// (POM_JUMPING on X): only those go in, and the skills the project had
+// keep their agents; a name the library doesn't have changes nothing.
+func TestProjectSkillsPickSome(t *testing.T) {
+	h, proj := projectLib(t)
+	skill(t, filepath.Join(h, "src", "xlsx"), "xlsx", "Sheets")
+	ok(t)(InstallSkills(filepath.Join(h, "src"), []string{"xlsx"}, nil))
+	ok(t)(ProjectSkill(proj, "pdf", []string{"codex"}))
+
+	ok(t)(ProjectSkills(proj, []string{"docx"}, []string{"claude", "codex"}))
+	v, _ := Read(nil)
+	if got := v.Projects[0].Skills; len(got) != 2 || !slices.Equal(got["pdf"], []string{"codex"}) || !slices.Equal(got["docx"], []string{"claude", "codex"}) {
+		t.Errorf("skills: %+v", got)
+	}
+	for _, e := range []string{".claude/skills/docx", ".agents/skills/docx", ".agents/skills/pdf"} {
+		if !isLink(t, filepath.Join(proj, e)) {
+			t.Errorf("%s isn't placed", e)
+		}
+	}
+	for _, e := range []string{".claude/skills/pdf", ".claude/skills/xlsx", ".agents/skills/xlsx"} {
+		gone(t, filepath.Join(proj, e))
+	}
+
+	if _, err := ProjectSkills(proj, []string{"xlsx", "nope"}, []string{"claude"}); err == nil {
+		t.Error("a skill the library hasn't was taken")
+	}
+	gone(t, filepath.Join(proj, ".claude/skills/xlsx"))
+
+	ok(t)(ProjectSkills(proj, []string{"docx"}, nil))
+	v, _ = Read(nil)
+	if got := v.Projects[0].Skills; len(got) != 1 || !slices.Equal(got["pdf"], []string{"codex"}) {
+		t.Errorf("skills after: %+v", got)
+	}
+	gone(t, filepath.Join(proj, ".claude/skills/docx"))
+	gone(t, filepath.Join(proj, ".agents/skills/docx"))
+}
+
 func TestProjectGitignoreMadeAndTakenAway(t *testing.T) {
 	_, proj := projectLib(t)
 	os.Remove(filepath.Join(proj, ".gitignore"))

@@ -672,6 +672,7 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-tag.lib-dot::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--muted); }
 .lib-projopts { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px 8px 49px; border-top: 1px solid var(--line-2); background: var(--card-2); }
 .lib-projopts .note { font-size: 11px; color: var(--faint); line-height: 1.45; min-width: 0; flex: 1 1 220px; }
+.lib-projopts .lib-projpick { height: 26px; color: var(--fg); }
 .lib-projcopy { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-2); cursor: default; }
 .lib-project .lib-projskill { border-top: 1px solid var(--line-2); }
 .lib-projfoot { margin: 0; padding: 8px 12px 10px 49px; border-top: 1px solid var(--line-2); }

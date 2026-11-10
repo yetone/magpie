@@ -5374,6 +5374,11 @@ magpie.plugin("library", (ctx) => {
   // MCP tab lists the same projects with the servers.
   let addingProject = null;       // the folder being added: { dir, error, busy }
   const openProjects = new Set(); // projects whose skills (or servers) are shown
+  // An open project's card lists the skills it has, not every library
+  // skill as though each were in it (POM_JUMPING on X): its menu picks
+  // which go in. A row whose chips are switched off stays till the card is
+  // closed, so it doesn't vanish under the pointer.
+  const projectShown = new Map(); // project dir → the skills its open card lists
   const projectAgents = () => shownAgents().filter((a) => a.projectSkills);
   // a project's file may take less than the agent's own: Pi's .pi/mcp.json
   // no SSE, whatever extension its user-wide file is for
@@ -5472,7 +5477,7 @@ magpie.plugin("library", (ctx) => {
     const chev = el("span", "chev");
     chev.append(svg(CHEV_R, 11, 1.7));
     head.append(glyph(GLYPH.folder), who, pills, acts, chev);
-    head.onclick = () => { isOpen ? openProjects.delete(p.dir) : openProjects.add(p.dir); render(); };
+    head.onclick = () => { isOpen ? openProjects.delete(p.dir) : openProjects.add(p.dir); projectShown.delete(p.dir); render(); };
     head.title = mcp ? (isOpen ? t("Hide its servers") : t("Pick the servers it gets")) : isOpen ? t("Hide its skills") : t("Pick the skills it gets");
     card.append(head);
     if (p.problems?.[""]) card.append(el("div", "lib-err", p.problems[""]));
@@ -5489,10 +5494,17 @@ magpie.plugin("library", (ctx) => {
     opts.append(lab, el("span", "note", p.copy
       ? t("Copies are made again whenever the library's skill changes; edits made to them are replaced.")
       : t("Links follow the library's skill: an update reaches the project at once.")));
+    const all = projectAgents();
+    const shown = projectShown.get(p.dir) || new Set();
+    projectShown.set(p.dir, shown);
+    const has = (s) => !!(p.skills[s.name]?.length || p.problems?.[s.name]);
+    for (const s of lib.skills) if (has(s)) shown.add(s.name);
+    opts.append(projectSkillsPick(p, all, has));
     card.append(opts);
 
-    const all = projectAgents();
-    for (const s of lib.skills) {
+    const listed = lib.skills.filter((s) => shown.has(s.name));
+    if (!listed.length) card.append(el("p", "lib-aside lib-projfoot lib-projnone", t("No skills yet")));
+    for (const s of listed) {
       const row = el("div", "row lib-row lib-projskill");
       const w = el("div", "who");
       const n = el("div", "name", s.name);
@@ -5515,6 +5527,40 @@ magpie.plugin("library", (ctx) => {
     const skip = shownAgents().filter((a) => a.skills && !a.projectSkills);
     if (skip.length) card.append(el("p", "lib-aside lib-projfoot", t("{agents} reads no project skills folder magpie knows of.", { agents: skip.map((a) => a.name).join(", ") })));
     return card;
+  }
+
+  // The open card's menu of the library's skills, those in the project
+  // ticked. One ticked goes to the agents the project's skills are for
+  // already, or, in a project with none yet, to every agent here that
+  // reads a project's skills; its chips change that after. One unticked is
+  // taken out of the project. The rest keep their agents.
+  function projectSkillsPick(p, all, has) {
+    const b = menuButton(t("Skills"), "lib-projpick", () => {
+      const now = lib.skills.filter(has).map((s) => s.name);
+      const opts = lib.skills.map((s) => ({ v: s.name, name: s.name, literalName: true, note: "" }));
+      openProtoMenu(b, opts, now, async (next) => {
+        const adds = next.filter((n) => !now.includes(n)), outs = now.filter((n) => !next.includes(n));
+        const ids = new Set(all.map((a) => a.id));
+        const used = [...new Set(Object.values(p.skills || {}).flat())].filter((id) => ids.has(id));
+        const agents = used.length ? used : all.filter((a) => !a.gone && !a.unseen && !a.asleep).map((a) => a.id);
+        const names = (xs) => xs.join(", ");
+        if (adds.length && agents.length) {
+          await change("projects/skills", { dir: p.dir, names: adds, agents }, adds.length === 1
+            ? t("{skill} is in {name} for {agents}", { skill: adds[0], name: p.name, agents: agents.map(nameOf).join(", ") })
+            : t("{skills} are in {name} for {agents}", { skills: names(adds), name: p.name, agents: agents.map(nameOf).join(", ") }));
+        }
+        if (outs.length) {
+          const shown = projectShown.get(p.dir);
+          for (const n of outs) shown?.delete(n);
+          await change("projects/skills", { dir: p.dir, names: outs, agents: [] }, outs.length === 1
+            ? t("{skill} is out of {name}", { skill: outs[0], name: p.name })
+            : t("{skills} are out of {name}", { skills: names(outs), name: p.name }));
+        }
+      }, "Pick the skills it gets", "", "right", false, opts.length > 8 ? "Find a skill" : "");
+    });
+    b.setAttribute("aria-expanded", "false");
+    if (!lib.skills.length || !all.length) b.disabled = true;
+    return b;
   }
 
   // A project row's chip: lit at once, so a second click before magpie has
