@@ -401,6 +401,40 @@ func notGlobal(dir string) error {
 	return nil
 }
 
+// ProjectPath is a folder as typed on a command line (~, or relative to
+// where magpie runs) made a full path, as AddProject takes it.
+func ProjectPath(dir string) (string, error) {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return "", fmt.Errorf("choose a project's folder")
+	}
+	return filepath.Abs(expand(dir))
+}
+
+// ProjectAt is the listed folder of the project dir is (ProjectPath's
+// way, or the same folder through a link): "" for a folder that isn't one.
+func ProjectAt(dir string) (string, error) {
+	abs, err := ProjectPath(dir)
+	if err != nil {
+		return "", err
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	l, err := load()
+	if err != nil {
+		return "", err
+	}
+	if p := l.project(abs); p != nil {
+		return p.Dir, nil
+	}
+	for _, p := range l.Projects {
+		if realDir(p.Dir) == realDir(abs) {
+			return p.Dir, nil
+		}
+	}
+	return "", nil
+}
+
 // RemoveProject takes every skill magpie placed out of a project, and the
 // project off the list; what's left, it couldn't take away and says why.
 // keep takes the project off the list alone (#514: a project given a few

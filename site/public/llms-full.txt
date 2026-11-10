@@ -3226,7 +3226,7 @@ The card shows how many tokens billion-context saved, in its own count: the net 
 - Never a file, entry or skill of yours with the same name. The page shows the clash and lets you choose.
 - Anything it replaces goes to the backups first.
 
-Projects can get skills and MCP servers too, in the project’s own folders (such as `.claude/skills`, `.agents/skills`, `.mcp.json` or `.codex/config.toml`).
+Projects can get skills and MCP servers too, in the project’s own folders (such as `.claude/skills`, `.agents/skills`, `.mcp.json` or `.codex/config.toml`). From a terminal, `magpie library project add .` adds the folder you are in, `magpie library project skill add . pdf docx` gives it skills, `magpie library project skill rm . pdf` takes one away, and `magpie library project skills .` lists them.
 
 ---
 
@@ -3781,7 +3781,7 @@ An adapter is an [`Agent`](https://github.com/yetone/magpie/blob/main/internal/a
 
 - **magpie edits your config file.** (most adapters; [`fx.go`](https://github.com/yetone/magpie/blob/main/internal/agent/fx.go), [`empryo.go`](https://github.com/yetone/magpie/blob/main/internal/agent/empryo.go)). `Dir`, `Path` and `Bin` find the app; each `Field` (`model`, `effort`…) has `Get`, `Set` and `Options`. Connecting adds a `magpie` provider at the gateway, keyed `magpie-<id>`, and sets your model to one of magpie’s; the agent’s default or `Unwire` takes magpie’s entries out and restores what was there. Only the keys magpie sets are touched. `Notice` says when your app must be restarted; `Sync` rewrites a model list your app keeps in a file.
 - **Your app takes a provider only through its own import link, confirmed in your app.** ([`cindy.go`](https://github.com/yetone/magpie/blob/main/internal/agent/cindy.go)). `Import` returns the link (`yourapp://provider/import?…` with the gateway’s URL, the key `magpie-<id>` and the endpoints), the row’s button opens it, and the user says yes once, in your app. `Added` reads, read-only, whether your app has magpie already. magpie writes nothing of yours. This suits an app that keeps its providers in a database or encrypted.
-- **Your app has a local API while it runs.** (Alma): magpie adds itself as a provider and sets the default model through it.
+- **Your app has a local API while it runs.** (Alma, Shelley): magpie adds itself as a provider and sets the default model through it.
 
 A pull request needs the adapter and its entry in `agents.go`, `UA` (what your User-Agent begins with, lower-case) so Usage knows your calls, an icon in `internal/gui/assets/icons`, tests that run under a temporary `HOME` (connect, switch, disconnect restoring the original file), and a row in the reference’s Agents table. What helps most is a stable, documented config format or import link, and where your app keeps it on each system.
 
