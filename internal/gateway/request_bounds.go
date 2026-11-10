@@ -267,7 +267,9 @@ func readBoundedRequestBody(w http.ResponseWriter, r *http.Request, limits reque
 	if err != nil {
 		return readFailure(err)
 	}
-	return body, 0, nil
+	// text that isn't, as U+FFFD, before anything routes or forwards it
+	// (textBody, laincatx on X)
+	return textBody(r.Header, body), 0, nil
 }
 
 // sizedReadFirst is the most readSized sets aside before a byte has come:
