@@ -303,6 +303,7 @@ func heldOf[T any](key string, build func() T) T {
 			held.built = map[string]heldValue{}
 		}
 		held.built[key] = heldValue{v, time.Now()}
+		armStaleSweep()
 	}
 	delete(heldFlight, key)
 	held.Unlock()
@@ -387,9 +388,85 @@ func keptFit[T any](key string, fits func(any) bool, build func() T) T {
 			kept.of = map[string]any{}
 		}
 		kept.of[key] = v
+		armStaleSweep()
 	}
 	kept.Unlock()
 	return v
+}
+
+// staleFor is heldFor and keptFor as the last arm read them, in the
+// request that held or kept something (the sweep runs on a timer of its
+// own and reads these rather than what a test may be setting meanwhile),
+// and when the sweep armed soonest will run; zero: none is armed.
+var staleFor struct {
+	sync.Mutex
+	held, kept time.Duration
+	next       time.Time
+}
+
+// armStaleSweep arms the sweep, unless one is armed for as soon: what was
+// held or kept past its time was dropped only when the next request
+// looked, so the catalog the last request built (~7.5 MB with real
+// accounts) stayed for the life of a magpie nobody asked again.
+func armStaleSweep() {
+	staleFor.Lock()
+	defer staleFor.Unlock()
+	staleFor.held, staleFor.kept = heldFor, keptFor
+	staleArmLocked(min(heldFor, keptFor))
+}
+
+// staleArmLocked arms the sweep d from now, unless one is armed sooner.
+// staleFor is held.
+func staleArmLocked(d time.Duration) {
+	d = max(d, 10*time.Millisecond)
+	at := time.Now().Add(d)
+	if !staleFor.next.IsZero() && !at.Before(staleFor.next) {
+		return
+	}
+	staleFor.next = at
+	time.AfterFunc(d, sweepStale)
+}
+
+// sweepStale drops what is held past heldFor and kept past keptFor, and
+// looks again when the next of the rest will be, until nothing is left.
+func sweepStale() {
+	staleFor.Lock()
+	heldFor, keptFor := staleFor.held, staleFor.kept
+	// let go first: what is held or kept while this one looks arms its own
+	staleFor.next = time.Time{}
+	staleFor.Unlock()
+	next := time.Duration(-1)
+	soon := func(left time.Duration) {
+		if next < 0 || left < next {
+			next = left
+		}
+	}
+	held.Lock()
+	for k, h := range held.built {
+		if left := heldFor - time.Since(h.at); left <= 0 {
+			delete(held.built, k)
+		} else {
+			soon(left)
+		}
+	}
+	if len(held.built) == 0 {
+		held.built = nil
+	}
+	held.Unlock()
+	kept.Lock()
+	if kept.of != nil {
+		if left := keptFor - time.Since(kept.at); left <= 0 {
+			kept.of = nil
+		} else {
+			soon(left)
+		}
+	}
+	kept.Unlock()
+	if next >= 0 {
+		staleFor.Lock()
+		staleArmLocked(next)
+		staleFor.Unlock()
+	}
 }
 
 // holdingNow is whether a request holds the catalog now.
@@ -456,6 +533,7 @@ func heldFrom[T any](key string, entries []Entry, build func([]Entry) T) T {
 			held.built = map[string]heldValue{}
 		}
 		held.built[key] = heldValue{f, time.Now()}
+		armStaleSweep()
 	}
 	held.Unlock()
 	return v
