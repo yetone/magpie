@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // DeepSeek Harness (dsh) keeps a session in a folder of its own, under
@@ -51,7 +51,7 @@ func DshDir() string {
 }
 
 // session.jsonl, session.v3.jsonl.zstd, …
-var dshName = regexp.MustCompile(`^session(?:\.v(\d+))?\.jsonl(\.zstd)?$`)
+var dshName = lazyre.New(`^session(?:\.v(\d+))?\.jsonl(\.zstd)?$`)
 
 // dshHead is a session file's first line.
 type dshHead struct {

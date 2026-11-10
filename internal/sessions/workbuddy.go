@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // WorkBuddy (Tencent's desktop agent) keeps its sessions much as Claude
@@ -174,7 +174,7 @@ var (
 	wbTitle = []byte(`-title"`)
 	wbUser  = []byte(`"role":"user"`)
 	wbCwd   = []byte(`"cwd":"`)
-	wbScene = regexp.MustCompile(`^@[\w-]+:\S*$`)
+	wbScene = lazyre.New(`^@[\w-]+:\S*$`)
 )
 
 func workbuddyLine(s *state, b []byte, main bool) {

@@ -13,12 +13,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/iconproxy"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/netguard"
 )
 
@@ -30,7 +30,7 @@ const iconPrefix = "file:"
 // MaxIcon is the largest picture magpie keeps for a provider.
 const MaxIcon = 1 << 20
 
-var iconName = regexp.MustCompile(`^[0-9a-f]{16}\.(png|jpg|gif|webp|ico|svg)$`)
+var iconName = lazyre.New(`^[0-9a-f]{16}\.(png|jpg|gif|webp|ico|svg)$`)
 
 // IconDir is where pictures given to providers are kept.
 func IconDir() string { return filepath.Join(filepath.Dir(Path()), "icons") }

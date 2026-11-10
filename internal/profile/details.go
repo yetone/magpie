@@ -1,12 +1,12 @@
 package profile
 
 import (
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
 
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // Group is what a profile holds for one agent, to be read before it is
@@ -52,8 +52,8 @@ type Item struct {
 // model or provider id has). No agent field holds one today, but
 // profiles.json is a file anyone can edit.
 var (
-	secretName  = regexp.MustCompile(`(?i)(key|token|secret|passw|credential|cookie)`)
-	secretValue = regexp.MustCompile(`^(sk-|sk_|ghp_|gho_|ghu_|github_pat_|xox[abpr]-|AIza|eyJ)|[A-Za-z0-9]{32,}`)
+	secretName  = lazyre.New(`(?i)(key|token|secret|passw|credential|cookie)`)
+	secretValue = lazyre.New(`^(sk-|sk_|ghp_|gho_|ghu_|github_pat_|xox[abpr]-|AIza|eyJ)|[A-Za-z0-9]{32,}`)
 )
 
 func secret(key, label, value string) bool {

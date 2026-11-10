@@ -29,7 +29,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -38,6 +37,7 @@ import (
 
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/lastgood"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 const (
@@ -171,7 +171,7 @@ func heldQuotaHist() quotaHist {
 	return readQuotaHist()
 }
 
-var spanWords = regexp.MustCompile(`(?i)(\d+)\s*-?\s*(h|hr|hour|d|day|w|wk|week|month)s?\b`)
+var spanWords = lazyre.New(`(?i)(\d+)\s*-?\s*(h|hr|hour|d|day|w|wk|week|month)s?\b`)
 
 // windowSpan is how long a window runs: as its vendor said, else as its
 // name says ("5 hours", "7d", "Weekly"), else 0, not known.

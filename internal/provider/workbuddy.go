@@ -32,7 +32,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -41,6 +40,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // Where WorkBuddy's plan is; vars so tests can point them elsewhere.
@@ -262,7 +262,7 @@ const ZCodeRestrictedHint = "ZCode's risk control blocked this account for unusu
 // wbRestrictedWords are the restriction as WorkBuddy's 11140 words it in
 // its displayMsg and displayTips: English, Simplified and Traditional
 // Chinese.
-var wbRestrictedWords = regexp.MustCompile(`(?i)account has been restricted due to unusual activity|账号存在异常行为|帳號存在異常行為`)
+var wbRestrictedWords = lazyre.New(`(?i)account has been restricted due to unusual activity|账号存在异常行为|帳號存在異常行為`)
 
 // wbRestrictedCode is WorkBuddy's code for an account it restricted.
 const wbRestrictedCode = 11140

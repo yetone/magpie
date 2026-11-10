@@ -10,7 +10,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -220,7 +220,7 @@ func autoSignIns(c AutoConfig) (autoSealed, error) {
 // autoName is a backup's file name; anything else in the folder (the
 // temporary file one is written to, the user's own files) is never listed,
 // put back or removed.
-var autoName = regexp.MustCompile(`^magpie-(\d{8}-\d{6})(?:-\d+)?-(auto|restore)\.json$`)
+var autoName = lazyre.New(`^magpie-(\d{8}-\d{6})(?:-\d+)?-(auto|restore)\.json$`)
 
 const autoTemp = ".magpie-backup-*.tmp"
 

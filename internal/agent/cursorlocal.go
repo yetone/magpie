@@ -26,7 +26,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -35,6 +34,7 @@ import (
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -193,7 +193,7 @@ func cursorLocalProduct(res string) (cursorProduct, bool) {
 	return p, strings.EqualFold(strings.TrimSpace(p.NameShort), cursorLocalName)
 }
 
-var plistExeRe = regexp.MustCompile(`<key>CFBundleExecutable</key>\s*<string>([^<]+)</string>`)
+var plistExeRe = lazyre.New(`<key>CFBundleExecutable</key>\s*<string>([^<]+)</string>`)
 
 // plistExecutable is CFBundleExecutable of an XML Info.plist, "" when it
 // can't be read.

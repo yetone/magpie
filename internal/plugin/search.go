@@ -8,12 +8,12 @@ import (
 	"io/fs"
 	"log"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/filememo"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/steady"
 )
@@ -52,7 +52,7 @@ func (p PluginSearch) VendorID() string {
 
 // unsafeVendorChars are what a vendor id leaves out: the CLI lowercases it
 // and it is a word in a space-separated key id.
-var unsafeVendorChars = regexp.MustCompile(`[^a-z0-9-]+`)
+var unsafeVendorChars = lazyre.New(`[^a-z0-9-]+`)
 
 // SearchPage is one page a plugin's search found.
 type SearchPage struct {

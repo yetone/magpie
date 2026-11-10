@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
 )
 
@@ -226,8 +226,8 @@ func registeredExeDir(v string) string {
 }
 
 var (
-	plistIDRe      = regexp.MustCompile(`<key>CFBundleIdentifier</key>\s*<string>([^<]+)</string>`)
-	plistVersionRe = regexp.MustCompile(`<key>CFBundleShortVersionString</key>\s*<string>([^<]+)</string>`)
+	plistIDRe      = lazyre.New(`<key>CFBundleIdentifier</key>\s*<string>([^<]+)</string>`)
+	plistVersionRe = lazyre.New(`<key>CFBundleShortVersionString</key>\s*<string>([^<]+)</string>`)
 )
 
 // macBundle reports whether app's bundle is in one of appFolders, under one
@@ -491,7 +491,7 @@ func (app desktopApp) linuxDir() string {
 	return dir
 }
 
-var linuxPackageVersionRe = regexp.MustCompile(`"version"\s*:\s*"([^"]+)"`)
+var linuxPackageVersionRe = lazyre.New(`"version"\s*:\s*"([^"]+)"`)
 
 // linuxVersion is the version of the app's Linux package, from its
 // resources/linux-package-metadata.json ({"codexAppBrand":"chatgpt",

@@ -35,7 +35,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -45,6 +44,7 @@ import (
 
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/lastgood"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/update"
@@ -146,7 +146,7 @@ func WhyOf(err error) *MoveWhy {
 
 // unreachable is an install that never got through to npm (or to Bun's
 // download): Bun's words for it, and Go's.
-var unreachable = regexp.MustCompile(`(?i)ConnectionRefused|ConnectionClosed|FailedToOpenSocket|ENOTFOUND|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|Unable to connect|network|no such host|dial tcp|i/o timeout|TLS handshake`)
+var unreachable = lazyre.New(`(?i)ConnectionRefused|ConnectionClosed|FailedToOpenSocket|ENOTFOUND|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|Unable to connect|network|no such host|dial tcp|i/o timeout|TLS handshake`)
 
 // installFailed says why the plugin couldn't be installed.
 func installFailed(pkg string, err error) error {

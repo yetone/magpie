@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -20,6 +19,7 @@ import (
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/filememo"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
 	"gopkg.in/yaml.v3"
 )
@@ -433,7 +433,7 @@ var rtkVersion = func() string {
 
 // semver finds the version in what opencode --version prints: OpenCode 1
 // prints "1.18.32", OpenCode 2 "opencode v2.0.18".
-var semver = regexp.MustCompile(`(?:^|[^\w.])v?(\d+\.\d+\.\d+\S*)`)
+var semver = lazyre.New(`(?:^|[^\w.])v?(\d+\.\d+\.\d+\S*)`)
 
 // openCodeVersion is the version the opencode on this machine says it is,
 // "" when there's none or it doesn't say; a test sets it. OpenCode 2's

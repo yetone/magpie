@@ -1,10 +1,10 @@
 package agent
 
 import (
-	"regexp"
 	"slices"
 	"strings"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -206,7 +206,7 @@ func sameModel(opts []Option, ref, agent string) Option {
 	return alike
 }
 
-var dated = regexp.MustCompile(`-(\d{8}|\d{4}-\d{2}-\d{2})$`)
+var dated = lazyre.New(`-(\d{8}|\d{4}-\d{2}-\d{2})$`)
 
 // modelKey is a model id as providers agree on it: its last part, lower
 // case, with dots and underscores as dashes and no date.

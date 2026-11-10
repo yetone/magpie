@@ -1,13 +1,14 @@
 package edit
 
 import (
-	"regexp"
 	"strings"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // dotenv files (KEY=value per line) as Gemini CLI reads from ~/.gemini/.env.
 
-var envLine = regexp.MustCompile(`^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$`)
+var envLine = lazyre.New(`^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$`)
 
 // GetEnvFile reads one key from a dotenv file.
 func GetEnvFile(path, key string) (string, bool) {

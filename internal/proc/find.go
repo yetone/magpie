@@ -3,9 +3,10 @@ package proc
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // FindTool is the command-line tool name as a terminal would run it: on
@@ -101,7 +102,7 @@ func toolIn(name, goos string, dirs []string) string {
 // npmShimLine is the line of npm's sh shim (cmd-shim) that runs a program
 // of its package's directly: exec "$basedir/node_modules/<pkg>/<bin>" "$@".
 // A shim of a node script names node first, and isn't matched.
-var npmShimLine = regexp.MustCompile(`(?m)^\s*exec "\$basedir/([^"$]+\.exe)"\s+"\$@"`)
+var npmShimLine = lazyre.New(`(?m)^\s*exec "\$basedir/([^"$]+\.exe)"\s+"\$@"`)
 
 // npmShimExe is the Windows program the npm sh shim at path runs, where it
 // is: Claude Code's is node_modules\@anthropic-ai\claude-code\bin\claude.exe.

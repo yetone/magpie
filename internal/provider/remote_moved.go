@@ -43,12 +43,12 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // seekDial is how long each address is given to take the connection.
@@ -98,7 +98,7 @@ func SeekHere(ats []string) (restore func()) {
 
 // unconnected says err is a connection that was never made: what a
 // computer that moved, or is off, leaves behind.
-var unconnected = regexp.MustCompile(`dial tcp |connectex|no route to host|host is down|network is unreachable`)
+var unconnected = lazyre.New(`dial tcp |connectex|no route to host|host is down|network is unreachable`)
 
 // SeekMoved is p, a Remote magpie a request found no one at (err), at
 // the address it was found at on this computer's network, saved there:

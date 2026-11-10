@@ -18,11 +18,11 @@ package provider
 // way to ask for it.
 
 import (
-	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // cursorEfforts are the effort words of Cursor's ids, the levels magpie
@@ -181,7 +181,7 @@ func collapseCursorModels(raw []catalog.Model) []catalog.Model {
 
 // cursorCapacity is the context Cursor puts in a model's name ("Claude
 // Opus 5.5 1M", "GPT-5.5 (1M)").
-var cursorCapacity = regexp.MustCompile(`\(\s*\d+M\s*\)|\b\d+M\b`)
+var cursorCapacity = lazyre.New(`\(\s*\d+M\s*\)|\b\d+M\b`)
 
 // withoutCursorCapacity is Cursor's list, collapsed, with the context taken
 // out of each name: it is the model's Context, shown apart. A name that

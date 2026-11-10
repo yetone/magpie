@@ -40,7 +40,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -49,6 +48,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // VertexPreset is the preset's id.
@@ -97,10 +97,10 @@ func (v *Vertex) Normal() *Vertex {
 var (
 	// a project's id (my-project-123), its number, or a domain-scoped
 	// one's (example.com:my-project)
-	vertexProject = regexp.MustCompile(`^[a-z0-9][a-z0-9.:-]*[a-z0-9]$`)
+	vertexProject = lazyre.New(`^[a-z0-9][a-z0-9.:-]*[a-z0-9]$`)
 	// global, us, eu or a region (us-central1, europe-west4)
-	vertexLocation = regexp.MustCompile(`^[a-z]+(-[a-z0-9]+)*$`)
-	vertexAccount  = regexp.MustCompile(`^[^\s@/]+@[^\s@/]+$`)
+	vertexLocation = lazyre.New(`^[a-z]+(-[a-z0-9]+)*$`)
+	vertexAccount  = lazyre.New(`^[^\s@/]+@[^\s@/]+$`)
 )
 
 // check is why a Vertex AI provider with v can't be saved, nil when it can.
@@ -282,7 +282,7 @@ func vertexTest(q Provider, model string) (string, string) {
 
 // vertexGen is the major version a Gemini id names: gemini-4-argon,
 // gemini-3.8-flash.
-var vertexGen = regexp.MustCompile(`^gemini-(\d+)`)
+var vertexGen = lazyre.New(`^gemini-(\d+)`)
 
 // vertexGeneration is the Gemini generation model names, 0 for an id that
 // names none (an alias such as gemini-flash-latest, which may be a 2.5).
@@ -570,7 +570,7 @@ func (c googleCreds) mint(ctx context.Context, top bool) (string, time.Time, err
 // impersonationURL is gcloud's …/serviceAccounts/<email>:generateAccessToken,
 // whose email is asked for at IAM Credentials: the token never goes to the
 // host the file names.
-var impersonationURL = regexp.MustCompile(`/serviceAccounts/([^/:]+):generateAccessToken$`)
+var impersonationURL = lazyre.New(`/serviceAccounts/([^/:]+):generateAccessToken$`)
 
 // impersonated is the service account an impersonated_service_account
 // file's URL names, "" for another kind.
@@ -594,7 +594,7 @@ func (e personRefused) Unwrap() error { return e.error }
 
 // legacyADC is the file gcloud keeps a signed-in account's credentials in
 // for other tools, under its folder: legacy_credentials/<account>/adc.json.
-var legacyADC = regexp.MustCompile(`^legacy_credentials/([^/]+)/adc\.json$`)
+var legacyADC = lazyre.New(`^legacy_credentials/([^/]+)/adc\.json$`)
 
 // signInAgain says how the person's sign-in in file is made anew: gcloud
 // writes its own files again, as they were made (impersonating account,

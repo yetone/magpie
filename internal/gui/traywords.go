@@ -2,9 +2,10 @@ package gui
 
 import (
 	"encoding/json"
-	"regexp"
 	"strings"
 	"sync"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // pageWords are the page's own translations (assets/i18n.js's I18N), by
@@ -23,8 +24,8 @@ var pageWords = sync.OnceValue(func() map[string]map[string]string {
 })
 
 var (
-	pageLangHead = regexp.MustCompile(`^  "?([\w-]+)"?: \{`)
-	pagePair     = regexp.MustCompile(`"((?:[^"\\]|\\.)*)"\s*:\s*"((?:[^"\\]|\\.)*)"`)
+	pageLangHead = lazyre.New(`^  "?([\w-]+)"?: \{`)
+	pagePair     = lazyre.New(`"((?:[^"\\]|\\.)*)"\s*:\s*"((?:[^"\\]|\\.)*)"`)
 )
 
 // parsePageWords reads I18N's language blocks from i18n.js's source: each

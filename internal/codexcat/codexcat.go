@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/filememo"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -332,7 +332,7 @@ type model struct {
 // DeepSeek's own deepseek-flash, a found auto/deepseek-flash), named by
 // the model's own id after its provider's. A routing group is not one: it
 // may hand the turn to any model.
-var deepSeekModel = regexp.MustCompile(`(?i)^deepseek-(v[4-9]|v\d\d|flash|pro|chat|reasoner)`)
+var deepSeekModel = lazyre.New(`(?i)^deepseek-(v[4-9]|v\d\d|flash|pro|chat|reasoner)`)
 
 func deepSeek(id string) bool {
 	if strings.HasPrefix(id, "group/") {
@@ -566,7 +566,7 @@ func Keep(cur, b []byte) []byte {
 
 // datedSuffix is a snapshot's date after a model's id (-2026-09-14,
 // -20260914).
-var datedSuffix = regexp.MustCompile(`-(\d{4}-\d{2}-\d{2}|\d{8})$`)
+var datedSuffix = lazyre.New(`-(\d{4}-\d{2}-\d{2}|\d{8})$`)
 
 // agentsEffort is the multi_agent_reasoning_effort of Codex's own entry for
 // the model a third-party one serves (s2a/gpt-6-astra, openai/gpt-6-astra on
@@ -591,7 +591,7 @@ func agentsEffort(own map[string]map[string]any, m catalog.Model) string {
 }
 
 // gptModel is an OpenAI model's id, as a relay may serve it: gpt-6-sol, o4.
-var gptModel = regexp.MustCompile(`^(gpt-|o\d)`)
+var gptModel = lazyre.New(`^(gpt-|o\d)`)
 
 // ownTiers are the service tiers Codex's own entry gives the model a
 // provider the user added by its address serves (openai/gpt-6-sol on a

@@ -40,13 +40,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -448,7 +448,7 @@ func wbCheckinFailed(err error) WorkBuddyCheckin {
 
 // unanswered is Bun's and Node's words for a fetch that got no reply: no
 // name lookup, no connection, or one closed before the answer.
-var unanswered = regexp.MustCompile(`\b(ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH|ConnectionRefused|ConnectionClosed|FailedToOpenSocket)\b|Unable to connect|socket connection was closed unexpectedly`)
+var unanswered = lazyre.New(`\b(ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH|ConnectionRefused|ConnectionClosed|FailedToOpenSocket)\b|Unable to connect|socket connection was closed unexpectedly`)
 
 // CheckInWorkBuddy checks each WorkBuddy (China) account in use in for
 // today now, those not in yet, and says how each stands.

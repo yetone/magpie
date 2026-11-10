@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -23,6 +22,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/probelog"
 )
 
@@ -1041,7 +1041,7 @@ const BlockedHint = "the provider's network firewall blocked requests from this 
 // | … used Cloudflare to restrict access" page, and the plain-text
 // "error code: 1020" (and the other access-denied codes, 1005 to 1012) it
 // answers a client that takes no HTML.
-var edgeBlocked = regexp.MustCompile(`(?i)request has been blocked|errors\.aliyun\.com|you have been blocked|used cloudflare to restrict access|error code: 10(0[5-9]|1[0-2]|20)\b`)
+var edgeBlocked = lazyre.New(`(?i)request has been blocked|errors\.aliyun\.com|you have been blocked|used cloudflare to restrict access|error code: 10(0[5-9]|1[0-2]|20)\b`)
 
 // EdgeBlocked says whether an error body is a firewall's block page rather
 // than the vendor's API answering, or one already put in plain words.
@@ -1090,17 +1090,17 @@ func APIError(b []byte, fallback string) string {
 // …" (#969). Go's key is only taken where Command Code's CLI asks, which
 // the Command Code plugin does; an API-key provider (the "commandcode"
 // preset) never can.
-var cmdGoNoAPI = regexp.MustCompile(`(?i)\bGo plan doesn.t include API access`)
+var cmdGoNoAPI = lazyre.New(`(?i)\bGo plan doesn.t include API access`)
 
 // CommandCodeGoHint says where a Go plan's key works.
 const CommandCodeGoHint = "a Go plan's key works in magpie through the Command Code plugin (Plugins › Command Code, then sign in with the key), which asks Command Code as its CLI does; a Command Code API-key provider can't use it"
 
 // verifyWords is a refusal asking for the account to be verified, put in
 // words rather than as VALIDATION_REQUIRED — or already by VerifyMessage.
-var verifyWords = regexp.MustCompile(`(?i)verify your account|account verification required|` + verifyAdvice)
+var verifyWords = lazyre.New(`(?i)verify your account|account verification required|` + verifyAdvice)
 
 // verifyLink is the link in a message VerifyMessage put in words.
-var verifyLink = regexp.MustCompile(verifyAdvice + `: open (https://[^\s"\\]+) in a browser`)
+var verifyLink = lazyre.New(verifyAdvice + `: open (https://[^\s"\\]+) in a browser`)
 
 // Verification says whether an error body is Google's refusal of an account
 // it wants verified first — Cloud Code Assist's 403 whose details say
@@ -1303,10 +1303,10 @@ const NoDetails = "refused with no details (an empty reply, often from a firewal
 
 // pageStart is how a web page begins, or a fragment of one that a proxy
 // serves as its error.
-var pageStart = regexp.MustCompile(`(?i)^<(!doctype\s+html|html[\s>]|head[\s>]|body[\s>]|title[\s>]|meta[\s>])`)
+var pageStart = lazyre.New(`(?i)^<(!doctype\s+html|html[\s>]|head[\s>]|body[\s>]|title[\s>]|meta[\s>])`)
 
 // pageTitle is a web page's title.
-var pageTitle = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
+var pageTitle = lazyre.New(`(?is)<title[^>]*>(.*?)</title>`)
 
 // PageTitle is a web page's title as plain words, cut to 120 runes: no
 // markup, entities read, whitespace folded. "" when there is none.
@@ -1323,7 +1323,7 @@ func PageTitle(b []byte) string {
 }
 
 // tagRe is a markup tag, taken out of a title that holds one.
-var tagRe = regexp.MustCompile(`<[^>]*>`)
+var tagRe = lazyre.New(`<[^>]*>`)
 
 // statusLine says a fallback is an HTTP error's status ("403 Forbidden",
 // or its text alone, "Forbidden"), what an error body was answered with,
@@ -1374,7 +1374,7 @@ func WebPage(b []byte) (string, bool) {
 
 // unshown is markup whose words aren't a reader's: a script, a style
 // sheet, a comment, an XML declaration.
-var unshown = regexp.MustCompile(`(?is)<script[^>]*>.*?</script\s*>|<style[^>]*>.*?</style\s*>|<!--.*?-->|<\?.*?\?>|<!doctype[^>]*>`)
+var unshown = lazyre.New(`(?is)<script[^>]*>.*?</script\s*>|<style[^>]*>.*?</style\s*>|<!--.*?-->|<\?.*?\?>|<!doctype[^>]*>`)
 
 // MarkupText is the words markup holds, as plain words: scripts, styles
 // and comments out, then every tag, entities read, whitespace folded, cut

@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/fx"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
@@ -788,7 +788,7 @@ func trayIconFile(name string) (b []byte, mono bool) {
 	return svgArcFlags(b), !strings.HasSuffix(name, "-color")
 }
 
-var svgPathData = regexp.MustCompile(`\sd="([^"]*[aA][^"]*)"`)
+var svgPathData = lazyre.New(`\sd="([^"]*[aA][^"]*)"`)
 
 // svgArcFlags spaces out the flags of a path's arcs ("a4.5 4.5 0 004.5 0",
 // the flags run into the number after them), which browsers read and the

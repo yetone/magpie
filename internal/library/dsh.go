@@ -24,13 +24,13 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"regexp"
 	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 const dshMCPPlugin = "@deepseek-ai/dsh-mcp-client"
@@ -38,7 +38,7 @@ const dshMCPPlugin = "@deepseek-ai/dsh-mcp-client"
 const dshMark = "- insert: # magpie"
 
 // dshServerName is what dsh-mcp-client takes as a serverName.
-var dshServerName = regexp.MustCompile(`^[A-Za-z0-9_-]{1,32}$`)
+var dshServerName = lazyre.New(`^[A-Za-z0-9_-]{1,32}$`)
 
 // errDshName is what the page says of a server whose name dsh can't take.
 var errDshName = errors.New("DeepSeek Harness takes a server name of at most 32 letters, digits, - and _")
@@ -298,7 +298,7 @@ func dshScalar(s string) string {
 	return strings.TrimSpace(b.String())
 }
 
-var dshPlain = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`)
+var dshPlain = lazyre.New(`^[A-Za-z_][A-Za-z0-9_-]*$`)
 
 // dshKey is a key bare where YAML reads it so, quoted where not.
 func dshKey(k string) string {

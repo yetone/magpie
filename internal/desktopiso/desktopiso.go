@@ -28,11 +28,11 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	xdraw "golang.org/x/image/draw"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
 )
 
@@ -127,7 +127,7 @@ func plist(claudeApp string) string {
 `
 }
 
-var plistKeyRe = regexp.MustCompile(`(?s)<key>([^<]*)</key>\s*<string>([^<]*)</string>`)
+var plistKeyRe = lazyre.New(`(?s)<key>([^<]*)</key>\s*<string>([^<]*)</string>`)
 
 // plistString is key's string in the XML Info.plist at path, "" when it
 // has none or can't be read (Claude.app's is XML).

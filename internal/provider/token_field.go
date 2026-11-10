@@ -3,10 +3,11 @@ package provider
 import (
 	"bytes"
 	"encoding/json"
-	"regexp"
 	"strings"
 
 	"github.com/tidwall/gjson"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // Chat Completions has two names for a reply's length. OpenAI's own API
@@ -30,7 +31,7 @@ func OpenAIHost(host string) bool {
 // tokenFieldAsked matches a vendor's 400 that names the other field as
 // the one to send: OpenAI's "Use 'max_completion_tokens' instead", and a
 // vendor that says the reverse ("use max_tokens instead").
-var tokenFieldAsked = regexp.MustCompile("(?i)\\buse\\s+['\"`]?(max_completion_tokens|max_tokens)['\"`]?")
+var tokenFieldAsked = lazyre.New("(?i)\\buse\\s+['\"`]?(max_completion_tokens|max_tokens)['\"`]?")
 
 // TokenFieldWanted is the field a Chat Completions refusal asks for in
 // place of the one sent, or "": only when its words name it as the one to

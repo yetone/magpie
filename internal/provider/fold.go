@@ -23,13 +23,13 @@ import (
 	"errors"
 	"os"
 	"reflect"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -37,8 +37,8 @@ import (
 // "NVIDIA #595", "Mistral #0001", or "NVIDIA NIM 2" as freeName names a
 // second one alike.
 var (
-	numberedHash  = regexp.MustCompile(`^(.*\S)\s*#\s*\d+$`)
-	numberedSpace = regexp.MustCompile(`^(.*\S) (\d+)$`)
+	numberedHash  = lazyre.New(`^(.*\S)\s*#\s*\d+$`)
+	numberedSpace = lazyre.New(`^(.*\S) (\d+)$`)
 )
 
 // copyBase is the name a numbered copy is a copy of, and whether name is

@@ -24,9 +24,10 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // followMovedSkills re-points each library skill linked into a version
@@ -127,7 +128,7 @@ func linkedEnd(p string) string {
 }
 
 // versionName is a folder named for a version: 0.6.0.12, v2.1, 1.4.2-beta.
-var versionName = regexp.MustCompile(`^[vV]?\d+(\.\d+)*([-+_][0-9A-Za-z.]+)?$`)
+var versionName = lazyre.New(`^[vV]?\d+(\.\d+)*([-+_][0-9A-Za-z.]+)?$`)
 
 // currentNames are the links an app keeps beside its version folders to
 // the one in use.

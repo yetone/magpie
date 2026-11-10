@@ -17,12 +17,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
 )
 
@@ -36,11 +36,11 @@ var gitTimeout = 3 * time.Minute
 var (
 	// remoteHelper is git's <transport>::<address>, which hands the
 	// address to a helper program (ext:: runs a command)
-	remoteHelper = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*::`)
+	remoteHelper = lazyre.New(`^[A-Za-z][A-Za-z0-9+.-]*::`)
 	// scpLike is git's user@host:path for SSH
-	scpLike = regexp.MustCompile(`^(?:([\w.-]+)@)?([\w.-]+):(.+)$`)
-	gitRef  = regexp.MustCompile(`^[\w./+@-]+$`)
-	hexRef  = regexp.MustCompile(`^[0-9a-fA-F]{7,40}$`)
+	scpLike = lazyre.New(`^(?:([\w.-]+)@)?([\w.-]+):(.+)$`)
+	gitRef  = lazyre.New(`^[\w./+@-]+$`)
+	hexRef  = lazyre.New(`^[0-9a-fA-F]{7,40}$`)
 )
 
 // gitSchemes are the URL schemes a git source may have. file:// is a

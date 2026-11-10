@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"net/url"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -72,13 +72,13 @@ func magpieFile(path string) bool {
 }
 
 // originRE is an http(s) URL's scheme and host, as it is written in a file.
-var originRE = regexp.MustCompile(`https?://[A-Za-z0-9.\-_\[\]:%]+`)
+var originRE = lazyre.New(`https?://[A-Za-z0-9.\-_\[\]:%]+`)
 
 // keyLineRE is a key and its value as a JSON, JSONC, YAML, TOML or .env
 // file writes it: "apiKey": "x", api_key = "x", apiKey: x, KEY=x; not one
 // whose value is an object or a list. The value is group 4 when quoted with
 // ", 5 with ', 6 bare.
-var keyLineRE = regexp.MustCompile(`(["']?)([A-Za-z0-9_\-]+)(["']?)[ \t]*[:=][ \t]*(?:"((?:[^"\\\n]|\\.)*)"|'([^'\n]*)'|([^\s"',{}\[\]#][^\n"',}\]#]*))`)
+var keyLineRE = lazyre.New(`(["']?)([A-Za-z0-9_\-]+)(["']?)[ \t]*[:=][ \t]*(?:"((?:[^"\\\n]|\\.)*)"|'([^'\n]*)'|([^\s"',{}\[\]#][^\n"',}\]#]*))`)
 
 // keyName says a key of that name holds what an agent sends the gateway to
 // be let in: apiKey, api_key, MAGPIE_QWEN_API_KEY, experimental_bearer_token,
@@ -208,7 +208,7 @@ func (k kept) away(path string, data []byte) []byte {
 }
 
 // urlRE is an http(s) URL with its path, as it is written in a file.
-var urlRE = regexp.MustCompile(`https?://[^\s"'<>,{}\[\]\\]+`)
+var urlRE = lazyre.New(`https?://[^\s"'<>,{}\[\]\\]+`)
 
 // awayPath is the path before magpie's own that the address away keeps in
 // was, the file before a sync wrote data with the gateway's address g: the

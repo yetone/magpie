@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -19,6 +18,7 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -188,7 +188,7 @@ func biliAgents(agents []*agent.Agent) []*agent.Agent {
 
 // biliStatusLine is a row of bili plugin list: the agent, then its
 // status, then the version and how it updates, apart by two spaces or more.
-var biliColumns = regexp.MustCompile(`\s{2,}`)
+var biliColumns = lazyre.New(`\s{2,}`)
 
 // parseBiliList is each agent's status as bili plugin list prints it.
 func parseBiliList(out string) map[string]string {
@@ -604,7 +604,7 @@ func keyPath(p []string) (string, bool) {
 
 // biliURL is the ANTHROPIC_BASE_URL bili's Claude Code plugin writes: its
 // proxy, then the URL it forwards to.
-var biliURL = regexp.MustCompile(`^https?://(?:127\.0\.0\.1|localhost|\[::1\]):\d+/bili/(https?://.+)$`)
+var biliURL = lazyre.New(`^https?://(?:127\.0\.0\.1|localhost|\[::1\]):\d+/bili/(https?://.+)$`)
 
 // biliMergeJSON is now with what the install changed (before → after) and
 // nothing changed since (cur still has it) put back as before, and what

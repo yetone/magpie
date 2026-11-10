@@ -13,12 +13,12 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/source"
 	"github.com/yetone/magpie/internal/update"
 )
@@ -81,7 +81,7 @@ var errDistUnread = errors.New("the community repo's dist branch can't be read")
 
 // distFile is a file the index may name: one tarball under tgz/, nothing
 // that leaves the branch or plugins/dist.
-var distFile = regexp.MustCompile(`^tgz/[A-Za-z0-9._-]+\.tgz$`)
+var distFile = lazyre.New(`^tgz/[A-Za-z0-9._-]+\.tgz$`)
 
 // distPkg is what the dist branch has of the package: nil with no error
 // when the branch was read and has none, or the package isn't one of its
@@ -298,7 +298,7 @@ func distWanted(spec string) (name, version string, ok bool) {
 	return name, version, true
 }
 
-var exactVersion = regexp.MustCompile(`^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
+var exactVersion = lazyre.New(`^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
 
 // installDist installs the package's version from the dist branch: its
 // tarball fetched, checked against the index's sha512, kept in
@@ -397,7 +397,7 @@ func distNamed(b []byte, file string) bool {
 
 // distLockedAt is a package bun.lock's packages has at a tarball in
 // plugins/dist, and that tarball: "<name>": ["<name>@./dist/<file>", …].
-var distLockedAt = regexp.MustCompile(`\["((?:@[^"/@]+/)?[^"/@]+)@(?:file:)?(?:\./)?dist/([A-Za-z0-9._-]+\.tgz)"`)
+var distLockedAt = lazyre.New(`\["((?:@[^"/@]+/)?[^"/@]+)@(?:file:)?(?:\./)?dist/([A-Za-z0-9._-]+\.tgz)"`)
 
 // mendDist sends bun.lock back to package.json for the packages it has at a
 // dist tarball package.json doesn't name, when package.json has them at one

@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -21,6 +20,7 @@ import (
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/lastgood"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/source"
 )
 
@@ -102,7 +102,7 @@ var partnerEvery = time.Hour
 
 const partnerRetry = 10 * time.Minute
 
-var partnerID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,40}$`)
+var partnerID = lazyre.New(`^[a-z0-9][a-z0-9-]{1,40}$`)
 
 func partnerCacheFile() string { return filepath.Join(appdir.Cache(), "partners.json") }
 

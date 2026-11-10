@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // CleanOrigins is the web origins a user typed for CORSOrigins, as a
@@ -65,10 +66,10 @@ func cleanOrigin(raw string) (string, error) {
 // Chromium's chrome-extension://<id>, the id 32 letters a–p; Firefox's
 // moz-extension://<uuid>, its per-install Internal UUID; Safari's
 // safari-web-extension://<uuid>, which Safari picks anew on each launch.
-var extensionIDs = map[string]*regexp.Regexp{
-	"chrome-extension":     regexp.MustCompile(`^[a-p]{32}$`),
-	"moz-extension":        regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`),
-	"safari-web-extension": regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`),
+var extensionIDs = map[string]*lazyre.RE{
+	"chrome-extension":     lazyre.New(`^[a-p]{32}$`),
+	"moz-extension":        lazyre.New(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`),
+	"safari-web-extension": lazyre.New(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`),
 }
 
 // extensionOrigin is raw as an extension's origin, lower-cased, with a

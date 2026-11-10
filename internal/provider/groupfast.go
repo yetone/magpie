@@ -14,9 +14,10 @@ package provider
 
 import (
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // FastWord is the last part of a member typed to be sent fast.
@@ -172,9 +173,9 @@ func modelSlug(model string) string {
 }
 
 var (
-	openAIFast = regexp.MustCompile(`^(gpt-|o\d)`)
+	openAIFast = lazyre.New(`^(gpt-|o\d)`)
 	// a dated id is its model's: claude-opus-4-8-20260501
-	claudeDated = regexp.MustCompile(`-\d{8}$`)
+	claudeDated = lazyre.New(`-\d{8}$`)
 )
 
 // claudeFastModels are the Claude models with fast mode (speed "fast",

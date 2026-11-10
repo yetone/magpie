@@ -2,8 +2,9 @@ package provider
 
 import (
 	"net/url"
-	"regexp"
 	"strings"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // A custom provider can be given a Gemini API (#1346): Google's own at
@@ -13,7 +14,7 @@ import (
 
 // geminiMethod is a Gemini endpoint pasted whole, cut back to its base:
 // …/models/gemini-2.5-pro:streamGenerateContent?alt=sse, or …/models.
-var geminiMethod = regexp.MustCompile(`/models(?:/[^/?#]*)?(?:[?#].*)?$`)
+var geminiMethod = lazyre.New(`/models(?:/[^/?#]*)?(?:[?#].*)?$`)
 
 // GeminiBase is the base a Gemini URL is kept as: trimmed, an endpoint or
 // the model list pasted whole cut back to the base, and a bare host given

@@ -36,7 +36,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -51,6 +50,7 @@ import (
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -629,7 +629,7 @@ type dshItem struct {
 	lines  []string
 }
 
-var dshIDLine = regexp.MustCompile(`^(?:- |  )id:\s*['"]?([^'"#\s]+)['"]?\s*(#.*)?$`)
+var dshIDLine = lazyre.New(`^(?:- |  )id:\s*['"]?([^'"#\s]+)['"]?\s*(#.*)?$`)
 
 // dshParse splits the patch list at path into what comes before its first
 // entry and the entries. A list written in flow style ([ {id: a} ], which
@@ -984,7 +984,7 @@ func dshRouteLists(route *yaml.Node, id string) bool {
 	return false
 }
 
-var dshModelLine = regexp.MustCompile(`^\s+model:\s*(.+?)\s*$`)
+var dshModelLine = lazyre.New(`^\s+model:\s*(.+?)\s*$`)
 
 // dshLead is the profile whose start magpie shows: the one named lead
 // when there is one (the desktop app's when DeepSeek Harness Desktop is

@@ -41,7 +41,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -50,6 +49,7 @@ import (
 
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/lastgood"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // DailyCredits is what one of an account's credits windows went to day
@@ -144,7 +144,7 @@ func creditUnit(s string) string {
 // currency sign, thousands' commas, a compact K/M/B/万/亿, an exponent
 // (Qoder's 1.5e+06), and a unit word after; a note after a " · " (CodeArts'
 // "· 300 即将过期", JoyCode's "· 剩余 …") is cut before it is read.
-var creditsDisplay = regexp.MustCompile(`(?i)^\s*([$¥￥€])?\s*([\d.,]*\d(?:e[+-]?\d+)?)\s*([kmb]\b|万|亿)?\s*/\s*([$¥￥€])?\s*([\d.,]*\d(?:e[+-]?\d+)?)\s*([kmb]\b|万|亿)?\s*(.*?)\s*$`)
+var creditsDisplay = lazyre.New(`(?i)^\s*([$¥￥€])?\s*([\d.,]*\d(?:e[+-]?\d+)?)\s*([kmb]\b|万|亿)?\s*/\s*([$¥￥€])?\s*([\d.,]*\d(?:e[+-]?\d+)?)\s*([kmb]\b|万|亿)?\s*(.*?)\s*$`)
 
 func creditsNumber(n, scale string) (float64, bool) {
 	if strings.Count(n, ".") > 1 {

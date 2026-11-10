@@ -12,11 +12,12 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // FaviconFor finds the site behind a provider's base URL and keeps its icon
@@ -250,9 +251,9 @@ func letterIcon(name string) (string, error) {
 const iconUA = "magpie"
 
 var (
-	linkTag  = regexp.MustCompile(`(?is)<link\b[^>]*>`)
-	tagAttr  = regexp.MustCompile(`(?is)\b(rel|href|sizes|type)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))`)
-	headDone = regexp.MustCompile(`(?i)</head>|<body\b`)
+	linkTag  = lazyre.New(`(?is)<link\b[^>]*>`)
+	tagAttr  = lazyre.New(`(?is)\b(rel|href|sizes|type)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))`)
+	headDone = lazyre.New(`(?i)</head>|<body\b`)
 )
 
 // pageIcons are the pictures a site's home page names as its icon, the

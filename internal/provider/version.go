@@ -3,15 +3,16 @@ package provider
 import (
 	"crypto/rand"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // claudeSemverRE finds a version (1.2.3) in a CLI's --version, and
 // compareClaudeVersion orders two of them.
-var claudeSemverRE = regexp.MustCompile(`\d+\.\d+\.\d+`)
+var claudeSemverRE = lazyre.New(`\d+\.\d+\.\d+`)
 
 func compareClaudeVersion(a, b string) int {
 	pa, pb := strings.Split(a, "."), strings.Split(b, ".")

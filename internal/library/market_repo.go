@@ -5,11 +5,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // A server the MCP Registry doesn't list can still be at the address
@@ -27,7 +28,7 @@ type repoAt struct {
 	Path string // the folder, "" for the top
 }
 
-var ghRepoRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+$`)
+var ghRepoRe = lazyre.New(`^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+$`)
 
 // parseRepoAt reads a GitHub address as a repository's folder:
 // github.com/o/r, with #subdirectory=p (pip's and uv's way), /tree/ref/p,
@@ -188,7 +189,7 @@ func pathPart(a repoAt) string {
 // pypiURL is PyPI's JSON API; a variable for tests.
 var pypiURL = "https://pypi.org/pypi"
 
-var pypiNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+var pypiNameRe = lazyre.New(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 // fromPyPI is the server a PyPI package of that name runs, uvx <name>,
 // with what its description (its README) says it reads from the
@@ -230,10 +231,10 @@ func fromPyPI(name string) (MarketServer, bool) {
 }
 
 var (
-	envBlockRe = regexp.MustCompile(`"env"\s*:\s*\{`)
-	envKeyRe   = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
-	secretRe   = regexp.MustCompile(`KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH`)
-	fenceRe    = regexp.MustCompile("^\\s*(```|~~~)")
+	envBlockRe = lazyre.New(`"env"\s*:\s*\{`)
+	envKeyRe   = lazyre.New(`^[A-Z][A-Z0-9_]*$`)
+	secretRe   = lazyre.New(`KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH`)
+	fenceRe    = lazyre.New("^\\s*(```|~~~)")
 )
 
 // envInputs are the environment variables a README's configuration

@@ -4,8 +4,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // errAppMain is what a probe of an app's own program (a Mac bundle's, a
@@ -56,7 +57,7 @@ func appMain(path string) bool {
 	return strings.EqualFold(exe, filepath.Base(path))
 }
 
-var bundleExeRe = regexp.MustCompile(`<key>CFBundleExecutable</key>\s*<string>([^<]+)</string>`)
+var bundleExeRe = lazyre.New(`<key>CFBundleExecutable</key>\s*<string>([^<]+)</string>`)
 
 // bundleExecutable is the CFBundleExecutable an XML Info.plist names, ""
 // when it can't be read (a binary plist too) or names none.

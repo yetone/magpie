@@ -35,7 +35,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -43,6 +42,7 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/dirent"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 	"gopkg.in/yaml.v3"
 )
@@ -338,7 +338,7 @@ func hermesProfileFields(at place, dir string) []Field {
 
 // hermesProfileID is the name a Hermes profile may have
 // (hermes_constants.PROFILE_ID_RE).
-var hermesProfileID = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+var hermesProfileID = lazyre.New(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 
 // hermesProfiles is the config.yaml of each of Hermes's own profiles (its
 // bots), as Hermes lists them (hermes_cli/profiles.py): the root's own, and
@@ -842,12 +842,12 @@ func hermesKept(at place, path, name string, e hermesProviderEntry) any {
 // hermesEnvRef is a reference in a value of Hermes's config.yaml, which
 // Hermes expands as it loads it: ${VAR}, or ${env:VAR}
 // (hermes_cli/config.py _ENV_REF_RE, _env_expand_match).
-var hermesEnvRef = regexp.MustCompile(`\$\{([^}]+)\}`)
+var hermesEnvRef = lazyre.New(`\$\{([^}]+)\}`)
 
 // hermesSecretSource starts a reference to a secret source other than the
 // environment (${vault:...}, ${bitwarden:...}), which Hermes leaves as it
 // is in config.yaml (_is_non_env_secret_ref).
-var hermesSecretSource = regexp.MustCompile(`^[a-z][a-z0-9_-]*:`)
+var hermesSecretSource = lazyre.New(`^[a-z][a-z0-9_-]*:`)
 
 // hermesRefVar is the variable the body of a reference reads, "" for
 // another source or an empty ${env:} (_env_ref_var_name).

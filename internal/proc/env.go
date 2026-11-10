@@ -3,8 +3,9 @@ package proc
 import (
 	"context"
 	"errors"
-	"regexp"
 	"strings"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // End ends process pid as its own clean exit would look to its parent:
@@ -29,7 +30,7 @@ func EnvOf(ctx context.Context, pid int, names ...string) (map[string]string, er
 }
 
 // psEnvNameRe is where the next variable starts in `ps -E` output.
-var psEnvNameRe = regexp.MustCompile(` [A-Za-z_][A-Za-z0-9_]*=`)
+var psEnvNameRe = lazyre.New(` [A-Za-z_][A-Za-z0-9_]*=`)
 
 // parsePSEnv reads names out of the line `ps -E -ww -o command=` prints:
 // the command line, then each variable as NAME=value, space-separated and

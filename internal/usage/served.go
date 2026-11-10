@@ -1,12 +1,12 @@
 package usage
 
 import (
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
 )
@@ -21,7 +21,7 @@ import (
 // versionTail is what a vendor puts after a model's name for the version
 // it answered with: a date, a build number, Bedrock's v1:0, latest,
 // preview. Not v3 alone: deepseek-v3 is another model than deepseek-v2.
-var versionTail = regexp.MustCompile(`(?:[-_@:](?:\d{4}-\d{2}-\d{2}|\d{2}-\d{2}|\d{6,8}|\d{3,4}|v\d+:\d+|latest|preview|exp))+$`)
+var versionTail = lazyre.New(`(?:[-_@:](?:\d{4}-\d{2}-\d{2}|\d{2}-\d{2}|\d{6,8}|\d{3,4}|v\d+:\d+|latest|preview|exp))+$`)
 
 // vendorDot is Bedrock's region and maker before a model's name
 // (us.anthropic.claude-…), the geography of an inference profile as
@@ -29,16 +29,16 @@ var versionTail = regexp.MustCompile(`(?:[-_@:](?:\d{4}-\d{2}-\d{2}|\d{2}-\d{2}|
 // makers are those models.dev's bedrock list names ids by (xai.grok-4.7,
 // writer.palmyra-x5, moonshot.kimi-k2-thinking, nvidia.nemotron), which
 // the reply names as Anthropic's own are, without the geography.
-var vendorDot = regexp.MustCompile(`^(?:(?:global|us-gov|[a-z]{2,4})\.)?(?:anthropic|amazon|meta|mistral|cohere|ai21|deepseek|qwen|openai|google|moonshotai|moonshot|minimax|nvidia|writer|xai|zai)\.`)
+var vendorDot = lazyre.New(`^(?:(?:global|us-gov|[a-z]{2,4})\.)?(?:anthropic|amazon|meta|mistral|cohere|ai21|deepseek|qwen|openai|google|moonshotai|moonshot|minimax|nvidia|writer|xai|zai)\.`)
 
 // contextTail is what Claude Code writes after a model's name for the size of
 // its context: claude-opus-5[1m].
-var contextTail = regexp.MustCompile(`\[[^\]]*\]$`)
+var contextTail = lazyre.New(`\[[^\]]*\]$`)
 
 // windowTail is the window magpie offers a model at beside its default
 // (grok-4.7@500k, Cursor's grok-4.7@256k): the vendor answers under the
 // plain name, which is the same model (#1645).
-var windowTail = regexp.MustCompile(`@\d+[km]?$`)
+var windowTail = lazyre.New(`@\d+[km]?$`)
 
 // bareModel is a model's name without its maker or path, its version, the
 // size of its context or its case.
@@ -76,7 +76,7 @@ func Swapped(sent, served string) bool {
 // its paid id for the Singapore deployment (the plugin's product config
 // names it paidId to the free deepseek-v4.1-flash, one window for both),
 // and answers under the model's own name.
-var regionTail = regexp.MustCompile(`[-_](?:sg|us|eu|cn|intl|global)$`)
+var regionTail = lazyre.New(`[-_](?:sg|us|eu|cn|intl|global)$`)
 
 // RegionTail reports whether one of sent and served is the other with a
 // region after it: the same model at that region's deployment, not
@@ -244,7 +244,7 @@ func ClineServing(sent, served string) bool {
 
 // vmcPoint is a version's dot as ClinePass's vmc/ names write it (v4p1
 // for v4.1), the part ClineServing reads past
-var vmcPoint = regexp.MustCompile(`(\d)p(\d)`)
+var vmcPoint = lazyre.New(`(\d)p(\d)`)
 
 // GrokServing reports whether served is xAI's name for the build serving
 // the Grok model sent: the model's own name with "-build" after its
@@ -267,7 +267,7 @@ func GrokServing(sent, served string) bool {
 
 // grokBuild is the "-build" after a Grok model's version (grok-4.7-build,
 // grok-4.7-build-fast), the part GrokServing reads past.
-var grokBuild = regexp.MustCompile(`^grok-[0-9][0-9.]*(-build)(?:-|$)`)
+var grokBuild = lazyre.New(`^grok-[0-9][0-9.]*(-build)(?:-|$)`)
 
 // GeminiServing reports whether served is the name Google's backend gives
 // the deployment that serves the Gemini model sent: the model's own name

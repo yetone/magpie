@@ -56,7 +56,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -65,6 +64,7 @@ import (
 
 	"github.com/MoeForge/moejs"
 	"github.com/yetone/magpie/internal/jsmod"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/plugin"
 )
 
@@ -160,7 +160,7 @@ var (
 
 var errTimeout = errors.New("took too long")
 
-var idOK = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
+var idOK = lazyre.New(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 
 type set struct {
 	stamp string

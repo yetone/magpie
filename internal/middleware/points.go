@@ -26,7 +26,6 @@ import (
 	"log"
 	"math"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -37,6 +36,7 @@ import (
 
 	"github.com/yetone/magpie/internal/beat"
 	"github.com/yetone/magpie/internal/filememo"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/routes"
 	"github.com/yetone/magpie/internal/usage"
@@ -52,7 +52,7 @@ var (
 	usageQueue = 1024
 )
 
-var strategyName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+var strategyName = lazyre.New(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 // strat is one strategy a module exports.
 type strat struct {
@@ -195,7 +195,7 @@ func (m *mw) routing(n string) string {
 	return short + "/" + n
 }
 
-var badPrefix = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+var badPrefix = lazyre.New(`[^A-Za-z0-9._-]+`)
 
 // seatJSON is a routes.Seat as a strategy is given it.
 type seatJSON struct {

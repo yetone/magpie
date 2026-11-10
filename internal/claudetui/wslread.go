@@ -8,10 +8,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
 )
 
@@ -43,7 +43,7 @@ var wslReadCommand = func(distro, sid string) *exec.Cmd {
 // how long the shell has to say it is ready
 var wslReadWait = 30 * time.Second
 
-var sidRe = regexp.MustCompile(`^[0-9A-Za-z-]+$`)
+var sidRe = lazyre.New(`^[0-9A-Za-z-]+$`)
 
 // wslRead is a transcript read inside the distro, copied to path.
 type wslRead struct {

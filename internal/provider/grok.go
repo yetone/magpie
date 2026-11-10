@@ -28,7 +28,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"sort"
@@ -37,6 +36,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
 )
@@ -709,18 +709,18 @@ func runCLISignIn(s *signInFlow, what string, env []string, using bool, failed f
 // it couldn't reach, not a page to open: grok 1.0.46 behind a proxy it
 // can't get through prints "Error: error sending request for url
 // (https://auth.x.ai/oauth2/device/code): …" (𝕏 on Discord).
-var failedLine = regexp.MustCompile(`(?i)\berror\b`)
+var failedLine = lazyre.New(`(?i)\berror\b`)
 
 // linkWait is how long a login command has to print its link.
 var linkWait = 30 * time.Second
 
 // linkRest is a line that is nothing but more of a link: no spaces, only
 // what a URL holds.
-var linkRest = regexp.MustCompile(`^[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+$`)
+var linkRest = lazyre.New(`^[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+$`)
 
 // queryRest is what may still follow a link that already has its challenge
 // and uuid: the rest of a value, or more params.
-var queryRest = regexp.MustCompile(`^[A-Za-z0-9\-_%&=]+$`)
+var queryRest = lazyre.New(`^[A-Za-z0-9\-_%&=]+$`)
 
 // AgentUser is who an agent is signed in to itself, as its own files say,
 // for an agent whose vendor a plugin serves too; "" when not known.

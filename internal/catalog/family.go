@@ -1,10 +1,11 @@
 package catalog
 
 import (
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // A model's family is its id with the version numbers taken out, so that
@@ -38,16 +39,16 @@ type Family struct {
 }
 
 var (
-	familySep = regexp.MustCompile(`[-_/:@\[\]\s]+`)
+	familySep = lazyre.New(`[-_/:@\[\]\s]+`)
 	// a number: 4, 4.5, 2.0
-	familyNum = regexp.MustCompile(`^\d+(?:\.\d+)*$`)
+	familyNum = lazyre.New(`^\d+(?:\.\d+)*$`)
 	// a word that ends in its version: qwen3, qwen2.5, o4, k2, v1, llama3.1
-	familyTail = regexp.MustCompile(`^([a-z][a-z.]*?[a-z])(\d+(?:\.\d+)*)$|^([a-z])(\d+(?:\.\d+)*)$`)
+	familyTail = lazyre.New(`^([a-z][a-z.]*?[a-z])(\d+(?:\.\d+)*)$|^([a-z])(\d+(?:\.\d+)*)$`)
 	// a word that starts with its version: 4o, 4.5v, 3n
-	familyHead = regexp.MustCompile(`^(\d+(?:\.\d+)*)([a-z]+)$`)
+	familyHead = lazyre.New(`^(\d+(?:\.\d+)*)([a-z]+)$`)
 	// a size, kept in the name: 8b, 1.5b, 70b, 128e, 32k, 8x7b, a22b, e4b
-	familySize = regexp.MustCompile(`^(?:[a-z]?\d+(?:\.\d+)?|\d+x\d+(?:\.\d+)?)[bmkte]$`)
-	familyYear = regexp.MustCompile(`^(?:19|20)\d\d$`)
+	familySize = lazyre.New(`^(?:[a-z]?\d+(?:\.\d+)?|\d+x\d+(?:\.\d+)?)[bmkte]$`)
+	familyYear = lazyre.New(`^(?:19|20)\d\d$`)
 )
 
 var familyPreview = map[string]bool{"preview": true, "exp": true, "experimental": true, "beta": true, "alpha": true}

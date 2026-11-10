@@ -20,7 +20,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -30,6 +29,7 @@ import (
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -145,15 +145,15 @@ func parseCursorAbout(out []byte) (user, plan string, said bool) {
 // whatever about said; a var so tests can fake it.
 var cursorSignedOut = func() bool { return readCursorToken() == "" }
 
-var ansi = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`)
+var ansi = lazyre.New(`\x1b\[[0-9;?]*[A-Za-z]`)
 
 // cursorDefaultContext is the context Cursor gives a model it doesn't name
 // as a 1M one.
 const cursorDefaultContext = 200_000
 
 var (
-	cursorMillion = regexp.MustCompile(`\b(\d+)M\b`)
-	cursorVariant = regexp.MustCompile(`-(fast|none|low|medium|high|xhigh|extra-high|max|thinking)$`)
+	cursorMillion = lazyre.New(`\b(\d+)M\b`)
+	cursorVariant = lazyre.New(`-(fast|none|low|medium|high|xhigh|extra-high|max|thinking)$`)
 )
 
 // cursorContext is how much of a conversation Cursor lets a model hold. Its
@@ -197,7 +197,7 @@ func withCursorContexts(ms []catalog.Model) []catalog.Model {
 	return out
 }
 
-var cursorLoginURL = regexp.MustCompile(`https://\S+`)
+var cursorLoginURL = lazyre.New(`https://\S+`)
 
 // cursorAuthFile is where cursor-agent keeps its sign-in off a Mac's keychain.
 func cursorAuthFile() string {

@@ -10,13 +10,13 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/yetone/magpie/internal/agentenv"
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -560,7 +560,7 @@ func splitLines(s string) []string {
 
 // lineKey is what a line sets: TOML's and .env's key before =, JSON's and
 // YAML's before :, "" for a line that sets nothing.
-var keyRe = regexp.MustCompile(`^\s*(?:export\s+)?"?([A-Za-z0-9_.\-]+)"?\s*[:=]`)
+var keyRe = lazyre.New(`^\s*(?:export\s+)?"?([A-Za-z0-9_.\-]+)"?\s*[:=]`)
 
 func lineKey(l string) string {
 	if m := keyRe.FindStringSubmatch(l); m != nil {
@@ -574,7 +574,7 @@ func lineKey(l string) string {
 
 func indent(l string) string { return l[:len(l)-len(strings.TrimLeft(l, " \t"))] }
 
-var secretKey = regexp.MustCompile(`(?i)(key|token|secret|password|auth)`)
+var secretKey = lazyre.New(`(?i)(key|token|secret|password|auth)`)
 
 // mask hides the value of a line whose key reads as a secret's; magpie's
 // own token, which is no secret, stays.

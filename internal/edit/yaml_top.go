@@ -2,12 +2,13 @@ package edit
 
 import (
 	"fmt"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // GetYAMLTop reads a top-level scalar key from a YAML file. Quoted keys and
@@ -88,7 +89,7 @@ func DelYAMLTop(path string, keys ...string) error {
 	return writeYAMLTop(path, out)
 }
 
-var yamlPlain = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
+var yamlPlain = lazyre.New(`^[A-Za-z0-9._/-]+$`)
 
 func yamlTopLiteral(value any) string {
 	v := toString(value)

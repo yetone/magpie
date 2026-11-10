@@ -1,9 +1,10 @@
 package library
 
 import (
-	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // A search in the market can be an address: a server's repository
@@ -20,9 +21,9 @@ var codeHosts = map[string]bool{
 }
 
 var (
-	schemeRe    = regexp.MustCompile(`^[a-z][a-z0-9+.-]*://`)
-	ownerRepoRe = regexp.MustCompile(`^@?[a-z0-9][a-z0-9_.-]*/[a-z0-9_.-]+$`)
-	hostRe      = regexp.MustCompile(`^[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?$`)
+	schemeRe    = lazyre.New(`^[a-z][a-z0-9+.-]*://`)
+	ownerRepoRe = lazyre.New(`^@?[a-z0-9][a-z0-9_.-]*/[a-z0-9_.-]+$`)
+	hostRe      = lazyre.New(`^[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?$`)
 )
 
 // normAddr is an address as it's compared: lower case, with no scheme, user,

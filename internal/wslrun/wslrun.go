@@ -16,7 +16,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -25,6 +24,7 @@ import (
 	"time"
 	"unicode/utf16"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -127,7 +127,7 @@ var ErrNotFound = errors.New("not in the distro")
 
 // plainName is a command In can look for: the probe names it in a shell
 // script unquoted, so a name with anything else in it isn't looked for.
-var plainName = regexp.MustCompile(`^[A-Za-z0-9_./+@:-]+$`)
+var plainName = lazyre.New(`^[A-Za-z0-9_./+@:-]+$`)
 
 var foundIn struct {
 	sync.Mutex

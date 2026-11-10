@@ -3,7 +3,6 @@ package library
 import (
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -11,6 +10,7 @@ import (
 	"github.com/tidwall/jsonc"
 
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // A server's tools can be turned off one by one (nf1qaz2w on Discord): the
@@ -216,7 +216,7 @@ func entryToolsEdit(f *mcpFile, old map[string]any, prev, want []string) (*tools
 // mcpToolName is a name as Claude Code and OpenCode spell it in a tool's
 // id: each character but a letter, a digit, _ and - is an _ (Claude Code
 // 2.1.296's normalizeNameForMCP; OpenCode's tool/mcp.ts namespace()).
-var mcpNameBad = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
+var mcpNameBad = lazyre.New(`[^a-zA-Z0-9_-]`)
 
 func mcpToolName(s string) string { return mcpNameBad.ReplaceAllString(s, "_") }
 

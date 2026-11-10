@@ -13,12 +13,13 @@ package provider
 import (
 	"errors"
 	"net/url"
-	"regexp"
 	"strings"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // gheName is an enterprise's subdomain of ghe.com: one DNS label.
-var gheName = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+var gheName = lazyre.New(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 // CopilotHost is where a Copilot account signs in, from what a user typed
 // ("acme.ghe.com", "https://acme.ghe.com/", "github.com"): "" for

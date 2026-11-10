@@ -47,7 +47,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 
 	"github.com/tidwall/gjson"
@@ -55,6 +54,7 @@ import (
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // openBotFile is the file of OpenBot's custom endpoints in its userData.
@@ -70,7 +70,7 @@ const openBotMaxModels = 64
 
 // openBotModelID is a model id OpenBot lists as magpie/<id>
 // (isAgentModel, ipc-agent-identity.ts).
-var openBotModelID = regexp.MustCompile(`^[A-Za-z0-9._:/\[\],=-]+$`)
+var openBotModelID = lazyre.New(`^[A-Za-z0-9._:/\[\],=-]+$`)
 
 // openBotProc is OpenBot's process: the .app's and the .exe's OpenBot, the
 // AppImage's openbot.

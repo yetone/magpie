@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
 )
@@ -40,7 +41,7 @@ import (
 // the bucket behind it. A var so tests can point it elsewhere.
 var grokCLIBases = []string{"https://x.ai/cli", "https://storage.googleapis.com/grok-build-public-artifacts/cli"}
 
-var grokVersionRe = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._]+)?$`)
+var grokVersionRe = lazyre.New(`^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._]+)?$`)
 
 // grokMaxBinary bounds what is unpacked, as the installer bounds it.
 const grokMaxBinary = 512 << 20

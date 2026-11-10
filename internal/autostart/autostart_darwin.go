@@ -9,6 +9,7 @@ import (
 	"regexp"
 
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 const label = "com.yetone.magpie"
@@ -21,7 +22,7 @@ func record() string {
 // launchd loads no job that names neither its own label nor a program to
 // run: a record a write left short of either sits in LaunchAgents, is
 // refused, and magpie never opens at login however long the file is there.
-var ourLabel = regexp.MustCompile(`<key>Label</key>\s*<string>` + regexp.QuoteMeta(label) + `</string>`)
+var ourLabel = lazyre.New(`<key>Label</key>\s*<string>` + regexp.QuoteMeta(label) + `</string>`)
 
 func enabled() bool {
 	b, err := os.ReadFile(record())
@@ -88,7 +89,7 @@ func plist(exe string) []byte {
 `, label, html.EscapeString(exe), Arg, associated(exe)))
 }
 
-var bundleID = regexp.MustCompile(`<key>CFBundleIdentifier</key>\s*<string>([^<]+)</string>`)
+var bundleID = lazyre.New(`<key>CFBundleIdentifier</key>\s*<string>([^<]+)</string>`)
 
 // associated is the AssociatedBundleIdentifiers entry for the app exe sits
 // in, read from that app's own Info.plist, so a build with another id
@@ -112,7 +113,7 @@ func associated(exe string) string {
 
 // with a path in the first string: an empty one names nothing to run, and
 // launchd refuses the job
-var program = regexp.MustCompile(`<key>ProgramArguments</key>\s*<array><string>([^<]+)</string>`)
+var program = lazyre.New(`<key>ProgramArguments</key>\s*<array><string>([^<]+)</string>`)
 
 // refresh writes a launch agent an older magpie wrote over as this one
 // would, for the program it names: the path stays the one the user turned

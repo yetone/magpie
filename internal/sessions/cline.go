@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // Cline's CLI (3, on the Cline SDK) keeps a session in a folder of its own
@@ -234,8 +234,8 @@ func clineTools(content json.RawMessage) [][2]string {
 var clineHook func(path string)
 
 var (
-	clineNotice = regexp.MustCompile(`(?s)<mode_notice\b[^>]*>.*?</mode_notice>`)
-	clineInput  = regexp.MustCompile(`</?(?:user_input|user_command)\b[^>]*>`)
+	clineNotice = lazyre.New(`(?s)<mode_notice\b[^>]*>.*?</mode_notice>`)
+	clineInput  = lazyre.New(`</?(?:user_input|user_command)\b[^>]*>`)
 )
 
 // clineTitle takes a session's title from a prompt: the words typed, out of

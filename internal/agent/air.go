@@ -34,7 +34,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -42,6 +41,7 @@ import (
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
 )
 
@@ -226,7 +226,7 @@ func jetBrainsIDESince(home, cfg string, year, minor int) bool {
 
 // jetBrainsVersioned is an IDE's config folder name: the product, then its
 // year and release.
-var jetBrainsVersioned = regexp.MustCompile(`^[A-Za-z]+(\d{4})\.(\d+)$`)
+var jetBrainsVersioned = lazyre.New(`^[A-Za-z]+(\d{4})\.(\d+)$`)
 
 // airAt is an Air agent on the acp.json at path: a, with its id, name,
 // icon and detection, gets the Magpie entry there and its OpenCode config

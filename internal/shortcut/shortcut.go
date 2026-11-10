@@ -14,10 +14,10 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // Name is what the shortcut is called, and what Windows search finds.
@@ -108,7 +108,7 @@ func remember(state, exe string) error {
 
 // aside is what an update moves the exe it replaces to, or stages the new
 // one as: magpie.exe.old, magpie.exe.old-2…, magpie.exe.new
-var aside = regexp.MustCompile(`(?i)(\.exe)\.(old(-\d+)?|new)$`)
+var aside = lazyre.New(`(?i)(\.exe)\.(old(-\d+)?|new)$`)
 
 // Target is what the shortcut opens for exe: exe itself, but for a magpie
 // left running from where an update moved it aside, the exe in its place,

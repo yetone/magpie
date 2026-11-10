@@ -17,16 +17,16 @@ package library
 
 import (
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/wslrun"
 )
 
 // cmdVar is a variable in a command or an arg: ${NAME} or $NAME.
-var cmdVar = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
+var cmdVar = lazyre.New(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
 
 // hasCmdVars says whether the command or any arg has a variable or a
 // leading ~.

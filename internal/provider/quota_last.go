@@ -11,10 +11,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 var lastQuotas lastQuotasT
@@ -45,7 +46,7 @@ func lastQuotasPath() string { return filepath.Join(filepath.Dir(Path()), "quota
 // read this time (errClaudeNotAsked, errClaudeSaved), or one a setup-token
 // can't read at all (errClaudeSetupToken). A sign-in gone bad
 // is not one.
-var passing = regexp.MustCompile(`(?i)not read yet|a setup-token can't read|doesn't read a saved account|rate.?limit|too many requests|429|internal server error|bad gateway|service unavailable|gateway timeout|deadline exceeded|timeout|timed out|connection (refused|reset)|no such host|network is unreachable|EOF|asks again|fetch failed|unable to connect|ECONN[A-Z]+|ENOTFOUND|EAI_AGAIN|socket hang up|HTTP 5\d\d`)
+var passing = lazyre.New(`(?i)not read yet|a setup-token can't read|doesn't read a saved account|rate.?limit|too many requests|429|internal server error|bad gateway|service unavailable|gateway timeout|deadline exceeded|timeout|timed out|connection (refused|reset)|no such host|network is unreachable|EOF|asks again|fetch failed|unable to connect|ECONN[A-Z]+|ENOTFOUND|EAI_AGAIN|socket hang up|HTTP 5\d\d`)
 
 // keyTag names a key's card among the last readings, by what it is (a
 // plan's windows, a balance) and a digest of the key, never the key: a

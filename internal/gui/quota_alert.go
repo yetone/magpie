@@ -3,11 +3,11 @@ package gui
 import (
 	"fmt"
 	"math"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -23,8 +23,8 @@ var onAlerts func()
 var notifyProblem func() string
 
 var (
-	hoursName = regexp.MustCompile(`^(\d+) hours?$`)
-	daysName  = regexp.MustCompile(`^(\d+) days?$`)
+	hoursName = lazyre.New(`^(\d+) hours?$`)
+	daysName  = lazyre.New(`^(\d+) days?$`)
 )
 
 // alertWindowZh is a window's name in Chinese, as the page's i18n.js has

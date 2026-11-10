@@ -7,13 +7,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // Goose (Block's goose, its CLI and desktop app alike) reaches magpie as a
@@ -48,7 +48,7 @@ const gooseProviderID = magpieID
 // thinking_effort is one of its own request params, never sent — so a
 // level offered for it would change nothing; it is declared without
 // reasoning rather than shown a picker that does nothing.
-var gooseThinks = regexp.MustCompile(`(?i)(?:^|[-/])(?:o\d+(?:$|-)|gpt-(?:5|6)(?:$|[-.]))`)
+var gooseThinks = lazyre.New(`(?i)(?:^|[-/])(?:o\d+(?:$|-)|gpt-(?:5|6)(?:$|[-.]))`)
 
 // gooseKeys are the secrets goose reads for the native providers whose
 // models magpie can list, and which goose takes from the environment before

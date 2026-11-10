@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"net/url"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // Cursor's CLI (cursor-agent) keeps a chat in a folder of its own under its
@@ -66,7 +66,7 @@ func cursorDataDir() string {
 	return filepath.Join(home, ".cursor")
 }
 
-var cursorSlugBad = regexp.MustCompile(`[^a-zA-Z0-9]+`)
+var cursorSlugBad = lazyre.New(`[^a-zA-Z0-9]+`)
 
 // cursorTranscripts are the transcripts Cursor writes of a chat, from its
 // store, under projects/<the cwd made a slug>/agent-transcripts/: <id>/
@@ -390,9 +390,9 @@ func cursorStarted(db *sql.DB, root string) time.Time {
 }
 
 var (
-	cursorQuery = regexp.MustCompile(`(?s)<user_query>(.*?)</user_query>`)
+	cursorQuery = lazyre.New(`(?s)<user_query>(.*?)</user_query>`)
 	// the context Cursor puts in a user message beside what was typed
-	cursorContext = regexp.MustCompile(`(?s)<(user_info|project_layout|rules|always_applied_workspace_rules|agent_requestable_workspace_rules|user_rules|agent_skills|available_skills|open_and_recently_viewed_files|system_reminder|system-reminder|instructions_update|mcp_instructions|mcp_file_system|mcp_file_system_servers|git_status|agent_transcripts|cursor_rules_context|attached_files|system_notification|task_notification|agent_notification)(?:\s[^>]*)?>.*?</(user_info|project_layout|rules|always_applied_workspace_rules|agent_requestable_workspace_rules|user_rules|agent_skills|available_skills|open_and_recently_viewed_files|system_reminder|system-reminder|instructions_update|mcp_instructions|mcp_file_system|mcp_file_system_servers|git_status|agent_transcripts|cursor_rules_context|attached_files|system_notification|task_notification|agent_notification)>`)
+	cursorContext = lazyre.New(`(?s)<(user_info|project_layout|rules|always_applied_workspace_rules|agent_requestable_workspace_rules|user_rules|agent_skills|available_skills|open_and_recently_viewed_files|system_reminder|system-reminder|instructions_update|mcp_instructions|mcp_file_system|mcp_file_system_servers|git_status|agent_transcripts|cursor_rules_context|attached_files|system_notification|task_notification|agent_notification)(?:\s[^>]*)?>.*?</(user_info|project_layout|rules|always_applied_workspace_rules|agent_requestable_workspace_rules|user_rules|agent_skills|available_skills|open_and_recently_viewed_files|system_reminder|system-reminder|instructions_update|mcp_instructions|mcp_file_system|mcp_file_system_servers|git_status|agent_transcripts|cursor_rules_context|attached_files|system_notification|task_notification|agent_notification)>`)
 )
 
 // cursorParts are a message's content as parts: words are one text part.

@@ -14,15 +14,15 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"regexp"
 	"slices"
 	"strings"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
 )
 
 // envRef is a reference as the library writes one: ${NAME}.
-var envRef = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+var envRef = lazyre.New(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
 // refSyntax is how an agent spells a reference in a value.
 type refSyntax int
@@ -347,12 +347,12 @@ func toAgent(syntax refSyntax, v string) string {
 }
 
 var (
-	openCodeRef = regexp.MustCompile(`\{env:([A-Za-z_][A-Za-z0-9_]*)\}`)
-	cursorRef   = regexp.MustCompile(`\$\{env:([A-Za-z_][A-Za-z0-9_]*)\}`)
+	openCodeRef = lazyre.New(`\{env:([A-Za-z_][A-Za-z0-9_]*)\}`)
+	cursorRef   = lazyre.New(`\$\{env:([A-Za-z_][A-Za-z0-9_]*)\}`)
 )
 
 // dshEnvRef is the expression dsh reads a variable whole with.
-var dshEnvRef = regexp.MustCompile(`^process\.env\.([A-Za-z_][A-Za-z0-9_]*)$`)
+var dshEnvRef = lazyre.New(`^process\.env\.([A-Za-z_][A-Za-z0-9_]*)$`)
 
 // dshRef is a value with references as the !!js expression dsh evaluates
 // to it, or false for one with none. A variable whole is process.env.NAME,
@@ -388,7 +388,7 @@ func dshRef(v string) (dshJS, bool) {
 
 // dshPart is one operand of a longer value dshRef writes: a JSON string,
 // or a variable with "" in its place while unset.
-var dshPart = regexp.MustCompile(`^(?:"(?:[^"\\]|\\.)*"|\(process\.env\.([A-Za-z_][A-Za-z0-9_]*) \?\? ""\))`)
+var dshPart = lazyre.New(`^(?:"(?:[^"\\]|\\.)*"|\(process\.env\.([A-Za-z_][A-Za-z0-9_]*) \?\? ""\))`)
 
 // dshUnref is the value an expression dshRef writes stands for, its
 // references as the library writes them; false for any other expression,

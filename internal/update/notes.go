@@ -7,12 +7,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -258,7 +258,7 @@ func Back(notes []Note, upto string, n int) []Note {
 	return out
 }
 
-var heading = regexp.MustCompile(`^(#{1,6})\s+(.*?)\s*#*\s*$`)
+var heading = lazyre.New(`^(#{1,6})\s+(.*?)\s*#*\s*$`)
 
 // installHeadings are the Install section's heading in each language the
 // notes come in: the Chinese notes call it 安装, and every release's own

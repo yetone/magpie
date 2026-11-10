@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -33,6 +32,7 @@ import (
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -324,7 +324,7 @@ func devinDeclaredImages() map[string]*bool {
 	return out
 }
 
-var devinEffort = regexp.MustCompile(`-(none|min|minimal|low|medium|high|xhigh|max|fast|priority)$`)
+var devinEffort = lazyre.New(`-(none|min|minimal|low|medium|high|xhigh|max|fast|priority)$`)
 
 // devinKnown is models.dev's window and reply cap for a model id, with the
 // effort suffix taken off: claude-opus-5-5-high-fast has claude-opus-5-5's.

@@ -18,7 +18,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -26,6 +25,7 @@ import (
 
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/imagemcp"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 const toolUsage = `usage:
@@ -645,7 +645,7 @@ func (a toolAnswer) text() string {
 
 // stillMaking is the id an answer says to wait on with generation_result;
 // a gateway older than PendingMeta says it in its text alone.
-var stillMakingText = regexp.MustCompile(gateway.GenerationResultTool + ` with id "([^"]+)"`)
+var stillMakingText = lazyre.New(gateway.GenerationResultTool + ` with id "([^"]+)"`)
 
 func (a toolAnswer) pending() string {
 	var id string

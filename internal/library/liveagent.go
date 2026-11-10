@@ -37,7 +37,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -45,6 +44,7 @@ import (
 	"github.com/tidwall/jsonc"
 
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // liveAgentMCP is the file K-brain keeps its MCP servers in, in its folder.
@@ -61,7 +61,7 @@ var liveAgentBuiltins = []string{"skills-creator", "skills-installer"}
 // liveAgentSkillName is a name K-brain takes for a skill in its folder:
 // lowercase letters, digits and single hyphens inside, at most 64
 // (validManagedName); SaveSettings refuses a selection with another.
-var liveAgentSkillName = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+var liveAgentSkillName = lazyre.New(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 func liveAgentNameOK(name string) bool {
 	return len(name) <= 64 && liveAgentSkillName.MatchString(name)

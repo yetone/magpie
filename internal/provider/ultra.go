@@ -1,11 +1,11 @@
 package provider
 
 import (
-	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // Codex's Ultra is not a level an API takes: Codex sends the model its max
@@ -29,7 +29,7 @@ var ultraSet = func() map[string]bool {
 }()
 
 // datedSuffix is a snapshot's date after a model's id (-2026-09-14, -20260914).
-var datedSuffix = regexp.MustCompile(`-(\d{4}-\d{2}-\d{2}|\d{8})$`)
+var datedSuffix = lazyre.New(`-(\d{4}-\d{2}-\d{2}|\d{8})$`)
 
 // OffersUltra reports whether Codex offers its Ultra on the model, by the id
 // a vendor serves it under: openai/gpt-6.1-sol on a relay, a dated snapshot,

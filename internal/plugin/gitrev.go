@@ -23,9 +23,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
-var hexSHA = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
+var hexSHA = lazyre.New(`^[0-9a-f]{7,40}$`)
 
 // refFixed is whether a git spec names the exact commit to install
 // (#<commit>): nothing is resolved for one, so no cache is fetched for it

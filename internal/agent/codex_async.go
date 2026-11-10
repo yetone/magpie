@@ -31,7 +31,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -39,6 +38,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 const (
@@ -95,7 +95,7 @@ var codexReaders = func(at place) []CodexReader {
 	return out
 }
 
-var codexPackageVersionRe = regexp.MustCompile(`"version"\s*:\s*"([^"]+)"`)
+var codexPackageVersionRe = lazyre.New(`"version"\s*:\s*"([^"]+)"`)
 
 // bundledCodexVersion is the version of the codex a Codex app bundle
 // ships (Contents/Resources/codex-cli/codex-package.json, "version":

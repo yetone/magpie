@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // OTel is the optional OTLP/HTTP metadata export. Endpoint is the base URL,
@@ -29,7 +30,7 @@ type OTel struct {
 	BodiesWhole bool `json:"bodiesWhole,omitempty"`
 }
 
-var otelHeaderName = regexp.MustCompile("^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
+var otelHeaderName = lazyre.New("^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 
 func (o OTel) Check() error {
 	if o.Enabled && o.Endpoint == "" {
