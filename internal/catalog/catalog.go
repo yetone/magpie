@@ -631,9 +631,16 @@ func loadGen() (map[string]mdProvider, int) {
 	if !loaded {
 		loaded = true
 		func() {
-			for _, p := range []string{CachePath(), opencodeCache()} {
-				b, err := os.ReadFile(p)
-				if err != nil {
+			// magpie's own copy, OpenCode's, then the one magpie ships
+			// with (bundled.go): a file that can't be read or parsed is
+			// passed over for the next, never read as no catalog
+			for _, read := range []func() ([]byte, error){
+				func() ([]byte, error) { return os.ReadFile(CachePath()) },
+				func() ([]byte, error) { return os.ReadFile(opencodeCache()) },
+				func() ([]byte, error) { return bundledCatalog(), nil },
+			} {
+				b, err := read()
+				if err != nil || b == nil {
 					continue
 				}
 				var m map[string]mdProvider
@@ -856,11 +863,9 @@ func syncLock(ctx context.Context, onlyIfMissing bool) error {
 	if err := json.Unmarshal(b, &probe); err != nil || len(probe) == 0 {
 		return fmt.Errorf("models.dev: unexpected payload")
 	}
-	p := CachePath()
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(p, b, 0o644); err != nil {
+	// written whole through a rename: a reader never sees it half
+	// written, and a failed write keeps the last good copy
+	if err := writeWhole(CachePath(), b, time.Time{}); err != nil {
 		return err
 	}
 	// the lab catalog beside it is best effort: without it the provider

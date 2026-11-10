@@ -2059,7 +2059,8 @@ function mdev() {
       const st = fs.statSync(modelsDevPath, { throwIfNoEntry: false })
       const mtime = st ? st.mtimeMs : 0
       if (modelsDev === undefined || (mtime > 0 && mtime !== modelsDevMtime) || (Object.keys(modelsDev).length === 0 && mtime > 0)) {
-        // a file caught half written (catalog.Sync writes it in place)
+        // a file caught half written (an older magpie's catalog.Sync wrote
+        // it in place; it goes through a rename now)
         // reads as unknown: keep what was read before, rather than list the
         // providers without models.dev, and read it again next time
         const md = readJSON(modelsDevPath)

@@ -34,14 +34,39 @@ var (
 // KeepFresh fetches the catalog whenever it is stale, now and every hour
 // after, for as long as the process runs (the app's backend, `magpie
 // serve`). It never returns.
+//
+// A fetch that fails (models.dev unreachable, or hanging past fetch's
+// bound) is tried again sooner than the hour, after retryFirst and then
+// twice as long each time up to the hour, so a magpie started before the
+// network or its proxy was up has the catalog fetched soon after
+// (creeksuen on X). Until then the catalog read before answers, or the
+// one magpie ships with (bundled.go).
 func KeepFresh() {
 	keeping.Store(true)
+	var retry time.Duration
 	for {
+		wait := freshEvery
 		if Stale() {
-			fetch()
+			if err := fetch(); err != nil {
+				retry = nextRetry(retry)
+				wait = min(retry, freshEvery)
+			} else {
+				retry = 0
+			}
 		}
-		time.Sleep(freshEvery)
+		time.Sleep(wait)
 	}
+}
+
+// retryFirst is how soon a failed fetch is tried again the first time.
+var retryFirst = 2 * time.Minute
+
+// nextRetry is the wait after a failed fetch, given the one before it.
+func nextRetry(was time.Duration) time.Duration {
+	if was <= 0 {
+		return retryFirst
+	}
+	return min(2*was, freshEvery)
 }
 
 // Missing says a call's model has no price: the catalog is fetched again,
@@ -102,16 +127,22 @@ func KeepFreshForTest(url string) (restore func()) {
 	return func() { modelsDevURL = was; keeping.Store(false); lastFetch.Store(0) }
 }
 
-// fetch is Sync with a bound, one at a time.
-func fetch() {
+// fetchBound is how long fetch waits for models.dev.
+var fetchBound = 30 * time.Second
+
+// fetch is Sync with a bound, one at a time. Its error is the Sync's, or
+// nil when another fetch was running.
+func fetch() error {
 	if !fetching.CompareAndSwap(false, true) {
-		return
+		return nil
 	}
 	defer fetching.Store(false)
 	lastFetch.Store(time.Now().UnixNano())
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), fetchBound)
 	defer cancel()
-	if err := Sync(ctx); err != nil {
+	err := Sync(ctx)
+	if err != nil {
 		log.Println("catalog:", err)
 	}
+	return err
 }

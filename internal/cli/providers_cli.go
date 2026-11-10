@@ -1546,6 +1546,7 @@ func advertisedURL() string {
 func serve() error {
 	s := gateway.New()
 	go stats.Run(version, "serve")
+	catalog.Seed()         // the shipped copy, when models.dev can't be reached
 	go catalog.KeepFresh() // new models' prices, in a gateway left running
 	// a signed-in account's list exists only at its vendor: asked for here
 	// as the app and the terminal ask (#1789), or a headless gateway offered

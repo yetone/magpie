@@ -66,7 +66,10 @@ line; agents connected to magpie lose it when it quits.
   doesn't list is named as the other providers serving it name it, so
   glm-5-turbo reads GLM-5-Turbo under Zhipu as under ZCode; an Azure
   deployment keeps its own name), and refreshes itself in the
-  background once it goes stale. Choose which models each provider exposes,
+  background once it goes stale. Where models.dev can't be reached, the
+  last copy fetched keeps answering, a first run answers from the copy
+  magpie ships with, and a failed fetch is tried again within minutes,
+  through the proxy set in Settings. Choose which models each provider exposes,
   or expose them all — a model released this morning is in the picker on
   the next refresh.
 - **Each agent's own model list.** Under an agent's name on the Agents page,

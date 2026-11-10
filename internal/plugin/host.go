@@ -1062,6 +1062,7 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 	if err := os.MkdirAll(settings.Dir(), 0o700); err != nil {
 		return nil, false, err
 	}
+	catalog.Seed() // the shipped copy, read until models.dev answers
 	if catalog.Source() == "" {
 		// a plugin's provider has the models models.dev lists for it, as in
 		// OpenCode; sync in the background so starting the host never stalls

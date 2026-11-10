@@ -59,21 +59,30 @@ func startBackend() (gw *gateway.Server) {
 	// comes from the models.dev catalog plus each vendor's own /models answer.
 	// Keep both halves warm without making the user click anything.
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		if catalog.Stale() {
+		// the copy magpie ships with, on a first run or over an older
+		// one: models.dev may not be reachable (creeksuen on X)
+		catalog.Seed()
+		if catalog.Source() == "" {
+			// no catalog file at all (the copy couldn't be written):
+			// fetched before the lists below are made of it
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			if err := catalog.Sync(ctx); err != nil {
 				log.Println("catalog:", err)
 			}
+			cancel()
 		}
-		cancel()
+		// fetched now when stale, beside the lists below rather than
+		// before them, so a models.dev that hangs holds nothing up; a
+		// fetch tells the agents (catalog.Changed). Then again each day
+		// it stays open, for new models' prices, and soon after a fetch
+		// that failed.
+		go catalog.KeepFresh()
 		// A signed-in agent's list exists only at the vendor; fill it in the
 		// first time so the picker never shows a stale snapshot.
 		provider.FetchNew(20 * time.Second)
 		// lists an older magpie wrote into agents' files, without what
 		// it has learnt since (context windows, providers added)
 		agent.SyncCatalog()
-		// and fetched again each day it stays open, for new models' prices
-		catalog.KeepFresh()
 	}()
 	return gw
 }
