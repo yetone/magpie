@@ -76,7 +76,7 @@ func TestStatFilesAsStat(t *testing.T) {
 			if i < 0 {
 				continue
 			}
-			if got[i].size != fi.Size() || !got[i].mod.Equal(fi.ModTime()) {
+			if got[i].size != fi.Size() || !got[i].mod.Equal(modOf(fi.ModTime())) {
 				t.Errorf("follow %v, %s: %d %v, want %d %v", follow, n, got[i].size, got[i].mod, fi.Size(), fi.ModTime())
 			}
 		}

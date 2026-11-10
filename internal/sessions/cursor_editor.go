@@ -150,7 +150,7 @@ func cursorEditorFiles(cli []file) []file {
 			continue
 		}
 		b, _ := json.Marshal(m)
-		out = append(out, file{agent: "cursor", key: "cursor:" + id, path: p + "#" + id, main: true, readOnly: true, size: int64(len(b)), mod: ms(max(m.Created, m.Updated)), more: &fileMore{sid: id, editor: m, rev: m.revision}})
+		out = append(out, file{agent: "cursor", key: "cursor:" + id, path: p + "#" + id, main: true, readOnly: true, size: int64(len(b)), mod: modOf(ms(max(m.Created, m.Updated))), more: &fileMore{sid: id, editor: m, rev: m.revision}})
 	}
 	return out
 }
@@ -179,10 +179,10 @@ func parseCursorEditor(f file) *state {
 	}
 	// Project transcripts have no timestamps: their existing modification
 	// time is the only activity date available, never the time of this scan.
-	s.saw(f.mod, false)
+	s.saw(f.mod.Time(), false)
 	message := func(role, text string, at time.Time) bool {
 		if at.IsZero() {
-			at = f.mod
+			at = f.mod.Time()
 		}
 		s.saw(at, false)
 		if role == "user" {

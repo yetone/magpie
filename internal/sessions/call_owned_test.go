@@ -38,7 +38,7 @@ func TestCallsFromTheShardAreNotCopied(t *testing.T) {
 			}
 			appendText(t, path, extra+"\n")
 			s := source()
-			f := file{path: s.Path, key: s.Key, agent: s.Agent, size: s.Size, mod: s.Modified}
+			f := file{path: s.Path, key: s.Key, agent: s.Agent, size: s.Size, mod: modOf(s.Modified)}
 			kept := loadKept(f)
 			if kept == nil || len(kept.Calls) != 1 {
 				t.Fatalf("the shard holds %v", kept)

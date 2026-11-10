@@ -152,7 +152,7 @@ func cursorParentOf(f file) string {
 	}
 	cursorParents.Lock()
 	defer cursorParents.Unlock()
-	if p, ok := cursorParents.m[f.path]; ok && p.size == f.size && p.mod.Equal(f.mod) {
+	if p, ok := cursorParents.m[f.path]; ok && p.size == f.size && p.mod.Equal(f.mod.Time()) {
 		return p.of
 	}
 	of := ""
@@ -168,7 +168,7 @@ func cursorParentOf(f file) string {
 	if cursorParents.m == nil {
 		cursorParents.m = map[string]cursorParent{}
 	}
-	cursorParents.m[f.path] = cursorParent{f.size, f.mod, of}
+	cursorParents.m[f.path] = cursorParent{f.size, f.mod.Time(), of}
 	return of
 }
 
@@ -445,18 +445,18 @@ func parseCursor(f file) *state {
 		}
 		s.saw(ms(m.Created), f.main)
 		if u := ms(m.Updated); !u.IsZero() {
-			last = u
+			last = modOf(u)
 		}
 	}
 	db, done, err := openCursorStore(f.path)
 	if err != nil {
-		s.saw(last, f.main)
+		s.saw(last.Time(), f.main)
 		return s
 	}
 	defer done()
 	meta, ok := readCursorMeta(db)
 	if !ok {
-		s.saw(last, f.main)
+		s.saw(last.Time(), f.main)
 		return s
 	}
 	s.ID = filepath.Base(dir)
@@ -465,7 +465,7 @@ func parseCursor(f file) *state {
 	}
 	s.saw(ms(meta.CreatedAt), f.main)
 	s.saw(cursorStarted(db, meta.Root), f.main)
-	s.saw(last, f.main)
+	s.saw(last.Time(), f.main)
 	// the messages carry no time of their own: they count on the day the
 	// chat was last at work
 	date := dateOf(s.Last)

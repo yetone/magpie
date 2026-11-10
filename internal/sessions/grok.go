@@ -119,7 +119,7 @@ func grokFiles() []file {
 			if m.mod.After(f.mod) {
 				f.mod = m.mod
 			}
-			s, ok := kinds.get(m.path, m.size, m.mod, func() (grokKind, bool) {
+			s, ok := kinds.get(m.path, m.size, m.mod.Time(), func() (grokKind, bool) {
 				s, ok := readGrokSummary(m.path)
 				return grokKind{s.Kind, s.Parent}, ok
 			})

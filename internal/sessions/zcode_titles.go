@@ -32,7 +32,7 @@ func zcodeTitleFiles() []file {
 			continue
 		}
 		parent[id] = par
-		out = append(out, file{agent: "zcode", path: path + "#" + id, mod: ms(updated),
+		out = append(out, file{agent: "zcode", path: path + "#" + id, mod: modOf(ms(updated)),
 			more: &fileMore{sid: id, oc: zcDB{ocDB{db}}}})
 	}
 	return ocRoots(out, parent)
@@ -59,6 +59,6 @@ func zcodeTitleStamps(files []file, want map[string]bool) {
 		if zc.db.QueryRow(`SELECT COUNT(id), COALESCE(MAX(time_updated), 0) FROM message WHERE session_id = ?`, f.m().sid).Scan(&n, &last) != nil {
 			continue
 		}
-		f.size, f.mod = n, ms(max(f.mod.UnixMilli(), last))
+		f.size, f.mod = n, modOf(ms(max(f.mod.UnixMilli(), last)))
 	}
 }

@@ -158,7 +158,7 @@ func almaFiles() []file {
 			path:     path + "#" + url.QueryEscape(id),
 			main:     true,
 			size:     bytes,
-			mod:      mod,
+			mod:      modOf(mod),
 			readOnly: true,
 			more: &fileMore{
 				sid:  id,

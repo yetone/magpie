@@ -143,7 +143,7 @@ func TestStatsMidnight(t *testing.T) {
 	check("read on", after20, after21, 180, 240)
 
 	// the same from the start, and from the parse kept on disk
-	full := parse(file{agent: "claude", path: path, main: true, size: int64(len(first + rest)), mod: time.Now()}, nil)
+	full := parse(file{agent: "claude", path: path, main: true, size: int64(len(first + rest)), mod: modOf(time.Now())}, nil)
 	if got := full.Days.of("2026-09-21").Models.of("claude-opus-5-5"); got != after21 {
 		t.Fatalf("read whole: %+v", got)
 	}

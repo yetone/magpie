@@ -148,7 +148,7 @@ func BenchmarkClaudeLargeActive(b *testing.B) {
 				if e != nil {
 					b.Fatal(e)
 				}
-				return file{path: path, key: "fixture", agent: "claude", main: true, size: info.Size(), mod: info.ModTime()}
+				return file{path: path, key: "fixture", agent: "claude", main: true, size: info.Size(), mod: modOf(info.ModTime())}
 			}
 			b.Run("cold", func(b *testing.B) {
 				for i := 0; i < b.N; i++ {

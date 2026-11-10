@@ -100,9 +100,9 @@ func (x *TraceSessionIndex) update(files []file) *traceIdentitySnapshot {
 			continue
 		}
 		cached, exists := x.headers[f.path]
-		if !exists || cached.size != f.size || !cached.mod.Equal(f.mod) {
+		if !exists || cached.size != f.size || !cached.mod.Equal(f.mod.Time()) {
 			identity, ok := traceSessionHeader(f)
-			cached = traceHeaderCache{f.size, f.mod, identity, ok}
+			cached = traceHeaderCache{f.size, f.mod.Time(), identity, ok}
 		}
 		headers[f.path] = cached
 		if cached.ok && f.key == cached.session.Agent+":"+cached.session.ID {

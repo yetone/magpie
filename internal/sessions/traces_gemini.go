@@ -258,11 +258,11 @@ func (r *TraceReader) readGemini(f file, bodies bool, budget *int64) []TraceSpan
 		}
 	}
 	if cursor.offset == f.size {
-		cursor.size, cursor.mod = f.size, f.mod
+		cursor.size, cursor.mod = f.size, f.mod.Time()
 	}
 	// Wait for the current file batch to settle: text, tokens and toolCalls can
 	// be appended separately. Tool completions and earlier responses export now.
-	settled := f.mod.Before(time.Now().Add(-2 * time.Second))
+	settled := f.mod.Before(modOf(time.Now().Add(-2 * time.Second)))
 	snap.settled = settled
 	return r.observations(snap, snap.gemini.spans(bodies, settled))
 }

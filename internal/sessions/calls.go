@@ -266,7 +266,7 @@ func callsFor(since time.Time, session, agent string) []Call {
 	capacity := 0
 	callsMu.Lock()
 	for _, f := range files {
-		if since.IsZero() || !f.mod.Before(since) {
+		if since.IsZero() || !f.mod.Before(modOf(since)) {
 			capacity += callCounts[f.path]
 		}
 	}
@@ -276,7 +276,7 @@ func callsFor(since time.Time, session, agent string) []Call {
 	}
 	out := make([]Call, 0, capacity)
 	for _, f := range files {
-		if !since.IsZero() && f.mod.Before(since) {
+		if !since.IsZero() && f.mod.Before(modOf(since)) {
 			continue
 		}
 		st := readCalls(f)
@@ -1376,7 +1376,7 @@ func callSourcesOf(fs []file) []CallSource {
 	pruneCalls(fs)
 	out := make([]CallSource, 0, len(fs))
 	for _, f := range fs {
-		out = append(out, CallSource{f.path, f.key, f.agent, f.size, f.mod})
+		out = append(out, CallSource{f.path, f.key, f.agent, f.size, f.mod.Time()})
 	}
 	return out
 }
@@ -1387,7 +1387,7 @@ func ReadCallSource(s CallSource) []Call {
 	if !Reads(s.Agent) {
 		return nil
 	}
-	st := readCalls(file{path: s.Path, key: s.Key, agent: s.Agent, size: s.Size, mod: s.Modified})
+	st := readCalls(file{path: s.Path, key: s.Key, agent: s.Agent, size: s.Size, mod: modOf(s.Modified)})
 	// Requests retains its own compact snapshot. Keeping the expanded parser's
 	// calls as well doubles residency, especially for long active sessions. The
 	// append-frame shard still carries the continuation for the next read.

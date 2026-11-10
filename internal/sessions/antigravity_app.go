@@ -115,8 +115,8 @@ func antigravityFilesIn(dir string) []file {
 		}
 		if fi, err := os.Stat(f.path + "-wal"); err == nil {
 			f.size += fi.Size()
-			if fi.ModTime().After(f.mod) {
-				f.mod = fi.ModTime()
+			if fi.ModTime().After(f.mod.Time()) {
+				f.mod = modOf(fi.ModTime())
 			}
 		}
 		if r, ok := rows[id]; ok {

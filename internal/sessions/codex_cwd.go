@@ -19,10 +19,10 @@ func CodexThreadCwd(id string) string {
 	var path string
 	var mod time.Time
 	for _, f := range codexFiles() {
-		if f.cold || !strings.EqualFold(f.key, "codex:"+id) || (path != "" && !f.mod.After(mod)) {
+		if f.cold || !strings.EqualFold(f.key, "codex:"+id) || (path != "" && !f.mod.After(modOf(mod))) {
 			continue
 		}
-		path, mod = f.path, f.mod
+		path, mod = f.path, f.mod.Time()
 	}
 	if path == "" {
 		return ""

@@ -213,7 +213,7 @@ func TestClaudeCdGlance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := glance(file{agent: "claude", key: "claude:" + ccMoved, path: p, size: st.Size(), mod: st.ModTime(), main: true})
+	g := glance(file{agent: "claude", key: "claude:" + ccMoved, path: p, size: st.Size(), mod: modOf(st.ModTime()), main: true})
 	if g == nil || g.Cwd != "/w/projB" {
 		t.Fatalf("glance: %+v", g)
 	}

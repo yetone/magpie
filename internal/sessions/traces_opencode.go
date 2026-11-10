@@ -89,8 +89,8 @@ func (r *TraceReader) pollOpenCode(bodies bool, budget *int64) []TraceSpan {
 				for _, part := range readDirectory(filepath.Join(store.root, "part", mid)) {
 					if info, err := part.Info(); err == nil && info.Mode().IsRegular() {
 						files[i].size += info.Size()
-						if info.ModTime().After(files[i].mod) {
-							files[i].mod = info.ModTime()
+						if info.ModTime().After(files[i].mod.Time()) {
+							files[i].mod = modOf(info.ModTime())
 						}
 					}
 				}
@@ -103,11 +103,11 @@ func (r *TraceReader) pollOpenCode(bodies bool, budget *int64) []TraceSpan {
 	for _, f := range files {
 		path := "opencode:" + f.path
 		seen[path] = true
-		if !f.main || f.mod.Before(r.Since.Add(-2*time.Second)) || *budget <= 0 {
+		if !f.main || f.mod.Before(modOf(r.Since.Add(-2*time.Second))) || *budget <= 0 {
 			continue
 		}
 		s := r.snapshot(path)
-		if s.size == f.size && s.mod.Equal(f.mod) {
+		if s.size == f.size && s.mod.Equal(f.mod.Time()) {
 			continue
 		}
 		localBudget := int64(32 << 20)
@@ -116,7 +116,7 @@ func (r *TraceReader) pollOpenCode(bodies bool, budget *int64) []TraceSpan {
 		// resumable row batches instead of this snapshot path.
 		if localBudget <= 0 {
 			*budget -= 32 << 20
-			s.size, s.mod = f.size, f.mod
+			s.size, s.mod = f.size, f.mod.Time()
 			continue
 		}
 		messages := make([]ocTraceMessage, 0, len(docs))
@@ -144,12 +144,12 @@ func (r *TraceReader) pollOpenCode(bodies bool, budget *int64) []TraceSpan {
 		}
 		if localBudget <= 0 {
 			*budget -= 32 << 20
-			s.size, s.mod = f.size, f.mod
+			s.size, s.mod = f.size, f.mod.Time()
 			continue
 		}
 		*budget -= (32 << 20) - localBudget
 		out = append(out, r.observations(s, traceOpenCode(f.m().sid, messages, bodies))...)
-		s.size, s.mod = f.size, f.mod
+		s.size, s.mod = f.size, f.mod.Time()
 	}
 	for path := range r.snapshots {
 		if strings.HasPrefix(path, "opencode:") && !seen[path] {

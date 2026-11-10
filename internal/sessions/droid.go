@@ -90,7 +90,7 @@ func droidFiles() []file {
 		if !stat(&f) {
 			continue
 		}
-		calling, _ := callers.get(p, f.size, f.mod, func() (string, bool) {
+		calling, _ := callers.get(p, f.size, f.mod.Time(), func() (string, bool) {
 			s, ok := readDroidStart(p)
 			return s.Calling, ok
 		})

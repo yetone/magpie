@@ -180,7 +180,7 @@ func TestClaudeWindowReservationsAndRemoval(t *testing.T) {
 	cache[path] = cache[path].withoutRevisions()
 	// An additional Claude-compatible source uses the same default dispatch;
 	// retention must not carry a second hard-coded list of agent names.
-	windows := summaryRevisionWindows([]file{{path: path, agent: "claude-compatible", size: 1024, mod: now}}, now)
+	windows := summaryRevisionWindows([]file{{path: path, agent: "claude-compatible", size: 1024, mod: modOf(now)}}, now)
 	if !windows[path] || len(windows) != 1 {
 		t.Fatal("disk-only summaries reserved phantom slots", windows)
 	}

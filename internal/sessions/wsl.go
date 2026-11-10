@@ -206,7 +206,7 @@ func wslFiles(agents ...string) []file {
 		in := &fileMore{wsl: n} // the distro's files share it
 		for _, e := range l.Files {
 			if want[e.Agent] {
-				out = append(out, file{agent: e.Agent, key: e.Key, path: e.Path, main: e.Main, size: e.Size, mod: e.Mod, more: in, cold: cold})
+				out = append(out, file{agent: e.Agent, key: e.Key, path: e.Path, main: e.Main, size: e.Size, mod: modOf(e.Mod), more: in, cold: cold})
 			}
 		}
 	}
@@ -237,7 +237,7 @@ func wslList(gen uint64, done chan struct{}) {
 		}
 		l := &wslListing{Home: h.Home, Running: true, Files: []wslEntry{}}
 		for _, f := range wslScan(h) {
-			l.Files = append(l.Files, wslEntry{Agent: f.agent, Key: f.key, Path: f.path, Main: f.main, Size: f.size, Mod: f.mod})
+			l.Files = append(l.Files, wslEntry{Agent: f.agent, Key: f.key, Path: f.path, Main: f.main, Size: f.size, Mod: f.mod.Time()})
 		}
 		lists[h.Distro] = l
 	}

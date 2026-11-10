@@ -385,7 +385,7 @@ func statsOfRange(days int, today time.Time, files []file, copies map[string]str
 	shares := map[string]*share{}
 	apps := appsOf(files)
 	for _, f := range files {
-		if f.mod.Before(since) || (copies[f.key] != "" && copied[f.path] == nil) {
+		if f.mod.Before(modOf(since)) || (copies[f.key] != "" && copied[f.path] == nil) {
 			continue
 		}
 		st := cache[f.path]

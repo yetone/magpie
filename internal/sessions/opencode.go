@@ -350,7 +350,7 @@ func ocDBRows(db *sql.DB, query, agent, path string, store ocStore, parent map[s
 			continue
 		}
 		parent[id] = par
-		out = append(out, file{agent: agent, path: path + "#" + id, size: n, mod: ms(max(updated, last)), more: &fileMore{sid: id, oc: store}})
+		out = append(out, file{agent: agent, path: path + "#" + id, size: n, mod: modOf(ms(max(updated, last))), more: &fileMore{sid: id, oc: store}})
 	}
 	return out
 }
@@ -507,8 +507,8 @@ func openCodeJSONFiles(root string) []file {
 			for _, e := range es {
 				if fi, err := e.Info(); err == nil && fi.Mode().IsRegular() {
 					f.size += fi.Size()
-					if fi.ModTime().After(f.mod) {
-						f.mod = fi.ModTime()
+					if fi.ModTime().After(f.mod.Time()) {
+						f.mod = modOf(fi.ModTime())
 					}
 				}
 			}

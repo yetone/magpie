@@ -133,9 +133,9 @@ func TestTraceSessionIndexSharesMissesAndDoesNotQueueRequests(t *testing.T) {
 
 func TestTraceClaudeChildrenCannotEvictMainStores(t *testing.T) {
 	now := time.Now()
-	files := []file{{agent: "codex", path: "codex", main: true, mod: now.Add(-time.Hour)}, {agent: "pi", path: "pi", main: true, mod: now.Add(-time.Hour)}}
+	files := []file{{agent: "codex", path: "codex", main: true, mod: modOf(now.Add(-time.Hour))}, {agent: "pi", path: "pi", main: true, mod: modOf(now.Add(-time.Hour))}}
 	for i := 0; i < Limit+30; i++ {
-		files = append(files, file{agent: "claude", path: fmt.Sprint(i), mod: now.Add(time.Duration(i) * time.Second)})
+		files = append(files, file{agent: "claude", path: fmt.Sprint(i), mod: modOf(now.Add(time.Duration(i) * time.Second))})
 	}
 	recent := traceRecentFiles(files)
 	if len(recent) != Limit+2 {

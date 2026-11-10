@@ -16,7 +16,7 @@ import (
 // came out 15225.3933882 one read and 15225.393388199998 the next, and the
 // Sessions tab was sent its row again on every poll for it.
 func TestSessionCostSummedInOneOrder(t *testing.T) {
-	f := file{agent: "claude", key: "claude:s", path: "/s.jsonl", main: true, mod: time.Unix(1790000000, 0)}
+	f := file{agent: "claude", key: "claude:s", path: "/s.jsonl", main: true, mod: modOf(time.Unix(1790000000, 0))}
 	var s state
 	for i, name := range []string{"a", "b", "c", "d", "e", "f", "g"} {
 		*s.Models.at(name) = Tokens{Input: 100000 + 33333*i}

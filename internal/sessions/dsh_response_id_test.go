@@ -31,7 +31,7 @@ func dshSessionFile(t *testing.T, lines []string) *state {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return parseDsh(file{agent: "dsh", path: p, main: true, size: st.Size(), mod: st.ModTime()}, nil)
+	return parseDsh(file{agent: "dsh", path: p, main: true, size: st.Size(), mod: modOf(st.ModTime())}, nil)
 }
 
 func TestDshResponseIDsSkipTheSeed(t *testing.T) {
@@ -115,7 +115,7 @@ func TestDshResponseIDsEndSeedAcrossReads(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return file{agent: "dsh", path: p, main: true, size: st.Size(), mod: st.ModTime()}
+		return file{agent: "dsh", path: p, main: true, size: st.Size(), mod: modOf(st.ModTime())}
 	}
 	write(head, dshReplyWithID(1, "inherited"))
 	first := parseDsh(f(), nil)
