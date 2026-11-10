@@ -414,7 +414,13 @@ re-derives every place that discloses it.**
   placeholder's random suffix spelled it ({{HOSTNAME_mlopsiy3}}) on macOS
   CI. f0453192 strips placeholders before the check, in its sibling
   TestMask too.
-- Seen 1× (2026-10-10).
+- 11-10: TestSearchAPIFailureKeepsNoURL looked for its query's "4410"
+  in usage.jsonl by substring. A random port (127.0.0.1:44105, #5616)
+  and then a route_id (1794294410888, run 42771382484) held it, and
+  main went red. Gaoshou101's patch, posted on #5616 three days before,
+  made the query letters only (17b9b5b03). A word a test looks for
+  can't be spelled by a port, an id, a time or a hash.
+- Seen 2× (2026-10-10, 2026-11-10).
 
 **Playwright's WebKit is not WebKitGTK.** A GUI change with motion or a new
 browser API is tried in the real Linux app too.
