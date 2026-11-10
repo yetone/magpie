@@ -266,6 +266,8 @@ var notYet = map[string]string{
 	"POST /api/proxy/check":                      S2, // api.go
 	"POST /api/set":                              S2, // api.go
 	"POST /api/settings/agent-telemetry":         A,  // api.go
+	"POST /api/settings/bark":                    S2, // api.go: Bark server, key and daily time
+	"POST /api/bark/test":                        S2, // api.go: a test push to Bark
 	"POST /api/settings/allowips":                S2, // api.go
 	"POST /api/settings/bare-ids":                S2, // api.go
 	"POST /api/settings/busy-load":               S2, // api.go
@@ -390,6 +392,7 @@ var notYet = map[string]string{
 	"POST /api/library/rtk/upgrade":              L,  // library.go
 	"POST /api/library/skills/check":             L,  // library.go
 	"POST /api/library/skills/probe":             L,  // library.go
+	"POST /api/library/plugins/probe":            L,  // library.go
 	"GET /api/memory":                            L,  // memory.go
 	"POST /api/memory":                           L,  // memory.go
 	"POST /api/memory/digest":                    L,  // memory.go
