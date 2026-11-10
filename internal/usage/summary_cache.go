@@ -130,6 +130,8 @@ func cloneSummary(s Summary) Summary {
 
 // usagePriceCacheKey invalidates priced views when local prices or provider feeds change.
 func usagePriceCacheKey(now time.Time) string {
+	// one catalog for the providers and the group names read below (#5978)
+	defer provider.Hold()()
 	_, offset := now.Zone()
 	meta := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%d", statKey(settings.Path()), statKey(provider.Path()), statKey(catalog.CachePath()), liveListKey("antigravity"), now.Format("2006-01-02"), now.Location(), offset)
 	// Sign-ins and plugin lists can change independently of providers.json.

@@ -190,7 +190,11 @@ func UsageAlias() func(string) string {
 
 // usageGroupNames is the spelling of every found group that has a public id.
 // A user's pre-existing provider named auto keeps ownership of auto/<model>.
+// It holds the catalog: usage asks for it on every Sessions poll and summary
+// key, and unheld each ask built every provider's entries and the found
+// groups again (#5978).
 func usageGroupNames() map[string]string {
+	defer Hold()()
 	var names map[string]string
 	if autoRefsOn() {
 		for _, g := range sharedGroups() {
