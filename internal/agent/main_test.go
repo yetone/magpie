@@ -51,6 +51,10 @@ func TestMain(m *testing.M) {
 	// refused every test that turns magpie on for each agent; the tests
 	// about it say their own
 	ombRunning = func() bool { return false }
+	// nor is an Avibe this machine runs reached: each home's Avibe runs
+	// in the test (runningAvibe), and the tests about Avibe serve their own
+	// (avibe_test.go)
+	avibeLive = runningAvibe
 	// nor which OpenCode this machine has: an OpenCode 2 on PATH turned
 	// every OpenCode test's file into OpenCode 2's words; the tests about
 	// it say their own (opencode_v2_test.go)

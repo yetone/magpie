@@ -322,6 +322,7 @@ func onMachine(home, cfg string) []*Agent {
 		kiroCrew(home),
 		t3code(home),
 		openMausBot(home),
+		avibe(home),
 		hanako(home),
 		atomcode(home),
 		snow(home),

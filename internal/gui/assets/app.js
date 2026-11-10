@@ -360,7 +360,7 @@ function toneCheck(img) {
     swap();
   }, { once: true });
 }
-const pngIcons = new Set(["crush", "zcode", "alma", "hanako", "cindy", "lody", "typesafe", "atomcode", "snow", "mlx-serve", "mothx", "zoo-code", "kimi-code-desktop", "openbot"]);
+const pngIcons = new Set(["crush", "zcode", "alma", "hanako", "cindy", "lody", "typesafe", "atomcode", "snow", "mlx-serve", "mothx", "zoo-code", "kimi-code-desktop", "openbot", "avibe"]);
 
 // lazy: a picture in a long list (Plugins' rows) is asked for near the
 // screen: each SVG an <img> draws is a ~0.6 MB webview document, kept (#909)
