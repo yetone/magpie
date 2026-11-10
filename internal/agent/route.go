@@ -399,6 +399,9 @@ func buildModels(agent string) []catalog.Model {
 		// magpie-models.json for (#1530)
 		provider.CodexTiers(&m, e, members)
 		if agent == "codex" {
+			provider.CodexSeals(&m, e, members)
+		}
+		if agent == "codex" {
 			// the entry its vendor lists the model under in Codex's own
 			// shape, handed on as it is (codexcat)
 			m.Codex = e.Codex

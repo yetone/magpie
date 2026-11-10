@@ -401,8 +401,10 @@ func entriesAt(ms []catalog.Model, after int, effort string) []any {
 			e.Tiers = namedTiers(own, m.Tiers)
 		}
 		// an OpenAI model: a ChatGPT account's (codex/), or a group one is
-		// in (Fast, see provider.codexListed)
-		if v1 && (strings.HasPrefix(m.ID, "codex/") || m.Fast) {
+		// in (Fast, see provider.codexListed), or one a provider that seals
+		// a V2 lead's subagent tasks serves (Seals: a relay of the ChatGPT
+		// backend)
+		if v1 && (strings.HasPrefix(m.ID, "codex/") || m.Fast || m.Seals) {
 			e.MultiAgent = "v1"
 		} else if m.AgentsV2 {
 			e.MultiAgent = "v2"
@@ -1163,7 +1165,7 @@ func listedEntry(m catalog.Model, priority int, work settings.Settings, autoRevi
 			e["input_modalities"] = slices.DeleteFunc(slices.Clone(in), func(x any) bool { return x == "image" })
 		}
 	}
-	if v1 && m.Fast {
+	if v1 && (m.Fast || m.Seals) {
 		Stamp(e)
 	} else if _, ok := e["multi_agent_version"]; !ok && m.AgentsV2 {
 		e["multi_agent_version"] = "v2"
