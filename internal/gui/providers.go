@@ -626,8 +626,10 @@ type gatewayJSON struct {
 	// callers from elsewhere, a container's host among them, need one
 	OnNetwork bool `json:"onNetwork,omitempty"`
 	Running   bool `json:"running"`
-	Mine      bool `json:"mine"`   // this process serves it
-	Window    bool `json:"window"` // the magpie serving it shows its routing
+	Mine      bool `json:"mine"` // this process serves it
+	// Paused: the user paused it (gatewaypause.go), and nothing serves it
+	Paused bool `json:"paused,omitempty"`
+	Window bool `json:"window"` // the magpie serving it shows its routing
 	// Version is another magpie's, serving it, and Older says it is older
 	// than this one: agents' requests are then sent as that version sends
 	// them, without this one's fixes (#506)
@@ -1353,6 +1355,7 @@ func providersState() providersJSON {
 		}
 		s.Gateway.Groups = append(s.Gateway.Groups, g)
 	}
+	s.Gateway.Paused = pausedNow()
 	if gw := served.Load(); gw != nil {
 		s.Gateway.Running, s.Gateway.Mine, s.Gateway.Window = true, true, true
 		// the calls without their bodies, which only an opened row reads

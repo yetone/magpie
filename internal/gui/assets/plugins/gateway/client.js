@@ -137,6 +137,19 @@ function renderGatewayOwn() {
 let gatewayFix = { busy: false, err: "", when: "" };
 const gatewayFixWhen = (g) => [g.running, g.mine, g.version || ""].join("|");
 function gatewayFixButton(g, older) {
+  // paused (gatewaypause.go): resumed, its agents connected again
+  if (g.paused) {
+    const b = el("button", "text action gw-fix", t("Resume gateway"));
+    b.disabled = gatewayFix.busy;
+    b.onclick = async () => {
+      gatewayFix = { busy: true, err: "", when: gatewayFixWhen(g) };
+      b.disabled = true;
+      await setGatewayPaused(false);
+      gatewayFix = { busy: false, err: "", when: "" };
+      renderGateway();
+    };
+    return b;
+  }
   if (g.running && !g.mine && !older) return null;
   // bordered: a plain text button read as words on the card in dark mode
   const b = el("button", "text action gw-fix");
@@ -263,12 +276,15 @@ function renderGateway() {
   const name = el("div", "name", t("Gateway"));
   name.append(el("span", "state", older
     ? t("running · served by magpie {v}, older than this one", { v: g.version })
+    : g.paused ? t("paused")
     : t(g.running ? (g.mine ? "running" : "running · served by another magpie") : "not running")));
   const routed = new Set();
   for (const p of providers.providers) for (const a of p.agents) if (a.current) routed.add(a.id);
   const n = routed.size;
   if (older) {
     who.append(name, el("div", "sub old", t("Agents' requests go through magpie {v} and are sent as it sends them, without this version's fixes. Quit it here and this one serves the gateway at once.", { v: g.version })));
+  } else if (g.paused) {
+    who.append(name, el("div", "sub", t("Paused, agents are disconnected and use their own settings")));
   } else who.append(name, el("div", "sub", g.running
     ? [t(g.models === 1 ? "{n} model" : "{n} models", { n: g.models }), n ? t(n === 1 ? "{n} agent routed through it" : "{n} agents routed through it", { n }) : t("no agent routed through it yet"), t("five APIs, one URL")].join(" · ")
     : t("start it with magpie serve, or open magpie at login")));

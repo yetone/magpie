@@ -361,6 +361,7 @@ func Run(version string, showMain bool, link string) error {
 	// magpie before, which hands it the gateway (handover.go).
 	startExe, _ = update.Executable()
 	handoverHost.Store(true)
+	pausable.Store(true) // the gateway paused from its menu (gatewaypause.go)
 	before := 0
 	if startExe != "" {
 		before = takeOver(startExe)
@@ -516,9 +517,26 @@ func Run(version string, showMain bool, link string) error {
 	onFonts = h.fontsChanged
 
 	// the menu in the page's language, relabelled when that changes (#301)
-	labels := trayMenuLabels(trayLang(settings.Load().Lang, systemLang), version, "")
+	labels := trayMenuLabels(trayLang(settings.Load().Lang, systemLang), version, "", pausedNow())
 	menu := h.app.NewMenu()
 	open := menu.Add(labels.open).OnClick(func(*application.Context) { h.ShowMain("") })
+	menu.AddSeparator()
+	// the gateway paused, or resumed, without quitting (gatewaypause.go);
+	// what couldn't be done opens the window on Settings, which says it
+	pause := menu.Add(labels.pause).OnClick(func(*application.Context) {
+		go func() {
+			var r pauseJSON
+			if pausedNow() {
+				r = resumeGateway()
+			} else {
+				r = pauseGateway()
+			}
+			if r.Error != "" || r.Fix != nil {
+				log.Printf("gateway pause: %s %s", r.Agent, r.Error)
+				h.ShowMain("settings")
+			}
+		}()
+	})
 	menu.AddSeparator()
 	ver := menu.Add(labels.version).SetEnabled(false)
 	restart := menu.Add(labels.restart).SetHidden(true)
@@ -536,11 +554,12 @@ func Run(version string, showMain bool, link string) error {
 	quit := menu.Add(labels.quit).OnClick(func(*application.Context) { go h.AskQuit() })
 	var ready string // the version waiting for a restart; on the main thread
 	relabel := func() {
-		l := trayMenuLabels(trayLang(settings.Load().Lang, systemLang), version, ready)
+		l := trayMenuLabels(trayLang(settings.Load().Lang, systemLang), version, ready, pausedNow())
 		if waiting, b := updates.waitingFor(); waiting && ready != "" {
 			l.restart = trayRestartNow(trayLang(settings.Load().Lang, systemLang), b)
 		}
 		open.SetLabel(l.open)
+		pause.SetLabel(l.pause)
 		ver.SetLabel(l.version)
 		restart.SetLabel(l.restart)
 		quit.SetLabel(l.quit)
@@ -550,6 +569,7 @@ func Run(version string, showMain bool, link string) error {
 		}
 	}
 	onLang = func() { application.InvokeSync(relabel) }
+	onPaused = onLang
 	updates.onReady = func(v string) {
 		application.InvokeSync(func() {
 			ready = v

@@ -44,11 +44,23 @@ type gatewayFixJSON struct {
 
 func gatewayFixRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/gateway/take-over", func(rw http.ResponseWriter, r *http.Request) {
-		writeJSON(rw, takeOverGateway())
+		writeJSON(rw, orResume(takeOverGateway))
 	})
 	mux.HandleFunc("POST /api/gateway/restart", func(rw http.ResponseWriter, r *http.Request) {
-		writeJSON(rw, restartGateway())
+		writeJSON(rw, orResume(restartGateway))
 	})
+}
+
+// orResume is fix, or with the gateway paused (gatewaypause.go) its
+// resume: a Start while paused brings back the agents the pause took off.
+func orResume(fix func() gatewayFixJSON) gatewayFixJSON {
+	if !pausedNow() {
+		return fix()
+	}
+	if r := resumeGateway(); r.Fix != nil {
+		return *r.Fix
+	}
+	return gatewayFixJSON{OK: true}
 }
 
 // How long a magpie asked to quit is given before it is ended at once,

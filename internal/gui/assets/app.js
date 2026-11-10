@@ -19522,6 +19522,16 @@ function renderLoginAllow(s) {
   sub.replaceChildren(t("Switched off in System Settings’ Login Items, so magpie won’t open at login"), " ", open);
 }
 
+// setGatewayPaused pauses the gateway or resumes it, from Settings or the
+// Gateway page, and says which agent stood in the way; the pages are read
+// again either way, the agents' rows with them
+async function setGatewayPaused(on) {
+  let out;
+  try { out = await api("gateway/pause", { on }); } catch (e) { out = { error: e.message }; }
+  if (out?.fix) status(gatewayFixSays(out.fix), "err");
+  else if (out?.error) status(on && out.agent ? t("{agent} couldn't be disconnected: {error}", { agent: out.agent, error: out.error }) : out.error, "err");
+  await Promise.allSettled([loadSettings(), loadProviders(), load(true)]);
+}
 async function loadSettings() {
   const since = prefsWrites;
   if (fontList === null && !fontListError) loadFonts();
@@ -19951,6 +19961,10 @@ function renderSettings() {
     ? "Keeps this computer and its screen awake while magpie runs tasks"
     : "Keeps this computer awake while magpie runs tasks";
   awakeSub.textContent = t(awakeSub.dataset.en);
+  // the gateway paused (me2seeks on X): agents disconnected and nothing
+  // listening, without quitting magpie (gatewaypause.go)
+  $("#gatewayPauseSegs").replaceChildren(segs([["on", t("On")], ["paused", t("Paused")]], s.gatewayPaused ? "paused" : "on",
+    (v) => setGatewayPaused(v === "paused")));
   // quitask.js's question
   $("#quitAskSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.quitNoAsk ? "off" : "on", (v) => savePrefs({ ...keep, quitNoAsk: v === "off" })));
   // WSL's distros, looked in on Windows unless turned off (#1264)

@@ -41,10 +41,8 @@ var quitAgents = func() []quitAgentJSON {
 // wiredAgents is the agents of as with magpie in their config.
 func wiredAgents(as []*agent.Agent) []quitAgentJSON {
 	out := []quitAgentJSON{}
-	for _, a := range as {
-		if a.Wired() {
-			out = append(out, quitAgentJSON{ID: a.ID, Name: a.Name, Icon: a.Icon})
-		}
+	for _, a := range wiredOf(as) {
+		out = append(out, quitAgentJSON{ID: a.ID, Name: a.Name, Icon: a.Icon})
 	}
 	return out
 }

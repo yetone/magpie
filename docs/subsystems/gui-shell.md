@@ -819,6 +819,41 @@ See `TestWindowQuitAsksFirst`, `TestQuitListsWiredAgents`,
 `TestQuitDontAskAgain`, `TestSetQuitNoAsk`, `TestQuitNoAskKeptUnlessSent`,
 `quit-ask.test.cjs` and `quit-ask-setting.test.cjs`.
 
+### Pausing the gateway
+
+Disconnect and quit was the only way to stop the gateway, and it quits
+magpie too (me2seeks on X). Pause does the same without the quit: the
+tray's Pause Gateway (Resume Gateway while paused), Settings › General ›
+Gateway (`#gatewayPauseRow`, On/Paused, the app's only) and the Gateway
+page's Resume gateway, all through `POST /api/gateway/pause {"on": bool}`
+([`gatewaypause.go`](../../internal/gui/gatewaypause.go)).
+
+- `pauseGateway` disconnects each wired agent as its row's Disconnect does
+  (its own settings put back), writes the ids to `gateway-paused.json` in
+  the config folder, then stops the gateway this process serves
+  (`stopServedLocked`, requests in flight drained). An agent that can't be
+  disconnected keeps the gateway serving, those before it connected again,
+  and is named in the status line.
+- While the file is there `serveGatewayLocked` serves nothing, so neither
+  the 15 s watch, a port change nor a handover starts it; a magpie started
+  again stays paused. A file that can't be read or parsed counts as a pause
+  (a failed read is unknown). The file is this computer's alone: backup and
+  sync don't carry it. Only the app pauses (`pausable`); `magpie web` and
+  `magpie serve` never read it.
+- `resumeGateway` removes the file and serves again (`startHere`). A port
+  held by something else keeps the pause and says what holds it
+  (`gatewayFixSays`). Then each agent named in the file that is still
+  there and not connected is connected again.
+- The Gateway page's Start or Restart (`orResume`, outside `gatewayMu`)
+  resumes, and so does connecting an agent or picking one of magpie's
+  models for it (`resumeOnWire`): it would otherwise point at nothing.
+  An agent wired from the CLI while the app is paused
+  does not resume it.
+
+See `TestGatewayPauseAndResume`, `TestGatewayPauseRollsBack`,
+`TestGatewayResumesOnWire`, `TestGatewayPauseFileUnreadable`,
+`TestTrayMenuLabels` and `gateway-pause.test.cjs`.
+
 ### A restart to update hands the gateway over
 
 On a Mac and on Linux, a restart into a downloaded update (the Update pill,

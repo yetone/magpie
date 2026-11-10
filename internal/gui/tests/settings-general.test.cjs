@@ -34,7 +34,7 @@ const system = { en: "System", zh: "跟随系统", "zh-TW": "跟隨系統", ja: 
 // the rows whose name says enough, found by the control they hold
 const bare = ["#themeSegs", "#colorblindSegs", "#reduceMotionSegs", "#birdSegs", "#langPick", "#textSizeSegs", "#traySegs", "#plainNamesSegs", "#loginSegs", "#dockSegs"];
 // the rows that keep a line, one each
-const kept = ["#lightweightSegs", "#keepAwakeSegs", "#quitAskSegs", "#sessionTerminalRow .sess-pick"];
+const kept = ["#lightweightSegs", "#keepAwakeSegs", "#gatewayPauseSegs", "#quitAskSegs", "#sessionTerminalRow .sess-pick"];
 
 function serve(lang, posted, st) {
   const settings = () => ({ lang, theme: "light", searchVendors: [], searchAPIs: [], ...st });

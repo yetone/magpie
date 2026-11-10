@@ -4,6 +4,10 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "paused": "已暂停",
+    "Resume gateway": "恢复网关",
+    "Paused, agents are disconnected and use their own settings": "暂停时各 agent 断开连接，用回它们自己的配置",
+    "{agent} couldn't be disconnected: {error}": "{agent} 断开失败：{error}",
     "Codex service tier": "Codex 服务层级",
     "As Codex asks": "按 Codex 的请求",
     "/fast in Codex": "Codex 里的 /fast",
@@ -4931,6 +4935,10 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "这份报告已经不在了：magpie 只保留最近 5 份。",
   },
   "zh-TW": {
+    "paused": "已暫停",
+    "Resume gateway": "恢復閘道",
+    "Paused, agents are disconnected and use their own settings": "暫停時各 agent 中斷連線，改用它們自己的設定",
+    "{agent} couldn't be disconnected: {error}": "{agent} 中斷連線失敗：{error}",
     "Codex service tier": "Codex 服務層級",
     "As Codex asks": "依 Codex 的請求",
     "/fast in Codex": "Codex 裡的 /fast",
@@ -9843,6 +9851,10 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "這份報告已經不在了：magpie 只保留最近 5 份。",
   },
   ja: {
+    "paused": "一時停止中",
+    "Resume gateway": "ゲートウェイを再開",
+    "Paused, agents are disconnected and use their own settings": "一時停止中はエージェントの接続を解除し、それぞれ元の設定を使います",
+    "{agent} couldn't be disconnected: {error}": "{agent} の接続を解除できませんでした: {error}",
     "Codex service tier": "Codex のサービスティア",
     "As Codex asks": "Codex の指定どおり",
     "/fast in Codex": "Codex の /fast",
@@ -14757,6 +14769,10 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "このレポートはもう残っていません。magpie は最新の 5 件だけを保存します。",
   },
   de: {
+    "paused": "pausiert",
+    "Resume gateway": "Zugangspunkt fortsetzen",
+    "Paused, agents are disconnected and use their own settings": "Pausiert werden Agenten getrennt und nutzen ihre eigenen Einstellungen",
+    "{agent} couldn't be disconnected: {error}": "{agent} konnte nicht getrennt werden: {error}",
     "Codex service tier": "Codex-Servicestufe",
     "As Codex asks": "Wie Codex es anfragt",
     "/fast in Codex": "/fast in Codex",

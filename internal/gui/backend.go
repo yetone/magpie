@@ -136,6 +136,10 @@ func serveGateway() *gateway.Server {
 }
 
 func serveGatewayLocked() *gateway.Server {
+	// paused by the user (gatewaypause.go): nothing serves it until resumed
+	if pausedNow() {
+		return nil
+	}
 	// handing over, the one there is this one's predecessor, which lets go
 	// once this one listens beside it
 	// so is the one that handed this one its socket, still finishing its
