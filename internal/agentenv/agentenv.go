@@ -94,6 +94,8 @@ var Vars = []string{
 	"DEVECO_CONFIG_DIR",
 	// alma-server's data folder (Alma without a desktop, on Linux)
 	"ALMA_DATA_DIR",
+	// miniQ's data folder, its settings.json and daemon.json in it
+	"MINIQ_DATA_DIR",
 	// Reasonix Studio and its native CLI share this config home
 	"REASONIX_HOME",
 	// Reasonix's state folder, where it reads REASONIX.md

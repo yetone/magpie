@@ -13,7 +13,7 @@ import (
 // own deepseek/deepseek-v4-pro).
 func TestOwnProviderNamedAsMagpies(t *testing.T) {
 	ids := []string{"agy", "opencode", "openchamber", "mimocode", "deveco", "pi", "aside", "omo", "prime-agent", "mu", "goose", "zed", "vscode",
-		"crush", "dsh", "ds-bot", "commandcode", "fx", "omp", "hermes", "morph", "kimi", "empryo", "nanobot", "minimax-code", "droid",
+		"crush", "dsh", "ds-bot", "commandcode", "fx", "omp", "hermes", "morph", "kimi", "empryo", "nanobot", "miniq", "minimax-code", "droid",
 		"qoder", "qoder-cn", "grok", "atomcode", "cline", "snow", "qwenpaw"}
 	for _, id := range ids {
 		t.Run(id, func(t *testing.T) {
@@ -27,6 +27,10 @@ func TestOwnProviderNamedAsMagpies(t *testing.T) {
 				t.Fatal(err)
 			}
 			f := &a.Fields[0]
+			if id == "miniq" {
+				// a provider of the user's own, for its own model to be on
+				hanakoWrite(t, a.Path, `{"provider":{"baseUrl":"https://relay.example/v1","apiKey":"sk-own","model":"glm-4.5","apiProtocol":"auto"}}`, 0o600)
+			}
 			if id == "cline" {
 				// a model of OpenRouter's, the provider Cline is on
 				hanakoWrite(t, a.Path, `{"version":1,"modes":{},"providers":{},"lastUsedProvider":"openrouter"}`, 0o600)
