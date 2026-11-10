@@ -266,6 +266,41 @@ func TestGitHubTokenBackup(t *testing.T) {
 	}
 }
 
+// Bark's device key is a key too (EV_John_Liu on X): a backup without keys
+// leaves it out, and restoring one keeps the key this machine has.
+func TestBarkKeyBackup(t *testing.T) {
+	home(t)
+	if err := settings.Save(settings.Settings{BarkKey: "bark_local_key", BarkServer: "https://bark.example.com", Theme: "dark"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, keys := range []bool{false, true} {
+		b, err := Collect(keys, "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, _ := Seal(b, "pw")
+		if got := strings.Contains(string(mustOpen(t, data)), "bark_local_key"); got != keys {
+			t.Fatalf("keys %v: the Bark key is in the backup: %v", keys, got)
+		}
+	}
+	for _, keys := range []bool{false, true} {
+		incoming := settings.Settings{Theme: "light"}
+		if keys {
+			incoming.BarkKey = "bark_incoming_key"
+		}
+		if err := settings.Save(settings.Settings{BarkKey: "bark_local_key"}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Restore(Bundle{Version: 1, Keys: keys, Settings: &incoming}, Parts{Settings: true}); err != nil {
+			t.Fatal(err)
+		}
+		want := map[bool]string{false: "bark_local_key", true: "bark_incoming_key"}[keys]
+		if got := settings.Load(); got.BarkKey != want {
+			t.Errorf("keys %v: restored key %q, want %q", keys, got.BarkKey, want)
+		}
+	}
+}
+
 func mustOpen(t *testing.T, data []byte) []byte {
 	t.Helper()
 	b, err := Open(data, "pw")

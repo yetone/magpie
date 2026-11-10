@@ -34,6 +34,7 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/applog"
 	"github.com/yetone/magpie/internal/autostart"
+	"github.com/yetone/magpie/internal/bark"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/fonts"
@@ -549,6 +550,8 @@ type settingsJSON struct {
 	// the token set in Settings was refused by GitHub (401): it is still
 	// shown, masked, while requests go without a token (#3926)
 	GitHubTokenRefused bool `json:"githubTokenRefused,omitempty"`
+	// whether a Bark device key is set; never the key (EV_John_Liu on X)
+	BarkKeySet bool `json:"barkKeySet,omitempty"`
 	// where other machines reach the gateway while it is shared
 	LANURLs []string `json:"lanURLs,omitempty"`
 	// LANURLs are a container's own addresses, not the host's: the page
@@ -842,6 +845,7 @@ func settingsState() settingsJSON {
 	s.GatewayOn, s.GatewayWhy = gatewayMode(s.Web)
 	s.GatewayPaused = pausedNow()
 	s.LANKey = "" // the retained credential belongs on disk, not in UI state
+	s.BarkKeySet, s.BarkKey = strings.TrimSpace(s.BarkKey) != "", ""
 	// the GitHub token, masked, and where the library's requests take one
 	// from: Settings, or the environment variable named
 	own := strings.TrimSpace(s.GitHubToken)
@@ -2720,6 +2724,56 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			return
 		}
 		writeJSON(rw, settingsState())
+	})
+	// the Bark target every alert also goes to, and the time of the daily
+	// summary (EV_John_Liu on X). A field left out stays; the key, "" takes it
+	// away. The key is written and never read back by the page.
+	mux.HandleFunc("POST /api/settings/bark", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Server *string `json:"server"`
+			Key    *string `json:"key"`
+			Daily  *string `json:"daily"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		s := settings.Load()
+		if in.Server != nil {
+			s.BarkServer = *in.Server
+		}
+		if in.Key != nil {
+			s.BarkKey = *in.Key
+		}
+		if in.Daily != nil {
+			s.BarkDaily = *in.Daily
+		}
+		if err := settings.CheckBark(s.BarkServer, s.BarkKey, s.BarkDaily); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := settings.Save(s); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
+	// a push to the saved Bark target, to see that it arrives
+	mux.HandleFunc("POST /api/bark/test", func(rw http.ResponseWriter, r *http.Request) {
+		s := settings.Load()
+		t := barkTarget(s)
+		if !t.On() {
+			fail(rw, fmt.Errorf("no Bark device key is set"))
+			return
+		}
+		title, body := barkTestText(trayLang(s.Lang, systemLang))
+		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+		defer cancel()
+		if err := bark.Push(ctx, t, title, body); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, map[string]bool{"ok": true})
 	})
 	// the GitHub download mirror updates come through (#893), the same
 	// setting `magpie update mirror` sets: a full https:// prefix, or ""

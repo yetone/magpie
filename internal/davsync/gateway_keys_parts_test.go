@@ -78,7 +78,7 @@ func TestGatewayKeysTakeSettings(t *testing.T) {
 func TestGatewayKeysKeylessSettings(t *testing.T) {
 	for _, sameEndpoint := range []bool{false, true} {
 		t.Run(map[bool]string{false: "different collector", true: "same collector"}[sameEndpoint], func(t *testing.T) {
-			cur := settings.Settings{Theme: "dark", LANKey: "fixture-lan", LANKeyID: "default", GitHubToken: "fixture-github"}
+			cur := settings.Settings{Theme: "dark", LANKey: "fixture-lan", LANKeyID: "default", GitHubToken: "fixture-github", BarkKey: "fixture-bark"}
 			cur.OTel = settings.OTel{Endpoint: "https://collector.example.com", Headers: map[string]string{"Authorization": "fixture-otel"}}
 			from := settings.Settings{Theme: "light"}
 			from.OTel.Endpoint = "https://different.example.com"
@@ -89,7 +89,7 @@ func TestGatewayKeysKeylessSettings(t *testing.T) {
 			to := backup.Bundle{Keys: true, Settings: &cur, GatewayKeys: keys}
 			take(&to, backup.Bundle{Settings: &from}, "settings")
 			got := to.Settings
-			if got.Theme != "light" || got.LANKey != cur.LANKey || got.LANKeyID != cur.LANKeyID || got.GitHubToken != cur.GitHubToken || !reflect.DeepEqual(to.GatewayKeys, keys) || !to.Keys {
+			if got.Theme != "light" || got.LANKey != cur.LANKey || got.LANKeyID != cur.LANKeyID || got.GitHubToken != cur.GitHubToken || got.BarkKey != cur.BarkKey || !reflect.DeepEqual(to.GatewayKeys, keys) || !to.Keys {
 				t.Error("a keyless theme upload erased credentials already on the server")
 			}
 			if sameEndpoint && !reflect.DeepEqual(got.OTel.Headers, cur.OTel.Headers) {
@@ -98,7 +98,7 @@ func TestGatewayKeysKeylessSettings(t *testing.T) {
 			if !sameEndpoint && len(got.OTel.Headers) != 0 {
 				t.Error("a different collector received the old collector's credentials")
 			}
-			if from.GitHubToken != "" || from.LANKey != "" || from.OTel.Headers != nil {
+			if from.GitHubToken != "" || from.BarkKey != "" || from.LANKey != "" || from.OTel.Headers != nil {
 				t.Error("merging modified the keyless source bundle")
 			}
 		})

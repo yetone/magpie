@@ -721,6 +721,17 @@ type Settings struct {
 	// never the value, a burst said once and at most once a minute. Only
 	// requests the app's own gateway serves; off until turned on.
 	MaskAlert bool `json:"maskAlert,omitempty"`
+	// BarkServer and BarkKey are where every alert above is also sent as a
+	// push to the iOS Bark app (EV_John_Liu on X): the server ("" is
+	// https://api.day.app, or a self-hosted Bark server's address) and the
+	// device key the app shows. The key is a secret: the Settings page is
+	// told only that one is set, and a backup or sync without keys leaves
+	// it out, as it does GitHubToken. BarkDaily is the time of day, "HH:MM",
+	// a summary is pushed once a day: what today cost and the allowances
+	// near their end; "" is off.
+	BarkServer string `json:"barkServer,omitempty"`
+	BarkKey    string `json:"barkKey,omitempty"`
+	BarkDaily  string `json:"barkDaily,omitempty"`
 	// PlainNames has the model lists magpie gives agents name each model
 	// by its name alone, without its provider's or "routing group" after it
 	// (#335) — but for two in one list that would read the same, which keep
@@ -2350,6 +2361,9 @@ func saveOwn(s Settings, recording, reads bool) error {
 	if s.TurnDoneAlert < 0 || s.TurnDoneAlert > 86400 {
 		return fmt.Errorf("a turn is said done after 1 to 86400 seconds, or 0 for off, not %d", s.TurnDoneAlert)
 	}
+	if err := CheckBark(s.BarkServer, s.BarkKey, s.BarkDaily); err != nil {
+		return err
+	}
 	if math.IsNaN(s.BalanceAlert) || math.IsInf(s.BalanceAlert, 0) || s.BalanceAlert < 0 {
 		return fmt.Errorf("a balance alert is at an amount of 0 or more (0 for off), not %v", s.BalanceAlert)
 	}
@@ -2627,6 +2641,7 @@ func (s Settings) normal() Settings {
 	if h, m, ok := Clock(s.CheckinAt); ok {
 		s.CheckinAt = fmt.Sprintf("%02d:%02d", h, m)
 	}
+	s.BarkServer, s.BarkKey, s.BarkDaily = normalBark(s.BarkServer, s.BarkKey, s.BarkDaily)
 	// a reply's model name: memberModel, as a magpie before replyModel
 	// kept it, when replyModel isn't set, and kept beside it for that
 	// magpie

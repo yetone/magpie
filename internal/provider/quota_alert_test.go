@@ -266,3 +266,23 @@ func TestDueReminders(t *testing.T) {
 		t.Fatalf("failed reading: %+v", got)
 	}
 }
+
+// NearLimits (the Bark daily summary) lists every window at its share,
+// again each time it is asked, and leaves no marks behind for the alerts.
+func TestNearLimitsTellsEveryTime(t *testing.T) {
+	now := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+	reset := now.Add(3 * time.Hour)
+	qs := []SubscriptionQuota{{Provider: "codex", Name: "Codex", Windows: []QuotaWindow{
+		{Name: "5 hours", Used: 85, ResetsAt: &reset},
+		{Name: "Weekly", Used: 10, ResetsAt: &reset},
+	}}}
+	for i := 0; i < 2; i++ {
+		got := NearLimits(qs, 80, 0, now)
+		if len(got) != 1 || got[0].Window != "5 hours" {
+			t.Fatalf("ask %d: %+v", i, got)
+		}
+	}
+	if got := NearLimits(qs, 0, 0, now); len(got) != 0 {
+		t.Fatalf("off: %+v", got)
+	}
+}

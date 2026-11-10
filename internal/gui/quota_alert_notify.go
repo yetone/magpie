@@ -103,6 +103,9 @@ const (
 func (n *notifier) send(title, body string) { n.sendAs("magpie-alert-", title, body) }
 
 func (n *notifier) sendAs(kind, title, body string) {
+	// every alert goes to Bark too, when it is set, whether or not the
+	// system lets this computer notify (EV_John_Liu on X)
+	barkPush(title, body)
 	if !n.allowed() {
 		return
 	}
@@ -196,6 +199,7 @@ func (h *host) watchAlerts() {
 		// an account in use signed out, or a Claude sign-in about to end
 		// (steven_4422 on Discord): always on, as the account's Sign in
 		// again is
+		go watchBarkDaily(backendCtx)
 		go provider.WatchSignIns(backendCtx, func(a provider.SignInAlert) {
 			title, body := signInText(trayLang(settings.Load().Lang, systemLang), a, time.Now())
 			n.sendAs(signInKind(a.Provider), title, body)

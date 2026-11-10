@@ -21110,6 +21110,7 @@ function renderAlerts(s, keep) {
   const turnOpts = [["0", t("Off")], ...mins.map((m) => [String(m * 60), t("{n} min", { n: m })])];
   if (d && !mins.some((m) => m * 60 === d)) turnOpts.push([String(d), d % 60 ? t("{n} s", { n: d }) : t("{n} min", { n: d / 60 })]);
   $("#turnDoneSegs").replaceChildren(segs(turnOpts, String(d), (v) => savePrefs({ ...keep, turnDoneAlert: Number(v) })));
+  window.barkPaint ? barkPaint(s) : import("./bark.js").then(() => barkPaint(prefs || s), statusErr);
 }
 
 // AGENT_PREFS: an agent's own settings rows, by its id (openAgentPrefs)

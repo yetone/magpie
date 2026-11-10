@@ -4131,6 +4131,9 @@ input.words.remote-key { width: 160px; }
 .warm-at.times > :not(.warm-times) { flex: none; }
 .warm-at .warm-times { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 8px; min-width: 0; }
 .warm-at .warm-time { display: inline-flex; align-items: center; gap: 2px; }
+.bark-box { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-left: auto; min-width: 0; max-width: 100%; }
+.bark-box input.words { width: 180px; }
+.bark-box code { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
 .warm-at .warm-rm, .warm-at .warm-add { min-width: 24px; height: 27px; padding: 0 6px; font-size: 14px; line-height: 1; }
 .row.pref .sub .warn { color: var(--amber); }
 .row.pref .sub.wraps { white-space: normal; }
