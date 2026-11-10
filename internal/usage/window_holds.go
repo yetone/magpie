@@ -267,6 +267,7 @@ func windowHolds(qs []provider.SubscriptionQuota, now, first time.Time, priceOf 
 			h.Routed.CacheWrite += int64(r.CacheWrite)
 			if pr := priceOf(r); pr != nil {
 				h.Routed.Cost += r.CostAt(*pr)
+				h.Routed.BaseCost += r.CostAt(baseRates(*pr))
 			} else {
 				unpriced[s] = true
 			}
@@ -305,10 +306,27 @@ func windowHolds(qs []provider.SubscriptionQuota, now, first time.Time, priceOf 
 		if !unpriced[s] && h.Routed.Cost > 0 {
 			h.Priced = true
 			h.Cost = h.Routed.Cost * scale
+			// told only where a premium was paid: the same figure twice
+			// would ask the reader to tell them apart for nothing
+			if math.Abs(h.Routed.Cost-h.Routed.BaseCost) > 1e-9 {
+				h.BaseCost = h.Routed.BaseCost * scale
+			} else {
+				h.Routed.BaseCost = 0
+			}
+		} else {
+			h.Routed.BaseCost = 0
 		}
 		w.Holds = h
 	}
 	return out
+}
+
+// baseRates is pr without its long-context tiers: every call at the base
+// rates however large its input (WindowHolds.BaseCost, #5861). A peak
+// hour's price is kept, as that is what the vendor's base rate is then.
+func baseRates(pr catalog.Price) catalog.Price {
+	pr.Tiers = nil
+	return pr
 }
 
 // apiPricer is each call's model at its API list price: its maker's, else

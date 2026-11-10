@@ -570,3 +570,53 @@ func TestWindowHoldsLeavesAWalletOut(t *testing.T) {
 		t.Fatalf("a wallet reckoned a whole: %+v, why %q", w.Holds, w.HoldsWhy)
 	}
 }
+
+// NorethSea (#5861): a window's whole is also told at the models' base
+// rates, without the API's long-context premium, which a plan's own use
+// doesn't pay, so two cycles whose calls' sizes differ compare. It is told
+// only where a call was over a tier's size; the API figure is as before.
+func TestWindowHoldsBaseCostLeavesOutLongContextPremiums(t *testing.T) {
+	now := time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)
+	reset := now.Add(3 * 24 * time.Hour)
+	week := func() []provider.SubscriptionQuota {
+		return []provider.SubscriptionQuota{{Provider: "codex", User: "sam@example.com", Windows: []provider.QuotaWindow{
+			{Name: "7 days", Used: 10, ResetsAt: &reset, Span: 7 * 24 * time.Hour}}}}
+	}
+	// gpt-6.1-sol's shape: 2× input and cache, 1.5× output above 272K
+	price := catalog.Price{Input: 5, Output: 30, CacheRead: 0.5, Tiers: []catalog.Tier{{Above: 272000, Input: 10, Output: 45, CacheRead: 1}}}
+	priceOf := func(Record) *catalog.Price { return &price }
+	call := func(in, out, read int) Record {
+		return Record{Time: now.Add(-time.Hour), Provider: "codex", ProviderAccount: "sam@example.com", Model: "gpt-6.1-sol", Input: in, Output: out, CacheRead: read, Status: 200}
+	}
+	reads := func(recs ...Record) func(func(Record)) {
+		return func(fn func(Record)) {
+			for _, r := range recs {
+				fn(r)
+			}
+		}
+	}
+	small, large := call(10000, 2000, 100000), call(50000, 4000, 250000) // the second is 300K in
+	smallBase := (10000*5 + 2000*30 + 100000*0.5) / 1e6
+	largeAPI, largeBase := (50000*10+4000*45+250000*1.0)/1e6, (50000*5+4000*30+250000*0.5)/1e6
+
+	h := windowHolds(week(), now, now.Add(-30*24*time.Hour), priceOf, provider.Renames{}, nil, nil, reads(small, large))[0].Windows[0].Holds
+	if h == nil || !h.Priced {
+		t.Fatalf("not reckoned: %+v", h)
+	}
+	if !near(h.Cost, (smallBase+largeAPI)*10) {
+		t.Errorf("API figure %v, want %v: the premium stays in it", h.Cost, (smallBase+largeAPI)*10)
+	}
+	if !near(h.BaseCost, (smallBase+largeBase)*10) || !near(h.Routed.BaseCost, smallBase+largeBase) {
+		t.Errorf("base figure %v (routed %v), want %v", h.BaseCost, h.Routed.BaseCost, (smallBase+largeBase)*10)
+	}
+	// no call over 272K: one figure, told once
+	h = windowHolds(week(), now, now.Add(-30*24*time.Hour), priceOf, provider.Renames{}, nil, nil, reads(small))[0].Windows[0].Holds
+	if h == nil || !near(h.Cost, smallBase*10) || h.BaseCost != 0 || h.Routed.BaseCost != 0 {
+		t.Errorf("no premium paid, and a base figure told apart: %+v", h)
+	}
+	// a model with no API price: neither figure
+	h = windowHolds(week(), now, now.Add(-30*24*time.Hour), func(Record) *catalog.Price { return nil }, provider.Renames{}, nil, nil, reads(large))[0].Windows[0].Holds
+	if h == nil || h.Priced || h.Cost != 0 || h.BaseCost != 0 {
+		t.Errorf("unpriced, and a figure told: %+v", h)
+	}
+}

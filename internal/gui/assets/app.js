@@ -18594,19 +18594,39 @@ function familyQuota(sub) {
   return [box, b];
 }
 
-// holdsLine: a window's whole, reckoned from the calls magpie routed
-// through the account since it began over the share used (WindowHolds),
-// and in its tooltip how, and why it reads low if the account is used
-// elsewhere too.
+// holdsLine: a window's whole (WindowHolds), how in its tooltip. With a
+// baseCost (#5861, no long-context premium) its figure switches every card.
+let holdsBase = kept("holdsBase", false);
+function holdsCostText(h) {
+  const c = fmtCost({ cost: holdsBase ? h.baseCost : h.cost });
+  return holdsBase ? t("≈ {cost} base", { cost: c }) : t("≈ {cost} API", { cost: c });
+}
 function holdsLine(h) {
   const cost = (c) => fmtCost({ cost: c });
   const line = el("span", "quota-holds");
   line.append(el("span", "", t("Whole ≈ {n} tokens", { n: fmtN(h.tokens) }) + (h.priced ? " ·" : "")));
-  if (h.priced) line.append(" ", el("span", "", "≈ " + cost(h.cost)));
+  const two = h.priced && h.baseCost > 0;
+  if (two) {
+    const b = el("button", "quota-holds-cost", holdsCostText(h));
+    b.type = "button";
+    b._holds = h;
+    b.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      holdsBase = !holdsBase;
+      keep("holdsBase", holdsBase);
+      for (const o of document.querySelectorAll(".quota-holds-cost")) if (o._holds) o.textContent = holdsCostText(o._holds);
+    };
+    line.append(" ", b);
+  } else if (h.priced) line.append(" ", el("span", "", "≈ " + cost(h.cost)));
   const r = h.routed || {};
   line.title = [
     h.priced ? t("The whole window ≈ {tokens} tokens of input and output, ≈ {cost} at API list prices", { tokens: fmtN(h.tokens), cost: cost(h.cost) })
       : t("The whole window ≈ {tokens} tokens of input and output; some of its models have no API price", { tokens: fmtN(h.tokens) }),
+    ...(two ? [
+      t("≈ {cost} at base rates, without long-context premiums: for comparing cycles", { cost: cost(h.baseCost) }),
+      t("Neither is an official dollar allowance or a fixed quota; click the figure to switch"),
+    ] : []),
     t("Reckoned from what magpie routed through this account in this window: {tokens} tokens in {calls} calls, {cache} cache reads, over the {used} the vendor says is used", { tokens: fmtN(r.tokens || 0), calls: r.calls || 0, cache: fmtN(r.cacheRead || 0), used: Math.round(h.used) + "%" }),
     t("Only magpie's calls are counted: if this account is also used elsewhere, this reads low"),
     t("A heavier model fills a window sooner: this holds for the models used so far"),
@@ -18614,8 +18634,7 @@ function holdsLine(h) {
   return line;
 }
 
-// holdsWhy: why a window's whole isn't told (provider.Holds*), for
-// holdsUnknownLine's tooltip; a reason not listed here says nothing.
+// holdsWhy: why a whole isn't told (provider.Holds*); one not listed says nothing.
 const holdsWhy = {
   low: () => t("Under {n}% of it is used: a rounded share that small is too coarse to scale up", { n: 5 }),
   clock: () => t("Its reset time isn't known, so neither is when it began"),

@@ -332,7 +332,15 @@ scope, and only calls and readings before that reading. A card that is gated
 live (a balance, a remote, an error) is gated for past cycles too, and a
 window no longer on the cached card is left out. Past prices aren't kept, so
 the cost is at today's API list prices. A call whose own id has no API price
-is costed as the model the reply named (Served), as the ledger is (#1498). See
+is costed as the model the reply named (Served), as the ledger is (#1498).
+Where a call was over a long-context tier's size, the whole is also told at
+the models' base rates, the tiers left out and a peak hour's price kept
+(`BaseCost`, `baseRates`, #5861, NorethSea): a plan's own use pays no such
+premium, so cycles whose calls' sizes differ compare on that figure. It is
+sent only when it differs from `Cost`; the card's figure is then a button that
+switches every card, past cycles too, between the two, kept in the browser
+(`holdsBase`, `quota-holds.test.cjs`,
+`TestWindowHoldsBaseCostLeavesOutLongContextPremiums`). See
 `TestWindowHoldsDryAgainAfterReset`, `TestWindowHoldsUsesObservedRefillStart`
 and `TestHistoricalWindowHoldsUsesEachWindowsOwnReading`.
 

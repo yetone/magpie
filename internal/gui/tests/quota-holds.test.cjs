@@ -29,7 +29,7 @@ const quotas = [
     { name: "Credits", used: 30, holdsWhy: "clock" },
   ] },
 ];
-function serve(lang) {
+function serve(lang, cards = quotas) {
   const settings = { lang, theme: "light", currency: "usd", chineseUnits: lang.startsWith("zh") };
   const state = { agents: [], profiles: [], settings };
   return async (r) => {
@@ -43,7 +43,7 @@ function serve(lang) {
     if (url.pathname === "/api/gateway/history") return json({ cut: false, days: [], routes: [] });
     if (url.pathname === "/api/groups") return json({ models: [], groups: [], pools: [] });
     if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true, url: "http://127.0.0.1:3999" } });
-    if (url.pathname === "/api/usage/quotas") return json(quotas);
+    if (url.pathname === "/api/usage/quotas") return json(cards);
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
     if (url.pathname.startsWith("/api/")) return json({});
     const file = path.join(assets, url.pathname === "/" ? "index.html" : url.pathname);
@@ -132,6 +132,80 @@ for (const [name, engine] of [["webkit", webkit], ["chromium", chromium]]) {
           await page.waitForTimeout(100);
           assert.deepEqual(await page.evaluate(() => [scrollY, document.querySelector("#view-usage")?.scrollTop]), before, at);
           await page.close();
+        }
+      }
+    } finally { await browser.close(); }
+  });
+}
+
+// NorethSea (#5861): where a call paid the API's long-context premium, the
+// server also sends the whole at base rates (baseCost). The figure is then a
+// button, which says it is the API's: a click switches every card's figure
+// to the base one and back,
+// moves nothing, and is kept for the next load; the tooltip names both. A
+// window with no baseCost keeps one plain figure.
+const premium = (tokens, cost, base, used) => ({ ...holds(tokens, cost, used), baseCost: base });
+const baseCards = [
+  { provider: "codex", name: "Codex", icon: "openai", plan: "pro", user: "sam@example.com", windows: [
+    { name: "5 hours", used: 20, resetsAt: soon(2), holds: holds(12345678, 85.4321, 20) },
+    { name: "7 days", used: 40, resetsAt: soon(70), holds: premium(234567890, 1234.5, 777.25, 40) },
+  ] },
+  { provider: "claude", name: "Claude Code", icon: "claude-color", plan: "max", user: "kit@example.com", windows: [
+    { name: "7 days", used: 50, resetsAt: soon(30), holds: premium(34567890, 312.5, 210.75, 50) },
+  ] },
+];
+const base = { en: " base", zh: "（基础价）", "zh-TW": "（基礎價）", ja: "（基本料金）", de: " (Basispreis)" };
+// and the API figure says it is one, beside the other
+const api = { en: " API", zh: "（API 价）", "zh-TW": "（API 價）", ja: "（API 料金）", de: " (API-Preis)" };
+
+for (const [name, engine] of [["webkit", webkit], ["chromium", chromium]]) {
+  test(`${name}: a whole that paid long-context premiums switches to its base-rate figure on every card, in every language`, async () => {
+    const browser = await engine.launch();
+    try {
+      for (const lang of Object.keys(base)) {
+        for (const width of [360, 1000]) {
+          const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
+          const page = await context.newPage();
+          page.setDefaultTimeout(5000);
+          page.setDefaultNavigationTimeout(60000);
+          await page.route("**/*", serve(lang, baseCards));
+          await page.goto("http://magpie.test/?view=usage");
+          await page.locator(".quota-holds-cost").nth(1).waitFor();
+          const read = () => page.evaluate(() => [...document.querySelectorAll(".quota-holds")].map((l) => {
+            const card = l.closest(".subscription-card").getBoundingClientRect(), b = l.getBoundingClientRect();
+            return { text: l.textContent, title: l.title, button: l.querySelector("button")?.textContent ?? null,
+              inCard: b.left >= card.left - 1 && b.right <= card.right + 1 };
+          }));
+          const at = `${lang} ${width}px`;
+          let got = await read();
+          assert.equal(got.length, 3, at);
+          const [plain, week, kit] = got;
+          // no premium paid: one plain figure, the tooltip as it was
+          assert.equal(plain.button, null, at);
+          assert.equal(plain.title.split("\n").length, 4, at);
+          assert.equal(week.button, "≈ $1235" + api[lang], at);
+          assert.equal(kit.button, "≈ $313" + api[lang], at);
+          for (const l of [week, kit]) {
+            assert.equal(l.title.split("\n").length, 6, `${at}: ${l.title}`);
+            assert.ok(l.inCard, `${at}: ${l.text}`);
+          }
+          assert.ok(week.title.includes("$1235") && week.title.includes("$777"), `${at}: ${week.title}`);
+          const before = await page.evaluate(() => [scrollY, document.querySelector("#view-usage")?.scrollTop]);
+          await page.locator(".quota-holds-cost").first().click();
+          got = await read();
+          assert.ok(got[1].button.startsWith("≈ $777") && got[1].button.endsWith(base[lang]), `${at}: ${got[1].button}`);
+          assert.ok(got[2].button.startsWith("≈ $211") && got[2].button.endsWith(base[lang]), `${at}: the other card didn't switch: ${got[2].button}`);
+          assert.equal(got[0].text, plain.text, at);
+          for (const l of got) assert.ok(l.inCard, `${at}: ${l.text}`);
+          assert.deepEqual(await page.evaluate(() => [scrollY, document.querySelector("#view-usage")?.scrollTop]), before, at);
+          // kept for the next load, and switched back
+          await page.reload();
+          await page.locator(".quota-holds-cost").nth(1).waitFor();
+          assert.ok((await read())[2].button.endsWith(base[lang]), `${at}: not kept`);
+          await page.locator(".quota-holds-cost").nth(1).click();
+          got = await read();
+          assert.deepEqual([got[1].button, got[2].button], [week.button, kit.button], at);
+          await context.close();
         }
       }
     } finally { await browser.close(); }

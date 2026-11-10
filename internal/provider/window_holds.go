@@ -20,17 +20,25 @@ import (
 // up to when the share was read, and Used that share. A call made with the
 // account outside magpie is in Used but not in Routed, so the estimate is
 // then lower than the window really holds.
+//
+// BaseCost is Cost with every call at its model's base rates, no API
+// long-context premium (catalog.Price.Tiers) (#5861, NorethSea): a plan's
+// own use has none (OpenAI bills no long-context surcharge in Codex), so
+// two cycles whose calls' sizes differ compare by it. It is there only
+// when some call was over a tier's size, else it is Cost.
 type WindowHolds struct {
-	Tokens int64   `json:"tokens"`
-	Cost   float64 `json:"cost,omitempty"`
-	Priced bool    `json:"priced"`
-	Used   float64 `json:"used"`
-	Routed struct {
+	Tokens   int64   `json:"tokens"`
+	Cost     float64 `json:"cost,omitempty"`
+	BaseCost float64 `json:"baseCost,omitempty"`
+	Priced   bool    `json:"priced"`
+	Used     float64 `json:"used"`
+	Routed   struct {
 		Calls      int     `json:"calls"`
 		Tokens     int64   `json:"tokens"`
 		CacheRead  int64   `json:"cacheRead,omitempty"`
 		CacheWrite int64   `json:"cacheWrite,omitempty"`
 		Cost       float64 `json:"cost,omitempty"`
+		BaseCost   float64 `json:"baseCost,omitempty"`
 	} `json:"routed"`
 	Since time.Time `json:"since"`
 }
