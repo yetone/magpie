@@ -620,6 +620,13 @@ func lanGuard(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		// so is the join page, and its route carries a password, not a
+		// key: the handler judges the password, the browser that sent it
+		// and how often it is tried (join.go)
+		if remote && (joinPageOpen(r) || joinAsked(r)) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		// a link the image server handed out opens with its own token
 		// and no key (imageTokenAsked); the handler judges the token, and
 		// refuses one that opens nothing as a request without a key

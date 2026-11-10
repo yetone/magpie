@@ -79,6 +79,10 @@ pre { margin: 0; background: var(--code); border-radius: 8px; padding: 12px 14px
 .models button .mono { overflow-wrap: anywhere; }
 .models button[aria-checked=true] { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .empty { color: var(--sub); padding: 6px 2px; }
+#join .field + input { margin-bottom: 2px; }
+#once { margin-bottom: 4px; }
+.once-row { margin-top: 6px; }
+.once-row code { background: var(--code); border-radius: 6px; padding: 6px 8px; overflow-wrap: anywhere; }
 [hidden] { display: none !important; }
 @media (max-width: 480px) {
   main { padding-top: 24px; }
@@ -105,6 +109,21 @@ pre { margin: 0; background: var(--code); border-radius: 8px; padding: 12px 14px
     </form>
   </section>
 
+  <section id="join" hidden>
+    <h1 data-t="joinTitle">Join this magpie</h1>
+    <p class="sub" data-t="joinIntro">Get a gateway key of your own for this computer, and the setup for its agents.</p>
+    <form id="joinForm" autocomplete="off">
+      <label class="field" for="device" data-t="device">This computer’s name</label>
+      <input id="device" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" maxlength="120">
+      <label class="field" for="pw" data-t="password">Password</label>
+      <div class="form-row">
+        <input id="pw" type="password" spellcheck="false" autocapitalize="off" autocomplete="off">
+        <button class="primary" id="joinGo" type="submit" data-t="joinGo">Join</button>
+      </div>
+      <p class="error" id="joinErr" role="alert" hidden></p>
+    </form>
+  </section>
+
   <section id="info" hidden>
     <div class="head">
       <div class="grow">
@@ -115,6 +134,11 @@ pre { margin: 0; background: var(--code); border-radius: 8px; padding: 12px 14px
       <button class="link" id="forget" type="button" data-t="forget">Forget key</button>
     </div>
     <p class="error" id="err2" role="alert" hidden></p>
+    <div class="card" id="once" hidden>
+      <p class="sub" data-t="yourKey">Your gateway key</p>
+      <div class="row once-row"><code class="mono grow" id="onceKey"></code><span id="onceCopy"></span></div>
+      <p class="note" data-t="keepKey">Keep it somewhere safe: this page won’t show it again.</p>
+    </div>
 
     <h2 data-t="limits">Limits</h2>
     <div class="card" id="limits"></div>
@@ -150,6 +174,11 @@ pre { margin: 0; background: var(--code); border-radius: 8px; padding: 12px 14px
 "use strict";
 const STR = {
   en: {
+    joinTitle: "Join this magpie", joinIntro: "Get a gateway key of your own for this computer, and the setup for its agents.",
+    device: "This computer’s name", password: "Password", joinGo: "Join", wrongPw: "Wrong password.",
+    joinOff: "Joining with a password is off on this magpie. Ask whoever runs it for a gateway key.",
+    yourKey: "Your gateway key", keepKey: "Keep it somewhere safe: this page won’t show it again.",
+    magpieNote: "On a computer with magpie, run this in a terminal, or add Remote magpie in Providers with this address and key.",
     title: "Your gateway key", intro: "Enter the gateway key you were given to see what it has used, what it may use and how to set up your agents.",
     keyLabel: "Gateway key", go: "Continue", kept: "The key stays in this tab and is sent to this gateway alone.",
     bad: "This isn't an enabled gateway key here. Check it with whoever gave it to you.", net: "The gateway didn't answer. Check the address and try again.",
@@ -170,6 +199,11 @@ const STR = {
     pick: "The model is the one picked below.",
   },
   zh: {
+    joinTitle: "加入这个 magpie", joinIntro: "为这台电脑领取一个专属的网关密钥，并拿到它上面智能体的配置。",
+    device: "这台电脑的名字", password: "密码", joinGo: "加入", wrongPw: "密码不对。",
+    joinOff: "这个 magpie 没有开启密码加入。请向它的管理者要一个网关密钥。",
+    yourKey: "你的网关密钥", keepKey: "请妥善保存：这个页面不会再显示它。",
+    magpieNote: "装了 magpie 的电脑：在终端里运行这行，或在服务商里添加「远程 magpie」，填入这个地址和密钥。",
     title: "你的网关密钥", intro: "输入你拿到的网关密钥，查看它的用量、可用的模型，以及怎样配置你的智能体。",
     keyLabel: "网关密钥", go: "继续", kept: "密钥只保存在这个标签页里，只会发给这个网关。",
     bad: "这不是此处可用的网关密钥。请向给你密钥的人确认。", net: "网关没有响应。请检查地址后重试。",
@@ -190,6 +224,11 @@ const STR = {
     pick: "模型为下方选中的那个。",
   },
   "zh-TW": {
+    joinTitle: "加入這個 magpie", joinIntro: "為這台電腦領取一個專屬的閘道金鑰，並取得其上代理程式的設定。",
+    device: "這台電腦的名稱", password: "密碼", joinGo: "加入", wrongPw: "密碼不正確。",
+    joinOff: "這個 magpie 沒有開啟密碼加入。請向它的管理者索取閘道金鑰。",
+    yourKey: "你的閘道金鑰", keepKey: "請妥善保存：這個頁面不會再顯示它。",
+    magpieNote: "裝了 magpie 的電腦：在終端機執行這行，或在服務商中新增「遠端 magpie」，填入這個位址和金鑰。",
     title: "你的閘道金鑰", intro: "輸入你拿到的閘道金鑰，查看它的用量、可用的模型，以及如何設定你的代理程式。",
     keyLabel: "閘道金鑰", go: "繼續", kept: "金鑰只保存在這個分頁中，只會傳給這個閘道。",
     bad: "這不是此處可用的閘道金鑰。請向提供金鑰的人確認。", net: "閘道沒有回應。請檢查位址後再試。",
@@ -210,6 +249,11 @@ const STR = {
     pick: "模型為下方選取的那個。",
   },
   ja: {
+    joinTitle: "この magpie に参加", joinIntro: "このコンピュータ専用のゲートウェイキーと、エージェントの設定を受け取ります。",
+    device: "このコンピュータの名前", password: "パスワード", joinGo: "参加", wrongPw: "パスワードが違います。",
+    joinOff: "この magpie ではパスワードでの参加がオフです。管理者にゲートウェイキーを頼んでください。",
+    yourKey: "あなたのゲートウェイキー", keepKey: "安全な場所に保管してください。このページでは再表示されません。",
+    magpieNote: "magpie のあるコンピュータでは、ターミナルでこれを実行するか、プロバイダでこのアドレスとキーのリモート magpie を追加します。",
     title: "あなたのゲートウェイキー", intro: "受け取ったゲートウェイキーを入力すると、使用量、使えるモデル、エージェントの設定方法が表示されます。",
     keyLabel: "ゲートウェイキー", go: "続ける", kept: "キーはこのタブにだけ保存され、このゲートウェイにだけ送られます。",
     bad: "ここで有効なゲートウェイキーではありません。キーをくれた人に確認してください。", net: "ゲートウェイから応答がありません。アドレスを確認して、もう一度お試しください。",
@@ -230,6 +274,11 @@ const STR = {
     pick: "モデルは下で選んだものです。",
   },
   de: {
+    joinTitle: "Diesem magpie beitreten", joinIntro: "Holen Sie sich einen eigenen Zugangsschlüssel für diesen Computer und die Einrichtung seiner Agenten.",
+    device: "Name dieses Computers", password: "Passwort", joinGo: "Beitreten", wrongPw: "Falsches Passwort.",
+    joinOff: "Beitreten mit Passwort ist bei diesem magpie aus. Bitten Sie den Betreiber um einen Zugangsschlüssel.",
+    yourKey: "Ihr Zugangsschlüssel", keepKey: "Bewahren Sie ihn sicher auf: Diese Seite zeigt ihn nicht noch einmal.",
+    magpieNote: "Auf einem Computer mit magpie im Terminal ausführen, oder unter Anbieter ein Remote-magpie mit dieser Adresse und diesem Schlüssel hinzufügen.",
     title: "Ihr Zugangsschlüssel", intro: "Geben Sie den Zugangsschlüssel ein, den Sie bekommen haben, um seine Nutzung, die erlaubten Modelle und die Einrichtung Ihrer Agenten zu sehen.",
     keyLabel: "Zugangsschlüssel", go: "Weiter", kept: "Der Schlüssel bleibt in diesem Tab und wird nur an dieses Gateway gesendet.",
     bad: "Das ist hier kein aktiver Zugangsschlüssel. Fragen Sie, wer ihn Ihnen gegeben hat.", net: "Das Gateway antwortet nicht. Prüfen Sie die Adresse und versuchen Sie es erneut.",
@@ -263,14 +312,16 @@ const LANG = (() => {
 const t = (k, v) => String(STR[LANG][k] ?? STR.en[k] ?? k).replace(/\{(\w+)\}/g, (_, n) => (v && n in v ? v[n] : ""));
 document.documentElement.lang = LANG;
 document.querySelectorAll("[data-t]").forEach((e) => { e.textContent = t(e.dataset.t); });
-document.title = t("title") + " · magpie";
+// /join is the same page, opened to join with a password
+const JOINING = /\/join\/?$/.test(location.pathname);
+document.title = t(JOINING ? "joinTitle" : "title") + " · magpie";
 const $ = (id) => document.getElementById(id);
 $("filter").placeholder = t("filter");
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
-// the gateway's address is where this page was opened, less "/me": a
+// the gateway's address is where this page was opened, less "/me" or "/join": a
 // reverse proxy that serves magpie under a path keeps it
-const BASE = location.origin + location.pathname.replace(/\/me\/?$/, "");
+const BASE = location.origin + location.pathname.replace(/\/(me|join)\/?$/, "");
 const PLACEHOLDER = "YOUR_GATEWAY_KEY";
 const STORE = "magpie-key";
 let key = "", data = null, model = "", tab = "claude";
@@ -312,8 +363,42 @@ $("form").addEventListener("submit", async (e) => {
 });
 $("forget").onclick = () => {
   key = ""; data = null; store.set("");
-  $("info").hidden = true; $("signin").hidden = false; $("key").focus();
+  $("once").hidden = true;
+  signedOut();
 };
+// signedOut: the form to sign in with a key, or on /join the one to join with
+function signedOut() {
+  $("info").hidden = true;
+  $("signin").hidden = JOINING; $("join").hidden = !JOINING;
+  $(JOINING ? "device" : "key").focus();
+}
+
+// joining: the password makes a gateway key of this computer's own, shown
+// once, then the page is that key's, its setup filled in with it
+$("joinForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const pw = $("pw").value;
+  if (!pw) return $("pw").focus();
+  $("joinGo").disabled = true;
+  $("joinErr").hidden = true;
+  const fail = (m) => { $("joinErr").textContent = m; $("joinErr").hidden = false; };
+  try {
+    const res = await fetch(BASE + "/v1/magpie/join", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pw, name: $("device").value.trim() }), cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer" });
+    if (!res.ok) return fail(res.status === 401 ? t("wrongPw") : res.status === 404 ? t("joinOff") : why(res.status));
+    const j = await res.json();
+    $("pw").value = "";
+    key = j.key; store.set(key);
+    $("onceKey").textContent = key;
+    $("onceCopy").replaceChildren(copyBtn(key));
+    $("once").hidden = false;
+    $("withKey").checked = true;
+    const r = await load(key);
+    if (r.ok) return show(r.body);
+    fail(why(r.status));
+  } catch { fail(t("net")); }
+  finally { $("joinGo").disabled = false; }
+});
 $("refresh").onclick = async () => {
   $("err2").hidden = true;
   try {
@@ -328,7 +413,7 @@ $("filter").oninput = () => drawModels();
 
 function show(d) {
   data = d;
-  $("signin").hidden = true; $("info").hidden = false;
+  $("signin").hidden = true; $("join").hidden = true; $("info").hidden = false;
   $("name").textContent = d.name || "—";
   drawLimits(); drawUsage();
   const ids = (d.models || []).map((m) => m.id);
@@ -389,7 +474,7 @@ function drawUsage() {
   if (!top.children.length) top.append(el("li", "empty", t("none")));
 }
 
-const TABS = [["claude", "Claude Code"], ["codex", "Codex"], ["openai", null], ["curl", null]];
+const TABS = [["claude", "Claude Code"], ["codex", "Codex"], ["magpie", "magpie"], ["openai", null], ["curl", null]];
 function drawTabs() {
   const box = $("tabs");
   box.replaceChildren();
@@ -449,6 +534,11 @@ function drawSetup() {
       "model = " + q(m), 'model_provider = "magpie"', "",
       "[model_providers.magpie]", 'name = "magpie"', "base_url = " + q(v1), 'wire_api = "responses"', "experimental_bearer_token = " + q(k),
     ].join("\n"));
+  } else if (tab === "magpie") {
+    // another computer's magpie takes this one as a provider, Remote
+    // magpie, and wires its own agents to it
+    $("tabNote").textContent = t("magpieNote");
+    block("", "magpie provider add remote-magpie " + sh(k) + " url=" + sh(BASE));
   } else if (tab === "openai") {
     $("tabNote").textContent = t("oaiNote");
     const kv = el("div", "kv");
@@ -485,14 +575,26 @@ function drawModels() {
 }
 
 (async () => {
+  if (JOINING) {
+    signedOut();
+    // whether a password is set to join with; a key this tab already
+    // holds is shown below as on /me
+    fetch(BASE + "/v1/magpie/join", { cache: "no-store", credentials: "omit" })
+      .then((r) => r.ok ? r.json() : { open: r.status !== 403 && r.status !== 404, status: r.status })
+      .then((j) => {
+        if (j.open) return;
+        $("joinErr").textContent = j.status === 403 ? t("notShared") : t("joinOff"); $("joinErr").hidden = false;
+        $("joinGo").disabled = true;
+      }, () => {});
+  }
   const k = store.get();
-  if (!k) return $("key").focus();
+  if (!k) return signedOut();
   try {
     const r = await load(k);
     if (r.ok) { key = k; return show(r.body); }
     if (r.status === 401) store.set("");
   } catch {}
-  $("key").focus();
+  signedOut();
 })();
 </script>
 </body>

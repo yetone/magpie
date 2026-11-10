@@ -427,6 +427,9 @@ type settingsJSON struct {
 	MTLSCerts []mtlsCert `json:"mtlsCerts,omitempty"`
 	MTLSErr   string     `json:"mtlsError,omitempty"`
 	MTLSSaved string     `json:"mtlsSaved,omitempty"`
+	// JoinOn: a password is set to join with (join.go); the password
+	// itself is never sent
+	JoinOn bool `json:"joinOn,omitempty"`
 	// Dir is the data folder beside a portable magpie (#508)
 	Portable bool `json:"portable,omitempty"`
 	// Log is the log the desktop app writes (applog), as shown; "" for a
@@ -829,6 +832,7 @@ func settingsState() settingsJSON {
 	if s.LAN || s.OnNetwork || s.MTLS {
 		s.MTLSCerts, s.MTLSErr = mtlsCerts()
 	}
+	s.JoinOn = access.JoinOn()
 	if s.LAN || gateway.OnNetwork() {
 		s.PublicURL = gateway.PublicURL()
 		s.PublicKind = gateway.URLKind(s.PublicURL)
@@ -1536,6 +1540,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	backupRoutes(mux, w)
 	dataFolderRoutes(mux, w)
 	mtlsRoutes(mux, w)
+	joinRoutes(mux)
 	uninstallRoutes(mux, w)
 	archiveRoutes(mux)
 	libraryRoutes(mux, w)

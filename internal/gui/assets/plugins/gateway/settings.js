@@ -509,6 +509,58 @@ function renderLAN(s) {
     update();
   }
   if (sub) row(head || t("In a container"), sub, "").classList.add("lan-container");
+  renderJoin(s, box);
+}
+
+// renderJoin: Join with a password (EV_John_Liu on X), under the shared
+// address. With a password set, another computer opens <address>/join,
+// types it, and gets a gateway key of its own, named for it in Gateway
+// keys, and the setup for its agents. Only a hash is kept: the field is
+// always empty, and a password typed in it replaces the one set.
+let joinDraft = { value: "", err: "" };
+function renderJoin(s, box) {
+  const d = joinDraft;
+  const set = (password) => writingPrefs(api("settings/join", { password }))
+    .then((ns) => { prefs = ns; joinDraft = { value: "", err: "" }; renderSettings(); status(t("Saved"), "ok", 1500); })
+    .catch((e) => { d.err = t(e.message); status(d.err, "err"); renderSettings(); });
+  const r = el("div", "row pref rule-row join-row");
+  const who = el("div", "who");
+  who.append(el("div", "name", t("Join with a password")),
+    el("div", "sub" + (d.err ? " err" : ""), d.err || t("Other computers open the join link and type this password to get a gateway key of their own and the setup for their agents")));
+  const field = input(d.value, s.joinOn ? t("New password") : t("Password"));
+  field.type = "password";
+  field.className = "words rule-match join-pw";
+  field.setAttribute("aria-label", t("Password"));
+  field.autocomplete = "new-password";
+  field.spellcheck = false;
+  const go = el("button", "text", t("Set"));
+  go.type = "button";
+  go.onclick = () => {
+    d.value = field.value;
+    if (!d.value) return field.focus();
+    set(d.value);
+  };
+  field.oninput = () => { d.value = field.value; };
+  field.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") go.onclick(); };
+  const val = el("div", "val rule-add");
+  val.append(field, go);
+  if (s.joinOn) {
+    const off = el("button", "text join-off", t("Turn off joining"));
+    off.type = "button";
+    off.onclick = () => set("");
+    val.append(off);
+  }
+  r.append(who, val);
+  box.append(r);
+  if (!s.joinOn || !lanSelectedURL) return;
+  const link = lanSelectedURL + "/join";
+  const lr = el("div", "row pref join-link-row");
+  const lw = el("div", "who");
+  lw.append(el("div", "name", t("Join link")));
+  const lv = el("div", "val");
+  lv.append(el("code", "", link), copyBtn(link, t("Join link")));
+  lr.append(lw, lv);
+  box.append(lr);
 }
 
 // renderWebPage: Browser access, the app's own page served to a browser

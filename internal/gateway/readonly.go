@@ -43,6 +43,10 @@ var readOnlyRoutes = map[string]bool{
 	"GET " + OwnMCPPath:               true,
 	"GET " + KeyPagePath:              true,
 	"GET " + keyPageData:              true,
+	// the join carries a password, not a key (join.go)
+	"GET " + JoinPagePath: true,
+	"GET " + joinData:     true,
+	"POST " + joinData:    true,
 	// a proof carries no key, and answers none (remote_prove.go)
 	"POST " + provider.RemoteProvePath: true,
 }

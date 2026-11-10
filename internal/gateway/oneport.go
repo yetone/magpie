@@ -31,6 +31,8 @@ var clientPrefixes = []string{
 	// the key page (KeyPagePath): a key's holder opens it at the address
 	// they give their agents
 	KeyPagePath,
+	// and the join page (JoinPagePath), at the same address
+	JoinPagePath,
 }
 
 // ClientPath: p is one of the gateway's client routes, which `magpie web`

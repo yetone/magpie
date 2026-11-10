@@ -1046,6 +1046,11 @@ func (s *Server) routes() *routeMux {
 	mux.HandleFunc("POST "+provider.RemoteProvePath, s.prove)
 	mux.HandleFunc("GET "+KeyPagePath, s.keyPage)
 	mux.HandleFunc("GET "+keyPageData, s.keyInfo)
+	// the join page, where another computer that knows the join password
+	// gets a gateway key of its own (join.go)
+	mux.HandleFunc("GET "+JoinPagePath, s.joinPage)
+	mux.HandleFunc("GET "+joinData, s.joinOpen)
+	mux.HandleFunc("POST "+joinData, s.joinKey)
 	// the Claude Code processes the Claude subscription runs, for magpie
 	// claude-code runs (loopback only)
 	mux.HandleFunc("GET "+ClaudeRunsPath, s.claudeRuns)

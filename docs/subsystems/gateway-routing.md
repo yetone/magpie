@@ -886,6 +886,34 @@ shared and with a key (`gatewayKeyPage` in `keys.js`). `key_page.go`, and
 [`key_page_test.go`](../../internal/gateway/key_page_test.go);
 `internal/gui/tests/key-page.test.cjs` drives the page itself.
 
+`GET /join` is the same page as the join page (EV_John_Liu on X): with a
+password set in Settings → Local network → Join with a password
+(`POST /api/settings/join`, `internal/gui/join.go`), another computer
+opens it, types the password and a name for itself, and gets a gateway
+key of its own (`access.Update("add-key")`, named for it or "Joined from
+<address>"), shown once and then filled into the page's setup, which adds
+a magpie tab (`magpie provider add remote-magpie`). The key is listed in
+Gateway keys and is limited, turned off or removed there like any other.
+Only a salted PBKDF2-SHA256 hash of the password is kept, in `join.json`
+(`internal/access/join.go`, 0600, temp and rename); a file that can't be
+read or parsed means joining is closed. `lanGuard` lets `GET /join` and
+`GET`/`POST /v1/magpie/join` (`joinPageOpen`, `joinAsked`) through
+without a key, after the allow list, the rebinding check, mTLS and the
+not-shared refusal. `joinKey` then refuses a browser's request
+(`fromBrowser`) unless the Host is this computer's own (`ownHost`: no
+rebound name, no `*.localhost`) and the Origin is that same address, not
+missing and not `null`, with `Sec-Fetch-Site` same-origin where sent;
+curl and scripts are judged on the password alone. Every try from another
+machine takes a token from the join's own bucket (10, then one each 10s),
+the right password too, so a guesser and a flood of keys are both held
+with 429 and `Retry-After`. Neither the password nor the key is logged,
+and the key goes back in a `no-store` body only. `join.go`, and
+`TestJoinMakesARevocableKey`, `TestJoinHoldsAGuesser`,
+`TestJoinRefusesOtherPages` and `TestJoinClosed` in
+[`join_test.go`](../../internal/gateway/join_test.go), `TestJoinPassword`
+in `internal/access`; `internal/gui/tests/lan-join.test.cjs` drives the
+page and the Settings rows.
+
 System One uses `RouteDecider` and `postDecide` in
 [`decide.go`](../../internal/gateway/decide.go), taking one provider prefix
 off at each hop and preserving the state, questions and vendor errors.
