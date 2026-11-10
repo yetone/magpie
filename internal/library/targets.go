@@ -333,6 +333,11 @@ func targetOf(a *agent.Agent) *Target {
 	case "cindy":
 		// Cindy keeps its user-wide skills in ~/.agents/skills
 		t.Skills = sharedSkillsDir()
+	case "openbot":
+		// OpenBot reads skills only from ~/.agents/skills (home-skills.ts,
+		// HOME_SKILL_FOLDER). Its MCP servers are rows in its SQLite
+		// database (McpServerStore), which magpie doesn't write.
+		t.Skills = sharedSkillsDir()
 	case "hermes":
 		// Hermes Agent reads mcp_servers from $HERMES_HOME/config.yaml, the
 		// file magpie sets its model in too (tools/mcp_tool.py), and skills

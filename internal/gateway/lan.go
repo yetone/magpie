@@ -569,6 +569,8 @@ func lanGuard(next http.Handler) http.Handler {
 		// (wsl.go), is one of this computer's; one given the key in its
 		// path (Claude Science's) has it taken off first
 		r = takeWSLPathKey(r)
+		// an agent named in the path (AgentPath) is told by it
+		r = takeAgentPath(r)
 		if fromWSL(r) {
 			r = asFromLoopback(r)
 		}

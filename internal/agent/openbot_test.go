@@ -176,7 +176,7 @@ func TestOpenBotProvider(t *testing.T) {
 
 	gw := gateway.URL()
 	e, others := openBotRead(t, path)
-	if *e.BaseURL != gw+"/v1" || *e.Name != "magpie" || e.Secret != nil || e.Harness != nil {
+	if *e.BaseURL != gw+"/agent/openbot/v1" || *e.Name != "magpie" || e.Secret != nil || e.Harness != nil {
 		t.Errorf("entry: base %q name %q secret %v harness %v", *e.BaseURL, *e.Name, e.Secret, e.Harness)
 	}
 	var got, want []string
