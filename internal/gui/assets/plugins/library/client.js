@@ -1798,14 +1798,15 @@ magpie.plugin("library", (ctx) => {
           const tags = [tag(k.kind)];
           if (!k.installed) tags.push(tag(t("Not installed"), "", t("Pi installs it when it next starts")));
           else if (k.version) tags.push(tag("v" + k.version));
-          list.append(piRow(p, others, { pkg: k.source }, k.name, k.source, k.on, tags, k.filtered));
+          list.append(piRow(p, others, { pkg: k.source }, k.name, k.source, k.on, tags, k.filtered, () => confirmRemovePi(p, k)));
         }
         if (!(p.extensions || []).length && !(p.packages || []).length) list.append(el("div", "lib-none", t("No extensions or packages yet.")));
       }
       body.append(list);
     }
+    if (live.length) body.append(discover("pi"));
   }
-  function piRow(p, others, what, name, sub, on, tags, filtered) {
+  function piRow(p, others, what, name, sub, on, tags, filtered, remove) {
     const key = p.id + " " + (what.ext || what.pkg);
     const row = el("div", "row lib-row lib-pi-row");
     row.dataset.id = what.ext || what.pkg;
@@ -1825,6 +1826,13 @@ magpie.plugin("library", (ctx) => {
     if (filtered) sw.title = t("This entry loads only some of the package; change it with pi config");
     sw.disabled = !!filtered || piBusy.has(key);
     row.append(sw);
+    if (remove) {
+      const rm = button("", "lib-icon danger lib-rm lib-pi-rm", remove);
+      rm.append(svg(GLYPH.trash, 13, 1.4));
+      rm.title = t("Remove");
+      rm.disabled = piBusy.has(key);
+      row.append(rm);
+    }
     return row;
   }
   async function setPi(p, what, name, on) {
@@ -7105,6 +7113,7 @@ magpie.plugin("library", (ctx) => {
   const market = {
     mcp: { q: "", items: null, error: "", loading: false, seq: 0, timer: 0, custom: null, shown: 0 },
     skills: { q: "", items: null, error: "", loading: false, seq: 0, timer: 0, shown: 0 },
+    pi: { q: "", items: null, error: "", loading: false, seq: 0, timer: 0, shown: 0 },
   };
   // how many cards a list shows at first, and each Show more adds
   const MARKET_PAGE = 60;
@@ -7116,7 +7125,7 @@ magpie.plugin("library", (ctx) => {
     m.loading = true;
     drawMarket(kind);
     try {
-      const r = await api("library/market/" + (kind === "mcp" ? "servers" : "skills") + "?q=" + encodeURIComponent(m.q.trim()));
+      const r = await api("library/market/" + ({ mcp: "servers", skills: "skills", pi: "pi" })[kind] + "?q=" + encodeURIComponent(m.q.trim()));
       if (seq !== m.seq) return;
       m.items = r.items || [];
       m.shown = MARKET_PAGE;
@@ -7136,6 +7145,7 @@ magpie.plugin("library", (ctx) => {
     m.loading = false;
     drawMarket(kind);
     if (kind === "skills") describeSkills();
+    if (kind === "pi") return;
     // The market reads the library as it is now; one it calls added that
     // this page doesn't list was added elsewhere — another window, the CLI.
     const mine = new Set((kind === "mcp" ? lib?.servers : lib?.skills)?.map((x) => x.name) || []);
@@ -7171,7 +7181,7 @@ magpie.plugin("library", (ctx) => {
     const inp = el("input");
     inp.type = "search";
     inp.dataset.lib = "market-" + kind;
-    inp.placeholder = kind === "mcp" ? t("Search MCP servers — GitHub, Postgres, Figma…") : t("Search skills on skills.sh — react, pdf, testing…");
+    inp.placeholder = kind === "mcp" ? t("Search MCP servers — GitHub, Postgres, Figma…") : kind === "pi" ? t("Search Pi packages on npm — mcp, web, subagents…") : t("Search skills on skills.sh — react, pdf, testing…");
     inp.spellcheck = false;
     inp.autocomplete = "off";
     inp.value = m.q;
@@ -7179,7 +7189,7 @@ magpie.plugin("library", (ctx) => {
       m.q = inp.value;
       clearTimeout(m.timer);
       const q = m.q.trim();
-      if (kind === "skills" && q.length === 1) return;
+      if (kind !== "mcp" && q.length === 1) return;
       m.timer = setTimeout(() => fetchMarket(kind), 320);
     };
     inp.onkeydown = (e) => {
@@ -7202,7 +7212,7 @@ magpie.plugin("library", (ctx) => {
     box.classList.toggle("loading", m.loading);
     const note = box.querySelector(".mk-note");
     note.textContent = q && m.items ? (m.items.length === 1 ? t("1 result") : t("{n} results", { n: m.items.length }))
-      : kind === "mcp" ? t("Featured, and the official MCP Registry") : t("Popular on skills.sh");
+      : kind === "mcp" ? t("Featured, and the official MCP Registry") : kind === "pi" ? t("Most downloaded on npm") : t("Popular on skills.sh");
     const grid = box.querySelector(".mk-grid");
     grid.replaceChildren();
     if (!m.items) {
@@ -7225,6 +7235,7 @@ magpie.plugin("library", (ctx) => {
     if (m.error && m.failed && m.items.length) {
       grid.append(el("div", "mk-msg mk-partial", kind === "mcp"
         ? t("The MCP Registry didn't answer ({error}), so these are only magpie's featured servers that match.", { error: m.failed.cause })
+        : kind === "pi" ? t("npm's search didn't answer ({error}), so these are only the matches among the most downloaded packages.", { error: m.failed.cause })
         : t("skills.sh's search didn't answer ({error}), so these are only the matches among magpie's picks and the most installed skills.", { error: m.failed.cause })));
     } else if (m.error) grid.append(el("div", "mk-msg err", m.error));
     if (kind === "mcp" && q && m.custom) grid.append(customAt(q, m.custom, m.items.length));
@@ -7232,9 +7243,11 @@ magpie.plugin("library", (ctx) => {
       grid.append(el("div", "mk-msg", q ? t("Nothing matches “{q}”.", { q }) : t("Nothing to show.")));
       return;
     }
-    for (const x of m.items.slice(0, m.shown)) grid.append(kind === "mcp" ? serverCard(x) : skillCard(x));
+    for (const x of m.items.slice(0, m.shown)) grid.append(cardOf(kind, x));
     moreCards(kind, grid);
   }
+
+  const cardOf = (kind, x) => kind === "mcp" ? serverCard(x) : kind === "pi" ? piCard(x) : skillCard(x);
 
   // The rest of a long list, a page at a time: the cards added under the
   // ones shown, which stay where they are.
@@ -7245,7 +7258,7 @@ magpie.plugin("library", (ctx) => {
     const more = button(t("Show more ({n} left)", { n: left.toLocaleString(intlLang()) }), "mk-more", () => {
       const from = m.shown;
       m.shown += MARKET_PAGE;
-      more.before(...m.items.slice(from, m.shown).map((x) => kind === "mcp" ? serverCard(x) : skillCard(x)));
+      more.before(...m.items.slice(from, m.shown).map((x) => cardOf(kind, x)));
       more.remove();
       moreCards(kind, grid);
       if (kind === "skills") describeSkills();
@@ -7586,6 +7599,102 @@ magpie.plugin("library", (ctx) => {
     const ok = await change("market/skill", body, t("{name} is in the library now", { name: x.name }));
     if (ok) { x.have = x.name; drawMarket("skills"); } // take asked the market again
     return ok;
+  }
+
+  // A package from Pi's market: who has it, or Install into a Pi (picked
+  // when there are several). Pi itself installs it.
+  const piLive = () => (piView?.pis || []).filter((p) => !p.asleep && !p.err && !isHidden({ id: p.id }));
+  const piHas = (x) => piLive().filter((p) => (p.packages || []).some((k) => k.kind === "npm" && k.name === x.name));
+  function piCard(x) {
+    const has = piHas(x);
+    const c = el("div", "mk-card" + (has.length ? " have" : ""));
+    c.dataset.id = x.source;
+    const top = el("div", "mk-top");
+    const who = el("div", "mk-who");
+    const nm = el("div", "mk-name");
+    nm.append(el("span", "mk-title", x.name));
+    who.append(nm);
+    const meta = el("div", "mk-meta");
+    if (x.publisher) meta.append(el("span", "mk-pub", x.publisher));
+    if (x.version) meta.append(el("span", "mk-badge", "v" + x.version));
+    who.append(meta);
+    top.append(logo(x.icon, x.name), who);
+    const d = el("p", "mk-desc", x.description || "");
+    d.title = x.description || "";
+    const foot = el("div", "mk-foot");
+    if (x.downloads) {
+      const n = el("span", "mk-installs");
+      n.append(svg(GLYPH.down, 11, 1.5), el("span", "", compact(x.downloads)));
+      n.title = t("{n} downloads last month", { n: x.downloads.toLocaleString(intlLang()) });
+      foot.append(n);
+    }
+    foot.append(extLink(x.repo || x.npm, x.repo ? t("Source") : "npm"), el("span", "grow"));
+    const live = piLive();
+    const want = live.filter((p) => !has.includes(p));
+    if (has.length && !want.length) {
+      const b = el("span", "mk-have");
+      b.append(svg(CHECK, 11, 2), el("span", "", t("Installed")));
+      b.title = t("In {agents}", { agents: has.map((p) => p.name).join(", ") });
+      foot.append(b);
+    } else if (want.length) {
+      const busy = want.some((p) => piBusy.has(p.id + " " + x.source));
+      const b = button(busy ? t("Installing…") : t("Install"), "action mk-add", () => {
+        if (want.length === 1) return installPi(want[0], x);
+        openProtoMenu(b, want.map((p) => ({ v: p.id, name: p.name, literalName: true, note: "" })), "", (id) => installPi(want.find((p) => p.id === id), x), "Install into", "", "right");
+      });
+      if (busy) { b.disabled = true; b.classList.add("busy"); }
+      if (has.length) b.title = t("In {agents}", { agents: has.map((p) => p.name).join(", ") });
+      foot.append(b);
+    }
+    c.append(top, d, foot);
+    return c;
+  }
+  async function installPi(p, x) {
+    if (!p) return;
+    const key = p.id + " " + x.source;
+    piBusy.add(key);
+    drawMarket("pi");
+    status(t("Installing {name} into {agent}…", { name: x.name, agent: p.name }), "", 300000);
+    try {
+      const v = await api("library/pi/install", { pi: p.id, source: x.source });
+      piView = v;
+      status(v.pending
+        ? t("{name} is in {agent}'s packages now: Pi installs it when it next starts", { name: x.name, agent: p.name })
+        : t("{name} is installed in {agent}: Pi loads it when it next starts, or at /reload", { name: x.name, agent: p.name }), "ok", 8000);
+    } catch (e) {
+      status(e.message, "err", 10000);
+    }
+    piBusy.delete(key);
+    if (tab === "pi") render();
+  }
+  function confirmRemovePi(p, k) {
+    const ed = el("div", "editor lib-editor lib-rmone");
+    const head = el("div", "ehead");
+    head.append(glyph(GLYPH.trash), el("b", "", t("Remove {name} from {agent}?", { name: k.name, agent: p.name })));
+    ed.append(head);
+    ed.append(el("p", "lib-confirm", p.wsl
+      ? t("It is taken out of {agent}'s settings.json; Pi stops loading it when it next starts.", { agent: p.name })
+      : t("pi remove takes it out of {agent}'s settings.json and uninstalls it.", { agent: p.name })));
+    const bar = el("div", "bar");
+    const go = button(t("Remove"), "primary danger-fill", async () => {
+      go.disabled = true;
+      const key = p.id + " " + k.source;
+      piBusy.add(key);
+      try {
+        piView = await api("library/pi/remove", { pi: p.id, source: k.source });
+        status(t("{name} removed from {agent}", { name: k.name, agent: p.name }), "ok", 6000);
+        closeLibModal(true);
+      } catch (e) {
+        status(e.message, "err", 10000);
+        go.disabled = false;
+      }
+      piBusy.delete(key);
+      if (tab === "pi") render();
+    });
+    bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
+    ed.append(bar);
+    modal = { save: () => go.click() };
+    openLib(ed);
   }
 
   function skillSheet(x) {
