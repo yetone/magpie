@@ -43,6 +43,21 @@ FrierenF on Discord). A run as anyone else has its env as before. Only the
 bridge's run gets it; the warm-up and `/usage` runs don't skip
 permissions.
 
+A run asks Claude Code for the model by `claudeRunName`. A Claude model
+of the 5 generation or later that Claude Code doesn't know (Fable 5.2 on
+2.1.316) is asked for by its `[1m]` name. By its own name Claude Code
+assumed a 200K window for it and turned a longer conversation away before
+Anthropic was asked ("Prompt is too long", `blocking_limit`), while magpie
+tells agents the model's 1M window: Codex, compacting at 272K, never
+compacted and failed every turn past 200K (magicalaciw18 on X).
+`CLAUDE_CODE_MAX_CONTEXT_TOKENS` is not read for a Claude name. The models
+Claude Code knows at 1M (`claudeKnownLong`) keep their names, since a new
+name misses the prompt cache once. Every 4 generation model keeps its name
+too: `claude-sonnet-4-6[1m]` is refused even a short turn on an account
+without usage credits ("Usage credits required for 1M context"). The
+reply, the saved session and the logs keep the model as asked; only
+Claude Code's `--model` has the mark.
+
 Every Claude Code magpie starts for the subscription (a turn's run, the
 warm-up and model test `askClaude`, `/usage`, and the sign-in's
 `auth login` and `auth status`) is given its proxy through one helper,

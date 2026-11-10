@@ -61,6 +61,7 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/claudecode"
 	"github.com/yetone/magpie/internal/claudetui"
 	"github.com/yetone/magpie/internal/edit"
@@ -1012,7 +1013,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	mcpConfig, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{
 		"magpie": map[string]any{"command": exe, "args": []string{claudetui.MCPCommand, callbackPath, toolsPath, filepath.Join(tmp, "listed")}},
 	}})
-	args := claudeCLIArgs(model, string(mcpConfig), req.Effort, req.WebSearch)
+	args := claudeCLIArgs(claudeRunName(model), string(mcpConfig), req.Effort, req.WebSearch)
 	if req.ThinkOff {
 		// the client turned thinking off, as Claude Code's auto mode
 		// classifier and its small asks do: a run at Claude Code's own
@@ -3519,6 +3520,43 @@ func messageWords(msgs []Message) []string {
 		out[i] = b.String()
 	}
 	return out
+}
+
+// claudeKnownLong are the Claude models Claude Code (2.1.316) knows, and
+// runs to their 1M window by their own ids.
+var claudeKnownLong = []string{
+	"claude-fable-5", "claude-fable-5-1", "claude-mythos-5", "claude-mythos-5-1",
+	"claude-opus-5", "claude-opus-5-5", "claude-sonnet-5", "claude-sonnet-5-5", "claude-haiku-5-5",
+}
+
+// claudeGenRe is a Claude model's id, its generation in the first group.
+var claudeGenRe = lazyre.New(`^claude-(?:opus|sonnet|haiku|fable|mythos)-([0-9]+)(?:-[0-9]+)?$`)
+
+// claudeRunName is the name a run asks Claude Code for model by. A Claude
+// model of the 5 generation or later that Claude Code doesn't know (Fable
+// 5.2 on 2.1.316) it holds to 200K, and turned away a longer conversation
+// before Anthropic was asked ("Prompt is too long"), while magpie tells
+// the agent the model's 1M window: Codex, which compacts at 272K, never
+// compacted and failed every turn past 200K instead (magicalaciw18 on X).
+// CLAUDE_CODE_MAX_CONTEXT_TOKENS isn't read for a Claude name; "[1m]" is,
+// and Anthropic serves these models to 1M on a subscription as they are.
+// One Claude Code knows keeps its id, as does every 4 generation one, whose
+// 1M a subscription without usage credits is refused even a short turn
+// on (claude-sonnet-4-6[1m]: "Usage credits required for 1M context"),
+// and one whose window magpie knows to be less.
+func claudeRunName(model string) string {
+	id := strings.ToLower(model)
+	m := claudeGenRe.Regexp().FindStringSubmatch(id)
+	if m == nil || slices.Contains(claudeKnownLong, id) {
+		return model
+	}
+	if gen, _ := strconv.Atoi(m[1]); gen < 5 {
+		return model
+	}
+	if w := catalog.ContextOf(model); w > 0 && w < 1000000 {
+		return model
+	}
+	return model + "[1m]"
 }
 
 // claudeCLIArgs runs Claude Code with none of its own tools but, when the
