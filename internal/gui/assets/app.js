@@ -6789,6 +6789,7 @@ function segs(items, current, onPick) {
   for (const [id, name] of items) {
     const b = el("button", "opt" + (id === current ? " on" : ""), name);
     b.type = "button";
+    b.dataset.seg = id;
     b.setAttribute("aria-pressed", String(id === current));
     b.onclick = () => {
       for (const x of box.querySelectorAll(".opt")) {
@@ -23831,6 +23832,8 @@ var NAV_SUBS = {
   plugins: () => $("#view-plugins .lib-tabs"),
   settings: () => $("#setTabs"),
 };
+// each tab's mark, from navicons.js (loaded with the first list)
+var NAV_SUB_IC;
 function navSubItems(v) { return [...(NAV_SUBS[v]?.()?.querySelectorAll(":scope > button") || [])].filter((b) => !b.hidden); }
 var navSubsAt = "";
 function navSubs() {
@@ -23854,6 +23857,7 @@ function navSubs() {
   const above = at?.id === "prefs";
   // another page's list folds away as this one's opens, both at once
   if (box && (!want || box.dataset.view !== view || (above ? box.nextElementSibling : box.previousElementSibling) !== at)) { navSubLeave(box); box = null; }
+  if (want && !NAV_SUB_IC) import("./navicons.js").then(() => { navSubsAt = ""; navSubs(); }, () => {});
   if (want) {
     const fresh = !box;
     if (fresh) {
@@ -23882,21 +23886,18 @@ function navSubs() {
       s.classList.toggle("cur", cur);
       s.setAttribute("aria-selected", String(cur));
       s.tabIndex = cur ? 0 : -1;
-      s.append(el("span", "", name));
+      const ic = NAV_SUB_IC?.[view]?.[b.dataset.seg || b.dataset.set];
+      s.append(ic ? svg(ic, 14, 1.4) : el("i", "nav-s-ic"), el("span", "", name));
       if (b.dataset.sub === "installed" && pluginUpdates) {
         const up = el("em", "up", t(pluginUpdates === 1 ? "1 update" : "{n} updates", { n: pluginUpdates }));
         s.title = t("Newer versions of your plugins are out: update them under Installed");
         s.append(up);
       } else if (n) s.append(el("em", "", n));
-      // the selection goes as the finger comes down, as iOS's does, not once
-      // the page has drawn the tab; let go off the row, it goes back
+      // the selection goes as the finger comes down, as iOS's does
       s.onpointerdown = (e) => { if (e.button === 0) navSubGlide(box, s); };
       s.onpointercancel = () => navSubGlide(box, box.querySelector(".nav-s.cur"));
       s.onpointerleave = (e) => { if (e.buttons & 1) navSubGlide(box, box.querySelector(".nav-s.cur")); };
-      // the page draws its strip again as it likes: the one there now is
-      // clicked at once, so what is typed next goes to the tab picked.
-      // Another tab opens at its top: the page's tabs share its one scroll,
-      // which would otherwise keep the place reached in the tab before.
+      // the strip's tab is clicked at once; another tab opens at its top
       s.onclick = (e) => {
         navSubGlide(box, s);
         for (const o of box.querySelectorAll(".nav-s")) o.classList.toggle("cur", o === s);
