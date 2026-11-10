@@ -449,6 +449,7 @@ var notYet = map[string]string{
 	"POST /api/signin/{id}/cancel":               P,  // providers.go
 	"POST /api/signin/claude-token":              P,  // providers.go
 	"POST /api/signin/import":                    P,  // providers.go
+	"POST /api/signin/export":                    P,  // providers.go
 	"POST /api/stepfun/{id}/session":             P,  // providers.go
 	"POST /api/stepfun/{id}/signout":             P,  // providers.go
 	"GET /api/speeds":                            U,  // sessions_manage.go: the Sessions row's speed curve
