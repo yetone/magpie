@@ -139,3 +139,66 @@ func TestVertexProviderEditor(t *testing.T) {
 		t.Fatalf("the test saved what was typed: %v %+v", err, p)
 	}
 }
+
+// A Vertex AI API key alone saves as express mode (no project), with a base
+// URL kept beside it; a base URL with no key is refused, never kept, and the
+// Test asks with the key typed, at the global address, with no Google token.
+func TestVertexExpressEditor(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+	t.Setenv("CLOUDSDK_CONFIG", "")
+
+	var mu sync.Mutex
+	var keys []string
+	var tokens int
+	google := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/token" {
+			mu.Lock()
+			tokens++
+			mu.Unlock()
+			w.Write([]byte(`{"access_token":"ya29.typed","expires_in":3600}`))
+			return
+		}
+		mu.Lock()
+		keys = append(keys, r.URL.Path+" "+r.Header.Get("x-goog-api-key")+" "+r.Header.Get("Authorization"))
+		mu.Unlock()
+		w.Write([]byte(`{"candidates":[{"content":{"role":"model","parts":[{"text":"hi"}]},"finishReason":"STOP"}]}`))
+	}))
+	defer google.Close()
+	defer provider.VertexForTest(google.URL, google.URL+"/token", google.URL+"/iam")()
+
+	mux := http.NewServeMux()
+	providerRoutes(mux, nil)
+	post := func(action, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/provider/"+action, strings.NewReader(body)))
+		return w
+	}
+	if w := post("save", `{"preset":"google-vertex","new":true,"vertex":{"baseUrl":"https://relay.example.com"}}`); w.Code == 200 {
+		t.Fatalf("a base URL with no key was saved: %s", w.Body)
+	}
+	if w := post("save", `{"preset":"google-vertex","new":true,"key":" AQ.Ab8RN6-gui ","vertex":{"project":"","location":"","credentials":"","impersonate":"","baseUrl":""}}`); w.Code != 200 {
+		t.Fatalf("a key alone: %d %s", w.Code, w.Body)
+	}
+	p, err := provider.Find(provider.VertexPreset)
+	if err != nil || p.Key != "AQ.Ab8RN6-gui" || !p.VertexExpress() || !p.Ready() {
+		t.Fatalf("saved %+v: %v", p, err)
+	}
+	w := post("test", `{"id":"google-vertex"}`)
+	mu.Lock()
+	defer mu.Unlock()
+	if w.Code != 200 || tokens != 0 || len(keys) == 0 {
+		t.Fatalf("test %d %s: %d tokens, asked %v", w.Code, w.Body, tokens, keys)
+	}
+	for _, k := range keys {
+		if !strings.HasPrefix(k, "/v1/publishers/google/models/") || !strings.HasSuffix(k, " AQ.Ab8RN6-gui ") {
+			t.Errorf("asked %q", k)
+		}
+	}
+}

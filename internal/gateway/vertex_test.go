@@ -200,8 +200,8 @@ type vertexUp struct {
 }
 
 type vertexAsked struct {
-	path, query, auth, beta string
-	body                    map[string]any
+	path, query, auth, beta, key string
+	body                         map[string]any
 }
 
 func (v *vertexUp) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -213,10 +213,10 @@ func (v *vertexUp) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		v.mints++
 		w.Header().Set("Content-Type", "application/json")
 		io.WriteString(w, `{"access_token":"ya29.vertex-test","expires_in":3599,"scope":"https://www.googleapis.com/auth/cloud-platform","token_type":"Bearer"}`)
-	case strings.HasPrefix(r.URL.Path, "/v1/projects/"):
+	case strings.HasPrefix(r.URL.Path, "/v1/projects/"), strings.HasPrefix(r.URL.Path, "/v1/publishers/"):
 		var m map[string]any
 		json.Unmarshal(b, &m)
-		v.asked = append(v.asked, vertexAsked{r.URL.Path, r.URL.RawQuery, r.Header.Get("Authorization"), r.Header.Get("anthropic-beta"), m})
+		v.asked = append(v.asked, vertexAsked{r.URL.Path, r.URL.RawQuery, r.Header.Get("Authorization"), r.Header.Get("anthropic-beta"), r.Header.Get("x-goog-api-key"), m})
 		code, out, kind := http.StatusOK, vertexPong, "text/event-stream"
 		if strings.HasSuffix(r.URL.Path, ":generateContent") {
 			out, kind = vertexColours, "application/json; charset=UTF-8"
@@ -1036,5 +1036,28 @@ func TestVertexClaudeModel(t *testing.T) {
 	vertexAsk(t, s, "/v1/messages", `{"model":"google-vertex/gemini-3.8-flash","max_tokens":100,"messages":[{"role":"user","content":"hi"}]}`)
 	if a := v.last(t); a.path != "/v1/projects/proj-1/locations/global/publishers/google/models/gemini-3.8-flash:streamGenerateContent" || a.body["contents"] == nil {
 		t.Errorf("Gemini asked at %s", a.path)
+	}
+}
+
+// A Vertex AI provider given an API key alone (express mode) streams at the
+// global address with the key in x-goog-api-key, no project in the path, and
+// no Google token minted; a Claude model, which express mode doesn't serve,
+// is refused rather than sent to a project it hasn't got.
+func TestVertexExpressStreams(t *testing.T) {
+	v := &vertexUp{}
+	s := vertexServe(t, v, `{}`)
+	if err := provider.Save(provider.Provider{ID: "google-vertex", Name: "Google Vertex AI", Preset: provider.VertexPreset, Key: "AQ.Ab8RN6-gw"}); err != nil {
+		t.Fatal(err)
+	}
+	s = New()
+	for _, stream := range []string{"true", "false"} {
+		vertexAsk(t, s, "/v1/chat/completions", `{"model":"google-vertex/gemini-3.8-flash","stream":`+stream+`,"messages":[{"role":"user","content":"ping"}]}`)
+		a := v.last(t)
+		if !strings.HasPrefix(a.path, "/v1/publishers/google/models/gemini-3.8-flash:") || a.key != "AQ.Ab8RN6-gw" || a.auth != "" || strings.Contains(a.query, "AQ.") {
+			t.Fatalf("stream %s: asked %+v", stream, a)
+		}
+	}
+	if n := v.minted(); n != 0 {
+		t.Fatalf("%d Google tokens minted for a key", n)
 	}
 }

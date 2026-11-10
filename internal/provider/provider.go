@@ -1214,8 +1214,12 @@ func Slug(name string) string {
 func Save(p Provider) error {
 	// a key given a Vertex AI provider is refused here, before normalize
 	// drops it: it would never be sent
-	if p.IsVertex() && (strings.TrimSpace(p.Key) != "" || len(p.Keys) > 0) {
-		return errors.New("Google Vertex AI is asked with your Google credentials, not an API key")
+	if p.IsVertex() && len(p.Keys) > 0 {
+		return errors.New("Google Vertex AI takes one API key")
+	}
+	// a base URL with no key is refused before normalize drops it
+	if p.IsVertex() && p.Vertex != nil && strings.TrimSpace(p.Vertex.BaseURL) != "" && strings.TrimSpace(p.Key) == "" {
+		return errors.New("a base URL is for an API key: Google credentials are sent only to Google's own address")
 	}
 	p = normalize(p)
 	p.IconURL = "" // import-only: never stored
@@ -1269,7 +1273,7 @@ func Save(p Provider) error {
 			return fmt.Errorf("%q is the id of the %s subscription; pick another name", p.ID, p.ID)
 		}
 		if p.IsVertex() {
-			if err := p.Vertex.check(); err != nil {
+			if err := p.Vertex.check(p.Key != ""); err != nil {
 				return err
 			}
 		} else if !hasEndpoint(p) {
@@ -1798,13 +1802,19 @@ func normalize(p Provider) Provider {
 	if !p.IsVertex() {
 		p.Vertex = nil
 	} else {
-		// asked only at the address its project and location make, with a
-		// Google token that no other address is to be sent, and never with
-		// a key: one put in providers.json by hand is dropped, so it stands
-		// in for neither that token nor a project, and the provider as
-		// found still saves
+		// asked only at the address its project and location make (or its
+		// BaseURL, with a key), with a Google token that no other address
+		// is to be sent: the URLs of a provider put in providers.json by
+		// hand are dropped. It has one key, or none.
 		p.Chat, p.Responses, p.Anthropic, p.Gemini, p.Decide = "", "", "", "", ""
-		p.Key, p.KeyName, p.Keys, p.KeyProtocol, p.KeyWeight, p.KeyPlan = "", "", nil, "", 0, ""
+		p.Key = strings.TrimSpace(p.Key)
+		p.KeyName, p.Keys, p.KeyProtocol, p.KeyWeight, p.KeyPlan = "", nil, "", 0, ""
+		if p.Key == "" && p.Vertex != nil && p.Vertex.BaseURL != "" {
+			// no key to go with it: Google's token must not go there
+			v := *p.Vertex
+			v.BaseURL = ""
+			p.Vertex = v.Normal()
+		}
 	}
 	p.remoteMagpieEndpoints()
 	for _, u := range []*string{&p.Chat, &p.Responses, &p.Anthropic, &p.Gemini, &p.Decide, &p.Website, &p.KeysURL} {
@@ -2068,7 +2078,7 @@ func (p Provider) Base(proto Protocol) string {
 		// Vertex AI's partner models, on Google's OpenAI-compatible chat
 		// completions at the project (VertexPartner)
 		if p.IsVertex() {
-			if b := p.vertexBase(); b != "" {
+			if b := p.vertexBase(); b != "" && !p.VertexExpress() {
 				return b + "/endpoints/openapi"
 			}
 			return ""
@@ -2080,6 +2090,9 @@ func (p Provider) Base(proto Protocol) string {
 		// Vertex AI's Claude models, on Anthropic's Messages API at the
 		// project, each at a path of its own (VertexClaudeRequest)
 		if p.IsVertex() {
+			if p.VertexExpress() {
+				return "" // express mode serves Gemini alone
+			}
 			return p.vertexBase()
 		}
 		return p.Anthropic

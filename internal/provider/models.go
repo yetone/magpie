@@ -1232,6 +1232,9 @@ func (p Provider) planModels(ms []catalog.Model) []catalog.Model {
 	if p.IsVertex() && p.Vertex != nil {
 		models = vertexModels(p.Vertex.Location) // each location serves its own
 	}
+	if p.VertexExpress() {
+		models = vertexExpressModels()
+	}
 	if pr.Only == "" && (len(models) == 0 || len(ms) > 0) {
 		return ms
 	}

@@ -6162,7 +6162,7 @@ function renderProviders(quiet) {
       const plan = accountPlan(p.account), bare = plan.startsWith(p.name + " ") ? plan.slice(p.name.length + 1) : "";
       key = el("span", "key acct acct-plan", bare && plan.length > 15 ? bare : plan);
       key.title = t("{agent} is signed in; its models are here for every other agent", { agent: p.account.agentName });
-    } else if (p.vertex) {
+    } else if (p.vertex && !p.key.set) {
       // Vertex AI signs with the user's Google credentials, never a key;
       // the pill says which: the service account it acts as, else the
       // credentials file, else Application Default Credentials (ADC)
@@ -9174,16 +9174,26 @@ const VERTEX_EP_HINT = "Gemini generateContent — what Vertex AI serves at your
 // apiLabel: the name an API (a protocol) goes by in the editor
 const apiLabel = (proto) => (PROTOS.find(([k]) => k === proto) || [])[1] || proto;
 // vertexBase: a Vertex AI provider's address (provider.vertexBase), "" till its project is one
-function vertexBase(v) {
+// vertexRoot: the base URL typed as a root, as provider.vertexRootOf keeps it
+function vertexRoot(u) {
+  u = (u || "").trim().replace(/\/+$/, "");
+  if (!u) return "";
+  if (!u.includes("://")) u = "https://" + u;
+  return u.replace(/\/v1(?:beta1)?$/, "");
+}
+// with a key (keyed) the project is optional: express mode asks at the global endpoint, and a base URL stands in for Google's host
+function vertexBase(v, keyed) {
   const project = (v?.project || "").trim().toLowerCase(), loc = (v?.location || "").trim().toLowerCase() || "global";
+  const root = keyed ? vertexRoot(v?.baseUrl) : "";
+  if (!project) return keyed ? `${root || "https://aiplatform.googleapis.com"}/v1` : "";
   if (!/^[a-z0-9][a-z0-9.:-]*[a-z0-9]$/.test(project) || !/^[a-z]+(-[a-z0-9]+)*$/.test(loc)) return "";
   const host = loc === "global" ? "aiplatform.googleapis.com" : loc === "us" || loc === "eu" ? `aiplatform.${loc}.rep.googleapis.com` : `${loc}-aiplatform.googleapis.com`;
-  return `https://${host}/v1/projects/${project}/locations/${loc}`;
+  return `${root || "https://" + host}/v1/projects/${project}/locations/${loc}`;
 }
 // vertexOfDraft is the editor's Vertex AI fields as a Save sends them
 function vertexOfDraft() {
   const v = draft.vertex || {};
-  return { project: (v.project || "").trim(), location: (v.location || "").trim(), credentials: (v.credentials || "").trim(), impersonate: (v.impersonate || "").trim() };
+  return { project: (v.project || "").trim(), location: (v.location || "").trim(), credentials: (v.credentials || "").trim(), impersonate: (v.impersonate || "").trim(), baseUrl: (v.baseUrl || "").trim() };
 }
 const decideOnly = (p) => !!p?.decide && !(p.chat || p.responses || p.anthropic || p.gemini);
 // OpenRouter lists its decision models apart
@@ -9226,7 +9236,7 @@ function duplicateProvider(p) {
   const d = draftOf(p);
   draft = { ...d, id: slug(name), name, chosen: [], extra: d.chosen, copyOf: p.id };
   if (p.zhipuTeam) draft.zhipuTeam = { org: p.zhipuTeam.org || "", project: p.zhipuTeam.project || "" };
-  if (p.vertex) draft.vertex = { project: p.vertex.project || "", location: p.vertex.location || "", credentials: p.vertex.credentials || "", impersonate: p.vertex.impersonate || "" };
+  if (p.vertex) draft.vertex = { project: p.vertex.project || "", location: p.vertex.location || "", credentials: p.vertex.credentials || "", impersonate: p.vertex.impersonate || "", baseUrl: p.vertex.baseUrl || "" };
   renderProviders();
 }
 
@@ -9687,8 +9697,11 @@ function drawEditor(p, presetID) {
   // Vertex AI: no key, the user's Google Cloud project's token
   const vertex = p ? !!p.vertex : !!pr?.vertex;
   let vertexProject = null;
-  if (vertex) draft.vertex = draft.vertex || { project: p?.vertex?.project || "", location: p?.vertex?.location || "", credentials: p?.vertex?.credentials || "", impersonate: p?.vertex?.impersonate || "" };
+  if (vertex) draft.vertex = draft.vertex || { project: p?.vertex?.project || "", location: p?.vertex?.location || "", credentials: p?.vertex?.credentials || "", impersonate: p?.vertex?.impersonate || "", baseUrl: p?.vertex?.baseUrl || "" };
   const vertexFields = () => {
+    // the address shown follows a key typed: with one the project is optional
+    const typedKey = key.oninput;
+    key.oninput = () => { typedKey(); refreshEndpoints(); };
     const box = (k, placeholder, cls) => {
       const i = input(draft.vertex[k], placeholder);
       i.classList.add(cls);
@@ -9702,6 +9715,8 @@ function drawEditor(p, presetID) {
       ...field(t("Location"), box("location", "global", "vertex-location"), t("global, us, eu or a region such as us-central1. Each location serves its own models; global serves them all.")),
       ...field(t("Credentials file"), box("credentials", "~/.config/gcloud/application_default_credentials.json", "vertex-credentials"), t("Optional. Left empty, gcloud's Application Default Credentials are used (gcloud auth application-default login), or the file GOOGLE_APPLICATION_CREDENTIALS names. A service account's key file works too.")),
       ...field(t("Service account"), box("impersonate", t("optional · a service account's email"), "vertex-impersonate"), t("Requests are then made as this service account, impersonated with the credentials above: their account needs roles/iam.serviceAccountTokenCreator on it.")),
+      ...(p?.keyList?.length ? [] : field(t("API key"), keyWrap, t("Instead of the above: a Vertex AI API key (express mode). Gemini models only, no project needed."))),
+      ...field(t("Base URL"), box("baseUrl", "https://aiplatform.googleapis.com", "vertex-base-url"), t("Only with an API key: where requests go in place of Google's address, such as a proxy.")),
     ];
   };
   if (addressField) ed.append(...addressField);
@@ -10078,7 +10093,7 @@ function drawEditor(p, presetID) {
       const src = { chat: draft.chat || base.chat || "", responses: draft.responses || base.responses || "", anthropic: draft.anthropic || base.anthropic || "", decide: (pr && !pr.decide ? draft.decide ?? base.decide : base.decide) || "" };
       // Vertex AI's, from its project and location, once one is typed
       if (vertex) {
-        src.gemini = vertexBase(draft.vertex);
+        src.gemini = vertexBase(draft.vertex, !!(draft.key || "").trim() || !!p?.key?.set);
         for (const x of row) x.hidden = !src.gemini;
       }
       Object.assign(src, address && movedURLs(draft));
@@ -10292,7 +10307,7 @@ function drawEditor(p, presetID) {
     if (isNew && custom && !body.name) { name.focus(); return editorError(t("Give it a name"), "warn"); }
     if (isNew && custom && !body.chat && !body.anthropic && !body.responses && !body.gemini && !body.decide) { url.focus(); return editorError(t("A base URL is needed"), "warn"); }
     if (endpoint && !body.chat && !body.responses) { endpoint.focus(); return editorError(t(pr.endpointNeeded || "Your resource's endpoint is needed"), "warn"); }
-    if (vertex && !body.vertex.project) { vertexProject?.focus(NO_SCROLL); return editorError(t("Google Vertex AI needs the id of your Google Cloud project"), "warn"); }
+    if (vertex && !body.vertex.project && !(draft.key || "").trim() && !p?.key?.set) { vertexProject?.focus(NO_SCROLL); return editorError(t("Google Vertex AI needs the id of your Google Cloud project"), "warn"); }
     if (address) {
       const a = (draft.address || "").trim();
       if (localAddress(a) === null) { address.focus(NO_SCROLL); return editorError(t("Address: {v} isn't an address like http://localhost:11434", { v: a }), "warn"); }
@@ -11012,7 +11027,7 @@ function detectAPIs(p, base, use) {
   const picked = () => p ? chosenIds() : (draft.extra || []).filter((id, i, all) => id && all.indexOf(id) === i);
   // no key typed, none saved and none copied: a refusal is likely the key
   const keyless = () => {
-    if ((draft.key || "").trim() || p?.key?.set || draft.vertex) return false;
+    if ((draft.key || "").trim() || p?.key?.set || (draft.vertex?.project || "").trim()) return false;
     const of = !p && draft.copyOf && providers.providers.find((x) => x.id === draft.copyOf);
     return !of?.key?.set;
   };

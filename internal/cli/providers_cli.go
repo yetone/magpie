@@ -162,6 +162,9 @@ const providerUsage = `usage:
                                     credentials=<file> names another, a service account key too; impersonate= needs
                                     roles/iam.serviceAccountTokenCreator on that account; location= global (the
                                     default), us, eu or a region such as us-central1; set changes them, empty clears)
+       magpie provider add google-vertex AQ.Ab8R…   (Vertex AI express mode: an API key, no project or gcloud; Gemini
+                                    models only. project= beside it asks that project's address with the key;
+                                    url=https://my-proxy.example.com asks a gateway that answers as Vertex AI does)
        magpie provider add "My Decider" decide=https://decide.example.com/v1 key=sk-… models=my-decision-model
                                    (a System One API, POST …/systemone: it routes groups, its models are never an agent's)
        magpie provider add anthropic sk-… id=anthropic-ws2 name="Anthropic WS2" header.anthropic-workspace-id=wrkspc_…
@@ -221,7 +224,9 @@ func keyColumn(p provider.Provider) string {
 	case p.IsVertex() && !p.Ready():
 		// no project an address can be made of (providers.json edited
 		// by hand): nothing is asked, as the app's row says
-		return amber.Render("○ needs a project")
+		return amber.Render("○ needs a project or an API key")
+	case p.IsVertex() && p.Key != "":
+		return green.Render("●") + " " + muted.Render(provider.Mask(p.Key))
 	case p.IsVertex():
 		// no key: a token minted from the user's Google credentials,
 		// traded for a service account's when it impersonates one
@@ -529,9 +534,6 @@ func providerCmd(args []string) error {
 		if err != nil {
 			return err
 		}
-		if p.IsVertex() {
-			return fmt.Errorf("%s is asked with your Google credentials, not an API key · magpie provider set %s credentials=<file> impersonate=<service account> changes them", p.Name, p.ID)
-		}
 		p.Key = rest[1]
 		if err := provider.Save(*p); err != nil {
 			return err
@@ -802,9 +804,6 @@ func addProvider(rest []string) error {
 	if pr, err := provider.FromPreset(strings.ToLower(rest[0])); err == nil {
 		p = pr
 		if len(rest) > 1 && !strings.Contains(rest[1], "=") {
-			if p.IsVertex() {
-				return fmt.Errorf("%s is asked with your Google credentials, not an API key · magpie provider add %s project=<your Google Cloud project's id>", p.Name, p.ID)
-			}
 			p.Key = rest[1]
 			rest = rest[2:]
 		} else {
@@ -822,7 +821,7 @@ func addProvider(rest []string) error {
 	id, err := provider.Add(p)
 	if err != nil && p.IsVertex() && (p.Vertex == nil || strings.TrimSpace(p.Vertex.Project) == "") {
 		// the pair that gives the project, which Save's words don't name
-		return fmt.Errorf("%w · magpie provider add %s project=<your Google Cloud project's id>", err, p.Preset)
+		return fmt.Errorf("%w · magpie provider add %s project=<your Google Cloud project's id>, or give an API key", err, p.Preset)
 	}
 	if err != nil {
 		return err
@@ -955,6 +954,17 @@ func showProviderAsking(p provider.Provider, ask bool) error {
 		if !p.Ready() {
 			project = amber.Render(cmp.Or(project, "not set")) + muted.Render("  magpie provider set "+p.ID+" project=…")
 		}
+		if p.Key != "" {
+			// an API key: express mode, or the project's address
+			kv("key", muted.Render(provider.Mask(p.Key)))
+			if v.BaseURL != "" {
+				kv("url", v.BaseURL)
+			}
+			if p.VertexExpress() {
+				kv("mode", "express: Gemini models, no project")
+				break
+			}
+		}
 		kv("project", project)
 		kv("location", v.Location)
 		creds := v.Credentials
@@ -1070,11 +1080,22 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 		if !ok {
 			return fmt.Errorf("expected key=value, got %q\n\n%s", kv, providerUsage)
 		}
-		if p.IsVertex() && slices.Contains([]string{"url", "chat", "openai", "responses", "anthropic", "decide", "address"}, strings.ToLower(k)) {
+		if p.IsVertex() && slices.Contains([]string{"url", "baseurl"}, strings.ToLower(k)) {
+			// an API key's gateway: Google's token never goes there, so
+			// it is kept only with a key (Save says so)
+			x := provider.Vertex{}
+			if p.Vertex != nil {
+				x = *p.Vertex
+			}
+			x.BaseURL = strings.TrimSpace(v)
+			p.Vertex = &x
+			continue
+		}
+		if p.IsVertex() && slices.Contains([]string{"chat", "openai", "responses", "anthropic", "decide", "address"}, strings.ToLower(k)) {
 			// asked only at the address its project and location make, so
 			// that its Google token goes nowhere else: one given here would
 			// be dropped without a word
-			return fmt.Errorf("%s is asked at its Google Cloud project's own address: project= and location= say where", p.Name)
+			return fmt.Errorf("%s is asked at its Google Cloud project's own address (project= and location= say where), or at url= with an API key", p.Name)
 		}
 		switch strings.ToLower(k) {
 		case "id":

@@ -20,7 +20,15 @@ package provider
 // gcloud's --impersonate-service-account does: the credentials' account
 // needs roles/iam.serviceAccountTokenCreator on it. Not read: the metadata
 // server of Compute Engine, Cloud Run and GKE, workload identity federation
-// (external_account), and Vertex's express mode API keys.
+// (external_account).
+//
+// A provider given an API key is asked as Vertex AI's express mode is
+// (https://docs.cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode/overview):
+// the key in the x-goog-api-key header, at the global endpoint with no
+// project (https://aiplatform.googleapis.com/v1/publishers/google/models/<model>:streamGenerateContent),
+// which serves Gemini models alone. With a project too it is asked at that
+// project's address, signed by the key in place of a token. Either may go
+// to Vertex.BaseURL instead of Google's host.
 
 import (
 	"cmp"
@@ -69,6 +77,11 @@ type Vertex struct {
 	// Impersonate is the email of a service account the credentials are
 	// traded for, "" to ask as their own account.
 	Impersonate string `json:"impersonate,omitempty"`
+	// BaseURL is the root a provider with an API key asks at in place of
+	// Google's (a proxy, or a gateway that answers as Vertex AI does), with
+	// no /v1 after it. Only with a key: the Google token goes nowhere but
+	// Google's own address.
+	BaseURL string `json:"baseUrl,omitempty"`
 }
 
 // IsVertex reports whether the provider is Google Vertex AI.
@@ -86,6 +99,7 @@ func (v *Vertex) Normal() *Vertex {
 		Location:    strings.ToLower(strings.TrimSpace(v.Location)),
 		Credentials: strings.TrimSpace(v.Credentials),
 		Impersonate: strings.ToLower(strings.TrimSpace(v.Impersonate)),
+		BaseURL:     vertexRootOf(v.BaseURL),
 	}
 	if n == (Vertex{}) {
 		return nil
@@ -103,11 +117,41 @@ var (
 	vertexAccount  = lazyre.New(`^[^\s@/]+@[^\s@/]+$`)
 )
 
+// vertexRootOf is a base URL as it is kept: trimmed, https:// when it has
+// no scheme, no trailing slash and no /v1 (or /v1beta1) after the root.
+func vertexRootOf(u string) string {
+	u = strings.TrimRight(strings.TrimSpace(u), "/")
+	if u == "" {
+		return ""
+	}
+	if !strings.Contains(u, "://") {
+		u = "https://" + u
+	}
+	for _, suf := range []string{"/v1beta1", "/v1"} {
+		if b, ok := strings.CutSuffix(u, suf); ok && len(b) > len("https://") {
+			return strings.TrimRight(b, "/")
+		}
+	}
+	return u
+}
+
 // check is why a Vertex AI provider with v can't be saved, nil when it can.
-func (v *Vertex) check() error {
+// keyed is whether it has an API key, which stands in for the project.
+func (v *Vertex) check(keyed bool) error {
+	if v != nil && v.BaseURL != "" {
+		if !keyed {
+			return errors.New("a base URL is for an API key: Google credentials are sent only to Google's own address")
+		}
+		if u, err := url.Parse(v.BaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("%q is no base URL", v.BaseURL)
+		}
+	}
 	switch {
 	case v == nil || v.Project == "":
-		return errors.New("Google Vertex AI needs the id of your Google Cloud project")
+		if keyed {
+			return nil
+		}
+		return errors.New("Google Vertex AI needs the id of your Google Cloud project, or an API key")
 	case !vertexProject.MatchString(v.Project):
 		return fmt.Errorf("%q is no Google Cloud project id", v.Project)
 	case !vertexLocation.MatchString(v.Location):
@@ -157,14 +201,35 @@ func VertexForTest(root, token, iam string) func() {
 // ones an address can be made of.
 func (p Provider) vertexBase() string {
 	v := p.Vertex
-	if v == nil || !vertexProject.MatchString(v.Project) {
+	if v == nil {
+		v = &Vertex{}
+	}
+	keyed := p.Key != ""
+	root := ""
+	if keyed {
+		root = v.BaseURL
+	}
+	if v.Project == "" {
+		// express mode: the key alone, at the global endpoint
+		if !keyed {
+			return ""
+		}
+		return cmp.Or(root, vertexRoot("global")) + "/v1"
+	}
+	if !vertexProject.MatchString(v.Project) {
 		return ""
 	}
 	loc := cmp.Or(v.Location, "global")
 	if !vertexLocation.MatchString(loc) {
 		return ""
 	}
-	return vertexRoot(loc) + "/v1/projects/" + v.Project + "/locations/" + loc
+	return cmp.Or(root, vertexRoot(loc)) + "/v1/projects/" + v.Project + "/locations/" + loc
+}
+
+// VertexExpress is whether the provider is asked as Vertex AI's express
+// mode is: an API key and no project, which serves Gemini models alone.
+func (p Provider) VertexExpress() bool {
+	return p.IsVertex() && p.Key != "" && (p.Vertex == nil || p.Vertex.Project == "")
 }
 
 // VertexPath is where, after a Vertex AI provider's base, a request for
@@ -708,4 +773,16 @@ func impersonateFor(ctx context.Context, tok, account string, delegates []string
 		out.ExpireTime = time.Now().Add(time.Hour)
 	}
 	return out.AccessToken, out.ExpireTime, nil
+}
+
+// vertexExpressModels are the models express mode serves, as Google's
+// overview lists them: Gemini alone, none of the partner or Claude models.
+func vertexExpressModels() []string {
+	var out []string
+	for _, m := range Preset(VertexPreset).Models {
+		if !VertexPartner(m) && !VertexClaude(m) {
+			out = append(out, m)
+		}
+	}
+	return out
 }

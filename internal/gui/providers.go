@@ -3304,8 +3304,8 @@ func typed(p, in provider.Provider, proxy *string, insecureTLS, http1 *bool) pro
 	if k := strings.TrimSpace(in.Key); k != "" && k != p.Key {
 		p.Key, p.KeyName, p.KeyProtocol, p.KeyWeight, p.KeyPlan = k, "", "", 0, ""
 	}
-	if v := in.Vertex.Normal(); v != nil && p.IsVertex() && v.Project != "" {
-		p.Vertex = v
+	if v := in.Vertex.Normal(); p.IsVertex() && (v != nil && v.Project != "" || in.Vertex != nil && p.Key != "") {
+		p.Vertex = v // with a key the project may be none: express mode
 	}
 	for _, f := range []struct {
 		to *string

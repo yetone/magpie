@@ -360,10 +360,12 @@ func TestVertexSaveRefuses(t *testing.T) {
 		keys []KeyAccount
 		want string
 	}{
-		{v: &Vertex{Project: "acme-vertex"}, key: "AIzaSyD-not-a-real-key", want: "Google Vertex AI is asked with your Google credentials, not an API key"},
-		{v: &Vertex{Project: "acme-vertex"}, keys: []KeyAccount{{Name: "express", Key: "AIzaSyD-not-a-real-key"}}, want: "Google Vertex AI is asked with your Google credentials, not an API key"},
-		{want: "Google Vertex AI needs the id of your Google Cloud project"},
-		{v: &Vertex{Location: "us-central1"}, want: "Google Vertex AI needs the id of your Google Cloud project"},
+		{v: &Vertex{Project: "acme-vertex"}, keys: []KeyAccount{{Name: "express", Key: "AQ.Ab8RN6-not-a-real-key"}}, want: "Google Vertex AI takes one API key"},
+		{want: "Google Vertex AI needs the id of your Google Cloud project, or an API key"},
+		{v: &Vertex{Location: "us-central1"}, want: "Google Vertex AI needs the id of your Google Cloud project, or an API key"},
+		// Google's token goes only to Google's own address
+		{v: &Vertex{Project: "acme-vertex", BaseURL: "https://proxy.example.com"}, want: "a base URL is for an API key: Google credentials are sent only to Google's own address"},
+		{v: &Vertex{Project: "acme-vertex", BaseURL: "ftp://proxy.example.com"}, key: "AQ.Ab8RN6-k", want: `"ftp://proxy.example.com" is no base URL`},
 		{v: &Vertex{Project: "acme_vertex"}, want: `"acme_vertex" is no Google Cloud project id`},
 		{v: &Vertex{Project: "-acme-vertex"}, want: `"-acme-vertex" is no Google Cloud project id`},
 		{v: &Vertex{Project: "acme-vertex/locations"}, want: `"acme-vertex/locations" is no Google Cloud project id`},
@@ -392,54 +394,41 @@ func TestVertexSaveRefuses(t *testing.T) {
 	}
 }
 
-// A key put in a Vertex AI provider's entry by hand stands in for
-// nothing: the provider as found has none, isn't ready without a project,
-// signs with its Google token, and saves without it (switched off, here).
-// A Provider made with one, as the app's typed Refresh makes it, still
-// signs with the token.
+// A Vertex AI provider's entry put in providers.json by hand with a key
+// and a list of keys keeps the one key and drops the list; its base URL
+// without a key is dropped, so that its Google token goes only to Google.
 func TestVertexKeyKeptDropped(t *testing.T) {
 	home := vertexHome(t)
 	newVertexGoogle(t)
 	writeFile(t, gcloudCredentials(home), vertexUser("1//0g-test-refresh"))
 	stray := []KeyAccount{{Name: "express", Key: "AQ.Ab8RN6-other"}}
 	writeFile(t, Path(), map[string]any{"providers": []Provider{
-		{ID: "vertex-prod", Name: "Vertex prod", Preset: VertexPreset, Key: "AQ.Ab8RN6-stray", KeyName: "express", Keys: stray, Vertex: &Vertex{Project: "acme-vertex"}},
-		{ID: "vertex-bare", Name: "Vertex bare", Preset: VertexPreset, Key: "AQ.Ab8RN6-stray"},
+		{ID: "vertex-prod", Name: "Vertex prod", Preset: VertexPreset, Key: "AQ.Ab8RN6-kept", KeyName: "express", Keys: stray, Vertex: &Vertex{Project: "acme-vertex"}},
+		{ID: "vertex-bare", Name: "Vertex bare", Preset: VertexPreset},
+		{ID: "vertex-leak", Name: "Vertex leak", Preset: VertexPreset, Vertex: &Vertex{Project: "acme-vertex", BaseURL: "https://evil.example.com"}},
 	}})
 	p, err := Find("vertex-prod")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Key != "" || p.KeyName != "" || p.Keys != nil || !p.On() {
+	if p.Key != "AQ.Ab8RN6-kept" || p.KeyName != "" || p.Keys != nil || !p.On() {
 		t.Fatalf("found with key %q (%q), keys %v, on %v", p.Key, p.KeyName, p.Keys, p.On())
 	}
 	if bare, err := Find("vertex-bare"); err != nil || bare.Ready() {
-		t.Fatalf("with a key and no project: ready %v (%v)", bare.Ready(), err)
+		t.Fatalf("with no key and no project: ready %v (%v)", bare.Ready(), err)
 	}
-	if auth, err := signVertex(context.Background(), *p, "gemini-3.5-flash"); err != nil || auth != "Bearer ya29.minted-1" {
+	leak, err := Find("vertex-leak")
+	if err != nil || leak.Vertex == nil || leak.Vertex.BaseURL != "" || strings.Contains(leak.Base(Gemini), "evil") {
+		t.Fatalf("a base URL with no key: %+v, %v", leak.Vertex, err)
+	}
+	if auth, err := signVertex(context.Background(), *leak, "gemini-3.5-flash"); err != nil || auth != "Bearer ya29.minted-1" {
 		t.Fatalf("signed with %q: %v", auth, err)
 	}
-	if err := SetOff("vertex-prod", true); err != nil {
-		t.Fatalf("switched off: %v", err)
-	}
-	var f struct {
-		Providers []map[string]any `json:"providers"`
-	}
-	if b, err := os.ReadFile(Path()); err != nil || json.Unmarshal(b, &f) != nil || f.Providers[0]["id"] != "vertex-prod" || f.Providers[0]["off"] != true {
-		t.Fatalf("providers.json: %v (%v)", f.Providers, err)
-	}
-	for _, k := range []string{"key", "keyName", "keys"} {
-		if v, ok := f.Providers[0][k]; ok && v != "" {
-			t.Errorf("saved with its %s %v", k, v)
-		}
-	}
-	typed := vertexAt("global", "")
-	typed.Key = "AQ.Ab8RN6-typed"
-	if auth, err := signVertex(context.Background(), typed, "gemini-3.5-flash"); err != nil || auth != "Bearer ya29.minted-1" {
-		t.Fatalf("made with a key, signed with %q: %v", auth, err)
-	}
-	if typed.Vertex = nil; typed.Ready() {
-		t.Fatal("a key made it ready with no project")
+	// even a Provider made with the URL and no key asks Google's address
+	q := vertexAt("global", "")
+	q.Vertex.BaseURL = "https://evil.example.com"
+	if b := q.Base(Gemini); strings.Contains(b, "evil") {
+		t.Fatalf("base %s", b)
 	}
 }
 
