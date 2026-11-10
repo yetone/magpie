@@ -59,6 +59,13 @@ import (
 // pick would restart it.
 var CodexAppRoute func() (route string, out, known bool)
 
+// CodexBeforeAppEnd is set by the agent package: it is called with Codex's
+// home just before the app's app-server is ended for a change of where
+// Codex goes, to put the chats the app has open onto the provider Codex is
+// on now. The app-server that starts in its place resumes them on their
+// row's provider, and Codex refuses a chat of another one.
+var CodexBeforeAppEnd func(home string)
+
 // CodexNoAccount is set by the agent package: whether the provider Codex's
 // config names takes no ChatGPT account at all (a [model_providers] table
 // without requires_openai_auth = true, such as magpie's with the user's
@@ -634,6 +641,9 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 			return nil
 		}
 		log.Printf("codex: a Codex turn left open on the used-up account has done nothing for %s; restarting the Codex app's app-server past it", codexTurnStuckAfter)
+	}
+	if CodexBeforeAppEnd != nil {
+		CodexBeforeAppEnd(home)
 	}
 	var ended []int
 	c.Lock()

@@ -1277,3 +1277,119 @@ func retagRows(db *sql.DB, ids []string, from, to string) ([]string, error) {
 	}
 	return done, nil
 }
+
+// RetagLoadedCodexThreads moves the threads a Codex has open (their writer
+// lock held, as the Codex app holds the lock of every thread it has
+// loaded, the chat on screen among them) from the provider from to the
+// provider to, which every other move leaves for later because Codex
+// would write its provider back. It is called as the Codex app's
+// app-server is about to be ended for a change of provider: Codex puts
+// nothing back at a clean exit (tried with codex-cli 0.167.1, SIGTERM),
+// and the app-server that starts in its place resumes the chat on its
+// row's provider, where it would otherwise be refused ("This chat uses
+// openai, but your current provider is magpie", modelProviderMismatch).
+// A paginated thread moves by its row alone; a legacy one that Codex
+// keeps as plain lines goes in place, its first line written over at one
+// length (openai and magpie) with the row following. A packed rollout or
+// one of another length is left to the next sync. Recency is not looked
+// at: the end waits for no turn to be open. It says the ids it moved and
+// the first error it met, having gone on past it.
+func RetagLoadedCodexThreads(home, from, to string) ([]string, error) {
+	if !codexProviderRe.MatchString(from) || !codexProviderRe.MatchString(to) || from == to {
+		return nil, fmt.Errorf("can't move Codex's threads from %q to %q", from, to)
+	}
+	locked := codexLockedIDs(home)
+	if len(locked) == 0 {
+		return nil, nil
+	}
+	var moved []string
+	var first error
+	fail := func(err error) {
+		if first == nil {
+			first = err
+		}
+	}
+	for _, p := range codexStateDBs(home) {
+		u := url.URL{Scheme: "file", Path: filepath.ToSlash(p), RawQuery: "_pragma=busy_timeout(5000)"}
+		if len(u.Path) >= 2 && u.Path[1] == ':' {
+			u.Path = "/" + u.Path
+		}
+		db, err := sql.Open("sqlite", u.String())
+		if err != nil {
+			fail(err)
+			continue
+		}
+		var n int
+		if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info('threads') WHERE name IN ('id','model_provider','rollout_path')`).Scan(&n); err != nil || n != 3 {
+			db.Close()
+			continue
+		}
+		var hm int
+		db.QueryRow(`SELECT count(*) FROM pragma_table_info('threads') WHERE name = 'history_mode'`).Scan(&hm)
+		q := `SELECT id, rollout_path, '' FROM threads WHERE model_provider = ?`
+		if hm == 1 {
+			q = `SELECT id, rollout_path, COALESCE(history_mode, '') FROM threads WHERE model_provider = ?`
+		}
+		type row struct{ id, path, mode string }
+		var rows []row
+		rs, err := db.Query(q, from)
+		if err != nil {
+			db.Close()
+			fail(err)
+			continue
+		}
+		for rs.Next() {
+			var r row
+			if rs.Scan(&r.id, &r.path, &r.mode) == nil && safeID.MatchString(r.id) && locked[strings.ToLower(r.id)] {
+				rows = append(rows, r)
+			}
+		}
+		rs.Close()
+		var ids []string
+		for _, r := range rows {
+			if r.mode == "paginated" {
+				ids = append(ids, r.id)
+				continue
+			}
+			path := filepath.Clean(r.path)
+			if len(from) != len(to) || !filepath.IsAbs(path) || packed(path) || !strings.Contains(filepath.Base(path), r.id) || !sameDir(codexHomeOf(path), home) {
+				continue
+			}
+			fi, err := os.Lstat(path)
+			if err != nil || !fi.Mode().IsRegular() {
+				continue
+			}
+			ok, err := relabelHead(path, from, to, fi.ModTime())
+			if err != nil {
+				fail(fmt.Errorf("thread %s: %w", r.id, err))
+				continue
+			}
+			if ok {
+				ids = append(ids, r.id)
+			}
+		}
+		if len(ids) > 0 {
+			tx, err := db.Begin()
+			if err != nil {
+				fail(err)
+			} else {
+				for _, id := range ids {
+					res, err := tx.Exec(`UPDATE threads SET model_provider = ? WHERE id = ? AND model_provider = ?`, to, id, from)
+					if err != nil {
+						fail(err)
+						break
+					}
+					if c, _ := res.RowsAffected(); c > 0 {
+						moved = append(moved, id)
+					}
+				}
+				if err := tx.Commit(); err != nil {
+					fail(err)
+				}
+			}
+		}
+		db.Close()
+	}
+	forgetPaged()
+	return moved, first
+}

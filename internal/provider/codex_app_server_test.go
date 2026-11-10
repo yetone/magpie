@@ -1370,3 +1370,32 @@ func TestCodexAppRestartedWhenTheTakeoverIsTurnedOff(t *testing.T) {
 		t.Fatal("the app left on the takeover's app-server at the reset isn't said")
 	}
 }
+
+// The chat open in the Codex app is moved to the provider Codex is on by
+// CodexBeforeAppEnd, and that happens before the app-server is ended, since
+// the next app-server resumes the chat at once.
+func TestCodexRouteChangeMovesOpenChatsFirst(t *testing.T) {
+	signIn(t)
+	s := stubCodexApp(t)
+	now := time.Now()
+	idle := func() (int, time.Time) { return 0, now.Add(-time.Minute) }
+	step := func() []int { return codexAppStep(context.Background(), now, idle) }
+	var order []string
+	old := CodexBeforeAppEnd
+	CodexBeforeAppEnd = func(string) { order = append(order, "move") }
+	t.Cleanup(func() { CodexBeforeAppEnd = old })
+	oldEnd := endCodexAppServer
+	endCodexAppServer = func(int) error { order = append(order, "end"); return nil }
+	t.Cleanup(func() { endCodexAppServer = oldEnd })
+
+	s.running = []int{60}
+	s.route = "openai_base_url=http://127.0.0.1:3425/backend-api/codex"
+	step()
+	s.route = "openai_base_url="
+	if got := step(); !slices.Equal(got, []int{60}) {
+		t.Fatalf("ended %v, want [60]", got)
+	}
+	if !slices.Equal(order, []string{"move", "end"}) {
+		t.Fatalf("order %v, want the chats moved before the app-server ends", order)
+	}
+}

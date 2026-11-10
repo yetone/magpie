@@ -3261,3 +3261,27 @@ func codexReachedRead(path string, since time.Time) (at time.Time, to string, re
 	}
 	return
 }
+
+// codexRetagOpenThreads is run as the Codex app's app-server is about to be
+// ended for a change of provider: the chats the app has open hold their
+// lock, so no move of threads could take them, and the app-server that
+// starts in place resumes each on its row's provider, which Codex refuses
+// when it isn't the one it is on ("This chat uses openai, but your current
+// provider is magpie"). They go onto the provider Codex is on now, from
+// OpenAI and magpie, the two ids magpie moves threads between
+// (sessions.RetagLoadedCodexThreads).
+func codexRetagOpenThreads(home string) {
+	now := sessions.CodexProviderIn(home)
+	for _, from := range []string{"openai", magpieID} {
+		if from == now {
+			continue
+		}
+		ids, err := sessions.RetagLoadedCodexThreads(home, from, now)
+		if len(ids) > 0 {
+			log.Printf("codex: %d chat(s) the Codex app has open moved from %s to %s before its app-server restarts, so it goes on with them", len(ids), from, now)
+		}
+		if err != nil {
+			log.Printf("codex: moving the chats the Codex app has open from %s: %v", from, err)
+		}
+	}
+}
