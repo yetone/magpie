@@ -93,6 +93,42 @@ func codexLookEvery(u map[string]SubscriptionQuota) time.Duration {
 	return loginSwitchEvery
 }
 
+// codexIdleAfter is how long no Codex session file has been written for
+// Codex to count idle, and codexIdleLookEvery how often the account Codex
+// is signed in to is read then, in place of loginSwitchEvery: nothing
+// runs on the account, so a reading every five minutes told nothing new
+// and asked chatgpt.com 288 times a day (dludream on Discord). Requests
+// magpie sends on the account keep its windows current from what each
+// reply says (NoteCodexLimits), and a session written to again has the
+// next look read it at once (codexDue).
+const (
+	codexIdleAfter     = 30 * time.Minute
+	codexIdleLookEvery = 30 * time.Minute
+)
+
+// codexIdle says whether Codex has written no session in codexIdleAfter.
+// A var so tests can say.
+var codexIdle = func(now time.Time) bool {
+	return codexSessionsQuiet(codexHome(), now, codexIdleAfter)
+}
+
+// codexDue says whether a full look of KeepOnAnAccountWithRoom reads
+// Codex's accounts at now: next, when the last look set it, has come, or
+// that look found Codex idle (idle) and it no longer is.
+func codexDue(now, next time.Time, idle bool) bool {
+	return !now.Before(next) || idle && !codexIdle(now)
+}
+
+// codexEveryAt is how long after a look at now the next reads Codex's
+// accounts, given every (codexLookEvery), and whether that is for Codex
+// being idle: only an account not near out waits the longer while idle.
+func codexEveryAt(every time.Duration, now time.Time) (time.Duration, bool) {
+	if every >= loginSwitchEvery && codexIdle(now) {
+		return codexIdleLookEvery, true
+	}
+	return every, false
+}
+
 // CodexOutUntil is when the ChatGPT account Codex is signed in to has room
 // again, as last read: the latest reset of the windows used up. Zero when
 // it isn't out or the reading doesn't say.
@@ -619,6 +655,10 @@ func KeepOnAnAccountWithRoom(ctx context.Context) {
 		}
 	}()
 	var full time.Time // when the next full look is due; zero: now
+	// when a full look next reads Codex's accounts (zero: the first), and
+	// whether the last that did found Codex idle
+	var codexNext time.Time
+	codexWasIdle := false
 	for {
 		select {
 		case <-ctx.Done():
@@ -641,19 +681,29 @@ func KeepOnAnAccountWithRoom(ctx context.Context) {
 			t.Reset(min(time.Until(full), claudeLookEvery))
 			continue
 		}
+		now := time.Now()
+		readCodex := codexDue(now, codexNext, codexWasIdle)
 		for _, agent := range switchedAgents {
+			if agent == "codex" && !readCodex {
+				continue
+			}
 			lookAtSignIn(ctx, agent)
 		}
 		// a sign-in made in Claude Code itself, or a proxy picked since,
 		// takes its account's proxy too (#1807)
 		syncClaudeProxyEnvNow()
-		c, cancel := context.WithTimeout(ctx, time.Minute)
-		noteCodexUsedUp(CodexUsedUp(c))
-		restartCodexAppLeftOnSpent(c)
-		cancel()
+		if readCodex {
+			c, cancel := context.WithTimeout(ctx, time.Minute)
+			noteCodexUsedUp(CodexUsedUp(c))
+			restartCodexAppLeftOnSpent(c)
+			cancel()
+			var codexEvery time.Duration
+			codexEvery, codexWasIdle = codexEveryAt(codexLookEvery(knownLoginUsage("codex")), time.Now())
+			codexNext = time.Now().Add(codexEvery)
+		}
 		// Codex's own sign-in refused for good, or signed in again since
 		noteCodexGoneNow()
-		every := codexLookEvery(knownLoginUsage("codex"))
+		every := min(loginSwitchEvery, max(time.Until(codexNext), 0))
 		full = time.Now().Add(every)
 		signInsLooked(true)
 		t.Reset(min(every, claudeLookEvery))

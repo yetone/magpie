@@ -2196,7 +2196,9 @@ which they don't ask again for. Any other 400 is never asked again.
 for requests sent through magpie. Claude Code or Codex used on its own
 talks to the vendor with the account it is signed in to, and routing
 never sees it. For that, magpie looks at the account the agent is signed
-in to a minute after it starts and every 5 minutes after: once it has used
+in to a minute after it starts and every 5 minutes after (Codex's every
+30 minutes while it has written no session for half an hour, read at the
+next look once it writes one again; every minute near its cap): once it has used
 98% of a window (100% In order), or reached its usage cap, magpie signs
 the agent in to the next ticked account, in their order, whose allowance
 is known and under that share. A saved Claude account magpie knows
