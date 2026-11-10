@@ -357,7 +357,7 @@ func accountRows(ls []provider.Login, now time.Time) []accountRow {
 		wg.Add(1)
 		go func(agent string) {
 			defer wg.Done()
-			u := provider.LoginUsage(ctx, agent)
+			u := provider.LoginUsageShown(ctx, agent)
 			mu.Lock()
 			usage[agent] = u
 			mu.Unlock()

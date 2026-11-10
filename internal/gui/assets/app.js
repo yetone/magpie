@@ -13842,6 +13842,8 @@ function quotaError(err, q) {
   if (/^couldn't reach chatgpt\.com for the usage read/.test(err)) return t("Couldn't reach ChatGPT — check the network or the proxy");
   if (/^ChatGPT's usage reply isn't one magpie reads/.test(err)) return t("ChatGPT answered in a form magpie doesn't read — hover for what it sent");
   if (/^a ChatGPT API account's usage isn't told through OpenAI's API/.test(err)) return t("OpenAI's API doesn't tell a ChatGPT API account's usage — see chatgpt.com/settings/usage, or add the account as ChatGPT to see it here");
+  // a switched-off subscription is not read (errLeftAlone, login_usage.go)
+  if (/^not read yet: this subscription is switched off/.test(err)) return t("Switched off, so no allowance is read — switch it on and refresh");
   const bal = balanceError(err);
   if (bal) return bal;
   // a plugin's own usage read failed: its first line (aqiu817/magpie-sensenova#1)

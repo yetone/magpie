@@ -142,7 +142,7 @@ func hadReading(provider, user string) bool {
 // vendor's HTTP call, so its error carries errNotAsked wrapped: "Get
 // \"https://…\": not read yet: …".
 func readDeferred(err string) bool {
-	for _, e := range []error{errNotAsked, errClaudeNotAsked, errClaudeSaved} {
+	for _, e := range []error{errNotAsked, errClaudeNotAsked, errClaudeSaved, errLeftAlone} {
 		if strings.Contains(err, e.Error()) {
 			return true
 		}

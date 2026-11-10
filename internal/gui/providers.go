@@ -2892,7 +2892,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		defer cancel()
 		// and each account's daily check-in, for its row's Check in now
 		agent := r.URL.Query().Get("agent")
-		writeJSON(rw, provider.LoginCheckins(agent, provider.WithCapped(provider.LoginUsage(ctx, agent))))
+		writeJSON(rw, provider.LoginCheckins(agent, provider.WithCapped(provider.LoginUsageShown(ctx, agent))))
 	})
 	// Switching the account an agent is signed in to, among those magpie
 	// remembers, and forgetting one.
