@@ -28,8 +28,12 @@ type Cond struct {
 	Value string `json:"value,omitempty"`
 }
 
-// CondFields are the fields a condition can look at.
-var CondFields = []string{"tokens", "effort", "agent", "subagent", "message"}
+// CondFields are the fields a condition can look at. system and last
+// are the request's texts as the agent sent them (SucroseMoE on X: a
+// harness's title or compaction call told apart by its prompt, with no
+// model asked): system, each of its system prompt's blocks; last, each
+// text of its last user message.
+var CondFields = []string{"tokens", "effort", "agent", "subagent", "message", "system", "last"}
 
 // CondOps are each field's ways to compare.
 var CondOps = map[string][]string{
@@ -38,7 +42,13 @@ var CondOps = map[string][]string{
 	"agent":    {"is", "not"},
 	"subagent": {"is", "not"},
 	"message":  {"contains", "excludes", "starts", "matches"},
+	"system":   {"contains", "excludes", "starts", "matches"},
+	"last":     {"contains", "excludes", "starts", "matches"},
 }
+
+// textField reports whether a condition's field is a text it looks for
+// words in.
+func textField(f string) bool { return f == "message" || f == "system" || f == "last" }
 
 // MaxCondText is how long a message condition's text may be, in
 // characters.
@@ -101,16 +111,20 @@ func (c *Cond) clean() error {
 		c.Value = strings.Join(agents, ",")
 	case "subagent":
 		c.Value = ""
-	case "message":
+	case "message", "system", "last":
 		if c.Value = strings.TrimSpace(c.Value); c.Value == "" {
-			return fmt.Errorf("a message condition needs the text it looks for")
+			return fmt.Errorf("a %s condition needs the text it looks for", c.Field)
 		}
 		if len([]rune(c.Value)) > MaxCondText {
-			return fmt.Errorf("a message condition's text is at most %d characters", MaxCondText)
+			return fmt.Errorf("a %s condition's text is at most %d characters", c.Field, MaxCondText)
 		}
 		if c.Op == "matches" {
+			// written as /…/, as in JavaScript
+			if v := c.Value; len(v) > 2 && v[0] == '/' && v[len(v)-1] == '/' {
+				c.Value = v[1 : len(v)-1]
+			}
 			if _, err := condRe(c.Value); err != nil {
-				return fmt.Errorf("message matches %q: not a regular expression: %v", c.Value, err)
+				return fmt.Errorf("%s matches %q: not a regular expression: %v", c.Field, c.Value, err)
 			}
 		}
 	}
@@ -184,21 +198,47 @@ func (c Cond) Holds(q RuleRequest) bool {
 			return !q.Subagent
 		}
 	case "message":
-		msg, v := strings.ToLower(q.Message), strings.ToLower(c.Value)
-		switch c.Op {
-		case "contains":
-			return strings.Contains(msg, v)
-		case "excludes":
-			return !strings.Contains(msg, v)
-		case "starts":
-			return strings.HasPrefix(strings.TrimSpace(msg), strings.TrimSpace(v))
-		case "matches":
-			re, err := condRe(c.Value)
-			return err == nil && re.MatchString(q.Message)
-		}
+		return c.holdsIn([]string{q.Message})
+	case "system":
+		return c.holdsIn(q.System)
+	case "last":
+		return c.holdsIn(q.Last)
 	}
 	return false // a condition this magpie doesn't know never holds
 }
+
+// holdsIn is a text condition over texts: it holds when one of them has
+// (starts with, matches) the words, and for excludes when none has them.
+func (c Cond) holdsIn(texts []string) bool {
+	v := strings.ToLower(c.Value)
+	var re *regexp.Regexp
+	if c.Op == "matches" {
+		var err error
+		if re, err = condRe(c.Value); err != nil {
+			return false
+		}
+	}
+	for _, text := range texts {
+		switch c.Op {
+		case "contains", "excludes":
+			if strings.Contains(strings.ToLower(text), v) {
+				return c.Op == "contains"
+			}
+		case "starts":
+			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(text)), strings.TrimSpace(v)) {
+				return true
+			}
+		case "matches":
+			if re.MatchString(text) {
+				return true
+			}
+		}
+	}
+	return c.Op == "excludes"
+}
+
+// textOps are a text condition's ops as Text writes them.
+var textOps = map[string]string{"contains": "contains", "excludes": "doesn't contain", "starts": "starts with", "matches": "matches"}
 
 // Text is the condition as a rule's conditions show it.
 func (c Cond) Text() string {
@@ -214,8 +254,8 @@ func (c Cond) Text() string {
 			return "not subagent"
 		}
 		return "subagent"
-	case "message":
-		return "message " + map[string]string{"contains": "contains", "excludes": "doesn't contain", "starts": "starts with", "matches": "matches"}[c.Op] + " " + strconv.Quote(c.Value)
+	case "message", "system", "last":
+		return c.Field + " " + textOps[c.Op] + " " + strconv.Quote(c.Value)
 	}
 	return strings.TrimSpace(c.Field + " " + c.Op + " " + c.Value)
 }
@@ -270,6 +310,10 @@ func ParseCond(s string) (Cond, error) {
 		field = "effort"
 	case "text", "content", "prompt":
 		field = "message"
+	case "system[0]", "sys", "instructions", "system-prompt":
+		field = "system"
+	case "user[-1]", "last-user", "lastuser", "last-message":
+		field = "last"
 	case "length", "context":
 		field = "tokens"
 	}

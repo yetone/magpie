@@ -248,6 +248,7 @@ magpie group rule add opus-anywhere use=kimi/kimi-k2.6 folders=~/oss,<span class
 magpie group rule add opus-anywhere pause=copilot/claude-opus-5.5 time=14:00-18:00 days=mon-fri  <span class="c"># 这段时间不用它</span>
 magpie group rule add opus-anywhere pause=claude/claude-opus-5-5 except-folders=~/big-task  <span class="c"># 只留给 ~/big-task 里的任务：其他文件夹不用它</span>
 magpie group rule add opus-anywhere use=deepseek/deepseek-v4-flash when=<span class="s">"effort is off"</span> when=<span class="s">"not subagent"</span>  <span class="c"># 关了推理、又不是子代理的请求</span>
+magpie group rule add opus-anywhere use=deepseek/deepseek-v4-flash when=<span class="s">"system matches ^你是对话标题命名"</span>  <span class="c"># 按系统提示词认出标题命名请求，不用模型判断</span>
 magpie group set coder models+=group/opus-anywhere  <span class="c"># 路由组里放路由组</span>
 magpie group rule opus-anywhere      <span class="c"># 查看规则；rule rm|mv &lt;n&gt;，rule classifier &lt;组&gt; &lt;模型&gt; 换判断模型</span>
 magpie group copy opus-anywhere <span class="s">"Opus test"</span>  <span class="c"># 复制一份：模型、路由方式和规则都一样，可单独修改</span>

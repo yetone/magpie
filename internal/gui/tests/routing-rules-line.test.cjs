@@ -39,7 +39,7 @@ const groups = () => ({
 // the order a rule reads, as the editor draws its conditions
 const ORDER = ["intent", "tokens", "images", "effort", "compact", "agents", "folders", "exceptFolders", "time"];
 // the conditions a rule may ask besides (aipha2025 on X), which the + still offers
-const BESIDES = ["subagent", "message"];
+const BESIDES = ["subagent", "message", "system", "last"];
 
 const words = {
   en: { edit: "Edit", save: "Save", image: "has an image", down: "Move down" },

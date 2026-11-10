@@ -75,6 +75,21 @@ func TestCondHolds(t *testing.T) {
 		{Cond{"message", "matches", `^fix .*bug$`}, RuleRequest{Message: "a bug to fix"}, false},
 		{Cond{"message", "contains", "翻译"}, RuleRequest{Message: "帮我翻译这段"}, true},
 
+		// the system prompt's blocks and the last user message's texts
+		// (SucroseMoE on X): one of them holds it
+		{Cond{"system", "matches", `^你是对话标题命名`}, RuleRequest{System: []string{"x-anthropic-billing-header: cc_version=2", "你是对话标题命名助手，"}}, true},
+		{Cond{"system", "matches", `^你是对话标题命名`}, RuleRequest{System: []string{"请注意：你是对话标题命名助手"}}, false},
+		{Cond{"system", "matches", `^你是对话标题命名`}, RuleRequest{Message: "你是对话标题命名", Last: []string{"你是对话标题命名"}}, false},
+		{Cond{"system", "starts", "You are"}, RuleRequest{System: []string{"billing", "  you are a title namer"}}, true},
+		{Cond{"system", "contains", "title"}, RuleRequest{System: []string{"a", "Make a TITLE"}}, true},
+		{Cond{"system", "excludes", "title"}, RuleRequest{System: []string{"a", "Make a TITLE"}}, false},
+		{Cond{"system", "excludes", "title"}, RuleRequest{System: []string{"a", "b"}}, true},
+		{Cond{"system", "excludes", "title"}, RuleRequest{}, true},
+		{Cond{"system", "contains", "title"}, RuleRequest{}, false},
+		{Cond{"last", "matches", `^正在上下文压缩`}, RuleRequest{Last: []string{"<system-reminder>x</system-reminder>", "正在上下文压缩，请总结"}}, true},
+		{Cond{"last", "matches", `^正在上下文压缩`}, RuleRequest{Message: "正在上下文压缩", System: []string{"正在上下文压缩"}}, false},
+		{Cond{"last", "starts", "正在"}, RuleRequest{Last: []string{"好的，正在"}}, false},
+
 		{Cond{"weather", "is", "rain"}, RuleRequest{}, false}, // one this magpie doesn't know
 		{Cond{"tokens", "eq", "1"}, RuleRequest{Tokens: 1}, false},
 	} {
@@ -148,6 +163,9 @@ func TestCleanRulesWhere(t *testing.T) {
 		{Cond{"message", "contains", "  "}, "needs the text"},
 		{Cond{"message", "contains", strings.Repeat("x", MaxCondText+1)}, "at most"},
 		{Cond{"message", "matches", "(unclosed"}, "not a regular expression"},
+		{Cond{"system", "matches", "(unclosed"}, "system matches"},
+		{Cond{"last", "contains", " "}, "a last condition needs the text"},
+		{Cond{"system", "is", "x"}, "a system condition is"},
 	} {
 		_, err := cleanRules([]Rule{{Use: "a/m", Where: []Cond{tc.c}}}, members)
 		if err == nil || !strings.Contains(err.Error(), tc.err) || !strings.HasPrefix(err.Error(), "rule 1:") {
@@ -196,6 +214,11 @@ func TestParseCond(t *testing.T) {
 		"content starts with /review":      {"message", "starts", "/review"},
 		`message matches ^fix\b`:           {"message", "matches", `^fix\b`},
 		"message contains is not a thing ": {"message", "contains", "is not a thing"},
+		"system matches ^你是对话标题命名":         {"system", "matches", "^你是对话标题命名"},
+		"system[0] matches /^你是对话标题命名/":    {"system", "matches", "^你是对话标题命名"},
+		"user[-1] matches /^正在上下文压缩/":      {"last", "matches", "^正在上下文压缩"},
+		"last starts with 正在上下文压缩":         {"last", "starts", "正在上下文压缩"},
+		"system does not contain title":    {"system", "excludes", "title"},
 	} {
 		got, err := ParseCond(in)
 		if err != nil || got != want {
@@ -239,9 +262,9 @@ func TestParseRuleWhen(t *testing.T) {
 
 // Conditions shows each as a list and a trace do.
 func TestWhereConditions(t *testing.T) {
-	r := Rule{Use: "a/m", Where: []Cond{{"tokens", "lt", "20000"}, {"effort", "not", "off"}, {"agent", "not", "codex,opencode"}, {"subagent", "not", ""}, {"message", "excludes", "x"}}}
+	r := Rule{Use: "a/m", Where: []Cond{{"tokens", "lt", "20000"}, {"effort", "not", "off"}, {"agent", "not", "codex,opencode"}, {"subagent", "not", ""}, {"message", "excludes", "x"}, {"system", "matches", "^你是"}, {"last", "starts", "正在"}}}
 	got := strings.Join(r.Conditions(), "; ")
-	if got != `tokens < 20000; effort is not off; agent is not codex|opencode; not subagent; message doesn't contain "x"` {
+	if got != `tokens < 20000; effort is not off; agent is not codex|opencode; not subagent; message doesn't contain "x"; system matches "^你是"; last starts with "正在"` {
 		t.Errorf("%q", got)
 	}
 }

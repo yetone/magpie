@@ -112,6 +112,7 @@ func readChat(body []byte, facts bool) (*Request, error) {
 		switch m.Role {
 		case "system", "developer":
 			sys = append(sys, stringOrText(m.Content))
+			r.systemRaw = append(r.systemRaw, m.Content)
 		case "user":
 			r.Messages = append(r.Messages, Message{Role: "user", Parts: chatParts(m.Content)})
 		case "assistant":

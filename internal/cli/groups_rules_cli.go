@@ -82,6 +82,11 @@ const ruleUsage = `usage:
              message  contains, does not contain, starts with, matches (a regular expression):
                       the user's own words as the turn begins, upper or lower case alike
                                                     when="message contains run the tests"
+             system   contains, does not contain, starts with, matches: any block of the system
+                      prompt as the agent sent it (a title or compaction call's own prompt)
+                                                    when="system matches ^You are a title"
+             last     the same, over any text of the last user message as sent
+                                                    when="last starts with Summarize"
 
   e.g. magpie group rule add opus-anywhere use=openrouter/google/gemini-3-pro tokens=200k
        magpie group rule add opus-anywhere use=a/vision-model images

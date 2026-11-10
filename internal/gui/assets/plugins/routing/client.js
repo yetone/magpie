@@ -1295,10 +1295,10 @@ function routingPage(part) {
     if ((m = /^effort (is not|is|≤) (\w+)$/.exec(c))) return whereText({ field: "effort", op: { "is not": "not", is: "is", "≤": "lte" }[m[1]], value: m[2] });
     if ((m = /^agent (is not|is) (.+)$/.exec(c))) return whereText({ field: "agent", op: m[1] === "is" ? "is" : "not", value: m[2].split("|").join(",") });
     if (c === "subagent" || c === "not subagent") return whereText({ field: "subagent", op: c === "subagent" ? "is" : "not" });
-    if ((m = /^message (contains|doesn't contain|starts with|matches) (".*")$/.exec(c))) {
-      let v = m[2];
+    if ((m = /^(message|system|last) (contains|doesn't contain|starts with|matches) (".*")$/.exec(c))) {
+      let v = m[3];
       try { v = JSON.parse(v); } catch { v = v.slice(1, -1); }
-      return whereText({ field: "message", op: { contains: "contains", "doesn't contain": "excludes", "starts with": "starts", matches: "matches" }[m[1]], value: v });
+      return whereText({ field: m[1], op: { contains: "contains", "doesn't contain": "excludes", "starts with": "starts", matches: "matches" }[m[2]], value: v });
     }
     if ((m = /^tokens ≥ (\d+)$/.exec(c))) return t("≥ {n} tokens", { n: Number(m[1]).toLocaleString(intlLang()) });
     if (c === "images") return t("has an image");
@@ -5998,6 +5998,8 @@ function routingPage(part) {
     r.where = w;
   };
   const TOKEN_OPS = { gte: "≥", gt: ">", lt: "<", lte: "≤" };
+  // the conditions that look for words in a text of the request
+  const TEXT_FIELDS = ["message", "system", "last"];
   const MESSAGE_OPS = { contains: "has the words", excludes: "doesn't have the words", starts: "starts with the words", matches: "matches the expression" };
   function whereText(c) {
     const v = String(c.value ?? "");
@@ -6014,6 +6016,8 @@ function routingPage(part) {
       }
       case "subagent": return c.op === "not" ? t("not sent by a subagent") : t("sent by a subagent");
       case "message": return t("message {op} “{text}”", { op: t(MESSAGE_OPS[c.op] || c.op), text: v });
+      case "system": return t("system prompt {op} “{text}”", { op: t(MESSAGE_OPS[c.op] || c.op), text: v });
+      case "last": return t("last user message {op} “{text}”", { op: t(MESSAGE_OPS[c.op] || c.op), text: v });
     }
     return [c.field, c.op, v].filter(Boolean).join(" ");
   }
@@ -7901,6 +7905,8 @@ function routingPage(part) {
     const COND_KINDS = [
       ["intent", "asks for", false],
       ["message", "Message text", false],
+      ["system", "System prompt text", false],
+      ["last", "Last user message", false],
       ["tokens", "Conversation length", false],
       ["images", "has an image", false],
       ["effort", "Reasoning level", false],
@@ -7912,7 +7918,7 @@ function routingPage(part) {
       ["time", "Hours and days", true],
     ];
     // the field of a kind's conditions in the rule's where
-    const KIND_FIELD = { tokens: "tokens", effort: "effort", agents: "agent", subagent: "subagent", message: "message" };
+    const KIND_FIELD = { tokens: "tokens", effort: "effort", agents: "agent", subagent: "subagent", message: "message", system: "system", last: "last" };
     const condSet = (r, k) => {
       const c = KIND_FIELD[k] && whereOf(r, KIND_FIELD[k]);
       if (c && (k === "subagent" || String(c.value ?? "").trim())) return true;
@@ -7925,7 +7931,7 @@ function routingPage(part) {
       openedOf(r).add(k);
       if (k === "images" || k === "compact") r[k] = true;
       if (k === "subagent") setWhere(r, "subagent", { op: "is" });
-      if (k === "message" && !whereOf(r, "message")) setWhere(r, "message", { op: "contains", value: "" });
+      if (TEXT_FIELDS.includes(k) && !whereOf(r, k)) setWhere(r, k, { op: "contains", value: "" });
       if (k === "intent" && !d.classifier && deciders.length) d.classifier = deciders[0].id;
       focusCond = { r, k };
       drawRules();
@@ -8084,29 +8090,38 @@ function routingPage(part) {
         }
         // the message's own words, as the user wrote them when the turn
         // began: contains, doesn't contain, starts with, or a pattern
-        if (kinds.includes("message")) {
-          const mc = whereOf(r, "message") || (setWhere(r, "message", { op: "contains", value: "" }), whereOf(r, "message"));
+        // a text of the request: the user's words as the turn began; or,
+        // as the agent sent them (SucroseMoE on X: a harness's title or
+        // compaction call told by its prompt, no model asked), a block of
+        // its system prompt, or a text of its last user message
+        for (const [k, cls, name, tip, eg, egRe] of [
+          ["message", "ms", "Message text", "The words the user wrote as the turn began, without what the agent adds to them; not case-sensitive", "e.g. run the tests", "^translate\\b"],
+          ["system", "sy", "System prompt text", "Any block of the system prompt, as the agent sent it; not case-sensitive", "e.g. title", "^You are"],
+          ["last", "lu", "Last user message", "Any text of the request's last user message, as the agent sent it, what the agent adds included; not case-sensitive", "e.g. summarize", "^Summarize"],
+        ]) {
+          if (!kinds.includes(k)) continue;
+          const mc = whereOf(r, k) || (setWhere(r, k, { op: "contains", value: "" }), whereOf(r, k));
           inPill.add(mc);
-          const ms = el("span", "rt-cond ms");
+          const ms = el("span", "rt-cond rt-tx " + cls);
           ms.onclick = (e) => { if (e.target === ms || e.target.tagName === "SPAN") mi.focus(); };
-          ms.title = t("The words the user wrote as the turn began, without what the agent adds to them; not case-sensitive");
+          ms.title = t(tip);
           const mi = input(mc.value || "", "");
           mi.maxLength = 500; // provider.MaxCondText
           const bad = () => { if (mc.op !== "matches") return false; try { new RegExp(mc.value); return false; } catch { return true; } };
           const look = () => {
             ms.classList.toggle("on", !!mc.value.trim());
             ms.classList.toggle("bad", bad());
-            mi.placeholder = mc.op === "matches" ? "^translate\\b" : t("e.g. run the tests");
+            mi.placeholder = mc.op === "matches" ? egRe : t(eg);
             fitBox(mi);
           };
           const mo = opBtn(t(MESSAGE_OPS[mc.op] || mc.op), Object.entries(MESSAGE_OPS).map(([v, w]) => ({ value: v, label: t(w), note: v === "matches" ? t("regular expression, any case") : "" })), () => mc.op,
             (v) => { mc.op = v; mo.textContent = t(MESSAGE_OPS[v]); look(); warn(); });
           mi.oninput = () => { mc.value = mi.value; look(); warn(); };
           mi.onkeydown = (e) => e.stopPropagation();
-          ms.append(el("span", "", t("Message text")), mo, mi);
+          ms.append(el("span", "", t(name)), mo, mi);
           look();
-          wrap("message", ms);
-          if (mine === "message") focus = () => mi.focus({ preventScroll: true });
+          wrap(k, ms);
+          if (mine === k) focus = () => mi.focus({ preventScroll: true });
         }
         // tokens: at least this long
         if (kinds.includes("tokens")) {
@@ -8691,8 +8706,8 @@ function routingPage(part) {
       }
       // a condition left without its value is none (an emptied box)
       for (const r of d.rules) if (r.where) { r.where = r.where.filter((c) => c.field === "subagent" || String(c.value ?? "").trim() && !(c.field === "tokens" && !(+c.value > 0))); if (!r.where.length) delete r.where; }
-      const badRe = d.rules.findIndex((r) => (r.where || []).some((c) => { if (c.field !== "message" || c.op !== "matches") return false; try { new RegExp(c.value); return false; } catch { return true; } }));
-      if (badRe >= 0) return status(t("Rule {n}: what the message matches isn't a regular expression", { n: badRe + 1 }), "warn");
+      const badRe = d.rules.findIndex((r) => (r.where || []).some((c) => { if (!TEXT_FIELDS.includes(c.field) || c.op !== "matches") return false; try { new RegExp(c.value); return false; } catch { return true; } }));
+      if (badRe >= 0) return status(t("Rule {n}: what it matches isn't a regular expression", { n: badRe + 1 }), "warn");
       // a folder is a whole path (provider.cleanFolder)
       const badDir = d.rules.findIndex((r) => [...(r.folders || []), ...(r.exceptFolders || [])].some((f) => !/^(~$|~[\\/]|\/|\\\\|[A-Za-z]:([\\/]|$))/.test(f)));
       if (badDir >= 0) return status(t("Rule {n}: a folder is a whole path, like ~/work or /Users/me/work", { n: badDir + 1 }), "warn");

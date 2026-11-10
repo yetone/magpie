@@ -346,6 +346,9 @@ func readResponsesFor(body []byte, facts, keepInstructions bool) (*Request, erro
 		TopP: q.TopP, Stream: q.Stream, Parallel: q.ParallelToolCalls, Fast: q.ServiceTier == "priority" || q.ServiceTier == "ultrafast", Ultrafast: q.ServiceTier == "ultrafast", Tier: q.ServiceTier, CacheKey: q.PromptCacheKey, Include: q.Include,
 		ClientMetadata: sentRaw(q.ClientMetadata), AccessPrograms: q.AccessPrograms}
 	r.Text, r.Format = textFormat(sentRaw(q.Text))
+	if q.Instructions != "" {
+		r.systemParts = []string{q.Instructions}
+	}
 	// a Responses client's turns go to Claude with hour-long cache marks,
 	// unless it asked for its prompt to be kept in memory only
 	r.hourMarks = q.PromptCacheRetention != "in_memory"
@@ -387,6 +390,13 @@ func readResponsesFor(body []byte, facts, keepInstructions bool) (*Request, erro
 				var parts []Part
 				if !facts || role != "assistant" {
 					parts = responsesParts(it.Content)
+				}
+				if it.Role == "system" || it.Role == "developer" {
+					for _, p := range parts {
+						if p.Kind == Text && p.Text != "" {
+							r.systemParts = append(r.systemParts, p.Text)
+						}
+					}
 				}
 				if keepInstructions && (it.Role == "system" || it.Role == "developer") {
 					r.Messages = append(r.Messages, Message{Role: it.Role, Parts: parts})

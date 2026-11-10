@@ -8,6 +8,9 @@
 // and one set to compare another way is saved as provider.Cond in where.
 // The group's card says the conditions. In every language, at a narrow
 // width with nothing run past the side.
+// SucroseMoE on X: a rule matches the system prompt or the last user
+// message as the agent sent them, by words or a regex, so a harness's
+// title or compaction call is routed with no model asked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -30,7 +33,13 @@ const ALL = [{ use: "b/other", where: [
   { field: "tokens", op: "lt", value: "20000" }, { field: "effort", op: "not", value: "off" },
   { field: "agent", op: "not", value: "codex" }, { field: "subagent", op: "is" },
   { field: "message", op: "contains", value: "run the tests" },
+  { field: "system", op: "matches", value: "^你是对话标题命名" }, { field: "last", op: "starts", value: "正在上下文压缩" },
 ] }];
+// a title call told by its system prompt, and a rule to add the rest to
+const SYS = [
+  { use: "b/other", where: [{ field: "system", op: "matches", value: "^你是对话标题命名" }] },
+  { use: "b/other", tokens: 1000 },
+];
 const groups = (rules) => ({
   models,
   groups: [{ id: "main", name: "Main", members: ["a/glm", "b/other"], routing: "order", ready: true,
@@ -40,12 +49,14 @@ const groups = (rules) => ({
 
 const words = {
   en: { card: "2. reasoning is not high → B · other", lt: "<", isNot: "≠", agentNot: "agent is none of", message: "Message text", subagent: "Subagent",
-    startsWith: "starts with the words", notSub: "not sent by a subagent", sub: "sent by a subagent", contains: "has the words", save: "Save", add: "Add a rule" },
+    startsWith: "starts with the words", notSub: "not sent by a subagent", sub: "sent by a subagent", contains: "has the words", save: "Save", add: "Add a rule",
+    system: "System prompt text", last: "Last user message", matches: "matches the expression", sysCard: "system prompt matches the expression “^你是对话标题命名”" },
   zh: { card: "2. 推理不是 high → B · other", lt: "<", isNot: "≠", agentNot: "Agent 不是", message: "消息内容", subagent: "子代理",
-    startsWith: "开头是", notSub: "不是子代理发出", sub: "子代理发出", contains: "包含", save: "保存", add: "添加规则" },
-  "zh-TW": { isNot: "≠", agentNot: "Agent 不是", contains: "包含", sub: "子代理發出" },
-  ja: { isNot: "≠", agentNot: "エージェント ≠", contains: "を含む", sub: "サブエージェントから" },
-  de: { isNot: "≠", agentNot: "Agent ist nicht", contains: "enthält", sub: "von einem Subagent" },
+    startsWith: "开头是", notSub: "不是子代理发出", sub: "子代理发出", contains: "包含", save: "保存", add: "添加规则",
+    system: "系统提示词内容", last: "最后一条用户消息", matches: "匹配", sysCard: "系统提示词匹配“^你是对话标题命名”" },
+  "zh-TW": { isNot: "≠", agentNot: "Agent 不是", contains: "包含", sub: "子代理發出", matches: "符合", startsWith: "開頭是" },
+  ja: { isNot: "≠", agentNot: "エージェント ≠", contains: "を含む", sub: "サブエージェントから", matches: "にマッチ", startsWith: "で始まる" },
+  de: { isNot: "≠", agentNot: "Agent ist nicht", contains: "enthält", sub: "von einem Subagent", matches: "passt auf", startsWith: "beginnt mit" },
 };
 const EDIT = { en: "Edit", zh: "编辑", "zh-TW": "編輯", ja: "編集", de: "Bearbeiten" };
 
@@ -196,11 +207,59 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await row.locator(".rt-addc").click();
       assert.equal(await page.locator(".proto-menu .pm-item", { hasText: w.message }).count(), 0);
       assert.equal(await page.locator(".proto-menu .pm-item", { hasText: w.subagent }).count(), 0);
+      assert.equal(await page.locator(".proto-menu .pm-item", { hasText: w.system }).count(), 0);
+      assert.equal(await page.locator(".proto-menu .pm-item", { hasText: w.last }).count(), 0);
       await page.keyboard.press("Escape");
       await press(page, page.locator(".rt-gedit button.primary", { hasText: w.save }));
       await page.waitForFunction(() => !document.querySelector(".rt-gedit"));
       const save = posts.find((p) => p.path === "/api/groups/save");
       assert.deepEqual([save.body.rules[0].pause, save.body.rules[0].agents, save.body.rules[0].where], [true, [], [{ field: "agent", op: "not", value: "claude" }]]);
+      assert.deepEqual(errors, []);
+    });
+
+    test(`${engine} ${lang}: a rule matches the system prompt and the last user message`, async (t) => {
+      const { page, group, errors, posts } = await open(engine, lang, 1100, t, SYS);
+      const title = await group.evaluate((g) => [...g.querySelectorAll("[title]")].map((e) => e.title).join("\n"));
+      assert(title.includes(w.sysCard), `the card says the condition: ${title}`);
+
+      await press(page, group.locator("button", { hasText: EDIT[lang] }));
+      const rows = page.locator(".rt-gedit .rt-rule");
+      await rows.first().waitFor();
+      const [r1, r2] = [rows.nth(0), rows.nth(1)];
+      // saved as a pattern, it reads back as one
+      assert.equal(await r1.locator(".rt-cond.sy .rt-op").textContent(), w.matches);
+      assert.equal(await r1.locator(".rt-cond.sy input").inputValue(), "^你是对话标题命名");
+
+      // the last user message, from the + menu: starts with
+      await press(page, r2.locator(".rt-addc"));
+      await page.locator(".proto-menu .pm-item", { hasText: w.last }).click();
+      const lu = r2.locator(".rt-cond.lu");
+      await lu.locator("input").fill("正在上下文压缩");
+      await lu.locator(".rt-op").click();
+      assert.equal(await page.locator("select").count(), 0, "the app menu, not a native select");
+      assert.equal(await page.locator("#list li").count(), 4);
+      await pick(page, w.startsWith);
+      assert.equal(await lu.locator(".rt-op").textContent(), w.startsWith);
+      // the system prompt, a pattern: one that isn't shows so
+      await press(page, r2.locator(".rt-addc"));
+      await page.locator(".proto-menu .pm-item", { hasText: w.system }).click();
+      const sy = r2.locator(".rt-cond.sy");
+      await sy.locator(".rt-op").click();
+      await pick(page, w.matches);
+      await sy.locator("input").fill("(unclosed");
+      assert.match(await sy.getAttribute("class"), /\bbad\b/);
+      await sy.locator("input").fill("^You are");
+      assert.doesNotMatch(await sy.getAttribute("class"), /\bbad\b/);
+      assert.deepEqual(await overrun(page), []);
+
+      await press(page, page.locator(".rt-gedit button.primary", { hasText: w.save }));
+      await page.waitForFunction(() => !document.querySelector(".rt-gedit"));
+      const save = posts.find((p) => p.path === "/api/groups/save");
+      assert(save, `saved: ${JSON.stringify(posts)}`);
+      const [s1, s2] = save.body.rules;
+      assert.deepEqual(s1.where, [{ field: "system", op: "matches", value: "^你是对话标题命名" }], "kept as it was");
+      assert.equal(s2.tokens, 1000);
+      assert.deepEqual(s2.where, [{ field: "last", op: "starts", value: "正在上下文压缩" }, { field: "system", op: "matches", value: "^You are" }]);
       assert.deepEqual(errors, []);
     });
   }
@@ -216,6 +275,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await row.locator(".rt-aop").textContent(), words[lang].agentNot);
       assert.equal(await row.locator(".rt-sub").textContent(), words[lang].sub);
       assert.equal(await row.locator(".rt-cond.ms .rt-op").textContent(), words[lang].contains);
+      assert.equal(await row.locator(".rt-cond.sy .rt-op").textContent(), words[lang].matches);
+      assert.equal(await row.locator(".rt-cond.sy input").inputValue(), "^你是对话标题命名");
+      assert.equal(await row.locator(".rt-cond.lu .rt-op").textContent(), words[lang].startsWith);
       assert.equal(await row.locator(".rt-more").count(), 0, "each in its own pill");
       if (process.env.SHOT) { await page.waitForTimeout(500); await row.scrollIntoViewIfNeeded(); await page.screenshot({ path: `${process.env.SHOT}/${engine}-${lang}-narrow.png` }); }
       assert.deepEqual(await overrun(page), []);

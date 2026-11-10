@@ -479,7 +479,7 @@ func cleanRules(rules []Rule, members []string) ([]Rule, error) {
 		case len([]rune(r.Intent)) > MaxIntent:
 			return nil, fmt.Errorf("rule %d: an intent is at most %d characters", n, MaxIntent)
 		case len(r.Conditions()) == 0:
-			return nil, fmt.Errorf("rule %d: it needs a condition (tokens, images, effort, agents, subagent, message, intent, compacting, time or folders)", n)
+			return nil, fmt.Errorf("rule %d: it needs a condition (tokens, images, effort, agents, subagent, message, system, last, intent, compacting, time or folders)", n)
 		case r.Pause && (r.Tokens > 0 || r.Images || r.Effort != "" || r.Intent != "" || r.Compact):
 			return nil, fmt.Errorf("rule %d: a pause holds by hours, days, agents or folders only", n)
 		}
@@ -517,15 +517,19 @@ type RuleRequest struct {
 	// be told.
 	Subagent bool
 	// Message is the user's own words at the turn's start, read only when
-	// a rule has a message condition (RulesReadMessage).
+	// a rule has a message condition (RulesRead).
 	Message string
+	// System is each block of the request's system prompt as the agent
+	// sent it, and Last each text of its last user message, read only
+	// when a rule has a system or last condition.
+	System, Last []string
 }
 
-// RulesReadMessage reports whether a rule of rules looks at the user's
-// message, which is then read for it.
-func RulesReadMessage(rules []Rule) bool {
+// RulesRead reports whether a rule of rules has a condition on field,
+// which is then read for it.
+func RulesRead(rules []Rule, field string) bool {
 	return slices.ContainsFunc(rules, func(r Rule) bool {
-		return slices.ContainsFunc(r.Where, func(c Cond) bool { return c.Field == "message" })
+		return slices.ContainsFunc(r.Where, func(c Cond) bool { return c.Field == field })
 	})
 }
 

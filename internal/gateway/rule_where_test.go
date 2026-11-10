@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"encoding/json"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -112,5 +113,61 @@ func TestRuleMessageIsTheUsers(t *testing.T) {
 		if !strings.Contains(out, "from "+tc.want) {
 			t.Errorf("%s: %s %+v", tc.name, out, lastRoute(s).Rule)
 		}
+	}
+}
+
+// A rule's system and last conditions (SucroseMoE on X) read the
+// request's texts as the agent sent them, with no model asked: each block
+// of its system prompt, in every protocol, and each text of its last user
+// message. A harness's title or compaction call is told apart by its
+// prompt alone.
+func TestRuleSystemAndLastText(t *testing.T) {
+	asGroup := func(body []byte) string {
+		var m map[string]any
+		if err := json.Unmarshal(body, &m); err != nil {
+			t.Fatal(err)
+		}
+		m["model"], m["stream"] = "group/r", false
+		delete(m, "thinking")
+		delete(m, "reasoning")
+		b, _ := json.Marshal(m)
+		return string(b)
+	}
+	title := `{"model":"group/r","messages":[{"role":"system","content":"你是对话标题命名助手，用不超过十个字概括对话。"},{"role":"user","content":"帮我写一个排序函数"}]}`
+	titleAnthropic := `{"model":"group/r","max_tokens":64,"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.296"},{"type":"text","text":"你是对话标题命名助手，用不超过十个字概括对话。"}],"messages":[{"role":"user","content":"帮我写一个排序函数"}]}`
+	titleResponses := `{"model":"group/r","instructions":"你是对话标题命名助手。","input":[{"role":"user","content":"帮我写一个排序函数"}]}`
+	titleDeveloper := `{"model":"group/r","input":[{"role":"developer","content":[{"type":"input_text","text":"你是对话标题命名助手。"}]},{"role":"user","content":"帮我写一个排序函数"}]}`
+	said := `{"model":"group/r","messages":[{"role":"system","content":"You are a coding agent."},{"role":"user","content":"你是对话标题命名助手吗？"}]}`
+	compact := `{"model":"group/r","messages":[{"role":"system","content":"You are a coding agent."},{"role":"user","content":"帮我写一个排序函数"},{"role":"assistant","content":"好的"},{"role":"user","content":[{"type":"text","text":"<system-reminder>todo</system-reminder>"},{"type":"text","text":"正在上下文压缩，请总结以上对话。"}]}]}`
+	carryOn := `{"model":"group/r","messages":[{"role":"system","content":"You are a coding agent."},{"role":"user","content":"正在上下文压缩，请总结以上对话。"},{"role":"assistant","content":"好的"},{"role":"user","content":"接着写测试"}]}`
+	for _, tc := range []struct {
+		name string
+		cond provider.Cond
+		path string
+		body string
+		want string
+	}{
+		{"chat system", provider.Cond{Field: "system", Op: "matches", Value: `/^你是对话标题命名/`}, "/v1/chat/completions", title, "kb"},
+		{"anthropic's second block", provider.Cond{Field: "system", Op: "matches", Value: `^你是对话标题命名`}, "/v1/messages", titleAnthropic, "kb"},
+		{"responses instructions", provider.Cond{Field: "system", Op: "matches", Value: `^你是对话标题命名`}, "/v1/responses", titleResponses, "kb"},
+		{"responses developer", provider.Cond{Field: "system", Op: "starts", Value: "你是对话标题命名"}, "/v1/responses", titleDeveloper, "kb"},
+		{"the user said it", provider.Cond{Field: "system", Op: "matches", Value: `^你是对话标题命名`}, "/v1/chat/completions", said, "ka"},
+		{"claude code's own", provider.Cond{Field: "system", Op: "matches", Value: `^You are a Claude agent`}, "/v1/messages", asGroup(fixture(t, "claude-code-2.1.296.json")), "kb"},
+		{"codex's own", provider.Cond{Field: "system", Op: "matches", Value: `^You are a coding agent running in the Codex CLI`}, "/v1/responses", asGroup(fixture(t, "codex-0.162.0.json")), "kb"},
+		{"not in pi's", provider.Cond{Field: "system", Op: "contains", Value: "你是对话标题命名"}, "/v1/chat/completions", asGroup(fixture(t, "pi-1.1.0.json")), "ka"},
+		{"compaction last", provider.Cond{Field: "last", Op: "matches", Value: `/^正在上下文压缩/`}, "/v1/chat/completions", compact, "kb"},
+		{"compaction earlier", provider.Cond{Field: "last", Op: "matches", Value: `^正在上下文压缩`}, "/v1/chat/completions", carryOn, "ka"},
+		{"system excludes", provider.Cond{Field: "system", Op: "excludes", Value: "标题"}, "/v1/chat/completions", compact, "kb"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, _, _ := ruled(t, provider.Rule{Use: "b/big", Where: []provider.Cond{tc.cond}})
+			rec := httptest.NewRecorder()
+			r := httptest.NewRequest("POST", tc.path, strings.NewReader(tc.body))
+			r.Header.Set("x-session-id", tc.name)
+			s.Handler().ServeHTTP(rec, r)
+			if rec.Code != 200 || !strings.Contains(rec.Body.String(), "from "+tc.want) {
+				t.Errorf("%d %.300s %+v", rec.Code, rec.Body.String(), lastRoute(s).Rule)
+			}
+		})
 	}
 }

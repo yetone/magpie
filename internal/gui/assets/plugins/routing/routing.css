@@ -968,10 +968,10 @@ body.window .rt-gedit > .bar { --vfoot: 8px; }
 @media (hover: hover) and (pointer: fine) { .rt-op:hover { background: var(--pill-hover, var(--pill)); } }
 .rt-op:focus-visible { outline: none; background: var(--pill-hover, var(--pill)); }
 .rt-cond.ef { cursor: default; }
-.rt-cond.ms { cursor: text; }
-.rt-cond.ms > span { flex: none; }
-.rt-cond.ms > input { min-width: 0; flex: 0 1 auto; }
-.rt-cond.ms.bad { border-style: solid; border-color: var(--amber, var(--muted)); }
+.rt-cond.rt-tx { cursor: text; }
+.rt-cond.rt-tx > span { flex: none; }
+.rt-cond.rt-tx > input { min-width: 0; flex: 0 1 auto; }
+.rt-cond.rt-tx.bad { border-style: solid; border-color: var(--amber, var(--muted)); }
 /* the time zone a rule's hours are in, when the server's clock is another */
 .rt-zone { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .rt-cond[hidden] { display: none; }

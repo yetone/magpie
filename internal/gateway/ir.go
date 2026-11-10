@@ -261,6 +261,15 @@ type Request struct {
 	// it, for a rule's subagent condition. Other agents don't say.
 	subagent bool
 
+	// systemParts: each block of the system prompt as the client sent it
+	// (Anthropic's system blocks, a system or developer message, Responses'
+	// instructions), before magpie adds to or joins them, for a rule's
+	// system condition (SucroseMoE on X). systemRaw holds the ones still
+	// as JSON (a string or text blocks), read only when a rule asks
+	// (systemTexts): a Claude Code system prompt is tens of KB.
+	systemParts []string
+	systemRaw   []json.RawMessage
+
 	Model      string
 	System     string
 	Messages   []Message
@@ -847,6 +856,52 @@ func text(parts []Part) string {
 		}
 	}
 	return b.String()
+}
+
+// systemTexts is each block of the system prompt as the client sent it
+// (systemParts, systemRaw).
+func (r *Request) systemTexts() []string {
+	out := slices.Clone(r.systemParts)
+	for _, raw := range r.systemRaw {
+		var s string
+		if decodeJSON(raw, &s) == nil {
+			if s != "" {
+				out = append(out, s)
+			}
+			continue
+		}
+		var blocks []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		if decodeJSON(raw, &blocks) == nil {
+			for _, b := range blocks {
+				if b.Text != "" && (b.Type == "text" || b.Type == "input_text") {
+					out = append(out, b.Text)
+				}
+			}
+		}
+	}
+	return out
+}
+
+// lastUserTexts is each text of the request's last user message as the
+// client sent it, the agent's reminders and all; none when that message
+// holds only tool results.
+func lastUserTexts(r *Request) []string {
+	for i := len(r.Messages) - 1; i >= 0; i-- {
+		if r.Messages[i].Role != "user" {
+			continue
+		}
+		var out []string
+		for _, p := range r.Messages[i].Parts {
+			if p.Kind == Text && p.Text != "" {
+				out = append(out, p.Text)
+			}
+		}
+		return out
+	}
+	return nil
 }
 
 // stringOrText reads a JSON value that is either a string or an array of

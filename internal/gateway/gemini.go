@@ -266,6 +266,9 @@ func parseGemini(body []byte) (*Request, error) {
 	}
 	r := &Request{Model: g.Model, Stream: g.Stream}
 	r.System = geminiText(g.SystemInstruction)
+	if r.System != "" {
+		r.systemParts = []string{r.System}
+	}
 	if gc := g.GenerationConfig; gc != nil {
 		r.MaxTokens, r.Temp, r.TopP, r.Stop = gc.MaxOutputTokens, gc.Temperature, gc.TopP, gc.StopSequences
 		if tc := gc.ThinkingConfig; tc != nil {
