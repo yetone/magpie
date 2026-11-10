@@ -98,10 +98,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const ed = page.locator(".rt-gedit");
         const byIntent = ed.locator(".rt-gadds button", { hasText: w.add });
         await byIntent.waitFor();
-        assert.equal(await ed.locator(".rt-gadds button").count(), 1, "one way to add a rule");
+        // one way to add a rule, besides the example rule a group with
+        // none offers (01a260af4, routing-rule-example.test.cjs)
+        assert.equal(await ed.locator(".rt-gadds button:not(.rt-try)").count(), 1, "one way to add a rule");
         // inside the editor, however narrow
         const eb = await ed.boundingBox();
-        for (const b of [await byIntent.boundingBox()]) assert(b.x >= eb.x - 0.5 && b.x + b.width <= eb.x + eb.width + 0.5, `${JSON.stringify(b)} in ${JSON.stringify(eb)}`);
+        for (const b of [await byIntent.boundingBox(), await ed.locator(".rt-gadds button.rt-try").boundingBox()]) assert(b.x >= eb.x - 0.5 && b.x + b.width <= eb.x + eb.width + 0.5, `${JSON.stringify(b)} in ${JSON.stringify(eb)}`);
         // no classifier yet: no rule has an intent
         assert.equal(await ed.locator(".rt-classifier").isVisible(), false);
 
