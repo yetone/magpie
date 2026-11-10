@@ -886,6 +886,13 @@ each one.
     lineWith(out, " as ") found the billing row before the "as" row
     (ea310a8c9). A test that finds a row by a word in it breaks when
     another row says the word; find a labelled row by its label.
+  - Three more the same night, after that line was written.
+    9c39edb92 (Avibe) and 4a9142ccd (Obsidian) each added an agent with
+    no Library line, and e6f151507's /api/speeds made the route guard red
+    a fifth time. All three were pushed and tagged before CI ran.
+    Writing the rule here didn't reach those sessions. Until a pre-push
+    check runs these guards, run them yourself before every push that
+    adds an agent or a route.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
