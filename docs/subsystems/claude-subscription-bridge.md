@@ -589,6 +589,25 @@ interactive, so its `/usage` asks the usage endpoint alone
 setup-token, which magpie never reads, or an API key) gets the session's
 cost instead. `TestClaudeUsageStartsNoInteractiveRun` holds it.
 
+A turn's run (`claudeRunEnv`) is not given
+`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, which the one-off runs above
+keep (`cleanClaudeEnv`). With it, or `DISABLE_TELEMETRY` or
+`DO_NOT_TRACK`, Claude Code 2.1.316 reads none of its feature flags, and
+one of them (`tengu_curious_tower`) is Message Threads: a turn sends only
+what came after the last reply. Without it every turn sent the whole
+history again, every image in it (#5963, nylesssssssss: with a ~3 MB PNG,
+672 KB on each of four turns; 737, 6, 3 and 3 KB with the flags read, on
+a real Team account behind a counting proxy). Nothing forces threads:
+`CLAUDE_CODE_TETHER_LIVE`, which turns them on whatever the account's
+flag says, is never set, and an account Anthropic hasn't given threads
+sends whole, as its own `claude` does. Updates and error reports stay off
+(`DISABLE_AUTOUPDATER`, `DISABLE_ERROR_REPORTING`); Claude Code's own
+telemetry goes as a plain `claude`'s does, unless the user turned it off:
+a quiet variable set in magpie's environment or in their Claude Code's
+`settings.json` env is given to the run as they set it, and the run then
+reads no flags. An interactive run sends Claude Code's quota request as it
+starts, right before the turn's own. `TestClaudeRunReadsItsFlags` holds it.
+
 The helper still takes a typed `/usage`, and nothing of magpie's sends it
 now: it is told `{"type":"command","command":"/usage"}`, types it, waits for the
 panel's windows ("NN% used", `commandSettle` still) and closes it with
