@@ -2260,6 +2260,9 @@ function connectPanel(a, { fields, fieldBtn }) {
       v.append(w);
     }
     if (a.id === "claude-desktop") v.append(desktopLongestLine());
+    // its own Provider in model names, over Settings' (KillTry27355 on X);
+    // an agent whose list doesn't take magpie's names has none
+    if (!a.noNames) { const v = kv(t("Provider in model names")), put = () => v.append(line(agentSuffixPick(a))); window.agentSuffixPick ? put() : import("./agentsuffix.js").then(put, () => {}); }
   }
   // what a new session starts on: optional, the agent's own last pick
   // unset; Codex's is the very value its /model picks, so one choice

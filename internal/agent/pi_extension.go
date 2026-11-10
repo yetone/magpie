@@ -54,7 +54,7 @@ func piExtensionFor(baseURL, key string) string {
 	for i := range ds {
 		ds[i].Name = cmp.Or(ds[i].Name, ds[i].Model)
 	}
-	labels := provider.Labels(ds)
+	labels := provider.LabelsFor("pi", ds)
 	classifiers := make([]piExtensionModel, 0, len(ds))
 	for i, e := range ds {
 		classifiers = append(classifiers, piExtensionModel{ID: e.ID, Name: labels[i]})

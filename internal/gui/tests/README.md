@@ -725,6 +725,13 @@ then it post `settings/plain-names` with `mode: "on"` and `mode: "own"`,
 neither click scrolls the page, the hint isn't cut short and the three fit
 the row at 900px and 560px. English and Chinese, Chromium and WebKit.
 
+`agent-suffix.test.cjs` checks an agent's own "Provider in model names" in
+its Details (KillTry27355 on X): it reads "As in Settings · Off" while every
+agent's is Off, On posts `settings/agent-suffix` with `{agent, mode: "on"}`
+and then reads On, the first item posts `mode: ""` back, an agent whose list
+takes no names of magpie's (noNames) has no such row, and the page doesn't
+scroll sideways at 1180px and 390px. Every language, Chromium and WebKit.
+
 `bare-ids.test.cjs` checks Settings › Network and sharing › "Model ids
 without the provider" (love1sbug on X): off by default, On posts
 `settings/bare-ids` with `on: true` on its own and lights On, Off posts it

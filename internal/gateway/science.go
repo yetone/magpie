@@ -84,7 +84,7 @@ func scienceObject(e provider.Entry, name string) map[string]any {
 // picked for it (provider.CatalogFor) by its alias, named as Claude
 // Desktop's are (desktopNames), no two alike.
 func scienceModels(entries []provider.Entry) []map[string]any {
-	names := desktopNames(entries)
+	names := desktopNames(ScienceID, entries)
 	data := make([]map[string]any, 0, len(entries))
 	for i, e := range entries {
 		data = append(data, scienceObject(e, names[i]))

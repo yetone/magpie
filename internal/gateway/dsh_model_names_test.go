@@ -83,3 +83,53 @@ func TestDshDiscoveryNamesModelsApart(t *testing.T) {
 		list("curl/8.7.1")
 	}
 }
+
+// /v1/models names models for the agent asking by its own Provider in
+// model names when it has one (KillTry27355 on X), whatever every agent's
+// says.
+func TestModelsListFollowsAgentSuffix(t *testing.T) {
+	fresh(t)
+	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
+	if err := os.WriteFile(catalog.CachePath(), []byte(`{"wb":{"models":{"glm-5":{"id":"glm-5","name":"GLM-5"}}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+	if err := provider.Save(provider.Provider{ID: "wb", Name: "WorkBuddy", Catalog: "wb", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"glm-5"}}); err != nil {
+		t.Fatal(err)
+	}
+	name := func() string {
+		req := httptest.NewRequest("GET", "/v1/models", nil)
+		req.Header.Set("User-Agent", dshUA)
+		req.Header.Set("Authorization", "Bearer "+TokenFor("dsh"))
+		rec := httptest.NewRecorder()
+		New().Handler().ServeHTTP(rec, req)
+		var out struct {
+			Data []struct{ ID, Name string } `json:"data"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range out.Data {
+			if m.ID == "wb/glm-5" {
+				return m.Name
+			}
+		}
+		return ""
+	}
+	for _, c := range []struct{ every, own, want string }{
+		{provider.SuffixOff, provider.SuffixOn, "GLM-5 · WorkBuddy"},
+		{provider.SuffixOn, provider.SuffixOff, "GLM-5"},
+		{provider.SuffixOn, "", "GLM-5 · WorkBuddy"},
+	} {
+		if err := provider.SetSuffixMode(c.every); err != nil {
+			t.Fatal(err)
+		}
+		if err := provider.SetAgentSuffix("dsh", c.own); err != nil {
+			t.Fatal(err)
+		}
+		if got := name(); got != c.want {
+			t.Fatalf("every %s, dsh %q: %q, want %q", c.every, c.own, got, c.want)
+		}
+	}
+}

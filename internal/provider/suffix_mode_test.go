@@ -84,3 +84,48 @@ func TestSuffixMode(t *testing.T) {
 		t.Fatal("took sometimes")
 	}
 }
+
+// An agent's own Provider in model names (KillTry27355 on X) is over every
+// agent's for that agent alone, by the id its lists are kept by: its WSL
+// copy and a named profile read it too, and another agent reads every
+// agent's. "" gives it back, and each change tells the agents.
+func TestAgentSuffix(t *testing.T) {
+	prefsHome(t)
+	touched := 0
+	catalog.Changed = func() { touched++ }
+	t.Cleanup(func() { catalog.Changed = nil })
+	if err := SetSuffixMode(SuffixOff); err != nil {
+		t.Fatal(err)
+	}
+	touched = 0
+	if err := SetAgentSuffix(" Pi ", SuffixOn); err != nil {
+		t.Fatal(err)
+	}
+	if s := settings.Load(); s.AgentSuffix["pi"] != SuffixOn || !s.PlainNames || touched != 1 {
+		t.Fatalf("%+v, told %d", s, touched)
+	}
+	for agent, want := range map[string]string{"pi": SuffixOn, "PI": SuffixOn, "pi@wsl:Ubuntu": SuffixOn, "pi#work": SuffixOn, "codex": SuffixOff, "": SuffixOff} {
+		if got := SuffixModeFor(agent); got != want {
+			t.Errorf("%q reads %q, want %q", agent, got, want)
+		}
+	}
+	if AgentSuffix("pi") != SuffixOn || AgentSuffix("codex") != "" {
+		t.Fatalf("own %q %q", AgentSuffix("pi"), AgentSuffix("codex"))
+	}
+	es := []Entry{{ID: "relay/glm-5", Name: "GLM-5", Provider: Provider{ID: "relay", Name: "Relay"}}}
+	if got := LabelsFor("pi", es); !slices.Equal(got, []string{"GLM-5 · Relay"}) {
+		t.Fatalf("pi %q", got)
+	}
+	if got := LabelsFor("codex", es); !slices.Equal(got, []string{"GLM-5"}) {
+		t.Fatalf("codex %q", got)
+	}
+	if err := SetAgentSuffix("pi", ""); err != nil {
+		t.Fatal(err)
+	}
+	if s := settings.Load(); len(s.AgentSuffix) != 0 || SuffixModeFor("pi") != SuffixOff || touched != 2 {
+		t.Fatalf("back: %+v, told %d", s, touched)
+	}
+	if SetAgentSuffix("pi", "sometimes") == nil || SetAgentSuffix("", SuffixOn) == nil {
+		t.Fatal("took a bad mode or no agent")
+	}
+}

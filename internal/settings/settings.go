@@ -719,6 +719,11 @@ type Settings struct {
 	// it (#92: "Opus 5.5", not "Opus 5.5 · Claude Code"), the vendor's names
 	// keeping their provider's after them (see provider.Labels).
 	PlainOwnNames bool `json:"plainOwnNames,omitempty"`
+	// AgentSuffix is an agent's own Provider in model names, by the id
+	// its lists are kept by (lower-cased): "on", "own" or "off", over
+	// PlainNames and PlainOwnNames for that agent alone (KillTry27355 on
+	// X). An agent it doesn't name follows those two (provider.LabelsFor).
+	AgentSuffix map[string]string `json:"agentSuffix,omitempty"`
 	// BareModelIDs has the gateway's /v1/models list each model by its id
 	// without the provider as well ("gpt-5.6-sol" beside
 	// "codex/gpt-5.6-sol"), for clients moved from another proxy that ask

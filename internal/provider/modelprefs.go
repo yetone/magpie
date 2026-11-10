@@ -861,11 +861,17 @@ func (e Entry) Label() string {
 // model's, or a routing group's they made (#868: "· routing group" was
 // what an agent's narrow menu cut off) — is that name just as they wrote
 // it, but for two the list would call the same, and the rest keep Label's.
-func Labels(es []Entry) []string {
+func Labels(es []Entry) []string { return LabelsFor("", es) }
+
+// LabelsFor is Labels as the agent of that id's lists name es: by its own
+// Provider in model names (settings.AgentSuffix, KillTry27355 on X: one
+// agent's narrow menu wants names plain while another's wants the
+// provider), else by the one for every agent. "" is every agent's.
+func LabelsFor(agent string, es []Entry) []string {
 	out := make([]string, len(es))
-	s := heldSettings()
-	plain := s.PlainNames
-	own := !plain && s.PlainOwnNames
+	mode := suffixModeOf(heldSettings(), agent)
+	plain := mode == SuffixOff
+	own := mode == SuffixOwn
 	// models and groups by name: a group is told apart by its "· routing
 	// group", so a model it shares a name with stays plain (nb5p on
 	// Discord: one relay's GPT-6.1 Terra kept "· MyGateway" beside the
@@ -920,8 +926,33 @@ const (
 
 // SuffixMode is how the agents' lists name models: SuffixOn, SuffixOwn or
 // SuffixOff.
-func SuffixMode() string {
-	s := settings.Load()
+func SuffixMode() string { return suffixModeOf(settings.Load(), "") }
+
+// SuffixModeFor is how the lists of the agent of that id name models: its
+// own mode (AgentSuffix), else SuffixMode.
+func SuffixModeFor(agent string) string { return suffixModeOf(settings.Load(), agent) }
+
+// AgentSuffix is the agent's own mode, "" when it follows every agent's.
+func AgentSuffix(agent string) string {
+	return settings.Load().AgentSuffix[suffixKey(agent)]
+}
+
+// suffixKey is the id an agent's own mode is kept by: a WSL copy and a
+// named profile (omp#work) keep their lists by the agent's, as
+// Agent.ListsFor does
+func suffixKey(agent string) string {
+	id, _, _ := strings.Cut(strings.ToLower(strings.TrimSpace(agent)), "@wsl:")
+	id, _, _ = strings.Cut(id, "#")
+	return id
+}
+
+func suffixModeOf(s settings.Settings, agent string) string {
+	if agent != "" {
+		switch m := s.AgentSuffix[suffixKey(agent)]; m {
+		case SuffixOn, SuffixOwn, SuffixOff:
+			return m
+		}
+	}
 	switch {
 	case s.PlainNames:
 		return SuffixOff
@@ -929,6 +960,40 @@ func SuffixMode() string {
 		return SuffixOwn
 	}
 	return SuffixOn
+}
+
+// SetAgentSuffix gives the agent of that id a Provider in model names of
+// its own, mode (SuffixOn, SuffixOwn or SuffixOff), over the one for every
+// agent; "" takes it away, and the agent follows that one again. The
+// agents are told when it changes.
+func SetAgentSuffix(agent, mode string) error {
+	agent = suffixKey(agent)
+	if agent == "" {
+		return errors.New("no agent")
+	}
+	switch mode {
+	case "", SuffixOn, SuffixOwn, SuffixOff:
+	default:
+		return fmt.Errorf("provider in model names: on, own, off or \"\" for every agent's, not %q", mode)
+	}
+	s := settings.Load()
+	if s.AgentSuffix[agent] == mode {
+		return nil
+	}
+	s.AgentSuffix = maps.Clone(s.AgentSuffix)
+	if mode == "" {
+		delete(s.AgentSuffix, agent)
+	} else {
+		if s.AgentSuffix == nil {
+			s.AgentSuffix = map[string]string{}
+		}
+		s.AgentSuffix[agent] = mode
+	}
+	if err := settings.Save(s); err != nil {
+		return err
+	}
+	catalog.Touched()
+	return nil
 }
 
 // SetSuffixMode has the agents' model lists name models as mode says (see

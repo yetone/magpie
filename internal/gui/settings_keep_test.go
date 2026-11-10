@@ -163,6 +163,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		ClientAgents:         map[string]string{"hermes-codex-thread-bridge": "codex"},
 		PlainNames:           true,
 		PlainOwnNames:        true,
+		AgentSuffix:          map[string]string{"pi": "off"},
 		BareModelIDs:         true,
 		CodexAgentsV1:        true,
 		CodexTitles:          "off",

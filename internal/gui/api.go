@@ -1865,6 +1865,25 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
+	// an agent's own Provider in model names (settings.AgentSuffix): Mode
+	// "" follows the one for every agent again
+	mux.HandleFunc("POST /api/settings/agent-suffix", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Agent, Mode string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		a, err := agent.Find(in.Agent)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := provider.SetAgentSuffix(a.ListsFor(), in.Mode); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
 	// takes out of Codex's config the keys it reads before Long
 	// conversations (agent.CodexCompactHeld), on the user's click
 	mux.HandleFunc("POST /api/settings/codex-compact-held/drop", func(rw http.ResponseWriter, r *http.Request) {

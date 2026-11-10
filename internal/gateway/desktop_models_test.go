@@ -296,13 +296,13 @@ func TestDesktopNames(t *testing.T) {
 		{ID: "d/z", Name: "Z", Provider: provider.Provider{ID: "d", Name: "D"}},
 		{ID: "d/z2", Name: "Z", Provider: provider.Provider{ID: "d", Name: "D"}},
 	}
-	if got, want := desktopNames(es), []string{"X · A", "x · B", "Y · C", "Z · D (d/z)", "Z · D (d/z2)"}; !slices.Equal(got, want) {
+	if got, want := desktopNames("claude-desktop", es), []string{"X · A", "x · B", "Y · C", "Z · D (d/z)", "Z · D (d/z2)"}; !slices.Equal(got, want) {
 		t.Fatalf("desktopNames = %q, want %q", got, want)
 	}
 	if err := provider.SetSuffixMode(provider.SuffixOff); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := desktopNames(es), []string{"X · A", "x · B", "Y", "Z · D (d/z)", "Z · D (d/z2)"}; !slices.Equal(got, want) {
+	if got, want := desktopNames("claude-desktop", es), []string{"X · A", "x · B", "Y", "Z · D (d/z)", "Z · D (d/z2)"}; !slices.Equal(got, want) {
 		t.Fatalf("desktopNames (names plain) = %q, want %q", got, want)
 	}
 }

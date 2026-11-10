@@ -41,3 +41,25 @@ func TestModelSuffixCmd(t *testing.T) {
 		t.Fatal("took maybe")
 	}
 }
+
+// magpie model suffix pi off gives Pi its own Provider in model names,
+// over every agent's (KillTry27355 on X); every gives it back. Every
+// agent's is left as it was, and a word it doesn't know is refused.
+func TestModelSuffixAgentCmd(t *testing.T) {
+	groupsHome(t)
+	catalog.Changed = nil
+	for _, args := range [][]string{{"suffix", "pi"}, {"suffix", "pi", "off"}, {"suffix", "pi"}} {
+		if err := modelCmd(args); err != nil {
+			t.Fatal(args, err)
+		}
+	}
+	if provider.SuffixModeFor("pi") != provider.SuffixOff || provider.SuffixMode() != provider.SuffixOn || settings.Load().PlainNames {
+		t.Fatalf("pi %q, every %q", provider.SuffixModeFor("pi"), provider.SuffixMode())
+	}
+	if err := modelCmd([]string{"suffix", "pi", "every"}); err != nil || provider.AgentSuffix("pi") != "" {
+		t.Fatal(err, provider.AgentSuffix("pi"))
+	}
+	if err := modelCmd([]string{"suffix", "pi", "maybe"}); err == nil {
+		t.Fatal("took maybe")
+	}
+}

@@ -883,7 +883,7 @@ func codexListedIf(shown []Entry, members func(id string) []Member, listed func(
 	var ms []catalog.Model
 	// named among all shown: the account's own, which the backend lists,
 	// are in Codex's picker beside these
-	labels := Labels(shown)
+	labels := LabelsFor("codex", shown)
 	seen := described()
 	s := settings.Load().ForAgent("codex")
 	find := func(id string) (Group, []Member, bool) { return Group{}, members(id), true }

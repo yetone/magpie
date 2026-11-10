@@ -1641,7 +1641,7 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 		} else if agent == ScienceID {
 			data = scienceModels(shown)
 		} else {
-			labels := provider.Labels(shown)
+			labels := provider.LabelsFor(agent, shown)
 			// for another magpie: how it searches the web for each model
 			magpie := r.Header.Get(provider.DrawersHeader) != ""
 			searches := magpie && canSearch()
@@ -1743,7 +1743,7 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 		for i := range deciders {
 			deciders[i].Name = cmp.Or(deciders[i].Name, deciders[i].Model)
 		}
-		labels := provider.Labels(deciders)
+		labels := provider.LabelsFor(agentOf(r), deciders)
 		for i, e := range deciders {
 			m := modelObject(e)
 			m["kind"], m["magpie_label"] = "decision", labels[i]
@@ -1783,7 +1783,7 @@ func (s *Server) model(w http.ResponseWriter, r *http.Request) {
 			if agentOf(r) == ScienceID {
 				// by the alias it asked by, which it keeps what it reads
 				// under
-				writeJSON(w, 200, scienceObject(e, provider.Labels([]provider.Entry{e})[0]))
+				writeJSON(w, 200, scienceObject(e, provider.LabelsFor(ScienceID, []provider.Entry{e})[0]))
 				return
 			}
 			writeJSON(w, 200, pricedModelObject(r, e))

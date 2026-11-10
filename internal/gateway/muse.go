@@ -23,7 +23,7 @@ const (
 // as the model it asks /v1/responses for.
 func (s *Server) museModels(w http.ResponseWriter, r *http.Request) {
 	shown := catalogFor(r)
-	labels := provider.Labels(shown)
+	labels := provider.LabelsFor(agentOf(r), shown)
 	data := []map[string]any{}
 	for i, e := range shown {
 		input := []string{"text"}

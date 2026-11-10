@@ -218,7 +218,7 @@ func DesktopNumber(e provider.Entry) string {
 // shown a reasoning-level model by its plain alias instead of the picker
 // one, which such a build would drop whole (#2426).
 func desktopModels(entries []provider.Entry, knowsMythos bool) []map[string]any {
-	names := desktopNames(entries)
+	names := desktopNames("claude-desktop", entries)
 	// the tier each model stands in for: the user's pick only (a model
 	// picked for two is tagged with the first, desktopTierTurn sends the
 	// other). A Claude model is never tagged with its own tier unasked:
@@ -229,7 +229,7 @@ func desktopModels(entries []provider.Entry, knowsMythos bool) []map[string]any 
 	// desktopTurn keeps on the chat's provider (servedBeside).
 	tierOf := desktopTierOf(DesktopTiers())
 	longest := settings.Load().DesktopLongest
-	labels := provider.Labels(entries)
+	labels := provider.LabelsFor("claude-desktop", entries)
 	data := make([]map[string]any, 0, len(entries))
 	for i, e := range entries {
 		m := modelObject(e)
@@ -424,15 +424,16 @@ func desktopTierAsked(asked string) bool {
 	return false
 }
 
-// desktopNames are the names Claude Desktop is shown entries by, in order:
+// desktopNames are the names Claude Desktop (or Claude Science, agent) is
+// shown entries by, in order:
 // as the agents' lists name them (provider.Labels, the Provider in model
 // names setting: on, every name with its provider's after it; own, a name
 // the user gave just as they wrote it; off, names plain — but two of one
 // name keep their provider's, so they stay apart), and where that still
 // leaves two alike (one provider's models named alike) the whole catalog id
 // after it, for Desktop's menu shows the name alone.
-func desktopNames(entries []provider.Entry) []string {
-	out := provider.Labels(entries)
+func desktopNames(agent string, entries []provider.Entry) []string {
+	out := provider.LabelsFor(agent, entries)
 	same := map[string]int{}
 	for _, s := range out {
 		same[strings.ToLower(s)]++

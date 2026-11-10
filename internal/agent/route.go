@@ -187,7 +187,7 @@ func buildVia(agent, prefix string) []Option {
 // setting, where an Option's Label is the name alone for magpie's picker.
 func listLabels(agent string) map[string]string {
 	shown, _ := provider.CatalogFor(agent)
-	labels := provider.Labels(shown)
+	labels := provider.LabelsFor(agent, shown)
 	out := make(map[string]string, len(shown))
 	for i, e := range shown {
 		out[e.ID] = labels[i]
@@ -338,7 +338,7 @@ func buildModels(agent string) []catalog.Model {
 	defer provider.Hold()()
 	var out []catalog.Model
 	shown, _ := provider.CatalogFor(agent)
-	labels := provider.Labels(shown)
+	labels := provider.LabelsFor(agent, shown)
 	// a model magpie describes images to takes them (provider.Described)
 	seen := describedNow()
 	// the agent's own Long conversations, if it has one (ForAgent)

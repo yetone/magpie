@@ -38,7 +38,7 @@ const AntigravityFormat = "antigravity"
 // level as it does any model asked at an effort (askedAt).
 func antigravityModels(w http.ResponseWriter, r *http.Request) {
 	shown := catalogFor(r)
-	labels := provider.Labels(shown)
+	labels := provider.LabelsFor(agentOf(r), shown)
 	list := make([]map[string]any, 0, len(shown))
 	for i, e := range shown {
 		levels := antigravityLevels(e.Efforts)

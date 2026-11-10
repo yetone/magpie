@@ -100,7 +100,7 @@ func (s *Server) ollamaShow(w http.ResponseWriter, r *http.Request) {
 		window = ollamaDefaultContext
 	}
 	info := map[string]any{
-		"general.architecture": ollamaArch, "general.basename": provider.Labels([]provider.Entry{e})[0],
+		"general.architecture": ollamaArch, "general.basename": provider.LabelsFor(agentOf(r), []provider.Entry{e})[0],
 		"general.parameter_count": 0, ollamaArch + ".context_length": window, ollamaArch + ".embedding_length": 0,
 	}
 	writeJSON(w, 200, map[string]any{

@@ -329,6 +329,7 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	in.ClientAgents = cur.ClientAgents
 	// how agents' lists name models, set on its own for the agents to be told
 	in.PlainNames, in.PlainOwnNames = cur.PlainNames, cur.PlainOwnNames
+	in.AgentSuffix = cur.AgentSuffix   // and each agent's own (agent-suffix)
 	in.BareModelIDs = cur.BareModelIDs // set on its own (bare-ids)
 	in.BusyLoad = cur.BusyLoad         // and so is this (busy-load)
 	in.CodexAgentsV1 = cur.CodexAgentsV1
