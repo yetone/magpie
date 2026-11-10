@@ -103,7 +103,8 @@ func distinctCodexFiles(files []file) []file {
 	// a name's first file, and the rest of its files, which few names
 	// have: a slice made for every name was ~45 MB of a minute of the
 	// page's polls (#2278)
-	first := make(map[string]int, len(files))
+	first := nameFirsts()
+	defer putNameFirsts(first)
 	var more map[string][]int
 	keep := make([]bool, len(files))
 	for i, f := range files {
@@ -140,6 +141,23 @@ func distinctCodexFiles(files []file) []file {
 		}
 	}
 	return out
+}
+
+// nameFirstSets are distinctCodexFiles' sets of names, kept on a shelf from
+// poll to poll as pathSets are: made new for ~13k rollouts, each was ~0.4
+// MB of every Sessions poll (#2278).
+var nameFirstSets shelf[map[string]int]
+
+func nameFirsts() map[string]int {
+	if m, ok := nameFirstSets.take(nil); ok {
+		return m
+	}
+	return map[string]int{}
+}
+
+func putNameFirsts(m map[string]int) {
+	clear(m)
+	nameFirstSets.give(m, nil)
 }
 
 func codexCopyRelation(first, second string) int {

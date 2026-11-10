@@ -1122,15 +1122,18 @@ func codexFilesIn(dir string) []file {
 	}
 	// During compression, prefer the readable plain twin in the same
 	// directory: the new compressed file may not have its trailer yet.
-	plain := map[string]bool{}
+	// (a set kept from poll to poll: made new, it was ~0.4 MB of each, #2278)
+	plain := pathSet()
+	defer putPathSet(plain)
 	for _, f := range out {
 		if !strings.HasSuffix(f.path, zstSuffix) {
-			plain[f.path] = true
+			plain[f.path] = struct{}{}
 		}
 	}
 	kept := out[:0]
 	for _, f := range out {
-		if q, ok := strings.CutSuffix(f.path, zstSuffix); !ok || !plain[q] {
+		q, ok := strings.CutSuffix(f.path, zstSuffix)
+		if _, twin := plain[q]; !ok || !twin {
 			kept = append(kept, f)
 		}
 	}
