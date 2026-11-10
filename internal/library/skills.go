@@ -33,6 +33,7 @@ import (
 // the agents that get it.
 type Skill struct {
 	Name   string   `json:"name"`
+	Bundle string   `json:"bundle,omitempty"` // the plugin it came with (plugin.go)
 	Source *Source  `json:"source,omitempty"`
 	Agents []string `json:"agents"`
 	// Hash is of the skill's files as last fetched from GitHub, and Commit

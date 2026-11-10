@@ -248,6 +248,21 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 		}
 		writeJSON(rw, p)
 	})
+	// the Claude Code plugins at an address: a folder, a repository, a
+	// marketplace.json (plugin.go); nothing is written
+	mux.HandleFunc("POST /api/library/plugins/probe", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Source string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		p, err := library.ProbePlugins(in.Source)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, p)
+	})
 	// which skills GitHub has changed: the page as it is, each skill from
 	// there carrying what the check found of it
 	mux.HandleFunc("POST /api/library/skills/check", func(rw http.ResponseWriter, r *http.Request) {
@@ -681,6 +696,16 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.RemoveHooks([]string{in.Name})
 		case "hooks/remove-all":
 			res, err = library.RemoveHooks(in.Names)
+		case "plugins/install":
+			res, err = library.InstallPlugins(in.Source, in.Names, in.Agents)
+		case "plugins/agents":
+			res, err = library.PluginAgents(in.Name, in.Agents)
+		case "plugins/on":
+			res, err = library.PluginOn(in.Name, in.On)
+		case "plugins/update":
+			res, err = library.UpdatePlugin(in.Name)
+		case "plugins/remove":
+			res, err = library.RemovePlugin(in.Name)
 		case "subagents/save":
 			res, err = library.SaveSubagent(in.Old, in.Subagent)
 		case "subagents/agents":

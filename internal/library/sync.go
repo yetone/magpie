@@ -458,6 +458,7 @@ type ServerView struct {
 // SkillView is a library skill as the page shows it.
 type SkillView struct {
 	Name        string            `json:"name"`
+	Bundle      string            `json:"bundle,omitempty"` // the plugin it came with
 	Description string            `json:"description"`
 	Source      string            `json:"source,omitempty"`
 	Kind        string            `json:"kind"`             // github, git, folder, or "" for one kept in the library
@@ -511,8 +512,10 @@ type View struct {
 	Subagents      []SubagentView      `json:"subagents"`
 	SubagentAgents []SubagentAgentView `json:"subagentAgents"`
 	FoundServers   []Found             `json:"foundServers"`
-	Skills         []SkillView         `json:"skills"`
-	FoundSkills    []FoundSkill        `json:"foundSkills"`
+	// Plugins are the plugins kept as one item each (plugin.go)
+	Plugins     []PluginView `json:"plugins"`
+	Skills      []SkillView  `json:"skills"`
+	FoundSkills []FoundSkill `json:"foundSkills"`
 	// NewSkills are skills a check found its skills' repositories, or
 	// the folders they were added from, to have beside them since, to
 	// add or set aside
@@ -704,9 +707,10 @@ func readView(problems []Problem, glance bool) (*View, error) {
 	}
 	v.Hooks, v.HookAgents = l.hooksView(append(slices.Clone(targets), gone...), asleep, of)
 	v.Subagents, v.SubagentAgents = l.subagentsView(targets, asleep, of)
+	v.Plugins = l.pluginsView()
 	tr := &tracer{}
 	for _, s := range l.Skills {
-		sv := SkillView{Name: s.Name, Agents: append([]string{}, s.Agents...), Icon: skillIcon(s), Problems: of("skill:" + s.Name), Repo: tr.repoOf(s), OffHere: s.OffHere, Note: s.Note, Router: s.Router}
+		sv := SkillView{Name: s.Name, Bundle: s.Bundle, Agents: append([]string{}, s.Agents...), Icon: skillIcon(s), Problems: of("skill:" + s.Name), Repo: tr.repoOf(s), OffHere: s.OffHere, Note: s.Note, Router: s.Router}
 		if s.Source != nil {
 			sv.Source, sv.Kind = s.Source.String(), s.Source.Kind
 		}

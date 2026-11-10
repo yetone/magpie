@@ -33,7 +33,8 @@ import (
 // Server is one MCP server: a command magpie's agents start, or a URL they
 // reach.
 type Server struct {
-	Name string `json:"name"`
+	Name   string `json:"name"`
+	Bundle string `json:"bundle,omitempty"` // the Claude Code plugin it came with (plugin.go)
 	// Transport is stdio for a command, http (streamable) or sse for a URL.
 	Transport string            `json:"transport"`
 	Command   string            `json:"command,omitempty"`

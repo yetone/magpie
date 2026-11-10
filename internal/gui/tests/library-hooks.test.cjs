@@ -152,7 +152,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         // the tab, with its count, between Skills and Subagents
         const tabs = (await v.locator(".lib-tabs button").allTextContents()).map((x) => x.trim());
-        assert.deepEqual(tabs.slice(3, 7), [w("Skills"), w("Hooks") + " · 2", w("Subagents"), "RTK"]);
+        assert.deepEqual(tabs.slice(3, 8), [w("Skills"), w("Hooks") + " · 2", w("Subagents"), w("Claude plugins"), "RTK"]);
         // each hook says when it runs, in words, and what it runs
         assert.equal((await row("fmt").locator(".lib-hookev").textContent()).trim(), w("After a tool runs") + " · " + w("File edits"));
         assert.equal((await row("bark").locator(".lib-hookev").textContent()).trim(), w("When a turn ends"));

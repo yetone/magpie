@@ -702,7 +702,7 @@ magpie.plugin("library", (ctx) => {
       ul.append(li);
     }
     if (ul.childElementCount) card.append(ul);
-    const tabNames = { instructions: t("Instructions"), mcp: t("MCP servers"), skills: t("Skills"), hooks: t("Hooks"), subagents: t("Subagents") };
+    const tabNames = { instructions: t("Instructions"), mcp: t("MCP servers"), skills: t("Skills"), hooks: t("Hooks"), subagents: t("Subagents"), plugins: t("Claude plugins") };
     const others = Object.keys(away).filter((k) => k in tabNames);
     if (others.length) {
       const more = el("div", "lib-problems-away");
@@ -738,7 +738,7 @@ magpie.plugin("library", (ctx) => {
   }
   // the tab a problem is about; "" is one shown on every tab
   function problemTab(what) {
-    return { instructions: "instructions", mcp: "mcp", skill: "skills", skills: "skills", project: "skills", hook: "hooks", hooks: "hooks", subagent: "subagents" }[what.split(":")[0]] || "";
+    return { instructions: "instructions", mcp: "mcp", skill: "skills", skills: "skills", project: "skills", hook: "hooks", hooks: "hooks", subagent: "subagents", plugin: "plugins" }[what.split(":")[0]] || "";
   }
   function problemWhat(what) {
     const [kind, ...rest] = what.split(":");
@@ -851,6 +851,7 @@ magpie.plugin("library", (ctx) => {
       ["skills", t("Skills") + n("skills")],
       ["hooks", t("Hooks") + n("hooks")],
       ["subagents", t("Subagents") + n("subagents")],
+      ["plugins", t("Claude plugins") + n("plugins")],
       ["rtk", "RTK"],
       ["bili", "billion-context"],
       ...(hasPi() ? [["pi", t("Pi packages")]] : []),
@@ -909,7 +910,7 @@ magpie.plugin("library", (ctx) => {
     if (agentless()) tab = "mcp";
     // Pi's tab only while a Pi is here; the pick is kept for when one is
     else if (tab === "pi" && !hasPi()) tab = "instructions";
-    const head = libHead({ mcp: lib.servers.length, skills: lib.skills.length, hooks: (lib.hooks || []).length, subagents: (lib.subagents || []).length });
+    const head = libHead({ mcp: lib.servers.length, skills: lib.skills.length, hooks: (lib.hooks || []).length, subagents: (lib.subagents || []).length, plugins: (lib.plugins || []).length });
     page.append(head);
     head.classList.toggle("stuck", top > 0);
     // what changed in a tab is drawn in place: only another tab (or the
@@ -926,6 +927,7 @@ magpie.plugin("library", (ctx) => {
     else if (tab === "pi") renderPi(body);
     else if (tab === "hooks") renderHooks(body);
     else if (tab === "subagents") renderSubagents(body);
+    else if (tab === "plugins") renderPlugins(body);
     else renderSkills(body);
     page.append(body);
     for (const n of body.querySelectorAll(".row-head .note")) n.title = n.textContent;
@@ -4380,6 +4382,160 @@ magpie.plugin("library", (ctx) => {
     modal = { save, dirty: () => JSON.stringify(d) !== original };
     openLib(ed);
     if (!s) requestAnimationFrame(() => name.focus());
+  }
+
+  // ---------- Claude plugins ----------
+
+  // A Claude Code plugin kept as one item (FakeshadowzZ on X): its skills,
+  // MCP servers, hooks and subagents are ordinary library items marked with
+  // the plugin, so each agent gets them through the code that writes that
+  // kind, and the other tabs go on listing them. The plugin's switch, its
+  // agents and Remove act on every part at once (library/plugin.go).
+  let plProbe = null;    // plugins found at an address: { source, found, pick:Set, agents }
+  let plProbing = false;
+  const pluginParts = (p) => [
+    p.skills?.length ? t("Skills: {names}", { names: p.skills.join(", ") }) : "",
+    p.mcp?.length ? t("MCP servers: {names}", { names: p.mcp.join(", ") }) : "",
+    p.hooks?.length ? t("Hooks: {names}", { names: p.hooks.join(", ") }) : "",
+    p.subagents?.length ? t("Subagents: {names}", { names: p.subagents.join(", ") }) : "",
+  ].filter(Boolean).join(" · ");
+
+  function renderPlugins(body) {
+    body.append(intro(t("A Claude Code plugin is skills, MCP servers, hooks and subagents in one package. Install it once: magpie gives each part to the agents you pick, and you turn the plugin on, off or remove it as a whole. Its parts also show under their own tabs.")));
+    body.append(pluginFind());
+    const all = shownAgents();
+    const plugins = lib.plugins || [];
+    if (!plugins.length) {
+      body.append(empty(t("No Claude plugins in the library yet"), t("Install one from a folder, a git address or a marketplace.json.")));
+      return;
+    }
+    const list = el("div", "list lib-list");
+    list.append(...[...plugins].sort((a, b) => a.name.localeCompare(b.name)).map((p) => pluginRow(p, all)));
+    body.append(list);
+  }
+
+  function pluginFind() {
+    const card = el("div", "list lib-card lib-install lib-plfind");
+    const line = el("div", "lib-find");
+    const inp = el("input");
+    inp.type = "text";
+    inp.dataset.lib = "plsource";
+    inp.placeholder = t("owner/repo, a git address, or a folder with a plugin or a marketplace.json");
+    inp.spellcheck = false;
+    inp.autocomplete = "off";
+    inp.value = plProbe?.source || "";
+    const go = button(plProbing ? t("Looking…") : t("Find plugins"), "action", () => find());
+    go.disabled = plProbing;
+    if (plProbing) go.classList.add("busy");
+    inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") find(); else if (e.key === "Escape" && plProbe) { plProbe = null; render(); } };
+    line.append(glyph(GLYPH.search, "lib-mini"), inp, go);
+    card.append(line);
+    async function find() {
+      const src = inp.value.trim();
+      if (!src || plProbing) return;
+      plProbing = true;
+      plProbe = { source: src };
+      render();
+      try {
+        const f = await api("library/plugins/probe", { source: src });
+        const fresh = f.candidates.filter((c) => !c.have);
+        plProbe = { source: src, found: f, pick: new Set((fresh.length === 1 ? fresh : []).map((c) => c.name)), agents: shownAgents().map((a) => a.id) };
+        if (!f.candidates.length) status(t("No Claude plugin found there"), "warn");
+      } catch (e) {
+        plProbe = { source: src, error: e.message };
+      }
+      plProbing = false;
+      render();
+    }
+    if (plProbe?.error) card.append(el("div", "lib-err", plProbe.error));
+    if (plProbe?.found?.candidates.length) card.append(pluginPicks(plProbe));
+    return card;
+  }
+
+  function pluginPicks(p) {
+    const box = el("div", "lib-probe");
+    const list = el("div", "lib-picks");
+    for (const x of p.found.candidates) {
+      const r = el("label", "lib-pick lib-plpick" + (x.have ? " dim" : ""));
+      const cb = el("input");
+      cb.type = "checkbox";
+      cb.checked = p.pick.has(x.name);
+      cb.onchange = () => { if (cb.checked) p.pick.add(x.name); else p.pick.delete(x.name); syncGo(); };
+      const w = el("span", "who");
+      w.append(el("span", "name", x.name), el("span", "sub", x.description || ""));
+      const count = (n) => (n ? [String(n)] : []);
+      const parts = x.remote ? t("Fetched from its own repository when installed")
+        : pluginParts({ skills: count(x.skills), mcp: count(x.mcp), hooks: count(x.hooks), subagents: count(x.subagents) });
+      if (parts) w.append(el("span", "sub lib-plparts", parts));
+      r.append(cb, w);
+      if (x.have) r.append(tag(t("in the library"), ""));
+      list.append(r);
+    }
+    box.append(list);
+    const foot = el("div", "lib-probefoot");
+    const agentsBox = el("div");
+    const drawAgents = () => agentsBox.replaceChildren(agentChips(shownAgents(), p.agents, (n) => { p.agents = n; drawAgents(); }, { names: false, all: true }));
+    drawAgents();
+    foot.append(el("span", "note", t("for")), agentsBox, el("span", "grow"));
+    foot.append(button(t("Cancel"), "", () => { plProbe = null; render(); }));
+    const go = button("", "primary", async () => {
+      go.disabled = true;
+      go.textContent = t("Installing…");
+      const n = p.pick.size;
+      if (await change("plugins/install", { source: p.source, names: [...p.pick], agents: p.agents }, n === 1 ? t("1 plugin installed") : t("{n} plugins installed", { n }))) { plProbe = null; render(); }
+      else { go.disabled = false; syncGo(); }
+    });
+    const syncGo = () => { const n = p.pick.size; go.textContent = n === 1 ? t("Install 1 plugin") : t("Install {n} plugins", { n }); go.disabled = !n; };
+    syncGo();
+    foot.append(go);
+    box.append(foot);
+    return box;
+  }
+
+  function pluginRow(p, all) {
+    const row = el("div", "row lib-row click lib-plugin" + (p.off ? " off" : ""));
+    const who = el("div", "who");
+    who.append(el("div", "name mono", p.name + (p.version ? " " + p.version : "")));
+    if (p.description) who.append(el("div", "lib-subagentdesc", p.description));
+    const line = pluginParts(p);
+    if (line) who.append(el("div", "sub lib-plparts", line));
+    row.append(glyph(GLYPH.folder), who,
+      agentChips(all, p.agents, chipsChange("plugins/agents", p.name, "plugins", (x) => pluginRow(x, all)), { all: true }),
+      toggle(!p.off, t("Turn {name} on or off", { name: p.name }), (v) => change("plugins/on", { name: p.name, on: v },
+        v ? t("{name} is on again", { name: p.name }) : t("{name} is off for every agent", { name: p.name }))));
+    row.onclick = () => pluginDetail(p);
+    row.title = t("Open the plugin {name}", { name: p.name });
+    return row;
+  }
+
+  function pluginDetail(p) {
+    const ed = el("div", "editor lib-editor lib-pldetail");
+    const head = el("div", "ehead");
+    head.append(glyph(GLYPH.folder), el("b", "", p.name));
+    ed.append(head);
+    if (p.description) ed.append(el("p", "lib-subagentdesc", p.description));
+    const rows = [[t("Skills"), p.skills], [t("MCP servers"), p.mcp], [t("Hooks"), p.hooks], [t("Subagents"), p.subagents]].filter(([, v]) => v?.length);
+    for (const [label, names] of rows) ed.append(...field(label, el("div", "mono lib-plnames", names.join(", "))));
+    if (p.missing?.length) ed.append(el("div", "hint lib-plmissing", t("Taken out by hand: {names}", { names: p.missing.join(", ") })));
+    if (p.left?.length) {
+      const left = el("div", "lib-plleft");
+      for (const x of p.left) left.append(el("div", "hint", x.what + " — " + x.why));
+      ed.append(...field(t("Not carried"), left));
+    }
+    if (p.source) ed.append(el("div", "hint lib-plsource mono", p.source + (p.pick ? " · " + p.pick : "")));
+    const bar = el("div", "bar");
+    bar.append(button(t("Remove from the library"), "danger", async () => {
+      if (!await confirmRemoval(p.name, "It will be removed from the library, with its skills, MCP servers, hooks and subagents, and from the agents they were given to.")) return;
+      if (await change("plugins/remove", { name: p.name }, t("{name} is out of the library and the agents it was given to", { name: p.name }))) closeLibModal(true);
+    }));
+    bar.append(el("span", "grow"));
+    if (p.source) bar.append(button(t("Update"), "", async () => {
+      if (await change("plugins/update", { name: p.name }, t("{name} read again from its source", { name: p.name }))) closeLibModal(true);
+    }));
+    bar.append(button(t("Cancel"), "", closeLibModal));
+    ed.append(bar);
+    modal = { dirty: () => false };
+    openLib(ed);
   }
 
   // ---------- skills ----------

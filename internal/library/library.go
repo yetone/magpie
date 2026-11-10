@@ -32,6 +32,10 @@ type Library struct {
 	// Subagents are agents of their own the agents ticked for each can
 	// hand a task to (subagents.go, #2283)
 	Subagents []*Subagent `json:"subagents,omitempty"`
+	// Plugins are the Claude Code plugins kept as one item each: its
+	// skills, servers, hooks and subagents are the items above marked
+	// with its name (plugin.go)
+	Plugins []*Plugin `json:"plugins,omitempty"`
 	// Applied is what magpie wrote into each agent, so that what it takes
 	// away is only ever its own.
 	Applied map[string]*Applied `json:"applied,omitempty"`

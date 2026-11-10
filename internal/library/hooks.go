@@ -40,7 +40,8 @@ import (
 
 // Hook is a command the agents ticked for it run at Event.
 type Hook struct {
-	Name string `json:"name"`
+	Name   string `json:"name"`
+	Bundle string `json:"bundle,omitempty"` // the plugin it came with (plugin.go)
 	// Description says what the hook is for, in any language (#2011):
 	// the name is letters, digits, - and _, which says little to someone
 	// who reads Chinese. Only the library keeps it; no agent is given it.

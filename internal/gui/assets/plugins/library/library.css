@@ -789,6 +789,10 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-subagent > .who { flex-basis: 240px; }
 .lib-subagent .lib-subagentdesc { font-size: 12px; line-height: 1.45; color: var(--fg); white-space: normal; overflow-wrap: anywhere; margin-top: 1px; }
 .lib-subagent .lib-subagentuses { white-space: normal; overflow-wrap: anywhere; }
+.lib-plugin > .who { flex-basis: 240px; }
+.lib-plugin.off .name, .lib-plugin.off .lib-subagentdesc { opacity: .55; }
+.lib-plugin .lib-plparts, .lib-plpick .lib-plparts { white-space: normal; overflow-wrap: anywhere; }
+.lib-pldetail .lib-plnames, .lib-pldetail .lib-plsource { white-space: normal; overflow-wrap: anywhere; }
 .lib-subagentedit .lib-menu { max-width: 100%; height: 28px; color: var(--fg); }
 .lib-subagentedit .lib-menu > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-subagentedit .lib-subagentdescin, .lib-subagentedit .lib-subagentprompt { width: 100%; box-sizing: border-box; resize: none; font: inherit; font-size: 12.5px; line-height: 1.45; }

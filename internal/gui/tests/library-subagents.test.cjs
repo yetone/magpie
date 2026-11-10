@@ -172,7 +172,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         // the tab, with its count, between Hooks and RTK
         const tabs = (await v.locator(".lib-tabs button").allTextContents()).map((x) => x.trim());
-        assert.deepEqual(tabs.slice(4, 7), [w("Hooks"), w("Subagents") + " · 1", "RTK"]);
+        assert.deepEqual(tabs.slice(4, 8), [w("Hooks"), w("Subagents") + " · 1", w("Claude plugins"), "RTK"]);
         // the row: what it is for, and what it binds
         assert.equal((await row("reviewer").locator(".lib-subagentdesc").textContent()).trim(), LONG);
         assert.equal((await row("reviewer").locator(".lib-subagentuses").textContent()).trim(), w("Skills: {names}", { names: "tdd" }) + " · " + w("MCP servers: {names}", { names: "github" }));

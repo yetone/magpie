@@ -53,6 +53,7 @@ import (
 // Subagent is one the agents ticked for it are given.
 type Subagent struct {
 	Name        string `json:"name"`
+	Bundle      string `json:"bundle,omitempty"` // the plugin it came with (plugin.go)
 	Description string `json:"description"`
 	Prompt      string `json:"prompt"`
 	// Model is the model or routing group the subagent runs on, as the
