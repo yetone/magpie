@@ -48,8 +48,8 @@ func noOwnClaude(t *testing.T) {
 func TestWSLProbeFindsClaude(t *testing.T) {
 	for _, want := range []string{`[ -d "$HOME/.claude" ] && echo dir:.claude`, `p=$(wslcmd claude) && echo "bin:claude $p"`,
 		`[ -d "$HOME/.pi" ] && echo dir:.pi`, `[ -d "$HOME/.codex" ] && echo dir:.codex`} {
-		if !strings.Contains(wslProbeScript, want) {
-			t.Errorf("probe lacks %q:\n%s", want, wslProbeScript)
+		if !strings.Contains(wslProbeScript(), want) {
+			t.Errorf("probe lacks %q:\n%s", want, wslProbeScript())
 		}
 	}
 	d := parseProbe("Debian", "home:/home/user\ndir:.claude\nbin:claude\n")

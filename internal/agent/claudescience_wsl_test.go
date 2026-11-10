@@ -81,7 +81,7 @@ func TestClaudeScienceInWSLUnderNAT(t *testing.T) {
 	if d := parseProbe("Ubuntu", "home:/home/me\nbin:claude-science /home/me/.local/bin/claude-science\n"); d == nil || !wslKindOf(ScienceID).found(*d) {
 		t.Fatal("the probe's claude-science isn't found")
 	}
-	if !strings.Contains(wslProbeScript, "wslcmd claude-science") {
+	if !strings.Contains(wslProbeScript(), "wslcmd claude-science") {
 		t.Error("the probe doesn't look for claude-science")
 	}
 	d := scienceDistro(t)

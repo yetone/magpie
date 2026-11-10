@@ -67,7 +67,7 @@ func TestWSLProbeFindsNodeManagersBins(t *testing.T) {
 			if _, err := os.Stat(filepath.Join(bin, "pi")); err != nil {
 				testenv.Program(t, filepath.Join(bin, "pi"), "#!/bin/sh\necho 0.73.1\n")
 			}
-			cmd := exec.Command("/bin/sh", "-c", wslProbeScript)
+			cmd := exec.Command("/bin/sh", "-c", wslProbeScript())
 			cmd.Env = []string{"HOME=" + home, "PATH=" + sys + ":/usr/bin:/bin"}
 			out, err := cmd.Output()
 			if err != nil {
@@ -108,7 +108,7 @@ func TestWSLProbeLooksPastWindowsCommand(t *testing.T) {
 		testenv.Program(t, filepath.Join(tools, "timeout"), "#!/bin/sh\nshift\nexec \"$@\"\n")
 	}
 
-	script := strings.ReplaceAll(wslProbeScript, "/proc/mounts", mounts)
+	script := strings.ReplaceAll(wslProbeScript(), "/proc/mounts", mounts)
 	cmd := exec.Command("/bin/sh", "-c", script)
 	cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin:" + tools + ":" + winNpm}
 	out, err := cmd.Output()

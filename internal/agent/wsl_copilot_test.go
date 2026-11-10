@@ -15,8 +15,8 @@ import (
 func TestWSLCopilotHome(t *testing.T) {
 	syncHome(t)
 	root := t.TempDir()
-	if !strings.Contains(wslProbeScript, `[ -d "$HOME/.copilot" ] && echo dir:.copilot; `) {
-		t.Fatalf("the probe doesn't look for the Copilot CLI's folder:\n%s", wslProbeScript)
+	if !strings.Contains(wslProbeScript(), `[ -d "$HOME/.copilot" ] && echo dir:.copilot; `) {
+		t.Fatalf("the probe doesn't look for the Copilot CLI's folder:\n%s", wslProbeScript())
 	}
 	t.Cleanup(FakeWSL(
 		map[string]string{"Ubuntu": "home:/home/jia\ndir:.copilot\n", "Debian": "home:/home/me\n"},

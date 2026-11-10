@@ -115,7 +115,7 @@ func TestOmoDir(t *testing.T) {
 // The WSL probe asks after OmO too.
 func TestWSLProbeFindsOmo(t *testing.T) {
 	for _, want := range []string{`[ -d "$HOME/.omo" ] && echo dir:.omo`, `p=$(wslcmd omo) && echo "bin:omo $p"`} {
-		if !strings.Contains(wslProbeScript, want) {
+		if !strings.Contains(wslProbeScript(), want) {
 			t.Errorf("probe lacks %q", want)
 		}
 	}

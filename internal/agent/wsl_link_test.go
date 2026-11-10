@@ -28,7 +28,7 @@ func TestWSLProbeLinks(t *testing.T) {
 	if err := os.Symlink(to, filepath.Join(home, ".codex")); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("/bin/sh", "-c", wslProbeScript)
+	cmd := exec.Command("/bin/sh", "-c", wslProbeScript())
 	cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin"}
 	out, _ := cmd.Output()
 	d := parseProbe("U", string(out))

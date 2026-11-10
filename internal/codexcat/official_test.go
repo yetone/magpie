@@ -63,8 +63,8 @@ func TestBundledIsCodexOwn(t *testing.T) {
 	if Prompt != string(p) {
 		t.Error("Prompt is not Codex's prompt.md")
 	}
-	if want := codexOwn(t); !reflect.DeepEqual(bundled, want) {
-		t.Errorf("bundled has %d models' instructions, Codex's models.json %d, or a text differs", len(bundled), len(want))
+	if want := codexOwn(t); !reflect.DeepEqual(bundled(), want) {
+		t.Errorf("bundled has %d models' instructions, Codex's models.json %d, or a text differs", len(bundled()), len(want))
 	}
 }
 

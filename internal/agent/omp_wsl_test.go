@@ -11,10 +11,10 @@ import (
 // One on Windows' drives isn't asked, and one that says no version is
 // taken for an older omp as before.
 func TestWSLOmpVersionProbed(t *testing.T) {
-	if !strings.Contains(wslProbeScript, `echo "ver:omp $(PATH="${p%/*}:$PATH" timeout 10 "$p" --version`) || !strings.Contains(wslProbeScript, `/mnt/*) ;;`) {
-		t.Fatalf("the probe doesn't ask omp its version: %s", wslProbeScript)
+	if !strings.Contains(wslProbeScript(), `echo "ver:omp $(PATH="${p%/*}:$PATH" timeout 10 "$p" --version`) || !strings.Contains(wslProbeScript(), `/mnt/*) ;;`) {
+		t.Fatalf("the probe doesn't ask omp its version: %s", wslProbeScript())
 	}
-	if strings.Contains(wslProbeScript, `"ver:codex`) {
+	if strings.Contains(wslProbeScript(), `"ver:codex`) {
 		t.Error("the probe asks a kind that doesn't need it")
 	}
 	d := parseProbe("U", "home:/home/me\nbin:omp /home/me/.bun/bin/omp\nver:omp omp/16.5.1\n")

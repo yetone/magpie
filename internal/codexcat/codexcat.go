@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
@@ -46,7 +47,9 @@ var Prompt string
 //go:embed codex_instructions.json
 var bundledJSON []byte
 
-var bundled = func() map[string]string {
+// It is read the first time a model asks, not at launch: ~0.5 MB a
+// launch that writes no Codex catalog (`magpie statusline`) never uses.
+var bundled = sync.OnceValue(func() map[string]string {
 	var b struct {
 		Instructions map[string]string `json:"instructions"`
 	}
@@ -54,7 +57,7 @@ var bundled = func() map[string]string {
 		panic(err)
 	}
 	return b.Instructions
-}()
+})
 
 // longestPrefix is the slug of slugs Codex takes a model's entry from:
 // the longest one the model's id starts with (codex-rs models-manager
@@ -97,8 +100,8 @@ func officialFor(own map[string]map[string]any, id string) (string, map[string]a
 			return text, msgs
 		}
 	}
-	if s := longestPrefix(slug, maps.Keys(bundled)); s != "" {
-		return bundled[s], nil
+	if s := longestPrefix(slug, maps.Keys(bundled())); s != "" {
+		return bundled()[s], nil
 	}
 	return Prompt, nil
 }

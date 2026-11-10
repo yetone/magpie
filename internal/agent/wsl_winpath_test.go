@@ -66,7 +66,7 @@ func TestWSLProbeScriptSaysWhere(t *testing.T) {
 	}
 	home, bin := t.TempDir(), t.TempDir()
 	testenv.Program(t, filepath.Join(bin, "pi"), "#!/bin/sh\n")
-	cmd := exec.Command(sh, "-c", wslProbeScript)
+	cmd := exec.Command(sh, "-c", wslProbeScript())
 	cmd.Env = []string{"HOME=" + home, "PATH=" + bin + ":/usr/bin:/bin"}
 	out, err := cmd.Output()
 	if err != nil {

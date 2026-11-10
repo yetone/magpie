@@ -1643,13 +1643,13 @@ func wslList(args ...string) (names []string, ok bool) {
 	return parseDistros(b), true
 }
 
-// wslProbeVersion is that of wslProbeScript: 2 says where each command is,
+// wslProbeVersion is that of wslProbeScript(): 2 says where each command is,
 // so one from Windows' drives isn't taken for the distro's own.
 // (wslinfo's networking mode came without a new version: a probe that
 // didn't ask leaves Net "", read as .wslconfig says, as before.)
 const wslProbeVersion = 2
 
-// wslProbeScript prints the distro's home, what of each of wslKinds it
+// wslProbeScript() prints the distro's home, what of each of wslKinds it
 // has (each command with where it is), where Windows' drives are mounted,
 // its default route (the Windows host under NAT), and WSL's networking
 // mode as wslinfo (WSL 2.0 on) says it; and the version of each that asks
@@ -1678,7 +1678,7 @@ const wslProbeVersion = 2
 // A command on Windows' drives isn't the distro's (parseProbe), so one
 // there is looked past (wslwin): WSL puts Windows' PATH on the distro's,
 // and a Pi npm installed on Windows hid the distro's own from wslbin.
-var wslProbeScript = func() string {
+var wslProbeScript = sync.OnceValue(func() string {
 	s := `nv="${NVM_DIR:-$HOME/.nvm}"; nd=; [ -s "$nv/nvm.sh" ] && command -v bash >/dev/null 2>&1 && nd=$(NVM_DIR="$nv" timeout 10 bash -c '. "$NVM_DIR/nvm.sh" --no-use >/dev/null 2>&1; nvm_version default 2>/dev/null' </dev/null 2>/dev/null); ` +
 		// Windows' drives, as /proc/mounts has them (C:\ written C:\134)
 		`wm=$(awk '$1 ~ /^[A-Za-z]:/ {print $2}' /proc/mounts 2>/dev/null); ` +
@@ -1723,7 +1723,7 @@ var wslProbeScript = func() string {
 	return s + `ip route show default 2>/dev/null | head -n1 | sed 's/^/route:/'; ` +
 		`grep -m1 '^nameserver' /etc/resolv.conf 2>/dev/null | sed 's/^/ns:/'; ` +
 		`command -v wslinfo >/dev/null 2>&1 && echo "net:$(wslinfo --networking-mode 2>/dev/null)"; true`
-}()
+})
 
 // wslLinkPaths are the paths under a distro's $HOME the probe asks where
 // they lead (distro.Links): each agent's folder and its skills, and the
@@ -1740,7 +1740,7 @@ func wslLinkPaths() []string {
 }
 
 func wslProbe(name string) *distro {
-	b, err := wslRun(30*time.Second, "-d", name, "-e", "sh", "-lc", wslProbeScript)
+	b, err := wslRun(30*time.Second, "-d", name, "-e", "sh", "-lc", wslProbeScript())
 	if err != nil {
 		return nil
 	}
@@ -1754,7 +1754,7 @@ func wslProbe(name string) *distro {
 	return d
 }
 
-// parseProbe reads wslProbeScript's output. A command on one of Windows'
+// parseProbe reads wslProbeScript()'s output. A command on one of Windows'
 // drives — WSL puts Windows' PATH on its own, so Windows npm's pi is
 // /mnt/c/Users/me/AppData/Roaming/npm/pi there — is Windows', not the
 // distro's.

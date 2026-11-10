@@ -185,9 +185,9 @@ func TestParseProbeOmpProfiles(t *testing.T) {
 	if v := d.place("omp#work@wsl:U").version; v != "16.5.1" {
 		t.Fatalf("profile place version %q", v)
 	}
-	if !strings.Contains(wslProbeScript, `for d in "$HOME"/.omp/profiles/*`) ||
-		!strings.Contains(wslProbeScript, `echo "profile:omp:$(basename "$d")"`) {
-		t.Fatalf("the probe doesn't list profiles: %s", wslProbeScript)
+	if !strings.Contains(wslProbeScript(), `for d in "$HOME"/.omp/profiles/*`) ||
+		!strings.Contains(wslProbeScript(), `echo "profile:omp:$(basename "$d")"`) {
+		t.Fatalf("the probe doesn't list profiles: %s", wslProbeScript())
 	}
 }
 

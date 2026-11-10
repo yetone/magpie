@@ -48,7 +48,7 @@ func TestWSLProbeNvmDefault(t *testing.T) {
 				}
 				os.WriteFile(filepath.Join(nvm, "nvm.sh"), []byte(c.nvmSh), 0o644)
 			}
-			cmd := exec.Command("/bin/sh", "-c", wslProbeScript)
+			cmd := exec.Command("/bin/sh", "-c", wslProbeScript())
 			cmd.Env = []string{"HOME=" + home, "PATH=" + sys + ":/usr/bin:/bin"}
 			out, err := cmd.Output()
 			if err != nil {

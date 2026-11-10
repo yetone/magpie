@@ -83,7 +83,7 @@ func TestWSLProbeFindsBunOmp(t *testing.T) {
 	if err := os.Symlink(to, filepath.Join(sys, "timeout")); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("/bin/sh", "-c", wslProbeScript)
+	cmd := exec.Command("/bin/sh", "-c", wslProbeScript())
 	cmd.Env = []string{"HOME=" + home, "PATH=" + sys + ":/usr/bin:/bin"}
 	out, err := cmd.Output()
 	if err != nil {

@@ -58,7 +58,7 @@ func TestParseProbeNet(t *testing.T) {
 			t.Errorf("%q: %+v", out, d)
 		}
 	}
-	if !strings.Contains(wslProbeScript, "wslinfo --networking-mode") {
+	if !strings.Contains(wslProbeScript(), "wslinfo --networking-mode") {
 		t.Error("probe doesn't ask wslinfo")
 	}
 }

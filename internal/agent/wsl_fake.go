@@ -12,7 +12,7 @@ import (
 
 // FakeWSL, for other packages' tests, stands in for wsl.exe on any
 // system: each distro named in probes is installed and running, answers
-// the probe with what probes has for it (wslProbeScript's output: "home:/
+// the probe with what probes has for it (wslProbeScript()'s output: "home:/
 // home/me\ndir:.codex\n…") and is opened at roots' folder for it. What
 // magpie remembers of WSL is forgotten, before and after; the returned
 // func puts everything back.
