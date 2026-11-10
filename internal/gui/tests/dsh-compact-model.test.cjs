@@ -3,7 +3,9 @@
 // latest model, so switching away from a model whose provider is out of its
 // limit failed on the compaction. Its row has a square for the model its
 // compactions go on, in the app's own picker; the Routing story says why a
-// compaction went there. All APIs are faked.
+// compaction went there. qtwaiter on X: with nothing set, a compaction on
+// a provider out of its limit goes to the same model from another
+// provider, and the story says that too. All APIs are faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -32,6 +34,8 @@ const seat = { id: "fake", provider: "fake", name: "Fake", who: "Test key", kind
 const routes = [
   { id: 1, seq: 1, time: at(0), agent: "dsh", model: "fake/m1", provider: "fake", kind: "compact", moved: { to: "fake/m2", why: "dsh-compact" },
     order: [seat], tries: [{ id: "fake", model: "m2", start: at(0), done: true, status: 200, ms: 900 }], done: true, status: 200, ms: 900, tokens: 1200 },
+  { id: 2, seq: 2, time: at(1), agent: "dsh", model: "workbuddy/deepseek-v4.1-flash", provider: "trae-cn", kind: "compact", moved: { to: "trae-cn/deepseek-v4.1-flash", why: "dsh-compact-rested" },
+    order: [{ ...seat, id: "trae-cn", provider: "trae-cn", name: "Trae CN", model: "deepseek-v4.1-flash" }], tries: [{ id: "trae-cn", model: "deepseek-v4.1-flash", start: at(1), done: true, status: 200, ms: 900 }], done: true, status: 200, ms: 900, tokens: 1200 },
 ];
 
 function server(lang, fixture) {
@@ -50,7 +54,7 @@ function server(lang, fixture) {
     }
     if (url.pathname === "/api/gateway/trace") {
       if (url.searchParams.has("wait")) return new Promise(() => {});
-      return json({ mine: true, now: now.toISOString(), seq: 1, totals: { requests: 1, rerouted: 0, errors: 0 }, routes });
+      return json({ mine: true, now: now.toISOString(), seq: 2, totals: { requests: 2, rerouted: 0, errors: 0 }, routes });
     }
     if (url.pathname === "/api/gateway/history") return json({ cut: false, days: [], routes: [] });
     if (url.pathname === "/api/gateway/session-titles") return json({ titles: {} });
@@ -70,15 +74,20 @@ function server(lang, fixture) {
 // Expected reader-facing words, independent of the translation lookup.
 const W = {
   en: { unset: "compaction model: the session's model", def: "Default", note: "each compaction on the session's model", set: "compaction model: M2",
-    moved: "DeepSeek Harness asked for fake/m1 to compact its conversation; magpie served it on fake/m2, the model set for its compaction." },
+    moved: "DeepSeek Harness asked for fake/m1 to compact its conversation; magpie served it on fake/m2, the model set for its compaction.",
+    rested: "DeepSeek Harness asked for workbuddy/deepseek-v4.1-flash to compact its conversation, and its provider is out of its limit; magpie served it on trae-cn/deepseek-v4.1-flash, the same model from another provider." },
   zh: { unset: "压缩模型：会话所用的模型", def: "默认", note: "每次压缩都用会话所用的模型", set: "压缩模型：M2",
-    moved: "DeepSeek Harness 请求用 fake/m1 压缩它的对话；magpie 让 fake/m2 来处理，即为它的压缩设定的模型。" },
+    moved: "DeepSeek Harness 请求用 fake/m1 压缩它的对话；magpie 让 fake/m2 来处理，即为它的压缩设定的模型。",
+    rested: "DeepSeek Harness 请求用 workbuddy/deepseek-v4.1-flash 压缩它的对话，而它的服务商已超出限额；magpie 让 trae-cn/deepseek-v4.1-flash 来处理，即另一家服务商的同一模型。" },
   "zh-TW": { unset: "壓縮模型：工作階段所用的模型", def: "預設", note: "每次壓縮都用工作階段所用的模型", set: "壓縮模型：M2",
-    moved: "DeepSeek Harness 請求用 fake/m1 壓縮它的對話；magpie 讓 fake/m2 來處理，即為它的壓縮設定的模型。" },
+    moved: "DeepSeek Harness 請求用 fake/m1 壓縮它的對話；magpie 讓 fake/m2 來處理，即為它的壓縮設定的模型。",
+    rested: "DeepSeek Harness 請求用 workbuddy/deepseek-v4.1-flash 壓縮它的對話，而它的服務商已超出限額；magpie 讓 trae-cn/deepseek-v4.1-flash 來處理，即另一家服務商的同一模型。" },
   ja: { unset: "圧縮モデル：セッションのモデル", def: "デフォルト", note: "圧縮はいつもセッションのモデルで行う", set: "圧縮モデル：M2",
-    moved: "DeepSeek Harness は会話の圧縮に fake/m1 をリクエストしました。magpie は fake/m2（圧縮用に設定されたモデル）で応答しました。" },
+    moved: "DeepSeek Harness は会話の圧縮に fake/m1 をリクエストしました。magpie は fake/m2（圧縮用に設定されたモデル）で応答しました。",
+    rested: "DeepSeek Harness は会話の圧縮に workbuddy/deepseek-v4.1-flash をリクエストしましたが、そのプロバイダーは上限に達しています。magpie は trae-cn/deepseek-v4.1-flash（別のプロバイダーの同じモデル）で応答しました。" },
   de: { unset: "Komprimierungsmodell: das Modell der Sitzung", def: "Standard", note: "jede Komprimierung auf dem Modell der Sitzung", set: "Komprimierungsmodell: M2",
-    moved: "DeepSeek Harness hat fake/m1 angefordert, um seine Unterhaltung zu komprimieren; magpie hat sie mit fake/m2 beantwortet, dem dafür eingestellten Modell." },
+    moved: "DeepSeek Harness hat fake/m1 angefordert, um seine Unterhaltung zu komprimieren; magpie hat sie mit fake/m2 beantwortet, dem dafür eingestellten Modell.",
+    rested: "DeepSeek Harness hat workbuddy/deepseek-v4.1-flash angefordert, um seine Unterhaltung zu komprimieren, doch sein Anbieter ist über seinem Limit; magpie hat sie mit trae-cn/deepseek-v4.1-flash beantwortet, demselben Modell eines anderen Anbieters." },
 };
 
 const row = '.row.agent[data-id="dsh"]';
@@ -153,12 +162,16 @@ for (const engine of engines) {
 
         fixture.state = fresh();
         await page.goto("http://magpie.test/?view=routing");
-        await page.locator(".rt-req").first().waitFor();
-        assert((await page.locator(".rt-req").first().getAttribute("title")).includes("\n" + w.moved), "the row's title says why");
-        await page.locator(".rt-req").first().evaluate((e) => e.click());
-        await page.waitForFunction(() => document.querySelector(".rt-req")?.getAttribute("aria-pressed") === "true");
-        const story = await page.locator(".rt-steps").textContent();
-        assert.equal(story.split(w.moved).length - 1, 1, `${w.moved}\nonce in\n${story}`);
+        await page.locator(".rt-req").nth(1).waitFor();
+        for (const why of [w.moved, w.rested]) {
+          const titles = await page.locator(".rt-req").evaluateAll((es) => es.map((e) => e.getAttribute("title") || ""));
+          const i = titles.findIndex((x) => x.includes("\n" + why));
+          assert(i >= 0, `no row's title says\n${why}\nin\n${titles.join("\n--\n")}`);
+          await page.locator(".rt-req").nth(i).evaluate((e) => e.click());
+          await page.waitForFunction((n) => document.querySelectorAll(".rt-req")[n]?.getAttribute("aria-pressed") === "true", i);
+          const story = await page.locator(".rt-steps").textContent();
+          assert.equal(story.split(why).length - 1, 1, `${why}\nonce in\n${story}`);
+        }
         assert.deepEqual(errors, []);
       });
     }

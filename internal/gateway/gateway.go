@@ -2518,6 +2518,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		asked = m
 		move(m, movedDshCompact)
 	}
+	// and, its provider out of its limit, on the same model from another
+	// provider: DSH compacts on the model it switches away from
+	if m := s.dshCompactElsewhere(r, agent, call.Kind, asked, from); m != "" {
+		asked = m
+		move(m, movedDshCompactRested)
+	}
 	// a Codex subagent on the model set for Codex's subagents, whatever
 	// its lead asked for (willz on Discord), and a Claude Desktop
 	// subagent's tool turn on the one set for Desktop's; one already put
