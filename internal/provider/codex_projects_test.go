@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -158,10 +159,11 @@ func codexStateFixture(t *testing.T, home string, a []byte, b []byte) string {
 // switched as magpie switches it, shows them on every account.
 func TestCodexProjectsFollowASwitch(t *testing.T) {
 	home := t.TempDir()
+	rec := filepath.Join(t.TempDir(), "codex-projects.json")
 	a, b, c := codexTestAuth("user-a", "acct-a"), codexTestAuth("user-b", "acct-b"), codexTestAuth("user-c", "acct-c")
 	path := codexStateFixture(t, home, a, b)
 
-	n, err := carryCodexProjects(home, [][]byte{a, b, c})
+	n, err := shareCodexProjects(home, [][]byte{a, b, c}, rec)
 	if err != nil || n != 2 {
 		t.Fatalf("carried to %d (%v), want b and c", n, err)
 	}
@@ -206,39 +208,148 @@ func TestCodexProjectsFollowASwitch(t *testing.T) {
 		t.Fatalf("no backup: %v", err)
 	}
 	// once more: nothing to do
-	if n, err := carryCodexProjects(home, [][]byte{a, b, c}); n != 0 || err != nil {
+	if n, err := shareCodexProjects(home, [][]byte{a, b, c}, rec); n != 0 || err != nil {
 		t.Fatalf("carried again to %d (%v)", n, err)
 	}
 }
 
-// A project the user added or removed on an account is that account's:
-// an identity with a list of its own, an emptied one too, is left alone,
-// and the source can be a parked identity when the owner has none.
-func TestCodexProjectsOwnListKept(t *testing.T) {
+// add is the user adding a folder as a project in the app's sidebar.
+func (s *codexAppSim) add(id, root string) {
+	lp, _ := s.state["local-projects"].(map[string]any)
+	if lp == nil {
+		lp = map[string]any{}
+	}
+	lp[id] = map[string]any{"id": id, "name": filepath.Base(root), "rootPaths": []any{root}, "createdAt": 3, "updatedAt": 3}
+	s.state["local-projects"] = lp
+	po, _ := s.state["project-order"].([]any)
+	s.state["project-order"] = append(po, id)
+}
+
+// remove is the user removing a project from the sidebar.
+func (s *codexAppSim) remove(id string) {
+	lp, _ := s.state["local-projects"].(map[string]any)
+	delete(lp, id)
+	var po []any
+	for _, e := range anyStrings(s.state["project-order"]) {
+		if e != id {
+			po = append(po, e)
+		}
+	}
+	s.state["project-order"] = po
+}
+
+func shareOnce(t *testing.T, home, rec string, want int, auths ...[]byte) {
+	t.Helper()
+	if n, err := shareCodexProjects(home, auths, rec); n != want || err != nil {
+		t.Fatalf("shared with %d (%v), want %d", n, err, want)
+	}
+}
+
+func shows(t *testing.T, path string, who []byte, want ...string) *codexAppSim {
+	t.Helper()
+	app := codexAppLaunch(t, path)
+	app.signIn(who)
+	if got := app.projects(); !slices.Equal(got, want) {
+		t.Fatalf("%s's account shows %v, want %v", codexIdentityOf(who).user, got, want)
+	}
+	return app
+}
+
+// Michael25651150 on X: projects are kept however accounts are switched.
+// Every account shows every account's projects, even one that has a list
+// of its own, and a folder added on two accounts is one project, its
+// threads with it.
+func TestCodexProjectsShared(t *testing.T) {
 	home := t.TempDir()
-	a, b := codexTestAuth("user-a", "acct-a"), codexTestAuth("user-b", "acct-b")
+	rec := filepath.Join(t.TempDir(), "codex-projects.json")
+	a, b, c := codexTestAuth("user-a", "acct-a"), codexTestAuth("user-b", "acct-b"), codexTestAuth("user-c", "acct-c")
 	path := codexStateFixture(t, home, a, b)
 	app := codexAppLaunch(t, path)
 	app.signIn(a)
-	app.signIn(b)
-	app.state["local-projects"] = map[string]any{} // b removed them all
-	app.save(t, path)
+	app.signIn(b) // a switch with the app open: b's own list
+	app.add("p-b", "/Users/me/b")
+	app.add("p-dup", "/Users/me/site/") // a's p-site, added again on b
+	app.state["thread-project-assignments"] = map[string]any{"t5": "p-b"}
+	app.save(t, path) // the app quit
+
+	shareOnce(t, home, rec, 2, a, b, c) // a and c; b has them all
+	app = shows(t, path, a, "g-p-1", "p-b", "p-site")
+	if got := app.state["thread-project-assignments"].(map[string]any); got["t5"] != "p-b" || got["t1"] != "p-site" {
+		t.Fatalf("a's thread-project-assignments %v", got)
+	}
+	shows(t, path, b, "p-b", "p-dup")
+	app = shows(t, path, c, "p-b", "p-dup")
+	if got := app.state["thread-project-assignments"].(map[string]any); got["t1"] != "p-dup" || got["t5"] != "p-b" || len(got) != 2 {
+		t.Fatalf("c's thread-project-assignments %v: a's thread in site, under c's id for it", got)
+	}
+	// once more: nothing to do, nothing written
 	before, _ := os.ReadFile(path)
-	if n, err := carryCodexProjects(home, [][]byte{a, b}); n != 0 || err != nil {
-		t.Fatalf("carried to %d (%v)", n, err)
-	}
+	shareOnce(t, home, rec, 0, a, b, c)
 	if after, _ := os.ReadFile(path); string(after) != string(before) {
-		t.Fatal("the file was written with nothing to carry")
+		t.Fatal("the file was written with nothing to share")
 	}
-	// c, new, gets a's parked projects
-	c := codexTestAuth("user-c", "acct-c")
-	if n, err := carryCodexProjects(home, [][]byte{a, b, c}); n != 1 || err != nil {
-		t.Fatalf("carried to %d (%v), want c", n, err)
+}
+
+// A project the user removes on one account is removed from every
+// account, not given back from another, and comes back only when the
+// user adds it again.
+func TestCodexProjectsRemovalRemembered(t *testing.T) {
+	home := t.TempDir()
+	rec := filepath.Join(t.TempDir(), "codex-projects.json")
+	a, b, c := codexTestAuth("user-a", "acct-a"), codexTestAuth("user-b", "acct-b"), codexTestAuth("user-c", "acct-c")
+	path := codexStateFixture(t, home, a, b)
+	shareOnce(t, home, rec, 2, a, b, c)
+
+	app := codexAppLaunch(t, path)
+	app.signIn(a)
+	app.add("p-new", "/Users/me/new") // added on a
+	app.signIn(b)
+	if got := app.projects(); !slices.Equal(got, []string{"p-site"}) {
+		t.Fatalf("b shows %v", got)
 	}
+	app.remove("p-site") // removed on b
+	app.save(t, path)
+
+	shareOnce(t, home, rec, 3, a, b, c)
+	for range 2 {
+		app = shows(t, path, a, "g-p-1", "p-new")
+		if got := anyStrings(app.state["project-order"]); slices.Contains(got, "p-site") {
+			t.Fatalf("a's project-order %v", got)
+		}
+		if got := app.state["thread-project-assignments"].(map[string]any); got["t1"] != nil {
+			t.Fatalf("a's thread-project-assignments %v", got)
+		}
+		shows(t, path, b, "p-new")
+		shows(t, path, c, "p-new")
+		shareOnce(t, home, rec, 0, a, b, c) // and it stays gone
+	}
+
+	// added again on c, under a new id: back on every account
 	app = codexAppLaunch(t, path)
 	app.signIn(c)
-	if got := app.projects(); !slices.Equal(got, []string{"p-site"}) {
-		t.Fatalf("c shows %v", got)
+	app.add("p-site2", "/Users/me/site")
+	app.save(t, path)
+	shareOnce(t, home, rec, 2, a, b, c)
+	shows(t, path, a, "g-p-1", "p-new", "p-site2")
+	shows(t, path, b, "p-new", "p-site2")
+}
+
+// What was removed is unknown when magpie's record can't be read: the
+// file isn't written then.
+func TestCodexProjectsRecordUnreadable(t *testing.T) {
+	home := t.TempDir()
+	rec := filepath.Join(t.TempDir(), "codex-projects.json")
+	if err := os.WriteFile(rec, []byte(`{"identities":`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a, b := codexTestAuth("user-a", "acct-a"), codexTestAuth("user-b", "acct-b")
+	path := codexStateFixture(t, home, a, b)
+	before, _ := os.ReadFile(path)
+	if n, err := shareCodexProjects(home, [][]byte{a, b}, rec); n != 0 || err == nil {
+		t.Fatalf("shared with %d (%v)", n, err)
+	}
+	if after, _ := os.ReadFile(path); string(after) != string(before) {
+		t.Fatal("written without knowing what was removed")
 	}
 }
 
@@ -252,11 +363,12 @@ func TestCodexProjectsUnknownFileLeft(t *testing.T) {
 		"odd shape": `{"electron-account-renderer-state-v1":{"owner":1,"inactive":[]}}`,
 	} {
 		home := t.TempDir()
+		rec := filepath.Join(t.TempDir(), "codex-projects.json")
 		path := codexGlobalStatePath(home)
 		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		n, _ := carryCodexProjects(home, [][]byte{a, b})
+		n, _ := shareCodexProjects(home, [][]byte{a, b}, rec)
 		if got, _ := os.ReadFile(path); n != 0 || string(got) != body {
 			t.Fatalf("%s: carried to %d, file %s", name, n, got)
 		}
@@ -264,7 +376,7 @@ func TestCodexProjectsUnknownFileLeft(t *testing.T) {
 			t.Fatalf("%s: a backup written", name)
 		}
 	}
-	if n, err := carryCodexProjects(t.TempDir(), [][]byte{a}); n != 0 || err != nil {
+	if n, err := shareCodexProjects(t.TempDir(), [][]byte{a}, filepath.Join(t.TempDir(), "rec.json")); n != 0 || err != nil {
 		t.Fatalf("no file: %d %v", n, err)
 	}
 }
@@ -313,6 +425,9 @@ func TestCodexProjectsStepWaitsForTheAppToClose(t *testing.T) {
 	app.signIn(b)
 	if got := app.projects(); !slices.Equal(got, []string{"p-site"}) {
 		t.Fatalf("b, signed in now, shows %v once the app closed", got)
+	}
+	if _, err := os.Stat(codexProjectsRecordPath()); err != nil {
+		t.Fatalf("no record of what each account has: %v", err)
 	}
 }
 
