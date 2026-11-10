@@ -828,7 +828,22 @@ func mergeKey(pid, model string, same map[string]string) string {
 	if v := same[pid+"/"+model]; v != "" {
 		return sameModel(v)
 	}
+	if v := editionTwins[pid+"/"+model]; v != "" {
+		return sameModel(v)
+	}
 	return sameModel(model)
+}
+
+// editionTwins are the models a vendor's international edition lists
+// under another id than its China edition does, which are the same model:
+// the found groups merge each with its twin, as they merge Qoder's and
+// Trae's two editions by their one id (Kts6M2fwWN43967 on X: WorkBuddy and
+// WorkBuddy AI stayed two rows). The user's own "same as" (ModelSameAs)
+// is read first. WorkBuddy AI lists deepseek-v4.1-flash under its paid
+// id, -sg, which the product config names as the free id's paid id
+// (allowPaidSwitch), so a signed-in account may list that one alone.
+var editionTwins = map[string]string{
+	"workbuddy-ai/deepseek-v4.1-flash-sg": "deepseek-v4.1-flash",
 }
 
 // AutoStandIn is the model a request for a group magpie found goes to while

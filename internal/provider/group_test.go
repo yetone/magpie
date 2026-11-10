@@ -138,3 +138,25 @@ func TestGroupSharesKimiFacts(t *testing.T) {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
 }
+
+// WorkBuddy AI lists deepseek-v4.1-flash under its paid id, -sg, so the
+// two editions' one model merged by id alone stayed two (Kts6M2fwWN43967
+// on X). The twin joins the group; another vendor's -sg id, and WorkBuddy
+// AI's other models, are unchanged.
+func TestAutoGroupsEditionTwins(t *testing.T) {
+	e := func(p, m string) Entry {
+		return Entry{ID: p + "/" + m, Model: m, Name: "DeepSeek-V4.1-Flash", Provider: Provider{ID: p}}
+	}
+	gs := autoGroups([]Entry{e("workbuddy", "deepseek-v4.1-flash"), e("workbuddy-ai", "deepseek-v4.1-flash-sg")}, nil)
+	if len(gs) != 1 || gs[0].ID != "auto-deepseek-v4-1-flash" || len(gs[0].Members) != 2 {
+		t.Fatalf("groups: %+v", gs)
+	}
+	if gs := autoGroups([]Entry{e("workbuddy", "deepseek-v4.1-flash"), e("other", "deepseek-v4.1-flash-sg")}, nil); len(gs) != 0 {
+		t.Errorf("another vendor's -sg model merged: %+v", gs)
+	}
+	// the user's own "same as" is read first
+	same := map[string]string{"workbuddy-ai/deepseek-v4.1-flash-sg": "deepseek-v4.1-flash-sg"}
+	if gs := autoGroups([]Entry{e("workbuddy", "deepseek-v4.1-flash"), e("workbuddy-ai", "deepseek-v4.1-flash-sg")}, same); len(gs) != 0 {
+		t.Errorf("the user's own same-as lost: %+v", gs)
+	}
+}
