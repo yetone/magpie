@@ -115,12 +115,18 @@ func packageOf(s *Server) string {
 	if s.Command == "docker" {
 		return s.Args[len(s.Args)-1]
 	}
-	for _, a := range s.Args {
+	uv := progName(s.Command) == "uvx"
+	for i := 0; i < len(s.Args); i++ {
+		a := s.Args[i]
+		if uv && a != "--from" && uvOpts[a] { // uvx -p 3.13: the value is not the package
+			i++
+			continue
+		}
 		if a == "" || strings.HasPrefix(a, "-") || a == "run" {
 			continue
 		}
-		if i := strings.LastIndex(a, "@"); i > 0 {
-			a = a[:i]
+		if j := strings.LastIndex(a, "@"); j > 0 {
+			a = a[:j]
 		}
 		return a
 	}
