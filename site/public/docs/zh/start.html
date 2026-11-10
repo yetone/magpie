@@ -312,6 +312,7 @@ magpie claude group/opus-anywhere    <span class="c"># 使用它</span></pre>
 
     <h3 id="data-folder"><a class="anchor" href="#data-folder">magpie 的文件能放到另一块磁盘上，重装系统也不丢吗？</a></h3>
     <p>安装版的 magpie 把设置、provider、用量和库放在 <code>~/.config/magpie</code>（Windows 上是 <code>C:\Users\&lt;你&gt;\.config\magpie</code>）。它每天自动备份一次，备份放在同一个文件夹的 <code>auto-backups</code> 里，所以重装系统时备份也会一起丢；<span class="ui">设置</span> → <span class="ui">同步与备份</span> 的 <span class="ui">备份文件夹</span> 下面会提示这一点。在那里点 <span class="ui">更改…</span>，选另一块磁盘上的文件夹（如 <code>D:\magpie-backups</code>）或网盘同步的文件夹。重装后装好 magpie，在同一处选回这个文件夹，再对最新的版本点 <span class="ui">恢复…</span>。备份里没有 API Key；打开 <span class="ui">备份登录信息</span> 会把订阅账号和插件登录也放进去，用口令加密。要连 Key 一起带走，在同一处设置同步到 WebDAV 文件夹、S3 存储桶或 GitHub 仓库，用口令加密。</p>
+    <p>想把 magpie 自己的文件放到那块磁盘（比如移动固态硬盘）上，就在同一处 <span class="ui">数据文件夹</span> 旁点 <span class="ui">移动…</span>，选那块盘上的一个文件夹。magpie 会重启，把文件和缓存移到其中名为 <code>magpie</code> 的文件夹里，并在原处留一个链接，其他都不用改。请保持那块盘连着：拔掉后 magpie 打不开，插回即可。点 <span class="ui">移回</span> 可移回本机。在终端里用 <code>magpie data move &lt;文件夹&gt;</code> 也一样。</p>
     <p>想把所有东西都放在那块磁盘上，就用便携模式：把 <code>magpie.exe</code> 放进那里的一个文件夹，旁边建一个名为 <code>data</code> 的空文件夹（<code>D:\magpie\magpie.exe</code> 和 <code>D:\magpie\data</code>）。这样 magpie 的一切，包括缓存和日志，都放在 <code>data</code> 里，不在你的用户文件夹里写任何自己的文件；<span class="ui">设置</span> → <span class="ui">关于</span> → <span class="ui">配置目录</span> 会显示便携模式。打开它，按上面的方法恢复一个备份。重装系统后，再打开 <code>D:\magpie\magpie.exe</code> 即可。各 Agent 自己的配置（<code>~/.claude</code>、<code>~/.codex</code>…）仍留在各自读取的位置。</p>
 
     <h3 id="log">magpie 的日志在哪里？</h3>

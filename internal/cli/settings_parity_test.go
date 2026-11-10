@@ -192,6 +192,8 @@ var cliForRoute = map[string]string{
 	"GET /api/davsync":                     "magpie webdav",
 	"POST /api/backup/export":              "magpie backup",
 	"POST /api/backup/import":              "magpie restore",
+	"GET /api/datafolder":                  "magpie data",
+	"POST /api/datafolder/{action}":        "magpie data move",
 	"POST /api/davsync/{action}":           "magpie webdav",
 	"GET /api/caller-keys":                 "magpie gateway-key list",
 	"POST /api/caller-keys/{action}":       "magpie gateway-key",

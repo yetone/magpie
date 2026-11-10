@@ -76,6 +76,7 @@ const usage = `magpie — one place to pick every agent's model
                                                      --sign-ins on backup: the subscriptions' and plugins' sign-ins too, sealed (off unless given); --no-sign-ins on restore leaves them out
   magpie uninstall [--yes]                           disconnect every agent, putting back what each had, then remove magpie's service and files
                                                      --keep-data: all but deleting magpie's settings, providers and usage
+  magpie data [move <folder>|move --home]            where magpie keeps its files and cache, and moving them to another disk (a link is left where they were)
   magpie webdav [on <address>|set k=v…|now|off]      the same, kept the same on every computer through a WebDAV folder (magpie webdav help)
   magpie s3 [on s3://<bucket>[/<prefix>]|set k=v…|now|off]   the same through an S3-compatible bucket: AWS, R2, B2, MinIO… (magpie s3 help)
   magpie github [on github://<owner>/<repo>[/<folder>]|set k=v…|now|off]   the same in an encrypted GitHub repository (magpie github help)
@@ -216,6 +217,8 @@ func Main(v string) {
 		fmt.Fprintln(os.Stderr, "magpie:", err)
 		os.Exit(1)
 	}
+	// moved to a disk that isn't connected: never an empty magpie in its place
+	unreachableStop(os.Args[1:])
 	slices.Sort(ignored)
 	for _, v := range ignored {
 		fmt.Fprintf(os.Stderr, "magpie: ignoring %s: not an absolute path (the programs magpie starts still get it)\n", v)
@@ -405,6 +408,8 @@ func run(args []string) error {
 			return toolCmd(args[1:])
 		case codexrelay.Command: // internal: what a quitting magpie leaves for Codex's open threads
 			return codexrelay.Main(args[1:], gateway.CodexRelay())
+		case "data": // where magpie's files are, and moving them: before anything is made in them
+			return dataCmd(args[1:])
 		case "uninstall":
 			// what the app starts as it quits from Settings › Uninstall
 			// magpie: nothing is made again before its folders go
@@ -422,6 +427,10 @@ func run(args []string) error {
 	// a command that serves no pages starts a plugin host beside the
 	// app's, whose page services it leaves to the app (#5187)
 	plugin.ServePages(servesPages(args))
+	// the app started again to move magpie's folders (Settings › General)
+	if servesPages(args) {
+		movePending()
+	}
 	startUp()
 	// a provider added, edited or removed, or a list fetched anew, reaches
 	// the model lists agents keep in files of their own, behind the save
