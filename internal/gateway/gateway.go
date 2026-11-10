@@ -1707,7 +1707,17 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 				// plain, so two providers' models of one name are told apart
 				// there as they are here
 				m["magpie_label"] = labels[i]
-				if agentOf(r) == "cursor-local" {
+				// for DeepSeek Harness: the same name as its name. Its
+				// Models page's model discovery (llm-pi-ai's readListing)
+				// names a row by name, then display_name, and display_name
+				// is the name alone, so two providers' models of one name
+				// read the same there, Kimi-K3.1-Pro of WorkBuddy and of
+				// Qoder CN (LeiWang_2000 on X), where the route magpie
+				// writes for it names them as its list does (dshKindConfig)
+				if agent == "dsh" {
+					m["name"] = labels[i]
+				}
+				if agent == "cursor-local" {
 					cursorLocalModel(m, e)
 				}
 				data = append(data, m)
