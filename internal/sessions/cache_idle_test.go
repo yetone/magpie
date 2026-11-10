@@ -42,6 +42,10 @@ func TestIdleParsesLetGoAndComeBackFromDisk(t *testing.T) {
 		rolloutsSeen.Range(func(any, any) bool { rollouts++; return true })
 		return
 	}
+	ccDirs := func() (n int) { ccListed.Range(func(any, any) bool { n++; return true }); return }
+	if ccDirs() == 0 {
+		t.Fatal("before: no Claude Code folder's listing kept; the test lists none")
+	}
 	// folders are listed so only on macOS (dirent.Stats)
 	if i, r := memos(); i == 0 || r == 0 && runtime.GOOS == "darwin" {
 		t.Fatalf("before: %d Codex identity lists and %d folders' rollouts kept; the test reads none", i, r)
@@ -52,8 +56,8 @@ func TestIdleParsesLetGoAndComeBackFromDisk(t *testing.T) {
 	if !dropIdleCache() || loaded || len(cache) != 0 || cacheDrops.Load() != drops+1 {
 		t.Fatalf("idle parses kept: loaded %v, %d in memory", loaded, len(cache))
 	}
-	if i, r := memos(); i != 0 || r != 0 {
-		t.Fatalf("idle: %d Codex identity lists and %d folders' rollouts kept", i, r)
+	if i, r := memos(); i != 0 || r != 0 || ccDirs() != 0 {
+		t.Fatalf("idle: %d Codex identity lists, %d folders' rollouts and %d Claude Code listings kept", i, r, ccDirs())
 	}
 
 	var parses atomic.Int32

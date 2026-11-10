@@ -109,7 +109,7 @@ func ccFamily(files []file) (copies, branches map[string]string) {
 		}
 		holds := func(b ccOne, uuid string) bool {
 			used[b.f.path] = true
-			return b.st.more().Leaf == uuid || ccUUIDsOf(*b.f)[uuid]
+			return b.st.more().Leaf == uuid || ccUUIDsOf(*b.f).has(uuid)
 		}
 		// before reports whether b is kept over a: the one that holds
 		// the other's first message too (a copy made after a compaction
@@ -215,7 +215,7 @@ var ccUUIDMemo = map[string]*ccUUIDs{}
 
 type ccUUIDs struct {
 	size, mod, off int64
-	set            map[string]bool
+	set            uuidSet
 	// forked is the session its messages say they were copied from
 	// (forkedFrom, which /branch writes on each), "" for none
 	forked string
@@ -235,10 +235,10 @@ var ccForked = []byte(`"forkedFrom":{`)
 
 // ccUUIDsOf is the uuids of the messages in f, read on from where the last
 // read stopped while the file only grew.
-func ccUUIDsOf(f file) map[string]bool {
+func ccUUIDsOf(f file) uuidSet {
 	m := ccUUIDMemo[f.path]
 	if m == nil || f.size < m.size || f.size == m.size && f.mod.UnixNano() != m.mod {
-		m = &ccUUIDs{set: map[string]bool{}}
+		m = &ccUUIDs{set: uuidSet{}}
 		ccUUIDMemo[f.path] = m
 	}
 	if m.size == f.size && m.mod == f.mod.UnixNano() {
@@ -250,7 +250,7 @@ func ccUUIDsOf(f file) map[string]bool {
 		}
 		r := gjson.GetManyBytes(b, "type", "uuid")
 		if t := r[0].String(); (t == "user" || t == "assistant") && r[1].Type == gjson.String {
-			m.set[r[1].String()] = true
+			m.set.add(r[1].Str)
 			if m.forked == "" && bytes.Contains(b, ccForked) {
 				m.forked = gjson.GetBytes(b, "forkedFrom.sessionId").String()
 			}
@@ -324,7 +324,7 @@ func ccRest(copyFile, keeper file) *state {
 			return true
 		}
 		r := gjson.GetManyBytes(b, "type", "uuid")
-		if t := r[0].String(); t != "user" && t != "assistant" || r[1].Type != gjson.String || held[r[1].String()] {
+		if t := r[0].String(); t != "user" && t != "assistant" || r[1].Type != gjson.String || held.has(r[1].Str) {
 			return true
 		}
 		line(s, b, copyFile.main)
