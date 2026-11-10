@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/yetone/magpie/internal/agent"
 )
 
 // antigravity is a sandbox home where Antigravity's CLI is set up, its
@@ -129,5 +131,26 @@ func TestAntigravityInstructionsAndSkills(t *testing.T) {
 	ok(t)(RemoveSkill("pdf"))
 	if _, err := os.Lstat(filepath.Join(cfg, "skills", "pdf")); !os.IsNotExist(err) {
 		t.Error("the skill is still there")
+	}
+}
+
+// xuanwo on X: the Antigravity app, an agent of its own beside agy, is a
+// target too, reading the same ~/.gemini/config (antigravity.google/docs/
+// skills, /mcp: the App and the CLI share it).
+func TestAntigravityAppTarget(t *testing.T) {
+	h := sandbox(t)
+	write(t, filepath.Join(h, ".gemini/antigravity/agyhub_summaries_proto.pb"), "x")
+	cfg := filepath.Join(h, ".gemini", "config")
+	a, err := agent.Find("antigravity")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tg := targetOf(a)
+	if tg == nil || tg.MCP == nil || tg.MCP.Path != filepath.Join(cfg, "mcp_config.json") ||
+		tg.Skills != filepath.Join(cfg, "skills") || tg.Instructions != filepath.Join(cfg, "GEMINI.md") {
+		t.Fatalf("target: %+v", tg)
+	}
+	if ProjectSkillsDir("antigravity") != ".agents/skills" {
+		t.Errorf("project skills: %q", ProjectSkillsDir("antigravity"))
 	}
 }

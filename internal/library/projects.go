@@ -92,6 +92,7 @@ var projectSkillsDirs = map[string]string{
 	"cursor":      ".agents/skills",
 	"copilot":     ".agents/skills",
 	"agy":         ".agents/skills",
+	"antigravity": ".agents/skills",
 	"kimi":        ".agents/skills",
 	"goose":       ".agents/skills",
 	"grok":        ".agents/skills",

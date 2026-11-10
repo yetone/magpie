@@ -167,7 +167,7 @@ func targetOf(a *agent.Agent) *Target {
 		t.Instructions = filepath.Join(d, "GEMINI.md")
 		t.MCP = &mcpFile{Path: filepath.Join(d, "settings.json"), Format: fmtGemini}
 		t.Skills = filepath.Join(d, "skills")
-	case "agy":
+	case "agy", "antigravity":
 		// Antigravity — the app and agy alike — reads its user-wide
 		// customizations from ~/.gemini/config: GEMINI.md there (as well as
 		// Gemini CLI's ~/.gemini/GEMINI.md), mcp_config.json and skills
