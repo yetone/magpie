@@ -131,6 +131,52 @@ func TestDriftBypassed(t *testing.T) {
 	}
 }
 
+// ifccod7391564 on X: the prompts magpie's bridge gives Claude Code, in
+// magpie's own work folder, go into its history.jsonl too. They reached
+// magpie, so they are no use round it: only the user's own prompts there
+// count as Claude Code bypassing magpie.
+func TestClaudeBridgePromptsArentBypass(t *testing.T) {
+	home, _ := codexHome(t, "", "")
+	managed := claudeManaged
+	claudeManaged = func() string { return filepath.Join(home, "managed-settings.json") }
+	t.Cleanup(func() { claudeManaged = managed })
+	defer func(s time.Time) { started = s }(started)
+	started = time.Now().Add(-time.Hour)
+	defer func(f func(string) time.Time) { lastSeen = f }(lastSeen)
+	lastSeen = func(string) time.Time { return time.Time{} }
+	a := claude(home)
+	if err := a.Apply("model", "fake/m1"); err != nil {
+		t.Fatal(err)
+	}
+	m := appliedLoad()
+	r := m["claude"]
+	r.At = time.Now().Add(-10 * time.Minute)
+	m["claude"] = r
+	appliedSave(m)
+	hist := filepath.Join(home, ".claude", "history.jsonl")
+	at := time.Now().Add(-5 * time.Minute).UnixMilli()
+	var lines string
+	for _, project := range []string{
+		"/private/var/folders/xz/6c5sgg_n3sgdlpc209dpp2n80000gn/T/magpie-claude-work-501", // the reporter's Mac
+		"/tmp/magpie-claude-work-1000/",
+		`C:\\Users\\me\\AppData\\Local\\Temp\\magpie-claude-work`,
+		"C:/Users/me/AppData/Local/Temp/magpie-claude-work",
+		"/mnt/c/Users/me/AppData/Local/Temp/magpie-claude-work",
+	} {
+		lines += fmt.Sprintf(`{"display":"[Pasted text #1 +30 lines]","timestamp":%d,"project":"%s","sessionId":"s"}`+"\n", at, project)
+	}
+	os.WriteFile(hist, []byte(lines), 0o600)
+	if d := a.Drift(); d != nil {
+		t.Fatalf("magpie's own prompts counted as bypass: %+v", d)
+	}
+	// the user's own prompt, in a folder of theirs, still does: even one
+	// whose name only starts like magpie's
+	os.WriteFile(hist, []byte(lines+fmt.Sprintf(`{"display":"hi","timestamp":%d,"project":"/Users/me/magpie-claude-workshop","sessionId":"u"}`+"\n", at)), 0o600)
+	if d := a.Drift(); d == nil || d.Kind != "bypassed" {
+		t.Fatalf("the user's own prompt: %+v", d)
+	}
+}
+
 // A profile that sets its own provider wins over magpie's top level.
 func TestCodexDriftProfile(t *testing.T) {
 	home, read := codexHome(t, "", "")

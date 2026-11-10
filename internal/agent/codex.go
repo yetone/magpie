@@ -2227,7 +2227,7 @@ func codexIn(at place) *Agent {
 			return ""
 		},
 		// every prompt typed into Codex goes into history.jsonl
-		LastUsed: func() time.Time { return lastJSONLTime(filepath.Join(dir, "history.jsonl"), "ts", "text") },
+		LastUsed: func() time.Time { return lastJSONLTime(filepath.Join(dir, "history.jsonl"), "ts", "text", nil) },
 		// the Codex app writes no history.jsonl, but it and the TUI log each
 		// model request they open
 		Reached: func(since time.Time) (time.Time, string, bool) { return codexReached(dir, since) },
