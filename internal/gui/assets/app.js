@@ -12233,6 +12233,22 @@ function routingOfDraft(p) {
   if (draft?.sink !== undefined && draft.sink !== !!p.sink) out.sink = draft.sink;
   return out;
 }
+// signInMovesLine says how magpie moves Codex's or Claude Code's own
+// sign-in between its accounts (provider.SignInMovesOf), "" when it
+// doesn't: the subscription is off
+function signInMovesLine(p, agent) {
+  const m = p.signInMoves;
+  if (!m) return "";
+  if (m.mode === "kept") return keptLogin(p)
+    ? t("Automatic switching is off: {agent} stays signed in to {user}, even once it runs out.", { agent, user: keptLogin(p) })
+    : t("Automatic switching is off: {agent} stays signed in to the first account, even once it runs out.", { agent });
+  if (m.mode === "gateway") return t("{agent}'s requests go through magpie, which sends each one to an account with room; its own sign-in stays where you put it.", { agent });
+  if (m.mode !== "moves") return "";
+  const on = m.share >= 100
+    ? t("When the account {agent} is signed in to is used up, magpie signs it in to the next ticked account with room.", { agent })
+    : t("When the account {agent} is signed in to reaches {share}%, magpie signs it in to the next ticked account with room.", { agent, share: m.share });
+  return on + (locale === "zh" || locale === "zh-TW" || locale === "ja" ? "" : " ") + (m.back ? t("It goes back to the first once that has room again.") : t("It stays on that one till it runs low too."));
+}
 function renderRouting(p) {
   const routingNow = () => draft.routing ?? (p.routing || "");
   const affinityNow = () => draft.affinity ?? (p.affinity || "");
@@ -12244,7 +12260,9 @@ function renderRouting(p) {
   const a = p.account;
   // — at 98%, In order once used up (#530), never when kept on the first (#524)
   const own = (routing) => !a || (a.agent !== "codex" && a.agent !== "claude") ? ""
-    : " " + (keptLogin(p)
+    : " " + (p.signInMoves?.mode === "gateway" && !keptLogin(p) && !p.keepLogin
+      ? t("{agent}'s requests go through magpie, which sends each one to an account with room; its own sign-in stays where you put it.", { agent: a.agentName })
+      : keptLogin(p)
       ? t("Routing picks the account for each request through magpie, in the accounts' order; {agent} on its own stays signed in to {user}, whatever it has left.", { agent: a.agentName, user: keptLogin(p) })
       : p.keepLogin && !p.switchOnly
       ? t("Routing picks the account for each request through magpie; {agent} on its own stays signed in to the first account, whatever it has left.", { agent: a.agentName })
@@ -13560,6 +13578,13 @@ function renderAccounts(a, p) {
     }
     if (amBox) row.append(amBox);
     list.append(row);
+  }
+  // what magpie does with the agent's own sign-in, said where the
+  // accounts are: a tick left on, or Claude Code on the gateway, had it
+  // never switch with nothing on the page saying so (the owner, 11-11)
+  if ((a.agent === "codex" || a.agent === "claude") && several && p) {
+    const say = signInMovesLine(p, a.agentName);
+    if (say) list.append(el("div", "hint sign-in-moves", say));
   }
   // one account (#209, #408, #524)
   if ((a.agent === "codex" || a.agent === "claude") && several && p && !p.switchOnly) {

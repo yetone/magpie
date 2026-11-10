@@ -325,6 +325,9 @@ type providerJSON struct {
 	// Claude's, the accounts are kept to Claude Code's own sign-in and
 	// serve no request through magpie (myduso on Discord)
 	SwitchOnly bool `json:"switchOnly,omitempty"`
+	// SignInMoves: how magpie moves Codex's or Claude Code's own sign-in
+	// between its accounts (provider.SignInMovesOf), said beside them
+	SignInMoves *provider.SignInMoves `json:"signInMoves,omitempty"`
 	// RestartApp: magpie restarts the Codex app's app-server for an
 	// account change it makes by itself (provider.Provider.RestartApp)
 	RestartApp bool `json:"restartApp,omitempty"`
@@ -845,6 +848,9 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		RateWindows: p.RateWindows, RateNow: rateNowOf(p, time.Now()),
 		AccountConcurrency: p.AccountConcurrency, AccountWeights: p.AccountWeights, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM,
 		Outputs: provider.OutputsOf(p.ID), Compacts: provider.CompactsOf(p.ID),
+	}
+	if p.Account != nil && p.Account.Agent == p.ID {
+		out.SignInMoves = provider.SignInMovesOf(p.ID)
 	}
 	if p.Account != nil {
 		for _, r := range p.AccountRefs() {
