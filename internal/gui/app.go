@@ -146,6 +146,16 @@ func (h *host) ShowMain(view string) {
 // MainShown says whether the window is up.
 func (h *host) MainShown() bool { return application.InvokeSyncWithResult(h.mainShown) }
 
+// mainUp says whether the window is up and whether it is minimised, read
+// together on the main thread.
+func (h *host) mainUp() (up, minimised bool) {
+	application.InvokeSync(func() {
+		up = h.mainShown()
+		minimised = up && h.main.IsMinimised()
+	})
+	return up, minimised
+}
+
 // Import opens the window on an import link, for the user to confirm.
 func (h *host) Import(link string) {
 	id := stash(link)
@@ -364,8 +374,9 @@ func Run(version string, showMain bool, link string) error {
 	}
 	// a restart magpie made by itself: back as it was, taking no focus
 	// (quiet_restart.go)
-	quiet := takeQuietRestart()
+	quiet, minimised := takeQuietRestart()
 	quietShow.Store(quiet && showMain)
+	quietMinimised.Store(quiet && showMain && minimised)
 	// before the first webview, which opens WebKit's data where programName says
 	keepWebData()
 	go func() {
@@ -545,9 +556,11 @@ func Run(version string, showMain bool, link string) error {
 		})
 	}
 	updates.onWait = func() { application.InvokeSync(relabel) }
-	// Settings' AutoRestart: the window comes back only if it was up (#2096)
+	// Settings' AutoRestart: the window comes back only if it was up
+	// (#2096), and minimised if it was (#3495)
 	updates.autoRestart = func() bool {
-		if restartInto(false, h.MainShown(), "", true) {
+		up, minimised := h.mainUp()
+		if restartInto(false, up, "", true, minimised) {
 			leave(h.app.Quit)
 			return true
 		}

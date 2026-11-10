@@ -42,42 +42,49 @@ func TestRestartBySelfComesBackQuietly(t *testing.T) {
 
 	// clicked: no mark, the new one comes to the front, even after a
 	// restart by itself that left one (it never came back)
-	markQuietRestart()
+	markQuietRestart(false)
 	if !restartToUpdate(false, true, "") {
 		t.Fatal("restart to update failed")
 	}
 	if _, err := os.Stat(mark); !os.IsNotExist(err) {
 		t.Fatalf("a restart the user asked for is marked quiet: %v", err)
 	}
-	if takeQuietRestart() {
+	if quiet, _ := takeQuietRestart(); quiet {
 		t.Fatal("the start after a clicked restart is quiet")
 	}
 
-	// by itself, window up or not: marked, read once
-	for _, window := range []bool{true, false} {
-		if !restartInto(false, window, "", true) {
-			t.Fatalf("window %v: restart by itself failed", window)
+	// by itself, window up or not: marked, read once; minimised (#3495)
+	// only for a window up and minimised
+	for _, c := range []struct{ window, minimised, want bool }{
+		{true, false, false}, {false, false, false}, {true, true, true}, {false, true, false},
+	} {
+		if !restartInto(false, c.window, "", true, c.minimised) {
+			t.Fatalf("%+v: restart by itself failed", c)
 		}
-		if !takeQuietRestart() {
-			t.Fatalf("window %v: the start after a restart by itself isn't quiet", window)
+		quiet, minimised := takeQuietRestart()
+		if !quiet {
+			t.Fatalf("%+v: the start after a restart by itself isn't quiet", c)
 		}
-		if takeQuietRestart() {
-			t.Fatalf("window %v: the mark is read twice", window)
+		if minimised != c.want {
+			t.Fatalf("%+v: minimised %v, want %v", c, minimised, c.want)
+		}
+		if quiet, _ := takeQuietRestart(); quiet {
+			t.Fatalf("%+v: the mark is read twice", c)
 		}
 	}
 
 	// magpie web restarts in place: nothing to mark
-	if !restartInto(true, false, "", true) {
+	if !restartInto(true, false, "", true, false) {
 		t.Fatal("web restart failed")
 	}
 	webReexec.Store(false)
-	if takeQuietRestart() {
+	if quiet, _ := takeQuietRestart(); quiet {
 		t.Fatal("a web restart marked the app's next start quiet")
 	}
 
 	// the new version refused (#894): this one runs on, unmarked
 	refuse = true
-	if restartInto(false, true, "", true) {
+	if restartInto(false, true, "", true, false) {
 		t.Fatal("a refused restart said to quit")
 	}
 	if _, err := os.Stat(mark); !os.IsNotExist(err) {
@@ -88,14 +95,24 @@ func TestRestartBySelfComesBackQuietly(t *testing.T) {
 	os.MkdirAll(filepath.Dir(mark), 0o755)
 	old := strconv.FormatInt(time.Now().Add(-quietFor-time.Minute).Unix(), 10)
 	os.WriteFile(mark, []byte(old+"\n"), 0o644)
-	if takeQuietRestart() {
+	if quiet, _ := takeQuietRestart(); quiet {
 		t.Fatal("a stale mark made this start quiet")
 	}
 	if _, err := os.Stat(mark); !os.IsNotExist(err) {
 		t.Fatalf("a stale mark is kept: %v", err)
 	}
-	os.WriteFile(mark, []byte("garbage"), 0o644)
-	if takeQuietRestart() {
-		t.Fatal("an unreadable mark made this start quiet")
+	for _, bad := range []string{"garbage", quietStampNow() + " junk", quietStampNow() + " minimised more", ""} {
+		os.WriteFile(mark, []byte(bad), 0o644)
+		if quiet, minimised := takeQuietRestart(); quiet || minimised {
+			t.Fatalf("an unreadable mark %q made this start quiet", bad)
+		}
+	}
+
+	// a mark from a version before #3495, the seconds alone: a window up
+	os.WriteFile(mark, []byte(quietStampNow()+"\n"), 0o644)
+	if quiet, minimised := takeQuietRestart(); !quiet || minimised {
+		t.Fatalf("an older version's mark read quiet=%v minimised=%v", quiet, minimised)
 	}
 }
+
+func quietStampNow() string { return strconv.FormatInt(time.Now().Unix(), 10) }

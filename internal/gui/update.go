@@ -862,14 +862,15 @@ func restartFrom(w Windows, view string) bool {
 // Off the Mac, the new one opens its window on view when window is set, and
 // only the tray icon when not; the Mac's always opens its window.
 func restartToUpdate(web, window bool, view string) bool {
-	return restartInto(web, window, view, false)
+	return restartInto(web, window, view, false, false)
 }
 
 // restartInto is restartToUpdate; bySelf, Settings' AutoRestart restarts
 // (#2096), and the Mac's new one too opens only its menu bar icon when no
 // window was up, rather than putting up one the user had closed. The new
-// one, by itself, also takes no focus (quiet_restart.go).
-func restartInto(web, window bool, view string, bySelf bool) bool {
+// one, by itself, also takes no focus (quiet_restart.go), and puts the
+// window back minimised when it was (minimised, #3495).
+func restartInto(web, window bool, view string, bySelf, minimised bool) bool {
 	if pending.Load() != nil {
 		return false // a handover under way restarts already
 	}
@@ -885,7 +886,7 @@ func restartInto(web, window bool, view string, bySelf bool) bool {
 	}
 	updatedInApp(version) // its first start leaves the notes to Settings (#525)
 	if bySelf && !web {
-		markQuietRestart() // it comes back without taking focus
+		markQuietRestart(window && minimised) // it comes back without taking focus
 	} else {
 		unmarkQuietRestart() // one asked for comes to the front
 	}
