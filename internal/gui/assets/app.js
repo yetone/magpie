@@ -9487,8 +9487,6 @@ function drawEditor(p, presetID) {
       b.dataset.api = v;
       seg.append(b);
     }
-    // the protocol the base URL is for, shown as picked: by its button,
-    // or by a detection taken (useDetected)
     const showApi = (v) => {
       draft.api = v;
       url.value = draft[apiField[v]] || "";
@@ -9523,6 +9521,10 @@ function drawEditor(p, presetID) {
       const v = draft[apiField[draft.api]] ? draft.api : ["openai", "responses", "anthropic", "gemini", "decide"].find((a) => draft[apiField[a]]);
       showApi(v || draft.api);
       draft.onModelPrefs?.(); // the APIs a model can be given follow the URLs
+    };
+    draft.onV1 = (rs) => {
+      for (const x of rs) if (x.v1 && (draft[x.protocol] || "").trim().replace(/\/+$/, "") + "/v1" === x.v1) draft[x.protocol] = x.v1;
+      showApi(draft.api);
     };
     curlBase = (api, base) => {
       carried = null;
@@ -11211,23 +11213,24 @@ function detectAPIs(p, base, use) {
   return box;
 }
 
-// modelTestWhy: why p's models can't be tested one by one (providerJSON.modelTest), or ""
 function modelTestWhy(p) {
   if (p.modelTest === "decide") return t("A classifier's models aren't sent test requests: Test under Endpoints asks Jev's endpoint for them.");
   if (p.modelTest === "own-api") return t("{name} is reached through its own API, which magpie translates each agent request for, so a test request can't be sent to it on its own. Ask the model from an agent to try it.", { name: p.name });
   return "";
 }
 
-// modelTests: each provider's Test models answers by id, null while asked
 const modelTests = {};
 
-// testsOn: a provider's tests under way, by run; Stop ends them on the server too (RIck)
 const testsOn = {};
 async function provTest(id, body) {
   const run = Math.random().toString(36).slice(2), ac = new AbortController(), on = testsOn[id] ||= new Map();
   on.set(run, ac);
   testBtns(id);
-  try { return await api("provider/test", { ...body, id, run }, null, ac.signal); }
+  try {
+    const r = await api("provider/test", { ...body, id, run }, null, ac.signal);
+    if (editing === id && r?.results?.some((x) => x.v1)) draft?.onV1?.(r.results);
+    return r;
+  }
   catch (e) { e.stopped = ac.signal.aborted; throw e; }
   finally { on.delete(run); testBtns(id); }
 }

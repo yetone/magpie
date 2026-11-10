@@ -1351,9 +1351,16 @@ func (p Provider) planMedia(ids func(*Region) []string, draws, films bool, serve
 // for under one there (catalog.FetchAt), and none is added here.
 func (p Provider) fixV1(base, at string) string {
 	base = strings.TrimRight(strings.TrimSpace(base), "/")
-	if base == "" || at != base+"/v1/models" || catalog.Versioned(base) {
+	if base == "" || at != base+"/v1/models" && at != catalog.RelayOpenAIList(base) || catalog.Versioned(base) {
 		return base
 	}
+	return p.setV1(base)
+}
+
+// setV1 is base with the /v1 it was given without, set on p's OpenAI
+// URLs that were base, as saved; base when p can't be saved.
+func (p Provider) setV1(base string) string {
+	base = strings.TrimRight(strings.TrimSpace(base), "/")
 	fixed := base + "/v1"
 	f, err := read()
 	if err != nil {

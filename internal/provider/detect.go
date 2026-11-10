@@ -116,6 +116,13 @@ func (p Provider) Detect(ctx context.Context, base, model string, picked ...stri
 		}()
 	}
 	wg.Wait()
+	for i := range out {
+		if out[i].V1 != "" {
+			// answered under the /v1 the URL was typed without: the
+			// base the editor keeps for it is that one
+			out[i].Base = out[i].V1
+		}
+	}
 	return out, nil
 }
 

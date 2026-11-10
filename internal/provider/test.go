@@ -38,6 +38,9 @@ type Result struct {
 	// otherAPI: the vendor said the model isn't served on the API asked
 	// (catalog.WrongEndpoint), so another may be asked instead
 	otherAPI bool
+	// V1 is the base the request was answered at once the /v1 it was
+	// typed without was added (missingV1): the editor's URL takes it
+	V1 string `json:"v1,omitempty"`
 }
 
 // Test sends the smallest possible request to each endpoint the vendor
@@ -781,6 +784,26 @@ func (p Provider) ownRequests(ctx context.Context, kind string) context.Context 
 // write the status alone, so a failed test's row said nothing of why
 // (ysm119 on Discord: "no answer", and no error to find anywhere).
 func probe(ctx context.Context, p Provider, proto Protocol, url string, body []byte, model string, wait time.Duration) Result {
+	r := probeAt(ctx, p, proto, url, body, model, wait)
+	if r.Status != http.StatusNotFound {
+		return r
+	}
+	// a relay given without the /v1 it serves OpenAI's API under
+	// (Cyrus_4433 on X: claude-relay-service's …/openai, whose chat is at
+	// …/openai/v1/chat/completions, answered every model 404 Not Found)
+	// is asked there too, and an answer there sets the base right, so
+	// the gateway's requests go there as well
+	if base, at, ok := p.missingV1(proto, url); ok {
+		if v := probeAt(ctx, p, proto, at, body, model, wait); v.OK {
+			p.setV1(base)
+			v.V1 = base + "/v1"
+			return v
+		}
+	}
+	return r
+}
+
+func probeAt(ctx context.Context, p Provider, proto Protocol, url string, body []byte, model string, wait time.Duration) Result {
 	r := probeOnce(ctx, p, proto, url, body, model, wait)
 	if proto == Chat && r.Status == http.StatusBadRequest {
 		// a vendor whose 400 names the other reply-length field as the
@@ -792,6 +815,24 @@ func probe(ctx context.Context, p Provider, proto Protocol, url string, body []b
 		}
 	}
 	return r
+}
+
+// missingV1 is the base of url, proto's endpoint at an OpenAI-style base
+// with no version in its path, and the same endpoint under that base's
+// /v1. Only a key's own base is asked so: a sign-in, a plugin, Azure,
+// Bedrock and Vertex AI have paths of their own, and a versioned base
+// (…/api/plan/v3) is the vendor's API as written (fixV1).
+func (p Provider) missingV1(proto Protocol, url string) (base, at string, ok bool) {
+	end := map[Protocol]string{Chat: "/chat/completions", Responses: "/responses"}[proto]
+	if end == "" || p.Account != nil || p.IsAzure() || p.IsBedrock() || p.IsVertex() {
+		return "", "", false
+	}
+	base, found := strings.CutSuffix(url, end)
+	if !found || base == "" || catalog.Versioned(base) || strings.TrimRight(base, "/") != strings.TrimRight(p.Base(proto), "/") {
+		return "", "", false
+	}
+	base = strings.TrimRight(base, "/")
+	return base, base + "/v1" + end, true
 }
 
 func probeOnce(ctx context.Context, p Provider, proto Protocol, url string, body []byte, model string, wait time.Duration) (r Result) {

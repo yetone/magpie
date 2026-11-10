@@ -603,8 +603,27 @@ func listURLs(base string, anthropic bool) []string {
 		}
 		add(root + "/v1/models")
 		add(root + "/models")
+		if u := RelayOpenAIList(base); u != "" {
+			add(u)
+		}
 	}
 	return urls
+}
+
+// RelayOpenAIList is the model list of a relay that serves OpenAI's API
+// under …/openai with no /v1 in the base, and its list at the root's
+// /api/v1/models alone: claude-relay-service mounts its unified routes
+// (/v1/chat/completions) and Codex's (/responses, /v1/responses) under
+// /openai, and the models list on /api and /claude only (src/app.js,
+// src/routes/api.js). "" for any other base. A list found there means
+// chat is at the base's /v1 (Cyrus_4433 on X: …/openai was asked
+// …/openai/chat/completions and answered 404 Not Found).
+func RelayOpenAIList(base string) string {
+	base = strings.TrimRight(base, "/")
+	if !strings.HasSuffix(base, "/openai") || Versioned(base) {
+		return ""
+	}
+	return strings.TrimSuffix(base, "/openai") + "/api/v1/models"
 }
 
 // Versioned reports whether an API base URL has a version in its path — a
