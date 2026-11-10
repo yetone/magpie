@@ -138,7 +138,7 @@ func TestListingKeptAcrossCollections(t *testing.T) {
 		t.Skip("listed in one call a folder on macOS only")
 	}
 	listings.Lock()
-	listings.last, listings.room, listings.entries = nil, nil, 0 // what tests before kept
+	listings.last, listings.spare, listings.room, listings.entries = nil, nil, nil, 0 // what tests before kept
 	listings.Unlock()
 	dir := t.TempDir()
 	for _, name := range []string{"rollout-a.jsonl", "rollout-b.jsonl", "rollout-c.jsonl"} {
@@ -181,4 +181,45 @@ func TestListingKeptAcrossCollections(t *testing.T) {
 		t.Error("a listing given back was let go by a garbage collection")
 	}
 	third.Done(dir)
+}
+
+// Folders of different sizes read one after another, as a poll reads
+// Codex's day folders and Claude Code's projects, each take their own
+// room: a room shared between them went from a small folder to a large
+// one and was grown again on every poll (#2278).
+func TestListingsOfDifferentSizesMadeOnce(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("listed in one call a folder on macOS only")
+	}
+	listings.Lock()
+	listings.last, listings.spare, listings.room, listings.entries = nil, nil, nil, 0
+	listings.Unlock()
+	var dirs []string
+	for _, n := range []int{2, 600, 5, 300, 1} {
+		dir := t.TempDir()
+		for i := range n {
+			if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("rollout-%04d.jsonl", i)), nil, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		dirs = append(dirs, dir)
+	}
+	poll := func() {
+		for _, dir := range dirs {
+			if l, ok := Stats(dir); ok {
+				l.Done(dir)
+			}
+		}
+	}
+	poll()
+	poll()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	for range 10 {
+		poll()
+	}
+	runtime.ReadMemStats(&after)
+	if got := after.TotalAlloc - before.TotalAlloc; got > 64<<10 {
+		t.Errorf("ten polls of unchanged folders allocated %d bytes, want next to none", got)
+	}
 }
