@@ -219,7 +219,7 @@ magpie opencode small deepseek/deepseek-v4-flash # its small_model</pre></div>
       <tr><td><code>provider.magpie.options.apiKey</code></td><td>The gateway’s key</td></tr>
       <tr><td><code>provider.magpie.models</code></td><td>Every model magpie lists for OpenCode</td></tr>
     </table></div>
-    <p>Each model carries its context window and output limit, so OpenCode knows when to compact; whether it takes images; its reasoning levels; and its price. magpie keeps the list up to date as you add providers and accounts. If the file also has the provider under <code>providers</code>, where OpenCode 2 keeps it, magpie writes it there as well. OpenCode in a WSL distro on Windows is set up the same way, in the distro’s <code>~/.config/opencode</code>.</p>
+    <p>Each model carries its context window and output limit, so OpenCode knows when to compact; whether it takes images; its reasoning levels; and its price. magpie keeps the list up to date as you add providers and accounts. With OpenCode 2 installed, magpie writes OpenCode 2’s own keys instead: the provider under <code>providers.magpie</code> and the small model as <code>agents.title.model</code>. OpenCode in a WSL distro on Windows is set up the same way, in the distro’s <code>~/.config/opencode</code>.</p>
 
     <h2 id="variants"><a class="anchor" href="#variants">Reasoning levels and cost</a></h2>
     <ul>

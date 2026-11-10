@@ -156,7 +156,13 @@ func openCodeOutputsKept(path string, ms orderedJSON) {
 		return
 	}
 	have := map[string]int{}
-	if raw, ok := edit.GetJSON(path, "provider."+magpieID+".models"); ok {
+	// under providers where the file keeps it there alone: OpenCode 2's,
+	// whose limit is OpenCode 1's
+	raw, ok := edit.GetJSON(path, "provider."+magpieID+".models")
+	if !ok {
+		raw, ok = edit.GetJSON(path, openCodeNativeKey+".models")
+	}
+	if ok {
 		var cur map[string]struct {
 			Limit struct {
 				Output int `json:"output"`

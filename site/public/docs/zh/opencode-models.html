@@ -219,7 +219,7 @@ magpie opencode small deepseek/deepseek-v4-flash # 它的 small_model</pre></div
       <tr><td><code>provider.magpie.options.apiKey</code></td><td>网关的 Key</td></tr>
       <tr><td><code>provider.magpie.models</code></td><td>magpie 给 OpenCode 列出的所有模型</td></tr>
     </table></div>
-    <p>每个模型都带上下文窗口和输出上限（OpenCode 据此判断何时压缩），是否支持图片、推理档位和价格。你添加供应商或账号后，magpie 会同步更新这份列表。如果文件里在 <code>providers</code> 下也有这个供应商（OpenCode 2 的写法），magpie 会一并写入。Windows 上 WSL 发行版里的 OpenCode 也同样配置，写在该发行版的 <code>~/.config/opencode</code>。</p>
+    <p>每个模型都带上下文窗口和输出上限（OpenCode 据此判断何时压缩），是否支持图片、推理档位和价格。你添加供应商或账号后，magpie 会同步更新这份列表。装的是 OpenCode 2 时，magpie 改用 OpenCode 2 自己的键：供应商写在 <code>providers.magpie</code>，small 模型写成 <code>agents.title.model</code>。Windows 上 WSL 发行版里的 OpenCode 也同样配置，写在该发行版的 <code>~/.config/opencode</code>。</p>
 
     <h2 id="variants"><a class="anchor" href="#variants">推理档位与费用</a></h2>
     <ul>

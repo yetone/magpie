@@ -562,7 +562,9 @@ var wslKinds = []wslKind{
 	// this machine, at their default folders: the distro's variables that
 	// move them (OPENCODE_CONFIG_DIR, KIMI_CODE_HOME, HERMES_HOME, …)
 	// aren't read. Each one's restart advice is its own Notice's.
-	{id: "opencode", name: "OpenCode", dir: ".config/opencode", bin: "opencode", in: opencodeIn,
+	// its version says whether its config is written in OpenCode 2's words
+	// (ocFile)
+	{id: "opencode", name: "OpenCode", dir: ".config/opencode", bin: "opencode", in: opencodeIn, version: true,
 		restart: newNotice("{agent} in WSL {distro} reads its config at start-up — restart open opencode sessions to use this."),
 		asleep:  wslOwnAsleep("opencode", "model", "small")},
 	{id: "mimocode", name: "MiMo Code", dir: ".config/mimocode", bin: "mimo", in: mimocodeIn,

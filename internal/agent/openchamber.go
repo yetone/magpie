@@ -165,7 +165,10 @@ func openChamber(home, cfg string) *Agent {
 	ocPath := oc.Path
 	auth := filepath.Join(home, ".local", "share", "opencode", "auth.json")
 	block := func() any { return magpieProviderJSONFor("opencode", "opencode") }
-	provider := openCodeKept(ocPath, block)
+	// the OpenCode config as the OpenCode on PATH reads it, which writes
+	// it in OpenCode 2's words for an OpenCode 2 (ocFile), as OpenCode's
+	// own Sync does: the two never write it in each other's
+	file := func() ocFile { return ocFile{path: ocPath, two: openCodeTwo(here("")), block: block} }
 	opts := func(key string) func(map[string]string) []Option {
 		return func(cur map[string]string) []Option {
 			return withVia(ownOptions(auth, cur[key]), "opencode", magpieID+"/")
@@ -175,8 +178,7 @@ func openChamber(home, cfg string) *Agent {
 	// OpenCode config names one of its models
 	tidy := func() error {
 		m, _ := edit.GetJSON(ocPath, "model")
-		sm, _ := edit.GetJSON(ocPath, "small_model")
-		if usesMagpie(m, sm, s.model(), s.small()) {
+		if usesMagpie(m, file().small(), s.model(), s.small()) {
 			return nil
 		}
 		return edit.DelJSON(ocPath, "provider."+magpieID, openCodeNativeKey)
@@ -208,14 +210,8 @@ func openChamber(home, cfg string) *Agent {
 		},
 		ListOnly: true,
 		Sync: func() error {
-			var err error
-			if _, ok := edit.GetJSON(ocPath, "provider."+magpieID); !ok && usesMagpie(s.model(), s.small()) {
-				err = edit.SetJSON(ocPath, edit.KV{Path: "provider." + magpieID, Value: provider()})
-			} else {
-				err = syncJSONInOrder(ocPath, "provider."+magpieID, provider)
-			}
 			// and the copy under providers its own form writes (#3883)
-			return errors.Join(err, syncOpenCodeNative(ocPath, block))
+			return file().sync(usesMagpie(s.model(), s.small()))
 		},
 		Fields: []Field{
 			{Key: "model", Label: "model", Get: s.model, Options: opts("model"), Set: func(v string) error {
