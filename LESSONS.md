@@ -893,6 +893,13 @@ each one.
     Writing the rule here didn't reach those sessions. Until a pre-push
     check runs these guards, run them yourself before every push that
     adds an agent or a route.
+  - 86825005e (#5890) wrote two hook-budget tests whose margin was the
+    one second between a hook's own timer and the RPC's 11s. That 11s
+    counts the plugin host's start, which on a busy CI machine is more
+    than a second. Both went red on CI and were fixed one at a time
+    (e39ecfec8, then 0659dc66f). When a test's margin is under a
+    deadline that also covers starting something, start it first, and
+    fix every test in the file that shares the margin.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
