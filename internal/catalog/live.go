@@ -828,6 +828,7 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 	// Anthropic's and OpenAI's /v1/models both page with has_more and
 	// last_id.
 	var out []Model
+	vercel := VercelGateway(url)
 	for i, r := range rows {
 		id := r.ID
 		if id == "" {
@@ -878,6 +879,34 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		if !drawer && !films && !decision && headers["X-Magpie-Drawers"] == "" {
 			serves = ServesOf(id)
 		}
+		// Vercel's AI Gateway says what each row is (its "type"), which
+		// the id and modalities don't always: its decision models
+		// (liquid/d1, typesafe-ai/jev) and realtime voices answer no
+		// chat, its voices and transcribers (elevenlabs/eleven-v3,
+		// elevenlabs/scribe-v2) serve their own APIs. A "-batch" id
+		// (anthropic/claude-sonnet-4.6-batch) is for its batch API alone:
+		// "Synchronous requests don't accept -batch IDs"
+		if vercel {
+			if strings.HasSuffix(id, "-batch") {
+				continue
+			}
+			switch r.Type {
+			case "evaluation", "realtime":
+				continue
+			case "image":
+				drawer, films, serves = true, false, ""
+			case "video":
+				drawer, films, serves = false, true, ""
+			case "embedding":
+				serves = ServesEmbedding
+			case "reranking":
+				serves = ServesRerank
+			case "speech":
+				serves = ServesSpeech
+			case "transcription":
+				serves = ServesTranscription
+			}
+		}
 		if !drawer && !films && !decision && serves == "" && headers["X-Magpie-Drawers"] == "" && !textModel(md) {
 			continue
 		}
@@ -908,6 +937,8 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 			InputModalities: ins, OutputModalities: outs}
 		if n, ok := r.ContextLength.(float64); ok && n > 0 {
 			m.Context = int(n)
+		} else if n, ok := r.Window.(float64); vercel && ok && n > 0 {
+			m.Context = int(n) // Vercel's context_window
 		}
 		if n, ok := r.Output.(float64); ok && n > 0 {
 			m.Output = int(n)
@@ -1012,6 +1043,11 @@ type liveModel struct {
 	// the protocol family PipeLLM routes the model by: openai, anthropic
 	// or gemini
 	TypeTarget string `json:"type_target"`
+	// what Vercel's AI Gateway says a model is: "language", "image",
+	// "video", "embedding", "reranking", "speech", "transcription",
+	// "realtime" or "evaluation" (read for its list alone; Anthropic's
+	// rows say "model")
+	Type string `json:"type"`
 	// a Codex catalog entry's (CodexEntry): its id, its window and the
 	// most it may be raised to, and what it takes. any, as an odd value
 	// mustn't lose the whole list
@@ -1240,4 +1276,11 @@ func (p Price) sane() bool {
 		}
 	}
 	return true
+}
+
+// VercelGateway reports whether u is at Vercel's AI Gateway
+// (ai-gateway.vercel.sh), whose model list marks each row's type.
+func VercelGateway(u string) bool {
+	x, err := url.Parse(strings.TrimSpace(u))
+	return err == nil && strings.EqualFold(x.Hostname(), "ai-gateway.vercel.sh")
 }

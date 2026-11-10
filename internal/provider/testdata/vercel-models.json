@@ -1,0 +1,539 @@
+{
+ "object": "list",
+ "data": [
+  {
+   "id": "anthropic/claude-sonnet-4.6",
+   "object": "model",
+   "created": 1755815280,
+   "released": 1771286400,
+   "owned_by": "anthropic",
+   "name": "Claude Sonnet 4.6",
+   "description": "Claude Sonnet 4.6 is the most capable Sonnet-class model yet, with frontier performance across coding, agents, and professional work. It excels at iterative development, complex codebase navigation, end-to-end project management with memory, polished document creation, and confident computer use for web QA and workflow automation.",
+   "context_window": 1000000,
+   "max_tokens": 128000,
+   "type": "language",
+   "zdr": "all",
+   "no_training": "all",
+   "tags": [
+    "file-input",
+    "reasoning",
+    "tool-use",
+    "vision",
+    "explicit-caching",
+    "web-search",
+    "structured-output"
+   ],
+   "regions": [
+    "eu",
+    "us"
+   ],
+   "supported_specifications": [
+    "v2",
+    "v3",
+    "v4"
+   ],
+   "modalities": {
+    "input": [
+     "text",
+     "image",
+     "pdf"
+    ],
+    "output": [
+     "text"
+    ]
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "temperature",
+    "stop",
+    "tools",
+    "tool_choice",
+    "reasoning",
+    "include_reasoning",
+    "response_format",
+    "structured_outputs"
+   ],
+   "temperature": true,
+   "reasoning_options": [
+    {
+     "type": "toggle"
+    },
+    {
+     "type": "effort",
+     "values": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "max"
+     ]
+    },
+    {
+     "type": "budget_tokens"
+    }
+   ],
+   "knowledge": "2025-08-31",
+   "interleaved": true,
+   "pricing": {
+    "input": "0.000003",
+    "output": "0.000015",
+    "input_cache_read": "0.0000003",
+    "input_cache_write": "0.00000375",
+    "web_search": "10",
+    "regional": {
+     "eu": {
+      "input": "0.0000033",
+      "output": "0.0000165",
+      "input_cache_read": "0.00000033",
+      "input_cache_write": "0.000004125"
+     },
+     "us": {
+      "input": "0.0000033",
+      "output": "0.0000165",
+      "input_cache_read": "0.00000033",
+      "input_cache_write": "0.000004125"
+     }
+    }
+   }
+  },
+  {
+   "id": "anthropic/claude-sonnet-4.6-batch",
+   "object": "model",
+   "created": 1755815280,
+   "released": 1771286400,
+   "owned_by": "anthropic",
+   "name": "Claude Sonnet 4.6 (Batch)",
+   "description": "Claude Sonnet 4.6 is the most capable Sonnet-class model yet, with frontier performance across coding, agents, and professional work. It excels at iterative development, complex codebase navigation, end-to-end project management with memory, polished document creation, and confident computer use for web QA and workflow automation.",
+   "context_window": 1000000,
+   "max_tokens": 128000,
+   "type": "language",
+   "zdr": "none",
+   "no_training": "all",
+   "tags": [
+    "file-input",
+    "reasoning",
+    "tool-use",
+    "vision",
+    "explicit-caching",
+    "structured-output"
+   ],
+   "supported_specifications": [
+    "v4"
+   ],
+   "modalities": {
+    "input": [
+     "text",
+     "image",
+     "pdf"
+    ],
+    "output": [
+     "text"
+    ]
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "temperature",
+    "stop",
+    "tools",
+    "tool_choice",
+    "reasoning",
+    "include_reasoning",
+    "response_format",
+    "structured_outputs"
+   ],
+   "temperature": true,
+   "reasoning_options": [
+    {
+     "type": "toggle"
+    },
+    {
+     "type": "effort",
+     "values": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "max"
+     ]
+    },
+    {
+     "type": "budget_tokens"
+    }
+   ],
+   "knowledge": "2025-08-31",
+   "interleaved": true,
+   "pricing": {
+    "input": "0.0000015",
+    "output": "0.0000075",
+    "input_cache_read": "0.00000015",
+    "input_cache_write": "0.000001875"
+   }
+  },
+  {
+   "id": "liquid/d1",
+   "object": "model",
+   "created": 1755815280,
+   "released": 1790640000,
+   "owned_by": "liquid",
+   "name": "Liquid d1",
+   "description": "Liquid d1 is a decision model for classification, routing, and scoring. It evaluates shared state against typed Choice, Score, and yes/no questions and returns structured answers with calibrated probabilities through the TypeSafe-compatible System One API.",
+   "context_window": 65536,
+   "max_tokens": 0,
+   "type": "evaluation",
+   "zdr": "none",
+   "no_training": "none",
+   "tags": [
+    "vision"
+   ],
+   "supported_specifications": [
+    "v4"
+   ],
+   "modalities": {
+    "input": [
+     "text",
+     "image"
+    ],
+    "output": [
+     "text"
+    ]
+   },
+   "pricing": {
+    "input": "0.00000002",
+    "output": "0"
+   }
+  },
+  {
+   "id": "spacexai/grok-voice-3.0",
+   "object": "model",
+   "created": 1755815280,
+   "released": 1791936000,
+   "owned_by": "spacexai",
+   "name": "Grok Voice 3.0",
+   "description": "Grok Voice 3.0 is xAI\u2019s realtime speech-to-speech model for interactive voice agents. It streams audio and text bidirectionally, supports multilingual conversations and function calling, and includes reasoning enabled by default for complex instructions and nuanced dialogue.",
+   "context_window": 0,
+   "max_tokens": 0,
+   "type": "realtime",
+   "zdr": "all",
+   "no_training": "all",
+   "tags": [
+    "audio-input",
+    "reasoning",
+    "tool-use",
+    "websocket-realtime"
+   ],
+   "supported_specifications": [
+    "v2",
+    "v3",
+    "v4"
+   ],
+   "modalities": {
+    "input": [
+     "text",
+     "audio"
+    ],
+    "output": [
+     "text",
+     "audio"
+    ]
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "temperature",
+    "stop",
+    "tools",
+    "tool_choice",
+    "reasoning",
+    "include_reasoning"
+   ],
+   "temperature": true,
+   "reasoning_options": [
+    {
+     "type": "toggle"
+    },
+    {
+     "type": "effort",
+     "values": [
+      "none",
+      "low",
+      "medium",
+      "high"
+     ]
+    }
+   ],
+   "pricing": {
+    "realtime_client_message_cost": "0.004",
+    "realtime_session_duration_cost_per_second": "0.001334"
+   }
+  },
+  {
+   "id": "elevenlabs/eleven-v3",
+   "object": "model",
+   "created": 1755815280,
+   "released": 1793059200,
+   "owned_by": "elevenlabs",
+   "name": "Eleven v3",
+   "description": "Emotionally rich text-to-speech with inline audio tags for delivery and expression, supporting more than 70 languages. Accepts up to 5,000 characters per request and is billed per input character, including audio tags.",
+   "type": "speech",
+   "zdr": "none",
+   "no_training": "none",
+   "tags": [
+    "websocket-speech"
+   ],
+   "supported_specifications": [
+    "v3",
+    "v4"
+   ],
+   "modalities": {
+    "input": [
+     "text"
+    ],
+    "output": [
+     "audio"
+    ]
+   },
+   "pricing": {
+    "input": "0.00008",
+    "speech_input_character_cost": "0.00008"
+   }
+  },
+  {
+   "id": "elevenlabs/scribe-v2",
+   "object": "model",
+   "created": 1755815280,
+   "released": 1793059200,
+   "owned_by": "elevenlabs",
+   "name": "Scribe v2",
+   "description": "Multilingual speech-to-text with speaker diarization, word-level timestamps, and audio event tagging. Supports more than 90 languages and is billed per second of input audio.",
+   "type": "transcription",
+   "zdr": "none",
+   "no_training": "none",
+   "supported_specifications": [
+    "v3",
+    "v4"
+   ],
+   "modalities": {
+    "input": [
+     "audio"
+    ],
+    "output": [
+     "text"
+    ]
+   },
+   "pricing": {
+    "input": "0",
+    "transcription_duration_cost_per_second": "0.000061112"
+   }
+  },
+  {
+   "id": "openai/text-embedding-3-small",
+   "object": "model",
+   "created": 1755815280,
+   "released": 1706140800,
+   "owned_by": "openai",
+   "name": "text-embedding-3-small",
+   "description": "OpenAI's improved, more performant version of their ada embedding model.",
+   "context_window": 0,
+   "max_tokens": 0,
+   "type": "embedding",
+   "zdr": "some",
+   "no_training": "all",
+   "regions": [
+    "eu",
+    "us"
+   ],
+   "supported_specifications": [
+    "v2",
+    "v3",
+    "v4"
+   ],
+   "modalities": {
+    "input": [
+     "text"
+    ],
+    "output": [
+     "text"
+    ]
+   },
+   "pricing": {
+    "input": "0.00000002",
+    "regional": {
+     "eu": {
+      "input": "0.00000002"
+     },
+     "us": {
+      "input": "0.00000002"
+     }
+    }
+   }
+  },
+  {
+   "id": "cohere/rerank-v3.5",
+   "object": "model",
+   "created": 1755815280,
+   "released": 1733097600,
+   "owned_by": "cohere",
+   "name": "Cohere Rerank 3.5",
+   "description": "A model that allows for re-ranking English Language documents and semi-structured data (JSON).",
+   "context_window": 4096,
+   "max_tokens": 4096,
+   "type": "reranking",
+   "zdr": "all",
+   "no_training": "all",
+   "regions": [
+    "us"
+   ],
+   "supported_specifications": [
+    "v2",
+    "v3",
+    "v4"
+   ],
+   "modalities": {
+    "input": [
+     "text"
+    ],
+    "output": [
+     "text"
+    ]
+   },
+   "pricing": {}
+  },
+  {
+   "id": "bfl/flux-2-flex",
+   "object": "model",
+   "created": 1755815280,
+   "released": 1764028800,
+   "owned_by": "bfl",
+   "name": "FLUX.2 [flex]",
+   "description": "FLUX.2 is a completely new base model trained for visual intelligence, not just pixel generation, setting a new standard for both image generation and image editing. With FLUX.2 models you can expect the highest quality, higher resolutions (up to 4MP), and new capabilities like multi-ref images. FLUX.2 [flex] supports customizable image generation and editing with adjustable steps and guidance. It's better at typography and text rendering. It supports up to 10 reference images (up to 14 MP total input).\nThis provider gives the option to change the moderation level for inputs and outputs. The control is under safety tolerance and is by default 2 on a range from 0 (more strict) through 6 (more permissive).",
+   "context_window": 0,
+   "max_tokens": 0,
+   "type": "image",
+   "zdr": "none",
+   "no_training": "none",
+   "tags": [
+    "image-generation"
+   ],
+   "supported_specifications": [
+    "v2",
+    "v3",
+    "v4"
+   ],
+   "modalities": {
+    "input": [
+     "text"
+    ],
+    "output": [
+     "image"
+    ]
+   },
+   "pricing": {}
+  },
+  {
+   "id": "alibaba/wan-v2.6-i2v",
+   "object": "model",
+   "created": 1755815280,
+   "released": 1765843200,
+   "owned_by": "alibaba",
+   "name": "Wan v2.6 Image-to-Video",
+   "description": "",
+   "context_window": 0,
+   "max_tokens": 0,
+   "type": "video",
+   "zdr": "all",
+   "no_training": "all",
+   "supported_specifications": [
+    "v3",
+    "v4"
+   ],
+   "modalities": {
+    "input": [
+     "text"
+    ],
+    "output": [
+     "video"
+    ]
+   },
+   "video_capabilities": {
+    "supported_operations": [
+     "image-to-video"
+    ],
+    "supported_resolutions": [
+     "720p",
+     "1080p"
+    ],
+    "supported_aspect_ratios": [
+     "16:9",
+     "9:16",
+     "1:1",
+     "4:3",
+     "3:4"
+    ],
+    "supported_durations_seconds": [
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "generate_audio": true,
+    "supported_fps": [
+     24
+    ],
+    "input_limits": {
+     "text": {
+      "max_chars": 1500
+     },
+     "image": {
+      "max_count": 1,
+      "max_file_size_mb": 20,
+      "supported_formats": [
+       "jpeg",
+       "jpg",
+       "png",
+       "bmp",
+       "webp"
+      ],
+      "supported_sources": [
+       "url"
+      ],
+      "min_dimension_pixels": 240,
+      "max_dimension_pixels": 8000
+     },
+     "audio": {
+      "max_file_size_mb": 15,
+      "supported_formats": [
+       "wav",
+       "mp3"
+      ],
+      "supported_sources": [
+       "url"
+      ],
+      "min_duration_seconds": 3,
+      "max_duration_seconds": 30
+     }
+    }
+   },
+   "pricing": {
+    "video_duration_pricing": [
+     {
+      "resolution": "720p",
+      "cost_per_second": "0.1"
+     },
+     {
+      "resolution": "1080p",
+      "cost_per_second": "0.15"
+     }
+    ]
+   }
+  }
+ ]
+}

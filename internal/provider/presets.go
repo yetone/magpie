@@ -548,6 +548,14 @@ var presets = []PresetDef{
 		Website: "https://openrouter.ai", KeysURL: "https://openrouter.ai/keys",
 		// app attribution, for OpenRouter's rankings and analytics
 		HeaderHints: []string{"HTTP-Referer", "X-OpenRouter-Title"}},
+	// Vercel's AI Gateway (Archie627 on X): one key for every maker's
+	// models, as provider/model ids, on OpenAI's chat completions and
+	// Responses at /v1 and Anthropic's Messages at the root, each serving
+	// every model (vercel.com/docs/ai-gateway/sdks-and-apis); its /v1/models
+	// says each row's type (catalog.VercelGateway)
+	{ID: "vercel", Name: "Vercel AI Gateway", Icon: "vercel", Kind: KindRelay, Catalog: "vercel",
+		Chat: "https://ai-gateway.vercel.sh/v1", Responses: "https://ai-gateway.vercel.sh/v1", Anthropic: "https://ai-gateway.vercel.sh",
+		Website: "https://vercel.com/docs/ai-gateway", KeysURL: "https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai-gateway%2Fapi-keys"},
 	{ID: "opencode-go", Name: "OpenCode Go", Icon: "opencode", Kind: KindRelay, Catalog: "opencode-go",
 		Chat: "https://opencode.ai/zen/go/v1", Responses: "https://opencode.ai/zen/go/v1", Anthropic: "https://opencode.ai/zen/go",
 		Note:    "open coding models, $10/month",
