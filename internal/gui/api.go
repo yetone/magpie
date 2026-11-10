@@ -997,7 +997,14 @@ var onDock func(settings.Settings)
 var assetTypes = map[string]string{".svg": "image/svg+xml", ".png": "image/png", ".css": "text/css; charset=utf-8",
 	".js": "text/javascript; charset=utf-8", ".html": "text/html; charset=utf-8"}
 
-func init() {
+// addAssetTypes is called by Handler, not init: the mime package reads
+// and parses the system's whole type table (/etc/apache2/mime.types,
+// ~18,000 allocations) the first time a type is added, and a launch that
+// serves no page (`magpie statusline` on every Claude Code message) never
+// needs it.
+var addAssetTypes = sync.OnceFunc(registerAssetTypes)
+
+func registerAssetTypes() {
 	for ext, t := range assetTypes {
 		mime.AddExtensionType(ext, t)
 	}
@@ -1075,6 +1082,7 @@ func versionedPage(page []byte) []byte {
 // gw is the gateway this process serves, or nil when another magpie has it
 // (for now: see startBackend).
 func Handler(w Windows, gw *gateway.Server) http.Handler {
+	addAssetTypes()
 	if gw != nil {
 		served.Store(gw)
 	}
