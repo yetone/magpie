@@ -709,6 +709,7 @@ type dshParsed struct {
 // read and parsed every profile's list again on each ask, a third of what
 // forty asks allocated with real accounts.
 func dshLook(path string) ([]string, []dshItem, error) {
+	dshUsed()
 	d, err := filememo.Read("dsh list", path, func(b []byte) (dshParsed, error) {
 		head, items, err := dshParse(path, string(edit.TrimBOM(b)))
 		return dshParsed{head, items}, err
@@ -779,6 +780,7 @@ func dshNodeShared(it dshItem) (*yaml.Node, error) {
 	// keyed by a hash of the lines, checked against a copy of them, so a
 	// look that finds the entry allocates nothing: joining the lines into a
 	// key each time was most of what the drift poll's dsh check still made
+	dshUsed()
 	key := dshLinesHash(it.lines)
 	dshNodes.Lock()
 	n, ok := dshNodes.find(key, it.lines)
