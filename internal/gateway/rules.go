@@ -195,7 +195,10 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 	turn, within := turnIn(req)
 	now := ruleClock()
 	size := estimate(req)
-	q := provider.RuleRequest{Tokens: size, Thinking: req.Thinking, Effort: req.Effort, Agent: agent, At: now}
+	q := provider.RuleRequest{Tokens: size, Thinking: req.Thinking, Effort: req.Effort, Off: req.ThinkOff, Agent: agent, At: now, Subagent: req.subagent}
+	if provider.RulesReadMessage(g.Rules) {
+		_, q.Message = lastSaid(req, len(req.Messages)) // the user's own words, as the turn began
+	}
 	for _, m := range req.Messages {
 		if slices.ContainsFunc(m.Parts, func(p Part) bool { return p.Kind == Image }) {
 			q.Images = true

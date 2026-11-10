@@ -16,7 +16,7 @@ const ruleUsage = `usage:
   magpie group rule <group>               the group's rules
   magpie group rule add <group> use=<model> [use-effort=low|medium|high|xhigh|max] [tokens=<n>] [images] [effort=on|low|medium|high|xhigh|max] [agents=a,b…]
                         [intent="<what the message asks for>"] [compact] [time=HH:MM-HH:MM] [days=mon-fri] [tz=<zone>]
-                        [folders=<folder>,…] [except-folders=<folder>,…] [classifier=<model>] [at=<n>]
+                        [folders=<folder>,…] [except-folders=<folder>,…] [when="<field> <op> <value>"]… [classifier=<model>] [at=<n>]
                                           a rule: a turn that matches it goes to <model>, one of the group's
                                           (or group/<id>, a group in it), first; a model in the group at an
                                           effort of its own is named with it (use=glm/glm-5.3-flash:high).
@@ -26,7 +26,7 @@ const ruleUsage = `usage:
                                           the rule sends it, whatever the agent asked: at the model's nearest
                                           level, or as the agent asked when its levels aren't known
   magpie group rule add <group> pause=<model> [time=HH:MM-HH:MM] [days=mon-fri] [tz=<zone>] [agents=a,b…]
-                        [folders=<folder>,…] [except-folders=<folder>,…] [at=<n>]
+                        [folders=<folder>,…] [except-folders=<folder>,…] [when="agent is not <a,b…>"] [at=<n>]
                                           a pause: while it holds, <model> is left out of the group — sent
                                           nothing, not even when the others fail or a conversation was on it
   magpie group rule rm <group> <n>        remove rule n
@@ -38,7 +38,7 @@ const ruleUsage = `usage:
   Rules are looked at top first when you send a message (a new turn); the first that
   matches puts its model first, and the group's others stay behind it if it fails.
   A pause is looked at on every request and leaves its model out while it holds; its
-  conditions are time, days, agents, folders and except-folders only.
+  conditions are time, days, agents, folders, except-folders and when="agent …" only.
   The agent's tool results within the turn stay with the model the turn began on.
   Every condition given must hold:
   tokens   the request is at least this long (200000, 200k, 1m): estimated from its size, or
@@ -71,6 +71,17 @@ const ruleUsage = `usage:
            tell its folder isn't known to be in one, so it holds for it: pause=<model>
            except-folders=~/big-task keeps <model> for the task in ~/big-task — every other request,
            a subagent's or a small model's too when it doesn't tell its folder, goes elsewhere
+  when     a condition as a field, a way to compare and a value, quoted; give several, each must hold:
+             tokens   >= > < <= a length            when="tokens < 20k"
+             effort   is, is not: off, on or a level; >= <= a level
+                                                    when="effort is not off"  when="effort <= medium"
+             agent    is, is not: agents, a,b       when="agent is not codex,opencode"
+             subagent the request is from a subagent the agent started: when=subagent, or
+                      when="not subagent". Claude Code and Codex say so; other agents' subagents
+                      can't be told from their lead, and count as not one
+             message  contains, does not contain, starts with, matches (a regular expression):
+                      the user's own words as the turn begins, upper or lower case alike
+                                                    when="message contains run the tests"
 
   e.g. magpie group rule add opus-anywhere use=openrouter/google/gemini-3-pro tokens=200k
        magpie group rule add opus-anywhere use=a/vision-model images
@@ -82,7 +93,9 @@ const ruleUsage = `usage:
        magpie group rule add opus-anywhere use=kimi/kimi-k2.6 folders=~/oss
        magpie group rule add auto-claude-opus-5-5 pause=claude/claude-opus-5-5 except-folders=~/big-task
        magpie group rule add opus-anywhere use=deepseek/deepseek-v4-flash intent="a quick question" classifier=groq/llama-3.1-8b-instant
-       magpie group rule add fast use=codex/gpt-5.6-sol use-effort=low intent="a quick question"`
+       magpie group rule add fast use=codex/gpt-5.6-sol use-effort=low intent="a quick question"
+       magpie group rule add fast use=deepseek/deepseek-v4-flash when="effort is off" when="not subagent"
+       magpie group rule add fast use=glm/glm-5.3 when="message starts with /review"`
 
 // parseTokens reads 200000, 200k, 1.5m.
 func parseTokens(v string) (int, error) { return provider.ParseTokens(v) }

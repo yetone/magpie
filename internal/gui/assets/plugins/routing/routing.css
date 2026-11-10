@@ -960,6 +960,17 @@ body.window .rt-gedit > .bar { --vfoot: 8px; }
 .rt-cond.tm { cursor: text; }
 .rt-cond.tm input.clock, .editor .rt-cond.tm input.clock[type="text"] { width: 5.5ch; text-align: center; }
 .rt-cond.tm.bad { border-style: solid; border-color: var(--amber, var(--muted)); }
+/* how a pill compares (aipha2025 on X): a word in the pill that opens the
+   app's menu, quiet until it is pointed at */
+.rt-aopw { display: contents; }
+.rt-op { display: inline-flex; align-items: center; height: 20px; padding: 0 4px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; flex: none; white-space: nowrap; transition: background-color .15s ease; }
+@media (hover: hover) and (pointer: fine) { .rt-op:hover { background: var(--pill-hover, var(--pill)); } }
+.rt-op:focus-visible { outline: none; background: var(--pill-hover, var(--pill)); }
+.rt-cond.ef { cursor: default; }
+.rt-cond.ms { cursor: text; }
+.rt-cond.ms > span { flex: none; }
+.rt-cond.ms > input { min-width: 0; flex: 0 1 auto; }
+.rt-cond.ms.bad { border-style: solid; border-color: var(--amber, var(--muted)); }
 /* the time zone a rule's hours are in, when the server's clock is another */
 .rt-zone { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .rt-cond[hidden] { display: none; }

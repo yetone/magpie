@@ -96,11 +96,17 @@ type Rule struct {
 	// "except in ~/big-task" keeps the model for requests known to come
 	// from there (#1606), never for one that may come from elsewhere.
 	ExceptFolders []string `json:"exceptFolders,omitempty"`
+	// Where: conditions as a field, a way to compare and a value
+	// (rulecond.go) — "effort is not off", "tokens < 20000", "agent is
+	// not codex", "subagent", "message contains …" — for what the fields
+	// above can't say. A magpie from before them doesn't read them, and a
+	// rule of them alone has no condition there, so it matches nothing.
+	Where []Cond `json:"where,omitempty"`
 	// Pause: rather than sending to Use first, the rule leaves Use out of
 	// the group while it holds (John on Discord: a model paused in a
 	// vendor's peak hours). Only Time, Agents, Folders and ExceptFolders
-	// can be its conditions: the request's clock, its agent and the folder
-	// it says, never what it asks for — a pause keeps the model out of the
+	// (and Where's agent conditions) can be its conditions: the request's
+	// clock, its agent and the folder it says, never what it asks for — a pause keeps the model out of the
 	// request whatever it is.
 	Pause bool `json:"pause,omitempty"`
 }
@@ -406,6 +412,9 @@ func (r Rule) Conditions() []string {
 	if len(r.ExceptFolders) > 0 {
 		out = append(out, "not folder "+strings.Join(r.ExceptFolders, "|"))
 	}
+	for _, c := range r.Where {
+		out = append(out, c.Text())
+	}
 	return out
 }
 
@@ -438,6 +447,19 @@ func cleanRules(rules []Rule, members []string) ([]Rule, error) {
 			}
 			r.Time = &w
 		}
+		if len(r.Where) == 0 {
+			r.Where = nil
+		} else {
+			r.Where = slices.Clone(r.Where)
+		}
+		for j := range r.Where {
+			if err := r.Where[j].clean(); err != nil {
+				return nil, fmt.Errorf("rule %d: %w", n, err)
+			}
+			if r.Pause && r.Where[j].Field != "agent" {
+				return nil, fmt.Errorf("rule %d: a pause holds by hours, days, agents or folders only", n)
+			}
+		}
 		switch {
 		case r.Use == "":
 			return nil, fmt.Errorf("rule %d: which model it sends to is missing", n)
@@ -457,7 +479,7 @@ func cleanRules(rules []Rule, members []string) ([]Rule, error) {
 		case len([]rune(r.Intent)) > MaxIntent:
 			return nil, fmt.Errorf("rule %d: an intent is at most %d characters", n, MaxIntent)
 		case len(r.Conditions()) == 0:
-			return nil, fmt.Errorf("rule %d: it needs a condition (tokens, images, effort, agents, intent, compacting, time or folders)", n)
+			return nil, fmt.Errorf("rule %d: it needs a condition (tokens, images, effort, agents, subagent, message, intent, compacting, time or folders)", n)
 		case r.Pause && (r.Tokens > 0 || r.Images || r.Effort != "" || r.Intent != "" || r.Compact):
 			return nil, fmt.Errorf("rule %d: a pause holds by hours, days, agents or folders only", n)
 		}
@@ -487,6 +509,24 @@ type RuleRequest struct {
 	// Folder is the working folder the agent says the request is from;
 	// "" when it doesn't say, which is in no rule's folders.
 	Folder string
+	// Off: the agent turned reasoning off (effort none, thinking
+	// disabled), which a rule's effort condition reads as off.
+	Off bool
+	// Subagent: the request is from a subagent the agent started, as the
+	// agent tells it (Claude Code's and Codex's do); false when it can't
+	// be told.
+	Subagent bool
+	// Message is the user's own words at the turn's start, read only when
+	// a rule has a message condition (RulesReadMessage).
+	Message string
+}
+
+// RulesReadMessage reports whether a rule of rules looks at the user's
+// message, which is then read for it.
+func RulesReadMessage(rules []Rule) bool {
+	return slices.ContainsFunc(rules, func(r Rule) bool {
+		return slices.ContainsFunc(r.Where, func(c Cond) bool { return c.Field == "message" })
+	})
 }
 
 // Matches reports whether the request is one the rule sends to its member
@@ -532,6 +572,11 @@ func (r Rule) MatchesBesidesIntent(q RuleRequest) bool {
 	}
 	if len(r.Agents) > 0 && !slices.Contains(r.Agents, strings.ToLower(q.Agent)) {
 		return false
+	}
+	for _, c := range r.Where {
+		if !c.Holds(q) {
+			return false
+		}
 	}
 	return len(r.Conditions()) > 0
 }
@@ -644,11 +689,11 @@ func ruledEntry(e *Entry, g Group, ms []Member, entries []Entry) {
 		if !ok || r.Pause {
 			continue
 		}
-		if r.Images && r.Tokens == 0 && r.Effort == "" && len(r.Agents) == 0 && r.Intent == "" && !r.Compact && r.Time == nil && !r.ByFolder() && sees(x) && !e.Images &&
+		if r.Images && r.Tokens == 0 && r.Effort == "" && len(r.Agents) == 0 && len(r.Where) == 0 && r.Intent == "" && !r.Compact && r.Time == nil && !r.ByFolder() && sees(x) && !e.Images &&
 			!slices.ContainsFunc(g.Rules[:i], func(b Rule) bool { y, ok := ofRule(b); return !b.Pause && (!ok || !sees(y)) }) {
 			e.Images, e.ImageInput = true, x.ImageInput
 		}
-		if r.Tokens == 0 || r.Images || r.Effort != "" || len(r.Agents) > 0 || r.Intent != "" || r.Compact || r.Time != nil || r.ByFolder() || x.Context <= e.Context {
+		if r.Tokens == 0 || r.Images || r.Effort != "" || len(r.Agents) > 0 || len(r.Where) > 0 || r.Intent != "" || r.Compact || r.Time != nil || r.ByFolder() || x.Context <= e.Context {
 			continue // only a rule of length alone takes every long request
 		}
 		// every request up to the rule's length must fit whoever may get
@@ -682,7 +727,7 @@ func ruledEntry(e *Entry, g Group, ms []Member, entries []Entry) {
 // Pauses reports whether a pause rule holds for a request from agent at
 // the time given, working in folder ("" when it didn't say).
 func (r Rule) Pauses(agent, folder string, at time.Time) bool {
-	if !r.Pause || r.Time == nil && len(r.Agents) == 0 && !r.ByFolder() {
+	if !r.Pause || r.Time == nil && len(r.Agents) == 0 && len(r.Where) == 0 && !r.ByFolder() {
 		return false
 	}
 	if r.Time != nil && !r.Time.Holds(at) {
@@ -690,6 +735,11 @@ func (r Rule) Pauses(agent, folder string, at time.Time) bool {
 	}
 	if !r.inFolders(folder) {
 		return false
+	}
+	for _, c := range r.Where {
+		if c.Field != "agent" || !c.Holds(RuleRequest{Agent: agent}) {
+			return false // a pause's conditions are its agents only
+		}
 	}
 	return len(r.Agents) == 0 || slices.Contains(r.Agents, strings.ToLower(agent))
 }

@@ -38,6 +38,8 @@ const groups = () => ({
 });
 // the order a rule reads, as the editor draws its conditions
 const ORDER = ["intent", "tokens", "images", "effort", "compact", "agents", "folders", "exceptFolders", "time"];
+// the conditions a rule may ask besides (aipha2025 on X), which the + still offers
+const BESIDES = ["subagent", "message"];
 
 const words = {
   en: { edit: "Edit", save: "Save", image: "has an image", down: "Move down" },
@@ -143,10 +145,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const chips1 = await r1.locator(".rt-cond").evaluateAll((xs) => xs.map((x) => x.className));
         assert.deepEqual(chips1, ["rt-cond in on", "rt-cond on rt-model"], "no empty chip beside the intent");
         assert.equal(await r1.locator(".rt-act").count(), 0, "sending goes unsaid");
-        // every condition, each set, in the rule's order; nothing left to add
+        // every condition of its own, each set, in the rule's order; the
+        // + left for the ones a rule may ask besides
         const r2 = rows.nth(1);
         assert.deepEqual(await kinds(r2), ORDER);
-        assert.equal(await r2.locator(".rt-addc").count(), 0);
+        assert.equal(await r2.locator(".rt-addc").count(), 1);
         for (const c of [".tk", ".in", ".fd", ".xf", ".tm"]) assert.match(await r2.locator(".rt-cond" + c).getAttribute("class"), /\bon\b/, c);
         // a pause: its hours, and says it pauses
         const r3 = rows.nth(2);
@@ -172,7 +175,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await press(page, r1.locator(".rt-addc"));
         assert.equal(await page.locator("select").count(), 0, "the app menu, not a native select");
         const items = page.locator(".proto-menu .pm-item");
-        assert.equal(await items.count(), ORDER.length - 1, "all but the intent it has");
+        assert.equal(await items.count(), ORDER.length - 1 + BESIDES.length, "all but the intent it has");
         await items.filter({ hasText: w.image }).click();
         assert.deepEqual(await kinds(r1), ["intent", "images"]);
         assert.equal(await r1.locator('.rt-c[data-k="images"] .rt-cond').getAttribute("class"), "rt-cond on");

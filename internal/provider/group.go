@@ -533,6 +533,7 @@ func cloneGroups(gs []Group) []Group {
 			rs := make([]Rule, len(g.Rules))
 			for j, r := range g.Rules {
 				r.Agents, r.Folders, r.ExceptFolders, r.More = slices.Clone(r.Agents), slices.Clone(r.Folders), slices.Clone(r.ExceptFolders), slices.Clone(r.More)
+				r.Where = slices.Clone(r.Where)
 				if r.Time != nil {
 					t := *r.Time
 					t.Days = slices.Clone(t.Days)
@@ -727,6 +728,7 @@ func (g Group) own() Group {
 		g.Rules[i].Folders = slices.Clone(r.Folders)
 		g.Rules[i].ExceptFolders = slices.Clone(r.ExceptFolders)
 		g.Rules[i].More = slices.Clone(r.More)
+		g.Rules[i].Where = slices.Clone(r.Where)
 		if r.Time != nil {
 			w := *r.Time
 			w.Days = slices.Clone(w.Days)

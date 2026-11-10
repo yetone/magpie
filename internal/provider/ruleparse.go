@@ -3,6 +3,7 @@ package provider
 // A rule as it is typed: use=<model>[,<model>…] use-effort=low tokens=200k images effort=high
 // agents=a,b intent="…" compact time=09:00-18:00 days=mon-fri tz=Asia/Shanghai
 // folders=~/work,"~/My Project" except-folders=~/work/old, or
+// when="effort is not off" when="message contains run the tests" (rulecond.go),
 // pause=<model> time=… days=… agents=… folders=… except-folders=… — by
 // magpie group rule and the
 // TUI's routing page.
@@ -217,6 +218,12 @@ func ParseRule(g Group, words []string) (r Rule, at int, classifier string, err 
 				return r, 0, "", fmt.Errorf("except-folders names the working folders it doesn't hold in: except-folders=~/big-task")
 			}
 			r.ExceptFolders = append(r.ExceptFolders, fs...)
+		case "when", "where", "if":
+			c, err := ParseCond(v)
+			if err != nil {
+				return r, 0, "", err
+			}
+			r.Where = append(r.Where, c)
 		case "classifier", "classify", "by":
 			if classifier = strings.TrimSpace(v); classifier == "" {
 				return r, 0, "", fmt.Errorf("classifier=<model>: the model that tells which intent a message is")
@@ -228,7 +235,7 @@ func ParseRule(g Group, words []string) (r Rule, at int, classifier string, err 
 			}
 			at = n
 		default:
-			return r, 0, "", fmt.Errorf(UnknownRuleWord+"%q (use, use-effort, pause, tokens, images, effort, agents, intent, compact, time, days, tz, folders, except-folders, classifier, at)", w)
+			return r, 0, "", fmt.Errorf(UnknownRuleWord+"%q (use, use-effort, pause, tokens, images, effort, agents, intent, compact, time, days, tz, folders, except-folders, when, classifier, at)", w)
 		}
 	}
 	if zoned {
@@ -246,10 +253,11 @@ func ParseRule(g Group, words []string) (r Rule, at int, classifier string, err 
 	if r.Pause && r.UseEffort != "" {
 		return r, 0, "", fmt.Errorf("pause=<model> sends nothing, so it takes no use-effort=")
 	}
-	if r.Pause && (r.Tokens > 0 || r.Images || r.Effort != "" || r.Intent != "" || r.Compact) {
-		return r, 0, "", fmt.Errorf("pause=<model> holds by time=, days=, agents=, folders= or except-folders= only")
+	if r.Pause && (r.Tokens > 0 || r.Images || r.Effort != "" || r.Intent != "" || r.Compact ||
+		slices.ContainsFunc(r.Where, func(c Cond) bool { return c.Field != "agent" })) {
+		return r, 0, "", fmt.Errorf("pause=<model> holds by time=, days=, agents=, folders=, except-folders= or when=\"agent …\" only")
 	}
-	if r.Pause && r.Time == nil && len(r.Agents) == 0 && !r.ByFolder() {
+	if r.Pause && r.Time == nil && len(r.Agents) == 0 && len(r.Where) == 0 && !r.ByFolder() {
 		return r, 0, "", fmt.Errorf("pause=<model> needs time=, days=, agents=, folders= or except-folders=: when the model is left out")
 	}
 	if r.Intent != "" && classifier == "" && g.Classifier == "" {
@@ -368,6 +376,13 @@ func (r Rule) Line() string {
 	}
 	folders("folders", r.Folders)
 	folders("except-folders", r.ExceptFolders)
+	for _, c := range r.Where {
+		v := strings.ReplaceAll(c.Words(), `"`, "")
+		if strings.ContainsAny(v, " \t") {
+			v = `"` + v + `"`
+		}
+		out = append(out, "when="+v)
+	}
 	return strings.Join(out, " ")
 }
 

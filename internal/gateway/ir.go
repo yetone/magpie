@@ -256,6 +256,11 @@ type Request struct {
 	// (zenFreeTools).
 	strictSaid bool
 
+	// subagent: the request is from a subagent the agent started, as
+	// Claude Code (x-claude-code-agent-id) and Codex (collab_spawn) tell
+	// it, for a rule's subagent condition. Other agents don't say.
+	subagent bool
+
 	Model      string
 	System     string
 	Messages   []Message

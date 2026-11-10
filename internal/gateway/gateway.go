@@ -2772,6 +2772,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	}) {
 		if req, err := parse(from, body); err == nil {
 			ruleReq, ruleAt, words = req, ruleKey(g, r.Header, req), firstWords(req)
+			ruleReq.subagent = subOf(r.Header) != "" ||
+				(agent == "codex" || fromCodex(r.Header)) && usage.PurposeOf(call.Kind) == "kind:collab_spawn"
 		}
 	}
 	if ruleReq != nil && g.Ruled() {
