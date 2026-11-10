@@ -401,6 +401,29 @@ re-derives every place that discloses it.**
   privacy text in the same commit.
 - Seen 1× (2026-10-08).
 
+**A test waits for the state it checks, not for an earlier step of
+the same start.**
+- TestServingGatesTools waited for the gateway's listener and then read
+  the tool gate at once. ListenAndServe sets the listener first and takes
+  the gate later, after loading rests, acks and groups. On a loaded mote,
+  a full -race run of internal/gateway checked in that gap and went red
+  (#6016). With a 300ms pause injected there, it was red 3 of 3.
+  6fa02550a waits for the gate itself.
+- Before waiting on a "ready" sign, read the code that sets it and check
+  that what you assert is done before that sign, not after it.
+- Seen 1× (2026-11-11).
+
+**A body written "to be rewritten at ship" is rewritten before the
+push.**
+- b9f8548d2 (11-10, account export, 1,037 lines; it writes live sign-ins
+  to files) went to main with only "WIP commit before the full checks;
+  body rewritten at ship." The rewrite never happened, so no record of
+  what was run reaches git. This is the 10-15 SUITE_LINE placeholder
+  again, in another wording.
+- Before pushing, read each commit's body (`git log origin/main..`) for
+  "WIP", "TODO", "rewritten" or a template's placeholder.
+- Seen 1× (2026-11-11).
+
 **A test that reads a dependency's source needs the dependency on disk.**
 - 884dbdb2's TestTrayMenuOpenFrameIsWails read Wails' source through
   `go list -m` Dir. CI's fresh module cache hasn't unpacked it, so main was
