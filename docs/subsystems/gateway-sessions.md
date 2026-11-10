@@ -828,7 +828,7 @@ one record or an array of up to 5000 (32 MiB at most), in `usage.jsonl`'s
 shape: `t`, `agent`, `provider`, `model` and `rid` are required; `in`,
 `out`, `cache_read`, `cache_write`, `cache_write_1h`, `reasoning`, `ms`,
 `ttft_ms`, `first_text_ms`, `flow_ms`, `status`, `cost`, `effort`,
-`session` and `err` are optional.
+`session`, `err`, `req` and `served` are optional.
 Any other field, a quoted number, a negative or out-of-range count, a time
 more than an hour ahead or before 2000-01-01T00:00:00Z refuses the whole
 post with a 400 that names the record (`error.index`) and the field
@@ -851,6 +851,13 @@ however old, so a client's history can be backfilled.
   was appended since. The reply counts `accepted` and `skipped` and gives
   each record's `index`, `rid` and `status`, so a re-run of a batch is
   safe.
+- **Asked and answered:** `req` and `served` (#3534) are `Record.Requested`
+  and `Record.Served`, the Requests page's requested and served model:
+  what the client asked for (an alias, a group) and what its vendor's
+  reply said answered. Each is checked as `model` is (a string, at most
+  256 characters, no control characters) and kept only as sent; a record
+  without `served` says nothing of what answered, so it is never filled
+  from `model`. `TestUsageIngestRequestedAndServed`.
 - **Pricing:** a record with `cost` keeps it (`Record.OwnCost`, the
   `rowOwnCost` flag on a packed row). Without one it is priced at magpie's
   own prices, like a gateway row.

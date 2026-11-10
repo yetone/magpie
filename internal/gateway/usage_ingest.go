@@ -73,8 +73,12 @@ var ingestEarliest = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 // first_text_ms and flow_ms (#2637) are what a reply's speed is told by
 // (usage.DecodeOf): without first_text_ms a reply that reasoned tells
 // none, and without flow_ms one its vendor held and let go in a burst
-// isn't told apart from one that streamed.
-var ingestFields = []string{"t", "agent", "provider", "model", "in", "out", "cache_read", "cache_write", "cache_write_1h", "reasoning", "ms", "ttft_ms", "first_text_ms", "flow_ms", "status", "rid", "cost", "effort", "session", "err"}
+// isn't told apart from one that streamed. req and served (#3534) are
+// the model the client asked for (an alias, a group) and the one its
+// vendor's reply said answered: the Requested and Served columns. Each is
+// kept only as sent, so a record without served says nothing of what
+// answered; it is never taken from model.
+var ingestFields = []string{"t", "agent", "provider", "model", "req", "served", "in", "out", "cache_read", "cache_write", "cache_write_1h", "reasoning", "ms", "ttft_ms", "first_text_ms", "flow_ms", "status", "rid", "cost", "effort", "session", "err"}
 
 // ingestFault is what is wrong with one record of a post.
 type ingestFault struct {
@@ -272,6 +276,12 @@ func parseReported(i int, raw json.RawMessage, now time.Time) (usage.Record, *in
 		return rec, f
 	}
 	if rec.Model, f = text("model", true); f != nil {
+		return rec, f
+	}
+	if rec.Requested, f = text("req", false); f != nil {
+		return rec, f
+	}
+	if rec.Served, f = text("served", false); f != nil {
 		return rec, f
 	}
 	if rec.Effort, f = text("effort", false); f != nil {

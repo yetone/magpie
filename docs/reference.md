@@ -2883,6 +2883,11 @@ curl -s http://127.0.0.1:3425/v1/magpie/usage/requests \
   required. `in`, `out`, `cache_read`, `cache_write`, `cache_write_1h`,
   `reasoning`, `ms`, `ttft_ms`, `first_text_ms`, `flow_ms`, `status`,
   `cost` (USD), `effort`, `session` and `err` may be left out.
+- **Asked and answered:** `req` is the model the app asked for (an alias
+  or a group of its own) and `served` the one its vendor's reply said
+  answered (#3534); the Requests page shows them as the requested and
+  served model. Each is kept as sent: left out, it is empty, never taken
+  from `model`.
 - **Speed:** the Requests page tells a reply's speed from `out`, `ms` and
   `ttft_ms` (ms from the request to the reply's first content: text,
   reasoning or a tool call). A reply that reasoned (`reasoning` above 0)

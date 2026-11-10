@@ -436,3 +436,56 @@ func TestUsageIngestTimesChecked(t *testing.T) {
 		}
 	}
 }
+
+// #3534 (Lemonawa): a reported call carries the model the client asked
+// for (req) and the one its vendor's reply said answered (served), and
+// the Requested and Served columns show them; a record without served
+// keeps it unknown, never filled from model. Each is a name, checked as
+// model is.
+func TestUsageIngestRequestedAndServed(t *testing.T) {
+	do := ingestServer(t)
+	both := reportedRecord("named-1", `,"req":"friendly-alias","served":"claude-opus-5-5-20261101"`)
+	none := reportedRecord("plain-1", "")
+	if c, out, b := do("127.0.0.1:5000", "["+both+","+none+"]"); c != 200 || out.Accepted != 2 {
+		t.Fatal(c, b)
+	}
+	h := lanGuard(New().Handler())
+	r := httptest.NewRequest("GET", "/v1/magpie/usage/requests?period=all&via=reported", nil)
+	r.RemoteAddr = "127.0.0.1:5000"
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	var l usageapi.Ledger
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &l) != nil {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	got := map[string][3]string{}
+	for _, row := range l.Rows {
+		got[row.RequestID] = [3]string{row.Model, row.Requested, row.Served}
+	}
+	want := map[string][3]string{
+		"named-1": {"claude-opus-5-5", "friendly-alias", "claude-opus-5-5-20261101"},
+		"plain-1": {"claude-opus-5-5", "", ""},
+	}
+	for rid, w := range want {
+		if got[rid] != w {
+			t.Errorf("%s: model, req, served %q, want %q", rid, got[rid], w)
+		}
+	}
+
+	long := strings.Repeat("m", ingestMaxText+1)
+	cases := []struct{ extra, field string }{
+		{`,"req":` + `"` + long + `"`, "req"},
+		{`,"served":` + `"` + long + `"`, "served"},
+		{`,"req":42`, "req"},
+		{`,"served":"a\u0007b"`, "served"},
+	}
+	for _, c := range cases {
+		code, out, b := do("127.0.0.1:5000", "["+reportedRecord("ok-x", "")+","+reportedRecord("bad-x", c.extra)+"]")
+		if code != 400 || out.Error == nil || out.Error.Param != c.field || out.Error.Index == nil || *out.Error.Index != 1 {
+			t.Errorf("%s: %d %s", c.extra, code, b)
+		}
+	}
+	if n := reportedLines(t); n != 2 {
+		t.Fatal("a refused batch wrote; lines:", n)
+	}
+}
