@@ -20,10 +20,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // Export formats.
@@ -155,7 +156,7 @@ func ExportLogins(agent, format string, users []string) (ExportResult, error) {
 	return res, nil
 }
 
-var exportUnsafe = regexp.MustCompile(`[^A-Za-z0-9@._+-]+`)
+var exportUnsafe = lazyre.New(`[^A-Za-z0-9@._+-]+`)
 
 // exportName is CLIProxyAPI's name for an auth file: <type>-<email>.json,
 // a ChatGPT one's plan after the email.

@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // A bundle is a Claude Code plugin kept in the library as one item
@@ -157,7 +159,7 @@ func inside(dir, p string) (string, bool) {
 	return p, true
 }
 
-var pluginName = regexp.MustCompile(`[^A-Za-z0-9_-]+`)
+var pluginName = lazyre.New(`[^A-Za-z0-9_-]+`)
 
 func pluginSlug(s string) string {
 	s = strings.Trim(pluginName.ReplaceAllString(strings.TrimSpace(s), "-"), "-_")
