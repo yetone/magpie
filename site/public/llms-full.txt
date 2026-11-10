@@ -4245,6 +4245,7 @@ throw Object.assign(new Error("Acme refused the sign-in; sign in again"), { sign
     amount: 370, limit: 1000, unit: "credits", // its own count, when it counts amounts
     model: "opus",              // counts only models whose ids hold this word
     models: [], notModels: [],  // or exactly these ids, or all but these
+    family: "Gemini", pool: "Gemini", // a model's family, and the group sharing its allowance: the card shows a pool's own windows (no model, no family) in place of its models'
     aside: false,               // true: using it up doesn't stop the account
     runsOutAt: "2026-10-05T00:00:00Z", runsOut: 120, // when the soonest credits left are lost, and how many
     balance: 6291,              // a prepaid wallet: what is left, in unit; no used or limit

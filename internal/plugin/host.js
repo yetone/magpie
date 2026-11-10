@@ -3168,7 +3168,12 @@ async function load({ provider, account, proxy }) {
 //       "credits"), span? (seconds the window runs), model? (a
 //       word in the ids of the only models it counts), models? / notModels?
 //       (the ids it counts, or all but these; a bare id and its id@size
-//       count as one), aside? (using it up doesn't
+//       count as one), family? (the model family a model's own window
+//       belongs to: "Gemini"), pool? (the group of models sharing one
+//       allowance: "Gemini", "Claude & GPT"; on the group's own windows,
+//       with no family, and on each of its models' — the GUI shows the
+//       group's windows in place of its models', as for magpie's built-in
+//       Antigravity), aside? (using it up doesn't
 //       stop the account), runsOutAt? (ISO or ms: when the soonest
 //       credits left in it are lost, apart from its reset, as WorkBuddy's
 //       packages end) / runsOut? (how many are lost then), balance?
@@ -3235,6 +3240,8 @@ async function usageOf(provider, account, signal) {
       model: text(w?.model),
       models: ids(w?.models),
       notModels: ids(w?.notModels),
+      family: text(w?.family),
+      pool: text(w?.pool),
       aside: !!w?.aside,
       runsOutAt: when(w?.runsOutAt),
       runsOut: Math.max(0, num(w?.runsOut)),

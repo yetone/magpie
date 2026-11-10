@@ -554,6 +554,7 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
     amount: 370, limit: 1000, unit: <span class="s">"credits"</span>, <span class="c">// its own count, when it counts amounts</span>
     model: <span class="s">"opus"</span>,              <span class="c">// counts only models whose ids hold this word</span>
     models: [], notModels: [],  <span class="c">// or exactly these ids, or all but these</span>
+    family: <span class="s">"Gemini"</span>, pool: <span class="s">"Gemini"</span>, <span class="c">// a model's family, and the group sharing its allowance: the card shows a pool's own windows (no model, no family) in place of its models'</span>
     aside: false,               <span class="c">// true: using it up doesn't stop the account</span>
     runsOutAt: <span class="s">"2026-10-05T00:00:00Z"</span>, runsOut: 120, <span class="c">// when the soonest credits left are lost, and how many</span>
     balance: 6291,              <span class="c">// a prepaid wallet: what is left, in unit; no used or limit</span>

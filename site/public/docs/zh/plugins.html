@@ -554,6 +554,7 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
     amount: 370, limit: 1000, unit: <span class="s">"credits"</span>, <span class="c">// 按数量计时，窗口自己的用量</span>
     model: <span class="s">"opus"</span>,              <span class="c">// 只统计 id 含这个词的模型</span>
     models: [], notModels: [],  <span class="c">// 或恰好这些 id，或除这些外的全部</span>
+    family: <span class="s">"Gemini"</span>, pool: <span class="s">"Gemini"</span>, <span class="c">// 模型所属系列，和共用一份额度的分组：卡片显示分组自己的窗口（不带 model 和 family），代替其中各模型的</span>
     aside: false,               <span class="c">// true：用完也不影响账号使用</span>
     runsOutAt: <span class="s">"2026-10-05T00:00:00Z"</span>, runsOut: 120, <span class="c">// 剩余额度中最早作废的一笔何时作废、作废多少</span>
     balance: 6291,              <span class="c">// 预付钱包：剩余多少（按 unit 计），不写 used 和 limit</span>
