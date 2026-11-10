@@ -175,6 +175,7 @@ magpie group rule add opus-anywhere use=kimi/kimi-k2.6 folders=~/oss,"~/My Proje
 magpie group rule add opus-anywhere pause=copilot/claude-opus-5.5 time=14:00-18:00 days=mon-fri  # left out in those hours
 magpie group rule add opus-anywhere pause=claude/claude-opus-5-5 except-folders=~/big-task  # the model kept for the task in ~/big-task: left out of every other folder
 magpie group rule add opus-anywhere use=deepseek/deepseek-v4-flash when="effort is off" when="not subagent"  # reasoning off, not a subagent
+magpie group rule add opus-anywhere use=deepseek/deepseek-v4-flash when="system matches ^你是对话标题命名"  # a harness's title call, told by its system prompt
 magpie group set coder models+=group/opus-anywhere  # a group in a group
 magpie group rule opus-anywhere      # its rules; rule rm|mv <n>, rule classifier <group> <model>
 magpie group copy opus-anywhere "Opus test"  # the same models, routing and rules, to change on its own
