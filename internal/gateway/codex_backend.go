@@ -3722,7 +3722,7 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 	r = r.WithContext(budget)
 	r = askWhole(r)
 	r = askCompaction(r)
-	ask := func(b []byte) (*recorder, compactResult, error) {
+	ask := func(r *http.Request, b []byte) (*recorder, compactResult, error) {
 		rec := &recorder{header: http.Header{}, status: 200}
 		s.serve(rec, r, provider.Responses, b)
 		if rec.status >= 400 {
@@ -3736,19 +3736,39 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 		}
 		return rec, res, err
 	}
-	rec, res, err := ask(body)
+	rec, res, err := ask(r, body)
+	// A relay of the ChatGPT backend takes developer alone: the summary
+	// ask went to it with the developer messages as system ones
+	// (forVendor, #2955), and it refused every one, 400 "System messages
+	// are not allowed", three of the failures holding the conversation
+	// (compactFails, #5067) — while the turns around it, developer as
+	// they came, are taken. Asked again with the roles as the client
+	// sent them, the swap off, the summary is taken the way the turns
+	// are; when that is refused too, the ask goes on as text, as for the
+	// shapes below. An older sub2api says only "Upstream request failed"
+	// for the same refusal, and one may say it in an error event after a
+	// 200 (roleRefused); a summary with no developer message to give back
+	// is not asked again the same
+	if roleRefused(rec, err) && !late() && !bytes.Equal(developerItemsAsSystem(body), body) {
+		who, msg := compactFailure(body, rec)
+		if err != nil {
+			msg = "broken off: " + err.Error()
+		}
+		log.Printf("codex compaction: %s answered %d (%s); asking again with the roles as the client sent them", who, rec.status, msg)
+		rec, res, err = ask(askAsSent(r), body)
+	}
 	local := ""
 	if late() {
 		local = lateSummary()
 		rec, res, err = &recorder{header: http.Header{}, status: 200}, compactResult{}, nil
-	} else if first := rec.status; lacksEndpoint(first) || itemNotFound(rec) || inputKindRefused(rec, err) || upstreamFailed(rec) || protectionRefused(first, rec.body.Bytes()) ||
+	} else if first := rec.status; lacksEndpoint(first) || itemNotFound(rec) || inputKindRefused(rec, err) || roleRefused(rec, err) || protectionRefused(first, rec.body.Bytes()) ||
 		summaryTooLarge(rec) || err != nil && protectionWords.MatchString(err.Error()) {
 		who, msg := compactFailure(body, rec)
 		if err != nil {
 			msg = "broken off: " + err.Error()
 		}
 		log.Printf("codex compaction: %s answered %d (%s); asking again with the conversation as text", who, first, msg)
-		rec, res, err = ask(plainCompact(body))
+		rec, res, err = ask(r, plainCompact(body))
 		if late() {
 			local = lateSummary()
 			rec, res, err = &recorder{header: http.Header{}, status: 200}, compactResult{}, nil
@@ -3849,7 +3869,7 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 		who, _ := compactFailure(body, rec)
 		called := answeredWith(res.Output)
 		log.Printf("codex compaction: %s wrote no summary%s; asking again with the conversation as text", who, called)
-		prec, pres, perr := ask(plainCompact(body))
+		prec, pres, perr := ask(r, plainCompact(body))
 		switch {
 		case late():
 			local = lateSummary()
@@ -3961,6 +3981,24 @@ func upstreamFailed(rec *recorder) bool {
 }
 
 var upstreamFailedWords = lazyre.New(`(?i)upstream request failed`)
+
+// roleRefused is a summary ask a relay turned away in words that may be
+// the role the swap gave it: a relay of the ChatGPT backend takes
+// developer alone, and the summary went to it with the developer messages
+// as system ones (forVendor, #2955), refused "System messages are not
+// allowed" (#5067) as a current sub2api passes it on, or "Upstream request
+// failed" as an older one words every refusal (upstreamFailed) — as a 4xx,
+// or as an error event in the summary's 200 stream, which had counted
+// toward the guard without either retry. The summary is asked again the
+// way the turns go (askAsSent), and as text when that is refused too.
+func roleRefused(rec *recorder, err error) bool {
+	if rec.status >= 400 {
+		return upstreamFailed(rec) || rec.status == http.StatusBadRequest && systemRefusedWords.Match(rec.body.Bytes())
+	}
+	return err != nil && (systemRefusedWords.MatchString(err.Error()) || upstreamFailedWords.MatchString(err.Error()))
+}
+
+var systemRefusedWords = lazyre.New(`(?i)system messages are not allowed`)
 
 // summaryTooLarge is a summary request refused for its size: past the
 // vendor's byte cap (413; DeepSeek's "Failed to buffer the request body:

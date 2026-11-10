@@ -140,6 +140,15 @@ func askCompaction(r *http.Request) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), compactionAskKey{}, true))
 }
 
+// askAsSent is a summary ask taken back to the roles the client sent,
+// after the swap was refused: the ChatGPT backend behind a relay takes
+// developer alone, and the summary went to it as system (forVendor,
+// #5067). Its turns, developer as they came, are taken, and the summary
+// goes the same way.
+func askAsSent(r *http.Request) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), compactionAskKey{}, false))
+}
+
 func askWhole(r *http.Request) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), wholeReplyKey{}, true))
 }
