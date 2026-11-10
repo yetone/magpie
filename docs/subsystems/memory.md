@@ -210,15 +210,54 @@ off until switched on under Memory → Tidy up every night.
   and `POST /api/memory/dream/undo`; `GET /api/memory/distill` carries
   `dreaming`.
 
-## Not built yet
+### Search by meaning
 
-Semantic search is planned; today search is by words (`Search`, CJK
-split per character, `TestSearch`).
+[internal/memembed](../../internal/memembed/memembed.go) ranks a search by
+what it means as well as by its words, so "什么时候上线" finds "Releases go
+out on Tuesdays". It is off until switched on under Memory → Search by
+meaning, since it downloads a model (~135 MB).
+
+- The model is paraphrase-multilingual-MiniLM-L12-v2, Xenova's int8 ONNX
+  at a pinned revision, fetched from Hugging Face with each file's size
+  and sha256 checked (`pii.Fetch`) into
+  `<cache>/paraphrase-multilingual-MiniLM-L12-v2/<rev>`. It
+  runs in Go on the PII guard's BERT code (`guard.LoadEmbedder`); nothing
+  leaves the computer. Its vectors match ONNX Runtime's to cosine 0.995
+  and are no further from fp32 than ONNX Runtime's own
+  (`TestEmbedderMatchesONNXRuntime`). A search and a memory are read the
+  same way, with no prefix. multilingual-e5-small was tried first: its
+  cosines sat in 0.78 to 0.89 for everything, and a Chinese search ranked
+  Chinese memories over the English one it meant.
+- Switched off, the model folder is deleted (`Set`). The switch is
+  `memory-semantic.json` in the config folder; one that can't be read is
+  off (`TestNotThereIsWords`).
+- What is read: each active or candidate memory's text and why, as an
+  one text, keyed by its sha256 in `vectors.bin` beside the model, once,
+  and again when its text changes; vectors of texts gone are dropped
+  (`TestIndexReadsOnce`). `Keep` reads them in the backend each minute and
+  on a nudge (`Poke`); a search reads up to 16 missing ones itself, and
+  with none read yet it is by words while Keep reads. The model is let go
+  after 10 minutes unused.
+- Ranking (`memory.Semantic`, `fuse` in
+  [search.go](../../internal/memory/search.go)): the memories whose
+  cosine with the query passes `Near` (0.30) and is within `Within` (0.15)
+  of the best are fused with the word hits by reciprocal rank (`rrfK` 20),
+  pinned ×1.2 and non-global ×1.1. Calibrated on 97 real memories and 16
+  queries, half in Chinese for English memories: the one sought scored a
+  median 0.47, the rest a median 0.16; 12 of 16 found with ~4 others each
+  (`TestSearchFindsByMeaning`).
+- Every search goes through it: the MCP server's `memory_search` and the
+  Memory tab, which asks `POST /api/memory/rank` `{q, status}` (ids, best
+  first, not noted as used; null while off) and lists what it ranked
+  first, then what holds the words. `GET`/`POST /api/memory/semantic`
+  `{on}` give the row its state: the download's progress, the memories
+  read, and why either failed.
 
 ## Verification
 
 ```sh
-mote-run go test ./internal/memory ./internal/memdistill ./internal/library
+mote-run go test ./internal/memory ./internal/memdistill ./internal/memembed ./internal/library
+mote-run sh -c 'MAGPIE_EMBED_DIR=$HOME/models/pml go test -run Embedder ./internal/pii/guard'
 mote-run go test -run 'Distill|Dream' ./internal/gui
 mote-run go test -tags nogui -run 'MemoryMCP|OwnMCP' ./internal/gateway
 mote-run go test ./internal/browsermcp ./internal/cli

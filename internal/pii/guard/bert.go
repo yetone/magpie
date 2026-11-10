@@ -319,6 +319,20 @@ func (nt *net) embed(ids []int, rows int) []float32 {
 // encode is the classifier's scores for embeddings x of n tokens, over
 // procs goroutines.
 func (nt *net) encode(x []float32, n, procs int) []float32 {
+	x = nt.hidden(x, n, procs)
+	out := nt.cls.matmul(x, n, procs)
+	for t := 0; t < n; t++ {
+		row := out[t*nt.labels : t*nt.labels+nt.labels]
+		for i := range row {
+			row[i] = nt.clsBias[i] + row[i]
+		}
+	}
+	return out
+}
+
+// hidden is the encoder's last hidden state for embeddings x of n tokens,
+// [n, hidden], over procs goroutines.
+func (nt *net) hidden(x []float32, n, procs int) []float32 {
 	for i := range nt.layers {
 		l := &nt.layers[i]
 		qkv := l.qkv.matmul(x, n, procs)
@@ -341,14 +355,7 @@ func (nt *net) encode(x []float32, n, procs int) []float32 {
 		skipNorm(o, x, n, l.downBias, l.ln2w, l.ln2b)
 		x = o
 	}
-	out := nt.cls.matmul(x, n, procs)
-	for t := 0; t < n; t++ {
-		row := out[t*nt.labels : t*nt.labels+nt.labels]
-		for i := range row {
-			row[i] = nt.clsBias[i] + row[i]
-		}
-	}
-	return out
+	return x
 }
 
 // skipNorm is SkipLayerNormalization: out = norm(out + skip + bias).

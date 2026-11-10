@@ -87,7 +87,7 @@ const (
 
 // Load reads the model in dir.
 func Load(dir string) (*Model, error) {
-	tok, err := loadTokenizer(filepath.Join(dir, "tokenizer.json"))
+	tok, err := loadTokenizer(filepath.Join(dir, "tokenizer.json"), vocabSize)
 	if err != nil {
 		return nil, fmt.Errorf("tokenizer: %w", err)
 	}

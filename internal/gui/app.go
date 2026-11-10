@@ -607,6 +607,8 @@ func Run(version string, showMain bool, link string) error {
 	}()
 	// conversations read into memory, when switched on (Memory tab)
 	go keepDistilling(backendCtx)
+	// memories read for search by meaning, when switched on
+	go keepEmbedding(backendCtx)
 
 	// before the item is made, which starts as hidden as AppKit kept it
 	hiddenAtStart := bringTrayBack()

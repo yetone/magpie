@@ -61,7 +61,7 @@ func dir(t *testing.T) string {
 // model's tokenizer.json (testdata/tokens.json: ids, and offsets in
 // characters).
 func TestTokenizerMatchesHF(t *testing.T) {
-	tk, err := loadTokenizer(filepath.Join(dir(t), "tokenizer.json"))
+	tk, err := loadTokenizer(filepath.Join(dir(t), "tokenizer.json"), vocabSize)
 	if err != nil {
 		t.Fatal(err)
 	}

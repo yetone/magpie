@@ -235,6 +235,13 @@ func unzipTo(f *zip.File, path string) error {
 	return out.Close()
 }
 
+// Fetch is fetch for another package's pinned file (memembed's model):
+// through magpie's proxy, taken up where a stopped one left off, and
+// renamed into place only when its sha256 is want.
+func Fetch(ctx context.Context, url, path string, size int64, want string, done *atomic.Int64) error {
+	return fetch(ctx, url, path, size, want, done)
+}
+
 // fetch downloads url to path through path+".part", taking up a part
 // already there with a Range request, and renames it to path only when
 // its sha256 is want (and its size size, unless that is -1). done counts

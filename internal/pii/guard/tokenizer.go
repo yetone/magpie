@@ -18,8 +18,9 @@ import (
 // tokenizers library runs it (XLM-RoBERTa's): special tokens split out
 // first, then SentencePiece's precompiled normalization (NFKC and the
 // like), a split at whitespace, Metaspace's "▁", and a Unigram model
-// over its 40,003 pieces. Each token says which bytes of the text it came
-// from, as the library's offsets do.
+// over its pieces. Each token says which bytes of the text it came
+// from, as the library's offsets do. AstrLink Guard's has 40,003 pieces
+// (vocabSize), the embedder's 250,002 (embedder.go).
 
 const vocabSize = 40003
 
@@ -32,6 +33,9 @@ type tokenizer struct {
 	special []special
 	trie    []uint32 // the charsmap's double array
 	norm    []byte   // and the strings it points at
+	// dropSpace is a pre-tokenizer that starts with WhitespaceSplit (the
+	// embedder's): every run of whitespace is dropped, after a digit too
+	dropSpace bool
 }
 
 type special struct {
@@ -47,7 +51,7 @@ type token struct {
 	start, end int
 }
 
-func loadTokenizer(path string) (*tokenizer, error) {
+func loadTokenizer(path string, size int) (*tokenizer, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -67,6 +71,11 @@ func loadTokenizer(path string) (*tokenizer, error) {
 			} `json:"normalizers"`
 			Charmap string `json:"precompiled_charsmap"`
 		} `json:"normalizer"`
+		PreTokenizer struct {
+			Pretokenizers []struct {
+				Type string `json:"type"`
+			} `json:"pretokenizers"`
+		} `json:"pre_tokenizer"`
 		Model struct {
 			Type  string               `json:"type"`
 			UnkID int                  `json:"unk_id"`
@@ -76,10 +85,10 @@ func loadTokenizer(path string) (*tokenizer, error) {
 	if err := json.Unmarshal(b, &f); err != nil {
 		return nil, err
 	}
-	if f.Model.Type != "Unigram" || len(f.Model.Vocab) != vocabSize {
+	if f.Model.Type != "Unigram" || len(f.Model.Vocab) != size {
 		return nil, fmt.Errorf("a %s model of %d pieces", f.Model.Type, len(f.Model.Vocab))
 	}
-	t := &tokenizer{pieces: make(map[string]int, vocabSize), scores: make([]float64, vocabSize), unk: f.Model.UnkID}
+	t := &tokenizer{pieces: make(map[string]int, size), scores: make([]float64, size), unk: f.Model.UnkID}
 	least := 0.0
 	for i, v := range f.Model.Vocab {
 		var p string
@@ -105,6 +114,8 @@ func loadTokenizer(path string) (*tokenizer, error) {
 	if f.Normalizer.Type == "Sequence" && len(f.Normalizer.Normalizers) == 1 {
 		cm = f.Normalizer.Normalizers[0].Charmap
 	}
+	pre := f.PreTokenizer.Pretokenizers
+	t.dropSpace = len(pre) > 0 && pre[0].Type == "WhitespaceSplit"
 	raw, err := base64.StdEncoding.DecodeString(cm)
 	if err != nil || len(raw) < 4 {
 		return nil, errors.New("no precompiled charsmap")
@@ -177,7 +188,7 @@ func (t *tokenizer) encodePlain(out []token, text string, base int) []token {
 		return out
 	}
 	norm := t.normalize(text, base)
-	for _, piece := range pretokenize(norm) {
+	for _, piece := range pretokenize(norm, t.dropSpace) {
 		// Metaspace: spaces become ▁, the piece starts with one, and each
 		// ▁ starts a word of its own
 		for i := range piece {
@@ -200,8 +211,9 @@ func (t *tokenizer) encodePlain(out []token, text string, base int) []token {
 }
 
 // pretokenize splits at whitespace: a run of it is dropped, unless it
-// follows a digit, when each of its characters is a piece of its own.
-func pretokenize(cs []nchar) [][]nchar {
+// follows a digit and not drop, when each of its characters is a piece
+// of its own.
+func pretokenize(cs []nchar, drop bool) [][]nchar {
 	var out [][]nchar
 	w := -1
 	flush := func(i int) {
@@ -223,7 +235,7 @@ func pretokenize(cs []nchar) [][]nchar {
 		for j < len(cs) && unicode.IsSpace(cs[j].r) {
 			j++
 		}
-		if i > 0 && cs[i-1].r >= '0' && cs[i-1].r <= '9' {
+		if !drop && i > 0 && cs[i-1].r >= '0' && cs[i-1].r <= '9' {
 			for k := i; k < j; k++ {
 				out = append(out, cs[k:k+1:k+1])
 			}

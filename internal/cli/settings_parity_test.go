@@ -402,6 +402,9 @@ var notYet = map[string]string{
 	"POST /api/memory/dream":                     L,  // memory_distill.go
 	"POST /api/memory/dream/run":                 L,  // memory_distill.go
 	"POST /api/memory/dream/undo":                L,  // memory_distill.go
+	"GET /api/memory/semantic":                   L,  // memory_semantic.go
+	"POST /api/memory/semantic":                  L,  // memory_semantic.go
+	"POST /api/memory/rank":                      L,  // memory_semantic.go
 	"POST /api/library/skills/regroup":           W,  // library.go
 	"GET /api/omarchy/widget":                    W,  // omarchy.go
 	"POST /api/omarchy/widget":                   W,  // omarchy.go

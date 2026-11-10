@@ -959,6 +959,10 @@ magpie.plugin("library", (ctx) => {
   let mem = null;        // /api/memory
   let dist = null;       // /api/memory/distill: conversations read into memory
   let distPoll = 0;
+  let sem = null;        // /api/memory/semantic: search by meaning (memembed)
+  let semPoll = 0;
+  let memRank = null;    // {q, status, ids}: the search's ranking by meaning, best first
+  let rankT = 0;
   let memLoading = false;
   let memQ = "";         // the search typed
   let memStatus = "active";
@@ -988,13 +992,15 @@ magpie.plugin("library", (ctx) => {
     if (memLoading) return;
     memLoading = true;
     try {
-      [mem, dist] = await Promise.all([api("memory"), api("memory/distill").catch(() => null)]);
+      [mem, dist, sem] = await Promise.all([api("memory"), api("memory/distill").catch(() => null), api("memory/semantic").catch(() => null)]);
     } catch (e) {
       status(e.message, "err");
     }
     memLoading = false;
     if (tab === "memory" && mem) render();
     distWatch();
+    semWatch();
+    rankSoon();
   }
   function memDirty() {
     if (!memOpen || !memDraft) return false;
@@ -1069,6 +1075,7 @@ magpie.plugin("library", (ctx) => {
     row.append(glyph(GLYPH.doc), who, sw);
     card.append(row);
     if (dist) card.append(distillRow(), dreamRow());
+    if (sem) card.append(semRow());
     if (!lib.servers.some((s) => s.name === "magpie-memory")) {
       const r = el("div", "row lib-row lib-memtools");
       const w = el("div", "who");
@@ -1085,21 +1092,25 @@ magpie.plugin("library", (ctx) => {
     q.type = "search";
     q.className = "lib-memq";
     q.dataset.lib = "memq";
-    q.oninput = () => { memQ = q.value; render(); };
+    q.oninput = () => { memQ = q.value; render(); rankSoon(); };
     q.onkeydown = (e) => e.stopPropagation();
     const sugg = count("candidate");
     const st = segs([
       ["active", t("In use") + (count("active") ? " · " + count("active") : "")],
       ...(sugg || memStatus === "candidate" ? [["candidate", t("To review") + (sugg ? " · " + sugg : "")]] : []),
       ["archived", t("Archived") + (count("archived") ? " · " + count("archived") : "")],
-    ], memStatus, (v) => { memStatus = v; memOpen = null; render(); });
+    ], memStatus, (v) => { memStatus = v; memOpen = null; render(); rankSoon(); });
     st.classList.add("lib-memstatus");
     const sc = menuButton(memScope ? scopeName(memScope) : t("All"), "lib-memscope", () => openProtoMenu(sc, [{ v: "", name: t("Everywhere and every project"), literalName: true, note: "" }, ...memScopes(true).filter((s) => all.some((m) => m.scope === s)).map((s) => ({ v: s, name: scopeName(s), literalName: true, note: "" }))], memScope, (v) => { memScope = v; render(); }, "Where it applies"));
     const words = memQ.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    // with search by meaning on, what it ranked comes first, best first,
+    // then what holds the words typed and it didn't rank
+    const ranked = memRank && memRank.q === memQ && memRank.status === memStatus ? memRank.ids : [];
+    const at = new Map(ranked.map((id, i) => [id, i]));
     const shown = all.filter((m) => (memStatus === "archived" ? m.status === "archived" || m.status === "superseded" : m.status === memStatus)
       && (!memScope || m.scope === memScope)
-      && words.every((w) => [m.text, m.why || "", ...(m.tags || []), kindName(m.kind), scopeName(m.scope)].join(" ").toLowerCase().includes(w)))
-      .sort((a, b) => (!!b.pinned - !!a.pinned) || (b.updated > a.updated ? 1 : b.updated < a.updated ? -1 : 0));
+      && (at.has(m.id) || words.every((w) => [m.text, m.why || "", ...(m.tags || []), kindName(m.kind), scopeName(m.scope)].join(" ").toLowerCase().includes(w))))
+      .sort((a, b) => (at.has(b.id) - at.has(a.id)) || (at.get(a.id) - at.get(b.id)) || (!!b.pinned - !!a.pinned) || (b.updated > a.updated ? 1 : b.updated < a.updated ? -1 : 0));
     // what's picked is what's listed: a search, a filter or another
     // status leaves the rest unpicked, and an empty list ends Select
     memShown = shown;
@@ -1324,6 +1335,67 @@ magpie.plugin("library", (ctx) => {
     acts.append(toggle(d.dream, t("Tidy up every night"), (on) => distChange("memory/dream", { on })));
     r.append(glyph(GLYPH.backup), w, acts);
     return r;
+  }
+  // Search by meaning (memembed): a small model on this computer reads
+  // each memory once, and the search finds what means the same in other
+  // words or another language. Switched off, the model is deleted.
+  function semRow() {
+    const s = sem;
+    const r = el("div", "row lib-row lib-memsem");
+    const w = el("div", "who");
+    w.append(el("div", "name", t("Search by meaning")));
+    let line = t("Finds memories that mean what you search for, in any language. Downloads a {size} model that runs on this computer.", { size: Math.round(s.size / 1e6) + " MB" });
+    let err = false;
+    if (s.on && s.downloading) line = t("Downloading the model · {p}%", { p: Math.floor(100 * s.done / (s.size || 1)) });
+    else if (s.on && s.error && !s.installed) { line = t("Couldn't download the model: {error}", { error: s.error }); err = true; }
+    else if (s.on && s.failed) { line = t("Couldn't read the memories: {error}", { error: s.failed }); err = true; }
+    else if (s.on && s.installed && s.read < s.of) line = t("Reading the memories · {n} of {m}", { n: s.read, m: s.of });
+    else if (s.on && s.installed) line = t("Finds memories that mean what you search for, in any language, on this computer.");
+    w.append(el("div", "sub" + (err ? " err" : ""), line));
+    const acts = el("div", "lib-acts");
+    if (s.on && s.error && !s.installed && !s.downloading) acts.append(button(t("Try again"), "action lib-semretry", () => semChange(true)));
+    acts.append(toggle(s.on, t("Search by meaning"), (on) => semChange(on)));
+    r.append(glyph(GLYPH.search), w, acts);
+    return r;
+  }
+  async function semChange(on) {
+    try {
+      sem = await api("memory/semantic", { on });
+    } catch (e) {
+      status(e.message, "err", 6000);
+    }
+    memRank = null;
+    render();
+    semWatch();
+    rankSoon();
+  }
+  // while the model downloads or the memories are read, the row is read
+  // again every 2s
+  function semWatch() {
+    clearTimeout(semPoll);
+    const s = sem;
+    if (!s?.on || !(s.downloading || s.reading || (s.installed && s.read < s.of && !s.failed))) return;
+    semPoll = setTimeout(async () => {
+      if (tab !== "memory") return;
+      const was = s.installed;
+      try { sem = await api("memory/semantic"); } catch {}
+      render();
+      semWatch();
+      if (!was && sem.installed) rankSoon();
+    }, 2000);
+  }
+  // the search, ranked by meaning a moment after the typing stops
+  function rankSoon() {
+    clearTimeout(rankT);
+    if (!sem?.on || !sem.installed || !memQ.trim()) { memRank = null; return; }
+    rankT = setTimeout(async () => {
+      const q = memQ, st = memStatus;
+      let r;
+      try { r = await api("memory/rank", { q, status: st }); } catch { return; }
+      if (q !== memQ || st !== memStatus || tab !== "memory") return;
+      memRank = r.ids ? { q, status: st, ids: r.ids } : null;
+      render();
+    }, 250);
   }
   async function distChange(path, body, reload) {
     try {
