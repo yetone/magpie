@@ -541,3 +541,22 @@ func TestBiliZedThroughPrefix(t *testing.T) {
 		t.Fatalf("served %d, ran %v", served, f.runs)
 	}
 }
+
+// TestBiliVersionPastItsWarnings: `bili --version` is read with stderr,
+// and bili 0.1.213 on mote wrote a config warning before the version; the
+// card said "2026-11-09T23:44:06.211" for the version.
+func TestBiliVersionPastItsWarnings(t *testing.T) {
+	for out, want := range map[string]string{
+		"0.1.213 (133f3525c)":   "0.1.213",
+		"0.1.213 (133f3525c)\n": "0.1.213",
+		"2026-11-09T23:44:06.211 [warn] [v=0.1.213] [acp-config] ignoring unknown top-level config key(s): models\n0.1.213 (133f3525c)\n": "0.1.213",
+		"0.1.214-beta.1":                      "0.1.214-beta.1",
+		"[warn] something\r\n0.2.0 (abc)\r\n": "0.2.0",
+		"command not found":                   "",
+		"":                                    "",
+	} {
+		if got := biliVersion(out); got != want {
+			t.Errorf("biliVersion(%q) = %q, want %q", out, got, want)
+		}
+	}
+}

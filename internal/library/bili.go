@@ -212,6 +212,22 @@ func biliOn(status string) bool {
 }
 
 // ReadBili says whether bili is installed and which agents have its plugin.
+// biliVersion is the version in `bili --version`'s output. Its output is
+// read with stderr, where bili writes warnings first (a config key it
+// doesn't know: "2026-11-09T23:44:06.211 [warn] [v=0.1.213] ..."), so
+// the version is the first word of the line that starts with one.
+func biliVersion(out string) string {
+	for _, l := range strings.Split(out, "\n") {
+		w, _, _ := strings.Cut(strings.TrimSpace(l), " ")
+		if biliVersionRe.MatchString(w) {
+			return w
+		}
+	}
+	return ""
+}
+
+var biliVersionRe = lazyre.New(`^v?\d+\.\d+\.\d+([-+][0-9A-Za-z.+-]*)?$`)
+
 func ReadBili() *BiliView {
 	return readBili(detected())
 }
@@ -225,7 +241,7 @@ func readBili(agents []*agent.Agent) *BiliView {
 		}
 	} else {
 		if out, err := biliRun(v.Path, 30*time.Second, "--version"); err == nil {
-			v.Version, _, _ = strings.Cut(strings.TrimSpace(out), " ")
+			v.Version = biliVersion(out)
 		}
 		v.Saved = readBiliSaved()
 		out, err := biliRun(v.Path, 30*time.Second, "plugin", "list")
