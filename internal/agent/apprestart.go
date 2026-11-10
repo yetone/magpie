@@ -17,10 +17,11 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 )
 
-// Claude Desktop, WorkBuddy and OpenMausBot read what magpie writes for
-// them as they start (微雨南山 and stones on Discord, 10-24: a provider
+// Claude Desktop, WorkBuddy, OpenMausBot and ZCode read what magpie writes
+// for them as they start (微雨南山 and stones on Discord, 10-24: a provider
 // added showed up there only after a restart; maxleebeta, 11-08: a model
-// picked for OpenMausBot wasn't in its search). Claude Desktop asks the
+// picked for OpenMausBot wasn't in its search; yetone/magpie#5662: ZCode's
+// picker kept the models it read at start). Claude Desktop asks the
 // gateway for its models once, at start. WorkBuddy 5.6's app.asar watches models.json only
 // when the file was there at start, and the watch is on the file itself,
 // so a rewrite by rename leaves it watching the old one. While such an app
@@ -47,17 +48,21 @@ type restartable struct {
 // com.anthropic.claudefordesktop, executable Claude).
 var claudeDesktopApp = desktopApp{id: "com.anthropic.claudefordesktop", names: []string{"Claude.app"}}
 
+// zcodeApp is ZCode's desktop bundle (dev.zcode.app; 3.17.2's ZCode.exe on
+// Windows).
+var zcodeApp = desktopApp{id: "dev.zcode.app", names: []string{"ZCode.app"}}
+
 // restartApps are the agents whose desktop app the Agents row restarts.
 // macOS: Claude.app, WorkBuddy.app and WorkBuddy AI.app (both run an
-// executable named Electron) and OpenMausBot.app. Windows: Claude
-// Desktop is claude.exe, from Squirrel's %LOCALAPPDATA%\AnthropicClaude
+// executable named Electron), OpenMausBot.app and ZCode.app. Windows:
+// Claude Desktop is claude.exe, from Squirrel's %LOCALAPPDATA%\AnthropicClaude
 // (a claude.exe stub beside app-<version>\claude.exe) or its MSIX
 // (desktopdir's Claude_… and AnthropicPBC.Claude_…), never Claude
 // Code's claude.exe elsewhere;
 // WorkBuddy is C:\Program Files\WorkBuddy\WorkBuddy.exe (5.6.2, seen on
-// the Windows box). WorkBuddy AI's Windows build wasn't to hand, so it has
-// no Restart there. Only OpenMausBot ships a Linux app; magpie doesn't
-// restart it there.
+// the Windows box), and ZCode is ZCode.exe. WorkBuddy AI's Windows build
+// wasn't to hand, so it has no Restart there. Only OpenMausBot ships a
+// Linux app; magpie doesn't restart it there.
 var restartApps = map[string]restartable{
 	"claude-desktop": {mac: claudeDesktopApp, macCmd: desktopInstance, winExe: "claude.exe", win: func(image string) bool {
 		return winBase(image, "claude.exe") && (winHas(image, `\AnthropicClaude\`) || winHas(image, `\WindowsApps\Claude_`) || winHas(image, `\WindowsApps\AnthropicPBC.Claude_`))
@@ -71,6 +76,12 @@ var restartApps = map[string]restartable{
 	// per-user NSIS, OpenMausBot.exe under Programs\openmausbot
 	"openmausbot": {mac: ombApp, winExe: "OpenMausBot.exe", win: func(image string) bool {
 		return winBase(image, "OpenMausBot.exe")
+	}},
+	// ZCode reads its providers at start (noticeZcode): its picker lists
+	// magpie's models from config.json and provider_config.json as they
+	// were then
+	"zcode": {mac: zcodeApp, winExe: "ZCode.exe", win: func(image string) bool {
+		return winBase(image, "ZCode.exe")
 	}},
 }
 
@@ -326,6 +337,8 @@ func (a *Agent) AppBehind() *AppRun {
 // applied and magpie's profile (or the user's for magpie's gateway), with the models the gateway lists it.
 // WorkBuddy: magpie's models in its models.json (workbuddyPart).
 // OpenMausBot: magpie's engine in its config.json (ombPart).
+// ZCode: magpie's provider in config.json and its rules in
+// provider_config.json (zcodePart).
 func (a *Agent) appReads() (files []string, reads func() string) {
 	switch a.ID {
 	case "claude-desktop":
@@ -372,6 +385,9 @@ func (a *Agent) appReads() (files []string, reads func() string) {
 		return []string{a.Path}, func() string { return workbuddyPart(a.Path) }
 	case "openmausbot":
 		return []string{a.Path}, func() string { return ombPart(a.Path) }
+	case "zcode":
+		rules := filepath.Join(filepath.Dir(a.Path), "provider_config.json")
+		return []string{a.Path, rules}, func() string { return zcodePart(a.Path, rules) }
 	}
 	return nil, nil
 }

@@ -484,6 +484,74 @@ func zcodeDefaultLevel(levels []string) string {
 	return on[len(on)/2]
 }
 
+// zcodePart is what ZCode reads of magpie's provider when it starts: the
+// provider in config.json and magpie's rules in provider_config.json, not
+// the key (AppBehind).
+func zcodePart(path, rules string) string {
+	var b strings.Builder
+	if raw, ok := edit.GetJSONRaw(path, "provider."+magpieID); ok {
+		var prov map[string]any
+		if json.Unmarshal([]byte(raw), &prov) == nil {
+			if opts, _ := prov["options"].(map[string]any); opts != nil {
+				delete(opts, "apiKey")
+			}
+			if v, err := json.Marshal(prov); err == nil {
+				b.Write(v)
+			}
+		}
+	}
+	b.WriteByte('\n')
+	b.WriteString(zcodeRulesPart(rules))
+	return b.String()
+}
+
+// zcodeRulesPart is magpie's provider rule and model rules in
+// provider_config.json at path, as ZCode reads them at start. A rule of
+// another provider is left out, so ZCode's own writes to one are no change
+// of magpie's.
+func zcodeRulesPart(path string) string {
+	var c struct {
+		Config struct {
+			ProviderConfigRules struct {
+				ProviderRules []json.RawMessage `json:"providerRules"`
+			} `json:"providerConfigRules"`
+			ModelConfigRules struct {
+				ProviderModelRules       []json.RawMessage `json:"providerModelRules"`
+				ManualProviderModelRules []json.RawMessage `json:"manualProviderModelRules"`
+			} `json:"modelConfigRules"`
+		} `json:"config"`
+	}
+	b, _ := os.ReadFile(path)
+	if json.Unmarshal(b, &c) != nil {
+		return ""
+	}
+	var out strings.Builder
+	for _, rs := range [][]json.RawMessage{
+		c.Config.ProviderConfigRules.ProviderRules,
+		c.Config.ModelConfigRules.ProviderModelRules,
+		c.Config.ModelConfigRules.ManualProviderModelRules,
+	} {
+		for _, r := range rs {
+			var m map[string]any
+			if json.Unmarshal(r, &m) != nil || m["providerId"] != magpieID {
+				continue
+			}
+			// the key is not what ZCode's picker reads, and a rotation of
+			// it is no change of the list
+			if cfg, _ := m["config"].(map[string]any); cfg != nil {
+				if access, _ := cfg["access"].(map[string]any); access != nil {
+					delete(access, "apiKey")
+				}
+			}
+			if v, err := json.Marshal(m); err == nil {
+				out.Write(v)
+				out.WriteByte('\n')
+			}
+		}
+	}
+	return out.String()
+}
+
 // zcodeRuled reports whether provider_config.json has magpie's provider.
 func zcodeRuled(path string) bool {
 	var c struct {
