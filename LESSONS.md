@@ -906,6 +906,22 @@ each one.
     `go test ./internal/cli -run Help|HTTPS|TLS|…`, and a -run filter
     skips the guard, which was named for none of those words. A change
     that adds a route runs internal/cli whole, with no -run.
+  - The same commit's `GET /magpie-ca.crt` was in neither
+    clientPrefixes nor readOnlyRoutes, so internal/gateway's
+    TestClientPathCoversHandler and TestReadOnlyKeyEveryRoute were red
+    on ubuntu and macOS CI for about ten hours (db0f2f20d, 5b28e8599)
+    under two tags, until 6b11914df. The CLI fix (20aff50d4) answered
+    one guard and stopped there. A route has three guards: the CLI's,
+    the one-port page's and the read-only key's. A change that adds one
+    runs internal/cli and internal/gateway whole, and a fix for one
+    guard reads the other two.
+  - plugins#601 (muzimu217) brought back the Doubao plugin declined on
+    10-06, now reading Doubao.app's HttpOnly cookies over CDP, clicking
+    through its reward campaigns, installing a .dmg into /Applications
+    and sending requests through a third-party relay. It was closed
+    unrun. A vendor the maintainer declined is checked for before the
+    diff is read: grep the PR's package names against the memory of
+    declined vendors and docs/contributors.md.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
