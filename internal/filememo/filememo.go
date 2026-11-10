@@ -315,3 +315,15 @@ func statFile(path string) (os.FileInfo, error) {
 	mu.Unlock()
 	return fi, err
 }
+
+// DropKind lets go of what was kept of every file read as kind: the next
+// Read of one reads and parses it again.
+func DropKind(kind string) {
+	mu.Lock()
+	defer mu.Unlock()
+	for k := range seen {
+		if k.kind == kind {
+			delete(seen, k)
+		}
+	}
+}

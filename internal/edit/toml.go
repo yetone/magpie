@@ -79,12 +79,21 @@ func EachTOMLTable(path string, fn func(TOMLTable)) error {
 // retain their literal text. Arrays and inline tables are omitted.
 // An array table with the requested name is a type error, not an absent table.
 func GetTOMLTable(path, name string) (map[string]string, error) {
+	a := tomlAnswersOf(path)
+	if a != nil {
+		if t, ok := a.getTable(name); ok {
+			return t, nil
+		}
+	}
 	tables, err := tomlTablesOf(path)
 	if err != nil {
 		return nil, err
 	}
 	table, ok := tomlTableNamed(tables, name)
 	if !ok {
+		if a != nil {
+			a.setTable(name, nil)
+		}
 		return nil, nil
 	}
 	if table.array {
@@ -95,6 +104,9 @@ func GetTOMLTable(path, name string) (map[string]string, error) {
 		if kv.scalar {
 			out[kv.name] = kv.value
 		}
+	}
+	if a != nil {
+		a.setTable(name, out)
 	}
 	return out, nil
 }
@@ -317,19 +329,30 @@ func DelTOMLTable(path, name string) error {
 // comment, an array or inline table over several lines included. A file
 // TOML's parser refuses is read line by line, as well as that goes.
 func GetTOMLTop(path, key string) (string, bool) {
+	a := tomlAnswersOf(path)
+	if a != nil {
+		if v, ok := a.getTop(key); ok {
+			return v.v, v.ok
+		}
+	}
 	doc, err := tomlFileOf(path)
 	if err != nil {
 		return getTOMLTopLines(path, key)
 	}
+	v := tomlTop{}
 	for _, kv := range doc.root.keys {
 		if kv.name == key {
+			v = tomlTop{kv.text, true}
 			if kv.scalar {
-				return kv.value, true
+				v.v = kv.value
 			}
-			return kv.text, true
+			break
 		}
 	}
-	return "", false
+	if a != nil {
+		a.setTop(key, v)
+	}
+	return v.v, v.ok
 }
 
 // getTOMLTopLines is GetTOMLTop for a file that isn't valid TOML: the first
@@ -511,6 +534,7 @@ func tomlTablesOf(path string) ([]tomlTableSpan, error) {
 // file is an empty document and no error.
 func tomlFileOf(path string) (tomlFile, error) {
 	doc, err := filememo.Read("toml file", path, func(b []byte) (tomlFile, error) {
+		tomlParses.Add(1)
 		doc, err := parseTOMLFile(splitLines(string(TrimBOM(b))))
 		if err != nil {
 			return tomlFile{}, fmt.Errorf("%s: %w", path, err)
@@ -543,6 +567,7 @@ func tomlFileOf(path string) (tomlFile, error) {
 	if errors.Is(err, fs.ErrNotExist) {
 		return tomlFile{}, nil
 	}
+	tomlUsed()
 	return doc, err
 }
 
