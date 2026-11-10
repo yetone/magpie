@@ -1,8 +1,9 @@
 package library
 
 import (
-	"regexp"
 	"strings"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // A registry entry's runtimeArguments for an OCI package are docker run's
@@ -27,7 +28,7 @@ var dockerValued = map[string]bool{"-e": true, "--env": true, "--entrypoint": tr
 	"--workdir": true, "-u": true, "--user": true, "--platform": true, "--name": true, "--pull": true}
 
 // volumeName is a named volume as docker names one.
-var volumeName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
+var volumeName = lazyre.New(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
 
 // volumeOpts are what may follow a -v's container path.
 var volumeOpts = map[string]bool{"ro": true, "rw": true, "z": true, "Z": true, "nocopy": true,
