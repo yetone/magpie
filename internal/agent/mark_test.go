@@ -53,6 +53,7 @@ func TestMarkedLinesEveryAgent(t *testing.T) {
 	claudeManaged = func() string { return filepath.Join(home, "managed-settings.json") }
 	t.Cleanup(func() { claudeManaged = managed })
 	startAlma(t)
+	startShelley(t)
 	host := strings.TrimPrefix(gateway.URL(), "http://")
 	var marked []string
 	for _, a := range All() {

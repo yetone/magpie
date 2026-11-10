@@ -330,6 +330,7 @@ func onMachine(home, cfg string) []*Agent {
 		atomcode(home),
 		snow(home),
 		alma(),
+		shelley(home),
 		cindy(),
 		aionui(),
 		cherryStudio(home),

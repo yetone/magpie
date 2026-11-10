@@ -143,7 +143,7 @@ curl -s http://127.0.0.1:3425/v1/models -H "Authorization: Bearer magpie-acme"</
     <ul>
       <li><b>magpie 编辑你的配置文件</b>（大多数适配器，如 <a href="https://github.com/yetone/magpie/blob/main/internal/agent/fx.go"><code>fx.go</code></a>、<a href="https://github.com/yetone/magpie/blob/main/internal/agent/empryo.go"><code>empryo.go</code></a>）。<code>Dir</code>、<code>Path</code>、<code>Bin</code> 用来检测应用；每个 <code>Field</code>（<code>model</code>、<code>effort</code>……）有 <code>Get</code>、<code>Set</code>、<code>Options</code>。连接时加入一个指向网关、key 为 <code>magpie-&lt;id&gt;</code> 的 <code>magpie</code> 供应商，并把模型设为 magpie 的模型；选回默认或 <code>Unwire</code> 会移除 magpie 的条目并还原原值。只动 magpie 设置的那些键。<code>Notice</code> 提示何时需要重启应用；<code>Sync</code> 更新你的应用保存在文件里的模型列表。</li>
       <li><b>你的应用只通过自己的导入链接接收供应商，由用户在你的应用里确认</b>（<a href="https://github.com/yetone/magpie/blob/main/internal/agent/cindy.go"><code>cindy.go</code></a>）。<code>Import</code> 返回这个链接（<code>yourapp://provider/import?…</code>，带网关地址、key <code>magpie-&lt;id&gt;</code> 和各端点），这一行的按钮会打开它，用户在你的应用里确认一次即可。<code>Added</code> 只读地检查你的应用是否已经有 magpie。magpie 不写你的任何文件。适合把供应商存在数据库里或加密保存的应用——这也最接近“检测到 magpie → 用户确认一次 → 完成接入”。</li>
-      <li><b>你的应用运行时有本地 API</b>（如 Alma）：magpie 通过它把自己加为供应商并设置默认模型。</li>
+      <li><b>你的应用运行时有本地 API</b>（如 Alma、Shelley）：magpie 通过它把自己加为供应商并设置默认模型。</li>
     </ul>
     <p>一个 PR 需要：适配器及其在 <code>agents.go</code> 里的注册；<code>UA</code>（你的 User-Agent 开头，小写），让用量认得你的调用；<code>internal/gui/assets/icons</code> 里的图标；在临时 <code>HOME</code> 下运行的测试（连接、切换、断开后原文件还原）；参考文档 Agents 表里的一行。最有帮助的是一个稳定、有文档的配置格式或导入链接，以及它在各系统上的位置。</p>
 

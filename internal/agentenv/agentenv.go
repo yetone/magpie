@@ -54,6 +54,8 @@ var Vars = []string{
 	"STEP_CODING_AGENT_DIR", "STEPCODE_CONFIG_DIR",
 	// MothX's config folder ($MOTHX_DIR/settings.json)
 	"MOTHX_DIR",
+	// Shelley's socket ($SHELLEY_SOCKET), which magpie tells it through
+	"SHELLEY_SOCKET",
 	// PenguinHarness's data root and the Project its CLI works in
 	// ($PENGUIN_HOME/$PENGUIN_PROJECT_ID/.project_config.toml)
 	"PENGUIN_HOME", "PENGUIN_PROJECT_ID",

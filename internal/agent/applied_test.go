@@ -198,7 +198,8 @@ func TestDriftUnwiredEveryAgent(t *testing.T) {
 	managed := claudeManaged
 	claudeManaged = func() string { return filepath.Join(home, "managed-settings.json") }
 	t.Cleanup(func() { claudeManaged = managed })
-	almaApp := startAlma(t) // Alma keeps its providers in the app
+	almaApp := startAlma(t)       // Alma keeps its providers in the app
+	shelleyApp := startShelley(t) // so does Shelley its models
 	// OpenHanako gives the model to an agent of its own
 	os.MkdirAll(filepath.Join(home, ".hanako", "agents", "hana"), 0o755)
 	os.WriteFile(filepath.Join(home, ".hanako", "agents", "hana", "config.yaml"), []byte("agent:\n  name: Hana\n"), 0o644)
@@ -262,6 +263,7 @@ func TestDriftUnwiredEveryAgent(t *testing.T) {
 				return nil
 			})
 			n += almaApp.repoint(gateway.URL(), "http://127.0.0.1:9")
+			n += shelleyApp.repoint(gateway.URL(), "http://127.0.0.1:9")
 			if n == 0 {
 				t.Fatal("no file holds the gateway's URL")
 			}

@@ -167,6 +167,7 @@ line; agents connected to magpie lose it when it quits.
 | AtomCode     | `~/.atomcode/config.toml` (`$ATOMCODE_HOME`) | model, effort (a `magpie` provider account, one model table per catalog model as its own sign-in writes) |
 | Snow CLI     | `~/.snow/profiles/magpie.json` (`$SNOW_CONFIG_DIR`), made the active profile and copied to `config.json` | model (the user's other profiles' models too; Snow App takes the profile in with "Sync Snow CLI API config") |
 | Alma         | Alma's local API (`localhost:23001`, while Alma runs; alma-server's data in `$ALMA_DATA_DIR`, `$XDG_DATA_HOME/alma` or `~/.local/share/alma` on Linux) | model (Alma's default; magpie's models as a provider), and Image Generation's model when it is Auto: the one magpie draws with |
+| Shelley      | Shelley's local socket (`~/.config/shelley/shelley.sock`, `$XDG_CONFIG_HOME/shelley`, `$SHELLEY_SOCKET`; while `shelley serve` runs) | model (the default profile's; magpie's models as Shelley custom models of type `openai` at the gateway's `/v1` with Shelley's own key, one per model picked; the profile's model and thinking level are stashed and put back on Disconnect, and magpie's custom models go) |
 | Lody | Its own confirmation dialog (`lody://provider/import`) | adds selected Claude, Codex, Pi, DSH, Kimi Code, Grok and Bub Providers on the local machine; no settings edited by magpie |
 
 Provider-scoped agents (OpenCode, MiMo Code, DevEco Code, Pi, OmO, StepCode, MothX, PenguinHarness, Aside, Goose, Crush, omp, Hermes Agent) take `provider/model`.

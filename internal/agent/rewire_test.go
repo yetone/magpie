@@ -47,6 +47,7 @@ func TestPortMovesEveryAgent(t *testing.T) {
 	claudeManaged = func() string { return filepath.Join(home, "managed-settings.json") }
 	t.Cleanup(func() { claudeManaged = managed })
 	almaApp := startAlma(t)
+	shelleyApp := startShelley(t)
 	os.MkdirAll(filepath.Join(home, ".hanako", "agents", "hana"), 0o755)
 	os.WriteFile(filepath.Join(home, ".hanako", "agents", "hana", "config.yaml"), []byte("agent:\n  name: Hana\n"), 0o644)
 	// Craft Agents, once it has run and saved its config
@@ -114,6 +115,9 @@ func TestPortMovesEveryAgent(t *testing.T) {
 	}
 	if almaApp.repoint("127.0.0.1:3591", "127.0.0.1:3591") > 0 {
 		t.Error("Alma still has the old port")
+	}
+	if shelleyApp.repoint("127.0.0.1:3591", "127.0.0.1:3591") > 0 {
+		t.Error("Shelley still has the old port")
 	}
 	for _, a := range wired {
 		if !a.Wired() {

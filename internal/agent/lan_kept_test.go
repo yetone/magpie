@@ -30,9 +30,9 @@ func TestSyncKeepsAnAddressOnAnotherMachine(t *testing.T) {
 	qwenpawFixture(t, home)
 	setPort(t, 3591)
 	for _, a := range All() {
-		// Alma is told through its running app, and Cursor's local
+		// Alma and Shelley are told through their running apps, and Cursor's local
 		// gateway is started by launchctl: neither is in the sandbox
-		if a.Check == nil || a.Launch != nil || a.WSL != "" || a.Native != nil || a.ID == "alma" || a.ID == "cursorlocal" {
+		if a.Check == nil || a.Launch != nil || a.WSL != "" || a.Native != nil || a.ID == "alma" || a.ID == "shelley" || a.ID == "cursorlocal" {
 			continue
 		}
 		var key, want string

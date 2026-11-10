@@ -140,8 +140,9 @@ app offers decides its shape:
   the row then asks the user to confirm in your app without claiming an
   import status. magpie writes nothing of yours. This suits an app that keeps
   its providers in a database or encrypted.
-- **Your app has a local API while it runs** (Alma, at `localhost:23001`):
-  magpie adds itself as a provider and sets the default model through it.
+- **Your app has a local API while it runs** (Alma, at `localhost:23001`;
+  Shelley, on its Unix socket): magpie adds itself as a provider and sets the
+  default model through it.
 
 A pull request needs: the adapter and its registration, `UA` (what your
 User-Agent begins with, lower-case) so Usage knows your calls, an icon in

@@ -49,6 +49,7 @@ func syncHome(t *testing.T) string {
 		t.Setenv(k, "")
 	}
 	t.Setenv("MOTHX_DIR", "")
+	t.Setenv("SHELLEY_SOCKET", "")
 	t.Setenv("PENGUIN_HOME", "")
 	t.Setenv("PENGUIN_PROJECT_ID", "")
 	t.Setenv("PI_CODING_AGENT_DIR", "")
