@@ -5,6 +5,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/dirent"
 )
 
 // cacheIdle is how long the parses of every session file stay in memory
@@ -80,6 +82,14 @@ func dropIdleCache() bool {
 	cacheGeneration++ // a refresh still holding the old generation drops its parses
 	forgetKeptStats()
 	forgetKeptList()
+	// what is made again from the parses or the folders on the next read:
+	// Codex's thread identities (~3.5 MB), and each Codex day folder's
+	// rollouts and every folder's listing as last read (~5.5 MB)
+	codexIdentityMemo.Lock()
+	codexIdentityMemo.kept = nil
+	codexIdentityMemo.Unlock()
+	rolloutsSeen.Clear()
+	dirent.Forget()
 	cacheDrops.Add(1)
 	return true
 }

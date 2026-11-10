@@ -172,3 +172,13 @@ func (l Listing) Done(dir string) {
 	listings.last[dir] = l
 	listings.entries += cap(l)
 }
+
+// Forget lets go of every listing kept for the next Stats, and the room
+// kept for them: once the session folders go unread, the listings and
+// their names were held for the life of the process (~4 MB for a real
+// history). A listing given back later is kept again.
+func Forget() {
+	listings.Lock()
+	listings.last, listings.spare, listings.room, listings.entries = nil, nil, nil, 0
+	listings.Unlock()
+}

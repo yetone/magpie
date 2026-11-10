@@ -223,3 +223,34 @@ func TestListingsOfDifferentSizesMadeOnce(t *testing.T) {
 		t.Errorf("ten polls of unchanged folders allocated %d bytes, want next to none", got)
 	}
 }
+
+// Forget lets go of every listing given back, and Stats still answers
+// what the folder has after it.
+func TestForgetLetsListingsGo(t *testing.T) {
+	dir := t.TempDir()
+	for i := range 5 {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprint(i)), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l, ok := Stats(dir)
+	if !ok {
+		t.Skip("Stats reads nothing here")
+	}
+	l.Done(dir)
+	kept := func() int {
+		listings.Lock()
+		defer listings.Unlock()
+		return len(listings.last) + len(listings.spare) + len(listings.room) + listings.entries
+	}
+	if kept() == 0 {
+		t.Fatal("nothing kept of a listing given back")
+	}
+	Forget()
+	if n := kept(); n != 0 {
+		t.Fatalf("%d kept after Forget", n)
+	}
+	if l, _ := Stats(dir); len(l) != 5 {
+		t.Fatalf("Stats after Forget has %d entries, want 5", len(l))
+	}
+}

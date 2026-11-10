@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,10 +35,25 @@ func TestIdleParsesLetGoAndComeBackFromDisk(t *testing.T) {
 		t.Fatal("the parses were let go though read just now")
 	}
 
+	memos := func() (identities, rollouts int) {
+		codexIdentityMemo.Lock()
+		identities = len(codexIdentityMemo.kept)
+		codexIdentityMemo.Unlock()
+		rolloutsSeen.Range(func(any, any) bool { rollouts++; return true })
+		return
+	}
+	// folders are listed so only on macOS (dirent.Stats)
+	if i, r := memos(); i == 0 || r == 0 && runtime.GOOS == "darwin" {
+		t.Fatalf("before: %d Codex identity lists and %d folders' rollouts kept; the test reads none", i, r)
+	}
+
 	idle()
 	drops := cacheDrops.Load()
 	if !dropIdleCache() || loaded || len(cache) != 0 || cacheDrops.Load() != drops+1 {
 		t.Fatalf("idle parses kept: loaded %v, %d in memory", loaded, len(cache))
+	}
+	if i, r := memos(); i != 0 || r != 0 {
+		t.Fatalf("idle: %d Codex identity lists and %d folders' rollouts kept", i, r)
 	}
 
 	var parses atomic.Int32
