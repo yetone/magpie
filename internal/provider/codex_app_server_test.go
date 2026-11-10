@@ -1178,21 +1178,30 @@ func TestCodexAppLeftRunningForMagpiesOwnChanges(t *testing.T) {
 	s.on = false
 	none("magpie gave Codex back its account at the reset")
 
-	// a switch the user made, alone or after one of magpie's
+	// a switch the user made among accounts with room, alone or beside
+	// one of magpie's: the app's projects are kept per ChatGPT identity,
+	// and a restart onto the new one hid them (Michael25651150 on X)
 	codexAppSwitched(false, true)
 	codexAppAccountSwitched()
-	ends("switched by the user after magpie", 101)
+	none("switched by the user after magpie")
 	codexAppAccountSwitched()
 	codexAppSwitched(false, true)
-	ends("switched by the user, then magpie", 102)
+	none("switched by the user, then magpie")
+	codexAppAccountSwitched()
+	none("switched by the user")
+	// one off a used-up account: the app greys Send till it restarts
+	codexAppSpentSwitch()
+	ends("switched by the user off a used-up account", 101)
 	// a Connect: where Codex's config sends it changed, not by the takeover
 	s.route = "connected"
-	ends("connected", 103)
+	ends("connected", 102)
 
-	// ticked: magpie's changes the app works without restart it as well
+	// ticked: the changes the app works without restart it as well
 	restarts = true
 	codexAppSwitched(false, true)
-	ends("RestartApp on, magpie switched back", 104)
+	ends("RestartApp on, magpie switched back", 103)
+	codexAppAccountSwitched()
+	ends("RestartApp on, switched by the user", 104)
 	s.on = true
 	ends("RestartApp on, magpie took over", 105)
 	s.on = false

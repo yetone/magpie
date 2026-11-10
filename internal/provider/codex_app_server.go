@@ -470,27 +470,37 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 	// quota ran out mid-turn would hold their restart, and the app's grey
 	// Send, for up to codexTurnWindow (xiaoq6285 on Discord)
 	into := changed && out && (!c.seen || !c.out)
-	// what changed magpie changed by itself and the app works without:
-	// the switch back once the account has room, and the takeover out at
-	// the reset. The ChatGPT app shows the end of its app-server as an
-	// error and relaunches (#4550), so that waits for the user to restart
-	// it unless they asked magpie to (RestartApp; atom0964 on Discord: both
-	// of Codex's sign-in ticks off, and magpie still restarted the app to
-	// switch accounts). A switch the user made, a Connect or a Disconnect
-	// is theirs, and restarts it, and so does the takeover turned off by
-	// hand (CodexTakeoverOff). So does whatever leaves the app-server on
-	// a used-up account: the takeover in, the first look on one and a
-	// switch off one. The app greys Send for every model while that
-	// account's rate limit says not allowed and reads the account only as
-	// its app-server starts (8b0132b3d), so nothing magpie serves would
-	// reach it until a restart.
-	byHand := c.switched && !c.auto || c.seen && c.route != route && c.out == out || offByHand
+	// what the app works without: a switch among accounts with room,
+	// magpie's own switch back or one the user made, and the takeover out
+	// at the reset. The ChatGPT app shows the end of its app-server as an
+	// error and relaunches (#4550), and on its new account shows that
+	// account's projects, none for one that never had the app open (the
+	// app keeps them per ChatGPT identity, codex_projects.go): "switching
+	// the preferred account force-restarts the client, and the projects
+	// are lost" (Michael25651150 on X, after 15acba534). So that waits for
+	// the user to restart it unless they asked magpie to (RestartApp;
+	// atom0964 on Discord: both of Codex's sign-in ticks off, and magpie
+	// still restarted the app to switch accounts); the account rows say
+	// the app is still on the account before (CodexAppStale), with a
+	// Restart. A Connect or a Disconnect is the user's, and restarts it,
+	// and so does the takeover turned off by hand (CodexTakeoverOff). So
+	// does whatever leaves the app-server on a used-up account: the
+	// takeover in, the first look on one and a switch off one. The app
+	// greys Send for every model while that account's rate limit says not
+	// allowed and reads the account only as its app-server starts
+	// (8b0132b3d), so nothing magpie serves would reach it until a
+	// restart; an app-server left on an account that runs out later is
+	// restarted then (restartCodexAppLeftOnSpent).
+	byHand := c.seen && c.route != route && c.out == out || offByHand
 	needed := into || c.switched && c.spent
 	// left on the takeover: the app-servers it started while magpie was
 	// Codex's provider, which show no account till they restart
 	leftBack := false
 	if changed && !byHand && !needed && !codexRestartsApp() {
 		why := "magpie switched Codex's ChatGPT account back"
+		if c.switched && !c.auto {
+			why = "Codex's ChatGPT account was switched"
+		}
 		if !c.switched {
 			why = "magpie gave Codex back its ChatGPT account after the reset"
 			leftBack = c.out && !out
