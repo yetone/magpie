@@ -15278,7 +15278,7 @@ function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key sp
   bareTicks(box, items);
   if (filter) filter.oninput = () => {
     const q = filter.value.trim().toLocaleLowerCase();
-    items.forEach((b, i) => { b.hidden = !opts[i].always && !opts[i].name.toLocaleLowerCase().includes(q); });
+    items.forEach((b, i) => { b.hidden = !opts[i].always && !(opts[i].name + " " + (opts[i].find || "")).toLocaleLowerCase().includes(q); });
   };
   document.body.append(box);
   placeMenu(box, anchor, align);

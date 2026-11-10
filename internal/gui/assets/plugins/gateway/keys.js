@@ -346,6 +346,8 @@ function gatewayKeyMore(k) {
       ...(k.browser ? [] : [{ name: "MCP servers", icon: MCP_GLYPH, run: () => gatewayMCPPick(k, more) }]),
       // every account but some, those signed in later too (LeiWang_2000
       // on X); the Browser key uses no account
+      // a name of the key's own for a model it may use (tsingchao on X)
+      ...(k.browser || k.readOnly ? [] : [{ name: "Model names", icon: MCP_GLYPH, run: () => gatewayAliasesAsk(k) }]),
       ...(k.browser ? [] : [{ name: "Keep accounts out", icon: KEEP_OUT_GLYPH, run: () => gatewayKeptOutPick(k, more) }]),
       { name: "Rotate key", icon: ROTATE_GLYPH, run: () => askGatewayKey(k, true) },
       { name: "Remove", icon: REMOVE_GLYPH, sep: true, run: () => askGatewayKey(k, false) },
@@ -373,6 +375,50 @@ function gatewayBrowserTag() {
   const tag = el("span", "amodels key-readonly key-browser set", t("Browser only"));
   tag.title = t("This key connects the Magpie Browser extension and nothing else. It can't use models, MCP servers or stats.");
   return tag;
+}
+
+// gatewayAliasesAsk edits the names a key gives its models: one
+// "name = provider/model" a line. /v1/models lists the name in the model's
+// place and a request by it goes to the model.
+function gatewayAliasesAsk(k) {
+  const ed = el("div", "editor");
+  const head = el("div", "ehead");
+  head.append(el("b", "", t("Model names")));
+  const ta = el("textarea", "json");
+  ta.value = Object.entries(k.aliases || {}).map(([n, m]) => n + " = " + m).join("\n");
+  ta.placeholder = "gpt-4 = openai/gpt-5";
+  ta.spellcheck = false;
+  ta.rows = 6;
+  ta.setAttribute("aria-label", t("Model names"));
+  ta.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Escape") closeConfirmAsk(); };
+  const why = el("div", "why");
+  why.setAttribute("aria-live", "polite");
+  const bar = el("div", "bar");
+  const cancel = el("button", "text", t("Cancel"));
+  cancel.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
+  const go = el("button", "text primary", t("Save"));
+  go.onclick = async (e) => {
+    e.stopPropagation();
+    if (go.disabled) return;
+    const aliases = {};
+    for (const line of ta.value.split("\n")) {
+      if (!line.trim()) continue;
+      const at = line.indexOf("=");
+      if (at < 1 || !line.slice(at + 1).trim()) { why.textContent = t("One name a line: name = provider/model"); return; }
+      aliases[line.slice(0, at).trim()] = line.slice(at + 1).trim();
+    }
+    go.disabled = true;
+    const out = await gatewayKeyAction("aliases-key", { key: k.id, aliases });
+    if (!out) { go.disabled = false; return; }
+    closeConfirmAsk();
+    status(t("Model names saved"), "ok");
+  };
+  bar.append(el("span", "grow"), cancel, go);
+  ed.append(head, ta, why, bar);
+  confirmAsk = ed;
+  openModal(ed);
+  $("#modal").classList.add("lib");
+  ta.focus({ preventScroll: true });
 }
 
 function askGatewayKey(k, rotate) {
@@ -626,7 +672,7 @@ function gatewayModelsBadge(k) {
       // asks it whatever the key may use, and the key may ask it itself
       // (/v1/systemone, another magpie's list) only when it is picked
       // (Kautism on Discord)
-      opts.push({ v: m.id, name: m.name, note: m.decides ? m.id + " · " + t("Decision model: a routing group asks it whatever this key may use; pick it so the key may ask it itself") : m.id, literalName: true });
+      opts.push({ v: m.id, find: m.id, name: m.name, note: m.decides ? m.id + " · " + t("Decision model: a routing group asks it whatever this key may use; pick it so the key may ask it itself") : m.id, literalName: true });
     }
     endBlock();
     // a provider with accounts and no model in the list (one kept
@@ -638,7 +684,7 @@ function gatewayModelsBadge(k) {
     // what the CLI kept that the list hasn't, a pattern, a model gone or
     // an account signed out: behind every live entry, a model gone
     // before an account signed out
-    for (const v of ms) if (!opts.some((o) => o.v === v)) opts.push({ v, name: v, note: "Not served now", literalName: true });
+    for (const v of ms) if (!opts.some((o) => o.v === v)) opts.push({ v, name: v, note: /^re:/i.test(v) ? "Pattern: models whose name it matches" : "Not served now", literalName: true });
     for (const v of as) if (!accountsSet.has(v)) { accountsSet.add(v); opts.push({ v, name: v, note: v.startsWith("@") ? "Account group removed" : "Not signed in now", literalName: true }); }
     openProtoMenu(b, opts, [...ms, ...as], (picked) => {
       // one action at a time: gatewayKeyAction is busy while one is sent.
@@ -658,7 +704,17 @@ function gatewayModelsBadge(k) {
           await gatewayKeyAction("accounts-key", { key: k.id, accounts: [...pickedAccounts, ...out] });
         }
       })();
-    }, "Models this key may use", "sess-menu", "right");
+    }, "Models this key may use", "sess-menu", "right", false, "Search models, or type re: and a pattern");
+    // "re:^gpt-" and Enter adds the pattern (a regular expression the
+    // gateway checks every model id against); the server refuses a bad one
+    const q = document.querySelector(".proto-menu .sc-q");
+    if (q) q.addEventListener("keydown", (e) => {
+      const v = q.value.trim();
+      if (e.key !== "Enter" || !/^re:./i.test(v)) return;
+      e.preventDefault(); e.stopPropagation();
+      closeProtoMenu();
+      if (!ms.includes(v)) gatewayKeyAction("models-key", { key: k.id, models: [...ms, v] });
+    }, true);
   };
   b.onclick = async (e) => {
     e.preventDefault();
@@ -753,7 +809,7 @@ async function gatewayMCPPick(k, anchor) {
   }
   // what the CLI kept that the list hasn't: a server gone, or a tool it
   // no longer lists
-  for (const v of ms) if (!opts.some((o) => o.v === v)) opts.push({ v, name: v, note: "Not served now", literalName: true });
+  for (const v of ms) if (!opts.some((o) => o.v === v)) opts.push({ v, name: v, note: /^re:/i.test(v) ? "Pattern: models whose name it matches" : "Not served now", literalName: true });
   openProtoMenu(anchor, opts, [...ms], (picked) => {
     // "No MCP server" just ticked is none; left ticked beside a server
     // ticked since, the server

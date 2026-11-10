@@ -216,6 +216,10 @@ function fixture(lang, theme, events, options = {}) {
         else k.used = reset(k.used);
       }
       if (action === "models-key") k.models = body.models?.length ? body.models : undefined;
+      if (action === "aliases-key") {
+        if (Object.values(body.aliases || {}).some((v) => !String(v).includes("/"))) return route.fulfill({ status: 400, json: { error: "An alias names a model as provider/model" } });
+        k.aliases = Object.keys(body.aliases || {}).length ? body.aliases : undefined;
+      }
       if (action === "accounts-key") k.accounts = body.accounts?.length ? body.accounts : undefined;
       if (action === "mcp-key") k.mcp = body.mcp?.length ? body.mcp : undefined;
       if (action === "quotas-key") k.quotas = body.quotas || undefined;
