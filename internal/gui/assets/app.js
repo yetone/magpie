@@ -1630,7 +1630,7 @@ function switchEntry(a) {
     setTimeout(() => b.classList.remove("done"), 5000 - ago);
   }
   b.append(pn ? el("span", "chev", svg(CHEV, 11, 1.7)) : svg(CHEV, 10, 1.6));
-  const opts = ls.filter((l) => !l.token).map((l) => ({ v: "u:" + l.user, name: l.user, literalName: true, note: l.lapsed ? "Sign-in required" : accountPlan({ agent: a.id, plan: l.plan }) }));
+  const opts = ls.filter((l) => !l.token && !l.accessOnly).map((l) => ({ v: "u:" + l.user, name: l.user, literalName: true, note: l.lapsed ? "Sign-in required" : accountPlan({ agent: a.id, plan: l.plan }) }));
   const on = cx ? t("magpie only switches {agent}'s sign-in; its requests go straight to OpenAI", ag) : t("magpie serves no requests on these accounts");
   // the Only switch setting, where the accounts page offers it
   if (!cx || ls.filter((l) => !l.lapsed && (l.active || l.on)).length > 1) opts.push({ v: "only", name: t("Only switch {agent}'s sign-in", ag), literalName: true, ticked: !!p.switchOnly, note: on });
@@ -12408,10 +12408,6 @@ const SUBS = [
   // accounts can also come from another tool's export (Antigravity Cockpit, Antigravity Manager, CLIProxyAPI)
   { agent: "antigravity", name: "Antigravity", icon: "antigravity-color", plans: "Google AI Pro · Ultra · free", own: true, risk: true, importable: true },
 ];
-// subOf: the subscription an agent id is. One moved onto its plugin signs
-// in through the plugin, still named, drawn, warned about and asked where
-// as it was; it keeps as many accounts as the plugin does (Cursor's took
-// one, its plugin takes more).
 const subOf = (agent) => {
   const own = SUBS.find((x) => x.agent === agent);
   const pl = pluginSubs().find((x) => x.agent === agent);
@@ -12448,11 +12444,6 @@ function pluginSubs() {
   }));
 }
 
-// importSay: what the import of an app's accounts says — where its files
-// come from, and who they are checked with. A ChatGPT sign-in is refreshed
-// as it comes in, which spends the file's refresh token; a Claude one is
-// kept as it came and spent when Claude Code first renews it (#1453: the
-// tool a file came from is told it loses the account either way).
 function importSay(agent) {
   if (agent === "factory") {
     return {
@@ -12466,13 +12457,11 @@ function importSay(agent) {
     };
   }
   if (agent === "codex") {
-    // codexbar's config.json; Cockpit Tools exports in its own shape
-    // (CLIProxyAPI's), Codex's auth.json, CPA and Sub2API: all read
-    // (login_import.go)
     return {
       from: t("Bring in accounts from Codex's auth.json, codexbar's config.json, or exports from Cockpit Tools, CLIProxyAPI or Sub2API"),
       intro: t("Choose or paste one or more files: Codex's auth.json, codexbar's config.json (in ~/.codexbar), or an export from Cockpit Tools, CLIProxyAPI or Sub2API. Each account's sign-in is refreshed with ChatGPT before it is added."),
       spent: t("This takes the sign-in over: the tool the file came from (Codex on another computer, codexbar, Cockpit Tools, CLIProxyAPI) is signed out of that account and has to sign in again. The file itself is only read."),
+      kept: t("Each account is kept with the file's access token and never renewed, so the tool it came from stays signed in. Once that token expires, import it again."),
       checking: t("Checking the accounts with {vendor}…", { vendor: "ChatGPT" }),
       checks: t("Each account's sign-in is refreshed and its account looked up, as signing in does."),
     };
@@ -12504,15 +12493,9 @@ const accountToolsOpen = new Set(); // rows whose ⋯ is open
 // hasLogins: the subscription has an account signed in already
 const hasLogins = (agent) => (providers?.providers || []).some((p) => p.account?.agent === agent && p.account.logins?.length);
 
-// o: { user } signing that account in again, { proxy } the one picked to
-// sign in through (#1663): none picked, the one the account's requests go
-// through
 async function startSignIn(agent, risky, site, o = {}) {
   if (signingOpen()) api("signin/" + signing.id + "/cancel", {}).catch(() => {});
   if (signing?.behind) api("signin/" + signing.behind + "/cancel", {}).catch(() => {});
-  // an account Google may suspend is added only once that is said, and
-  // said once: not again beside accounts already signed in, nor to sign
-  // one of them in again (the owner: "这里就不要显示可能被封禁了")
   if (subOf(agent)?.risk && !risky && !o.user && !hasLogins(agent)) {
     signing = { agent, state: "risk", forUser: o.user, picked: o.proxy };
     renderProviders();
@@ -12738,10 +12721,6 @@ function renderPluginAsk(sub) {
       b.onclick = () => pluginAnswer(sub, o.value);
       ch.append(b);
     }
-    // a moved subscription opens its plugin's first way at once (#777);
-    // when that way asks first (Kiro's sign-in methods), its other ways,
-    // the API key among them, are a link away from that first question,
-    // as they are from the waiting box (mahiro233: no API key offered)
     if (sub.moved && sub.plugin.methods.length > 1 && !Object.keys(flow.inputs || {}).length) {
       const acts = tt.appendChild(el("span", "acts"));
       const other = el("button", "link other-ways", t("Other ways to sign in…"));
@@ -13012,10 +12991,6 @@ function renderSigning(sub) {
     // ZCode: a Z.ai account or a BigModel (智谱) one, a team's seat included
     tt.append(el("span", "n", t("Where is your {name} account?", { name: sub.name })),
       el("span", "s", t("Sign in where your GLM Coding Plan was bought, a team's plan too: z.ai, or bigmodel.cn for Zhipu.")));
-    // the question keeps the row's width, Cancel beside it; the sites go
-    // under it as one group and a plugin's other ways under them as links,
-    // each line wrapping (361: four buttons in its row left the question a
-    // strip a character or two wide)
     box.classList.add("site-pick");
     box.append(tt);
     const close = el("button", "text", t("Cancel"));
@@ -13190,12 +13165,6 @@ function renderSigning(sub) {
     form.append(url, submit);
     tt.append(form, why);
   }
-  // a plugin's browser sign-in whose page can't reach magpie (Docker: the
-  // Command Code plugin's Studio posts its key to 127.0.0.1) can be left
-  // for the plugin's own API key way, without starting over; one that
-  // takes a pasted key in place already (#2468) needs no second way, and
-  // nor does a moved one whose key import goes to its plugin (Factory,
-  // factory_key.go): two "Use an API key instead" links read as one
   const keyWay = sub.plugin && signing.method != null && !signing.pasteCode && !signing.pasteKey && signing.state === "waiting"
     ? (sub.plugin.methods || []).findIndex((m) => m.type === "api") : -1;
   if (keyWay >= 0 && keyWay !== signing.method && !(sub.moved && sub.importable)) {
@@ -13363,11 +13332,6 @@ function renderAccounts(a, p) {
   // kept signed in to one (#524): the first is the order's
   const kept = keptLogin(p);
   const firstUser = kept ? ls.find((l) => (l.active || l.on) && !l.paused && !l.lapsed)?.user : ls.find((l) => l.active)?.user;
-  // Smart, Least used first and Weekly pace go by each account's quota and
-  // use the order only between those alike (docs/reference.md), so Make
-  // first says so there rather than that the gateway uses it first
-  // (CryptoSarom on X: a new account made first never got a request).
-  // Keys have no quota that renews, so Smart keeps them in their order.
   const byQuota = p?.account && ["", "usage", "pace"].includes(p?.routing || "") ? ROUTINGS.find(([id]) => id === (p?.routing || ""))?.[1] : "";
   const firstNote = (user) => t("{user} is first in the order; {routing} still goes by each account's quota, so the order only settles ties. In order uses the first first.", { user, routing: t(byQuota) });
   const makeFirst = (l) => {
@@ -13435,6 +13399,13 @@ function renderAccounts(a, p) {
       const c = creditsRow({ provider: "codex", user: l.user }, "acc-credits");
       if (c) tools.append(c);
     }
+    if (a.agent === "codex" && !sub?.plugin && !l.active && (l.accessOnly || !l.lapsed)) {
+      const [ao, cb] = tick(t("Access token only"), !!l.accessOnly);
+      ao.classList.add("acc-access-only");
+      ao.title = t("magpie never renews this sign-in, so another computer signed in to it stays signed in. Once its access token expires, import it again.");
+      cb.onchange = () => accountAction("login/" + (cb.checked ? "access-only" : "renewed"), { agent: a.agent, user: l.user });
+      (l.accessOnly ? line : tools).append(ao);
+    }
     const held = capHeldOf(quota?.[l.user], capFor);
     if (held) line.append(capHeldNote(held, held.cap, several, direct));
     line.append(el("span", "grow"));
@@ -13448,6 +13419,12 @@ function renderAccounts(a, p) {
       if (!l.active) {
         line.append(forgetOf());
       }
+    } else if (l.accessOnly && l.lapsed) {
+      row.classList.add("signed-out");
+      line.append(el("span", "using", t("Access expired")));
+      const again = el("button", "text", t("Import again"));
+      again.onclick = () => startImport(a.agent, true);
+      line.append(again, forgetOf(true));
     } else if (signedOut(l)) {
       row.classList.add("signed-out");
       line.append(el("span", "using", t("Sign-in required")));
@@ -13491,6 +13468,10 @@ function renderAccounts(a, p) {
       } else if (l.token) {
         const only = el("span", "using", t("magpie only"));
         only.title = t("Added by a setup-token: requests through magpie use it; Claude Code itself can't be signed in to it");
+        line.append(forget, only);
+      } else if (l.accessOnly) {
+        const only = el("span", "using", t("magpie only"));
+        only.title = t("Kept access token only: requests through magpie use it until it expires; Codex itself isn't signed in to it, as Codex would renew it");
         line.append(forget, only);
       } else {
         const use = el("button", "text", on ? t("Make first") : t("Use"));
@@ -13537,7 +13518,7 @@ function renderAccounts(a, p) {
     keep.title = t("{agent} stays on this account even when it runs low. Requests through magpie still follow Routing.", { agent: a.agentName });
     let keepAs = kept;
     const opts = [{ v: "", name: t("the first account"), note: "", literalName: true }];
-    for (const l of ls) if (!l.lapsed) opts.push({ v: l.user, name: l.user, note: "", literalName: true });
+    for (const l of ls) if (!l.lapsed && !l.accessOnly) opts.push({ v: l.user, name: l.user, note: "", literalName: true });
     const as = el("button", "sess-pick keep-as" + (keepAs ? " set" : ""));
     as.type = "button";
     as.title = t("The account {agent} stays signed in to", { agent: a.agentName });
@@ -13672,10 +13653,10 @@ function codexNote(cls, n, s) {
 // Accounts brought in from another tool's export: magpie checks each with
 // the vendor and says what became of it. A sign-in waiting for its address
 // is kept behind the import; that address pasted here finishes it.
-function startImport(agent) {
+function startImport(agent, accessOnly = false) {
   const behind = signingOpen() && signing.pasteCallback ? signing.id : signing?.behind;
   if (signingOpen() && signing.id !== behind) api("signin/" + signing.id + "/cancel", {}).catch(() => {});
-  signing = { agent, state: "import", text: "", files: [], behind };
+  signing = { agent, state: "import", text: "", files: [], behind, accessOnly };
   renderProviders();
   document.querySelector(".signing.import textarea")?.focus();
 }
@@ -13686,11 +13667,11 @@ async function runImport(agent) {
   const names = signing.files.map((f) => f.name);
   if (signing.text.trim()) { files.push(signing.text); names.push(t("The pasted text")); }
   if (!files.length) return;
-  const behind = signing.behind;
-  signing = { agent, state: "importing", names, behind };
+  const behind = signing.behind, accessOnly = agent === "codex" && !!signing.accessOnly;
+  signing = { agent, state: "importing", names, behind, accessOnly };
   renderProviders();
   try {
-    const r = await api("signin/import", { agent, files });
+    const r = await api("signin/import", accessOnly ? { agent, files, accessOnly } : { agent, files });
     if (signing?.agent !== agent) return;
     providers = r.providers;
     const added = r.results.filter((x) => x.status === "added" || x.status === "updated");
@@ -13709,7 +13690,7 @@ async function runImport(agent) {
     renderAgents();
   } catch (e) {
     if (signing?.agent !== agent) return;
-    signing = { agent, state: "import", text: "", files: [], error: e.message, behind };
+    signing = { agent, state: "import", text: "", files: [], error: e.message, behind, accessOnly };
     renderProviders();
   }
 }
@@ -13745,14 +13726,23 @@ function renderLoginImport(sub) {
     // the next batch is one click away, beside the last one's results,
     // rather than behind Done (#2131: several Antigravity exports in a row)
     const more = el("button", "text primary", t("Import more…"));
-    more.onclick = () => startImport(sub.agent);
+    more.onclick = () => startImport(sub.agent, signing.accessOnly);
     box.append(done, more);
     return box;
   }
   box.append(el("span", "mark", "↑"));
   const say = importSay(sub.agent);
   tt.append(el("span", "n", say.title || t("Import {name} accounts", { name: sub.name })), el("span", "s", say.intro));
-  if (say.spent) tt.append(el("span", "s", say.spent));
+  if (say.spent) {
+    const spent = el("span", "s", signing.accessOnly ? say.kept : say.spent);
+    tt.append(spent);
+    if (say.kept) {
+      const [ao, cb] = tick(t("Access token only"), !!signing.accessOnly);
+      ao.classList.add("import-access-only");
+      cb.onchange = () => { signing.accessOnly = cb.checked; spent.textContent = cb.checked ? say.kept : say.spent; };
+      tt.append(ao);
+    }
+  }
   if (sub.risk) tt.append(el("span", "s", t(sub.riskNote || "Google may suspend an Antigravity account it sees used outside Antigravity. Use one you can afford to lose.")));
   const area = el("textarea");
   area.rows = 3;

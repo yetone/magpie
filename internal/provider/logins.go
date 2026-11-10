@@ -65,6 +65,10 @@ type Login struct {
 	// Token is a Claude account added by a setup-token: magpie's
 	// requests use it, Claude Code itself can't be signed in to it.
 	Token bool `json:"token,omitempty"`
+	// AccessOnly is a ChatGPT account kept access token only
+	// (codex_access_only.go): magpie never renews its sign-in, nor signs
+	// Codex in to it.
+	AccessOnly bool `json:"accessOnly,omitempty"`
 
 	// first is the saved Claude account served in the place of Claude
 	// Code's own while it is signed out (claudeStandIn).
@@ -112,6 +116,10 @@ type savedLogin struct {
 	// keepalive.go).
 	Renewed time.Time `json:"renewed,omitzero"`
 	Lapsed  string    `json:"lapsed,omitempty"`
+	// AccessOnly keeps a ChatGPT account access token only: its sign-in
+	// is never refreshed, which would sign out the place it came from
+	// (codex_access_only.go).
+	AccessOnly bool `json:"accessOnly,omitempty"`
 	// Refused is the Claude credential Anthropic refused (its version, in
 	// claude_auth.go): Lapsed holds while the account has that one, and
 	// says nothing of the one it is refreshed or signed in to next.
@@ -1196,6 +1204,13 @@ func loginsNow(agent string) []Login {
 			if l.Agent != "claude" {
 				lg.Lapsed = l.Lapsed
 			}
+			if l.Agent == "codex" && l.AccessOnly {
+				lg.AccessOnly = true
+				// run out with no request to say so yet: passed over now
+				if lg.Lapsed == "" && accessOnlyExpired(l.Auth, time.Now()) {
+					lg.Lapsed = accessOnlyLapse(l.User)
+				}
+			}
 			lg.Returns = l.On && strings.EqualFold(back[l.Agent], l.User)
 		}
 		out = append(out, lg)
@@ -1409,6 +1424,9 @@ func switchSavedLogin(agent, user string) (from string, _ error) {
 	if agent == "claude" && claudeSetupToken(target.Auth) != "" {
 		return "", fmt.Errorf(errClaudeTokenSwitch, target.User)
 	}
+	if agent == "codex" && target.AccessOnly {
+		return "", fmt.Errorf(errCodexAccessOnlySwitch, target.User)
+	}
 	if agent == "claude" {
 		// as Claude Code keeps it, if it has run on the account beside the
 		// one it is signed in to; never one that can't be used, which
@@ -1612,7 +1630,7 @@ func nextOnForget(agent, user string) string {
 // switchable is an account an agent can be signed in to: not a Claude
 // setup-token one (errClaudeTokenSwitch), nor a ChatGPT account Codex
 // keeps in another folder (codexHeldIn).
-func switchable(l Login) bool { return !l.Token && l.home == "" }
+func switchable(l Login) bool { return !l.Token && !l.AccessOnly && l.home == "" }
 
 func forgetLogin(agent, user string) (signedOut bool, err error) {
 	loginsMu.Lock()

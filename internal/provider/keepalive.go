@@ -127,7 +127,8 @@ func renewLogins(ctx context.Context, every time.Duration, atOnce int) []Renewal
 	out := []Renewal{}
 	tried := 0
 	for _, l := range ls {
-		if l.Agent != "codex" && !claudeKeptAlive(l) || strings.EqualFold(active[l.Agent], l.User) || leftAlone(l.Agent) {
+		// nor one kept access token only, whose sign-in magpie never renews
+		if l.Agent != "codex" && !claudeKeptAlive(l) || l.AccessOnly || strings.EqualFold(active[l.Agent], l.User) || leftAlone(l.Agent) {
 			continue
 		}
 		r := Renewal{Agent: l.Agent, User: l.User}

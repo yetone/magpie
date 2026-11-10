@@ -31,7 +31,7 @@ func accountsCmd(args []string) error {
 	if len(args) > 1 && args[1] == "discovery" {
 		return accountsDiscoveryCmd(args[2:])
 	}
-	const usage = "usage: magpie accounts [claude|codex|grok|copilot|gemini|antigravity|zed|factory|mimo|<plugin>] [--json] | magpie accounts add <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> | magpie accounts add copilot [--host <name>.ghe.com] | magpie accounts import <codex|claude|antigravity|factory> <file>... [--yes] | magpie accounts refresh [--json] | magpie accounts checkin [--json] | magpie accounts switch|forget <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> <email> | magpie accounts switch <claude|codex> next | magpie accounts switch|forget copilot <login>[@<name>.ghe.com] [--host <name>.ghe.com] | magpie accounts project <gemini|antigravity> <email> <gcp-project-id> | magpie accounts alias <agent|<plugin>> <email> [<name>|--clear] | magpie accounts switch-only <codex|claude> [on|off]"
+	const usage = "usage: magpie accounts [claude|codex|grok|copilot|gemini|antigravity|zed|factory|mimo|<plugin>] [--json] | magpie accounts add <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> | magpie accounts add copilot [--host <name>.ghe.com] | magpie accounts import <codex|claude|antigravity|factory> <file>... [--yes] | magpie accounts import codex <file>... --access-only [--yes] | magpie accounts access-only codex <email> [on|off] | magpie accounts refresh [--json] | magpie accounts checkin [--json] | magpie accounts switch|forget <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> <email> | magpie accounts switch <claude|codex> next | magpie accounts switch|forget copilot <login>[@<name>.ghe.com] [--host <name>.ghe.com] | magpie accounts project <gemini|antigravity> <email> <gcp-project-id> | magpie accounts alias <agent|<plugin>> <email> [<name>|--clear] | magpie accounts switch-only <codex|claude> [on|off]"
 	agentID := func(s string) (string, error) {
 		switch strings.ToLower(s) {
 		case "claude", "cc":
@@ -119,6 +119,9 @@ func accountsCmd(args []string) error {
 	}
 	if len(args) > 1 && args[1] == "import" {
 		return importAccounts(args[2:])
+	}
+	if len(args) > 1 && args[1] == "access-only" {
+		return accessOnlyCmd(args[2:])
 	}
 	if len(args) > 1 && args[1] == "refresh" {
 		return refreshAccounts(len(args) > 2 && args[2] == "--json")
@@ -555,7 +558,7 @@ func addAccount(agentID string) error {
 }
 
 // importUsage is how `magpie accounts import` is run.
-const importUsage = "usage: magpie accounts import <codex|claude|antigravity|factory> <file>... [--yes]"
+const importUsage = "usage: magpie accounts import <codex|claude|antigravity|factory> <file>... [--yes] | magpie accounts import codex <file>... --access-only [--yes]"
 
 // importAccounts: `magpie accounts import <agent> <file>... [--yes]` brings
 // in accounts from other tools' files, as the window's "Import accounts from
@@ -568,12 +571,14 @@ const importUsage = "usage: magpie accounts import <codex|claude|antigravity|fac
 // read. What importing does to the tool the file came from is said first,
 // and nothing is imported until that is agreed to (--yes agrees).
 func importAccounts(args []string) error {
-	yes := false
+	yes, accessOnly := false, false
 	var rest []string
 	for _, a := range args {
 		switch a {
 		case "--yes", "-y":
 			yes = true
+		case "--access-only":
+			accessOnly = true
 		default:
 			rest = append(rest, a)
 		}
@@ -594,6 +599,9 @@ func importAccounts(args []string) error {
 	default:
 		return fmt.Errorf("%q: accounts can be imported for codex, claude, antigravity and factory\n%s", rest[0], importUsage)
 	}
+	if accessOnly && id != "codex" {
+		return fmt.Errorf("only ChatGPT accounts can be kept access token only\n%s", importUsage)
+	}
 	paths := rest[1:]
 	files := make([]string, len(paths))
 	for i, p := range paths {
@@ -613,16 +621,20 @@ func importAccounts(args []string) error {
 		files[i] = string(b)
 	}
 	var say []string
-	switch id {
-	case "codex":
+	switch {
+	case accessOnly:
+		say = []string{"Each account is kept with the access token the file has, and magpie never renews its sign-in: the tool it came from (Codex CLI on another computer, codexbar, CLIProxyAPI) stays signed in.",
+			"When its access token runs out (about ten days after that sign-in was last renewed), magpie stops using the account until it is imported again.",
+			"The files are only read, never changed."}
+	case id == "codex":
 		say = []string{"Each account's sign-in is refreshed with ChatGPT before it is added, as signing in does.",
 			"That spends the file's sign-in: the tool it came from (Codex CLI on another computer, codexbar, Cockpit Tools, CLIProxyAPI) is signed out of that account and has to sign in again. From then on the account is magpie's.",
 			"The files are only read, never changed. An account magpie holds already is left as it is."}
-	case "claude":
+	case id == "claude":
 		say = []string{provider.ClaudeRisk,
 			"Each account is kept as the file has it. Claude Code renews its sign-in the first time it uses it, and the file's copy then stops working: the tool it came from has to sign in again.",
 			"The files are only read, never changed."}
-	case "antigravity":
+	case id == "antigravity":
 		say = []string{provider.AntigravityRisk, "Each account's sign-in is refreshed with Google before it is added."}
 	}
 	for _, s := range say {
@@ -644,6 +656,10 @@ func importAccounts(args []string) error {
 	var err error
 	switch id {
 	case "codex", "claude":
+		if accessOnly {
+			res, err = provider.ImportCodexAccessOnly(ctx, files)
+			break
+		}
 		res, err = provider.ImportLogins(ctx, id, files)
 	case "antigravity":
 		res, err = provider.ImportGoogleAccounts(ctx, id, files)
@@ -910,6 +926,51 @@ func accountNamed(agent, user string) (string, error) {
 		return "", fmt.Errorf("no saved %s accounts · add one: magpie accounts add %s", agent, agent)
 	}
 	return "", fmt.Errorf("no saved %s account %q · its accounts: %q", agent, user, names)
+}
+
+// accessOnlyCmd is `magpie accounts access-only codex <email> [on|off]`:
+// a saved ChatGPT account kept access token only (EastonXvii on X), so
+// magpie never renews its sign-in and another computer signed in to it
+// stays signed in. With no on or off it says which it is.
+func accessOnlyCmd(args []string) error {
+	const usage = "usage: magpie accounts access-only codex <email> [on|off]"
+	if len(args) < 2 || len(args) > 3 || !strings.EqualFold(args[0], "codex") {
+		return fmt.Errorf("%s", usage)
+	}
+	user, err := accountNamed("codex", args[1])
+	if err != nil {
+		return err
+	}
+	if len(args) == 2 {
+		for _, l := range provider.Logins("codex") {
+			if l.User == user {
+				if l.AccessOnly {
+					fmt.Println("on · magpie uses its access token and never renews its sign-in")
+				} else {
+					fmt.Println("off · magpie renews its sign-in as it runs out")
+				}
+				return nil
+			}
+		}
+		return fmt.Errorf("no saved codex account %q", user)
+	}
+	var on bool
+	switch strings.ToLower(args[2]) {
+	case "on":
+		on = true
+	case "off":
+	default:
+		return fmt.Errorf("%s", usage)
+	}
+	if err := provider.SetLoginAccessOnly("codex", user, on); err != nil {
+		return err
+	}
+	if on {
+		fmt.Println(green.Render("✓"), user, "is kept access token only: magpie never renews its sign-in, and stops using it once its access token runs out")
+	} else {
+		fmt.Println(green.Render("✓"), "magpie renews", user+"'s sign-in again; the place it came from is signed out of it at the next renewal")
+	}
+	return nil
 }
 
 // switchOnlyCmd is `magpie accounts switch-only <codex|claude> [on|off]`:

@@ -292,13 +292,13 @@ func NextLogin(ctx context.Context, agent string) (from, to string, back, ok boo
 		switch {
 		case l.Active:
 			from = l.User
-		case l.Returns:
+		case l.Returns && switchable(l):
 			first = &ls[i]
 		}
 		// never one Codex keeps signed in in another folder (switchSavedLogin)
 		// nor one added by a setup-token, which Claude Code can't be
-		// signed in to
-		if !l.Active && l.On && l.Lapsed == "" && l.home == "" && !l.Token {
+		// signed in to, nor one kept access token only (switchable)
+		if !l.Active && l.On && l.Lapsed == "" && switchable(l) {
 			spares = append(spares, l)
 		}
 	}

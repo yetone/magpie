@@ -2850,6 +2850,12 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			change = func() error { return provider.ForgetLogin(in.Agent, in.User) }
 		case "on", "off":
 			change = func() error { return provider.SetLoginOn(in.Agent, in.User, r.PathValue("action") == "on") }
+		case "access-only", "renewed":
+			// kept access token only, never renewed (EastonXvii on X), or
+			// renewed by magpie again
+			change = func() error {
+				return provider.SetLoginAccessOnly(in.Agent, in.User, r.PathValue("action") == "access-only")
+			}
 		default:
 			http.NotFound(rw, r)
 			return
@@ -3075,6 +3081,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		var in struct {
 			Agent string
 			Files []string
+			// ChatGPT accounts kept with the file's access token only,
+			// never renewed (EastonXvii on X)
+			AccessOnly bool
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 8<<20)).Decode(&in); err != nil {
 			fail(rw, err)
@@ -3087,6 +3096,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// ChatGPT and Claude sign-ins: CLIProxyAPI's auth files, Codex
 			// CLI's auth.json, Claude Code's .credentials.json
 			imp = provider.ImportLogins
+			if in.AccessOnly && in.Agent == "codex" {
+				imp = func(ctx context.Context, _ string, files []string) ([]provider.ImportedAccount, error) {
+					return provider.ImportCodexAccessOnly(ctx, files)
+				}
+			}
 		} else if in.Agent == "factory" {
 			// Factory API keys (fk-…), as droid takes FACTORY_API_KEY (#506)
 			imp = func(ctx context.Context, _ string, files []string) ([]provider.ImportedAccount, error) {

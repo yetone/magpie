@@ -282,6 +282,10 @@ func renewSaved(ctx context.Context, agent, user string, force bool, stale strin
 		if accountID == "" {
 			accountID = claimString(jwtClaims(a.Tokens.IDToken), "https://api.openai.com/auth", "chatgpt_account_id")
 		}
+		if l.AccessOnly {
+			// never refreshed: that would sign out where it came from
+			return accessOnlyToken(user, l.Lapsed, a, accountID, force, stale)
+		}
 		if stale != "" {
 			if a.Tokens.AccessToken != stale {
 				return a.Tokens.AccessToken, accountID, nil

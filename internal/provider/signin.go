@@ -913,6 +913,14 @@ func addLogin(l savedLogin) (using bool, err error) {
 		// account is magpie's alone, its own sign-in left as it is
 		using = false
 	}
+	if l.AccessOnly {
+		// kept access token only: Codex would renew it, so it is magpie's
+		// alone, and never the one Codex holds here or in another folder
+		if signedIn && (sameLogin(live, l) || sameRefresh(live.Auth, l.Auth)) || codexHeldFolder(ls, l) != "" {
+			return false, errAccessOnlyHeld
+		}
+		using = false
+	}
 	if first := claudeStandIn(ls); !signedIn && l.Agent == "claude" && first != "" {
 		// logged out of Claude Code with accounts in magpie: it stays so,
 		// as the user left it (a claude.ai sign-in beside magpie's token
@@ -935,7 +943,7 @@ func addLogin(l savedLogin) (using bool, err error) {
 	// Codex and magpie both read it, or the next look would read the old
 	// ones back over them
 	held := ""
-	if l.Agent == "codex" && !using {
+	if l.Agent == "codex" && !using && !l.AccessOnly {
 		held = codexHeldFolder(ls, l)
 		l.Home = held
 	}

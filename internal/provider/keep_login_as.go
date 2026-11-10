@@ -85,6 +85,9 @@ func SetKeepLoginAs(id, user string) error {
 	if to.Token {
 		return fmt.Errorf(errClaudeTokenSwitch, to.User)
 	}
+	if to.AccessOnly {
+		return fmt.Errorf(errCodexAccessOnlySwitch, to.User)
+	}
 	if !p.KeepLogin || p.KeepLoginAs == "" {
 		// the order the gateway goes by now — the one signed in to
 		// first — is kept as the accounts' own, before the sign-in moves
@@ -149,7 +152,7 @@ func rankLogins(agent string, order []string) error {
 // choosing, the one signed in to is the first again.
 func signInToFirst(agent string) error {
 	for _, l := range Logins(agent) {
-		if (l.Active || l.On) && !l.Paused && l.Lapsed == "" && !l.Token {
+		if (l.Active || l.On) && !l.Paused && l.Lapsed == "" && !l.Token && !l.AccessOnly {
 			if l.Active {
 				return nil
 			}
