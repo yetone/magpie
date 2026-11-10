@@ -75,6 +75,8 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ['chromium', 
       await page.getByRole('button', { name: manage, exact: true }).click();
       const dialog = page.getByRole('dialog'), search = dialog.locator('input[type=search]');
       const button = (name) => dialog.getByRole('button', { name, exact: true });
+      // the dialog is in agentsmanager.js, loaded when Manage is pressed
+      await dialog.getByRole('checkbox').first().waitFor();
       assert.equal(await dialog.getByRole('checkbox').count(), 4, 'hidden and folded agents are manageable');
       // a name's text sits beside its icon, not at the row's far end (the
       // owner's screenshot: .editor label's right alignment reached the
