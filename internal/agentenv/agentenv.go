@@ -82,6 +82,9 @@ var Vars = []string{
 	"OMB_DATA_DIR",
 	// Avibe's home (its config/config.json and its control socket), ~/.avibe without it
 	"AVIBE_HOME",
+	// Kun's data folder (its runtime.json and model-connections.v2.json),
+	// ~/.kun/data without it
+	"KUN_DATA_DIR",
 	// AstrBot's root, the folder holding its data/ (else ~/.astrbot, the desktop app's)
 	"ASTRBOT_ROOT",
 	// jcode's folder, ~/.jcode without it

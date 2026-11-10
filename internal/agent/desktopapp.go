@@ -120,7 +120,15 @@ var desktopApps = map[string]desktopApp{
 	// per-user folder isn't under %LOCALAPPDATA%\Programs, so on Windows
 	// it is found by its ~/.codely folder alone.
 	"tuanjie-cowork": {id: "dev.codelycowork.desktop", names: []string{"Tuanjie Cowork.app"}},
-	"penguin":        {id: "com.prismshadow.penguinharness", names: []string{"PenguinHarness.app"}, win: filepath.Join("PenguinHarness", "PenguinHarness.exe"), guid: "8bb9acb7-2bdc-596b-9669-7b014ab1c47f"},
+	// Kun (electron-builder.config.cjs, 0.4.5: appId
+	// com.xingyuzhong.deepseekgui from its DeepSeek GUI days, productName
+	// Kun, package kun-gui). Its Windows installer is a per-user assisted
+	// NSIS one, so it goes to %LOCALAPPDATA%\Programs\Kun unless the user
+	// picks another folder; guid is the UUID v5 of the appId, as dsh's
+	// above. Its deb installs /opt/Kun, with the kun:// scheme.
+	"kun": {id: "com.xingyuzhong.deepseekgui", names: []string{"Kun.app"}, win: filepath.Join("Kun", "Kun.exe"), guid: "af3c880c-15f8-5a1f-a7e8-6e299ab90803",
+		onLinux: &linuxApp{dirs: []string{"/opt/Kun"}, exe: "kun-gui", name: "Kun", scheme: "kun"}},
+	"penguin": {id: "com.prismshadow.penguinharness", names: []string{"PenguinHarness.app"}, win: filepath.Join("PenguinHarness", "PenguinHarness.exe"), guid: "8bb9acb7-2bdc-596b-9669-7b014ab1c47f"},
 	// The CodeBuddy IDE (Tencent's VS Code fork, 4.12.2: CodeBuddy.app,
 	// com.tencent.codebuddy, from codebuddy.ai; CodeBuddy CN.app,
 	// com.tencent.codebuddycn, from codebuddy.cn) reads the CodeBuddy Code

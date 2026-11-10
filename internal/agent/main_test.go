@@ -55,6 +55,9 @@ func TestMain(m *testing.M) {
 	// in the test (runningAvibe), and the tests about Avibe serve their own
 	// (avibe_test.go)
 	avibeLive = runningAvibe
+	// nor a Kun runtime this machine runs: each home's Kun runs in the
+	// test (runningKun)
+	kunLive = runningKun
 	// nor which OpenCode this machine has: an OpenCode 2 on PATH turned
 	// every OpenCode test's file into OpenCode 2's words; the tests about
 	// it say their own (opencode_v2_test.go)
