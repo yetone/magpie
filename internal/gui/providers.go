@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -3187,6 +3189,55 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			Results   []provider.ImportedAccount `json:"results"`
 			Providers providersJSON              `json:"providers"`
 		}{res, providersState()})
+	})
+	// ChatGPT and Claude accounts taken out as a file Sub2API, CLIProxyAPI
+	// or magpie imports (heyiwei5 and Rk1ngggg on X). The file holds live
+	// sign-ins: it is written 0600 into Downloads, never sent to the page,
+	// and its tokens are never logged.
+	mux.HandleFunc("POST /api/signin/export", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Agent, Format string
+			Users         []string
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		res, err := provider.ExportLogins(in.Agent, in.Format, in.Users)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		dir := downloads()
+		stamp := time.Now().Format("2006-01-02")
+		if in.Format == provider.ExportCLIProxy {
+			// one file an account, in a folder of their own
+			base := filepath.Join(dir, "magpie-cliproxyapi-"+in.Agent+"-"+stamp)
+			dir = base
+			for i := 2; ; i++ {
+				if _, err := os.Stat(dir); err != nil {
+					break
+				}
+				dir = fmt.Sprintf("%s-%d", base, i)
+			}
+		} else {
+			res.Files[0].Name = "magpie-sub2api-" + in.Agent + "-" + stamp + ".json"
+		}
+		paths, err := provider.WriteExport(res, dir)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		shown := dir
+		if len(paths) == 1 {
+			shown = paths[0]
+		}
+		_ = w.OpenFolder(dir) // saved either way; the path is in the answer
+		writeJSON(rw, struct {
+			Path     string                     `json:"path"`
+			Accounts []string                   `json:"accounts"`
+			Skipped  []provider.ImportedAccount `json:"skipped"`
+		}{tilde(shown), res.Accounts, res.Skipped})
 	})
 	// StepFun's Step Plan windows: the session the user copied from their
 	// browser with magpie's bookmarklet, the provider's own (two on one

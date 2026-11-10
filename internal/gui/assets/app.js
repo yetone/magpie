@@ -12923,13 +12923,14 @@ function copilotHostSwitch(sub) {
 
 // signAsk: a sign-in that asks one value first (Copilot's GHE.com host, a
 // Claude setup-token); its sheet is in signsheets.js, loaded when asked for
-async function signAsk(flow) {
-  try { await import("./signsheets.js"); } catch (err) { return statusErr(err); }
+async function signAsk(flow, sheet = "./signsheets.js") {
+  try { await import(sheet); } catch (err) { return statusErr(err); }
   stopSignIn();
   signing = flow;
   renderProviders();
 }
 const startClaudeToken = () => signAsk({ agent: "claude", state: "token", token: "" });
+const startExport = (agent) => signAsk({ agent, state: "export", format: "sub2api", off: new Set() }, "./acctexport.js");
 
 // dropSigningIn: an editor closing leaves no sign-in waiting (#526); an
 // import being read finishes.
@@ -13009,6 +13010,7 @@ function renderSigning(sub) {
   }
   if (signing.state === "ghe") return window.copilotGHESheet();
   if (signing.state === "token") return window.claudeTokenSheet();
+  if (signing.state === "export") return window.accountExportSheet(sub);
   if (signing.state === "import" || signing.state === "importing" || signing.state === "imported") return renderLoginImport(sub);
   if (signing.state === "method" || signing.state === "prompt" || signing.state === "key") return renderPluginAsk(sub);
   if (signing.state === "failed") {
@@ -13597,6 +13599,7 @@ function renderAccounts(a, p) {
       imp.title = importSay(a.agent).from;
       list.append(imp);
     }
+    if (sub.importable && (a.agent === "claude" || a.agent === "codex")) list.append(addRow(t("Export accounts to a file…"), () => startExport(a.agent)));
     if (a.agent === "claude") list.append(addRow(t("Add an account by setup-token…"), startClaudeToken));
   }
   arrangeAccountRows(list, p);

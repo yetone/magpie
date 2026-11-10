@@ -168,6 +168,7 @@ func loginEntry(agent string, x map[string]any) loginImport {
 	e.refreshToken = jsonStr(src, "refresh_token", "refreshToken")
 	e.accountID = jsonStr(src, "account_id", "accountId")
 	e.scopes = importScopes(src["scopes"])
+	e.claudeAccount, e.claudeOrg = jsonStr(x, "account_uuid"), jsonStr(x, "org_uuid")
 	if agent == "claude" {
 		e.expiresAt = jsonMillis(src, "expiresAt")
 	}

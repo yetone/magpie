@@ -120,6 +120,9 @@ func accountsCmd(args []string) error {
 	if len(args) > 1 && args[1] == "import" {
 		return importAccounts(args[2:])
 	}
+	if len(args) > 1 && args[1] == "export" {
+		return exportAccounts(args[2:])
+	}
 	if len(args) > 1 && args[1] == "access-only" {
 		return accessOnlyCmd(args[2:])
 	}
@@ -702,6 +705,95 @@ func importAccounts(args []string) error {
 		return fmt.Errorf("nothing imported")
 	}
 	fmt.Println(faint.Render("  see them: magpie accounts " + id))
+	return nil
+}
+
+// exportUsage is how `magpie accounts export` is run.
+const exportUsage = "usage: magpie accounts export <codex|claude> [<email>...] [--format sub2api|cliproxyapi] [--to <folder>] [--yes]"
+
+// exportAccounts: `magpie accounts export`, the accounts as a file magpie,
+// Sub2API or CLIProxyAPI imports. The file is written 0600 into a folder
+// (the current one unless --to), never over a file there; its tokens are
+// never printed.
+func exportAccounts(args []string) error {
+	yes, format, to := false, provider.ExportSub2API, "."
+	var rest []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--yes" || a == "-y":
+			yes = true
+		case a == "--format" || a == "--to":
+			if i+1 >= len(args) {
+				return fmt.Errorf("%s needs a value\n%s", a, exportUsage)
+			}
+			i++
+			if a == "--to" {
+				to = args[i]
+			} else {
+				format = strings.ToLower(args[i])
+			}
+		case strings.HasPrefix(a, "--format="):
+			format = strings.ToLower(strings.TrimPrefix(a, "--format="))
+		case strings.HasPrefix(a, "--to="):
+			to = strings.TrimPrefix(a, "--to=")
+		case strings.HasPrefix(a, "-"):
+			return fmt.Errorf("%s: no such flag\n%s", a, exportUsage)
+		default:
+			rest = append(rest, a)
+		}
+	}
+	if format == "cpa" || format == "cliproxy" {
+		format = provider.ExportCLIProxy
+	}
+	if len(rest) < 1 {
+		return fmt.Errorf("%s", exportUsage)
+	}
+	var id string
+	switch strings.ToLower(rest[0]) {
+	case "codex", "chatgpt":
+		id = "codex"
+	case "claude", "cc":
+		id = "claude"
+	default:
+		return fmt.Errorf("%q: accounts can be exported for codex and claude\n%s", rest[0], exportUsage)
+	}
+	if format != provider.ExportSub2API && format != provider.ExportCLIProxy {
+		return fmt.Errorf("%q: the format is sub2api or cliproxyapi\n%s", format, exportUsage)
+	}
+	// the names are the accounts', as the other account commands take them
+	var users []string
+	for _, u := range rest[1:] {
+		user, err := accountNamed(id, u)
+		if err != nil {
+			return err
+		}
+		users = append(users, user)
+	}
+	fmt.Println(bold.Render("!"), provider.ExportRisk)
+	if !yes {
+		fmt.Print("Export? [y/N] ")
+		var answer string
+		fmt.Scanln(&answer)
+		if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
+			return fmt.Errorf("export canceled")
+		}
+	}
+	res, err := provider.ExportLogins(id, format, users)
+	for _, s := range res.Skipped {
+		fmt.Println(bold.Render("✗"), s.User+":", s.Error)
+	}
+	if err != nil {
+		return err
+	}
+	paths, err := provider.WriteExport(res, to)
+	for _, p := range paths {
+		fmt.Println(green.Render("✓"), "wrote", p, muted.Render("(readable by you only)"))
+	}
+	if err != nil {
+		return err
+	}
+	fmt.Println(faint.Render(fmt.Sprintf("  %d account(s): %s", len(res.Accounts), strings.Join(res.Accounts, ", "))))
 	return nil
 }
 
