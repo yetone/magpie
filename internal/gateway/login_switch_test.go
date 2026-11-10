@@ -30,13 +30,13 @@ func TestLoginSwitchKeepsEachAccountItself(t *testing.T) {
 	h.Set("x-claude-code-session-id", "login-switch-209")
 	body := []byte(`{"messages":[{"role":"user","content":"hi"}]}`)
 	pl := planned{order: make([]Weighed, 2)}
-	_, _, _, key := affine("t", provider.AffinitySession, false, false, false, h, provider.Anthropic, body, body, []candidate{a, b}, pl)
+	_, _, _, key := affine("t", provider.AffinitySession, false, false, false, false, h, provider.Anthropic, body, body, []candidate{a, b}, pl)
 	answered(key, a, 1, Usage{})
 	servedCandidate(a, 5000)
 
 	// signed in to b now
 	a2, b2 := acct("a@example.com", "claude@a@example.com"), acct("b@example.com", "claude")
-	cs, _, aff, _ := affine("t", provider.AffinitySession, false, false, false, h, provider.Anthropic, body, body, []candidate{b2, a2}, planned{order: make([]Weighed, 2)})
+	cs, _, aff, _ := affine("t", provider.AffinitySession, false, false, false, false, h, provider.Anthropic, body, body, []candidate{b2, a2}, planned{order: make([]Weighed, 2)})
 	if cs[0].p.Account.User != "a@example.com" || !aff.Kept {
 		t.Fatalf("the conversation went to %s (kept %v, %s)", cs[0].p.Account.User, aff.Kept, aff.Why)
 	}

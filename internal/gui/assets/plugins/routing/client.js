@@ -1147,6 +1147,7 @@ function routingPage(part) {
         : t("{who} answered this conversation last, but the provider goes in order and {first}, ahead of it, is ready again, so turn {n} goes back to {first}.", { who: last, first: who(r.order[0]), n: a.turn });
       case "main": return t("{who}, a fallback, answered this conversation last, but the provider's own {first} is ready again, so turn {n} goes back to it.", { who: last, first: who(r.order[0]), n: a.turn });
       case "back": return t("{who} took this conversation while {first}, listed ahead of it in the group, couldn't; {first} is ready again, so turn {n} goes back to it.", { who: last, first: who(r.order[0]), n: a.turn });
+      case "hours": return t("{who} answered this conversation last, by rule {rule}, but the rule's hours are over, so turn {n} goes where the group routes it.", { who: last, rule: r.rule?.ended, n: a.turn });
       case "no-cache": return t("{who} answered this conversation last, but the vendor then read only {r} tokens of it from its cache and wrote {w} — not worth staying for.", { who: last, r: tokens(a.cacheRead || 0), w: tokens(a.cacheWrite || 0) });
       case "cold": return t("{who} answered this conversation {d} ago, longer than the 5 minutes a vendor keeps a prompt cached — so routing decides afresh.", { who: last, d: ago });
       case "off": return t("Affinity is off: each request is routed afresh, whoever answered its conversation before.");
@@ -1373,10 +1374,14 @@ function routingPage(part) {
     }
     return -new Date().getTimezoneOffset() === server ? "" : t("server time, {offset}", { offset: utcText(server) });
   }
-  // "9:5" is no time; "9:05" is 09:05
+  // "9:5" is no time; "9:05" is 09:05. What a phone's number pad or a
+  // Chinese keyboard types counts too (MinglunZhu on X): "22", "2200",
+  // "930", "22：00", "22.00", "22点", "22点30".
   const clockOf = (s) => {
-    const m = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(s || "");
-    return m && +m[1] < 24 && +m[2] < 60 ? m[1].padStart(2, "0") + ":" + m[2] : "";
+    const v = String(s || "").replace(/[\uff10-\uff19]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0)).trim();
+    const m = /^(\d{1,2})(?:[:：.．h時时点點]\s*(\d{2})?分?)?$/i.exec(v) || /^(\d{1,2})(\d{2})$/.exec(v);
+    const h = m?.[1], mm = m?.[2] ?? "00";
+    return m && +h < 24 && +mm < 60 ? h.padStart(2, "0") + ":" + mm : "";
   };
 
   // how the reasoning a try was sent at came to be
@@ -7950,6 +7955,9 @@ function routingPage(part) {
     // a condition taken off is the value saved for none, as before
     const condNone = { intent: "", tokens: 0, images: false, effort: "", compact: false, agents: [], folders: [], exceptFolders: [], time: null };
     const addCond = (r, k) => {
+      // a new rule's intent box left empty gives way to the condition
+      // picked instead (MinglunZhu on X: hours took an × and a +)
+      if (k !== "intent" && !r.intent?.trim()) openedOf(r).delete("intent");
       openedOf(r).add(k);
       if (k === "images" || k === "compact") r[k] = true;
       if (k === "subagent") setWhere(r, "subagent", { op: "is" });

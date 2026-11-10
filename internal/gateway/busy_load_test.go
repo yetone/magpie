@@ -119,22 +119,22 @@ func TestBusyModelNotKeptAtNewTurn(t *testing.T) {
 	h.Set("x-claude-code-session-id", "busy-load-kept")
 	turn := []byte(`{"messages":[{"role":"user","content":"hi"}]}`)
 	within := []byte(`{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":null,"tool_calls":[{"id":"c1","type":"function","function":{"name":"f","arguments":"{}"}}]},{"role":"tool","tool_call_id":"c1","content":"ok"}]}`)
-	_, _, _, key := affine("t", provider.AffinitySession, false, false, false, h, provider.Chat, turn, turn, cs, pl)
+	_, _, _, key := affine("t", provider.AffinitySession, false, false, false, false, h, provider.Chat, turn, turn, cs, pl)
 	answered(key, cs[1], 1, Usage{CacheRead: 50_000})
 	t.Cleanup(func() { sticks.Lock(); delete(sticks.m, key); sticks.Unlock() })
 
-	got, _, aff, _ := affine("t", provider.AffinitySession, false, false, false, h, provider.Chat, within, within, cs, pl)
+	got, _, aff, _ := affine("t", provider.AffinitySession, false, false, false, false, h, provider.Chat, within, within, cs, pl)
 	if got[0].rest != "inhouse-plugin/big" || !aff.Kept {
 		t.Fatalf("within a turn: first %s, kept %v, why %s", got[0].rest, aff.Kept, aff.Why)
 	}
-	got, _, aff, _ = affine("t", provider.AffinitySession, false, false, false, h, provider.Chat, turn, turn, cs, pl)
+	got, _, aff, _ = affine("t", provider.AffinitySession, false, false, false, false, h, provider.Chat, turn, turn, cs, pl)
 	if got[0].rest != "inhouse-plugin/mid" || aff.Kept || aff.Why != "busy" {
 		t.Fatalf("a new turn: first %s, kept %v, why %s", got[0].rest, aff.Kept, aff.Why)
 	}
 
 	// every one busy: kept where it was
 	both := planned{order: []Weighed{{Who: "mid", Busy: 85}, {Who: "big", Busy: 92}}}
-	got, _, aff, _ = affine("t", provider.AffinitySession, false, false, false, h, provider.Chat, turn, turn, cs, both)
+	got, _, aff, _ = affine("t", provider.AffinitySession, false, false, false, false, h, provider.Chat, turn, turn, cs, both)
 	if got[0].rest != "inhouse-plugin/big" || !aff.Kept {
 		t.Fatalf("all busy: first %s, kept %v, why %s", got[0].rest, aff.Kept, aff.Why)
 	}

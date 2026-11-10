@@ -10,8 +10,9 @@ import (
 
 // A rule's hours are looked at as a turn begins, on the clock then: a turn
 // begun inside them goes to its member and stays there for its tool
-// rounds after they end; a turn begun outside them isn't the rule's (where
-// the same conversation goes then is the group's Stays to say).
+// rounds after they end; a turn begun outside them isn't the rule's (and the
+// conversation goes where the group routes it then:
+// TestRuleHoursOverGiveTheConversationBack).
 func TestRuleTimeWindowAtTurnStart(t *testing.T) {
 	now := time.Date(2026, 9, 29, 10, 0, 0, 0, time.Local) // a Tuesday
 	ruleClock = func() time.Time { return now }
@@ -113,5 +114,67 @@ func TestRuleTimeWindowInItsZoneAtTurnStart(t *testing.T) {
 	}
 	if a.n() != 1 || b.n() != 2 {
 		t.Fatalf("a %d b %d", a.n(), b.n())
+	}
+}
+
+// A conversation a rule's hours sent to its member goes where the group
+// routes it once they are over, whatever that member cached (MinglunZhu on
+// X: a cheaper provider at night, the usual one by day). Kept by its cache,
+// a Claude Code session begun at night stayed on the night's provider all
+// day in a group routed Smart. Session, the user's own, keeps it.
+func TestRuleHoursOverGiveTheConversationBack(t *testing.T) {
+	for _, tc := range []struct {
+		routing, mode, day string // where turn 2, by day, goes
+		why                string
+	}{
+		{"", "", "from ka", "hours"},
+		{"", provider.AffinitySession, "from kb", "session"},
+	} {
+		t.Run(tc.routing+"/"+tc.mode, func(t *testing.T) {
+			now := time.Date(2026, 9, 29, 23, 0, 0, 0, time.Local) // a Tuesday night
+			ruleClock = func() time.Time { return now }
+			t.Cleanup(func() { ruleClock = time.Now })
+			night := provider.Rule{Use: "b/big", Time: &provider.TimeWindow{From: "22:00", To: "08:00"}}
+			s, a, b := ruled(t, night)
+			g := provider.Group{Name: "R", Members: []string{"a/small", "b/big"}, Routing: tc.routing, Affinity: tc.mode, Rules: []provider.Rule{night}}
+			if err := provider.SaveGroup(g); err != nil {
+				t.Fatal(err)
+			}
+			post := func(body string) (string, Route) {
+				t.Helper()
+				code, out := postAs(t, s, "sess", body)
+				if code != 200 {
+					t.Fatalf("%d %s", code, out)
+				}
+				return out, lastRoute(s)
+			}
+			// turn 1, at night: the rule's member
+			if out, r := post(chat("hello", nil, 0, "")); !strings.Contains(out, "from kb") || r.Rule.N != 1 {
+				t.Fatalf("night: %s %+v", out, r.Rule)
+			}
+			// its tool round past 08:00 stays where the turn began
+			now = time.Date(2026, 9, 30, 8, 1, 0, 0, time.Local)
+			if out, r := post(chat("hello", nil, 1, "")); !strings.Contains(out, "from kb") || !r.Rule.Held {
+				t.Fatalf("tool round: %s %+v", out, r.Rule)
+			}
+			// turn 2, by day, a minute later: the vendor read 2500 tokens of
+			// it from its cache, and the hours are over
+			now = time.Date(2026, 9, 30, 8, 2, 0, 0, time.Local)
+			out, r := post(chat("hello", []string{"more"}, 0, ""))
+			if !strings.Contains(out, tc.day) || r.Rule.N != 0 || r.Affinity == nil || r.Affinity.Why != tc.why {
+				t.Fatalf("day: %s rule %+v affinity %+v", out, r.Rule, r.Affinity)
+			}
+			if tc.why == "hours" && r.Rule.Ended != 1 {
+				t.Fatalf("the trace names the rule whose hours ended: %+v", r.Rule)
+			}
+			// and the day's turns after it keep the day's member by its cache
+			out, r = post(chat("hello", []string{"more", "again"}, 0, ""))
+			if !strings.Contains(out, tc.day) || r.Rule.Ended != 0 {
+				t.Fatalf("turn 3: %s rule %+v affinity %+v", out, r.Rule, r.Affinity)
+			}
+			if a.n()+b.n() != 4 {
+				t.Fatalf("a %d b %d", a.n(), b.n())
+			}
+		})
 	}
 }

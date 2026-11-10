@@ -72,6 +72,13 @@ type RuleHit struct {
 	Small   []string `json:"small,omitempty"`
 	// Bare: the group has no rules, only its effort picked
 	Bare bool `json:"bare,omitempty"`
+	// Ended: the rule (from 1) that sent the conversation's last turn to
+	// its member held by hours that are over now (MinglunZhu on X: a
+	// cheaper provider at night, the usual one by day). No rule puts a
+	// member first this turn, and the vendor's cache of the night's member
+	// doesn't keep the conversation there (affine's "hours"): it goes
+	// where the group routes it, as a new conversation would
+	Ended int `json:"ended,omitempty"`
 	// UseEffort: the reasoning the rule asks the member it names for
 	// (provider.Rule.UseEffort, #2633), in place of the agent's
 	UseEffort string `json:"useEffort,omitempty"`
@@ -373,6 +380,11 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 	}
 	if i := provider.MatchRule(g.Rules, q); i >= 0 {
 		hit.N, hit.Use, hit.More, hit.When = i+1, g.Rules[i].Use, g.Rules[i].More, g.Rules[i].Conditions()
+	}
+	if had && hit.Use == "" && tr.use != "" && tr.n >= 1 && tr.n <= len(g.Rules) {
+		if r := g.Rules[tr.n-1]; r.Use == tr.use && r.Time != nil && !r.Time.Holds(now) {
+			hit.Ended = tr.n
+		}
 	}
 	turnRules.Lock()
 	defer turnRules.Unlock()

@@ -42,7 +42,7 @@ func TestChatGPTConversationStaysPastFiveMinutes(t *testing.T) {
 		// more left first, which after a turn on the last is the other
 		cs := []candidate{c.next, c.last}
 		pl := planned{order: []Weighed{{}, {}}}
-		_, _, _, key := affine("t", "", false, false, false, h, provider.Responses, first, first, cs, pl)
+		_, _, _, key := affine("t", "", false, false, false, false, h, provider.Responses, first, first, cs, pl)
 		answered(key, c.last, 1, Usage{Input: 1200, CacheRead: 20000, CacheWrite: 1200})
 		t.Cleanup(func() { sticks.Lock(); delete(sticks.m, key); sticks.Unlock() })
 		sticks.Lock()
@@ -50,7 +50,7 @@ func TestChatGPTConversationStaysPastFiveMinutes(t *testing.T) {
 		st.at = st.at.Add(-c.ago)
 		sticks.m[key] = st
 		sticks.Unlock()
-		got, _, a, _ := affine("t", "", false, false, false, h, provider.Responses, again, again, cs, pl)
+		got, _, a, _ := affine("t", "", false, false, false, false, h, provider.Responses, again, again, cs, pl)
 		if a.Why != c.why || a.Kept != (c.why == "cache") {
 			t.Fatalf("%s: why %q kept %v, want %q", c.name, a.Why, a.Kept, c.why)
 		}

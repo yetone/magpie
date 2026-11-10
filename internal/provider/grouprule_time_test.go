@@ -71,7 +71,10 @@ func TestRuleTimeCleanAndConditions(t *testing.T) {
 	}
 	for _, bad := range []TimeWindow{
 		{From: "25:00", To: "08:00"},
-		{From: "09:00", To: "8"},
+		{From: "09:00", To: "8:5"},
+		{From: "09:00", To: "8 pm"},
+		{From: "24", To: "08:00"},
+		{From: "12345", To: "08:00"},
 		{From: "", To: "08:00"},
 		{From: "09:60", To: "10:00"},
 		{From: "09:00", To: "18:00", Days: []string{"funday"}},
@@ -80,6 +83,28 @@ func TestRuleTimeCleanAndConditions(t *testing.T) {
 		if _, err := cleanRules([]Rule{{Use: "a/x", Time: &bad}}, []string{"a/x"}); err == nil {
 			t.Errorf("%+v: no error", bad)
 		}
+	}
+}
+
+// Hours as a phone's number pad or a Chinese keyboard types them are the
+// same hours (MinglunZhu on X: setting the time in a rule was awkward).
+func TestRuleTimeTypedLoosely(t *testing.T) {
+	for typed, want := range map[string]string{
+		"22": "22:00", "8": "08:00", "2200": "22:00", "930": "09:30", "22：00": "22:00",
+		"22.30": "22:30", "２２：３０": "22:30", "22点": "22:00", "22点30": "22:30", "8点30分": "08:30",
+		"22h": "22:00", "9:00": "09:00", " 07:05 ": "07:05", "22:": "22:00",
+	} {
+		w := TimeWindow{From: typed, To: "12:00"}
+		if err := w.clean(); err != nil || w.From != want {
+			t.Errorf("%q: %q %v, want %q", typed, w.From, err, want)
+		}
+	}
+	if w, err := ParseTimeWindow("9-18"); err != nil || w.From != "09:00" || w.To != "18:00" {
+		t.Errorf("time=9-18: %+v %v", w, err)
+	}
+	w, err := ParseTimeWindow("22～8")
+	if err != nil || w.From != "22:00" || w.To != "08:00" {
+		t.Errorf("time=22～8: %+v %v", w, err)
 	}
 }
 
@@ -143,7 +168,7 @@ func TestParseRuleTime(t *testing.T) {
 			t.Errorf("%s: read back %v %+v", c.line, err, again.Time)
 		}
 	}
-	for _, bad := range []string{"use=b/y time=9-18", "use=b/y time=09:00", "use=b/y days=someday", "use=b/y days="} {
+	for _, bad := range []string{"use=b/y time=9:5-18", "use=b/y time=09:00", "use=b/y days=someday", "use=b/y days="} {
 		if _, _, _, err := ParseRule(g, RuleWords(bad)); err == nil {
 			t.Errorf("%s: no error", bad)
 		}

@@ -6,7 +6,11 @@
 // times typed into one pill, past midnight noted, the days picked like the
 // agents, a time that isn't one marked, nothing moved by a click, and they
 // are saved as time:{from,to,days}, with the browser's zone when typed.
-// In English and Chinese.
+// A time typed as a phone's number pad or a Chinese keyboard gives it
+// ("9：00", "18") is that time, and the hours take a new rule's empty
+// intent box's place (MinglunZhu on X: the time was awkward to set). A
+// conversation a rule's hours sent somewhere goes where the group routes
+// it once they are over, and the trace says so. In English and Chinese.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -34,13 +38,21 @@ const route = {
   tries: [{ id: "b", model: "other", start: new Date(now - 2000).toISOString(), done: true, ms: 800, status: 200 }],
   rule: { n: 1, use: "b/other", when: ["time 22:00–08:00 Mon–Fri"], turn: 2, tokens: 9000 },
 };
-
-const words = {
-  en: { cond: "22:00–08:00 Mon–Fri", story: "rule 1 matches — 22:00–08:00 Mon–Fri —", night: "runs past midnight, into the next day", every: "every day", weekdays: "weekdays", sat: "Sat", monSat: "Mon–Sat", edit: "Edit", add: "Add a rule", save: "Save", hours: "Hours and days" },
-  zh: { cond: "周一–周五 22:00–08:00", story: "规则 1", night: "跨过午夜，到第二天", every: "每天", weekdays: "工作日", sat: "周六", monSat: "周一–周六", edit: "编辑", add: "添加规则", save: "保存", hours: "时段" },
+// the morning after: no rule matches, and the night's member gives it back
+const morning = {
+  ...route, id: 8, seq: 8, provider: "a",
+  order: [route.order[1], route.order[0]],
+  tries: [{ id: "a", model: "glm", start: new Date(now - 2000).toISOString(), done: true, ms: 800, status: 200 }],
+  affinity: { why: "hours", last: "b", turn: 3 },
+  rule: { turn: 3, tokens: 9000, ended: 1 },
 };
 
-function serve(lang, posts) {
+const words = {
+  en: { cond: "22:00–08:00 Mon–Fri", story: "rule 1 matches — 22:00–08:00 Mon–Fri —", night: "runs past midnight, into the next day", every: "every day", weekdays: "weekdays", sat: "Sat", monSat: "Mon–Sat", edit: "Edit", add: "Add a rule", save: "Save", hours: "Hours and days", over: "by rule 1, but the rule's hours are over, so turn 3 goes where the group routes it." },
+  zh: { cond: "周一–周五 22:00–08:00", story: "规则 1", night: "跨过午夜，到第二天", every: "每天", weekdays: "工作日", sat: "周六", monSat: "周一–周六", edit: "编辑", add: "添加规则", save: "保存", hours: "时段", over: "依据的是规则 1，但该规则的时段已过，所以第 3 轮" },
+};
+
+function serve(lang, posts, routes = [route]) {
   const state = { agents: [{ id: "claude", name: "Claude Code", path: "/test/claude", fields: [] }], profiles: [], settings: { lang, theme: "light" } };
   let first = true;
   return async (r) => {
@@ -51,9 +63,9 @@ function serve(lang, posts) {
     if (url.pathname === "/api/state") return json(state);
     if (url.pathname === "/api/gateway/trace") {
       if (url.searchParams.get("wait")) return new Promise(() => {}); // nothing more comes
-      const routes = first ? [route] : [];
+      const out = first ? routes : [];
       first = false;
-      return json({ mine: true, now: new Date().toISOString(), seq: 7, totals: { requests: 1, rerouted: 0, errors: 0 }, routes });
+      return json({ mine: true, now: new Date().toISOString(), seq: routes.at(-1).seq, totals: { requests: routes.length, rerouted: 0, errors: 0 }, routes: out });
     }
     if (url.pathname === "/api/gateway/history") return json({ cut: false, days: [], routes: [] });
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
@@ -123,15 +135,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await wheelTo(addBtn);
       await addBtn.click();
       const row2 = rows.nth(1);
-      // a new rule asks for an intent; the hours take its place, added
-      // from the rule's + menu
+      // a new rule asks for an intent; the hours, added from the rule's +
+      // menu, take the empty box's place
       assert.equal(await row2.locator(".rt-cond.tm").count(), 0, "no hours until they are added");
-      await row2.locator('.rt-c[data-k="intent"]').hover();
-      await row2.locator('.rt-c[data-k="intent"] .rt-cx').click();
+      assert.equal(await row2.locator('.rt-c[data-k="intent"]').count(), 1);
       await row2.locator(".rt-addc").click();
       await page.locator(".proto-menu .pm-item", { hasText: w.hours }).click();
       const tm2 = row2.locator(".rt-cond.tm");
       await tm2.waitFor();
+      assert.equal(await row2.locator('.rt-c[data-k="intent"]').count(), 0, "the empty intent gave way to the hours");
       const dayBtn2 = row2.locator("button.rt-cond", { hasText: w.every });
       assert.equal(await dayBtn2.isVisible(), true, "the days beside the hours, every day until picked");
       const at = () => page.evaluate(() => [...document.querySelectorAll("*")].filter((e) => e.scrollTop).map((e) => [e.id || e.className, e.scrollTop]).join(";") + "|" + Math.round(document.querySelector(".rt-gedit").getBoundingClientRect().top));
@@ -147,10 +159,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await to2.click();
       assert.match(await tm2.getAttribute("class"), /\bbad\b/, "a time that isn't one is marked once left");
       assert.equal(await at(), before, "the click moved nothing");
-      await from2.fill("9:00");
-      await to2.fill("18:00");
+      // typed as a Chinese keyboard and a phone's number pad give them
+      await from2.fill("9：00");
+      await to2.fill("18");
       await to2.blur();
       assert.equal(await from2.inputValue(), "09:00");
+      assert.equal(await to2.inputValue(), "18:00");
       assert.equal(await tm2.getAttribute("class"), "rt-cond tm on");
       assert.equal(await row2.locator(".rt-rwarn").textContent(), "");
 
@@ -180,6 +194,23 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         ["b/other", { from: "22:00", to: "08:00", days: WEEKDAYS }],
         ["b/other", { from: "09:00", to: "18:00", days: [...WEEKDAYS, "sat"], zone: "Asia/Shanghai" }], // typed here: in this browser's zone
       ]);
+      assert.deepEqual(errors, []);
+    });
+
+    test(`${engine} ${lang}: the rule's hours over, the conversation goes back`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const page = await (await browser.newContext({ viewport: { width: 1100, height: 1400 }, timezoneId: "Asia/Shanghai" })).newPage();
+      page.setDefaultTimeout(5000);
+      page.setDefaultNavigationTimeout(60000);
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.route("**/*", serve(lang, [], [morning]));
+      await page.goto("http://magpie.test/?view=routing");
+      // the caption under the stage tells it
+      const said = () => document.body.innerText + "\n" + (document.querySelector(".rt-cap")?.textContent || "");
+      await page.waitForFunction((s) => (document.body.innerText + "\n" + (document.querySelector(".rt-cap")?.textContent || "")).includes(s), w.over)
+        .catch(async (e) => { throw new Error(`${e.message}: ${await page.evaluate(said)}`); });
       assert.deepEqual(errors, []);
     });
   }

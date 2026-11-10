@@ -114,17 +114,17 @@ func TestCodexCreditsLastNotKept(t *testing.T) {
 	h := http.Header{}
 	h.Set("x-claude-code-session-id", "credits-last-kept")
 	body := []byte(`{"messages":[{"role":"user","content":"hi"}]}`)
-	_, _, _, key := affine("t", provider.AffinitySession, false, false, false, h, provider.Chat, body, body, cs, pl)
+	_, _, _, key := affine("t", provider.AffinitySession, false, false, false, false, h, provider.Chat, body, body, cs, pl)
 	answered(key, cs[1], 1, Usage{CacheRead: 50_000})
 	t.Cleanup(func() { sticks.Lock(); delete(sticks.m, key); sticks.Unlock() })
-	got, _, aff, _ := affine("t", provider.AffinitySession, false, false, false, h, provider.Chat, body, body, cs, pl)
+	got, _, aff, _ := affine("t", provider.AffinitySession, false, false, false, false, h, provider.Chat, body, body, cs, pl)
 	if got[0].rest != "codex/spare@example.com" || aff.Kept || aff.Why != "credits" {
 		t.Fatalf("first %s, kept %v, why %s", got[0].rest, aff.Kept, aff.Why)
 	}
 
 	// every one on its credits and last: kept where it was
 	both := planned{order: []Weighed{{Who: "spare@example.com", CreditsLast: true}, {Who: "me@example.com", CreditsLast: true}}}
-	got, _, aff, _ = affine("t", provider.AffinitySession, false, false, false, h, provider.Chat, body, body, cs, both)
+	got, _, aff, _ = affine("t", provider.AffinitySession, false, false, false, false, h, provider.Chat, body, body, cs, both)
 	if got[0].rest != "codex/me@example.com" || !aff.Kept {
 		t.Fatalf("all last: first %s, kept %v, why %s", got[0].rest, aff.Kept, aff.Why)
 	}

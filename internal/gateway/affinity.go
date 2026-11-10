@@ -117,7 +117,9 @@ type Affinity struct {
 	// again at a new turn: backToFirst), "back" (a member of a group
 	// routed any other way stood in for one listed ahead of it that
 	// couldn't take the conversation, and a member ahead is ready first
-	// at a new turn: backFromStandIn), "credits" (a Codex account gone
+	// at a new turn: backFromStandIn), "hours" (a group's rule by hours
+	// sent its last turn there and they are over: RuleHit.Ended),
+	// "credits" (a Codex account gone
 	// onto its credits answered it, set to spend them only after
 	// everything else, and one not on its credits leads: lastBehind),
 	// "busy" (its plugin says the model is busier than settings.BusyLoad
@@ -559,7 +561,7 @@ func stickKey(scope string, in http.Header, body []byte) string {
 // more for each 4 MB Codex request in flight. inOrder: the request is to
 // a routing group, or a provider's keys or accounts, set to In order,
 // whose order the user chose (backToFirst).
-func affine(scope, mode string, rotate, spread, inOrder bool, in http.Header, from provider.Protocol, body, written []byte, cs []candidate, pl planned) ([]candidate, planned, *Affinity, string) {
+func affine(scope, mode string, rotate, spread, inOrder, hoursOver bool, in http.Header, from provider.Protocol, body, written []byte, cs []candidate, pl planned) ([]candidate, planned, *Affinity, string) {
 	key := stickKey(scope, in, body)
 	a := &Affinity{Mode: mode}
 	a.Turn, a.Within = turnOf(from, written)
@@ -667,6 +669,15 @@ func affine(scope, mode string, rotate, spread, inOrder bool, in http.Header, fr
 		// its cache as before; within a turn it stays, and Stays:
 		// Session or Strict, the user's own, keep it where it is
 		a.Why = "back"
+	case !a.Within && hoursOver && !rotate && mode == "" && at > 0:
+		// a rule's hours sent the conversation's last turn here, and they
+		// are over (RuleHit.Ended; MinglunZhu on X: a cheaper provider at
+		// night, the usual one by day): the new turn goes where the group
+		// routes it, whatever this one cached, or a conversation begun at
+		// night stayed on the night's provider all day by its cache.
+		// Within a turn it stays; Stays: Session and Strict, the user's
+		// own, keep it where it is
+		a.Why = "hours"
 	case at > 0 && pl.order[at].Known && pl.order[at].Used >= provider.SpentShareOf(cs[at].p.Routing) && !pl.order[at].CreditsFirst:
 		// all but used up, and put behind another: first still — the
 		// one key or account it has (#1016), or every one used up — it

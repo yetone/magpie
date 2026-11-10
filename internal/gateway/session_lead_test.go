@@ -85,7 +85,7 @@ func TestSessionSideCallFollowsItsMain(t *testing.T) {
 	}
 	run := func(mode string, body []byte) ([]candidate, *Affinity) {
 		cs := []candidate{key("k1"), key("k2")}
-		got, _, aff, _ := affine("sx/m2", mode, false, false, false, h, provider.Chat, body, body, cs, planned{order: make([]Weighed, 2)})
+		got, _, aff, _ := affine("sx/m2", mode, false, false, false, false, h, provider.Chat, body, body, cs, planned{order: make([]Weighed, 2)})
 		return got, aff
 	}
 	t.Run("new turn", func(t *testing.T) {
@@ -130,7 +130,7 @@ func TestSessionSideCallFollowsItsMain(t *testing.T) {
 			delete(sticks.m, "sx/m1|"+hashed)
 			sticks.Unlock()
 		})
-		got, _, aff, _ := affine("sx/m2", "", false, false, false, http.Header{}, provider.Chat, turn, turn, cs, planned{order: make([]Weighed, 2)})
+		got, _, aff, _ := affine("sx/m2", "", false, false, false, false, http.Header{}, provider.Chat, turn, turn, cs, planned{order: make([]Weighed, 2)})
 		if got[0].rest != "sx#k2" || aff.Why != "cache" {
 			t.Errorf("first %s, why %s; want kept on sx#k2", got[0].rest, aff.Why)
 		}
@@ -147,7 +147,7 @@ func TestSessionSideCallFollowsItsMain(t *testing.T) {
 		set(t, 60_000, 120_000)
 		cs := []candidate{key("k2"), key("k1")}
 		order := []Weighed{{}, {Rest: &Rest{}}}
-		got, _, aff, _ := affine("sx/m2", "", false, false, false, h, provider.Chat, turn, turn, cs, planned{order: order})
+		got, _, aff, _ := affine("sx/m2", "", false, false, false, false, h, provider.Chat, turn, turn, cs, planned{order: order})
 		if got[0].rest != "sx#k2" || aff.Why != "cache" {
 			t.Errorf("first %s, why %s; want kept on sx#k2", got[0].rest, aff.Why)
 		}

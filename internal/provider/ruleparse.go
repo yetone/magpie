@@ -72,7 +72,7 @@ func ParseDays(v string) ([]string, error) {
 // the time zone they are in after an @: 09:00-18:00@Asia/Shanghai.
 func ParseTimeWindow(v string) (*TimeWindow, error) {
 	hours, zone, _ := strings.Cut(v, "@")
-	from, to, ok := strings.Cut(strings.ReplaceAll(strings.TrimSpace(hours), "–", "-"), "-")
+	from, to, ok := strings.Cut(strings.NewReplacer("–", "-", "~", "-", "～", "-").Replace(strings.TrimSpace(hours)), "-")
 	if !ok {
 		return nil, fmt.Errorf("time is hours of the day: time=09:00-18:00 (or 22:00-08:00, past midnight; 09:00-18:00@Asia/Shanghai in a time zone), not %q", v)
 	}

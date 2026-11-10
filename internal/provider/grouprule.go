@@ -238,18 +238,53 @@ var Weekdays = []string{"sun", "mon", "tue", "wed", "thu", "fri", "sat"}
 // dayOrder is the week as a window shows it, Monday first.
 var dayOrder = []string{"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 
-// clockMinutes reads "HH:MM" (or "H:MM") as minutes past midnight.
+// clockMinutes reads "HH:MM" (or "H:MM") as minutes past midnight. What a
+// phone's number pad or a Chinese keyboard types counts too, as the GUI's
+// clockOf reads it (MinglunZhu on X): "22", "2200", "930", "22：00",
+// "22.00", "22点", "22点30". "9:5" is no time.
 func clockMinutes(s string) (int, bool) {
-	h, m, ok := strings.Cut(strings.TrimSpace(s), ":")
-	if !ok || len(h) < 1 || len(h) > 2 || len(m) != 2 {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(s) {
+		switch {
+		case r >= '０' && r <= '９':
+			b.WriteRune(r - '０' + '0')
+		case strings.ContainsRune(":：.．hH時时点點", r):
+			b.WriteByte(':')
+		case r == '分':
+		default:
+			b.WriteRune(r)
+		}
+	}
+	v := b.String()
+	h, m, ok := strings.Cut(v, ":")
+	if !ok && len(v) >= 3 {
+		h, m = v[:len(v)-2], v[len(v)-2:]
+	}
+	m = strings.TrimSpace(m)
+	if ok && m == "" {
+		m = "00"
+	}
+	if !ok && len(v) <= 2 {
+		m = "00"
+	}
+	if len(h) < 1 || len(h) > 2 || len(m) != 2 || !digits(h) || !digits(m) {
 		return 0, false
 	}
-	hh, err1 := strconv.Atoi(h)
-	mm, err2 := strconv.Atoi(m)
-	if err1 != nil || err2 != nil || hh < 0 || hh > 23 || mm < 0 || mm > 59 || h[0] == '+' || m[0] == '+' {
+	hh, _ := strconv.Atoi(h)
+	mm, _ := strconv.Atoi(m)
+	if hh > 23 || mm > 59 {
 		return 0, false
 	}
 	return hh*60 + mm, true
+}
+
+func digits(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return s != ""
 }
 
 // ParseDay reads a day of the week, "mon" or "Monday", as Weekdays has it.

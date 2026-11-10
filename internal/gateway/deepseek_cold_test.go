@@ -40,7 +40,7 @@ func TestDeepSeekConversationStaysPastFiveMinutes(t *testing.T) {
 		h.Set("x-claude-code-session-id", "deepseek-cold-"+string(rune('a'+i)))
 		cs := []candidate{c.next, c.last}
 		pl := planned{order: []Weighed{{}, {}}}
-		_, _, _, key := affine("t", "", false, false, false, h, provider.Anthropic, first, first, cs, pl)
+		_, _, _, key := affine("t", "", false, false, false, false, h, provider.Anthropic, first, first, cs, pl)
 		answered(key, c.last, 1, Usage{Input: 300, CacheRead: 13696})
 		t.Cleanup(func() { sticks.Lock(); delete(sticks.m, key); sticks.Unlock() })
 		sticks.Lock()
@@ -48,7 +48,7 @@ func TestDeepSeekConversationStaysPastFiveMinutes(t *testing.T) {
 		st.at = st.at.Add(-c.ago)
 		sticks.m[key] = st
 		sticks.Unlock()
-		got, _, a, _ := affine("t", "", false, false, false, h, provider.Anthropic, again, again, cs, pl)
+		got, _, a, _ := affine("t", "", false, false, false, false, h, provider.Anthropic, again, again, cs, pl)
 		if a.Why != c.why || a.Kept != (c.why == "cache") {
 			t.Fatalf("%s: why %q kept %v, want %q", c.name, a.Why, a.Kept, c.why)
 		}

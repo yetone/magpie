@@ -69,10 +69,10 @@ func TestLoneSpentKeyKeepsItsConversation(t *testing.T) {
 	h := http.Header{}
 	h.Set("x-claude-code-session-id", "lone-spent-1016")
 	body := []byte(`{"messages":[{"role":"user","content":"hi"}]}`)
-	_, _, _, key := affine("t", provider.AffinitySession, false, false, false, h, provider.Chat, body, body, cs, pl)
+	_, _, _, key := affine("t", provider.AffinitySession, false, false, false, false, h, provider.Chat, body, body, cs, pl)
 	answered(key, c, 1, Usage{})
 	t.Cleanup(func() { sticks.Lock(); delete(sticks.m, key); sticks.Unlock() })
-	got, _, aff, _ := affine("t", provider.AffinitySession, false, false, false, h, provider.Chat, body, body, cs, pl)
+	got, _, aff, _ := affine("t", provider.AffinitySession, false, false, false, false, h, provider.Chat, body, body, cs, pl)
 	if got[0].rest != "kimi-code-cn" || aff.Why == "spent" || !aff.Kept {
 		t.Fatalf("kept %v, why %s", aff.Kept, aff.Why)
 	}
