@@ -135,12 +135,12 @@ type tlsServer struct {
 }
 
 // config is the TLS config for a connection, nil to serve it plain HTTP
-// (no --tls-cert and mTLS off). strict asks for a client certificate and
+// (no --tls-cert, mTLS off and HTTPS off). strict asks for a client certificate and
 // ends a handshake without one, for a peer that isn't this computer or a
 // WSL distro.
 func (t *tlsServer) config(strict bool) *tls.Config {
 	on := MTLSOn()
-	if t == nil || (t.files == nil && !on) {
+	if t == nil || (t.files == nil && !on && !HTTPSOn()) {
 		return nil
 	}
 	cfg := &tls.Config{
@@ -152,7 +152,7 @@ func (t *tlsServer) config(strict bool) *tls.Config {
 	if t.files != nil {
 		cfg.GetCertificate = t.files.get
 	} else {
-		cfg.GetCertificate = ownServerCert
+		cfg.GetCertificate = settingsCert
 	}
 	if !on {
 		return cfg
@@ -249,7 +249,7 @@ func ownServerCert(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	}
 	c, err := st.ServerCert(names, ips)
 	if err != nil {
-		return nil, errors.New("mTLS: magpie's CA can't sign a server certificate: " + err.Error())
+		return nil, errors.New("TLS: magpie's CA can't sign a server certificate: " + err.Error())
 	}
 	ownCerts.key, ownCerts.stamp, ownCerts.made, ownCerts.cert = key.String(), stampOf(st.CAFile()), time.Now(), &c
 	return &c, nil

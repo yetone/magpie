@@ -133,6 +133,8 @@ const usage = `magpie — one place to pick every agent's model
   magpie healthcheck              exit 0 when the gateway answers (a container's HEALTHCHECK)
   magpie mtls [on|off|issue <device>|list|revoke <device>]
                                   require a client certificate magpie issued from other computers (mTLS)
+  magpie https [on|off|import <files>|remove|ca]
+                                  other computers call magpie at https://, with your certificate or one magpie's own CA signs
   magpie heap [<file>]            a Go heap profile of the running magpie, with its memory numbers, for a report of it using too much memory
   magpie cpu [<file>] [--seconds N]   a Go CPU profile of the running magpie over 30s (5..120) while you use it, for a report of it using too much CPU
   magpie goroutines [<file>]      every goroutine of the running magpie, its stack and how long it waited, for a report of it stuck at something
@@ -355,6 +357,11 @@ func run(args []string) error {
 		// magpie's CA and the client certificates it issued: nothing
 		// else is read or moved
 		return mtlsCmd(args[1:])
+	}
+	if len(args) > 0 && args[0] == "https" {
+		// HTTPS for other computers: the setting, the certificate and
+		// magpie's CA, nothing else
+		return httpsCmd(args[1:])
 	}
 	if len(args) > 0 && args[0] == "cpu" {
 		// the running magpie's CPU profile: asks it, and moves nothing here

@@ -616,7 +616,9 @@ func lanGuard(next http.Handler) http.Handler {
 		}
 		// the key page itself is the same bytes for everyone, so it is
 		// opened before the key it asks for is typed; its data isn't
-		if remote && keyPageOpen(r) {
+		// magpie's CA, too: public, and fetched before the computer
+		// asking trusts magpie's https:// (https.go)
+		if remote && (keyPageOpen(r) || caFileOpen(r)) {
 			next.ServeHTTP(w, r)
 			return
 		}

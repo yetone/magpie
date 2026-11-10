@@ -44,7 +44,10 @@ func tlsLine() string {
 	}
 	cert, _ := gateway.TLSFiles()
 	if cert == "" {
-		cert = "magpie's own CA (mTLS)"
+		cert = "magpie's own CA"
+		if c, _ := gateway.ImportedFiles(); c != "" {
+			cert = c
+		}
 	}
 	s := muted.Render("  TLS     ") + " " + cert
 	if sum := gateway.TLSSummary(); sum != "" {

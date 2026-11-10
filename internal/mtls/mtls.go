@@ -431,6 +431,9 @@ func pemOf(typ string, der []byte) []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: typ, Bytes: der})
 }
 
+// WriteFile is writeFile, for the certificate Settings imports.
+func WriteFile(path string, b []byte, mode os.FileMode) error { return writeFile(path, b, mode) }
+
 // writeFile writes b to path through a temp file renamed over it, so a
 // reader never sees half of one.
 func writeFile(path string, b []byte, mode os.FileMode) error {

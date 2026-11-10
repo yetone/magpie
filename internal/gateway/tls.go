@@ -40,10 +40,10 @@ func TLSFiles() (cert, key string) {
 }
 
 // TLSOn: the gateway serves other computers over HTTPS: with the files
-// set, or with mTLS on (mtls.go).
+// set, with mTLS on (mtls.go), or with HTTPS on (https.go).
 func TLSOn() bool {
 	c, k := TLSFiles()
-	return c != "" && k != "" || MTLSOn()
+	return c != "" && k != "" || MTLSOn() || HTTPSOn()
 }
 
 // Scheme is the gateway's scheme for other computers: https with TLS on.
@@ -109,7 +109,7 @@ func TLSSummary() string {
 		c, err = tls.LoadX509KeyPair(cf, kf)
 	} else {
 		var own *tls.Certificate
-		if own, err = ownServerCert(nil); own != nil {
+		if own, err = settingsCert(nil); own != nil {
 			c = *own
 		}
 	}
@@ -288,7 +288,7 @@ func (l *tlsListener) accept() {
 			switch {
 			case cfg == nil:
 				l.taken(c)
-			case wsl && MTLSOn():
+			case wsl && (MTLSOn() || HTTPSOn()):
 				go l.sniff(c, cfg)
 			default:
 				l.taken(tls.Server(c, cfg))

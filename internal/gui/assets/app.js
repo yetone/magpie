@@ -20043,6 +20043,7 @@ function renderSettings() {
   renderLAN(s);
   renderAllow(s);
   renderMTLS(s);
+  renderHTTPS(s);
   renderCORS(s);
   renderSync();
 

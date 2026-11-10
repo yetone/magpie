@@ -1541,6 +1541,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	dataFolderRoutes(mux, w)
 	mtlsRoutes(mux, w)
 	joinRoutes(mux)
+	httpsRoutes(mux, w)
 	uninstallRoutes(mux, w)
 	archiveRoutes(mux)
 	libraryRoutes(mux, w)
