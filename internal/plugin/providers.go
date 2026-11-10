@@ -1261,6 +1261,11 @@ type UsageWindow struct {
 	Models    []string `json:"models"`
 	NotModels []string `json:"notModels"`
 	Aside     bool     `json:"aside"`
+	// Pool is the group of models that share one allowance, and Family the
+	// model family a per-model window belongs to, as Antigravity's quota
+	// says them (QuotaWindow.Pool, QuotaWindow.Family)
+	Pool   string `json:"pool"`
+	Family string `json:"family"`
 	// RunsOutAt (RFC 3339) is when the soonest credits left in the window
 	// are lost, and RunsOut how many, when the vendor's credits expire
 	// apart from the window's reset (WorkBuddy's packages)

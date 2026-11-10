@@ -158,7 +158,8 @@ func quotaOfPlugin(q SubscriptionQuota, u plugin.Usage) SubscriptionQuota {
 	for _, x := range u.Windows {
 		w := QuotaWindow{Name: x.Name, ResetSecs: x.ResetSecs, Display: x.Display,
 			Amount: x.Amount, Limit: x.Limit, Unit: x.Unit,
-			Span: time.Duration(x.Span * float64(time.Second)), Model: strings.ToLower(x.Model), Aside: x.Aside}
+			Span: time.Duration(x.Span * float64(time.Second)), Model: strings.ToLower(x.Model), Aside: x.Aside,
+			Pool: x.Pool, Family: x.Family}
 		if x.Balance != nil {
 			// a wallet's balance: a reading, though it tells no share (#3950)
 			b := *x.Balance

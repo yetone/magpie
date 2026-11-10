@@ -657,6 +657,19 @@ func (p Provider) Origin(ctx context.Context) string {
 	return scheme + "://" + HostOf(rest)
 }
 
+// EffortHeader is the header a plugin's fetch is told the request's
+// effort in: one of the efforts its model's variants named, or another the
+// client asked for (minimal, xhigh), for the plugin to pick its variant by.
+const EffortHeader = "X-Magpie-Effort"
+
+type effortKey struct{}
+
+// WithEffort is ctx carrying the effort a request asks of a plugin's
+// model, which pluginFetch tells the plugin in EffortHeader.
+func WithEffort(ctx context.Context, effort string) context.Context {
+	return context.WithValue(ctx, effortKey{}, effort)
+}
+
 // pluginFetch sends a request the gateway made for a plugin's provider
 // through the plugin: to the base URL its loader gave (else the model's,
 // the provider's, the AI SDK package's), with what the loader adds.
@@ -735,6 +748,9 @@ func pluginFetch(pp plugin.Provider, account string, req *http.Request) (*http.R
 		if len(vs) > 0 && !strings.EqualFold(k, ConversationHeader) {
 			h[strings.ToLower(k)] = vs[0]
 		}
+	}
+	if e, _ := ctx.Value(effortKey{}).(string); e != "" {
+		h[strings.ToLower(EffortHeader)] = e
 	}
 	resp, err := plugin.Fetch(ctx, plugin.FetchRequest{
 		Provider: pp.ID, Account: account, Model: api, NPM: m.NPM, URL: url, Method: req.Method,

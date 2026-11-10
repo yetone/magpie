@@ -8035,7 +8035,14 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			p.Chat = strings.TrimSuffix(p.Chat, "/v1")
 			path = "/beta" + path
 		}
-		res, err := s.forward(ctx, p, to, path, p.Prepare(body), in)
+		fctx := ctx
+		if p.IsPlugin() && req.Effort != "" {
+			// the effort picked, which a plugin's model with variants is
+			// told in X-Magpie-Effort: the body says only what Gemini's
+			// thinkingConfig can, and loses minimal and xhigh
+			fctx = provider.WithEffort(ctx, req.Effort)
+		}
+		res, err := s.forward(fctx, p, to, path, p.Prepare(body), in)
 		if err != nil || res.StatusCode < 400 {
 			if dropped && err == nil {
 				// it was the key: not sent there again
