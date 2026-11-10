@@ -167,6 +167,7 @@ type codexTop struct {
 	Desktop        any `toml:"desktop"`
 	Profile        any `toml:"profile"`
 	Profiles       any `toml:"profiles"`
+	Analytics      any `toml:"analytics"`
 }
 
 // codexTopOf is the config at path as codexTop, decoded again only once the
@@ -1854,7 +1855,8 @@ func codexIn(at place) *Agent {
 
 	a := atomic(&Agent{
 		ID: "codex", Name: "Codex", Icon: "codex-color", Bin: "codex", Dir: dir, Path: path,
-		UA: []string{"codex", "acp-extension-codex"}, // The ACP adapter's default client name becomes Codex's originator.
+		Telemetry: codexTelemetry(at, path),
+		UA:        []string{"codex", "acp-extension-codex"}, // The ACP adapter's default client name becomes Codex's originator.
 		// Codex as it was before magpie: its default puts it back as
 		// installed, OpenAI and its default model, where this brings back
 		// the provider and model the user had

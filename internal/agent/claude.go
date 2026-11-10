@@ -2265,6 +2265,7 @@ func claudeIn(at place) *Agent {
 		Bin: "claude", Dir: filepath.Dir(path), Path: path,
 		Fields:       fields,
 		ModelAliases: claudeAliases,
+		Telemetry:    claudeTelemetry(at, path),
 		// Claude Code as it was before magpie: its default puts it back as
 		// installed, on Anthropic's endpoint, where this brings back the
 		// endpoint, token and model the user had

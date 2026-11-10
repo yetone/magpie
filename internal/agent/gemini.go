@@ -185,6 +185,7 @@ func geminiIn(at place) *Agent {
 		ID: "gemini", Name: "Gemini CLI", Icon: "geminicli-color", Aliases: []string{"gemini-cli"}, NoNames: true,
 		UA:  []string{"geminicli", "gemini-cli"},
 		Bin: "gemini", Dir: dir, Path: path,
+		Telemetry: usageStatsTelemetry(at, path, "gemini"),
 		// its model's default forgets what it had before magpie, its
 		// sign-in's default forgets the sign-in: this puts both back
 		Unwire: unroute,

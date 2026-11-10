@@ -1304,10 +1304,7 @@ const previews = {}; // agent id → its disconnect preview, as last read
 
 const anyMagpieModels = () => state.agents.some((a) => connectField(a)?.options.some((o) => o.ref));
 
-// connectKind: "ok" (a switch), "empty" (a switch for when magpie has
-// models), "no" (never), "link" (an app magpie is added to by a link of its
-// own: Cindy), "" (the row as it was); an agent whose CLI is gone is
-// offered to no one: only its own row keeps the switch while it is wired
+// connectKind: "ok", "empty", "no", "link" (Cindy) or "" (the row as it was)
 function connectKind(a) {
   if (a.cliMissing) return "no";
   if (a.import) return "link";
@@ -1597,10 +1594,7 @@ function connectRow(a, row, who, { fields, extras, fieldBtn, sw, kind }) {
   }
 }
 
-// Switch accounts only (the owner on X): a Claude Code or Codex not
-// connected says its account, and its menu signs it in to another. The
-// panel's (shuizhuyu on X) is drawn from the kept list (?last=1): a fresh
-// read takes seconds after a start, so it waits for the menu
+// Switch accounts only (the owner on X): a Claude Code or Codex not connected says its account
 let accountSwitched = null, panelAccts = null;
 const switchesAccounts = (a) => !a.wired && (a.id === "claude" || a.id === "codex");
 
@@ -1679,9 +1673,7 @@ function panelSeveral() {
   return (quotas || []).some((q) => q.user && !q.balance && (seen.has(q.provider) || !seen.add(q.provider)));
 }
 
-// agentsLead: above the window's list, what 「接入」 does, said once in a
-// line; while no agent is connected, as a welcome, with a way to add a
-// provider when magpie has no models to give
+// agentsLead: above the window's list, what 「接入」 does, said once
 function agentsLead(list) {
   let lead = $("#agentsLead");
   if (!lead) {
@@ -2030,9 +2022,7 @@ function appReopen(bundle) {
   return go;
 }
 
-// appOutSaid: why Codex is on magpie while its ChatGPT account is used up,
-// and what of the Codex app is off till the reset (the app turns its
-// ChatGPT side off with magpie its provider, and greys Send without)
+// appOutSaid: why Codex is on magpie while its ChatGPT account is used up
 function appOutSaid(a) {
   const o = a.appOut || {};
   let s = o.user
@@ -2066,9 +2056,7 @@ function appBackRestart() {
   return go;
 }
 
-// keepChatGPT: the takeover turned off where it is told (eddie.zhan on
-// Discord: browser use said it had no permission), as the sign-in's
-// Always ChatGPT, which puts Codex back on its account at once
+// keepChatGPT: the takeover turned off where it is told (eddie.zhan on Discord)
 function keepChatGPT(a) {
   const go = el("button", "ag-quiet accent", t("Keep on ChatGPT"));
   go.type = "button";
@@ -2163,18 +2151,14 @@ function connectPanel(a, { fields, fieldBtn }) {
       later.onclick = () => { staleSeen[a.id] = a.stale; renderAgents(); };
       w.append(later);
       parts.push(w);
-      // which copy is left, and how it is reopened: a reopen of one kind
-      // doesn't end another (the Codex app keeps running on macOS when its
-      // window is closed; an editor's Codex and the CLI's daemon run on)
+      // which copy is left, and how it is reopened
       for (const c of a.staleCopies || []) {
         const how = STALE_HOW[c.kind];
         if (!how) continue;
         const [pre, post] = t(how[0], { agent: a.name, when: ago(c.since), app: c.app || "" }).split("{cmd}");
         const l = line(pre, ...(how[1] ? [code(how[1]), post || ""] : []));
         l.classList.add("ag-stale-copy");
-        // Codex's daemon, which magpie restarts itself while no codex
-        // session is on it: with one on, here, when the user says (open
-        // sessions of Codex 0.162 reconnect to the new one)
+        // Codex's daemon, restarted here when the user says
         if (c.kind === "daemon" && a.id === "codex") l.append(daemonRestart());
         if (c.kind === "app" && a.id === "codex" && c.bundle) l.append(appReopen(c.bundle));
         parts.push(l);
@@ -2281,10 +2265,7 @@ function connectPanel(a, { fields, fieldBtn }) {
   // unset; Codex's is the very value its /model picks, so one choice
   // the model it starts on is on the row; what goes with it here
   if (fields) {
-    // each setting named, as the tray panel's opened rows name them. On the
-    // row a setting nobody has picked is the agent's own logo for want of
-    // room, which says nothing about which setting it is, and four of them
-    // laid side by side all read as one
+    // each setting named, as the tray panel's opened rows name them
     for (const b of fields.querySelectorAll(":scope > .field")) {
       const f = a.fields.find((x) => x.key === b.dataset.key);
       if (f && !b.querySelector(":scope > .k")) b.prepend(el("span", "k", t(f.label)));
@@ -2302,6 +2283,7 @@ function connectPanel(a, { fields, fieldBtn }) {
     const list = el("div", "list prefs ag-prefs");
     homeAgentPrefRows();
     list.append(...own.map((id) => $("#" + id)));
+    if (a.telemetry) list.append(telemetryRow(a));
     kv(t("Settings"), list);
     agentCompactIn(list, own, a);
     if (!prefs) {
@@ -2397,10 +2379,7 @@ function changesList(changes, back) {
   return box;
 }
 
-// askDisconnect takes magpie out of an agent's config once asked: every
-// field magpie set, and its endpoint and key, give way to what the agent
-// had before magpie (agent.Disconnect). Picking Default isn't that: it is
-// the agent as installed.
+// askDisconnect takes magpie out of an agent's config once asked (agent.Disconnect)
 function askDisconnect(a) {
   const ed = el("div", "editor disconnect-ask");
   const head = el("div", "ehead");
@@ -4157,6 +4136,7 @@ function agentPrefsButton(a) {
   // what is in it, by the rows' own names
   homeAgentPrefRows();
   const names = agentPrefsOf(a).map((id) => $("#" + id)).filter((r) => !r.hidden).map((r) => r.querySelector(".name").textContent);
+  if (a.telemetry) names.push(t("Telemetry"));
   b.append(el("span", "k", t("Settings")), el("span", "v", names.join(" · ")), c);
   b.title = t("{agent} settings", { agent: a.name });
   b.setAttribute("aria-label", b.title);
@@ -20953,9 +20933,7 @@ function warmTimes(ats, at) {
   return Array.isArray(ats) ? ats : at ? [at] : [];
 }
 
-// nextWarmTime is the time a daily warm-up's + adds after ats: a 5-hour
-// window after the last, so the two follow one another, or the first
-// hour that isn't taken when that wraps past midnight onto one.
+// nextWarmTime: the time a daily warm-up's + adds, 5 hours after the last
 function nextWarmTime(ats) {
   const [h, m] = (ats[ats.length - 1] || "06:00").split(":").map(Number);
   const pad = (n) => String(n).padStart(2, "0");
@@ -21007,9 +20985,7 @@ function renderWarmAt(box, sub, ats, onReset, via, save) {
   box.append(segs([["off", t("Off")], ["on", t("On")]], ats.length ? "on" : "off", (v) => save(v === "on" ? (ats.length ? ats : ["06:00"]) : [])));
 }
 
-// Settings › Usage's Codex auto-use rows and how early one expiring is
-// used are drawn by autoresetown.js, imported as Settings first draws
-// them; then in the same draw, so a redraw leaves a pressed switch in place
+// Settings › Usage's Codex auto-use rows, drawn by autoresetown.js
 function renderAutoResetOwn(s) {
   if (window.autoResetOwnPaint) return autoResetOwnPaint(s);
   import("./autoresetown.js").then(() => autoResetOwnPaint(s), statusErr);
@@ -21063,9 +21039,7 @@ function renderWarmAtOwn(s) {
   }
 }
 
-// renderWarmNow is Warm up now (a Windows user on Discord): the scheduled
-// warm-up's request to one account at once, of several the menu's; what it
-// came to stays on its line (warmNowSaid). An account's card: quotaWarm.
+// renderWarmNow is Warm up now: the scheduled warm-up's request to one account at once
 const warmNowSaid = {};
 function renderWarmNow(agent, users, rowId) {
   const row = $(rowId), sub = row.querySelector(".sub"), box = row.lastElementChild;
@@ -21157,16 +21131,42 @@ function renderAlerts(s, keep) {
   $("#turnDoneSegs").replaceChildren(segs(turnOpts, String(d), (v) => savePrefs({ ...keep, turnDoneAlert: Number(v) })));
 }
 
-// AGENT_PREFS: an agent's own settings, by its id, each a row kept in
-// #agentPrefRows and shown in the agent's sheet (openAgentPrefs). They sat
-// in Settings, apart from the agents they set (the owner, 10-20); Long
-// conversations is Codex's, Claude Code's and Grok Build's (uk.jent), in each one's sheet.
+// AGENT_PREFS: an agent's own settings rows, by its id (openAgentPrefs)
 const AGENT_PREFS = {
   codex: ["codexAgentsV1Row", "codexSubagentModelRow", "codexServiceTierRow", "fullContextRow", "codexAsyncRow", "codexTitlesRow", "codexDescriptionsRow", "codexPredictionsRow", "codexAutoReviewRow", "codexMemoriesRow"],
   claude: ["fullContextRow"],
   grok: ["fullContextRow"],
 };
-const agentPrefsOf = (a) => gatewayMode ? null : AGENT_PREFS[kindOf(a)];
+// an agent with a telemetry switch (agent/telemetry.go) has a sheet for it
+// when it has no other settings
+const agentPrefsOf = (a) => gatewayMode ? null : AGENT_PREFS[kindOf(a)] || (a.telemetry ? [] : null);
+
+// telemetryRow: the agent's own telemetry off in its config (OipsAnthony on X)
+function telemetryRow(a) {
+  const st = a.telemetry;
+  const row = el("div", "row pref ag-telemetry");
+  const who = el("div", "who");
+  who.append(el("div", "name", t("Telemetry")));
+  who.title = t("Written in {file}: {keys}", { file: st.file, keys: (st.keys || []).join(", ") });
+  if (st.error) who.append(el("div", "sub", t("{file} couldn't be read", { file: st.file })));
+  else if (st.off && st.own?.length) who.append(el("div", "sub", t("Turned off in your own config too: {keys}", { keys: st.own.join(", ") })));
+  const again = () => {
+    const now = state.agents.find((x) => x.id === a.id);
+    if (now?.telemetry && row.isConnected) row.replaceWith(telemetryRow(now));
+    if (view === "agents") renderAgents();
+  };
+  const box = segs([["off", t("Off")], ["on", t("On")]], st.off ? "off" : "on", (v) => {
+    if ((v === "off") === !!st.off) return;
+    api("agents/telemetry/" + a.id, { off: v === "off" }).then((ns) => {
+      state = ns;
+      status(t("Takes effect when {agent} next starts", { agent: a.name }), "ok");
+      again();
+    }, (e) => { status(t(e.message), "err"); again(); });
+  });
+  if (st.error) for (const b of box.querySelectorAll("button")) b.disabled = true;
+  row.append(who, box);
+  return row;
+}
 const PREFS_GLYPH = "M2.75 4.75h10.5M2.75 11.25h10.5M5.75 3.25v3M10.25 9.75v3";
 let agentPrefRowEls = null;
 // an agent's own Long conversations, under every agent's (agentcompact.js)
@@ -21191,6 +21191,7 @@ async function openAgentPrefs(a) {
   const list = el("div", "list prefs");
   for (const id of ids) list.append($("#" + id));
   agentCompactIn(list, ids, a);
+  if (a.telemetry) list.append(telemetryRow(a));
   const bar = el("div", "bar");
   const done = el("button", "primary", t("Done"));
   done.type = "button";
@@ -21282,16 +21283,12 @@ function renderAgentPrefs() {
   renderCodexSubagentModel();
 }
 
-// renderAgentPrefLinks: Settings' search still finds the settings an agent's
-// sheet holds, each a row saying where it is that opens the sheet; shown
-// only while searching (app.css)
+// renderAgentPrefLinks: Settings' search finding the settings an agent's sheet holds
 function renderAgentPrefLinks() {
   const box = $("#agentPrefLinks");
   box.replaceChildren();
   homeAgentPrefRows();
-  // Long conversations sets the windows the gateway serves, which an agent
-  // on another computer reads too: with no Codex or Claude Code here to
-  // hold it (a gateway, magpie in Docker) it stays in Settings (Linka)
+  // Long conversations stays in Settings with no agent here to hold it (Linka)
   const loose = $("#fullContextRow");
   if (!state.agents.some((a) => agentPrefsOf(a)?.includes(loose.id))) box.before(loose);
   else if (loose.parentElement === box.parentElement) $("#agentPrefRows").append(loose);

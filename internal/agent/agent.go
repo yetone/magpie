@@ -315,6 +315,10 @@ type Agent struct {
 	// is the model's on the command line: magpie claude opus sets the
 	// model, where another field's name alone shows that field.
 	ModelAliases []string
+	// Telemetry, when set, turns the agent's own telemetry to its vendor
+	// off in its config (telemetry.go). It is not a field: a profile
+	// saved before would turn it back on.
+	Telemetry *Telemetry
 	// detect, when set, says whether the agent is here in place of looking
 	// for its files and binary: a distro's, probed once.
 	detect func() bool

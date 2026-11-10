@@ -318,7 +318,8 @@ func qwenIn(at place) *Agent {
 		// openaiContentGenerator/provider/default.ts buildHeaders)
 		UA:  []string{"qwencode"},
 		Bin: "qwen", Dir: dir, Path: path,
-		ListOnly: true,
+		ListOnly:  true,
+		Telemetry: usageStatsTelemetry(at, path, "qwen"),
 		Sync: func() error {
 			for _, c := range qwenCustoms(path) {
 				if c.ours {

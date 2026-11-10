@@ -247,6 +247,7 @@ var notYet = map[string]string{
 	"POST /api/agents/rescan":                    A,  // api.go
 	"POST /api/agents/restart/{id}":              A,  // api.go
 	"POST /api/agents/stage/{id}":                A,  // api.go
+	"POST /api/agents/telemetry/{id}":            A,  // api.go
 	"POST /api/cli":                              A,  // api.go
 	"POST /api/cli-behind/quiet":                 W,  // api.go
 	"POST /api/gateway/held/reveal":              W,  // api.go
