@@ -4261,7 +4261,8 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
 /* ---------- modal ---------- */
 .modal {
   position: fixed; inset: 0; z-index: 20;
-  display: flex; align-items: center; justify-content: center; padding: 28px 24px;
+  --grip-h: var(--top-h, 46px);
+  display: flex; align-items: center; justify-content: center; padding: max(28px, var(--grip-h)) 24px;
   background: rgba(0, 0, 0, .28);
   -webkit-backdrop-filter: blur(8px) saturate(1.1); backdrop-filter: blur(8px) saturate(1.1);
 }
@@ -4277,9 +4278,17 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
 .modal .dialog { position: relative; z-index: 1; }
 /* the scrim covers the title bar, so the window is still dragged from the
    top strip while a dialog is open; the dialog lies over it and stays no-drag
-   (the strip is after it in the markup, app.js keeps the dialog the first child) */
-.modal-grip { position: absolute; z-index: 0; top: 0; left: 0; right: 0; height: var(--top-h, 46px); }
-body.window.mac .modal-grip { height: calc(50px / var(--zoom, 1)); }
+   (the strip is after it in the markup, app.js keeps the dialog the first child).
+   The modal's padding is at least the strip's height, so a tall dialog never
+   lies over the strip's middle (the strip was only free at the sides, and the
+   bar's middle is where a window is taken). */
+.modal-grip { position: absolute; z-index: 0; top: 0; left: 0; right: 0; height: var(--grip-h); }
+body.window.mac .modal { --grip-h: calc(50px / var(--zoom, 1)); }
+/* On the Mac the scrim begins under the bar, and the bar itself (the header,
+   the sidebar's top) is inert while a dialog is open (modalBackground), so
+   nothing there drags: the strip reaches up over it. (A fixed child wouldn't:
+   the scrim's backdrop-filter is its containing block.) */
+body.window.mac .modal-grip { top: calc(-1 * var(--grip-h)); }
 .modal .dialog {
   width: min(600px, 100%); min-width: 0; max-height: 100%; overflow-y: auto;
   border-radius: 14px; background: var(--card);
@@ -4332,7 +4341,7 @@ body.window.mac .modal-grip { height: calc(50px / var(--zoom, 1)); }
 /* Keep native window chrome outside the scrim and dialog. In particular, the
    macOS traffic lights must never sit on top of modal content. */
 body.window.mac .modal { top: calc(50px / var(--zoom, 1)); padding: 16px 24px 24px; }
-body.window .modal { padding: 16px 24px 24px; }
+body.window .modal { padding: max(16px, var(--grip-h)) 24px 24px; }
 body.panel .modal { padding: 16px 12px; }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes content-in { from { opacity: .5; transform: translateY(2px); } }

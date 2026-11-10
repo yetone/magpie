@@ -92,3 +92,37 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
     }
   }
 }
+
+// ssuuuuooo again (v0.1.3631): the strip was free only at the sides; a tall
+// dialog (the provider editor in a short window) lay over its middle, where a
+// window is taken. Every point along the bar must drag, the middle too.
+for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"]) {
+  for (const mac of [false, true]) {
+    test(`${engine} ${mac ? "mac" : "web"}: the middle of the title bar drags with a tall dialog open`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const page = await browser.newPage({ viewport: { width: 1000, height: 520 }, reducedMotion: "reduce" });
+      page.setDefaultTimeout(5000);
+      page.setDefaultNavigationTimeout(60000);
+      await page.route("**/*", fixture("en"));
+      await page.goto("http://magpie.test/?view=providers");
+      await page.evaluate((mac) => { document.body.classList.remove("web"); document.body.classList.add("window"); if (mac) document.body.classList.add("mac"); }, mac);
+      await page.locator('#providers .row.provider[data-id="relay"]').click();
+      await page.getByRole("dialog").first().waitFor();
+      await page.waitForTimeout(400);
+      const grip = await page.evaluate(() => document.querySelector("#modal .modal-grip").getBoundingClientRect().height);
+      const d = await page.locator("#modal .dialog").boundingBox();
+      const m = await page.locator("#modal").boundingBox();
+      assert.ok(d.y >= m.y + (mac ? 0 : grip) - 0.5, `the dialog starts at ${d.y}, below the strip`);
+      // the header and sidebar are inert behind a dialog: the title bar's drag is the strip's
+      assert.ok(await page.evaluate(() => document.querySelector("header.top").inert), "the header is inert");
+      const top = 0; // the bar's rows from the window's top edge
+      for (const x of [4, 250, 500, 750, 996]) {
+        for (const y of [top + 4, top + grip / 2, top + grip - 3]) {
+          const r = await probe(page, x, y);
+          assert.equal(r.v, "drag", `(${x}, ${y}) drags the window`);
+        }
+      }
+    });
+  }
+}
