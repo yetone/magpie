@@ -339,24 +339,43 @@ body:not(.side-nav) #nav button[data-view="groups"], body.side-nav .rt-togroups 
 .top.packed .seg { min-width: 0; flex: 0 1 auto; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .top.packed .seg::-webkit-scrollbar { display: none; }
 /* magpie web on a phone, or a browser as narrow (phoneWeb): the magpie and
-   the icons in a row, the tabs at their size in a row of their own under
-   them, sliding sideways when they don't fit (they were squeezed into the
-   room between, too small to read or tap) */
+   the icons in the header, the pages a tab bar at the foot, as an iPhone
+   app's: each tab its mark over its word, five at most, the fifth More
+   when there are more (phonetabs.js). A strip that slid sideways hid the
+   pages past its edge (geraldpppppp on X) */
 @media (max-width: 760px), (pointer: coarse) and (max-width: 1024px) {
+  body.web:not(.panel) { --tabbar: calc(50.5px + env(safe-area-inset-bottom)); padding-bottom: var(--tabbar); }
   body.web .top {
-    height: auto; min-height: 48px; flex-wrap: wrap; gap: 4px 8px;
-    padding: calc(6px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
+    height: auto; min-height: 48px; gap: 4px 8px;
+    padding: calc(6px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 4px max(12px, env(safe-area-inset-left));
   }
   body.web .top .brand, body.web .top .actions { min-height: 40px; align-items: center; }
-  body.web .top #nav {
-    position: relative; left: auto; top: auto; transform: none;
-    order: 3; flex: 0 0 100%; min-width: 0; max-width: 100%;
-    overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none;
+  body.web:not(.panel) .top #nav {
+    position: fixed; z-index: 15; left: 0; right: 0; top: auto; bottom: 0; transform: none;
+    display: flex; height: var(--tabbar); padding: 0 max(4px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(4px, env(safe-area-inset-left));
+    border-radius: 0; border-top: .5px solid var(--line);
+    background: color-mix(in srgb, var(--bg) 86%, transparent);
+    -webkit-backdrop-filter: saturate(1.6) blur(20px); backdrop-filter: saturate(1.6) blur(20px);
   }
-  body.web .top #nav::-webkit-scrollbar { display: none; }
-  body.web .top #nav button { flex: none; height: 40px; padding: 0 14px; font-size: 14px; }
+  body.web:not(.panel) .top #nav > :is(.thumb, .tb-over), body.web:not(.side-nav, .panel) .top #nav > [data-view="groups"] { display: none; }
+  body.web:not(.panel) .top #nav > button {
+    flex: 1 1 0; min-width: 0; height: 50px; padding: 5px 2px 3px; border-radius: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    font-size: 10.5px; font-weight: 500; line-height: 1.1; color: var(--muted);
+  }
+  body.web:not(.panel) .top #nav > button.on { color: var(--fg); }
+  body.web:not(.panel) .top #nav > button > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  body.web:not(.panel) .top #nav .nav-ic { display: block; flex: none; width: 23px; height: 23px; }
+  body.web:not(.panel) .top #nav > button.has-dot::after { top: 5px; right: calc(50% - 17px); }
   body.web .top .actions { gap: 4px; }
+  /* a status line comes up over the bar, not under it */
+  html body.web:not(.panel) :is(.foot .status:not(:empty):not(.lift), .status.lift) { bottom: calc(var(--tabbar) + 10px); }
 }
+/* More's menu: each page with its tab's mark */
+.nav-more-menu .pm-head { display: none; }
+.nav-more-menu .pm-item { align-items: center; gap: 10px; padding: 9px 10px; }
+.nav-more-menu .nav-ic { display: block; flex: none; width: 20px; height: 20px; color: var(--fg-2); }
+.nav-more-menu .pm-name { font-size: 14px; }
 @keyframes update-in { from { opacity: 0; max-width: 0; margin-right: 0; padding: 0; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -4338,7 +4357,7 @@ body.panel .modal { padding: 16px 12px; }
   body.web .view {
     --view-left: max(12px, env(safe-area-inset-left));
     --view-right: max(12px, env(safe-area-inset-right));
-    padding: 2px max(0px, calc(var(--view-right) - var(--bar, 0px))) max(12px, env(safe-area-inset-bottom)) var(--view-left);
+    padding: 2px max(0px, calc(var(--view-right) - var(--bar, 0px))) 12px var(--view-left); /* the tab bar keeps the home indicator clear */
   }
   body.web .foot .status { min-width: 0; overflow-wrap: anywhere; }
   body.web .row-head { height: auto; min-height: 40px; flex-wrap: wrap; gap: 4px; }

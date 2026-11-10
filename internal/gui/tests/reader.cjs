@@ -320,4 +320,18 @@ async function closeRequest(page) {
   await page.locator("#ledReqPane").waitFor({ state: "hidden" });
 }
 
-module.exports = { openRequest, closeRequest, provPrefsProviders, openProvPrefs, inEditor, settled, inView, reach, wheelTo, click, openPart, watchSettingsReads, settingsDrawn, agentRow, openAgentSettings, pickItem };
+// openPage opens a page from the navigation as the reader does: its tab, or,
+// on a phone's tab bar where it is past the fifth, More and then its row in
+// More's menu (phonetabs.js).
+async function openPage(page, view) {
+  const tab = page.locator(`#nav [data-view="${view}"]`);
+  if (await tab.isVisible()) await tab.click();
+  else {
+    await page.locator("#nav .nav-more").click();
+    const name = (await tab.textContent()).trim();
+    await page.locator(".nav-more-menu .pm-item", { hasText: name }).first().click();
+  }
+  await page.locator(`#view-${view}`).waitFor();
+}
+
+module.exports = { openPage, openRequest, closeRequest, provPrefsProviders, openProvPrefs, inEditor, settled, inView, reach, wheelTo, click, openPart, watchSettingsReads, settingsDrawn, agentRow, openAgentSettings, pickItem };

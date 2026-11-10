@@ -90,7 +90,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // a click adds cards under the ones shown and moves nothing (the
         // button brought into view by the wheel, as a reader would)
         await box.hover();
-        while (await button.evaluate((b) => b.getBoundingClientRect().bottom > innerHeight)) await page.mouse.wheel(0, 600);
+        // (the page ends above a phone's tab bar, so its own foot, not the window's)
+        while (await button.evaluate((b) => b.getBoundingClientRect().bottom > b.closest("main.view").getBoundingClientRect().bottom)) await page.mouse.wheel(0, 600);
         // the wheel's last scroll told the page, a frame on
         await page.evaluate(() => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))));
         const first = cards.nth(59);

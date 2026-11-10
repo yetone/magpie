@@ -13,6 +13,7 @@
 // is written. Every language, at a wide and a narrow window.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
+const { openPage } = require("./reader.cjs");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
@@ -113,7 +114,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // the groups tab is the sidebar's; the header's row reaches them from Routing
         const tab = page.locator('#nav button[data-view="groups"]');
         if (await tab.isVisible()) await tab.click();
-        else { await page.locator('#nav button[data-view="routing"]').click(); await page.locator("#rtToGroups").click(); }
+        else { await openPage(page, "routing"); await page.locator("#rtToGroups").click(); }
         await picked(page.locator(".rt-gnames .opt.on"), await tr("Off"));
         assert.deepEqual(posts, [], "nothing is written");
         assert.deepEqual(errors, []);

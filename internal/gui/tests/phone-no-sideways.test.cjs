@@ -9,6 +9,7 @@
 // 390 and 430 in English, Chromium and WebKit; no backend, the API is
 // faked. MAGPIE_ASSETS runs it on older assets.
 const assert = require("node:assert/strict");
+const { openPage } = require("./reader.cjs");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
@@ -182,7 +183,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           if (process.env.ARTIFACT_DIR) await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-${width}-${view}-${sub ?? ""}.png`) });
         }
         // the Requests table, wider than the phone, scrolls in its own box
-        await page.locator("#nav [data-view=usage]").click();
+        await openPage(page, "usage");
         await page.locator("#usageTab .opt").nth(1).click();
         assert(await page.locator("#ledWrap").evaluate((e) => e.scrollWidth > e.clientWidth + 100), "the table is wider than the phone");
         assert.deepEqual(bad, [], "views wider than the phone, or a band held at its foot");

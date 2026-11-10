@@ -8,6 +8,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+const { openPage } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const iso = (ms) => new Date(ms).toISOString();
@@ -75,7 +76,7 @@ for (const engine of engines) for (const lang of langs) for (const width of widt
     // another view first, the request already under way
     await page.goto("http://magpie.test/?view=agents");
     await page.waitForTimeout(800);
-    await page.locator('#nav button[data-view="routing"]').click();
+    await openPage(page, "routing");
     await page.waitForFunction(() => document.querySelector(".rt-sky .pkt.held"), null, { timeout: 6000 });
     await page.waitForTimeout(400);
     const atSeat = async (when) => {

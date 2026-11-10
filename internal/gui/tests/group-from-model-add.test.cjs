@@ -106,11 +106,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
               await page.mouse.wheel(0, 120);
               await page.waitForTimeout(60);
             }
-            let now = await seen();
+            // and back up until the whole of Add is in the view: a press on
+            // its middle, with its top still under the header, can land on
+            // the header in WebKit
+            const whole = () => add.evaluate((btn) => {
+              const r = btn.getBoundingClientRect(), v = btn.closest("main.view").getBoundingClientRect();
+              return r.top >= v.top && r.bottom <= v.bottom;
+            });
+            let now = (await whole()) && (await seen());
             for (let i = 0; i < 80 && !now; i++) {
-              await page.mouse.wheel(0, -120);
+              await page.mouse.wheel(0, -60);
               await page.waitForTimeout(60);
-              now = await seen();
+              now = (await whole()) && (await seen());
             }
             assert.ok(now, "Add is under the pointer's reach to be clicked");
             await page.mouse.click(now.x, now.y);

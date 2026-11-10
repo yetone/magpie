@@ -1,7 +1,7 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // magpie web on a phone (jiakun_zhao on X: 移动端的显示效果非常不友好，甚至滚动
-//会抽搐). The header is two rows, the magpie and the icons over the tabs at
-// their size, sliding sideways, the one open in sight; a setting's control
+//会抽搐). The header is the magpie and the icons, the tabs a bar at the
+// window's foot (geraldpppppp on X), the one open marked in sight; a setting's control
 // too wide beside its name goes under it rather than cut the name; iOS isn't
 // let zoom into a field it focuses. And a flick's scroll, which goes on
 // after the finger is lifted with no touch event, is the reader's: the page
@@ -89,15 +89,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
     t.after(() => browser.close());
 
-    // the header: two rows, the tabs at their size, the one open in sight
+    // the header: the magpie and the icons; the tabs a bar at the foot, as
+    // an iPhone app's, each its mark over its word (phone-tabs.test.cjs)
     let page = await open(browser, phone, true, "plugins");
     const [top, nav, actions, brand] = [await box(page, ".top"), await box(page, "#nav"), await box(page, ".top .actions"), await box(page, ".top .brand")];
+    const vh = await page.evaluate(() => innerHeight);
     assert.ok(nav.y >= actions.y + actions.height - 1 && nav.y >= brand.y + brand.height - 1, "the tabs are under the magpie and the icons");
-    assert.ok(nav.width >= top.width - 30, `the tabs take the row: ${nav.width} of ${top.width}`);
-    const tab = await page.locator("#nav button").first().evaluate((b) => [parseFloat(getComputedStyle(b).fontSize), b.getBoundingClientRect().height]);
-    assert.ok(tab[0] >= 13 && tab[1] >= 30, `a tab is readable and tappable: ${tab}`);
-    const on = await box(page, "#nav button.on");
-    assert.ok(on.x >= nav.x - 1 && on.x + on.width <= nav.x + nav.width + 1, "Plugins, open, is in sight");
+    assert.ok(Math.abs(nav.y + nav.height - vh) <= 1, `the tabs are at the window's foot: ${nav.y + nav.height} of ${vh}`);
+    assert.ok(nav.width >= top.width - 1, `the tabs take the window's width: ${nav.width} of ${top.width}`);
+    const tab = await page.locator("#nav button").first().evaluate((b) => [parseFloat(getComputedStyle(b).fontSize), b.getBoundingClientRect().height, getComputedStyle(b.querySelector(".nav-ic")).display]);
+    assert.ok(tab[0] >= 10 && tab[1] >= 44 && tab[2] !== "none", `a tab is readable and tappable, with its mark: ${tab}`);
+    const on = await box(page, "#nav > button.on:not(.tb-over)"); // a page under More hides its own tab
+    assert.ok(on && on.x >= nav.x - 1 && on.x + on.width <= nav.x + nav.width + 1, "Plugins, open, is marked in sight (More while it is past the fifth)");
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390, "nothing runs off the side");
     assert.equal(await page.locator(".top").getAttribute("class"), "top", "none of the narrow window's squeezing");
     assert.match(await page.locator('meta[name="viewport"]').getAttribute("content"), /maximum-scale=1/, "iOS doesn't zoom into a field");
