@@ -362,7 +362,7 @@ func Points() usage.Observer { return &observer{} }
 
 type observer struct {
 	mu      sync.Mutex
-	queue   chan usage.Record
+	queue   chan *usage.Record // a pointer each: a 1024-row queue of Records held ~1 MB from the start, for every user, with or without an onUsage
 	using   atomic.Bool // the set served has an onUsage
 	serving *set
 	removes []func()
@@ -384,7 +384,7 @@ func (o *observer) Ledger(r usage.Record) {
 		return
 	}
 	select {
-	case q <- r:
+	case q <- &r:
 	default:
 		for _, m := range s.list {
 			if m.hasUse {
@@ -400,7 +400,7 @@ func (o *observer) Ledger(r usage.Record) {
 // Serve registers the strategies of the modules loaded and keeps them as
 // the modules load again, and gives onUsage its rows, until stop.
 func (o *observer) Serve() (stop func()) {
-	q := make(chan usage.Record, usageQueue)
+	q := make(chan *usage.Record, usageQueue)
 	done := make(chan struct{})
 	var wg sync.WaitGroup
 	o.mu.Lock()
@@ -443,7 +443,7 @@ func (o *observer) Serve() (stop func()) {
 				if time.Since(priced) > 5*time.Minute {
 					cost, priced = usage.NewCoster(), time.Now()
 				}
-				b, err := json.Marshal(rowOf(r, cost))
+				b, err := json.Marshal(rowOf(*r, cost))
 				if err != nil {
 					continue
 				}
