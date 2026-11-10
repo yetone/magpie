@@ -516,9 +516,10 @@ func codexIn(at place) *Agent {
 		case asProvider():
 			return sharedModels("codex")
 		case viaBase():
-			return append(catalog.Codex(), sharedModels("codex")...)
+			own, more := catalog.CodexShared(), sharedModels("codex")
+			return append(append(make([]catalog.Model, 0, len(own)+len(more)), own...), more...)
 		}
-		return catalog.Codex()
+		return catalog.CodexShared()
 	}
 	// relist hands Codex its models again after the effort new sessions
 	// start at changed, which their default efforts follow: magpie's
@@ -2658,25 +2659,30 @@ func codexServedModels() []string {
 // that reaches it. Those come first, in own's group: a "Codex" section
 // of their own beside it read as a second kind of model (ysm119).
 func codexViaMagpieFor(own []Option) []Option {
-	in := map[string]bool{}
+	in := make(map[string]bool, 2*len(own))
 	for _, o := range own {
 		in[o.Value] = true
 		if m := codexOwnOf(o.Value); m != "" {
 			in[m] = true
 		}
 	}
-	var hidden, out []Option
-	for _, o := range viaMagpieShared("codex", "") {
-		if !strings.HasPrefix(o.Value, "codex/") {
-			out = append(out, o)
-		} else if !in[codexOwnOf(o.Value)] {
+	// one slice, hidden ones first: on every poll of Codex's model field
+	via := viaMagpieShared("codex", "")
+	out := make([]Option, 0, len(via))
+	for _, o := range via {
+		if strings.HasPrefix(o.Value, "codex/") && !in[codexOwnOf(o.Value)] {
 			if len(own) > 0 {
 				o.Group, o.GroupIcon = own[0].Group, own[0].GroupIcon
 			}
-			hidden = append(hidden, o)
+			out = append(out, o)
 		}
 	}
-	return append(hidden, out...)
+	for _, o := range via {
+		if !strings.HasPrefix(o.Value, "codex/") {
+			out = append(out, o)
+		}
+	}
+	return out
 }
 
 // codexOwnViaMagpie is the catalog id magpie serves one of Codex's own

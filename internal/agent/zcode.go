@@ -317,6 +317,9 @@ func zcodeRuleFormat(dir string) string {
 // onAnotherMachine says base is an http(s) address whose host isn't this
 // machine's loopback.
 func onAnotherMachine(base string) bool {
+	if loopbackAuthority(base) {
+		return false
+	}
 	u, err := url.Parse(base)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
 		return false
@@ -327,6 +330,36 @@ func onAnotherMachine(base string) bool {
 	}
 	ip := net.ParseIP(h)
 	return ip == nil || !ip.IsLoopback() && !ip.IsUnspecified()
+}
+
+// loopbackAuthority is the common case of onAnotherMachine without
+// url.Parse: an http(s) base on localhost, 127.0.0.1 or [::1], no user
+// info, which a state poll asks of each agent's gateway base several
+// hundred times. Anything else is left to url.Parse.
+func loopbackAuthority(base string) bool {
+	rest, ok := strings.CutPrefix(base, "http://")
+	if !ok {
+		if rest, ok = strings.CutPrefix(base, "https://"); !ok {
+			return false
+		}
+	}
+	if i := strings.IndexAny(rest, "/?#"); i >= 0 {
+		rest = rest[:i]
+	}
+	host := rest
+	if i := strings.LastIndexByte(rest, ':'); i >= 0 && !strings.HasSuffix(rest, "]") {
+		host = rest[:i]
+		for _, c := range rest[i+1:] {
+			if c < '0' || c > '9' {
+				return false
+			}
+		}
+	}
+	switch host {
+	case "localhost", "127.0.0.1", "[::1]":
+		return true
+	}
+	return false
 }
 
 // zcodeMaxOutput caps a model's output limit: some vendors report their

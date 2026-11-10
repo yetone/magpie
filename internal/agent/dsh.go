@@ -170,7 +170,7 @@ func dshAt(at place) *Agent {
 // dshModern says a dsh home's patch lists are its profiles' (dsh 0.1.5
 // on): it has one, or fresh names the one magpie makes.
 func dshModern(dir string, fresh func() string) bool {
-	return len(dshProfiles(dir)) > 0 || fresh() != ""
+	return len(dshProfilesHeld(dir)) > 0 || fresh() != ""
 }
 
 // dshOn is what a dsh home at dir is wired by, for the agent whose models
@@ -203,7 +203,7 @@ func dshOn(at place, dir, list string, fresh, lead func() string) *Agent {
 		// /model has magpie's models beside DeepSeek's (Fate on Discord:
 		// DSH went back to Not connected)
 		Joined: func() bool {
-			files := dshProfiles(dir)
+			files := dshProfilesHeld(dir)
 			if len(files) == 0 {
 				return false
 			}
@@ -319,6 +319,15 @@ func dshProfiles(dir string) []string {
 		}
 	}
 	return append(web, rest...)
+}
+
+// dshProfilesHeld is dshProfiles looked at once while a request holds
+// what it reads (provider.Held), for the looks a state poll makes for
+// each row (dshModern, Joined, dshLead): each listed the profiles' folder
+// again, ~2.5 MB a 40 polls. Read only; a write goes through
+// dshProfiles.
+func dshProfilesHeld(dir string) []string {
+	return provider.Held("dsh profiles\x00"+dir, func() []string { return dshProfiles(dir) })
 }
 
 // dshProfileTemplate is the patch list dsh writes for a new profile
@@ -947,7 +956,7 @@ var dshModelLine = regexp.MustCompile(`^\s+model:\s*(.+?)\s*$`)
 // the Agents page showed a model the desktop app's sessions don't start
 // on, and picking what it showed changed nothing there (#5222).
 func dshLead(dir, lead string) string {
-	files := dshProfiles(dir)
+	files := dshProfilesHeld(dir)
 	if len(files) == 0 {
 		return ""
 	}

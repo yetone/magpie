@@ -2251,9 +2251,13 @@ func CodexModelsCache() string { return filepath.Join(CodexHome(), "models_cache
 
 // Codex returns the models Codex itself lists, straight from the cache the
 // Codex CLI writes; there is no compiled-in list to fall back to.
-func Codex() []Model {
+func Codex() []Model { return slices.Clone(CodexShared()) }
+
+// CodexShared is Codex's list without a copy, for a caller that only
+// reads it: the effort field asks for it on every poll.
+func CodexShared() []Model {
 	out, _ := filememo.Read("codex models", CodexModelsCache(), parseCodex)
-	return slices.Clone(out)
+	return out
 }
 
 func parseCodex(b []byte) ([]Model, error) {

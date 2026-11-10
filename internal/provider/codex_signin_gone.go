@@ -178,15 +178,25 @@ func setCodexGone(dir, hash string) {
 // dir, is one OpenAI refused to refresh for good (noteCodexSignInGone).
 // known false: the record couldn't be read, which says nothing either way.
 func CodexSignInGone(dir string, auth []byte) (gone, known bool) {
+	m, err := readCodexGone()
+	if err != nil {
+		var a codexAuth
+		if json.Unmarshal(auth, &a) != nil || a.Tokens.RefreshToken == "" {
+			return false, true
+		}
+		return false, false
+	}
+	// no refusal on record for dir, the usual case: nothing to compare,
+	// so the sign-in isn't parsed and hashed on each poll
+	want := m[filepath.Clean(dir)]
+	if want == "" {
+		return false, true
+	}
 	var a codexAuth
 	if json.Unmarshal(auth, &a) != nil || a.Tokens.RefreshToken == "" {
 		return false, true
 	}
-	m, err := readCodexGone()
-	if err != nil {
-		return false, false
-	}
-	return m[filepath.Clean(dir)] == codexGoneHash(a.Tokens.RefreshToken), true
+	return want == codexGoneHash(a.Tokens.RefreshToken), true
 }
 
 // codexWasGone is whether Codex's own sign-in was gone at the last look.
