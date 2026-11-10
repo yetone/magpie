@@ -979,3 +979,63 @@ func TestAntigravityQuotaModelApartFromGroup(t *testing.T) {
 		}
 	}
 }
+
+// stacofman on X: one Antigravity account whose Gemini week is used up
+// (1% left) while its 5 hours are untouched. Google then gives each Gemini
+// model the week's reading, not the 5 hours', and each was made a pool of
+// its own: the card showed Gemini's week again for every model, five
+// "Gemini … 7d" rings at 1% beside Gemini's own. A model read as any of
+// its group's windows draws on the group.
+func TestAntigravityQuotaModelsReadAsGroupWeek(t *testing.T) {
+	at := func(d time.Duration) string { return time.Now().Add(d).UTC().Format(time.RFC3339) }
+	five, week := at(5*time.Hour), at(5*24*time.Hour)
+	gemini := `{"displayName":"Gemini Models","description":"Models within this group: Gemini Flash, Gemini Pro","buckets":[
+		{"bucketId":"gemini-weekly","window":"weekly","remainingFraction":0.01,"resetTime":"` + week + `"},
+		{"bucketId":"gemini-5h","window":"5h","remainingFraction":1,"resetTime":"` + five + `"}]}`
+	claude := `{"displayName":"Claude and GPT models","description":"Models within this group: Claude Opus, Claude Sonnet, GPT-OSS","buckets":[
+		{"bucketId":"3p-weekly","window":"weekly","resetTime":"` + week + `"},
+		{"bucketId":"3p-5h","window":"5h","resetTime":"` + five + `"}]}`
+	wk := `{"remainingFraction":0.01,"resetTime":"` + week + `"}`
+	f := &fakeGoogle{
+		load:    `{"allowedTiers":[{"id":"free-tier","name":"Antigravity","isDefault":true}]}`,
+		onboard: `{"done":true,"response":{"cloudaicompanionProject":"ag-proj"}}`,
+		models: `{"models":{
+			"gemini-3-flash":{"displayName":"Gemini 3 Flash","quotaInfo":` + wk + `},
+			"gemini-3.1-pro-high":{"displayName":"Gemini 3.1 Pro (High)","quotaInfo":` + wk + `},
+			"gemini-3.1-pro-low":{"displayName":"Gemini 3.1 Pro (Low)","quotaInfo":` + wk + `},
+			"gemini-3.5-flash":{"displayName":"Gemini 3.5 Flash","quotaInfo":` + wk + `},
+			"gemini-3.1-flash-lite":{"displayName":"Gemini 3.1 Flash Lite","quotaInfo":` + wk + `},
+			"claude-sonnet-4-6":{"displayName":"Claude Sonnet 4.6","quotaInfo":{"resetTime":"` + week + `"}},
+			"claude-opus-4-6-thinking":{"displayName":"Claude Opus 4.6 (Thinking)","quotaInfo":{"resetTime":"` + week + `"}}}}`,
+		summary: `{"groups":[` + gemini + `,` + claude + `]}`,
+	}
+	googleSandbox(t, f)
+	auth := googleAuth{AccessToken: "tok", RefreshToken: "rt-ag", Expiry: time.Now().Add(time.Hour).UnixMilli()}
+	if err := addGoogleLogin("antigravity", "ag@example.com", "", auth); err != nil {
+		t.Fatal(err)
+	}
+	q := googleLogins("antigravity")[0].acct.quota(context.Background(), "")
+	for _, w := range q.Windows {
+		if w.Model == "" {
+			continue
+		}
+		want := "Gemini"
+		if w.Family == "Claude" {
+			want = "Claude & GPT"
+		}
+		if w.Pool != want {
+			t.Errorf("%s: pool %q, want %q", w.Model, w.Pool, want)
+		}
+	}
+	var names []string
+	for _, w := range PooledWindows(q.Windows) {
+		names = append(names, w.Name)
+	}
+	if got, want := strings.Join(names, ","), "Gemini · 7 days,Gemini · 5 hours,Claude & GPT · 7 days,Claude & GPT · 5 hours"; got != want {
+		t.Errorf("pooled\n%s\nwant\n%s", got, want)
+	}
+	// routing still reads each model's own window, none of the pools'
+	if a := allowanceOf(q.Windows, time.Now()); len(a) != 7 {
+		t.Errorf("allowance has %d limits, want the 7 models'", len(a))
+	}
+}

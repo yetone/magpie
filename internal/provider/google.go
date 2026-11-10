@@ -1373,7 +1373,8 @@ func (g googleAccount) pools(ctx context.Context, ws []QuotaWindow) []QuotaWindo
 	}
 	type group struct {
 		pool, about string
-		five        int // its 5 hours' window in out, which stand in for its models'; -1 without
+		five        int   // its 5 hours' window in out, which stand in for its models'; -1 without
+		all         []int // each of its windows in out
 	}
 	var shape []string // each group's name and buckets, for the log
 	for _, gr := range res.Groups {
@@ -1395,7 +1396,7 @@ func (g googleAccount) pools(ctx context.Context, ws []QuotaWindow) []QuotaWindo
 		if pool == "" {
 			continue
 		}
-		n, five := 0, -1
+		n, five, all := 0, -1, []int(nil)
 		for _, b := range gr.Buckets {
 			if b.Disabled {
 				continue
@@ -1426,11 +1427,12 @@ func (g googleAccount) pools(ctx context.Context, ws []QuotaWindow) []QuotaWindo
 			if w.Span == modelSpan && five < 0 {
 				five = len(out)
 			}
+			all = append(all, len(out))
 			out = append(out, w)
 			n++
 		}
 		if n > 0 {
-			groups = append(groups, group{pool, strings.ToLower(gr.DisplayName + " " + gr.Description), five})
+			groups = append(groups, group{pool, strings.ToLower(gr.DisplayName + " " + gr.Description), five, all})
 		}
 	}
 	own := map[string]bool{} // a model's own pool made below, by its name
@@ -1454,10 +1456,18 @@ func (g googleAccount) pools(ctx context.Context, ws []QuotaWindow) []QuotaWindo
 		// group), and folded into the family's pool its reading would be
 		// hidden behind the family's (runking on Discord). It is a pool of
 		// its own, named as Google names the model.
+		//
+		// A model read as another of the group's windows is drawing on
+		// the group all the same: with the group's week used up and its
+		// 5 hours not, Google gives each of its models the week's reading,
+		// and a pool of each model's own showed the group's week again
+		// beside it, one ring a model (stacofman on X).
 		for _, gr := range groups {
 			if gr.five >= 0 && !versioned(gr.pool) && strings.Contains(gr.about, strings.ToLower(ws[i].Family)) {
 				if sameReading(ws[i], out[gr.five]) {
 					ws[i].Pool = gr.pool
+				} else if j := slices.IndexFunc(gr.all, func(k int) bool { return k != gr.five && sameReading(ws[i], out[k]) }); j >= 0 {
+					ws[i].Pool, ws[i].Span = gr.pool, out[gr.all[j]].Span
 				} else if name := modelPool(ws[i]); name != "" {
 					ws[i].Pool = name
 					// its reading's span as its reset tells: Argon's,
