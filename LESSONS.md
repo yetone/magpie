@@ -438,6 +438,16 @@ push.**
   "WIP", "TODO", "rewritten" or a template's placeholder.
 - Seen 1× (2026-11-11).
 
+**A new file's name is checked against the tree before it is written.**
+- 8fa91a852 (11-11) wrote its idle test to internal/agent/dsh_idle_test.go,
+  which already held 544b91ca8's streamIdleTimeoutMs tests, and they went
+  with it. 1c3056a2e put them back minutes later. ac2340d lost
+  three tests the same way.
+- Before pushing, `git diff --stat` a "new" test file: it shows
+  insertions only. Deletions in a file you meant to create are someone
+  else's tests.
+- Seen 1× (2026-11-11).
+
 **A test that reads a dependency's source needs the dependency on disk.**
 - 884dbdb2's TestTrayMenuOpenFrameIsWails read Wails' source through
   `go list -m` Dir. CI's fresh module cache hasn't unpacked it, so main was
