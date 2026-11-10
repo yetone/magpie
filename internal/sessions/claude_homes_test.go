@@ -1,0 +1,56 @@
+package sessions
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+)
+
+// Claude run with CLAUDE_CONFIG_DIR set to a folder of each account's
+// (~/.claude-work beside the one magpie runs with) is counted too, a session
+// kept in both folders once, and a folder with no projects/ is no Claude
+// folder (@fivesmallq on X: only one Claude folder's token use counted).
+func TestCallsReadEveryClaudeFolder(t *testing.T) {
+	d := setupCalls(t)
+	home, _ := os.UserHomeDir()
+	work := filepath.Join(home, ".claude-work")
+	writeLines(t, filepath.Join(d.claude, "projects", "-a", "main1.jsonl"),
+		claudeMsg("m1", "claude-opus-5-5", 1, 2, 0, 0, 1))
+	writeLines(t, filepath.Join(work, "projects", "-b", "work1.jsonl"),
+		swap(claudeMsg("m2", "claude-opus-5-5", 3, 4, 0, 0, 2), `"sessionId":"sess1"`, `"sessionId":"work1"`))
+	// the same session copied into both folders
+	writeLines(t, filepath.Join(work, "projects", "-a", "main1.jsonl"),
+		claudeMsg("m1", "claude-opus-5-5", 1, 2, 0, 0, 1))
+	writeLines(t, filepath.Join(home, ".claude-notes", "todo.jsonl"), "{}")
+
+	cs := Calls(time.Time{})
+	got := map[string]int{}
+	for _, c := range cs {
+		got[c.RequestID]++
+	}
+	if len(cs) != 2 || got["req_m1"] != 1 || got["req_m2"] != 1 {
+		t.Fatalf("calls = %+v, want req_m1 and req_m2 once each", cs)
+	}
+}
+
+// A session kept in two Claude folders is one row of the list, and the
+// other folder's own sessions are listed.
+func TestListReadsEveryClaudeFolderOnce(t *testing.T) {
+	d := setupCalls(t)
+	home, _ := os.UserHomeDir()
+	work := filepath.Join(home, ".claude-work")
+	user := func(id string) string {
+		return `{"type":"user","timestamp":"` + stamp(0) + `","message":{"role":"user","content":"hello"},"cwd":"/work/app","sessionId":"` + id + `"}`
+	}
+	writeLines(t, filepath.Join(d.claude, "projects", "-a", "main1.jsonl"), user("main1"))
+	writeLines(t, filepath.Join(work, "projects", "-a", "main1.jsonl"), user("main1"))
+	writeLines(t, filepath.Join(work, "projects", "-b", "work1.jsonl"), user("work1"))
+	n := map[string]int{}
+	for _, s := range List(0) {
+		n[s.ID]++
+	}
+	if len(n) != 2 || n["main1"] != 1 || n["work1"] != 1 {
+		t.Fatalf("rows = %v, want main1 and work1 once each", n)
+	}
+}

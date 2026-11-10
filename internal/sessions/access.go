@@ -211,7 +211,11 @@ func Found() []string {
 			}
 		}
 	}
-	add("claude", filepath.Join(ClaudeDir(), "projects"))
+	var claude []string
+	for _, d := range ClaudeDirs() {
+		claude = append(claude, filepath.Join(d, "projects"))
+	}
+	add("claude", claude...)
 	var desktop []string
 	for _, d := range callDesktopDirs() {
 		desktop = append(desktop, filepath.Join(d, "local-agent-mode-sessions"), filepath.Join(d, "claude-code-sessions"))

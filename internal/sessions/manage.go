@@ -605,7 +605,7 @@ func sessionPaths(agent, id string, fs []file) []string {
 		}
 	}
 	if agent == "claude" {
-		dir := ClaudeDir()
+		dir := claudeDirOf(fs[0].path)
 		if fs[0].m().wsl != "" {
 			// the distro's own ~/.claude
 			if dir = wslHomeOf(fs[0].m().wsl); dir == "" {
@@ -859,4 +859,13 @@ func Restore(key string) (Trashed, error) {
 	os.RemoveAll(dir)
 	wslRelistNow(t.Items)
 	return t, nil
+}
+
+// claudeDirOf is the Claude Code folder a session file at path is kept in
+// (<dir>/projects/<project>/<id>.jsonl), ClaudeDir for one elsewhere.
+func claudeDirOf(path string) string {
+	if p := filepath.Dir(filepath.Dir(path)); filepath.Base(p) == "projects" {
+		return filepath.Dir(p)
+	}
+	return ClaudeDir()
 }

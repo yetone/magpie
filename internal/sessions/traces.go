@@ -92,7 +92,9 @@ func traceLineFiles() []file {
 	// is shared (heldFiles)
 	files := slices.Concat(codexFiles(), piFiles())
 	claude := func(agent, dir string) { files = append(files, ccFiles(agent, dir)...) }
-	claude("claude", ClaudeDir())
+	for _, d := range ClaudeDirs() {
+		claude("claude", d)
+	}
 	for _, dir := range desktopReadDirs() {
 		homes, _ := SessionGlob(filepath.Join(dir, "local-agent-mode-sessions", "*", "*", "local_*", ".claude"))
 		for _, home := range homes {

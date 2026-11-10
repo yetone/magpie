@@ -220,6 +220,15 @@ Sessions is not cleared. Verification: `TestClearedUsageLeavesThePages`,
 `TestClearUsageKeepsOneMarkAModel`, `TestUsageClearRoute`,
 `usage-clear.test.cjs`.
 
+Claude Code's sessions are read from every folder it is run in
+(`appdir.ClaudeHomes`, `sessions.ClaudeDirs`): `$CLAUDE_CONFIG_DIR` or
+`~/.claude`, a folder beside it or in the home folder whose name starts with
+`claude` or `.claude` (or one level down) and holds `projects/`, and the
+folders of the Claude accounts saved in magpie. A session id kept in two of
+them is one session, under the first. Verification:
+`TestClaudeHomesIn`, `TestCallsReadEveryClaudeFolder`,
+`TestListReadsEveryClaudeFolderOnce`.
+
 Claude Desktop gateway rows can have a local name even without a CLI
 transcript (#1675). [`DesktopTitles`](../../internal/sessions/desktop_titles.go)
 reads `claude-code-sessions/*/*/local_*.json` and
