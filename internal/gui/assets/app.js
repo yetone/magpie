@@ -8998,12 +8998,8 @@ const edAlign = new ResizeObserver((es) => {
     if (!n.isConnected) { edAlign.unobserve(n); continue; }
     const cs = getComputedStyle(n.parentElement), cols = cs.gridTemplateColumns.split(" ");
     const lab = cols.length > 1 ? parseFloat(cols[0]) || 0 : 0;
-    // only when changed, and in an open fold a change after the first a
-    // frame later: its rows take the column, so set while the observer is
-    // delivering, the fold's own height changes with it (a label wrapping)
-    // and the browser reports a loop as a page error (a group's editor
-    // narrowed with the window). A closed fold only moves its chevron, so
-    // it follows at once, never a frame out of line
+    // only when changed; an open fold's later change a frame later, or its
+    // own height change is reported as an observer loop (a page error)
     const at = (lab && lab + parseFloat(cs.columnGap)) + "px";
     if (n.style.getPropertyValue("--ed-lab") === lab + "px" && n.style.getPropertyValue("--ed-at") === at) continue;
     const set = () => { n.style.setProperty("--ed-lab", lab + "px"); n.style.setProperty("--ed-at", at); };
@@ -9223,7 +9219,7 @@ function baseAPIOf(p) {
 
 // draftOf is a saved provider as its editor's form holds it.
 function draftOf(p) {
-  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, best: !!p.bestInFamily, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), replyHeaders: (p.replyHeaders || []).join(", "), passHeaders: (p.passHeaders || []).join(", "), icon: p.icon || "", iconFrom: p.iconFrom || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, hiddenDrawers: [...(p.hiddenDrawers || [])], hiddenVideomakers: [...(p.hiddenVideomakers || [])], searches: !!p.searches, unredacted: !!p.unredacted, countFree: !!p.countFree, billing: p.billing || "", insecureTLS: !!p.insecureTLS, http1: !!p.http1, clientCert: p.clientCert || "", clientKey: p.clientKey || "", serverCA: p.serverCA || "", socket: p.socket || "", limitRestOff: !!p.limitRestOff, passErrors: !!p.passErrors, imageFilesOff: !!p.imageFilesOff, nativeCompaction: !!p.nativeCompaction, passUserAgent: p.passUserAgent !== false, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", balanceMethod: p.balanceMethod || "", modelsURL: p.modelsURL || "", listOff: !!p.listOff, contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p), rateWindows: (p.rateWindows || []).map((w) => ({ ...w })) };
+  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, best: !!p.bestInFamily, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), replyHeaders: (p.replyHeaders || []).join(", "), passHeaders: (p.passHeaders || []).join(", "), icon: p.icon || "", iconFrom: p.iconFrom || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, hiddenDrawers: [...(p.hiddenDrawers || [])], hiddenVideomakers: [...(p.hiddenVideomakers || [])], searches: !!p.searches, unredacted: !!p.unredacted, countFree: !!p.countFree, billing: p.billing || "", insecureTLS: !!p.insecureTLS, http1: !!p.http1, clientCert: p.clientCert || "", clientKey: p.clientKey || "", serverCA: p.serverCA || "", socket: p.socket || "", limitRestOff: !!p.limitRestOff, upstreamProviders: !!p.upstreamProviders, passErrors: !!p.passErrors, imageFilesOff: !!p.imageFilesOff, nativeCompaction: !!p.nativeCompaction, passUserAgent: p.passUserAgent !== false, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", balanceMethod: p.balanceMethod || "", modelsURL: p.modelsURL || "", listOff: !!p.listOff, contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p), rateWindows: (p.rateWindows || []).map((w) => ({ ...w })) };
 }
 
 // duplicateProvider opens the Add form on a copy of p, its key p's unless another is pasted (#268).
@@ -9735,6 +9731,13 @@ function drawEditor(p, presetID) {
     c.onchange = () => (draft.libraryMCP = c.checked);
     ed.append(...field(t("MCP servers"), l));
   }
+  // lcc580 on X
+  if ((p?.preset || pr?.id) === "remote-magpie") {
+    const [l, c] = tick(t("With the provider serving it there"), !!draft.upstreamProviders);
+    l.classList.add("upstream-providers");
+    c.onchange = () => { draft.upstreamProviders = c.checked; draft.onUpstreamProviders?.(); };
+    ed.append(...field(t("Model names"), l));
+  }
 
   // A user-defined provider can have its own picture; presets keep theirs.
   if (custom) ed.append(...field(t("Icon"), iconPicker(ed), ""));
@@ -10233,6 +10236,7 @@ function drawEditor(p, presetID) {
     if (certTakes()) for (const k of CERT_FIELDS) body[k] = onHTTPS() ? (draft[k] || "").trim() : "";
     if (socketable()) body.socket = draft.socket || "";
     if (custom) body.limitRestOff = !!draft.limitRestOff;
+    if ((p?.preset || pr?.id) === "remote-magpie") body.upstreamProviders = !!draft.upstreamProviders;
     if (p?.takesImageFiles) body.imageFilesOff = !!draft.imageFilesOff;
     if (p ? p.takesPassErrors : custom) body.passErrors = !!draft.passErrors;
     if (!decideOnly(p || pr)) body.nativeCompaction = !!draft.nativeCompaction && carriesCompaction();
@@ -11524,12 +11528,15 @@ function renderModels(p) {
     const sayLabel = (mode) => {
       const name = prefs[first.id]?.name ?? (first.default ? first.name : "");
       const base = name || first.default || first.name || first.id;
-      let label = suffixed(base, p.name || p.id, !!name, mode);
+      // named by the provider serving it there (lcc580 on X)
+      const up = draft.upstreamProviders && first.by && !(name && (mode || suffixMode()) === "own");
+      let label = up ? (name || first.plain || base) + " · " + (p.name || p.id) + " › " + first.by : suffixed(base, p.name || p.id, !!name, mode);
       // a remote magpie's model: its name there (ARNO)
-      if (!name && first.plain && label === base) label = first.plain;
+      if (!up && !name && first.plain && label === base) label = first.plain;
       sfxSaid.textContent = t("Agents’ lists show “{label}”", { label });
     };
     sayLabel();
+    draft.onUpstreamProviders = () => sayLabel();
     sfx.dataset.mode = suffixMode();
     sfx.drawnAgain = sayLabel;
     const where = el("button", "text action", t("Change in Settings"));
@@ -17063,12 +17070,8 @@ if (mode === "panel") document.addEventListener("visibilitychange", () => {
   if (panelPeek || panelArranging) { panelPeek = ""; panelArranging = false; renderPanelQuota(); }
 });
 
-// The tray panel is four tabs over the one page: the agents, the allowances
-// of every subscription and key (the "usage" tab, as it was named before),
-// what the requests add up to (the "stats" tab, the window's Requests made
-// small) and the gateway's latest requests (routing/client.js draws those). The saved
-// profiles open from Profiles at the Agents tab's foot, over the list (a tab
-// of their own was one too many). The tab is remembered.
+// The tray panel's four tabs: agents, allowances ("usage"), totals ("stats")
+// and latest requests; Profiles opens at the Agents tab's foot.
 const profBtn = $("#profBtn"), profBox = $(".profiles");
 function placeProfiles() {
   if (!profBox.classList.contains("open")) return;
@@ -22997,12 +23000,8 @@ function setRoom(v, px) {
   r.style.height = px + "px";
   room.set(v, px);
 }
-// Where what's in the view ends, its padding at the foot included, the room
-// aside. Not scrollHeight less the room: scrollHeight is never less than the
-// view is tall, so under a list shorter than the view (the agents rolled up
-// in a tall window) it counted the empty foot as content, the room made was
-// too short to hold the list, and each frame's hold and fit took turns
-// adding and taking it away, the list swinging between two places (#355).
+// Where the view's content ends, the room aside; never scrollHeight less
+// the room, which is never under the view's height (#355).
 function contentEnd(v) {
   const top = v.getBoundingClientRect().top - v.scrollTop;
   let end = 0;

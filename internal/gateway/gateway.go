@@ -1695,6 +1695,10 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 					// magpie that is this one's remote too doesn't take
 					// back its own models (catalog's magpie_via.go)
 					m["magpie_via"] = catalog.ViaHere(viaOf(e))
+					// the provider serving it, the first in a chain of
+					// magpies, for one that names its models by it
+					// (provider.UpstreamNames, lcc580 on X)
+					m["magpie_by"] = e.ServedBy()
 				}
 				if ts := tiers[e.ID]; len(ts) > 0 {
 					m["service_tiers"] = ts
@@ -1749,6 +1753,7 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 			m["kind"], m["magpie_label"] = "decision", labels[i]
 			m["native_endpoints"] = []string{"/v1/systemone"}
 			m["magpie_via"] = catalog.ViaHere(viaOf(e))
+			m["magpie_by"] = e.ServedBy()
 			data = append(data, m)
 		}
 	}

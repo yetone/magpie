@@ -214,6 +214,19 @@ that the upstream does not list are named against all listed names and ids;
 listed models keep their `Available` names unchanged
 ([`Exposed`](../../internal/provider/models.go)).
 
+The list a magpie gives another magpie also names, as `magpie_by`, the
+provider serving each model there (`Entry.ServedBy`: "routing group" for a
+group, and for a model of its own Remote magpie the provider at the start
+of that chain), kept as the model's `By` ([`live.go`](../../internal/catalog/live.go)).
+A Remote magpie set `upstreamProviders` (the editor's *Model names* tick,
+`magpie provider set <id> upstream-providers=on`; lcc580 on X) names each
+of its models by it, whatever either magpie's *Provider in model names*:
+"DeepSeek Chat · Office › Relay A" (`Entry.Label`, `upstream`), so the same
+model from two of the remote's providers can be told apart. Ids stay as
+they were, and a remote older than the field names its models as before
+(`TestRemoteMagpieUpstreamNames`, `TestServedByAndUpstreamLabel`,
+`name-suffix-remote.test.cjs`).
+
 A listed model's window, reply limit and levels come from the vendor's
 list first; only what it leaves out is filled from models.dev. `Decorate`
 matches the provider's own catalog by id, then by the same model under

@@ -58,6 +58,9 @@ const providerUsage = `usage:
                                           image-files=off sends DeepSeek's API an agent's images inline on every
                                           turn; image-files=on, the default, uploads each once (for a day)
                                           and names it by its file id
+                                          upstream-providers=on, on a Remote magpie, names its models by the
+                                          provider serving each there (Claude · Office › RelayA); off, the
+                                          default, as that magpie's own list names them
                                           patience=2m keeps a request to it alone (not through a group) that long
                                           while it is busy or briefly rate limited, asking again after a pause
                                           (at most 4m); patience=off hands the agent the error at once;
@@ -1215,6 +1218,20 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 				p.ImageFilesOff = false
 			default:
 				return fmt.Errorf("image-files=on|off, not %q", v)
+			}
+		case "upstream-providers":
+			// on: a Remote magpie's models named by the provider serving
+			// each there (Provider.UpstreamProviders, lcc580 on X)
+			if !p.IsRemoteMagpie() {
+				return fmt.Errorf("upstream-providers is a Remote magpie's; %s is not one", p.ID)
+			}
+			switch strings.ToLower(v) {
+			case "on", "yes":
+				p.UpstreamProviders = true
+			case "off", "no", "default":
+				p.UpstreamProviders = false
+			default:
+				return fmt.Errorf("upstream-providers=on|off, not %q", v)
 			}
 		case "prompt":
 			// as-written: Antigravity's subscription is sent the system

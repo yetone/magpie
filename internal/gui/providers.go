@@ -36,6 +36,7 @@ type modelJSON struct {
 	Name    string   `json:"name"`              // the user's name for it, if they gave one
 	Default string   `json:"default,omitempty"` // its own name, when the user gave it another
 	Plain   string   `json:"plain,omitempty"`   // a remote magpie's model's name there alone, when Name has its provider there after it (catalog.Model's)
+	By      string   `json:"by,omitempty"`      // a remote magpie's model's provider there, the first in a chain (catalog.Model's)
 	Kept    []string `json:"kept,omitempty"`    // the reasoning levels the user keeps of Efforts, when not all
 	Efforts []string `json:"efforts,omitempty"`
 	Given   bool     `json:"given,omitempty"` // its levels aren't known: Efforts are those it can be given, Kept those it was
@@ -159,6 +160,9 @@ type providerJSON struct {
 	// asked as usual after a quota refusal or a 429, never set aside for
 	// it (provider.LimitRestOff)
 	LimitRestOff bool `json:"limitRestOff"`
+	// a Remote magpie's models named by the provider serving each there
+	// (provider.UpstreamProviders, lcc580 on X)
+	UpstreamProviders bool `json:"upstreamProviders,omitempty"`
 	// DeepSeek's own API sent an agent's images inline on every turn, not
 	// once by file id (provider.ImageFilesOff, #5407); TakesImageFiles:
 	// it is DeepSeek's own API, so the editor offers it
@@ -824,7 +828,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		ID: p.ID, Name: p.Name, Icon: p.Icon, IconFrom: p.IconFrom, Preset: p.Preset, Host: p.Host(),
 		Chat: p.Chat, Responses: p.Responses, Anthropic: p.Anthropic, Gemini: p.Gemini, Decide: p.Decide, BaseAPI: p.BaseAPI, ModelTest: p.ModelTest(), TestsAs: p.TestClients(), DecideTest: p.AsksDecideModels(), MarksKinds: p.MarksKinds(),
 		Catalog: p.Catalog, Website: p.Website, KeysURL: p.KeysURL,
-		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountWindowAmounts: p.AccountWindowAmounts, AccountNames: p.AccountNames, Headers: p.Headers, ExtraBody: p.ExtraBody, ReplyHeaders: p.ReplyHeaders, PassHeaders: p.PassHeaders, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, CountFree: p.CountFree, Billing: p.Billing, BillingKind: p.BillingKind(), InsecureTLS: p.InsecureTLS, TakesInsecureTLS: p.TakesInsecureTLS(), HTTP1: p.HTTP1, ClientCert: tilde(p.ClientCert), ClientKey: tilde(p.ClientKey), ServerCA: tilde(p.ServerCA), TakesClientCert: p.TakesClientCert(), Socket: p.Socket, TakesSocket: p.TakesSocket(), LimitRestOff: p.LimitRestOff, ImageFilesOff: p.ImageFilesOff, TakesImageFiles: p.TakesImageFiles(), NativeCompaction: p.NativeCompaction, CarriesCompaction: p.CarriesCompaction(), PassUserAgent: !p.MagpieUserAgent, OwnClient: p.OwnClient(), PassErrors: p.PassErrors, TakesPassErrors: p.TakesPassErrors(), AuthHeader: p.AuthHeader, BothAuth: p.BothAuth(), BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, BalanceMethod: p.BalanceMethod, ModelsURL: p.ModelsURL, ListOff: p.ListsOff(), TakesListOff: p.Account == nil && !p.IsPlugin() && !p.DecideOnly(), TakesModelHeaders: p.Account == nil, DecideAPIKind: p.DecideAPIKind(),
+		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountWindowAmounts: p.AccountWindowAmounts, AccountNames: p.AccountNames, Headers: p.Headers, ExtraBody: p.ExtraBody, ReplyHeaders: p.ReplyHeaders, PassHeaders: p.PassHeaders, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, CountFree: p.CountFree, Billing: p.Billing, BillingKind: p.BillingKind(), InsecureTLS: p.InsecureTLS, TakesInsecureTLS: p.TakesInsecureTLS(), HTTP1: p.HTTP1, ClientCert: tilde(p.ClientCert), ClientKey: tilde(p.ClientKey), ServerCA: tilde(p.ServerCA), TakesClientCert: p.TakesClientCert(), Socket: p.Socket, TakesSocket: p.TakesSocket(), LimitRestOff: p.LimitRestOff, UpstreamProviders: p.UpstreamProviders, ImageFilesOff: p.ImageFilesOff, TakesImageFiles: p.TakesImageFiles(), NativeCompaction: p.NativeCompaction, CarriesCompaction: p.CarriesCompaction(), PassUserAgent: !p.MagpieUserAgent, OwnClient: p.OwnClient(), PassErrors: p.PassErrors, TakesPassErrors: p.TakesPassErrors(), AuthHeader: p.AuthHeader, BothAuth: p.BothAuth(), BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, BalanceMethod: p.BalanceMethod, ModelsURL: p.ModelsURL, ListOff: p.ListsOff(), TakesListOff: p.Account == nil && !p.IsPlugin() && !p.DecideOnly(), TakesModelHeaders: p.Account == nil, DecideAPIKind: p.DecideAPIKind(),
 		Ready: p.Ready(), Chosen: p.PicksOf(avail), Agents: make([]providerAgent, 0, len(agents)),
 		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, UseFirst: p.UseFirst, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, RestartApp: p.RestartApp, Self: p.SelfAnswered(), KeepSelf: p.KeepSelf, CapStop: p.CapStop, CapCareful: p.CapCareful, Unlisted: p.Unlisted, NoModels: p.ServesNone(), BestInFamily: p.BestInFamily && len(p.Models) == 0 && !p.NoModels, Off: p.Off, Contexts: p.Contexts,
 		MaxConcurrency: p.MaxConcurrency, PluginConcurrency: p.PluginConcurrency(), MaxAccounts: p.MaxAccounts, PluginAccounts: p.PluginAtOnce(), PriceRate: p.PriceRate,
@@ -1045,6 +1049,9 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 			j.Name = n
 		} else {
 			j.Plain = m.Plain
+		}
+		if p.IsRemoteMagpie() {
+			j.By = m.By
 		}
 		if api, ok := p.ModelAPI(m.ID); ok {
 			j.API = string(api)
@@ -1622,6 +1629,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// LimitRestOff is whether a quota refusal or a 429 leaves it
 			// asked as usual; a save that leaves it out keeps it
 			LimitRestOff *bool `json:"limitRestOff"`
+			// UpstreamProviders, on a Remote magpie, names its models by the
+			// provider serving each there; a save that leaves it out keeps it
+			UpstreamProviders *bool `json:"upstreamProviders"`
 			// ImageFilesOff is whether DeepSeek's own API is sent an
 			// agent's images inline (#5407); a save that leaves it out
 			// keeps it, as `magpie provider set <id> image-files=off` set it
@@ -2061,6 +2071,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				if req.LimitRestOff != nil {
 					in.LimitRestOff = *req.LimitRestOff
 				}
+				if req.UpstreamProviders != nil {
+					in.UpstreamProviders = *req.UpstreamProviders && in.IsRemoteMagpie()
+				}
 				if req.ImageFilesOff != nil {
 					in.ImageFilesOff = *req.ImageFilesOff
 				}
@@ -2114,6 +2127,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					in.LimitRestOff = *req.LimitRestOff
 				} else if old != nil {
 					in.LimitRestOff = old.LimitRestOff
+				}
+				if req.UpstreamProviders != nil {
+					in.UpstreamProviders = *req.UpstreamProviders && in.IsRemoteMagpie()
+				} else if old != nil {
+					in.UpstreamProviders = old.UpstreamProviders
 				}
 				// DeepSeek's images sent inline, set here or with `magpie
 				// provider set <id> image-files=off` (#5407)

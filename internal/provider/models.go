@@ -3129,7 +3129,10 @@ type Entry struct {
 	Default string `json:"default,omitempty"` // the model's own name, when the user gave it another
 	// Plain is a remote magpie's model's name there alone, when Name is
 	// its label there with that magpie's provider after it (catalog.Model's)
-	Plain      string   `json:"-"`
+	Plain string `json:"-"`
+	// By is the provider a remote magpie's list names as serving the
+	// model there, the first in a chain of magpies (catalog.Model's)
+	By         string   `json:"-"`
 	Efforts    []string `json:"efforts,omitempty"`
 	Provider   Provider `json:"-"`                // a group's: its first member's
 	Group      string   `json:"group,omitempty"`  // set on a routing group (group.go)
@@ -3476,6 +3479,9 @@ func entryFor(p Provider, m catalog.Model, s settings.Settings) Entry {
 		e.Name, e.Default = n, name
 	} else {
 		e.Plain = m.Plain
+	}
+	if p.IsRemoteMagpie() {
+		e.By = m.By
 	}
 	// a model that thinks still does with the levels the user kept or
 	// none at all; one its source says nothing of thinks as most of the

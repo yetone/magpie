@@ -839,15 +839,48 @@ func renameModelPrefs(s *settings.Settings, from, to string) bool {
 // when they gave one, else the vendor's) with its provider's after it, or
 // "routing group" for a group's — dropped only when a name of the user's
 // own already carries the provider's, so it isn't said twice.
+//
+// A Remote magpie's model, with its upstream names on (UpstreamProviders), is
+// named by its name there alone and the provider serving it there after
+// this one's: "Claude Sonnet 5 · Office › RelayA" (lcc580 on X).
 func (e Entry) Label() string {
-	by := e.Provider.Name
+	by, name := e.Provider.Name, e.Name
 	if e.Group != "" {
 		by = "routing group"
+	} else if up := e.upstream(); up != "" {
+		by = e.Provider.Name + " › " + up
+		if e.Default == "" {
+			name = e.PlainName()
+		}
 	}
-	if e.Default != "" && strings.Contains(strings.ToLower(e.Name), strings.ToLower(by)) {
-		return e.Name
+	if e.Default != "" && strings.Contains(strings.ToLower(name), strings.ToLower(by)) {
+		return name
 	}
-	return e.Name + " · " + by
+	return name + " · " + by
+}
+
+// upstream is the provider a Remote magpie's model is served by there,
+// when its upstream names are on and that magpie's list said which; ""
+// otherwise (a magpie from before magpie_by says none).
+func (e Entry) upstream() string {
+	if e.Group != "" || !e.Provider.UpstreamProviders || !e.Provider.IsRemoteMagpie() {
+		return ""
+	}
+	return e.By
+}
+
+// ServedBy is the provider this magpie's list tells another magpie serves
+// the entry (magpie_by): its own provider, or, for a model it has from a
+// magpie further on, the one there, the first in the chain; "routing
+// group" for a group's.
+func (e Entry) ServedBy() string {
+	switch {
+	case e.Group != "":
+		return "routing group"
+	case e.Provider.IsRemoteMagpie() && e.By != "":
+		return e.By
+	}
+	return e.Provider.Name
 }
 
 // Labels are how an agent's list names each of es, in order: as Label, or,
@@ -891,6 +924,11 @@ func LabelsFor(agent string, es []Entry) []string {
 		mine := own && (e.Default != "" || e.Named)
 		name := e.PlainName()
 		if !(plain || mine) || name == "" {
+			continue
+		}
+		// a Remote magpie's model named by its provider there keeps it
+		// under Off too: the user turned that on for this one (lcc580)
+		if e.upstream() != "" && !mine {
 			continue
 		}
 		k := strings.ToLower(name)
@@ -1472,7 +1510,7 @@ func wireKey(wires map[string]string, pid, model string) string {
 	return key
 }
 
-// UpstreamNames are the names the user gave the provider's models, by model
+// UpstreamProviders are the names the user gave the provider's models, by model
 // id, with the one given for all of them under "*" — each as it will be sent,
 // trimmed, "*" and all, which is what a list of them shows. A name that is
 // only whitespace is none, and is not listed.

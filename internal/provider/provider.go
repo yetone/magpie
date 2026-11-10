@@ -339,6 +339,15 @@ type Provider struct {
 	// by its file id (gateway's deepseek_files.go, #5407).
 	ImageFilesOff bool `json:"imageFilesOff,omitempty"`
 
+	// UpstreamProviders, on a Remote magpie, `upstream-providers=on`, names each
+	// of its models in the agents' lists by the provider serving it on
+	// the other magpie, the first in a chain of them: "Claude Sonnet 5 ·
+	// Office › RelayA", whatever that magpie's own Provider in model names
+	// is, so one model from two of its providers is told apart here
+	// (lcc580 on X). Off, the default, names each as that magpie's list
+	// does. The ids stay as they are: office/relaya/claude-sonnet-5.
+	UpstreamProviders bool `json:"upstreamProviders,omitempty"`
+
 	// PromptAsWritten, on Antigravity's subscription, has the system prompt
 	// go to Google exactly as the agent wrote it. By default the few lines
 	// Google answers with a 429 "Resource has been exhausted" whatever

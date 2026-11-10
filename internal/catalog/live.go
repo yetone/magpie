@@ -933,7 +933,7 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		if len(apis) == 0 {
 			apis = targetAPIs(r.TypeTarget)
 		}
-		m := Model{ID: id, Name: name, Plain: plain, ImageInput: input, APIs: apis, Draws: drawer, Films: films, Decides: decision, Serves: serves,
+		m := Model{ID: id, Name: name, Plain: plain, By: strings.TrimSpace(r.By), ImageInput: input, APIs: apis, Draws: drawer, Films: films, Decides: decision, Serves: serves,
 			InputModalities: ins, OutputModalities: outs}
 		if n, ok := r.ContextLength.(float64); ok && n > 0 {
 			m.Context = int(n)
@@ -1024,7 +1024,10 @@ type liveModel struct {
 	// another magpie's name for the model with its provider there after
 	// it, and "image", "video" or "decision" for its other models
 	Label string `json:"magpie_label"`
-	Kind  string `json:"kind"`
+	// the provider serving the model there, the first in a chain of
+	// magpies (Model.By)
+	By   string `json:"magpie_by"`
+	Kind string `json:"kind"`
 	// how another magpie searches the web for the model: "native" or
 	// "magpie" (Model.WebSearch)
 	WebSearch string `json:"web_search"`
