@@ -139,6 +139,20 @@ on both sides keeps the newer version while retaining the replaced copy.
 A conditional write refused because another computer committed in between
 is retried through this same merge.
 
+A computer can follow the server instead (`Config.FollowServer`, set only
+by `SetFollowServer`: Settings → Sync → This computer → Follows the
+server, `/api/davsync/follow-server`, or `magpie <webdav|s3|github>
+follow on|off`; Ramon317317 on X). It takes every changed part from the
+file whichever side is newer, never writes the file (not a merged
+sign-in, not a rebuild of a damaged file), and a change made on it is
+kept in the sync folder like a join's and said in the notice
+(`Notice.Followed`). The join rules still hold: an `unset` part on the
+server leaves this computer's, and own agent fields and agents only here
+stay. Following a server with no file yet is an error, nothing sent.
+`Configure` keeps the choice, as it keeps `AutoEvery`. The computer
+followed is an ordinary two-way one (`TestFollowServer`,
+`TestFollowServerSendsNoSignIn`, `sync-follow-server.test.cjs`).
+
 When a remote file is empty, damaged or another app's format, sync stops and
 describes it through `ServerFile`. Settings and the backend's `upload` command
 can replace it with this computer's setup, keeping the old file first.
@@ -428,7 +442,7 @@ with none hashes as before (`TestSyncHooks`, `TestNoHooksHashAsBefore`,
 ```sh
 go test -tags nogui ./internal/davsync
 go test -tags nogui ./internal/cli -run 'TestGitHubCmd|TestWebdavCmd|TestS3Cmd'
-node --test internal/gui/tests/github-sync.test.cjs internal/gui/tests/s3-sync.test.cjs internal/gui/tests/sync-other-kind.test.cjs
+node --test internal/gui/tests/github-sync.test.cjs internal/gui/tests/s3-sync.test.cjs internal/gui/tests/sync-other-kind.test.cjs internal/gui/tests/sync-follow-server.test.cjs
 ```
 
 `TestGitHubEmptyRepository` covers the first encrypted backup initializing an

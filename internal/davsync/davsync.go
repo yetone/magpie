@@ -98,6 +98,14 @@ type Config struct {
 	// itself: 0 is Every's 3, Manual never — then only Sync now syncs
 	// (#847). Set by SetAuto alone; Configure keeps it.
 	AutoEvery int `json:"autoEvery,omitempty"`
+	// FollowServer is this computer following the setup on the server
+	// rather than syncing both ways (Ramon317317 on X: one computer the
+	// others all take theirs from). Each sync brings in every part that
+	// changed on either side since the last one, and nothing goes up: a
+	// change made here is replaced, a copy of it kept in the sync folder
+	// and named in a notice. The computer the others follow keeps syncing
+	// both ways. Set by SetFollowServer alone; Configure keeps it.
+	FollowServer bool `json:"followServer,omitempty"`
 }
 
 // Manual is AutoEvery's never: sync runs only when asked.
@@ -191,6 +199,10 @@ type Notice struct {
 	Here  []string  `json:"here,omitempty"`  // this computer's parts, replaced by the server's
 	There []string  `json:"there,omitempty"` // the server's parts, replaced by this computer's
 	Saved string    `json:"saved,omitempty"` // the folder the replaced copies are kept in
+	// Followed is that the parts in Here were changed here and replaced
+	// because this computer follows the server (Config.FollowServer), not
+	// because the server's were newer
+	Followed bool `json:"followed,omitempty"`
 	// Restored is a Restore's notice: Here are the parts it brought in,
 	// what was here before kept in Saved, which Undo brings back
 	Restored bool `json:"restored,omitempty"`
@@ -336,7 +348,8 @@ func Configure(c Config) error {
 			if old.Other != nil {
 				c.Servers[strings.ToLower(old.Other.config().Kind())] = *old.Other
 			}
-			c.AutoEvery = old.AutoEvery // SetAuto's, not the form's
+			c.AutoEvery = old.AutoEvery       // SetAuto's, not the form's
+			c.FollowServer = old.FollowServer // SetFollowServer's, not the form's
 			if old.Kind() != c.Kind() {
 				o := old.where()
 				c.Other = &o
@@ -504,6 +517,9 @@ type View struct {
 	// Auto is how many minutes apart it syncs by itself; 0 never: only when
 	// asked
 	Auto int `json:"auto"`
+	// FollowServer is whether this computer takes the server's setup and
+	// sends none of its own (Config.FollowServer)
+	FollowServer bool `json:"followServer,omitempty"`
 	// Undo is whether the last Restore can be undone
 	Undo bool `json:"undo,omitempty"`
 	// File is what the server holds instead of a backup, when Error is
@@ -540,7 +556,7 @@ func Status() View {
 	v := View{On: true, URL: c.URL, User: c.User, PasswordSet: c.Password != "", PassphraseSet: c.Passphrase != "",
 		Keys: c.Keys, Agents: c.Agents, Library: c.library(), Error: st.Error, Notice: st.Notice,
 		Kind: strings.ToLower(c.Kind()), Endpoint: c.Endpoint, Region: c.Region, PathStyle: c.PathStyle, Branch: c.Branch,
-		Auto: int(c.auto() / time.Minute)}
+		Auto: int(c.auto() / time.Minute), FollowServer: c.FollowServer}
 	if st.Key == stateKey(c) {
 		v.Last = st.Last
 		v.Undo = st.Undo != "" && isFile(st.Undo)
@@ -1254,6 +1270,9 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 		remember(sealed)
 		return nil
 	}
+	if data == nil && c.FollowServer {
+		return errNothingToFollow
+	}
 	if data == nil { // nothing there yet: this computer's setup is the first
 		if err := push(local, "", blind{}); err != nil {
 			return err
@@ -1297,7 +1316,9 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 		// damaged file's ETag as the version to replace, so the push is
 		// still checked against the server and another computer's parts
 		// survive the way they would on any sync.
-		if !errors.Is(err, backup.ErrCorrupt) || st.Local == nil {
+		// A computer following the server never writes it, a rebuild
+		// included: the computer it follows, or Upload, replaces the file.
+		if !errors.Is(err, backup.ErrCorrupt) || st.Local == nil || c.FollowServer {
 			return described(c, data, err)
 		}
 		good := cached(st.Sum) // the version this computer last read whole
@@ -1345,6 +1366,22 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 		}
 		lc := !first && L[p] != st.Local[p]
 		rc := first || R[p] != st.Remote[p]
+		if c.FollowServer {
+			// following the server: what changed on either side is the
+			// server's, a change here kept aside first. A part the server's
+			// file holds nothing of on joining is left as it is here
+			// (#5642): nothing has been set there to follow yet.
+			if remote.Library == nil && p == "library" || first && unset(remote, p) && !unset(local, p) {
+				continue
+			}
+			if lc || rc {
+				bringIn = append(bringIn, p)
+			}
+			if lc || first {
+				here = append(here, p)
+			}
+			continue
+		}
 		switch {
 		case lc && !rc:
 			take(&merged, local, p)
@@ -1463,12 +1500,12 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 	st.Local, st.Sum, st.Server, st.Remote = pending, sum(data), ver, R
 	remember(data)
 	if len(here)+len(there) > 0 {
-		st.Notice = &Notice{At: time.Now(), Here: here, There: there, Saved: saved}
+		st.Notice = &Notice{At: time.Now(), Here: here, There: there, Saved: saved, Followed: c.FollowServer && !first}
 		st.Undo = "" // a restore's undo goes with its notice
 	}
 	// A rebuild always writes back: the server's file is the damaged one,
 	// so even a merge that matches the cached copy must replace it.
-	if rebuilt || !maps.Equal(M, R) {
+	if !c.FollowServer && (rebuilt || !maps.Equal(M, R)) {
 		if err := push(merged, etag, blind{Remote: R, Local: pending}); err != nil {
 			return err
 		}

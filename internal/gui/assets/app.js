@@ -20283,11 +20283,7 @@ async function renderSync(v) {
   const toggle = (id) => () => { syncOpen = syncOpen === id ? "" : id; renderSync(); };
   const parts = (ps) => ps.map((p) => t({ providers: "providers", settings: "settings", profiles: "profiles", agents: "agents' models", library: "library", usage: "usage", signins: "sign-ins" }[p])).join(t(", "));
 
-  // WebDAV, S3 or GitHub
-  // off: what it would keep the same, named from the view's toggles as the
-  // CLI names them, so the page can't promise a part the setup leaves out.
-  // A view that says nothing of the toggles (a read that failed) reads as
-  // all on, as Status' off view is.
+  // off: what it would keep the same, from the view's toggles (none: all on)
   const goes = ["settings", "profiles"];
   if (v.agents !== false) goes.push("agents");
   if (v.library !== false) goes.push("library");
@@ -20312,21 +20308,15 @@ async function renderSync(v) {
     ? [btn(t("Sync now"), async (e) => { e.target.classList.add("busy"); renderSync(await api("davsync/now", {}).catch((x) => ({ ...v, error: x.message }))); }),
        btn(t(syncOpen === "dav" ? "Close" : "Edit"), toggle("dav"))]
     : [btn(t(syncOpen === "dav" ? "Close" : "Set up"), toggle("dav"))]));
-  // a failure is shown whole: what the server sent and what to do don't
-  // fit one line
   if (v.error) sub.classList.add("bad", "wraps");
   if (v.on) sub.classList.add("say");
-  // usage that couldn't be shared is a line of its own, in red: beside
-  // "Synced" in the same grey it read as part of a sync that went fine
-  // (#1259)
+  // usage not shared: its own red line (#1259)
   if (v.on && !v.error && v.usageError) sub.after(el("div", "sub bad wraps sync-usage-err", t("Couldn't share usage: {error}", { error: v.usageError })));
   // subscriptions synced with no account here (悠悠哥 on Discord)
   // with sign-ins synced, it is one no other computer shared
   if (v.on && v.signIn?.length) sub.after(el("div", "sub wraps sync-sign-in", v.signIns
     ? t("Your synced settings use {names}, which isn't signed in on this computer, and no other computer synced its sign-in. To use it here, sign in in Providers → Add a provider; if you don't, nothing needs doing.", { names: subNames(v.signIn) })
     : t("Your synced settings use {names}, which isn't signed in on this computer. Sync carries settings, not sign-ins: to use it here, sign in in Providers → Add a provider; if you don't, nothing needs doing.", { names: subNames(v.signIn) })));
-  // the server's file isn't a backup a sync can read, and is a file: this
-  // computer's setup can go up in its place, the user choosing it
   if (v.on && v.error && v.serverFile?.replace) {
     row(t("Upload this computer's setup"), t("It replaces the file on the server. That file is kept in the sync folder first."),
       btn(t("Upload…"), () => syncFile("askUpload", v.serverFile)));
@@ -20345,6 +20335,7 @@ async function renderSync(v) {
     const n = v.notice, r = el("div", "row pref sync-note");
     const lines = [];
     if (n.restored) lines.push(t("Restored from the server: {parts}", { parts: parts(n.here || []) }));
+    else if (n.here?.length && n.followed) lines.push(t("Replaced by the server's, as this computer follows it: {parts}", { parts: parts(n.here) }));
     else if (n.here?.length) lines.push(t("Replaced here by newer ones from another computer: {parts}", { parts: parts(n.here) }));
     if (n.there?.length) lines.push(t("Replaced on the server by this computer's newer ones: {parts}", { parts: parts(n.there) }));
     const who = el("div", "who");
@@ -20368,6 +20359,16 @@ async function renderSync(v) {
       segs([[0, t("Off")], [3, t("3 min")], [15, t("15 min")], [30, t("30 min")], [60, t("1 hour")]], every, async (m) => {
         renderSync(await api("davsync/auto", { minutes: m || -1 }).catch((x) => ({ ...v, error: x.message })));
       }));
+    // following the server (Ramon317317 on X)
+    const follows = !!v.followServer;
+    row(t("This computer"), follows
+      ? t("Takes the server's setup and sends none. A change made here is replaced and kept in the sync folder.")
+      : t("Changes go to the other computers, and theirs come here"),
+      segs([["both", t("Both ways")], ["follow", t("Follows the server")]], follows ? "follow" : "both", async (m) => {
+        if ((m === "follow") === follows) return;
+        renderSync(await api("davsync/follow-server", { on: m === "follow" }).catch((x) => ({ ...v, error: x.message })));
+        refreshAfterSync();
+      })).classList.add("wraps", "sync-follows");
     row(t("Restore from the server"), t("This computer's setup becomes the one on the server. What is here now is kept first, to undo."),
       btn(t("Restore…"), () => syncFile("askRestore", v, parts)));
   }

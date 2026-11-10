@@ -218,6 +218,13 @@ func backupRoutes(mux *http.ServeMux, w Windows) {
 			if err = json.NewDecoder(r.Body).Decode(&in); err == nil {
 				err = davsync.SetAuto(in.Minutes)
 			}
+		case "follow-server": // this computer takes the server's setup and sends none (Ramon317317 on X)
+			var in struct{ On bool }
+			if err = json.NewDecoder(r.Body).Decode(&in); err == nil {
+				if err = davsync.SetFollowServer(in.On); err == nil {
+					err = busy(davsync.SyncNow(ctx)) // how it went is in the status
+				}
+			}
 		case "restore": // the server's setup over this computer's, which is kept
 			brought, err = davsync.Restore(ctx)
 		case "undo":

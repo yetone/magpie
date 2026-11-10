@@ -29,6 +29,9 @@ const webdavUsage = `usage:
                                           password= and passphrase= ask for a new one
   magpie webdav now                       sync now (the gateway also syncs by itself while it runs: see auto)
   magpie webdav auto off|3|15|30|60       how often the gateway syncs by itself, in minutes; off: only when asked
+  magpie webdav follow on|off             on: this computer takes the server's setup on every sync and sends
+                                          none of its own; a change made here is replaced, a copy kept in the
+                                          sync folder. off: both ways, as before
   magpie webdav restore                   make this computer's setup the server's; what is here is kept first
   magpie webdav undo                      put back what the last restore replaced
   magpie webdav upload                    put this computer's setup over a server file that isn't a backup
@@ -75,6 +78,9 @@ const s3Usage = `usage:
                                           passphrase= ask for a new one
   magpie s3 now                           sync now (the gateway also syncs by itself while it runs: see auto)
   magpie s3 auto off|3|15|30|60           how often the gateway syncs by itself, in minutes; off: only when asked
+  magpie s3 follow on|off                 on: this computer takes the server's setup on every sync and sends
+                                          none of its own; a change made here is replaced, a copy kept in the
+                                          sync folder. off: both ways, as before
   magpie s3 restore                       make this computer's setup the server's; what is here is kept first
   magpie s3 undo                          put back what the last restore replaced
   magpie s3 upload                        put this computer's setup over a bucket file that isn't a backup
@@ -115,6 +121,7 @@ const githubUsage = `usage:
   magpie github set k=v…                  change it: address, branch, keys, agents, library, usage, sign-ins (yes|no)
   magpie github now                       sync now
   magpie github auto off|3|15|30|60       how often the gateway syncs by itself, in minutes
+  magpie github follow on|off             on: this computer takes the repository's setup and sends none of its own
   magpie github restore                   make this computer's setup the repository's; what is here is kept first
   magpie github undo                       put back what the last restore replaced
   magpie github upload                     put this computer's setup over a repository file that isn't a backup; the old file is kept first
@@ -183,6 +190,17 @@ func syncCmd(k syncKind, args []string) error {
 			}
 		}
 		if err := davsync.SetAuto(m); err != nil {
+			return err
+		}
+		return syncShow(k)
+	case "follow":
+		if len(args) != 2 || args[1] != "on" && args[1] != "off" {
+			return fmt.Errorf("magpie %s follow on|off", k.cmd)
+		}
+		if err := davsync.SetFollowServer(args[1] == "on"); err != nil {
+			if errors.Is(err, davsync.ErrOff) {
+				return fmt.Errorf("%s sync is off: %s", k.name, k.turnOn())
+			}
 			return err
 		}
 		return syncShow(k)
@@ -533,7 +551,9 @@ func syncShow(k syncKind) error {
 		fmt.Println("  Restored from the server:", partNames(n.Here))
 		fmt.Println(muted.Render("  This computer's setup from before is kept in " + tilde(n.Saved) + " (magpie " + cmd + " undo puts it back; magpie " + cmd + " dismiss clears this)"))
 	} else if n != nil {
-		if len(n.Here) > 0 {
+		if len(n.Here) > 0 && n.Followed {
+			fmt.Println("  This computer follows the server, so what was changed here is replaced by the server's:", partNames(n.Here))
+		} else if len(n.Here) > 0 {
 			fmt.Println("  Replaced here by newer ones from another computer:", partNames(n.Here))
 		}
 		if len(n.There) > 0 {
@@ -544,6 +564,9 @@ func syncShow(k syncKind) error {
 			dir = filepath.Join(settings.Dir(), "sync")
 		}
 		fmt.Println(muted.Render("  The copies replaced are kept in " + tilde(dir) + " (magpie restore opens one; magpie " + cmd + " dismiss clears this)"))
+	}
+	if v.FollowServer {
+		fmt.Println("  follows the server: takes its setup, sends none of its own (magpie " + cmd + " follow off syncs both ways)")
 	}
 	switch {
 	case v.Auto == 0:

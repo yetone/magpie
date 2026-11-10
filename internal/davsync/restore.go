@@ -18,6 +18,30 @@ import (
 // ErrOff is a Restore, Undo or SetAuto asked for with sync off.
 var ErrOff = errors.New("sync is off")
 
+// errNothingToFollow is a sync of a computer following the server when
+// the server has no setup yet: nothing goes up from one that follows.
+var errNothingToFollow = errors.New("there is no setup on the server to follow yet: sync the computer the others follow first")
+
+// SetFollowServer sets whether this computer follows the setup on the
+// server (Config.FollowServer) or syncs both ways.
+func SetFollowServer(on bool) error {
+	return locked(func() error {
+		c, ok := Load()
+		if !ok {
+			return ErrOff
+		}
+		c.FollowServer = on
+		b, err := json.MarshalIndent(c, "", "  ")
+		if err != nil {
+			return err
+		}
+		if err := edit.WriteAtomic(path("sync.json"), b); err != nil {
+			return err
+		}
+		return os.Chmod(path("sync.json"), 0o600)
+	})
+}
+
 // SetAuto sets how many minutes apart the gateway's magpie syncs by
 // itself, one of AutoChoices; Manual: never, only when asked (#847).
 func SetAuto(minutes int) error {
