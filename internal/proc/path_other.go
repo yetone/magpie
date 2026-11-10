@@ -5,7 +5,6 @@ package proc
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -315,7 +314,7 @@ func FindShell(name string) string {
 			}
 		}
 	}
-	p, _ := exec.LookPath(name)
+	p, _ := Look(name)
 	return p
 }
 

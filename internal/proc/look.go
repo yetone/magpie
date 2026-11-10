@@ -148,12 +148,18 @@ func lookStamp() (string, bool) {
 	b.WriteString(os.Getenv("PATHEXT"))
 	dirs := filepath.SplitList(os.Getenv("PATH"))
 	dirs = append(dirs, findDirs()...)
+	hung := hungDirs(dirs)
 	for _, d := range dirs {
 		if d == "" {
 			continue
 		}
 		b.WriteByte(0)
 		b.WriteString(d)
+		if hung[d] {
+			// not asked (reach.go); the stamp changes once it answers
+			b.WriteString("!")
+			continue
+		}
 		if st, err := os.Stat(d); err == nil {
 			b.WriteByte('@')
 			b.WriteString(strconv.FormatInt(st.ModTime().UnixNano(), 36))

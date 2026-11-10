@@ -13,7 +13,6 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -239,7 +238,7 @@ func findMise(named string) string {
 		}
 	}
 	for _, n := range []string{filepath.Base(named), "mise"} {
-		if p, err := exec.LookPath(n); err == nil {
+		if p, err := Look(n); err == nil {
 			return p
 		}
 		if p := toolIn(n, runtime.GOOS, UserBinDirs()); p != "" {

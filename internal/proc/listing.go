@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -155,9 +156,19 @@ func pathDirs() []string {
 
 // lookPath is exec.LookPath, with a command no folder of PATH has a name
 // for answered as not found without looking.
+// A folder of PATH that doesn't answer (reach.go) is left out: the
+// command is looked for in the others, each as a path.
 func lookPath(name string) (string, error) {
-	if !mayBeIn(name, pathDirs()) {
+	dirs := pathDirs()
+	hung := hungDirs(dirs)
+	if hung != nil {
+		dirs = slices.DeleteFunc(slices.Clone(dirs), func(d string) bool { return hung[d] })
+	}
+	if !mayBeIn(name, dirs) {
 		return "", &exec.Error{Name: name, Err: exec.ErrNotFound}
+	}
+	if hung != nil && !strings.ContainsAny(name, `/\`) {
+		return lookIn(name, dirs)
 	}
 	return execLookPath(name)
 }
