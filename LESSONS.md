@@ -880,6 +880,12 @@ each one.
     A guard test lives where the rule is kept, not where the change is.
     A new agent, route or package-level value runs `go test .
     ./internal/library ./internal/cli ./internal/gui` before the push.
+  - And in the evening: e8fbee60e's /api/gateway/pause made the route
+    guard red a fourth time (db9f0652a), and 07af9f86a's "billing  pay
+    as you go" row turned TestProvidersShowVertexCredentials red, whose
+    lineWith(out, " as ") found the billing row before the "as" row
+    (ea310a8c9). A test that finds a row by a word in it breaks when
+    another row says the word; find a labelled row by its label.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
