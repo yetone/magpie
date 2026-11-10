@@ -3,10 +3,10 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
-	"regexp"
 	"strconv"
 
 	"github.com/tidwall/gjson"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -27,7 +27,7 @@ const passthroughKey = "internal_chat_message_metadata_passthrough"
 // passthroughRefusal is OpenAI's refusal of one member of the passthrough,
 // or of the passthrough itself, as its path in the request: the member's
 // name, empty for the whole passthrough.
-var passthroughRefusal = regexp.MustCompile(`input\[\d+\]\.` + passthroughKey + `(?:\.([A-Za-z0-9_]+))?\]?\s*\[unknown_parameter\]|(?i:unknown parameter):?\s*'input\[\d+\]\.` + passthroughKey + `(?:\.([A-Za-z0-9_]+))?'`)
+var passthroughRefusal = lazyre.New(`input\[\d+\]\.` + passthroughKey + `(?:\.([A-Za-z0-9_]+))?\]?\s*\[unknown_parameter\]|(?i:unknown parameter):?\s*'input\[\d+\]\.` + passthroughKey + `(?:\.([A-Za-z0-9_]+))?'`)
 
 // refusedPassthrough is the member msg says the upstream doesn't know,
 // "" for the passthrough as a whole.

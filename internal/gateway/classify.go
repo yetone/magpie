@@ -19,13 +19,13 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -395,7 +395,7 @@ func writePrior(b *strings.Builder, prev before) {
 	}
 }
 
-var firstNumber = regexp.MustCompile(`\d+`)
+var firstNumber = lazyre.New(`\d+`)
 
 // readIntent is the intent a classifier's answer names: its first number,
 // 0 for none. The number is given back as it was said (said), so the

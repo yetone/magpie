@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"regexp"
 	"strings"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 	"golang.org/x/image/webp"
 )
@@ -32,7 +32,7 @@ const webpRefused = "image/webp"
 // took for a file and found none of its file fields in, and the pair of
 // codes in the double brackets it puts before them. Read of the words
 // wordsOf gives, as a relay may pass them on \u-escaped (#1669).
-var zhipuImageRefusal = regexp.MustCompile(`必须传入file_id、file_url、file_data至少之一|图片输入格式|\[(?:1210|1214)\]\[`)
+var zhipuImageRefusal = lazyre.New(`必须传入file_id、file_url、file_data至少之一|图片输入格式|\[(?:1210|1214)\]\[`)
 
 // mayHoldWebP is whether the body may hold a webp: an image/webp type, or
 // the base64 of a RIFF file's head, wherever its base64 starts (a webp

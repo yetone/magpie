@@ -2,7 +2,8 @@ package gateway
 
 import (
 	"encoding/json"
-	"regexp"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // A model that won't go on from a conversation ending with the
@@ -33,7 +34,7 @@ import (
 
 // prefillRefusal is an upstream's refusal of a conversation ending with
 // the assistant's message.
-var prefillRefusal = regexp.MustCompile(`(?i)does not support (?:assistant message )?prefill|requests ending with a model turn are not supported`)
+var prefillRefusal = lazyre.New(`(?i)does not support (?:assistant message )?prefill|requests ending with a model turn are not supported`)
 
 // prefillRefused is how unfit remembers a provider's model refusing a
 // conversation ending with the assistant's message.

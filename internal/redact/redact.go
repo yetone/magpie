@@ -33,6 +33,8 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/net/publicsuffix"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // Options says what to mask.
@@ -120,7 +122,7 @@ func (o Options) covers(cat string) bool {
 // either side (a key inside a longer word is no key); ok checks it further.
 type rule struct {
 	kind    string
-	re      *regexp.Regexp
+	re      *lazyre.RE
 	markers []string // one of these is in any text it can match
 	// fold are markers too, looked for in the text in lower case, for a
 	// pattern that matches its words in any case (Passport, PASSPORT)
@@ -162,26 +164,26 @@ const (
 )
 
 var rules = append([]rule{
-	{kind: "PRIVATE_KEY", re: regexp.MustCompile(`-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----[\s\S]+?-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----`), markers: []string{"PRIVATE KEY"}},
-	{kind: "API_KEY", re: regexp.MustCompile(`sk-(?:ant-|proj-|or-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}`), markers: []string{"sk-"}, bound: tokenCh, ok: notASlug},
+	{kind: "PRIVATE_KEY", re: lazyre.New(`-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----[\s\S]+?-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----`), markers: []string{"PRIVATE KEY"}},
+	{kind: "API_KEY", re: lazyre.New(`sk-(?:ant-|proj-|or-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}`), markers: []string{"sk-"}, bound: tokenCh, ok: notASlug},
 	// a gateway's or a relay's own: oc_sk_…, or_sk_… (#195)
-	{kind: "API_KEY", re: regexp.MustCompile(`[a-z]{2,4}_sk_[A-Za-z0-9_-]{20,}`), markers: []string{"_sk_"}, bound: tokenCh, ok: secretValue},
+	{kind: "API_KEY", re: lazyre.New(`[a-z]{2,4}_sk_[A-Za-z0-9_-]{20,}`), markers: []string{"_sk_"}, bound: tokenCh, ok: secretValue},
 	// Volcano Ark and the relays in front of it issue keys with an ark-
 	// prefix (#2946)
-	{kind: "API_KEY", re: regexp.MustCompile(`ark-[A-Za-z0-9][A-Za-z0-9_-]{15,}`), markers: []string{"ark-"}, bound: tokenCh, ok: secretValue},
-	{kind: "API_KEY", re: regexp.MustCompile(`(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|glpat-[A-Za-z0-9_-]{20,})`), markers: []string{"gh", "github_pat_", "glpat-"}, bound: tokenCh},
-	{kind: "API_KEY", re: regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`), markers: []string{"AIza"}, bound: tokenCh},
-	{kind: "API_KEY", re: regexp.MustCompile(`xox[abposr]-[0-9A-Za-z-]{10,}`), markers: []string{"xox"}, bound: tokenCh},
-	{kind: "API_KEY", re: regexp.MustCompile(`(?:sk|rk)_live_[0-9A-Za-z]{20,}`), markers: []string{"_live_"}, bound: tokenCh},
-	{kind: "API_KEY", re: regexp.MustCompile(`(?:AKIA|ASIA)[0-9A-Z]{16}`), markers: []string{"AKIA", "ASIA"}, bound: alnum},
-	{kind: "API_KEY", re: regexp.MustCompile(`(?:hf_[A-Za-z0-9]{30,}|gsk_[A-Za-z0-9]{40,}|xai-[A-Za-z0-9]{40,}|npm_[A-Za-z0-9]{36}|pypi-[A-Za-z0-9_-]{50,}|dop_v1_[a-f0-9]{64}|SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43})`),
+	{kind: "API_KEY", re: lazyre.New(`ark-[A-Za-z0-9][A-Za-z0-9_-]{15,}`), markers: []string{"ark-"}, bound: tokenCh, ok: secretValue},
+	{kind: "API_KEY", re: lazyre.New(`(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|glpat-[A-Za-z0-9_-]{20,})`), markers: []string{"gh", "github_pat_", "glpat-"}, bound: tokenCh},
+	{kind: "API_KEY", re: lazyre.New(`AIza[0-9A-Za-z_-]{35}`), markers: []string{"AIza"}, bound: tokenCh},
+	{kind: "API_KEY", re: lazyre.New(`xox[abposr]-[0-9A-Za-z-]{10,}`), markers: []string{"xox"}, bound: tokenCh},
+	{kind: "API_KEY", re: lazyre.New(`(?:sk|rk)_live_[0-9A-Za-z]{20,}`), markers: []string{"_live_"}, bound: tokenCh},
+	{kind: "API_KEY", re: lazyre.New(`(?:AKIA|ASIA)[0-9A-Z]{16}`), markers: []string{"AKIA", "ASIA"}, bound: alnum},
+	{kind: "API_KEY", re: lazyre.New(`(?:hf_[A-Za-z0-9]{30,}|gsk_[A-Za-z0-9]{40,}|xai-[A-Za-z0-9]{40,}|npm_[A-Za-z0-9]{36}|pypi-[A-Za-z0-9_-]{50,}|dop_v1_[a-f0-9]{64}|SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43})`),
 		markers: []string{"hf_", "gsk_", "xai-", "npm_", "pypi-", "dop_v1_", "SG."}, bound: tokenCh},
-	{kind: "TOKEN", re: regexp.MustCompile(`eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`), markers: []string{"eyJ"}, bound: tokenCh},
+	{kind: "TOKEN", re: lazyre.New(`eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`), markers: []string{"eyJ"}, bound: tokenCh},
 	// the password of user:password@host, or of :password@host as a Redis
 	// URL has it with no user
-	{kind: "PASSWORD", re: regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s:@/?#"'<>]*:([^\s@/?#"'<>]{3,})@`), markers: []string{"://"}, ok: notAVariable, at: hiddenInURL},
+	{kind: "PASSWORD", re: lazyre.New(`[A-Za-z][A-Za-z0-9+.-]*://[^\s:@/?#"'<>]*:([^\s@/?#"'<>]{3,})@`), markers: []string{"://"}, ok: notAVariable, at: hiddenInURL},
 	// password = …, API_KEY: "…", as .env files and configs have them
-	{kind: "SECRET", re: regexp.MustCompile(`(?i)[A-Za-z0-9_.-]*(?:` + secretNames.pattern() + `)[A-Za-z0-9_.-]*` + quote + `[ \t]*[:=][ \t]*` + quote + `(` + secretCh + `{8,})`),
+	{kind: "SECRET", re: lazyre.New(`(?i)[A-Za-z0-9_.-]*(?:` + secretNames.pattern() + `)[A-Za-z0-9_.-]*` + quote + `[ \t]*[:=][ \t]*` + quote + `(` + secretCh + `{8,})`),
 		markers: secretNames.markers(), ok: secretValue, at: fieldAt, field: true},
 	// an env var's name says what it holds in the upper case: a
 	// SERVICE_X_KEY, a DB_PASS (#2946). The names above have a word for the
@@ -189,16 +191,16 @@ var rules = append([]rule{
 	// that a secret's name — in the lower case a name that ends in key is
 	// code's: a sort key, a cache key, a public key (notAPlainKey turns the
 	// upper-case ones of those away too).
-	{kind: "SECRET", re: regexp.MustCompile(`(?:^|[^A-Za-z0-9_.-])[A-Za-z0-9_.-]*_(?:KEY|PASS)` + quote + `[ \t]*[:=][ \t]*` + quote + `(` + secretCh + `{8,})`),
+	{kind: "SECRET", re: lazyre.New(`(?:^|[^A-Za-z0-9_.-])[A-Za-z0-9_.-]*_(?:KEY|PASS)` + quote + `[ \t]*[:=][ \t]*` + quote + `(` + secretCh + `{8,})`),
 		markers: fieldNames{{"key", "key"}, {"pass", "pass"}}.markers(), ok: secretValue, at: namedSecretAt, field: true},
 	// an Authorization or Cookie header's value is a secret whatever it
 	// looks like: an opaque bearer token, a session value (#2946)
-	{kind: "SECRET", re: regexp.MustCompile(`(?im)^[ \t]*(?:authorization|cookie)[ \t]*:[ \t]*(\S[^\r\n]{7,})`),
+	{kind: "SECRET", re: lazyre.New(`(?im)^[ \t]*(?:authorization|cookie)[ \t]*:[ \t]*(\S[^\r\n]{7,})`),
 		markers: fieldNames{{"authorization", "authorization"}, {"cookie", "cookie"}}.markers(), ok: headerValue},
 	// a field called key and nothing more, as providers.json has one: "key":
 	// "oc_sk_…" (#195). Only a long value of letters and digits both, since
 	// code calls anything a key: a map's "key": "value", sort_key, keyboard.
-	{kind: "SECRET", re: regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9_.-])` + quote + `key` + quote + `[ \t]*[:=][ \t]*` + quote + `(` + secretCh + `{16,})`),
+	{kind: "SECRET", re: lazyre.New(`(?i)(?:^|[^A-Za-z0-9_.-])` + quote + `key` + quote + `[ \t]*[:=][ \t]*` + quote + `(` + secretCh + `{16,})`),
 		markers: fieldNames{{"key", "key"}}.markers(), ok: secretValue, at: fieldAt, field: true},
 	// a password after its name in Chinese, Japanese or Korean, as people
 	// write one into a message: 密码：786kih, 密碼是 hunter2, パスワード: … .
@@ -214,14 +216,14 @@ var rules = append([]rule{
 	// an English name for one before 为, 為, 是 or ：, as a Chinese message
 	// has it: apikey 为 …, token 是 …, API Key：… (CyberCaius on Discord).
 	// password = … and API_KEY: … in a config are the SECRET rule's above.
-	{kind: "SECRET", re: regexp.MustCompile(`(?i)(?:` + secretNames.pattern() + `|pwd|api[ ]key|access[ ]key|secret[ ]key|key|\bpin(?:[ ]?code)?)` + quote +
+	{kind: "SECRET", re: lazyre.New(`(?i)(?:` + secretNames.pattern() + `|pwd|api[ ]key|access[ ]key|secret[ ]key|key|\bpin(?:[ ]?code)?)` + quote +
 		`[ \t]*(?:[为為是][ \t]*[:：]?|：)[ \t]*(?:\\?["'“「])?(` + secretCh + `{3,}[A-Za-z0-9_\-/+=~!@#%^&*])`),
 		fold: cjkCopulas, back: 24, ahead: 260, at: keyAt, field: true},
 
-	{kind: "EMAIL", re: regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`), markers: []string{"@"}, bound: alnum + "_%+-", ok: realEmail, at: emailAt, cat: catPersonal},
-	{kind: "ID_CARD", re: regexp.MustCompile(`[1-9]\d{5}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]`), bound: alnum, ok: chineseID, cat: catPersonal},
-	{kind: "PHONE", re: regexp.MustCompile(`(?:\+?86[- ]?)?1[3-9]\d{9}`), bound: alnum, at: phoneAt, cat: catPersonal},
-	{kind: "BANK_CARD", re: regexp.MustCompile(`[3-6]\d{3}(?:[ -]?\d{4}){2,3}(?:[ -]?\d{1,3})?`), bound: alnum, ok: luhn, cat: catPersonal},
+	{kind: "EMAIL", re: lazyre.New(`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`), markers: []string{"@"}, bound: alnum + "_%+-", ok: realEmail, at: emailAt, cat: catPersonal},
+	{kind: "ID_CARD", re: lazyre.New(`[1-9]\d{5}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]`), bound: alnum, ok: chineseID, cat: catPersonal},
+	{kind: "PHONE", re: lazyre.New(`(?:\+?86[- ]?)?1[3-9]\d{9}`), bound: alnum, at: phoneAt, cat: catPersonal},
+	{kind: "BANK_CARD", re: lazyre.New(`[3-6]\d{3}(?:[ -]?\d{4}){2,3}(?:[ -]?\d{1,3})?`), bound: alnum, ok: luhn, cat: catPersonal},
 }, moreRules...)
 
 // cjkPasswordNames are what a password is called in Chinese, Japanese and
@@ -251,8 +253,8 @@ func lowerAll(names []string) []string {
 
 // cjkNamed is a value after one of names: after ：, :, =, 为, 為, 是, は
 // or 는, quoted or not, or after nothing but a space.
-func cjkNamed(names []string) *regexp.Regexp {
-	return regexp.MustCompile(`(?i)(?:` + strings.Join(names, "|") + `)[ \t]*(?:[:：=][ \t]*|[为為是][ \t]*[:：]?[ \t]*|は[ \t]*|는[ \t]*)?(?:\\?["'“「])?(` + secretCh + `{3,63}[A-Za-z0-9_\-/+=~!@#%^&*])`)
+func cjkNamed(names []string) *lazyre.RE {
+	return lazyre.New(`(?i)(?:` + strings.Join(names, "|") + `)[ \t]*(?:[:：=][ \t]*|[为為是][ \t]*[:：]?[ \t]*|は[ \t]*|는[ \t]*)?(?:\\?["'“「])?(` + secretCh + `{3,63}[A-Za-z0-9_\-/+=~!@#%^&*])`)
 }
 
 // fieldNames are what a field that holds a secret is called: a pattern for
@@ -301,7 +303,7 @@ const (
 )
 
 // placeholderRe is a placeholder as Mask writes it.
-var placeholderRe = regexp.MustCompile(`\{\{[A-Z][A-Z0-9_]*_[a-z2-7]{8}\}\}`)
+var placeholderRe = lazyre.New(`\{\{[A-Z][A-Z0-9_]*_[a-z2-7]{8}\}\}`)
 
 // HasPlaceholder says whether s holds text written as Mask writes a
 // placeholder, in JSON or not.
@@ -371,7 +373,7 @@ func secretValue(v string) bool {
 
 // identPath is a name in code, or a field read through one: Uint8Array,
 // details.2, opts.token2.
-var identPath = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*$`)
+var identPath = lazyre.New(`^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*$`)
 
 // notCode turns away a value at s[a:b] that is code naming a secret, not
 // the secret: a call (privateKey: toBase64Url(…), secretKey =
@@ -677,7 +679,7 @@ var fileExt = map[string]bool{
 // address.
 var scaleExt = map[string]bool{"zip": true, "mov": true, "md": true, "map": true}
 
-var scaleRe = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+)?x$`)
+var scaleRe = lazyre.New(`^[0-9]+(?:\.[0-9]+)?x$`)
 
 // fileHost says host, what follows the @ of what looks like an address,
 // is the end of a file's name: an extension no domain has (fileExt), or a
@@ -1534,7 +1536,7 @@ func (r rule) matches(s, lower string) [][]int {
 // field (fieldMatches).
 func (r rule) findAll(s string) [][]int {
 	if r.field {
-		return fieldMatches(r.re, s)
+		return fieldMatches(r.re.Regexp(), s)
 	}
 	return r.re.FindAllStringSubmatchIndex(s, -1)
 }
@@ -1673,7 +1675,7 @@ func containsAny(s string, subs []string) bool {
 
 // placeholderBody is a placeholder without its braces, as a model may write
 // one back: API_KEY_k3v9x2mq, phone_b5puzbfv, PHONE_B5PUZBFV.
-var placeholderBody = regexp.MustCompile(`[A-Za-z][A-Za-z0-9_]*_[A-Za-z2-7]{8}`)
+var placeholderBody = lazyre.New(`[A-Za-z][A-Za-z0-9_]*_[A-Za-z2-7]{8}`)
 
 // Restore puts the values back in s. escaped is for text that is itself
 // JSON (a tool call's arguments), where a value goes in escaped.

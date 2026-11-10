@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -28,6 +27,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/routes"
 	"github.com/yetone/magpie/internal/settings"
@@ -139,7 +139,7 @@ func plainUnavailable(c candidate, status int, body []byte) bool {
 
 // idRun is a run in an error's words that differs from one try to the
 // next: a request or trace id, a timestamp.
-var idRun = regexp.MustCompile(`[0-9a-fA-F][0-9a-fA-F-]{11,}|\d{6,}`)
+var idRun = lazyre.New(`[0-9a-fA-F][0-9a-fA-F-]{11,}|\d{6,}`)
 
 // refusalWords is a 5xx's status and the words it said, ids left out
 // (idRun), for two tries' to be compared; "" when it said nothing, as a
@@ -302,7 +302,7 @@ var creditLadder = []time.Duration{creditRest, 2 * time.Hour, 8 * time.Hour, 24 
 // max_tokens … can only afford N" (the request's size, not the balance
 // spent), and a vendor's "try again in 30 seconds" or "1 分钟后重试".
 // These rest creditRest, as before; they don't climb creditLadder.
-var creditSoon = regexp.MustCompile(`(?i)openrouter_in_flight_budget|can only afford|fewer max_tokens|(?:try again|retry)(?: after| in)?\s*\d|\d+\s*(?:秒|分钟|小时)[后後]`)
+var creditSoon = lazyre.New(`(?i)openrouter_in_flight_budget|can only afford|fewer max_tokens|(?:try again|retry)(?: after| in)?\s*\d|\d+\s*(?:秒|分钟|小时)[后後]`)
 
 // creditBackoff is the rest of a key (c, no subscription account) out of
 // credit, rested by id: the vendor's own time when it names one (a
@@ -336,7 +336,7 @@ func creditBackoff(id string, header http.Header, body []byte, now time.Time) (d
 
 var (
 	// creditWords: the account or key has no money left.
-	creditWords = regexp.MustCompile(`(?i)insufficient.?(balance|credit|fund)|balance|credit|billing|payment|arrear|overdue|suspended|余额|欠费|充值|账户.*(不足|停)`)
+	creditWords = lazyre.New(`(?i)insufficient.?(balance|credit|fund)|balance|credit|billing|payment|arrear|overdue|suspended|余额|欠费|充值|账户.*(不足|停)`)
 	// brokeWords: a 429 that says the balance itself is spent, as Zhipu
 	// answers a GLM Coding Plan's key at the pay-as-you-go endpoint (1113
 	// "余额不足或无可用资源包，请充值") — out of credit, not a rate limit;
@@ -346,26 +346,26 @@ var (
 	// prepaid API credits are spent: its underscores kept "credits
 	// exhausted" from matching, so it read as a rate limit and the same
 	// key was asked again rather than the next account
-	brokeWords = regexp.MustCompile(`(?i)insufficient.?(balance|credit|fund)|\bcredits? (are )?exhausted\b|credit.?balance.?exhausted|余额不足|欠费|请充值`)
+	brokeWords = lazyre.New(`(?i)insufficient.?(balance|credit|fund)|\bcredits? (are )?exhausted\b|credit.?balance.?exhausted|余额不足|欠费|请充值`)
 	// quotaWords: it has used up what its plan allows for now. The budget's
 	// words needn't sit beside each other: LiteLLM's spent key answers 429
 	// "Budget has been exceeded! Key=… (sk-…), Current cost: …, Max budget:
 	// …" (#5111, wuxiaoqiang12) — its "has been" broke the pair, and read
 	// as a plain rate limit the key was asked again every half an hour, the
 	// user's quota-rest never read
-	usedUpWords = regexp.MustCompile(`(?i)quota|usage.?limit|out of budget|budget.{0,32}(exceeded|exhausted)|limit.?reached|hit your .*limit|limit.{0,24}resets|exceeded.*(plan|limit)|额度|用量|套餐|上限`)
+	usedUpWords = lazyre.New(`(?i)quota|usage.?limit|out of budget|budget.{0,32}(exceeded|exhausted)|limit.?reached|hit your .*limit|limit.{0,24}resets|exceeded.*(plan|limit)|额度|用量|套餐|上限`)
 	// rateWords: a 429 that is a short rate limit — requests or tokens per
 	// minute — which usedUpWords took for a used-up plan ("Rate limit
 	// exceeded", "reached"): as magpie words an upstream error, with
 	// "rate_limit_error" for its type, every such 429 was, and rested a
 	// quarter of an hour rather than a minute (#153).
 	// "Frequency limit" is the English of 频率 (zoecats on Discord).
-	rateWords = regexp.MustCompile(`(?i)rate.?limit|frequency.?limit|too many requests|per.?(second|sec|minute|min)\b|\b[rt]pm\b|频率|太频繁|过于频繁|速率`)
+	rateWords = lazyre.New(`(?i)rate.?limit|frequency.?limit|too many requests|per.?(second|sec|minute|min)\b|\b[rt]pm\b|频率|太频繁|过于频繁|速率`)
 	// plannedWords: a 429 that says the plan's own allowance is used, rate
 	// words or not — a day's free requests, say, or a sub2api key's own
 	// 5-hour, day or 7-day limit ("api key 7天限额已用完", sent as
 	// rate_limit_exceeded).
-	plannedWords = regexp.MustCompile(`(?i)quota|usage.?limit|hit your .*limit|limit.{0,24}resets|per.?(day|week|month)|daily|weekly|monthly|额度|用量|套餐|限额已用完`)
+	plannedWords = lazyre.New(`(?i)quota|usage.?limit|hit your .*limit|limit.{0,24}resets|per.?(day|week|month)|daily|weekly|monthly|额度|用量|套餐|限额已用完`)
 	// minuteWords: a 429 that names a window of a minute or less, or the
 	// rate itself — tokens or requests per minute, TPM, RPM — which some
 	// vendors call a quota all the same: Gemini's "You exceeded your
@@ -376,15 +376,15 @@ var (
 	// of a quota that says nothing of when, with balance left
 	// (monater.114514 on Discord). A longer window named beside it
 	// (longWords) is still the plan's.
-	minuteWords = regexp.MustCompile(`(?i)per.?(second|minute)|per.?(sec|min)\b|\b[rt]p[ms]\b|(token|call|request) rate limit|每分钟|每秒`)
+	minuteWords = lazyre.New(`(?i)per.?(second|minute)|per.?(sec|min)\b|\b[rt]p[ms]\b|(token|call|request) rate limit|每分钟|每秒`)
 	// longWords: a window longer than a minute, or a plan's own limit,
 	// named in a 429 — what minuteWords' rate limit is not.
-	longWords = regexp.MustCompile(`(?i)usage.?limit|hit your .*limit|limit.{0,24}resets|per.?(hour|day|week|month)|\bhours?\b|hourly|daily|weekly|monthly|\b[rt]p[dh]\b|额度已用|用量|套餐|限额已用完|小时|每天|每日|每周|每月`)
+	longWords = lazyre.New(`(?i)usage.?limit|hit your .*limit|limit.{0,24}resets|per.?(hour|day|week|month)|\bhours?\b|hourly|daily|weekly|monthly|\b[rt]p[dh]\b|额度已用|用量|套餐|限额已用完|小时|每天|每日|每周|每月`)
 	// urlWords: a link in an error, whose words are its path, not what the
 	// vendor said: Azure's rate limit points to aka.ms/oai/quotaincrease
-	urlWords = regexp.MustCompile(`https?://\S+`)
+	urlWords = lazyre.New(`https?://\S+`)
 	// resetsWords: Claude Code's "usage limit reached|<when it resets>".
-	resetsWords = regexp.MustCompile(`(?i)limit reached\|(\d{10})\b`)
+	resetsWords = lazyre.New(`(?i)limit reached\|(\d{10})\b`)
 	// resetsWhen: a 429 that says in words when the account is back, as
 	// WorkBuddy's do in both its builds (#1669): "将在 2026-10-11 20:16:02
 	// UTC+8重置", "your usage will reset at 2026-10-11 12:37:53 UTC+8, ...".
@@ -401,22 +401,22 @@ var (
 	// build writes it since November (taoxiaoxin on Discord: "将在
 	// 2026-11-06 17:13:04 (UTC+8) 重置"): unread, the refusal rested the
 	// whole account a quarter of an hour as out of quota.
-	resetsWhen = regexp.MustCompile(`(?i)(?:\bresets? at|将在|将于)\s*(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2}):(\d{2})\s*[(（]?\s*(?:(?:UTC|GMT)([+-])(\d{1,2})(?::?(\d{2}))?|([+-])(\d{2})(\d{2}) (?-i:[A-Z]{2,5}))\s*[)）]?(?:\s*(?:重置|[,.;，。；]))`)
+	resetsWhen = lazyre.New(`(?i)(?:\bresets? at|将在|将于)\s*(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2}):(\d{2})\s*[(（]?\s*(?:(?:UTC|GMT)([+-])(\d{1,2})(?::?(\d{2}))?|([+-])(\d{2})(\d{2}) (?-i:[A-Z]{2,5}))\s*[)）]?(?:\s*(?:重置|[,.;，。；]))`)
 	// monthlyWords: a refusal that says the allowance it used up is a
 	// month's, as Ark's does ("You have exceeded the monthly usage quota")
 	// and Zhipu's 1310 ("Weekly/Monthly Limit Exhausted"): the reset time
 	// it writes can honestly be weeks off (longestSaid).
-	monthlyWords = regexp.MustCompile(`(?i)\bmonthly\b|月度|每月|本月`)
+	monthlyWords = lazyre.New(`(?i)\bmonthly\b|月度|每月|本月`)
 	// otherModels: a refusal that says the account's other models still
 	// answer ("切换其他模型", "switch to the other models"): its limit is
 	// the model's, and the model alone rests
-	otherModels = regexp.MustCompile(`(?i)switch(?:ing)? to (?:the )?other models?|切换(?:到)?其他模型`)
+	otherModels = lazyre.New(`(?i)switch(?:ing)? to (?:the )?other models?|切换(?:到)?其他模型`)
 	// modelCooling is a relay that pools credentials per model saying
 	// those of the requested model cooled down: CLIProxyAPI's 429
 	// model_cooldown, "All credentials for model model-a are cooling down
 	// via provider upstream" (#3039, Welkon's relay), or OmniRoute's "All
 	// credentials for the requested model are cooling down"
-	modelCooling = regexp.MustCompile(`(?i)credentials for (?:the requested )?model .{0,200}?cooling down`)
+	modelCooling = lazyre.New(`(?i)credentials for (?:the requested )?model .{0,200}?cooling down`)
 	// clineFreeLimit: Cline's refusal of a free model whose day's allowance
 	// is used up, 429 "Daily free limit reached on model deepseek/deepseek-
 	// v4-flash. Try again in 23h 59m", as its own clients read it (cline/
@@ -424,16 +424,16 @@ var (
 	// isClineFreeModelLimitMessage, which tells the user to pick another
 	// model): the limit is that model's, and the model alone rests
 	// (#1398, wuasakura)
-	clineFreeLimit = regexp.MustCompile(`(?i)free limit reached on model`)
+	clineFreeLimit = lazyre.New(`(?i)free limit reached on model`)
 	// tryAgainIn: how long Cline's free-model refusal says until it is
 	// back ("Try again in 23h 59m"), in the units resetsInWords reads
-	tryAgainIn = regexp.MustCompile(`(?i)\btry again in (?:(\d+)\s*d(?:ays?)?\b\s*)?(?:(\d+)\s*h(?:ours?|rs?)?\b\s*)?(?:(\d+)\s*m(?:in(?:utes?|s)?)?\b)?`)
+	tryAgainIn = lazyre.New(`(?i)\btry again in (?:(\d+)\s*d(?:ays?)?\b\s*)?(?:(\d+)\s*h(?:ours?|rs?)?\b\s*)?(?:(\d+)\s*m(?:in(?:utes?|s)?)?\b)?`)
 	// quotaCodes: a vendor's own code for a used-up allowance, which alone
 	// makes a server error (5xx) one over the quota: Claude Code's resets
 	// line, the ChatGPT backend's usage_limit_reached, Google's
 	// RESOURCE_EXHAUSTED. A 5xx's words don't: a relay's 500 "当前模型 …
 	// 负载已经达到上限，请稍后重试" is its load's limit, not the plan's (#1418).
-	quotaCodes = regexp.MustCompile(`(?i)limit reached\|\d{10}\b|usage_limit_reached|RESOURCE_EXHAUSTED`)
+	quotaCodes = lazyre.New(`(?i)limit reached\|\d{10}\b|usage_limit_reached|RESOURCE_EXHAUSTED`)
 	// cutWords: a plugin's own error for the turn its upstream's stream
 	// died mid-call: the model wrote its tool call as text, the text
 	// stopped before the call was whole, and the plugin ends the turn as a
@@ -444,7 +444,7 @@ var (
 	// never named it, twice, before anything of the reply was given — the
 	// model's glitch, not the account's, and asked again it mostly answers
 	// (magpie-community/plugins#579)
-	cutWords = regexp.MustCompile(`(?i)tool call, written as text, was cut short|native tool call has no name; it is not sent on as a tool`)
+	cutWords = lazyre.New(`(?i)tool call, written as text, was cut short|native tool call has no name; it is not sent on as a tool`)
 )
 
 // Why a candidate failed, as rest tells it.
@@ -532,7 +532,7 @@ const reloopedError = "the model's reasoning was stuck in a loop before it said 
 
 // proxyDown is the error Go gives when the proxy itself can't be reached,
 // over HTTP (proxyconnect) or SOCKS (socks connect).
-var proxyDown = regexp.MustCompile(`proxyconnect |socks connect `)
+var proxyDown = lazyre.New(`proxyconnect |socks connect `)
 
 // wordsOf is catalog.Words: an error body as its words are matched, with
 // the strings of a JSON body that escapes what isn't ASCII decoded (#1669).
@@ -660,7 +660,7 @@ func minuteRate(body []byte) bool {
 // month ("hour allocated quota exceeded") and arrears (400 Arrearage) are
 // worded otherwise. OpenAI's own insufficient_quota is out of credit, so
 // this is DashScope's alone.
-var dashScopeTokenRate = regexp.MustCompile(`Allocated quota exceeded, please increase your quota limit|"(?:code|type)"\s*:\s*"insufficient_quota"`)
+var dashScopeTokenRate = lazyre.New(`Allocated quota exceeded, please increase your quota limit|"(?:code|type)"\s*:\s*"insufficient_quota"`)
 
 // dashScopeRate says p is DashScope and its 429 is a rate per minute or
 // second (dashScopeTokenRate), not its free allowance or a plan's window.
@@ -723,7 +723,7 @@ func restrictedRefused(p provider.Provider, status int, body []byte) bool {
 // suspended: "This service has been disabled in this account for violation
 // of Terms of Service. Please submit an appeal to continue using this
 // product." (bestony on Discord, an Antigravity account, 11-06).
-var googleToS = regexp.MustCompile(`(?i)disabled in this account for violation of Terms of Service`)
+var googleToS = lazyre.New(`(?i)disabled in this account for violation of Terms of Service`)
 
 // googleSuspended says Google suspended p, an account signed in to
 // Antigravity or Gemini CLI, for its terms (googleToS): the account, not
@@ -1128,7 +1128,7 @@ func resetsAt(body []byte, now time.Time) time.Duration {
 // time Z.ai named (Player on Discord: "reset at 2026-10-15 20:12", "not
 // asked again before 17:12"). Only these words, then a whole date and a
 // time to the minute at least, with no digit, colon or zone after it.
-var zhipuResets = regexp.MustCompile(`(?:\bYour limit will reset at|您的限额将在)\s*(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?(\s*\S{0,3})`)
+var zhipuResets = lazyre.New(`(?:\bYour limit will reset at|您的限额将在)\s*(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?(\s*\S{0,3})`)
 
 // heldClock is when a key or model held out of its allowance is asked
 // again, as an error put in words says it. The agent reading it, or a
@@ -1194,7 +1194,7 @@ func resetsZhipu(body []byte, now time.Time) time.Duration {
 // hours and minutes, as Factory's 402 does: "You've reached your weekly
 // standard usage limit (resets in 0h 19min)" (#1979). At least one of
 // them, each a number and its unit, and nothing else between.
-var resetsInWords = regexp.MustCompile(`(?i)\bresets? in (?:(\d+)\s*d(?:ays?)?\b\s*)?(?:(\d+)\s*h(?:ours?|rs?)?\b\s*)?(?:(\d+)\s*m(?:in(?:utes?|s)?)?\b)?`)
+var resetsInWords = lazyre.New(`(?i)\bresets? in (?:(\d+)\s*d(?:ays?)?\b\s*)?(?:(\d+)\s*h(?:ours?|rs?)?\b\s*)?(?:(\d+)\s*m(?:in(?:utes?|s)?)?\b)?`)
 
 // quotaResetAfter: Antigravity's (Google Code Assist's) 429 for a model's
 // allowance used up, which writes how long until it is back as Go prints
@@ -1203,7 +1203,7 @@ var resetsInWords = regexp.MustCompile(`(?i)\bresets? in (?:(\d+)\s*d(?:ays?)?\b
 // an hour of a quota that says nothing, and the account first in order
 // was asked again, and refused, every 15 minutes for the hours or days
 // its quota was out (Dani Ariyanto on Discord, 10-24).
-var quotaResetAfter = regexp.MustCompile(`(?i)\bquota will reset after ((?:\d+h)?(?:\d+m)?(?:\d+(?:\.\d+)?s)?)`)
+var quotaResetAfter = lazyre.New(`(?i)\bquota will reset after ((?:\d+h)?(?:\d+m)?(?:\d+(?:\.\d+)?s)?)`)
 
 // resetsAfter is how long the refusal says until it is back
 // (resetsInWords, quotaResetAfter, soonWords), held to longestWritten. Zero when it
@@ -1225,7 +1225,7 @@ func resetsAfter(body []byte) time.Duration {
 // long until it is back: "try again in 30 seconds", "retry after 20s",
 // "resets in 45 secs", "请 1 分钟后重试", "30秒后再试". The English minutes,
 // hours and days are resetsInWords' and tryAgainIn's.
-var soonWords = regexp.MustCompile(`(?i)\b(?:resets? (?:in|after)|try again in|retry (?:in|after))\s*(\d+(?:\.\d+)?)\s*(?:s|secs?|seconds?)\b|(\d+)\s*(秒|分钟)钟?\s*(?:之?后)`)
+var soonWords = lazyre.New(`(?i)\b(?:resets? (?:in|after)|try again in|retry (?:in|after))\s*(\d+(?:\.\d+)?)\s*(?:s|secs?|seconds?)\b|(\d+)\s*(秒|分钟)钟?\s*(?:之?后)`)
 
 // soonest is the longest a refusal may say it is back in for a 429 to be
 // a rate limit waited out, not a plan used up: as long as a provider's

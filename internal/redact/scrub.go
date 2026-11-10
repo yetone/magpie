@@ -2,10 +2,11 @@ package redact
 
 import (
 	"crypto/sha256"
-	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // Scrubbing is for what is kept rather than sent — the request archive: a
@@ -22,7 +23,7 @@ func scrubbed(kind, _ string) string { return "[REDACTED:" + kind + "]" }
 // secretName is a field's or header's name that says its value is a secret.
 // A name that ends in pass (a db_pass) is one too (#2946); a name that only
 // ends in key is not — a sort key, a cache key, a public key hold no secret.
-var secretName = regexp.MustCompile(`(?i)` + secretNames.pattern() + `|authori[sz]ation|cookie|^key$|^pass$|_pass$`)
+var secretName = lazyre.New(`(?i)` + secretNames.pattern() + `|authori[sz]ation|cookie|^key$|^pass$|_pass$`)
 
 // SecretName says a field or header called name holds a secret: a token,
 // key, password or cookie — not a count of tokens (max_tokens).

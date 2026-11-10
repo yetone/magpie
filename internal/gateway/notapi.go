@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -67,7 +67,7 @@ func eventsStart(head []byte) bool {
 }
 
 // htmlStart is how a web page begins.
-var htmlStart = regexp.MustCompile(`(?i)^<(!doctype\s+html|html[\s>]|head[\s>]|body[\s>])`)
+var htmlStart = lazyre.New(`(?i)^<(!doctype\s+html|html[\s>]|head[\s>]|body[\s>])`)
 
 // webPage says what a page served in place of a reply was, by its title,
 // and for a firewall's block page what to do about it.

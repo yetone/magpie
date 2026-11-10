@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"maps"
 	"net/http"
-	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/tidwall/gjson"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -143,16 +143,16 @@ func (s *Server) bodyBetas(p provider.Provider, body []byte) []byte {
 // unexpectedBetas is the error of a provider that turns away betas it
 // doesn't know: Unexpected value(s) `a`, `b` for the `anthropic-beta`
 // header (Bedrock's), and its word for the body's anthropic_beta.
-var unexpectedBetas = regexp.MustCompile("(?i)unexpected values?(?:\\(s\\))?\\s+((?:`[^`]+`[,\\s]*(?:and\\s+)?)+)for the\\s+`anthropic[-_]beta`")
+var unexpectedBetas = lazyre.New("(?i)unexpected values?(?:\\(s\\))?\\s+((?:`[^`]+`[,\\s]*(?:and\\s+)?)+)for the\\s+`anthropic[-_]beta`")
 
-var backquoted = regexp.MustCompile("`([^`]+)`")
+var backquoted = lazyre.New("`([^`]+)`")
 
 // unsupportedBetas is Copilot's word for the same: 400 "unsupported beta
 // header(s): tool-search-tool-2025-10-19", the name Claude Code asks tool
 // search by in Claude Desktop's Code tab once its toolSearchEnabled policy
 // is on. Copilot answers the same request without it, defer_loading tools
 // and all (and with advanced-tool-use-2025-11-20).
-var unsupportedBetas = regexp.MustCompile(`(?i)unsupported beta headers?(?:\(s\))?:\s*([a-z0-9][a-z0-9._-]*(?:\s*,\s*[a-z0-9][a-z0-9._-]*)*)`)
+var unsupportedBetas = lazyre.New(`(?i)unsupported beta headers?(?:\(s\))?:\s*([a-z0-9][a-z0-9._-]*(?:\s*,\s*[a-z0-9][a-z0-9._-]*)*)`)
 
 // refuseBetas reads the betas an error from p names as unknown, remembers
 // them so p isn't asked them again, and returns those it hadn't already.

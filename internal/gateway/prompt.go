@@ -18,12 +18,12 @@ package gateway
 import (
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -346,12 +346,12 @@ func (p *Prompt) calibrate(counted, window int) {
 
 var (
 	// Claude Code: "Contents of /path/CLAUDE.md (project instructions, …):"
-	contentsOf = regexp.MustCompile(`(?m)^Contents of (\S.*?) \(([^()\n]*(?:\([^()\n]*\)[^()\n]*)*)\):[ \t]*$`)
+	contentsOf = lazyre.New(`(?m)^Contents of (\S.*?) \(([^()\n]*(?:\([^()\n]*\)[^()\n]*)*)\):[ \t]*$`)
 	// OpenCode: "Instructions from: /path/AGENTS.md"
-	instructionsFrom = regexp.MustCompile(`(?m)^Instructions from: (\S.*?)[ \t]*$`)
+	instructionsFrom = lazyre.New(`(?m)^Instructions from: (\S.*?)[ \t]*$`)
 	// Codex: "# AGENTS.md instructions for /path"
-	agentsFor = regexp.MustCompile(`^# (\S+\.md) instructions for (\S.*?)[ \t]*\n`)
-	leadTag   = regexp.MustCompile(`^\s*<([a-zA-Z_][\w -]{0,40})>`)
+	agentsFor = lazyre.New(`^# (\S+\.md) instructions for (\S.*?)[ \t]*\n`)
+	leadTag   = lazyre.New(`^\s*<([a-zA-Z_][\w -]{0,40})>`)
 )
 
 // memoryTag says whose an instruction file is from how the agent
@@ -492,8 +492,8 @@ var (
 	readTools = map[string]bool{"Read": true, "read": true, "read_file": true, "ReadFile": true, "view": true,
 		"View": true, "NotebookRead": true, "readFile": true, "open_file": true, "cat": true}
 	pathKeys  = []string{"file_path", "path", "filePath", "target_file", "notebook_path", "file", "filename", "uri"}
-	cmdOfExec = regexp.MustCompile(`\bcmd\s*:\s*"((?:[^"\\]|\\.)*)"`)
-	toolOfJS  = regexp.MustCompile(`\btools\.(\w+)\s*\(`)
+	cmdOfExec = lazyre.New(`\bcmd\s*:\s*"((?:[^"\\]|\\.)*)"`)
+	toolOfJS  = lazyre.New(`\btools\.(\w+)\s*\(`)
 	readCmds  = map[string]bool{"cat": true, "head": true, "tail": true, "nl": true, "bat": true, "less": true, "more": true}
 )
 
@@ -714,10 +714,10 @@ func userSays(text string) bool { return userWords(text) != "" }
 var (
 	// reminders are what agents add to a user's message for the model
 	// alone: Claude Code's <system-reminder>, ZCode's with a source=.
-	reminders = regexp.MustCompile(`(?s)<system-reminder(?:\s[^>]*)?>.*?</system-reminder>`)
+	reminders = lazyre.New(`(?s)<system-reminder(?:\s[^>]*)?>.*?</system-reminder>`)
 	// myRequest heads what the user typed in the Codex app, after the
 	// context it puts first (# Context from my IDE setup:, <in-app-browser-context>…).
-	myRequest = regexp.MustCompile(`(?m)^## My request(?: for Codex)?:[ \t]*\n?`)
+	myRequest = lazyre.New(`(?m)^## My request(?: for Codex)?:[ \t]*\n?`)
 	// injected are how a text the agent put in as the user begins, beside
 	// agentsFor and the reminders: Codex's and the Codex app's context,
 	// Reasonix's snapshot of the workspace, Claude Code's and ZCode's

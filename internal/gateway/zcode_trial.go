@@ -2,9 +2,9 @@ package gateway
 
 import (
 	"net/http"
-	"regexp"
 	"strings"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -17,8 +17,8 @@ import (
 // unavailable" when its bucket is spent. The plugin's words, after any
 // "<provider>: " put in front of them.
 var (
-	zcodeEndedWords = regexp.MustCompile(`(?:^|: )ZCode has no active limited quota for (\S+)$`)
-	zcodeSpentWords = regexp.MustCompile(`(?:^|: )ZCode's limited quota for (\S+) is exhausted or temporarily unavailable$`)
+	zcodeEndedWords = lazyre.New(`(?:^|: )ZCode has no active limited quota for (\S+)$`)
+	zcodeSpentWords = lazyre.New(`(?:^|: )ZCode's limited quota for (\S+) is exhausted or temporarily unavailable$`)
 )
 
 // zcodeTrialRefused says c, a ZCode plugin account asked for one of its

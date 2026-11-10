@@ -3,9 +3,10 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
-	"regexp"
 	"strconv"
 	"unicode/utf8"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // Codex offers custom tools on Responses (exec in code mode, apply_patch):
@@ -23,7 +24,7 @@ import (
 // "Unsupported custom tool: 'exec'", or the type named unsupported — as
 // xAI names it, Rust's own wording, "unknown variant `custom`" (#3392). A
 // refusal of anything else about a tool doesn't match.
-var customToolRefusal = regexp.MustCompile(`(?i)unsupported custom tool|custom tools? (?:is |are )?not (?:supported|allowed)|(?:unsupported|unknown|invalid) tool type[^\n{}]{0,20}?['"\x60]custom['"\x60]|tool type ['"\x60]custom['"\x60] (?:is )?(?:not supported|unsupported)|unknown variant[^\n{}]{0,20}?['"\x60]custom['"\x60]`)
+var customToolRefusal = lazyre.New(`(?i)unsupported custom tool|custom tools? (?:is |are )?not (?:supported|allowed)|(?:unsupported|unknown|invalid) tool type[^\n{}]{0,20}?['"\x60]custom['"\x60]|tool type ['"\x60]custom['"\x60] (?:is )?(?:not supported|unsupported)|unknown variant[^\n{}]{0,20}?['"\x60]custom['"\x60]`)
 
 // customToolRefused is how unfit remembers model turning custom tools
 // away.

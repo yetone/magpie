@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"hash/fnv"
 	"net/http"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/tidwall/gjson"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -347,12 +347,12 @@ func resultSum(p Part) string {
 // id, and its shell's duration_seconds.
 var runNoise = []struct {
 	mark string // in a result the expression may change
-	re   *regexp.Regexp
+	re   *lazyre.RE
 	with string
 }{
-	{"Wall time", regexp.MustCompile(`(?m)^(Wall time:? )[0-9.]+( seconds?)`), "${1}#${2}"},
-	{"Chunk ID: ", regexp.MustCompile(`(?m)^(Chunk ID: )\S+`), "${1}#"},
-	{`"duration_seconds"`, regexp.MustCompile(`("duration_seconds"\s*:\s*)[0-9.eE+-]+`), "${1}#"},
+	{"Wall time", lazyre.New(`(?m)^(Wall time:? )[0-9.]+( seconds?)`), "${1}#${2}"},
+	{"Chunk ID: ", lazyre.New(`(?m)^(Chunk ID: )\S+`), "${1}#"},
+	{`"duration_seconds"`, lazyre.New(`("duration_seconds"\s*:\s*)[0-9.eE+-]+`), "${1}#"},
 }
 
 func steadyResult(s string) string {

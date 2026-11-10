@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // What follows a secret's name and a colon or = is not always the secret.
@@ -71,7 +73,7 @@ func fieldAt(s string, a, b int) bool {
 // .RELEASE, +build.5) or a number alone. One letter on its own is a
 // part only with a number after it (b1, M2), so 3.14159abc is no
 // version.
-var versionRangeRe = regexp.MustCompile(`^(?:[~^]|[<>=!~]=?|==)?[vV]?\d+(?:\.\d+)+` +
+var versionRangeRe = lazyre.New(`^(?:[~^]|[<>=!~]=?|==)?[vV]?\d+(?:\.\d+)+` +
 	`(?:[-+._]?(?:(?i:alpha|beta|rc|pre|preview|post|dev|canary|next|nightly|snapshot|release|final|ga|stable|build|incubating)\d*|[abcmABCM]\d+|\d+))*$`)
 
 // versionValue says v is a release's version, which no secret is: the
@@ -87,7 +89,7 @@ func versionValue(v string) bool { return versionRangeRe.MatchString(v) }
 // 2026-08-30T11 and the minutes went out as written (dchaofei, #5002). A
 // date alone has no letter in it and secretValue keeps it already; the T
 // and the hour are what read as a key's letters.
-var stampRe = regexp.MustCompile(`^\d{4}-\d{1,2}-\d{1,2}[Tt]\d{1,2}(?::\d{1,2}){0,2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:?\d{2})?$`)
+var stampRe = lazyre.New(`^\d{4}-\d{1,2}-\d{1,2}[Tt]\d{1,2}(?::\d{1,2}){0,2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:?\d{2})?$`)
 
 // timestampValue says v is a moment's writing, which no secret is: an
 // expiry, a renewal, an update (fieldAt, keyAt, namedSecret).
@@ -111,12 +113,12 @@ func skillName(s string, a, b int) bool {
 
 // skillSlugRe is words in lower case joined by hyphens: a plugin's, a skill's
 // or a command's name.
-var skillSlugRe = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)+$`)
+var skillSlugRe = lazyre.New(`^[a-z0-9]+(?:-[a-z0-9]+)+$`)
 
 // lineRefRe is a line or a range of lines, as an editor or a review names
 // them: L643, L643-669, L12-L40, 643-669, 643:12, with a sentence's
 // stop after it.
-var lineRefRe = regexp.MustCompile(`^L?\d+(?:[-–:]L?\d+)*[.,;:]?$`)
+var lineRefRe = lazyre.New(`^L?\d+(?:[-–:]L?\d+)*[.,;:]?$`)
 
 // lineRef says v is a line or a range of lines, never a secret.
 func lineRef(v string) bool { return lineRefRe.MatchString(v) }
@@ -208,7 +210,7 @@ var secretWords = map[string]bool{
 
 // identRe is a name in code, read through others or not: camelCase,
 // snake_case, SCREAMING_CASE, env.SECRET_V2.
-var identRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$`)
+var identRe = lazyre.New(`^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$`)
 
 // namesASecret says v is a name in code for a secret, not one: two words
 // or more, one of them token, secret, password or key, written as code
@@ -261,7 +263,7 @@ func identWords(v string) []string {
 // (UI_ADDR=), one in lower case (addr=, data-dir=), or a flag
 // (--listen=); then =, and something other than another =, so a base64
 // value's padding (dGVzdA==) is never taken for one.
-var nextFieldRe = regexp.MustCompile(`^(?:[A-Z_][A-Z0-9_]*|[a-z_][a-z0-9_-]*|--?[A-Za-z][A-Za-z0-9_-]*)=[^=]`)
+var nextFieldRe = lazyre.New(`^(?:[A-Z_][A-Z0-9_]*|[a-z_][a-z0-9_-]*|--?[A-Za-z][A-Za-z0-9_-]*)=[^=]`)
 
 // nextField says the value at s[a:b] is not the value of the field before
 // it but the next field: the name before it was set to nothing (UI_PASSWORD=

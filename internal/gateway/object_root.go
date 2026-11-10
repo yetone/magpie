@@ -3,8 +3,8 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
-	"regexp"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -29,7 +29,7 @@ import (
 
 // rootUnionRefusal is an upstream refusing a tool's parameters for a
 // union at their root.
-var rootUnionRefusal = regexp.MustCompile(`(?i)tool parameter root must be an object type|does not support oneOf, allOf, or anyOf at the top level|schema must have type .object. and not have .oneOf.|schema must be a JSON Schema of .type: \\?"object\\?".`)
+var rootUnionRefusal = lazyre.New(`(?i)tool parameter root must be an object type|does not support oneOf, allOf, or anyOf at the top level|schema must have type .object. and not have .oneOf.|schema must be a JSON Schema of .type: \\?"object\\?".`)
 
 // rootUnionRefused is how unfit remembers model refusing one.
 func rootUnionRefused(model string) string { return "root union\x00" + model }

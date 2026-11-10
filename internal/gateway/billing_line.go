@@ -3,9 +3,9 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
-	"regexp"
 
 	"github.com/tidwall/gjson"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -22,7 +22,7 @@ import (
 // and Code Assist is sent it as before (antigravityTurnsAway, #666).
 
 // billingLine is a system block that is the billing line and nothing else.
-var billingLine = regexp.MustCompile(`^x-anthropic-billing-header:(\s*[A-Za-z_]+=[^;\s]*;)*\s*$`)
+var billingLine = lazyre.New(`^x-anthropic-billing-header:(\s*[A-Za-z_]+=[^;\s]*;)*\s*$`)
 
 // keepsBillingLine says whether a request for model (wire, the vendor's name
 // for it) asked on to keeps Claude Code's billing line: a Claude model on

@@ -8,6 +8,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // A masked word that is a date matches that calendar date however it is
@@ -31,11 +33,11 @@ import (
 const dateSep = `(?:[ \t]*[-/.、／－][ \t]*|[ \t])`
 
 var (
-	dateYMD   = regexp.MustCompile(`^(\d{4})` + dateSep + `(\d{1,2})` + dateSep + `(\d{1,2})\.?$`)
-	dateCJK   = regexp.MustCompile(`^(\d{4})[ \t]*[年년][ \t]*(\d{1,2})[ \t]*[月월][ \t]*(\d{1,2})[ \t]*[日号號일]?$`)
-	dateDMY   = regexp.MustCompile(`^(\d{1,2})` + dateSep + `(\d{1,2})` + dateSep + `(\d{4})$`)
-	dateNameF = regexp.MustCompile(`^([A-Za-z]+)\.?[ \t]+(\d{1,2})(?:st|nd|rd|th)?,?[ \t]+(\d{4})$`)
-	dateNameB = regexp.MustCompile(`^(\d{1,2})(?:st|nd|rd|th)?(?:[ \t]+|-)([A-Za-z]+)\.?,?(?:[ \t]+|-)(\d{4})$`)
+	dateYMD   = lazyre.New(`^(\d{4})` + dateSep + `(\d{1,2})` + dateSep + `(\d{1,2})\.?$`)
+	dateCJK   = lazyre.New(`^(\d{4})[ \t]*[年년][ \t]*(\d{1,2})[ \t]*[月월][ \t]*(\d{1,2})[ \t]*[日号號일]?$`)
+	dateDMY   = lazyre.New(`^(\d{1,2})` + dateSep + `(\d{1,2})` + dateSep + `(\d{4})$`)
+	dateNameF = lazyre.New(`^([A-Za-z]+)\.?[ \t]+(\d{1,2})(?:st|nd|rd|th)?,?[ \t]+(\d{4})$`)
+	dateNameB = lazyre.New(`^(\d{1,2})(?:st|nd|rd|th)?(?:[ \t]+|-)([A-Za-z]+)\.?,?(?:[ \t]+|-)(\d{4})$`)
 )
 
 var monthNames = []string{"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"}

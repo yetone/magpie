@@ -5,12 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/tidwall/gjson"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -39,10 +39,10 @@ import (
 // boundRefusal is Claude's refusal of a thinking block it didn't sign for
 // this conversation or account: the signature's wording, the newer
 // binding's, and a redacted_thinking block's.
-var boundRefusal = regexp.MustCompile("(?i)invalid `?signature`? in `?thinking`? block|bound to a different conversation|not created in this conversation|invalid data in `?redacted_thinking`? block")
+var boundRefusal = lazyre.New("(?i)invalid `?signature`? in `?thinking`? block|bound to a different conversation|not created in this conversation|invalid data in `?redacted_thinking`? block")
 
 // boundAt is where the refusal says the block is: messages.<m>.content.<b>.
-var boundAt = regexp.MustCompile(`messages\.(\d+)\.content\.(\d+)`)
+var boundAt = lazyre.New(`messages\.(\d+)\.content\.(\d+)`)
 
 // thinkingRefusedMost bounds the signatures remembered; past it the
 // memory starts again, and a conversation still going is mended by one
@@ -269,8 +269,8 @@ func withoutForeignThinking(p provider.Provider, body []byte) []byte {
 
 // thinkingTyped is a body with a thinking block in it, for one that says
 // no signature at all.
-var thinkingTyped = regexp.MustCompile(`"type"\s*:\s*"thinking"`)
+var thinkingTyped = lazyre.New(`"type"\s*:\s*"thinking"`)
 
 // deepseekSignature is the signature DeepSeek's Anthropic endpoint gives
 // its thinking: the reply's id, a UUID.
-var deepseekSignature = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+var deepseekSignature = lazyre.New(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)

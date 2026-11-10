@@ -5,10 +5,10 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"regexp"
 
 	"github.com/tidwall/gjson"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -33,7 +33,7 @@ func mantleRouteKey(model string) string { return "mantle-route:" + model }
 
 // mantleWrongRoute is Mantle's refusal of a model asked at the prefix that
 // doesn't serve it.
-var mantleWrongRoute = regexp.MustCompile(`(?i)(?:isn't|is not|not) supported on this route`)
+var mantleWrongRoute = lazyre.New(`(?i)(?:isn't|is not|not) supported on this route`)
 
 // mantleReroute asks a request Mantle refused for its route again at the
 // other prefix, once, and remembers that prefix for the model when it is

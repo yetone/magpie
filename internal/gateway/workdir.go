@@ -29,29 +29,29 @@ import (
 	"html"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
 var (
-	ccWorkDir = regexp.MustCompile(`(?m)^(?: - )?Primary working directory: (.+)$`)
+	ccWorkDir = lazyre.New(`(?m)^(?: - )?Primary working directory: (.+)$`)
 	// the folder a <cwd> holds: Codex's on its line, Pi's on its own
-	cwdTag = regexp.MustCompile(`<cwd>\s*([^<\n]+?)\s*</cwd>`)
-	envDir = regexp.MustCompile(`(?m)^\s*Working directory: (.+)$`)
+	cwdTag = lazyre.New(`<cwd>\s*([^<\n]+?)\s*</cwd>`)
+	envDir = lazyre.New(`(?m)^\s*Working directory: (.+)$`)
 	// a --bare run's whole system prompt is "CWD: /x"
-	bareCWD = regexp.MustCompile(`(?m)^\s*(?: - )?CWD: (.+)$`)
+	bareCWD = lazyre.New(`(?m)^\s*(?: - )?CWD: (.+)$`)
 	// pi 1.1 states its folder as a line, where its <cwd> wraps it
-	piDir  = regexp.MustCompile(`(?m)^\s*(?: - )?Current working directory: (.+)$`)
-	wasDir = regexp.MustCompile(` \(was .*\)$`)
+	piDir  = lazyre.New(`(?m)^\s*(?: - )?Current working directory: (.+)$`)
+	wasDir = lazyre.New(` \(was .*\)$`)
 )
 
 // dirForm is one form a caller states its folder in. wrap, when set, is
 // the caller's own block the form is read inside: in a turn, a form is a
 // caller's word only inside the block it states it in (#4940).
 type dirForm struct {
-	re   *regexp.Regexp
+	re   *lazyre.RE
 	wrap string
 	was  bool // a moved-folder line, its " (was …)" dropped
 }

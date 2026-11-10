@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,6 +19,7 @@ import (
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/budget"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
@@ -876,7 +876,7 @@ func readYouSearch(b []byte) ([]foundPage, error) {
 	return pages, nil
 }
 
-var searchTags = regexp.MustCompile(`<[^>]*>`)
+var searchTags = lazyre.New(`<[^>]*>`)
 
 // searchPlain is a search API's text without the tags it marks matches with
 // (Brave's <strong>), on one line.

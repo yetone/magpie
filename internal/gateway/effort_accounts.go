@@ -12,11 +12,12 @@ package gateway
 import (
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // effortRemember is how long an account's refusal of a level is kept: a
@@ -94,12 +95,12 @@ func effortMate(left []candidate, c candidate, e string) int {
 var (
 	// unsupportedEffort is OpenAI's "Unsupported value: 'high' is not
 	// supported with the 'gpt-6-luna' model. Supported values are: …"
-	unsupportedEffort = regexp.MustCompile(`(?i)unsupported value:?\s*['"\x60]?([a-z]+)['"\x60]?\s+is not supported`)
+	unsupportedEffort = lazyre.New(`(?i)unsupported value:?\s*['"\x60]?([a-z]+)['"\x60]?\s+is not supported`)
 	// effortNamed is a refusal naming the reasoning effort itself
-	effortNamed  = regexp.MustCompile(`(?i)reasoning[._ ]?effort`)
-	effortDenied = regexp.MustCompile(`(?i)not supported|unsupported|not available|isn'?t available|not allowed|invalid value|upgrade|your plan`)
-	supportedAre = regexp.MustCompile(`(?i)supported values are:?\s*([^.]*)`)
-	quotedLevel  = regexp.MustCompile(`['"\x60]([a-z]+)['"\x60]`)
+	effortNamed  = lazyre.New(`(?i)reasoning[._ ]?effort`)
+	effortDenied = lazyre.New(`(?i)not supported|unsupported|not available|isn'?t available|not allowed|invalid value|upgrade|your plan`)
+	supportedAre = lazyre.New(`(?i)supported values are:?\s*([^.]*)`)
+	quotedLevel  = lazyre.New(`['"\x60]([a-z]+)['"\x60]`)
 )
 
 // effortRefused reads a vendor's 400 as the reasoning level sent turned

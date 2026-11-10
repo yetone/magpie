@@ -3,12 +3,12 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
-	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/tidwall/gjson"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -150,12 +150,12 @@ func replyLeft(msg []byte) int {
 // that adds the reply's allowance to the prompt: "(N in the messages, M in
 // the completion)", or vLLM's newer "your prompt contains at least N input
 // tokens".
-var windowAndPrompt = regexp.MustCompile(`(?is)maximum context length is (\d+) tokens.{0,200}?(?:\((\d+) in the messages, \d+ in the completion\)|your prompt contains at least (\d+) input tokens)`)
+var windowAndPrompt = lazyre.New(`(?is)maximum context length is (\d+) tokens.{0,200}?(?:\((\d+) in the messages, \d+ in the completion\)|your prompt contains at least (\d+) input tokens)`)
 
 // inputPlusReply is Anthropic's words for the same, which an endpoint
 // speaking its API may answer with: "input length and `max_tokens` exceed
 // context limit: 197202 + 21333 > 200000".
-var inputPlusReply = regexp.MustCompile(`(?i)input length and .{0,3}max_tokens.{0,3} exceed context limit:\s*(\d+)\s*\+\s*\d+\s*>\s*(\d+)`)
+var inputPlusReply = lazyre.New(`(?i)input length and .{0,3}max_tokens.{0,3} exceed context limit:\s*(\d+)\s*\+\s*\d+\s*>\s*(\d+)`)
 
 // leastReplyLeft is the least room left for a reply that is worth asking
 // for: less, and the conversation needs compacting, which the refusal

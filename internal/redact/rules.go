@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // Rule is one the user added (Settings → Privacy) for a secret magpie's own
@@ -134,7 +136,7 @@ func customRules(in []Rule) []rule {
 		if re == nil {
 			continue
 		}
-		c := rule{kind: RuleKind(r.Kind), yours: true, re: re, ok: func(v string) bool { return len(v) >= minCustomLen }}
+		c := rule{kind: RuleKind(r.Kind), yours: true, re: lazyre.Of(re), ok: func(v string) bool { return len(v) >= minCustomLen }}
 		if r.Prefix != "" {
 			c.markers = []string{r.Prefix}
 		}

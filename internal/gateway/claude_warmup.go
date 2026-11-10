@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -19,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/yetone/magpie/internal/claudetui"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
@@ -385,7 +385,7 @@ func logOneOff(what, configDir, stderr string, err error) {
 
 // homePath is a user's home folder in a path, on Windows, a Mac or
 // Linux, with either slash: what follows it is kept, the user's name not.
-var homePath = regexp.MustCompile(`(?i)(?:\b[a-z]:)?[\\/]+(?:users|home)[\\/]+[^\\/\s"'│:]+`)
+var homePath = lazyre.New(`(?i)(?:\b[a-z]:)?[\\/]+(?:users|home)[\\/]+[^\\/\s"'│:]+`)
 
 // logSafe is s for app.log: secrets out (redact.Scrub), this user's home
 // folder and any other home folder in it written ~, its spaces

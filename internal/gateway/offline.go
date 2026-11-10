@@ -19,13 +19,13 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -33,7 +33,7 @@ import (
 // connection was made: a name that didn't resolve, no route, refused, a
 // dial or TLS handshake that timed out. A proxy that is down (proxyDown)
 // is told apart before it.
-var connFailed = regexp.MustCompile(`dial tcp |dial udp |lookup [^ ]+|TLS handshake timeout|network is unreachable|no route to host|Unable to connect|ConnectionRefused|FailedToOpenSocket|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH`)
+var connFailed = lazyre.New(`dial tcp |dial udp |lookup [^ ]+|TLS handshake timeout|network is unreachable|no route to host|Unable to connect|ConnectionRefused|FailedToOpenSocket|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH`)
 
 // lastHeard is when any upstream last answered, as unix nanoseconds.
 var lastHeard atomic.Int64

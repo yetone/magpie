@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/tidwall/gjson"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -423,7 +423,7 @@ func withThinkingOnToolTurns(body []byte) []byte {
 
 // anthropicModel is one of Anthropic's own models, which think only when asked,
 // so a request for one is left as the agent sent it.
-var anthropicModel = regexp.MustCompile(`(?i)(?:^|[/.:-])claude-`)
+var anthropicModel = lazyre.New(`(?i)(?:^|[/.:-])claude-`)
 
 // alwaysThinks is a vendor refusing to turn a model's thinking off: Z.ai's
 // GLM-5.3 answers 1210, "…always engages in thinking…", or, in Chinese
@@ -435,7 +435,7 @@ var anthropicModel = regexp.MustCompile(`(?i)(?:^|[/.:-])claude-`)
 // glm-5.3 "thinking.type `disabled` is not supported by this model"
 // (#1141). Kimi Code (China)'s K3.1 answers "…does not support disabled
 // thinking mode" (#3739).
-var alwaysThinks = regexp.MustCompile(`(?i)always engages in thinking|thinking (?:can ?not|can't) be (?:disabled|turned off)|enable_thinking[^"]{0,60}restricted to true|始终(?:支持|开启|启用)?思考|思考[^"]{0,20}(?:不可|无法|不能)关闭|requires adaptive thinking\W+thinking\.type\W+disabled\W+\(including reasoning\.effort=none\) is not allowed|thinking\.type \x60disabled\x60 is not supported by this model|does not support disabled thinking mode`)
+var alwaysThinks = lazyre.New(`(?i)always engages in thinking|thinking (?:can ?not|can't) be (?:disabled|turned off)|enable_thinking[^"]{0,60}restricted to true|始终(?:支持|开启|启用)?思考|思考[^"]{0,20}(?:不可|无法|不能)关闭|requires adaptive thinking\W+thinking\.type\W+disabled\W+\(including reasoning\.effort=none\) is not allowed|thinking\.type \x60disabled\x60 is not supported by this model|does not support disabled thinking mode`)
 
 // refusesThinkingOff is an Anthropic endpoint turning away a request
 // with thinking turned off (thinking.type disabled): a model that always
@@ -477,7 +477,7 @@ func withoutThinkingOff(body []byte) ([]byte, bool) {
 // claudeVersion finds the family's version in a Claude model id however a
 // relay spells it: claude-opus-4-6, claude-opus-5, anthropic.claude-sonnet-4.6-v1,
 // a relay's opus-5.5, claude-fable-5-1, or the old order, claude-3-7-sonnet.
-var claudeVersion = regexp.MustCompile(`(?:^|[^a-z0-9])(?:claude-)?(?:opus|sonnet|haiku|fable|mythos)-(\d{1,2})(?:[-.](\d{1,2}))?(?:[^0-9]|$)|claude-(\d+)(?:[-.](\d))?-(?:opus|sonnet|haiku)`)
+var claudeVersion = lazyre.New(`(?:^|[^a-z0-9])(?:claude-)?(?:opus|sonnet|haiku|fable|mythos)-(\d{1,2})(?:[-.](\d{1,2}))?(?:[^0-9]|$)|claude-(\d+)(?:[-.](\d))?-(?:opus|sonnet|haiku)`)
 
 // adaptiveOnly is a Claude model from 4.6 on, which thinks adaptively:
 // claude-opus-5-5 refuses thinking.type=enabled with a budget ("requires
@@ -556,7 +556,7 @@ func adaptiveThinking(body []byte) []byte {
 // spells it: claude-sonnet-5-5, claude-sonnet-5.5, a relay's sonnet-5.5,
 // Bedrock's anthropic.claude-sonnet-5-5-v1:0, Vertex's
 // claude-sonnet-5-5@20261001, claude-fable-5-1.
-var claudeLine = regexp.MustCompile(`(?:^|[^a-z0-9])(?:claude-)?(opus|sonnet|haiku|fable|mythos)-(\d{1,2})(?:[-.](\d{1,2}))?(?:[^0-9]|$)`)
+var claudeLine = lazyre.New(`(?:^|[^a-z0-9])(?:claude-)?(opus|sonnet|haiku|fable|mythos)-(\d{1,2})(?:[-.](\d{1,2}))?(?:[^0-9]|$)`)
 
 // thinkingOff is how a Claude model takes thinking turned off.
 type thinkingOff int
@@ -706,12 +706,12 @@ func thinkingOffAsTaken(body []byte, path string) []byte {
 // {"type": "between_tools"} instead of {"type": "disabled"}" as relays
 // pass it on (#1454), or the API's "Use "thinking.type.between_tools" for
 // the lowest thinking setting".
-var asksBetweenTools = regexp.MustCompile(`(?i)between_tools\W+instead of|use\W+thinking\.type\.between_tools`)
+var asksBetweenTools = lazyre.New(`(?i)between_tools\W+instead of|use\W+thinking\.type\.between_tools`)
 
 // thinkingOffRefused is a Claude refusing thinking turned off at any
 // effort, as Opus 5.5 does: ""thinking.type.disabled" is not supported for
 // this model. Use "thinking.type.adaptive"…".
-var thinkingOffRefused = regexp.MustCompile(`(?i)thinking\.type\.disabled\W+is not supported`)
+var thinkingOffRefused = lazyre.New(`(?i)thinking\.type\.disabled\W+is not supported`)
 
 // withBetweenTools is body with its thinking turned off as Sonnet 5.5
 // asks it, at effort high at most; false when body doesn't turn it off.
@@ -784,7 +784,7 @@ func hasSampling(body []byte) bool {
 // samplingDeprecated is a Claude refusing a sampling parameter, as Haiku
 // 5.5 does: "`temperature` is deprecated for this model." (and `top_p`,
 // `top_k`).
-var samplingDeprecated = regexp.MustCompile("(?i)\\b(?:temperature|top_p|top_k)`?\\W+is (?:deprecated|not supported) for this model")
+var samplingDeprecated = lazyre.New("(?i)\\b(?:temperature|top_p|top_k)`?\\W+is (?:deprecated|not supported) for this model")
 
 // withoutSampling is body without temperature, top_p and top_k; false
 // when it has none of them.
@@ -812,7 +812,7 @@ func AdaptiveThinking(model string) bool { return adaptiveOnly(model) }
 // relay the user set up): a relay that maps Messages onto OpenAI reads the
 // level from output_config.effort, and a budget alone left every request at
 // its default, medium (zxz8009195489 on Discord, 2026-11-04).
-var effortInOutputConfig = regexp.MustCompile(`(?i)glm-5\.[23](?:$|[-.:/\[])|minimax-m3\.1-flash(?:$|[-.:/\[])|(?:^|[^a-z0-9])gpt-\d`)
+var effortInOutputConfig = lazyre.New(`(?i)glm-5\.[23](?:$|[-.:/\[])|minimax-m3\.1-flash(?:$|[-.:/\[])|(?:^|[^a-z0-9])gpt-\d`)
 
 // deepseekHost is DeepSeek's own API, whose Anthropic endpoint
 // (api.deepseek.com/anthropic) takes the effort in output_config.
@@ -855,7 +855,7 @@ func outputEffortAt(host, model string) bool {
 func AdaptiveWithEffort(model string) bool { return glmOutputEffort.MatchString(model) }
 
 // glmOutputEffort is effortInOutputConfig's Z.ai half.
-var glmOutputEffort = regexp.MustCompile(`(?i)glm-5\.[23](?:$|[-.:/\[])`)
+var glmOutputEffort = lazyre.New(`(?i)glm-5\.[23](?:$|[-.:/\[])`)
 
 // withOutputEffort is body asking, in output_config.effort, for the level
 // of levels nearest the reasoning it asks for; body when it asks for none.
@@ -1574,7 +1574,7 @@ func rawCallID(mark, id string) string {
 	return string(raw)
 }
 
-var safeIDChars = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+var safeIDChars = lazyre.New(`^[A-Za-z0-9_-]+$`)
 
 func (e *anthropicEncoder) start(ev Event) {
 	if e.started {

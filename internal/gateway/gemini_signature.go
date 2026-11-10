@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/tidwall/gjson"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -484,7 +484,7 @@ func dropSignatures(req *Request, drop func(sig string) bool) *Request {
 // "Corrupted thought signature.". It is about the request's history, not
 // the account: the request is asked again without signatures, and no
 // account rests for it.
-var signatureRefused = regexp.MustCompile(`(?i)\b(invalid|corrupted) thought signature`)
+var signatureRefused = lazyre.New(`(?i)\b(invalid|corrupted) thought signature`)
 
 // signaturesReach says a request built for provider p on API to carries
 // Gemini's signatures there: Gemini's own API (Vertex AI, AI Studio, Code

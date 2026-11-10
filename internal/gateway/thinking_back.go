@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"io"
 	"net/http"
-	"regexp"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -17,7 +17,7 @@ import (
 // an assistant turn of the tool loop being continued with no thinking is
 // refused, one with a space is taken, as are finished turns and plain
 // replies without.
-var thinkingBackRefusal = regexp.MustCompile("(?i)`?(?:content\\[\\]\\.thinking|reasoning_content)`? in the thinking mode must be passed back")
+var thinkingBackRefusal = lazyre.New("(?i)`?(?:content\\[\\]\\.thinking|reasoning_content)`? in the thinking mode must be passed back")
 
 // reasoningBackWords are a model asking for an earlier assistant
 // message's reasoning in other words than thinkingBackRefusal's:
@@ -26,7 +26,7 @@ var thinkingBackRefusal = regexp.MustCompile("(?i)`?(?:content\\[\\]\\.thinking|
 // has none (EDwinpzy on Discord, magpie 0.1.2717), and the like that name
 // reasoning_content as missing or required. A request missing what every
 // API requires ("Missing required parameter: 'messages'") isn't one.
-var reasoningBackWords = regexp.MustCompile(`(?i)\breasoning_content\b[^"]{0,40}\b(?:is (?:missing|required)|must be (?:passed|provided|included))|\b(?:missing|required)\b[^"]{0,80}\breasoning_content\b`)
+var reasoningBackWords = lazyre.New(`(?i)\breasoning_content\b[^"]{0,40}\b(?:is (?:missing|required)|must be (?:passed|provided|included))|\b(?:missing|required)\b[^"]{0,80}\breasoning_content\b`)
 
 // reasoningBackRefused says a model turned the request away for an
 // earlier turn's reasoning it didn't have: a demand of that model's on the

@@ -8,10 +8,11 @@ import (
 	"image"
 	"image/jpeg"
 	_ "image/png"
-	"regexp"
 	"strings"
 
 	"golang.org/x/image/draw"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // The browser MCP server lists one tool, browser, whose action names what
@@ -152,7 +153,7 @@ func browserUnfold(raw json.RawMessage) (tool string, args json.RawMessage, shot
 
 // the extension's answers name its own tools; through browser they are
 // actions
-var browserNameRe = regexp.MustCompile(`browser_(tabs|navigate|snapshot|click|type|press|hover|select|scroll|drag|upload|wait|screenshot|evaluate|text|console|dialog)\b`)
+var browserNameRe = lazyre.New(`browser_(tabs|navigate|snapshot|click|type|press|hover|select|scroll|drag|upload|wait|screenshot|evaluate|text|console|dialog)\b`)
 
 var browserNameSay = strings.NewReplacer(
 	"browser_tabs with action new", "the tab_new action",

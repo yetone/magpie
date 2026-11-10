@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"net/http"
-	"regexp"
 	"slices"
 	"time"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -93,7 +93,7 @@ func busy(status int, body []byte) bool {
 // queue status rather than sending the request again. Only the plugin's
 // own words are matched: a relay's 503 that names its own queue ("queue
 // full", 排队中) is a moment's overload, waited out as before.
-var queuedWords = regexp.MustCompile(`(?i)\bqueued the request\b|\bthis plan's queue:`)
+var queuedWords = lazyre.New(`(?i)\bqueued the request\b|\bthis plan's queue:`)
 
 // queued says whether a failure's body is the Qoder plugin's queue answer.
 func queued(body []byte) bool {

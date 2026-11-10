@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"runtime/pprof"
 	"slices"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // A request magpie holds too long before routing it is stopped with a 504
@@ -49,7 +49,7 @@ func heldWhere() string {
 
 // heldName is a report's file name: held-<UTC time>-<nanoseconds>.txt, so
 // names sort in the order written.
-var heldName = regexp.MustCompile(`^held-\d{8}-\d{6}-\d{9}\.txt$`)
+var heldName = lazyre.New(`^held-\d{8}-\d{6}-\d{9}\.txt$`)
 
 // heldMu keeps two reports' writes and prunes apart, and heldLast is
 // when the last was named.

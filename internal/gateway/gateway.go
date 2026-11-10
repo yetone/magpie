@@ -18,7 +18,6 @@ import (
 	"net/http/httptrace"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -37,6 +36,7 @@ import (
 	"github.com/yetone/magpie/internal/gwbudget"
 	"github.com/yetone/magpie/internal/gwmw"
 	"github.com/yetone/magpie/internal/gwtool"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/pluginrt"
 	"github.com/yetone/magpie/internal/provider"
@@ -217,7 +217,7 @@ func standIn(agent, asked string) string {
 // claude-fable-5-1, claude-haiku-4-5-20251001, claude-3-5-sonnet-20241022,
 // whatever the version, matched by family so a release magpie has never
 // heard of is one too. A provider's "a/claude-…" is not one.
-var claudeFamily = regexp.MustCompile(`^claude-(?:[0-9][0-9.-]*-)?(?:opus|sonnet|haiku|fable)(?:[-.@:]|$)`)
+var claudeFamily = lazyre.New(`^claude-(?:[0-9][0-9.-]*-)?(?:opus|sonnet|haiku|fable)(?:[-.@:]|$)`)
 
 // claudeTierStandIn is the model Claude Code is set to use for the tier of
 // a full Claude id it names (StandIn), even one magpie serves: Claude Code
@@ -2045,7 +2045,7 @@ func (s *Server) countOn(w http.ResponseWriter, r *http.Request, p provider.Prov
 
 // Match the counting operation or the endpoint itself, not an unsupported
 // image, model, API key or tool parameter mentioned in the same error.
-var unsupportedCountWords = regexp.MustCompile(`(?i)` +
+var unsupportedCountWords = lazyre.New(`(?i)` +
 	`^(unsupported|unimplemented|not (supported|implemented))$|` +
 	`\b(count_tokens|counttokens|token counting|counting tokens) ((is )?not (supported|implemented)|is (unsupported|unimplemented))\b|` +
 	`\b(unsupported|unimplemented|does not support|doesn't support) (count_tokens|counttokens|token counting|counting tokens)\b|` +
@@ -8291,7 +8291,7 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 // reasoning_effort are not supported for global.openai.gpt-6-luna in
 // /v1/chat/completions. To use function tools, use /v1/responses or set
 // reasoning_effort to 'none'.").
-var toolsWithoutEffort = regexp.MustCompile(`(?is)tools with reasoning_effort are not supported.*reasoning_effort to .?none`)
+var toolsWithoutEffort = lazyre.New(`(?is)tools with reasoning_effort are not supported.*reasoning_effort to .?none`)
 
 // effortRequired is an upstream turning a request away for asking no
 // reasoning effort, or none, from a model that needs one: "reasoning
@@ -8299,7 +8299,7 @@ var toolsWithoutEffort = regexp.MustCompile(`(?is)tools with reasoning_effort ar
 // "this model requires a reasoning effort", "reasoning cannot be
 // disabled". A refusal of a level the model hasn't, or of the field
 // itself, is not one.
-var effortRequired = regexp.MustCompile(`(?i)reasoning[ _.]?effort\W+(?:is\s+)?(?:required|mandatory|missing)\b|(?:missing|requires?|needs?)\s+(?:a\s+|the\s+)?(?:required\s+)?(?:parameter\W+)?reasoning(?:[ _.]?effort)?\b|reasoning\s+is\s+(?:required|mandatory)\b|reasoning\W+(?:cannot|can't|can not)\s+be\s+(?:disabled|turned off)`)
+var effortRequired = lazyre.New(`(?i)reasoning[ _.]?effort\W+(?:is\s+)?(?:required|mandatory|missing)\b|(?:missing|requires?|needs?)\s+(?:a\s+|the\s+)?(?:required\s+)?(?:parameter\W+)?reasoning(?:[ _.]?effort)?\b|reasoning\s+is\s+(?:required|mandatory)\b|reasoning\W+(?:cannot|can't|can not)\s+be\s+(?:disabled|turned off)`)
 
 // needsReasoning is b turning effort away as effortRequired does, or,
 // for reasoning asked off (none, minimal), in the words of a model that
@@ -8311,7 +8311,7 @@ func needsReasoning(effort string, b []byte) bool {
 }
 
 // OpenRouter rejects an explicit reasoning-off request for some endpoints.
-var mandatoryReasoning = regexp.MustCompile(`(?i)reasoning is mandatory for this endpoint and cannot be disabled`)
+var mandatoryReasoning = lazyre.New(`(?i)reasoning is mandatory for this endpoint and cannot be disabled`)
 
 // servesElsewhere reports whether p serves model on an API besides proto
 // that hasn't turned it away.
@@ -8464,22 +8464,22 @@ func refusedOptional(status int, msg, body []byte) []string {
 	return out
 }
 
-var unknownOptionalField = regexp.MustCompile("(?i)\\b(?:unknown (?:name|field|parameter)|unsupported (?:parameter|field|property|argument)|unrecognized (?:request )?(?:argument|parameter)(?: supplied)?):?\\s*['\"\\x60]([a-z_]+)['\"\\x60]")
-var unquotedUnsupportedOptionalField = regexp.MustCompile("(?i)\\bunsupported (?:parameter|field|property|argument):\\s*([a-z_]+)\\b")
-var rejectedOptionalField = regexp.MustCompile("(?i)(?:^|\\b(?:parameter|field|property|argument)\\s+)['\"\\x60]([a-z_]+)['\"\\x60]\\s+(?:is\\s+)?(?:unsupported|not supported)\\b")
+var unknownOptionalField = lazyre.New("(?i)\\b(?:unknown (?:name|field|parameter)|unsupported (?:parameter|field|property|argument)|unrecognized (?:request )?(?:argument|parameter)(?: supplied)?):?\\s*['\"\\x60]([a-z_]+)['\"\\x60]")
+var unquotedUnsupportedOptionalField = lazyre.New("(?i)\\bunsupported (?:parameter|field|property|argument):\\s*([a-z_]+)\\b")
+var rejectedOptionalField = lazyre.New("(?i)(?:^|\\b(?:parameter|field|property|argument)\\s+)['\"\\x60]([a-z_]+)['\"\\x60]\\s+(?:is\\s+)?(?:unsupported|not supported)\\b")
 
 // leadingRejectedOptionalField is a message that starts with the field's
 // bare name: OpenAI's "prompt_cache_options is not supported on this
 // model" (#2154). Only at the start, so a field named further on, in an
 // echo of the input, is not taken for it.
-var leadingRejectedOptionalField = regexp.MustCompile("(?i)^\\s*([a-z_]+)\\s+is\\s+(?:unsupported|not supported)\\b")
+var leadingRejectedOptionalField = lazyre.New("(?i)^\\s*([a-z_]+)\\s+is\\s+(?:unsupported|not supported)\\b")
 
 // valueRejectedForField is a vendor naming the field after the value it
 // turned away: litellm's "'priority' is not supported for 'service_tier'
 // on this model" (#3978). The name after "for" is what separates this
 // from a value's refusal ("... is not supported with this model"),
 // which reaches the client as it came.
-var valueRejectedForField = regexp.MustCompile("(?i)['\"\\x60][^'\"\\x60]{0,64}['\"\\x60]\\s+is\\s+(?:unsupported|not supported)\\s+for\\s+['\"\\x60]([a-z_]+)['\"\\x60]")
+var valueRejectedForField = lazyre.New("(?i)['\"\\x60][^'\"\\x60]{0,64}['\"\\x60]\\s+is\\s+(?:unsupported|not supported)\\s+for\\s+['\"\\x60]([a-z_]+)['\"\\x60]")
 
 func unsupportedOptionalField(fault any, field string) bool {
 	switch v := fault.(type) {
@@ -8664,7 +8664,7 @@ func refusedInMessages(status int, msg, body []byte) []string {
 }
 
 // fieldAtPosition is Kimi's refusal of a thinking field in a message.
-var fieldAtPosition = regexp.MustCompile(`\bthe (reasoning_details|reasoning_content|reasoning) at position \d+\b`)
+var fieldAtPosition = lazyre.New(`\bthe (reasoning_details|reasoning_content|reasoning) at position \d+\b`)
 
 // badRequest is a status an upstream refuses a request's contents with.
 func badRequest(status int) bool {
@@ -10139,7 +10139,7 @@ func forcesTool(choice string) bool {
 // answers `tools.N.custom: For 'object' type, 'additionalProperties' must
 // be explicitly set to false` (#668), which Anthropic says only of a
 // strict tool, and magpie sends none.
-var toolChoiceRefused = regexp.MustCompile(`(?i)tool_choice\W+type\W+tool\W+and\W+any\W+are not supported|tools\.\d+\.custom\W+for\W+object\W+type\W+additionalProperties\W+must be explicitly set to false`)
+var toolChoiceRefused = lazyre.New(`(?i)tool_choice\W+type\W+tool\W+and\W+any\W+are not supported|tools\.\d+\.custom\W+for\W+object\W+type\W+additionalProperties\W+must be explicitly set to false`)
 
 // unforced is req with its forced tool_choice left to the model: a named
 // tool is the only one offered, as the Claude subscription's bridge does,
@@ -10156,7 +10156,7 @@ func unforced(req *Request) *Request {
 // effortLevelsNamed is an error that lists the reasoning levels a model
 // takes, as one refusing "none" does: Command Code's `expected one of
 // "low"|"medium"|"high"|"xhigh"|"max"`.
-var effortLevelsNamed = regexp.MustCompile(`(?i)\blow\b\W+(?:medium|high)\b`)
+var effortLevelsNamed = lazyre.New(`(?i)\blow\b\W+(?:medium|high)\b`)
 
 // otherOffNamed is, for one level of reasoning off, the other named in an
 // error: one refusing that level and listing the other among those taken
@@ -10164,14 +10164,14 @@ var effortLevelsNamed = regexp.MustCompile(`(?i)\blow\b\W+(?:medium|high)\b`)
 // Supported values are: 'none', 'low', 'medium', and 'high'."). The level is
 // matched quoted, as errors listing levels quote them (in JSON a double
 // quote comes escaped), so a "None" in a sentence isn't it.
-var otherOffNamed = map[string]*regexp.Regexp{
-	"none":    regexp.MustCompile(`(?i)['"]minimal\\?['"]`),
+var otherOffNamed = map[string]*lazyre.RE{
+	"none":    lazyre.New(`(?i)['"]minimal\\?['"]`),
 	"minimal": noneQuoted,
 }
 
 // noneQuoted is reasoning effort none named in an error, quoted, as
 // errors listing levels quote them (in JSON a double quote comes escaped).
-var noneQuoted = regexp.MustCompile(`(?i)['"]none\\?['"]`)
+var noneQuoted = lazyre.New(`(?i)['"]none\\?['"]`)
 
 // bodyEffort is the reasoning effort a Chat or Responses request asks for,
 // or an Anthropic one in its output_config, or a Gemini one in its
@@ -10492,7 +10492,7 @@ func saidOverloaded(status int, msg string) bool {
 // takes for a failure worth asking again (Pi's isRetryableError, #2372):
 // one of the usual statuses, a timeout, a rate limit, a busy or
 // unreachable server.
-var passingSaid = regexp.MustCompile(`(?i)\b(429|500|502|503|504)\b|timed? ?out|rate.?limit|too many requests|overloaded|service.?unavailable|server.?error|internal.?error|connection.?(error|refused|reset)|retry your request|try your request again`)
+var passingSaid = lazyre.New(`(?i)\b(429|500|502|503|504)\b|timed? ?out|rate.?limit|too many requests|overloaded|service.?unavailable|server.?error|internal.?error|connection.?(error|refused|reset)|retry your request|try your request again`)
 
 // saysPassing is msg, an error sent in a stream whose status the agent
 // can no longer be told, with the status said in it when it is one a
@@ -10513,12 +10513,12 @@ func saysPassing(status int, msg string) string {
 // retry later" and "Too many pending requests, please retry later" in a
 // 400, "The service is temporarily unavailable. Please retry later." with
 // no status at all (#2372, the texts zminds' Pi sessions recorded).
-var busyWords = regexp.MustCompile(`(?i)concurrency limit|too many (pending|concurrent|in-?flight) requests|temporarily unavailable|(please )?(retry|try again) later|并发|稍后(再)?重?试`)
+var busyWords = lazyre.New(`(?i)concurrency limit|too many (pending|concurrent|in-?flight) requests|temporarily unavailable|(please )?(retry|try again) later|并发|稍后(再)?重?试`)
 
 // spentWords say an account is out of what it pays for, which no retry
 // clears: Pi's own deny-list keeps such a text from being asked again, and
 // magpie doesn't tell it otherwise.
-var spentWords = regexp.MustCompile(`(?i)quota|insufficient|balance|credit|billing|budget|usage.?limit|余额|额度|欠费|套餐|用量`)
+var spentWords = lazyre.New(`(?i)quota|insufficient|balance|credit|billing|budget|usage.?limit|余额|额度|欠费|套餐|用量`)
 
 // saysBusy is msg, a request error's text (400, 409, 422), with "you can
 // retry your request" said in it when its words say only that the relay
@@ -10662,7 +10662,7 @@ func writeErrorAs(w http.ResponseWriter, proto provider.Protocol, status int, ty
 // 提示词, prompt…) beside its length, so "名称超出最大长度" (a field) or
 // "输出过长" (the reply) isn't taken; bare "token数量超过上限" isn't either,
 // as a day's allowance is said so too.
-var tooLongRe = regexp.MustCompile(`(?i)context_length_exceeded|prompt is too long|input is too long|(exceeds?|exceeded|over|beyond)( the)?( model'?s?)?( maximum)? context|context (length|limit|window) (exceeded|is exceeded)|context (window )?(is )?full\b|maximum context length|too many (input |prompt )?tokens|上下文(长度)?(超|过长)|超(过|出)(了)?(模型)?(的)?(最大)?上下文` +
+var tooLongRe = lazyre.New(`(?i)context_length_exceeded|prompt is too long|input is too long|(exceeds?|exceeded|over|beyond)( the)?( model'?s?)?( maximum)? context|context (length|limit|window) (exceeded|is exceeded)|context (window )?(is )?full\b|maximum context length|too many (input |prompt )?tokens|上下文(长度)?(超|过长)|超(过|出)(了)?(模型)?(的)?(最大)?上下文` +
 	`|input token count.*exceeds the maximum|maximum prompt length is \d|reduce the length of the messages|maximum allowed input length|longer than the model'?s? context length|available context size|greater than the context length|prompt token count of [\d,]+ exceeds the limit|context window exceeds limit|exceeded model token limit|configured context size|prompt too long|prompt exceeds max length|context_window_exceeded|exceeded (max |maximum )?context length|range of input length should be|token limit exceeded|input tokens? (count )?(exceeds?|exceeded) (the )?(max(imum)? )?limit` +
 	`|(内容|输入|文本|提示词?|prompt|问题|对话|消息)(内容|文本)?(长度)?\s*(太长|过长|超长)|字数(太多|过多)` +
 	`|(内容|输入|文本|提示词?|prompt|问题|对话|消息)[^，。,.;；!！]{0,12}超(过|出)[^，。,.;；!！]{0,12}(长度|token|令牌|字数)` +
@@ -10697,7 +10697,7 @@ func tooLong(status int, msg string) bool {
 
 // paceWords say a limit on how fast or how much, not on one prompt's size,
 // in Chinese too (#4420): "内容太长，已达到速率限制" is the momentary cap.
-var paceWords = regexp.MustCompile(`(?i)rate.?limit|per (minute|hour|day)|\bTP[MD]\b|please wait|try again later|throttl|速率|频繁|频率|限流|并发|每(秒|分钟|小时|天|日)|稍后(再试|重试)`)
+var paceWords = lazyre.New(`(?i)rate.?limit|per (minute|hour|day)|\bTP[MD]\b|please wait|try again later|throttl|速率|频繁|频率|限流|并发|每(秒|分钟|小时|天|日)|稍后(再试|重试)`)
 
 // splitSent tells what of sent, the ms from the request (start) to its
 // answering try's body written, was magpie's own work, the tries that

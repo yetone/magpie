@@ -46,12 +46,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/yetone/magpie/internal/access"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/usage"
 )
@@ -240,7 +240,7 @@ func nativeProto(p provider.Provider) provider.Protocol {
 
 // schemeLike is a first segment that reads as a URL's scheme ("http:",
 // "javascript:x").
-var schemeLike = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*:`)
+var schemeLike = lazyre.New(`^[A-Za-z][A-Za-z0-9+.-]*:`)
 
 // nativeTarget is raw, the path after the provider as the caller escaped
 // it, at base's host: scheme and host from base, nothing of base's path.

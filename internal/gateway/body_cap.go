@@ -8,13 +8,13 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/tidwall/gjson"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -50,7 +50,7 @@ import (
 
 // bodyCapWords are a vendor's words for a request body over its byte
 // cap, not a conversation over the model's window (tooLong) nor a rate.
-var bodyCapWords = regexp.MustCompile(`(?i)request[ _](body|entity|payload)( size)?( is| was)? (too large|too big|over|larger than|exceeds?|exceeded)|request body is [\d.]+ ?[kmg]i?b|payload too large|entity too large|request_too_large|(body|request|payload) (size )?(exceeds?|exceeded|is over|is larger than) (the )?(max|limit|\d)|length limit exceeded|maximum allowed number of bytes|limit for one request|(max(imum)?|request) (request |body )*size (limit )?(exceeded|of)`)
+var bodyCapWords = lazyre.New(`(?i)request[ _](body|entity|payload)( size)?( is| was)? (too large|too big|over|larger than|exceeds?|exceeded)|request body is [\d.]+ ?[kmg]i?b|payload too large|entity too large|request_too_large|(body|request|payload) (size )?(exceeds?|exceeded|is over|is larger than) (the )?(max|limit|\d)|length limit exceeded|maximum allowed number of bytes|limit for one request|(max(imum)?|request) (request |body )*size (limit )?(exceeded|of)`)
 
 // byteCapRefusal is a provider's refusal of a request for its bytes: a
 // 413 that doesn't say the model's window is full, or any other refusal
@@ -98,7 +98,7 @@ func pageOverSize(status int, errBody []byte, sent int) bool {
 
 // capSizes are the sizes a refusal names: "33554432 bytes", "32 MB",
 // "32MiB", "40.1 MB".
-var capSizes = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*(bytes|b|kb|kib|mb|mib|gb|gib)\b`)
+var capSizes = lazyre.New(`(?i)(\d+(?:\.\d+)?)\s*(bytes|b|kb|kib|mb|mib|gb|gib)\b`)
 
 // statedCap is the cap a refusal names: the smallest size in its words
 // under what was sent (the body's own size is often named beside it). A

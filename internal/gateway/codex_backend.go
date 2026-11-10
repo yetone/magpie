@@ -13,7 +13,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptrace"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -28,6 +27,7 @@ import (
 	"github.com/yetone/magpie/internal/claudeseal"
 	"github.com/yetone/magpie/internal/codexcat"
 	"github.com/yetone/magpie/internal/codexsummary"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
@@ -50,7 +50,7 @@ var codexAPIBase = "https://api.openai.com/v1"
 // only magpie reads back (codexsummary).
 const magpieCompaction = codexsummary.Mark
 
-var nativeSealedAgentPayload = regexp.MustCompile(`^gAAAAA[A-Za-z0-9_-]+={0,2}$`)
+var nativeSealedAgentPayload = lazyre.New(`^gAAAAA[A-Za-z0-9_-]+={0,2}$`)
 
 // codexCompactPrompt and codexSummaryPrefix are Codex's own (Apache-2.0,
 // openai/codex, prompts/templates/compact).
@@ -1794,7 +1794,7 @@ func codexRelayedAccount(base string, h http.Header, on *provider.Provider) (pro
 // found"), which a relay in front of one answers in words of its own
 // ("Referenced reasoning item 'rs_…' was not found or has expired",
 // #3062).
-var unreadableItem = regexp.MustCompile(`(?i)(?:encrypted content for item|item with id|referenced reasoning item) '?([A-Za-z]+_[A-Za-z0-9_-]+)'?`)
+var unreadableItem = lazyre.New(`(?i)(?:encrypted content for item|item with id|referenced reasoning item) '?([A-Za-z]+_[A-Za-z0-9_-]+)'?`)
 
 // withoutUnreadable is body without what OpenAI's refusal msg says it
 // can't read: the item it names, what another account sealed
@@ -2865,7 +2865,7 @@ func reasoningTextRefused(model string) string { return "reasoning text\x00" + m
 // long. Expected an array with maximum length 0, but got an array with
 // length 1 instead." (the ChatGPT backend's; a relay's may word the rest
 // otherwise, #1411)
-var reasoningContentRefusal = regexp.MustCompile(`input\[(\d+)\]\.content'?:? array too long`)
+var reasoningContentRefusal = lazyre.New(`input\[(\d+)\]\.content'?:? array too long`)
 
 // refusesReasoningText is a 400 refusing the reasoning text in a Responses
 // request: the item the refusal names is reasoning with text in it.
@@ -2936,7 +2936,7 @@ func citationOffsetRefused(model string) string { return "citation offsets\x00" 
 // it passes it on: "Invalid response.create payload: Missing required
 // parameter: 'input[221].content[0].annotations[0].start_index'."
 // (#4921)
-var citationOffsetRefusal = regexp.MustCompile(`input\[\d+\]\.content\[\d+\]\.annotations\[\d+\]\.(?:start|end)_index`)
+var citationOffsetRefusal = lazyre.New(`input\[\d+\]\.content\[\d+\]\.annotations\[\d+\]\.(?:start|end)_index`)
 
 // refusesCitationOffsets is a 400 refusing a Responses request over a
 // citation that lacks the offsets OpenAI's schema wants.
@@ -3130,7 +3130,7 @@ func itemIDRefusal(b []byte) bool {
 	return false
 }
 
-var itemIDRefusalHead = regexp.MustCompile(`Invalid 'input\[\d+\]\.id'`)
+var itemIDRefusalHead = lazyre.New(`Invalid 'input\[\d+\]\.id'`)
 
 // itemIDsRefused is how unfit remembers a provider turning away, for
 // model, an input item id with another character in it (plainItemIDs).
@@ -3297,7 +3297,7 @@ func plainItemIDs(body []byte) []byte {
 }
 
 // longCallID finds a call_id longer than the ChatGPT backend takes.
-var longCallID = regexp.MustCompile(`"call_id"\s*:\s*"[^"]{65,}"`)
+var longCallID = lazyre.New(`"call_id"\s*:\s*"[^"]{65,}"`)
 
 // boundCallIDs is a Responses request with every call_id longer than 64
 // characters as provider.BoundCallID has it, the rest of the request byte
@@ -3895,7 +3895,7 @@ func upstreamFailed(rec *recorder) bool {
 		upstreamFailedWords.Match(rec.body.Bytes())
 }
 
-var upstreamFailedWords = regexp.MustCompile(`(?i)upstream request failed`)
+var upstreamFailedWords = lazyre.New(`(?i)upstream request failed`)
 
 // summaryTooLarge is a summary request refused for its size: past the
 // vendor's byte cap (413; DeepSeek's "Failed to buffer the request body:
@@ -3941,7 +3941,7 @@ func inputKindRefused(rec *recorder, err error) bool {
 	return inputKindWords.Match(rec.body.Bytes())
 }
 
-var inputKindWords = regexp.MustCompile(`(?i)unsupported_input_item|unknown item type`)
+var inputKindWords = lazyre.New(`(?i)unsupported_input_item|unknown item type`)
 
 // compactFailure names who answered a summary request with a failure — the
 // provider, the model and the provider's base URL — and what it said.

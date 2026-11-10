@@ -3,8 +3,8 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
-	"regexp"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -23,7 +23,7 @@ import (
 // not allowed, before or after it, or Pydantic's extra_forbidden located
 // there. An invalid value or a schema strict mode can't take is a
 // different fault and doesn't match.
-var toolStrictRefusal = regexp.MustCompile(`(?i)(?:unsupported|unknown|unrecognized|not (?:supported|allowed|permitted)|extra (?:fields?|inputs?|parameters?)|forbidden)[^\n{}]{0,120}?\btools(?:\[\d+\]|\.\d+)(?:\.[^\s.'"\x60]+)?\.strict\b|\btools(?:\[\d+\]|\.\d+)(?:\.[^\s.'"\x60]+)?\.strict\b['"\x60]?[^\n{}]{0,40}?(?:unsupported|unknown|unrecognized|not (?:supported|allowed|permitted)|extra_forbidden|forbidden)|"loc"\s*:\s*\[\s*(?:"body"\s*,\s*)?"tools"\s*,\s*\d+\s*,\s*(?:"function"\s*,\s*)?"strict"\s*\][^{}]*"type"\s*:\s*"extra_forbidden"|"type"\s*:\s*"extra_forbidden"[^{}]*"loc"\s*:\s*\[\s*(?:"body"\s*,\s*)?"tools"\s*,\s*\d+\s*,\s*(?:"function"\s*,\s*)?"strict"\s*\]`)
+var toolStrictRefusal = lazyre.New(`(?i)(?:unsupported|unknown|unrecognized|not (?:supported|allowed|permitted)|extra (?:fields?|inputs?|parameters?)|forbidden)[^\n{}]{0,120}?\btools(?:\[\d+\]|\.\d+)(?:\.[^\s.'"\x60]+)?\.strict\b|\btools(?:\[\d+\]|\.\d+)(?:\.[^\s.'"\x60]+)?\.strict\b['"\x60]?[^\n{}]{0,40}?(?:unsupported|unknown|unrecognized|not (?:supported|allowed|permitted)|extra_forbidden|forbidden)|"loc"\s*:\s*\[\s*(?:"body"\s*,\s*)?"tools"\s*,\s*\d+\s*,\s*(?:"function"\s*,\s*)?"strict"\s*\][^{}]*"type"\s*:\s*"extra_forbidden"|"type"\s*:\s*"extra_forbidden"[^{}]*"loc"\s*:\s*\[\s*(?:"body"\s*,\s*)?"tools"\s*,\s*\d+\s*,\s*(?:"function"\s*,\s*)?"strict"\s*\]`)
 
 // toolStrictRefused is how unfit remembers a provider refusing it: the
 // provider's validator, not a model, turns it away.

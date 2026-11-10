@@ -8,13 +8,13 @@ import (
 	"maps"
 	"net/http"
 	"reflect"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -31,7 +31,7 @@ import (
 // this one tells it not to.
 const skipSignature = "skip_thought_signature_validator"
 
-var unsafeToolID = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
+var unsafeToolID = lazyre.New(`[^a-zA-Z0-9_-]`)
 
 // antigravityBaseOf is the model an id of Antigravity's own is one level
 // of; a var so tests can stand in for it.
@@ -796,7 +796,7 @@ func thinkingConfig(r *Request, model string, claude bool, at string) map[string
 
 // geminiVersion is the major version in a Gemini model's id, as the id
 // names it: gemini-4-argon, models/gemini-3.8-flash, gemini-2.5-pro.
-var geminiVersion = regexp.MustCompile(`(?:^|/)gemini-(\d+)`)
+var geminiVersion = lazyre.New(`(?:^|/)gemini-(\d+)`)
 
 // geminiGeneration is the generation of Gemini model names, 0 for an id
 // that names none (a non-Gemini model, or an alias such as

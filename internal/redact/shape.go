@@ -5,9 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"net/netip"
-	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // A key can go to the vendor as a made-up key of its own form instead of
@@ -67,7 +68,7 @@ func keyHead(v string) string {
 }
 
 // namedValue is a name before = or : and the value after it.
-var namedValue = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.-]*[ \t]*[=:][ \t]*()`)
+var namedValue = lazyre.New(`^[A-Za-z_][A-Za-z0-9_.-]*[ \t]*[=:][ \t]*()`)
 
 // splitName parts a value found with its name, as 密钥
 // OPENAI_API_KEY=sk_… is, into the name, which stays as written, and the

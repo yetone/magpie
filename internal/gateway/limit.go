@@ -2,9 +2,10 @@ package gateway
 
 import (
 	"encoding/json"
-	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // tooFewTokens reads a provider's floor on the reply's length from the 400
@@ -13,7 +14,7 @@ import (
 // providers answer and some turn away. A > may come JSON-escaped, as
 // \u003e: the error is read from the body magpie re-encoded for the agent,
 // or a vendor encodes its own that way (#260: "Expected a value >= 16").
-var tooFewTokens = regexp.MustCompile(`(?i)max_(?:completion_|output_)?tokens.{0,60}?(greater than|more than|larger than|at least|(?:>|\\u003e)=?)\s*(\d+)`)
+var tooFewTokens = lazyre.New(`(?i)max_(?:completion_|output_)?tokens.{0,60}?(greater than|more than|larger than|at least|(?:>|\\u003e)=?)\s*(\d+)`)
 
 // tokenFloor is the least a provider said it takes, or 0 when the error
 // isn't about that.
