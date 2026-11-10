@@ -277,3 +277,35 @@ func TestCodexAppRowRestartWatchesForTheErrorPage(t *testing.T) {
 		t.Fatalf("the Agents row's Restart: relaunched %d", c.relaunch)
 	}
 }
+
+// Michael25651150 on X: "额度用尽时会强制重启 codex 客户端". With the
+// user's "Restart the Codex app" off (as it ships), quota running out
+// still restarts the app's app-server, which the takeover needs, but the
+// app showing its error page after it is never quit and opened again
+// unasked: the Agents row says to, and the app's Try again or the row's
+// Restart is the user's. Nor is a Windows app that started no app-server.
+func TestCodexAppNotQuitUnasked(t *testing.T) {
+	signIn(t)
+	s := stubCodexApp(t)
+	c := stubCodexCrash(t)
+	codexRestartsApp = func() bool { return false }
+	now := time.Now()
+	idle := func() (int, time.Time) { return 0, now.Add(-time.Minute) }
+	s.running = []int{60}
+	codexAppStep(context.Background(), now, idle)
+	s.on = true // the account used up: magpie serves it
+	if got := codexAppStep(context.Background(), now, idle); !slices.Equal(got, []int{60}) {
+		t.Fatalf("ended %v, want [60]: the takeover needs the app-server's restart", got)
+	}
+	c.page, c.at = true, now.Add(2*time.Second)
+	now = now.Add(3 * time.Second)
+	codexAppStep(context.Background(), now, idle)
+	if c.relaunch != 0 || !CodexAppSnagged() {
+		t.Fatalf("relaunched %d, snag %v: want left to the user, said on the row", c.relaunch, CodexAppSnagged())
+	}
+	reopened := 0
+	CodexAppReopen = func(context.Context) error { reopened++; return nil }
+	if stuck := codexAppGotNone(context.Background()); !stuck || reopened != 0 {
+		t.Fatalf("no app-server: reopened %d, stuck %v", reopened, stuck)
+	}
+}

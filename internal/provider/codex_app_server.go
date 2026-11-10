@@ -128,6 +128,12 @@ func codexAppGotNone(ctx context.Context) (stuck bool) {
 	if CodexAppReopen == nil {
 		return true
 	}
+	if !codexRestartsApp() {
+		// the user's app is never quit unasked (Michael25651150 on X):
+		// the Agents row says to, and its Restart does it
+		log.Printf("codex: the Codex app started no app-server in place of the one magpie ended; left for the user to reopen (Restart the Codex app is off)")
+		return true
+	}
 	if err := CodexAppReopen(ctx); err != nil {
 		log.Printf("codex: the Codex app started no app-server in place of the one magpie ended; reopening it: %v", err)
 		return true
@@ -429,6 +435,7 @@ func KeepCodexAppOnItsProvider(ctx context.Context, busy func() (int, time.Time)
 // ended.
 func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Time)) []int {
 	codexAppCrashStep(ctx, now, busy)
+	codexProjectsStep(ctx)
 	if CodexAppRoute == nil {
 		return nil
 	}

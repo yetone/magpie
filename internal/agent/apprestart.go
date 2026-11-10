@@ -451,6 +451,7 @@ func (a *Agent) restartWin(ctx context.Context, r restartable, c appRunning) err
 			return restartErr(noticeRestartStillThere, a)
 		}
 	}
+	appQuitDone(a.ID)
 	if err := winLaunch(c.main); err != nil {
 		return restartErr(noticeRestartNoOpen, a)
 	}
@@ -544,8 +545,19 @@ func reopenBundle(ctx context.Context, a *Agent, bundle, exe string) error {
 		case <-time.After(appPoll):
 		}
 	}
+	appQuitDone(a.ID)
 	if err := appOpen(ctx, bundle); err != nil {
 		return restartErr(noticeRestartNoOpen, a)
 	}
 	return nil
+}
+
+// appQuitDone runs once agent id's app has quit and before it opens
+// again: the Codex app's projects are carried to its other accounts then,
+// while it can't write over them (provider.CodexAppClosed). A var so
+// tests don't touch the state file.
+var appQuitDone = func(id string) {
+	if id == "codex" {
+		provider.CodexAppClosed()
+	}
 }

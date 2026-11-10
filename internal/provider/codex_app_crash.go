@@ -24,8 +24,11 @@ import (
 // and no Codex turn has started since nor a request gone through magpie
 // (the page has no composer: one that ran means it came back), magpie
 // quits the app and opens it again, once (CodexAppRelaunch: ⌘Q's quit on
-// macOS, never forced; the Agents row's Restart on Windows). Where that
-// can't be done, or the app didn't quit, the Agents row says to (snag,
+// macOS, never forced; the Agents row's Restart on Windows), but only
+// with the user's "Restart the Codex app" on (RestartApp): unasked, a
+// quit of the user's app read as magpie force-restarting it whenever
+// quota ran out (Michael25651150 on X). Where that is off or can't be
+// done, or the app didn't quit, the Agents row says to (snag,
 // CodexAppSnagged) until the app-servers seen then are gone.
 
 // CodexAppCrashed and CodexAppRelaunch are set by the agent package.
@@ -130,7 +133,14 @@ func codexAppCrashStep(ctx context.Context, now time.Time, busy func() (int, tim
 	pids, _ := codexAppServersOn(lctx, home)
 	cancel()
 	err := errNoRelaunch
-	if CodexAppRelaunch != nil {
+	switch {
+	case !codexRestartsApp():
+		// quitting the user's app and opening it again, unasked, takes
+		// their window with it (Michael25651150 on X: "额度用尽时会强制重启
+		// codex 客户端"); the Agents row says to, and its Try again or
+		// Restart is theirs
+		err = errRelaunchOff
+	case CodexAppRelaunch != nil:
 		err = CodexAppRelaunch(ctx)
 	}
 	if err == nil {
@@ -150,4 +160,7 @@ func codexAppUnsnag() {
 	c.Unlock()
 }
 
-var errNoRelaunch = errors.New("magpie doesn't reopen the Codex app here")
+var (
+	errNoRelaunch  = errors.New("magpie doesn't reopen the Codex app here")
+	errRelaunchOff = errors.New("left to the user: Restart the Codex app when magpie switches its account is off")
+)
