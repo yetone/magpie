@@ -60,7 +60,8 @@ export async function onResponse(reply, ctx) {
 // TestGatewayHookDefaultBudgetStillCuts: without a longer timeout a slow
 // hook is cut where it always was, by the host's own timer ("timeout", not
 // the RPC's deadline, which would read "cancelled"): at the default second,
-// and at 10s for the 10000 every host took.
+// and at 10s for the 10000 every host took. A first, quick request starts
+// the host, so the start doesn't eat the second's margin.
 func TestGatewayHookDefaultBudgetStillCuts(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -69,7 +70,13 @@ func TestGatewayHookDefaultBudgetStillCuts(t *testing.T) {
 	}{{"default", nil, 8000}, {"10000", map[string]any{"gatewayTimeoutMs": 10000}, 0}} {
 		t.Run(tc.name, func(t *testing.T) {
 			sandbox(t)
-			spec := gatewayFixture(t, `export async function onRequest(body) {
+			// The first request only starts the host: the RPC's 11s counts
+			// the host's start too, and on a busy CI machine a start past a
+			// second let it cut the 10000 hook first ("cancelled", run
+			// 42819148533 on macOS). The second request is the one measured.
+			spec := gatewayFixture(t, `let seen = 0;
+export async function onRequest(body) {
+  if (seen++ === 0) return body;
   await new Promise(resolve => setTimeout(resolve, 12000));
   return {...body, note: "recalled"};
 }`)
@@ -80,6 +87,9 @@ func TestGatewayHookDefaultBudgetStillCuts(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(t.Context(), 40*time.Second)
 			defer cancel()
+			if out := gatewayRequest(ctx, []byte(`{"note":"original"}`), GatewayContext{}); string(out) != `{"note":"original"}` {
+				t.Fatalf("the warming request came back changed: %s", out)
+			}
 			if out := gatewayRequest(ctx, []byte(`{"note":"original"}`), GatewayContext{}); string(out) != `{"note":"original"}` {
 				t.Fatalf("a hook past its default budget was kept: %s", out)
 			}
