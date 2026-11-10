@@ -37,6 +37,18 @@ func lineWith(out, s string) string {
 	return ""
 }
 
+// labelled is the line of a provider's show that label heads, "" when none
+// does: "as" is the impersonated account's label, where " as " is in
+// "billing  pay as you go" too.
+func labelled(out, label string) string {
+	for _, l := range strings.Split(out, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(l), label+" ") {
+			return l
+		}
+	}
+	return ""
+}
+
 // magpie provider add google-vertex takes the project, location, credentials
 // file and service account as pairs, set changes them (an empty one goes
 // back to the default), and none of them is taken by a provider that isn't
@@ -201,19 +213,19 @@ func TestProvidersShowVertexCredentials(t *testing.T) {
 		t.Fatal(err)
 	}
 	for label, want := range map[string]string{"project": "my-project", "location": "global", "signs with": "gcloud's Application Default Credentials"} {
-		if !strings.Contains(lineWith(out, label), want) {
+		if !strings.Contains(labelled(out, label), want) {
 			t.Errorf("show, ADC: no %s %s in\n%s", label, want, out)
 		}
 	}
-	if strings.Contains(out, "none needed") || strings.Contains(out, "not set") || lineWith(out, " as ") != "" {
+	if strings.Contains(out, "none needed") || strings.Contains(out, "not set") || labelled(out, "as") != "" {
 		t.Errorf("show, ADC:\n%s", out)
 	}
 	out, err = printed(t, func() error { return providerCmd([]string{"provider", "vertex-sa"}) })
 	if err != nil {
 		t.Fatal(err)
 	}
-	for label, want := range map[string]string{"location": "us-central1", "signs with": key, " as ": "vertex@my-project.iam.gserviceaccount.com"} {
-		if !strings.Contains(lineWith(out, label), want) {
+	for label, want := range map[string]string{"location": "us-central1", "signs with": key, "as": "vertex@my-project.iam.gserviceaccount.com"} {
+		if !strings.Contains(labelled(out, label), want) {
 			t.Errorf("show, impersonating: no %s %s in\n%s", label, want, out)
 		}
 	}
