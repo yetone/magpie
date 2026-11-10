@@ -859,19 +859,21 @@ func wslOwnFolder(a *agent.Agent) *Target {
 
 // apps are what the library can give MCP servers to that aren't agents
 // magpie sets up: known by the folder they keep their settings in
-// (Claude Desktop), or by their program alone (Kiro CLI).
+// (Claude Desktop; on Windows by its program, agent.DesktopApp), or by
+// their program alone (Kiro CLI).
 func apps() []*agent.Agent {
 	// Desktop's own folder (%APPDATA%\Claude on Windows, the MSIX
 	// package's for a packaged Desktop, which doesn't see a file written
 	// into %APPDATA%). Desktop only ever run in its 3p mode has no Claude
 	// folder, only Claude-3p: its file is the one there
 	d := desktopdir.Here()
+	home, _ := os.UserHomeDir()
 	dir := d.Data
 	if !isDir(dir) && isDir(d.ThreeP) {
 		dir = d.ThreeP
 	}
 	out := []*agent.Agent{
-		{ID: "claude-desktop", Name: "Claude Desktop", Icon: "claude-color", Dir: dir, Path: filepath.Join(dir, "claude_desktop_config.json")},
+		agent.DesktopApp(home, dir, filepath.Join(dir, "claude_desktop_config.json")),
 	}
 	// Kiro CLI (#4769) is no agent magpie wires a model into, but the
 	// library can give it skills, MCP servers and instructions. It is

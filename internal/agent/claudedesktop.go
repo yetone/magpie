@@ -145,8 +145,15 @@ func claudeDesktop(home string) *Agent {
 		ID: "claude-desktop", Name: "Claude Desktop", Icon: "claude-color", Aliases: []string{"claude-app"},
 		Dir: p.dir, Path: p.config,
 		detect: func() bool {
-			// its own data (%APPDATA%\Claude on Windows, or the MSIX
-			// package's), the folder magpie writes or Claude-3p
+			// on Windows Desktop's uninstall leaves %APPDATA%\Claude
+			// behind, its claude_desktop_config.json in it (alien_jambob on
+			// X: Desktop uninstalled and still listed), so there only its
+			// program says it is here; one still on magpie stays listed
+			// too, to be turned off
+			if desktopdir.OS == "windows" {
+				return desktopInstalled(home) || desktopWiredAny(ps)
+			}
+			// its own data, the folder magpie writes or Claude-3p
 			for _, s := range sets {
 				for _, d := range s.All() {
 					if isDir(d) {
@@ -155,11 +162,7 @@ func claudeDesktop(home string) *Agent {
 				}
 			}
 			// the isolated Desktop's folder
-			if iso && isDir(ps[0].dir3p) {
-				return true
-			}
-			// installed on Windows and not yet opened: none of them yet
-			return desktopdir.Installed(desktopdir.OS, home, os.Getenv)
+			return iso && isDir(ps[0].dir3p)
 		},
 		Notice: func() string {
 			if iso {
@@ -262,6 +265,38 @@ func claudeDesktop(home string) *Agent {
 			return joinErrs(errs)
 		},
 	}
+}
+
+// desktopInstalled reports whether Desktop's program is installed on this
+// Windows, whatever folders it has (desktopdir.Installed: Squirrel's
+// claude.exe or the MSIX's package folder), or opened yet (#1482): or
+// whether the AppX registry has its package, the Store's or the one its
+// setup.exe installs, for a package folder not made yet.
+func desktopInstalled(home string) bool {
+	if desktopdir.Installed(desktopdir.OS, home, os.Getenv) {
+		return true
+	}
+	for _, pkg := range windowsStorePackages() {
+		// name_version_architecture_resourceid_publisher: the main
+		// package, with no resource id
+		f := strings.Split(pkg, "_")
+		if len(f) == 5 && f[3] == "" && (f[0] == "Claude" || f[0] == "AnthropicPBC.Claude") {
+			return true
+		}
+	}
+	return false
+}
+
+// DesktopApp is Claude Desktop as the library knows it, with its file at
+// path in dir: on Windows listed only while its program is installed
+// (desktopInstalled), as the folder its uninstall leaves behind is no sign
+// of it; elsewhere by that folder, as any agent is.
+func DesktopApp(home, dir, path string) *Agent {
+	a := &Agent{ID: "claude-desktop", Name: "Claude Desktop", Icon: "claude-color", Dir: dir, Path: path}
+	if desktopdir.OS == "windows" {
+		a.detect = func() bool { return desktopInstalled(home) }
+	}
+	return a
 }
 
 // desktopRead are the sets of Desktop's folders whose wiring counts: the

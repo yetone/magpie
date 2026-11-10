@@ -123,6 +123,10 @@ func TestClaudeDesktopFresh(t *testing.T) {
 		t.Fatal("detected without its folder")
 	}
 	os.MkdirAll(p.dir, 0o755)
+	if desktopdir.OS == "windows" {
+		// there its program, not its folder, says it is here
+		desktopWrite(t, filepath.Join(home, "AppData", "Local", "AnthropicClaude", "claude.exe"), "")
+	}
 	if !a.Detected() {
 		t.Fatal("not detected")
 	}
