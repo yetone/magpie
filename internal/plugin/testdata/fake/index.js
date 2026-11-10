@@ -331,6 +331,26 @@ export const FakePlugin = async ({ client }) => ({
         ],
       }
     },
+    // $FAKE_CALLS: the account's calls made outside magpie, as Cursor's
+    // plugin lists them (auth.calls), from since on; the account key
+    // "calls-throw" can't reach the vendor
+    ...(process.env.FAKE_CALLS
+      ? {
+          calls: async (getAuth, provider, { since }) => {
+            const a = await getAuth()
+            if (a.key === "calls-throw") throw new Error("FakeCo's usage events answered 503")
+            return {
+              calls: [
+                { rid: "ev-1", t: since + 1000, model: "fake-1", in: 12, out: 3, cache_read: 40, cache_write: 2, cost: 0.004, session: "conv-1" },
+                // no rid, no time, odd counts: dropped or read as none
+                { t: since + 2000, model: "fake-1", in: 1 },
+                { rid: "ev-no-time", model: "fake-1" },
+                { rid: "ev-2", t: since + 3000, model: "fake-2", in: "9", out: -1, cost: "1" },
+              ],
+            }
+          },
+        }
+      : {}),
     // $FAKE_CHECKIN: the plugin presses the daily check-in itself, each
     // press written as a line of the account's key to that file (a signed-in
     // account's name/uid, so two of one name tell apart), and the

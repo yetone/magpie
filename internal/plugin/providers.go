@@ -146,6 +146,9 @@ type Provider struct {
 	// Checkin says the plugin presses its vendor's daily check-in for each
 	// account (auth.checkin)
 	Checkin bool `json:"checkin,omitempty"`
+	// Calls says the plugin lists each account's calls made outside
+	// magpie, for the Usage page (auth.calls)
+	Calls bool `json:"calls,omitempty"`
 	// Renews says the plugin renews its accounts' sign-ins through magpie
 	// (auth.refresh) and lets the gateway's magpie do it in the background
 	// as each comes due (auth.keepAlive not false); RenewLead is how long
@@ -1279,6 +1282,32 @@ func AccountCheckin(ctx context.Context, provider, account string) (Checkin, err
 	var c Checkin
 	err := Call(ctx, "checkin", map[string]any{"provider": provider, "account": account, "proxy": proxyOf(ctx)}, &c)
 	return c, err
+}
+
+// OutsideCall is one call an account made outside magpie, as the plugin's
+// auth.calls said it: RID is the vendor's id of it, T its time (epoch ms),
+// In the input tokens with the cache apart, Cost its USD price as the
+// vendor gave it (nil when not said), Session the conversation it was in.
+type OutsideCall struct {
+	RID        string   `json:"rid"`
+	T          int64    `json:"t"`
+	Model      string   `json:"model"`
+	In         int64    `json:"in"`
+	Out        int64    `json:"out"`
+	CacheRead  int64    `json:"cache_read"`
+	CacheWrite int64    `json:"cache_write"`
+	Cost       *float64 `json:"cost"`
+	Session    string   `json:"session"`
+}
+
+// AccountCalls asks the plugin for account's calls of provider made
+// outside magpie, from since on.
+func AccountCalls(ctx context.Context, provider, account string, since time.Time) ([]OutsideCall, error) {
+	var r struct {
+		Calls []OutsideCall `json:"calls"`
+	}
+	err := Call(ctx, "calls", map[string]any{"provider": provider, "account": account, "proxy": proxyOf(ctx), "since": since.UnixMilli()}, &r)
+	return r.Calls, err
 }
 
 // AccountUsage asks the plugin for account's usage of provider.

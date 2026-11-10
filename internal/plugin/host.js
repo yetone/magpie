@@ -2602,6 +2602,7 @@ function rowOf(id, a, keys, stored, p, own) {
     icon: iconOf(a),
     usage: typeof a.auth.usage === "function",
     checkin: typeof a.auth.checkin === "function",
+    calls: typeof a.auth.calls === "function",
     // its sign-ins are renewed in the background as they come due, so
     // long before expires (keepSignedIn)
     renews: keepsAlive(a.auth),
@@ -3248,6 +3249,51 @@ async function checkinOf(provider, account) {
   return { outcome: r.outcome, credit: num(r.credit), streak: Math.round(num(r.streak)), message, until }
 }
 
+// ---- calls made outside magpie -------------------------------------------------
+
+// calls are the account's calls made outside magpie (the vendor's own
+// editor or CLI) from since on, for magpie's Usage page, as the plugin's
+// auth.calls gives them (magpie's own hook, which OpenCode ignores):
+//   auth.calls(getAuth, provider, {since, signal}) → {calls: [{
+//     rid (the vendor's id of the call: magpie counts each once),
+//     t (epoch ms), model, in (input tokens, cache apart), out,
+//     cache_read, cache_write, cost? (USD, as the vendor priced it),
+//     session? (the conversation it was part of)
+//   }]}
+// A call without an rid or a time is dropped. A hook that throws fails
+// the reading: magpie asks again from the same time.
+// Run in the account's scope, a token it renews is saved to that account.
+async function calls({ provider, account, proxy, since }, signal) {
+  return via.run(proxy ?? "", () => callsOf(provider, account, since, signal))
+}
+
+async function callsOf(provider, account, since, signal) {
+  const a = auths().get(provider)?.auth
+  if (typeof a?.calls !== "function") throw new Error(`${provider}'s plugin doesn't list its calls`)
+  const key = accountKey(provider, account)
+  if (!readAuth()[key]) throw new Error("not signed in")
+  await fresh(provider, key)
+  const p = await infoOf(provider, key)
+  const r = (await inScope(provider, key, () => a.calls(async () => authCopy(key), JSON.parse(JSON.stringify(p)), { since: Number(since) || 0, ...(signal === undefined ? {} : { signal }) }))) ?? {}
+  const num = (v) => (typeof v === "number" && isFinite(v) ? Math.max(0, v) : 0)
+  const text = (v) => (typeof v === "string" ? v : "")
+  return {
+    calls: (Array.isArray(r.calls) ? r.calls : [])
+      .filter((c) => c && typeof c === "object" && text(c.rid) && num(c.t) > 0)
+      .map((c) => ({
+        rid: text(c.rid),
+        t: Math.round(num(c.t)),
+        model: text(c.model),
+        in: Math.round(num(c.in)),
+        out: Math.round(num(c.out)),
+        cache_read: Math.round(num(c.cache_read)),
+        cache_write: Math.round(num(c.cache_write)),
+        cost: typeof c.cost === "number" && isFinite(c.cost) && c.cost >= 0 ? c.cost : null,
+        session: text(c.session),
+      })),
+  }
+}
+
 // sdkHeaders are what the AI SDK package the model is on sends of the key.
 function sdkHeaders(npm, key) {
   if (!key) return {}
@@ -3448,6 +3494,7 @@ const handlers = {
   load,
   usage,
   checkin,
+  calls,
   keepSignedIn,
   // setOptions takes the user's option values over, as init did: the
   // plugin reads them when it next asks (#2038)
