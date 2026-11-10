@@ -56,7 +56,7 @@ func allowList() (list []string, fromEnv, unknown bool) {
 	if v := strings.TrimSpace(os.Getenv(AllowIPsEnv)); v != "" {
 		return settings.SplitAllowIPs(v), true, false
 	}
-	s, err := settings.LoadChecked()
+	s, err := settings.SharedChecked() // only AllowIPs read, kept as is
 	lastAllow.Lock()
 	defer lastAllow.Unlock()
 	if err == nil {

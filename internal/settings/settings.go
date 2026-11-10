@@ -1663,6 +1663,24 @@ func Shared() Settings {
 	return s
 }
 
+// SharedChecked is Shared with LoadChecked's error: the settings without
+// a copy of their own while settings.json parses whole, and LoadChecked's
+// copy (or its error) otherwise. Read only, as Shared is: the gateway's
+// allow list asks on every request the GUI and gateway serve, and a copy
+// each time was most of what a state poll's Settings cost.
+func SharedChecked() (Settings, error) {
+	fileMu.RLock()
+	defer fileMu.RUnlock()
+	if !writing {
+		if b, err := filememo.Read("settings", pathNow(), func(b []byte) ([]byte, error) { return b, nil }); err == nil {
+			if s, ok := sharedFor(b); ok {
+				return s, nil
+			}
+		}
+	}
+	return loadChecked()
+}
+
 // SharedModelIDs is Shared().ModelIDs, read for each model a list is
 // built of: only that field is parsed, once per change of the file, and a
 // missing file has none without the defaults Shared builds each time.
