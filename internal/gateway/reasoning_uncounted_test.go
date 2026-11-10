@@ -62,7 +62,15 @@ func TestStreamedReasoningWithoutCount(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			fresh(t)
-			up := httptest.NewServer(&paced{events: c.events, gap: 80 * time.Millisecond})
+			w := newHearing(0)
+			pc := &paced{events: c.events, gap: 80 * time.Millisecond}
+			if c.proto == provider.Chat {
+				// each piece a gap after the agent had the one before, so
+				// a gateway that reads late can't read them as one (#5948)
+				w = newHearing(0, "We need", " to check", " it.")
+				pc.heard = w.heard
+			}
+			up := httptest.NewServer(pc)
 			t.Cleanup(up.Close)
 			p := provider.Provider{ID: "fake", Name: "Fake", Key: "k", Models: []string{"m1"}}
 			if c.proto == provider.Anthropic {
@@ -74,7 +82,6 @@ func TestStreamedReasoningWithoutCount(t *testing.T) {
 				t.Fatal(err)
 			}
 			s := New()
-			w := httptest.NewRecorder()
 			s.Handler().ServeHTTP(w, httptest.NewRequest("POST", c.path, strings.NewReader(c.body)))
 			if w.Code != 200 {
 				t.Fatalf("%d %s", w.Code, w.Body)

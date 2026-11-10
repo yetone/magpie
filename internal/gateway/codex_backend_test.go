@@ -39,11 +39,17 @@ func chatgpt(t *testing.T, h http.HandlerFunc) *httptest.Server {
 func codexPost(t *testing.T, body string) (int, string) {
 	t.Helper()
 	rec := httptest.NewRecorder()
+	codexServe(rec, body)
+	return rec.Code, rec.Body.String()
+}
+
+// codexServe sends body to a new Server's Codex path as Codex does, its
+// reply to w.
+func codexServe(w http.ResponseWriter, body string) {
 	req := httptest.NewRequest("POST", CodexPath+"/responses", strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer chatgpt-token")
 	req.Header.Set("chatgpt-account-id", "acct-1")
-	New().Handler().ServeHTTP(rec, req)
-	return rec.Code, rec.Body.String()
+	New().Handler().ServeHTTP(w, req)
 }
 
 // One of Codex's own models goes on to the ChatGPT backend as it came, the

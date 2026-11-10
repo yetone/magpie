@@ -234,16 +234,21 @@ func TestUsageLeavesTTFTOfAWholeReply(t *testing.T) {
 
 // In a group that fails over, each try keeps its own time to its first
 // token, from when it was sent, and the usage the request's, from when it
-// came: the time the failed try took is in it, as it is in ms.
+// came: the time the failed try took is in it, as it is in ms. The
+// answering try's text comes a gap after the agent was sent its
+// reasoning, so a loaded machine can't read the two at once and time them
+// as one (#5948, as #2575 in TestUsageKeepsTimeToFirstToken).
 func TestGroupFailoverTimesEachTry(t *testing.T) {
 	fresh(t)
+	rec := newHearing(0, "hmm", `"hi"`)
 	serveOn(t, "a", "ka", []string{"m"}, &paced{fail: 429, gap: pacedGap})
-	serveOn(t, "b", "kb", []string{"m"}, &paced{events: pacedChat, gap: pacedGap})
+	serveOn(t, "b", "kb", []string{"m"}, &paced{events: pacedChat, gap: pacedGap, heard: rec.heard})
 	if err := provider.SaveGroup(provider.Group{Name: "Mine", Members: []string{"a/m", "b/m"}, Routing: provider.Ordered}); err != nil {
 		t.Fatal(err)
 	}
 	s := New()
-	code, body := postAs(t, s, "", `{"model":"group/mine","stream":true,"messages":[{"role":"user","content":"hi"}]}`)
+	s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"group/mine","stream":true,"messages":[{"role":"user","content":"hi"}]}`)))
+	code, body := rec.Code, rec.Body.String()
 	if code != 200 || !strings.Contains(body, `"hi"`) {
 		t.Fatalf("%d %s", code, body)
 	}
@@ -317,15 +322,20 @@ func TestFirstTokenKinds(t *testing.T) {
 
 // Codex's own models, relayed to the ChatGPT backend as they came, are
 // timed too — its stream says no Content-Type.
+// Each event after the first comes a gap after Codex was sent the one
+// before it, so a loaded machine can't read the text and the end at once
+// (#5948).
 func TestCodexBackendTimesFirstToken(t *testing.T) {
 	setup(t, provider.Chat, &fake{t: t})
-	p := &paced{events: pacedResponses, gap: pacedGap}
+	rec := newHearing(0, "hmm", `"hi"`)
+	p := &paced{events: pacedResponses, gap: pacedGap, heard: rec.heard}
 	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header()["Content-Type"] = nil
 		p.ServeHTTP(w, r)
 	})
-	if code, body := codexPost(t, `{"model":"gpt-5.5","stream":true,"input":"hi"}`); code != 200 {
-		t.Fatalf("%d %s", code, body)
+	codexServe(rec, `{"model":"gpt-5.5","stream":true,"input":"hi"}`)
+	if rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
 	gap := pacedGap.Milliseconds()
 	if u := lastUsage(t); u.TTFT < gap || u.FirstText < 2*gap || u.Millis <= u.FirstText || u.Output != 20 {

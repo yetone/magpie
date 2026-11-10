@@ -58,7 +58,9 @@ func TestReasoningSpeedThroughGateway(t *testing.T) {
 	for _, path := range []string{"/v1/chat/completions", "/v1/responses", "/v1/messages"} {
 		t.Run(path, func(t *testing.T) {
 			fresh(t)
-			up := httptest.NewServer(&paced{events: events, gap: 150 * time.Millisecond})
+			// each thought a gap after the agent had the one before (#5948)
+			rec := newHearing(0, "first thought", "second thought", "third thought")
+			up := httptest.NewServer(&paced{events: events, gap: 150 * time.Millisecond, heard: rec.heard})
 			t.Cleanup(up.Close)
 			if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Chat: up.URL + "/v1", Key: "k", Models: []string{"m1"}}); err != nil {
 				t.Fatal(err)
@@ -68,7 +70,6 @@ func TestReasoningSpeedThroughGateway(t *testing.T) {
 				body = `{"model":"fake/m1","stream":true,"input":"hi"}`
 			}
 			s := New()
-			rec := httptest.NewRecorder()
 			s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", path, strings.NewReader(body)))
 			u := lastUsage(t)
 			r := lastRoute(s)
@@ -94,7 +95,7 @@ func TestReasoningSpeedThroughGateway(t *testing.T) {
 // stood in for by holding the sticks' save.
 func TestSpeedEndsWithTheReply(t *testing.T) {
 	events := []string{
-		`data: {"choices":[{"delta":{"reasoning_content":"first thought"}}]}`,
+		`~data: {"choices":[{"delta":{"reasoning_content":"first thought"}}]}`,
 		`~data: {"choices":[{"delta":{"reasoning_content":"second thought"}}]}`,
 		`~data: {"choices":[{"delta":{"reasoning_content":"third thought"}}]}`,
 		`~data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"check","arguments":"{}"}}]}}]}`,
@@ -103,13 +104,14 @@ func TestSpeedEndsWithTheReply(t *testing.T) {
 	}
 	const held = 2 * time.Second
 	fresh(t)
-	up := httptest.NewServer(&paced{events: events, gap: 150 * time.Millisecond})
+	// each thought a gap after the agent had the one before (#5948)
+	rec := newHearing(0, "first thought", "second thought", "third thought")
+	up := httptest.NewServer(&paced{events: events, gap: 150 * time.Millisecond, heard: rec.heard})
 	t.Cleanup(up.Close)
 	if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Chat: up.URL + "/v1", Key: "k", Models: []string{"m1"}}); err != nil {
 		t.Fatal(err)
 	}
 	s := New()
-	rec := httptest.NewRecorder()
 	sticksSaving.Lock()
 	let := time.AfterFunc(held, sticksSaving.Unlock)
 	t.Cleanup(func() {
