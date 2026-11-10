@@ -1618,7 +1618,6 @@ function switchEntry(a) {
   const pn = mode === "panel", b = el("button", pn ? "field ag-who" : "ag-acc ag-who"), cx = a.id === "codex";
   b.type = "button";
   b.setAttribute("aria-haspopup", "menu");
-  b.setAttribute("aria-expanded", "false");
   if (cur) b.title = t("Switch accounts only: {agent} is signed in as {user}. Pick another of its accounts to sign {agent} in to it, without connecting it to magpie.", { ...ag, user: cur });
   b.append(pn ? el("span", "k", t("account")) : svg(EXTRA_GLYPH["sign-in"], 12, 1.5), el("span", "v", cur || t("Not signed in")));
   const ago = performance.now() - (accountSwitched?.at || -1e9);
@@ -1663,14 +1662,21 @@ async function switchAccountTo(a, p, user) {
   renderAgents();
 }
 
-// the panel's list for it: the kept one, a fresh read only with none kept
+// the panel's list for it and the Usage tab's: the kept one, a fresh read
+// only with none kept, one read at a time
 async function panelAccounts() {
-  if (!state.agents.some(switchesAccounts)) return;
-  const s = await api("providers?last=1").then((s) => s || api("providers")).catch(() => null);
+  if (!state.agents.some(switchesAccounts) && !panelSeveral()) return;
+  const s = await (panelAccounts.p ||= api("providers?last=1").then((s) => s || api("providers")).catch(() => null).finally(() => panelAccounts.p = null));
   const key = (l) => JSON.stringify(l?.providers?.filter((p) => p.account).map((p) => [p.id, p.account, p.switchOnly, p.keepLoginAs]));
   if (!s || panelAccts === s || key(s) === key(panelAccts)) return;
   panelAccts = s;
   renderAgents();
+  renderPanelQuota(true);
+}
+
+function panelSeveral() {
+  const seen = new Set();
+  return (quotas || []).some((q) => q.user && !q.balance && (seen.has(q.provider) || !seen.add(q.provider)));
 }
 
 // agentsLead: above the window's list, what 「接入」 does, said once in a
@@ -12476,7 +12482,7 @@ function pluginMethod(sub, site) {
 // Plugins), as subscriptions like the built-in ones. The plugin, not
 // magpie, signs in and carries the requests.
 function pluginSubs() {
-  return (providers.plugins || []).map((x) => ({
+  return ((providers || panelAccts)?.plugins || []).map((x) => ({
     agent: x.id, pid: x.pid, name: x.name, icon: x.icon, plugin: x, own: true, single: !!x.single,
     get plans() { return t("from the plugin {spec}", { spec: x.spec }); },
   }));
@@ -12914,7 +12920,6 @@ function signInProxyLink(sub) {
   // the whole address too, which a narrow sheet cuts short
   b.title = proxyName(signing.proxy) + "\n" + t("The sign-in goes through this proxy, as the account's requests will. One picked here is kept as the account's.");
   b.setAttribute("aria-haspopup", "menu");
-  b.setAttribute("aria-expanded", "false");
   b.onclick = (e) => {
     e.stopPropagation();
     const flow = signing;
@@ -13353,6 +13358,29 @@ function loginsInOrder(a, p) {
   return ls.sort((x, y) => (y.active ? 1 : 0) - (x.active ? 1 : 0));
 }
 
+// the editor's First, and its Make first or Use (putFirst), which the
+// panel's Usage tab shares
+function firstLogin(a, p) {
+  const ls = loginsInOrder(a, p);
+  return keptLogin(p) ? ls.find((l) => (l.active || l.on) && !l.paused && !l.lapsed)?.user : ls.find((l) => l.active)?.user;
+}
+
+function byQuotaOf(p, r = p?.routing || "") {
+  return p?.account && ["", "usage", "pace"].includes(r) ? ROUTINGS.find(([id]) => id === r)?.[1] : "";
+}
+function firstNoteOf(p, user) {
+  return t("{user} is first in the order; {routing} still goes by each account's quota, so the order only settles ties. In order uses the first first.", { user, routing: t(byQuotaOf(p)) });
+}
+
+function putFirst(a, p, l) {
+  const sub = subOf(a.agent), byQuota = byQuotaOf(p), on = !l.paused && (l.active || l.on);
+  if (keptLogin(p)) {
+    const ls = loginsInOrder(a, p);
+    return accountAction("provider/arrange", { id: p.id, accountOrder: [l.user, ...ls.filter((x) => x !== l).map((x) => x.user)] }, byQuota ? firstNoteOf(p, l.user) : t("The gateway now uses {user} first", { user: l.user }));
+  }
+  return accountAction("login/switch", { agent: a.agent, user: l.user }, on && byQuota ? (sub?.own ? "" : t("{agent} is now signed in as {user}", { agent: a.agentName, user: l.user }) + " ") + firstNoteOf(p, l.user) : sub?.own ? t("The gateway now uses {user} first", { user: l.user }) : t("{agent} is now signed in as {user}", { agent: a.agentName, user: l.user }));
+}
+
 function renderAccounts(a, p) {
   const sub = subOf(a.agent);
   const list = el("div", "accts");
@@ -13369,13 +13397,12 @@ function renderAccounts(a, p) {
   const isOn = (l) => !unusable(l) && !l.paused && (l.active || l.on), wOf = (l) => Math.max(p?.accountWeights?.[String(l.user).toLowerCase()] || 0, 1), weights = ls.filter(isOn).reduce((n, l) => n + wOf(l), 0);
   // kept signed in to one (#524): the first is the order's
   const kept = keptLogin(p);
-  const firstUser = kept ? ls.find((l) => (l.active || l.on) && !l.paused && !l.lapsed)?.user : ls.find((l) => l.active)?.user;
-  const byQuota = p?.account && ["", "usage", "pace"].includes(p?.routing || "") ? ROUTINGS.find(([id]) => id === (p?.routing || ""))?.[1] : "";
-  const firstNote = (user) => t("{user} is first in the order; {routing} still goes by each account's quota, so the order only settles ties. In order uses the first first.", { user, routing: t(byQuota) });
+  const firstUser = firstLogin(a, p);
+  const byQuota = byQuotaOf(p);
   const makeFirst = (l) => {
     const b = el("button", "text", t("Make first"));
-    b.title = byQuota ? firstNote(l.user) : t("The gateway uses this account first; {agent} stays signed in to {user}", { agent: a.agentName, user: kept });
-    b.onclick = () => { b.classList.add("busy"); accountAction("provider/arrange", { id: p.id, accountOrder: [l.user, ...ls.filter((x) => x !== l).map((x) => x.user)] }, byQuota ? firstNote(l.user) : t("The gateway now uses {user} first", { user: l.user })); };
+    b.title = byQuota ? firstNoteOf(p, l.user) : t("The gateway uses this account first; {agent} stays signed in to {user}", { agent: a.agentName, user: kept });
+    b.onclick = () => { b.classList.add("busy"); putFirst(a, p, l); };
     return b;
   };
   // pausable while another is on (#263)
@@ -13513,8 +13540,8 @@ function renderAccounts(a, p) {
         line.append(forget, only);
       } else {
         const use = el("button", "text", on ? t("Make first") : t("Use"));
-        use.title = on && byQuota ? firstNote(l.user) : sub?.own ? t("The gateway uses this account first") : t("Sign {agent} in to this account", { agent: a.agentName });
-        use.onclick = () => { use.classList.add("busy"); accountAction("login/switch", { agent: a.agent, user: l.user }, on && byQuota ? (sub?.own ? "" : t("{agent} is now signed in as {user}", { agent: a.agentName, user: l.user }) + " ") + firstNote(l.user) : sub?.own ? t("The gateway now uses {user} first", { user: l.user }) : t("{agent} is now signed in as {user}", { agent: a.agentName, user: l.user })); };
+        use.title = on && byQuota ? firstNoteOf(p, l.user) : sub?.own ? t("The gateway uses this account first") : t("Sign {agent} in to this account", { agent: a.agentName });
+        use.onclick = () => { use.classList.add("busy"); putFirst(a, p, l); };
         line.append(forget, use);
       }
     }
@@ -14278,7 +14305,6 @@ function windowCapMeter(m, p, user, w) {
     : own ? t("{window} has a cap of its own: magpie counts this account as used up once {window} is at {n}%, until it renews. Click to change", { window: name, n: own })
     : t("Click to give {window} a cap of its own, apart from this account's", { window: name })].filter(Boolean).join("\n");
   b.setAttribute("aria-haspopup", "menu");
-  b.setAttribute("aria-expanded", "false");
   const set = (v) => accountAction("provider/windowcap", { id: p.id, account: user, window: w.capId, ...w.tiers && { windows: ids }, cap: v },
     v === 0 && !w.ownCap ? t("{window} of {who} follows the account's cap", { window: name, who: user })
       : !(v % 100) ? t("{window} of {who} has no cap", { window: name, who: user })
@@ -15891,6 +15917,7 @@ function loadQuotas(asked, again) {
       if (!same) renderQuotas(true);
       if (view === "usage") loadUpstream();
       if (reading && !quotasLater && ++quotasTries <= 20) quotasLater = setTimeout(() => { quotasLater = 0; loadQuotas(false, true); }, 1500);
+      if (mode === "panel" && state?.agents && !panelAccts) panelAccounts();
     });
   p.asked = asked;
   quotasLoading = p;
@@ -17483,7 +17510,7 @@ function renderPanelUse() {
 function renderPanelQuota(lazy) {
   const box = $("#panelQuota");
   if (mode !== "panel" || !box) return;
-  const drawn = JSON.stringify([quotas, quotaHistV, quotaLeft, quotaRange, [...panelOptsFolded], state?.settings, locale, panelTab, panelPeek, panelArranging, panelZeroOpen, usageArranging, Math.floor(Date.now() / 60e3)]);
+  const drawn = JSON.stringify([quotas, quotaHistV, quotaLeft, quotaRange, [...panelOptsFolded], state?.settings, locale, panelTab, panelPeek, panelArranging, panelZeroOpen, usageArranging, panelAcctsKey(), Math.floor(Date.now() / 60e3)]);
   if (lazy && renderPanelQuota.drawn === drawn) return;
   renderPanelQuota.drawn = drawn;
   const subs = byUsageOrder(keyCards(quotas || []).filter((q) => q.balance || q.error || q.windows?.length));
@@ -17515,7 +17542,7 @@ function renderPanelQuota(lazy) {
     fit();
     return;
   }
-  if (panelArranging) {
+  if (panelArranging && window.panelArrange) {
     box.append(panelArrange(subs));
     if (view && view.scrollTop !== keep) view.scrollTop = keep;
     fit();
@@ -17550,11 +17577,14 @@ function renderPanelQuota(lazy) {
     const { name, qs } = part;
     if (qs.every((q) => zero.has(q)) && (atZero += qs.length) && !panelZeroOpen) continue;
     const g = el("div", "pq-group");
+    g.dataset.provider = qs[0].provider;
     const head = el("div", "pq-gh");
     head.append(icon(qs[0].icon), el("span", "pq-gn", name));
-    // several accounts: how many, a quiet count by the name; one: its plan
-    // and until when, at the right
-    if (qs.length > 1) {
+    // several accounts: how many, a quiet count by the name, which puts one
+    // first; one: its plan and until when, at the right
+    const first = qs.length > 1 && panelFirstOf(qs);
+    if (first) head.append(panelFirstMenu(qs, first));
+    else if (qs.length > 1) {
       const n = el("span", "pq-count", String(qs.length));
       n.title = t("{n} accounts", { n: qs.length });
       head.append(n);
@@ -17576,7 +17606,7 @@ function renderPanelQuota(lazy) {
     // the accounts in full; none of them, the one in sight; folded, none
     const shut = all && quotaAllFolded(qs[0].provider);
     const full = qs.length > 1 ? qs.filter((q) => usageAcctOpen(q, qs)) : qs;
-    if (!shut) for (const q of full.length ? full : [usageShown(qs)]) g.append(panelQuotaCard(q));
+    if (!shut) for (const q of full.length ? full : [usageShown(qs)]) g.append(panelQuotaCard(q, first && sameUser(q.user, first.user)));
     if (qs.length > 1 && !shut) g.append(usageMore(qs, "pq-more"));
     box.append(g);
   }
@@ -17585,7 +17615,7 @@ function renderPanelQuota(lazy) {
   const arrange = el("button", "pq-more pq-arrange", t("Arrange"));
   arrange.type = "button";
   arrange.title = t("Choose which subscriptions this tab shows, and their order");
-  arrange.onclick = () => { panelArranging = true; panelPeek = ""; renderPanelQuota(); $("#panelQuota .pq-arow .pq-ahandle")?.focus(NO_SCROLL); };
+  arrange.onclick = () => import("./panelarrange.js").then(() => { panelArranging = true; panelPeek = ""; renderPanelQuota(); $("#panelQuota .pq-arow .pq-ahandle")?.focus(NO_SCROLL); }, statusErr);
   foot.append(arrange);
   if (atZero) {
     const z = el("button", "pq-more pq-zero", panelZeroOpen ? t("Fold the ones at 0") : t("{n} at 0", { n: atZero }));
@@ -17603,6 +17633,31 @@ function renderPanelQuota(lazy) {
   panelAge();
   fit();
   requestAnimationFrame(focusQuotaCard);
+}
+
+// a vendor's count on the panel's Usage tab puts an account first
+// (RealZeroP27 on X); its menu is panelfirst.js
+const sameUser = (a, b) => !!a && !!b && String(a).toLowerCase() === String(b).toLowerCase();
+function panelAcctsKey() {
+  return panelAccts?.providers?.map((p) => p.account?.logins?.length > 1 && [p.id, p.routing, p.keepLogin, p.keepLoginAs, p.account.logins]);
+}
+function panelFirstOf(qs) {
+  const p = panelAccts?.providers?.find((x) => x.id === qs[0].provider && x.account?.logins?.length > 1);
+  if (!p) return null;
+  const a = p.account, kept = keptLogin(p), user = firstLogin(a, p);
+  const can = loginsInOrder(a, p).filter((l) => !l.token && !l.accessOnly && !l.lapsed && (!kept || (!l.paused && (l.active || l.on))));
+  return can.length > 1 && can.some((l) => l.user !== user) ? { p, a, user, can } : null;
+}
+function panelFirstMenu(qs, f) {
+  const b = el("button", "pq-count pq-pick");
+  b.type = "button";
+  b.title = t("{n} accounts", { n: qs.length });
+  b.setAttribute("aria-label", b.title);
+  b.setAttribute("aria-haspopup", "menu");
+  b.setAttribute("aria-expanded", "false");
+  b.append(el("span", "", String(qs.length)), svg(CHEV, 9, 1.8));
+  b.onclick = (e) => { e.stopPropagation(); if (b.classList.contains("open")) return closeProtoMenu(); import("./panelfirst.js").then(() => panelFirstOpen(b, qs, f), statusErr); };
+  return b;
 }
 
 // panelBalances is a run of balances on the Allowances tab, under their
@@ -17653,81 +17708,6 @@ function panelBalances(bals) {
   return g;
 }
 
-// The Allowances tab's arranging (H20 on Discord): a row a subscription,
-// in the order the Usage page's cards have, its logo the handle to move it
-// (drag, or Alt+arrows) and a pill to hide it from this tab or show it
-// again. Hiding is the panel's alone; routing and the rest still use it.
-function panelArrange(subs) {
-  const g = el("div", "pq-group pq-arranging");
-  const head = el("div", "pq-gh");
-  head.append(el("span", "pq-gn", t("Arrange")));
-  const done = el("button", "pq-mode pq-done", t("Done"));
-  done.type = "button";
-  done.onclick = () => { panelArranging = false; renderPanelQuota(); };
-  head.append(done);
-  g.append(head, el("p", "pq-anote", t("Hiding is for this panel only: routing, the Usage page and the menu bar still use what's hidden. The order is the Usage page's too.")));
-  const hidden = new Set(state.settings?.panelUsageHidden || []);
-  const list = el("div", "pq-alist");
-  const seen = new Set();
-  for (const q of subs) {
-    if (seen.has(q.provider)) continue;
-    seen.add(q.provider);
-    const off = hidden.has(q.provider);
-    const row = el("div", "pq-arow" + (off ? " put-away" : ""));
-    row.dataset.key = q.provider;
-    const h = el("button", "ag-handle pq-ahandle");
-    h.type = "button";
-    h.setAttribute("aria-label", t("Arrange {agent}", { agent: q.name }));
-    h.title = t("Drag to reorder · Alt+arrow keys to move");
-    h.append(icon(q.icon || "generic"));
-    h.onkeydown = (e) => {
-      const step = { ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1 }[e.key];
-      if (!e.altKey || !step) return;
-      e.preventDefault();
-      moveUsage(q.provider, usageKeys().indexOf(q.provider) + step);
-      $(`#panelQuota .pq-arow[data-key="${CSS.escape(q.provider)}"] .pq-ahandle`)?.focus(NO_SCROLL);
-    };
-    h.onpointerdown = (e) => {
-      if (usageArranging) return;
-      usageArranging = dragCards(e, h, row, list, [...list.children], (to) => moveUsage(q.provider, to), () => {
-        usageArranging = false;
-        if (usageRenderPending) { usageRenderPending = false; renderQuotas(); }
-      });
-    };
-    const pill = el("button", "pq-more pq-show", t(off ? "Show" : "Hide"));
-    pill.type = "button";
-    pill.setAttribute("aria-pressed", String(!off));
-    pill.title = t(off ? "Show {name} in this panel" : "Hide {name} from this panel", { name: q.name });
-    pill.onclick = () => hidePanelUsage(q.provider, !off);
-    row.append(h, el("span", "pq-aname", q.name), off ? el("span", "pq-hidden", t("Hidden")) : "", pill);
-    list.append(row);
-  }
-  g.append(list);
-  return g;
-}
-
-// hidePanelUsage hides a subscription from the panel's Allowances tab, or
-// shows it again: drawn at once, put back if the save fails.
-async function hidePanelUsage(key, hide) {
-  const prev = state.settings;
-  const cur = (prev.panelUsageHidden || []).filter((k) => k !== key);
-  const panelHidden = hide ? [...cur, key] : cur;
-  state.settings = { ...prev, panelUsageHidden: panelHidden };
-  const again = () => {
-    renderPanelQuota();
-    $(`#panelQuota .pq-arow[data-key="${CSS.escape(key)}"] .pq-show`)?.focus(NO_SCROLL);
-  };
-  again();
-  try {
-    const s = await api("usage/arrange", { panelHidden });
-    state.settings = { ...state.settings, panelUsageHidden: s.panelUsageHidden || [] };
-  } catch (e) {
-    state.settings = prev;
-    again();
-    statusErr(e);
-  }
-}
-
 // asOfText dates a cached allowance and distinguishes a deliberate skip
 // from a failed read (such as the vendor rate limiting its usage endpoint).
 function asOfText(q, short = false) {
@@ -17743,7 +17723,7 @@ function shortWindow(name) {
   return m ? m[1] + { minute: "m", hour: "h", day: "d", week: "w", month: "mo" }[m[2].toLowerCase()] : t(name);
 }
 
-function panelQuotaCard(q) {
+function panelQuotaCard(q, first = false) {
   const card = el("div", "pq-card");
   card.dataset.card = trayCardID(q);
   if (q.balanceCard) card.dataset.balCard = q.balanceCard;
@@ -17751,6 +17731,13 @@ function panelQuotaCard(q) {
   // in for (#1515), before the account itself
   // and its eye while Hide accounts is on, as on the Usage page (yogurt36)
   const who = el("span", "pq-who");
+  if (first) {
+    const tick = el("span", "pq-first");
+    tick.append(svg(CHECK, 10, 2.2));
+    tick.title = t("First");
+    who.append(tick);
+    card.classList.add("first");
+  }
   who.append(el("span", "pq-user" + (q.alias && q.named ? " own-name" : ""), q.alias || q.user || q.name));
   if ((q.user || q.alias) && window.hideAccounts) who.append(hideAccounts.eye(q.user || q.alias, q.provider));
   card.append(who);
@@ -21650,7 +21637,6 @@ function sideEffortChip(val, levels, saved, now, cls, dflt, save) {
   const b = el("button", "rt-cond on side-effort " + cls);
   b.type = "button";
   b.setAttribute("aria-haspopup", "menu");
-  b.setAttribute("aria-expanded", "false");
   const shown = saved ? now || saved : "";
   b.setAttribute("aria-label", t("Thinking") + ": " + (shown ? t(shown) : t("Default")));
   b.title = t("How hard this model thinks");
@@ -21679,7 +21665,6 @@ function replyModelRow(s, keep) {
   b.type = "button";
   b.title = n;
   b.setAttribute("aria-haspopup", "menu");
-  b.setAttribute("aria-expanded", "false");
   b.append(el("span", "", t(cur[1])), svg(CHEV, 11, 1.6));
   b.onclick = (e) => {
     e.stopPropagation();
@@ -21989,7 +21974,6 @@ function pmPick(m, pick) {
   const b = el("button", "sess-pick pm-model");
   b.type = "button";
   b.setAttribute("aria-haspopup", "menu");
-  b.setAttribute("aria-expanded", "false");
   b.title = t("The local model");
   b.append(el("span", "", (PM_MODELS[m.model] || [m.model])[0]), svg(CHEV, 11, 1.6));
   b.onclick = (e) => {
@@ -22009,7 +21993,6 @@ function pmScore(m, pick) {
   const b = el("button", "sess-pick pm-score");
   b.type = "button";
   b.setAttribute("aria-haspopup", "menu");
-  b.setAttribute("aria-expanded", "false");
   b.title = t("Confidence threshold");
   b.append(el("span", "", String(m.minScore)), svg(CHEV, 11, 1.6));
   b.onclick = (e) => {

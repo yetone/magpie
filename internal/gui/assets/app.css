@@ -2030,6 +2030,13 @@ body.panel .profiles #save { height: 25px; } /* the field's: the line keeps its 
 .pq-gn { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* how many accounts: a quiet count set by the name, on its cap height */
 .pq-count { flex: none; min-width: 16px; height: 15px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; display: inline-grid; place-items: center; background: color-mix(in srgb, var(--fg) 7%, transparent); color: var(--muted); font-size: 9.5px; font-weight: 600; line-height: 1; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+/* with a vendor's accounts to put first: the count opens their menu */
+.pq-pick { height: 17px; gap: 1px; padding: 0 3px 0 6px; display: inline-flex; align-items: center; cursor: default; transition: background .12s ease, color .12s ease, transform .12s cubic-bezier(.23, 1, .32, 1); }
+.pq-pick svg { flex: none; opacity: .8; }
+.pq-pick:is(:hover, .open) { background: color-mix(in srgb, var(--fg) 12%, transparent); color: var(--fg); }
+.pq-pick:active { transform: scale(.97); }
+/* the account used first: ticked before its name */
+.pq-first { flex: none; display: inline-grid; place-items: center; width: 12px; height: 12px; margin-right: 3px; color: var(--accent); }
 .pq-gnote { flex: none; margin-left: auto; font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums; }
 .pq-gnote.ends { color: var(--amber); }
 /* used or left: a quiet pill at the right, over the rings; lit a moment
