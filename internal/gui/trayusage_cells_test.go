@@ -1,6 +1,8 @@
 package gui
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -159,5 +161,39 @@ func TestSVGArcFlags(t *testing.T) {
 	b, _ := trayIconFile("codex-color")
 	if !strings.Contains(string(b), "A 4.496 4.496 0 0 0 0 4.496") {
 		t.Errorf("codex's logo not spaced out: %.300s", b)
+	}
+}
+
+// A card's logo can be a picture the plugin gave (a stored "file:…" one),
+// which the menu bar reads as the page's icons are read, in its own
+// colours; anything else under "file:" is refused and the name's letter
+// drawn in its place.
+func TestTrayIconFileStored(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+
+	png := []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR")
+	kept, err := provider.StoreIcon(png)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, mono := trayIconFile(kept)
+	if mono || string(b) != string(png) {
+		t.Errorf("trayIconFile(%q) = %d bytes, mono %v", kept, len(b), mono)
+	}
+	// each file a refused name could reach is there, so a refusal is the
+	// name's check and not a missing file
+	dir := provider.IconDir()
+	for _, f := range []string{filepath.Join(dir, "mine.png"), filepath.Join(dir, "..", "providers.json"), filepath.Join(dir, "0123456789abcdef.exe")} {
+		if err := os.WriteFile(f, png, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, bad := range []string{"file:mine.png", "file:../providers.json", "file:", "http://x/y.png", "file:0123456789abcdef.exe"} {
+		if b, mono = trayIconFile(bad); b != nil || mono {
+			t.Errorf("trayIconFile(%q) = %d bytes, mono %v", bad, len(b), mono)
+		}
 	}
 }
