@@ -3097,6 +3097,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 #gatewayKeys .klf-days[hidden] { display: none; }
 #gatewayKeys .klf-models { grid-column: 1 / -1; }
 #gatewayKeys .klf .klf-pick > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editor .headers.aliases .pair .alias-pick { flex: 6; max-width: none; min-width: 0; height: 27px; justify-content: space-between; }
+.editor .headers.aliases .pair input:first-child { flex: 4; }
 #gatewayKeys .klf-used { display: flex; align-items: center; gap: 8px; min-width: 0; }
 #gatewayKeys .klf-used .key-limit { flex: 1 1 auto; }
 #gatewayKeys .klf-used .klf-reset { flex: none; }
@@ -5099,6 +5101,7 @@ input[type="checkbox"]:disabled { opacity: .45; }
 .ag-manage-state { flex: none; }
 .ag-manager > .bar { flex-wrap: wrap; }
 .ag-manage-result { font-size: 13px; overflow-wrap: anywhere; }
+.modal .editor.alias-ask > .ebody { grid-template-columns: minmax(0, 1fr); }
 .modal .editor.ag-manager > .ebody { grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; }
 
 /* a disabled model's pattern, as typed (#1867): an id or a glob */

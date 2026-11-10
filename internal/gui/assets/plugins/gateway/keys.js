@@ -377,48 +377,88 @@ function gatewayBrowserTag() {
   return tag;
 }
 
-// gatewayAliasesAsk edits the names a key gives its models: one
-// "name = provider/model" a line. /v1/models lists the name in the model's
-// place and a request by it goes to the model.
+// gatewayAliasesAsk edits the names a key gives its models: a row each, the
+// name typed and the model picked in the app's menu. /v1/models lists the
+// name in the model's place and a request by it goes to the model.
 function gatewayAliasesAsk(k) {
-  const ed = el("div", "editor");
+  const ed = el("div", "editor alias-ask");
   const head = el("div", "ehead");
   head.append(el("b", "", t("Model names")));
-  const ta = el("textarea", "json");
-  ta.value = Object.entries(k.aliases || {}).map(([n, m]) => n + " = " + m).join("\n");
-  ta.placeholder = "gpt-4 = openai/gpt-5";
-  ta.spellcheck = false;
-  ta.rows = 6;
-  ta.setAttribute("aria-label", t("Model names"));
-  ta.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Escape") closeConfirmAsk(); };
-  const why = el("div", "why");
-  why.setAttribute("aria-live", "polite");
+  const rows = Object.entries(k.aliases || {});
+  let models = null;  // the models a row may pick, read when a row is first opened
+  const box = el("div", "headers aliases");
   const bar = el("div", "bar");
   const cancel = el("button", "text", t("Cancel"));
   cancel.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
   const go = el("button", "text primary", t("Save"));
+  // a row with a name and no model, or a model and no name, isn't one yet;
+  // a row with neither is left out
+  const half = () => rows.some(([n, m]) => !!n.trim() !== !!m);
+  const check = () => { go.disabled = half(); };
+  const pick = async (b, row) => {
+    if (b.classList.contains("open")) return closeProtoMenu();
+    if (!models) {
+      try { ({ models } = await api("caller-keys/models")); } catch (err) { status(t(err.message), "err"); return; }
+    }
+    if (!b.isConnected) return;
+    const opts = (models || []).map((m) => ({ v: m.id, find: m.id, name: m.name, note: m.id, literalName: true }));
+    if (row[1] && !opts.some((o) => o.v === row[1])) opts.push({ v: row[1], name: row[1], note: "Not served now", literalName: true });
+    openProtoMenu(b, opts, row[1], (v) => { row[1] = v; draw(rows.indexOf(row)); check(); }, "Pick a model", "sess-menu", "left", false, "Search models");
+  };
+  const draw = (at = -1) => {
+    box.replaceChildren();
+    rows.forEach((row, i) => {
+      const line = el("div", "pair");
+      const name = input(row[0], "gpt-4");
+      name.spellcheck = false;
+      name.setAttribute("aria-label", t("Model names"));
+      name.oninput = () => { row[0] = name.value; check(); };
+      name.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Escape") closeConfirmAsk(); };
+      const b = el("button", "sess-pick alias-pick" + (row[1] ? " set" : ""));
+      b.type = "button";
+      b.setAttribute("aria-label", t("Pick a model"));
+      b.setAttribute("aria-haspopup", "menu");
+      b.setAttribute("aria-expanded", "false");
+      b.title = row[1];
+      b.replaceChildren(el("span", "", row[1] || t("Pick a model")), svg(CHEV, 11, 1.6));
+      b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); pick(b, row); };
+      const del = el("button", "text danger", "\u00d7");
+      del.type = "button";
+      del.title = t("Remove");
+      del.setAttribute("aria-label", t("Remove"));
+      del.onclick = (e) => { e.stopPropagation(); rows.splice(i, 1); draw(); check(); };
+      const side = el("div", "side");
+      side.append(del);
+      line.append(name, b, side);
+      box.append(line);
+    });
+    const add = el("button", "text", t("Add a name"));
+    add.type = "button";
+    add.onclick = (e) => { e.stopPropagation(); rows.push(["", ""]); draw(); check(); [...box.querySelectorAll(".pair input")].at(-1)?.focus({ preventScroll: true }); };
+    const adds = el("div", "hadds");
+    adds.append(add);
+    box.append(adds);
+    if (at >= 0) box.querySelectorAll(".pair")[at]?.querySelector(".alias-pick")?.focus({ preventScroll: true });
+  };
   go.onclick = async (e) => {
     e.stopPropagation();
     if (go.disabled) return;
     const aliases = {};
-    for (const line of ta.value.split("\n")) {
-      if (!line.trim()) continue;
-      const at = line.indexOf("=");
-      if (at < 1 || !line.slice(at + 1).trim()) { why.textContent = t("One name a line: name = provider/model"); return; }
-      aliases[line.slice(0, at).trim()] = line.slice(at + 1).trim();
-    }
+    for (const [n, m] of rows) if (n.trim() && m) aliases[n.trim()] = m;
     go.disabled = true;
     const out = await gatewayKeyAction("aliases-key", { key: k.id, aliases });
-    if (!out) { go.disabled = false; return; }
+    if (!out) { check(); return; }
     closeConfirmAsk();
     status(t("Model names saved"), "ok");
   };
   bar.append(el("span", "grow"), cancel, go);
-  ed.append(head, ta, why, bar);
+  ed.append(head, box, bar);
+  if (!rows.length) rows.push(["", ""]);
+  draw();
   confirmAsk = ed;
   openModal(ed);
   $("#modal").classList.add("lib");
-  ta.focus({ preventScroll: true });
+  box.querySelector("input")?.focus({ preventScroll: true });
 }
 
 function askGatewayKey(k, rotate) {

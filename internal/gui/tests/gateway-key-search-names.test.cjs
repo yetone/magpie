@@ -11,11 +11,11 @@ const { chromium, webkit } = require("playwright");
 const { fixture } = require("./fixtures/caller-keys.cjs");
 
 const words = {
-  en: { label: "Models this key may use", search: "Search models, or type re: and a pattern", names: "Model names", save: "Save", bad: "One name a line: name = provider/model", saved: "Model names saved", model: "Model mini" },
-  zh: { label: "此密钥可用的模型", search: "搜索模型，或输入 re: 加正则", names: "模型名", save: "保存", bad: "每行一个：名称 = provider/model", saved: "模型名称已保存", model: "Model mini" },
-  "zh-TW": { label: "此金鑰可用的模型", search: "搜尋模型，或輸入 re: 加正規表示式", names: "模型名稱", save: "儲存", bad: "每行一個：名稱 = provider/model", saved: "模型名稱已儲存", model: "Model mini" },
-  ja: { label: "このキーで使えるモデル", search: "モデルを検索、または re: と正規表現を入力", names: "モデル名", save: "保存", bad: "1行に1つ：名前 = provider/model", saved: "モデル名を保存しました", model: "Model mini" },
-  de: { label: "Modelle, die dieser Schlüssel nutzen darf", search: "Modelle suchen, oder re: und ein Muster eingeben", names: "Modellnamen", save: "Speichern", bad: "Ein Name pro Zeile: Name = provider/model", saved: "Modellnamen gespeichert", model: "Model mini" },
+  en: { label: "Models this key may use", search: "Search models, or type re: and a pattern", names: "Model names", save: "Save", add: "Add a name", saved: "Model names saved", model: "Model mini" },
+  zh: { label: "此密钥可用的模型", search: "搜索模型，或输入 re: 加正则", names: "模型名", save: "保存", add: "添加名称", saved: "模型名称已保存", model: "Model mini" },
+  "zh-TW": { label: "此金鑰可用的模型", search: "搜尋模型，或輸入 re: 加正規表示式", names: "模型名稱", save: "儲存", add: "新增名稱", saved: "模型名稱已儲存", model: "Model mini" },
+  ja: { label: "このキーで使えるモデル", search: "モデルを検索、または re: と正規表現を入力", names: "モデル名", save: "保存", add: "名前を追加", saved: "モデル名を保存しました", model: "Model mini" },
+  de: { label: "Modelle, die dieser Schlüssel nutzen darf", search: "Modelle suchen, oder re: und ein Muster eingeben", names: "Modellnamen", save: "Speichern", add: "Name hinzufügen", saved: "Modellnamen gespeichert", model: "Model mini" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -57,28 +57,54 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(sent("models-key"), [{ key: "work", models: ["re:^gpt-"] }]);
         await page.waitForFunction(() => document.querySelector('#gatewayKeys .acc[data-key="work"] .key-models.set')?.textContent.trim() === "re:^gpt-");
 
-        // the key's names for models: a line that isn't one is said, not sent
-        await row.hover();
-        await row.locator(".gw-key-more").click();
-        await page.locator(".row-menu").getByRole("menuitem", { name: w.names, exact: true }).click();
+        // the key's names for models, a row each: a name typed and a model
+        // picked in the app's menu. A row with half of it can't be saved.
+        const open = async () => {
+          await row.hover();
+          await row.locator(".gw-key-more").click();
+          await page.locator(".row-menu").getByRole("menuitem", { name: w.names, exact: true }).click();
+        };
+        await open();
         const modal = page.locator("#modal");
-        const ta = modal.locator("textarea");
-        await ta.waitFor();
-        await ta.fill("oops");
-        await modal.getByRole("button", { name: w.save, exact: true }).click();
-        await modal.getByText(w.bad).waitFor();
-        assert.equal(sent("aliases-key").length, 0);
-        await ta.fill("fast = relay/m\n\ngpt-4 = openai/gpt-5");
-        await modal.getByRole("button", { name: w.save, exact: true }).click();
+        assert.equal(await modal.locator("textarea").count(), 0);
+        const save = modal.getByRole("button", { name: w.save, exact: true });
+        const pairs = modal.locator(".pair");
+        await pairs.first().waitFor();
+        assert.equal(await pairs.count(), 1);
+        await pairs.nth(0).locator("input").fill("oops");
+        assert.equal(await save.isDisabled(), true);
+        const choose = async (n, find, name) => {
+          await pairs.nth(n).locator(".alias-pick").click();
+          const pm = page.locator(".proto-menu");
+          await pm.waitFor();
+          await pm.locator(".sc-q").fill(find);
+          await pm.locator(".pm-item:not([hidden])").filter({ has: page.locator(".pm-name", { hasText: new RegExp("^" + name + "$") }) }).click();
+          await pm.waitFor({ state: "detached" });
+        };
+        await choose(0, "openai/gpt", "GPT-5");
+        assert.equal(await save.isDisabled(), false);
+        await pairs.nth(0).locator("input").fill("gpt-4");
+        await modal.getByRole("button", { name: w.add, exact: true }).click();
+        assert.equal(await pairs.count(), 2);
+        await pairs.nth(1).locator("input").fill("fast");
+        assert.equal(await save.isDisabled(), true);
+        await choose(1, "mini", "Model mini");
+        // a row with neither is left out; a name's model can be picked again
+        await modal.getByRole("button", { name: w.add, exact: true }).click();
+        assert.equal(await pairs.count(), 3);
+        assert.equal(await save.isDisabled(), false);
+        await choose(1, "relay/m", "Model");
+        await pairs.nth(2).locator(".side button").click();
+        assert.equal(await pairs.count(), 2);
+        await save.click();
         await until(() => sent("aliases-key").length);
-        assert.deepEqual(sent("aliases-key"), [{ key: "work", aliases: { fast: "relay/m", "gpt-4": "openai/gpt-5" } }]);
+        assert.deepEqual(sent("aliases-key"), [{ key: "work", aliases: { "gpt-4": "openai/gpt-5", fast: "relay/m" } }]);
         await modal.waitFor({ state: "hidden" });
         // opened again, the names are in it
-        await row.hover();
-        await row.locator(".gw-key-more").click();
-        await page.locator(".row-menu").getByRole("menuitem", { name: w.names, exact: true }).click();
-        await ta.waitFor();
-        assert.equal(await ta.inputValue(), "fast = relay/m\ngpt-4 = openai/gpt-5");
+        await open();
+        await pairs.nth(1).waitFor();
+        assert.deepEqual(await pairs.locator("input").evaluateAll((l) => l.map((i) => i.value)), ["gpt-4", "fast"]);
+        assert.deepEqual(await pairs.locator(".alias-pick").evaluateAll((l) => l.map((b) => b.title)), ["openai/gpt-5", "relay/m"]);
         await page.keyboard.press("Escape");
         await page.waitForFunction(() => document.documentElement.scrollWidth <= window.innerWidth);
         assert.deepEqual(errors, []);
