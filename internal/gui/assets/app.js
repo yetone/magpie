@@ -8216,6 +8216,9 @@ function headerEditor(hints = []) {
     const add = el("button", "text", t("+ Add header"));
     add.onclick = () => { draft.headers.push(["", "", false]); render(); };
     adds.append(add);
+    const pre = el("button", "text hpresets", t("Presets"));
+    pre.onclick = () => { if (pre.classList.contains("open")) return closeProtoMenu(); import("./headerpresets.js").then(() => headerPresetsOpen(pre, draft.headers, render), statusErr); };
+    adds.append(pre);
     for (const h of hints) {
       if (draft.headers.some((r) => (r[0] || "").trim().toLowerCase() === h.toLowerCase())) continue;
       const b = el("button", "text", "+ " + h);
