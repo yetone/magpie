@@ -449,13 +449,19 @@ func (a *Account) Tiers(model string) (tiers []string, ok bool) {
 // high, doesn't lower the request a Plus one beside it answers (#520). The
 // gateway sends each account only the models and levels its own list has
 // (Account.Lists, Account.Levels) first.
-func codexPoolModels(ms []catalog.Model) []catalog.Model {
+func codexPoolModels(ms []catalog.Model) []catalog.Model { return poolModels("codex", ms) }
+
+// poolModels is ms, the list of agent's account in use first, with what
+// the agent's other accounts on add to it, as codexPoolModels says: a
+// Copilot account's plan lists other models than another's too
+// (copilotPoolModels).
+func poolModels(agent string, ms []catalog.Model) []catalog.Model {
 	var lists [][]catalog.Model
-	for _, l := range Logins("codex") {
+	for _, l := range Logins(agent) {
 		if l.Active || !l.On {
 			continue
 		}
-		if live, _, ok := catalog.Live(accountModels("codex", l.User)); ok {
+		if live, _, ok := catalog.Live(accountModels(agent, l.User)); ok {
 			lists = append(lists, live)
 		}
 	}

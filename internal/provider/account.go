@@ -1578,6 +1578,8 @@ func copilotProvider(app copilotApp, plan string) Provider {
 		if err != nil {
 			return nil, err
 		}
+		// with what the other accounts' plans add (copilot_pool.go)
+		ms = copilotPoolModels(ctx, acct.User, ms)
 		return ms, catalog.SaveLive("copilot", copilotBase, ms)
 	}
 	// each model is served on some of these: the newest GPT models on

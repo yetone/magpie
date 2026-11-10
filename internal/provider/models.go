@@ -72,7 +72,18 @@ func (p Provider) available() []catalog.Model {
 		if p.Account != nil && p.Account.unusable != nil {
 			// a model the list offers that the account was refused
 			// (Copilot's, copilot_refused.go)
-			live = slices.DeleteFunc(slices.Clone(live), func(m catalog.Model) bool { return p.Account.unusable(m.ID) })
+			// unless another of its accounts on lists it (copilot_pool.go),
+			// read only once a model was refused
+			var others map[string]bool
+			live = slices.DeleteFunc(slices.Clone(live), func(m catalog.Model) bool {
+				if !p.Account.unusable(m.ID) {
+					return false
+				}
+				if others == nil && p.Account.Agent == "copilot" {
+					others = copilotOthersList(p.Account.User)
+				}
+				return !others[m.ID]
+			})
 		}
 		switch p.ID {
 		case "cursor":
