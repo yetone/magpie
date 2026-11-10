@@ -115,8 +115,8 @@ function server(lang, theme, variant, asked, exported) {
 }
 
 const L = {
-  en: { strip: ["Tokens", "Requests", "Cost", "Cache hit rate", "Output speed"], metric: ["Tokens", "Cost", "Requests", "Speed"], split: ["Model", "Model · provider", "Provider", "Agent"], all: "All providers", none: "No known price for these requests" },
-  zh: { strip: ["Token", "请求", "费用", "缓存命中率", "输出速度"], metric: ["Token", "费用", "请求", "速度"], split: ["模型", "模型 · 供应商", "供应商", "Agent"], all: "全部供应商", none: "这些请求没有已知价格" },
+  en: { strip: ["Tokens", "Requests", "Cost", "Cache hit rate", "Output speed"], metric: ["Tokens", "Cost", "Requests", "Speed", "Traffic"], split: ["Model", "Model · provider", "Provider", "Agent"], all: "All providers", none: "No known price for these requests" },
+  zh: { strip: ["Token", "请求", "费用", "缓存命中率", "输出速度"], metric: ["Token", "费用", "请求", "速度", "流量"], split: ["模型", "模型 · 供应商", "供应商", "Agent"], all: "全部供应商", none: "这些请求没有已知价格" },
 };
 // where each split is among #ledSplit's choices
 const SPLIT = { model: 0, modelAt: 1, provider: 2, agent: 3 };
