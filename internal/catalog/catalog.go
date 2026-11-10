@@ -642,6 +642,7 @@ func load() map[string]mdProvider {
 func loadGen() (map[string]mdProvider, int) {
 	loadMu.Lock()
 	defer loadMu.Unlock()
+	loadUsed()
 	if !loaded {
 		loaded = true
 		func() {

@@ -9,7 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -40,7 +40,11 @@ var bundledAt = time.Date(2026, 11, 10, 10, 11, 0, 0, time.UTC)
 // turn it on.
 var bundledOn = !testing.Testing()
 
-var bundled = sync.OnceValue(func() []byte {
+// bundled is the shipped copy, unpacked again for each call and kept by
+// no one: Seed and a load with no file to read are all that want it, and
+// kept for the life of the process it was 5.7 MB of an idle heap of ~40.
+func bundled() []byte {
+	bundledUnpacks.Add(1)
 	r, err := gzip.NewReader(bytes.NewReader(bundledGz))
 	if err != nil {
 		return nil
@@ -50,7 +54,10 @@ var bundled = sync.OnceValue(func() []byte {
 		return nil
 	}
 	return b
-})
+}
+
+// bundledUnpacks counts bundled's unpacks, for a test.
+var bundledUnpacks atomic.Int64
 
 // bundledCatalog is the shipped copy, or nil when it is off.
 func bundledCatalog() []byte {
@@ -67,8 +74,11 @@ func bundledCatalog() []byte {
 // and a copy that can't be written is still read from the binary (load).
 // It is cheap when there is nothing to do, a stat or two.
 func Seed() {
+	if !bundledOn || !seedWanted() {
+		return // nothing unpacked when the file there is newer
+	}
 	b := bundledCatalog()
-	if b == nil || !seedWanted() {
+	if b == nil {
 		return
 	}
 	select {
