@@ -2538,11 +2538,14 @@ type dshRounds struct {
 	// whose models are written there; "": dsh's.
 	home func() string
 	list string
-	// the models, and the stamp and time they were built at
-	models []catalog.Model
-	stamp  provider.Stamp
-	at     time.Time
-	built  bool
+	// the stamp and time the models were last built at, their sum in
+	// last: the list itself is not kept between rounds, where it was the
+	// largest thing an idle magpie held (~9 MB with real accounts, and the
+	// catalog it was built from with it), and is built again only for a
+	// round that writes
+	stamp provider.Stamp
+	at    time.Time
+	built bool
 	// what the last round went by, and whether it wrote nothing, nothing
 	// else wrote while it ran, and nothing troubled it
 	last dshRoundKey
@@ -2659,14 +2662,19 @@ func (r *dshRounds) once() string {
 	key := dshRoundKey{files: dshFilesSum(dir, files), gw: gateway.URL(), models: r.last.models}
 	// the stamp is read before the models are built: a change while they
 	// are moves it past the one kept, and the next round builds them again
+	var models []catalog.Model
 	if stamp := provider.StampNow(); !r.built || stamp != r.stamp || time.Since(r.at) >= dshModelsFor {
-		r.models, r.stamp, r.at, r.built = magpieModels(list), stamp, time.Now(), true
-		key.models = dshModelsSum(r.models)
+		models = magpieModels(list)
+		r.stamp, r.at, r.built = stamp, time.Now(), true
+		key.models = dshModelsSum(models)
 	}
 	if r.done && key == r.last {
 		return ""
 	}
-	trouble := dshWiredWith(dir, files, r.models)
+	if models == nil {
+		models = magpieModels(list)
+	}
+	trouble := dshWiredWith(dir, files, models)
 	// kept only when the round wrote nothing and nothing else wrote while
 	// it ran: a file written by either is read again next round
 	r.last, r.done = key, trouble == "" && dshFilesSum(dir, dshProfiles(dir)) == key.files
