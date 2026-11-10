@@ -106,7 +106,15 @@ var desktopApps = map[string]desktopApp{
 	// (notMuAgent).
 	"mu": {id: "io.github.qybaihe.mu", names: []string{"mu.app"}, win: filepath.Join("mu", "mu.exe"), guid: "8be59721-9051-5f2b-8372-96932fdbf5da",
 		onLinux: &linuxApp{dirs: []string{"/opt/mu"}, exe: "mu", name: "mu", scheme: "mu"}},
-	"penguin": {id: "com.prismshadow.penguinharness", names: []string{"PenguinHarness.app"}, win: filepath.Join("PenguinHarness", "PenguinHarness.exe"), guid: "8bb9acb7-2bdc-596b-9669-7b014ab1c47f"},
+	// Craft Agents (apps/electron/electron-builder.yml, 0.15.8: appId
+	// com.lukilabs.craft-agent, productName Craft Agents) reads its config
+	// folder on its own (craftagents.go). Its NSIS installer is one-click
+	// and per user, so electron-builder names the folder under
+	// %LOCALAPPDATA%\Programs after the package, @craft-agent/electron
+	// with its "/" taken out (getWindowsInstallationDirName; the README's
+	// own path); guid is the UUID v5 of the appId, as dsh's above.
+	"craft-agents": {id: "com.lukilabs.craft-agent", names: []string{"Craft Agents.app"}, win: filepath.Join("@craft-agentelectron", "Craft Agents.exe"), guid: "61dc82ee-e3b9-557b-98c4-20b9178a0f78"},
+	"penguin":      {id: "com.prismshadow.penguinharness", names: []string{"PenguinHarness.app"}, win: filepath.Join("PenguinHarness", "PenguinHarness.exe"), guid: "8bb9acb7-2bdc-596b-9669-7b014ab1c47f"},
 	// The CodeBuddy IDE (Tencent's VS Code fork, 4.12.2: CodeBuddy.app,
 	// com.tencent.codebuddy, from codebuddy.ai; CodeBuddy CN.app,
 	// com.tencent.codebuddycn, from codebuddy.cn) reads the CodeBuddy Code

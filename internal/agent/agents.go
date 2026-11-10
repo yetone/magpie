@@ -315,6 +315,7 @@ func onMachine(home, cfg string) []*Agent {
 		pencil(home),
 		openPencil(home, cfg),
 		openBot(home, cfg),
+		craftAgents(home),
 		newMax(home),
 		liveAgent(home),
 		raycast(home),

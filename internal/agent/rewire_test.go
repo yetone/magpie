@@ -49,6 +49,8 @@ func TestPortMovesEveryAgent(t *testing.T) {
 	almaApp := startAlma(t)
 	os.MkdirAll(filepath.Join(home, ".hanako", "agents", "hana"), 0o755)
 	os.WriteFile(filepath.Join(home, ".hanako", "agents", "hana", "config.yaml"), []byte("agent:\n  name: Hana\n"), 0o644)
+	// Craft Agents, once it has run and saved its config
+	craftFixture(t, home)
 	// AstrBot is connected once it has written its settings
 	os.MkdirAll(filepath.Join(home, ".astrbot", "data"), 0o755)
 	os.WriteFile(filepath.Join(home, ".astrbot", "data", "cmd_config.json"), []byte(astrbotConfig), 0o644)

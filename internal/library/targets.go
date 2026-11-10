@@ -343,6 +343,12 @@ func targetOf(a *agent.Agent) *Target {
 	case "cindy":
 		// Cindy keeps its user-wide skills in ~/.agents/skills
 		t.Skills = sharedSkillsDir()
+	case "craft-agents":
+		// Craft Agents reads user-wide skills from ~/.agents/skills
+		// (skills/storage.ts, GLOBAL_AGENT_SKILLS_DIR) beside its
+		// workspaces' own. Its MCP servers are sources of a workspace,
+		// which magpie doesn't write.
+		t.Skills = sharedSkillsDir()
 	case "openbot":
 		// OpenBot reads skills only from ~/.agents/skills (home-skills.ts,
 		// HOME_SKILL_FOLDER). Its MCP servers are rows in its SQLite

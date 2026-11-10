@@ -22,6 +22,8 @@ func TestSyncKeepsAnAddressOnAnotherMachine(t *testing.T) {
 	t.Cleanup(func() { claudeManaged = managed })
 	os.MkdirAll(filepath.Join(home, ".hanako", "agents", "hana"), 0o755)
 	os.WriteFile(filepath.Join(home, ".hanako", "agents", "hana", "config.yaml"), []byte("agent:\n  name: Hana\n"), 0o644)
+	// Craft Agents, once it has run and saved its config
+	craftFixture(t, home)
 	t.Setenv("ASTRBOT_ROOT", "")
 	writeFile(t, filepath.Join(home, ".astrbot", "data", "cmd_config.json"), astrbotConfig)
 	// QwenPaw, once it has written its agents' settings
