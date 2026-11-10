@@ -578,6 +578,9 @@ func TestHanakoSealed(t *testing.T) {
 	}
 
 	// taking magpie out needs OpenHanako: nothing changes meanwhile
+	wasInstalled := hanakoInstalled
+	hanakoInstalled = func() bool { return true }
+	t.Cleanup(func() { hanakoInstalled = wasInstalled })
 	f := a.Field("model")
 	if err := f.Set(""); err == nil || !strings.Contains(err.Error(), "open OpenHanako") {
 		t.Fatalf("reset: %v", err)
@@ -723,5 +726,39 @@ func TestHanakoLiveBackNeedsProviderID(t *testing.T) {
 				t.Fatal("stash kept")
 			}
 		})
+	}
+}
+
+// OpenHanako uninstalled with its catalog sealed can't be opened to take
+// magpie out (aooo_han on X, of Alma): turning it off puts its agent's
+// model back in its plain config and leaves the sealed catalog as it is.
+func TestHanakoSealedUninstalled(t *testing.T) {
+	home, dir := hanakoTestHome(t)
+	catalogPath := filepath.Join(dir, "provider-catalog.json")
+	sealed := hanakoSeal(t, `{"catalogVersion":2,"providers":{"openai":{"api_key":"sk-x"},"magpie":{"api_key":"magpie-hanako"}}}`)
+	hanakoWrite(t, catalogPath, sealed, 0o600)
+	plugin := filepath.Join(dir, "provider-plugins", "magpie", "providers", "magpie.json")
+	hanakoWrite(t, plugin, `{"id":"magpie","displayName":"magpie","authType":"api-key","defaultBaseUrl":"`+gatewayV1()+`",`+
+		`"defaultApi":"openai-completions","models":[{"id":"relay/glm-4.6"}]}`, 0o600)
+	cfg := filepath.Join(dir, "agents", "hana", "config.yaml")
+	hanakoWrite(t, cfg, "models:\n  chat:\n    id: relay/glm-4.6\n    provider: magpie\n", 0o644)
+	a := hanako(home)
+	// what it was on before magpie
+	stash(map[string]string{"hanako:" + dir + ":hana:chat": "openai/gpt-5"})
+	was := hanakoInstalled
+	hanakoInstalled = func() bool { return false }
+	t.Cleanup(func() { hanakoInstalled = was })
+
+	if err := a.Field("model").Set(""); err != nil {
+		t.Fatalf("turn off: %v", err)
+	}
+	if chat, _ := hanakoChatOf(t, cfg); chat["provider"] != "openai" || chat["id"] != "gpt-5" {
+		t.Fatalf("model not put back: %v", chat)
+	}
+	if b, _ := os.ReadFile(catalogPath); string(b) != sealed {
+		t.Fatalf("the sealed catalog was written:\n%s", b)
+	}
+	if a.Wired() {
+		t.Fatal("still connected")
 	}
 }

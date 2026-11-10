@@ -38,6 +38,7 @@ import (
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/proc"
 )
 
 // almaAPI is where Alma's API answers. Under test it is nothing, so no test
@@ -55,6 +56,37 @@ var almaClient = &http.Client{Timeout: 1500 * time.Millisecond}
 
 // errAlmaDown is Alma not answering.
 var errAlmaDown = errors.New("Alma isn't running — open Alma and try again")
+
+// almaApp is Alma's desktop app as its packages install it
+// (electron-builder.yml and desktop-native/PACKAGING.md in Alma's repo):
+// Alma.app (com.yetone.alma) on a Mac; Alma\Alma.exe under
+// %LOCALAPPDATA%\Programs on Windows, or the folder its installer
+// registered under the guid electron-builder makes of the appId; on
+// Linux /opt/alma (the native deb and rpm) or /opt/Alma (the Electron
+// ones), or a desktop entry named Alma for alma:// links (an AppImage's).
+var almaApp = desktopApp{id: "com.yetone.alma", names: []string{"Alma.app"},
+	win: filepath.Join("Alma", "Alma.exe"), guid: "53efb302-dbc3-52a1-8bb5-041beae96976",
+	onLinux: &linuxApp{dirs: []string{"/opt/alma", "/opt/Alma"}, exe: "alma", name: "Alma", scheme: "alma"}}
+
+// almaInstalled reports whether Alma is installed here: its desktop app,
+// or on Linux alma-server, Alma without a desktop, on PATH. A var so a
+// test can say.
+var almaInstalled = func() bool {
+	if almaApp.installed() {
+		return true
+	}
+	if almaOS == "darwin" || almaOS == "windows" {
+		return false
+	}
+	_, err := proc.LookPath("alma-server")
+	return err == nil
+}
+
+// almaTakeOut, in the stash, is magpie's provider left in an Alma that was
+// gone when it was turned off (almaSet): Alma uninstalled keeps its data,
+// and only Alma itself can change it. It is taken out once Alma answers
+// again (Sync), installed again with that data.
+const almaTakeOut = "alma.takeout"
 
 // almaProvider is what magpie reads of one of Alma's providers.
 type almaProvider struct {
@@ -604,6 +636,9 @@ func almaPutImage(s map[string]any, v string) error {
 func almaGet() string {
 	s, err := almaSettingsSeen()
 	if err != nil {
+		if stashShared()[almaTakeOut] != "" {
+			return ""
+		}
 		return appliedOf("alma").Fields["model"]
 	}
 	v := almaDefault(s)
@@ -621,11 +656,25 @@ func almaGet() string {
 	return v
 }
 
-func almaSet(v string) error {
+func almaSet(v string) (err error) {
+	defer func() {
+		// put on magpie again: nothing is left to take out
+		if v != "" && err == nil && stashShared()[almaTakeOut] != "" {
+			forget(almaTakeOut)
+		}
+	}()
 	if v == "" {
 		// back to Alma's own: its default model is its to pick, and
 		// magpie's provider comes out
 		s, err := almaSettings()
+		if errors.Is(err, errAlmaDown) && !almaInstalled() {
+			// Alma uninstalled: nothing of it to change, and opening it
+			// to turn magpie off can't be done (aooo_han on X: "得先运行
+			// 起来"). Its data, which only it changes, loses magpie's
+			// provider if it is installed again (Sync).
+			stash(map[string]string{almaTakeOut: "1"})
+			return nil
+		}
 		if err != nil {
 			return err
 		}
@@ -771,6 +820,14 @@ func alma() *Agent {
 			ps, err := almaProviders()
 			if err != nil {
 				return nil // not running: nothing to keep current
+			}
+			if stashShared()[almaTakeOut] != "" {
+				// turned off while Alma was gone, and here again
+				if err := almaSet(""); err != nil {
+					return err
+				}
+				forget(almaTakeOut)
+				return nil
 			}
 			p := almaMagpie(ps)
 			if p == nil {

@@ -626,3 +626,124 @@ func TestAlmaKey(t *testing.T) {
 		t.Fatalf("encrypted key replaced: %v", f.keys)
 	}
 }
+
+// aooo_han on X: Alma connected, then uninstalled, couldn't be turned off
+// in magpie: it said to open Alma first. Uninstalled, turning it off
+// forgets magpie's own record; installed and closed it still says to open
+// it. Alma installed again with its data has magpie's provider taken out
+// once it answers.
+func TestAlmaOffUninstalled(t *testing.T) {
+	syncHome(t)
+	f := startAlma(t)
+	a := alma()
+	os.MkdirAll(a.Dir, 0o755)
+	var ref string
+	for _, o := range a.Field("model").Options(nil) {
+		if o.Ref != "" {
+			ref = o.Ref
+			break
+		}
+	}
+	if err := a.Apply("model", "magpie/"+ref); err != nil {
+		t.Fatal(err)
+	}
+	if !a.Wired() {
+		t.Fatal("not connected")
+	}
+	srv := almaAPI
+	almaAPI = "http://127.0.0.1:1"
+	defer func() { almaAPI = srv }()
+	was := almaInstalled
+	defer func() { almaInstalled = was }()
+
+	// installed, only closed: it is opened to take magpie out
+	almaInstalled = func() bool { return true }
+	if err := a.Disconnect(); err == nil || !strings.Contains(err.Error(), "isn't running") {
+		t.Fatalf("installed: %v", err)
+	}
+
+	almaInstalled = func() bool { return false }
+	if err := a.Disconnect(); err != nil {
+		t.Fatalf("uninstalled: %v", err)
+	}
+	if a.Wired() {
+		t.Fatal("still connected after turning it off")
+	}
+	if got := a.Field("model").Get(); got != "" {
+		t.Fatalf("model after turning it off: %q", got)
+	}
+	if d := a.Drift(); d != nil {
+		t.Fatalf("drift: %+v", d)
+	}
+
+	// installed again, its data kept: magpie comes out at the next sync
+	almaAPI = srv
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	for _, p := range f.providers {
+		if p["name"] == magpieID {
+			t.Errorf("magpie's provider left in Alma: %v", p)
+		}
+	}
+	def := f.settings["chat"].(map[string]any)["defaultModel"]
+	f.mu.Unlock()
+	if def != "" {
+		t.Fatalf("default model left on magpie: %v", def)
+	}
+	if stashShared()[almaTakeOut] != "" {
+		t.Fatal("take-out still pending")
+	}
+	if a.Wired() {
+		t.Fatal("connected after Alma came back")
+	}
+	// and a sync after that leaves Alma alone
+	f.mu.Lock()
+	n := len(f.writes)
+	f.mu.Unlock()
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.writes) != n {
+		t.Fatalf("second sync wrote: %v", f.writes[n:])
+	}
+}
+
+// Alma is installed where its packages put it: Alma.app on a Mac.
+func TestAlmaInstalledApp(t *testing.T) {
+	apps := t.TempDir()
+	wasF, wasS, wasOS := appFolders, spotlightApps, linuxAppOS
+	appFolders = func() []string { return []string{apps} }
+	spotlightApps = func(string) []string { return nil }
+	linuxAppOS = "darwin"
+	t.Cleanup(func() { appFolders, spotlightApps, linuxAppOS = wasF, wasS, wasOS })
+	if almaApp.installed() {
+		t.Fatal("installed with no Alma.app")
+	}
+	plist := filepath.Join(apps, "Alma.app", "Contents", "Info.plist")
+	os.MkdirAll(filepath.Dir(plist), 0o755)
+	os.WriteFile(plist, []byte(`<plist><dict><key>CFBundleIdentifier</key><string>com.yetone.alma</string>`+
+		`<key>CFBundleShortVersionString</key><string>0.4.554</string></dict></plist>`), 0o644)
+	if !almaApp.installed() {
+		t.Fatal("Alma.app not found")
+	}
+}
+
+// An app dragged to the Trash, as a Mac app is uninstalled, is still in
+// Spotlight: it doesn't count as installed (aooo_han on X).
+func TestInTrash(t *testing.T) {
+	for p, want := range map[string]bool{
+		"/Users/a/.Trash/Alma.app":         true,
+		"/Volumes/X/.Trashes/501/Alma.app": true,
+		"/Applications/Alma.app":           false,
+		"/Users/a/Applications/Alma.app":   false,
+		"/Users/a/Trash notes/Alma.app":    false,
+	} {
+		if got := inTrash(p); got != want {
+			t.Errorf("inTrash(%q) = %v, want %v", p, got, want)
+		}
+	}
+}

@@ -136,9 +136,18 @@ func hanako(home string) *Agent {
 			Set: func(v string) error {
 				agent := hanakoAgent(dir)
 				if v == "" {
-					// nothing changes rather than half of it
+					// nothing changes rather than half of it, while
+					// OpenHanako can be opened to do it all. Uninstalled,
+					// it can't: its agent's model goes back in its plain
+					// config, and magpie's provider stays in the sealed
+					// catalog, which only OpenHanako can change (aooo_han
+					// on X: Alma uninstalled said to open it first).
+					gone := false
 					if _, there := hanakoCurrent(dir); there && hanakoSealed(path) && hanakoLive(dir) == nil {
-						return errSealed("take magpie out of")
+						if hanakoInstalled() {
+							return errSealed("take magpie out of")
+						}
+						gone = true
 					}
 					if onMagpie() {
 						// the stash goes only once the model is back
@@ -146,6 +155,9 @@ func hanako(home string) *Agent {
 							return err
 						}
 						forget(key())
+					}
+					if gone {
+						return nil
 					}
 					return hanakoRemove(dir)
 				}
@@ -360,6 +372,19 @@ func hanakoRemove(dir string) error {
 	}
 	return os.RemoveAll(hanakoPlugin(dir))
 }
+
+// hanakoApp is OpenHanako's desktop app as its package.json builds it:
+// HanaAgent.app (com.hanako.app) on a Mac; HanaAgent\HanaAgent.exe under
+// %LOCALAPPDATA%\Programs on Windows, or where its installer registered it
+// under the guid electron-builder makes of the appId; its deb's
+// /opt/HanaAgent on Linux. An AppImage of it isn't found.
+var hanakoApp = desktopApp{id: "com.hanako.app", names: []string{"HanaAgent.app"},
+	win: filepath.Join("HanaAgent", "HanaAgent.exe"), guid: "3802e236-0c74-5d5f-a339-e8fa54299135",
+	onLinux: &linuxApp{dirs: []string{"/opt/HanaAgent"}, exe: "hanako", name: "HanaAgent"}}
+
+// hanakoInstalled reports whether OpenHanako's app is installed here; a
+// var so a test can say.
+var hanakoInstalled = hanakoApp.installed
 
 // errSealed says why magpie can't do what it was asked to with OpenHanako
 // closed, and what will.
