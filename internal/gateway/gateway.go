@@ -2499,6 +2499,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		asked = m
 		move(m, why)
 	}
+	// DSH's compaction on the model set for it, not the session's, whose
+	// provider may be the one out of its limit (#5395)
+	if m := dshCompactTo(r, agent, call.Kind, asked); m != "" {
+		asked = m
+		move(m, movedDshCompact)
+	}
 	// a Codex subagent on the model set for Codex's subagents, whatever
 	// its lead asked for (willz on Discord), and a Claude Desktop
 	// subagent's tool turn on the one set for Desktop's; one already put

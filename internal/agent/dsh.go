@@ -193,7 +193,15 @@ func dshOn(at place, dir, list string, fresh, lead func() string) *Agent {
 	} else if f := fresh(); f != "" {
 		path = f
 	}
-	return &Agent{
+	joined := func() bool {
+		files := dshProfilesHeld(dir)
+		if len(files) == 0 {
+			return false
+		}
+		_, items, err := dshLook(files[0]) // dshOver changes a copy
+		return err == nil && dshWired(dshOver(dir, items))
+	}
+	a := &Agent{
 		Spelled: prefixed,
 		Dir:     dir, Path: path,
 		Sync:  func() error { return dshSyncFresh(at, dir, gw(), fresh) },
@@ -202,14 +210,7 @@ func dshOn(at place, dir, list string, fresh, lead func() string) *Agent {
 		// leaves magpie's route in its list: dsh is still connected, its
 		// /model has magpie's models beside DeepSeek's (Fate on Discord:
 		// DSH went back to Not connected)
-		Joined: func() bool {
-			files := dshProfilesHeld(dir)
-			if len(files) == 0 {
-				return false
-			}
-			_, items, err := dshLook(files[0]) // dshOver changes a copy
-			return err == nil && dshWired(dshOver(dir, items))
-		},
+		Joined: joined,
 		// connected so, Disconnect takes the route out, the start magpie
 		// wrote and its key; the model picked in dsh stays its own
 		Unwire: func() error {
@@ -280,6 +281,44 @@ func dshOn(at place, dir, list string, fresh, lead func() string) *Agent {
 				return static(dshEfforts...)
 			},
 		}},
+	}
+	if list == "dsh" {
+		a.Fields = append(a.Fields, dshCompactField(func() bool { return !at.cold && joined() }, list))
+	}
+	return a
+}
+
+// dshCompactField picks the model DeepSeek Harness compacts its context
+// on, whatever model the session is on (#5395): unset, dsh compacts on the
+// session's latest model, so a switch away from one whose provider is out
+// of its limit failed on its compaction. dsh's own setting for it is in
+// each agent preset's whole config, which a profile patch can only replace
+// whole, so it is magpie's setting (settings.DshCompactModel), read by
+// the gateway on each request (gateway dshCompactTo): Live, and a change
+// needs no restart. Offered while dsh is on magpie's route; DS Bot, whose
+// requests the gateway can't tell from dsh's, has none of its own. Its
+// models are spelt as the model field's, magpie/<id>, so `magpie dsh
+// deepseek/flash` is still the model (the CLI gives a bare value to the
+// first field offering it), and either spelling is taken. joined looks at
+// nothing at a cold place: a stopped distro's files start it (#3896).
+func dshCompactField(joined func() bool, list string) Field {
+	return Field{
+		Key: "compact_model", Label: "compaction model", Quiet: true, Live: true,
+		Get: func() string {
+			if m := provider.DshCompactModel(); m != "" {
+				return magpieID + "/" + m
+			}
+			return ""
+		},
+		Set: func(v string) error {
+			return provider.SetDshCompactModel(strings.TrimPrefix(v, magpieID+"/"))
+		},
+		Options: func(map[string]string) []Option {
+			if !joined() {
+				return nil
+			}
+			return viaMagpie(list, magpieID+"/")
+		},
 	}
 }
 

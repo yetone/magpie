@@ -69,6 +69,10 @@ var compactAsks = []compactAsk{
 	// system prompt above, which a route that drops it loses.
 	{ask: "Merge the previous summary with the new conversation."},
 	{ask: "Here is the full conversation to compact."},
+	// DeepSeek Harness (compaction-basic's COMPACTION_INSTRUCTION, a user
+	// message after the conversation): its llm-pi-ai routes, magpie's
+	// among them, send no x-deepseek-harness-compact mark (#5395)
+	{ask: "You are now acting as a compaction engine for this AI coding assistant."},
 }
 
 // leads reports whether p begins within compactLead bytes of text's start.

@@ -63,7 +63,11 @@ func SetDesktopSubagentModel(id string) error {
 // id now, "" when magpie serves that exact model or routing group.
 // Resolve isn't enough: it takes any model name under a provider that is
 // on, and the subagent would go to the vendor for a model it lacks.
-func DesktopSubagentUnserved(id string) string {
+func DesktopSubagentUnserved(id string) string { return Unserved(id) }
+
+// Unserved says why a request can't be put on id, a model or routing
+// group a setting of magpie's names, "" when magpie serves that exact one.
+func Unserved(id string) string {
 	id = RenamedRef(id)
 	for _, e := range Served() {
 		if e.ID == id {
