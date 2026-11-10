@@ -147,8 +147,16 @@ func TestServingGatesTools(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if gwtool.Served(gwtool.WebSearch) {
-		t.Error("serving, with the plugin off: web search still served")
+	// the listener is set before ListenAndServe gates the tools, and the
+	// HTTP server only starts after: wait for the gate, not for the
+	// listener (#6016, red in a full -race run on a loaded mote)
+	deadline = time.Now().Add(10 * time.Second)
+	for gwtool.Served(gwtool.WebSearch) {
+		if time.Now().After(deadline) {
+			t.Error("serving, with the plugin off: web search still served")
+			break
+		}
+		time.Sleep(time.Millisecond)
 	}
 	cancel()
 	if err := <-done; err != nil {
