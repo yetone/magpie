@@ -155,6 +155,10 @@ type rule struct {
 	// checks each
 	groups  []string
 	groupOK []func(string) bool
+	// may, where set, is a cheap scan that is true of any text the
+	// pattern can match, for a rule with no marker to look for: a run of
+	// 51 base58 letters
+	may func(string) bool
 }
 
 const (
@@ -224,7 +228,7 @@ var rules = append([]rule{
 	{kind: "ID_CARD", re: lazyre.New(`[1-9]\d{5}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]`), bound: alnum, ok: chineseID, cat: catPersonal},
 	{kind: "PHONE", re: lazyre.New(`(?:\+?86[- ]?)?1[3-9]\d{9}`), bound: alnum, at: phoneAt, cat: catPersonal},
 	{kind: "BANK_CARD", re: lazyre.New(`[3-6]\d{3}(?:[ -]?\d{4}){2,3}(?:[ -]?\d{1,3})?`), bound: alnum, ok: luhn, cat: catPersonal},
-}, moreRules...)
+}, append(moreRules, cryptoRules...)...)
 
 // cjkPasswordNames are what a password is called in Chinese, Japanese and
 // Korean.
@@ -266,9 +270,11 @@ type fieldNames []struct{ re, marker string }
 // DB_PASSWORD, apiKey, x-api-key, client_secret.
 var secretNames = fieldNames{
 	{"password", "pass"}, {"passwd", "pass"},
+	// an exchange's API passphrase (OKX, Coinbase, KuCoin)
+	{"passphrase", "pass"},
 	{"secret", "secret"},
 	{"token", "token"},
-	{`api[_-]?key`, "key"}, {`access[_-]?key`, "key"}, {`private[_-]?key`, "key"},
+	{`api[_-]?key`, "key"}, {`access[_-]?key`, "key"}, {`private[_-]?key`, "key"}, {`priv[_-]?key`, "key"},
 	{"credential", "credential"},
 }
 
@@ -1141,6 +1147,9 @@ func ruleSpans(s string, o Options) []span {
 				continue
 			}
 			if len(r.markers) > 0 && !containsAny(s, r.markers) {
+				continue
+			}
+			if r.may != nil && !r.may(s) {
 				continue
 			}
 			if len(r.fold) > 0 {

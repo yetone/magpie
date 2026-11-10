@@ -60,6 +60,10 @@ func noIDs(s string, found []span) []span {
 			switch f.kind {
 			case "PASSWORD", "API_KEY", "TOKEN", "PRIVATE_KEY":
 				return false
+			case "WALLET_KEY":
+				// taken only after a key's name (walletKeyAt): 64 hex
+				// digits after --private-key are the key, not an id
+				return false
 			case "SECRET":
 				// a short digest after a key's name in a sentence (密钥为
 				// 5d41402abc4b2a76) is that key; in a field, as a long id
