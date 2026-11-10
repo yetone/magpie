@@ -117,6 +117,14 @@ func TestNativeRelayNamespacedCallSaysUnsealed(t *testing.T) {
 			t.Fatalf("stream %v: %s", stream, rec.Body)
 		}
 		for _, it := range items {
+			if it["arguments"] == "" {
+				// a stream's first item has no arguments yet, so
+				// nothing can say whether they are sealed
+				if v, ok := it["encrypted_function_args"]; ok {
+					t.Fatalf("stream %v: the argument-less item was given %v", stream, v)
+				}
+				continue
+			}
 			sealed, ok := it["encrypted_function_args"].([]any)
 			if it["name"] != "spawn_agent" || it["namespace"] != "collaboration" || !ok || len(sealed) != 0 {
 				t.Fatalf("stream %v: Codex was given %v", stream, it)
