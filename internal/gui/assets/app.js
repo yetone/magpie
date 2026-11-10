@@ -21661,25 +21661,24 @@ function renderReplies(s, keep) {
   box.replaceChildren();
   const onOff = [["off", t("Off")], ["on", t("On")]];
   const r = replyModelRow(s, keep);
-  // a reply stuck in a loop is ended with an error the agent can act on,
-  // not let run to its output limit (#1359): on unless turned off
+  // #1359
   const l = segRow("loopGuardRow", t("Stop looping replies"),
     t("A reply whose reasoning or text goes round the same few lines is ended with an error the agent can retry, not left to run to its output limit"),
     onOff, s.noLoopGuard ? "off" : "on", (v) => savePrefs({ ...keep, noLoopGuard: v === "off" }));
-  // how many more are asked after a safety refusal (#248): every one unless set
+  // #248
   const counts = [["0", t("Never ask again")], ["1", "1"], ["2", "2"], ["3", "3"]];
   const n = s.refusalRetries == null || s.refusalRetries < 0 ? "" : String(s.refusalRetries);
   if (n && !counts.some(([id]) => id === n)) counts.push([n, n]); // set by hand in settings.json
   const f = segRow("refusalRetriesRow", t("Ask again after a refusal"),
     t("When a vendor's safety filter refuses a request before anything is said, how many more accounts or routing group members are asked. Never ask again hands the refusal straight back: Claude Code then switches to its own fallback model, as it does on Anthropic's API"),
     [...counts, ["", t("All")]], n, (v) => savePrefs({ ...keep, refusalRetries: v === "" ? null : Number(v) }));
-  // longest Retry-After an agent is told (#5371): as it came unless set
+  // #5371
   const ra = s.retryAfterCap > 0 ? String(s.retryAfterCap) : "", waits = [60, 300, 900].map((n) => [String(n), t("{n} min", { n: n / 60 })]);
   if (ra && !waits.some(([id]) => id === ra)) waits.push([ra, t("{n} s", { n: ra })]);
   const a = segRow("retryAfterCapRow", t("Longest wait an agent is told"),
     t("When a limit has every account resting, an agent is told when to ask again, which can be hours away. A shorter wait lets an agent with its own fallback models move on sooner. The accounts rest as long either way"),
     [...waits, ["", t("No limit")]], ra, (v) => savePrefs({ ...keep, retryAfterCap: v === "" ? null : Number(v) }));
-  // how long a routing group's classifier is given: 8 seconds unless set (#2934)
+  // #2934
   const k = waitRow("classifyTimeoutRow", t("Intent classifier timeout"), t("How long a routing group's classifier is given to say which intent a turn is. The turn waits for it before it goes anywhere, and past it goes on without its answer. A slow classifier may need longer"),
     [8, 15, 30, 60], s.classifyTimeout > 0 ? s.classifyTimeout : 8, "{n} s", (n) => savePrefs({ ...keep, classifyTimeout: n }));
   // the agent's instructions as a Claude run's system prompt (off unless on)
@@ -21698,32 +21697,52 @@ function renderReplies(s, keep) {
   $("#routeList").replaceChildren(f, a, k, $("#busyLoadRow"));
 }
 
-// renderDisabledModels: models turned off for every request (#1867), a row per pattern
+// renderDisabledModels: models turned off for every request (#1867), a row per
+// pattern; its writes go one after another (disabledSaves)
+let disabledSaves = Promise.resolve();
 function renderDisabledModels(s) {
   const box = $("#disabledModelsList");
   if (!box) return;
   const list = s.disabledModels || [];
-  const save = (next) => writingPrefs(api("settings/disabled-models", { models: next }))
+  const save = (next) => (disabledSaves = disabledSaves.then(() => writingPrefs(api("settings/disabled-models", { models: next }))
     .then((ns) => { prefs = ns; renderSettings(); })
-    .catch(settingsErr);
+    .catch(settingsErr)));
   const add = el("div", "row pref");
   add.id = "disabledAddRow";
   const who = el("div", "who");
   who.append(el("div", "name", t("Disable a model")),
     el("div", "sub wraps", t("A disabled model is refused on every route through magpie (a request, a session, a routing group, a fallback, a sub-agent, a decision model) and left out of magpie's lists and agents' pickers. Only requests through magpie are covered. Type a pattern such as *fable* to disable every model it matches")));
   const val = el("div", "val");
-  const b = el("button", "text action", t("Disable…"));
+  const b = pick?.anchor?.id === "disabledAdd" ? pick.anchor : el("button", "text action", t("Disable…"));
   b.type = "button";
   b.id = "disabledAdd";
   const models = (s.titleModels || []).filter((x) => x.provider);
-  b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "disabledModels", label: "model", value: "",
-    options: models.map(modelOpt),
-    onPick: (id) => {
-      id = String(id || "").trim();
-      if (!id || list.some((p) => p.toLowerCase() === id.toLowerCase())) return;
-      save([...list, id]);
-    } }, b, ev);
+  // several at once, ticked or not (char1es_lu on X)
+  b.onclick = (ev) => {
+    let have = [...list];
+    const at = (id) => have.findIndex((p) => p.toLowerCase() === String(id).toLowerCase());
+    const own = (id) => ({ value: id, label: id, group: "" });
+    const options = models.map(modelOpt);
+    for (const p of [...have].reverse()) if (!options.some((o) => o.value.toLowerCase() === p.toLowerCase())) options.unshift(own(p));
+    openPicker({ id: "", name: "", fields: [] }, { key: "disabledModels", label: "model", value: "", multi: true,
+      options, picked: (id) => at(id) >= 0,
+      onPick: (id) => {
+        id = String(id || "").trim();
+        if (!id) return;
+        const i = at(id);
+        have = i >= 0 ? have.filter((_, j) => j !== i) : [...have, id];
+        if (i < 0 && pick && !pick.options.some((o) => o.value === id)) pick.options.unshift(own(id));
+        save(have);
+      } }, b, ev);
+  };
   val.append(b);
+  if (list.length > 1) {
+    const all = el("button", "text", t("Enable all"));
+    all.type = "button";
+    all.id = "disabledEnableAll";
+    all.onclick = () => save([]);
+    val.append(all);
+  }
   add.append(who, val);
   const rows = list.map((pat) => {
     const r = el("div", "row pref disabled-model");
