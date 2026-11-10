@@ -36,7 +36,15 @@ type Method struct {
 	Placeholder string `json:"placeholder,omitempty"`
 	// Keyless skips personal-key entry; authorize supplies the credential.
 	Keyless bool `json:"keyless,omitempty"`
+	// KeyAsked is an "api" method whose own prompts ask its key: its
+	// authorize turns their answers into it (host.js keyAsked), so no key
+	// is asked beside them.
+	KeyAsked bool `json:"keyAsked,omitempty"`
 }
+
+// NoKey is whether an "api" method is signed in to with no key of
+// magpie's asking: keyless, or its prompts ask the key.
+func (m Method) NoKey() bool { return m.Keyless || m.KeyAsked }
 
 // KeyTitle is what an "api" method's key is asked as: its label, as
 // OpenCode's dialog titles it, unless that only says "API key" (or

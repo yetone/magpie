@@ -640,7 +640,7 @@ func pluginLogin(ctx context.Context, name, method string) error {
 	var saved plugin.Saved
 	if pp.Methods[m].Type == "api" {
 		key := ""
-		if !pp.Methods[m].Keyless {
+		if !pp.Methods[m].NoKey() {
 			var err error
 			key, err = secret("key", keyPrompt(pp.Name, pp.Methods[m]), false)
 			if err != nil {

@@ -224,7 +224,7 @@ func PluginAPIKey(ctx context.Context, id string, method int, inputs map[string]
 	}
 	if strings.TrimSpace(key) == "" {
 		pp, ok := PluginOf(PluginID(id))
-		if !ok || method < 0 || method >= len(pp.Methods) || pp.Methods[method].Type != "api" || !pp.Methods[method].Keyless {
+		if !ok || method < 0 || method >= len(pp.Methods) || pp.Methods[method].Type != "api" || !pp.Methods[method].NoKey() {
 			return "", errors.New("enter the key")
 		}
 	}

@@ -2480,8 +2480,18 @@ function methods(auth) {
     label: m.label,
     ...byLang(m.labels, "labels"),
     ...(m.type === "api" && m.keyless === true && typeof m.authorize === "function" ? { keyless: true } : {}),
+    ...(keyAsked(m) ? { keyAsked: true } : {}),
     ...(m.type === "api" && shown(m.placeholder, 200) ? { placeholder: shown(m.placeholder, 200) } : {}),
   }))
+}
+
+// keyAsked is whether an "api" method's own questions ask its key: it has
+// prompts and an authorize that turns their answers into the key, as
+// inkstone's and Devin's session-token method do. magpie asks no key of
+// its own beside them; one typed there went nowhere (authorize gets the
+// answers only), so the user gave the same token twice.
+function keyAsked(m) {
+  return m.type === "api" && Array.isArray(m.prompts) && m.prompts.length > 0 && typeof m.authorize === "function"
 }
 
 // iconOf is the picture a plugin gives its provider, magpie's own field
@@ -2729,17 +2739,34 @@ function validate(provider, index, key, value) {
 // save keeps a successful sign-in as OpenCode's CLI does, at key (or, for
 // a sign-in the plugin says is another provider's, a new account of
 // that one). It gives the provider and where the account is kept.
-async function save(provider, key, result, inputs, apiKey) {
+async function save(provider, key, result, inputs, apiKey, method) {
   const id = result.provider ?? provider
   if (id !== provider) key = freshKey(id)
   if ("refresh" in result) {
     const { type: _t, provider: _p, refresh, access, expires, ...extra } = result
     await setAuth(key, { type: "oauth", refresh, access, expires, ...extra })
   } else if ("key" in result || apiKey) {
-    const md = { ...(inputs && Object.keys(inputs).length ? inputs : {}), ...(result.metadata ?? {}) }
+    const md = { ...plainAnswers(provider, method, inputs), ...(result.metadata ?? {}) }
     await setAuth(key, { type: "api", key: result.key ?? apiKey, ...(Object.keys(md).length ? { metadata: md } : {}) })
   }
   return { provider: id, account: await settle(id, key) }
+}
+
+// plainAnswers are the answers to an "api" method's questions that the
+// account's metadata keeps beside what its authorize gave: a choice
+// (select) only. A typed answer may be the token or key itself (inkstone's
+// apiKey and uaaToken, Cloudflare's token), and the key is kept as the
+// account's key already; copied into metadata it sat there a second time,
+// in plain text. A plugin that wants a typed answer kept puts it in its
+// result's metadata, as every one in magpie-community/plugins does.
+function plainAnswers(provider, method, inputs) {
+  if (!inputs || typeof inputs !== "object") return {}
+  const prompts = authOf(provider).methods[method]?.prompts ?? []
+  const out = {}
+  for (const [k, v] of Object.entries(inputs)) {
+    if (prompts.some((p) => p?.key === k && p.type === "select")) out[k] = v
+  }
+  return out
 }
 
 // signInKey is where a sign-in goes: the account named, else a new one.
@@ -2828,7 +2855,9 @@ async function apiKey({ provider, method, inputs, key, account, proxy }, signal)
   const r = await signingIn(signal, proxy ?? "", provider, at, () => m.authorize(inputs ?? {}, { signal }))
   if (signal?.aborted) throw abortedSignIn()
   if (!r || r.type !== "success") return failed(r)
-  return { ok: true, ...(await save(provider, at, r, inputs, key)) }
+  // nothing to keep: no key typed, and the plugin's authorize gave none
+  if (!("key" in r) && !("refresh" in r) && !key) return { ok: false, error: `${provider}'s sign-in gave no key` }
+  return { ok: true, ...(await save(provider, at, r, inputs, key, method)) }
 }
 
 // ---- renewing a sign-in ------------------------------------------------------

@@ -288,3 +288,21 @@ func TestPluginEmptyKeyOnlyKeyless(t *testing.T) {
 		t.Errorf("an unknown plugin with no key: %v", err)
 	}
 }
+
+// An API method whose own questions ask its key (keyAsked) is signed in
+// with its answers and no key: the window asks none beside them.
+func TestPluginEmptyKeyKeyAsked(t *testing.T) {
+	claudeHome(t)
+	t.Setenv("MAGPIE_BUN", "")
+	spec := "@example/opencode-acme-auth"
+	os.MkdirAll(settings.Dir(), 0o700)
+	if err := os.WriteFile(filepath.Join(settings.Dir(), "plugins.json"), []byte(`{"plugins":[{"spec":"`+spec+`"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	plugin.UseCached([]plugin.Provider{{ID: "acme", Spec: spec, Name: "Acme",
+		Methods: []plugin.Method{{Type: "api", Label: "Session token", KeyAsked: true}}}})
+	t.Cleanup(func() { plugin.UseCached(nil) })
+	if _, err := PluginAPIKey(context.Background(), "acme", 0, map[string]string{"token": "t"}, ""); err != nil && err.Error() == "enter the key" {
+		t.Errorf("a keyAsked method with no key: %v", err)
+	}
+}

@@ -12592,8 +12592,10 @@ async function startPluginSignIn(sub, method, inputs = {}, o = {}) {
       return renderProviders();
     }
     if (ms[method].type === "api") {
-      signing = { agent: sub.agent, ...keep, state: ms[method].keyless === true ? "starting" : "key" };
-      if (ms[method].keyless === true) return pluginKey(sub, "");
+      // keyless, or its own questions asked the key (keyAsked): no key field
+      const noKey = ms[method].keyless === true || ms[method].keyAsked === true;
+      signing = { agent: sub.agent, ...keep, state: noKey ? "starting" : "key" };
+      if (noKey) return pluginKey(sub, "");
       return renderProviders();
     }
     const body = { provider: sub.pid, method, inputs };
@@ -12642,7 +12644,13 @@ async function pluginKey(sub, key) {
     const st = await api("plugin-signin", { provider: sub.pid, method: flow.method, inputs: flow.inputs, key });
     if (signing?.agent === sub.agent) signedIn(st);
   } catch (e) {
-    if (signing?.agent === sub.agent) { signing = { ...flow, state: flow.state === "starting" ? "failed" : flow.state, error: e.message }; renderProviders(); }
+    if (signing?.agent === sub.agent) {
+      // a key its own questions asked and the plugin turned away is asked
+      // again on Try again, not sent again as it was
+      const again = flow.state === "starting" && sub.plugin.methods?.[flow.method]?.keyAsked === true ? { inputs: {} } : {};
+      signing = { ...flow, ...again, state: flow.state === "starting" ? "failed" : flow.state, error: e.message };
+      renderProviders();
+    }
   }
 }
 
