@@ -391,6 +391,10 @@ type Weighed struct {
 	// Barred: left out as the user set it not to serve the model, its
 	// own list of models leaving it out (#474)
 	Barred bool `json:"barred,omitempty"`
+	// StandIn: left out as its provider never takes another model's
+	// request (provider.NoStandIn), and a provider not so marked was
+	// planned before it (standInsOut)
+	StandIn bool `json:"standIn,omitempty"`
 	// Held: left out as the gateway key asking may not use its account or
 	// key (#905), or a routing group it was reached through is held to
 	// other accounts (Group.Accounts): HeldBy names that group

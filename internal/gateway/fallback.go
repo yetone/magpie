@@ -537,6 +537,9 @@ func (s *Server) planPaused(p provider.Provider, model string, from provider.Pro
 		pl.order = append(pl.order, asideOf(aside, q, fallback, from)...)
 		cs = append(cs, aside...)
 		for _, c := range left {
+			if fallback && q.NoStandIn && !p.NoStandIn {
+				continue // no last resort for another's request either
+			}
 			w := weighed(c, q, weighing{}, fallback, from)
 			w.Unlisted = true
 			pl.left = append(pl.left, w)
@@ -579,7 +582,35 @@ func (s *Server) planPaused(p provider.Provider, model string, from provider.Pro
 		seen[fp.ID+"/"+fm] = true
 		out = append(out, add(fp, fm, true)...)
 	}
+	out, pl.order, pl.left, _ = standInsOut(out, pl.order, pl.left, !p.NoStandIn)
 	return restLast(out, pl)
+}
+
+// standInsOut leaves out, of cs in the order planned (before a failure
+// rests one or a rate limit sinks it, so a local model that is down still
+// counts as first), each key or account of a provider set never to take
+// another model's request (provider.NoStandIn) that comes after one of a
+// provider not so set, and says so on left (sonnnnnnnnnnnna on X: a local
+// uncensored model that fails must not hand its request to a vendor that
+// bans for it). other is true when the request went first to a provider
+// not so set, which may have nothing planned (its model off, its accounts
+// at their caps), and comes back true once one such was seen. order is
+// cs's rows, as restLast takes them.
+func standInsOut(cs []candidate, order, left []Weighed, other bool) ([]candidate, []Weighed, []Weighed, bool) {
+	keep := cs[:0:0]
+	kept := order[:0:0]
+	for i, c := range cs {
+		if !c.p.NoStandIn {
+			other = true
+		} else if other {
+			w := order[i]
+			w.StandIn, w.Unlisted = true, true
+			left = append(left, w)
+			continue
+		}
+		keep, kept = append(keep, c), append(kept, order[i])
+	}
+	return keep, append(kept, order[len(cs):]...), left, other
 }
 
 // groupsAfter is p with the routing groups the user built that have p's
@@ -647,6 +678,11 @@ func (s *Server) planGroup(g provider.Group, ms []provider.Member, from provider
 	var asides []candidate
 	var wAsides []Weighed
 	out := planLevel(g, ms, 0, from, &pl, &asides, &wAsides, nil)
+	// a member never another's stand-in goes only where the group's
+	// first, or those before it, are so set too
+	var other bool
+	out, pl.order, pl.left, other = standInsOut(out, pl.order, pl.left, false)
+	asides, wAsides, pl.left, _ = standInsOut(asides, wAsides, pl.left, other)
 	if sinks(g.Sinks(), g.Routing) {
 		out, pl.order = sinkPlanned(out, pl.order)
 	}

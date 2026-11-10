@@ -635,7 +635,7 @@ func (s *Server) serveSystemOneBody(w http.ResponseWriter, r *http.Request, body
 	// request (fflake33 on Discord). One the user set not to serve the
 	// model is never asked; with every one so, the request is refused
 	cs, pl := s.decideKeys(p, model)
-	barred := len(cs) == 0 && len(pl.left) > 0 && !slices.ContainsFunc(pl.left, func(w Weighed) bool { return !w.Barred })
+	barred := len(cs) == 0 && slices.ContainsFunc(pl.left, func(w Weighed) bool { return w.Barred }) && !slices.ContainsFunc(pl.left, func(w Weighed) bool { return !w.Barred && !w.StandIn })
 	// and held to some accounts (#905): the decision model's provider must
 	// have one the key may use and that is let serve the model, the call
 	// spend landing on it as any's, and only those are asked

@@ -730,7 +730,7 @@ func (s *Server) onKeys(r *http.Request, p provider.Provider, model, asked strin
 	q := p
 	q.Fallback = nil
 	cs, pl := s.plan(q, model, provider.Chat)
-	if len(cs) == 0 && len(pl.left) > 0 && !slices.ContainsFunc(pl.left, func(w Weighed) bool { return !w.Barred }) {
+	if len(cs) == 0 && slices.ContainsFunc(pl.left, func(w Weighed) bool { return w.Barred }) && !slices.ContainsFunc(pl.left, func(w Weighed) bool { return !w.Barred && !w.StandIn }) {
 		return nil, http.StatusForbidden, barredError(asked, pl.left)
 	}
 	if keyWho, held := accountHolds(r); held {

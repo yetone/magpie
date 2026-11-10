@@ -6231,13 +6231,10 @@ function providerHandle(p, row) {
     if (e.shiftKey) arrangeProvider(p.id, up ? 0 : onProviderIds().length - 1, true);
     else stepProvider(p.id, up ? -1 : 1, true);
   };
-  // the click that ends a drag doesn't open the row
   b.addEventListener("click", (e) => { if (b.dataset.dragged) { e.stopPropagation(); e.preventDefault(); } });
   b.onpointerdown = (e) => {
     if (providerArranging) return;
     const list = $("#providers");
-    // while a search hides some, the row moves among the ones shown: it
-    // takes the place of the one it is dropped on (shownToOn)
     const rows = [...list.children].filter((r) => r.classList.contains("provider") && !r.hidden);
     providerArranging = dragRows(e, b, row, list, rows,
       (to) => arrangeProvider(p.id, shownToOn(rows[to]?.dataset.id)), () => { closeProtoMenu(); closeAgentMenu(); }, () => {
@@ -6248,8 +6245,7 @@ function providerHandle(p, row) {
   return b;
 }
 
-// The providers on, in order, and those a search shows: while searching, one
-// moves among those shown; the hidden keep their order.
+// While searching, a row moves among those shown.
 const onProviderIds = () => providers.providers.filter((x) => !x.off).map((x) => x.id);
 const shownProviderIds = () => [...$("#providers").children].filter((r) => r.classList.contains("provider") && !r.hidden).map((r) => r.dataset.id);
 const shownToOn = (id) => (id ? onProviderIds().indexOf(id) : -1);
@@ -6259,8 +6255,7 @@ function stepProvider(id, by, keyboard) {
   arrangeProvider(id, shownToOn(shown[i + by]), keyboard);
 }
 
-// openProviderMenu: a row's right-click (#1614), and Use first, which Smart
-// tries first (hzh_1119 on Discord)
+// openProviderMenu: a row's right-click (#1614), Use first, Never a fallback
 function openProviderMenu(anchor, p) {
   if (!anchor) return;
   const again = agentMenu?.anchor === anchor;
@@ -6275,6 +6270,7 @@ function openProviderMenu(anchor, p) {
     { name: "Move down", icon: MOVE_DOWN, key: ALT + "↓", off: k < 0 || k >= shown.length - 1, run: () => stepProvider(p.id, 1) },
     { name: "Move to bottom", icon: MOVE_BOTTOM, key: ALT + SHIFT + "↓", off: i === on.length - 1, run: () => arrangeProvider(p.id, on.length - 1) },
     { name: "Use first", icon: p.useFirst ? CHECK : "", sep: !0, run: () => accountAction("provider/usefirst", { id: p.id, useFirst: !p.useFirst }, t(p.useFirst ? "{name} takes its turn with the others" : "{name} is used first", { name: p.name })) },
+    { name: "Never a fallback", icon: p.noStandIn ? CHECK : "", run: () => accountAction("provider/standin", { id: p.id, noStandIn: !p.noStandIn }, t(p.noStandIn ? "{name} can be a fallback again" : "{name} is never a fallback for another model", { name: p.name })) },
     ...magpie.actions?.("provider", { provider: { id: p.id, name: p.name } }) || [],
   ]);
 }

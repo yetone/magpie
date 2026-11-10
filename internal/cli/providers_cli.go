@@ -179,6 +179,9 @@ const providerUsage = `usage:
                                    (Settings' redaction leaves its requests as written, at any address: your call,
                                     so mind a relay that passes them on to a vendor; a subscription or a plugin's
                                     provider too, whose vendor gets them so; never another magpie)
+       magpie provider set claude fallback-for-others=no
+                                   (no other model's fallback, nor a routing group's next after one:
+                                    a local model that is down or full doesn't send its requests on to it)
        magpie provider set modelscope free=yes
                                    (every model of it counts as free, so a Free first routing spends it before
                                     paid ones, as a free daily quota; prices and Usage's costs stay as listed)
@@ -908,6 +911,9 @@ func showProviderAsking(p provider.Provider, ask bool) error {
 		}
 		kv("unmasked", "yes"+muted.Render(why))
 	}
+	if p.NoStandIn {
+		kv("fallback-for-others", "no"+muted.Render("  never takes another model's request"))
+	}
 	switch b := p.BillingKind(); {
 	case b == "":
 	case p.Billing != "":
@@ -1343,6 +1349,19 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 				return fmt.Errorf("unmasked=yes|no, not %q", v)
 			}
 			p.Unredacted = v == "yes"
+		case "fallback-for-others":
+			// no: never a fallback for another model, nor a routing
+			// group's next after one (sonnnnnnnnnnnna on X: a local
+			// uncensored model's request reaching a vendor that bans for
+			// it); yes, the default, again (provider.NoStandIn)
+			switch strings.ToLower(v) {
+			case "yes", "on":
+				p.NoStandIn = false
+			case "no", "off":
+				p.NoStandIn = true
+			default:
+				return fmt.Errorf("fallback-for-others=yes|no, not %q", v)
+			}
 		case "free":
 			// yes: every model of it counts as free for Free first and
 			// Cheapest routing, by the user's word (jiabubu on Discord:

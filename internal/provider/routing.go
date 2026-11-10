@@ -117,6 +117,17 @@ func SetUseFirst(id string, on bool) error {
 	return Save(*p)
 }
 
+// SetNoStandIn keeps another model's request off a provider, or lets it
+// stand in for any again (Provider.NoStandIn).
+func SetNoStandIn(id string, on bool) error {
+	p, err := Find(id)
+	if err != nil {
+		return err
+	}
+	p.NoStandIn = on
+	return Save(*p)
+}
+
 // SetCapStop has a subscription answer 429 while every account is held at
 // its usage cap, rather than go on to its fallbacks (Provider.CapStop), or
 // go on to them again.
