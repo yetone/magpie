@@ -3,7 +3,9 @@
 // version and system, and, unless the user turned that part off, which
 // agents, providers and models it is used with, by their built-in ids
 // (Usage): a provider of the user's own is only "custom". No names, URLs,
-// accounts, keys, prompts or usage go. Settings → Privacy turns it off,
+// accounts, keys, prompts or usage go. With that part, usemagpie.ai is
+// told which of the plugins Discover lists are installed here, for
+// Discover's counts (plugins.go). Settings → Privacy turns it off,
 // and so do DO_NOT_TRACK=1 and MAGPIE_NO_STATS=1; a build from source
 // never sends it.
 package stats
@@ -137,6 +139,9 @@ func Send(ctx context.Context, version, what string, now time.Time) error {
 	}
 	if !settings.Load().NoUsageStats {
 		provider.PartnerCountsSent(now)
+		// Discover's counts; the day's event went, so this isn't tried
+		// again till tomorrow when it fails
+		_ = sendPlugins(ctx, id)
 	}
 	return os.WriteFile(stamp, []byte(day+"\n"), 0o644)
 }

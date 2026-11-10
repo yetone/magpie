@@ -4162,10 +4162,19 @@ and models to look after first, by magpie's own ids only:
   many times a day the add sheet showed it, its row was opened, its key
   page was opened and a provider was added from it (at most 20 of each,
   5 adds), kept in `~/.cache/magpie/partner-counts.json` for at most 14
-  days and sent the day after as `magpie partner` events.
+  days and sent the day after as `magpie partner` events;
+- to usemagpie.ai, not PostHog, which of the plugins Discover lists are
+  installed and on (npm names, or `github:owner/repo` for a repository
+  tagged `magpie-plugin`; never a folder, a private repository or an
+  unlisted package), with the same id, so Discover can say how many use
+  each (the ids that reported it in 7 days). A like on a plugin's page
+  goes there too, only for a plugin installed here, and is kept in
+  `~/.config/magpie/plugin-likes.json`. The code is
+  [internal/stats/plugins.go](../internal/stats/plugins.go) and
+  [site/pluginstats.js](../site/pluginstats.js).
 
 No names, base URLs, accounts, keys, prompts or usage go. Turn that part off
-in Settings → Privacy → Share the agents, providers and models I use; the
+in Settings → Privacy → Share the agents, providers, models and plugins I use; the
 day's event then has the id, version and system only. Turn it all off in
 Settings → Privacy → Count me as a user, or with `DO_NOT_TRACK=1` or
 `MAGPIE_NO_STATS=1`. Builds from source never send it. The code is

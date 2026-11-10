@@ -235,6 +235,7 @@
       loadBuiltins(),
       providers ? null : loadProviders().then(drawBody, () => {}),
     ];
+    import("./plugincounts.js").then(() => window.pmCounts.load(drawBody), () => {});
     await Promise.all(parts);
     askNPM();
     askGit();
@@ -581,6 +582,7 @@
       meta.append(o);
     }
     if (l.github) meta.append(stars(l.github.stars));
+    window.pmCounts?.chips(meta, l.package);
     if (l.npm?.weekly) {
       const d = el("span", "pm-dl");
       d.append(glyph(DOWN, 11, 1.5), el("span", "", t("{n}/week", { n: count(l.npm.weekly) })));
@@ -655,13 +657,13 @@
   const SHORT = { pv: "Subscriptions", mw: "Middleware", ag: "Agents", tl: "Tools", pg: "Pages" };
   const SHELF_N = { pv: 6 };
   const SOURCES = [["", "All sources"], ["ours", "magpie community"], ["third", "Other authors"], ["gh", "Unofficial, on GitHub"]];
-  const SORTS = [["hot", "Most popular"], ["name", "Name"]];
+  const SORTS = [["hot", "Most popular"], ["liked", "Most liked"], ["name", "Name"]];
   let kindPick = "", srcPick = "", onlyNew = false, sortPick = "hot";
   const srcOf = (l) => l.github ? "gh" : l.community ? "ours" : "third";
   const hotOf = (l) => l.npm?.weekly || 0;
   const nameOrder = (a, b) => a.name.localeCompare(b.name, intlLang());
   const byHot = (a, b) => hotOf(b) - hotOf(a) || (b.github?.stars || 0) - (a.github?.stars || 0) || nameOrder(a, b);
-  const ranked = (list, how = sortPick) => [...list].sort(how === "name" ? nameOrder : byHot);
+  const ranked = (list, how = sortPick) => [...list].sort(how === "name" ? nameOrder : how === "liked" && window.pmCounts ? (a, b) => pmCounts.order(a, b, byHot) : byHot);
   // the day in the reader's own calendar, which the daily pick turns on
   const today = () => { const d = new Date(); return Math.floor((d.getTime() - d.getTimezoneOffset() * 6e4) / 864e5); };
 
@@ -728,6 +730,8 @@
     const stats = el("div", "pm-stats");
     const stat = (v, k) => { const s = el("div", "pm-stat"); s.append(el("b", "", v), el("span", "", k)); stats.append(s); };
     stat(count(hotOf(l)), t("Downloads last week"));
+    const u = window.pmCounts?.users(l.package);
+    if (u) stat(count(u), t("Users"));
     stat(t(SHORT[kindOf(l)]), t("Kind"));
     if (l.npm?.version) stat("v" + l.npm.version, t("Version"));
     const acts = el("div", "pm-hact");
@@ -1820,6 +1824,8 @@
     if (!local) link("npm", "https://www.npmjs.com/package/" + l.package);
     link(l.github ? "GitHub" : t("Source"), l.npm?.repository);
     if (l.npm?.homepage && l.npm.homepage !== l.npm.repository && !l.npm.homepage.startsWith(l.npm.repository + "#")) link(t("Homepage"), l.npm.homepage);
+    const like = local ? null : window.pmCounts?.like(l.package, () => { const e = entryOf(l.package); return !!e && !e.off; });
+    if (like) links.append(like);
     main.append(links);
     if (l.github) {
       const w = el("p", "pm-note warn");
@@ -1852,7 +1858,7 @@
     confirmAsk = ed;
     openModal(ed);
     // the button follows an install or a sign-in made while it's open
-    const tick = setInterval(() => { if (!ed.isConnected) return stop(); redrawAct(); }, 600);
+    const tick = setInterval(() => { if (!ed.isConnected) return stop(); redrawAct(); like?.sync(); }, 600);
     function stop() { clearInterval(tick); }
     // the README takes the skeleton's place, and the dialog grows to it on
     // the spring it opened on, centred as it goes, not in one jump; the

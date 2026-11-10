@@ -122,6 +122,7 @@
       <li><b>モデル</b>：つないだエージェントに設定されたモデルを、プロバイダー ID とベンダーのモデル ID で（<code>deepseek/deepseek-v4</code>）。キーのプロバイダーで <a href="https://models.dev">models.dev</a> に載っていないモデル ID（ローカルモデル、ファインチューン）は <code>&lt;プロバイダー&gt;/other</code>、自分のプロバイダーのモデルは <code>custom</code>、ルーティンググループは <code>group</code> です。</li>
     </ul>
     <p>あわせて <code>magpie partner</code> イベントも送ります。プロバイダー追加シートの先頭に載る各パートナーについて、その ID で、終わった日にシートに表示された回数、行が開かれた回数、キーのページが開かれた回数、そこからプロバイダーが追加された回数です（<code>what</code>：<code>shown</code>、<code>opened</code>、<code>keys</code>、<code>added</code>。1 日にそれぞれ最大 20 回、追加は 5 回）。回数だけで、自分のプロバイダーは含みません。</p>
+    <p id="plugins">この部分がオンのとき、magpie は同じ日に、Discover に載っているどのプラグインを入れて（オンにして）いるかを <code>usemagpie.ai</code> に伝え、Discover が各プラグインの利用者数を示せるようにします：<code>POST /api/plugins/report</code> に同じランダムな ID とプラグインの npm パッケージ名、<code>magpie-plugin</code> タグのリポジトリは <code>github:owner/repo</code>（最大 50 個）。フォルダーから入れたもの、非公開リポジトリ、Discover に載っていないパッケージのプラグインは送りません。プラグインのページでのいいねは <code>POST /api/plugins/like</code> で、ID、プラグイン、オンかオフかを送ります。いいねできるのはこのコンピューターに入っているプラグインだけで、いいねしたものは <code>plugin-likes.json</code> に残ります。サイトは直近 7 日に報告した ID の数を数え、報告は 30 日で消します。アドレスはハッシュだけを 1 時間、頻度の制限のために残します。Discover は ID を含まない <code>GET /api/plugins/stats</code> で数を読みます。コードは <a href="https://github.com/yetone/magpie/blob/main/internal/stats/plugins.go">internal/stats/plugins.go</a> と <a href="https://github.com/yetone/magpie/blob/main/site/pluginstats.js">site/pluginstats.js</a> です。</p>
     <p>どのイベントにも <code>$process_person_profile: false</code> が付き、PostHog はこの ID の人物プロファイルを作りません。名前、Base URL、アカウント、キー、プロンプト、返答、使用量は送りません。まとめ全体はこのような形です。</p>
     <div class="code">
       <span class="lang">POST https://us.i.posthog.com/batch/</span>
@@ -155,7 +156,7 @@
     <ul>
       <li><span class="ui">設定</span> → <span class="ui">プライバシー</span> → <span class="ui">ユーザー数に含める</span> をオフ、または <code>settings.json</code> に <code>"noStats": true</code>：毎日のカウント全体。</li>
       <li>magpie の環境に <code>DO_NOT_TRACK=1</code> か <code>MAGPIE_NO_STATS=1</code>（空、<code>0</code>、<code>false</code> 以外の値）：設定にかかわらず、毎日のカウント全体。</li>
-      <li><span class="ui">設定</span> → <span class="ui">プライバシー</span> → <span class="ui">使っているエージェント、プロバイダー、モデルを共有</span> をオフ、または <code>"noUsageStats": true</code>：<code>magpie uses</code> と <code>magpie partner</code> イベント、<code>magpie active</code> の数。ID、バージョン、システムは送られます。パートナーの回数も記録しなくなります。</li>
+      <li><span class="ui">設定</span> → <span class="ui">プライバシー</span> → <span class="ui">使っているエージェント、プロバイダー、モデル、プラグインを共有</span> をオフ、または <code>"noUsageStats": true</code>：<code>magpie uses</code> と <code>magpie partner</code> イベント、<code>magpie active</code> の数、<a href="#plugins">プラグインの報告</a>。ID、バージョン、システムは送られます。パートナーの回数も記録しなくなります。</li>
       <li><span class="ui">設定</span> → <span class="ui">情報</span> → <span class="ui">自動アップデート</span> をオフ、または <code>"noAutoUpdate": true</code>：magpie が自分から <code>usemagpie.ai</code> に新しいバージョンを尋ねること（そうでなければ 6 時間ごと）。カウントの一部ではありません。</li>
     </ul>
     <p>設定の変更は次の 1 時間ごとの確認で反映され、再起動はいりません。<code>settings.json</code> は magpie のフォルダーにあります（<a href="#files">下記</a>）。</p>
@@ -175,6 +176,7 @@
       <tr><th>ファイル</th><th>内容</th></tr>
       <tr><td><code>install-id</code></td><td>ランダムな ID。初めてカウントを送るときに作られます</td></tr>
       <tr><td><code>stats-sent</code></td><td>最後に送った日（UTC）。1 日 1 回にするため</td></tr>
+      <tr><td><code>plugin-likes.json</code></td><td>Discover でいいねしたプラグイン</td></tr>
       <tr><td><code>partner-counts.json</code>（キャッシュフォルダー）</td><td>まだ送っていないパートナーの回数。最大 14 日分</td></tr>
     </table></div>
     <p><code>install-id</code> と <code>stats-sent</code> は magpie のフォルダーにあります。macOS と Linux では <code>~/.config/magpie</code>、Windows では <code>%USERPROFILE%\.config\magpie</code>、<code>$XDG_CONFIG_HOME</code> が設定されていれば <code>$XDG_CONFIG_HOME/magpie</code>、ポータブル版ではそのデータフォルダーです。<code>partner-counts.json</code> は <code>~/.cache/magpie</code>（<code>$XDG_CACHE_HOME/magpie</code>、ポータブル版ではデータフォルダーの <code>cache</code>）にあります。どれも削除できます。<code>install-id</code> を消すと次の送信で新しいランダムな ID が作られ、新しいユーザーとして数えられます。カウントをオフにすれば、どれも再び書かれません。</p>
@@ -188,6 +190,7 @@
       <li><code>/files/&lt;バージョン&gt;/&lt;ファイル&gt;</code>：更新とインストーラがダウンロードするリリースファイルで、Cloudflare R2 から配信されます。サイトにないファイルは github.com へ転送されます。何も計測しません。</li>
       <li><code>/api/partners</code>：プロバイダー追加シートのパートナー一覧。6 時間ごと。パートナーが載っている間、10 回に 1 回の取得を Cloudflare が示す国とともに <code>magpie partners fetch</code> として数えます。</li>
       <li><code>/go/&lt;パートナー&gt;/site</code> と <code>/go/&lt;パートナー&gt;/keys</code>：パートナーの公式サイトとキーのページへのリンクをブラウザーで開くと、移動の前に <code>magpie partner go</code>（どのパートナーか、どのリンクか、地域、国）として数えます。</li>
+      <li><code>/api/plugins/stats</code>：Discover の各プラグインの利用者数といいねの数。多くて 1 時間に 1 回で、ID は含みません。<a href="#plugins">プラグインの報告</a>といいねは ID を含み、共有がオンのときだけ送ります。</li>
       <li><code>/api/icon?url=…</code>：プラグイン、インポートリンク、ライブラリが示すアイコンはここを経由して取得するので、アイコンのあるホストに見えるのはあなたではなく Cloudflare のアドレスです。画像を中継するだけで、数えることも記録することもしません。</li>
     </ul>
     <p>サイト自身のページ（このドキュメント、ホーム）には Cloudflare Web Analytics と PostHog Web Analytics（<code>us.i.posthog.com</code>）が入っており、どちらも Cookie は使いません。PostHog はこのサイト用のランダムな訪問者 ID をブラウザのローカルストレージに保存し、再訪問を同じ訪問者として数えます。受け取るのは各ページのアドレス、参照元のページ、ページ上でクリックしたもの（入力内容は含みません）、ページとそのリクエストの読み込み速度、ページで起きたエラー、ブラウザ・OS・画面サイズ、IP アドレスの国と都市、そして訪問の録画（ページの表示、マウスの動き、クリック、スクロール、コンソールのメッセージ）で、入力欄はすべて伏せられます。ブラウザが Do Not Track か Global Privacy Control を送っていれば何も送りません。PostHog へのリクエストはこのサイトの <code>usemagpie.ai/r/</code> を経由し、IP アドレスとともに PostHog へ渡されます。サイトの Cookie は渡しません。<code>/download</code> のリンクを開くか <code>install.sh</code> を取得すると、PostHog に別のカウントが 1 件送られます。どのファイルか、国、ブラウザかコマンドか、だけで、ID も IP アドレスも含みません。アプリはどちらも読み込みません。コードは <a href="https://github.com/yetone/magpie/blob/main/site/worker.js">site/worker.js</a> です。</p>

@@ -122,6 +122,7 @@
       <li><b>模型</b>：接入的 agent 设定的模型，记为供应商 ID 加厂商模型 ID（<code>deepseek/deepseek-v4</code>）。密钥类供应商上 <a href="https://models.dev">models.dev</a> 没收录的模型 ID（本地模型、微调模型）只记作 <code>&lt;供应商&gt;/other</code>；你自己供应商上的模型记作 <code>custom</code>；路由组记作 <code>group</code>。</li>
     </ul>
     <p>同时发送 <code>magpie partner</code> 事件：添加供应商页里排在最前的每个合作伙伴，按它的 ID，在已结束的某一天里被展示、行被打开、Key 页面被打开、从它添加供应商的次数（<code>what</code>：<code>shown</code>、<code>opened</code>、<code>keys</code>、<code>added</code>；每天每项最多 20 次，添加最多 5 次）。只有次数，从不包含你自己的供应商。</p>
+    <p id="plugins">这部分开着时，magpie 当天还会告诉 <code>usemagpie.ai</code> 装了 Discover 里列出的哪些插件（且已开启），让 Discover 显示每个插件有多少人在用：<code>POST /api/plugins/report</code>，带同一个随机 ID 和插件的 npm 包名；打了 <code>magpie-plugin</code> 标签的仓库记作 <code>github:owner/repo</code>（最多 50 个）。来自本地文件夹、私有仓库或 Discover 没列出的包的插件，永远不会发送。在插件页点赞时发 <code>POST /api/plugins/like</code>，带 ID、插件名和点赞还是取消，只有本机装了的插件才能点赞；点过赞的插件记在 <code>plugin-likes.json</code>。网站只统计近 7 天上报过某个插件的 ID 数，30 天后删除上报记录；你的 IP 只以哈希形式保存一小时，用来限制请求频率。Discover 从 <code>GET /api/plugins/stats</code> 读取计数，这个请求不带 ID。代码见 <a href="https://github.com/yetone/magpie/blob/main/internal/stats/plugins.go">internal/stats/plugins.go</a> 和 <a href="https://github.com/yetone/magpie/blob/main/site/pluginstats.js">site/pluginstats.js</a>。</p>
     <p>每个事件都带 <code>$process_person_profile: false</code>，PostHog 不为这个 ID 建用户档案。不发送名称、Base URL、账号、密钥、提示词、回复和用量。一整批大致如下：</p>
     <div class="code">
       <span class="lang">POST https://us.i.posthog.com/batch/</span>
@@ -155,7 +156,7 @@
     <ul>
       <li>关掉 <span class="ui">设置</span> → <span class="ui">隐私</span> → <span class="ui">计入用户数</span>，或在 <code>settings.json</code> 里写 <code>"noStats": true</code>：整个每日计数。</li>
       <li>在 magpie 的环境变量里设 <code>DO_NOT_TRACK=1</code> 或 <code>MAGPIE_NO_STATS=1</code>（除空、<code>0</code>、<code>false</code> 之外的任何值）：整个每日计数，不管设置里怎么选。</li>
-      <li>关掉 <span class="ui">设置</span> → <span class="ui">隐私</span> → <span class="ui">分享我用的 agent、provider 和模型</span>，或 <code>"noUsageStats": true</code>：<code>magpie uses</code>、<code>magpie partner</code> 事件和 <code>magpie active</code> 里的数量；ID、版本和系统仍会发送。合作伙伴次数也不再记录。</li>
+      <li>关掉 <span class="ui">设置</span> → <span class="ui">隐私</span> → <span class="ui">分享我用的 agent、provider、模型和插件</span>，或 <code>"noUsageStats": true</code>：<code>magpie uses</code>、<code>magpie partner</code> 事件、<code>magpie active</code> 里的数量和<a href="#plugins">插件上报</a>；ID、版本和系统仍会发送。合作伙伴次数也不再记录。</li>
       <li>关掉 <span class="ui">设置</span> → <span class="ui">关于</span> → <span class="ui">自动更新</span>，或 <code>"noAutoUpdate": true</code>：magpie 自己向 <code>usemagpie.ai</code> 询问新版本（否则每 6 小时一次）。这不属于计数。</li>
     </ul>
     <p>设置里的改动在下一次每小时检查时生效，不用重启。<code>settings.json</code> 在 magpie 的文件夹里（见<a href="#files">下文</a>）：</p>
@@ -175,6 +176,7 @@
       <tr><th>文件</th><th>用途</th></tr>
       <tr><td><code>install-id</code></td><td>随机 ID，第一次发送计数时生成</td></tr>
       <tr><td><code>stats-sent</code></td><td>上次发送的日期（UTC），保证每天只发一次</td></tr>
+      <tr><td><code>plugin-likes.json</code></td><td>你在 Discover 里点过赞的插件</td></tr>
       <tr><td><code>partner-counts.json</code>（缓存文件夹）</td><td>还没发送的合作伙伴次数，最多保留 14 天</td></tr>
     </table></div>
     <p><code>install-id</code> 和 <code>stats-sent</code> 在 magpie 的文件夹里：macOS 和 Linux 上是 <code>~/.config/magpie</code>，Windows 上是 <code>%USERPROFILE%\.config\magpie</code>，设置了 <code>$XDG_CONFIG_HOME</code> 时是 <code>$XDG_CONFIG_HOME/magpie</code>，便携版则在它的数据文件夹里。<code>partner-counts.json</code> 在 <code>~/.cache/magpie</code>（或 <code>$XDG_CACHE_HOME/magpie</code>，便携版数据文件夹里的 <code>cache</code>）。这些文件都可以删：删掉 <code>install-id</code> 后，下次发送会生成新的随机 ID，你会被算作新用户；关掉计数后，它们都不会再写入。</p>
@@ -188,6 +190,7 @@
       <li><code>/files/&lt;版本&gt;/&lt;文件&gt;</code>：更新和安装脚本下载的发布文件，由 Cloudflare R2 提供；站点上没有的文件会转到 github.com。不做任何统计。</li>
       <li><code>/api/partners</code>：添加供应商页的合作伙伴列表，每 6 小时一次。在有合作伙伴上架时，每十次拉取记一次 <code>magpie partners fetch</code> 事件，附 Cloudflare 给出的国家。</li>
       <li><code>/go/&lt;合作伙伴&gt;/site</code> 和 <code>/go/&lt;合作伙伴&gt;/keys</code>：在浏览器里打开合作伙伴的官网和 Key 页面链接时，先记一次 <code>magpie partner go</code>（哪个合作伙伴、哪个链接、地区、国家），再跳转。</li>
+      <li><code>/api/plugins/stats</code>：Discover 里每个插件的在用人数和点赞数，最多每小时取一次，不带 ID；<a href="#plugins">插件上报</a>和点赞带 ID，只在开着分享时发送。</li>
       <li><code>/api/icon?url=…</code>：插件、导入链接和库里的图标经它获取，图标所在的服务器只看到 Cloudflare 的地址，看不到你的。它只转发图片，不计数也不记录。</li>
     </ul>
     <p>网站自己的页面（这些文档、首页）带 Cloudflare Web Analytics 和 PostHog Web Analytics（<code>us.i.posthog.com</code>），都不用 Cookie。PostHog 在浏览器的本地存储里为本站记一个随机访客 id，再次访问算同一位访客。它收到每个页面的地址、来源页面、你在页面上点了什么（不含输入的内容）、页面及其请求的加载速度、页面遇到的报错、浏览器、系统和屏幕尺寸、IP 所在的国家和城市，以及这次访问的录屏（页面显示的内容、鼠标移动、点击、滚动和控制台消息），所有输入框都被遮住；浏览器开了 Do Not Track 或 Global Privacy Control 就什么都不发。PostHog 的请求经由本站的 <code>usemagpie.ai/r/</code> 转给 PostHog，连同你的 IP 一起转发，本站的 Cookie 不转发。打开 <code>/download</code> 下载链接或获取 <code>install.sh</code> 时，会另外向 PostHog 发一次计数：哪个文件、你所在的国家、是浏览器还是命令发起的；不带 id，也不带 IP。应用两者都不加载。代码见 <a href="https://github.com/yetone/magpie/blob/main/site/worker.js">site/worker.js</a>。</p>

@@ -53,6 +53,7 @@ import { LANGS } from "./i18n.js";
 import { PARTNERS } from "./partners.js";
 import { SPONSORS } from "./sponsors.js";
 import { serve as serveFile, held, onR2, mirror, githubFile } from "./files.js";
+import { handle as pluginStats, prune as prunePlugins } from "./pluginstats.js";
 
 const REPO = "yetone/magpie-releases";
 const SITE = "https://usemagpie.ai";
@@ -84,6 +85,10 @@ export default {
     if (url.hostname.startsWith("www.")) {
       url.hostname = url.hostname.slice(4);
       return Response.redirect(url.toString(), 301);
+    }
+    if (url.pathname.startsWith("/api/plugins/")) {
+      const got = await pluginStats(req, env, ctx);
+      if (got) return got;
     }
     if (url.pathname === "/api/latest") {
       const lang = url.searchParams.get("lang");
@@ -193,11 +198,14 @@ export default {
     return beacon(await withWall(await env.ASSETS.fetch(req), env, url));
   },
   // the crons (wrangler.jsonc's triggers): every quarter hour the ledger
-  // the Stable channel is chosen from, every five minutes the newest and
+  // the Stable channel is chosen from and Discover's old counts pruned, every five minutes the newest and
   // the Stable release's files into R2
   async scheduled(event, env, ctx) {
     if (event.cron === MIRROR_CRON) ctx.waitUntil(keepFiles(ctx, env));
-    else ctx.waitUntil(keepLedger(env, Date.now()));
+    else {
+      ctx.waitUntil(keepLedger(env, Date.now()));
+      ctx.waitUntil(prunePlugins(env));
+    }
   },
 };
 

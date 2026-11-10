@@ -23,6 +23,9 @@
   // RELEASES: each release's files, copied from GitHub by the five-minute
   // cron and served at /files (files.js)
   "r2_buckets": [{ "binding": "RELEASES", "bucket_name": "magpie-releases" }],
+  // PLUGINS: Discover's counts, each plugin's users and likes
+  // (pluginstats.js)
+  "d1_databases": [{ "binding": "PLUGINS", "database_name": "magpie-plugins", "database_id": "ec0a0670-9de4-4906-8534-ac83c8ba3cd6" }],
   "triggers": { "crons": ["*/15 * * * *", "*/5 * * * *"] },
   "observability": { "enabled": true }
 }
