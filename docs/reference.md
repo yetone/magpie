@@ -666,6 +666,7 @@ magpie gateway-key limit <id> off      # no limit
 magpie gateway-key models <id> openai/gpt-5 anthropic/*   # only these models
 magpie gateway-key models <id> all     # every model
 magpie gateway-key accounts <id> codex/me@example.com   # only these accounts
+magpie gateway-key accounts <id> codex/!me@example.com  # every account but these, later ones too
 magpie gateway-key accounts <id> all    # every account
 magpie gateway-key mcp <id> github fs/read_file   # only these MCP servers and tools
 magpie gateway-key mcp <id> none        # no MCP server (all: every one)
@@ -805,7 +806,10 @@ and keys its requests may use, picked in the same menu right after their
 provider's models — an account by who is signed in, a key by its
 fingerprint — or with
 `magpie gateway-key accounts <id> codex/me@example.com openai/<key id>`
-(`all` takes the restriction off). The list holds a key to some accounts
+(`all` takes the restriction off). An entry `<provider>/!<account>` keeps
+that account out instead: the key may use every other account, those
+signed in later too, and is held to no model by it (LeiWang_2000 on X;
+the menu's "Keep accounts out…"). The list holds a key to some accounts
 **of the providers it names**: a provider it names no account of, the key
 uses as its models allow. A key that lists accounts and **no model** may use
 only the models of those accounts' providers (`access.HeldModels`, each

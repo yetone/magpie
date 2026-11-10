@@ -41,14 +41,16 @@ func CleanModels(in []string) ([]string, error) {
 // it every model of every other provider, as it did when the accounts
 // held only the providers they name (#905). A key that lists models is
 // held to those, its accounts holding the providers they name, as before.
+// An account kept out ("<provider>/!<ref>", LeiWang_2000 on X) holds the
+// key to no model: a key that only keeps some out may use every model.
 func HeldModels(models, accounts []string) []string {
-	if len(models) > 0 || len(accounts) == 0 {
+	if len(models) > 0 || !picksAccounts(accounts) {
 		return models
 	}
 	var out []string
 	for _, a := range accounts {
 		pid, _, ok := strings.Cut(strings.TrimSpace(a), "/")
-		if !ok || pid == "" {
+		if !ok || pid == "" || Excluded(a) {
 			continue
 		}
 		m := pid + "/*"

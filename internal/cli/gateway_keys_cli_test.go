@@ -314,6 +314,23 @@ func TestGatewayKeyAccountsCLI(t *testing.T) {
 			t.Error("accepted", args)
 		}
 	}
+	// every account but one (LeiWang_2000 on X), kept by its fingerprint
+	if got, err := call("accounts", id, "relay/!Second"); err != nil || got != "Phone: every account but relay/Second\n" {
+		t.Fatal(got, err)
+	}
+	if keys, _ = access.List(); !slices.Equal(keys[0].Accounts, []string{"relay/!" + k2}) {
+		t.Fatal("kept", keys[0].Accounts)
+	}
+	if got, _ := call("list"); !strings.Contains(got, "every account but relay/Second") {
+		t.Fatal(got)
+	}
+	// kept out, it holds the key to no model
+	if got, err := call("models", id); err != nil || strings.Contains(got, "only its accounts") {
+		t.Fatal(got, err)
+	}
+	if _, err := call("accounts", id, "relay/First", "relay/!First"); err == nil {
+		t.Error("an account both used and kept out was accepted")
+	}
 	if got, err := call("accounts", id, "all"); err != nil || got != "Phone: every account\n" {
 		t.Fatal(got, err)
 	}

@@ -320,7 +320,7 @@ func ScopeBrowser(id string) error {
 
 // identityOf is who k is, folded into its issuer when it has one.
 func identityOf(k Key, keys []Key, now time.Time) (Identity, error) {
-	who := Identity{KeyID: k.ID, KeyName: k.Name, Limit: k.Limit, More: k.More, Models: HeldModels(k.Models, k.Accounts), AccountModels: len(k.Models) == 0 && len(k.Accounts) > 0, Accounts: k.Accounts, MCP: k.MCP, Quotas: k.Quotas, ReadOnly: k.ReadOnly, Browser: k.Browser, Expires: k.Expires, Issues: k.Issues && k.Issuer == "" && !k.Browser, MaxConcurrency: k.MaxConcurrency}
+	who := Identity{KeyID: k.ID, KeyName: k.Name, Limit: k.Limit, More: k.More, Models: HeldModels(k.Models, k.Accounts), AccountModels: len(k.Models) == 0 && picksAccounts(k.Accounts), Accounts: k.Accounts, MCP: k.MCP, Quotas: k.Quotas, ReadOnly: k.ReadOnly, Browser: k.Browser, Expires: k.Expires, Issues: k.Issues && k.Issuer == "" && !k.Browser, MaxConcurrency: k.MaxConcurrency}
 	// the default key as Default tells it: marked LAN, or the id the
 	// settings name (settings read only for an unmarked key)
 	who.Default = k.LAN || (k.ID != "" && settings.Load().LANKeyID == k.ID)
@@ -333,7 +333,7 @@ func identityOf(k Key, keys []Key, now time.Time) (Identity, error) {
 	}
 	p := keys[j]
 	pModels := HeldModels(p.Models, p.Accounts)
-	who.AccountModels = len(k.Models) == 0 && len(p.Models) == 0 && (len(k.Accounts) > 0 || len(p.Accounts) > 0)
+	who.AccountModels = len(k.Models) == 0 && len(p.Models) == 0 && (picksAccounts(k.Accounts) || picksAccounts(p.Accounts))
 	if len(pModels) > 0 {
 		if who.Models = foldModels(who.Models, pModels); len(who.Models) == 0 {
 			return Identity{}, &Refused{Why: fmt.Sprintf("the gateway key %q may use none of its models now: the key it was issued under no longer lets it", k.Name)}
@@ -386,7 +386,37 @@ func foldModels(child, issuer []string) []string {
 // foldAccounts holds a child to the issuer's accounts too: of each
 // provider the issuer names accounts of, the child's own of them that the
 // issuer has, else the issuer's; the child's of other providers as given.
+// An account either keeps out stays out (LeiWang_2000 on X).
 func foldAccounts(child, issuer []string) []string {
+	if len(issuer) == 0 {
+		return child
+	}
+	split := func(as []string) (use, out []string) {
+		for _, a := range as {
+			if Excluded(a) {
+				out = append(out, a)
+			} else {
+				use = append(use, a)
+			}
+		}
+		return
+	}
+	cu, co := split(child)
+	pu, po := split(issuer)
+	out := foldUsed(cu, pu)
+	if len(po) > 0 {
+		out = slices.DeleteFunc(out, func(a string) bool { return !(Identity{Accounts: po}).allowsEntry(a) })
+	}
+	for _, a := range append(co, po...) {
+		if !slices.ContainsFunc(out, func(o string) bool { return strings.EqualFold(o, a) }) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// foldUsed is foldAccounts over the accounts each names to use.
+func foldUsed(child, issuer []string) []string {
 	if len(issuer) == 0 {
 		return child
 	}
@@ -420,7 +450,11 @@ func foldAccounts(child, issuer []string) []string {
 }
 
 // allowsEntry: the account entry "<provider>/<ref>" is one who may use.
+// An entry keeping an account out asks for nothing, so who allows it.
 func (who Identity) allowsEntry(a string) bool {
+	if Excluded(a) {
+		return true
+	}
 	p, ref, _ := strings.Cut(a, "/")
 	return who.AllowsAccount(p, ref)
 }

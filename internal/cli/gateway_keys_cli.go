@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -141,11 +140,8 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 			}
 			accounts := "all"
 			if len(k.Accounts) > 0 {
-				shown := make([]string, len(k.Accounts))
-				for i, a := range k.Accounts {
-					shown[i] = cmp.Or(names[a], a)
-				}
-				accounts = strings.Join(shown, ",")
+				// a column: no space after each comma, as before
+				accounts = strings.ReplaceAll(access.AccountsShown(names, k.Accounts), ", ", ",")
 			}
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", k.ID, strings.Map(func(r rune) rune {
 				if r < 32 || r == 127 {
@@ -471,8 +467,8 @@ func gatewayKeyModels(out io.Writer, args []string) error {
 		return fmt.Errorf("Key not found")
 	}
 	k := keys[i]
-	if len(k.Models) == 0 && len(k.Accounts) > 0 {
-		_, err = fmt.Fprintf(out, "%s: only its accounts' providers' models, %s\n", k.Name, strings.Join(access.HeldModels(nil, k.Accounts), ", "))
+	if ms := access.HeldModels(nil, k.Accounts); len(k.Models) == 0 && len(ms) > 0 {
+		_, err = fmt.Fprintf(out, "%s: only its accounts' providers' models, %s\n", k.Name, strings.Join(ms, ", "))
 		return err
 	}
 	if len(k.Models) == 0 {
@@ -557,9 +553,11 @@ func limitWords(k access.Key, now time.Time) string {
 // gatewayKeyAccounts shows or sets a key's account whitelist (#905): the
 // accounts and keys it may use, "<provider>/<account>" — a signed-in
 // account by its name, a key by its KeyID — every one when none are set.
+// "<provider>/!<account>" keeps one out instead (LeiWang_2000 on X): the
+// key may use every other, those signed in later too.
 func gatewayKeyAccounts(out io.Writer, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: magpie gateway-key accounts <id> [all | <provider>/<account>|<provider>/<key id> ...]")
+		return fmt.Errorf("usage: magpie gateway-key accounts <id> [all | <provider>/<account>|<provider>/<key id>|<provider>/!<account> ...]")
 	}
 	id := args[0]
 	if len(args) > 1 {
@@ -584,13 +582,13 @@ func gatewayKeyAccounts(out io.Writer, args []string) error {
 		_, err = fmt.Fprintf(out, "%s: every account\n", k.Name)
 		return err
 	}
-	// shown by who is signed in, kept by the account's stable id (#905)
-	names := provider.AccountNames()
-	shown := make([]string, len(k.Accounts))
-	for i, a := range k.Accounts {
-		shown[i] = cmp.Or(names[a], a)
+	// shown by who is signed in, kept by the account's stable id (#905);
+	// one kept out, "<provider>/!<account>", as every account but it
+	shown := access.AccountsShown(provider.AccountNames(), k.Accounts)
+	if !strings.HasPrefix(shown, "every account but ") {
+		shown = "only " + shown
 	}
-	_, err = fmt.Fprintf(out, "%s: only %s\n", k.Name, strings.Join(shown, ", "))
+	_, err = fmt.Fprintf(out, "%s: %s\n", k.Name, shown)
 	return err
 }
 

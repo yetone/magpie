@@ -1,6 +1,7 @@
 package access
 
 import (
+	"cmp"
 	"errors"
 	"slices"
 	"strings"
@@ -17,8 +18,12 @@ import (
 // its provider has now, so a typo can't quietly hold a key to nothing;
 // one gone later — a key rotated, an account signed out — is kept as it
 // is, matching nothing.
+//
+// An entry "<provider>/!<account>" keeps that account out instead
+// (LeiWang_2000 on X): the key may use every other account, those signed
+// in later too. An account is never both kept out and named.
 func CleanAccounts(in []string) ([]string, error) {
-	var out []string
+	var cleaned []string
 	for _, a := range in {
 		a = strings.TrimSpace(a)
 		if a == "" {
@@ -31,12 +36,26 @@ func CleanAccounts(in []string) ([]string, error) {
 		if len(a) > 300 {
 			return nil, errors.New("A key's account is at most 300 characters")
 		}
+		ref, excl := strings.CutPrefix(ref, ExcludeMark)
+		if ref = strings.TrimSpace(ref); ref == "" {
+			return nil, errors.New("A key's account is <provider>/<account> or <provider>/<key id>, like codex/me@example.com: " + a)
+		}
 		kept, err := provider.ResolveAccount(pid, ref)
 		if err != nil {
 			return nil, err
 		}
-		if !slices.ContainsFunc(out, func(o string) bool { return strings.EqualFold(o, kept) }) {
-			out = append(out, kept)
+		if excl {
+			p, r, _ := strings.Cut(kept, "/")
+			kept = p + "/" + ExcludeMark + r
+		}
+		if !slices.ContainsFunc(cleaned, func(o string) bool { return strings.EqualFold(o, kept) }) {
+			cleaned = append(cleaned, kept)
+		}
+	}
+	out := cleaned
+	for _, a := range out {
+		if p, r, ok := excludedEntry(a); ok && slices.ContainsFunc(out, func(o string) bool { return strings.EqualFold(o, p+"/"+r) }) {
+			return nil, errors.New("A key's account is either used or kept out, not both: " + p + "/" + r)
 		}
 	}
 	if len(out) > 500 {
@@ -45,26 +64,65 @@ func CleanAccounts(in []string) ([]string, error) {
 	return out, nil
 }
 
+// ExcludeMark starts an entry's account to keep the key off it:
+// "<provider>/!<ref>" (LeiWang_2000 on X). A magpie older than the mark
+// reads it as an account no provider has, which holds the key to none of
+// that provider's: it fails closed.
+const ExcludeMark = "!"
+
+// excludedEntry is the provider and account of an entry that keeps an
+// account out, "<provider>/!<ref>".
+func excludedEntry(a string) (pid, ref string, ok bool) {
+	pid, ref, cut := strings.Cut(strings.TrimSpace(a), "/")
+	if ref, ok = strings.CutPrefix(ref, ExcludeMark); !cut || !ok || ref == "" {
+		return "", "", false
+	}
+	return pid, ref, true
+}
+
+// Excluded says the entry keeps an account out, "<provider>/!<ref>".
+func Excluded(a string) bool {
+	_, _, ok := excludedEntry(a)
+	return ok
+}
+
+// picksAccounts says some entry names an account to use, not only ones
+// kept out.
+func picksAccounts(accounts []string) bool {
+	return slices.ContainsFunc(accounts, func(a string) bool { return !Excluded(a) })
+}
+
 // AllowsAccount says the provider pid's account or key ref is among the
 // key's accounts — "<provider>/<ref>", told apart in lower case, as
 // accounts are. The list holds a key to some accounts **of the providers
 // it names**: a provider it names no account of, the key uses as it
 // always did, its every account and key. Any, for a key that lists none.
+// An account the list keeps out ("<provider>/!<ref>") is never one, and
+// keeps the key off no other: every account its provider signs in later
+// is one the key may use.
 func (who Identity) AllowsAccount(pid, ref string) bool {
 	if len(who.Accounts) == 0 {
 		return true
 	}
 	pid = strings.ToLower(strings.TrimSpace(pid))
-	key := pid + "/" + strings.ToLower(strings.TrimSpace(ref))
-	named := false
+	ref = strings.ToLower(strings.TrimSpace(ref))
+	key := pid + "/" + ref
+	named, used := false, false
 	for _, a := range who.Accounts {
-		if a = strings.ToLower(strings.TrimSpace(a)); a == key {
-			return true
+		a = strings.ToLower(strings.TrimSpace(a))
+		if p, r, ok := excludedEntry(a); ok {
+			if p == pid && r == ref && ref != "" {
+				return false
+			}
+			continue
+		}
+		if a == key {
+			used = true
 		} else if p, _, ok := strings.Cut(a, "/"); ok && p == pid {
 			named = true
 		}
 	}
-	return !named
+	return used || !named
 }
 
 // heldToNone is the account an entry "<provider>/<heldToNone>" names: none
@@ -119,8 +177,31 @@ func (who Identity) HeldToGroup(group string, accounts []string) Identity {
 	return who
 }
 
+// AccountsShown is a key's accounts as words say them: those it may use
+// by names[entry] (provider.AccountNames), else the entry itself, and
+// those it keeps out as "every account but …" (LeiWang_2000 on X).
+func AccountsShown(names map[string]string, accounts []string) string {
+	var used, out []string
+	for _, a := range accounts {
+		if p, r, ok := excludedEntry(a); ok {
+			out = append(out, cmp.Or(names[p+"/"+r], p+"/"+r))
+		} else {
+			used = append(used, cmp.Or(names[a], a))
+		}
+	}
+	var parts []string
+	if len(used) > 0 {
+		parts = append(parts, strings.Join(used, ", "))
+	}
+	if len(out) > 0 {
+		parts = append(parts, "every account but "+strings.Join(out, ", "))
+	}
+	return strings.Join(parts, "; ")
+}
+
 // ShownAccounts is who's accounts as a message lists them: the entries
 // HeldToGroup adds to name a provider with none of its accounts left out.
+// An account kept out stays "<provider>/!<ref>".
 func (who Identity) ShownAccounts() []string {
 	return slices.DeleteFunc(slices.Clone(who.Accounts), func(a string) bool { return strings.HasSuffix(a, "/"+heldToNone) })
 }
@@ -140,11 +221,16 @@ func ReplaceAccount(pid, was, now string) (int, error) {
 		return 0, err
 	}
 	old := strings.ToLower(pid + "/" + was)
+	oldOut := strings.ToLower(pid + "/" + ExcludeMark + was)
 	moved := 0
 	for i := range keys {
 		for j, a := range keys[i].Accounts {
-			if strings.ToLower(strings.TrimSpace(a)) == old {
+			switch strings.ToLower(strings.TrimSpace(a)) {
+			case old:
 				keys[i].Accounts[j] = pid + "/" + now
+				moved++
+			case oldOut:
+				keys[i].Accounts[j] = pid + "/" + ExcludeMark + now
 				moved++
 			}
 		}

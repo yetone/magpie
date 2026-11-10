@@ -227,7 +227,7 @@ function renderGatewayKeys() {
     tick.onclick = () => gatewayKeyAction(k.off ? "on-key" : "off-key", { key: k.id });
     // the copy sits by the key it copies (the owner: stranded among the
     // badges it read as nobody's); Rotate and Remove wait in the row's menu
-    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), copyCallerKeyBtn(k), el("span", "grow"), ...(k.browser ? [gatewayBrowserTag()] : k.readOnly ? [gatewayReadOnlyTag()] : []), gatewayModelsBadge(k), ...gatewayMCPBadge(k), gatewayQuotasBadge(k), ...(k.browser || k.readOnly ? [] : [gatewayConcurrencyBadge(k)]), gatewayLimitBadge(k), gatewayKeyMore(k));
+    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), copyCallerKeyBtn(k), el("span", "grow"), ...(k.browser ? [gatewayBrowserTag()] : k.readOnly ? [gatewayReadOnlyTag()] : []), gatewayModelsBadge(k), ...gatewayKeptOutBadge(k), ...gatewayMCPBadge(k), gatewayQuotasBadge(k), ...(k.browser || k.readOnly ? [] : [gatewayConcurrencyBadge(k)]), gatewayLimitBadge(k), gatewayKeyMore(k));
     const under = gatewayLimit?.id === k.id ? [gatewayLimitEditor(k)] : keyUsed(k).map((u) => gatewayLimitLine(k, u));
     if (under.length) row.classList.add("with-limit"), row.append(...under);
     list.append(row);
@@ -309,6 +309,7 @@ function gatewayKeyPage() {
 
 const ROTATE_GLYPH = "M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3.25h-3.25";
 const REMOVE_GLYPH = "M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5M7 7v4M9 7v4";
+const KEEP_OUT_GLYPH = "M8 1.8a6.2 6.2 0 1 0 0 12.4A6.2 6.2 0 0 0 8 1.8zM3.6 3.6l8.8 8.8";
 const MCP_GLYPH = "M6 2.5v3M10 2.5v3M4.5 5.5h7V8a3.5 3.5 0 0 1-7 0zM8 11.5v2";
 const POWER_GLYPH = "M8 2.5v5M4.8 4.6a4.75 4.75 0 1 0 6.4 0";
 function gatewayKeyMore(k) {
@@ -336,6 +337,9 @@ function gatewayKeyMore(k) {
       // the MCP servers and tools it may use (wakaka on Discord); the
       // Browser key connects the extension alone
       ...(k.browser ? [] : [{ name: "MCP servers", icon: MCP_GLYPH, run: () => gatewayMCPPick(k, more) }]),
+      // every account but some, those signed in later too (LeiWang_2000
+      // on X); the Browser key uses no account
+      ...(k.browser ? [] : [{ name: "Keep accounts out", icon: KEEP_OUT_GLYPH, run: () => gatewayKeptOutPick(k, more) }]),
       { name: "Rotate key", icon: ROTATE_GLYPH, run: () => askGatewayKey(k, true) },
       { name: "Remove", icon: REMOVE_GLYPH, sep: true, run: () => askGatewayKey(k, false) },
     ]);
@@ -419,7 +423,9 @@ let keyModelsLoading = null;
 // it may, always shown. A pick is sent when the menu closes.
 function gatewayModelsBadge(k) {
   const ms = k.models || [];
-  const as = k.accounts || [];
+  // the accounts kept out are gatewayKeptOutPick's, sent back as they are
+  const keptOut = (k.accounts || []).filter(isKeptOut);
+  const as = (k.accounts || []).filter((a) => !isKeptOut(a));
   const b = el("button", "amodels key-models" + (ms.length || as.length ? " set" : ""));
   b.type = "button";
   b.textContent = !ms.length && !as.length ? t("All models")
@@ -521,7 +527,9 @@ function gatewayModelsBadge(k) {
             : pickedAccounts.length ? "{name} may use only the picked accounts' models" : "{name} may use every model", { name: k.name }), "ok");
         }
         if (pickedAccounts.length !== as.length || pickedAccounts.some((v) => !as.includes(v))) {
-          await gatewayKeyAction("accounts-key", { key: k.id, accounts: pickedAccounts });
+          // an account picked is kept out no longer
+          const out = keptOut.filter((v) => !pickedAccounts.some((a) => a.toLowerCase() === keptIn(v).toLowerCase()));
+          await gatewayKeyAction("accounts-key", { key: k.id, accounts: [...pickedAccounts, ...out] });
         }
       })();
     }, "Models this key may use", "sess-menu", "right");
@@ -543,6 +551,62 @@ function gatewayModelsBadge(k) {
   };
   if (keyModelsLoading?.id === k.id) keyModelsLoading.open = open;
   return b;
+}
+
+// ---- the accounts a gateway key keeps out (LeiWang_2000 on X) ----
+
+// isKeptOut: an account entry "<provider>/!<id>" keeps that account out
+// (access.ExcludeMark): the key uses every other, those signed in later too
+const isKeptOut = (a) => /^[^/]+\/!./.test(a);
+// keptIn is the account a kept-out entry names, "<provider>/<id>"
+const keptIn = (a) => a.replace("/!", "/");
+
+// gatewayKeptOutPick picks the accounts a key keeps out, in the app's
+// menu, from the row's menu and from the key's badge once it keeps some
+// out. An account picked to use (gatewayModelsBadge) and kept out here is
+// kept out: it is taken off the picked ones.
+async function gatewayKeptOutPick(k, anchor) {
+  const as = k.accounts || [];
+  const out = as.filter(isKeptOut);
+  let accounts = [];
+  try { ({ accounts } = await api("caller-keys/models")); } catch (err) { status(t(err.message), "err"); return; }
+  if (!anchor.isConnected) return;
+  const opts = [{ v: "", name: "No account kept out", note: "" }];
+  for (const a of accounts || []) {
+    const slash = a.id.indexOf("/");
+    opts.push({ v: a.id.slice(0, slash) + "/!" + a.id.slice(slash + 1), name: a.name, note: a.plan ? a.providerName + " · " + a.plan : a.providerName, literalName: true });
+  }
+  // one kept out and signed out since stays kept out, as the CLI kept it
+  for (const v of out) if (!opts.some((o) => o.v === v)) opts.push({ v, name: keptIn(v), note: "Not signed in now", literalName: true });
+  openProtoMenu(anchor, opts, [...out], (picked) => {
+    if (picked.length === out.length && picked.every((v) => out.includes(v))) return;
+    const used = as.filter((a) => !isKeptOut(a) && !picked.some((v) => keptIn(v).toLowerCase() === a.toLowerCase()));
+    (async () => {
+      const done = await gatewayKeyAction("accounts-key", { key: k.id, accounts: [...used, ...picked] });
+      if (done) status(t(picked.length ? "{name} may use every account but those kept out" : "{name} keeps no account out", { name: k.name }), "ok");
+    })();
+  }, "Accounts this key keeps out", "sess-menu", "right");
+}
+
+// gatewayKeptOutBadge says which accounts a key keeps out; a key that
+// keeps none out has none (the row's menu sets it)
+function gatewayKeptOutBadge(k) {
+  const out = (k.accounts || []).filter(isKeptOut);
+  if (!out.length) return [];
+  const b = el("button", "amodels key-out set");
+  b.type = "button";
+  b.textContent = out.length === 1 ? t("Not {name}", { name: accountShown(keptIn(out[0])) }) : t("{n} accounts kept out", { n: out.length });
+  b.title = t("Every account but: {list}", { list: out.map((v) => accountShown(keptIn(v))).join(", ") });
+  b.setAttribute("aria-label", t("Accounts this key keeps out"));
+  b.setAttribute("aria-haspopup", "menu");
+  b.setAttribute("aria-expanded", "false");
+  b.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    gatewayKeptOutPick(k, b);
+  };
+  return [b];
 }
 
 // gatewayMCPPick picks the MCP servers and tools a key may use (wakaka

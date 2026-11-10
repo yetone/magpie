@@ -105,9 +105,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const menu = page.locator(".row-menu");
         await menu.waitFor();
         const items = (await menu.getByRole("menuitem").allTextContents()).map((s) => s.trim());
-        assert.equal(items.length, 5);
-        if (w.rotate) assert.deepEqual(items.filter((s) => !/MCP/.test(s)), [w.off, w.readOnly, w.rotate, w.remove]);
-        assert.deepEqual(items, await page.evaluate(() => [t("Disable key"), t("Make read-only"), t("MCP servers"), t("Rotate key"), t("Remove")]));
+        assert.equal(items.length, 6);
+        if (w.rotate) assert.deepEqual(items.filter((s) => !/MCP/.test(s)).filter((s, i) => i !== 2), [w.off, w.readOnly, w.rotate, w.remove]);
+        assert.deepEqual(items, await page.evaluate(() => [t("Disable key"), t("Make read-only"), t("MCP servers"), t("Keep accounts out"), t("Rotate key"), t("Remove")]));
         // off from the menu, then on again: the key stays, only its switch moves
         await menu.getByRole("menuitem").first().click();
         await menu.waitFor({ state: "detached" });

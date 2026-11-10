@@ -785,20 +785,11 @@ func groupsHeldError(model string, left []Weighed) string {
 // named as the accounts list names them, "<provider>/<user>" where a
 // provider has the account now, the id alone otherwise.
 func keyAccountNames(who access.Identity) string {
-	names := provider.AccountNames()
 	accounts := who.ShownAccounts()
 	if len(accounts) == 0 {
 		return "none"
 	}
-	shown := make([]string, len(accounts))
-	for i, a := range accounts {
-		if n, ok := names[a]; ok {
-			shown[i] = n
-		} else {
-			shown[i] = a
-		}
-	}
-	return strings.Join(shown, ", ")
+	return access.AccountsShown(provider.AccountNames(), accounts)
 }
 
 // countHeld answers the 403 a gateway key held to some models (#882) gets
