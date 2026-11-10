@@ -118,6 +118,15 @@ func launchLine(p *registryPackage) (cmd string, args []string, inputs []Input, 
 				prog = append(prog, t...)
 			}
 		default: // docker run's options, all of them before the image
+			// only the ones that keep the container a container
+			// (dockerOptSafe): the line is the publisher's, and the
+			// user, shown "docker", never sees it
+			if len(t) > 0 && !dockerOptSafe(a, t) {
+				if a.IsRequired {
+					return "", nil, nil, false
+				}
+				continue
+			}
 			opts = append(opts, t...)
 		}
 		rt = append(rt, t...)
