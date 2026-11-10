@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>よくあるエラーの直し方：401・429・502・504 など · magpie</title>
+<meta name="description" content="magpie のゲートウェイのエラーの意味と直し方：401 と 403、429 と休止、502 と 504、モデルが見つからない、エージェントにモデルが出ない、ポート 3425 が使用中、WSL のエージェント、別のコンピュータからの利用。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/troubleshooting">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/troubleshooting">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/troubleshooting">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/troubleshooting">
+<link rel="canonical" href="https://usemagpie.ai/docs/ja/troubleshooting">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="よくあるエラーの直し方：401・429・502・504 など">
+<meta property="og:description" content="magpie のゲートウェイのエラーの意味と直し方：401 と 403、429 と休止、502 と 504、モデルが見つからない、エージェントにモデルが出ない、ポート 3425 が使用中、WSL のエージェント、別のコンピュータからの利用。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/ja/troubleshooting">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "よくあるエラーの直し方：401・429・502・504 など",
+   "description": "magpie のゲートウェイのエラーの意味と直し方：401 と 403、429 と休止、502 と 504、モデルが見つからない、エージェントにモデルが出ない、ポート 3425 が使用中、WSL のエージェント、別のコンピュータからの利用。",
+   "inLanguage": "ja",
+   "url": "https://usemagpie.ai/docs/ja/troubleshooting",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "プロバイダは動いているのに、なぜ 502 になるのですか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "プロバイダが Web ページや空の本文など、API の返答でないものを返しました。たいていはベース URL が API ではなくベンダーの Web サイトを指しています。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "429 のあと、なぜアカウントが使われないままなのですか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie はベンダーが示したリセットまで、示されなければしばらくの間そのアカウントを休ませます。プロバイダの行に復帰時刻が出ており、「今すぐ試す」で休止を終えられます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "“magpie knows no model” とはどういう意味ですか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "その名前のモデルを提供するプロバイダがありません。magpie models が表示する provider/model で指定するか、プロバイダをオンに戻します。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie のポートを変えるには？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "設定 › ネットワークと共有 › ゲートウェイのアドレス です。magpie が接続したエージェントも一緒に移ります。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "WSL のエージェントから Windows の magpie を使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。magpie は実行中の WSL ディストリビューションのエージェントを見つけ、届くアドレスで設定します。NAT ネットワークでは、Windows ファイアウォールが WSL からの接続を通す必要があります。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "別のコンピュータから magpie を使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。設定 › ネットワークと共有 › ローカルネットワークで共有 をオンにし、相手のコンピュータからゲートウェイキーを送ります。ポートはインターネットに公開しないでください。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/ja/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>ドキュメント</small></a>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/start">はじめに</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a class="toc-only" href="/docs/ja/remote">リモート magpie</a>
+    <a class="toc-only" href="/docs/ja/docker">Docker</a>
+    <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
+    <a class="toc-only" href="/docs/ja/masking">プライバシーマスキング</a>
+    <a class="toc-only" href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a class="toc-only" href="/docs/ja/library">ライブラリ</a>
+    <a class="toc-only" href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a class="toc-only" href="/docs/ja/local-models">ローカルモデル</a>
+    <a class="toc-only" href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="言語" title="言語" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/troubleshooting" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/troubleshooting" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/troubleshooting" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="Discord の magpie" title="Discord に参加"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="GitHub の magpie" title="GitHub のソースコード"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">ダウンロード</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>よくあるエラー</p>
+    <a href="#overview">まず見る場所</a>
+    <a href="#auth">401 と 403</a>
+    <a href="#limits">429 と休止</a>
+    <a href="#bad-gateway">502</a>
+    <a href="#timeout">504</a>
+    <a href="#unknown-model">モデルが見つからない</a>
+    <a href="#not-listed">モデルが出ない</a>
+    <a href="#port">ポート 3425 が使用中</a>
+    <a href="#wsl">WSL のエージェント</a>
+    <a href="#lan">別のコンピュータから</a>
+    <a href="#plugins">プラグインへの移行</a>
+    <a href="#faq">よくある質問</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">ドキュメント · ヘルプ</p>
+    <h1>よくあるエラーの直し方：401・429・502・504 など</h1>
+    <p class="lede">magpie のゲートウェイのエラーは、何が起きたかを自分の言葉で伝えます。このページでは、よくあるエラーとその原因、直し方をまとめます。</p>
+
+    <p>すべてのリクエストは magpie の <span class="ui">ルーティング</span> ページに並び、どのプロバイダとアカウントに送られ、各試行がどう終わったかが分かります。リクエストの <span class="ui">レポートをコピー</span> で、質問に必要な情報をコピーできます。</p>
+
+    <h2 id="auth"><a class="anchor" href="#auth">401 と 403：キーやサインインが拒否された</a></h2>
+    <p><b>ベンダーから。</b>プロバイダが magpie の送ったキーやサインインを拒否しました。magpie はそのキーやアカウントを休ませて次を試すので、エラーが見えるのは残りがないときだけです。サインインの期限切れはそう書かれます（例：“the ChatGPT sign-in has expired — sign in again”）。</p>
+    <ul><li><b>直し方：</b><span class="ui">＋ プロバイダを追加</span>（または <code>magpie accounts add &lt;provider&gt;</code>）からサインインし直すか、プロバイダに新しいキーを設定します。</li></ul>
+    <p><b>magpie 自身から。</b>次の場合、magpie は何も送らずに 403 を返します。</p>
+    <div class="table-wrap"><table>
+      <tr><th>エラー</th><th>原因</th><th>直し方</th></tr>
+      <tr><td>model disabled</td><td>magpie でそのモデルをオフにしています。</td><td>プロバイダでオンに戻します。</td></tr>
+      <tr><td>model not allowed for the gateway key</td><td>ゲートウェイキーが一部のモデルに限られています。</td><td><code>magpie gateway-key models &lt;id&gt;</code> で確認・変更します。</td></tr>
+      <tr><td>magpie doesn’t answer the web page …</td><td>Web ページがブラウザからゲートウェイを呼びました。</td><td><span class="ui">設定</span> › <span class="ui">ネットワークと共有</span> › <span class="ui">Web ページ</span> に追加し、ゲートウェイキーを送ります。</td></tr>
+    </table></div>
+
+    <h2 id="limits"><a class="anchor" href="#limits">429 と休止</a></h2>
+    <p>429 はクォータ切れ、残高不足、レート制限のいずれかです。magpie は拒否されたキーやアカウントを休ませ、リクエストを次のアカウント、ルーティンググループの次のメンバー、またはプロバイダの <span class="ui">フォールバック</span> に送ります。プロバイダの行には <span class="ui">休止中 · {why} · {time} に復帰</span> と表示されます。</p>
+    <div class="table-wrap"><table>
+      <tr><th>拒否の理由</th><th>休止の長さ</th></tr>
+      <tr><td>クォータ切れ（リセット時刻あり）</td><td>リセットまで</td></tr>
+      <tr><td>レート制限（Retry-After あり）</td><td>その時刻まで</td></tr>
+      <tr><td>残高不足</td><td>30 分。再び拒否されると 2 時間、8 時間、1 日、3 日、1 週間</td></tr>
+      <tr><td>ChatGPT アカウントのクレジット切れ</td><td>拒否が示すリセットまで。なければ枠全体の更新まで。それも分からなければ 5 時間</td></tr>
+      <tr><td>その他の失敗</td><td>1 分。繰り返すと倍になり最大 10 分（レート制限は 30 分）</td></tr>
+    </table></div>
+    <ul>
+      <li><b>今すぐもう一度。</b><span class="ui">今すぐ試す</span> は休止を終えます。次のリクエストで再び使われ、再度拒否されれば通常どおり休止します。</li>
+      <li><b>休止の上限。</b><code>magpie provider rest-cap &lt;id&gt; 4h</code> でプロバイダの最長休止を設定します。<code>off</code> にすると、理由の分からない失敗では休止しません。</li>
+      <li><b>上限がすぐ戻る中継サービス。</b>プロバイダ編集の <span class="ui">詳細設定</span> で <span class="ui">クォータ切れやレート制限で一時的に外す</span> のチェックを外すと、429 で休止せず、次のリクエストもいつもどおり送られます。</li>
+      <li><b>1 つに頼らない。</b>アカウントやフォールバックのモデルをもう 1 つ追加すれば、1 つが切れてもエージェントは止まりません。<code>magpie accounts</code> で各アカウントの使用量が分かります。</li>
+    </ul>
+    <p>休止は再起動後も保たれるので、magpie を終了しても休止中のアカウントは早く戻りません。</p>
+
+    <h2 id="bad-gateway"><a class="anchor" href="#bad-gateway">502：プロバイダが応答しない</a></h2>
+    <p>502 は、magpie がプロバイダから API の返答を得られなかったことを示します。プロバイダ名に続く文で、どの場合かが分かります。</p>
+    <ul>
+      <li><b>“didn’t answer: …”</b>接続に失敗しました：名前が解決できない、接続が拒否された、プロキシが止まっている、など。コンピュータがまったくネットワークにつながっていないときは、magpie がそれに気づき、どのプロバイダも休ませません。</li>
+      <li><b>“… not an API reply”</b>プロバイダは応答しましたが、Web ページ（サインインページ、Cloudflare のチャレンジ）、空の本文、JSON でない内容でした。たいていはベース URL が API ではなく Web サイトを指しています。ベンダーのドキュメントと照らし合わせ、<code>/v1</code> で終わるべきかも確認してください。</li>
+      <li><b>OpenCode：“… which is no error, not an API reply”。</b>OpenCode のゲートウェイは、モデル名だけを含む 400 を返すことがあります。同じリクエストは数秒後に通るので、magpie はこれを 502 とみなし、リクエストの待ち時間内に再試行するか、グループの次のメンバーを試します。誰も休ませません。非常に大きなツール一覧を含むリクエストで起きます。</li>
+    </ul>
+    <p>502、503、504、529、Cloudflare の 520〜524 は「混雑」として扱われ、エージェントに返す前に再試行するか、ルーティンググループの次のメンバーに移ります。</p>
+
+    <h2 id="timeout"><a class="anchor" href="#timeout">504：時間内に応答がない</a></h2>
+    <ul>
+      <li><b>“&lt;provider&gt;: no first token in Ns”。</b>ルーティンググループは各メンバーに応答開始までの時間（<span class="ui">最初のトークン</span>）を与えます。それを過ぎたので次のメンバーに移りました。遅いモデルにはグループで長くします。</li>
+      <li><b>“no member of the group answered within its Ns budget”。</b>グループの時間内に全メンバーを試し、どれも応答しませんでした。</li>
+      <li><b>“magpie held this request for … without routing it to any provider”。</b>リクエストが magpie の中で待ちすぎたため、待たせ続けずに止めました。送り直してください。繰り返すときは、<span class="ui">ルーティング</span> ページでそのリクエストの <span class="ui">レポートをコピー</span> して共有してください。</li>
+    </ul>
+
+    <h2 id="unknown-model"><a class="anchor" href="#unknown-model">モデルが見つからない（404）</a></h2>
+    <p>エラーは <em>magpie knows no model “…”</em> で、<em>did you mean …?</em> とプロバイダ id の一覧が付くことがあります。</p>
+    <ul>
+      <li><b>magpie の名前で指定する。</b><code>magpie models</code> が表示する <code>provider/model</code>、ルーティンググループの id か名前、またはプレフィックスなしのモデル id を使います。</li>
+      <li><b>“… is switched off in Magpie, so … is not served”。</b>プロバイダかルーティンググループがオフです。プロバイダページかルーティングページでオンに戻します。</li>
+      <li><b>プロバイダがまだない。</b>エラーに “add a provider in magpie first” と出ます。</li>
+    </ul>
+
+    <h2 id="not-listed"><a class="anchor" href="#not-listed">エージェントにモデルが出ない</a></h2>
+    <ul>
+      <li><b>エージェントを再起動する。</b>多くのエージェントは起動時にだけ設定を読みます。変更後、magpie はエージェントの行でそう知らせます（例：Codex は起動時にモデル一覧を作る）。Codex アプリは app-server も動かし続けるので、案内どおりに再起動してください。</li>
+      <li><b>magpie が提供しているか確認する。</b><code>magpie models</code> に選べるモデルがすべて並びます。オフにしたモデルや、プロバイダがオフのモデルは出ません。</li>
+      <li><b>Claude Code。</b><code>/model</code> に “via magpie” 付きでモデルが並びます。シェルで <code>CLAUDE_CODE_USE_BEDROCK</code> や <code>CLAUDE_CODE_USE_VERTEX</code> が設定されていると、Claude Code は magpie ではなくそのクラウドに接続します。シェルのプロファイルから外してください。</li>
+    </ul>
+
+    <h2 id="port"><a class="anchor" href="#port">ポート 3425 が使用中</a></h2>
+    <p>ゲートウェイは <code>127.0.0.1:3425</code> で待ち受けます。変えるには <span class="ui">設定</span> › <span class="ui">ネットワークと共有</span> › <span class="ui">ゲートウェイのアドレス</span> を開きます。設定できるのはポート（1024〜65535）だけで、magpie が接続したエージェントも一緒に移ります。</p>
+    <div class="table-wrap"><table>
+      <tr><th>magpie の表示</th><th>直し方</th></tr>
+      <tr><td>ポート … は他のプログラムが使用中です。別のポートを選んでください</td><td>空いているポートを選びます。</td></tr>
+      <tr><td>別の magpie が … でゲートウェイを提供しています。そちらでポートを設定するか、先に終了してください</td><td>magpie が 2 つ動いています。1 つを終了します。</td></tr>
+      <tr><td>ポート … は別のプログラム（magpie web かもしれません）が使用中です：magpie が数秒ごとに再試行します</td><td>ポートを使っているものを探すか、ゲートウェイを別のポートに移します。</td></tr>
+      <tr><td>MAGPIE_ADDR=… がゲートウェイのアドレス全体を設定しています</td><td><code>MAGPIE_ADDR</code> を外すか変更します。</td></tr>
+    </table></div>
+
+    <h2 id="wsl"><a class="anchor" href="#wsl">WSL のエージェント</a></h2>
+    <p>Windows では、magpie は実行中の WSL ディストリビューションから Claude Code、Codex、OpenCode、Kimi Code、Qwen Code などのエージェントを探します。見つかったものはそれぞれエージェントページに自分の行を持ち、Windows と同じように設定されます。停止中のディストリビューションを起動することはありません。</p>
+    <ul>
+      <li><b>エージェントが出ない。</b>ディストリビューションを起動し、<span class="ui">設定</span> › <span class="ui">一般</span> › <span class="ui">WSL のエージェントを検出</span> がオンか確認します。</li>
+      <li><b>magpie に届かない。</b>WSL 既定の NAT ネットワークでは、magpie は WSL ネットワーク上の Windows のアドレスでも専用のキーでゲートウェイを提供し、そのアドレスをエージェントの設定に書き込みます。ミラーモードでは、エージェントは Windows と同じく <code>127.0.0.1</code> を使います。通すかどうかは Windows ファイアウォールが決め、WSL のネットワークは「パブリック」扱いです。接続が遮断されるときはそこで magpie を許可してください。</li>
+      <li><b>変更が反映されない。</b>WSL のエージェントは起動時に設定を読みます。WSL 側で再起動してください。</li>
+    </ul>
+
+    <h2 id="lan"><a class="anchor" href="#lan">ネットワーク上の別のコンピュータから</a></h2>
+    <p>既定では、ゲートウェイはこのコンピュータにだけ応答します。別のコンピュータから使うには <span class="ui">設定</span> › <span class="ui">ネットワークと共有</span> › <span class="ui">ローカルネットワークで共有</span> をオンにします。相手のコンピュータは <span class="ui">ゲートウェイ</span> ページの <span class="ui">ゲートウェイキー</span> のキーを送ります。</p>
+    <ul>
+      <li><b>“magpie isn’t shared on the local network”。</b>magpie を動かしているコンピュータで共有をオンにします。</li>
+      <li><b>401。</b>キーがない、オフ、または期限切れです。有効なゲートウェイキーを <code>Authorization: Bearer &lt;key&gt;</code> か <code>x-api-key</code> で送ります。</li>
+      <li><b>特定のモデルで 403。</b>キーが一部のモデルに限られています：<code>magpie gateway-key models &lt;id&gt;</code>。</li>
+    </ul>
+    <p>ポートをインターネットに公開しないでください。コンピュータ間は VPN を使います。別の magpie への接続を含む設定の全体は <a href="/docs/ja/remote">リモート magpie</a> にあります。</p>
+
+    <h2 id="plugins"><a class="anchor" href="#plugins">プラグインに移ったサブスクが使えない</a></h2>
+    <p>Command Code、Cursor、Devin、Factory、Grok、Kiro、Xiaomi MiMo、Qoder、WorkBuddy、ZCode、Zed は magpie に組み込まれなくなり、それぞれ同じ働きをするコミュニティプラグインが提供します。以前に追加したアカウントはプラグインへの移行が必要で、移行するまで使えません。</p>
+    <ul><li><b>直し方：</b>プロバイダ一覧の上に「… の組み込みサブスクリプションは終了しました。アカウントはまだプラグインに移行されていません」と出ます。<span class="ui">プラグインに移行</span> を押すと、magpie がプラグインをインストールし、各アカウントを確認します。移行してもアカウント、モデル、エージェントはそのままです。magpie は自動でも移行し、<span class="ui">プラグイン</span> ページからプラグインをインストールしても移行されます。</li></ul>
+    <p>移行後のエラーはプラグインから来ています。サインイン、モデル、リクエストはプラグインが処理します。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
+    <h3>プロバイダは動いているのに、なぜ 502 になるのですか？</h3>
+    <p>プロバイダが Web ページや空の本文など、API の返答でないものを返しました。たいていはベース URL が API ではなくベンダーの Web サイトを指しています。</p>
+    <h3>429 のあと、なぜアカウントが使われないままなのですか？</h3>
+    <p>magpie はベンダーが示したリセットまで、示されなければしばらくの間そのアカウントを休ませます。プロバイダの行に復帰時刻が出ており、「今すぐ試す」で休止を終えられます。</p>
+    <h3>“magpie knows no model” とはどういう意味ですか？</h3>
+    <p>その名前のモデルを提供するプロバイダがありません。magpie models が表示する provider/model で指定するか、プロバイダをオンに戻します。</p>
+    <h3>magpie のポートを変えるには？</h3>
+    <p>設定 › ネットワークと共有 › ゲートウェイのアドレス です。magpie が接続したエージェントも一緒に移ります。</p>
+    <h3>WSL のエージェントから Windows の magpie を使えますか？</h3>
+    <p>使えます。magpie は実行中の WSL ディストリビューションのエージェントを見つけ、届くアドレスで設定します。NAT ネットワークでは、Windows ファイアウォールが WSL からの接続を通す必要があります。</p>
+    <h3>別のコンピュータから magpie を使えますか？</h3>
+    <p>使えます。設定 › ネットワークと共有 › ローカルネットワークで共有 をオンにし、相手のコンピュータからゲートウェイキーを送ります。ポートはインターネットに公開しないでください。</p>
+
+    <p style="margin-top:48px">解決しないときは、ルーティングページでそのリクエストのレポートをコピーして <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> で質問してください。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a href="/docs/ja/remote">リモート magpie</a>
+    <a href="/docs/ja/docker">Docker</a>
+    <a href="/docs/ja/privacy">プライバシー</a>
+    <a href="/docs/ja/masking">プライバシーマスキング</a>
+    <a href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a href="/docs/ja/library">ライブラリ</a>
+    <a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a href="/docs/ja/local-models">ローカルモデル</a>
+    <a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/ja/contributors">コントリビューター</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "コピーしました"; setTimeout(() => (b.textContent = "コピー"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

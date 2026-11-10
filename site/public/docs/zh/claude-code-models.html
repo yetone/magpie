@@ -240,7 +240,7 @@ magpie claude haiku ""                           # 回到跟随主模型</pre></
     <p>在 magpie 里登录订阅：<span class="ui">＋ 添加供应商</span>，选 ChatGPT 或 Copilot。magpie 会打开官方的登录页。登录后，账号里的模型以 <code>codex/…</code> 或 <code>copilot/…</code> 出现在 Claude Code 的模型列表里。</p>
     <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-cc-gpt">复制</button><pre id="ex-cc-gpt">magpie accounts add codex      # 登录一个 ChatGPT 账号
 magpie claude codex/gpt-5.5</pre></div>
-    <p>Claude Code 说的还是 Anthropic Messages，magpie 把每个请求转成 GPT 模型能懂的格式，再把回复转回来，工具调用也包括在内。Antigravity 账号同理，模型是 <code>antigravity/…</code>。</p>
+    <p>Claude Code 说的还是 Anthropic Messages，magpie 把每个请求转成 GPT 模型能懂的格式，再把回复转回来，工具调用也包括在内。Antigravity 账号同理，模型是 <code>antigravity/…</code>。ChatGPT 套餐的完整用法，包括分档、推理强度和额度，见 <a href="/docs/zh/claude-code-chatgpt">Claude Code 用 ChatGPT</a>。</p>
 
     <h2 id="routing"><a class="anchor" href="#routing">多个 Key 轮换</a></h2>
     <p>有多个 Key 或账号时，magpie 可以把 Claude Code 的请求分摊到它们上面，一个用完自动换下一个。</p>

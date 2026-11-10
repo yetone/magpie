@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fixing common errors: 401, 429, 502, 504 and more · magpie</title>
+<meta name="description" content="What magpie’s gateway errors mean and how to fix them: 401 and 403, 429 and rest periods, 502 and 504, model not found, an agent that doesn’t show a model, port 3425 in use, agents in WSL, and use from another computer.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/troubleshooting">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/troubleshooting">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/troubleshooting">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/troubleshooting">
+<link rel="canonical" href="https://usemagpie.ai/docs/troubleshooting">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Fixing common errors: 401, 429, 502, 504 and more">
+<meta property="og:description" content="What magpie’s gateway errors mean and how to fix them: 401 and 403, 429 and rest periods, 502 and 504, model not found, an agent that doesn’t show a model, port 3425 in use, agents in WSL, and use from another computer.">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/troubleshooting">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Fixing common errors: 401, 429, 502, 504 and more",
+   "description": "What magpie’s gateway errors mean and how to fix them: 401 and 403, 429 and rest periods, 502 and 504, model not found, an agent that doesn’t show a model, port 3425 in use, agents in WSL, and use from another computer.",
+   "inLanguage": "en",
+   "url": "https://usemagpie.ai/docs/troubleshooting",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Why does magpie answer 502 when the provider is up?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "The provider answered with something that isn’t an API reply, such as a web page or an empty body. The base URL usually points at the vendor’s web site instead of its API."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Why does an account stay unused after a 429?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie rests it until the reset the vendor named, or for a while if none was named. The provider’s row says when it is back, and Try now ends the rest."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "What does “magpie knows no model” mean?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "No provider serves a model by that name. Name it as provider/model, as magpie models lists it, or switch its provider on again."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "How do I change magpie’s port?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Settings › Network and sharing › Gateway address. The agents magpie connected move with it."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can an agent in WSL use magpie on Windows?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. magpie finds agents in running WSL distros and sets each up with an address it can reach. Under NAT networking, Windows’ firewall must let WSL’s connection through."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can I use magpie from another computer?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Turn on Settings › Network and sharing › Share on local network, and send a gateway key from the other computer. Don’t open the port to the internet."
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>Docs</small></a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/start">Get started</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a class="toc-only" href="/docs/remote">Remote magpie</a>
+    <a class="toc-only" href="/docs/docker">Docker</a>
+    <a class="toc-only" href="/docs/privacy">Privacy</a>
+    <a class="toc-only" href="/docs/masking">Privacy masking</a>
+    <a class="toc-only" href="/docs/mcp-router">MCP router</a>
+    <a class="toc-only" href="/docs/library">Library</a>
+    <a class="toc-only" href="/docs/claude-code-models">Models in Claude Code</a>
+    <a class="toc-only" href="/docs/codex-models">Models in Codex</a>
+    <a class="toc-only" href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a class="toc-only" href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a class="toc-only" href="/docs/local-models">Local models</a>
+    <a class="toc-only" href="/docs/opencode-models">Models in OpenCode</a>
+    <a class="toc-only" href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/troubleshooting" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/troubleshooting" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/troubleshooting" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">Download</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Fixing common errors</p>
+    <a href="#overview">Where to look</a>
+    <a href="#auth">401 and 403</a>
+    <a href="#limits">429 and rests</a>
+    <a href="#bad-gateway">502</a>
+    <a href="#timeout">504</a>
+    <a href="#unknown-model">Model not found</a>
+    <a href="#not-listed">Agent doesn’t show it</a>
+    <a href="#port">Port 3425 in use</a>
+    <a href="#wsl">Agents in WSL</a>
+    <a href="#lan">From another computer</a>
+    <a href="#plugins">Moved to plugins</a>
+    <a href="#faq">FAQ</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">Docs · Help</p>
+    <h1>Fixing common errors: 401, 429, 502, 504 and more</h1>
+    <p class="lede">An error from magpie’s gateway says what went wrong in its own words. This page lists the common ones, what causes them, and the fix.</p>
+
+    <p>Every request is listed on magpie’s <span class="ui">Routing</span> page, with which provider and account it went to and how each try ended. <span class="ui">Copy Report</span> on a request copies what you need to ask for help.</p>
+
+    <h2 id="auth"><a class="anchor" href="#auth">401 and 403: a key or sign-in refused</a></h2>
+    <p><b>From the vendor.</b> The provider turned down the key or sign-in magpie sent. magpie sets that key or account aside and tries the next one, so you see the error only when none is left. A sign-in that has run out says so, for example “the ChatGPT sign-in has expired — sign in again”.</p>
+    <ul><li><b>Fix:</b> sign in again from <span class="ui">＋ Add provider</span> (or <code>magpie accounts add &lt;provider&gt;</code>), or give the provider a new key.</li></ul>
+    <p><b>From magpie itself.</b> magpie answers 403 on its own in a few cases, before anything is sent:</p>
+    <div class="table-wrap"><table>
+      <tr><th>Error</th><th>Cause</th><th>Fix</th></tr>
+      <tr><td>model disabled</td><td>You turned the model off in magpie.</td><td>Turn it on again on its provider.</td></tr>
+      <tr><td>model not allowed for the gateway key</td><td>The gateway key is held to some models.</td><td><code>magpie gateway-key models &lt;id&gt;</code> lists or changes them.</td></tr>
+      <tr><td>magpie doesn’t answer the web page …</td><td>A web page called the gateway from a browser.</td><td>List it in <span class="ui">Settings</span> › <span class="ui">Network and sharing</span> › <span class="ui">Web pages</span>, and send a gateway key.</td></tr>
+    </table></div>
+
+    <h2 id="limits"><a class="anchor" href="#limits">429 and rest periods</a></h2>
+    <p>A 429 means the provider is out of quota, out of credit or rate limiting you. magpie rests the key or account that was refused and sends the request to the next account, the next member of a routing group, or the provider’s <span class="ui">Fallback</span>. The provider’s row shows <span class="ui">Resting · {why} · back at {time}</span>.</p>
+    <div class="table-wrap"><table>
+      <tr><th>Refused for</th><th>Rests</th></tr>
+      <tr><td>Quota, with a reset time</td><td>Until the reset</td></tr>
+      <tr><td>Rate limit, with Retry-After</td><td>Until then</td></tr>
+      <tr><td>Credit</td><td>30 minutes, then 2 hours, 8 hours, a day, 3 days and a week if it is refused again</td></tr>
+      <tr><td>A ChatGPT account out of credits</td><td>Until the reset its refusal names, else until its full window renews, else 5 hours</td></tr>
+      <tr><td>Any other failure</td><td>A minute, doubling on repeats up to 10 minutes (30 for a rate limit)</td></tr>
+    </table></div>
+    <ul>
+      <li><b>Ask it again now.</b> <span class="ui">Try now</span> ends the rest: the next request asks it again. Refused again, it rests again.</li>
+      <li><b>Cap the rest.</b> <code>magpie provider rest-cap &lt;id&gt; 4h</code> sets the longest rest for a provider; <code>off</code> stops it resting for failures that say nothing of why.</li>
+      <li><b>A relay whose limits pass in a moment.</b> Untick <span class="ui">Set it aside when out of quota or rate limited</span> in the provider editor’s <span class="ui">Advanced</span>: a 429 then rests nothing, and the next request goes to it as usual.</li>
+      <li><b>Never all at once.</b> Add a second account or a fallback model, so a spent one never stops the agent. <code>magpie accounts</code> shows how much of each account’s allowance is used.</li>
+    </ul>
+    <p>Rests are kept across restarts, so quitting magpie doesn’t bring a resting account back early.</p>
+
+    <h2 id="bad-gateway"><a class="anchor" href="#bad-gateway">502: the provider didn’t answer</a></h2>
+    <p>A 502 means magpie couldn’t get an API reply from the provider. What follows the provider’s name says which case it is:</p>
+    <ul>
+      <li><b>“didn’t answer: …”</b> The connection failed: a name that doesn’t resolve, a refused connection, a proxy that is down. When this computer has no network at all, magpie notices and rests nobody.</li>
+      <li><b>“… not an API reply”</b> The provider answered, but with a web page (a sign-in page, a Cloudflare challenge), nothing at all, or something that isn’t JSON. The base URL usually points at a web site instead of the API: check it against the vendor’s docs, and whether it should end in <code>/v1</code>.</li>
+      <li><b>OpenCode: “… which is no error, not an API reply”.</b> OpenCode’s gateway sometimes answers a 400 holding only the model’s name. The same request is answered some seconds later, so magpie reads it as a 502, asks again within the request’s patience or tries a group’s next member, and rests nobody. It is tied to requests carrying very large tool lists.</li>
+    </ul>
+    <p>A 502, 503, 504, 529 or Cloudflare’s 520 to 524 counts as busy: magpie asks again or moves to a routing group’s next member before the agent sees it.</p>
+
+    <h2 id="timeout"><a class="anchor" href="#timeout">504: no answer in time</a></h2>
+    <ul>
+      <li><b>“&lt;provider&gt;: no first token in Ns”.</b> A routing group gives each member a time to start answering (<span class="ui">First token</span>). The member was slower, so the next was asked. Raise it on the group for a slow model.</li>
+      <li><b>“no member of the group answered within its Ns budget”.</b> Every member of the group was tried within the group’s time and none answered.</li>
+      <li><b>“magpie held this request for … without routing it to any provider”.</b> The request waited inside magpie and was stopped rather than left waiting. Send it again; if it comes back, <span class="ui">Copy Report</span> on that request on the <span class="ui">Routing</span> page and share it.</li>
+    </ul>
+
+    <h2 id="unknown-model"><a class="anchor" href="#unknown-model">Model not found (404)</a></h2>
+    <p>The error reads <em>magpie knows no model “…”</em>, often with <em>did you mean …?</em> and the list of your provider ids.</p>
+    <ul>
+      <li><b>Name it as magpie does.</b> Use <code>provider/model</code>, as <code>magpie models</code> lists it, a routing group’s id or name, or a bare model id.</li>
+      <li><b>“… is switched off in Magpie, so … is not served”.</b> The provider or routing group is off. Switch it on again on the Providers or Routing page.</li>
+      <li><b>No providers yet.</b> The error says “add a provider in magpie first”.</li>
+    </ul>
+
+    <h2 id="not-listed"><a class="anchor" href="#not-listed">The agent doesn’t show the model</a></h2>
+    <ul>
+      <li><b>Restart the agent.</b> Most agents read their config only when they start. magpie says so on the agent’s row after a change, for example “Codex builds its model list at start-up”. Codex’s app also keeps an app-server running; restart it as the notice says.</li>
+      <li><b>Check magpie serves it.</b> <code>magpie models</code> lists every model you can pick. A model you turned off, or one whose provider is switched off, isn’t listed.</li>
+      <li><b>Claude Code.</b> <code>/model</code> lists magpie’s models marked “via magpie”. If <code>CLAUDE_CODE_USE_BEDROCK</code> or <code>CLAUDE_CODE_USE_VERTEX</code> is set in your shell, Claude Code goes to that cloud instead of magpie; remove it from your shell profile.</li>
+    </ul>
+
+    <h2 id="port"><a class="anchor" href="#port">Port 3425 is in use</a></h2>
+    <p>The gateway listens on <code>127.0.0.1:3425</code>. To move it, open <span class="ui">Settings</span> › <span class="ui">Network and sharing</span> › <span class="ui">Gateway address</span>. Only the port is set there, 1024 to 65535, and the agents magpie connected move with it.</p>
+    <div class="table-wrap"><table>
+      <tr><th>magpie says</th><th>Fix</th></tr>
+      <tr><td>Port … is in use by another program: pick another one</td><td>Pick a free port.</td></tr>
+      <tr><td>Another magpie serves the gateway at …: set its port there, or quit it first</td><td>Two copies of magpie are running. Quit one.</td></tr>
+      <tr><td>Port … is taken by another program, magpie web perhaps: magpie tries again every few seconds</td><td>Find what holds the port, or move the gateway to another.</td></tr>
+      <tr><td>MAGPIE_ADDR=… sets the gateway’s whole address, host:port: unset it to set the port here</td><td>Unset <code>MAGPIE_ADDR</code>, or change it.</td></tr>
+    </table></div>
+
+    <h2 id="wsl"><a class="anchor" href="#wsl">Agents in WSL</a></h2>
+    <p>On Windows, magpie looks in running WSL distros for agents such as Claude Code, Codex, OpenCode, Kimi Code and Qwen Code. Each one it finds gets a row of its own on the Agents page, and magpie sets it up as it does on Windows. It never starts a stopped distro.</p>
+    <ul>
+      <li><b>The agent isn’t listed.</b> Start the distro, and check <span class="ui">Settings</span> › <span class="ui">General</span> › <span class="ui">Detect agents in WSL</span> is on.</li>
+      <li><b>It can’t reach magpie.</b> Under WSL’s default NAT networking, magpie also serves the gateway at Windows’ address on the WSL network, with a key of its own, and writes that address into the agent’s config. With mirrored networking the agent uses <code>127.0.0.1</code> as on Windows. Windows’ firewall still decides: WSL’s network counts as Public, so allow magpie there if the connection is blocked.</li>
+      <li><b>A change doesn’t show.</b> An agent in WSL reads its config at start-up: restart it there.</li>
+    </ul>
+
+    <h2 id="lan"><a class="anchor" href="#lan">From another computer on the network</a></h2>
+    <p>By default the gateway answers only this computer. To use it from another: <span class="ui">Settings</span> › <span class="ui">Network and sharing</span> › <span class="ui">Share on local network</span>. The other computer sends a gateway key from the <span class="ui">Gateway</span> page’s <span class="ui">Gateway keys</span>.</p>
+    <ul>
+      <li><b>“magpie isn’t shared on the local network”.</b> Turn sharing on, on the computer that runs magpie.</li>
+      <li><b>401.</b> The key is missing, off or expired. Send an enabled gateway key as <code>Authorization: Bearer &lt;key&gt;</code> or <code>x-api-key</code>.</li>
+      <li><b>403 for a model.</b> The key is held to some models: <code>magpie gateway-key models &lt;id&gt;</code>.</li>
+    </ul>
+    <p>Don’t open the port to the internet; use a VPN between your computers. The full setup, another magpie included, is in <a href="/docs/remote">Remote magpie</a>.</p>
+
+    <h2 id="plugins"><a class="anchor" href="#plugins">A subscription moved to a plugin isn’t served</a></h2>
+    <p>Command Code, Cursor, Devin, Factory, Grok, Kiro, Xiaomi MiMo, Qoder, WorkBuddy, ZCode and Zed are no longer built into magpie. Each is served by a community plugin that does the same job. Accounts added before still need to move to the plugin, and nothing serves them until they do.</p>
+    <ul><li><b>Fix:</b> a line over the Providers list says “… built-in subscription is retired, and its accounts haven’t moved to its plugin yet”. Press <span class="ui">Move to the plugin</span>: magpie installs the plugin and checks each account. Moving keeps your accounts, models and agents as they are. magpie also moves them by itself, and installing the plugin from the <span class="ui">Plugins</span> page does too.</li></ul>
+    <p>An error after the move comes from the plugin, which does the sign-in, models and requests.</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
+    <h3>Why does magpie answer 502 when the provider is up?</h3>
+    <p>The provider answered with something that isn’t an API reply, such as a web page or an empty body. The base URL usually points at the vendor’s web site instead of its API.</p>
+    <h3>Why does an account stay unused after a 429?</h3>
+    <p>magpie rests it until the reset the vendor named, or for a while if none was named. The provider’s row says when it is back, and Try now ends the rest.</p>
+    <h3>What does “magpie knows no model” mean?</h3>
+    <p>No provider serves a model by that name. Name it as provider/model, as magpie models lists it, or switch its provider on again.</p>
+    <h3>How do I change magpie’s port?</h3>
+    <p>Settings › Network and sharing › Gateway address. The agents magpie connected move with it.</p>
+    <h3>Can an agent in WSL use magpie on Windows?</h3>
+    <p>Yes. magpie finds agents in running WSL distros and sets each up with an address it can reach. Under NAT networking, Windows’ firewall must let WSL’s connection through.</p>
+    <h3>Can I use magpie from another computer?</h3>
+    <p>Yes. Turn on Settings › Network and sharing › Share on local network, and send a gateway key from the other computer. Don’t open the port to the internet.</p>
+
+    <p style="margin-top:48px">Still stuck? Copy the request’s report from the Routing page and ask on <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>.</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a href="/docs/remote">Remote magpie</a>
+    <a href="/docs/docker">Docker</a>
+    <a href="/docs/privacy">Privacy</a>
+    <a href="/docs/masking">Privacy masking</a>
+    <a href="/docs/mcp-router">MCP router</a>
+    <a href="/docs/library">Library</a>
+    <a href="/docs/claude-code-models">Models in Claude Code</a>
+    <a href="/docs/codex-models">Models in Codex</a>
+    <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a href="/docs/local-models">Local models</a>
+    <a href="/docs/opencode-models">Models in OpenCode</a>
+    <a href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/contributors">Contributors</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

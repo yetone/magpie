@@ -240,7 +240,7 @@ magpie claude haiku ""                           # メインのモデルに戻�
     <p>magpie でサブスクリプションにサインインします：<span class="ui">＋ Add provider</span> から ChatGPT または Copilot のタイルを選ぶと、magpie がベンダー自身のサインインページを開きます。するとそのアカウントのモデルが、Claude Code のピッカーに <code>codex/…</code> または <code>copilot/…</code> として表示されます。</p>
     <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-cc-gpt">コピー</button><pre id="ex-cc-gpt">magpie accounts add codex      # ChatGPT アカウントにサインイン
 magpie claude codex/gpt-5.5</pre></div>
-    <p>Claude Code が話すのはあくまで Anthropic Messages です。magpie が各リクエストを GPT モデル向けに変換し、応答を戻します。ツール呼び出しも含みます。Antigravity アカウントも同じように <code>antigravity/…</code> として使えます。</p>
+    <p>Claude Code が話すのはあくまで Anthropic Messages です。magpie が各リクエストを GPT モデル向けに変換し、応答を戻します。ツール呼び出しも含みます。Antigravity アカウントも同じように <code>antigravity/…</code> として使えます。ティア、推論レベル、上限を含む ChatGPT プランの使い方は <a href="/docs/ja/claude-code-chatgpt">Claude Code で ChatGPT</a> にあります。</p>
 
     <h2 id="routing"><a class="anchor" href="#routing">複数のキーでルーティング</a></h2>
     <p>キーやアカウントが複数あれば、magpie は Claude Code のリクエストをそれらに分散し、1 つが使い切られたら次へ移れます。</p>

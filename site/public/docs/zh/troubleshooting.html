@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>常见错误排查：401、429、502、504 等 · magpie</title>
+<meta name="description" content="magpie 网关报错的含义和解决办法：401 和 403、429 与暂停使用、502 和 504、找不到模型、Agent 里看不到模型、3425 端口被占用、WSL 里的 Agent，以及从其他电脑使用。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/troubleshooting">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/troubleshooting">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/troubleshooting">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/troubleshooting">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/troubleshooting">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="常见错误排查：401、429、502、504 等">
+<meta property="og:description" content="magpie 网关报错的含义和解决办法：401 和 403、429 与暂停使用、502 和 504、找不到模型、Agent 里看不到模型、3425 端口被占用、WSL 里的 Agent，以及从其他电脑使用。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/troubleshooting">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "常见错误排查：401、429、502、504 等",
+   "description": "magpie 网关报错的含义和解决办法：401 和 403、429 与暂停使用、502 和 504、找不到模型、Agent 里看不到模型、3425 端口被占用、WSL 里的 Agent，以及从其他电脑使用。",
+   "inLanguage": "zh",
+   "url": "https://usemagpie.ai/docs/zh/troubleshooting",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "供应商明明正常，magpie 为什么回 502？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "供应商回的不是 API 回复，比如网页或空内容。通常是 Base URL 指向了厂商的网站而不是 API。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "429 之后为什么某个账号一直不用？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie 会暂停它，直到厂商给出的重置时间；没有给出时暂停一段时间。供应商那一行会显示何时恢复，点“立即重试”可以结束暂停。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "“magpie knows no model” 是什么意思？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "没有供应商提供这个名字的模型。按 magpie models 列出的 provider/model 命名，或重新打开它的供应商。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "怎么修改 magpie 的端口？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "设置 › 网络与共享 › 网关地址。magpie 接入过的 Agent 会一起改过去。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "WSL 里的 Agent 能用 Windows 上的 magpie 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。magpie 会在运行中的 WSL 发行版里找到 Agent，并给每个配置一个能连上的地址。NAT 网络下需要 Windows 防火墙放行 WSL 的连接。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "能从局域网里的其他电脑用 magpie 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。打开 设置 › 网络与共享 › 局域网共享，另一台电脑发送网关密钥即可。不要把端口暴露到公网。"
+     }
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/troubleshooting" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/troubleshooting" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/troubleshooting" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>常见错误排查</p>
+    <a href="#overview">先看哪里</a>
+    <a href="#auth">401 和 403</a>
+    <a href="#limits">429 与暂停</a>
+    <a href="#bad-gateway">502</a>
+    <a href="#timeout">504</a>
+    <a href="#unknown-model">找不到模型</a>
+    <a href="#not-listed">Agent 里看不到模型</a>
+    <a href="#port">3425 端口被占用</a>
+    <a href="#wsl">WSL 里的 Agent</a>
+    <a href="#lan">从其他电脑使用</a>
+    <a href="#plugins">已迁移到插件</a>
+    <a href="#faq">常见问题</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 帮助</p>
+    <h1>常见错误排查：401、429、502、504 等</h1>
+    <p class="lede">magpie 网关的报错会说明出了什么问题。这一页列出常见的报错、原因和解决办法。</p>
+
+    <p>每个请求都列在 magpie 的 <span class="ui">路由</span> 页上：发给了哪个供应商、哪个账号，每次尝试的结果。在请求上点 <span class="ui">复制报告</span>，就能拿到求助需要的信息。</p>
+
+    <h2 id="auth"><a class="anchor" href="#auth">401 和 403：密钥或登录被拒</a></h2>
+    <p><b>来自厂商。</b>供应商拒绝了 magpie 发送的密钥或登录。magpie 会暂停这个密钥或账号，改用下一个，所以只有全都不行时你才会看到报错。登录过期时报错会直接说明，比如 “the ChatGPT sign-in has expired — sign in again”。</p>
+    <ul><li><b>解决：</b>在 <span class="ui">＋ 添加供应商</span> 里重新登录（或 <code>magpie accounts add &lt;provider&gt;</code>），或者给供应商换一个新密钥。</li></ul>
+    <p><b>来自 magpie 自己。</b>以下情况 magpie 会直接回 403，什么都不发出去：</p>
+    <div class="table-wrap"><table>
+      <tr><th>报错</th><th>原因</th><th>解决</th></tr>
+      <tr><td>model disabled</td><td>你在 magpie 里关掉了这个模型。</td><td>在它的供应商里重新打开。</td></tr>
+      <tr><td>model not allowed for the gateway key</td><td>这个网关密钥限定了可用的模型。</td><td>用 <code>magpie gateway-key models &lt;id&gt;</code> 查看或修改。</td></tr>
+      <tr><td>magpie doesn’t answer the web page …</td><td>有网页在浏览器里调用网关。</td><td>把它加到 <span class="ui">设置</span> › <span class="ui">网络与共享</span> › <span class="ui">网页</span>，并发送网关密钥。</td></tr>
+    </table></div>
+
+    <h2 id="limits"><a class="anchor" href="#limits">429 与暂停使用</a></h2>
+    <p>429 表示供应商额度用完、余额不足或在限流。magpie 会暂停被拒的密钥或账号，把请求交给下一个账号、路由组里的下一个成员，或供应商的 <span class="ui">备用</span>。供应商那一行会显示 <span class="ui">暂停使用 · {why} · {time} 恢复</span>。</p>
+    <div class="table-wrap"><table>
+      <tr><th>被拒原因</th><th>暂停多久</th></tr>
+      <tr><td>额度用完，给出了重置时间</td><td>到重置为止</td></tr>
+      <tr><td>限流，带 Retry-After</td><td>到那时为止</td></tr>
+      <tr><td>余额不足</td><td>30 分钟；再被拒依次为 2 小时、8 小时、1 天、3 天、1 周</td></tr>
+      <tr><td>ChatGPT 账号额度用完</td><td>到拒绝时给出的重置时间；没有就等整个窗口刷新；都不知道就 5 小时</td></tr>
+      <tr><td>其他失败</td><td>1 分钟，重复时翻倍，最多 10 分钟（限流最多 30 分钟）</td></tr>
+    </table></div>
+    <ul>
+      <li><b>现在就再试。</b><span class="ui">立即重试</span> 会结束暂停：下一个请求会再次使用它。再被拒绝时，会照常再次暂停。</li>
+      <li><b>限制暂停时长。</b><code>magpie provider rest-cap &lt;id&gt; 4h</code> 设置一个供应商最长暂停多久；<code>off</code> 让它在原因不明的失败后不暂停。</li>
+      <li><b>限额很快恢复的中转站。</b>在供应商编辑器的 <span class="ui">高级</span> 里取消勾选 <span class="ui">额度用完或被限流时暂停它</span>：之后 429 不再暂停它，下一个请求照常发给它。</li>
+      <li><b>不要只靠一个。</b>再加一个账号或备用模型，一个用完不会让 Agent 停下来。<code>magpie accounts</code> 显示每个账号用掉了多少额度。</li>
+    </ul>
+    <p>暂停状态在重启后保留，退出 magpie 不会让暂停中的账号提前回来。</p>
+
+    <h2 id="bad-gateway"><a class="anchor" href="#bad-gateway">502：供应商没有正常回应</a></h2>
+    <p>502 表示 magpie 没从供应商拿到 API 回复。供应商名称后面的内容说明是哪种情况：</p>
+    <ul>
+      <li><b>“didn’t answer: …”</b>连接失败：域名解析不了、连接被拒、代理没开。这台电脑完全没有网络时，magpie 能识别出来，不会暂停任何供应商。</li>
+      <li><b>“… not an API reply”</b>供应商回应了，但回的是网页（登录页、Cloudflare 验证页）、空内容，或不是 JSON 的内容。通常是 Base URL 指向了网站而不是 API：对照厂商文档检查，看看是否需要以 <code>/v1</code> 结尾。</li>
+      <li><b>OpenCode：“… which is no error, not an API reply”。</b>OpenCode 的网关有时会回一个只含模型名的 400。同样的请求几秒后就能成功，所以 magpie 把它当作 502：在请求的等待时间内重试，或换路由组的下一个成员，不暂停任何账号。它和携带特别多工具定义的请求有关。</li>
+    </ul>
+    <p>502、503、504、529 和 Cloudflare 的 520 到 524 都算作“忙”：magpie 会先重试或换路由组的下一个成员，然后才把错误交给 Agent。</p>
+
+    <h2 id="timeout"><a class="anchor" href="#timeout">504：没有及时回应</a></h2>
+    <ul>
+      <li><b>“&lt;provider&gt;: no first token in Ns”。</b>路由组给每个成员一个开始回复的时限（<span class="ui">首字耗时</span>）。这个成员超时了，于是换了下一个。慢模型可以在组里调大它。</li>
+      <li><b>“no member of the group answered within its Ns budget”。</b>在组的时限内试过了每个成员，都没有回应。</li>
+      <li><b>“magpie held this request for … without routing it to any provider”。</b>请求在 magpie 内部等待过久，被停下而不是一直挂着。重新发送；如果还出现，在 <span class="ui">路由</span> 页这个请求上点 <span class="ui">复制报告</span>，发出来。</li>
+    </ul>
+
+    <h2 id="unknown-model"><a class="anchor" href="#unknown-model">找不到模型（404）</a></h2>
+    <p>报错是 <em>magpie knows no model “…”</em>，常带有 <em>did you mean …?</em> 和你的供应商 id 列表。</p>
+    <ul>
+      <li><b>按 magpie 的方式命名。</b>用 <code>provider/model</code>（和 <code>magpie models</code> 列出的一样）、路由组的 id 或名称，或者不带前缀的模型 id。</li>
+      <li><b>“… is switched off in Magpie, so … is not served”。</b>供应商或路由组被关掉了。在供应商页或路由页重新打开。</li>
+      <li><b>还没有供应商。</b>报错会说 “add a provider in magpie first”。</li>
+    </ul>
+
+    <h2 id="not-listed"><a class="anchor" href="#not-listed">Agent 里看不到模型</a></h2>
+    <ul>
+      <li><b>重启 Agent。</b>大多数 Agent 只在启动时读取配置。改动后 magpie 会在 Agent 那一行提示，比如 Codex 启动时生成模型列表。Codex 应用还有一个常驻的 app-server，按提示重启它。</li>
+      <li><b>确认 magpie 提供这个模型。</b><code>magpie models</code> 列出所有可选模型。你关掉的模型，或所在供应商被关掉的模型，不会列出。</li>
+      <li><b>Claude Code。</b><code>/model</code> 会列出标着 “via magpie” 的模型。如果 shell 里设置了 <code>CLAUDE_CODE_USE_BEDROCK</code> 或 <code>CLAUDE_CODE_USE_VERTEX</code>，Claude Code 会连到那个云而不是 magpie；把它从 shell 配置文件里去掉。</li>
+    </ul>
+
+    <h2 id="port"><a class="anchor" href="#port">3425 端口被占用</a></h2>
+    <p>网关监听 <code>127.0.0.1:3425</code>。要换端口，打开 <span class="ui">设置</span> › <span class="ui">网络与共享</span> › <span class="ui">网关地址</span>。这里只设置端口（1024 到 65535），magpie 接入过的 Agent 会一起改过去。</p>
+    <div class="table-wrap"><table>
+      <tr><th>magpie 的提示</th><th>解决</th></tr>
+      <tr><td>端口 … 已被其他程序占用，请换一个</td><td>换一个空闲端口。</td></tr>
+      <tr><td>另一个 magpie 正在 … 提供网关：请在那边设端口，或先退出它</td><td>运行了两个 magpie，退出一个。</td></tr>
+      <tr><td>端口 … 被其他程序占用（可能是 magpie web）：magpie 每隔几秒会再试一次</td><td>找到占用端口的程序，或把网关换到别的端口。</td></tr>
+      <tr><td>MAGPIE_ADDR=… 设置了网关的完整地址</td><td>取消或修改 <code>MAGPIE_ADDR</code>。</td></tr>
+    </table></div>
+
+    <h2 id="wsl"><a class="anchor" href="#wsl">WSL 里的 Agent</a></h2>
+    <p>在 Windows 上，magpie 会在正在运行的 WSL 发行版里查找 Claude Code、Codex、OpenCode、Kimi Code、Qwen Code 等 Agent。找到的每个都在 Agent 页有自己的一行，magpie 像在 Windows 上一样配置它。magpie 不会启动已停止的发行版。</p>
+    <ul>
+      <li><b>没有列出 Agent。</b>先启动发行版，并确认 <span class="ui">设置</span> › <span class="ui">常规</span> › <span class="ui">检测 WSL 中的 Agent</span> 已打开。</li>
+      <li><b>连不上 magpie。</b>在 WSL 默认的 NAT 网络下，magpie 还会在 Windows 的 WSL 网络地址上提供网关，使用单独的密钥，并把这个地址写进 Agent 的配置。镜像网络模式下，Agent 和 Windows 上一样用 <code>127.0.0.1</code>。是否放行仍由 Windows 防火墙决定：WSL 网络属于“公用”网络，连接被拦时请在那里允许 magpie。</li>
+      <li><b>改动没生效。</b>WSL 里的 Agent 启动时读取配置：在那边重启它。</li>
+    </ul>
+
+    <h2 id="lan"><a class="anchor" href="#lan">从局域网里的其他电脑使用</a></h2>
+    <p>默认情况下网关只回应本机。要让其他电脑使用：<span class="ui">设置</span> › <span class="ui">网络与共享</span> › <span class="ui">局域网共享</span>。另一台电脑需要发送 <span class="ui">网关</span> 页 <span class="ui">网关密钥</span> 里的密钥。</p>
+    <ul>
+      <li><b>“magpie isn’t shared on the local network”。</b>在运行 magpie 的电脑上打开共享。</li>
+      <li><b>401。</b>没带密钥，或密钥已关闭、已过期。以 <code>Authorization: Bearer &lt;key&gt;</code> 或 <code>x-api-key</code> 发送一个启用的网关密钥。</li>
+      <li><b>某个模型 403。</b>这个密钥限定了可用的模型：<code>magpie gateway-key models &lt;id&gt;</code>。</li>
+    </ul>
+    <p>不要把端口暴露到公网；在电脑之间用 VPN。完整的设置，包括连接另一台 magpie，见 <a href="/docs/zh/remote">远程 magpie</a>。</p>
+
+    <h2 id="plugins"><a class="anchor" href="#plugins">已迁移到插件的订阅无法使用</a></h2>
+    <p>Command Code、Cursor、Devin、Factory、Grok、Kiro、Xiaomi MiMo、Qoder、WorkBuddy、ZCode 和 Zed 已不再内置于 magpie，各自由一个功能相同的社区插件提供。之前添加的账号还需要迁移到插件，迁移之前它们无法使用。</p>
+    <ul><li><b>解决：</b>供应商列表上方会有一行提示“… 的内置订阅已下线，它的账号还没迁移到插件”。点 <span class="ui">迁移到插件</span>：magpie 会安装插件并逐个检查账号。迁移会保留你的账号、模型和 Agent 设置。magpie 也会自动迁移，在 <span class="ui">插件</span> 页安装插件同样会迁移。</li></ul>
+    <p>迁移后的报错来自插件：登录、模型和请求都由插件处理。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>供应商明明正常，magpie 为什么回 502？</h3>
+    <p>供应商回的不是 API 回复，比如网页或空内容。通常是 Base URL 指向了厂商的网站而不是 API。</p>
+    <h3>429 之后为什么某个账号一直不用？</h3>
+    <p>magpie 会暂停它，直到厂商给出的重置时间；没有给出时暂停一段时间。供应商那一行会显示何时恢复，点“立即重试”可以结束暂停。</p>
+    <h3>“magpie knows no model” 是什么意思？</h3>
+    <p>没有供应商提供这个名字的模型。按 magpie models 列出的 provider/model 命名，或重新打开它的供应商。</p>
+    <h3>怎么修改 magpie 的端口？</h3>
+    <p>设置 › 网络与共享 › 网关地址。magpie 接入过的 Agent 会一起改过去。</p>
+    <h3>WSL 里的 Agent 能用 Windows 上的 magpie 吗？</h3>
+    <p>能。magpie 会在运行中的 WSL 发行版里找到 Agent，并给每个配置一个能连上的地址。NAT 网络下需要 Windows 防火墙放行 WSL 的连接。</p>
+    <h3>能从局域网里的其他电脑用 magpie 吗？</h3>
+    <p>能。打开 设置 › 网络与共享 › 局域网共享，另一台电脑发送网关密钥即可。不要把端口暴露到公网。</p>
+
+    <p style="margin-top:48px">还没解决？在路由页复制这个请求的报告，到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

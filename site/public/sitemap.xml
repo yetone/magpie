@@ -5,6 +5,7 @@
 <url><loc>https://usemagpie.ai/ja/</loc></url>
 <url><loc>https://usemagpie.ai/de/</loc></url>
 <url><loc>https://usemagpie.ai/docs/claude-code-models</loc></url>
+<url><loc>https://usemagpie.ai/docs/claude-code-chatgpt</loc></url>
 <url><loc>https://usemagpie.ai/docs/codex-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/contributors</loc></url>
 <url><loc>https://usemagpie.ai/docs/docker</loc></url>
@@ -20,6 +21,7 @@
 <url><loc>https://usemagpie.ai/docs/remote</loc></url>
 <url><loc>https://usemagpie.ai/docs/start</loc></url>
 <url><loc>https://usemagpie.ai/docs/subscriptions</loc></url>
+<url><loc>https://usemagpie.ai/docs/troubleshooting</loc></url>
 <url><loc>https://usemagpie.ai/docs/local-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/opencode-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/alternatives</loc></url>
@@ -37,6 +39,7 @@
 <url><loc>https://usemagpie.ai/docs/anthropic</loc></url>
 <url><loc>https://usemagpie.ai/docs/openai</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/claude-code-models</loc></url>
+<url><loc>https://usemagpie.ai/docs/zh/claude-code-chatgpt</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/codex-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/contributors</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/docker</loc></url>
@@ -52,6 +55,7 @@
 <url><loc>https://usemagpie.ai/docs/zh/remote</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/start</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/subscriptions</loc></url>
+<url><loc>https://usemagpie.ai/docs/zh/troubleshooting</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/local-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/opencode-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/alternatives</loc></url>
@@ -69,6 +73,7 @@
 <url><loc>https://usemagpie.ai/docs/zh/anthropic</loc></url>
 <url><loc>https://usemagpie.ai/docs/zh/openai</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/claude-code-models</loc></url>
+<url><loc>https://usemagpie.ai/docs/ja/claude-code-chatgpt</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/codex-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/contributors</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/docker</loc></url>
@@ -83,6 +88,7 @@
 <url><loc>https://usemagpie.ai/docs/ja/remote</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/start</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/subscriptions</loc></url>
+<url><loc>https://usemagpie.ai/docs/ja/troubleshooting</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/local-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/opencode-models</loc></url>
 <url><loc>https://usemagpie.ai/docs/ja/alternatives</loc></url>

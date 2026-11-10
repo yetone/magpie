@@ -41,6 +41,7 @@ DeepSeek, Kimi (Moonshot), GLM (Zhipu), Qwen, MiniMax, Anthropic (Claude), OpenA
 - [Models in Codex](https://usemagpie.ai/docs/codex-models): run Codex on DeepSeek, Kimi, GLM, Qwen or a Claude subscription; the /model list with reasoning efforts and what changes in config.toml.
 - [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models): run Gemini CLI on DeepSeek, Kimi, GLM, Qwen or a Claude or ChatGPT subscription; what changes in ~/.gemini/.env and settings.json, and how to switch back.
 - [Subscriptions in any agent](https://usemagpie.ai/docs/subscriptions): sign in to Claude, ChatGPT, GitHub Copilot, Gemini Code Assist or Antigravity in magpie and use its models in Claude Code, Codex, Gemini CLI or OpenCode, with several accounts and failover.
+- [ChatGPT in Claude Code](https://usemagpie.ai/docs/claude-code-chatgpt): use a ChatGPT Plus or Pro subscription in Claude Code with no API key; signing in, picking a GPT model, how the opus, sonnet and haiku tiers map, reasoning effort, usage limits, several accounts and switching back.
 - [Local models in Claude Code and Codex](https://usemagpie.ai/docs/local-models): run Claude Code and Codex on Ollama, LM Studio, oMLX, MLX-Serve, vLLM or llama.cpp; default addresses, which API each server speaks, context window and masking.
 - [Models in OpenCode](https://usemagpie.ai/docs/opencode-models): run OpenCode on DeepSeek, Kimi, GLM, Qwen or a Claude, ChatGPT or Copilot subscription; what magpie writes in opencode.json, reasoning variants and cost, and how to switch back.
 - [magpie vs CC Switch vs Claude Code Router](https://usemagpie.ai/docs/alternatives): a fair comparison of the three: agents, config rewrite or local proxy, protocol translation, subscription sign-ins, routing and failover, GUI and CLI, platforms and license, and which one fits.
@@ -59,6 +60,7 @@ DeepSeek, Kimi (Moonshot), GLM (Zhipu), Qwen, MiniMax, Anthropic (Claude), OpenA
 - [OpenAI in every agent](https://usemagpie.ai/docs/openai): an OpenAI API key (or Azure OpenAI) in Claude Code, Codex, Gemini CLI and OpenCode; Responses vs Chat Completions, prompt_cache_key, reasoning effort and Fast (priority tier), web search, cost and several keys.
 - [Intent routing](https://usemagpie.ai/docs/intent): how a turn is routed by what the user asks for.
 - [Privacy masking](https://usemagpie.ai/docs/masking): what is masked before a request leaves the computer and how values come back.
+- [Fixing common errors](https://usemagpie.ai/docs/troubleshooting): what the gateway's errors mean and the fix: 401 and 403, 429 and rest periods, 502 and 504, model not found, an agent that doesn't show a model, port 3425 in use, agents in WSL, use from another computer and subscriptions moved to plugins.
 - [Library](https://usemagpie.ai/docs/library): instructions, MCP servers, skills, hooks and subagents for each agent.
 - [MCP router](https://usemagpie.ai/docs/mcp-router): one magpie MCP server per agent.
 - [Remote magpie](https://usemagpie.ai/docs/remote): use one magpie from several computers.
