@@ -4510,8 +4510,17 @@ body.panel .modal { padding: 16px 12px; }
 .subscription-usage.sorting > .subscription-card { transition: transform .22s cubic-bezier(.22, 1, .36, 1); }
 .subscription-usage.sorting .us-handle { cursor: grabbing; }
 .subscription-usage > .subscription-card.dragging { position: relative; z-index: 2; box-shadow: 0 8px 22px rgba(20, 22, 30, .14), 0 0 0 1px var(--line); transition: none; }
+/* where a dragged card lands (dragCards): a dashed slot its size, gliding
+   to the next place as the others make room */
+.subscription-usage.sorting, .pq-alist.sorting { position: relative; }
+.drag-slot {
+  position: absolute; left: 0; top: 0; box-sizing: border-box; pointer-events: none;
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  transition: transform .22s cubic-bezier(.23, 1, .32, 1); animation: fade-in .15s cubic-bezier(.23, 1, .32, 1);
+}
 @media (prefers-reduced-motion: reduce) {
-  .accts.sorting > [data-account-id], #agents.sorting > .row, .subscription-usage.sorting > .subscription-card { transition: none; }
+  .accts.sorting > [data-account-id], #agents.sorting > .row, .subscription-usage.sorting > .subscription-card, .pq-alist.sorting > .pq-arow, .drag-slot { transition: none; }
 }
 /* the show while the session files are indexed: the words on the left, a
    field of dots that light up as the files land on the right, a hairline
