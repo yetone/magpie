@@ -471,3 +471,82 @@ func TestRequestChunksTrimmedWhenIdle(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+// Within requestIdleBytes the chunks stay through the trim, and go
+// requestForget after it when nothing asked for them since; an ask
+// after the trim keeps them.
+func TestRequestChunksForgottenLongIdle(t *testing.T) {
+	pageHome(t)
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
+	oldIdle, oldIdleBytes, oldForget := requestIdle, requestIdleBytes, requestForget
+	t.Cleanup(func() {
+		requestCache.Lock()
+		requestIdle, requestIdleBytes, requestForget = oldIdle, oldIdleBytes, oldForget
+		requestCache.Unlock()
+	})
+	cacheBudget(t, 1<<30)
+	requestCache.Lock()
+	requestIdle, requestIdleBytes, requestForget = time.Hour, 1<<30, time.Hour
+	if requestCache.forget != nil { // armed by a test before
+		requestCache.forget.Stop()
+		requestCache.forget = nil
+	}
+	requestCache.Unlock()
+	dir := filepath.Join(sessions.CodexDir(), "sessions")
+	os.MkdirAll(dir, 0700)
+	for i := range 3 {
+		meta := fmt.Sprintf(`{"type":"session_meta","payload":{"id":"s%d","model_provider":"custom"}}`, i) + "\n" + `{"type":"turn_context","payload":{"model":"m"}}` + "\n"
+		line := fmt.Sprintf(`{"timestamp":%q,"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":10,"output_tokens":1},"last_token_usage":{"input_tokens":10,"output_tokens":1}}}}`+"\n", now.Add(-time.Duration(i)*time.Minute).Format(time.RFC3339Nano))
+		os.WriteFile(filepath.Join(dir, fmt.Sprintf("rollout-2026-09-30T00-00-0%d-s%d.jsonl", i, i)), []byte(meta+line), 0600)
+	}
+	chunks := func() int {
+		requestCache.Lock()
+		defer requestCache.Unlock()
+		return len(requestCache.chunks)
+	}
+	trimmed := func() bool {
+		requestCache.Lock()
+		defer requestCache.Unlock()
+		return requestCache.forget != nil
+	}
+	ask := func() {
+		if p := QueryPage(All, Filter{}, 0, 100); p.Total != 3 {
+			t.Fatalf("total %d, want 3", p.Total)
+		}
+	}
+	wait := func(what string, done func() bool) {
+		for deadline := time.Now().Add(10 * time.Second); !done(); {
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: %d chunks kept", what, chunks())
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	ask()
+	requestCache.Lock()
+	requestIdle = time.Millisecond
+	requestCache.Unlock()
+	ask() // the trim comes a millisecond on; the forget an hour after it
+	wait("trimmed", trimmed)
+	if n := chunks(); n != 3 {
+		t.Fatalf("%d chunks kept after the trim within its bound, want 3", n)
+	}
+
+	// an ask after the trim: the forget armed before it lets nothing go
+	requestCache.Lock()
+	requestIdle = time.Hour
+	requestCache.forget.Reset(time.Millisecond)
+	requestCache.asks++ // as an ask that comes as the forget fires
+	requestCache.Unlock()
+	time.Sleep(50 * time.Millisecond)
+	if n := chunks(); n != 3 {
+		t.Fatalf("%d chunks kept after an ask since the trim, want 3", n)
+	}
+
+	requestCache.Lock()
+	requestIdle, requestForget = time.Millisecond, time.Millisecond
+	requestCache.Unlock()
+	ask()
+	wait("forgotten", func() bool { return chunks() == 0 })
+	ask() // read back from the file of them
+}
