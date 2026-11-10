@@ -55,6 +55,9 @@ func TestSettingsSetGetReset(t *testing.T) {
 		{"redactWords", `["a","b"]`, "a,b"},
 		{"redactWords", "", "[]"},
 		{"codexWarmup", "off", `""`},
+		// the check-in's time of day (times_ang on X), as 09:00
+		{"checkinAt", "9:30", "09:30"},
+		{"checkinAt", "", `""`},
 		{"refusalRetries", "2", "2"},
 		{"otel", `{"enabled":true,"endpoint":"http://127.0.0.1:4318"}`, ""},
 	} {
@@ -92,6 +95,7 @@ func TestSettingsRefusesAndWritesNothing(t *testing.T) {
 		{"settings", "set", "usageAlert", "lots"},
 		{"settings", "set", "usageAlert", "200"}, // the save's own range
 		{"settings", "set", "trayUsageEvery", "4"},
+		{"settings", "set", "checkinAt", "25:00"},
 		{"settings", "set", "vision", "nobody/nothing"},
 		{"settings", "set", "otel", `{"bogus":1}`},
 		{"settings", "set", "theme", "--help-me"},

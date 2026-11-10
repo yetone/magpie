@@ -4,6 +4,11 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "Check-in time": "签到时间",
+    "From {at} each day, for every vendor's check-in": "每天 {at} 起签到，所有服务商的签到都按这个时间",
+    "As soon as each vendor's day starts": "每个服务商的新一天一开始就签到",
+    "A computer asleep then checks in when it wakes.": "到点时电脑在睡眠的话，醒来后再签到。",
+    "checks in from {at}": "{at} 起签到",
     "Archived": "已归档",
     "Everywhere": "所有地方",
     "Preference": "偏好",
@@ -4841,6 +4846,11 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "这份报告已经不在了：magpie 只保留最近 5 份。",
   },
   "zh-TW": {
+    "Check-in time": "簽到時間",
+    "From {at} each day, for every vendor's check-in": "每天 {at} 起簽到，所有服務商的簽到都按這個時間",
+    "As soon as each vendor's day starts": "每個服務商的新一天一開始就簽到",
+    "A computer asleep then checks in when it wakes.": "到點時電腦在睡眠的話，醒來後再簽到。",
+    "checks in from {at}": "{at} 起簽到",
     "Archived": "已封存",
     "Everywhere": "所有地方",
     "Preference": "偏好",
@@ -9663,6 +9673,11 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "這份報告已經不在了：magpie 只保留最近 5 份。",
   },
   ja: {
+    "Check-in time": "チェックインの時刻",
+    "From {at} each day, for every vendor's check-in": "毎日 {at} からチェックイン（すべてのサービスのチェックインに共通）",
+    "As soon as each vendor's day starts": "各サービスの日付が変わったらすぐにチェックイン",
+    "A computer asleep then checks in when it wakes.": "その時刻にスリープ中なら、復帰後にチェックインします。",
+    "checks in from {at}": "{at} からチェックイン",
     "Archived": "アーカイブ済み",
     "Everywhere": "どこでも",
     "Preference": "好み",
@@ -14487,6 +14502,11 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "このレポートはもう残っていません。magpie は最新の 5 件だけを保存します。",
   },
   de: {
+    "Check-in time": "Check-in-Zeit",
+    "From {at} each day, for every vendor's check-in": "Täglich ab {at}, für den Check-in jedes Anbieters",
+    "As soon as each vendor's day starts": "Sobald der Tag des jeweiligen Anbieters beginnt",
+    "A computer asleep then checks in when it wakes.": "Schläft der Computer dann, wird beim Aufwachen eingecheckt.",
+    "checks in from {at}": "Check-in ab {at}",
     "Archived": "Archiviert",
     "Everywhere": "Überall",
     "Preference": "Vorliebe",

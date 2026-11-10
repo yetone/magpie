@@ -665,6 +665,10 @@ func (l *wbCheckinLoop) tick(ctx context.Context, c checkinRunner) []WorkBuddyCh
 	cx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	rs := c.checkinNow(cx, false)
+	// and at the user's time of day, when the day's first ask waits for it
+	if g := checkinGate(now); g.After(now) && (l.again.IsZero() || g.Before(l.again)) {
+		l.again = g
+	}
 	for _, r := range rs {
 		due := time.Time{}
 		if r.Outcome == CheckinFailed {

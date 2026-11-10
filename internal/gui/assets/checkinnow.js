@@ -109,3 +109,30 @@ function checkinNowLine(r, who) {
       return { bad: true, text: t("Couldn't check in {who}: {why}", { who, why: r?.msg || t("Check-in failed") }) };
   }
 }
+
+// ciAtFill draws the check-in's time of day into row (checkinAt; times_ang
+// on X): Off asks as each vendor's day starts, On at 09:00 or the time typed.
+window.ciAtFill = function (row, s) {
+  const at = s.checkinAt || "";
+  const save = (v) => savePrefs({ ...prefsKeep(s), checkinAt: v });
+  const who = el("div", "who");
+  const sub = el("div", "sub", at ? t("From {at} each day, for every vendor's check-in", { at }) : t("As soon as each vendor's day starts"));
+  sub.title = t("A computer asleep then checks in when it wakes.");
+  who.append(el("div", "name", t("Check-in time")), sub);
+  const box = el("div", "warm-at" + (at ? " times" : ""));
+  if (at) {
+    const i = input(at, "09:00", "time");
+    i.className = "at";
+    i.setAttribute("aria-label", t("Time of day"));
+    blurOnEnter(i);
+    i.onchange = () => { if (i.value && i.value !== at) save(i.value); };
+    const one = el("span", "warm-time");
+    one.append(i);
+    const list = el("span", "warm-times");
+    list.append(one);
+    box.append(list);
+  }
+  box.append(segs([["off", t("Off")], ["on", t("On")]], at ? "on" : "off", (v) => save(v === "on" ? at || "09:00" : "")));
+  row.hidden = false;
+  row.append(who, box);
+};

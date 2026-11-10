@@ -6,6 +6,8 @@ package provider
 // rechecked every 30 minutes but for a captcha or own-app answer, which
 // waits on the user, and an answer that may be the vendor's day before
 // (provisional, #3326), asked again every 30 minutes until a claim or an answer from noon on.
+// The loop asks for a day from the time of day the user set on
+// (settings.CheckinAt, checkinGate), else as the day turns.
 // A press asks the vendor again for a done, inactive or ineligible one.
 // What came of it is kept in the vendor's file by its key for reuse
 // (see workbuddy_checkin.go for when a failure is tried again).
@@ -82,6 +84,7 @@ func (c checkiner) checkinNow(ctx context.Context, soon bool) []WorkBuddyCheckin
 	// and an account the user left out is not asked at all, by the loop
 	// or a press (#1902)
 	off := checkinOff()
+	gate := checkinGate(now)
 	for _, a := range c.accounts() {
 		if !a.On || a.key == "" || asked[a.key] || !c.reaches(a.key, off) {
 			continue
@@ -93,6 +96,15 @@ func (c checkiner) checkinNow(ctx context.Context, soon bool) []WorkBuddyCheckin
 		}
 		asked[a.key] = true
 		prev, seen := st[a.key]
+		// the loop asks for a day not yet asked from the user's time of
+		// day on (checkinGate); a press asks at once
+		if !soon && (!seen || prev.Day != day) && now.Before(gate) {
+			if seen {
+				prev.User, prev.By = a.User, c.by
+				out = append(out, prev.shown())
+			}
+			continue
+		}
 		settled := prev.settled(day, now, soon)
 		// a press asks the vendor again for a done, inactive or
 		// ineligible magpie saw no claim for: answered from the record,
@@ -155,6 +167,30 @@ func (c checkiner) checkinNow(ctx context.Context, soon bool) []WorkBuddyCheckin
 		}
 	}
 	return out
+}
+
+// checkinGate is when the loop first asks for the Beijing day now is on:
+// the first time of day settings.CheckinAt names, on now's clock (the
+// computer's zone), at or after the day's start; the start when none is
+// set (as before: as the day turns). Every Beijing day holds one, so a
+// time set never skips one; on a day a clock change leaves without it,
+// the start.
+func checkinGate(now time.Time) time.Time {
+	t := now.In(beijing)
+	start := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, beijing)
+	h, m, ok := settings.Clock(settings.Load().CheckinAt)
+	if !ok {
+		return start
+	}
+	l := start.In(now.Location())
+	at := time.Date(l.Year(), l.Month(), l.Day(), h, m, 0, 0, l.Location())
+	if at.Before(start) {
+		at = time.Date(l.Year(), l.Month(), l.Day()+1, h, m, 0, 0, l.Location())
+	}
+	if !at.Before(start.AddDate(0, 0, 1)) {
+		return start
+	}
+	return at
 }
 
 // unread is how the accounts checkinNow would look at stand while its file
