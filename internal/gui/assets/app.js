@@ -20664,22 +20664,15 @@ const TRAY_TOTALS = [["usage:today", "Tokens and cost today"], ["usage:7d", "Tok
 // how often magpie checks for updates by itself, in minutes (settings.UpdateEveries)
 const UPDATE_EVERY = [30, 60, 360, 1440];
 
-// renderProxy: magpie's own requests to vendors, and its update checks, follow the system proxy on
-// their own; this row says which one, and lets it be turned off or set. A provider, account or key
-// that names a proxy of its own (or Direct) keeps it whatever this says (netproxy.With), so the
-// line says it holds for those without one (#1832).
-let proxyCustom = false; // Custom picked, not saved yet
-// The login has fields of its own; the setting stays one address with it as
-// userinfo, split as Go's url.Parse does (last @, then first :).
+// renderProxy: the proxy for vendors with none of their own, and update checks (#1832); its
+// login in fields of its own, split as url.Parse does (last @, then first :).
 function proxyFields(value) {
   const [, scheme = "", auth, rest] = /^([a-z][\w+.-]*:\/\/)?([^/?#]*)(.*)$/is.exec((value || "").trim());
   const at = auth.lastIndexOf("@"), info = at < 0 ? "" : auth.slice(0, at), c = info.indexOf(":");
   const eu = c < 0 ? info : info.slice(0, c), ep = c < 0 ? "" : info.slice(c + 1);
-  // non-UTF-8 escapes are kept as saved until edited
   const dec = (v) => { try { return decodeURIComponent(v); } catch { return v; } };
   return { address: scheme + auth.slice(at + 1) + rest, username: dec(eu), password: dec(ep), eu, ep };
 }
-// each typed part percent-encoded; one left as loaded keeps its escapes
 function proxyAddress(a, f, user, pass) {
   a = (a || "").trim();
   if (!a || !(user || pass)) return a;
@@ -20687,9 +20680,7 @@ function proxyAddress(a, f, user, pass) {
   const [, scheme = "", rest] = /^([a-z][\w+.-]*:\/\/)?(.*)$/is.exec(a);
   return scheme + enc(user, f.username, f.eu) + (pass ? ":" + enc(pass, f.password, f.ep) : "") + "@" + rest;
 }
-// proxyLoginRow: a proxy login's fields for the proxy rows outside
-// Settings (#3382), split and joined as Settings' row does (proxyFields,
-// proxyAddress), so setURL gets the address Settings would save.
+// proxyLoginRow: Settings' login fields for other proxy rows (#3382)
 function proxyLoginRow(addr, setURL, changed) {
   const fields = {};
   const auth = el("div", "proxy-auth proxy-login");
@@ -20723,12 +20714,10 @@ function proxyLoginRow(addr, setURL, changed) {
   return auth;
 }
 function proxyDisplay(value) {
-  // Also mask an older backend's proxyNow, and environment/system proxies.
   return (value || "").replace(/^(\w+:\/\/)?[^/?#]*@/, "$1");
 }
 function renderProxy(s, keep) {
   const cur = !s.proxy ? "auto" : s.proxy === "direct" ? "off" : "custom";
-  const mode = proxyCustom ? "custom" : cur;
   const sub = $("#proxySub");
   sub.textContent = {
     settings: t("Requests to vendors without a proxy of their own, and update checks, go through {proxy}", { proxy: proxyDisplay(s.proxyNow) }),
@@ -20737,22 +20726,46 @@ function renderProxy(s, keep) {
     off: t("Off: requests to vendors without a proxy of their own, and update checks, go direct"),
     none: t("No system proxy found; requests to vendors without a proxy of their own, and update checks, go direct"),
   }[s.proxySource] || "";
-  const box = $("#proxySegs");
+  const row = proxyRow(s, keep, {
+    key: "proxy", box: $("#proxySegs"), cur, state: proxyState,
+    modes: [["auto", t("Auto")], ["off", t("Off")], ["custom", t("Custom")]],
+    again: () => renderProxy(s, keep),
+  });
+  renderProxyCheck(s, row);
+  renderPluginProxy(s, keep);
+}
+const proxyState = { custom: false };
+// plugin downloads' proxy (JonahFu on X); plugins' vendor requests follow the one above
+const pluginProxyState = { custom: false };
+function renderPluginProxy(s, keep) {
+  const v = (s.pluginProxy || "").trim();
+  const cur = !v ? "auto" : v === "direct" ? "off" : "custom";
+  $("#pluginProxySub").textContent = cur === "auto" ? t("Plugins, npm and GitHub go through the proxy above")
+    : cur === "off" ? t("Plugins, npm and GitHub go direct") : t("Plugins, npm and GitHub go through {proxy}", { proxy: proxyDisplay(v) });
+  proxyRow(s, keep, {
+    key: "pluginProxy", box: $("#pluginProxySegs"), cur, state: pluginProxyState,
+    modes: [["auto", t("Same as above")], ["off", t("Direct")], ["custom", t("Custom")]],
+    again: () => renderPluginProxy(s, keep),
+  });
+}
+// proxyRow: o.key's modes, and Custom's address and login; o.state.custom is Custom not saved yet.
+function proxyRow(s, keep, o) {
+  const mode = o.state.custom ? "custom" : o.cur;
+  const box = o.box;
   box.replaceChildren();
   const row = el("div", "proxy-controls");
   box.append(row);
   let picking = false;
   let saveOnLeave = null;
   const pick = (id) => {
-    proxyCustom = id === "custom";
-    if (id === "auto") savePrefs({ ...keep, proxy: "" });
-    else if (id === "off") savePrefs({ ...keep, proxy: "direct" });
-    else renderProxy(s, keep);
+    o.state.custom = id === "custom";
+    if (id === "auto") savePrefs({ ...keep, [o.key]: "" });
+    else if (id === "off") savePrefs({ ...keep, [o.key]: "direct" });
+    else o.again();
   };
   if (mode === "custom") {
-    // Custom picked again after Off or Auto: the last one saved, login and
-    // all, which settings.Save keeps as proxyCustom (Zane on Discord)
-    let fields = proxyFields(cur === "custom" ? s.proxy : s.proxyCustom || "");
+    // Custom again: the last saved, s[o.key + "Custom"] (Zane on Discord)
+    let fields = proxyFields(o.cur === "custom" ? s[o.key] : s[o.key + "Custom"] || "");
     const i = input(fields.address, "http://127.0.0.1:7890");
     i.className = "proxy";
     i.setAttribute("aria-label", t("Proxy address"));
@@ -20763,7 +20776,6 @@ function renderProxy(s, keep) {
       field.className = "proxy-credential";
       field.setAttribute("aria-label", field.placeholder);
     }
-    // a pasted login moves into the fields
     i.oninput = () => {
       const parsed = proxyFields(i.value);
       if (parsed.username || parsed.password) {
@@ -20777,19 +20789,18 @@ function renderProxy(s, keep) {
       if (!i.value.trim() || saving) return;
       let v;
       try { v = proxyAddress(i.value, fields, username.value, password.value); } catch { return; }
-      if (v === s.proxy) return;
+      if (v === s[o.key]) return;
       saving = true;
-      proxyCustom = false;
-      savePrefs({ ...keep, proxy: v });
+      o.state.custom = false;
+      savePrefs({ ...keep, [o.key]: v });
     };
-    // Moving between fields must not redraw the row with a partial login.
-    // A mode click makes its own save and must not also save the old draft.
+    // no save between fields, nor of the draft on a mode click
     saveOnLeave = (e) => {
       if (box.contains(e.relatedTarget)) return;
       queueMicrotask(() => { if (i.isConnected && !picking) save(); });
     };
     for (const field of [i, username, password]) {
-      field.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") save(); else if (e.key === "Escape") { proxyCustom = false; renderProxy(s, keep); } };
+      field.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") save(); else if (e.key === "Escape") { o.state.custom = false; o.again(); } };
       field.onfocus = () => { picking = false; };
       field.onblur = saveOnLeave;
     }
@@ -20799,22 +20810,17 @@ function renderProxy(s, keep) {
     auth.append(username, password, apply);
     row.append(i);
     box.append(auth);
-    if (proxyCustom) queueMicrotask(() => i.focus());
+    if (o.state.custom) queueMicrotask(() => i.focus());
   }
-  const modes = segs([["auto", t("Auto")], ["off", t("Off")], ["custom", t("Custom")]], mode, pick);
-  // WebKit doesn't focus clicked buttons, so relatedTarget alone can't tell
-  // a mode click from leaving the proxy editor.
+  const modes = segs(o.modes, mode, pick);
+  // WebKit doesn't focus clicked buttons
   modes.onpointerdown = () => { picking = true; };
   for (const button of modes.querySelectorAll("button")) button.onblur = saveOnLeave;
   row.append(modes);
-  renderProxyCheck(s, row);
+  return row;
 }
 
-// renderProxyCheck: Test (#2076), whether magpie's requests leave by the
-// proxy: POST /api/proxy/check asks Cloudflare's trace through it and
-// direct, and the row says each exit. One exit both ways fails only when
-// the proxy didn't connect (a TUN or VPN gives one, #2369). Kept until the
-// proxy changes.
+// renderProxyCheck: Test (#2076), the exits through the proxy and direct; one both ways fails only if it didn't connect (#2369).
 let proxyCheck = null; // { key, busy, out, err }
 function renderProxyCheck(s, row) {
   const key = (s.proxySource || "") + "|" + (s.proxyNow || "");
@@ -22664,7 +22670,7 @@ function dockChoice(s) {
 
 // prefsKeep is what the settings page sends of s, all of it each time.
 function prefsKeep(s) {
-  return { theme: s.theme, colorblind: !!s.colorblind, reduceMotion: !!s.reduceMotion, noBird: !!s.noBird, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, dockNever: !!s.dockNever, lightweight: s.lightweight, keepAwake: !!s.keepAwake, keepAwakeDisplay: !!s.keepAwakeDisplay, noWSLAgents: !!s.noWSLAgents, quitNoAsk: !!s.quitNoAsk, proxy: s.proxy || "",
+  return { theme: s.theme, colorblind: !!s.colorblind, reduceMotion: !!s.reduceMotion, noBird: !!s.noBird, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, dockNever: !!s.dockNever, lightweight: s.lightweight, keepAwake: !!s.keepAwake, keepAwakeDisplay: !!s.keepAwakeDisplay, noWSLAgents: !!s.noWSLAgents, quitNoAsk: !!s.quitNoAsk, proxy: s.proxy || "", pluginProxy: s.pluginProxy || "",
     sessionTerminal: s.sessionTerminal || "",
     uiFont: s.uiFont || null, codeFont: s.codeFont || null,
     otel: s.otel || {},

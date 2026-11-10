@@ -398,13 +398,14 @@ func pruneAuto(dir, reason string, keep int, now time.Time) {
 }
 
 // autoCollect is the setup as an export without keys holds it, and the
-// proxy taken out too: it may name a password, the file isn't sealed, and
+// proxies (plugin downloads' too) taken out: it may name a password, the file isn't sealed, and
 // a restore keeps this computer's own proxy (KeepOwn) anyway.
 func autoCollect(app string) (Bundle, error) {
 	b, err := Collect(false, app)
 	if err == nil && b.Settings != nil {
 		s := *b.Settings
 		s.Proxy, s.ProxyCustom = "", ""
+		s.PluginProxy, s.PluginProxyCustom = "", ""
 		b.Settings = &s
 	}
 	return b, err

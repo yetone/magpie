@@ -1015,6 +1015,11 @@ func command(ctx context.Context, name string, args ...string) *exec.Cmd {
 // env is the plugins' environment: magpie's, with its proxy.
 func env() []string { return netproxy.Env(os.Environ()) }
 
+// dlEnv is env for a program that downloads plugins (bun add, update and
+// remove, git): plugin downloads' proxy where Settings sets one
+// (netproxy.EnvDownloads), never the one a plugin's requests take.
+func dlEnv() []string { return netproxy.EnvDownloads(os.Environ()) }
+
 // Version is the version of the package spec installed (or checked out
 // at its path), "" when there is none.
 func Version(spec string) string {

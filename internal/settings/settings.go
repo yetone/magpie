@@ -118,7 +118,19 @@ type Settings struct {
 	// Save sets it from Proxy, and it is stored as Proxy is. This
 	// computer's own (KeepOwn), as Proxy is.
 	ProxyCustom string `json:"proxyCustom,omitempty"`
-	OTel        OTel   `json:"otel,omitempty"`
+	// PluginProxy is the proxy magpie downloads plugins through: the
+	// plugins list, npm's registry, GitHub, the plugins repo's dist
+	// branch, Bun's own download, and bun add, update and git clone
+	// (JonahFu on X: GitHub needs a proxy where the vendors don't). ""
+	// follows Proxy, as every download did before; "direct" uses none;
+	// anything else is the proxy, as Proxy takes it. A plugin's requests
+	// to its vendor are API requests and follow Proxy (and the
+	// provider's or account's own), never this. This computer's own
+	// (KeepOwn), as Proxy is.
+	PluginProxy string `json:"pluginProxy,omitempty"`
+	// PluginProxyCustom is PluginProxy's ProxyCustom.
+	PluginProxyCustom string `json:"pluginProxyCustom,omitempty"`
+	OTel              OTel   `json:"otel,omitempty"`
 	// GitHubToken is a GitHub token the library's requests to GitHub's
 	// API carry, raising its rate limit from 60 requests an hour to 5,000.
 	// It is a secret: the Settings page is told only a masked one, and a
@@ -1462,7 +1474,7 @@ func (s Settings) Compact() int {
 
 // KeepOwn puts back cur's settings that are this computer's own, which a
 // sync or a restored backup never brings from another: the window's size,
-// place and whether it was maximised, the proxy, the gateway's port, whether it
+// place and whether it was maximised, the proxy (and plugin downloads'), the gateway's port, whether it
 // is shared on the local network and the addresses let in to it, what
 // its MCP router says of itself, the Dock, gateway mode, whether WSL is
 // looked in, whether agents' sign-ins are read, when allowances are read, the terminal app a session resumes
@@ -1478,6 +1490,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.Window, s.Proxy, s.Port, s.Dock, s.DockWindow, s.Lightweight = cur.Window, cur.Proxy, cur.Port, cur.Dock, cur.DockWindow, cur.Lightweight
 	s.DockNever, s.DockSettled = cur.DockNever, cur.DockSettled
 	s.ProxyCustom = cur.ProxyCustom
+	s.PluginProxy, s.PluginProxyCustom = cur.PluginProxy, cur.PluginProxyCustom
 	s.WindowMaximised, s.KeepAwake, s.KeepAwakeDisplay = cur.WindowMaximised, cur.KeepAwake, cur.KeepAwakeDisplay
 	s.WindowAt = cur.WindowAt
 	s.TrayUsages, s.TrayUsage, s.TrayUsageEvery, s.TrayNoLogos, s.TrayNoBird, s.TrayPace, s.TrayNoCost = cur.TrayUsages, cur.TrayUsage, cur.TrayUsageEvery, cur.TrayNoLogos, cur.TrayNoBird, cur.TrayPace, cur.TrayNoCost
@@ -2292,6 +2305,13 @@ func saveOwn(s Settings, recording, reads bool) error {
 	}
 	if s.Proxy != "" && s.Proxy != "direct" {
 		s.ProxyCustom = s.Proxy
+	}
+	s.PluginProxy = strings.TrimSpace(s.PluginProxy)
+	if err := CheckProxy(s.PluginProxy); err != nil {
+		return fmt.Errorf("plugin downloads: %w", err)
+	}
+	if s.PluginProxy != "" && s.PluginProxy != "direct" {
+		s.PluginProxyCustom = s.PluginProxy
 	}
 	s.Vision = strings.TrimSpace(s.Vision)
 	if s.Vision != "" && s.Vision != "off" && !strings.Contains(s.Vision, "/") {

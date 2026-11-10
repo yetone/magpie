@@ -37,7 +37,7 @@ var Keys = []string{
 	// usage and alerts
 	"currency", "chineseUnits", "usageAlert", "balanceAlert", "resetReminder", "turnDoneAlert", "maskAlert",
 	// network
-	"proxy",
+	"proxy", "pluginProxy",
 	// privacy
 	"redact", "redactPersonal", "redactKinds", "redactWords", "redactWordsAnyCase", "redactWordsWhole", "redactShape",
 	"noStats", "noUsageStats", "otel",
@@ -291,6 +291,7 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	in.RouterAllTools = cur.RouterAllTools             // set on its own (the Library's servers/hub-tools)
 	in.GitHubToken = cur.GitHubToken                   // set on its own (github-token), never sent to the page
 	in.ProxyCustom = cur.ProxyCustom                   // set by settings.Save from the proxy, never by the page
+	in.PluginProxyCustom = cur.PluginProxyCustom       // and plugin downloads' from theirs
 	in.RequestArchive = cur.RequestArchive             // the Gateway page's, set on its own
 	in.RequestArchiveMaxMB = cur.RequestArchiveMaxMB   // in settings.json only
 	in.ClaudeRunsMost = cur.ClaudeRunsMost             // magpie claude-code runs, or settings.json (#2956)

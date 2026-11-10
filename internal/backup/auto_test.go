@@ -179,12 +179,13 @@ func TestAutoBackupPrunes(t *testing.T) {
 	}
 }
 
-// What a backup holds is what an export without keys holds, the proxy
-// left out too: nothing secret is in the file.
+// What a backup holds is what an export without keys holds, the proxies
+// (plugin downloads' too) left out: nothing secret is in the file.
 func TestAutoBackupHoldsNoSecrets(t *testing.T) {
 	autoHome(t)
 	s := settings.Load()
 	s.GitHubToken, s.LANKey, s.Proxy = "ghp_SYNTHETIC_PRIVATE_TOKEN", "lan-SYNTHETIC-KEY", "http://user:proxy-SYNTHETIC-pass@10.0.0.1:8080"
+	s.PluginProxy = "socks5://user:plugin-SYNTHETIC-pass@10.0.0.2:1080"
 	if err := settings.Save(s); err != nil {
 		t.Fatal(err)
 	}
@@ -216,6 +217,7 @@ func TestAutoBackupHoldsNoSecrets(t *testing.T) {
 	}
 	ws := *want.Settings
 	ws.Proxy, ws.ProxyCustom = "", ""
+	ws.PluginProxy, ws.PluginProxyCustom = "", ""
 	want.Settings, want.Created, want.App = &ws, time.Time{}, ""
 	raw, _ := json.Marshal(want)
 	var wantBack Bundle

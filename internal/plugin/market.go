@@ -21,6 +21,7 @@ import (
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/ghtoken"
+	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/source"
 	"github.com/yetone/magpie/internal/update"
 )
@@ -284,6 +285,8 @@ func fetchJSONFaithful(ctx context.Context, u string, limit int64) ([]byte, erro
 }
 
 func fetchJSONFrom(ctx context.Context, u string, limit int64, do func(*http.Client, *http.Request) (*http.Response, error)) ([]byte, error) {
+	// through plugin downloads' proxy, where Settings sets one
+	ctx = netproxy.Downloads(ctx)
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
 		return nil, err

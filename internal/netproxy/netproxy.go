@@ -137,6 +137,24 @@ func With(ctx context.Context, choice string) context.Context {
 	return ctx
 }
 
+// Downloads is ctx for magpie's downloads of plugins — the plugins list,
+// npm's registry, GitHub, the plugins repo's dist branch, Bun itself —
+// which go through the proxy Settings sets for them (PluginProxy) when it
+// names one (JonahFu on X: GitHub reached only through a proxy, the
+// vendors without). Its "" leaves ctx as it is, so they follow the
+// global proxy as every other request does.
+func Downloads(ctx context.Context) context.Context {
+	if c := strings.TrimSpace(settings.Load().PluginProxy); c != "" {
+		return With(ctx, c)
+	}
+	return ctx
+}
+
+// EnvDownloads is Env for a program magpie starts to download plugins
+// (bun add and update, git): plugin downloads' proxy (Downloads), or,
+// when that names none, Env's.
+func EnvDownloads(env []string) []string { return EnvWith(settings.Load().PluginProxy, env) }
+
 // Choice is the proxy ctx names (With), "" when it names none — for a CLI
 // run on a provider's behalf, whose *_PROXY is set from it (EnvWith).
 func Choice(ctx context.Context) string { return choiceOf(ctx) }

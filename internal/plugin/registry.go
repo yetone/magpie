@@ -14,6 +14,7 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
+	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/source"
@@ -314,6 +315,7 @@ func fetchNPM(ctx context.Context, name, suffix string, limit int64) ([]byte, er
 // fetchRegistry gets u from a registry of the user's, with its token; the
 // token never goes to any other address (a mirror, a redirect elsewhere).
 func fetchRegistry(ctx context.Context, u, token string, limit int64) ([]byte, error) {
+	ctx = netproxy.Downloads(ctx) // plugin downloads' proxy
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
 		return nil, err

@@ -347,6 +347,7 @@ func getURLOfficial(ctx context.Context, url string, limit int64) ([]byte, error
 // off (netproxy.AgainOverHTTP1): Bun's zip is tens of MB, which a proxy
 // that cuts HTTP/2 streams part way breaks on each try over HTTP/2.
 func getURLFrom(ctx context.Context, url string, limit int64, mirror bool) ([]byte, error) {
+	ctx = netproxy.Downloads(ctx)
 	var b []byte
 	err := netproxy.AgainOverHTTP1(ctx, func(ctx context.Context) (err error) {
 		b, err = getURLOnce(ctx, url, limit, mirror)
@@ -402,7 +403,14 @@ func getURLOnce(ctx context.Context, url string, limit int64, mirror bool) (b []
 var bunCommand = func(ctx context.Context, bun, dir string, args ...string) *exec.Cmd {
 	cmd := command(ctx, bun, args...)
 	cmd.Dir = dir
-	cmd.Env = append(netproxy.EnvForBun(env()), "BUN_INSTALL_CACHE_DIR="+installCacheDir())
+	// bun run is the host, whose requests are the plugins' own to their
+	// vendors: magpie's proxy. Every other command downloads plugins, and
+	// takes plugin downloads' proxy (dlEnv).
+	e := dlEnv()
+	if len(args) > 0 && args[0] == "run" {
+		e = env()
+	}
+	cmd.Env = append(netproxy.EnvForBun(e), "BUN_INSTALL_CACHE_DIR="+installCacheDir())
 	cmd.Env = append(cmd.Env, caEnv(cmd.Env, dir)...)
 	cmd.Env = append(cmd.Env, registryEnv(cmd.Env)...)
 	return cmd
