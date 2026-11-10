@@ -16,6 +16,9 @@ const assets = path.resolve(__dirname, "../assets");
 
 const before = "Not connected · on magpie, Claude Desktop opens a separate profile: chats and projects from your Anthropic sign-in stay, and are back when you turn it off";
 const once = "Chats and projects from your Anthropic sign-in stay in Desktop's own profile, not shown on magpie; nothing is deleted, and turning this off brings them back.";
+// and how to go on with them on magpie, in Desktop's own importer
+// (Jacky_yyyyyyyy on X)
+const resume = "To go on with them on magpie, open Settings → Import in Desktop: it can copy in your Claude.ai chats and projects and this computer's earlier sessions, and leaves the originals as they are.";
 const plain = "Not connected · {agent} uses its own settings";
 
 function fixture(lang, wired) {
@@ -69,7 +72,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.route("**/*", fixture(lang, false));
         await page.goto("http://magpie.test/?view=agents");
         await page.locator(`${row("claude-desktop")} .ag-st`).waitFor();
-        for (const k of [before, once]) assert.ok(await tr(k), `${lang} has ${k.slice(0, 40)}`);
+        for (const k of [before, once, resume]) assert.ok(await tr(k), `${lang} has ${k.slice(0, 40)}`);
         assert.equal(await page.locator(`${row("claude-desktop")} .ag-st`).textContent(), await tr(before));
         assert.equal(await page.locator(`${row("codex")} .ag-st`).textContent(), (await tr(plain)).replace("{agent}", "Codex"));
         const wide = await page.evaluate(() => document.scrollingElement.scrollWidth - document.scrollingElement.clientWidth);
@@ -82,7 +85,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator(`${row("claude-desktop")} .ag-link`, { hasText: details[lang] }).click();
         const exp = page.locator(`${row("claude-desktop")} .ag-exp`);
         await exp.waitFor();
-        assert.ok((await exp.textContent()).includes(await tr(once)), await exp.textContent());
+        assert.ok((await exp.textContent()).includes((await tr(once)) + " " + (await tr(resume))), await exp.textContent());
         assert.deepEqual(errors, []);
       });
     }
