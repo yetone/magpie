@@ -1333,6 +1333,7 @@ func zone() string {
 }
 
 func loadCache() {
+	cacheUsed()
 	z := zone()
 	if loaded && z == cacheZone {
 		return
@@ -1444,6 +1445,9 @@ var saving struct {
 	gap     time.Duration // the shortest gap the saves folded into next asked
 	wrote   time.Time     // when the last save was written
 	hurry   bool          // Saved is waiting: no save waits out saveGap
+	// failed says the last write didn't reach the disk: the parses in
+	// memory are then the only ones, and stay (dropIdleCache)
+	failed bool
 }
 
 type save struct {
@@ -1480,6 +1484,12 @@ func writeCache(c *save) {
 	if saveHook != nil {
 		saveHook()
 	}
+	ok := false
+	defer func() {
+		saving.Lock()
+		saving.failed = !ok
+		saving.Unlock()
+	}()
 	dir := filepath.Dir(c.path)
 	if os.MkdirAll(dir, 0o755) != nil {
 		return
@@ -1497,7 +1507,9 @@ func writeCache(c *save) {
 	}
 	if err != nil || os.Rename(tmp.Name(), c.path) != nil {
 		os.Remove(tmp.Name())
+		return
 	}
+	ok = true
 }
 
 // refresh parses those of want that changed since their parse was kept, a
