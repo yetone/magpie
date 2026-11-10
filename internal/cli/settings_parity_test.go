@@ -337,6 +337,7 @@ var notYet = map[string]string{
 	"POST /api/dev/import":                       W,  // dev_on.go
 	"GET /api/fonts":                             W,  // fonts.go
 	"POST /api/settings/gateway-mode":            S2, // gatewaymode.go
+	"POST /api/gateway/pause":                    A,  // gatewaypause.go
 	"POST /api/gateway/restart":                  A,  // gateway_takeover.go
 	"POST /api/gateway/take-over":                A,  // gateway_takeover.go
 	"GET /api/importapps":                        P,  // importapps.go
