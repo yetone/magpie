@@ -494,3 +494,42 @@ func TestQueuedUpstreamKeepsResponsesClientAlive(t *testing.T) {
 	}
 	t.Logf("events=%d upstream_comments=%d", events, comments.Load())
 }
+
+// A translated reply's reader can outlive the request that started it: a
+// model test (probeTranslated) returns at the first word and leaves the
+// reader to see the cancel. The reader read keepaliveEvery itself, so a
+// later test's keepFast wrote it with no order between the two, and the
+// race detector failed TestQueuedStreamKeptAliveForTheMinute on CI
+// (#5973). The interval is read on the request's goroutine now; under
+// -race this test fails on the old code.
+func TestTranslatedReaderReadsNoKeepaliveLater(t *testing.T) {
+	fresh(t)
+	release := make(chan struct{})
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, "data: {\"id\":\"c1\",\"object\":\"chat.completion.chunk\",\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"}}]}\n\n")
+		w.(http.Flusher).Flush()
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(up.Close)
+	t.Cleanup(func() { close(release) })
+	p := provider.Provider{ID: "q", Name: "Q", Key: "k", Models: []string{"m"}, Chat: up.URL + "/v1"}
+	ctx, cancel := context.WithCancel(context.Background())
+	events, code, msg := New().askTranslated(p, provider.Chat, "m", http.Header{}, http.Header{})(ctx, &Request{MaxTokens: 16, Messages: []Message{{Role: "user", Parts: []Part{{Kind: Text, Text: "hi"}}}}})
+	if events == nil {
+		t.Fatalf("asked: %d %s", code, msg)
+	}
+	for ev := range events {
+		if ev.Kind == KText {
+			break
+		}
+	}
+	// the reader is still running, as a model test leaves it
+	keepFast(t, 10*time.Millisecond, 20*time.Millisecond, keepaliveLongest)
+	cancel()
+	for range events {
+	}
+}

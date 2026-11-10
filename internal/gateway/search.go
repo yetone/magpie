@@ -1468,6 +1468,9 @@ func (s *Server) askTranslated(p provider.Provider, to provider.Protocol, model 
 			return nil, 502, p.Name + " " + didNotStream + ": " + provider.APIError(b, "unexpected reply")
 		}
 		events := make(chan Event, 16)
+		// read here, on the request's goroutine: the reader below can
+		// outlive the request (#5973)
+		every, gap := keepaliveEvery, keepaliveGap
 		go func() {
 			defer close(events)
 			defer res.Body.Close()
@@ -1486,8 +1489,8 @@ func (s *Server) askTranslated(p provider.Provider, to provider.Protocol, model 
 			// provider says nothing at all, as streamTranslated's client
 			// does (keepThroughSilence)
 			var mu sync.Mutex
-			heard, stopKeep := keepThroughSilence(&mu, func() {
-				if failed == nil && time.Since(told) >= keepaliveEvery/2 {
+			heard, stopKeep := keepThroughSilence(every, &mu, func() {
+				if failed == nil && time.Since(told) >= every/2 {
 					failed = send(Event{Kind: KAlive})
 					told = time.Now()
 				}
@@ -1512,7 +1515,7 @@ func (s *Server) askTranslated(p provider.Provider, to provider.Protocol, model 
 				// a provider still queued or thinking — keepalives,
 				// response.in_progress — is heard from with nothing to
 				// translate: the reader hears that it goes on (#2316)
-				if failed == nil && time.Since(told) >= keepaliveGap {
+				if failed == nil && time.Since(told) >= gap {
 					failed = send(Event{Kind: KAlive})
 					told = time.Now()
 				}

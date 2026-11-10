@@ -9371,19 +9371,20 @@ var pingEvery = time.Minute
 
 // keepThroughSilence keeps a translated reply's client alive while its
 // upstream, its 200 and stream begun, says nothing at all: keep is
-// called every keepaliveEvery, until stop, while the upstream was last
+// called every every (keepaliveEvery, read by the caller on its
+// request's own goroutine, since this one can outlive it), until stop, while the upstream was last
 // heard (heard, at each event or comment it sends) less than
 // translatedQuietLongest ago. keep is called holding lock, which the
 // caller holds around everything else it writes to the client. Before,
 // such a reply sent its client nothing until the upstream spoke, and
 // Claude Code's watchdog ended it (youyo.p on Discord).
-func keepThroughSilence(lock sync.Locker, keep func()) (heard, stop func()) {
+func keepThroughSilence(every time.Duration, lock sync.Locker, keep func()) (heard, stop func()) {
 	var mu sync.Mutex
 	last := time.Now()
 	done, over := make(chan struct{}), make(chan struct{})
 	go func() {
 		defer close(over)
-		tick := time.NewTicker(keepaliveEvery)
+		tick := time.NewTicker(every)
 		defer tick.Stop()
 		for {
 			select {

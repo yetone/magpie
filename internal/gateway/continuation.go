@@ -648,7 +648,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 				// upstream's 200 is in, and a holdWriter holds what is
 				// written for another candidate to answer still
 				var wmu sync.Mutex
-				heard, stopKeep := keepThroughSilence(&wmu, func() {
+				heard, stopKeep := keepThroughSilence(keepaliveEvery, &wmu, func() {
 					if failed == "" && !cut && !relooped && sw.quiet() >= keepaliveEvery/2 {
 						enc.keepalive()
 					}
