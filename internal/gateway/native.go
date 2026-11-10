@@ -313,9 +313,12 @@ func nativeHeaderDropped(k string) bool {
 // proxyIdentity says k is what a proxy or tunnel in front of magpie says
 // of the caller: its address (every forwardHeaders entry, X-Forwarded-*,
 // Cloudflare's Cf-*) or who it is (Tailscale Serve's Tailscale-User-Login,
-// the user's email, -Name and -Profile-Pic). It is for magpie to judge a
-// request by (proxied), never for a vendor or a server magpie passes the
-// request on to.
+// the user's email, -Name and -Profile-Pic; a LazyCat box's X-HC-*, the
+// box account a signed-in browser or app is, its role, its device and
+// when it signed in, which the box's ingress adds to every request it
+// passes an app, the gateway's client routes too). It is for magpie to
+// judge a request by (proxied), never for a vendor or a server magpie
+// passes the request on to.
 func proxyIdentity(k string) bool {
 	k = http.CanonicalHeaderKey(k)
 	if slices.ContainsFunc(forwardHeaders, func(h string) bool { return http.CanonicalHeaderKey(h) == k }) {
@@ -325,7 +328,7 @@ func proxyIdentity(k string) bool {
 	case "Forwarded", "Via", "X-Real-Ip", "True-Client-Ip", "X-Client-Ip", "X-Original-Forwarded-For":
 		return true
 	}
-	return strings.HasPrefix(k, "X-Forwarded-") || strings.HasPrefix(k, "Cf-") || strings.HasPrefix(k, "Tailscale-")
+	return strings.HasPrefix(k, "X-Forwarded-") || strings.HasPrefix(k, "Cf-") || strings.HasPrefix(k, "Tailscale-") || strings.HasPrefix(k, "X-Hc-")
 }
 
 // nativeAnswerDropped are the vendor's answer headers that don't come

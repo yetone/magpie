@@ -14,11 +14,17 @@ import (
 
 // identityHeaders are what a proxy or tunnel in front of magpie says of
 // the caller: where it is, and with Tailscale Serve who (the user's
-// email, name and picture).
+// email, name and picture). A LazyCat box's ingress (lzc-ingress, in
+// front of every app on the box) says who too: the box account signed
+// in, its role and groups, the device and the sign-in's ticket, as the
+// box's own docs and a request to a probe app on a box (lzcos 1.6.2)
+// name them.
 var identityHeaders = []string{
 	"Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto", "X-Real-IP", "Via",
 	"Cf-Connecting-IP", "Cf-Ipcountry", "True-Client-IP",
 	"Tailscale-User-Login", "Tailscale-User-Name", "Tailscale-User-Profile-Pic",
+	"X-Forwarded-By", "X-HC-User-ID", "X-HC-User-Role", "X-HC-User-Groups", "X-HC-User-Ticket", "X-HC-Source",
+	"X-HC-Login-Time", "X-HC-Device-ID", "X-HC-Device-PeerID", "X-HC-Device-Version", "X-HC-Original-Host",
 }
 
 // identityHeadersOn is a request's headers: every identity header, and

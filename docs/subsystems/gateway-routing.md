@@ -1132,11 +1132,14 @@ OpenAI shape can't carry. GET, POST, PUT, PATCH and DELETE
   `proxyIdentity`: every name lanGuard reads as forwarded
   (`forwardHeaders`: `Forwarded`, `X-Forwarded-For`, `X-Real-IP`,
   `Cf-Connecting-IP`, `True-Client-IP`, `Tailscale-User-Login`), any
-  `X-Forwarded-*`, `Cf-*` and `Tailscale-*` (Tailscale Serve's user
-  login, name and picture), `Via`, `X-Client-IP` and
+  `X-Forwarded-*`, `Cf-*`, `Tailscale-*` (Tailscale Serve's user
+  login, name and picture) and `X-HC-*` (a LazyCat box's ingress: the
+  box account signed in, its role and device), `Via`, `X-Client-IP` and
   `X-Original-Forwarded-For`. The Codex passthrough and relay to the
   ChatGPT backend (`copyHeaders`) and the MCP proxy drop the same; see
   `TestNativeAnyDropsProxyIdentity` and `TestPassthroughDropsProxyIdentity`.
+  A provider's `PassHeaders` still passes on the names it lists, these
+  too: the user chose them.
   `Sign` puts in the provider's key as it takes one, and magpie's
   User-Agent goes in (`stampUA`). The answer's hop headers, `Set-Cookie`,
   `Alt-Svc` and HSTS don't come back (`nativeAnswerDropped`).
