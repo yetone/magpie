@@ -583,12 +583,13 @@ func (s *Server) planPaused(p provider.Provider, model string, from provider.Pro
 }
 
 // groupsAfter is p with the routing groups the user built that have p's
-// model in them (provider.GroupsAfter) added after its own fallbacks,
-// those it has already left out; ok is false when there are none to add.
-func groupsAfter(p provider.Provider, model string) (provider.Provider, bool) {
+// model in them (provider.GroupsAfter), then also, added after its own
+// fallbacks, those it has already left out; ok is false when there are
+// none to add.
+func groupsAfter(p provider.Provider, model string, also ...string) (provider.Provider, bool) {
 	var add []string
-	for _, id := range provider.GroupsAfter(p.ID + "/" + model) {
-		if !slices.Contains(p.Fallback, id) {
+	for _, id := range append(provider.GroupsAfter(p.ID+"/"+model), also...) {
+		if !slices.Contains(p.Fallback, id) && !slices.Contains(add, id) {
 			add = append(add, id)
 		}
 	}

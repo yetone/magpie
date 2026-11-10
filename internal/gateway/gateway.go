@@ -2931,7 +2931,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// the groups the user built with this model in them go on from
 			// it, as a request to the group would (the Codex app asks
 			// Codex's own model, never the group)
-			if q, ok := groupsAfter(p, model); ok {
+			// Codex's auto-review on codex-auto-review, which no group has,
+			// goes on where its conversation's turns go (codexReviewAfter)
+			if q, ok := groupsAfter(p, model, s.codexReviewAfter(r, p, model, body)...); ok {
 				cands, pl = s.planPaused(q, model, from, pausedIn)
 			}
 		}
@@ -2939,6 +2941,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// Codex's own sign-in, asked as often as it is asked: only
 			// the fallbacks are left (codexFallBack)
 			cands, pl = fallbacksOnly(cands, pl, p.ID, model)
+			if lead := s.codexReviewLead(r, p, model, body); lead != "" && !strings.Contains(lead, "/") {
+				// and an auto-review's, on the conversation's model through
+				// that same sign-in, in a group it goes on to
+				cands, pl = fallbacksOnly(cands, pl, p.ID, lead)
+			}
 		}
 		if provider.IsFastPick(agent, p.ID+"/"+model) {
 			// the agent's pick of it is sent in its vendor's fast mode

@@ -994,6 +994,15 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	if r.Method == http.MethodPost && (rest == "/responses" || rest == "/responses/compact") {
 		holdKey = codexHoldKey(base, on)
 		if h, ok := codexHeld(holdKey, start); ok {
+			if rest == "/responses" && base == provider.CodexBase && on == nil && s.codexFallsBack(r, body0) {
+				// Codex's own sign-in held, and somewhere for the turn to
+				// go on to: the fallbacks answer, as they did the refusal
+				// that held it, not Codex handed that refusal again while
+				// it lasts (riverleaf88 on X: the turn after went on to
+				// the group no more, nor did the auto-review)
+				s.codexFallBack(w0, r, body0, &keptAlive{proto: provider.Responses, told: start, streams: streamOf(body0)})
+				return
+			}
 			s.writeCodexHeld(w, r, h, base, on, modelOf(body), start)
 			return
 		}
@@ -1423,7 +1432,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 			// its credits and resets looked at above, a 429 that names
 			// when the account is back holds it till then (codexHolds)
 			noteCodexHold(holdKey, res.StatusCode, res.Header, msg)
-			if overload && codexBusy(res.StatusCode, msg) && s.codexFallsBack(modelOf(body), body) {
+			if overload && codexBusy(res.StatusCode, msg) && s.codexFallsBack(r, body) {
 				// still too busy once asked again: the fallbacks answer
 				said := provider.APIError(msg, res.Status)
 				handOn(res.StatusCode, said, 0)
@@ -1431,7 +1440,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 				s.codexFallBack(w0, r, body0, kept)
 				return
 			}
-			if overload && codexAccountOut(res.StatusCode, msg) && s.codexFallsBack(modelOf(body), body) {
+			if overload && codexAccountOut(res.StatusCode, msg) && s.codexFallsBack(r, body) {
 				// the account out of its allowance (its credits and resets
 				// looked at above): the fallbacks answer, as they do for a
 				// turn through magpie's accounts, rather than Codex handed
@@ -1461,7 +1470,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		// come, an error before them held for the turn to be asked again
 		out := w
 		var hw *holdWriter
-		if overload && streams && (busyAgain < lastRetries || kept.sent || s.codexFallsBack(modelOf(body), body)) {
+		if overload && streams && (busyAgain < lastRetries || kept.sent || s.codexFallsBack(r, body)) {
 			hw = newHoldWriter(w, true)
 			hw.alive, hw.streams, hw.ctx, hw.stop = kept, true, r.Context(), cancel
 			// reasoning goes to Codex at once, as it always went
@@ -1542,7 +1551,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 				}
 				continue
 			}
-			if s.codexFallsBack(modelOf(body), body) {
+			if s.codexFallsBack(r, body) {
 				res.Body.Close()
 				handOn(hw.failure, said, 0)
 				end(hw.failure, said, 0, 0)
@@ -1550,7 +1559,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 				return
 			}
 		}
-		if hw.mayAskAgain() && hw.failure != 0 && !hw.refused && codexAccountOut(hw.failure, hw.errBody()) && r.Context().Err() == nil && s.codexFallsBack(modelOf(body), body) {
+		if hw.mayAskAgain() && hw.failure != 0 && !hw.refused && codexAccountOut(hw.failure, hw.errBody()) && r.Context().Err() == nil && s.codexFallsBack(r, body) {
 			// the account out of its allowance, said on its stream before
 			// any of the reply: the fallbacks answer
 			said := "OpenAI: " + string(hw.errBody())
@@ -1689,7 +1698,14 @@ func codexAccountOut(status int, body []byte) bool {
 // least one of them found, or a routing group the user built with the
 // model in it (provider.GroupsAfter). A turn compacting natively is the backend's to
 // answer, and goes nowhere else.
-func (s *Server) codexFallsBack(model string, body []byte) bool {
+//
+// Codex's auto-review on codex-auto-review falls back too where its
+// conversation's turns would (codexReviewAfter): no group has that model,
+// so with the account out and Codex routed on through a group, every
+// review was handed the refusal and failed while the turns went on
+// (riverleaf88 on X).
+func (s *Server) codexFallsBack(r *http.Request, body []byte) bool {
+	model := modelOf(body)
 	if model == "" || strings.Contains(model, "/") || compactionTriggerIn(body) {
 		return false
 	}
@@ -1697,7 +1713,54 @@ func (s *Server) codexFallsBack(model string, body []byte) bool {
 	if !ok || p.Account == nil || p.Account.Agent != "codex" {
 		return false
 	}
-	return len(provider.FallbackModels(p)) > 0 || len(provider.GroupsAfter(p.ID+"/"+model)) > 0
+	return len(provider.FallbackModels(p)) > 0 || len(provider.GroupsAfter(p.ID+"/"+model)) > 0 ||
+		len(s.codexReviewAfter(r, p, model, body)) > 0
+}
+
+// codexReviewAfter is where Codex's auto-review on codex-auto-review goes
+// on to when the Codex subscription can't take it (the account out of its
+// allowance, every account held at its cap), after the subscription's own
+// fallbacks: where the turns of the conversation it reviews go on to.
+// That conversation on one of magpie's models, the model itself, when
+// magpie serves it to this caller (servedSession); on one of Codex's own,
+// the routing groups the user built with that model in them
+// (provider.GroupsAfter), which a turn on it goes on to. Codex asks its
+// reviewer by OpenAI's name whatever the conversation is on (codex-rs
+// guardian reviewer_config.rs, approval_review_preferred_model), and only
+// the ChatGPT backend serves it. nil for any other request.
+func (s *Server) codexReviewAfter(r *http.Request, p provider.Provider, model string, body []byte) []string {
+	lead := s.codexReviewLead(r, p, model, body)
+	if lead == "" {
+		return nil
+	}
+	if strings.Contains(lead, "/") {
+		to := s.servedSession(r, lead)
+		if to == "" {
+			return nil
+		}
+		if q, _, ok := provider.Resolve(to); ok && q.ID == p.ID && !provider.IsGroupRef(to) {
+			// the subscription itself, under another name: out too
+			return nil
+		}
+		return []string{to}
+	}
+	return provider.GroupsAfter(p.ID + "/" + lead)
+}
+
+// codexReviewLead is the model the conversation Codex's auto-review on
+// codex-auto-review through p, the Codex subscription, reviews is on: one
+// of Codex's own by its bare name, or one of magpie's ids; "" for any
+// other request, or a conversation magpie has seen no turn of.
+func (s *Server) codexReviewLead(r *http.Request, p provider.Provider, model string, body []byte) string {
+	if p.ID != "codex" || p.Account == nil || p.Account.Agent != "codex" || !strings.EqualFold(strings.TrimSpace(model), provider.CodexAutoReview) {
+		return ""
+	}
+	lead, _, _ := s.codexLeads.lookup(r, body)
+	lead = strings.TrimPrefix(lead, "codex/")
+	if strings.EqualFold(lead, model) {
+		return ""
+	}
+	return lead
 }
 
 // codexFallBack serves Codex's turn on its own sign-in, which the backend
