@@ -1774,6 +1774,10 @@ again as the reply begins (`relay`'s `begin`), once the turn's own
 `rate_limit_event` is in. A run on Claude Code's own home that has moved to
 another account says nothing (`ClaudeCodeMovedOff`), as its event isn't
 kept either.
+An event names only some windows (often `five_hour` alone): the rest
+stand as last kept, after a restart as `quotas.json` kept them, when
+they haven't renewed since (`keptClaudeWindows`; ifccod7391564 on X: the
+week's ring went on a cold start, `TestNoteClaudeLimitsKeepsTheWeekOnDisk`).
 
 A Claude Code signed in to claude.ai (its sign-in field set to
 `claudeai`, `claudeSignIns` in `internal/agent/claude.go`) reads these into its status line's `rate_limits`, which
