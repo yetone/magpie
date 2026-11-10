@@ -136,7 +136,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       });
 
       await t.test("a skill removed is no longer marked added", async () => {
-        await view.page().locator(":is(.lib-tabs .opt, .nav-s):visible").nth(2).click();
+        await view.page().locator(":is(.lib-tabs .opt, .nav-s):visible").nth(3).click();
         await card("skills", "acme/skills/pdf").locator(".mk-have").waitFor();
         await view.locator(".lib-row", { hasText: "pdf" }).locator(".lib-icon.danger").click();
         const market = answered("skills");

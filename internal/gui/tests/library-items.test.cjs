@@ -169,7 +169,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(await card.locator(".lib-problems-away button").allTextContents(), words[lang].instrAway);
         assert.equal(await page.locator("#view-library .lib-tabs .opt.on").textContent(), lang === "zh" ? "指令" : "Instructions");
         assert.equal(await page.evaluate(() => document.querySelector("#view-library").scrollTop), top0);
-        await page.locator(":is(#view-library .lib-tabs .opt, .nav-s):visible").nth(2).click();
+        await page.locator(":is(#view-library .lib-tabs .opt, .nav-s):visible").nth(3).click();
         await page.locator("#view-library .lib-body:not(.lib-skel) .lib-row").first().waitFor();
 
         const again = card.getByRole("button", { name: words[lang].again });

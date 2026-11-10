@@ -167,8 +167,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator('#nav button[data-view="library"]').click();
       await page.locator(`${libv} .lib-row, ${libv} .row`).first().waitFor();
       const at = await toFoot(page, libv);
-      await page.locator(`${libv} .lib-tabs > button`).nth(1).click();
-      await page.waitForFunction(() => document.querySelectorAll("#view-library .lib-tabs > button")[1]?.classList.contains("on"));
+      await page.locator(`${libv} .lib-tabs > button`).nth(2).click();
+      await page.waitForFunction(() => document.querySelectorAll("#view-library .lib-tabs > button")[2]?.classList.contains("on"));
       await settle(page);
       const after = await top(page, libv);
       assert.ok(after > 100, `the strip's click left the Library where it was, not at its top: ${at} then ${after}`);
