@@ -110,7 +110,7 @@ func TestPiGoogleThinkingLevelsAreGeminis(t *testing.T) {
 func TestPiFolderKeepsGeminiOnChatForRaft(t *testing.T) {
 	m := catalog.Model{ID: "gem/gemini-3.8-flash", Name: "Gemini 3.8 Flash", APIs: []string{"gemini"}, Efforts: []string{"low", "high", "xhigh"}}
 	const gw = "http://127.0.0.1:1"
-	for id, want := range map[string]any{"pi": nil, "stepcode": nil, "omo": "google-generative-ai", "prime-agent": "google-generative-ai"} {
+	for id, want := range map[string]any{"pi": nil, "stepcode": nil, "omo": "google-generative-ai", "prime-agent": "google-generative-ai", "mu": nil} {
 		e := piModelJSON(piAsked(id, m), gw, true)
 		if e["api"] != want {
 			t.Errorf("%s: api %v, want %v", id, e["api"], want)

@@ -251,6 +251,8 @@ var cliSpecs = map[string]cliSpec{
 	// the engine it pins (senpi) with it
 	"omo": {npm: []string{"omo-ai"}, scripts: true,
 		self: func(bin, real string) []string { return []string{bin, "update"} }},
+	// mu-agent from npm: its own `mu update` updates Pi packages, not mu
+	"mu": {npm: []string{"mu-agent"}},
 }
 
 // updater is how an installed CLI is brought up to date.

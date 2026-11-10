@@ -48,6 +48,8 @@ var Vars = []string{
 	// Raft (slock), whose agents keep their Pi sessions in its folder
 	"SLOCK_HOME",
 	"PRIME_AGENT_CODING_AGENT_DIR",
+	// mu's agent folder (agentDirFor in kyrn/bin/mu.mjs), KYRN_ its old name
+	"MU_AGENT_DIR", "KYRN_AGENT_DIR", "MU_CODING_AGENT_DIR", "KYRN_CODING_AGENT_DIR",
 	// StepCode: config root resolution and folder overrides
 	"STEP_CODING_AGENT_DIR", "STEPCODE_CONFIG_DIR",
 	// MothX's config folder ($MOTHX_DIR/settings.json)

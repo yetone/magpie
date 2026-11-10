@@ -96,6 +96,16 @@ var desktopApps = map[string]desktopApp{
 	// electron-builder registers it under, the UUID v5 of the appId in its
 	// namespace, as dsh's above is of com.deepseek.dsh. Linux's deb links
 	// /usr/bin/penguin, so Bin finds it there.
+	// mu's desktop app (desktop/packages/desktop/electron-builder.yml,
+	// qybaihe/mu b71cd18: appId io.github.qybaihe.mu, productName and
+	// executable mu) carries mu-agent itself (resources/harness) and runs
+	// it on the CLI's agent folder (MU_AGENT_DIR, kyrn/naming.ts), so it
+	// needs no CLI. Windows' assisted NSIS installer and its guid as
+	// penguin's below; Linux's deb puts it in /opt/mu (v0.3.9's
+	// mu-0.3.9-linux-amd64.deb), whose /usr/bin/mu link is no mu-agent
+	// (notMuAgent).
+	"mu": {id: "io.github.qybaihe.mu", names: []string{"mu.app"}, win: filepath.Join("mu", "mu.exe"), guid: "8be59721-9051-5f2b-8372-96932fdbf5da",
+		onLinux: &linuxApp{dirs: []string{"/opt/mu"}, exe: "mu", name: "mu", scheme: "mu"}},
 	"penguin": {id: "com.prismshadow.penguinharness", names: []string{"PenguinHarness.app"}, win: filepath.Join("PenguinHarness", "PenguinHarness.exe"), guid: "8bb9acb7-2bdc-596b-9669-7b014ab1c47f"},
 	// The CodeBuddy IDE (Tencent's VS Code fork, 4.12.2: CodeBuddy.app,
 	// com.tencent.codebuddy, from codebuddy.ai; CodeBuddy CN.app,

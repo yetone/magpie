@@ -246,6 +246,16 @@ func targetOf(a *agent.Agent) *Target {
 		t.Override = filepath.Join(d, "AGENTS.override.md")
 		t.MCP = &mcpFile{Path: filepath.Join(d, "mcp.json"), Format: fmtPiNative}
 		t.Skills = filepath.Join(d, "skills")
+	case "mu":
+		// mu is Pi 1.4.0 (packages/coding-agent, qybaihe/mu b71cd18) on
+		// its own agent folder (agent.muDir): Pi's AGENTS.override.md, else
+		// the first there is of AGENTS.md, AGENTS.MD, CLAUDE.md and
+		// CLAUDE.MD, its mcp.json (Pi's own MCP servers) and its skills
+		d := a.Dir
+		t.Instructions = firstThere(d, "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD")
+		t.Override = filepath.Join(d, "AGENTS.override.md")
+		t.MCP = &mcpFile{Path: filepath.Join(d, "mcp.json"), Format: fmtPiNative}
+		t.Skills = filepath.Join(d, "skills")
 	case "goose":
 		t.Instructions = filepath.Join(filepath.Dir(a.Path), ".goosehints")
 		t.MCP = &mcpFile{Path: a.Path, Format: fmtGoose}
@@ -700,6 +710,12 @@ func wslTargetOf(a *agent.Agent) *Target {
 		t.Override = filepath.Join(d, "AGENTS.override.md")
 		t.MCP = &mcpFile{Path: filepath.Join(d, "mcp.json"), Format: fmtPiNative}
 		t.Skills = filepath.Join(d, "skills")
+	case "mu":
+		d := j(h, ".mu", "agent")
+		t.Instructions = firstThere(d, "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD")
+		t.Override = filepath.Join(d, "AGENTS.override.md")
+		t.MCP = &mcpFile{Path: filepath.Join(d, "mcp.json"), Format: fmtPiNative}
+		t.Skills = filepath.Join(d, "skills")
 	case "gemini":
 		// as targetOf's, under the distro's home
 		d := j(h, ".gemini")
@@ -970,8 +986,9 @@ func (l *Library) held(have []*Target) []*Target {
 // ~/.kimi-code/skills besides it (#4379). OmO's engine, senpi, a fork of
 // Pi from after Pi 0.54 (its oldest on npm is 0.74.0), reads it as Pi
 // does (core/package-manager.js, userAgentsSkillsDir, @code-yeongyu/senpi
-// 2026.5.13). ZCode reads it beside ~/.zcode/skills (#4987).
-var readsShared = []string{"codex", "gemini", "opencode", "deveco", "crush", "dsh", "commandcode", "devin", "droid", "cline", "grok", "grok-app", "fx", "alma", "kimi", "omo", "zcode"}
+// 2026.5.13). ZCode reads it beside ~/.zcode/skills (#4987). mu is Pi
+// 1.4.0 (core/package-manager.ts, qybaihe/mu b71cd18).
+var readsShared = []string{"codex", "gemini", "opencode", "deveco", "crush", "dsh", "commandcode", "devin", "droid", "cline", "grok", "grok-app", "fx", "alma", "kimi", "omo", "zcode", "mu"}
 
 // Pi reads ~/.agents/skills from 0.54.0 (2026-02-19, its CHANGELOG: "Added
 // default skill auto-discovery for .agents/skills locations … global

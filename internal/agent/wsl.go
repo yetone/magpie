@@ -514,6 +514,17 @@ var wslKinds = []wslKind{
 			}
 			return nil
 		}},
+	// mu, Pi's files in ~/.mu/agent: the distro's variables that move it
+	// and its old ~/.kyrn aren't read. No bin: mu is maildir-utils' too
+	{id: "mu", name: "mu", dir: ".mu/agent", in: muIn,
+		asleep: func(key string) func(map[string]string) []Option {
+			if key == "model" {
+				return func(cur map[string]string) []Option {
+					return withVia(ownOptions("", cur["model"]), "mu", magpieID+"/")
+				}
+			}
+			return nil
+		}},
 	{id: "stepcode", name: "StepCode", dir: ".stepcode", in: stepcodeIn,
 		asleep: wslOwnAsleep("stepcode", "model")},
 	// only its settings.json: its sign-in, sessions and prompt history,

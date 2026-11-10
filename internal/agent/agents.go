@@ -267,6 +267,7 @@ func onMachine(home, cfg string) []*Agent {
 		aside(home),
 		omo(home),
 		primeAgent(home),
+		mu(home),
 		goose(home, cfg),
 		cursor(home),
 		cursorLocal(),
@@ -803,8 +804,12 @@ func objectPairs(raw []byte) orderedJSON {
 //     1.4.0, api/google-generative-ai.js; yunfei9958 on X). Per-request
 //     fetch is a feature of Pi's SDK, so any other host of it can do the
 //     same. OmO's and Prime Agent's folders are their own, and keep it.
+//   - mu (mu.go) is Pi 1.4.0 itself, and its desktop app runs that Pi on
+//     the same folder through a host of its own (desktop/scripts/kyrn,
+//     qybaihe/mu b71cd18) that magpie hasn't tried with Gemini's API, so
+//     it goes the way Pi's folder does.
 func piAsked(agentID string, m catalog.Model) catalog.Model {
-	if agentID == "stepcode" || agentID == "pi" {
+	if agentID == "stepcode" || agentID == "pi" || agentID == "mu" {
 		m.APIs = slices.DeleteFunc(slices.Clone(m.APIs), func(a string) bool { return a == string(provider.Gemini) })
 	}
 	return m

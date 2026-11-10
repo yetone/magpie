@@ -156,6 +156,7 @@ func TestPiEnabledModelsFollowRename(t *testing.T) {
 		{"pi", []string{".pi", "agent"}, pi},
 		{"omo", []string{".omo", "agent"}, omo},
 		{"prime-agent", []string{".prime", "agent"}, primeAgent},
+		{"mu", []string{".mu", "agent"}, mu},
 	} {
 		t.Run(c.id, func(t *testing.T) {
 			home := syncHome(t)

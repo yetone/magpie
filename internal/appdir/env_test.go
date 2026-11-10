@@ -121,6 +121,10 @@ func TestTildeFolderVariables(t *testing.T) {
 		{"PRIME_AGENT_CODING_AGENT_DIR", "~/pa", true},
 		{"PRIME_AGENT_CODING_AGENT_DIR", "~other/pa", false},
 		{"PRIME_AGENT_CODING_AGENT_DIR", `~\pa`, runtime.GOOS == "windows"},
+		{"MU_AGENT_DIR", "~/mu", true},
+		{"KYRN_AGENT_DIR", "~", true},
+		{"MU_CODING_AGENT_DIR", "~other/mu", false},
+		{"KYRN_CODING_AGENT_DIR", "~/kyrn", true},
 	} {
 		t.Run(tc.name+"="+tc.value, func(t *testing.T) {
 			t.Setenv(tc.name, tc.value)
