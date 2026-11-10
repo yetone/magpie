@@ -377,6 +377,14 @@ func unredactedRoute(p provider.Provider, isGroup bool, ms []provider.Member) bo
 	return true
 }
 
+// unmaskedMembers says every model in ms, the ones a picture, a video or
+// a vendor's own route may go to, is a provider the user set to go
+// unmasked (provider.SkipsRedaction), so the request goes as written, as
+// a chat's does on such a route (unredactedRoute). None is masked.
+func unmaskedMembers(ms []provider.Member) bool {
+	return len(ms) > 0 && !slices.ContainsFunc(ms, func(m provider.Member) bool { return !m.Provider.SkipsRedaction() })
+}
+
 // maskedFor is ctx for masking a request resolved to p, or to the group
 // whose models are ms, that may go to the providers unredactedRoute walks:
 // p and each of its fallbacks, or every model of the group. A text sent

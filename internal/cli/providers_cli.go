@@ -898,7 +898,7 @@ func showProviderAsking(p provider.Provider, ask bool) error {
 	if p.Unredacted {
 		why := "  Settings' redaction leaves its requests as written"
 		if !p.SkipsRedaction() {
-			why = "  but masked: another magpie or no address"
+			why = "  but masked: no address"
 		}
 		kv("unmasked", "yes"+muted.Render(why))
 	}
@@ -1310,7 +1310,8 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			// yes: the provider gets the requests as written, unmasked by
 			// Settings' redaction (lc, AcMilan on Discord): the user's word
 			// at any address, a subscription's or a plugin's provider's too
-			// (isee1_1), never another magpie's (provider.SkipsRedaction)
+			// (isee1_1), another magpie's too, which then masks by its own
+			// settings (provider.SkipsRedaction)
 			if v != "yes" && v != "no" {
 				return fmt.Errorf("unmasked=yes|no, not %q", v)
 			}

@@ -143,14 +143,17 @@ func (s *Server) nativeArk(w http.ResponseWriter, r *http.Request, p provider.Pr
 			fail(http.StatusForbidden, msg)
 			return
 		}
-		var hits maskHits
-		if err := maskStrings(r.Context(), obj, &hits); err != nil { // fails closed
-			fail(maskStatus(err), err.Error())
-			return
-		}
-		if hits.n > 0 {
-			b, _ := json.Marshal(obj)
-			noteMasked(r, "native", hits, string(b), 0, p.ID, model)
+		// as nativeAny's: one the user set to go unmasked goes as written
+		if !p.SkipsRedaction() {
+			var hits maskHits
+			if err := maskStrings(r.Context(), obj, &hits); err != nil { // fails closed
+				fail(maskStatus(err), err.Error())
+				return
+			}
+			if hits.n > 0 {
+				b, _ := json.Marshal(obj)
+				noteMasked(r, "native", hits, string(b), 0, p.ID, model)
+			}
 		}
 		body, _ = json.Marshal(obj)
 	}

@@ -475,6 +475,11 @@ type settingsJSON struct {
 	// (RedactRouteTo): those whose every route is set to go unmasked
 	// (gateway.MaskRoute)
 	MaskRouteModels []modelRef `json:"maskRouteModels"`
+	// the providers the user set to Send requests unmasked
+	// (provider.SkipsRedaction), listed in Settings › Privacy, each a way
+	// to its editor, so the switch is found from where masking is
+	// (CrazyMouse_TT on X)
+	UnmaskedProviders []modelRef `json:"unmaskedProviders"`
 	// what each of the disabled models (#1867) turns off now, by pattern
 	DisabledHits map[string][]string `json:"disabledHits,omitempty"`
 	// the model magpie's generate_image tool draws with when ImageGen
@@ -885,6 +890,12 @@ func settingsState() settingsJSON {
 	s.TitleModels, s.MaskRouteModels = []modelRef{}, []modelRef{}
 	// only a provider set to go unmasked can take one (most have none)
 	unmaskedAny := slices.ContainsFunc(provider.All(), provider.Provider.SkipsRedaction)
+	s.UnmaskedProviders = []modelRef{}
+	for _, p := range provider.All() {
+		if p.SkipsRedaction() {
+			s.UnmaskedProviders = append(s.UnmaskedProviders, modelRef{ID: p.ID, Name: p.Name, Provider: p.ID, PName: p.Name, Icon: p.Icon})
+		}
+	}
 	for _, pat := range s.DisabledModels {
 		if s.DisabledHits == nil {
 			s.DisabledHits = map[string][]string{}

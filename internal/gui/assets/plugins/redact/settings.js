@@ -3,7 +3,8 @@
 // plugin's part of Settings). Run after app.js, whose helpers it shares
 // (el, icon, openPicker, modelOpt, prefWrite, api), and before start.js
 // draws Settings. It wraps renderRedact, so app.js carries none of it: the row
-// shows while anything is masked, after the masked-words rows.
+// shows while anything is masked, after the masked-words rows, and then
+// the providers sent unmasked (unmaskedRow).
 
 // redactRouteRow: where a request masking would change goes instead
 // (redactRouteTo, jessyoungyu on X): Off masks it as before; a model whose
@@ -37,6 +38,28 @@ function redactRouteRow(s) {
   r.append(who, val);
   r.id = "redactRouteRow";
   const after = $("#redactWordsWholeRow");
+  if (after) after.after(r); else $("#redactList").append(r);
+}
+// unmaskedRow: the providers the user set to Send requests unmasked
+// (unmaskedProviders), each opening its editor, where the switch is under
+// Advanced; none, it says where the switch is (CrazyMouse_TT on X wanted
+// masking off for their own model and found no way to)
+function unmaskedRow(s) {
+  const ps = s.unmaskedProviders || [];
+  const r = el("div", "row pref"), who = el("div", "who"), val = el("div", "val unmasked-list");
+  who.append(el("div", "name", t("Sent unmasked")), el("div", "sub", ps.length
+    ? t("Requests to these providers go as written. Open one to change it")
+    : t("None. For your own model, turn on Send requests unmasked in its provider's editor, under Advanced")));
+  for (const p of ps) {
+    const b = el("button", "rt-cond on");
+    b.type = "button";
+    b.append(icon(p.icon || "generic"), el("span", "", p.name || p.id));
+    b.onclick = () => openProvider(p.id);
+    val.append(b);
+  }
+  r.append(who, val);
+  r.id = "unmaskedRow";
+  const after = $("#redactRouteRow") || $("#redactWordsWholeRow");
   if (after) after.after(r); else $("#redactList").append(r);
 }
 // wordList: Masked words and Never mask as a list, one row a value
@@ -260,6 +283,7 @@ function redactWordsHidden(r) {
     }
     wordFocusBack(f);
     if (s.redact || s.redactPersonal || (s.redactWords || []).length) redactRouteRow(s);
+    unmaskedRow(s);
   };
 }
 

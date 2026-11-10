@@ -1125,20 +1125,23 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	call.To = provider.Chat
-	var unmask func()
 	prompt := f.Prompt
-	var hits maskHits
-	w, f.Prompt, unmask, hits, err = redactedPromptHits(r.Context(), w, f.Prompt)
-	defer unmask()
-	// the fields passed on as they came are masked as the prompt is: a
-	// negative_prompt is the user's text all the same
-	var extra maskHits
-	if err == nil {
-		err = maskStrings(r.Context(), f.Extra, &extra)
-	}
-	if err != nil { // fails closed
-		fail(maskStatus(err), err.Error())
-		return
+	var hits, extra maskHits
+	// masked unless every model it may start on is a provider the user
+	// set to go unmasked (unmaskedMembers), as a chat's is
+	if !unmaskedMembers(tries) {
+		var unmask func()
+		w, f.Prompt, unmask, hits, err = redactedPromptHits(r.Context(), w, f.Prompt)
+		defer unmask()
+		// the fields passed on as they came are masked as the prompt is: a
+		// negative_prompt is the user's text all the same
+		if err == nil {
+			err = maskStrings(r.Context(), f.Extra, &extra)
+		}
+		if err != nil { // fails closed
+			fail(maskStatus(err), err.Error())
+			return
+		}
 	}
 	n := extra.n
 	hits.add(extra)

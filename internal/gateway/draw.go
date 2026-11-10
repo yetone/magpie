@@ -729,20 +729,24 @@ func (s *Server) images(edit bool) http.HandlerFunc {
 				tries = t
 			}
 		}
-		var unmask func()
+		// masked unless every model it may be drawn on is a provider the
+		// user set to go unmasked (unmaskedMembers), as a chat's is
 		var hits maskHits
-		w, d.Prompt, unmask, hits, err = redactedPromptHits(r.Context(), w, d.Prompt)
-		defer unmask()
-		// the fields passed on as they came are masked as the prompt is,
-		// as a video's are
-		if err == nil {
-			var extra maskHits
-			err = maskStrings(r.Context(), d.Extra, &extra)
-			hits.add(extra)
-		}
-		if err != nil {
-			fail(maskStatus(err), err.Error())
-			return
+		if !unmaskedMembers(tries) {
+			var unmask func()
+			w, d.Prompt, unmask, hits, err = redactedPromptHits(r.Context(), w, d.Prompt)
+			defer unmask()
+			// the fields passed on as they came are masked as the prompt is,
+			// as a video's are
+			if err == nil {
+				var extra maskHits
+				err = maskStrings(r.Context(), d.Extra, &extra)
+				hits.add(extra)
+			}
+			if err != nil {
+				fail(maskStatus(err), err.Error())
+				return
+			}
 		}
 		// the Routing page lists it as it does a chat, each account or
 		// member asked a try of its one route (sideRoute)

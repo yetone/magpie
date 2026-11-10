@@ -11,8 +11,9 @@ import (
 // "Send requests unmasked" is the user's switch for each provider
 // (AcMilan on Discord): set, a provider goes unmasked at whatever address,
 // a name of the user's own DNS or a vendor's; unset, it is masked. A
-// signed-in account and a plugin's provider take it too (isee1_1); another
-// magpie never goes unmasked, as it masks on its own side. Nothing is
+// signed-in account and a plugin's provider take it too (isee1_1), and so
+// does another magpie, which then masks by its own settings
+// (CrazyMouse_TT on X). Nothing is
 // looked up to decide: the lookup fails the test if it is.
 func TestSkipsRedaction(t *testing.T) {
 	t.Cleanup(netproxy.SetLookup(func(_ context.Context, host string) ([]net.IPAddr, error) {
@@ -36,7 +37,8 @@ func TestSkipsRedaction(t *testing.T) {
 		{"an account", Provider{Unredacted: true, Account: &Account{Agent: "codex"}}, true},
 		{"an account, off", Provider{Account: &Account{Agent: "codex"}}, false},
 		{"a plugin's provider", Provider{Unredacted: true, Chat: "plugin://translate", Account: &Account{Agent: "translate"}}, true},
-		{"another magpie", Provider{Unredacted: true, Preset: RemoteMagpiePreset, Anthropic: "http://192.168.1.5:3425"}, false},
+		{"another magpie, which masks by its own settings", Provider{Unredacted: true, Preset: RemoteMagpiePreset, Anthropic: "http://192.168.1.5:3425"}, true},
+		{"another magpie, left masked", Provider{Preset: RemoteMagpiePreset, Anthropic: "http://192.168.1.5:3425"}, false},
 	}
 	for _, tc := range cases {
 		if got := tc.p.SkipsRedaction(); got != tc.want {

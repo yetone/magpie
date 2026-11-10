@@ -9,7 +9,8 @@
 // name is asked about only once the switch is on, so an editor merely
 // opened asks nothing. A signed-in account or a plugin's provider has the
 // row too (isee1_1 on Discord), its caution always shown while on: its
-// vendor is never local. Another magpie has none. In English and Chinese,
+// vendor is never local. Another magpie has it too, with no caution: it
+// masks by its own settings (CrazyMouse_TT on X). In English and Chinese,
 // wide and narrow.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -256,9 +257,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(errors, []);
       });
 
-      test(`${engine} ${lang} ${width}: another magpie has no such row`, async (t) => {
-        const { page, errors } = await open(t, "Home magpie");
-        assert.equal(await row(page).count(), 0);
+      test(`${engine} ${lang} ${width}: another magpie has the row with no caution, and turned on is saved so`, async (t) => {
+        const { page, errors, posts } = await open(t, "Home magpie");
+        assert.equal(await box(page).isChecked(), false);
+        await box(page).scrollIntoViewIfNeeded();
+        await box(page).check();
+        await cautionSays(page, "");
+        const saved = await save(page, posts);
+        assert.equal(saved.body.id, "home");
+        assert.equal(saved.body.unredacted, true);
         assert.deepEqual(errors, []);
       });
     }

@@ -4051,6 +4051,7 @@ input.words.search-key, input.words.search-url { flex: 1 1 120px; width: auto; m
 .prefs .val > .side-effort { flex: none; }
 /* Web search's searchers after the one named, in order: chips that wrap */
 .prefs .val.searcher-then-list { flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.prefs .val.unmasked-list { flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
 .prefs .val.searcher-then-list > .rt-cond { min-width: 0; max-width: 100%; }
 .searcher-then-n { color: var(--muted); font-variant-numeric: tabular-nums; }
 .side-effort .effort-ic svg { width: 100%; height: 100%; }
