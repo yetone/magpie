@@ -284,7 +284,7 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-detail { padding: 4px 14px 14px 50px; background: var(--card-2); display: flex; flex-direction: column; gap: 8px; border-top: 0 !important; animation: content-in .2s var(--ease); }
 .lib-lab { font-size: 11.5px; color: var(--muted); }
 .lib-detail .lib-aside { margin: 0; }
-.lib-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.lib-acts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .lib-warn { font-size: 12px; line-height: 1.5; color: var(--fg); background: var(--amber-soft); border-radius: 8px; padding: 8px 10px; }
 .lib-warn .lib-path { display: inline; }
 /* what the last change couldn't write: for which agent, and why */

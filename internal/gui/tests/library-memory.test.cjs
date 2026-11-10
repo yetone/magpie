@@ -272,6 +272,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // the run ends: Read now is back, and what it proposed waits under To review
         await drow.locator(".lib-distnow").waitFor({ timeout: 8000 });
         assert.match(await drow.locator(".lib-distnow").textContent(), new RegExp(w.now));
+        // every control of a row shares one centre line, the switch too
+        for (const row of [drow, trow]) {
+          const mids = [];
+          for (const c of await row.locator(".lib-acts > *").all()) {
+            const r = await c.boundingBox();
+            mids.push(r.y + r.height / 2);
+          }
+          // a narrow row wraps: a gap over half a control's height starts a line
+          mids.sort((a, b) => a - b);
+          assert.ok(mids.length > 1, "a row with one control");
+          let first = mids[0];
+          for (let i = 1; i < mids.length; i++) {
+            if (mids[i] - mids[i - 1] > 12) { first = mids[i]; continue; }
+            assert.ok(mids[i] - first <= 1, "controls off one centre line: " + mids.join(", "));
+          }
+        }
         assert.match(await drow.locator(".sub").textContent(), /1/);
         await page.locator(`${view} .lib-memstatus .opt`, { hasText: w.review }).click();
         await page.locator(`${view} .lib-mems .lib-mem`, { hasText: "Ships on Tuesdays" }).waitFor();
