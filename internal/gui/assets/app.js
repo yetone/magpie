@@ -9060,7 +9060,8 @@ function closeModal() {
 }
 // the providers page's dialog; the library and a confirmation that borrow it
 // ask the same of its backdrop
-const modalBackdrop = backdropClick($("#modal"));
+// the title bar strip (.modal-grip) is part of the backdrop: a click there closes too
+const modalBackdrop = backdropClick($("#modal"), (e) => e.target === e.currentTarget || e.target.classList.contains("modal-grip"));
 $("#modal").onclick = (e) => { if (modalBackdrop(e)) cancelEdit(); };
 
 // ---------- sliding thumb ----------

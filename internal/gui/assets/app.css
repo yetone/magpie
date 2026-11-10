@@ -4271,7 +4271,12 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
 .modal.out { pointer-events: none; }
 /* open, it holds its place from a top app.js gives it (holdModal) */
 .modal.held { align-items: flex-start; }
-.modal .dialog { position: relative; }
+.modal .dialog { position: relative; z-index: 1; }
+/* the scrim covers the title bar, so the window is still dragged from the
+   top strip while a dialog is open; the dialog lies over it and stays no-drag
+   (the strip is after it in the markup, app.js keeps the dialog the first child) */
+.modal-grip { position: absolute; z-index: 0; top: 0; left: 0; right: 0; height: var(--top-h, 46px); }
+body.window.mac .modal-grip { height: calc(50px / var(--zoom, 1)); }
 .modal .dialog {
   width: min(600px, 100%); min-width: 0; max-height: 100%; overflow-y: auto;
   border-radius: 14px; background: var(--card);
