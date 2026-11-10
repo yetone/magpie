@@ -76,7 +76,7 @@ func takesEffortUpdates(p provider.Provider, model string) bool {
 	if os.Getenv("MAGPIE_EFFORT_UPDATES") != "on" || p.Base(provider.Responses) == "" {
 		return false
 	}
-	if !(p.Account != nil && p.Account.Agent == "codex" || p.Account == nil && strings.HasSuffix(p.Host(), "openai.com")) {
+	if !(p.Account != nil && p.Account.Agent == "codex" || p.Account == nil && strings.HasSuffix(p.VendorHost(), "openai.com")) {
 		return false
 	}
 	if i := strings.LastIndexByte(model, '/'); i >= 0 {

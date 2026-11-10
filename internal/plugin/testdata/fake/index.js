@@ -74,7 +74,11 @@ export const FakePlugin = async ({ client }) => ({
     cfg.provider[ID] = {
       name: "FakeCo",
       npm: "@ai-sdk/openai-compatible",
-      api: "https://fake.invalid/v1",
+      // $FAKE_API: the base the provider says its requests go to, as a
+      // plugin in front of a vendor's own API says it (a Mistral Vibe
+      // plugin's https://api.mistral.ai/v1, #5464); the loader's fetch
+      // still sends to $FAKE_BASE
+      api: process.env.FAKE_API || "https://fake.invalid/v1",
       models: {
         "fake-1": { name: "Fake One", limit: { context: 1000, output: 100 } },
         "fake-claude": { name: "Fake Claude", provider: { npm: "@ai-sdk/anthropic" }, modalities: { input: ["text", "image"], output: ["text"] }, limit: { context: 2000, output: 200 } },

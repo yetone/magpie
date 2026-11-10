@@ -159,7 +159,7 @@ func prevKeeps(p provider.Provider) bool {
 	if p.Account != nil || p.PluginProvider() != "" {
 		return false
 	}
-	host := p.Host()
+	host := p.VendorHost()
 	if host == "api.openai.com" || p.IsAzure() {
 		return true
 	}

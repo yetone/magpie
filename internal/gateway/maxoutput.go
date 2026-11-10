@@ -233,7 +233,7 @@ func namesOutput(proto provider.Protocol, body []byte) bool {
 // against api.deepseek.com on 2026-10-27: deepseek-flash, effort none, no
 // limit: incomplete at 8192; max_output_tokens 393216: completed at 17602.
 func shortByDefault(p provider.Provider) bool {
-	return p.Host() == "api.deepseek.com"
+	return p.VendorHost() == "api.deepseek.com"
 }
 
 // withOwnOutput is body, in proto's words, asking p's model for the reply

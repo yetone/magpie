@@ -310,6 +310,9 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
     </div>
     <p>モデルには、プロバイダとは別の API やアドレスを使うための <code>provider: { npm, api }</code>、<code>headers</code>、<code>options</code>、そして非表示にするための <code>disabled: true</code> も指定できます。</p>
 
+        <h3 id="vendor">magpie が知っているベンダーの前に立つ</h3>
+    <p>プロバイダの <code>api</code> が magpie にプリセットのあるベンダーの API（<code>https://api.mistral.ai/v1</code>、<code>https://api.deepseek.com/v1</code>、<code>https://openrouter.ai/api/v1</code> など）なら、magpie はそのベンダーと同じようにリクエストを整えてから <code>fetch</code> に渡します。<code>reasoning_content</code> の代わりに Mistral の thinking パーツ、DeepSeek や xAI のスキーマ規則、OpenRouter の無料枠などです。追加の設定は要りません。読むのはすでに渡している base URL で、loader の <code>baseURL</code> が別の場所を指していても同じです。どのプリセットのホストでもない、<code>localhost</code> やローカルネットワーク上のベースには、どのベンダーの処理も適用されません。</p>
+
         <h3 id="searches">自分でウェブ検索する上流</h3>
     <p>プラグインが Anthropic や OpenAI 自身の API（ホスト型のウェブ検索ツールを自分で実行する）の前に立つ場合は、<code>config</code> フックでプロバイダに <code>searches: true</code> を設定します。するとクライアントのウェブ検索（Claude Code の WebSearch、Codex の <code>web_search</code>）は、そのプロバイダの Anthropic または Responses のモデルでは送られたまま <code>fetch</code> に届き、magpie 自身の検索を通りません。Chat のモデルは変わりません。magpie が他のモデルのために自動でこれを使って検索することはありませんが、設定で検索モデルとして指定できます。</p>
 

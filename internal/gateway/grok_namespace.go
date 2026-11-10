@@ -219,5 +219,5 @@ func (t *nsTidy) call(it map[string]any) bool {
 // replies go back as they came, never given the empty
 // encrypted_function_args a relay's are (#3183).
 func sealsItsOwn(p provider.Provider) bool {
-	return accountAgent(p) == "codex" || strings.HasSuffix(p.Host(), "openai.com") || p.IsAzure()
+	return accountAgent(p) == "codex" || strings.HasSuffix(p.VendorHost(), "openai.com") || p.IsAzure()
 }

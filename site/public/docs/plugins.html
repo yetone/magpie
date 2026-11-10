@@ -310,6 +310,9 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
     </div>
     <p>A model can also say <code>provider: { npm, api }</code> to use another API or address than the provider’s, <code>headers</code>, <code>options</code>, and <code>disabled: true</code> to hide it.</p>
 
+        <h3 id="vendor">In front of a vendor magpie knows</h3>
+    <p>When the provider’s <code>api</code> is the API of a vendor magpie has a preset for (<code>https://api.mistral.ai/v1</code>, <code>https://api.deepseek.com/v1</code>, <code>https://openrouter.ai/api/v1</code>, …), magpie shapes requests to your provider as it does for that vendor before they reach your <code>fetch</code>: Mistral’s thinking parts in place of <code>reasoning_content</code>, DeepSeek’s and xAI’s schema rules, OpenRouter’s free pool, and the rest. There is nothing to add; the base URL you already give is what it reads, even when your loader’s <code>baseURL</code> sends elsewhere. A base on no preset’s host, on <code>localhost</code> or on your network gets no vendor’s handling.</p>
+
         <h3 id="searches">An upstream that searches the web</h3>
     <p>When your plugin sits in front of Anthropic’s or OpenAI’s own API, which runs the hosted web search tool itself, set <code>searches: true</code> on the provider in the <code>config</code> hook. A client’s web search (Claude Code’s WebSearch, Codex’s <code>web_search</code>) then reaches your <code>fetch</code> as it was sent, on the provider’s Anthropic or Responses models, rather than going through magpie’s own search. Its Chat models are unaffected. magpie doesn’t search with it for other models by itself, but it can be named as the searcher in Settings.</p>
 

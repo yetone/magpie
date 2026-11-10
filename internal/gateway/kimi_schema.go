@@ -86,7 +86,7 @@ func isKimi(p provider.Provider, to provider.Protocol) bool {
 	case "api.moonshot.ai", "api.moonshot.cn", "api.kimi.com", "api.kimi.ai":
 		return true
 	}
-	return strings.HasPrefix(p.Preset, "moonshot") || strings.HasPrefix(p.Preset, "kimi")
+	return strings.HasPrefix(p.VendorPreset(), "moonshot") || strings.HasPrefix(p.VendorPreset(), "kimi")
 }
 
 type typeInsert struct {

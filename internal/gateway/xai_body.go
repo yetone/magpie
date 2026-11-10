@@ -34,7 +34,7 @@ import (
 
 // xaiBody shapes body as xAI's own API takes it on proto.
 func xaiBody(p provider.Provider, proto provider.Protocol, body []byte) []byte {
-	if p.Host() != "api.x.ai" {
+	if p.VendorHost() != "api.x.ai" {
 		return body
 	}
 	body = withoutNullToolRequired(body)

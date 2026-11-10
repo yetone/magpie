@@ -301,7 +301,7 @@ func buildHost(p provider.Provider) string {
 			return id
 		}
 	}
-	return p.Host()
+	return p.VendorHost()
 }
 
 // failedAsText are the plugins whose vendor has no failed mark on a tool

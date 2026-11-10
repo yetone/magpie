@@ -25,7 +25,7 @@ const imageToolRefused = "tool:" + imageNamespace
 // mayDropImageTool reports whether p is one that may not take Codex's
 // image tool: anything but a ChatGPT sign-in and OpenAI's own API.
 func mayDropImageTool(p provider.Provider) bool {
-	return (p.Account == nil || p.Account.Agent != "codex") && !strings.HasSuffix(p.Host(), "openai.com")
+	return (p.Account == nil || p.Account.Agent != "codex") && !strings.HasSuffix(p.VendorHost(), "openai.com")
 }
 
 // withoutImageTool is a Responses body without Codex's image tool among its

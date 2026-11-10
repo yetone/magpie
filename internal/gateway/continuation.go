@@ -183,7 +183,7 @@ func saysItsEnd(p provider.Provider, proto provider.Protocol, model string) bool
 	case proto == provider.Anthropic, proto == provider.Responses, geminiKin(proto):
 		return true
 	case proto == provider.Chat:
-		return geminiCompat(p.Host(), model) || p.Host() == commandCodeHost
+		return geminiCompat(p.VendorHost(), model) || p.VendorHost() == commandCodeHost
 	}
 	return false
 }
@@ -286,7 +286,7 @@ func prefillHow(p provider.Provider, to provider.Protocol, model string) string 
 	case provider.Anthropic:
 		return "anthropic"
 	case provider.Chat:
-		return chatPrefill(p.Host(), model)
+		return chatPrefill(p.VendorHost(), model)
 	}
 	return ""
 }
@@ -604,7 +604,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 				if turnedAway {
 					markAntigravityTurnsAway(w, request.System)
 				}
-				if p.Preset == "openrouter" && openRouterSharedPool(b) {
+				if p.VendorPreset() == "openrouter" && openRouterSharedPool(b) {
 					markOpenRouterSharedPool(w)
 				}
 				keepRetry(w.Header(), res.Header, b)

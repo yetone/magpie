@@ -37,7 +37,7 @@ func rootUnionRefused(model string) string { return "root union\x00" + model }
 // foldsRoots reports whether p's requests for model go with their tools'
 // parameters folded to an object root.
 func (s *Server) foldsRoots(p provider.Provider, model string, proto provider.Protocol) bool {
-	return proto == provider.Anthropic || p.Host() == "api.x.ai" || !s.fits(p.ID, rootUnionRefused(model), proto)
+	return proto == provider.Anthropic || p.VendorHost() == "api.x.ai" || !s.fits(p.ID, rootUnionRefused(model), proto)
 }
 
 // objectRootsBody is a Chat, Responses or Messages body whose function

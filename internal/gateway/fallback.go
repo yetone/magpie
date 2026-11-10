@@ -178,7 +178,7 @@ func (c candidate) seat() string {
 }
 
 func (c candidate) isOpenRouterFree() bool {
-	return c.p.Preset == "openrouter" && strings.HasSuffix(c.model, ":free")
+	return c.p.VendorPreset() == "openrouter" && strings.HasSuffix(c.model, ":free")
 }
 
 // restID is the candidate's model's own rest key: a free OpenRouter

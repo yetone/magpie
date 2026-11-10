@@ -5407,7 +5407,7 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	liveOfInflight(inflightOf(r.Context())).routed(p.ID, unprefixed(model))
 	// the tier the reply said, unknown where the vendor's word tells
 	// nothing (servedTierAt)
-	defer func() { call.Usage.Tier = servedTierAt(p.Host(), call.Usage.Tier) }()
+	defer func() { call.Usage.Tier = servedTierAt(p.VendorHost(), call.Usage.Tier) }()
 	// Normalize for the actual destination, separately on each fallback.
 	// Native ChatGPT accounts accept standalone tool outputs themselves.
 	if from == provider.Responses && (p.Account == nil || p.Account.Agent != "codex") {
@@ -6289,7 +6289,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	geminiWhole := false         // a Gemini client's generateContent
 	var toolSeen map[string]bool // the call ids the client holds (tool_use_ids.go)
 	// a model that wants its reasoning text back (#388, #1104)
-	replay := proto == provider.Responses && (replaysReasoning(model, p.Host()) || replaysReasoning(upstream, p.Host()))
+	replay := proto == provider.Responses && (replaysReasoning(model, p.VendorHost()) || replaysReasoning(upstream, p.VendorHost()))
 	switch proto {
 	case provider.Responses:
 		if codexAsSent(p, r.Header) {
@@ -6322,20 +6322,20 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			// refuses a request without it (#1104)
 			body = withReasoningText(body)
 		} else {
-			if strings.HasSuffix(p.Host(), "openai.com") || p.IsAzure() || !s.fits(p.ID, bareReasoningRefused(model), proto) {
+			if strings.HasSuffix(p.VendorHost(), "openai.com") || p.IsAzure() || !s.fits(p.ID, bareReasoningRefused(model), proto) {
 				// reasoning magpie gave Codex, an id with nothing sealed in
 				// it, which they'd look up and not find (#1008), nor does an
 				// upstream that has turned it away before (#1044)
 				body = withoutBareReasoning(body)
 			}
-			if strings.HasSuffix(p.Host(), "openai.com") || p.IsAzure() || p.Account != nil && p.Account.Agent == "codex" || !s.fits(p.ID, reasoningTextRefused(model), proto) {
+			if strings.HasSuffix(p.VendorHost(), "openai.com") || p.IsAzure() || p.Account != nil && p.Account.Agent == "codex" || !s.fits(p.ID, reasoningTextRefused(model), proto) {
 				// another vendor's reasoning with its text in it (a
 				// routing group's DeepSeek turn), which OpenAI and the
 				// ChatGPT backend take only empty, nor does an upstream
 				// that has turned it away before (#1411)
 				body = withoutReasoningText(body)
 			}
-			if strings.HasSuffix(p.Host(), "openai.com") || p.IsAzure() || p.Account != nil && p.Account.Agent == "codex" || !s.fits(p.ID, citationOffsetRefused(model), proto) {
+			if strings.HasSuffix(p.VendorHost(), "openai.com") || p.IsAzure() || p.Account != nil && p.Account.Agent == "codex" || !s.fits(p.ID, citationOffsetRefused(model), proto) {
 				// a citation another vendor's reply wrote without the
 				// offsets OpenAI's schema wants (Volcengine Ark's
 				// url_citation, #4921), which the ChatGPT backend
@@ -6380,7 +6380,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		// Kimi and OpenAI turn the whole request away for: what a fork
 		// at an earlier turn or a stopped reply leaves (Paidaixinbao on X)
 		body = toolPairsOut(body)
-		if mistral := p.Preset == "mistral" || p.Host() == "api.mistral.ai"; !mistral && (chatReplaysReasoning(buildHost(p), model) || chatReplaysReasoning(buildHost(p), upstream)) {
+		if mistral := p.VendorPreset() == "mistral" || p.VendorHost() == "api.mistral.ai"; !mistral && (chatReplaysReasoning(buildHost(p), model) || chatReplaysReasoning(buildHost(p), upstream)) {
 			// a tool call the client kept no thinking for, which DeepSeek
 			// turns the whole request away for (#1462)
 			body = withReasoningOnToolTurns(body)
@@ -6397,12 +6397,12 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		// there, as the Ollama route's own body builder judges
 		// (ollamaChatBody), so no upstream is sent them
 		body = withoutOllamaOptions(body)
-		compat := geminiCompat(p.Host(), model)
+		compat := geminiCompat(p.VendorHost(), model)
 		// Gemini's thought signatures, which came to the client in its
 		// calls' ids, go back where Gemini wants them; another upstream
 		// gets the calls' own ids (#687)
 		body = chatCallSignatures(body, compat, p.ID, true)
-		if p.Preset == "mistral" || p.Host() == "api.mistral.ai" {
+		if p.VendorPreset() == "mistral" || p.VendorHost() == "api.mistral.ai" {
 			// an earlier turn's reasoning_content, which Mistral turns
 			// away, as the thinking part it takes (#494)
 			body = mistralThinking(body)
@@ -6413,7 +6413,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			// its thinking as the reasoning_content Kimi takes (#1765)
 			body = reasoningDetailsAsContent(body)
 		}
-		if strings.HasSuffix(p.Host(), "openai.com") || p.IsAzure() {
+		if strings.HasSuffix(p.VendorHost(), "openai.com") || p.IsAzure() {
 			// Qwen's switch and Kimi Code's (thinking: {type: …}), which
 			// OpenAI turns away as arguments it doesn't know, and Azure
 			// OpenAI as well
@@ -6451,7 +6451,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			// byte (#1600, billing_line.go)
 			body = withoutBillingLine(body)
 		}
-		if anthropicReplaysThinking(p.Host(), model) || anthropicReplaysThinking(p.Host(), upstream) {
+		if anthropicReplaysThinking(p.VendorHost(), model) || anthropicReplaysThinking(p.VendorHost(), upstream) {
 			// a tool_use turn with no thinking, or Claude's redacted
 			// thinking (a routing group's Claude turn), which DeepSeek
 			// turns the whole request away for (#1611)
@@ -6464,9 +6464,9 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			// goes as it was sent, safeguards and all
 			body = autoModeClassifierBody(model, body)
 		}
-		if outputEffortAt(p.Host(), model) {
+		if outputEffortAt(p.VendorHost(), model) {
 			levels := p.Efforts(model)
-			if len(levels) == 0 && p.Host() == deepseekHost {
+			if len(levels) == 0 && p.VendorHost() == deepseekHost {
 				levels = deepseekEfforts
 			}
 			body = withOutputEffort(body, levels)
@@ -6997,7 +6997,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			}
 			msg += wrongAPINote(p, model, res, b)
 		}
-		if p.Preset == "openrouter" && openRouterSharedPool(b) {
+		if p.VendorPreset() == "openrouter" && openRouterSharedPool(b) {
 			markOpenRouterSharedPool(w)
 		}
 		keepRetry(w.Header(), res.Header, b)
@@ -7067,7 +7067,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		whole = &chatWhole{names: chatToolNames(body)}
 	}
 	var sigs *sigTidy
-	if proto == provider.Chat && geminiCompat(p.Host(), model) {
+	if proto == provider.Chat && geminiCompat(p.VendorHost(), model) {
 		sigs = &sigTidy{sse: sse, by: p.ID}
 	} else if proto == provider.Gemini {
 		// a Gemini client keeps the signatures itself: noted as p's
@@ -7821,7 +7821,7 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r := *req
 			r.Metadata, req = nil, &r
 		}
-		if want := to == provider.Chat && geminiCompat(p.Host(), model) && s.fits(p.ID, thinkingConfigField, to); want != req.GeminiCompat {
+		if want := to == provider.Chat && geminiCompat(p.VendorHost(), model) && s.fits(p.ID, thinkingConfigField, to); want != req.GeminiCompat {
 			r := *req
 			r.GeminiCompat, req = want, &r
 		}
@@ -7938,7 +7938,7 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 		if to == provider.Chat && (p.IsBedrock() || p.IsAzure()) {
 			body = asCompletionTokens(body)
 		}
-		if to == provider.Chat && (p.Preset == "mistral" || p.Host() == "api.mistral.ai") {
+		if to == provider.Chat && (p.VendorPreset() == "mistral" || p.VendorHost() == "api.mistral.ai") {
 			// an earlier turn's reasoning, which the build replays in
 			// reasoning_content for a model whose name says DeepSeek
 			// wherever it is served (chatReplaysReasoning), and Mistral
@@ -7984,7 +7984,7 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			body = rewriteModel(body, wire)
 		}
 		path := upstreamPath(p, to, wire)
-		if req.Resume && to == provider.Chat && chatPrefill(p.Host(), model) == "prefix" {
+		if req.Resume && to == provider.Chat && chatPrefill(p.VendorHost(), model) == "prefix" {
 			// DeepSeek serves its prefix mode under /beta, beside the /v1
 			// the base carries
 			p.Chat = strings.TrimSuffix(p.Chat, "/v1")
@@ -8338,7 +8338,7 @@ func loadsInPlace(p provider.Provider) bool {
 	if p.Account != nil {
 		return p.Account.Agent == "codex"
 	}
-	h := p.Host()
+	h := p.VendorHost()
 	return !p.IsPlugin() && !p.IsAzure() && (h == "api.openai.com" || strings.HasSuffix(h, ".api.openai.com"))
 }
 
@@ -8372,7 +8372,7 @@ func ownCacheKey(p provider.Provider) bool {
 	if p.AddedByAddress() {
 		return true
 	}
-	h := p.Host()
+	h := p.VendorHost()
 	return h == "api.openai.com" || strings.HasSuffix(h, ".api.openai.com")
 }
 
@@ -8827,7 +8827,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 			msg += " — " + antigravityHint(request.System)
 			markAntigravityTurnsAway(w, request.System)
 		}
-		if p.Preset == "openrouter" && openRouterSharedPool(b) {
+		if p.VendorPreset() == "openrouter" && openRouterSharedPool(b) {
 			markOpenRouterSharedPool(w)
 		}
 		keepRetry(w.Header(), res.Header, b)
@@ -9419,11 +9419,11 @@ func render(proto provider.Protocol, res Result, r *Request) []byte {
 // Bailian, Qwen Cloud): Qwen's presets, or one of its hosts given as a
 // custom provider.
 func dashScope(p provider.Provider) bool {
-	switch p.Preset {
+	switch p.VendorPreset() {
 	case "qwen", "qwen-cn", "qwen-token-plan", "bailian-token-plan", "qwencloud", "qwencloud-token-plan":
 		return true
 	}
-	h := p.Host()
+	h := p.VendorHost()
 	return strings.HasPrefix(h, "dashscope") && strings.HasSuffix(h, ".aliyuncs.com") ||
 		strings.HasSuffix(h, ".maas.aliyuncs.com") || h == "maas.qianwenaiapi.com" || strings.HasSuffix(h, ".maas.qianwenaiapi.com") ||
 		h == "maas.qwencloudapi.com" || strings.HasSuffix(h, ".maas.qwencloudapi.com")
@@ -10361,7 +10361,7 @@ func keepsLoneNone(p provider.Provider) bool {
 // tool_choice with no tools beside it: xAI's, and Copilot's /responses in
 // front of it for Grok (#378).
 func refusesLoneToolChoice(p provider.Provider) bool {
-	return p.Host() == "api.x.ai" || p.Account != nil && p.Account.Agent == "copilot"
+	return p.VendorHost() == "api.x.ai" || p.Account != nil && p.Account.Agent == "copilot"
 }
 
 // withoutLoneToolChoice leaves out a tool_choice sent with no tools; with

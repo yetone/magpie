@@ -255,7 +255,7 @@ func withoutForeignThinking(p provider.Provider, body []byte) []byte {
 		return body
 	}
 	model := modelOf(body)
-	if anthropicReplaysThinking(p.Host(), model) || p.Host() != "api.anthropic.com" && !anthropicModel.MatchString(model) {
+	if anthropicReplaysThinking(p.VendorHost(), model) || p.VendorHost() != "api.anthropic.com" && !anthropicModel.MatchString(model) {
 		return body
 	}
 	return withoutThinkingBlocks(body, func(_, _ int, b gjson.Result) bool {

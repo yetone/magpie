@@ -20,7 +20,7 @@ import (
 // "pattern" fields in tool schemas using gjson and splices the normalized string
 // literals in place from the end of the body backwards.
 func deepseekToolPatterns(p provider.Provider, to provider.Protocol, body []byte) []byte {
-	if p.Preset != "deepseek" && provider.HostOf(p.Base(to)) != "api.deepseek.com" {
+	if p.VendorPreset() != "deepseek" && provider.HostOf(p.Base(to)) != "api.deepseek.com" && p.VendorHost() != "api.deepseek.com" {
 		return body
 	}
 	if !bytes.Contains(body, []byte(`\\0`)) {
@@ -190,7 +190,7 @@ func deepseekModel(id string) bool {
 // vendor's chat API is left alone: OpenAI's and Azure's want
 // max_completion_tokens.
 func deepseekTokenField(p provider.Provider, to provider.Protocol, body []byte) []byte {
-	if to != provider.Chat || p.Preset != "deepseek" && provider.HostOf(p.Base(to)) != "api.deepseek.com" && !deepseekModel(gjson.GetBytes(body, "model").String()) {
+	if to != provider.Chat || p.VendorPreset() != "deepseek" && provider.HostOf(p.Base(to)) != "api.deepseek.com" && p.VendorHost() != "api.deepseek.com" && !deepseekModel(gjson.GetBytes(body, "model").String()) {
 		return body
 	}
 	if !bytes.Contains(body, []byte(`"max_completion_tokens"`)) || gjson.GetBytes(body, "max_tokens").Exists() {

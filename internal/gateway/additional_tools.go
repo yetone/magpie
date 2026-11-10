@@ -106,7 +106,7 @@ func liteKept(p provider.Provider, to provider.Protocol, codex bool, model strin
 		return false
 	}
 	return p.Account != nil && p.Account.Agent == "codex" ||
-		strings.HasSuffix(p.Host(), "openai.com") ||
+		strings.HasSuffix(p.VendorHost(), "openai.com") ||
 		p.CodexAsSent && p.Account == nil && codex ||
 		p.IsRemoteMagpie() && codexModel(model)
 }

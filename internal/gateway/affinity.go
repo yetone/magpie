@@ -88,7 +88,7 @@ func coldAfter(p provider.Provider) time.Duration {
 	if p.Account != nil && p.Account.Agent == "codex" {
 		return chatGPTCold
 	}
-	if p.Host() == deepseekHost {
+	if p.VendorHost() == deepseekHost {
 		return deepseekCold
 	}
 	return cacheCold

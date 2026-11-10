@@ -310,6 +310,9 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
     </div>
     <p>模型还可以写 <code>provider: { npm, api }</code>，使用和供应商不同的 API 或地址；也可以写 <code>headers</code>、<code>options</code>，以及用 <code>disabled: true</code> 隐藏它。</p>
 
+        <h3 id="vendor">转发 magpie 认识的厂商</h3>
+    <p>如果提供商的 <code>api</code> 是 magpie 有预设的厂商 API（<code>https://api.mistral.ai/v1</code>、<code>https://api.deepseek.com/v1</code>、<code>https://openrouter.ai/api/v1</code> 等），magpie 会像对待该厂商一样处理发给你的提供商的请求，再交给你的 <code>fetch</code>：Mistral 的 thinking 片段代替 <code>reasoning_content</code>、DeepSeek 和 xAI 的 schema 规则、OpenRouter 的免费池等。无需额外配置，读的就是你已经给出的 base URL，即使 loader 的 <code>baseURL</code> 指向别处。不在任何预设主机上、在 <code>localhost</code> 或局域网上的地址不会套用任何厂商的处理。</p>
+
         <h3 id="searches">自己能联网搜索的上游</h3>
     <p>如果插件转发的是 Anthropic 或 OpenAI 官方 API（它们自己执行托管的联网搜索工具），在 <code>config</code> 钩子里给提供商设 <code>searches: true</code>。之后客户端的联网搜索（Claude Code 的 WebSearch、Codex 的 <code>web_search</code>）会原样发到你的 <code>fetch</code>，只作用于该提供商走 Anthropic 或 Responses 的模型，不再经过 magpie 自己的代搜；Chat 模型不受影响。magpie 不会自动用它替其他模型搜索，但可以在设置里手动指定它为搜索模型。</p>
 
