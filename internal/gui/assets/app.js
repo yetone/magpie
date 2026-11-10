@@ -23823,8 +23823,7 @@ function navMorph(change) {
   const stuck = setTimeout(() => vt.skipTransition(), MORPH_MAX);
   vt.finished.finally(() => { clearTimeout(stuck); root.classList.remove("nav-morph"); });
 }
-// where the page shown keeps its own tabs: the sidebar lists them under it
-// and picks them there, the page's own strip hidden (app.css)
+// each page's own tabs, listed in the sidebar (navSubs)
 var NAV_SUBS = {
   usage: () => $("#usageTab"),
   library: () => $("#view-library .lib-tabs"),
@@ -24033,8 +24032,7 @@ function navSubEnter(box) {
     { duration: 260, delay: 40 + Math.min(i, 12) * 20, easing: NAV_EASE, fill: "backwards" }));
   box.querySelector(".nav-hl").animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, delay: 80, fill: "backwards" });
 }
-// a folding list is out of the way at once: not a tab, not reachable, not
-// found by what looks for the sidebar's rows
+// a folding list is out of reach at once
 function navSubLeave(box) {
   box.classList.add("leaving");
   box.removeAttribute("role");
