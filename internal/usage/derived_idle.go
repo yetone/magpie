@@ -84,11 +84,18 @@ func dropDerived() int {
 // dropEffortPeriods lets go of every period's kept CodexModelEffort answer
 // but one being built: each thread's consumption by model, ~7 MB of a real
 // history's idle heap after one visit to the Sessions page. The next ask
-// builds it again, waiting for it as a first ask does.
+// builds it again, waiting for it as a first ask does. The effort before
+// the last few days (effortOlds, ~2 MB more) goes too when no build is
+// under way: it is in effort-v1.json, read back by the next build.
 func dropEffortPeriods() int {
+	n := 0
+	if codexEffortBuilding.TryLock() {
+		n += len(effortOlds)
+		clear(effortOlds)
+		codexEffortBuilding.Unlock()
+	}
 	codexEffort.Lock()
 	defer codexEffort.Unlock()
-	n := 0
 	for p, e := range codexEffort.periods {
 		if e.building == nil {
 			delete(codexEffort.periods, p)

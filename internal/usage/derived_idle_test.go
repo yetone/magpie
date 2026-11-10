@@ -83,6 +83,12 @@ func TestIdleCodexEffortLetGoAndBuiltAgain(t *testing.T) {
 	t.Cleanup(func() { effortBuilt = nil })
 
 	CodexModelEffort(All)
+	codexEffortBuilding.Lock()
+	olds := len(effortOlds)
+	codexEffortBuilding.Unlock()
+	if olds == 0 {
+		t.Fatal("before: no effort before the cut kept; the test builds none")
+	}
 	derivedIdleCheck() // asked just now: kept
 	if CodexModelEffort(All); built != 1 {
 		t.Fatalf("built %d times while asked; want the answer kept", built)
@@ -92,8 +98,11 @@ func TestIdleCodexEffortLetGoAndBuiltAgain(t *testing.T) {
 	codexEffort.Lock()
 	kept := len(codexEffort.periods)
 	codexEffort.Unlock()
-	if kept != 0 {
-		t.Fatalf("%d periods' answers kept while idle", kept)
+	codexEffortBuilding.Lock()
+	olds = len(effortOlds)
+	codexEffortBuilding.Unlock()
+	if kept != 0 || olds != 0 {
+		t.Fatalf("%d periods' answers and %d periods' effort before the cut kept while idle", kept, olds)
 	}
 	again := CodexModelEffort(All)
 	if got, ok := findModelEffort(again["main-a"], "m", "low"); built != 2 || !ok || got.Input != 20 {
