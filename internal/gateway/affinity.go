@@ -427,7 +427,10 @@ func turnIn(req *Request) (turn int, within bool) {
 		case result:
 			within = true
 			results = true
-		case said && results:
+		case results && withImages(m):
+			// the words beside the images are their caption, as match
+			// reads them; the user's words in a message of no images
+			// begin a turn (saidWithResults)
 			within = true
 		case said:
 			turn++

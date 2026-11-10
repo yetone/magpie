@@ -35,6 +35,9 @@ func TestTurnInCarriesAnImageBesideItsToolResult(t *testing.T) {
 		{"the user's image beside a result", []Message{ask, call, Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: "t1", Text: "ok"}}}, img}, 1, true},
 		// a plain result, as before
 		{"a text result", []Message{ask, call, Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: "t1", Text: "ok"}}}}, 1, true},
+		// the user's own words beside the results, with no image, are a
+		// turn of theirs, as the bridge tells them (saidWithResults)
+		{"the user's words beside a result", []Message{ask, call, Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: "t1", Text: "ok"}}}, userMsg("stop, read the other one")}, 2, false},
 	} {
 		if turn, within := turnIn(&Request{Messages: tc.ms}); turn != tc.turn || within != tc.within {
 			t.Errorf("%s: turn %d within %v, want %d %v", tc.name, turn, within, tc.turn, tc.within)
