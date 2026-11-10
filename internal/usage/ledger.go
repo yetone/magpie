@@ -183,6 +183,15 @@ func (f Filter) keeps(r Record) bool {
 	return f.keepsRecord(&r, false, "", "")
 }
 
+// sameGroupModel is whether a record's model is the found routing group
+// a filter names by its kept id (group/auto-…, FilterOf), written by an
+// agent's own session file as auto/<model>. Only such pairs read the
+// providers, not every record a filter passes over.
+func sameGroupModel(recorded, filtered string) bool {
+	return strings.HasPrefix(filtered, provider.GroupPrefix) && strings.HasPrefix(recorded, provider.AutoPrefix) &&
+		provider.CanonicalRef(recorded) == filtered
+}
+
 func (f Filter) keepsRecord(r *Record, codexIdentity bool, subagent, parentAgent string) bool {
 	if f.Day != "" {
 		var day [len(time.DateOnly)]byte
@@ -196,7 +205,7 @@ func (f Filter) keepsRecord(r *Record, codexIdentity bool, subagent, parentAgent
 	if f.RouteID != 0 && r.RouteID != f.RouteID {
 		return false
 	}
-	if f.Model != "" && r.Model != f.Model {
+	if f.Model != "" && r.Model != f.Model && !sameGroupModel(r.Model, f.Model) {
 		return false
 	}
 	if f.Agent != "" && ReportedAs(r.Agent) != f.Agent {
@@ -1077,16 +1086,36 @@ func (r *Row) key(by string) string {
 // keyer is Row.key for many rows, made once for each provider and model:
 // a "modelAt" is a string built of two, which a page of thousands of rows
 // would otherwise build again for each.
-type keyer map[[2]string]string
+type keyer struct {
+	public func(string) string
+	models map[string]string
+	at     map[[2]string]string
+}
+
+func newKeyer() keyer {
+	return keyer{public: provider.PublicRefs(), models: map[string]string{}, at: map[[2]string]string{}}
+}
 
 func (m keyer) key(r *Row, by string) string {
-	if by != "modelAt" {
+	if by != "modelAt" && by != "model" {
 		return r.key(by)
 	}
-	k, ok := m[[2]string{r.Provider, r.Model}]
+	model := r.Model
+	if m.public != nil {
+		var ok bool
+		model, ok = m.models[r.Model]
+		if !ok {
+			model = m.public(r.Model)
+			m.models[r.Model] = model
+		}
+	}
+	if by == "model" {
+		return model
+	}
+	k, ok := m.at[[2]string{r.Provider, r.Model}]
 	if !ok {
-		k = r.key(by)
-		m[[2]string{r.Provider, r.Model}] = k
+		k = ModelAtKey(r.Provider, model)
+		m.at[[2]string{r.Provider, r.Model}] = k
 	}
 	return k
 }
@@ -1105,7 +1134,7 @@ type Share struct {
 func Breakdown(rows []Row, by string) []Share {
 	at := map[string]*Share{}
 	var out []*Share
-	keys := keyer{}
+	keys := newKeyer()
 	for _, r := range rows {
 		if r.IsRejected() {
 			continue
@@ -1226,7 +1255,7 @@ func ledgerSeriesAt(p Period, rows []Row, now time.Time) (bucket string, pts []S
 		}
 	}
 	kept := map[string]map[string]bool{}
-	keys := keyer{}
+	keys := newKeyer()
 	for _, d := range Dimensions {
 		kept[d] = map[string]bool{}
 		for i, s := range Breakdown(rows, d) {

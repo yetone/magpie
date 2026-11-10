@@ -144,8 +144,7 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 		// told so without the rows being made, encoded and hashed again,
 		// ~60% of an unchanged poll's ~22 MB over ~17k real sessions
 		logV, logKnown := usage.LogVersion()
-		aliases := provider.UsageAliases()
-		now := listTag{log: logV, drawn: drawn.String(), aliases: aliases}
+		now := listTag{log: logV, drawn: drawn.String(), names: provider.UsageNamesKey()}
 		made := -1
 		listTags.Lock()
 		if t, ok := listTags.m[n]; ok && logKnown && t.same(now) && r.Header.Get("X-Magpie-Had") == t.tag {
@@ -592,15 +591,15 @@ var listTags struct {
 var listsRowed atomic.Int64
 
 type listTag struct {
-	made    int    // sessions.ListUnless's listing
-	log     uint64 // usage.LogVersion
-	drawn   string // the agents' names and icons, and the folders
-	aliases map[string]string
-	tag     string
+	made  int    // sessions.ListUnless's listing
+	log   uint64 // usage.LogVersion
+	drawn string // the agents' names and icons, and the folders
+	names string // usage aliases and found groups' public ids
+	tag   string
 }
 
 func (t listTag) same(u listTag) bool {
-	return t.log == u.log && t.drawn == u.drawn && maps.Equal(t.aliases, u.aliases)
+	return t.log == u.log && t.drawn == u.drawn && t.names == u.names
 }
 
 // sameStats is whether a and b would be sent the same: a read again
@@ -643,6 +642,11 @@ var overviewsMade atomic.Int64
 const overviewsKept = 8
 
 func writeOverview(rw http.ResponseWriter, days int, agentID, model, cwd string) {
+	if model != "" {
+		if alias := provider.UsageAlias(); alias != nil {
+			model = alias(model)
+		}
+	}
 	st, gen := statsForGen(days)
 	key := overviewKey{days, gen, agentID, model, cwd}
 	overviews.Lock()

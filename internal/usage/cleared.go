@@ -37,21 +37,21 @@ var clearedAs atomic.Pointer[clearSet]
 // reader of the usage waits on.
 func readCleared() *clearSet {
 	marks := settings.UsageClearedNow()
-	var aliases map[string]string
+	names := ""
 	if len(marks) > 0 {
-		aliases = provider.UsageAliases()
+		names = provider.UsageNamesKey()
 	}
 	b, _ := json.Marshal(struct {
 		M []settings.UsageClear
-		A map[string]string
-	}{marks, aliases})
+		N string
+	}{marks, names})
 	key := string(b)
 	if cur := clearedAs.Load(); cur != nil && cur.key == key {
 		return cur
 	}
 	c := &clearSet{marks: marks, key: key}
-	if len(aliases) > 0 {
-		c.alias = provider.UsageAliasIn(aliases)
+	if len(marks) > 0 {
+		c.alias = provider.UsageAlias()
 	}
 	for _, m := range marks {
 		if m.Provider == "" && m.Model == "" && m.Time().After(c.all) {
@@ -92,7 +92,7 @@ func (c *clearSet) hides(r *Record) bool {
 			if model == "" {
 				model = c.alias(r.Model)
 			}
-			if model == m.Model {
+			if model == c.alias(m.Model) {
 				return true
 			}
 		}

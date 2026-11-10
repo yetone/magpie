@@ -139,8 +139,7 @@ func usagePriceCacheKey(now time.Time) string {
 	prices, _ := json.Marshal(st.ModelPrices)
 	aliases := provider.UsageRenames().Key()
 	// and the names models' usage is counted under, which the groups key on
-	usageAliases, _ := json.Marshal(st.UsageAliases)
-	fmt.Fprint(h, string(prices), string(aliases), string(usageAliases))
+	fmt.Fprint(h, string(prices), string(aliases), provider.UsageNamesKey())
 	for _, current := range provider.All() {
 		fmt.Fprintf(h, "%q:%q:%v:%t:%t:%t;", current.ID, current.Where(), current.Catalogs(), current.IsPlugin(), current.Account == nil, current.Key != "")
 		if current.Account != nil {

@@ -2,12 +2,14 @@ package usage
 
 import (
 	"hash/maphash"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
 )
 
@@ -593,6 +595,37 @@ var effortBuilt func()
 // never write it. A copy of every thread's for each ask was ~230 MB every
 // 80 s of a Sessions page open over a large history (#2278).
 func CodexModelEffort(p Period) map[string][]sessions.ModelEffort {
+	return namedModelEffort(keptCodexModelEffort(p), provider.UsageAlias())
+}
+
+// namedModelEffort maps only the returned view. The ledger and its kept sums
+// retain their original model ids and prices, as session parses do.
+func namedModelEffort(in map[string][]sessions.ModelEffort, alias func(string) string) map[string][]sessions.ModelEffort {
+	if alias == nil {
+		return in
+	}
+	var out map[string][]sessions.ModelEffort
+	for actor, rows := range in {
+		if !slices.ContainsFunc(rows, func(r sessions.ModelEffort) bool { return alias(r.Model) != r.Model }) {
+			continue
+		}
+		if out == nil {
+			out = maps.Clone(in)
+		}
+		sums := effortSums{}
+		for _, row := range rows {
+			row.Model = alias(row.Model)
+			sums.addValue(actor, row)
+		}
+		out[actor] = sums.values()[actor]
+	}
+	if out != nil {
+		return out
+	}
+	return in
+}
+
+func keptCodexModelEffort(p Period) map[string][]sessions.ModelEffort {
 	if LogCalls != nil { // synthetic logs carry no state to key on
 		return codexModelEffort(codexEffortRows(p, Clock(), LogCalls))
 	}
