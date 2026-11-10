@@ -2,9 +2,12 @@ package provider
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -206,5 +209,67 @@ func TestClaudeAccountListsFable52(t *testing.T) {
 	}
 	if got := claudeExposed(t); !slices.Contains(got, "claude-fable-5-2") {
 		t.Fatalf("not served beside picks of every model listed before: %v", got)
+	}
+}
+
+// Fetch models again on a Claude subscription fetches models.dev's list
+// first when the catalog magpie keeps is older than a few minutes: a
+// model launched since the day's sync is on the list the user asked for
+// (hhdaxia on X: Fable 5.2 in Claude Code's /model, on models.dev, and
+// not in the vendor's list "just now" fetched). Outside a process that
+// keeps the catalog fresh (a CLI command, a test) nothing is fetched.
+func TestClaudeFetchAsksModelsDevForANewModel(t *testing.T) {
+	home := claudeHome(t)
+	claudeSignIn(t, home, time.Now().Add(time.Hour))
+	t.Cleanup(catalog.Reset)
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Write([]byte(`{"anthropic":{"id":"anthropic","name":"Anthropic","models":{` + mdOpus55 + "," + mdHaiku55 + "," + mdFable52 + `}}}`))
+	}))
+	defer srv.Close()
+
+	// the day's sync, two hours before Fable 5.2 reached models.dev
+	writeAnthropicCatalog(t, mdOpus55, mdHaiku55)
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(catalog.CachePath(), old, old); err != nil {
+		t.Fatal(err)
+	}
+	fetch := func() []string {
+		t.Helper()
+		p, ok := find(All(), "claude")
+		if !ok || p.Account == nil {
+			t.Fatalf("claude: %+v %v", p, ok)
+		}
+		ms, err := p.Fetch(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return modelIDs(ms)
+	}
+
+	t.Cleanup(catalog.KeepFreshForTest(srv.URL))
+	if got := fetch(); len(got) == 0 || got[0] != "claude-fable-5-2" {
+		t.Fatalf("Fable 5.2 not first after a fetch: %v (%d asks of models.dev)", got, hits.Load())
+	}
+	p, _ := find(All(), "claude")
+	if !slices.ContainsFunc(p.Available(), func(m catalog.Model) bool { return m.ID == "claude-fable-5-2" }) {
+		t.Fatalf("Fable 5.2 not served: %v", modelIDs(p.Available()))
+	}
+	// fetched again at once: models.dev is asked nothing more
+	fetch()
+	if n := hits.Load(); n != 1 {
+		t.Fatalf("%d asks of models.dev, want 1", n)
+	}
+
+	// a process that doesn't keep the catalog fresh asks nothing
+	catalog.KeepFreshForTest(srv.URL)()
+	writeAnthropicCatalog(t, mdOpus55)
+	os.Chtimes(catalog.CachePath(), old, old)
+	if got := fetch(); slices.Contains(got, "claude-fable-5-2") {
+		t.Fatalf("models.dev asked outside KeepFresh: %v", got)
+	}
+	if n := hits.Load(); n != 1 {
+		t.Fatalf("%d asks of models.dev, want 1", n)
 	}
 }

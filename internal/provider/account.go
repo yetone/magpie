@@ -879,7 +879,10 @@ func claudeProvider(acct *Account) Provider {
 	// Claude's models are the ones magpie knows and the ones Claude Code
 	// was told an account has (claude_models.go): listing them would ask
 	// Anthropic with the account's sign-in, which magpie never does
-	acct.fetch = func(context.Context) ([]catalog.Model, error) {
+	acct.fetch = func(ctx context.Context) ([]catalog.Model, error) {
+		// models.dev's list, fetched again first when it is older than
+		// a few minutes: a model launched since the day's sync is listed
+		catalog.Asked(ctx)
 		ms := claudeModels()
 		return ms, catalog.SaveLive("claude", claudeBase, ms)
 	}

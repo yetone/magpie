@@ -60,6 +60,48 @@ func Missing() {
 	go fetch()
 }
 
+// askedAfter is how old the catalog may be when a list made of it alone
+// is asked for again (Asked).
+var askedAfter = 10 * time.Minute
+
+// Asked says a model list made of the catalog alone is being fetched: a
+// Claude subscription's, which is models.dev's anthropic list, as magpie
+// asks Anthropic nothing in Claude Code's name. The catalog is fetched
+// now, as long as ctx allows, when it is older than askedAfter and wasn't
+// tried in that time, so a model launched since the day's fetch is on the
+// list the user asked for (hhdaxia on X: Fable 5.2, on models.dev and in
+// Claude Code's /model, not after Fetch models again). Only in a process
+// that keeps the catalog fresh (KeepFresh), one fetch at a time, and a
+// failed one leaves the catalog as it was.
+func Asked(ctx context.Context) {
+	if !keeping.Load() || time.Since(time.Unix(0, lastFetch.Load())) < askedAfter {
+		return
+	}
+	if src := Source(); src != "" {
+		if st, err := os.Stat(src); err == nil && time.Since(st.ModTime()) < askedAfter {
+			return
+		}
+	}
+	if !fetching.CompareAndSwap(false, true) {
+		return
+	}
+	defer fetching.Store(false)
+	lastFetch.Store(time.Now().UnixNano())
+	if err := Sync(ctx); err != nil {
+		log.Println("catalog:", err)
+	}
+}
+
+// KeepFreshForTest has the catalog kept fresh from url, as the app's
+// backend keeps it from models.dev, for a test of what asks for it.
+func KeepFreshForTest(url string) (restore func()) {
+	was := modelsDevURL
+	modelsDevURL = url
+	keeping.Store(true)
+	lastFetch.Store(0)
+	return func() { modelsDevURL = was; keeping.Store(false); lastFetch.Store(0) }
+}
+
 // fetch is Sync with a bound, one at a time.
 func fetch() {
 	if !fetching.CompareAndSwap(false, true) {
