@@ -1590,6 +1590,15 @@ var unservedWords = provider.ModelUnserved
 // and its other models are asked as before. A refusal that also says
 // quota, credit or a rate limit is about the account, and rests it.
 func modelRefused(status int, body []byte) bool {
+	if status >= 500 {
+		// a relay pooling accounts says why each refused it in the last
+		// one's words (poolLastError): when those are the model's, the
+		// model is what the relay can't serve, not the key
+		if m := poolLastError.FindSubmatch(wordsOf(body)); m != nil {
+			return modelRefused(http.StatusNotFound, m[1])
+		}
+		return false
+	}
 	if modelRetired(status, body) {
 		return true
 	}
@@ -1602,6 +1611,18 @@ func modelRefused(status int, body []byte) bool {
 	body = wordsOf(body)
 	return unservedWords.Match(body) && !quotaWords.Match(body) && !refusedWords.Match(body) && !zdrRefused(status, body)
 }
+
+// poolLastError is a relay that pools accounts (CLIProxyAPI) answering,
+// once every account it has for the model refused, its 503
+// "auth_unavailable: no auth available (providers=codex, model=gpt-6-sol;
+// last upstream error: model_not_found: The 'gpt-6-sol' model is not
+// supported when using Codex with a ChatGPT account.)" (Jray05343207 on
+// X): its accounts are ChatGPT plans that lack the model, which the relay
+// lists all the same. Read as the 503 it came with, it rested the whole
+// key as an outage, with every model on it, and another provider of the
+// model was never asked for it. The words after "last upstream error:"
+// are the refusal itself.
+var poolLastError = lazyre.New(`(?i)no auth available \(providers=[^;)"]*; last upstream error: ([^"\n]+)`)
 
 // codeAssistModelMissing says a Google account's Code Assist — the
 // Antigravity or Gemini CLI built-in's — answered 404 NOT_FOUND

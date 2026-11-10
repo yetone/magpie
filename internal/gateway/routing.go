@@ -133,7 +133,7 @@ func plainUnavailable(c candidate, status int, body []byte) bool {
 		return false
 	}
 	return failureOf(c, status, body) == failOther && !vendorOverloaded(status, body) &&
-		!codexReset(status, body) && !protectionRefused(status, body) &&
+		!modelRefused(status, body) && !codexReset(status, body) && !protectionRefused(status, body) &&
 		!bytes.Contains(body, []byte(didNotStream)) && refusalWords(status, body) != ""
 }
 
