@@ -765,7 +765,7 @@ func (s *Server) images(edit bool) http.HandlerFunc {
 		)
 		for i, m := range tries {
 			call.Provider, model = m.Provider.ID, m.Model
-			drew, out, code, capBack, err = s.drawOnAccounts(ctx, r, m.Provider, m.Model, d)
+			drew, out, code, capBack, err = s.drawOnAccounts(ctx, memberOn(r, g, m), m.Provider, m.Model, d)
 			// a group's next member is asked as a chat's would be: while
 			// this one's vendor fails, is out of quota or doesn't serve the
 			// model; a refusal of the request itself is the request's
@@ -884,28 +884,30 @@ func (s *Server) drawingTries(g provider.Group, ms []provider.Member, keeps map[
 	if slices.ContainsFunc(ms, func(m provider.Member) bool { return makes(m.Provider, m.Model) }) {
 		ms = slices.DeleteFunc(slices.Clone(ms), func(m provider.Member) bool { return !makes(m.Provider, m.Model) })
 	}
-	byRef := map[string]provider.Member{}
-	for _, m := range ms {
-		if ref := m.Provider.ID + "/" + m.Model; byRef[ref].Model == "" {
-			byRef[ref] = m
-		}
-	}
+	// a member on an account of its own (EastonXvii on X) is one of its
+	// own beside the same model on another, or on any: each is asked once
 	var out []provider.Member
 	seen := map[string]bool{}
-	add := func(ref string) {
-		m, ok := byRef[ref]
-		if !ok || seen[ref] || keeps != nil && !keeps[ref] {
-			return
+	add := func(m provider.Member) bool {
+		ref := m.Provider.ID + "/" + m.Model
+		k := ref + provider.AccountMark + m.Account
+		if seen[k] || keeps != nil && !keeps[ref] {
+			return false
 		}
-		seen[ref] = true
+		seen[k] = true
 		out = append(out, m)
+		return true
 	}
 	cs, _ := s.planGroup(g.Live(), ms, provider.Chat)
 	for _, c := range cs {
-		add(c.p.ID + "/" + c.model)
+		for _, m := range ms {
+			if m.Provider.ID == c.p.ID && m.Model == c.model && memberHeld(c, m, g) == "" && add(m) {
+				break
+			}
+		}
 	}
 	for _, m := range ms {
-		add(m.Provider.ID + "/" + m.Model)
+		add(m)
 	}
 	return out
 }

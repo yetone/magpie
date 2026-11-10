@@ -537,6 +537,52 @@ used only on the accounts it names, one it doesn't name on every account.
   some are ticked in its menu (`openPicker`, `multi`). Every save sends the
   group's accounts, since a save replaces the group.
 
+### A member on one account of its own
+
+A member may name one account or key of its provider (EastonXvii on X:
+Astra on account A, then Astra on B, then Sol on C, tried strictly in that
+order), so a group's order runs over accounts as well as models. Before
+it, `Group.Accounts` was a set for the whole group, with no order between
+the accounts of one provider, and the user made a group per account.
+
+- The account is the member id's last part, after its effort and fast:
+  `provider/model[:effort][:fast]#<account>` (`provider.MemberAccount`,
+  `AccountMark`, [`groupaccount.go`](../../internal/provider/groupaccount.go)).
+  Every list keyed by a member's spelling (rules, `Fast`, `Off`, `Weights`,
+  `Placed`, `EffortMaps`, `Pick`) and `membersFound`'s dedup key therefore
+  tell the same model on two accounts apart, and the vendor is still asked
+  for the model's own id. A group saved before has no `#`, so it reads as
+  it did.
+- `SaveGroup` keeps the account as its stable id (`memberAccountKept`,
+  `ResolveAccount`: a typed name becomes the id) and refuses one on a group
+  member (`group/…`, `auto/…`) and a new one magpie has no such account or
+  key for (`checkMemberAccounts`); one the stored group had already that is
+  gone is kept, matching nothing, as `Group.Accounts` keeps its own.
+- The gateway holds such a member to that account alone: `planLevel`'s
+  `keys` leaves the provider's other candidates out as Held rows
+  (`memberHeld`, `Weighed.HeldOwn` with `HeldBy` the group), and fallback goes
+  to the next member, never to another account of the same model. With
+  `routing: order` the members are tried top first. The member's account is
+  narrowed further by `Group.Accounts` and a key's accounts, never widened.
+- Shared and imported groups drop a member's account (`withoutMemberAccounts`
+  in `ShareGroup` and `importGroup`); two members left the same are one.
+- The editor's model row has an account chip (`rt-macct` in the routing
+  plugin's `client.js`, for a provider `/api/groups`' `accounts` lists, which
+  now also has one a member names): "Any account", each account, and "Also on
+  another account…", which adds the model on another account as a member of
+  its own after the row. `memberJSON.Account` carries the member's account.
+  The CLI takes `#<account>` in `models=` (`memberResolver`), and the TUI's
+  effort key keeps it.
+- Image and video groups go the same way: `drawingTries` keeps the same
+  model on two accounts as two tries, matched to the chat plan's candidates
+  by `memberHeld`, and each try is drawn on a request held to its member's
+  account alone (`memberOn`, before `drawOnAccounts` and `startVideo`).
+  `count_tokens` counts on the resolved member's account (`heldByGroupAt`).
+
+`TestGroupMemberAccountsInOrder`, `TestGroupMemberAccountNeverSpills`,
+`TestGroupMemberAccountSaved`, `TestGroupMemberAccountsDraw`,
+`TestGroupMembersOnAccounts` (CLI), `group-member-account.test.cjs`.
+
 `TestGroupAccountsHoldEveryRoute`, `TestGroupAccountsFallBackWithinTheGroup`,
 `TestGroupAccountsAndAKeysAccounts`, `TestGroupAccountsSaved`,
 `TestHeldToGroup`, `group-accounts.test.cjs`.

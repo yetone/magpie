@@ -157,6 +157,10 @@ type memberJSON struct {
 	// Effort that effort ("provider/model:low"); "" for one without
 	Of     string `json:"of,omitempty"`
 	Effort string `json:"effort,omitempty"`
+	// Account is the one account or key the member is sent on,
+	// "<provider>/<id>" as Accounts has them ("provider/model#<id>",
+	// EastonXvii on X); "" for every one the group allows
+	Account string `json:"account,omitempty"`
 	// Fast: the group sends it in its vendor's fast mode; CanFast: its
 	// model has one (provider.CanFast)
 	Fast    bool `json:"fast,omitempty"`
@@ -314,6 +318,14 @@ func groupAccounts(gs []provider.Group) map[string][]keyModelJSON {
 				named[strings.ToLower(pid)] = true
 			}
 		}
+		for _, m := range g.Members {
+			// a member on an account of its own (EastonXvii on X)
+			if _, acct := provider.MemberAccount(m); acct != "" {
+				if pid, _, ok := strings.Cut(m, "/"); ok {
+					named[strings.ToLower(pid)] = true
+				}
+			}
+		}
 	}
 	out := map[string][]keyModelJSON{}
 	for _, p := range provider.All() {
@@ -441,9 +453,17 @@ func groupsState() groupsJSON {
 			}
 			of, effort := provider.MemberEffort(id)
 			m.Of, m.Effort = of, effort
+			if _, acct := provider.MemberAccount(id); acct != "" {
+				if pid, _, ok := strings.Cut(of, "/"); ok {
+					m.Account = pid + "/" + acct
+				}
+			}
 			if p, model, ok := provider.ResolveRoute(of); ok {
 				_, who := onOf(p)
 				m.Ready, m.Provider, m.Name, m.Icon, m.Model, m.On = true, p.ID, p.Name, p.Icon, model, max(len(who), 1)
+				if m.Account != "" {
+					m.On = 1 // its own account alone
+				}
 				m.CanFast = provider.CanFast(p, model)
 				m.OwnFast = m.CanFast && provider.OwnFast(p, model)
 				m.Fast = m.CanFast && g.IsFast(id)

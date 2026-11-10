@@ -475,7 +475,8 @@ func (m model) updateGroup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}, id+said)
 		}
 		model, effort := provider.MemberEffort(id)
-		to := provider.WithMemberEffort(model, nextMemberEffort(effort))
+		_, acct := provider.MemberAccount(id) // on its own account still
+		to := provider.WithMemberAccount(provider.WithMemberEffort(model, nextMemberEffort(effort)), acct)
 		return m, saveGroup(g.ID, func(g *provider.Group) error {
 			g.RenameMember(id, to)
 			return nil

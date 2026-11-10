@@ -30,6 +30,11 @@ func MemberFast(id string) (member string, fast bool) {
 }
 
 func memberFastIn(entries []Entry, id string) (string, bool) {
+	if base, acct := MemberAccount(id); acct != "" {
+		// "a/m:high:fast#x": fast is said before the account, which is last
+		m, fast := memberFastIn(entries, base)
+		return WithMemberAccount(m, acct), fast
+	}
 	i := strings.LastIndex(id, ":")
 	if i <= 0 || !strings.EqualFold(id[i+1:], FastWord) {
 		return id, false

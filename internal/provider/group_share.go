@@ -52,9 +52,10 @@ func ShareGroup(id string) (string, error) {
 	g.Members, g.Match = ownMembers(g)
 	g.Matched = nil
 	g.Auto, g.Hidden, g.Disabled = false, false, false
-	g.Accounts = nil // this magpie's accounts: another has its own
-	g.Keys = nil     // this magpie's gateway keys, the same
-	g.Seen = nil     // what this magpie found: another finds its own
+	g.Accounts = nil          // this magpie's accounts: another has its own
+	withoutMemberAccounts(&g) // a member's own account too
+	g.Keys = nil              // this magpie's gateway keys, the same
+	g.Seen = nil              // what this magpie found: another finds its own
 	g.Rules = slices.DeleteFunc(g.Rules, Rule.ByFolder)
 	out, err := json.Marshal(SharedGroup{Magpie: ShareMark, Version: ShareVersion, Group: g})
 	return string(out), err
@@ -160,8 +161,9 @@ func importGroup(text string, over bool) (Imported, error) {
 		return Imported{}, err
 	}
 	g := s.Group
-	g.Accounts = nil    // another magpie's accounts, never this one's
-	g.Keys = []string{} // its gateway keys too; over, the user's are kept below
+	g.Accounts = nil          // another magpie's accounts, never this one's
+	g.Keys = []string{}       // its gateway keys too; over, the user's are kept below
+	withoutMemberAccounts(&g) // and a member's own account (a text made before ShareGroup dropped them)
 	entries := providerEntries()
 	all := Groups()
 	var res Imported
@@ -299,6 +301,7 @@ func importGroup(text string, over bool) (Imported, error) {
 // Providers order; "" when none does. A member's own effort goes with it.
 func memberHere(entries []Entry, all []Group, m string) string {
 	m = CanonicalRef(strings.TrimPrefix(strings.TrimSpace(m), "magpie/"))
+	m, _ = MemberAccount(m) // another magpie's account, never this one's
 	model, effort := memberEffortIn(entries, m)
 	if gid, ok := strings.CutPrefix(model, GroupPrefix); ok {
 		if slices.ContainsFunc(all, func(g Group) bool { return g.ID == gid && !g.Hidden }) {

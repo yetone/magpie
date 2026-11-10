@@ -383,6 +383,11 @@ type Member struct {
 	// Fast is set on a member the group sends in its vendor's fast mode
 	// (Group.Fast), where its model has one.
 	Fast bool
+	// Account is the one account or key of Provider the member is sent
+	// on, "<provider>/<stable id>", as Group.Accounts has them
+	// ("provider/model#<id>", groupaccount.go); "" for every one the
+	// groups it is in allow.
+	Account string
 	// At is where the walk down the group met it, counting every model of
 	// every group in it, the same model's later places too: a group's own
 	// models are met in its own order.
@@ -449,7 +454,7 @@ func (m Member) Groups() []string {
 // Below is the member as the group at depth (0 the group itself, 1 the
 // group in it Path[0] names, …) has it.
 func (m Member) Below(depth int) Member {
-	out := Member{ID: m.Path[depth], Path: m.Path[depth:], Via: m.Via[depth:], Provider: m.Provider, Model: m.Model, Effort: m.Effort, Levels: m.Levels, EffortMap: m.EffortMap, Fast: m.Fast, At: m.At}
+	out := Member{ID: m.Path[depth], Path: m.Path[depth:], Via: m.Via[depth:], Provider: m.Provider, Model: m.Model, Effort: m.Effort, Levels: m.Levels, EffortMap: m.EffortMap, Fast: m.Fast, Account: m.Account, At: m.At}
 	// its other places in the same group at depth
 	for _, o := range m.Also {
 		if len(o.Path) > depth && slices.Equal(o.Path[:depth], m.Path[:depth]) {
@@ -1271,10 +1276,16 @@ func membersFound(entries []Entry, find entryOf, all []Group, g Group, off func(
 			if !ok || unpicked(find, p, m) && (also == nil || !also(p, m)) {
 				continue // none serves it, or the user unchecked it (#3911)
 			}
-			key := WithMemberEffort(p.ID+"/"+m, effort)
+			// on one account of its own (EastonXvii on X): the same model
+			// on another account is another member, asked in its own place
+			_, acct := MemberAccount(id)
+			if acct != "" {
+				acct = p.ID + "/" + acct
+			}
+			key := WithMemberAccount(WithMemberEffort(p.ID+"/"+m, effort), acct)
 			here := append(slices.Clone(path), id)
 			fixed, levels := MemberLevels(effort)
-			mem := Member{ID: here[0], Path: here, Via: via, Provider: p, Model: m, Effort: fixed, Levels: levels, Fast: g.IsFast(id), At: at}
+			mem := Member{ID: here[0], Path: here, Via: via, Provider: p, Model: m, Effort: fixed, Levels: levels, Fast: g.IsFast(id), Account: acct, At: at}
 			if fixed == "" && levels == nil {
 				mem.EffortMap = g.MemberEffortMap(id)
 			}
@@ -1702,6 +1713,9 @@ func SaveGroup(g Group) error {
 	named := len(g.Members)
 	g.Members = append(g.Members, matchesIn(entries, g)...)
 	if err := cleanFast(entries, &g); err != nil {
+		return err
+	}
+	if err := checkMemberAccounts(g.Members, wasMembers(f.Groups, g.ID)); err != nil {
 		return err
 	}
 	for i, m := range g.Members {

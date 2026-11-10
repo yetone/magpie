@@ -1173,7 +1173,7 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 	for i, m := range tries {
 		model = m.Model
 		at := time.Now()
-		v, code, err = s.startVideo(ctx, r, m.Provider, m.Model, f)
+		v, code, err = s.startVideo(ctx, memberOn(r, g, m), m.Provider, m.Model, f)
 		p, call.Provider = v.p, v.p.ID
 		side.tryAt(candidateOf(v.p, m.Model), at)(code, err)
 		// a group's next member is asked as a chat's would be: while this

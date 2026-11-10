@@ -698,7 +698,7 @@ function routingPage(part) {
   // from its vendor does — relays list each key its own group's models
   // or the user set the account or key to serve other models only (#474)
   // or it is held at the usage cap the user set on the account
-  const unlistedWord = (w) => w.heldBy ? t("not an account {group} may use", { group: w.heldBy }) : w.held ? t("not an account the gateway key may use") : w.noCredits ? t("held: its allowance used up, set not to spend credits") : w.capped ? t("held at its {cap}% usage cap", { cap: w.capped }) : w.barred ? t("set to serve other models, not {model}", { model: w.model }) : w.kind === "key" ? t("{name}'s list for this key has no {model}", { name: w.name, model: w.model }) : t("its plan doesn't list {model}", { model: w.model });
+  const unlistedWord = (w) => w.heldOwn ? t("another account is named for this model in {group}", { group: w.heldBy }) : w.heldBy ? t("not an account {group} may use", { group: w.heldBy }) : w.held ? t("not an account the gateway key may use") : w.noCredits ? t("held: its allowance used up, set not to spend credits") : w.capped ? t("held at its {cap}% usage cap", { cap: w.capped }) : w.barred ? t("set to serve other models, not {model}", { model: w.model }) : w.kind === "key" ? t("{name}'s list for this key has no {model}", { name: w.name, model: w.model }) : t("its plan doesn't list {model}", { model: w.model });
   // noURLWord: its keys are all set to a protocol its provider has no URL
   // for, so it went out on the URLs it has (#1702)
   const noURLWord = (w) => t("key set to {api} only, no {api} URL · sent on the others", { api: API[w.noURL] || w.noURL });
@@ -1032,7 +1032,9 @@ function routingPage(part) {
   }
 
   // leftWhy is why a member was skipped before it was tried (r.left)
-  const leftWhy = (x) => x.heldBy
+  const leftWhy = (x) => x.heldOwn
+    ? t("{who} is left out: {group} names another account for this model.", { who: who(x), group: x.heldBy })
+    : x.heldBy
     ? t("{who} is left out: the routing group {group} is held to other accounts of its provider.", { who: who(x), group: x.heldBy })
     : x.held
     ? t("{who} is left out: the gateway key asking may not use its account.", { who: who(x) })
@@ -6055,14 +6057,33 @@ function routingPage(part) {
   // Garydesu on X) are those the agent picks among (provider.MemberLevels),
   // kept each once, lowest first
   const LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]; // provider.MemberEfforts
+  // and on one account or key of its provider of its own, last,
+  // "provider/model:high#<account>" (EastonXvii on X, provider.MemberAccount):
+  // the same model on two accounts is two members, tried in the group's order.
+  // splitMember's third is that account's id, "" for every account
   function splitMember(id) {
     id = id || "";
-    if (id.startsWith("group/") || groups?.models.some((m) => m.id === id) || groups?.drawers?.some((m) => m.id === id)) return [id, ""];
+    let acct = "";
+    const a = id.startsWith("group/") ? null : /^(.+)#([^#/]+)$/.exec(id);
+    if (a && a[2].trim()) { id = a[1]; acct = a[2].trim(); }
+    if (id.startsWith("group/") || groups?.models.some((m) => m.id === id) || groups?.drawers?.some((m) => m.id === id)) return [id, "", acct];
     const m = /^(.+):((?:none|minimal|low|medium|high|xhigh|max)(?:\+(?:none|minimal|low|medium|high|xhigh|max))*)$/i.exec(id);
-    if (!m) return [id, ""];
+    if (!m) return [id, "", acct];
     const parts = m[2].toLowerCase().split("+");
-    return [m[1], LEVELS.filter((v) => parts.includes(v)).join("+")];
+    return [m[1], LEVELS.filter((v) => parts.includes(v)).join("+"), acct];
   }
+  // a member's id from its model, reasoning and account
+  const memberId = (model, level, acct) => (level ? `${model}:${level}` : model) + (acct ? "#" + acct : "");
+  // the account a member is sent on: {id: "provider/<id>", name}, or null
+  // for any the group allows
+  const memberAccount = (id) => {
+    const [model, , acct] = splitMember(id);
+    if (!acct || subOf(id)) return null;
+    const pid = modelOf(id)?.provider || model.split("/")[0];
+    const full = pid + "/" + acct;
+    const a = (groups?.accounts?.[pid] || []).find((x) => x.id === full);
+    return { id: full, name: a?.name || acct, plan: a?.plan || "" };
+  };
   // a decision model (Jev) is a member of a group of decision models only,
   // asked at /v1/systemone (provider/decide_group.go): it is in
   // groups.deciders, not groups.models
@@ -6152,7 +6173,7 @@ function routingPage(part) {
   };
   const modelName = (m) => { const tell = tellOf(m); return (m.name || m.id) + (tell ? " · " + tell : ""); };
   const memberName = (id) => { const s = subOf(id), m = modelOf(id), o = !m && offOf(id); return s ? s.name : m ? modelName(m) : o ? o.model : id; };
-  const memberNote = (id) => { const o = !subOf(id) && !modelOf(id) && offOf(id); return subOf(id) ? t("routing group") : [modelOf(id)?.providerName || o && `${o.name} · ${t("switched off")}`, drawerOf(id) && t("Image model"), fixedOf(id) && fixedWords(fixedOf(id))].filter(Boolean).join(" · "); };
+  const memberNote = (id) => { const o = !subOf(id) && !modelOf(id) && offOf(id); return subOf(id) ? t("routing group") : [modelOf(id)?.providerName || o && `${o.name} · ${t("switched off")}`, memberAccount(id)?.name, drawerOf(id) && t("Image model"), fixedOf(id) && fixedWords(fixedOf(id))].filter(Boolean).join(" · "); };
   // a member the group sends in its vendor's fast mode (Group.Fast)
   const fastIn = (g, id) => !!g?.fast?.includes(id) && !subOf(id);
   // a member Free first and Cheapest first count as costing nothing: its
@@ -6163,7 +6184,8 @@ function routingPage(part) {
   function memberLabel(g, id) {
     const i = g.memberInfo?.find((x) => x.id === id), m = modelOf(id), s = subOf(id), f = fixedOf(id);
     if (s) return `${t("routing group")} · ${s.name}`;
-    const at = (f ? ` · ${fixedWords(f)}` : "") + (fastIn(g, id) ? ` · ${t("fast")}` : "") + (freeIn(g, id) ? ` · ${t("free")}` : "");
+    const acct = memberAccount(id);
+    const at = (acct ? ` · ${acct.name}` : "") + (f ? ` · ${fixedWords(f)}` : "") + (fastIn(g, id) ? ` · ${t("fast")}` : "") + (freeIn(g, id) ? ` · ${t("free")}` : "");
     if (m) return `${m.providerName} · ${modelName(m)}${at}`;
     if (i?.providerOff) return `${i.name} · ${i.model}${at} (${t("switched off")})`;
     return i?.name ? `${i.name} · ${i.model}${at}` : id;
@@ -7251,7 +7273,7 @@ function routingPage(part) {
         const nm = el("span", "", memberName(id));
         nm.title = memberName(id);
         n.append(nm);
-        if (m || s) n.append(el("small", "", subOf(id) || drawerOf(id) ? memberNote(id) : m.providerName));
+        if (m || s) n.append(el("small", "", subOf(id) || drawerOf(id) ? memberNote(id) : [m.providerName, memberAccount(id)?.name].filter(Boolean).join(" · ")));
         else if (info?.providerOff) n.append(el("small", "", `${info.name} · ${t("switched off")}`));
         if (info?.free && !s) {
           const fr = el("small", "rt-free", t("free"));
@@ -7288,7 +7310,10 @@ function routingPage(part) {
         // it reasons as it says.
         // a decision model reasons at no level of the group's or its own
         if (!s && !deciderOf(id) && !drawerOf(id)) {
-          const [base, fixed] = splitMember(id);
+          const [model, fixed, acct] = splitMember(id);
+          // the member at a level ("" the group's), on its own account still
+          const at = (v) => memberId(model, v, acct);
+          const base = at("");
           const several = fixed.includes("+");
           // the levels it sends in place of those asked (LuckymanJC on
           // Discord: one vendor's high is another's xhigh), for one that
@@ -7305,7 +7330,7 @@ function routingPage(part) {
           const moveTo = (to) => {
             const from = d.members[i];
             if (to === from) return true;
-            if (d.members.includes(to)) { status(t("{name} at that reasoning is in the group already", { name: memberName(from) }), "err"); return false; }
+            if (d.members.includes(to)) { status(t(splitMember(to)[2] !== splitMember(from)[2] ? "{name} on that account is in the group already" : "{name} at that reasoning is in the group already", { name: memberName(from) }), "err"); return false; }
             d.members[i] = to;
             d.matched = d.matched.filter((x) => x !== from); // named now, at its own reasoning
             for (const r of d.rules) setUses(r, rUses(r).map((x) => x === from ? to : x));
@@ -7326,8 +7351,7 @@ function routingPage(part) {
             openPicker({ id: "", name: "", fields: [] }, { key: "rule", label: "reasoning", value: "", menu: true, multi: true,
               options: levels.map((v) => ({ value: v, label: v })), picked: (v) => have.includes(v), onPick: (v) => {
                 const next = have.includes(v) ? have.filter((x) => x !== v) : LEVELS.filter((x) => x === v || have.includes(x));
-                const at = next.join("+");
-                if (!moveTo(at ? `${base}:${at}` : base)) return;
+                if (!moveTo(at(next.join("+")))) return;
                 have = next;
                 draw(); drawRules();
               } }, fx, ev);
@@ -7357,7 +7381,7 @@ function routingPage(part) {
             if (v === "+") { pickSeveral(ev); return; }
             if (v === "=") { pickMap(ev); return; }
             if (!v && !fixed) { delete d.effortMaps[id]; draw(); return; } // the group's, as asked
-            if (moveTo(v ? `${base}:${v}` : base)) { draw(); drawRules(); }
+            if (moveTo(at(v))) { draw(); drawRules(); }
           }, several ? "+" : map ? "=" : fixed);
           row.append(fx);
           // its vendor's fast mode, where the model has one: priority
@@ -7374,6 +7398,39 @@ function routingPage(part) {
               : (on ? t("Sent in its vendor's fast mode whatever the agent asks: quicker, at a higher price") : t("Sent at its vendor's usual speed; click to send it in fast mode"));
             fb.onclick = () => { d.fast = on ? d.fast.filter((x) => x !== id) : [...d.fast, id]; draw(); };
             row.append(fb);
+          }
+          // the one account or key it is sent on (EastonXvii on X: account
+          // A, then B, then another model on C), for a provider with more
+          // than one: the same model on another account is a member of its
+          // own, added after this one and tried in the group's order
+          const accts = groups.accounts?.[m?.provider] || [];
+          if (accts.length) {
+            const mine = memberAccount(id);
+            const ab = el("button", "rt-cond rt-fixed rt-macct" + (mine ? " on" : ""));
+            ab.type = "button";
+            ab.append(el("span", "", mine ? mine.name : t("Any account")));
+            ab.title = mine ? t("Sent on {account} alone; when it can't answer, the next model in the group is tried", { account: mine.name }) : t("Sent on any account the group allows");
+            ab.setAttribute("aria-label", `${memberName(id)}: ${ab.textContent}`);
+            const bare = (a) => a.slice(m.provider.length + 1);
+            const used = (a) => d.members.some((x) => x !== id && splitMember(x)[0] === model && splitMember(x)[2] === bare(a));
+            // the accounts it isn't on yet, here or in another row
+            const free = accts.filter((a) => !used(a.id) && a.id !== mine?.id);
+            ab.onclick = (ev) => pickFrom("account", ab, ev, [
+              { value: "", label: t("Any account"), note: t("any the group allows") },
+              ...accts.map((a) => ({ value: a.id, label: a.name, note: [a.plan, used(a.id) && t("in the group already")].filter(Boolean).join(" · ") })),
+              ...(free.length ? [{ value: "+", label: t("Also on another account…"), note: t("a member of its own, tried after this one") }] : []),
+            ], (v) => {
+              if (v === "+") {
+                pickFrom("account", ab, ev, free.map((a) => ({ value: a.id, label: a.name, note: a.plan || "" })), (a) => {
+                  if (!a) return;
+                  d.members.splice(i + 1, 0, memberId(model, fixed, bare(a)));
+                  rematch(); draw(); drawRules();
+                });
+                return;
+              }
+              if (moveTo(memberId(model, fixed, v && bare(v)))) { draw(); drawRules(); }
+            }, mine?.id || "");
+            row.append(ab);
           }
         } else if (s) {
           // a group in the group takes no reasoning of its own: its models

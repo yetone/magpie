@@ -624,6 +624,20 @@ func heldByGroup(r *http.Request, g provider.Group) *http.Request {
 	return r.WithContext(access.WithIdentity(r.Context(), who))
 }
 
+// memberOn is r held to the one account m is sent on, when it names one
+// (EastonXvii on X), for the paths that go over a member's accounts
+// themselves (a drawing's, a video's): r for a member on any.
+func memberOn(r *http.Request, g provider.Group, m provider.Member) *http.Request {
+	if m.Account == "" {
+		return r
+	}
+	if len(m.Via) > 0 {
+		g = m.Via[len(m.Via)-1]
+	}
+	who := access.Caller(r.Context()).HeldToGroup(cmp.Or(g.Name, g.ID), []string{m.Account})
+	return r.WithContext(access.WithIdentity(r.Context(), who))
+}
+
 // heldByGroupAt is heldByGroup for the routing group id names, as a
 // request may name one (a bare group's name, auto/<model>); r when it
 // names none.
@@ -634,8 +648,20 @@ func heldByGroupAt(r *http.Request, id string) *http.Request {
 	if sid, ok := provider.AutoStandIn(id); ok {
 		id = sid
 	}
-	if g, _, ok := provider.FindGroup(id); ok {
-		return heldByGroup(r, g)
+	if g, ms, ok := provider.FindGroup(id); ok {
+		r = heldByGroup(r, g)
+		// counted on the member it resolves to: on its own account alone
+		// when it names one (EastonXvii on X), as planLevel sends it
+		if p, model, ok := provider.Resolve(id); ok {
+			if i := slices.IndexFunc(ms, func(m provider.Member) bool { return m.Provider.ID == p.ID && m.Model == model }); i >= 0 && ms[i].Account != "" {
+				g := g
+				if len(ms[i].Via) > 0 {
+					g = ms[i].Via[len(ms[i].Via)-1]
+				}
+				who := access.Caller(r.Context()).HeldToGroup(cmp.Or(g.Name, g.ID), []string{ms[i].Account})
+				r = r.WithContext(access.WithIdentity(r.Context(), who))
+			}
+		}
 	}
 	return r
 }
@@ -650,6 +676,19 @@ func groupHeld(c candidate, gs []provider.Group) string {
 		}
 	}
 	return ""
+}
+
+// memberHeld is the name of g, the group m is a member of, when m names
+// an account of its own (Member.Account, EastonXvii on X) other than c's;
+// "" when it names none or c's.
+func memberHeld(c candidate, m provider.Member, g provider.Group) string {
+	if m.Account == "" || (access.Identity{Accounts: []string{m.Account}}).AllowsAccount(c.p.ID, c.p.AccountID()) {
+		return ""
+	}
+	if len(m.Via) > 0 {
+		g = m.Via[len(m.Via)-1] // the group in the group that names it
+	}
+	return cmp.Or(g.Name, g.ID)
 }
 
 // allowedKey is p sent on the first of its keys in use the calling key
@@ -738,7 +777,7 @@ func groupsHeldError(model string, left []Weighed) string {
 			by = append(by, w.HeldBy)
 		}
 	}
-	return fmt.Sprintf("Every account or key behind %s is one the routing group %s is held away from: it is held to other accounts. Change the group's accounts in magpie's Routing page, or use an account it has.",
+	return fmt.Sprintf("Every account or key behind %s is one the routing group %s is held away from: it is held to other accounts, or names another account for the model. Change the group's accounts in magpie's Routing page, or use an account it has.",
 		model, strings.Join(by, ", "))
 }
 

@@ -705,15 +705,18 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 		// a group the member is reached through that is held to some
 		// accounts (Group.Accounts) holds it to them: one it leaves out
 		// is said on the plan's left, held, as a gateway key's are
-		if by := append(slices.Clip(hold), m.Via...); slices.ContainsFunc(by, func(h provider.Group) bool { return len(h.Accounts) > 0 }) {
+		// and a member on one account of its own (EastonXvii on X) is
+		// sent on it alone, never on its provider's others
+		if by := append(slices.Clip(hold), m.Via...); m.Account != "" || slices.ContainsFunc(by, func(h provider.Group) bool { return len(h.Accounts) > 0 }) {
 			out := func(l []candidate) []candidate {
 				return slices.DeleteFunc(l, func(c candidate) bool {
-					name := groupHeld(c, by)
+					own := memberHeld(c, m, g)
+					name := cmp.Or(own, groupHeld(c, by))
 					if name == "" {
 						return false
 					}
 					w := weighed(c, m.Provider, weighing{}, false, from)
-					w.Held, w.HeldBy, w.Via = true, name, m.Groups()
+					w.Held, w.HeldBy, w.HeldOwn, w.Via = true, name, own != "", m.Groups()
 					pl.left = append(pl.left, w)
 					return true
 				})

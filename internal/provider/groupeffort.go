@@ -52,6 +52,7 @@ func MemberEffort(id string) (model, effort string) {
 // (nil to read the providers' models as needed). Several levels come
 // back as MemberLevels reads them: each once, lowest first, joined by "+".
 func memberEffortIn(entries []Entry, id string) (string, string) {
+	id, _ = MemberAccount(id) // the account a member names comes after its effort (groupaccount.go)
 	i := strings.LastIndex(id, ":")
 	if i <= 0 {
 		return id, ""
@@ -143,11 +144,16 @@ func WithMemberEffort(model, effort string) string {
 }
 
 // cleanMember spells a member as it is kept: its effort lowercase, a found
-// group by group/auto-<slug> (CanonicalRef).
+// group by group/auto-<slug> (CanonicalRef), the account it names by its
+// stable id (memberAccountKept).
 func cleanMember(entries []Entry, id string) string {
+	id, acct := MemberAccount(id)
 	id = CanonicalRef(id) // a found group by the id magpie keeps it by
 	m, e := memberEffortIn(entries, id)
-	return WithMemberEffort(m, e)
+	if acct != "" {
+		acct, _ = memberAccountKept(m, acct)
+	}
+	return WithMemberAccount(WithMemberEffort(m, e), acct)
 }
 
 // fixedLevels are the efforts a group's members are fixed at, lowest first.
