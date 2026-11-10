@@ -56,6 +56,13 @@ func emptyRetries(w http.ResponseWriter, ctx context.Context) int {
 	return streamRetries
 }
 
+// emptyAccounts is how many accounts of one model may answer a request
+// with a reply that said nothing before the rest of its accounts aren't
+// asked: the same conversation ends empty on whichever account it is sent
+// to, and each ask took minutes on a long one (vhjjkkhg on X: 8 to 9 tries
+// over 10+ minutes). The others of its group, and other providers, are.
+const emptyAccounts = 2
+
 // loopReasks is how many times a reply whose reasoning was stuck in a
 // loop (loopGuard) before it said anything is asked again in place, rather
 // than ended with the loop's error.

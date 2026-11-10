@@ -3327,12 +3327,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	roomFor, roomCap := "", 0
 	// the key or subscription account the last try went to (#557)
 	providerKeyID, providerKeyName, providerAccount := "", "", ""
-	var other *Try                    // the first failure that wasn't an allowance run out
-	var forbade []forbidden           // the plain 403s and 5xx rested so far (forbiddenAlike)
-	sameRefusal := false              // the last try's 5xx was a mate's word for word: the request's
-	autoReset := resetFirst != nil    // a Codex or Claude reset looked at, once a request
-	creditsAsked := map[string]bool{} // Codex accounts asked again onto their credits, once each (creditsAgain)
-	regionAsked := map[string]int{}   // a provider's model refused for where the request came from, times this request (#5182)
+	var other *Try                          // the first failure that wasn't an allowance run out
+	var forbade []forbidden                 // the plain 403s and 5xx rested so far (forbiddenAlike)
+	sameRefusal := false                    // the last try's 5xx was a mate's word for word: the request's
+	autoReset := resetFirst != nil          // a Codex or Claude reset looked at, once a request
+	creditsAsked := map[string]bool{}       // Codex accounts asked again onto their credits, once each (creditsAgain)
+	emptied := map[string]map[string]bool{} // a provider's model's accounts whose reply said nothing, this request (emptyAccounts)
+	regionAsked := map[string]int{}         // a provider's model refused for where the request came from, times this request (#5182)
 	// the subscription/model pairs an account refused as a model it doesn't
 	// serve, for the accounts whose own list lacks it to be asked next
 	// (unlistedNext); none for a request pinned to an account, a
@@ -4828,6 +4829,21 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			skipped = append(skipped, c.label()+": "+call.Error)
 			continue
+		}
+		if !last && hw.failed() && strings.Contains(call.Error, emptyReply) {
+			// said by a second account of the model, it is about the
+			// request and no account: the rest of that model's accounts
+			// are not asked (emptyAccounts); other providers and models
+			// still are
+			ek := c.p.ID + "\x00" + c.model
+			if emptied[ek] == nil {
+				emptied[ek] = map[string]bool{}
+			}
+			emptied[ek][c.who()] = true
+			if len(emptied[ek]) >= emptyAccounts {
+				cands = append(cands[:i+1:i+1], notMates(cands[i+1:], c)...)
+				last = i == len(cands)-1
+			}
 		}
 		if !last && hw.failed() && strings.Contains(call.Error, emptyReply) {
 			// a reply that said nothing is a failure of the model or
