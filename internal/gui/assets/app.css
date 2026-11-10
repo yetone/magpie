@@ -4710,6 +4710,17 @@ body.window .row.agent .who.with-models { flex-wrap: wrap; row-gap: 0; }
 .am-ri .rn { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .am-ri .c { flex: none; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .am-ri:focus-visible { outline: 1.5px solid var(--accent); outline-offset: -1.5px; }
+/* a provider's tick beside it: every model of it on, some, or none
+   (coolAndyHe on X) */
+.am-rr { display: flex; align-items: center; gap: 2px; }
+.am-rr .am-ri { flex: 1 1 auto; min-width: 0; width: auto; }
+.am-rk { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--accent-fg); cursor: pointer; }
+.am-rk::before { content: ""; position: absolute; width: 13px; height: 13px; box-sizing: border-box; border: 1.5px solid var(--faint); border-radius: 4px; transition: background-color .12s ease, border-color .12s ease; }
+.am-rk > svg { position: relative; }
+.am-rk.on::before, .am-rk.part::before { background: var(--accent); border-color: var(--accent); }
+.am-rk:disabled { cursor: default; opacity: .45; }
+.am-rk:focus-visible { outline: 1.5px solid var(--accent); outline-offset: -1.5px; }
+@media (hover: hover) and (pointer: fine) { .am-rk:hover:not(:disabled)::before { border-color: var(--accent); } }
 .am-gh { display: flex; align-items: center; margin: 6px 2px 0; }
 .am-fold { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
 .am-fold > .ic, .am-fold > svg { width: 14px; height: 14px; flex: none; }

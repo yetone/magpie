@@ -3450,22 +3450,44 @@ async function openAgentModels(a, anchor, ev) {
     if (!railed) return;
     const top = rail.scrollTop;
     rail.replaceChildren();
-    const item = (name, label, lead, on, n) => {
+    // each provider ticked, cleared or part ticked at its right: a click
+    // ticks every model of it, or clears them, without picking it first
+    // (coolAndyHe on X: one or two providers, not every one); all
+    // providers' tick is the foot's Show all or Hide all, asked twice
+    const item = (name, label, lead, ms, flip) => {
+      const on = ms.filter((m) => !m.hidden).length;
+      const free = ms.filter((m) => !m.inUse);
+      const full = free.every((m) => !m.hidden);
+      const row = el("div", "am-rr");
       const b = el("button", "am-ri" + (pick === name ? " on" : ""));
       b.type = "button";
       b.setAttribute("aria-pressed", String(pick === name));
-      b.append(lead, el("span", "rn", label), el("span", "c", `${on}/${n}`));
+      b.append(lead, el("span", "rn", label), el("span", "c", `${on}/${ms.length}`));
       b.title = label;
       b.onclick = () => { pick = name; q.value = ""; list.scrollTop = 0; draw(); };
-      rail.append(b);
+      const k = el("button", "am-rk" + (on === ms.length ? " on" : on ? " part" : ""));
+      k.type = "button";
+      k.setAttribute("role", "checkbox");
+      k.setAttribute("aria-checked", on === ms.length ? "true" : on ? "mixed" : "false");
+      k.title = full ? t("Hide all") : t("Show all");
+      k.setAttribute("aria-label", `${label}: ${k.title}`);
+      k.disabled = !free.length;
+      if (on === ms.length) k.append(svg("m3.5 8.5 3 3 6-7", 10, 2));
+      else if (on) k.append(svg("M4 8h8", 10, 2));
+      k.onclick = () => flip(full, free);
+      row.append(b, k);
+      rail.append(row);
     };
     const all = el("span", "ic");
     all.append(svg("M3 4.5h10M3 8h10M3 11.5h10", 14, 1.5));
-    item("", t("All providers"), all, models.filter((m) => !m.hidden).length, models.length);
+    item("", t("All providers"), all, models, (full) => (full ? hideAll : reset).click());
     for (const g of groups) {
       const route = g.name === ROUTING_GROUPS;
-      item(g.name, route ? t(g.name) : g.name, route ? svg(FAN, 14, 1.5) : icon(g.icon || "generic"),
-        g.models.filter((m) => !m.hidden).length, g.models.length);
+      item(g.name, route ? t(g.name) : g.name, route ? svg(FAN, 14, 1.5) : icon(g.icon || "generic"), g.models, (full, free) => {
+        for (const m of free) { m.hidden = full; if (full) kept.add(m.id); }
+        save();
+        draw();
+      });
     }
     rail.scrollTop = top;
   };
