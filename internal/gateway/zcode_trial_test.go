@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -164,6 +165,112 @@ func TestZCodeTrialRefusalRestsTheTrialAlone(t *testing.T) {
 			}
 			if b.n != 1 || len(asked) != 2 || asked[1] != "GLM-5.3" {
 				t.Fatalf("the trial's refusal kept the account's GLM-5.3 out: asked %v, the other provider %d times", asked, b.n)
+			}
+		})
+	}
+}
+
+// plugins#438 (takomitkm): a dual ZCode account's GLM Coding Plan model
+// refused for its weekly or monthly limit (Zhipu's 1310) rested the whole
+// account, so its Start Plan -Trial entries, which the gift's own buckets
+// serve, were answered the cached 1310 without being asked. zcode 0.1.58
+// lists the trial entries free: the coding plan model's refusal rests that
+// model alone (PaidBesideFree), and the trial entry is still asked. A list
+// with no free model — another vendor's, or ZCode's before 0.1.58 — still
+// rests the account on the same refusal.
+func TestZCodeCodingPlanLimitLeavesTrials(t *testing.T) {
+	resets := time.Now().In(time.FixedZone("UTC+8", 8*3600)).Add(72 * time.Hour).Format("2006-01-02 15:04:05")
+	limit := `{"error":{"code":"1310","message":"Weekly/Monthly Limit Exhausted. Your limit will reset at ` + resets + `"}}`
+	for _, tc := range []struct {
+		name, vendor string
+		free         bool // the plugin lists the trial entries free
+		accountRest  bool
+	}{
+		{"zcode 0.1.58", "zcode", true, false},
+		{"no free entries", "zcode", false, true},
+		{"another vendor", "factory", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("FAKE_ZCODE", "1")
+			t.Setenv("FAKE_NO_FREE", "1")
+			t.Setenv("FAKE_ZCODE_TRIAL", "1")
+			if tc.free {
+				t.Setenv("FAKE_ZCODE_FREE", "1")
+			}
+			var mu sync.Mutex
+			var asked []string
+			good := &adaptiveVendor{}
+			movedFake(t, tc.vendor, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					t.Error(err)
+					w.WriteHeader(500)
+					return
+				}
+				model := modelOf(body)
+				mu.Lock()
+				asked = append(asked, model)
+				mu.Unlock()
+				if model == "GLM-5.3" {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(429)
+					io.WriteString(w, limit)
+					return
+				}
+				r.Body = io.NopCloser(strings.NewReader(string(body)))
+				good.ServeHTTP(w, r)
+			}))
+			p, err := provider.Find(tc.vendor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := p.PaidBesideFree("GLM-5.3"); got != tc.free {
+				t.Fatalf("GLM-5.3 paid beside free = %v, want %v", got, tc.free)
+			}
+			c := candidate{p: *p, rest: tc.vendor, model: "GLM-5.3"}
+			old := allowances
+			allowances = func(string) map[string]provider.Allowance {
+				return map[string]provider.Allowance{p.Account.User: {{Used: 10}}}
+			}
+			t.Cleanup(func() { allowances = old })
+			b := &scripted{replies: []reply{{200, "", chatOK}, {200, "", chatOK}}}
+			scriptedOn(t, "b", provider.Chat, b)
+			for name, first := range map[string]string{"S": "GLM-5.3", "T": "GLM-5.3-Trial"} {
+				if err := provider.SaveGroup(provider.Group{Name: name, Members: []string{tc.vendor + "/" + first, "b/m"}, Routing: provider.Ordered}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			s := New()
+			// the coding plan's model refused for its weekly limit, and the
+			// other provider answers
+			if code, body := postAs(t, s, "", `{"model":"group/s","messages":[{"role":"user","content":"hi"}]}`); code != 200 {
+				t.Fatalf("GLM-5.3 request: %d %s", code, body)
+			}
+			tries := s.trace.routes[len(s.trace.routes)-1].Tries
+			if len(tries) != 2 || tries[0].Status != 429 || tries[0].Rest == nil || tries[0].Rest.Why != failQuota {
+				t.Fatalf("GLM-5.3 tries: %+v", tries)
+			}
+			want := c.restID()
+			if tc.accountRest {
+				want = c.restKey()
+			}
+			if tries[0].Rest.Key != want {
+				t.Fatalf("the 1310 rested %q, want %q", tries[0].Rest.Key, want)
+			}
+			// then the trial entry: asked unless the account was rested
+			if code, body := postAs(t, s, "", `{"model":"group/t","messages":[{"role":"user","content":"hi"}]}`); code != 200 {
+				t.Fatalf("trial request: %d %s", code, body)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if tc.accountRest {
+				if b.n != 2 || len(asked) != 1 {
+					t.Fatalf("account rest: asked %v, the other provider %d times", asked, b.n)
+				}
+				return
+			}
+			if b.n != 1 || len(asked) != 2 || asked[1] != "GLM-5.3-Trial" {
+				t.Fatalf("the 1310 kept the trial entry out: asked %v, the other provider %d times", asked, b.n)
 			}
 		})
 	}

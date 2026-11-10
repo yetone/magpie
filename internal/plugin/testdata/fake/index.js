@@ -415,8 +415,12 @@ export const FakePlugin = async ({ client }) => ({
         await client.auth.set({ path: { id: ID }, body: { ...auth, refresh: auth.refresh + "+" } })
       }
       // fake-1 costs the plan nothing, as a WorkBuddy model of x0.00
-      // credits ($FAKE_NO_FREE: a list with no free model, as ZCode's is)
+      // credits ($FAKE_NO_FREE: a list with no free model, as ZCode's was
+      // before 0.1.58 and a coding-plan-only account's is)
       if (!process.env.FAKE_NO_FREE) p.models["fake-1"].free = true
+      // $FAKE_ZCODE_FREE: the Start Plan's trial entries marked free, as
+      // zcode 0.1.58 on lists them (plugins#438)
+      if (process.env.FAKE_ZCODE_FREE) for (const id of ["GLM-5.3-Flash-Trial", "GLM-5.3-Trial"]) if (p.models[id]) p.models[id].free = true
       // fake-claude's credits are a number, discounted; fake-gemini's as
       // WorkBuddy's picker writes them
       if (p.models["fake-claude"]) Object.assign(p.models["fake-claude"], { rate: 0.5, rateWas: 1 })
