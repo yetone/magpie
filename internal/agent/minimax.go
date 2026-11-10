@@ -2,7 +2,8 @@ package agent
 
 // MiniMax Code — MiniMax's mcode CLI and the desktop app, which run the same
 // runtime (#362) — keeps its settings in config.yaml in its data folder,
-// $MINIMAX_DATA_DIR or ~/.minimax. The model sessions start on is
+// $MINIMAX_DATA_DIR, the folder the desktop app moved it to, or ~/.minimax
+// (appdir.MiniMaxDirIn). The model sessions start on is
 // defaultModel, "<provider>/<model>" split at the first slash, where a
 // provider the user added (Add 3rd-party provider…, mcode provider add) is
 // "custom_provider:<key>", an entry of custom_provider. magpie adds itself
@@ -72,13 +73,10 @@ func mcodeID(key string) string {
 // it too (#1605: a provider pointed at magpie by hand).
 const mcodeUA = "minimax-code"
 
-// MiniMaxDir is the folder MiniMax Code keeps its config.yaml in.
-func MiniMaxDir(home string) string {
-	if d := strings.TrimSpace(appdir.Getenv("MINIMAX_DATA_DIR")); d != "" {
-		return d
-	}
-	return filepath.Join(home, ".minimax")
-}
+// MiniMaxDir is the folder MiniMax Code keeps its config.yaml in:
+// $MINIMAX_DATA_DIR, the folder its desktop app moved it to, or ~/.minimax
+// (appdir.MiniMaxDirIn).
+func MiniMaxDir(home string) string { return appdir.MiniMaxDirIn(home) }
 
 func miniMax(home string) *Agent { return miniMaxAt(here(home), MiniMaxDir(home)) }
 

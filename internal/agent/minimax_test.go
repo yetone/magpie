@@ -1,10 +1,12 @@
 package agent
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -267,6 +269,67 @@ func TestMiniMaxCodeLeavesNoEmptyProviders(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(path); string(b) != own {
 		t.Fatalf("left:\n%s", b)
+	}
+}
+
+// MiniMax Code Desktop's Settings moves its data folder to
+// <parent>/.minimax, keeping the parent as localRuntimeDataParentDir in its
+// electron-store file (YujunT46308 on X, 3.1.13 CN: magpie went on writing
+// ~/.minimax/config.yaml, which the app no longer read). magpie finds it,
+// wires it, sees its drift and puts it back there, and leaves the old
+// ~/.minimax alone.
+func TestMiniMaxCodeMovedByDesktop(t *testing.T) {
+	home, old := miniMaxHome(t)
+	t.Setenv("MAVIS_DATA_DIR", "")
+	userData := filepath.Join(home, "Library", "Application Support", "MiniMax")
+	switch runtime.GOOS {
+	case "windows":
+		t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+		userData = filepath.Join(home, "AppData", "Roaming", "MiniMax")
+	case "darwin":
+	default:
+		t.Skip("MiniMax Code Desktop ships for macOS and Windows only")
+	}
+	parent := filepath.Join(t.TempDir(), "D")
+	dir := filepath.Join(parent, ".minimax")
+	path := filepath.Join(dir, "config.yaml")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(path, []byte(miniMaxConfig), 0o644)
+	os.MkdirAll(userData, 0o755)
+	store, _ := json.Marshal(map[string]any{"config": map[string]any{"language": "zh", "localRuntimeDataParentDir": parent}})
+	os.WriteFile(filepath.Join(userData, "minimax-agent-cn-config.json"), store, 0o644)
+	stale, _ := os.ReadFile(old)
+
+	a := miniMax(home)
+	if a.Dir != dir || a.Path != path || !a.Detected() {
+		t.Fatalf("dir %q path %q detected %v", a.Dir, a.Path, a.Detected())
+	}
+	f := a.Field("model")
+	if err := f.Set("magpie/think/deep"); err != nil {
+		t.Fatal(err)
+	}
+	if c, raw := readMiniMax(t, path); c.DefaultModel != "custom_provider:magpie/think~deep" || c.CustomProvider["magpie"].Kind != "custom" {
+		t.Fatalf("moved config:\n%s", raw)
+	}
+	if f.Get() != "magpie/think/deep" || a.Check() != "" {
+		t.Fatalf("get %q check %q", f.Get(), a.Check())
+	}
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(path)
+	os.WriteFile(path, []byte(strings.Replace(string(b), "apiKey: "+gateway.Token, "apiKey: other", 1)), 0o644)
+	if a.Check() == "" {
+		t.Fatal("check missed a changed key in the moved config")
+	}
+	if err := f.Set(""); err != nil {
+		t.Fatal(err)
+	}
+	if c, raw := readMiniMax(t, path); c.DefaultModel != "minimax/MiniMax-M2.7" || c.DefaultModelVariant != "thinking" || c.CustomProvider["magpie"].Kind != "" {
+		t.Fatalf("restored:\n%s", raw)
+	}
+	if b, _ := os.ReadFile(old); string(b) != string(stale) {
+		t.Fatalf("~/.minimax/config.yaml was written:\n%s", b)
 	}
 }
 
