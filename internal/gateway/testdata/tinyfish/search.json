@@ -1,0 +1,21 @@
+{
+  "query": "web automation tools",
+  "results": [
+    {
+      "position": 1,
+      "site_name": "tinyfish.ai",
+      "title": "TinyFish — AI Web Automation Platform",
+      "snippet": "Automate any website with natural language instructions...",
+      "url": "https://tinyfish.ai"
+    },
+    {
+      "position": 2,
+      "site_name": "github.com",
+      "title": "Top Web Automation Tools in 2026",
+      "snippet": "A curated list of browser automation frameworks...",
+      "url": "https://github.com/example/web-automation-tools"
+    }
+  ],
+  "total_results": 10,
+  "page": 0
+}

@@ -35,7 +35,7 @@ const searchUsage = `usage:
                                              Codex's web_search): 1 to 20, 6 by default;
                                              "magpie search count default" puts 6 back
 
-  apis: tavily, brave, exa, firecrawl, you, deepseek, volcengine, wsa, searxng
+  apis: tavily, brave, exa, firecrawl, you, deepseek, volcengine, wsa, tinyfish, searxng
         and the ones a plugin gives (its search hook), as <plugin>:<id> in magpie's Settings
         › Models › Web search; a plugin that is off gives none
 
@@ -74,7 +74,7 @@ func searchCmd(args []string) error {
 	if len(args) == 0 {
 		as := provider.StoredSearchAPIs()
 		if len(as) == 0 {
-			fmt.Println(muted.Render("  no search API · magpie search add <tavily|brave|exa|firecrawl|you|deepseek|volcengine|wsa|searxng> <key>"))
+			fmt.Println(muted.Render("  no search API · magpie search add <tavily|brave|exa|firecrawl|you|deepseek|volcengine|wsa|tinyfish|searxng> <key>"))
 			return nil
 		}
 		for i, a := range as {

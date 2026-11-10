@@ -427,6 +427,11 @@ func (s *Server) askSearchAPI(ctx context.Context, a provider.SearchAPI, query s
 		// a smaller one is turned away, so the fewest that covers n, cut
 		// to n below
 		post("/SearchPro", map[string]any{"Query": query, "Cnt": wsaCntFor(n)})
+	case "tinyfish":
+		// TinyFish's Search API (docs.tinyfish.ai/search-api/reference): a
+		// GET at its root with the query; it takes no count, answers a
+		// page of about 10, cut to n below
+		get("/", url.Values{"query": {query}})
 	case "searxng":
 		get("/search", url.Values{"q": {query}, "format": {"json"}})
 	case "you":
@@ -456,7 +461,7 @@ func (s *Server) askSearchAPI(ctx context.Context, a provider.SearchAPI, query s
 		switch a.Vendor {
 		case "brave":
 			r.Header.Set("X-Subscription-Token", a.Key)
-		case "exa", "you":
+		case "exa", "you", "tinyfish":
 			r.Header.Set("X-API-Key", a.Key)
 		default:
 			r.Header.Set("Authorization", "Bearer "+a.Key)
@@ -607,11 +612,11 @@ func readSearchAPI(vendor string, b []byte) ([]foundPage, error) {
 		Text        string `json:"text"`
 		Markdown    string `json:"markdown"`
 		Summary     string `json:"summary"` // deepseek: its longer text for a model
-		Snippet     string `json:"snippet"` // deepseek: its short one
-		Date        string `json:"date"`    // deepseek: RFC 3339, or null
+		Snippet     string `json:"snippet"` // deepseek: its short one; tinyfish's only text
+		Date        string `json:"date"`    // deepseek: RFC 3339, or null; tinyfish: news and some web pages
 	}
 	var out struct {
-		Results []result `json:"results"` // tavily, exa, searxng, deepseek
+		Results []result `json:"results"` // tavily, exa, searxng, deepseek, tinyfish
 		Web     struct {
 			Results []result `json:"results"`
 		} `json:"web"` // brave

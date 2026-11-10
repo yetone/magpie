@@ -1806,8 +1806,8 @@ answers as that API does (#1580). Empty is the vendor's own
 takes only an `http://` or `https://` URL with a host and no `?query` or
 `#fragment`, since `askSearchAPI` puts the vendor's path after it
 (`/search`, `/res/v1/web/search`, `/v2/search`, `/v1/tools/search`,
-`/search_api/web_search`, `/SearchPro`; `SearchVendor.Paths`) with the slash at its end
-trimmed. A URL given ending in that path (`…/search` for Tavily, any
+`/search_api/web_search`, `/SearchPro`, TinyFish's root `/`;
+`SearchVendor.Paths`) with the slash at its end trimmed. A URL given ending in that path (`…/search` for Tavily, any
 case) is its base: `SetSearchAPI` saves it without the path, and
 `SearchAPI.Base` drops it from one saved with it before, so it is asked
 once, never `/search/search` (plugins#509,
@@ -1950,7 +1950,11 @@ plain error (`TestVolcengineSearchAPI`). Yuanbao Search (Tencent Cloud,
 not opened) as 403, `ResourceUnavailable` (an account in arrears),
 `LimitExceeded` and `ResourceInsufficient` as 402,
 `RequestLimitExceeded.*` as 429; any other code is a plain error
-(`TestWSASearchAPI`). A resting key is not dropped:
+(`TestWSASearchAPI`). TinyFish says its error with its status (401 a
+wrong key, 402 `INSUFFICIENT_CREDITS` once the day's free searches are
+spent with an empty wallet, 429), read as any other API's
+(`TestTinyFishSearchAPI`); it takes no count and answers one page of
+about 10, cut to the count. A resting key is not dropped:
 it is asked after every key that isn't, the one back soonest first, so a
 search still has every key to fall back on. A key that answers wakes.
 Rests are held by vendor and a hash of the key (`searchKeyID`), never the

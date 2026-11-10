@@ -2,8 +2,9 @@ package provider
 
 // Search APIs answer a model's web search when no provider can (#419):
 // Tavily, Brave Search, Exa, Firecrawl, You.com, DeepSeek, Volcengine's
-// Doubao Search, Tencent Cloud's Yuanbao Search, a SearXNG of the user's. They are
-// kept in providers.json beside the providers, their keys with theirs.
+// Doubao Search, Tencent Cloud's Yuanbao Search, TinyFish, a SearXNG of the
+// user's. They are kept in providers.json beside the providers, their keys
+// with theirs.
 
 import (
 	"crypto/sha256"
@@ -102,6 +103,10 @@ var SearchVendors = []SearchVendor{
 	// key (服务 API KEY 方式, cloud.tencent.com/document/product/1806/130615),
 	// made in its console's 概览 › 服务 API KEY 方式 (plugins#509)
 	{ID: "wsa", Name: "Yuanbao Search (Tencent Cloud)", Base: "https://api.wsa.cloud.tencent.com", KeysURL: "https://console.cloud.tencent.com/wsapi/index", Paths: []string{"/SearchPro"}},
+	// TinyFish's Search API (docs.tinyfish.ai/search-api/reference): a
+	// GET at its root (/), keys from agent.tinyfish.ai/api-keys (Niapyaya
+	// on X)
+	{ID: "tinyfish", Name: "TinyFish", Base: "https://api.search.tinyfish.ai", KeysURL: "https://agent.tinyfish.ai/api-keys", Paths: []string{"/"}},
 	{ID: "searxng", Name: "SearXNG", KeyOptional: true, Paths: []string{"/search"}},
 }
 
