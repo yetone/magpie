@@ -1603,8 +1603,15 @@ function bounded(promise, signal) {
 const gatewayRuns = new Map()
 const GATEWAY_RUN_LIMIT = 128
 const GATEWAY_RUN_TTL = 15 * 60 * 1000
-const gatewayTimeout = (h) => Number.isInteger(h.options.gatewayTimeoutMs) && h.options.gatewayTimeoutMs >= 100 && h.options.gatewayTimeoutMs <= 10000 ? h.options.gatewayTimeoutMs : 1000
-const gatewayBudget = () => Math.min(10000, Math.max(2000, gatewayHooks.reduce((n, h) => n + gatewayTimeout(h), 0)))
+// A hook's own timeout: gatewayTimeoutMs, an integer clamped to 100–30000
+// ms (a slow deep recall may take 20s, #5890), or 1000 when it isn't one.
+// Keep gatewayTimeout in gateway.go the same.
+const GATEWAY_HOOK_LEAST = 100, GATEWAY_HOOK_MOST = 30000
+const gatewayTimeout = (h) => Number.isInteger(h.options.gatewayTimeoutMs) ? Math.min(GATEWAY_HOOK_MOST, Math.max(GATEWAY_HOOK_LEAST, h.options.gatewayTimeoutMs)) : 1000
+// The chain's budget: the hooks' timeouts summed within 2–10s, as before,
+// or the longest one's own timeout when that is longer, so a hook given
+// more than 10s gets it (at most 30s). gatewayBudget in gateway.go mirrors it.
+const gatewayBudget = () => Math.max(Math.min(10000, Math.max(2000, gatewayHooks.reduce((n, h) => n + gatewayTimeout(h), 0))), ...gatewayHooks.map(gatewayTimeout))
 
 function closeGateway(run) {
   if (!run || run.closed) return

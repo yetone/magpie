@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -130,28 +131,84 @@ func GatewayStates(ctx context.Context) map[string]GatewayState {
 // plugins.json and each plugin's package.json took ~1ms a request with 12
 // plugins on Windows (#3725).
 func HasGateway() bool {
+	return gatewayLook().on
+}
+
+// gatewayLook is HasGateway's look at the plugins, with the hooks' budget.
+func gatewayLook() *gatewaySeen {
 	now, g, list := time.Now().UnixNano(), filememo.Gen(), listPath()
 	if c := hasGateway.Load(); c != nil && c.gen == g && c.list == list && now < c.until {
-		return c.on
+		return c
 	}
-	on := false
+	var each []time.Duration
 	for _, e := range Load().Plugins {
 		if !e.Off && Gateway(Target(e.Spec)) != "" {
-			on = true
-			break
+			each = append(each, gatewayTimeout(e.Options))
 		}
 	}
-	hasGateway.Store(&gatewaySeen{on: on, gen: g, list: list, until: now + int64(time.Second)})
-	return on
+	c := &gatewaySeen{on: len(each) > 0, budget: gatewayBudget(each), gen: g, list: list, until: now + int64(time.Second)}
+	hasGateway.Store(c)
+	return c
 }
 
 // gatewaySeen is HasGateway's last look: for the plugins.json at list,
-// while filememo's generation is gen, until until (UnixNano).
+// while filememo's generation is gen, until until (UnixNano). budget is
+// the hook chain's, as the host reckons it.
 type gatewaySeen struct {
-	on    bool
-	gen   uint64
-	list  string
-	until int64
+	on     bool
+	budget time.Duration
+	gen    uint64
+	list   string
+	until  int64
+}
+
+// gatewayTimeout is a hook's own timeout, as host.js's gatewayTimeout
+// reckons it: gatewayTimeoutMs, a whole number clamped to 100–30000 ms, or
+// one second when it isn't one.
+func gatewayTimeout(opts map[string]any) time.Duration {
+	var ms float64
+	switch v := opts["gatewayTimeoutMs"].(type) {
+	case float64:
+		ms = v
+	case int:
+		ms = float64(v)
+	case int64:
+		ms = float64(v)
+	case json.Number:
+		f, err := v.Float64()
+		if err != nil {
+			return time.Second
+		}
+		ms = f
+	default:
+		return time.Second
+	}
+	if math.IsNaN(ms) || ms != math.Trunc(ms) {
+		return time.Second
+	}
+	return time.Duration(min(30000, max(100, ms))) * time.Millisecond
+}
+
+// gatewayBudget is the hook chain's budget, as host.js's gatewayBudget
+// reckons it: the hooks' timeouts summed within 2–10 seconds, or the
+// longest one's when that is longer (#5890).
+func gatewayBudget(each []time.Duration) time.Duration {
+	var sum, most time.Duration
+	for _, d := range each {
+		sum += d
+		most = max(most, d)
+	}
+	return max(min(10*time.Second, max(2*time.Second, sum)), most)
+}
+
+// gatewayStart bounds starting the host (or waiting for one already
+// starting) before a hook RPC, whatever the hooks' budget.
+const gatewayStart = 11 * time.Second
+
+// gatewayWait bounds a hook RPC: the chain's budget and a second for the
+// host's answer, never less than the eleven seconds it always had.
+func gatewayWait() time.Duration {
+	return max(gatewayStart, gatewayLook().budget+time.Second)
 }
 
 var hasGateway atomic.Pointer[gatewaySeen]
@@ -175,8 +232,13 @@ func GatewayBegin(ctx context.Context, body []byte, info GatewayContext) *Gatewa
 	if !HasGateway() {
 		return nil
 	}
-	start, cancel := context.WithTimeout(ctx, 11*time.Second)
+	// The whole run is bounded by the hooks' budget and a second; starting
+	// the host within it by the eleven seconds it always had. With the
+	// default budget (at most 10s) the two are one deadline, as before.
+	total, cancel := context.WithTimeout(ctx, gatewayWait())
 	defer cancel()
+	start, cancelStart := context.WithTimeout(total, gatewayStart)
+	defer cancelStart()
 	checkList()
 	// Provider discovery may already be starting the shared host. Wait within
 	// the same hook budget rather than skipping recall on the first request.
@@ -203,7 +265,7 @@ func GatewayBegin(ctx context.Context, body []byte, info GatewayContext) *Gatewa
 		Token string          `json:"token"`
 		Body  json.RawMessage `json:"body"`
 	}
-	err = h.call(start, "gatewayRequest", map[string]any{"operation": "begin", "body": json.RawMessage(body), "context": info}, &out)
+	err = h.call(total, "gatewayRequest", map[string]any{"operation": "begin", "body": json.RawMessage(body), "context": info}, &out)
 	if err != nil || out.ID == "" || out.Token == "" || len(out.Body) == 0 || out.Body[0] != '{' || !json.Valid(out.Body) {
 		return nil
 	}
@@ -235,8 +297,9 @@ func (r *GatewayRun) Finish(ctx context.Context, reply json.RawMessage, success 
 	if len(request) != 0 && json.Valid(request[0]) {
 		params["request"] = append(json.RawMessage(nil), request[0]...)
 	}
+	wait := gatewayWait()
 	go func() {
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 11*time.Second)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), wait)
 		defer cancel()
 		_ = r.h.call(ctx, "gatewayRequest", params, nil)
 	}()
@@ -274,25 +337,29 @@ type SignInEvent struct {
 
 // GatewaySignIn hands ev to every request hook's onSignIn, without waiting
 // for them: the host is started if it isn't, within the request hooks'
-// eleven seconds. Nothing is done for a user with no hooks.
+// eleven seconds, and the hooks have their budget. Nothing is done for a
+// user with no hooks.
 func GatewaySignIn(ctx context.Context, ev SignInEvent) {
 	if !HasGateway() {
 		return
 	}
+	total := gatewayWait()
 	go func() {
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 11*time.Second)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), total)
 		defer cancel()
+		start, cancelStart := context.WithTimeout(ctx, gatewayStart)
+		defer cancelStart()
 		checkList()
 		wait := time.NewTicker(10 * time.Millisecond)
 		defer wait.Stop()
 		for !hostMu.TryLock() {
 			select {
-			case <-ctx.Done():
+			case <-start.Done():
 				return
 			case <-wait.C:
 			}
 		}
-		h, err := getLocked(ctx)
+		h, err := getLocked(start)
 		hostMu.Unlock()
 		if err != nil {
 			return

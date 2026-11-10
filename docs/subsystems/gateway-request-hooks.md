@@ -72,11 +72,18 @@ unknown. This classification is not a user identity; plugins that export
 conversations must obtain their own explicit opt-in and default to skipping
 non-local or unknown origins. It is available in both lifecycle callbacks.
 
-The `gatewayTimeoutMs` option accepts 100–10000 ms (default 1000 ms). The
-entire request hook chain is bounded to ten seconds, with an eleven-second host
-startup/RPC limit, including waiting for a host already starting during provider
-discovery. The first request waits within that budget rather than skipping its
-hook because startup holds the host lock. Client cancellation aborts the wait
+The `gatewayTimeoutMs` option is an integer from 100 to 30000 ms (default
+1000 ms); a value outside the range is clamped to the nearer bound, and one that
+isn't an integer gets the default. The request hook chain's budget is the hooks'
+timeouts summed within two to ten seconds, or the longest hook's own timeout when
+that is longer, so a slow deep recall configured for 15 seconds gets them (#5890,
+plugins#926). Starting the host, including waiting for one already starting
+during provider discovery, is bounded to eleven seconds; the whole run (startup
+and the request RPC) to the budget plus one second, never under eleven seconds
+(`gatewayWait` in `gateway.go`, which mirrors host.js's `gatewayTimeout` and
+`gatewayBudget`). With every hook at 10000 ms or less both are the one
+eleven-second limit they always were. The first request waits within that budget
+rather than skipping its hook because startup holds the host lock. Client cancellation aborts the wait
 and request-hook I/O. Hooks run in
 plugin order. Failure keeps the last accepted request; diagnostics contain fixed
 outcome codes and byte counts rather than private content.
@@ -138,8 +145,8 @@ to start loses it. An older host never calls `onSignIn`, and fails
 to load a hooks file without `onRequest`.
 
 Host request state is limited to 128 runs and expires after 15 minutes. The
-response RPC has an eleven-second limit; each callback uses the configured
-bounded hook timeout. Request-owned state is released after notification.
+response RPC has the request RPC's limit (the budget plus one second, at least
+eleven seconds); each callback uses the configured bounded hook timeout. Request-owned state is released after notification.
 
 ## Sources and verification
 
@@ -160,6 +167,11 @@ bounded hook timeout. Request-owned state is released after notification.
   `gatewaySignIn` that deliver them.
 - `internal/plugin/gateway_test.go` and `internal/gateway/gateway_hook_test.go`:
   failures, cancellation, ownership and real HTTP streaming.
+  `internal/plugin/gateway_budget_test.go`: a 12-second recall and response
+  given 15 seconds, the default and 10000 ms still cut by the host, two
+  8000 ms hooks still sharing ten seconds, an over-long timeout
+  clamped, caller cancellation under a long budget, and the Go mirror of the
+  budget.
   `TestGatewaySignInHook` (a sign-in-only hook, options, a throwing hook)
   and `TestRevokedAccountToldToHooksOnce` (a revoked ChatGPT account told
   once, not before a hook is installed, with no token) guard sign-ins.

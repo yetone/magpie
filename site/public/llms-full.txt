@@ -174,6 +174,7 @@ magpie group rule add opus-anywhere use=deepseek/deepseek-v4-flash compact  # /c
 magpie group rule add opus-anywhere use=kimi/kimi-k2.6 folders=~/oss,"~/My Project"  # turns in those projects to it first
 magpie group rule add opus-anywhere pause=copilot/claude-opus-5.5 time=14:00-18:00 days=mon-fri  # left out in those hours
 magpie group rule add opus-anywhere pause=claude/claude-opus-5-5 except-folders=~/big-task  # the model kept for the task in ~/big-task: left out of every other folder
+magpie group rule add opus-anywhere use=deepseek/deepseek-v4-flash when="effort is off" when="not subagent"  # reasoning off, not a subagent
 magpie group set coder models+=group/opus-anywhere  # a group in a group
 magpie group rule opus-anywhere      # its rules; rule rm|mv <n>, rule classifier <group> <model>
 magpie group copy opus-anywhere "Opus test"  # the same models, routing and rules, to change on its own
@@ -252,6 +253,8 @@ Deleted magpie already (the app in the Trash, the folder removed) and an agent s
 ### Can magpie keep its files on another disk, so reinstalling the system doesn’t lose them?
 
 Installed, magpie keeps its settings, providers, usage and library in `~/.config/magpie` (`C:\Users\<you>\.config\magpie` on Windows). It backs them up by itself once a day, into `auto-backups` in that same folder, so a reinstalled system loses the backups too; Settings → Sync and backup says so under Backup folder. Click Change… there and pick a folder on another disk (`D:\magpie-backups`) or one a cloud drive syncs. After a reinstall, install magpie, pick the same folder there and Restore… the newest version. Backups hold no API keys; Sign-ins in backups adds subscription accounts and plugin sign-ins, sealed with a passphrase. To carry the keys too, sync to a WebDAV folder, an S3 bucket or a GitHub repository, sealed with a passphrase, in the same place.
+
+To keep magpie’s own files on that disk (an external SSD, say), click Move… beside Data folder in the same place and pick a folder there. magpie restarts, moves its files and cache into a folder named `magpie` inside it, and leaves a link where they were, so nothing else changes. Keep the disk connected: without it magpie won’t open until it is back. Move back brings them home. `magpie data move <folder>` does the same from a terminal.
 
 To keep everything on that disk, run magpie portable: put `magpie.exe` in a folder there with an empty folder named `data` beside it (`D:\magpie\magpie.exe` and `D:\magpie\data`). magpie then keeps everything in `data`, its caches and log too, and writes nothing of its own to your user folder; Settings → About → Config folder says Portable. Open it, and restore a backup into it as above. After a reinstall, open `D:\magpie\magpie.exe` again. The agents’ own configs (`~/.claude`, `~/.codex`…) stay where each agent reads them.
 
@@ -966,7 +969,7 @@ magpie writes to the config file OpenCode reads from its config folder, `$OPENCO
 | `provider.magpie.options.apiKey` | The gateway’s key |
 | `provider.magpie.models` | Every model magpie lists for OpenCode |
 
-Each model carries its context window and output limit, so OpenCode knows when to compact; whether it takes images; its reasoning levels; and its price. magpie keeps the list up to date as you add providers and accounts. If the file also has the provider under `providers`, where OpenCode 2 keeps it, magpie writes it there as well. OpenCode in a WSL distro on Windows is set up the same way, in the distro’s `~/.config/opencode`.
+Each model carries its context window and output limit, so OpenCode knows when to compact; whether it takes images; its reasoning levels; and its price. magpie keeps the list up to date as you add providers and accounts. With OpenCode 2 installed, magpie writes OpenCode 2’s own keys instead: the provider under `providers.magpie` and the small model as `agents.title.model`. OpenCode in a WSL distro on Windows is set up the same way, in the distro’s `~/.config/opencode`.
 
 ## Reasoning levels and cost
 
@@ -2764,7 +2767,7 @@ Source: https://usemagpie.ai/docs/library
 
 magpie’s Library keeps instructions, MCP servers, skills, hooks and subagents in one place, and writes each of them into every agent you tick for it, in that agent’s own files and format. The agents read those files as they always do. magpie adds no layer between an agent and what it is given: the agent itself decides when to use a skill, an MCP tool or a subagent.
 
-The page has six tabs: Instructions, MCP servers, Skills, Hooks, Subagents and RTK. Each item has a row of agents; tick an agent to give it the item, untick it to take it away. An agent reads the change when it starts again.
+The page has seven tabs: Instructions, MCP servers, Skills, Hooks, Subagents, RTK and billion-context. Each item has a row of agents; tick an agent to give it the item, untick it to take it away. An agent reads the change when it starts again.
 
 ## Where it is kept
 
@@ -2910,6 +2913,14 @@ A hook is a command an agent runs at a point in its turn: a notification when it
 ## RTK
 
 The RTK tab turns on [RTK](https://www.rtk-ai.app/) per agent: the agent’s shell commands run through RTK, which shortens their output to save tokens. magpie can install RTK for you; turning it off works with RTK gone.
+
+## billion-context
+
+The billion-context tab turns on [billion-context](https://github.com/ranxianglei/billion-context)’s plugin per agent: it folds older turns of a long session into summaries the model can open again, so the session stays inside the model’s window. It is offered for Pi, omp, OpenCode, Claude Code and Zed, whose requests still go through magpie with it on. magpie can install it for you (`npm install -g billion-context --prefix=~/.local`) and runs its own installer and remover; turning it off puts back what the install changed in the agent’s settings. An agent turned on here can’t also run billion-context-pi or opencode-acp.
+
+For Claude Code, billion-context’s install turns Claude Code’s own auto-compaction off. magpie turns it back on, so a session billion-context doesn’t fold, such as one in the Claude desktop app’s Code tab, compacts instead of stopping at “Prompt is too long”. A `DISABLE_AUTO_COMPACT` you set yourself is left as it is.
+
+Zed has no billion-context plugin. Turned on, magpie runs `bili start` and points Zed’s magpie provider at `http://127.0.0.1:8787/bili/` followed by magpie’s address, the route billion-context documents for any client. Pick one of magpie’s models for Zed on the Agents page first, and restart Zed after turning it on or off.
 
 ## What magpie touches
 
@@ -3688,6 +3699,10 @@ config: async (cfg) => {
 
 A model can also say `provider: { npm, api }` to use another API or address than the provider’s, `headers`, `options`, and `disabled: true` to hide it.
 
+### In front of a vendor magpie knows
+
+When the provider’s `api` is the API of a vendor magpie has a preset for (`https://api.mistral.ai/v1`, `https://api.deepseek.com/v1`, `https://openrouter.ai/api/v1`, …), magpie shapes requests to your provider as it does for that vendor before they reach your `fetch`: Mistral’s thinking parts in place of `reasoning_content`, DeepSeek’s and xAI’s schema rules, OpenRouter’s free pool, and the rest. There is nothing to add; the base URL you already give is what it reads, even when your loader’s `baseURL` sends elsewhere. A base on no preset’s host, on `localhost` or on your network gets no vendor’s handling.
+
 ### An upstream that searches the web
 
 When your plugin sits in front of Anthropic’s or OpenAI’s own API, which runs the hosted web search tool itself, set `searches: true` on the provider in the `config` hook. A client’s web search (Claude Code’s WebSearch, Codex’s `web_search`) then reaches your `fetch` as it was sent, on the provider’s Anthropic or Responses models, rather than going through magpie’s own search. Its Chat models are unaffected. magpie doesn’t search with it for other models by itself, but it can be named as the searcher in Settings.
@@ -4066,7 +4081,7 @@ Optional async `onSignIn(event, ctx)` hears of a subscription account that has t
 
 It runs in Bun once per agent request, before the JS gateway middleware, for every provider, Codex's own ChatGPT sign-in included. body is the agent API object. ctx contains `protocol`, `model`, `stream`, `path`, `agent`, `session`, `cwd`, `query`, `options` and `signal`. The query is the latest user text, excluding tool results and images. Missing identity fields are empty; authorization headers are never included.
 
-Return an object to replace the request, or undefined to keep it. A hook that changes the model, streaming, the client's tools or its tool choice is rolled back, as a failure, and gets no `onResponse` for that request. Each hook receives a clone; mutations from failed or undefined hooks are discarded. Successful changes follow enabled plugin order. Each hook defaults to one second; `gatewayTimeoutMs` accepts integers from 100 to 10000 milliseconds. The chain sums budgets, clamped to 2–10 seconds; startup plus RPC is bounded to 11 seconds. Settings → Plugins offers JSON options and call, latency, failure and outcome diagnostics. `ctx.report(code, bytes)` accepts ready/empty/unbound/unauthorized/unavailable/invalid/skipped and byte counts only. Statistics reset on reload and retain no private text. Use `ctx.signal` with fetch. Errors, invalid returns, timeouts and a host busy starting keep the request. Bun plugins have host privileges; install trusted code.
+Return an object to replace the request, or undefined to keep it. A hook that changes the model, streaming, the client's tools or its tool choice is rolled back, as a failure, and gets no `onResponse` for that request. Each hook receives a clone; mutations from failed or undefined hooks are discarded. Successful changes follow enabled plugin order. Each hook defaults to one second; `gatewayTimeoutMs` accepts integers from 100 to 30000 milliseconds; a value outside that range is clamped to the nearer bound. The chain sums budgets, clamped to 2–10 seconds, or takes the longest hook's own timeout when that is longer; host startup is bounded to 11 seconds, and startup plus RPC to the chain budget plus one second (at least 11 seconds). Settings → Plugins offers JSON options and call, latency, failure and outcome diagnostics. `ctx.report(code, bytes)` accepts ready/empty/unbound/unauthorized/unavailable/invalid/skipped and byte counts only. Statistics reset on reload and retain no private text. Use `ctx.signal` with fetch. Errors, invalid returns, timeouts and a host busy starting keep the request. Bun plugins have host privileges; install trusted code.
 
 Install with `magpie plugin add ./my-plugin`; save options with `magpie plugin options my-plugin '&lbrace;"serverUrl":"http://127.0.0.1:8000"&rbrace;'`. On/off and options changes reload the host; source-only edits need a configuration reload. Internal title/classifier requests skip the hook.
 
