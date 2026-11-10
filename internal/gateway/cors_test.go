@@ -770,3 +770,83 @@ func TestCORSPreflightFromLANReachesNothing(t *testing.T) {
 		}
 	}
 }
+
+// Copilot for Obsidian streams its chat through the window's fetch, from
+// Origin app://obsidian.md, and the agent "obsidian" wires it with no key
+// (shirotokiren on X): its preflight is answered and its calls read their
+// replies without being listed in Settings or carrying a key. Another
+// app:// origin is still neither answered nor refused, as before, and from
+// another machine the call needs the key as every other call does.
+func TestCORSObsidian(t *testing.T) {
+	fresh(t)
+	var hits atomic.Int64
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":1}}`)
+	}))
+	defer up.Close()
+	if err := provider.Save(provider.Provider{ID: "plan", Name: "Plan", Key: "upstream-secret", Chat: up.URL + "/v1", Models: []string{"m1"}}); err != nil {
+		t.Fatal(err)
+	}
+	s := settings.Load()
+	s.LAN = true
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	const obsidian = "app://obsidian.md"
+	srv := lanGuard(New().Handler())
+	do := func(remote, method, path, origin string) *httptest.ResponseRecorder {
+		t.Helper()
+		var body io.Reader
+		if method == "POST" {
+			body = strings.NewReader(chatReq)
+		}
+		r := httptest.NewRequest(method, path, body)
+		r.RemoteAddr = remote
+		r.Host = "127.0.0.1:3425"
+		r.Header.Set("Origin", origin)
+		r.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 obsidian/1.9.12 Chrome/138.0 Electron/37.2.0 Safari/537.36")
+		if method == "OPTIONS" {
+			r.Header.Set("Access-Control-Request-Method", "POST")
+			r.Header.Set("Access-Control-Request-Headers", "content-type, x-stainless-os, x-stainless-lang")
+		} else {
+			r.Header.Set("Content-Type", "application/json")
+		}
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, r)
+		return w
+	}
+	const here = "127.0.0.1:50123"
+	w := do(here, "OPTIONS", "/v1/chat/completions", obsidian)
+	if w.Code != http.StatusNoContent || w.Header().Get("Access-Control-Allow-Origin") != obsidian ||
+		w.Header().Get("Access-Control-Allow-Headers") != "content-type, x-stainless-os, x-stainless-lang" ||
+		!strings.Contains(w.Header().Get("Access-Control-Allow-Methods"), "POST") {
+		t.Fatalf("preflight: %d %v", w.Code, w.Header())
+	}
+	if hits.Load() != 0 {
+		t.Fatal("a preflight reached the vendor")
+	}
+	w = do(here, "POST", "/v1/chat/completions", obsidian)
+	if w.Code != http.StatusOK || w.Header().Get("Access-Control-Allow-Origin") != obsidian || !strings.Contains(w.Body.String(), "ok") {
+		t.Fatalf("chat without a key: %d %v %s", w.Code, w.Header(), w.Body)
+	}
+	if w := do(here, "GET", "/v1/models", obsidian); w.Code != http.StatusOK || w.Header().Get("Access-Control-Allow-Origin") != obsidian {
+		t.Errorf("models: %d %v", w.Code, w.Header())
+	}
+	// another app's scheme: passed on as before, with no CORS headers
+	if w := do(here, "OPTIONS", "/v1/chat/completions", "app://other.example"); w.Code == http.StatusNoContent || w.Header().Get("Access-Control-Allow-Origin") != "" {
+		t.Errorf("another app's preflight: %d %v", w.Code, w.Header())
+	}
+	if w := do(here, "POST", "/v1/chat/completions", "app://other.example"); w.Code != http.StatusOK || w.Header().Get("Access-Control-Allow-Origin") != "" {
+		t.Errorf("another app's call: %d %v", w.Code, w.Header())
+	}
+	// from another machine, the key as always
+	n := hits.Load()
+	if w := do("192.168.1.9:50123", "POST", "/v1/chat/completions", obsidian); w.Code != http.StatusUnauthorized {
+		t.Errorf("keyless from the LAN: %d %s", w.Code, w.Body)
+	}
+	if hits.Load() != n {
+		t.Error("a keyless call from the LAN reached the vendor")
+	}
+}
