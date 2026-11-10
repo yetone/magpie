@@ -376,6 +376,7 @@ var notYet = map[string]string{
 	"POST /api/memory":                           L,  // memory.go
 	"POST /api/memory/digest":                    L,  // memory.go
 	"POST /api/memory/remove":                    L,  // memory.go
+	"POST /api/memory/status":                    L,  // memory.go
 	"GET /api/memory/distill":                    L,  // memory_distill.go
 	"POST /api/memory/distill":                   L,  // memory_distill.go
 	"POST /api/memory/distill/run":               L,  // memory_distill.go
