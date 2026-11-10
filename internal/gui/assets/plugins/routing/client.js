@@ -2576,7 +2576,7 @@ function routingPage(part) {
   // account's plan; and the provider of a key or account named as one of
   // another provider's on the stage is (twin), so two providers' Key-01
   // rows, each of the same model, are told apart (iamleehom on Discord)
-  const rowSub = (w, twin) => w.fallback ? w.name : w.kind === "provider" ? "" : twin ? [w.name || w.provider, w.plan].filter(Boolean).join(" · ") : w.plan || "";
+  const rowSub = (w, twin) => w.fallback ? w.name : w.kind === "provider" ? "" : twin ? [w.name || w.provider, planName(w.plan)].filter(Boolean).join(" · ") : planName(w.plan) || "";
 
   // sync puts the staged routes on the stage: each agent on the left, and
   // the accounts they weighed, each route's in the order it weighed them —
@@ -4866,7 +4866,7 @@ function routingPage(part) {
       const name = el("div", "nm");
       // a provider's own row: its model, the provider's name is the heading
       if (w.kind === "provider") name.append(el("b", "", w.model || w.name));
-      else name.append(el("b", "", who(w)), el("span", "", w.plan || (w.kind === "key" ? t("API key") : "")));
+      else name.append(el("b", "", who(w)), el("span", "", planName(w.plan) || (w.kind === "key" ? t("API key") : "")));
       let st, cls = "", asOf = "";
       const resting = a.rest && at(a.rest.until) > n;
       // its models resting alone, while the account answers its others:
@@ -6317,7 +6317,7 @@ function routingPage(part) {
       const all = mergeQuotas(subs);
       const ws = (familyWindows(all.windows) || []).slice(0, 3);
       if (!ws.length) continue;
-      const figs = ws.map((w) => t(w.name) + (w.plan ? " · " + w.plan : "") + " " + quotaText(w)).join(" · ");
+      const figs = ws.map((w) => t(w.name) + (w.plan ? " · " + planName(w.plan) : "") + " " + quotaText(w)).join(" · ");
       const text = t("{name}, {n} accounts: {windows}", { name: i.name || i.provider, n: subs.length, windows: figs });
       const line = el("div", "mem rt-gquota", all.unknown ? text + " · " + t("{n} couldn't be read", { n: all.unknown }) : text);
       line.dataset.provider = i.provider;
@@ -7503,11 +7503,11 @@ function routingPage(part) {
             const free = accts.filter((a) => !used(a.id) && a.id !== mine?.id);
             ab.onclick = (ev) => pickFrom("account", ab, ev, [
               { value: "", label: t("Any account"), note: t("any the group allows") },
-              ...accts.map((a) => ({ value: a.id, label: a.name, note: [a.plan, used(a.id) && t("in the group already")].filter(Boolean).join(" · ") })),
+              ...accts.map((a) => ({ value: a.id, label: a.name, note: [planName(a.plan), used(a.id) && t("in the group already")].filter(Boolean).join(" · ") })),
               ...(free.length ? [{ value: "+", label: t("Also on another account…"), note: t("a member of its own, tried after this one") }] : []),
             ], (v) => {
               if (v === "+") {
-                pickFrom("account", ab, ev, free.map((a) => ({ value: a.id, label: a.name, note: a.plan || "" })), (a) => {
+                pickFrom("account", ab, ev, free.map((a) => ({ value: a.id, label: a.name, note: planName(a.plan) || "" })), (a) => {
                   if (!a) return;
                   d.members.splice(i + 1, 0, memberId(model, fixed, bare(a)));
                   rematch(); draw(); drawRules();
@@ -7634,7 +7634,7 @@ function routingPage(part) {
         b.title = on.length ? t("This group spends only {accounts} of {provider}", { accounts: on.map(nameOf).join(", "), provider: pname }) : t("This group may spend every account of {provider}", { provider: pname });
         b.setAttribute("aria-label", `${pname}: ${b.textContent}`);
         b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "account", label: "account", value: "", menu: true, multi: true,
-          options: all.map((a) => ({ value: a.id, label: a.name, note: a.plan || "" })), picked: (v) => d.accounts.includes(v), onPick: (v) => {
+          options: all.map((a) => ({ value: a.id, label: a.name, note: planName(a.plan) || "" })), picked: (v) => d.accounts.includes(v), onPick: (v) => {
             if (!v) return;
             d.accounts = d.accounts.includes(v) ? d.accounts.filter((x) => x !== v) : [...d.accounts, v];
             drawAccounts();

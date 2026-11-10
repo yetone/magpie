@@ -475,7 +475,7 @@ async function gatewayAccountGroupsEditor() {
         e.preventDefault();
         e.stopPropagation();
         if (pick.classList.contains("open")) return closeProtoMenu();
-        const opts = (accounts || []).map((a) => ({ v: a.id, name: a.name, note: a.plan ? a.providerName + " · " + a.plan : a.providerName, literalName: true }));
+        const opts = (accounts || []).map((a) => ({ v: a.id, name: a.name, note: a.plan ? a.providerName + " · " + planName(a.plan) : a.providerName, literalName: true }));
         // one signed out since stays, matching nothing, until it is unticked
         for (const v of g.accounts) if (!opts.some((o) => o.v.toLowerCase() === v.toLowerCase())) opts.push({ v, name: v, note: "Not signed in now", literalName: true });
         openProtoMenu(pick, opts, [...g.accounts], (picked) => {
@@ -592,7 +592,7 @@ function gatewayModelsBadge(k) {
         ? (ms.length && modelsReach(pid)
           ? t("Used: no {provider} account is picked", { provider: a.providerName })
           : t("Not used: no {provider} model or account is picked", { provider: a.providerName }))
-        : a.plan ? a.providerName + " · " + a.plan : a.providerName;
+        : a.plan ? a.providerName + " · " + planName(a.plan) : a.providerName;
       const o = { v: a.id, name: a.name, note, literalName: true };
       ofProvider.set(a.provider, [...(ofProvider.get(a.provider) || []), o]);
     }
@@ -700,7 +700,7 @@ async function gatewayKeptOutPick(k, anchor) {
   const opts = [{ v: "", name: "No account kept out", note: "" }];
   for (const a of accounts || []) {
     const slash = a.id.indexOf("/");
-    opts.push({ v: a.id.slice(0, slash) + "/!" + a.id.slice(slash + 1), name: a.name, note: a.plan ? a.providerName + " · " + a.plan : a.providerName, literalName: true });
+    opts.push({ v: a.id.slice(0, slash) + "/!" + a.id.slice(slash + 1), name: a.name, note: a.plan ? a.providerName + " · " + planName(a.plan) : a.providerName, literalName: true });
   }
   // a group kept out, each of its accounts as they are now (LeiWang_2000 on X)
   opts.push(...groupOptions(groups, true));

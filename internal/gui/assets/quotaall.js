@@ -98,7 +98,7 @@ function quotaAll(subs, cls = "", max = Infinity) {
   const ws = familyWindows(all.windows);
   for (const w of ws.slice(0, max)) {
     const item = el("span", "quota-all-w");
-    const name = t(w.name) + (w.plan ? " · " + w.plan : "");
+    const name = t(w.name) + (w.plan ? " · " + planName(w.plan) : "");
     item.append(el("span", "quota-all-name", name), el("span", "quota-all-n", quotaText(w)));
     if (!w.unlimited && !quotaNoShare(w)) {
       const bar = el("span", "quota-all-bar" + (to100(w.used) >= 90 ? " full" : ""));
