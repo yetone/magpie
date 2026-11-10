@@ -1538,6 +1538,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	gatewayModeRoutes(mux)
 	if !isWeb(w) {
 		appPageRoutes(mux)
+		remoteRoutes(mux, w)
 	}
 	privacyModelRoutes(mux)
 	maskingRoutes(mux)

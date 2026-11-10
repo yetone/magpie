@@ -4031,6 +4031,8 @@ input.words.compact-num { flex: none; width: 76px; font-variant-numeric: tabular
 input.words.rule-kind { flex: none; width: 110px; }
 input.words.gateway-port { flex: none; width: 110px; font-variant-numeric: tabular-nums; }input.words.rule-match { flex: 1 1 auto; width: auto; min-width: 0; }
 input.words.search-key, input.words.search-url { flex: 1 1 120px; width: auto; min-width: 0; }
+input.words.remote-url { width: 280px; }
+input.words.remote-key { width: 160px; }
 /* a search API that signs in as a plugin's provider, in the key's place */
 .search-signs { flex: 1 1 120px; min-width: 0; font-size: 12px; color: var(--fg-2); overflow-wrap: anywhere; }
 /* a search API's base URL (#1580): on a line of its own under the key */

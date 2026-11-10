@@ -77,6 +77,8 @@ type host struct {
 	panel *application.WebviewWindow
 	main  *application.WebviewWindow
 	tray  *application.SystemTray
+	// remote shows another magpie's page (remote_app.go); main thread only
+	remote *application.WebviewWindow
 	// flapping is set while the tray bird plays its flap, so a second
 	// click in it doesn't start another over it
 	flapping atomic.Bool

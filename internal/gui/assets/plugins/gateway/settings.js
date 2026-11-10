@@ -145,6 +145,7 @@ function corsSays(m) {
 }
 function renderCORS(s) {
   renderWebPage(); // Browser access, the section under this one
+  renderRemote(); // Another magpie, under that
   const box = $("#corsList");
   box.replaceChildren();
   const origins = s.corsOrigins || [];
@@ -578,4 +579,70 @@ function renderWebPage(asked) {
     }
   }
   box.replaceChildren(...rows);
+}
+
+// renderRemote: Another magpie, a magpie on a server (magpie daemon install
+// --web, magpie web, or an app's Browser access) opened in a window of the
+// app's own (xuanwo on X: its routing and usage, read from the desktop).
+// The window is that magpie's web page, signed in with the key in its link
+// as a browser is; the app checks the key before opening it and keeps the
+// address and key on this computer alone (remote.go). The key is never
+// read back into the page. The app's windows alone draw it.
+let remoteState = null, remoteDraft = { url: null, key: "" };
+function remoteSays(m) {
+  let x;
+  if (/^type the other magpie's address/.test(m)) return t("Type the other magpie’s address");
+  if (/^type that magpie's key/.test(m)) return t("Type that magpie’s key: the k= in the link it printed, or its MAGPIE_WEB_KEY");
+  if (/turned the key away/.test(m)) return t("That magpie turned the key away: use the key in the link it printed");
+  if (/doesn't let this computer in/.test(m)) return t("That magpie doesn’t let this computer in: add this computer’s address to its allowed addresses");
+  if ((x = /^(\S+) is a name on the internet/.exec(m))) return t("{host} is a name on the internet: open it over https://, or the key crosses the network unencrypted", { host: x[1] });
+  if ((x = /^(\S+)'s certificate isn't trusted/.exec(m))) return t("{host}’s certificate isn’t trusted by this computer", { host: x[1] });
+  if ((x = /^(\S+) doesn't answer/.exec(m))) return t("{host} doesn’t answer", { host: x[1] });
+  if ((x = /^(\S+) answered .*not as a magpie page/.exec(m))) return t("{host} doesn’t answer as a magpie page: check the address and port (magpie web’s is 3430)", { host: x[1] });
+  if (/^the key is \d+ characters/.test(m)) return t("The key is too short");
+  if (/^the key takes letters/.test(m)) return t("The key takes letters, digits and - . _ ~ only");
+  return t(m);
+}
+function renderRemote(asked) {
+  const head = $("#remoteHead"), box = $("#remoteList");
+  if (!box) return;
+  head.hidden = box.hidden = web;
+  if (web) return;
+  if (!asked) api("remote").then((r) => { remoteState = r; renderRemote(true); }).catch(() => {});
+  const s = remoteState;
+  if (!s) return;
+  const row = (name, ...tools) => {
+    const r = el("div", "row pref");
+    const who = el("div", "who");
+    who.append(el("div", "name", name));
+    const val = el("div", "val");
+    val.append(...tools);
+    r.append(who, val);
+    return r;
+  };
+  const addr = input(remoteDraft.url ?? s.url, "https://magpie.example.com");
+  addr.className = "words remote-url";
+  addr.setAttribute("aria-label", t("Address"));
+  addr.oninput = () => { remoteDraft.url = addr.value; };
+  const key = input(remoteDraft.key, s.hasKey ? t("Kept") : t("The k= in its link"), "password");
+  key.className = "words remote-key";
+  key.setAttribute("aria-label", t("Key"));
+  key.oninput = () => { remoteDraft.key = key.value; };
+  const open = el("button", "text", t("Open"));
+  open.onclick = () => {
+    open.disabled = true;
+    api("remote", { url: addr.value, key: key.value })
+      .then((r) => { remoteState = r; remoteDraft = { url: null, key: "" }; renderRemote(true); })
+      .catch((e) => { open.disabled = false; status(remoteSays(e.message), "err"); });
+  };
+  for (const f of [addr, key]) f.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") open.onclick(); };
+  const tools = [key, open];
+  if (s.url) {
+    const forget = el("button", "text", t("Forget"));
+    forget.onclick = () => api("remote/forget", {})
+      .then((r) => { remoteState = r; remoteDraft = { url: null, key: "" }; renderRemote(true); })
+      .catch(statusTErr);
+    tools.push(forget);
+  }
+  box.replaceChildren(row(t("Address"), addr), row(t("Key"), ...tools));
 }
