@@ -161,6 +161,9 @@ type memberJSON struct {
 	// "<provider>/<id>" as Accounts has them ("provider/model#<id>",
 	// EastonXvii on X); "" for every one the group allows
 	Account string `json:"account,omitempty"`
+	// Billing is how its provider bills: plan, payg or mixed, "" when
+	// unknown (provider.BillingKind; EV_John_Liu on X)
+	Billing string `json:"billing,omitempty"`
 	// Fast: the group sends it in its vendor's fast mode; CanFast: its
 	// model has one (provider.CanFast)
 	Fast    bool `json:"fast,omitempty"`
@@ -468,6 +471,7 @@ func groupsState() groupsJSON {
 				m.OwnFast = m.CanFast && provider.OwnFast(p, model)
 				m.Fast = m.CanFast && g.IsFast(id)
 				m.Free = p.FreeModel(model)
+				m.Billing = p.BillingKind()
 				for _, e := range served {
 					if e.Group == "" && e.Provider.ID == p.ID && e.Model == model {
 						m.Context, m.Images, m.ImagesUnknown = e.Context, seesImages(e), imagesUnknown(e)

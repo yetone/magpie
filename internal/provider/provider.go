@@ -272,6 +272,10 @@ type Provider struct {
 	// weighs it at nothing). Prices and the costs Usage counts stay as
 	// listed: it says what to spend first, not what a call cost.
 	CountFree bool `json:"countFree,omitempty"`
+	// Billing is the user's word on how the provider bills: BillingPlan
+	// or BillingPAYG (EV_John_Liu on X); "" has magpie read it
+	// (BillingKind). It only marks the provider on Providers and Routing.
+	Billing string `json:"billing,omitempty"`
 	// RateWindows are the time-of-day windows it bills at its own rate
 	// (#2463): a peak at 2× or 3×, a discount off peak. The first window
 	// that holds a call's time multiplies the price again, on top of
@@ -1077,6 +1081,8 @@ func accountSettings(a, pk Provider) Provider {
 	a.PriceRate = pk.PriceRate
 	// counted free by the user's word, every account alike
 	a.CountFree = pk.CountFree
+	// and how it bills, by the user's word (BillingKind)
+	a.Billing = pk.Billing
 	// the hours the provider bills at its own rate (#2463), as the editor
 	// keeps them for the account like the rest of these
 	a.RateWindows = pk.RateWindows
@@ -1507,6 +1513,9 @@ func AddCopy(p Provider, from string) (string, error) {
 	p.Searches = p.Searches || src.Searches
 	p.Unredacted = p.Unredacted || src.Unredacted
 	p.CountFree = p.CountFree || src.CountFree
+	if p.Billing == "" {
+		p.Billing = src.Billing
+	}
 	p.NativeCompaction = p.NativeCompaction || src.NativeCompaction
 	if p.Socket == "" {
 		p.Socket = src.Socket

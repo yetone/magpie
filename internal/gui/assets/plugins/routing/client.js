@@ -6879,6 +6879,22 @@ function routingPage(part) {
       status(e.message, "err");
     }
   }
+  // billTag: the group's members' billing summed up, quiet, each member's
+  // on hover; null while one of them is unknown or a group
+  function billTag(g) {
+    const kinds = new Set(), lines = [];
+    for (const id of shownMembers(g)) {
+      if (g.off?.includes(id)) continue;
+      const kind = g.memberInfo?.find((x) => x.id === id)?.billing;
+      if (!kind) return null;
+      for (const k of kind === "mixed" ? ["plan", "payg"] : [kind]) kinds.add(k);
+      lines.push(`${memberLabel(g, id)}: ${billingWord(kind)}`);
+    }
+    if (!kinds.size) return null;
+    const k = el("span", "tag bill", billingWord(kinds.size > 1 ? "mixed" : [...kinds][0]));
+    k.title = lines.join("\n");
+    return k;
+  }
   function groupRow(g) {
     const row = el("div", "rt-group" + (g.ready ? "" : " off") + (g.disabled ? " disabled" : ""));
     row.dataset.id = row.dataset.gslot = g.id;
@@ -6930,6 +6946,10 @@ function routingPage(part) {
       k.title = t(LIST_HINT.unlists);
       tags.append(k);
     }
+    // on a plan, pay as you go or both, as its members' providers bill
+    // (EV_John_Liu on X); said only when magpie knows of every one
+    const bill = billTag(g);
+    if (bill) tags.append(bill);
     if (g.firstToken > 0 && !manual) tags.append(el("span", "tag", t("Next after {n} without a first token", { n: took(g.firstToken * 1000) })));
     if (g.rules?.length) {
       const r = el("span", "tag" + (manual ? " idle" : ""), t(g.rules.length === 1 ? "1 rule" : "{n} rules", { n: g.rules.length }));

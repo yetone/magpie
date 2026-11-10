@@ -179,6 +179,9 @@ const providerUsage = `usage:
        magpie provider set modelscope free=yes
                                    (every model of it counts as free, so a Free first routing spends it before
                                     paid ones, as a free daily quota; prices and Usage's costs stay as listed)
+       magpie provider set my-relay billing=plan
+                                   (marks it on a plan, or billing=payg pay as you go, on Providers and Routing;
+                                    billing=auto goes back to magpie's reading of its endpoints)
        magpie provider add "My Relay" url=https://relay.example.com/v1 key=sk-… balance=https://relay.example.com/api/usage/token balance.path='$data.total_available / 500000'
        magpie provider set my-relay balance.path='(1 - credits.monthlyCredits / 70) %'
        magpie provider set my-relay balance.method=POST
@@ -902,6 +905,13 @@ func showProviderAsking(p provider.Provider, ask bool) error {
 		}
 		kv("unmasked", "yes"+muted.Render(why))
 	}
+	switch b := p.BillingKind(); {
+	case b == "":
+	case p.Billing != "":
+		kv("billing", billingWord(b)+muted.Render("  by your word"))
+	default:
+		kv("billing", billingWord(b))
+	}
 	if p.CountFree {
 		kv("free", "yes"+muted.Render("  counted free by Free first and Cheapest routing; prices and Usage's costs stay as listed"))
 	}
@@ -1328,6 +1338,20 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 				p.CountFree = false
 			default:
 				return fmt.Errorf("free=yes|no, not %q", v)
+			}
+		case "billing":
+			// plan or payg: how the provider bills, by the user's word,
+			// marked on Providers and Routing (EV_John_Liu on X); auto:
+			// magpie's reading of it (provider.BillingKind)
+			switch strings.ToLower(v) {
+			case "plan":
+				p.Billing = provider.BillingPlan
+			case "payg", "pay-as-you-go":
+				p.Billing = provider.BillingPAYG
+			case "auto", "":
+				p.Billing = ""
+			default:
+				return fmt.Errorf("billing=plan|payg|auto, not %q", v)
 			}
 		case "context":
 			if err := setContext(p, "*", v); err != nil {
@@ -2407,4 +2431,17 @@ func patienceArg(v string) (int, error) {
 		return 0, fmt.Errorf("patience is at most %s, not %q", provider.PatienceLongest*time.Second, v)
 	}
 	return int((d + time.Second - 1) / time.Second), nil
+}
+
+// billingWord is how a provider bills, in words (provider.BillingKind).
+func billingWord(b string) string {
+	switch b {
+	case provider.BillingPlan:
+		return "plan"
+	case provider.BillingPAYG:
+		return "pay as you go"
+	case provider.BillingMixed:
+		return "plan and pay as you go"
+	}
+	return b
 }
