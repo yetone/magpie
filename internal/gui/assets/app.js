@@ -23668,10 +23668,8 @@ function layoutNav() {
   renderSideToggle();
   fitTop();
 }
-// the sidebar's width, the reader's own once they drag its edge (sideDrag):
-// kept for the window, as a Mac app keeps it; none set, app.css's. A narrow
-// window has it no wider than a third of itself and a little, so the page
-// keeps the room
+// the sidebar's width, the reader's own once dragged (sideDrag), else
+// app.css's; at most ~a third of a narrow window
 var SIDE_MIN = 168, SIDE_MAX = 320;
 var sideW = 0;
 try { sideW = Math.round(+localStorage.getItem("magpie.sideWidth")) || 0; } catch { /* app.css's, then */ }
@@ -23731,10 +23729,7 @@ function sideDrag(edge) {
   });
   addEventListener("resize", () => { if (sideW) sideWidth(); });
 }
-// a box of the sidebar that runs longer than the window has no bar of its
-// own (app.css .side-bar): a thin one is laid over its edge while it
-// scrolls and fades once it stops, as a Mac's overlay bar does; held under
-// the pointer it stays, and dragged it scrolls the box
+// a sidebar box's overlay bar, as a Mac's (app.css .side-bar)
 function sideBars() {
   const side = $("#side");
   if (!side) return;
@@ -23754,7 +23749,9 @@ function sideBars() {
       bar.style.top = box.offsetTop + "px";
       bar.style.height = ch + "px";
       const h = Math.max(24, Math.round(ch * ch / sh));
-      const y = Math.round((ch - h) * box.scrollTop / (sh - ch));
+      // the foot is laid from its end (app.css): scrollTop 0 there
+      const from = getComputedStyle(box).flexDirection === "column-reverse" ? sh - ch : 0;
+      const y = Math.round((ch - h) * (box.scrollTop + from) / (sh - ch));
       thumb.style.height = h + "px";
       thumb.style.transform = `translateY(${y}px)`;
     };
@@ -23853,8 +23850,10 @@ function navSubs() {
   navSubsAt = sig;
   let box = document.querySelector(".nav-sub:not(.leaving)");
   const want = side && at && items.length > 1;
+  // Settings' list is over its button, which stays put (jen_celeus on X)
+  const above = at?.id === "prefs";
   // another page's list folds away as this one's opens, both at once
-  if (box && (!want || box.dataset.view !== view || box.previousElementSibling !== at)) { navSubLeave(box); box = null; }
+  if (box && (!want || box.dataset.view !== view || (above ? box.nextElementSibling : box.previousElementSibling) !== at)) { navSubLeave(box); box = null; }
   if (want) {
     const fresh = !box;
     if (fresh) {
@@ -23869,7 +23868,7 @@ function navSubs() {
         e.preventDefault();
         all[(to + all.length) % all.length].focus();
       };
-      at.after(box);
+      if (above) at.before(box); else at.after(box);
     }
     box.setAttribute("aria-label", (at.querySelector("span[data-t]") || at.querySelector("span"))?.textContent || "");
     for (const s of box.querySelectorAll(".nav-s")) s.remove();
@@ -24025,8 +24024,12 @@ function navSubEnter(box) {
   box.classList.add("moving");
   box.animate([{ height: "0px", marginTop: "0px", marginBottom: "0px", opacity: 0 }, to], { duration: 300, easing: NAV_EASE })
     .finished.then(() => box.classList.remove("moving"), () => {});
-  [...box.querySelectorAll(".nav-s")].forEach((s, i) => s.animate(
-    [{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }],
+  // Settings' rises from its button, the nearest row first
+  const up = !!box.closest(".side-foot");
+  const rows = [...box.querySelectorAll(".nav-s")];
+  if (up) rows.reverse();
+  rows.forEach((s, i) => s.animate(
+    [{ opacity: 0, transform: `translateY(${up ? 6 : -6}px)` }, { opacity: 1, transform: "none" }],
     { duration: 260, delay: 40 + Math.min(i, 12) * 20, easing: NAV_EASE, fill: "backwards" }));
   box.querySelector(".nav-hl").animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, delay: 80, fill: "backwards" });
 }
