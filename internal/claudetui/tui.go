@@ -34,6 +34,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -352,6 +353,13 @@ func (s *shim) read() {
 			}
 		}
 		if err != nil {
+			// a terminal read non-blocking with nothing to read yet is
+			// not its end: Claude Code would fill the terminal and hang
+			// waiting for a reader (#4834)
+			if errors.Is(err, syscall.EAGAIN) {
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
 			return
 		}
 	}

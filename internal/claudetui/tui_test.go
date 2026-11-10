@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -1458,5 +1459,42 @@ func TestShimEndedAfterLastWordsRead(t *testing.T) {
 				t.Fatalf("the exit was recorded with the screen %q", got)
 			}
 		})
+	}
+}
+
+// eagainOnce answers EAGAIN before its bytes, as a non-blocking terminal
+// with nothing written yet does.
+type eagainOnce struct {
+	again int
+	data  []byte
+}
+
+func (e *eagainOnce) Read(p []byte) (int, error) {
+	if e.again > 0 {
+		e.again--
+		return 0, syscall.EAGAIN
+	}
+	if len(e.data) == 0 {
+		return 0, io.EOF
+	}
+	n := copy(p, e.data)
+	e.data = e.data[n:]
+	return n, nil
+}
+
+func (e *eagainOnce) Write(p []byte) (int, error) { return len(p), nil }
+
+// TestReadPastEAGAIN: EAGAIN is not the terminal's end; read keeps
+// reading what Claude Code draws after it (#4834).
+func TestReadPastEAGAIN(t *testing.T) {
+	s := &shim{pty: &eagainOnce{again: 3, data: []byte("Welcome")}, changed: make(chan struct{}, 1), readDone: make(chan struct{})}
+	go s.read()
+	select {
+	case <-s.readDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("read never ended")
+	}
+	if got := string(s.screen); got != "Welcome" {
+		t.Fatalf("screen %q, want what was drawn after the EAGAIN", got)
 	}
 }
