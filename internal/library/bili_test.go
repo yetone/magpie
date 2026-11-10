@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/testenv"
@@ -539,6 +540,65 @@ func TestBiliZedThroughPrefix(t *testing.T) {
 	keepBiliServe(context.Background())
 	if served != 2 || len(filter(f.runs, "plugin install", "plugin remove")) != 0 {
 		t.Fatalf("served %d, ran %v", served, f.runs)
+	}
+}
+
+// TestBiliHermesThroughPrefix (Duckb7si on X): Hermes on magpie had no
+// row on billion-context's page. bili's plugin for Hermes sets HTTPS_PROXY
+// alone, which magpie's http://127.0.0.1 provider never takes, so Hermes
+// goes through the /bili/ prefix as Zed does: switched on, bili start
+// answers and magpie's provider's base_url is behind the prefix; off, it is
+// on the gateway again and magpie's bili start ends. bili's plugin
+// installer never runs for it.
+func TestBiliHermesThroughPrefix(t *testing.T) {
+	h := sandbox(t)
+	f := newFakeBili(t, h)
+	t.Setenv("HERMES_HOME", "")
+	holdCLI(t, h, "hermes")
+	cfg := filepath.Join(appdir.HermesHome(), "config.yaml")
+	gw := gateway.URL() + "/v1"
+	write(t, cfg, "# mine\nmodel:\n  default: deepseek/pro\n  provider: magpie\nproviders:\n  magpie:\n    name: magpie\n    base_url: "+gw+"\n    api_key: magpie\n    api_mode: chat_completions\n")
+
+	serving, served, stopped := false, 0, 0
+	was := []any{biliServe, biliStop, biliServing}
+	biliServe = func(string) error { served++; serving = true; return nil }
+	biliStop = func() { stopped++; serving = false }
+	biliServing = func() bool { return serving }
+	t.Cleanup(func() {
+		biliServe = was[0].(func(string) error)
+		biliStop = was[1].(func())
+		biliServing = was[2].(func() bool)
+	})
+
+	if on, ok := biliOnFor(t)["hermes"]; !ok || on {
+		t.Fatalf("Hermes offered %v, on %v", ok, on)
+	}
+	v, err := SetBili("hermes", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(v.Restart, []string{"hermes"}) || v.Backup == "" {
+		t.Fatalf("restart %v, backup %q", v.Restart, v.Backup)
+	}
+	if !strings.Contains(read(t, cfg), "base_url: "+biliPrefix+gw+"\n") || !strings.Contains(read(t, cfg), "# mine") || served != 1 {
+		t.Fatalf("served %d, config:\n%s", served, read(t, cfg))
+	}
+	if !biliOnFor(t)["hermes"] {
+		t.Fatal("Hermes isn't shown on")
+	}
+	serving = false
+	keepBiliServe(context.Background())
+	if served != 2 {
+		t.Fatalf("bili start run %d times, want 2", served)
+	}
+	if _, err := SetBili("hermes", false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(read(t, cfg), "base_url: "+gw+"\n") || stopped != 1 || biliOnFor(t)["hermes"] {
+		t.Fatalf("stopped %d, config:\n%s", stopped, read(t, cfg))
+	}
+	if len(filter(f.runs, "plugin install", "plugin remove")) != 0 {
+		t.Fatalf("ran %v", f.runs)
 	}
 }
 

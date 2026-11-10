@@ -33,6 +33,7 @@ package agent
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -245,7 +246,75 @@ func hermesIn(at place) *Agent {
 		}},
 	}
 	a.Fields = append(a.Fields, hermesProfileFields(at, dir)...)
+	a.through = func(prefix string) error { return hermesThrough(at, dir, path, prefix) }
 	return a
+}
+
+// HermesThrough points magpie's providers in Hermes's configs (a, Hermes)
+// at the gateway through prefix, an address a local proxy takes the
+// gateway's after (billion-context's http://127.0.0.1:8787/bili/), "" for
+// the gateway itself. Hermes must be on magpie already. bili's own plugin
+// for Hermes (bili plugin install hermes) sets HTTPS_PROXY in Hermes's
+// process and nothing else, so a provider at http://127.0.0.1 (magpie's)
+// never passes it; its docs' /bili/ prefix, which bili start answers,
+// takes any client whose address can be edited.
+func HermesThrough(a *Agent, prefix string) error {
+	if a == nil || a.ID != "hermes" || a.through == nil {
+		return fmt.Errorf("not Hermes")
+	}
+	return a.through(prefix)
+}
+
+// HermesURL is the base_url of magpie's provider in Hermes's connected
+// config (a, Hermes), "" without one.
+func HermesURL(a *Agent) string {
+	u, _ := edit.GetYAML(a.Path, "providers."+magpieID+".base_url")
+	return u
+}
+
+// hermesPrefix is the prefix magpie's entries in the config at path reach
+// the gateway behind: a local proxy's route on loopback before the
+// gateway's address (billion-context's http://127.0.0.1:8787/bili/,
+// HermesThrough), which a sync and a pick keep; "" when they go to the
+// gateway itself or anywhere else.
+func hermesPrefix(at place, path string) string {
+	gw := at.gw()
+	for _, name := range []string{magpieID, hermesAnthropicID} {
+		v, ok := edit.GetYAML(path, "providers."+name+".base_url")
+		if !ok {
+			continue
+		}
+		mode, _ := hermesModeIn(path, name)
+		p, ok := strings.CutSuffix(strings.TrimSuffix(strings.TrimSpace(v), "/"), hermesBase(gw, mode))
+		if ok && p != "" && loopbackWithPath(strings.TrimSuffix(p, "/")) {
+			return p
+		}
+	}
+	return ""
+}
+
+// hermesThrough is HermesThrough for Hermes at a place, connected in the
+// config at path (in dir): magpie's entries there and in every other
+// profile's config that has them go to the gateway through prefix.
+func hermesThrough(at place, dir, path, prefix string) error {
+	if edit.GetYAMLMap(path, "providers."+magpieID) == nil {
+		return fmt.Errorf("connect Hermes to magpie first: pick one of magpie's models for it on the Agents page")
+	}
+	var errs []error
+	for _, p := range append([]string{path}, hermesOthers(at, dir)...) {
+		var kvs []edit.KV
+		for _, name := range []string{magpieID, hermesAnthropicID} {
+			if edit.GetYAMLMap(p, "providers."+name) == nil {
+				continue
+			}
+			mode, _ := hermesModeIn(p, name)
+			kvs = append(kvs, edit.KV{Path: "providers." + name + ".base_url", Value: prefix + hermesBase(at.gw(), mode)})
+		}
+		if len(kvs) > 0 {
+			errs = append(errs, edit.SetYAML(p, kvs...))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // hermesProfileKey begins the key of a profile's model field
@@ -735,10 +804,12 @@ func hermesRoute(path, ref string) string {
 // entry's api_mode the user set stays, and its address follows it.
 func hermesEntries(at place, path string) [][2]any {
 	gw := at.gw()
+	// a local proxy's prefix the entries go through stays (HermesThrough)
+	pre := hermesPrefix(at, path)
 	anth, split := hermesSplit(path)
 	chat := hermesProviderAt(gw)
 	mode, _ := hermesModeIn(path, magpieID)
-	chat.APIMode, chat.BaseURL = mode, hermesBase(gw, mode)
+	chat.APIMode, chat.BaseURL = mode, pre+hermesBase(gw, mode)
 	if split {
 		chat.Models = slices.DeleteFunc(chat.Models, func(id string) bool { return slices.Contains(anth, id) })
 	}
@@ -748,7 +819,7 @@ func hermesEntries(at place, path string) [][2]any {
 	}
 	mode, _ = hermesModeIn(path, hermesAnthropicID)
 	e := hermesProviderAt(gw)
-	e.Name, e.APIMode, e.BaseURL, e.Models = hermesAnthropicID, mode, hermesBase(gw, mode), anth
+	e.Name, e.APIMode, e.BaseURL, e.Models = hermesAnthropicID, mode, pre+hermesBase(gw, mode), anth
 	// the key as "magpie" has it: a reference to a variable the user
 	// keeps there goes into this one too
 	e.APIKey = hermesKeptKey(at, path, magpieID, e.APIKey)

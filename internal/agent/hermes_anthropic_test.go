@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/yetone/magpie/internal/appdir"
@@ -223,4 +224,75 @@ func TestHermesKeepsTheUsersAPIMode(t *testing.T) {
 	if c, raw := readHermes(t, path); c.Model.Provider != hermesAnthropicID {
 		t.Fatalf("openai alias:\n%s", raw)
 	}
+}
+
+// Duckb7si on X: Hermes was on magpie, and billion-context's Library page
+// had no Hermes to switch on. bili's own plugin for Hermes sets
+// HTTPS_PROXY alone, which magpie's http://127.0.0.1 provider never takes,
+// so Hermes goes through bili's /bili/ prefix: HermesThrough puts both of
+// magpie's entries, in every bot that has them, behind it; a pick and a
+// sync keep it (each rewrites base_url), Check takes it as magpie's, and
+// off puts the gateway back.
+func TestHermesThroughBili(t *testing.T) {
+	home, path := hermesAnthropicHome(t)
+	os.WriteFile(path, []byte("model:\n  default: kimi-k3\n  provider: moonshot\n"), 0o644)
+	bot := filepath.Join(filepath.Dir(path), "profiles", "coder", "config.yaml")
+	os.MkdirAll(filepath.Dir(bot), 0o755)
+	os.WriteFile(bot, []byte("model:\n  default: kimi-k3\n  provider: moonshot\n"), 0o644)
+	const prefix = "http://127.0.0.1:8787/bili/"
+	gw := gateway.URL()
+	fakeMagpieAt(t, map[string]bool{prefix + gw: true})
+	a := hermes(home)
+	if err := HermesThrough(a, prefix); err == nil {
+		t.Fatal("put a Hermes not on magpie through bili")
+	}
+	setUpInMagpie("hermes")
+	if err := a.Apply("model", "magpie/relay/claude-opus-5-5"); err != nil {
+		t.Fatal(err)
+	}
+	if err := HermesThrough(a, prefix); err != nil {
+		t.Fatal(err)
+	}
+	through := func(when string, want string) {
+		t.Helper()
+		for _, p := range []string{path, bot} {
+			c, raw := readHermes(t, p)
+			if c.Providers[magpieID] == nil || c.Providers[hermesAnthropicID] == nil ||
+				c.Providers[magpieID].BaseURL != want+gw+"/v1" || c.Providers[hermesAnthropicID].BaseURL != want+gw {
+				t.Fatalf("%s: %s:\n%s", when, p, raw)
+			}
+		}
+		if HermesURL(a) != want+gw+"/v1" {
+			t.Fatalf("%s: HermesURL %q", when, HermesURL(a))
+		}
+		if c := a.Check(); c != "" {
+			t.Fatalf("%s: %s", when, c)
+		}
+	}
+	through("on", prefix)
+	// a pick, onto the other entry, and a sync keep it
+	if err := a.Apply("model", "magpie/deepseek/pro"); err != nil {
+		t.Fatal(err)
+	}
+	through("after a pick", prefix)
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	through("after a sync", prefix)
+	// one at an address that isn't a local proxy's route goes back to the
+	// gateway on a sync, as before
+	for _, wrong := range []string{"http://127.0.0.1:9999", "https://elsewhere.example/bili/"} {
+		os.WriteFile(path, []byte(strings.ReplaceAll(readFile(path), prefix, wrong)), 0o644)
+		if err := a.Sync(); err != nil {
+			t.Fatal(err)
+		}
+		if c, raw := readHermes(t, path); c.Providers[magpieID].BaseURL != gw+"/v1" {
+			t.Fatalf("%s kept:\n%s", wrong, raw)
+		}
+		HermesThrough(a, prefix)
+	}
+	if err := HermesThrough(a, ""); err != nil {
+		t.Fatal(err)
+	}
+	through("off", "")
 }

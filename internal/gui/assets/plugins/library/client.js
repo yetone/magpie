@@ -1699,7 +1699,7 @@ magpie.plugin("library", (ctx) => {
       row.append(sw);
       list.append(row);
     }
-    if (!rows.length) list.append(el("div", "lib-none", t("None of your agents can use billion-context with magpie: Pi, omp, OpenCode, Claude Code or Zed.")));
+    if (!rows.length) list.append(el("div", "lib-none", t("None of your agents can use billion-context with magpie: Pi, omp, OpenCode, Claude Code, Hermes or Zed.")));
     body.append(list);
   }
   // What billion-context saved, in its own count: what its running proxy

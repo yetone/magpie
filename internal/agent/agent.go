@@ -341,6 +341,10 @@ type Agent struct {
 	// that is known yet, and the proxy and where it is set; ok with no
 	// proxy when it sends them straight there (see codex_proxy.go).
 	viaProxy func() (ok, known bool, proxy, from string)
+	// through, when set, puts magpie's provider in the agent's config at
+	// the gateway behind a proxy's prefix ("" for the gateway itself):
+	// Hermes's, through billion-context's /bili/ (HermesThrough)
+	through func(prefix string) error
 	// dirShared says Dir is a folder another agent keeps its files in too
 	// (omp's, when PI_CODING_AGENT_DIR points it at Pi's): that it is there
 	// says nothing of this agent.
