@@ -7,7 +7,34 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"sync/atomic"
 )
+
+// stateHeld is what writeStateJSON writes through, used again from poll
+// to poll: two buffers for the state without its agents (which
+// json.Marshal copied out whole each time) and the 32KB writer. One set
+// is kept, not a sync.Pool's: polls are seconds apart and a GC between
+// them would empty a pool. A poll that finds it taken makes its own.
+var stateHeld atomic.Pointer[stateBufs]
+
+type stateBufs struct {
+	tail, kept bytes.Buffer
+	out        *bufio.Writer
+}
+
+// encodeTo is json.Marshal(v) into b, without its copy of the result:
+// Encode escapes as Marshal does, and its newline is cut.
+func encodeTo(b *bytes.Buffer, v any) ([]byte, error) {
+	b.Reset()
+	if err := json.NewEncoder(b).Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(b.Bytes(), []byte{'\n'}), nil
+}
+
+// stateBufMax is the largest buffer kept for the next poll; one grown
+// past it by an odd state goes.
+const stateBufMax = 4 << 20
 
 // agentsNull is how a stateJSON with no agents begins: Agents is its
 // first field.
@@ -25,8 +52,20 @@ func writeStateJSON(rw http.ResponseWriter, s stateJSON) ([32]byte, bool) {
 	agents := s.Agents
 	f := keptFile(s)
 	s.Agents, f.State.Agents = nil, nil
-	tail, err := json.Marshal(s)
-	keptTail, kerr := json.Marshal(f)
+	bufs := stateHeld.Swap(nil)
+	if bufs == nil {
+		bufs = new(stateBufs)
+	}
+	defer func() {
+		if bufs.tail.Cap() <= stateBufMax && bufs.kept.Cap() <= stateBufMax {
+			if bufs.out != nil {
+				bufs.out.Reset(nil)
+			}
+			stateHeld.CompareAndSwap(nil, bufs)
+		}
+	}()
+	tail, err := encodeTo(&bufs.tail, s)
+	keptTail, kerr := encodeTo(&bufs.kept, f)
 	v, _ := json.Marshal(Version)
 	keptHead := `{"version":` + string(v) + `,"state":` + agentsNull
 	if agents == nil || err != nil || kerr != nil ||
@@ -37,7 +76,12 @@ func writeStateJSON(rw http.ResponseWriter, s stateJSON) ([32]byte, bool) {
 		return sum, err == nil
 	}
 	rw.Header().Set("Content-Type", "application/json")
-	out := bufio.NewWriterSize(rw, 32<<10)
+	if bufs.out == nil {
+		bufs.out = bufio.NewWriterSize(rw, 32<<10)
+	} else {
+		bufs.out.Reset(rw)
+	}
+	out := bufs.out
 	defer out.Flush()
 	h := sha256.New()
 	_, _ = out.WriteString(`{"agents":[`)

@@ -64,7 +64,8 @@ func bigState() stateJSON {
 // The state is written as writeJSON wrote it, and the sum it gives is the
 // one keepState finds for it, with no agents too.
 func TestStateWrittenAsEncoded(t *testing.T) {
-	for _, s := range []stateJSON{bigState(), {Agents: []agentJSON{}}, {}} {
+	// Big after small and small after big: the held buffers are used again.
+	for _, s := range []stateJSON{bigState(), {Agents: []agentJSON{}}, {}, bigState(), {}} {
 		w := &sinkWriter{keep: true}
 		sum, ok := writeStateJSON(w, s)
 		var want bytes.Buffer

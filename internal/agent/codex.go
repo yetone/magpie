@@ -2565,12 +2565,12 @@ func codexEnableEfforts(path string, ms []catalog.Model) error {
 // subscription in magpie when any are — the subscription switched off, its
 // picks narrow nothing, as it serves no agent anything.
 func ownCodex() []catalog.Model {
-	ms := catalog.Codex()
+	ms := catalog.CodexShared() // only read (codexNamed), on every poll
 	picks := codexPicks()
 	if len(picks) == 0 {
 		return ms
 	}
-	var out []catalog.Model
+	out := make([]catalog.Model, 0, min(len(picks), len(ms)))
 	for _, m := range ms {
 		if slices.Contains(picks, m.ID) {
 			out = append(out, m)
