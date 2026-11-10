@@ -33,6 +33,9 @@ var clientPrefixes = []string{
 	KeyPagePath,
 	// and the join page (JoinPagePath), at the same address
 	JoinPagePath,
+	// and magpie's CA (CAPath), which the other computer fetches from the
+	// address it gives its agents
+	CAPath,
 }
 
 // ClientPath: p is one of the gateway's client routes, which `magpie web`
