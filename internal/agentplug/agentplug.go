@@ -46,6 +46,49 @@
 //	  mcp: "~/.aider/mcp.json", mcpFormat: "claude",
 //	  skills: "~/.aider/skills",
 //	}
+//
+// An agent that takes the gateway only from how it is started (agy reads
+// GEMINI_API_KEY and GOOGLE_GEMINI_BASE_URL from its environment, and
+// resolves a model only given on its command line) says so with launch,
+// beside model and bin. While it is on one of magpie's models its row
+// gives the command, and magpie puts a function named bin in the user's
+// shells that runs `magpie <id> run`: the agent started with env, each
+// {url}, {v1} and {key} the gateway's, and the model after launch.model's
+// flag (none when the user gives that flag).
+//
+//	launch: {
+//	  env: { GEMINI_API_KEY: "{key}", GOOGLE_GEMINI_BASE_URL: "{url}" },
+//	  model: "--model",
+//	}
+//
+// merge names keys whose object connect returns only magpie's members of:
+// each member is written on its own beside the user's, and taken out
+// again when magpie steps out (agy's customModelsConfig.customModels).
+// effort: true gives its row a field for how hard magpie's models reason,
+// which the gateway asks its requests for (an agent with no setting of
+// its own for it). wsl: true, for an agent that takes a built-in's place
+// (magpie's agentMovers), has it wired in WSL distros too where the
+// built-in was; aliases are other names it is typed as.
+//
+// An agent that reads a settings file of magpie's own only when it is so
+// started (agy's --settings) names it as config, the flag that hands it
+// over in launch.args, and its own settings file as base: magpie writes
+// only config, which it removes when magpie steps out, and the user's
+// own model goes in base. connect's input and own's have base, parsed,
+// so connect can carry the user's own entries over (agy takes
+// customModels whole from the --settings file). launch.plain are the
+// arguments that start it as it is (agy's remote-control, which needs
+// its Google sign-in).
+//
+//	config: "~/.gemini/antigravity-cli/magpie-settings.json",
+//	base: "~/.gemini/antigravity-cli/settings.json",
+//	launch: { env: {…}, model: "--model", args: { "--settings": "{config}" }, plain: ["remote-control", "--remote-control"] },
+//
+// A module may also export own({ config, base, model }), given its config
+// file (and base) as parsed JSON ({} for none) and the model it is on
+// now, returning the agent's own models for its picker, each { value,
+// model, direct }: the value written, the model's name for its picture,
+// and the vendor it goes to without magpie.
 package agentplug
 
 import (
@@ -54,6 +97,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -107,6 +151,53 @@ type Desc struct {
 	// for an agent that keeps it apart from config; nil for one that
 	// keeps it in config (Model) or picks it itself
 	Startup *Startup `json:"startup"`
+	// Base is the agent's own settings file, for one whose config is a
+	// file of magpie's alone (launch.args names it): the user's model is
+	// there off magpie, and connect and own are given it as base; magpie
+	// never writes it but for the user's own model picked in its row
+	Base string `json:"base"`
+	// Launch is how the agent is started on magpie, for one that takes the
+	// gateway only from its environment and command line; nil for one its
+	// config file connects
+	Launch *Launch `json:"launch"`
+	// Merge are key paths whose object connect returns magpie's members
+	// of, each written beside the user's own (json only)
+	Merge []string `json:"merge"`
+	// Effort gives the agent's row magpie's effort field
+	Effort bool `json:"effort"`
+	// WSL has the agent in WSL distros too
+	WSL bool `json:"wsl"`
+	// Aliases are other names the agent is typed as
+	Aliases []string `json:"aliases"`
+}
+
+// Launch is the environment an agent is started with, by variable, each
+// value {key}, {url} or {v1} (the gateway's), or a path under the address,
+// and Model the flag that names its model on the command line ("" for
+// none).
+type Launch struct {
+	Env   map[string]string `json:"env"`
+	Model string            `json:"model"`
+	// Args are flags put before the user's arguments, each with its value
+	// "{config}", the path of agent.config: agy's --settings, for a config
+	// that is magpie's own file the agent reads only when so started
+	Args map[string]string `json:"args"`
+	// Plain are arguments (a subcommand or a flag, alone or with
+	// "=value") with which the agent starts as it is, off magpie: agy's
+	// remote-control, which needs its own sign-in
+	Plain []string `json:"plain"`
+}
+
+// Fill is v with {url}, {v1} and {key} as given.
+func Fill(v, url, v1, key string) string {
+	return strings.NewReplacer("{url}", url, "{v1}", v1, "{key}", key).Replace(v)
+}
+
+// Own is one of an agent's own models, as own() gives it.
+type Own struct {
+	Value  string `json:"value"`
+	Model  string `json:"model"`
+	Direct string `json:"direct"`
 }
 
 // Startup is where an agent keeps the model it starts on, apart from the
@@ -150,6 +241,8 @@ type Agent struct {
 	rt      *moejs.Runtime
 	connect moejs.Hook
 	has     bool
+	own     moejs.Hook
+	hasOwn  bool
 }
 
 // How long the module may take to load, and connect to answer.
@@ -160,7 +253,19 @@ var (
 
 var errTimeout = errors.New("took too long")
 
-var idOK = lazyre.New(`^[a-z0-9][a-z0-9._-]{0,63}$`)
+var (
+	idOK   = lazyre.New(`^[a-z0-9][a-z0-9._-]{0,63}$`)
+	binOK  = lazyre.New(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
+	envOK  = lazyre.New(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
+	flagOK = lazyre.New(`^--?[A-Za-z0-9][A-Za-z0-9-]{0,63}$`)
+	// a plain argument: a subcommand or a flag
+	plainOK = lazyre.New(`^-{0,2}[A-Za-z0-9][A-Za-z0-9-]{0,63}$`)
+	// a launch variable's value is magpie's address or key, a path under
+	// the address at most: it goes into the user's shell profiles, and a
+	// variable such as LD_PRELOAD or NODE_OPTIONS gets nothing a plugin
+	// chose
+	envValueOK = lazyre.New(`^(\{key\}|\{(url|v1)\}(/[A-Za-z0-9._~-]+)*/?)$`)
+)
 
 type set struct {
 	stamp string
@@ -301,6 +406,14 @@ func Compile(spec, file string) (*Agent, error) {
 			}
 		}
 	}
+	for _, h := range [][]string{{"own"}, {"default", "own"}} {
+		if hk, err := mod.Hook(h[0], h[1:]...); err == nil {
+			if ok, _ := a.rt.Has(hk); ok {
+				a.own, a.hasOwn = hk, true
+				break
+			}
+		}
+	}
 	// connect only: with no model key, connect's keys are all magpie
 	// writes, so a module with neither would write nothing
 	if a.Desc.Startup != nil && !a.has {
@@ -374,7 +487,97 @@ func (d *Desc) check() error {
 	for i, u := range d.UA {
 		d.UA[i] = strings.ToLower(u)
 	}
+	if l := d.Launch; l != nil {
+		l.Model = strings.TrimSpace(l.Model)
+		switch {
+		case d.Model == "":
+			return errors.New("agent.launch starts the agent on a model: name its key with agent.model")
+		case !binOK.MatchString(d.Bin):
+			return fmt.Errorf("agent.launch needs agent.bin, the command it starts, as a shell names a function (letters, digits, '_' and '-'), not %q", d.Bin)
+		case len(l.Env) == 0 && l.Model == "":
+			return errors.New("agent.launch gives neither env nor a model flag")
+		case l.Model != "" && !flagOK.MatchString(l.Model):
+			return fmt.Errorf("agent.launch.model %q: a flag, as --model", l.Model)
+		}
+		for f, v := range l.Args {
+			if !flagOK.MatchString(f) || f == l.Model {
+				return fmt.Errorf("agent.launch.args %q: a flag, as --settings, not the model's", f)
+			}
+			if v != "{config}" {
+				return fmt.Errorf("agent.launch.args %s %q: {config}, agent.config's path", f, v)
+			}
+		}
+		for i, a := range l.Plain {
+			a = strings.TrimSpace(a)
+			if !plainOK.MatchString(a) {
+				return fmt.Errorf("agent.launch.plain %q: a subcommand or a flag", a)
+			}
+			l.Plain[i] = a
+		}
+		for k := range l.Env {
+			if !envOK.MatchString(k) {
+				return fmt.Errorf("agent.launch.env %q: a variable's name", k)
+			}
+			if !envValueOK.MatchString(l.Env[k]) {
+				return fmt.Errorf("agent.launch.env %s %q: {key}, {url} or {v1}, a path after the address at most", k, l.Env[k])
+			}
+		}
+	}
+	if d.Base = strings.TrimSpace(d.Base); d.Base != "" {
+		switch {
+		case d.Launch == nil || !slices.Contains(slices.Collect(maps.Values(d.Launch.Args)), "{config}"):
+			return errors.New("agent.base is for an agent.config that agent.launch.args hands the agent, as magpie's own file")
+		case d.Base == strings.TrimSpace(d.Config):
+			return errors.New("agent.base is agent.config")
+		case FormatOf(d.Base) != "" && FormatOf(d.Base) != d.Format:
+			return fmt.Errorf("agent.base %q: a file of agent.format, %s", d.Base, d.Format)
+		}
+	}
+	for i, m := range d.Merge {
+		m = strings.TrimSpace(m)
+		switch {
+		case d.Format != "json":
+			return errors.New("agent.merge is for a json agent.config")
+		case m == "":
+			return errors.New("agent.merge names an empty key")
+		case m == d.Model:
+			return fmt.Errorf("agent.merge %q is the model's own key", m)
+		}
+		d.Merge[i] = m
+	}
+	for i, al := range d.Aliases {
+		al = strings.TrimSpace(al)
+		if !idOK.MatchString(al) || al == d.ID {
+			return fmt.Errorf("agent.aliases %q: lower-case letters, digits, '.', '_' and '-', not its id", al)
+		}
+		d.Aliases[i] = al
+	}
 	return nil
+}
+
+// HasOwn says the module exports own.
+func (a *Agent) HasOwn() bool { return a.hasOwn }
+
+// OwnModels is what the module's own gives for config, the agent's file
+// as parsed JSON, base, its own settings file so (agent.base; nil for
+// none), and model, the one it is on now; none for a module without it.
+func (a *Agent) OwnModels(config, base any, model string) ([]Own, error) {
+	if !a.hasOwn {
+		return nil, nil
+	}
+	in := map[string]any{"config": config, "model": model}
+	if base != nil {
+		in["base"] = base
+	}
+	b, err := a.call(a.own, "own", in)
+	if err != nil || b == nil {
+		return nil, err
+	}
+	var out []Own
+	if err := json.Unmarshal(b, &out); err != nil {
+		return nil, errors.New("own returned no list of models")
+	}
+	return slices.DeleteFunc(out, func(o Own) bool { return o.Value == "" }), nil
 }
 
 // Connect is what the module's connect returns for in: the keys to write
@@ -383,6 +586,17 @@ func (a *Agent) Connect(in map[string]any) (map[string]any, error) {
 	if !a.has {
 		return nil, nil
 	}
+	b, err := a.call(a.connect, "connect", in)
+	if err != nil || b == nil {
+		return nil, err
+	}
+	return keys(b)
+}
+
+// call calls the module's hook named name with in, and gives what it
+// returns as JSON text: nil for nothing, an error for what isn't an
+// object or a list.
+func (a *Agent) call(hook moejs.Hook, name string, in map[string]any) ([]byte, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	defer a.rt.ReleaseCallData()
@@ -393,33 +607,29 @@ func (a *Agent) Connect(in map[string]any) (map[string]any, error) {
 	var res moejs.Value
 	err = a.limit(connectLimit, func() error {
 		var err error
-		res, err = a.rt.Call(a.connect, arg)
+		res, err = a.rt.Call(hook, arg)
 		return err
 	})
 	if err != nil {
-		return nil, fmt.Errorf("connect: %s", errText(err))
+		return nil, fmt.Errorf("%s: %s", name, errText(err))
 	}
 	if st, v, ok := moejs.PromiseResult(res); ok {
 		switch st {
 		case moejs.PromiseFulfilled:
 			res = v
 		case moejs.PromiseRejected:
-			return nil, fmt.Errorf("connect rejected: %s", text(a.rt, v))
+			return nil, fmt.Errorf("%s rejected: %s", name, text(a.rt, v))
 		default:
-			return nil, errors.New("connect returned a promise that never settled")
+			return nil, fmt.Errorf("%s returned a promise that never settled", name)
 		}
 	}
 	if res.IsUndefined() || res.IsNull() {
 		return nil, nil
 	}
 	if !res.IsObject() {
-		return nil, errors.New("connect returned neither an object nor nothing")
+		return nil, fmt.Errorf("%s returned neither an object nor nothing", name)
 	}
-	b, err := a.rt.AppendJSON(nil, res)
-	if err != nil {
-		return nil, err
-	}
-	return keys(b)
+	return a.rt.AppendJSON(nil, res)
 }
 
 // keys is connect's result, as JSON text, by key path. An object or array

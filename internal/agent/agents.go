@@ -44,8 +44,10 @@ func init() {
 	// an agy conversation started on magpie's gateway is picked up again
 	// there, with the variables and --model it was started with
 	sessions.AgyStart = func() string {
-		home, _ := homes()
-		return agy(home).Launch()
+		if a, _ := FindIn(local(), "agy"); a != nil && a.Launch != nil {
+			return a.Launch()
+		}
+		return ""
 	}
 	// a Copilot CLI signed in inside a running distro (#723)
 	provider.CopilotWSLDirs = copilotWSLDirs
@@ -248,8 +250,27 @@ func local() []*Agent {
 	return append(own, pluggedAgents(home, own, nil)...)
 }
 
-// onMachine are builtins but those in WSL.
-func onMachine(home, cfg string) []*Agent {
+// Starter is the agent on this machine typed as q, by its id or an alias
+// (no prefix: every argument after it is the agent's), that magpie starts
+// from the command line (Agent.Start); nil for none.
+func Starter(q string) *Agent {
+	for _, a := range local() {
+		if a.Start == nil {
+			continue
+		}
+		if strings.EqualFold(a.ID, q) || slices.Contains(a.Aliases, strings.ToLower(q)) {
+			return a
+		}
+	}
+	return nil
+}
+
+// onMachine are builtins but those in WSL, and but those a plugin serves
+// now (agentMovers).
+func onMachine(home, cfg string) []*Agent { return dropMoved(onMachineAll(home, cfg)) }
+
+// onMachineAll is onMachine with every built-in.
+func onMachineAll(home, cfg string) []*Agent {
 	return append([]*Agent{
 		claude(home),
 		claudeDesktop(home),

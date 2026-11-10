@@ -336,14 +336,15 @@ func run(args []string) error {
 		agent.SyncCatalogSettled()
 		catalog.Changed = was
 	}()
-	// what a shell's agy runs (agy_cli.go): every argument after run is
-	// agy's, --help too, and nothing is moved or started first
-	if ok, err := agyCmd(args); ok {
-		return err
-	}
 	// claude-magpie (claude_launch_cli.go): every argument after run is
 	// claude's, --help too
 	if ok, err := claudeLaunchCmd(args); ok {
+		return err
+	}
+	// what a shell's agy, or another agent's function, runs
+	// (start_cli.go): every argument after run is the agent's, --help
+	// too, and nothing is moved or started first
+	if ok, err := startCmd(args); ok {
 		return err
 	}
 	// Claude Magpie.app (claude_desktop_launch_cli.go), --help too

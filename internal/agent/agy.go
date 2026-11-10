@@ -75,12 +75,10 @@ func agySettingsFile() string {
 	return filepath.Join(home, ".gemini", "antigravity-cli", agyOverride)
 }
 
-// AgyRemote says a is what asks agy for its remote control, which only a
-// Google sign-in has, never an API key's session: run plain.
-func AgyRemote(a string) bool {
-	a, _, _ = strings.Cut(a, "=")
-	return a == "remote-control" || a == "--remote-control" || a == "-remote-control"
-}
+// agyPlain are what ask agy for its remote control, which only a Google
+// sign-in has, never an API key's session: agy runs plain with one of
+// them (alone or with "=value").
+var agyPlain = []string{"remote-control", "--remote-control", "-remote-control"}
 
 // agyLaunchAt is AgyLaunch for agy reaching the gateway at gw with key and
 // magpie's settings file, in PowerShell or a POSIX shell.
@@ -90,20 +88,6 @@ func agyLaunchAt(gw, key, settings, model string, powershell bool) string {
 	}
 	return "GEMINI_API_KEY=" + key + " GOOGLE_GEMINI_BASE_URL=" + gw + " agy --settings '" + strings.ReplaceAll(settings, "'", `'\''`) + "' --model '" + strings.ReplaceAll(model, "'", `'\''`) + "'"
 }
-
-// AgyStart is what starts agy on magpie, the variables and the model,
-// while magpie's settings file names one of magpie's models; nil and ""
-// otherwise, when agy starts as it is. The file is AgySettings.
-func AgyStart() (env []string, model string) {
-	m := jsonGet(agySettingsFile(), "model")()
-	if !usesMagpie(m) {
-		return nil, ""
-	}
-	return []string{"GEMINI_API_KEY=" + agentKey("agy"), "GOOGLE_GEMINI_BASE_URL=" + gateway.URL()}, m
-}
-
-// AgySettings is the --settings file agy starts with on magpie.
-func AgySettings() string { return agySettingsFile() }
 
 // agyShell gives the user's shells the function agy, or takes it out of
 // them; only for agy on this machine. What fails leaves the setting as it
@@ -364,6 +348,14 @@ func agyIn(at place) *Agent {
 			}
 			return "agy"
 		},
+		Start: func() Starting {
+			s := Starting{Bin: "agy", Flag: "--model", Plain: agyPlain}
+			if v := overModel(); usesMagpie(v) {
+				s.Env, s.Model = []string{"GEMINI_API_KEY=" + key(), "GOOGLE_GEMINI_BASE_URL=" + gw()}, v
+				s.Args = []string{"--settings", at.native(over)}
+			}
+			return s
+		},
 		Sync: func() error {
 			m, err := migrate()
 			if err != nil {
@@ -471,7 +463,10 @@ func agyIn(at place) *Agent {
 	}
 }
 
-// agyEffortField is how hard agy's models reason, picked in its row. agy
+// agyEffortField is effortField for agy.
+func agyEffortField(on func() bool) Field { return effortField("agy", on) }
+
+// effortField is how hard agy's models reason, picked in its row. agy
 // 1.5 has --effort for one session only, which it allows for a model
 // whose name it knows and turns away for magpie's ("not adjustable" in
 // /effort, xyenon on Discord), and settings.json has no key for it
@@ -480,17 +475,18 @@ func agyIn(at place) *Agent {
 // requests for the level picked here (provider.AgentEffort), as the
 // model takes it (withGeminiEffort); with none they go as agy asks.
 // Shown only while agy is on magpie's models, and never read at a
-// stopped distro (#3896).
-func agyEffortField(on func() bool) Field {
+// stopped distro (#3896). An agent a plugin adds that says effort has
+// one as well, under its id.
+func effortField(id string, on func() bool) Field {
 	return Field{
 		Key: "effort", Label: "effort",
-		Get: func() string { return provider.AgentEffort("agy") },
-		Set: func(v string) error { return provider.SetAgentEffort("agy", v) },
+		Get: func() string { return provider.AgentEffort(id) },
+		Set: func(v string) error { return provider.SetAgentEffort(id, v) },
 		Options: func(map[string]string) []Option {
 			if !on() {
 				return nil
 			}
-			return pickedEfforts("agy")
+			return pickedEfforts(id)
 		},
 	}
 }

@@ -291,6 +291,10 @@ type Agent struct {
 	// to start it on magpie, a function magpie gave their shells (agy);
 	// "" when there is none, and Launch is the way.
 	Typed func() string
+	// Start, for such an agent, is what `magpie <id> run` starts it with:
+	// its command, the variables and its model flag, the model "" while
+	// it isn't on magpie's, when it starts as it is.
+	Start func() Starting
 	// SplitSuffix, for an agent whose model values carry something of its
 	// own after the model that varies from value to value (omp's thinking
 	// level, "…:max"), splits a value into the model the picker offers and

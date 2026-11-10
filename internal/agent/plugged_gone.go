@@ -72,11 +72,11 @@ func pluggedOff(spec string) *Agent {
 	}
 	home, cfg := homes()
 	for _, b := range append(builtins(home, cfg), others...) {
-		if b.ID == p.Desc.ID || slices.Contains(b.Aliases, p.Desc.ID) {
+		if (b.ID == p.Desc.ID || slices.Contains(b.Aliases, p.Desc.ID)) && !movesTo(b.ID, p) {
 			return nil
 		}
 	}
-	return plugged(home, p)
+	return plugged(here(home), p)
 }
 
 // Gone is what RestoreGone did: the files it put back as the user had

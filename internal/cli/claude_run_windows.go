@@ -10,7 +10,7 @@ import (
 )
 
 // claudeRunOS starts claude and waits for it, its exit code magpie's, as
-// agyExecOS does. Ctrl+C is claude's to handle, so magpie lets it pass.
+// startExecOS does. Ctrl+C is claude's to handle, so magpie lets it pass.
 func claudeRunOS(bin string, args, env []string) error {
 	cmd := proc.Command(bin, args...)
 	cmd.Env = env

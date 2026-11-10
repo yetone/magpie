@@ -9,10 +9,11 @@ import (
 	"github.com/yetone/magpie/internal/proc"
 )
 
-// agyExecOS starts agy and waits for it, its exit code magpie's: Windows
-// has no exec. Ctrl+C is agy's to handle, so magpie lets it pass.
-func agyExecOS(bin string, args, env []string) error {
-	cmd := proc.Command(bin, args...)
+// startExecOS starts the agent at path and waits for it, its exit code
+// magpie's: Windows has no exec. Ctrl+C is the agent's to handle, so
+// magpie lets it pass.
+func startExecOS(path, _ string, args, env []string) error {
+	cmd := proc.Command(path, args...)
 	cmd.Env = env
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	signal.Ignore(os.Interrupt)

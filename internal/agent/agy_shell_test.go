@@ -36,8 +36,8 @@ func TestAgyShell(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if env, m := AgyStart(); env != nil || m != "" {
-		t.Fatalf("AgyStart before: %v %q", env, m)
+	if s := a.Start(); s.Env != nil || s.Model != "" {
+		t.Fatalf("Start before: %+v", s)
 	}
 	if err := a.Apply("model", "magpie/deepseek/pro"); err != nil {
 		t.Fatal(err)
@@ -58,9 +58,8 @@ func TestAgyShell(t *testing.T) {
 	if n := a.Notice(); !strings.HasPrefix(n, "Type agy in a new terminal: magpie added it to ~/") || !strings.HasSuffix(n, "(in a terminal open now: "+a.Launch()+").") {
 		t.Fatalf("notice: %q", n)
 	}
-	env, m := AgyStart()
-	if m != "magpie/deepseek/pro" || strings.Join(env, " ") != "GEMINI_API_KEY="+gateway.TokenFor("agy")+" GOOGLE_GEMINI_BASE_URL="+gateway.URL() {
-		t.Fatalf("AgyStart: %v %q", env, m)
+	if s := a.Start(); s.Model != "magpie/deepseek/pro" || strings.Join(s.Env, " ") != "GEMINI_API_KEY="+gateway.TokenFor("agy")+" GOOGLE_GEMINI_BASE_URL="+gateway.URL() {
+		t.Fatalf("Start: %+v", s)
 	}
 
 	// wired before the function was given: the next start gives it

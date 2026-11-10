@@ -21,16 +21,21 @@ func TestAgyRun(t *testing.T) {
 	os.MkdirAll(filepath.Dir(settings), 0o755)
 	t.Setenv("GEMINI_API_KEY", "users-own")
 	t.Setenv("GOOGLE_GEMINI_BASE_URL", "")
-	var bin string
+	var bin, name string
 	var args, env []string
-	oldExec, oldLook := agyExec, agyLook
-	t.Cleanup(func() { agyExec, agyLook = oldExec, oldLook })
-	agyExec = func(b string, a, e []string) error {
-		bin, args, env = b, a, e
+	oldExec, oldLook := startExec, startLook
+	t.Cleanup(func() { startExec, startLook = oldExec, oldLook })
+	startExec = func(b, n string, a, e []string) error {
+		bin, name, args, env = b, n, a, e
 		return nil
 	}
 	real := filepath.Join(home, "bin", "agy")
-	agyLook = func() (string, error) { return real, nil }
+	startLook = func(b string) (string, error) {
+		if b != "agy" {
+			return "", errors.New("looked for " + b)
+		}
+		return real, nil
+	}
 	envOf := func(k string) []string {
 		var out []string
 		for _, kv := range env {
@@ -52,7 +57,7 @@ func TestAgyRun(t *testing.T) {
 		if _, err := runOut(t, append([]string{"agy", "run"}, c.in...)...); err != nil {
 			t.Fatal(err)
 		}
-		if bin != real || !slices.Equal(args, c.want) {
+		if bin != real || name != "agy" || !slices.Equal(args, c.want) {
 			t.Fatalf("agy run %v: %s %v, want %v", c.in, bin, args, c.want)
 		}
 		if k, u := envOf("GEMINI_API_KEY"), envOf("GOOGLE_GEMINI_BASE_URL"); !slices.Equal(k, []string{gateway.TokenFor("agy")}) || !slices.Equal(u, []string{gateway.URL()}) {
@@ -94,7 +99,7 @@ func TestAgyRun(t *testing.T) {
 	if _, err := runOut(t, "agy", "env", "x"); err == nil {
 		t.Fatal("agy env x: no error")
 	}
-	agyLook = func() (string, error) { return "", errors.New("not found") }
+	startLook = func(string) (string, error) { return "", errors.New("not found") }
 	if _, err := runOut(t, "agy", "run"); err == nil || !strings.Contains(err.Error(), "isn't installed") {
 		t.Fatalf("no agy: %v", err)
 	}

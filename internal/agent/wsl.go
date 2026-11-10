@@ -448,6 +448,15 @@ type wslKind struct {
 	ownNotice bool
 }
 
+// served is k with its agent the plugin's, where a plugin that says wsl
+// serves the built-in now (agentMovers).
+func (k wslKind) served() wslKind {
+	if p := movedAgent(k.id); p != nil && p.Desc.WSL {
+		k.in = func(at place) *Agent { return plugged(at, p) }
+	}
+	return k
+}
+
 var wslKinds = []wslKind{
 	// its daemon, which magpie starts there itself (claudescience_wsl.go):
 	// the probe looks in ~/.local/bin, where its installer puts it
@@ -1153,7 +1162,7 @@ func wslAgentsOf(ds []distro) []*Agent {
 		// distro's files opened start it again (#3896)
 		for _, k := range wslKinds {
 			if k.found(d) {
-				out = append(out, wslAgent(k, d))
+				out = append(out, wslAgent(k.served(), d))
 			}
 		}
 		// the named omp profiles the probe remembered: the row is made

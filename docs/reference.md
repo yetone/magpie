@@ -1584,7 +1584,37 @@ call costs. Each is left out when it isn't known (a routing group has no
   "pricing": { "prompt": "0.0000003", "completion": "0.0000012", "input_cache_read": "0.00000003" } }
 ```
 
-An id magpie's own agents use is refused. In the market an agent's entry has
+An agent that takes the gateway only from how it is started, not from a
+file, says so in `launch`: `{ env: { GEMINI_API_KEY: "{key}",
+GOOGLE_GEMINI_BASE_URL: "{url}" }, model: "--model" }`. While its model is
+one of magpie's, magpie puts a function named after its `bin` in the
+user's shells (zsh, bash, fish, PowerShell) that runs `magpie <id> run`,
+which starts the agent with those variables and the model flag; its own
+model takes the function out. A value is `{key}`, `{url}` or `{v1}`, a
+path after the address at most, so nothing else a plugin says reaches a
+shell profile. Beside `launch`:
+
+- `merge`: key paths of a json config whose object `connect` returns
+  magpie's members of, written beside the user's own and taken out alone
+  (`["customModelsConfig.customModels"]`);
+- `launch.args`: flags put before the user's arguments, each `{config}`,
+  the config's path (`{ "--settings": "{config}" }`); `launch.plain`:
+  arguments that start the agent as it is, never on the gateway
+  (`["remote-control"]`);
+- `base`: for a config handed over by `launch.args`, so magpie's own
+  file, the agent's own settings file: `connect` and `own` get it as
+  `base`, the user's own model is written there, and stepping out takes
+  the config away whole;
+- `own({ config, base, model })`: the user's own models for the picker, each
+  `{ value, model, direct }`, `direct` naming the vendor it goes to;
+- `effort: true`, the Effort field; `wsl: true`, the agent in WSL
+  distros too; `aliases`, other names `magpie <name>` takes.
+
+An id magpie's own agents use is refused, except a built-in's that moves
+onto a community plugin: with `@magpie-community/agent-agy` installed and
+on, `agy` is the plugin's, and what the built-in had wired is handed over
+as the plugin's, so nothing changes for the user; with it off or removed,
+agy is connected no more and the built-in is back. In the market an agent's entry has
 `"kind": "agent"` (`@magpie-community/agent-<name>`). An agent that needs a
 runtime (a timer, a file watched) keeps its agent file in moejs and adds a
 Bun module as the package's `main`; a package that declares `magpie.agent`
