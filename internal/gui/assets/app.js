@@ -7120,7 +7120,7 @@ function shinePartners(k, grid) {
   seen.observe(k);
 }
 
-// The add sheet: presets first (a key is all they need), custom last.
+// The add sheet: presets, and a custom provider beside its search (jackutan on X).
 let presetQuery = "", addReturnPick = null;
 function renderAdd() {
   const sheet = $("#addSheet");
@@ -7155,7 +7155,12 @@ function renderAdd() {
     if (q.value) { q.value = presetQuery = ""; drawTiles(); } else if (providers.providers.length) closeAddSheet();
   };
   q.oninput = () => { presetQuery = q.value; drawTiles(); };
-  head.append(q);
+  const c = el("button", "text custom" + (editing?.custom ? " on" : ""));
+  c.append(svg(PLUS, 11, 1.8), t("Custom provider"));
+  c.dataset.pick = "custom";
+  c.title = t("any OpenAI or Anthropic compatible URL");
+  c.onclick = () => { editing = { custom: true }; draft = null; renderProviders(); };
+  head.append(q, c);
   const imp = el("button", "text", t("Import…"));
   imp.title = t("Bring over providers set up in other apps");
   imp.onclick = openImportApps;
@@ -7269,20 +7274,11 @@ function renderAdd() {
       const none = el("div", "none");
       none.append(t("Nothing called “{q}”. ", { q: presetQuery.trim() }));
       const b = el("button", "link", t("Add it as a custom provider"));
-      b.onclick = () => { editing = { custom: true }; draft = null; renderProviders(); };
+      b.onclick = c.onclick;
       const pl = el("button", "link", t("look for a plugin"));
       pl.onclick = () => openPlugins(presetQuery.trim());
       none.append(b, t(", or "), pl);
       tiles.append(none);
-    } else if (!f) {
-      // a vendor not listed: one line under them all
-      const foot = el("div", "custom-foot");
-      const c = el("button", "custom" + (editing?.custom ? " on" : ""));
-      c.append(svg(PLUS, 13, 1.8), el("span", "", t("Custom provider")));
-      c.dataset.pick = "custom";
-      c.onclick = () => { editing = { custom: true }; draft = null; renderProviders(); };
-      foot.append(c, el("span", "hint", t("any OpenAI or Anthropic compatible URL")));
-      tiles.append(foot);
     }
   };
   drawTiles();

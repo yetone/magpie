@@ -3355,10 +3355,15 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .tile .nm .badge { flex: none; }
 .tile .have { flex: none; width: 6px; height: 6px; border-radius: 3px; background: var(--green); }
 .tile .cnt { flex: none; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.sheet .custom-foot { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding: 10px 2px 0; border-top: 1px solid var(--line-2); }
-.sheet .custom-foot .custom { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px 0 6px; border-radius: 8px; color: var(--accent); font-size: 13px; }
-.sheet .custom-foot .custom:hover, .sheet .custom-foot .custom.on { background: var(--accent-soft); }
-.sheet .custom-foot .hint { font-size: 12px; color: var(--muted); }
+.sheet .row-head .custom { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); }
+.sheet .row-head .custom:hover, .sheet .row-head .custom.on { color: var(--accent); background: var(--accent-soft); }
+/* narrow: the search and Custom provider on a line of their own */
+@media (max-width: 760px) {
+  .sheet .row-head { flex-wrap: wrap; height: auto; row-gap: 8px; }
+  .sheet .row-head::after { content: ""; order: 1; flex-basis: 100%; }
+  .sheet .row-head .find { order: 2; flex: 1; width: auto; min-width: 0; }
+  .sheet .row-head .custom { order: 2; }
+}
 /* the provider editor, in a dialog */
 /* the label column is as wide as its longest label, so that label starts
    at the padding and the fields end the same way on the right (the

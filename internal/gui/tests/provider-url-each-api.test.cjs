@@ -64,7 +64,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const addNew = async (name) => {
         await page.goto("http://magpie.test/?view=providers");
         await page.locator("#addProvider").click();
-        await page.locator("#addSheet .custom-foot .custom").click();
+        await page.locator("#addSheet .row-head .custom").click();
         await baseURL.waitFor();
         await ed.locator('input[placeholder]').first().fill(name);
       };

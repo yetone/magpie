@@ -8,8 +8,8 @@
 // subscription's account count beside it when more than one. A vendor's
 // global and China presets are one row with nothing added to it, the
 // regions' hosts in its title, its editor switching between them with
-// the key kept. A custom provider is one line
-// under them all, gone while searching. English and Chinese; no backend,
+// the key kept. A custom provider is a button
+// beside the search, kept while searching. English and Chinese; no backend,
 // the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -137,13 +137,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.match(kt, new RegExp(w.china + " api\\.moonshot\\.cn"));
         assert.match(kt, /api\.moonshot\.example\.com/);
 
-        // the custom provider: one line at the foot, gone while searching
-        const foot = sheet.locator(".custom-foot");
-        assert.equal(await foot.locator(".custom").textContent(), w.custom);
-        assert.equal(await foot.locator(".hint").textContent(), w.customHint);
+        // the custom provider: beside the search, kept while searching
+        const custom = sheet.locator(".row-head .custom");
+        assert.equal(await custom.textContent(), w.custom);
+        assert.equal(await custom.getAttribute("title"), w.customHint);
         await sheet.locator(".find").fill("deep");
         assert.deepEqual(await rows.locator(".n").allTextContents(), ["DeepSeek"]);
-        assert.equal(await foot.count(), 0);
+        assert.equal(await custom.count(), 1);
         await sheet.locator(".find").fill("china");
         assert.deepEqual(await rows.locator(".n").allTextContents(), ["Kimi"]);
         await sheet.locator(".find").fill("");

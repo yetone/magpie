@@ -66,7 +66,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         hint: zh ? "可选：用「获取模型」从供应商列表中勾选，或直接填写模型 ID；不选则保存后自动获取模型列表。" : "Optional: Fetch models to pick from the vendor's list, or type ids; none picked, magpie asks for the list after saving.",
       };
       await page.locator("#addProvider").click();
-      await page.locator("#addSheet .custom-foot .custom").click();
+      await page.locator("#addSheet .row-head .custom").click();
       const ed = page.locator(".editor.new");
       await ed.locator(".add-models").waitFor();
       const field = ed.locator(".add-models .detect-row input");
