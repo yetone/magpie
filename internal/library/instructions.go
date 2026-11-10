@@ -858,6 +858,9 @@ func KeepLinked(ctx context.Context, interval time.Duration) {
 		}
 		// what was ticked for a stopped WSL distro's agents, once it runs
 		keepWoken()
+		// Claude Code's auto-compaction beside a bili plugin magpie
+		// installed before it kept it on
+		keepBiliCompact()
 		// once a day, what agents saved to memory meanwhile
 		if res, err := PublishMemory(true); err != nil {
 			log.Println("library: memory:", err)

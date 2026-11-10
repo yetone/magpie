@@ -238,6 +238,7 @@ magpie library sync     # write it into the agents again</pre>
 
     <h2 id="billion-context"><a class="anchor" href="#billion-context">billion-context</a></h2>
     <p>The billion-context tab turns on <a href="https://github.com/ranxianglei/billion-context">billion-context</a>’s plugin per agent: it folds older turns of a long session into summaries the model can open again, so the session stays inside the model’s window. It is offered for Pi, omp, OpenCode and Claude Code, whose requests still go through magpie with it on. magpie can install it for you (<code>npm install -g billion-context --prefix=~/.local</code>) and runs its own installer and remover; turning it off puts back what the install changed in the agent’s settings. An agent turned on here can’t also run billion-context-pi or opencode-acp.</p>
+    <p>For Claude Code, billion-context’s install turns Claude Code’s own auto-compaction off. magpie turns it back on, so a session billion-context doesn’t fold, such as one in the Claude desktop app’s Code tab, compacts instead of stopping at “Prompt is too long”. A <code>DISABLE_AUTO_COMPACT</code> you set yourself is left as it is.</p>
 
     <h2 id="touch"><a class="anchor" href="#touch">What magpie touches</a></h2>
     <ul>

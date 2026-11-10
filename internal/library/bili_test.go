@@ -105,7 +105,11 @@ func (f *fakeBili) run(args ...string) (string, error) {
 			up = "https://api.anthropic.com"
 		}
 		env["ANTHROPIC_BASE_URL"] = f.proxy + up
-		env["DISABLE_AUTO_COMPACT"] = "1"
+		// bili's applyClaudeManagedBlock: a value other than its own "1"
+		// is the user's, left as it is
+		if v, has := env["DISABLE_AUTO_COMPACT"]; !has || v == "1" {
+			env["DISABLE_AUTO_COMPACT"] = "1"
+		}
 		m["env"] = env
 		m["hooks"] = map[string]any{"SessionStart": []any{map[string]any{"hooks": []any{map[string]any{"type": "command", "command": "node claude-native-bootstrap.js"}}}}}
 		write(f.t, filepath.Join(f.h, ".claude", "commands", "acp-cache.md"), "acp cache\n")
@@ -115,7 +119,9 @@ func (f *fakeBili) run(args ...string) (string, error) {
 		_ = json.Unmarshal([]byte(read(f.t, p+".bili-bak")), &bak)
 		env, _ := m["env"].(map[string]any)
 		delete(env, "ANTHROPIC_BASE_URL")
-		delete(env, "DISABLE_AUTO_COMPACT")
+		if env["DISABLE_AUTO_COMPACT"] == "1" {
+			delete(env, "DISABLE_AUTO_COMPACT")
+		}
 		if be, ok := bak["env"].(map[string]any); ok && be["DISABLE_AUTO_COMPACT"] != nil {
 			env["DISABLE_AUTO_COMPACT"] = be["DISABLE_AUTO_COMPACT"]
 		}
@@ -365,4 +371,93 @@ func TestBiliMergeJSON(t *testing.T) {
 	if string(b) != `{"a":2,"keep":"x","plugins":["mine"]}` {
 		t.Fatalf("got %s", b)
 	}
+}
+
+// TestBiliClaudeKeepsAutoCompact: Kling__Lab's "Prompt is too long". bili's
+// install turns Claude Code's auto-compaction off, and a session bili
+// doesn't compress (Claude Desktop's Code tab, past its proxy) then stops
+// at the window for good. magpie puts it back on, takes that away again
+// with the plugin, and leaves a value the user had before as theirs.
+func TestBiliClaudeKeepsAutoCompact(t *testing.T) {
+	compact := func(cc string) (any, bool) {
+		m := map[string]any{}
+		if err := json.Unmarshal([]byte(read(t, cc)), &m); err != nil {
+			t.Fatalf("%v:\n%s", err, read(t, cc))
+		}
+		env, _ := m["env"].(map[string]any)
+		v, has := env["DISABLE_AUTO_COMPACT"]
+		return v, has
+	}
+	t.Run("on and off", func(t *testing.T) {
+		h := sandbox(t)
+		f := newFakeBili(t, h)
+		cc := filepath.Join(h, ".claude", "settings.json")
+		write(t, cc, `{"env":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:3425","ANTHROPIC_AUTH_TOKEN":"magpie"}}`)
+		if _, err := SetBili("claude", true); err != nil {
+			t.Fatal(err)
+		}
+		if v, _ := compact(cc); v != "0" {
+			t.Fatalf("DISABLE_AUTO_COMPACT = %v after the install, want \"0\":\n%s", v, read(t, cc))
+		}
+		// bili's own install again (its SessionStart hook, a reinstall)
+		// keeps it
+		if _, err := f.run("plugin", "install", "claude"); err != nil {
+			t.Fatal(err)
+		}
+		if v, _ := compact(cc); v != "0" {
+			t.Fatalf("DISABLE_AUTO_COMPACT = %v after bili's reinstall:\n%s", v, read(t, cc))
+		}
+		if _, err := SetBili("claude", false); err != nil {
+			t.Fatal(err)
+		}
+		if v, has := compact(cc); has {
+			t.Fatalf("DISABLE_AUTO_COMPACT = %v left after the plugin went:\n%s", v, read(t, cc))
+		}
+	})
+	t.Run("the user's own", func(t *testing.T) {
+		h := sandbox(t)
+		newFakeBili(t, h)
+		cc := filepath.Join(h, ".claude", "settings.json")
+		write(t, cc, `{"env":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:3425","DISABLE_AUTO_COMPACT":"1"}}`)
+		if _, err := SetBili("claude", true); err != nil {
+			t.Fatal(err)
+		}
+		if v, _ := compact(cc); v != "1" {
+			t.Fatalf("the user's DISABLE_AUTO_COMPACT became %v:\n%s", v, read(t, cc))
+		}
+		if _, err := SetBili("claude", false); err != nil {
+			t.Fatal(err)
+		}
+		if v, _ := compact(cc); v != "1" {
+			t.Fatalf("the user's DISABLE_AUTO_COMPACT became %v after off:\n%s", v, read(t, cc))
+		}
+	})
+	t.Run("installed before", func(t *testing.T) {
+		// a plugin magpie installed before this: the record has bili's "1"
+		h := sandbox(t)
+		f := newFakeBili(t, h)
+		cc := filepath.Join(h, ".claude", "settings.json")
+		write(t, cc, `{"env":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:3425"}}`)
+		before := read(t, cc)
+		if _, err := f.run("plugin", "install", "claude"); err != nil {
+			t.Fatal(err)
+		}
+		after := read(t, cc)
+		if err := writeBiliState(map[string][]biliFile{"claude": {{Path: cc, Before: &before, After: &after}}}); err != nil {
+			t.Fatal(err)
+		}
+		keepBiliCompact()
+		if v, _ := compact(cc); v != "0" {
+			t.Fatalf("DISABLE_AUTO_COMPACT = %v after magpie started, want \"0\":\n%s", v, read(t, cc))
+		}
+		if _, err := SetBili("claude", false); err != nil {
+			t.Fatal(err)
+		}
+		if v, has := compact(cc); has {
+			t.Fatalf("DISABLE_AUTO_COMPACT = %v left after the plugin went:\n%s", v, read(t, cc))
+		}
+		if got := read(t, cc); !sameJSON(got, before) {
+			t.Fatalf("settings.json not as before:\n%s\nwant\n%s", got, before)
+		}
+	})
 }

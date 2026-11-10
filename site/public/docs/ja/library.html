@@ -238,6 +238,7 @@ magpie library sync     # エージェントに書き直す</pre>
 
     <h2 id="billion-context"><a class="anchor" href="#billion-context">billion-context</a></h2>
     <p>billion-context タブでは <a href="https://github.com/ranxianglei/billion-context">billion-context</a> のプラグインをエージェントごとにオンにします。長いセッションの古いやり取りを、モデルが再び開ける要約に畳み込み、セッションをモデルのコンテキストウィンドウに収めます。対象は Pi、omp、OpenCode、Claude Code で、オンにしてもリクエストは magpie を通ります。magpie はインストールでき（<code>npm install -g billion-context --prefix=~/.local</code>）、billion-context 自身のインストーラーとリムーバーを実行します。オフにすると、インストールで変わったエージェントの設定を元に戻します。ここでオンにしたエージェントでは billion-context-pi や opencode-acp を併用できません。</p>
+    <p>Claude Code では、billion-context のインストールが Claude Code 自身の自動コンパクトをオフにします。magpie はそれをオンに戻すので、billion-context が畳み込まないセッション（Claude デスクトップアプリの Code タブなど）は「Prompt is too long」で止まらずにコンパクトされます。自分で設定した <code>DISABLE_AUTO_COMPACT</code> はそのままです。</p>
 
     <h2 id="touch"><a class="anchor" href="#touch">magpie が触るもの</a></h2>
     <ul>

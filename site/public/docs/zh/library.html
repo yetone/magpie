@@ -238,6 +238,7 @@ magpie library sync     # 重新写进各个 Agent</pre>
 
     <h2 id="billion-context"><a class="anchor" href="#billion-context">billion-context</a></h2>
     <p>billion-context 标签可以按 Agent 打开 <a href="https://github.com/ranxianglei/billion-context">billion-context</a> 的插件：它把长会话里较早的对话折叠成模型可以再展开的摘要，让会话始终留在模型的上下文窗口内。支持 Pi、omp、OpenCode 和 Claude Code，打开后它们的请求仍经过 magpie。magpie 可以帮你安装（<code>npm install -g billion-context --prefix=~/.local</code>），并运行它自己的安装和卸载命令；关闭时会把安装改动过的 Agent 设置恢复原样。在这里打开的 Agent 不能再同时使用 billion-context-pi 或 opencode-acp。</p>
+    <p>对 Claude Code，billion-context 的安装会关掉 Claude Code 自带的自动压缩。magpie 会把它重新打开，这样 billion-context 没有折叠的会话（比如 Claude 桌面版 Code 标签里的会话）会自动压缩，而不是停在 “Prompt is too long”。你自己设置的 <code>DISABLE_AUTO_COMPACT</code> 保持不变。</p>
 
     <h2 id="touch"><a class="anchor" href="#touch">magpie 会改什么</a></h2>
     <ul>

@@ -49,6 +49,20 @@ import (
 // before the install and as the install left it, and after a remove puts
 // back what the install changed and nothing changed since (biliRestore).
 
+// Claude Code's auto-compaction stays on beside bili's plugin. bili's
+// install writes DISABLE_AUTO_COMPACT=1, so a session bili doesn't
+// compress has nothing left to keep it under the window: Claude Desktop's
+// Code tab runs Claude Code on the same settings.json with its own base
+// URL, past bili's proxy (bili's #2290), and a window bili takes larger
+// than the one magpie serves lets the session reach it first. Claude Code
+// then answers each message at once with "Prompt is too long", sending
+// nothing. magpie sets the "1" bili added to "0", which bili leaves as a
+// value of the user's (and keeps across its SessionStart hook and a
+// reinstall): auto-compaction fires only at the window magpie wrote
+// (CLAUDE_CODE_AUTO_COMPACT_WINDOW), which bili, when it compresses,
+// keeps the session under. A value the user had before the install is
+// left as theirs.
+
 // BiliURL is billion-context's page.
 const BiliURL = "https://github.com/ranxianglei/billion-context"
 
@@ -325,6 +339,11 @@ func SetBili(id string, on bool) (*BiliView, error) {
 		if err != nil {
 			return nil, err
 		}
+		if id == "claude" {
+			if err := biliKeepCompact(snap[0].Path, snap[0].Before); err != nil {
+				return nil, err
+			}
+		}
 		for i := range snap {
 			snap[i].After = biliRead(snap[i].Path)
 		}
@@ -382,6 +401,64 @@ func SetBili(id string, on bool) (*BiliView, error) {
 		pruneBackups()
 	}
 	return v, nil
+}
+
+// biliCompact is the setting of Claude Code's that turns auto-compaction
+// off, and biliCompactOn its value magpie writes in place of bili's "1".
+const (
+	biliCompact   = "env.DISABLE_AUTO_COMPACT"
+	biliCompactOn = "0"
+)
+
+// biliKeepCompact turns Claude Code's auto-compaction back on in its
+// settings.json at path after bili's install turned it off, unless
+// before (the file before the install) had a DISABLE_AUTO_COMPACT of the
+// user's own.
+func biliKeepCompact(path string, before *string) error {
+	if v, has := edit.GetJSON(path, biliCompact); !has || v != "1" {
+		return nil
+	}
+	if b, ok := parseJSONC(before); !ok {
+		return nil
+	} else if _, had := jsonAt(b, []string{"env", "DISABLE_AUTO_COMPACT"}); had {
+		return nil
+	}
+	return edit.SetJSON(path, edit.KV{Path: biliCompact, Value: biliCompactOn})
+}
+
+// keepBiliCompact does biliKeepCompact for a Claude Code plugin magpie
+// installed before it did so itself (KeepLinked runs it at start), and has the record of the install say
+// "0" where it said bili's "1", so that switching the plugin off takes the
+// "0" away with the rest of the install.
+func keepBiliCompact() {
+	biliMu.Lock()
+	defer biliMu.Unlock()
+	state := readBiliState()
+	snap := state["claude"]
+	if len(snap) == 0 || snap[0].After == nil {
+		return
+	}
+	f := &snap[0]
+	if v, _ := edit.GetJSON(f.Path, biliCompact); v != "1" {
+		return
+	}
+	if err := biliKeepCompact(f.Path, f.Before); err != nil {
+		return
+	}
+	if v, _ := edit.GetJSON(f.Path, biliCompact); v != biliCompactOn {
+		return
+	}
+	after, ok := parseJSONC(f.After)
+	if v, _ := jsonAt(after, []string{"env", "DISABLE_AUTO_COMPACT"}); !ok || v != "1" {
+		return
+	}
+	b, err := edit.PatchJSON([]byte(*f.After), []edit.KV{{Path: biliCompact, Value: biliCompactOn}}, nil)
+	if err != nil {
+		return
+	}
+	s := string(b)
+	f.After = &s
+	_ = writeBiliState(state)
 }
 
 // biliLane is bili's name of an agent's plugin: magpie's id, as both use it.
