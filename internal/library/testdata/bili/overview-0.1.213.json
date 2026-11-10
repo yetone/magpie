@@ -1,0 +1,191 @@
+{
+  "overview": {
+    "sessions": 1,
+    "live": 1,
+    "requests": 10,
+    "inputTokens": 175279,
+    "cachedTokens": 0,
+    "outputTokens": 200,
+    "tokensSaved": 38128,
+    "savedEstimated": 0,
+    "grossSavedTotal": 166390,
+    "netSavedTotal": 166285,
+    "hasFoldData": true,
+    "repayTotal": 0,
+    "summaryCostTotal": 105,
+    "coverageLostFoldTotal": 0,
+    "coverageLostFrozenTotal": 0,
+    "costUsdTotal": 0,
+    "savedUsdTotal": 0,
+    "savedUsdGrossTotal": 0,
+    "foldsTotal": 7,
+    "hasMoneyData": false,
+    "missNewTotal": 0,
+    "missCompTotal": 0,
+    "missTtlTotal": 0,
+    "missInputTotal": 175279,
+    "hitPct": 0,
+    "blocks": 7,
+    "byProtocol": [
+      {
+        "protocol": "openai",
+        "sessions": 1,
+        "requests": 10,
+        "inputTokens": 175279,
+        "cachedTokens": 0,
+        "savedNet": 166285,
+        "folds": 7,
+        "hitPct": 0,
+        "missDropNew": 0,
+        "missDropComp": 0,
+        "missDropTtl": 0
+      }
+    ],
+    "recent": [
+      {
+        "id": "pfa-21b65d77ab41c422",
+        "contextBest": {
+          "tokens": 19122,
+          "kind": "usage",
+          "at": 1794295277161
+        },
+        "title": "Turn 0: fact0_0 is value 0 fact0_1 is value 7 fact0_2 is …",
+        "label": "prefix-affinity b69b8b38",
+        "protocol": "openai",
+        "upstreamOrigin": "http://127.0.0.1:18801",
+        "snapshotShadow": {
+          "turns": 13,
+          "errors": 0,
+          "lastClass": "degraded",
+          "lastReason": "transcript-empty"
+        },
+        "live": true,
+        "requests": 10,
+        "contextTokens": 19122,
+        "contextTokensSource": "usage",
+        "tokensSaved": 38128,
+        "inputTokens": 175279,
+        "cachedTokens": 0,
+        "outputTokens": 200,
+        "cacheHitPct": 0,
+        "blocks": 7,
+        "contextWindow": 20000,
+        "lastSeen": "2026-11-10T07:21:17.134Z",
+        "hasLedger": true,
+        "firstBlockHint": "preflight overflow compress",
+        "grossSaved": 166390,
+        "netSaved": 166285,
+        "repayCost": 0,
+        "summaryCost": 105,
+        "foldCount": 7,
+        "model": "fake-model",
+        "newContent": 0,
+        "compRepay": 0,
+        "ttlRepay": 0,
+        "clientHint": "Python-urllib/3.9",
+        "engineLane": "server"
+      }
+    ],
+    "hiddenEmpty": 0
+  },
+  "version": "0.1.213",
+  "origin": "127.0.0.1:18799",
+  "commit": "133f3525c",
+  "diskVersion": "0.1.213",
+  "stale": false,
+  "updateReady": null,
+  "autoRestartOnUpdate": false,
+  "advisory": null,
+  "resolverWedge": null,
+  "updatePolicy": {
+    "source": "unknown",
+    "fetchedAt": null,
+    "hold": false,
+    "pinned": null,
+    "blocked": [],
+    "error": null,
+    "plannedUpgrade": null
+  },
+  "pluginAdvisories": [],
+  "hostPluginNotices": [],
+  "notices": [
+    {
+      "source": "builtin",
+      "id": "pck-default-off",
+      "tone": "warn",
+      "keys": {
+        "on": "pckoff.on",
+        "desc": "pckoff.desc",
+        "hint": "pckoff.hint",
+        "dismiss": "pckoff.dismiss_btn"
+      },
+      "priority": 50
+    },
+    {
+      "source": "builtin",
+      "id": "wm-fastpath-intro",
+      "tone": "ok",
+      "keys": {
+        "on": "wmfast.on",
+        "desc": "wmfast.desc",
+        "hint": "wmfast.hint",
+        "dismiss": "wmfast.dismiss_btn"
+      },
+      "priority": 50
+    }
+  ],
+  "inFlight": 0,
+  "blindTunnels": {
+    "total": 0,
+    "hosts": {}
+  },
+  "conflicts": {
+    "sessions": 0,
+    "events": 0,
+    "active": 0,
+    "historical": 0,
+    "lastAt": null,
+    "kinds": {},
+    "latest": [],
+    "sibling": 0,
+    "suspected": 0,
+    "displayOnly": 0,
+    "activeConfirmed": 0,
+    "clients": []
+  },
+  "passthrough": {
+    "enabled": false,
+    "source": null
+  },
+  "alerts": [],
+  "pckSuppressions": [],
+  "storage": {
+    "requested": "full",
+    "effective": "full",
+    "degraded": false,
+    "intentionalOptOut": false,
+    "reason": null,
+    "engine": {
+      "name": "node:sqlite",
+      "source": "builtin"
+    },
+    "bootstrap": "not-needed",
+    "bootstrapFailure": null,
+    "cooldownRemainingMs": null,
+    "sidecarDisabled": false,
+    "verifyDrift": 0,
+    "driftedSessions": 0,
+    "integrity": {
+      "ok": true,
+      "checkedAt": 1794295272948,
+      "durationMs": 0,
+      "detail": "/Users/yetone/runs/bili-savings/home/.local/share/billion-context/sessions/index.db: verdict cache hit (file set unchanged since the last check)"
+    },
+    "secondProcess": null,
+    "splitBrain": null,
+    "backup": null,
+    "frozenEnvelopeSessions": 0,
+    "frozenEnvelopeDetails": []
+  },
+  "attribution": {}
+}

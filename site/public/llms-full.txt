@@ -2922,6 +2922,8 @@ For Claude Code, billion-context’s install turns Claude Code’s own auto-comp
 
 Zed has no billion-context plugin. Turned on, magpie runs `bili start` and points Zed’s magpie provider at `http://127.0.0.1:8787/bili/` followed by magpie’s address, the route billion-context documents for any client. Pick one of magpie’s models for Zed on the Agents page first, and restart Zed after turning it on or off.
 
+The card shows how many tokens billion-context saved, in its own count: the net savings its dashboard shows, after the rebuilds a fold causes and the summaries’ cost, with how many folds and sessions, over every session it ran on this computer. magpie asks a running billion-context for it (`/__bili/overview`); when none runs, the card shows the last count it read and when. It shows nothing until billion-context has run for an agent.
+
 ## What magpie touches
 
 - Only what it wrote: the text between its markers, entries it recorded, files it marked as its own.

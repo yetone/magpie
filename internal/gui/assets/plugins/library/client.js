@@ -1517,6 +1517,7 @@ magpie.plugin("library", (ctx) => {
     card.append(ttl);
     if (bili.path) {
       ttl.append(el("span", "note mono", bili.version ? "v" + bili.version : tilde(bili.path)));
+      card.append(biliSaved(bili.saved));
       card.append(el("p", "lib-rtk-gain", t("An agent switched on here can't also run billion-context-pi or opencode-acp.")));
       if (bili.listErr) card.append(el("p", "lib-rtk-note lib-rtk-err", t("magpie couldn't read which agents have it: {why}", { why: bili.listErr })));
     } else {
@@ -1555,6 +1556,23 @@ magpie.plugin("library", (ctx) => {
     }
     if (!rows.length) list.append(el("div", "lib-none", t("None of your agents can use billion-context with magpie: Pi, omp, OpenCode, Claude Code or Zed.")));
     body.append(list);
+  }
+  // What billion-context saved, in its own count: what its running proxy
+  // says at /__bili/overview (its dashboard's net savings), over every
+  // session on this computer; the last answer kept when none runs now
+  function biliSaved(s) {
+    if (!s) return el("p", "lib-rtk-gain lib-bili-saved", t("What billion-context saves shows here once it has run for an agent."));
+    const n = (v) => Number(v || 0).toLocaleString(intlLang());
+    const count = (v, one, many) => v === 1 ? t(one) : t(many, { n: n(v) });
+    const p = el("p", "lib-rtk-gain lib-bili-saved", s.hasFolds
+      ? t("{saved} tokens saved over {folds} in {sessions}", { saved: (s.net < 0 ? "-" : "") + tokens(Math.abs(s.net)), folds: count(s.folds, "1 fold", "{n} folds"), sessions: count(s.sessions, "1 session", "{n} sessions") })
+      : t("Nothing folded yet over {requests}: billion-context folds a session once it nears the model's window.", { requests: count(s.requests, "1 request", "{n} requests") }));
+    if (s.hasFolds) p.append(" ", el("span", "lib-rtk-scope", t("billion-context's own count, after the rebuilds a fold causes and the summaries' cost ({gross} before them): every session it ran on this computer, from any agent.", { gross: tokens(s.gross) })));
+    if (!s.live) {
+      const at = new Date(s.at);
+      p.append(" ", el("span", "lib-rtk-scope lib-bili-asof", t("As of {time}: billion-context isn't running now.", { time: isNaN(at) ? s.at : at.toLocaleString(intlLang(), { dateStyle: "medium", timeStyle: "short" }) })));
+    }
+    return p;
   }
   async function setBili(a, on) {
     biliBusy.add(a.id);

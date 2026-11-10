@@ -106,6 +106,9 @@ type BiliView struct {
 	ListErr string   `json:"listErr,omitempty"`
 	Restart []string `json:"restart,omitempty"`
 	Backup  string   `json:"backup,omitempty"`
+	// Saved is what bili says it saved (bili_saved.go), nil when no bili
+	// has answered here yet
+	Saved *BiliSaved `json:"saved,omitempty"`
 }
 
 var biliMu sync.Mutex
@@ -224,6 +227,7 @@ func readBili(agents []*agent.Agent) *BiliView {
 		if out, err := biliRun(v.Path, 30*time.Second, "--version"); err == nil {
 			v.Version, _, _ = strings.Cut(strings.TrimSpace(out), " ")
 		}
+		v.Saved = readBiliSaved()
 		out, err := biliRun(v.Path, 30*time.Second, "plugin", "list")
 		if st = parseBiliList(out); err != nil || len(st) == 0 {
 			v.ListErr = lastLines(out, 2)
