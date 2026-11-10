@@ -2,6 +2,11 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Set price…": "设置价格…",
+    "Price of {model}": "{model} 的价格",
+    "What {model} costs from every provider that has no price of its own for it. The Usage and Sessions pages count its calls at it, past ones too.": "{model} 在每个没有单独为它设价格的供应商处的价格。用量和会话页按它计算这个模型的调用，过去的也一样。",
+    "{model} is counted at the price you set": "{model} 已按你设置的价格计算",
+    "{model} is counted at its list price again": "{model} 已恢复按标价计算",
     "Saved by image files": "图片文件省下",
     "{n} saved by image files": "图片文件省下 {n}",
     "{n}/s": "{n}/s",
@@ -251,6 +256,11 @@ magpie.strings({
     "Sent upstream as {to}, as the agent spoke it": "以 {to} 协议发往上游，与 agent 所用协议相同",
   },
   "zh-TW": {
+    "Set price…": "設定價格…",
+    "Price of {model}": "{model} 的價格",
+    "What {model} costs from every provider that has no price of its own for it. The Usage and Sessions pages count its calls at it, past ones too.": "{model} 在每個沒有單獨為它設價格的供應商處的價格。用量和會話頁依它計算這個模型的呼叫，過去的也一樣。",
+    "{model} is counted at the price you set": "{model} 已依你設定的價格計算",
+    "{model} is counted at its list price again": "{model} 已恢復依標價計算",
     "Saved by image files": "圖片檔案省下",
     "{n} saved by image files": "圖片檔案省下 {n}",
     "{n}/s": "{n}/s",
@@ -500,6 +510,11 @@ magpie.strings({
     "Sent upstream as {to}, as the agent spoke it": "以 {to} 協議發往上游，與 agent 所用協議相同",
   },
   ja: {
+    "Set price…": "価格を設定…",
+    "Price of {model}": "{model} の価格",
+    "What {model} costs from every provider that has no price of its own for it. The Usage and Sessions pages count its calls at it, past ones too.": "{model} 用の価格を持たないすべてのプロバイダでの {model} の価格です。使用量とセッションのページは、過去の呼び出しも含めてこの価格で計算します。",
+    "{model} is counted at the price you set": "{model} は設定した価格で計算されます",
+    "{model} is counted at its list price again": "{model} は再び定価で計算されます",
     "Saved by image files": "画像ファイルで節約",
     "{n} saved by image files": "画像ファイルで {n} 節約",
     "{n}/s": "{n}/s",
@@ -749,6 +764,11 @@ magpie.strings({
     "Sent upstream as {to}, as the agent spoke it": "エージェントと同じ {to} で上流へ送信",
   },
   de: {
+    "Set price…": "Preis festlegen…",
+    "Price of {model}": "Preis von {model}",
+    "What {model} costs from every provider that has no price of its own for it. The Usage and Sessions pages count its calls at it, past ones too.": "Was {model} bei jedem Anbieter kostet, der keinen eigenen Preis dafür hat. Die Seiten Nutzung und Sitzungen rechnen seine Aufrufe damit, auch frühere.",
+    "{model} is counted at the price you set": "{model} wird zu deinem Preis gerechnet",
+    "{model} is counted at its list price again": "{model} wird wieder zum Listenpreis gerechnet",
     "Saved by image files": "Durch Bilddateien gespart",
     "{n} saved by image files": "{n} durch Bilddateien gespart",
     "{n}/s": "{n}/s",

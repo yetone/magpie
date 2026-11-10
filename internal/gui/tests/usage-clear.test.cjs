@@ -99,8 +99,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const more = row.locator(".us-more");
           await more.click();
           const item = p.locator(".row-menu .rm-item");
-          assert.deepEqual((await item.allTextContents()).map((s) => s.trim()), [w.item]);
-          await item.click();
+          // Set price… above it (usage-model-price.test.cjs)
+          assert.deepEqual((await item.allTextContents()).map((s) => s.trim()).slice(1), [w.item]);
+          await item.nth(1).click();
           const dialog = p.locator("dialog.action-confirm");
           await dialog.waitFor();
           assert.equal(await dialog.getAttribute("role"), "alertdialog");

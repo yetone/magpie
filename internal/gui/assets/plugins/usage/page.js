@@ -929,7 +929,7 @@ function renderUsage() {
       const again = agentMenu?.anchor === b;
       closeAgentMenu();
       if (again) return;
-      openRowMenu(b, [{ name: "Clear usage…", icon: USAGE_CLEAR, run: () => clearUsage(g) }]);
+      openRowMenu(b, [{ name: "Set price…", icon: PRICE_TAG, run: () => setModelPrice(g.model) }, { name: "Clear usage…", icon: USAGE_CLEAR, run: () => clearUsage(g) }]);
     };
     b.onclick = (e) => { e.stopPropagation(); menu(); };
     r.oncontextmenu = (e) => { e.preventDefault(); menu(); };
@@ -971,6 +971,77 @@ async function clearUsage(g) {
   } catch (e) {
     status(e.message, "err");
   }
+}
+
+// setModelPrice: a model's price from any provider (*/model), from its row
+// on the Usage page (soilzhu80 on X): a model an agent ran is often in no
+// provider's list, so no provider's Model settings can price it. Empty
+// boxes take the maker's list price, shown greyed; Restore default takes
+// the set price away. The pages count past calls at it too.
+const PRICE_TAG = "M8.5 2.5H13.5V7.5L7.5 13.5L2.5 8.5ZM10.8 5.2h.01";
+async function setModelPrice(model) {
+  let now;
+  try { now = await api("model-price?model=" + encodeURIComponent(model)); } catch (e) { return status(e.message, "err"); }
+  const shown = (n) => String(Math.round(n * 1e6) / 1e6);
+  const ed = el("div", "editor price-ask");
+  const head = el("div", "ehead");
+  head.append(el("b", "", t("Price of {model}", { model })));
+  ed.append(head, el("p", "lib-confirm", t("What {model} costs from every provider that has no price of its own for it. The Usage and Sessions pages count its calls at it, past ones too.", { model })));
+  const box = el("div", "price-ask-parts");
+  box.append(el("span", "price-ask-unit", t("Price, $ / 1M tokens")));
+  const cells = [["input", "Input"], ["output", "Output"], ["cache_read", "Cache read"], ["cache_write", "Cache write"]].map(([k, l]) => {
+    const part = el("label", "mpart");
+    const i = input(now.price ? shown(now.price[k]) : "", now.maker ? shown(now.maker[k]) : "");
+    i.inputMode = "decimal";
+    i.dataset.part = k;
+    part.append(el("span", "", t(l)), i);
+    box.append(part);
+    return i;
+  });
+  const bad = el("p", "hint price-ask-bad");
+  bad.hidden = true;
+  ed.append(box, bad);
+  const send = async (price, said) => {
+    try {
+      await api("model-price", { model, price });
+      closeConfirmAsk();
+      status(said, "ok");
+      ledger = null;
+      loadUsage();
+    } catch (e) { bad.textContent = e.message; bad.hidden = false; }
+  };
+  const go = el("button", "text primary", t("Save"));
+  go.onclick = (e) => {
+    e.stopPropagation();
+    const typed = cells.map((i) => i.value.trim());
+    if (typed.every((v) => !v)) return now.price ? send(null, t("{model} is counted at its list price again", { model })) : closeConfirmAsk();
+    const price = {};
+    for (const [n, i] of cells.entries()) {
+      const k = i.dataset.part, v = typed[n] ? decimalOf(typed[n]) : now.maker ? now.maker[k] : n < 2 ? NaN : 0;
+      if (!(v >= 0)) {
+        bad.textContent = typed[n] || now.maker ? t("A price is a number of dollars, 0 or more") : t("{id} has no list price: give its input and output prices", { id: model });
+        bad.hidden = false;
+        return i.focus(NO_SCROLL);
+      }
+      price[k] = v;
+    }
+    send(price, t("{model} is counted at the price you set", { model }));
+  };
+  for (const i of cells) i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") go.click(); else if (e.key === "Escape") closeConfirmAsk(); };
+  const bar = el("div", "bar");
+  if (now.price) {
+    const back = el("button", "text", t("Restore default"));
+    back.onclick = (e) => { e.stopPropagation(); send(null, t("{model} is counted at its list price again", { model })); };
+    bar.append(back);
+  }
+  const cancel = el("button", "text", t("Cancel"));
+  cancel.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
+  bar.append(el("span", "grow"), cancel, go);
+  ed.append(bar);
+  confirmAsk = ed;
+  openModal(ed);
+  $("#modal").classList.add("lib");
+  cells[0].focus(NO_SCROLL);
 }
 
 // countable is whether the Usage page's Agents list offers to count a
@@ -3689,7 +3760,7 @@ function renderSessions() {
     grid.hidden = false;
     // the folders and models to pick from, as the pickers offer them
     sessBars($("#sessProjects"), "Projects", sessSums(rows.filter((r) => byAgent(r) && byModel(r)), "cwd"), sessFolder, (v) => { sessFolder = v; renderSessions(); }, baseName);
-    sessBars($("#sessModels"), "Models", sessSums(rows.filter((r) => byAgent(r) && byFolder(r)), "model"), sessModel, (v) => { sessModel = v; renderSessions(); }, (v) => v);
+    sessBars($("#sessModels"), "Models", sessSums(rows.filter((r) => byAgent(r) && byFolder(r)), "model"), sessModel, (v) => { sessModel = v; renderSessions(); }, (v) => v, (r, v) => openRowMenu(r, [{ name: "Set price…", icon: PRICE_TAG, run: () => setModelPrice(v.slice(v.lastIndexOf("/") + 1)) }]));
     renderSessHours($("#sessHours"), actsIn);
     renderSessTop();
     renderSessShape();
@@ -4321,7 +4392,7 @@ function sessLineUp(box) {
 // sessBars is a card of folders or models as bars of the tokens each took;
 // a click shows that one alone, and a click on it again every one
 const SESS_BARS = 6;
-function sessBars(box, title, items, cur, choose, name) {
+function sessBars(box, title, items, cur, choose, name, menu) {
   box.replaceChildren();
   box.append(sessCardHead(title));
   const body = el("div", "sess-bars");
@@ -4340,6 +4411,8 @@ function sessBars(box, title, items, cur, choose, name) {
     const fc = x.cost ? fmtCost(x) : "";
     r.append(el("span", "n", name(x.v)), track, el("span", "v", fmtN(x.n)), el("span", "c", fc ? "≈" + fc : ""));
     r.onclick = () => choose(x.v === cur ? "" : x.v);
+    // a model's bar: its price, on a right-click
+    if (menu) r.oncontextmenu = (e) => { e.preventDefault(); menu(r, x.v); };
     body.append(r);
   }
   if (!items.length) body.append(el("div", "sess-none", t("Nothing in this range.")));

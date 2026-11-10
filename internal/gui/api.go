@@ -2887,6 +2887,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	})
 	agentModelsAPI(mux)
 	speedsAPI(mux)
+	modelPriceRoutes(mux)
 	devListen(mux)
 	return noFramedAPI(held(mux))
 }
