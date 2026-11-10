@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -409,5 +410,69 @@ func TestZedRelativeConfigDirUsesDefault(t *testing.T) {
 	}
 	if a.Path != want {
 		t.Fatalf("relative config directory escaped default: %q, want %q", a.Path, want)
+	}
+}
+
+// CoMi6818 (X): billion-context's documented route for Zed is its
+// /bili/ prefix before the provider's api_url. Through it, Zed's
+// magpie provider still reaches magpie: a model picked keeps the prefix,
+// a sync writes the models there, the key is saved for that address
+// (Zed looks it up by it), and ZedThrough takes it back off.
+func TestZedThroughBili(t *testing.T) {
+	home := syncHome(t)
+	credential := zedCredential
+	t.Cleanup(func() { zedCredential = credential })
+	var keyed []string
+	zedCredential = func(url string) error { keyed = append(keyed, url); return nil }
+	a := zedAt(filepath.Join(home, "zed"))
+	writeFile(t, a.Path, `{"theme":"One Dark"}`)
+	if err := ZedThrough(a, "http://127.0.0.1:8787/bili/"); err == nil {
+		t.Fatal("put a Zed not on magpie through bili")
+	}
+	if err := a.Apply("model", "magpie/relay/glm-4.6"); err != nil {
+		t.Fatal(err)
+	}
+	bili := "http://127.0.0.1:8787/bili/" + gatewayV1()
+	base := strings.TrimSuffix(bili, "/v1")
+	fakeMagpieAt(t, map[string]bool{base: true})
+	keyed = nil
+	if err := ZedThrough(a, "http://127.0.0.1:8787/bili/"); err != nil {
+		t.Fatal(err)
+	}
+	if ZedURL(a) != bili || !slices.Equal(keyed, []string{bili}) {
+		t.Fatalf("through bili: %q, key saved for %v", ZedURL(a), keyed)
+	}
+	if c := a.Check(); c != "" {
+		t.Fatalf("through bili: %s", c)
+	}
+	// a pick keeps it, and saves the key for it again
+	keyed = nil
+	if err := a.Apply("model", "magpie/relay/glm-4.6"); err != nil {
+		t.Fatal(err)
+	}
+	if ZedURL(a) != bili || !slices.Equal(keyed, []string{bili}) {
+		t.Fatalf("after a pick: %q, key saved for %v", ZedURL(a), keyed)
+	}
+	// a sync writes the models there too
+	if err := edit.SetJSON(a.Path, edit.KV{Path: zedProvider + ".available_models", Value: []any{}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := edit.GetJSON(a.Path, zedProvider+".available_models.0.name"); n == "" || ZedURL(a) != bili {
+		t.Fatalf("sync through bili: models %q, api_url %q", n, ZedURL(a))
+	}
+	// off, with bili down: back on the gateway
+	fakeMagpieAt(t, map[string]bool{})
+	keyed = nil
+	if err := ZedThrough(a, ""); err != nil {
+		t.Fatal(err)
+	}
+	if ZedURL(a) != gatewayV1() || !slices.Equal(keyed, []string{gatewayV1()}) || a.Check() != "" {
+		t.Fatalf("off: %q, key saved for %v, %q", ZedURL(a), keyed, a.Check())
+	}
+	if th, _ := edit.GetJSON(a.Path, "theme"); th != "One Dark" {
+		t.Fatalf("theme: %q", th)
 	}
 }

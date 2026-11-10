@@ -1,6 +1,7 @@
 package library
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -11,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/testenv"
 )
@@ -460,4 +463,81 @@ func TestBiliClaudeKeepsAutoCompact(t *testing.T) {
 			t.Fatalf("settings.json not as before:\n%s\nwant\n%s", got, before)
 		}
 	})
+}
+
+// TestBiliZedThroughPrefix: Zed has no plugin of bili's; it's offered,
+// and switched on its magpie provider's api_url goes through bili's
+// /bili/ prefix with bili start answering there, no plugin installed.
+// Off, the provider is back on the gateway and magpie's bili start ends.
+// While it's on, KeepLinked starts bili start again when it doesn't
+// answer.
+func TestBiliZedThroughPrefix(t *testing.T) {
+	h := sandbox(t)
+	f := newFakeBili(t, h)
+	dir := filepath.Join(h, "zed-config")
+	t.Setenv("MAGPIE_ZED_CONFIG_DIR", dir)
+	zs := filepath.Join(dir, "settings.json")
+	gw := gateway.URL() + "/v1"
+	write(t, zs, `{"theme":"One Dark","language_models":{"openai_compatible":{"magpie":{"api_url":"`+gw+`","available_models":[]}}}}`)
+
+	serving, served, stopped := false, 0, 0
+	through := []string{}
+	was := []any{zedThrough, biliServe, biliStop, biliServing}
+	zedThrough = func(a *agent.Agent, prefix string) error {
+		through = append(through, prefix)
+		b, _ := os.ReadFile(a.Path)
+		var m map[string]any
+		if err := json.Unmarshal(b, &m); err != nil {
+			return err
+		}
+		m["language_models"].(map[string]any)["openai_compatible"].(map[string]any)["magpie"].(map[string]any)["api_url"] = prefix + gw
+		out, _ := json.Marshal(m)
+		return os.WriteFile(a.Path, out, 0o600)
+	}
+	biliServe = func(string) error { served++; serving = true; return nil }
+	biliStop = func() { stopped++; serving = false }
+	biliServing = func() bool { return serving }
+	t.Cleanup(func() {
+		zedThrough = was[0].(func(*agent.Agent, string) error)
+		biliServe = was[1].(func(string) error)
+		biliStop = was[2].(func())
+		biliServing = was[3].(func() bool)
+	})
+
+	if on, ok := biliOnFor(t)["zed"]; !ok || on {
+		t.Fatalf("Zed offered %v, on %v", ok, on)
+	}
+	v, err := SetBili("zed", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(v.Restart, []string{"zed"}) || v.Backup == "" {
+		t.Fatalf("restart %v, backup %q", v.Restart, v.Backup)
+	}
+	if !strings.Contains(read(t, zs), `"api_url":"`+biliPrefix+gw+`"`) || served != 1 {
+		t.Fatalf("served %d, settings:\n%s", served, read(t, zs))
+	}
+	if !biliOnFor(t)["zed"] {
+		t.Fatal("Zed isn't shown on")
+	}
+	// magpie restarted, bili start isn't answering: it's started again
+	serving = false
+	keepBiliServe(context.Background())
+	if served != 2 {
+		t.Fatalf("bili start run %d times, want 2", served)
+	}
+	if _, err := SetBili("zed", false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(read(t, zs), `"api_url":"`+gw+`"`) || stopped != 1 || biliOnFor(t)["zed"] {
+		t.Fatalf("stopped %d, settings:\n%s", stopped, read(t, zs))
+	}
+	if !slices.Equal(through, []string{biliPrefix, ""}) {
+		t.Fatalf("through %q", through)
+	}
+	// off, nothing starts it
+	keepBiliServe(context.Background())
+	if served != 2 || len(filter(f.runs, "plugin install", "plugin remove")) != 0 {
+		t.Fatalf("served %d, ran %v", served, f.runs)
+	}
 }

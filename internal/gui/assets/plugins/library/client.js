@@ -1526,7 +1526,7 @@ magpie.plugin("library", (ctx) => {
       row.append(sw);
       list.append(row);
     }
-    if (!rows.length) list.append(el("div", "lib-none", t("None of your agents is one billion-context has a plugin for that works with magpie: Pi, omp, OpenCode or Claude Code.")));
+    if (!rows.length) list.append(el("div", "lib-none", t("None of your agents can use billion-context with magpie: Pi, omp, OpenCode, Claude Code or Zed.")));
     body.append(list);
   }
   async function setBili(a, on) {

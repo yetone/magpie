@@ -41,6 +41,9 @@ import (
 // package manager, and Hermes' can't be tried without touching its
 // launcher: none of those is offered.
 //
+// Zed has no plugin of bili's: its magpie provider goes through bili's
+// /bili/ prefix with bili start answering there (biliURLLanes, bili_url.go).
+//
 // bili's remove doesn't put a file back as it was: it leaves "packages": []
 // in Pi's settings.json and "extensions:" in omp's config.yml, and after
 // magpie rewrote Claude Code's settings.json it took ANTHROPIC_BASE_URL out
@@ -175,7 +178,8 @@ func biliAgents(agents []*agent.Agent) []*agent.Agent {
 	}
 	var out []*agent.Agent
 	for _, a := range agents {
-		if _, ok := biliLanes[a.ID]; ok && a.WSL == "" && !a.CLIMissing() {
+		_, plugin := biliLanes[a.ID]
+		if _, url := biliURLLanes[a.ID]; (plugin || url) && a.WSL == "" && !a.CLIMissing() {
 			out = append(out, a)
 		}
 	}
@@ -230,7 +234,9 @@ func readBili(agents []*agent.Agent) *BiliView {
 	}
 	for _, a := range biliAgents(agents) {
 		ba := BiliAgent{ID: a.ID, Name: a.Name, Icon: a.Icon}
-		if s, ok := st[a.ID]; ok {
+		if l, ok := biliURLLanes[a.ID]; ok {
+			ba.On = l.on(a)
+		} else if s, ok := st[a.ID]; ok {
 			ba.On = biliOn(s)
 			if !ba.On && s != "not installed" {
 				ba.Status = s
@@ -303,8 +309,9 @@ func SetBili(id string, on bool) (*BiliView, error) {
 		}
 	}
 	files, ok := biliLanes[id]
+	_, url := biliURLLanes[id]
 	switch {
-	case !ok:
+	case !ok && !url:
 		return nil, fmt.Errorf("billion-context isn't offered for %s", id)
 	case a == nil:
 		return nil, fmt.Errorf("%s isn't installed", id)
@@ -312,6 +319,9 @@ func SetBili(id string, on bool) (*BiliView, error) {
 	bin := biliPath()
 	if bin == "" {
 		return nil, fmt.Errorf("billion-context isn't installed — install it first (%s)", BiliURL)
+	}
+	if url {
+		return setBiliURL(a, agents, bin, on)
 	}
 	paths := files(a)
 	b := newBackups()

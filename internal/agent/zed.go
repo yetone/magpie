@@ -53,6 +53,11 @@ func zedAtWith(dir, bin string, processes []string) *Agent {
 	get := func(k string) string { v, _ := edit.GetJSON(path, k); return v }
 	model := pairGet(func(k string) (string, bool) { return edit.GetJSON(path, k) }, zedModel+".provider", zedModel+".model")
 	key := "zed:" + path + ":"
+	// at is where Zed's magpie provider reaches the gateway: its own
+	// address, or a proxy to it where magpie answers (#1985), such as
+	// billion-context's /bili/ prefix, which a sync and a pick keep
+	at := func() string { return zedReach(path) }
+	routed := func() bool { return zedRouted(path) }
 	return atomic(&Agent{
 		ID: "zed", Name: "Zed", Icon: "zed", Bin: bin, Dir: dir, Path: path, Spelled: prefixed,
 		UA: []string{"zed"},
@@ -63,11 +68,11 @@ func zedAtWith(dir, bin string, processes []string) *Agent {
 			return ""
 		},
 		Sync: func() error {
-			if get(zedProvider+".api_url") != gatewayV1() {
+			if !routed() {
 				return nil
 			}
 			return syncJSON(path, zedProvider+".available_models", func() any {
-				return zedProviderJSON(path)["available_models"]
+				return zedProviderJSON(path, at())["available_models"]
 			})
 		},
 		Check: func() string {
@@ -80,18 +85,19 @@ func zedAtWith(dir, bin string, processes []string) *Agent {
 			Key: "model", Label: "model", Get: model,
 			Set: func(v string) error {
 				if ref, ok := strings.CutPrefix(v, magpieID+"/"); ok && isMagpie(ref) {
-					if err := zedCredential(gatewayV1()); err != nil {
+					url := at()
+					if err := zedCredential(url); err != nil {
 						return fmt.Errorf("configure Zed gateway credential: %w", err)
 					}
 					if !usesMagpie(model()) {
 						previous := map[string]string{key + "model": get(zedModel)}
-						if get(zedProvider+".api_url") != gatewayV1() {
+						if !routed() {
 							previous[key+"provider"] = get(zedProvider)
 						}
 						stash(previous)
 					}
 					return edit.SetJSON(path,
-						edit.KV{Path: zedProvider, Value: zedProviderJSON(path)},
+						edit.KV{Path: zedProvider, Value: zedProviderJSON(path, url)},
 						edit.KV{Path: zedModel, Value: map[string]string{"provider": magpieID, "model": ref}})
 				}
 				// Validate a native selection before removing magpie's wiring.
@@ -99,7 +105,7 @@ func zedAtWith(dir, bin string, processes []string) *Agent {
 				if v != "" && (!ok || p == "" || m == "") {
 					return fmt.Errorf("expected provider/model, got %q", v)
 				}
-				if get(zedProvider+".api_url") == gatewayV1() || usesMagpie(model()) {
+				if routed() || usesMagpie(model()) {
 					for _, entry := range []struct{ name, field string }{{"provider", zedProvider}, {"model", zedModel}} {
 						if entry.name == "model" && !usesMagpie(model()) {
 							forget(key + entry.name)
@@ -188,7 +194,7 @@ func zedEffort(m catalog.Model) string {
 // zedProviderJSON is magpie's provider in Zed's settings at path. A
 // reasoning_effort already on a model there is kept: the user may have
 // picked another level, or "none" to keep it from thinking.
-func zedProviderJSON(path string) map[string]any {
+func zedProviderJSON(path, url string) map[string]any {
 	kept := map[string]json.RawMessage{}
 	if raw, ok := edit.GetJSON(path, zedProvider+".available_models"); ok {
 		var cur []struct {
@@ -238,7 +244,58 @@ func zedProviderJSON(path string) map[string]any {
 		}
 		models = append(models, entry)
 	}
-	return map[string]any{"api_url": gatewayV1(), "available_models": models}
+	return map[string]any{"api_url": url, "available_models": models}
+}
+
+// zedReach is the address Zed's magpie provider (settings.json at path)
+// reaches the gateway at: its api_url where that is the gateway's, or a
+// proxy to it where magpie has answered (#1985: a company's reverse proxy,
+// billion-context's http://127.0.0.1:8787/bili/<gateway>), else the
+// gateway's own.
+func zedReach(path string) string {
+	u, _ := edit.GetJSON(path, zedProvider+".api_url")
+	if u == gatewayV1() {
+		return u
+	}
+	if base, ok := proxyBase(u, gatewayV1()); ok {
+		magpieAsked(base)
+		if surelyMagpie(u, gatewayV1()) {
+			return u
+		}
+	}
+	return gatewayV1()
+}
+
+// zedRouted says Zed's magpie provider sends to magpie (zedReach).
+func zedRouted(path string) bool {
+	u, _ := edit.GetJSON(path, zedProvider+".api_url")
+	return u != "" && u == zedReach(path)
+}
+
+// ZedThrough points Zed's magpie provider (a, Zed) at the gateway through
+// prefix, an address a proxy takes the gateway's after (billion-context's
+// http://127.0.0.1:8787/bili/), "" for the gateway itself, and saves its
+// key for that address in the system's credential store, where Zed looks
+// it up by the address. Zed must be on magpie already.
+func ZedThrough(a *Agent, prefix string) error {
+	if a == nil || a.ID != "zed" {
+		return fmt.Errorf("not Zed")
+	}
+	// one through a proxy that is down now is still magpie's to take back
+	if u := ZedURL(a); !zedRouted(a.Path) && (u == "" || !strings.HasSuffix(u, gatewayV1())) {
+		return fmt.Errorf("connect Zed to magpie first: pick one of magpie's models for it on the Agents page")
+	}
+	url := prefix + gatewayV1()
+	if err := zedCredential(url); err != nil {
+		return fmt.Errorf("configure Zed gateway credential: %w", err)
+	}
+	return edit.SetJSON(a.Path, edit.KV{Path: zedProvider + ".api_url", Value: url})
+}
+
+// ZedURL is the api_url of Zed's magpie provider (a, Zed), "" without one.
+func ZedURL(a *Agent) string {
+	u, _ := edit.GetJSON(a.Path, zedProvider+".api_url")
+	return u
 }
 
 // what zed says after a change (notice.go)

@@ -861,6 +861,8 @@ func KeepLinked(ctx context.Context, interval time.Duration) {
 		// Claude Code's auto-compaction beside a bili plugin magpie
 		// installed before it kept it on
 		keepBiliCompact()
+		// bili start, while an agent goes through its /bili/ prefix
+		keepBiliServe(ctx)
 		// once a day, what agents saved to memory meanwhile
 		if res, err := PublishMemory(true); err != nil {
 			log.Println("library: memory:", err)
