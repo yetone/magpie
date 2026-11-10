@@ -872,6 +872,14 @@ each one.
     without waiting for CI is not pushing without running `go test
     ./internal/gui ./internal/cli`: a new route or core bytes trip them
     every time.
+  - The same class in two more packages that afternoon. d3f862340 put a
+    package-level `regexp.MustCompile` in internal/library, and the root
+    package's TestNoEagerPackageRegexps was red until 7869a454c.
+    d109ec8da added the miniq agent with no Library target and no
+    noLibrary line, and TestEveryAgentInLibrary was red until 68cb92e8e.
+    A guard test lives where the rule is kept, not where the change is.
+    A new agent, route or package-level value runs `go test .
+    ./internal/library ./internal/cli ./internal/gui` before the push.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
