@@ -204,3 +204,13 @@ func forgetKeptStats() {
 	keptStats.files, keptStats.ranges, keptStats.native = nil, nil, nil
 	keptStats.prices, keptStats.titles, keptStats.desktop = nil, titleAnswers{}, nil
 }
+
+// ForgetKeptRanges lets go of the ranges' Stats kept for the next read,
+// and what they were checked against, once no page has asked for a while.
+// The parsed files stay: a page that asks again sums them up again
+// (~0.1 s for a long history) and reads no file.
+func ForgetKeptRanges() {
+	mu.Lock()
+	defer mu.Unlock()
+	forgetKeptStats()
+}

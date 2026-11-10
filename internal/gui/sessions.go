@@ -704,6 +704,7 @@ func statsFor(days int) sessions.Stats {
 
 func statsForGen(days int) (sessions.Stats, uint64) {
 	days = max(0, days)
+	keepStatsWhileAsked()
 	statsMemo.Lock()
 	if k := statsMemo.m[days]; k != nil {
 		statsMemo.asks++
@@ -762,6 +763,62 @@ func statsForGen(days int) (sessions.Stats, uint64) {
 	}
 	statsMemo.Unlock()
 	return st, gen
+}
+
+// statsIdle is how long the Sessions page's stats are kept after the last
+// ask. The page polls every 15 s while it is open; once it has been shut
+// for this long, every range's Stats (a Summary for each session ever:
+// ~15 MB of a 14k-session history), the overviews and the answers' tags
+// go. The parsed session files stay, so the next ask sums them up again
+// (~0.1 s a range) without reading a file.
+const statsIdle = 2 * time.Minute
+
+var statsIdleTimer struct {
+	sync.Mutex
+	t *time.Timer
+	// off: tests, which ask for stats over minutes, have it armed only
+	// when they ask for it
+	off bool
+}
+
+func init() { statsIdleTimer.off = testing.Testing() }
+
+// keepStatsWhileAsked puts off forgetIdleStats for statsIdle.
+func keepStatsWhileAsked() {
+	statsIdleTimer.Lock()
+	defer statsIdleTimer.Unlock()
+	if statsIdleTimer.off {
+		return
+	}
+	if statsIdleTimer.t != nil {
+		statsIdleTimer.t.Reset(statsIdle)
+		return
+	}
+	statsIdleTimer.t = time.AfterFunc(statsIdle, forgetIdleStats)
+}
+
+// forgetIdleStats lets go of what statsForGen and writeOverview kept, and
+// hands the pages back to the system at once; a range being read again
+// puts it off.
+func forgetIdleStats() {
+	statsMemo.Lock()
+	for _, k := range statsMemo.m {
+		if k.busy {
+			statsMemo.Unlock()
+			keepStatsWhileAsked()
+			return
+		}
+	}
+	statsMemo.m = nil
+	statsMemo.Unlock()
+	overviews.Lock()
+	overviews.m = nil
+	overviews.Unlock()
+	statsTags.Lock()
+	statsTags.m = nil
+	statsTags.Unlock()
+	sessions.ForgetKeptRanges()
+	debug.FreeOSMemory()
 }
 
 func combinedSessionStats(days int) sessions.Stats {
