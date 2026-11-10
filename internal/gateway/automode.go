@@ -15,28 +15,37 @@ import (
 // Behind a gateway, its first requests ask the API to do it: the
 // dangerous-tool-use beta and a `safeguards` field, answered by
 // `safeguard_results` in the reply: a whole reply's own, a stream's in its
-// message_delta. Anthropic's own API (and a relay in front of it) gets them
-// as they were sent, relayed or built (buildAnthropic), and the results
-// come back as it gave them, on a stream made of a whole reply too
+// message_delta's delta. Anthropic's own API (and a relay in front of it)
+// gets them as they were sent, relayed or built (buildAnthropic), and the
+// results come back as it gave them, on a stream made of a whole reply too
 // (anthropicWholeEvents). Any other model neither sees them nor answers
-// them (serverReview), and magpie says nothing on the API's behalf. What
-// Claude Code does then is Anthropic's choice, made per account by a flag
-// (tengu_bright_dragonfly, read in 2.1.312 to 2.1.316): with it off, it
-// classifies locally for the rest of the session, naming the gateway in a
-// notice; with it on, it has no local classifier behind a gateway at all,
-// and every action the check would have judged asks for approval ("Auto
-// mode can't check actions in this session … your requests go through
-// 127.0.0.1:3425, which doesn't pass it through", chenxiang0010 on
-// Discord). Only Anthropic can answer the check, so no route here other
-// than those AutoModeReviewed names can make auto mode work there. Where no
-// model Claude Code can reach through magpie is reviewed, the agent's
-// wiring turns the review off in Claude Code's settings
-// (CLAUDE_CODE_AUTO_MODE_SERVER=0, as Anthropic's page on the notice says to
-// for a gateway that can't run the checks): with the flag off it
-// classifies locally from the start and says nothing about the gateway
-// (1EFLOPS on X); with it on, 2.1.314 says it has no check of its own to
-// use instead. Where one is, it is left on: /model can take the same
-// session to that model, which reviews it.
+// them (serverReview), and magpie says nothing on the API's behalf.
+//
+// What Claude Code does with a reply that has no results is Anthropic's
+// choice. Up to 2.1.316, with its flag (tengu_bright_dragonfly) off, it
+// classified locally for the rest of the session, naming the gateway in a
+// notice; with it on, every action the check would have judged asked for
+// approval ("Auto mode can't check actions in this session … your
+// requests go through 127.0.0.1:3425, which doesn't pass it through",
+// chenxiang0010 on Discord). 2.1.322 reads the flag as on wherever it
+// can't read flags or send telemetry (WJe in its bundle:
+// DISABLE_TELEMETRY, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC,
+// DO_NOT_TRACK, CLAUDE_CODE_DISABLE_FEATURE_FLAGS, DISABLE_GROWTHBOOK),
+// unless CLAUDE_CODE_AUTO_MODE_SERVER is "0". So a user who turned
+// Claude Code's telemetry off, on magpie's Agents page or in their shell,
+// had every action refused on a model whose route drops the results, a
+// Claude model on a relay as well as DeepSeek (JoyYoung2Lucky on X).
+// With "0", Claude Code asks for no review and runs its local classifier
+// from the start, which magpie serves on any model.
+//
+// So the agent's wiring writes CLAUDE_CODE_AUTO_MODE_SERVER=0 in Claude
+// Code's settings unless every model Claude Code can reach through magpie
+// is one whose results surely come back (AutoModeAnswered: Anthropic's own
+// API, or the Claude subscription, whose bridge hands the review to Claude
+// Code's own binary). A relay may pass the field through or drop it, and
+// /model can take a session from a reviewed model to one that isn't, so
+// either turns the review off; Claude Code's environment, the shell's
+// included, can't be read from here to tell whether it would fall back.
 //
 // Locally, the classifier is a request of its own on the session's model:
 // the transcript in <transcript> blocks, a system prompt asking for
@@ -115,6 +124,21 @@ func AutoModeReviewable(p provider.Provider, model string) bool {
 	}
 	apis := p.APIs(model)
 	return apis == nil || slices.Contains(apis, provider.Anthropic)
+}
+
+// AutoModeAnswered reports whether Claude Code, asking for model at p
+// through magpie, surely gets the review's results back: AutoModeReviewable
+// on Anthropic's own API, or on the Claude subscription. A relay in front
+// of Anthropic is sent the safeguards (AutoModeReviewed) but may drop the
+// results, which 2.1.322 with its telemetry off reads as no check at all.
+func AutoModeAnswered(p provider.Provider, model string) bool {
+	if !AutoModeReviewable(p, model) {
+		return false
+	}
+	if p.Account != nil {
+		return p.Account.Agent == "claude"
+	}
+	return provider.HostOf(p.Base(provider.Anthropic)) == "api.anthropic.com"
 }
 
 // classifierRoom is what a model that reasons is given on top of the

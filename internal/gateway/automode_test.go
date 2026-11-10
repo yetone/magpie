@@ -381,6 +381,39 @@ func TestAutoModeReviewableAsksOnMessages(t *testing.T) {
 	}
 }
 
+// TestAutoModeAnsweredOnlyWhereResultsComeBack: Claude Code 2.1.322 with
+// its telemetry off refuses every action whose reply has no
+// safeguard_results (JoyYoung2Lucky on X), so the wiring keeps the review
+// on only where they surely come back: Anthropic's own API and the Claude
+// subscription. A relay or Bedrock is sent the safeguards but may drop the
+// results; another vendor's subscription isn't sent them.
+func TestAutoModeAnsweredOnlyWhereResultsComeBack(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	sub := provider.Provider{ID: "claude", Account: &provider.Account{Agent: "claude", User: "u"}}
+	copilot := provider.Provider{ID: "copilot", Anthropic: "https://api.githubcopilot.com", Account: &provider.Account{Agent: "copilot", User: "u"}}
+	anthropic := provider.Provider{ID: "anthropic", Anthropic: "https://api.anthropic.com", Key: "k"}
+	relay := provider.Provider{ID: "or", Chat: "https://openrouter.ai/api/v1", Anthropic: "https://openrouter.ai/api", Key: "k"}
+	bedrock := provider.Provider{ID: "bedrock", Preset: "bedrock", Anthropic: "https://bedrock-runtime.us-east-1.amazonaws.com", Key: "k"}
+	ds := provider.Provider{ID: "deepseek", Anthropic: "https://api.deepseek.com/anthropic", Key: "k"}
+	for _, c := range []struct {
+		p     provider.Provider
+		model string
+		want  bool
+	}{
+		{sub, "claude-opus-4-8", true},
+		{anthropic, "claude-sonnet-5", true},
+		{relay, "anthropic/claude-sonnet-5", false},
+		{bedrock, "us.anthropic.claude-opus-4-8-v1:0", false},
+		{copilot, "claude-sonnet-5", false},
+		{ds, "deepseek-v4.1-flash", false},
+	} {
+		if got := AutoModeAnswered(c.p, c.model); got != c.want {
+			t.Errorf("%s/%s: %v, want %v", c.p.ID, c.model, got, c.want)
+		}
+	}
+}
+
 // Claude Code asks for the review on every auto-mode request. A Claude
 // model on another vendor's subscription (Copilot here, which answers the
 // safeguards with "Extra inputs are not permitted", #1756) is sent neither

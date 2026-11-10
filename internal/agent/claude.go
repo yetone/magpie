@@ -301,16 +301,17 @@ const claudeCapsEnv = "CLAUDE_CODE_MODEL_CAPABILITIES"
 
 // claudeReviewEnv is whether Claude Code's auto mode asks the API to review
 // its actions (the dangerous-tool-use beta and `safeguards`), "0" for no.
-// Behind a gateway whose model doesn't answer, it classifies locally anyway
-// and names the gateway in a notice, "this session isn't eligible because
-// your requests go through 127.0.0.1:3425…" (1EFLOPS on X, Claude Code on
-// Codex), or, where Anthropic has turned its local classifier off (2.1.312
-// and later), asks for approval of each action the check would judge,
-// whichever the value (gateway/automode.go). Anthropic's page on it says
-// to set it to 0 for a gateway that can't run the checks: magpie does
-// while none of the models Claude Code
-// can reach through it is reviewed (claudeReviewed), and leaves it unset
-// while one is. One the user set is theirs.
+// Behind a gateway whose model doesn't answer, 2.1.316 and earlier
+// classified locally anyway and named the gateway in a notice ("this
+// session isn't eligible because your requests go through
+// 127.0.0.1:3425…", 1EFLOPS on X). 2.1.322, with its telemetry or
+// feature flags off, refuses every action the check would judge instead
+// ("Auto mode can't check actions in this session", JoyYoung2Lucky on X),
+// a Claude model's on a relay too, unless this is "0"
+// (gateway/automode.go). Anthropic's page on it says to set it to 0 for a
+// gateway that can't run the checks: magpie does unless every model Claude
+// Code can reach through it surely answers the review (claudeReviewed),
+// and leaves it unset while each does. One the user set is theirs.
 const claudeReviewEnv = "CLAUDE_CODE_AUTO_MODE_SERVER"
 
 // claudeSearchEnv turns Claude Code's tool search on: MCP tools are named
@@ -330,52 +331,70 @@ const claudeSearchEnv = "ENABLE_TOOL_SEARCH"
 // Desktop is on magpie, without forcing other subagents onto a model.
 const claudeExploreEnv = "CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP"
 
-// claudeReviewed reports whether a model Claude Code can reach through
-// magpie has its actions reviewed by Anthropic (gateway.AutoModeReviewable:
-// a Claude model asked on the Messages API, not translated):
-// one shown to the agents in catalogs (Claude Code, Claude Desktop whose
-// Code tab is Claude Code, T3 Code's instance of it), a routing group's
-// member, a provider's fallback, or one of models (those it is set to),
-// judged where it resolves to.
-// Any such keeps the review on, as /model can take a session there.
+// claudeReviewed reports whether every model Claude Code can reach
+// through magpie has its actions reviewed, the results coming back
+// (gateway.AutoModeAnswered: a Claude model on Anthropic's own API or the
+// Claude subscription): each one shown to the agents in catalogs (Claude
+// Code, Claude Desktop whose Code tab is Claude Code, T3 Code's instance of
+// it), each member of a routing group, each provider's fallback, and each
+// of models (those it is set to), judged where it resolves to. One that
+// isn't turns the review off, as /model can take a session there, and
+// 2.1.322 with its telemetry off then has no check at all.
 func claudeReviewed(catalogs []string, models ...string) bool {
 	var entries []provider.Entry
 	for _, c := range catalogs {
 		shown, _ := provider.CatalogFor(c)
 		entries = append(entries, shown...)
 	}
-	reviewed := func(p provider.Provider, model string) bool {
-		if gateway.AutoModeReviewable(p, model) {
-			return true
+	answered := func(p provider.Provider, model string) bool {
+		if !gateway.AutoModeAnswered(p, model) {
+			return false
 		}
-		return slices.ContainsFunc(provider.FallbackModels(p), func(m provider.Member) bool {
-			return gateway.AutoModeReviewable(m.Provider, m.Model)
+		return !slices.ContainsFunc(provider.FallbackModels(p), func(m provider.Member) bool {
+			return !gateway.AutoModeAnswered(m.Provider, m.Model)
 		})
+	}
+	every := func(ms []provider.Member) bool {
+		return len(ms) > 0 && !slices.ContainsFunc(ms, func(m provider.Member) bool { return !answered(m.Provider, m.Model) })
 	}
 	find := provider.GroupFinder()
 	for _, e := range entries {
 		if e.Group == "" {
-			if reviewed(e.Provider, e.Model) {
-				return true
+			if !answered(e.Provider, e.Model) {
+				return false
 			}
 			continue
 		}
-		_, ms, _ := find(e.ID)
-		if slices.ContainsFunc(ms, func(m provider.Member) bool { return reviewed(m.Provider, m.Model) }) {
-			return true
+		if _, ms, _ := find(e.ID); !every(ms) {
+			return false
 		}
 	}
-	return slices.ContainsFunc(models, func(id string) bool {
+	judged := 0
+	for _, id := range models {
+		if id == "" {
+			// a slot Claude Code isn't set to (no small model, say)
+			continue
+		}
+		judged++
 		if _, ms, ok := find(id); ok {
-			return slices.ContainsFunc(ms, func(m provider.Member) bool { return reviewed(m.Provider, m.Model) })
+			if !every(ms) {
+				return false
+			}
+			continue
 		}
 		if p, m, ok := provider.Resolve(id); ok {
-			return reviewed(p, m)
+			if !answered(p, m) {
+				return false
+			}
+			continue
 		}
 		// Not one magpie knows: judged by its name, as the gateway would
 		// judge a request for it.
-		return gateway.AutoModeReviewed(provider.Provider{}, id)
-	})
+		if !gateway.AutoModeReviewed(provider.Provider{}, id) {
+			return false
+		}
+	}
+	return len(entries)+judged > 0
 }
 
 // claudeCapsMax bounds claudeCapsEnv: the models Claude Code is set to go
@@ -1175,8 +1194,8 @@ func claudeIn(at place) *Agent {
 		}
 		return nil
 	}
-	// writeReview turns the review off while no model Claude Code can reach
-	// through magpie runs it, and back on (unset) once one does
+	// writeReview turns the review off while a model Claude Code can reach
+	// through magpie doesn't answer it, and back on (unset) once each does
 	writeReview := func(models ...string) error {
 		if rawEnv(claudeReviewEnv) != "" && !reviewOurs() {
 			forget(reviewKey)
