@@ -268,6 +268,9 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 			id, ok = codexSealedFor(r, model, body)
 		}
 		if ok {
+			// the codex/ in it is magpie's, not Codex's: Codex asked its
+			// own model bare (providerPicked)
+			r = providerPicked(r)
 			// through magpie's accounts, Codex's compaction is the codex
 			// provider's to decide as a magpie model's is: sealed natively
 			// only with its native compaction on, as only the account that
@@ -1781,6 +1784,25 @@ type handedOnKey struct{}
 
 // handedOnOf is what the agent of a request codexFallBack handed on was
 // sent while it waited, nil for any other request.
+// pickedKey marks a request whose model magpie put a provider on
+// (codexAccounts' codex/<model>), the client having asked it bare.
+type pickedKey struct{}
+
+func providerPicked(r *http.Request) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), pickedKey{}, true))
+}
+
+// namedProvider is whether the client named the provider of the model it
+// asked for ("claude/claude-opus-5-5", a flat or aliased spelling of one),
+// rather than a bare model magpie put on a provider. A provider named so
+// is the one asked: past its usage cap it goes on to its own fallbacks
+// only, never to a routing group that merely has the model in it
+// (Anotiaww on X).
+func namedProvider(r *http.Request, asked string) bool {
+	picked, _ := r.Context().Value(pickedKey{}).(bool)
+	return strings.Contains(asked, "/") && !picked
+}
+
 func handedOnOf(r *http.Request) *keptAlive {
 	k, _ := r.Context().Value(handedOnKey{}).(*keptAlive)
 	return k

@@ -27,7 +27,8 @@ import (
 // used as before; once usage reads again, A serves. With Stop at the caps
 // on, both at their caps, the fallback isn't sent the request either.
 // With no fallback, a routing group of the user's that has the plugin's
-// model first goes on to its next member, Stop at the caps off.
+// model first goes on to its next member, Stop at the caps off, for the
+// model asked bare; named "factory/fake-1" it is the cap's 429.
 func TestPluginCarefulPool(t *testing.T) {
 	bun := testenv.Bun(t)
 	fresh(t)
@@ -150,8 +151,12 @@ func TestPluginCarefulPool(t *testing.T) {
 	}
 
 	s := New()
-	ask := func(t *testing.T) (int, string, []string) {
+	ask := func(t *testing.T, model ...string) (int, string, []string) {
 		t.Helper()
+		m := "factory/fake-1"
+		if len(model) > 0 {
+			m = model[0]
+		}
 		mu.Lock()
 		tried = nil
 		mu.Unlock()
@@ -159,7 +164,7 @@ func TestPluginCarefulPool(t *testing.T) {
 		sticks.m = map[string]stick{}
 		sticks.Unlock()
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"factory/fake-1","stream":true,"messages":[{"role":"user","content":"hello"}]}`))
+		req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"`+m+`","stream":true,"messages":[{"role":"user","content":"hello"}]}`))
 		s.Handler().ServeHTTP(rec, req)
 		mu.Lock()
 		defer mu.Unlock()
@@ -248,7 +253,13 @@ func TestPluginCarefulPool(t *testing.T) {
 	if err := provider.SetCapStop("factory", false); err != nil {
 		t.Fatal(err)
 	}
-	if code, body, seen := ask(t); code != 200 || !strings.Contains(body, "from kf") || len(seen) != 0 {
+	if code, body, seen := ask(t, "fake-1"); code != 200 || !strings.Contains(body, "from kf") || len(seen) != 0 {
 		t.Fatalf("group, stop off: %d %s (tried %v)", code, body, seen)
+	}
+	// named with its provider, the plugin's model is the provider's
+	// alone: the cap's 429, the group not asked (Anotiaww on X)
+	fb.tried = nil
+	if code, body, seen := ask(t); code != 429 || len(seen) != 0 || len(fb.tried) != 0 || !strings.Contains(body, "usage cap reached") {
+		t.Fatalf("named, group, stop off: %d %s (tried %v, group's API %v)", code, body, seen, fb.tried)
 	}
 }

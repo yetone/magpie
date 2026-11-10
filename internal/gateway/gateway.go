@@ -2925,12 +2925,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			return kept
 		}
 		cands, pl = s.planPaused(p, model, from, pausedIn)
-		if len(cands) == 0 && len(pl.capped) > 0 && !p.CapStop || handedOnOf(r) != nil {
+		if len(cands) == 0 && len(pl.capped) > 0 && !p.CapStop && !namedProvider(r, call.Model) || handedOnOf(r) != nil {
 			// every account held at the usage cap the user set, or Codex's
 			// own sign-in handed on (codexFallBack), and no fallback left:
 			// the groups the user built with this model in them go on from
 			// it, as a request to the group would (the Codex app asks
-			// Codex's own model, never the group)
+			// Codex's own model, never the group). Not for a request that
+			// named the provider itself ("claude/…", another magpie's
+			// call): that one is answered the cap's 429 unless the
+			// provider has fallbacks of its own (Anotiaww on X)
 			// Codex's auto-review on codex-auto-review, which no group has,
 			// goes on where its conversation's turns go (codexReviewAfter)
 			if q, ok := groupsAfter(p, model, s.codexReviewAfter(r, p, model, body)...); ok {

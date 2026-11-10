@@ -107,12 +107,11 @@ func TestSubscriptionCappedMidConversationGivesWay(t *testing.T) {
 // The reporter's case: the Codex app, signed in to ChatGPT, sends Codex's
 // own model names, never the group's. With the account past its cap, a
 // routing group the user built with that account first goes on to its
-// next member, on both of magpie's Codex paths, rather than answering
-// "usage cap reached".
+// next member rather than answering "usage cap reached". A model named with its provider ("codex/gpt-5.5")
+// is that provider's alone: TestNamedProviderCappedRefuses.
 func TestCappedCodexOwnModelGoesToItsGroup(t *testing.T) {
 	for _, c := range []struct{ path, model string }{
 		{CodexPath + "/responses", "gpt-5.5"},
-		{"/v1/responses", "codex/gpt-5.5"},
 	} {
 		for _, stream := range []bool{true, false} {
 			t.Run(fmt.Sprintf("%s-%s-%v", c.path, c.model, stream), func(t *testing.T) {

@@ -1068,7 +1068,9 @@ func FallbackModels(p Provider) []Member {
 // can't take (every one held at its usage cap, or Codex's own sign-in out
 // of its allowance) goes on to these when nothing set as its fallback
 // takes it (adorable_piglet on Discord, v0.1.3354): the Codex app asks
-// Codex's own model, never the group built around it.
+// Codex's own model, never the group built around it. A request that
+// named the provider itself ("claude/…") is not sent on to these
+// (gateway's namedProvider, Anotiaww on X).
 func GroupsAfter(id string) []string {
 	var out []string
 	for _, gid := range MemberGroups()[id] {
