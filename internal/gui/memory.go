@@ -106,6 +106,27 @@ func memoryRoutes(mux *http.ServeMux) {
 		}
 		memoryChanged(rw)
 	})
+	// some memories given one status at once: kept, archived or brought
+	// back from the Memory tab's Select (RealZeroP27 on X)
+	mux.HandleFunc("POST /api/memory/status", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			IDs    []string `json:"ids"`
+			Status string   `json:"status"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if len(in.IDs) == 0 {
+			fail(rw, errors.New("name the memories to change"))
+			return
+		}
+		if _, err := memory.SetStatus(in.Status, in.IDs...); err != nil {
+			fail(rw, err)
+			return
+		}
+		memoryChanged(rw)
+	})
 	mux.HandleFunc("POST /api/memory/digest", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
 			On bool `json:"on"`

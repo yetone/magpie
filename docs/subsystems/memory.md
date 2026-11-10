@@ -93,11 +93,20 @@ agents ticked under Instructions, unless `Instructions.NoMemory`
 | `GET /api/memory` | `{memories, projects, digest, agents}` |
 | `POST /api/memory` | `{id?, …Input}`: `Edit` with an id, else `Save` as the user's |
 | `POST /api/memory/remove` | `{ids}` |
+| `POST /api/memory/status` | `{ids, status}`: `SetStatus`, in one write, as `Edit` by the user per memory (`TestSetStatusOfSome`, `TestMemoryStatusRouteActsOnSome`) |
 | `POST /api/memory/digest` | `{on}` |
 
 A reply after a change carries `problem` when publishing the digest
 failed. The tab is in [plugins/library/client.js](../../internal/gui/assets/plugins/library/client.js)
 (`renderMemory`), tested by `internal/gui/tests/library-memory.test.cjs`.
+Its Select puts a box on each memory listed: a click picks one, a
+Shift-click the range from the last one clicked, ↑ ↓ move between the
+boxes (Shift picks as it goes), ⌘A / Ctrl+A picks every one shown, Escape
+ends it. The bar under the list keeps (To review), archives (In use) or
+restores (Archived) the ones picked through `/api/memory/status`, and
+deletes them on a second click through `/api/memory/remove`; a search or
+filter unpicks what it hides (RealZeroP27 on X,
+`library-memory-select.test.cjs`).
 
 ### Distillation
 
@@ -213,5 +222,5 @@ mote-run go test ./internal/memory ./internal/memdistill ./internal/library
 mote-run go test -run 'Distill|Dream' ./internal/gui
 mote-run go test -tags nogui -run 'MemoryMCP|OwnMCP' ./internal/gateway
 mote-run go test ./internal/browsermcp ./internal/cli
-mote-run node --test internal/gui/tests/library-memory.test.cjs
+mote-run node --test internal/gui/tests/library-memory.test.cjs internal/gui/tests/library-memory-select.test.cjs
 ```

@@ -964,6 +964,13 @@ magpie.plugin("library", (ctx) => {
   let memOpen = null;    // the memory open to edit, or "new"
   let memDraft = null;   // its fields as typed
   let memRemoving = null; // the memory whose Delete was clicked once
+  // Select (RealZeroP27 on X): a box on each memory shown, and a bar that
+  // keeps, archives, restores or deletes the ones picked at once
+  let memPicking = false;
+  const memPicked = new Set(); // ids
+  let memAnchor = null;  // the one picked or unpicked last: a Shift-click's range starts there
+  let memSure = false;   // the bar's Delete was clicked once
+  let memShown = [];     // the memories listed, in their order
   const MEM_KINDS = ["profile", "preference", "rule", "reference", "fact", "procedure", "episode"];
   const kindName = (k) => ({ profile: t("About you"), preference: t("Preference"), rule: t("Rule"), reference: t("Reference"), fact: t("Fact"), procedure: t("How-to"), episode: t("Decision") })[k] || k;
   function scopeName(s) {
@@ -1086,15 +1093,23 @@ magpie.plugin("library", (ctx) => {
     ], memStatus, (v) => { memStatus = v; memOpen = null; render(); });
     st.classList.add("lib-memstatus");
     const sc = menuButton(memScope ? scopeName(memScope) : t("All"), "lib-memscope", () => openProtoMenu(sc, [{ v: "", name: t("Everywhere and every project"), literalName: true, note: "" }, ...memScopes(true).filter((s) => all.some((m) => m.scope === s)).map((s) => ({ v: s, name: scopeName(s), literalName: true, note: "" }))], memScope, (v) => { memScope = v; render(); }, "Where it applies"));
-    bar.append(q, sc, st, el("span", "grow"), button("+ " + t("Add"), "action lib-memadd", () => { openMemory(null); render(); }));
-    body.append(bar);
-
     const words = memQ.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const shown = all.filter((m) => (memStatus === "archived" ? m.status === "archived" || m.status === "superseded" : m.status === memStatus)
       && (!memScope || m.scope === memScope)
       && words.every((w) => [m.text, m.why || "", ...(m.tags || []), kindName(m.kind), scopeName(m.scope)].join(" ").toLowerCase().includes(w)))
       .sort((a, b) => (!!b.pinned - !!a.pinned) || (b.updated > a.updated ? 1 : b.updated < a.updated ? -1 : 0));
-    const list = el("div", "list lib-list lib-mems");
+    // what's picked is what's listed: a search, a filter or another
+    // status leaves the rest unpicked, and an empty list ends Select
+    memShown = shown;
+    for (const id of memPicked) if (!shown.some((m) => m.id === id)) memPicked.delete(id);
+    if (memAnchor && !memPicked.has(memAnchor) && !shown.some((m) => m.id === memAnchor)) memAnchor = null;
+    if (memPicking && !shown.length) endMemPick();
+    bar.append(q, sc, st, el("span", "grow"));
+    if (memPicking || shown.length > 1) bar.append(memPickButton());
+    bar.append(button("+ " + t("Add"), "action lib-memadd", () => { endMemPick(); openMemory(null); render(); }));
+    body.append(bar);
+
+    const list = el("div", "list lib-list lib-mems" + (memPicking ? " picking" : ""));
     if (memOpen === "new") list.append(memDetail(null));
     for (const m of shown) list.append(...memRow(m));
     if (!shown.length && memOpen !== "new") {
@@ -1104,6 +1119,121 @@ magpie.plugin("library", (ctx) => {
         : t("Nothing remembered yet. Tell an agent “remember that…”, or add one here.")));
     }
     body.append(list);
+    if (memPicking) body.append(memPickBar());
+  }
+
+  // ---------- some memories, picked, acted on at once ----------
+
+  function endMemPick() {
+    memPicking = false;
+    memPicked.clear();
+    memAnchor = null;
+    memSure = false;
+  }
+  function memPickButton() {
+    const b = button(memPicking ? t("Done") : t("Select"), "action lib-select lib-memselect", () => {
+      const on = !memPicking;
+      endMemPick();
+      if (on) { memPicking = true; memOpen = null; memDraft = null; memRemoving = null; }
+      render();
+      if (on) requestAnimationFrame(() => page.querySelector(".lib-mems .lib-pickbox")?.focus({ preventScroll: true }));
+    });
+    b.dataset.alt = memPicking ? t("Select") : t("Done"); // as wide as the other, see library.css
+    b.title = memPicking ? t("Stop picking memories") : t("Pick some memories and act on them together");
+    return b;
+  }
+  // a click picks one or unpicks it; with Shift, every one from the last
+  // clicked to this one takes the last one's state
+  function memPick(id, range) {
+    const ids = memShown.map((m) => m.id);
+    const to = ids.indexOf(id), from = range && memAnchor ? ids.indexOf(memAnchor) : -1;
+    if (from >= 0 && to >= 0) {
+      const on = memPicked.has(memAnchor);
+      for (const x of ids.slice(Math.min(from, to), Math.max(from, to) + 1)) on ? memPicked.add(x) : memPicked.delete(x);
+    } else if (memPicked.has(id)) memPicked.delete(id);
+    else memPicked.add(id);
+    memAnchor = id;
+    memSync();
+  }
+  function memPickAll(on) {
+    for (const m of memShown) on ? memPicked.add(m.id) : memPicked.delete(m.id);
+    memSync();
+  }
+  // every box and the bar as the picks are now, without drawing the page
+  // again: the box with the focus keeps it
+  function memSync() {
+    memSure = false;
+    for (const row of page.querySelectorAll(".lib-mems .lib-mem")) {
+      const on = memPicked.has(row.dataset.id);
+      row.classList.toggle("picked", on);
+      const box = row.querySelector(".lib-pickbox");
+      if (box) box.checked = on;
+    }
+    page.querySelector(".lib-mempickbar")?.replaceWith(memPickBar());
+  }
+  // the keys a picked list answers to: ↑ ↓ move between the boxes (with
+  // Shift, picking as they go), ⌘A / Ctrl+A picks every one shown, Escape
+  // ends Select
+  function memPickKeys(e, id) {
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); endMemPick(); render(); page.querySelector(".lib-memselect")?.focus({ preventScroll: true }); return; }
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "a") { e.preventDefault(); e.stopPropagation(); memPickAll(memPicked.size !== memShown.length); return; }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    e.stopPropagation();
+    const boxes = [...page.querySelectorAll(".lib-mems .lib-pickbox")];
+    const i = boxes.findIndex((b) => b.closest(".lib-mem")?.dataset.id === id);
+    const next = boxes[i + (e.key === "ArrowDown" ? 1 : -1)];
+    if (!next) return;
+    next.focus({ preventScroll: true });
+    next.closest(".lib-mem")?.scrollIntoView({ block: "nearest" });
+    if (e.shiftKey) {
+      const nid = next.closest(".lib-mem").dataset.id;
+      if (!memAnchor) memAnchor = id;
+      memPick(nid, true);
+    }
+  }
+  function memPickBar() {
+    const bar = el("div", "row lib-row lib-pickbar lib-mempickbar");
+    const n = memShown.filter((m) => memPicked.has(m.id)).length;
+    const every = el("label", "lib-pickall");
+    const all = el("input", "lib-pickbox lib-mempickall");
+    all.type = "checkbox";
+    all.checked = n > 0 && n === memShown.length;
+    all.indeterminate = n > 0 && n < memShown.length;
+    all.onclick = (e) => { e.stopPropagation(); memPickAll(n !== memShown.length); };
+    all.onkeydown = (e) => { if (e.key === "Escape") memPickKeys(e, ""); };
+    every.append(all, el("span", "", t("All {n}", { n: memShown.length })));
+    bar.append(every, el("span", "lib-pickn" + (n ? "" : " none"), n ? t("{n} selected", { n }) : t("Shift-click picks a range")), el("span", "grow"));
+    if (n) {
+      const ids = memShown.filter((m) => memPicked.has(m.id)).map((m) => m.id);
+      const act = async (path, body, done) => {
+        const ok = await memChange(path, body, done);
+        if (ok) { memPicked.clear(); memAnchor = null; memSure = false; render(); }
+      };
+      // what the status shown moves them to: kept, archived or brought back
+      const to = memStatus === "candidate" ? ["active", t("Keep"), t("{n} kept", { n })]
+        : memStatus === "active" ? ["archived", t("Archive"), t("{n} archived", { n })]
+        : ["active", t("Restore"), t("{n} restored", { n })];
+      bar.append(button(to[1], "action lib-updall lib-memto", () => act("memory/status", { ids, status: to[0] }, to[2])));
+      // deleted on a second click, as one memory's Delete is
+      const del = button(memSure ? t("Delete {n} for good", { n }) : t("Delete"), (memSure ? "primary danger-fill" : "action danger") + " lib-updall lib-memdel", () => {
+        if (!memSure) {
+          memSure = true;
+          const b = memPickBar();
+          bar.replaceWith(b);
+          b.querySelector(".lib-memdel")?.focus({ preventScroll: true });
+          return;
+        }
+        act("memory/remove", { ids }, t("{n} deleted", { n }));
+      });
+      bar.append(del);
+      const c = button(t("Clear"), "lib-updall lib-pickclear", () => { memPicked.clear(); memAnchor = null; memSync(); });
+      c.title = t("Unpick them all");
+      bar.append(c);
+    }
+    bar.append(button(t("Done"), "action lib-updall lib-pickdone", () => { endMemPick(); render(); }));
+    bar.onkeydown = (e) => { if (e.key === "Escape") memPickKeys(e, ""); };
+    return bar;
   }
   // the model conversations are read and memory tidied with: the
   // automatic one or one picked, shared by both rows
@@ -1219,7 +1349,7 @@ magpie.plugin("library", (ctx) => {
     }, 2000);
   }
   function memRow(m) {
-    const isOpen = memOpen === m.id;
+    const isOpen = !memPicking && memOpen === m.id;
     const row = el("div", "row lib-row click lib-mem" + (isOpen ? " open" : ""));
     row.dataset.id = m.id;
     const who = el("div", "who");
@@ -1234,6 +1364,21 @@ magpie.plugin("library", (ctx) => {
     const chev = el("span", "chev");
     chev.append(svg(CHEV_R, 11, 1.7));
     row.append(who, tags, chev);
+    if (memPicking) {
+      // a row with a box, which its click ticks rather than opening it
+      const box = el("input", "lib-pickbox");
+      box.type = "checkbox";
+      box.checked = memPicked.has(m.id);
+      box.setAttribute("aria-label", m.text);
+      box.onclick = (e) => { e.stopPropagation(); memPick(m.id, e.shiftKey); };
+      box.onkeydown = (e) => memPickKeys(e, m.id);
+      row.prepend(box);
+      row.classList.toggle("picked", box.checked);
+      // a Shift-click picks a range, not the text between
+      row.onmousedown = (e) => { if (e.shiftKey) e.preventDefault(); };
+      row.onclick = (e) => { memPick(m.id, e.shiftKey); box.focus({ preventScroll: true }); };
+      return [row];
+    }
     row.onclick = () => { if (isOpen) { memOpen = null; memDraft = null; } else openMemory(m); render(); };
     return isOpen ? [row, memDetail(m)] : [row];
   }

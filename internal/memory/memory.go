@@ -473,23 +473,55 @@ func Edit(id string, in Input, byUser bool) (*Memory, error) {
 		if m == nil {
 			return ErrNotFound
 		}
-		c := *m
-		apply(&c, in)
-		if err := check(&c); err != nil {
-			return err
-		}
-		if byUser && c.Status == Archived && m.Status != Archived {
-			dismiss(f, m)
-		}
-		if byUser && (in.Text != nil || in.Kind != nil || in.Scope != nil || in.Why != nil) {
-			c.Origin = FromUser
-		}
-		c.Updated = now().UTC()
-		*m = c
 		out = m
-		return nil
+		return editIn(f, m, in, byUser)
 	})
 	return out, err
+}
+
+// editIn applies in to m, held in f, as Edit does.
+func editIn(f *file, m *Memory, in Input, byUser bool) error {
+	c := *m
+	apply(&c, in)
+	if err := check(&c); err != nil {
+		return err
+	}
+	if byUser && c.Status == Archived && m.Status != Archived {
+		dismiss(f, m)
+	}
+	if byUser && (in.Text != nil || in.Kind != nil || in.Scope != nil || in.Why != nil) {
+		c.Origin = FromUser
+	}
+	c.Updated = now().UTC()
+	*m = c
+	return nil
+}
+
+// SetStatus gives the user's status to the memories with ids, in one
+// write: those to review kept at once, or archived or brought back, as
+// Edit would one by one (RealZeroP27 on X). An id no longer there is
+// passed over; n is how many were changed, and none found is ErrNotFound.
+// A status that isn't one changes nothing.
+func SetStatus(status string, ids ...string) (n int, err error) {
+	err = change(func(f *file) error {
+		for _, m := range f.Memories {
+			if !slices.Contains(ids, m.ID) {
+				continue
+			}
+			if err := editIn(f, m, Input{Status: &status}, true); err != nil {
+				return err
+			}
+			n++
+		}
+		if n == 0 {
+			return ErrNotFound
+		}
+		return nil
+	})
+	if err != nil {
+		n = 0
+	}
+	return n, err
 }
 
 // Forget sets the memory with id aside (archived): out of searches and

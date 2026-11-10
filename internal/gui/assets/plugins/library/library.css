@@ -878,6 +878,14 @@ body.window .lib-list .lib-row { --lib-indent: 38px; }
 .lib-mems .lib-mem.open > .who .name { -webkit-line-clamp: unset; }
 .lib-mems .lib-mem > .who .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-memdetail { padding-left: 12px; }
+/* Select: a box on each memory, the ones picked tinted, the bar under the list */
+.lib-mems.picking .lib-mem > .chev { display: none; }
+.lib-mems .lib-mem.picked { background: var(--accent-soft); }
+/* a row moved to with ↑ ↓ stops above the bar, not under it */
+.lib-mems.picking .lib-mem { scroll-margin-bottom: 96px; }
+.lib-mems .lib-mem > .lib-pickbox { margin: 0; flex: none; }
+.lib-membar .lib-memselect { height: 28px; }
+.lib-mempickbar .lib-memdel.danger { color: var(--red); }
 .lib-memline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .lib-memline .lib-menu { height: 28px; max-width: 220px; color: var(--fg); }
 .lib-memline .lib-memtags { flex: 1 1 160px; min-width: 0; height: 28px; }
