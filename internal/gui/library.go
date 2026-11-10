@@ -768,6 +768,11 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.ProjectSkills(in.Dir, in.Names, in.Agents)
 		case "projects/server":
 			res, err = library.ProjectServer(in.Dir, in.Name, in.Agents)
+		case "projects/server-off":
+			// a Library server turned off in this project only
+			res, err = library.ProjectServerOff(in.Dir, in.Name, in.Agents)
+		case "projects/skill-off":
+			res, err = library.ProjectSkillsOff(in.Dir, oneOrMore(in.Name, in.Names), in.Agents)
 		case "projects/copy":
 			res, err = library.ProjectCopy(in.Dir, in.Copy)
 		case "all/sync":

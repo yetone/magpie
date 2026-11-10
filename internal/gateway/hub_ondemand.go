@@ -63,7 +63,7 @@ func hubOnDemand(agent string, n int) bool {
 	if agent == "" || n <= hubOnDemandOver {
 		return false
 	}
-	id, _, _ := strings.Cut(agent, "@")
+	id, _, _ := strings.Cut(HubAgentOf(agent), "@")
 	if hubSearchesItself[id] {
 		return false
 	}

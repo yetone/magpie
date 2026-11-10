@@ -397,11 +397,15 @@ type AgentView struct {
 	// ProjectMCP is the file, in a project, it reads MCP servers from
 	ProjectMCP string `json:"projectMCP,omitempty"`
 	// ProjectNoSSE: its project file can't take a server over SSE
-	ProjectNoSSE bool     `json:"projectNoSSE,omitempty"`
-	SkillsAlso   []string `json:"skillsAlso,omitempty"`
-	Note         string   `json:"note,omitempty"`
-	NoSSE        bool     `json:"noSSE,omitempty"`
-	NoRemote     bool     `json:"noRemote,omitempty"`
+	ProjectNoSSE bool `json:"projectNoSSE,omitempty"`
+	// ProjectOff and ProjectSkillOff: a server, or a skill, it has from
+	// the Library can be turned off for it in one project (project_scope.go)
+	ProjectOff      bool     `json:"projectOff,omitempty"`
+	ProjectSkillOff bool     `json:"projectSkillOff,omitempty"`
+	SkillsAlso      []string `json:"skillsAlso,omitempty"`
+	Note            string   `json:"note,omitempty"`
+	NoSSE           bool     `json:"noSSE,omitempty"`
+	NoRemote        bool     `json:"noRemote,omitempty"`
 	// NoEnvRefs: it reads no ${NAME} from its MCP config, so a server
 	// whose headers or environment have one isn't given to it (envref.go)
 	NoEnvRefs bool `json:"noEnvRefs,omitempty"`
@@ -608,6 +612,7 @@ func readView(problems []Problem, glance bool) (*View, error) {
 	for _, t := range targets {
 		av := AgentView{ID: t.Agent.ID, Name: t.Agent.Name, Icon: t.Agent.Icon, Instructions: t.Instructions, Skills: t.Skills,
 			SkillsAlso: t.SkillsAlso, Note: t.Note, MCPVia: t.MCPVia, ProjectSkills: ProjectSkillsDir(t.Agent.ID), ProjectMCP: ProjectMCPFile(t.Agent.ID),
+			ProjectOff: slices.Contains(projectOffAgents, t.Agent.ID), ProjectSkillOff: slices.Contains(projectSkillOffAgents, t.Agent.ID),
 			ProjectNoSSE: ProjectNoSSE(t.Agent.ID)}
 		if t.Skills != "" {
 			_, av.HowOwn = l.SkillHow[t.Agent.ID]

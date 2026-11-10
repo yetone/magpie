@@ -32,6 +32,19 @@ import (
 // HubMCPPath is where the hub is served, the agent's id after it.
 const HubMCPPath = "/mcp/magpie/hub/"
 
+// HubProjectSep joins an agent's id and a project's key in the hub's
+// address (claude~1a2b3c4d5e6f): the agent run in that project folder is
+// given the project's set, the Library's ticks for the agent with the
+// project's servers added and those it turned off left out.
+const HubProjectSep = "~"
+
+// HubAgentOf is the agent's id of a hub address's agent, without a
+// project's key.
+func HubAgentOf(agent string) string {
+	id, _, _ := strings.Cut(agent, HubProjectSep)
+	return id
+}
+
 // HubMCPAll is the hub for any other app (Cursor, VS Code, a script): one
 // address with every server in the Library, ticked for an agent or not.
 // It is the agent "" to Hub.
@@ -650,7 +663,7 @@ func (s *Server) hubMCPCall(r *http.Request, agent string, m mcpMessage) (any, m
 		if agent == "" {
 			return nil, map[string]any{"code": -32602, "message": "unknown tool " + p.Name + ": no MCP server in magpie's Library gives it"}
 		}
-		return nil, map[string]any{"code": -32602, "message": "unknown tool " + p.Name + ": no MCP server switched on for " + agent + " in magpie's Library gives it"}
+		return nil, map[string]any{"code": -32602, "message": "unknown tool " + p.Name + ": no MCP server switched on for " + HubAgentOf(agent) + " in magpie's Library gives it"}
 	}
 	return nil, map[string]any{"code": -32601, "message": "method not found: " + m.Method}
 }
@@ -715,7 +728,7 @@ func (s *Server) hubMCPRun(r *http.Request, agent string, t hubTool, args json.R
 	// the request log names the Library's server, and the agent the hub is mounted for
 	use := mcpUseOf(r.Context())
 	use.on(t.Server)
-	use.as(agent)
+	use.as(HubAgentOf(agent))
 	use.named(t.name)
 	// every hub call comes here: a tool the gateway key may not use is
 	// refused whichever way it was found

@@ -5672,7 +5672,7 @@ magpie.plugin("library", (ctx) => {
     const all = projectAgents();
     const shown = projectShown.get(p.dir) || new Set();
     projectShown.set(p.dir, shown);
-    const has = (s) => !!(p.skills[s.name]?.length || p.problems?.[s.name]);
+    const has = (s) => !!(p.skills[s.name]?.length || p.problems?.[s.name] || p.skillsOff?.[s.name]?.length);
     for (const s of lib.skills) if (has(s)) shown.add(s.name);
     opts.append(projectSkillsPick(p, all, has));
     card.append(opts);
@@ -5692,13 +5692,11 @@ magpie.plugin("library", (ctx) => {
       const on = p.skills[s.name] || [];
       // an agent reading the same folder as one that has it has it too
       const via = (a) => { const o = on.find((id) => agentOf(id)?.projectSkills === a.projectSkills); return o ? nameOf(o) : ""; };
-      row.append(mark(s.icon, GLYPH.skill), w, agentChips(all, on, projectChange("projects/skill", p.dir, s.name, (next) => next.length
-        ? t("{skill} is in {name} for {agents}", { skill: s.name, name: p.name, agents: next.map(nameOf).join(", ") })
-        : t("{skill} is out of {name}", { skill: s.name, name: p.name })), { via }));
+      row.append(mark(s.icon, GLYPH.skill), w, scopedChips(p, s, all, "skill", { via, cantOff: routedOff }));
       card.append(row);
     }
     const dirs = [...new Set(all.map((a) => a.projectSkills))];
-    card.append(el("p", "lib-aside lib-projfoot", t("Placed in {dirs} of the project and listed in its .gitignore. A folder there that isn't magpie's is left as it is.", { dirs: dirs.join(", ") })));
+    card.append(el("p", "lib-aside lib-projfoot", t("Placed in {dirs} of the project and kept out of git, its .gitignore untouched. A folder there that isn't magpie's is left as it is.", { dirs: dirs.join(", ") })));
     const skip = shownAgents().filter((a) => a.skills && !a.projectSkills);
     if (skip.length) card.append(el("p", "lib-aside lib-projfoot", t("{agents} reads no project skills folder magpie knows of.", { agents: skip.map((a) => a.name).join(", ") })));
     return card;
@@ -5711,10 +5709,30 @@ magpie.plugin("library", (ctx) => {
   // taken out of the project. The rest keep their agents.
   function projectSkillsPick(p, all, has) {
     const b = menuButton(t("Skills"), "lib-projpick", () => {
-      const now = lib.skills.filter(has).map((s) => s.name);
+      // a skill from the Library is ticked while on in the project for
+      // an agent that can have it turned off here; unticking turns it off
+      const offIds = all.filter((a) => a.projectSkillOff).map((a) => a.id);
+      const global = (s) => (s.agents || []).filter((id) => offIds.includes(id) && !routedOff(agentOf(id) || { name: id }, s));
+      const inherited = (s) => !p.skills[s.name]?.length && global(s).some((id) => !(p.skillsOff?.[s.name] || []).includes(id));
+      const now = lib.skills.filter((s) => p.skills[s.name]?.length || p.problems?.[s.name] || inherited(s)).map((s) => s.name);
       const opts = lib.skills.map((s) => ({ v: s.name, name: s.name, literalName: true, note: "" }));
       openProtoMenu(b, opts, now, async (next) => {
-        const adds = next.filter((n) => !now.includes(n)), outs = now.filter((n) => !next.includes(n));
+        const byName = (n) => lib.skills.find((s) => s.name === n);
+        let adds = next.filter((n) => !now.includes(n)), outs = now.filter((n) => !next.includes(n));
+        // from the Library: on and off in the project, not the project's own
+        const back = adds.filter((n) => p.skillsOff?.[n]?.length);
+        const offs = outs.filter((n) => inherited(byName(n)));
+        adds = adds.filter((n) => !back.includes(n));
+        outs = outs.filter((n) => !offs.includes(n));
+        if (back.length) {
+          await change("projects/skill-off", { dir: p.dir, names: back, agents: [] }, t("{item} is back on in {name}", { item: back.join(", "), name: p.name }));
+        }
+        if (offs.length) {
+          const shown = projectShown.get(p.dir);
+          for (const n of offs) shown?.add(n);
+          const ids = [...new Set(offs.flatMap((n) => global(byName(n))))];
+          await change("projects/skill-off", { dir: p.dir, names: offs, agents: ids }, t("{item} is off in {name} for {agents}", { item: offs.join(", "), name: p.name, agents: ids.map(nameOf).join(", ") }));
+        }
         const ids = new Set(all.map((a) => a.id));
         const used = [...new Set(Object.values(p.skills || {}).flat())].filter((id) => ids.has(id));
         const agents = used.length ? used : all.filter((a) => !a.gone && !a.unseen && !a.asleep).map((a) => a.id);
@@ -5742,9 +5760,9 @@ magpie.plugin("library", (ctx) => {
   // answered the first counts from it; the clicks are sent one at a time,
   // the last of them winning, and the page drawn again once they're in.
   const projectWriting = new Map();
-  function projectChange(path, dir, name, done) {
+  function projectChange(path, dir, name, done, offs = false) {
     return async (next, c) => {
-      const on = next.includes(c.dataset.agent);
+      const on = offs ? !next.includes(c.dataset.agent) : next.includes(c.dataset.agent);
       c.classList.toggle("on", on);
       if (on) c.classList.remove("via");
       c.setAttribute("aria-pressed", on ? "true" : "false");
@@ -5771,6 +5789,42 @@ magpie.plugin("library", (ctx) => {
     };
   }
 
+  // A project is the Library's global set with its own added and some of
+  // the global ones turned off there. A row's chip is lit for an agent
+  // that has the item in the project: given it in the Library (and not
+  // turned off here), or by the project. A click on an agent that has it
+  // from the Library turns it off, or back on, in this project alone; an
+  // agent that can't have one turned off for a project keeps it lit, and
+  // says so.
+  function scopedChips(p, item, all, kind, opts = {}) {
+    const skill = kind === "skill";
+    const global = (id) => (item.agents || []).includes(id) && !item.hidden;
+    const canOff = (a) => (skill ? a.projectSkillOff : a.projectOff) && !opts.cantOff?.(a, item);
+    const offs = ((skill ? p.skillsOff : p.serversOff) || {})[item.name] || [];
+    const own = ((skill ? p.skills : p.servers) || {})[item.name] || [];
+    const on = all.filter((a) => (global(a.id) ? !offs.includes(a.id) : own.includes(a.id))).map((a) => a.id);
+    const path = skill ? "projects/skill" : "projects/server";
+    const say = (next) => next.length
+      ? t(skill ? "{skill} is in {name} for {agents}" : "{server} is in {name} for {agents}", { skill: item.name, server: item.name, name: p.name, agents: next.map(nameOf).join(", ") })
+      : t(skill ? "{skill} is out of {name}" : "{server} is out of {name}", { skill: item.name, server: item.name, name: p.name });
+    const add = projectChange(path, p.dir, item.name, say);
+    const off = projectChange(path + "-off", p.dir, item.name, (next) => next.length
+      ? t("{item} is off in {name} for {agents}", { item: item.name, name: p.name, agents: next.map(nameOf).join(", ") })
+      : t("{item} is back on in {name}", { item: item.name, name: p.name }), true);
+    const change = (next, c) => {
+      if (!global(c.dataset.agent)) return add(next.filter((id) => !global(id)), c);
+      return off(all.filter((a) => global(a.id) && canOff(a) && !next.includes(a.id)).map((a) => a.id), c);
+    };
+    const always = (a) => global(a.id) && !canOff(a) ? opts.cantOff?.(a, item) || t("{agent} has it from the Library, and can't have it turned off in one project", { agent: a.name }) : "";
+    return agentChips(all, on, change, { ...opts, always });
+  }
+
+  // A skill the skill router lists is reached through the router's own
+  // skill, which a project can't turn one off in.
+  const routedOff = (a, s) => lib.skillRouter && s.router !== "direct" && !s.manual
+    ? t("{agent} reaches {skill} through the skill router, which can't leave it out in one project: set it to not go through the router first", { agent: a.name, skill: s.name })
+    : "";
+
   // The project's card, open on the MCP tab: each library server with the
   // chips of the agents that read a project's own servers.
   function projectServers(p, card) {
@@ -5785,13 +5839,11 @@ magpie.plugin("library", (ctx) => {
       const sub = el("div", "sub mono", problem || serverLine(s));
       sub.title = problem || serverLine(s);
       w.append(sub);
-      row.append(mark(s.icon, s.transport === "stdio" ? GLYPH.cmd : GLYPH.web), w, agentChips(all, p.servers?.[s.name] || [], projectChange("projects/server", p.dir, s.name, (next) => next.length
-        ? t("{server} is in {name} for {agents}", { server: s.name, name: p.name, agents: next.map(nameOf).join(", ") })
-        : t("{server} is out of {name}", { server: s.name, name: p.name })), { blocked: sseBlocked(s) }));
+      row.append(mark(s.icon, s.transport === "stdio" ? GLYPH.cmd : GLYPH.web), w, scopedChips(p, s, all, "server", { blocked: sseBlocked(s) }));
       card.append(row);
     }
     if (!lib.servers.length) card.append(el("p", "lib-aside lib-projfoot", t("No servers in the library yet")));
-    card.append(el("p", "lib-aside lib-projfoot", t("Written into {files} of the project, beside what's in them; a file magpie makes is listed in its .gitignore. A server there by the same name that isn't magpie's is left as it is.", { files: projectFiles() })));
+    card.append(el("p", "lib-aside lib-projfoot", t("Written into {files} of the project, beside what's in them; a file magpie makes is kept out of git, its .gitignore untouched. A server there by the same name that isn't magpie's is left as it is.", { files: projectFiles() })));
     card.append(el("p", "lib-aside lib-projfoot", t("Claude Code asks before it starts a project's servers; Codex reads .codex/config.toml, and Pi .pi/mcp.json, only in a project you trust.")));
     const skip = shownAgents().filter((a) => a.mcp && !a.projectMCP);
     if (skip.length) card.append(el("p", "lib-aside lib-projfoot", t("{agents} reads no project MCP file magpie knows of.", { agents: skip.map((a) => a.name).join(", ") })));
@@ -5812,8 +5864,8 @@ magpie.plugin("library", (ctx) => {
     keep.type = "checkbox";
     const tell = () => {
       say.textContent = keep.checked
-        ? t("magpie forgets the project. The skills and MCP servers it put in the folder stay there as they are, with their lines in its .gitignore, and are yours from then on; a linked skill still follows the library's.")
-        : t("The skills and MCP servers magpie put in it are taken away, with their lines in its .gitignore. Nothing else in the folder is touched.");
+        ? t("magpie forgets the project. The skills and MCP servers it put in the folder stay there as they are, kept out of git, and are yours from then on; a linked skill still follows the library's.")
+        : t("The skills and MCP servers magpie put in it are taken away. Nothing else in the folder is touched.");
     };
     keep.onchange = tell;
     if (has) {

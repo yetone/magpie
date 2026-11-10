@@ -19,6 +19,7 @@ func mcpProject(t *testing.T) (h, proj string) {
 	ok(t)(SaveServer("", Server{Name: "docs", Transport: "http", URL: "https://docs.example/mcp"}))
 	proj = filepath.Join(t.TempDir(), "app")
 	write(t, filepath.Join(proj, ".gitignore"), "node_modules/\n")
+	gitInit(t, proj)
 	write(t, filepath.Join(proj, ".mcp.json"), `{
   // the team's own
   "mcpServers": {"team": {"command": "team-mcp"}},
@@ -81,14 +82,14 @@ func TestProjectServers(t *testing.T) {
 		t.Error("a user-wide file was written")
 	}
 	// the files magpie made are kept out of git; the user's .mcp.json isn't
-	g := read(t, filepath.Join(proj, ".gitignore"))
+	g := excluded(t, proj)
 	for _, f := range []string{"/.codex/config.toml", "/.gemini/settings.json", "/.cursor/mcp.json", "/opencode.json"} {
 		if !strings.Contains(g, f+"\n") {
-			t.Errorf(".gitignore lacks %s:\n%s", f, g)
+			t.Errorf("info/exclude lacks %s:\n%s", f, g)
 		}
 	}
-	if strings.Contains(g, ".mcp.json") {
-		t.Errorf(".gitignore lists the user's .mcp.json:\n%s", g)
+	if strings.Contains(g, "/.mcp.json") {
+		t.Errorf("info/exclude lists the user's .mcp.json:\n%s", g)
 	}
 	v, _ := Read(nil)
 	if len(v.Projects) != 1 || !slices.Equal(v.Projects[0].Wrote[".mcp.json"], []string{"docs", "fs"}) {
@@ -106,8 +107,8 @@ func TestProjectServers(t *testing.T) {
 	for _, f := range []string{".codex", ".gemini", ".cursor", "opencode.json"} {
 		gone(t, filepath.Join(proj, f))
 	}
-	if g := read(t, filepath.Join(proj, ".gitignore")); g != "node_modules/\n" {
-		t.Errorf(".gitignore: %q", g)
+	if g := excluded(t, proj); g != "" {
+		t.Errorf("info/exclude: %q", g)
 	}
 
 	// removing the project takes out only magpie's entries
@@ -143,7 +144,7 @@ func TestProjectServerNotOurs(t *testing.T) {
 	}
 }
 
-// What the user adds to a file magpie made keeps it, out of .gitignore.
+// What the user adds to a file magpie made keeps it, out of info/exclude.
 func TestProjectServerFileKept(t *testing.T) {
 	_, proj := mcpProject(t)
 	ok(t)(ProjectServer(proj, "fs", []string{"cursor"}))
@@ -156,8 +157,8 @@ func TestProjectServerFileKept(t *testing.T) {
 	if s := servers(t, p, "mcpServers"); len(s) != 0 || jsonOf(t, p)["theirs"] != true {
 		t.Errorf("%s:\n%s", p, read(t, p))
 	}
-	if g := read(t, filepath.Join(proj, ".gitignore")); strings.Contains(g, "cursor") {
-		t.Errorf(".gitignore: %q", g)
+	if g := excluded(t, proj); strings.Contains(g, "cursor") {
+		t.Errorf("info/exclude: %q", g)
 	}
 }
 
@@ -256,9 +257,9 @@ func TestProjectServersZCodePi(t *testing.T) {
 	if ps["events"] != nil {
 		t.Errorf("pi got an SSE server: %v", ps)
 	}
-	g := read(t, filepath.Join(proj, ".gitignore"))
+	g := excluded(t, proj)
 	if !strings.Contains(g, "/.pi/mcp.json\n") || strings.Contains(g, ".zcode") {
-		t.Errorf(".gitignore:\n%s", g)
+		t.Errorf("info/exclude:\n%s", g)
 	}
 	if now, _ := os.ReadFile(userZC); string(now) != string(userWas) {
 		t.Errorf("ZCode's own file was written:\n%s", now)
@@ -278,8 +279,8 @@ func TestProjectServersZCodePi(t *testing.T) {
 		t.Errorf("zcode after:\n%s", read(t, zc))
 	}
 	gone(t, filepath.Join(proj, ".pi"))
-	if g := read(t, filepath.Join(proj, ".gitignore")); g != "node_modules/\n" {
-		t.Errorf(".gitignore after: %q", g)
+	if g := excluded(t, proj); g != "" {
+		t.Errorf("info/exclude after: %q", g)
 	}
 }
 

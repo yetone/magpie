@@ -23,10 +23,10 @@ func TestProjectSkillsMoreAgents(t *testing.T) {
 			t.Errorf("%s: %v", e, err)
 		}
 	}
-	g := read(t, filepath.Join(proj, ".gitignore"))
+	g := excluded(t, proj)
 	for _, e := range []string{"/.qoder/skills/pdf", "/.codebuddy/skills/pdf", "/.commandcode/skills/pdf", "/.agents/skills/pdf"} {
 		if !strings.Contains(g, e+"\n") {
-			t.Errorf(".gitignore lacks %s:\n%s", e, g)
+			t.Errorf("info/exclude lacks %s:\n%s", e, g)
 		}
 	}
 	// Qoder CN shares Qoder's project folder: one of the two taken away
@@ -38,8 +38,8 @@ func TestProjectSkillsMoreAgents(t *testing.T) {
 	gone(t, filepath.Join(proj, ".codebuddy"))
 	ok(t)(RemoveProject(proj, false))
 	gone(t, filepath.Join(proj, ".qoder"))
-	if g := read(t, filepath.Join(proj, ".gitignore")); g != "node_modules/\n" {
-		t.Errorf(".gitignore after: %q", g)
+	if g := excluded(t, proj); g != "" {
+		t.Errorf("info/exclude after: %q", g)
 	}
 }
 
@@ -86,9 +86,9 @@ func TestProjectServersQoderCodeBuddyDroid(t *testing.T) {
 	if d := servers(t, f, "mcpServers"); d["fs"].(map[string]any)["type"] != "stdio" || d["docs"].(map[string]any)["type"] != "http" || d["events"] == nil {
 		t.Errorf("droid: %v", d)
 	}
-	g := read(t, filepath.Join(proj, ".gitignore"))
+	g := excluded(t, proj)
 	if !strings.Contains(g, "/.factory/mcp.json\n") || strings.Contains(g, ".qoder") || strings.Contains(g, "/.mcp.json") {
-		t.Errorf(".gitignore:\n%s", g)
+		t.Errorf("info/exclude:\n%s", g)
 	}
 	if _, err := os.Stat(filepath.Join(h, ".qoder", "settings.json")); err == nil {
 		t.Error("Qoder's user-wide settings were written")
@@ -143,8 +143,8 @@ func TestProjectSkillsDsh(t *testing.T) {
 	if !isLink(t, p) || !ours(p, "pdf") {
 		t.Errorf("%s isn't a link to the library's", p)
 	}
-	if g := read(t, filepath.Join(proj, ".gitignore")); !strings.Contains(g, "/.agents/skills/pdf\n") {
-		t.Errorf(".gitignore lacks /.agents/skills/pdf:\n%s", g)
+	if g := excluded(t, proj); !strings.Contains(g, "/.agents/skills/pdf\n") {
+		t.Errorf("info/exclude lacks /.agents/skills/pdf:\n%s", g)
 	}
 	v, err := Read(nil)
 	if err != nil {

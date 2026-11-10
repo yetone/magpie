@@ -106,7 +106,12 @@ func formatOfRel(rel string) (mcpFormat, bool) {
 // agent's file there, and takes out those magpie wrote that it no longer
 // has; an entry by the same name that magpie didn't write is left as it
 // is, and so is everything else in the file.
-func (l *Library) syncProjectMCP(p *Project, fail func(what string, err error)) {
+//
+// hubs are the router's entries the project gives an agent (projectHubs):
+// a server the router serves goes to that agent through its entry, not as
+// an entry of its own, and Codex's is written in its file here (Claude
+// Code's is in its own record of the project, syncClaudeLocal).
+func (l *Library) syncProjectMCP(p *Project, hubs map[string]*Server, fail func(what string, err error)) {
 	want := map[string][]*Server{} // the file → its servers
 	for _, name := range slices.Sorted(func(yield func(string) bool) {
 		for n := range p.Servers {
@@ -123,7 +128,7 @@ func (l *Library) syncProjectMCP(p *Project, fail func(what string, err error)) 
 		}
 		for _, id := range p.Servers[name] {
 			rel, format := p.mcpRel(id)
-			if rel == "" {
+			if rel == "" || hubs[id] != nil && inHub(s, id) {
 				continue
 			}
 			if err := (&mcpFile{Format: format}).supports(s); err != nil {
@@ -138,6 +143,10 @@ func (l *Library) syncProjectMCP(p *Project, fail func(what string, err error)) 
 			}
 		}
 	}
+	if hs := hubs["codex"]; hs != nil {
+		want[codexOffRel] = append(want[codexOffRel], hs)
+	}
+	l.syncCodexOff(p, fail)
 	files := map[string]bool{}
 	for rel := range want {
 		files[rel] = true
@@ -231,6 +240,9 @@ func (l *Library) syncProjectMCP(p *Project, fail func(what string, err error)) 
 			wrote[rel] = mine
 			continue
 		}
+		if rel == codexOffRel && len(p.CodexOff) > 0 {
+			continue // the servers it turns off are in it still
+		}
 		// a file magpie made goes once nothing is left in it; one with
 		// anything of the user's in it is the user's from then on
 		if i := slices.Index(p.MadeFiles, rel); i >= 0 {
@@ -242,6 +254,9 @@ func (l *Library) syncProjectMCP(p *Project, fail func(what string, err error)) 
 			}
 			p.MadeFiles = slices.Delete(p.MadeFiles, i, i+1)
 		}
+	}
+	if len(p.CodexOff) == 0 && wrote[codexOffRel] == nil {
+		p.dropMadeFile(codexOffRel)
 	}
 	if len(wrote) == 0 {
 		wrote = nil

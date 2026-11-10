@@ -858,6 +858,8 @@ func KeepLinked(ctx context.Context, interval time.Duration) {
 		}
 		// what was ticked for a stopped WSL distro's agents, once it runs
 		keepWoken()
+		// a git worktree made or removed beside a project follows it
+		keepProjectTrees()
 		// Claude Code's auto-compaction beside a bili plugin magpie
 		// installed before it kept it on
 		keepBiliCompact()

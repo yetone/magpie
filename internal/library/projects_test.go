@@ -25,7 +25,7 @@ func gone(t *testing.T, p string) {
 }
 
 // projectLib is a sandbox with a library skill pdf (from a folder) and a
-// project folder with a .gitignore of the user's.
+// project folder in git with a .gitignore of the user's.
 func projectLib(t *testing.T) (h, proj string) {
 	h = sandbox(t)
 	src := filepath.Join(h, "src")
@@ -34,8 +34,26 @@ func projectLib(t *testing.T) (h, proj string) {
 	ok(t)(InstallSkills(src, []string{"pdf", "docx"}, nil))
 	proj = filepath.Join(t.TempDir(), "app")
 	write(t, filepath.Join(proj, ".gitignore"), "node_modules/\n")
+	gitInit(t, proj)
 	ok(t)(AddProject(proj))
 	return h, proj
+}
+
+// gitInit makes dir a repository's top folder, as git init does.
+func gitInit(t *testing.T, dir string) {
+	t.Helper()
+	write(t, filepath.Join(dir, ".git", "HEAD"), "ref: refs/heads/main\n")
+}
+
+// excluded is magpie's block in the repository's info/exclude for proj,
+// and checks the project's own .gitignore is as the user wrote it.
+func excluded(t *testing.T, proj string) string {
+	t.Helper()
+	if g := read(t, filepath.Join(proj, ".gitignore")); g != "node_modules/\n" {
+		t.Errorf(".gitignore was changed: %q", g)
+	}
+	b, _ := os.ReadFile(filepath.Join(proj, ".git", "info", "exclude"))
+	return string(b)
 }
 
 func TestProjectSkillsLinked(t *testing.T) {
@@ -50,9 +68,9 @@ func TestProjectSkillsLinked(t *testing.T) {
 			t.Errorf("%s: %v", e, err)
 		}
 	}
-	want := "node_modules/\n\n" + ignoreBegin + "\n/.agents/skills/pdf\n/.claude/skills/pdf\n" + ignoreEnd + "\n"
-	if g := read(t, filepath.Join(proj, ".gitignore")); g != want {
-		t.Errorf(".gitignore:\n%s", g)
+	want := excludeBegin(proj) + "\n/.agents/skills/pdf\n/.claude/skills/pdf\n" + ignoreEnd + "\n"
+	if g := excluded(t, proj); g != want {
+		t.Errorf("info/exclude:\n%s", g)
 	}
 	v, _ := Read(nil)
 	if len(v.Projects) != 1 || !slices.Equal(v.Projects[0].Skills["pdf"], []string{"claude", "codex", "gemini"}) {
@@ -67,15 +85,15 @@ func TestProjectSkillsLinked(t *testing.T) {
 	ok(t)(ProjectSkill(proj, "pdf", []string{"codex"}))
 	gone(t, filepath.Join(proj, ".claude/skills/pdf"))
 	gone(t, filepath.Join(proj, ".claude")) // magpie made it, and it's empty
-	if g := read(t, filepath.Join(proj, ".gitignore")); strings.Contains(g, ".claude") || !strings.Contains(g, "/.agents/skills/pdf") {
-		t.Errorf(".gitignore:\n%s", g)
+	if g := excluded(t, proj); strings.Contains(g, ".claude") || !strings.Contains(g, "/.agents/skills/pdf") {
+		t.Errorf("info/exclude:\n%s", g)
 	}
 
 	// removing the project takes away all it placed, and its lines
 	ok(t)(RemoveProject(proj, false))
 	gone(t, filepath.Join(proj, ".agents"))
-	if g := read(t, filepath.Join(proj, ".gitignore")); g != "node_modules/\n" {
-		t.Errorf(".gitignore after: %q", g)
+	if g := excluded(t, proj); g != "" {
+		t.Errorf("info/exclude after: %q", g)
 	}
 	if v, _ := Read(nil); len(v.Projects) != 0 {
 		t.Errorf("projects: %+v", v.Projects)
@@ -119,16 +137,56 @@ func TestProjectSkillsPickSome(t *testing.T) {
 	gone(t, filepath.Join(proj, ".agents/skills/docx"))
 }
 
-func TestProjectGitignoreMadeAndTakenAway(t *testing.T) {
+// Nothing of magpie's goes into the project's git (WhyULose0 on X): the
+// lines an earlier magpie wrote in its .gitignore come out, and what it
+// places is listed in the repository's info/exclude, which git never
+// commits, git's and the user's lines there kept.
+func TestProjectKeptOutOfGitByExclude(t *testing.T) {
 	_, proj := projectLib(t)
-	os.Remove(filepath.Join(proj, ".gitignore"))
+	old := "node_modules/\n\n" + ignoreBegin + "\n/.claude/skills/pdf\n" + ignoreEnd + "\n"
+	write(t, filepath.Join(proj, ".gitignore"), old)
+	write(t, filepath.Join(proj, ".git", "info", "exclude"), "# git ls-files --others --exclude-from=.git/info/exclude\n*.swp\n")
 	ok(t)(ProjectSkill(proj, "docx", []string{"claude"}))
-	if g := read(t, filepath.Join(proj, ".gitignore")); g != ignoreBegin+"\n/.claude/skills/docx\n"+ignoreEnd+"\n" {
-		t.Errorf(".gitignore: %q", g)
+	if g := excluded(t, proj); g != "# git ls-files --others --exclude-from=.git/info/exclude\n*.swp\n\n"+excludeBegin(proj)+"\n/.claude/skills/docx\n"+ignoreEnd+"\n" {
+		t.Errorf("info/exclude: %q", g)
 	}
 	ok(t)(ProjectSkill(proj, "docx", nil))
-	gone(t, filepath.Join(proj, ".gitignore"))
+	if g := excluded(t, proj); g != "# git ls-files --others --exclude-from=.git/info/exclude\n*.swp\n" {
+		t.Errorf("info/exclude after: %q", g)
+	}
 	gone(t, filepath.Join(proj, ".claude/skills/docx"))
+
+	// a .gitignore magpie made and nothing else is in goes
+	ok(t)(change(func(l *Library) error { l.project(proj).Gitignore = true; return nil }))
+	write(t, filepath.Join(proj, ".gitignore"), ignoreBegin+"\n/.claude/skills/pdf\n"+ignoreEnd+"\n")
+	ok(t)(ProjectSkill(proj, "docx", []string{"claude"}))
+	gone(t, filepath.Join(proj, ".gitignore"))
+}
+
+// A folder outside git gets no ignore file at all; made a repository
+// later, its entries go into the new info/exclude on the next round.
+func TestProjectOutsideGit(t *testing.T) {
+	_, proj := projectLib(t)
+	os.RemoveAll(filepath.Join(proj, ".git"))
+	ok(t)(ProjectSkill(proj, "docx", []string{"claude"}))
+	if g := read(t, filepath.Join(proj, ".gitignore")); g != "node_modules/\n" {
+		t.Errorf(".gitignore: %q", g)
+	}
+	l, _ := load()
+	if l.treesChanged() {
+		t.Error("a folder outside git is synced again every round")
+	}
+	gitInit(t, proj)
+	if l, _ = load(); !l.treesChanged() {
+		t.Fatal("a folder made a repository isn't synced again")
+	}
+	keepProjectTrees()
+	if g := excluded(t, proj); !strings.Contains(g, "/.claude/skills/docx\n") {
+		t.Errorf("info/exclude: %q", g)
+	}
+	if l, _ = load(); l.treesChanged() {
+		t.Error("synced again with nothing changed")
+	}
 }
 
 func TestProjectSkillsCopied(t *testing.T) {
@@ -198,8 +256,8 @@ func TestProjectRefusesForeignFolder(t *testing.T) {
 	if !isLink(t, filepath.Join(proj, ".agents/skills/pdf")) {
 		t.Error("codex's went with it")
 	}
-	if g := read(t, filepath.Join(proj, ".gitignore")); strings.Contains(g, ".claude/skills/pdf") {
-		t.Errorf("the project's own is in .gitignore:\n%s", g)
+	if g := excluded(t, proj); strings.Contains(g, ".claude/skills/pdf") {
+		t.Errorf("the project's own is in info/exclude:\n%s", g)
 	}
 	// removing the project leaves the folder that isn't magpie's
 	ok(t)(ProjectSkill(proj, "pdf", nil))

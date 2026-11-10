@@ -200,11 +200,27 @@ func hubServers(agentID string) []*Server {
 	return l.hubServers(agentID)
 }
 
-// hubServers are the servers the hub gives agentID from l, by name.
+// hubServers are the servers the hub gives agentID from l, by name. An
+// id with a project's key after it (gateway.HubProjectSep, projectHubs)
+// is the agent in that project: the global set with the project's own
+// servers added and those it turns off left out.
 func (l *Library) hubServers(agentID string) []*Server {
+	id, key, scoped := strings.Cut(agentID, gateway.HubProjectSep)
+	var p *Project
+	if scoped {
+		p = l.projectByKey(key)
+	}
 	var out []*Server
 	for _, s := range l.MCP {
-		if (agentID == "" && !s.Hidden || slices.Contains(s.Agents, agentID)) && inHub(s, agentID) {
+		on := id == "" && !s.Hidden || slices.Contains(s.Agents, id)
+		if p != nil {
+			if slices.Contains(p.ServersOff[s.Name], id) {
+				on = false
+			} else if !s.Hidden && slices.Contains(p.Servers[s.Name], id) {
+				on = true
+			}
+		}
+		if on && inHub(s, id) {
 			out = append(out, s)
 		}
 	}
@@ -299,7 +315,7 @@ func (theHub) Call(ctx context.Context, agentID, server, tool string, args json.
 		return nil, errors.New("it isn't in magpie's Library")
 	}
 	if i < 0 {
-		return nil, fmt.Errorf("it isn't switched on for %s in magpie's Library", agentID)
+		return nil, fmt.Errorf("it isn't switched on for %s in magpie's Library", gateway.HubAgentOf(agentID))
 	}
 	s := ss[i]
 	if s.Bridge != "" && gateway.FromRouter(ctx) {
@@ -319,7 +335,7 @@ func (theHub) Call(ctx context.Context, agentID, server, tool string, args json.
 		meta[gateway.HubSessionMeta] = c.Session
 	}
 	if s.Plugin != "" {
-		return pluginHubCall(ctx, agentID, s, tool, args)
+		return pluginHubCall(ctx, gateway.HubAgentOf(agentID), s, tool, args)
 	}
 	return backendOf(s).call(ctx, tool, args, meta)
 }
