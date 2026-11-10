@@ -900,6 +900,12 @@ each one.
     (e39ecfec8, then 0659dc66f). When a test's margin is under a
     deadline that also covers starting something, start it first, and
     fix every test in the file that shares the margin.
+  - The route guard went red a sixth and seventh time before midnight:
+    e053c337a's /api/settings/join and 4623f5419's five
+    /api/settings/https routes. 4623f5419's record says it ran
+    `go test ./internal/cli -run Help|HTTPS|TLS|…`, and a -run filter
+    skips the guard, which was named for none of those words. A change
+    that adds a route runs internal/cli whole, with no -run.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
