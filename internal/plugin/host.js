@@ -340,7 +340,7 @@ function forgetAccount(key) {
 const sessions = new Map() // oauth sign-in in progress → its authorize result
 const inflight = new Map() // fetch id → its lifecycle and owned resources
 const renewing = new Map() // account → its sign-in's renewal under way
-const unrenewed = new Map() // account → its last renewal that failed: {at, secret, gone, error}
+const unrenewed = new Map() // account → its last renewal that failed: {at, secret, gone, error, n}
 let config = { provider: {} } // what the plugins' config hooks made of it
 
 // loadWait bounds one plugin's load (its import and its plugin function)
@@ -2814,12 +2814,33 @@ async function apiKey({ provider, method, inputs, key, account, proxy }, signal)
 // requests that find it due wait for the one renewal (a vendor that spends
 // a refresh token once turns a second away). A renewal that fails leaves
 // the sign-in as it was, for the vendor's answer to tell, and isn't tried
-// again for RENEW_RETRY, or, turned away for good, till it is signed in
-// again.
+// again for RENEW_RETRY, doubled for each failure in a row up to
+// RENEW_RETRY_MOST (retryAfter), or, turned away for good, till it is
+// signed in again. A refresh that gives nothing back while the sign-in is
+// due failed too: magpie-ima-auth's swallows ima's "sign in again" and
+// returns undefined, and every request, models listing and usage read
+// asked ima again, ~80 times a minute for two dead accounts
+// (JZGiVvkSOA75376 on X).
 
 const RENEW_LEAD = 5 * 60 * 1000
 const RENEW_WAIT = 15 * 1000
 const RENEW_RETRY = 30 * 1000
+const RENEW_RETRY_MOST = 30 * 60 * 1000
+
+// retryAfter is how long a sign-in whose renewal failed n times in a row
+// waits before it is tried again.
+function retryAfter(n) {
+  return Math.min(RENEW_RETRY * 2 ** Math.max(0, Math.min(n, 20) - 1), RENEW_RETRY_MOST)
+}
+
+// failedRenewal notes that the sign-in was's renewal at key failed, one
+// more in a row when the last one was of the same sign-in.
+function failedRenewal(key, was, gone, error) {
+  const f = unrenewed.get(key)
+  const secret = secretOf(was)
+  const n = f && f.secret === secret ? (f.n ?? 1) + 1 : 1
+  unrenewed.set(key, { at: Date.now(), secret, gone, error, n })
+}
 
 function leadOf(a) {
   const v = a?.refreshLead
@@ -2836,7 +2857,7 @@ function renewAt(a, stored) {
 
 // renewal is the renewal of the sign-in at key under way, started now if
 // it is due and none is: null when it isn't due, or its last renewal
-// failed less than RENEW_RETRY ago (or for good). A request and the
+// failed less than retryAfter ago (or for good). A request and the
 // background keep-alive (keepSignedIn) share it, so an account is renewed
 // once at a time whoever asks.
 function renewal(provider, key) {
@@ -2847,7 +2868,7 @@ function renewal(provider, key) {
   let r = renewing.get(key)
   if (r) return r
   const f = unrenewed.get(key)
-  if (f && f.secret === secretOf(stored) && (f.gone || Date.now() - f.at < RENEW_RETRY)) return null
+  if (f && f.secret === secretOf(stored) && (f.gone || Date.now() - f.at < retryAfter(f.n ?? 1))) return null
   pending++ // the host doesn't leave in the middle of it
   r = renew(provider, key, a).finally(() => {
     renewing.delete(key)
@@ -3005,12 +3026,17 @@ async function renewLocked(provider, key, a, was) {
       forgetAccount(key)
       return
     }
-    unrenewed.set(key, { at: Date.now(), secret: secretOf(was), gone: e?.signIn === "expired", error: String(e?.message ?? e) })
+    failedRenewal(key, was, e?.signIn === "expired", String(e?.message ?? e))
     if (e?.signIn === "expired") send({ event: "signIn", provider, account: key, said: "expired" })
     send({ event: "log", level: "error", message: `${auths().get(provider)?.spec ?? provider}: auth.refresh: ${e?.message ?? e}` })
     return
   }
-  if (!got || typeof got !== "object") return
+  if (!got || typeof got !== "object") {
+    // nothing to keep while it is due: not renewed, and not asked again
+    // at once (failedRenewal)
+    failedRenewal(key, was, false, "")
+    return
+  }
   // signed out, signed in again or renewed by another host while it ran:
   // that one stands. Checked under the lock the save is made under, so
   // nothing comes between the two.

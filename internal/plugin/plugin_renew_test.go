@@ -20,7 +20,8 @@ import (
 // so, each of them sent with the new one; one with time left, or no
 // expiry, isn't renewed; one the vendor turns away is marked expired and
 // not tried again, and one that can't be renewed goes with the old token
-// and isn't tried again at once.
+// and isn't tried again at once, nor is one whose refresh gives nothing
+// back while it is due (magpie-ima-auth's, JZGiVvkSOA75376 on X).
 func TestPluginRenewsSignIns(t *testing.T) {
 	sandbox(t)
 	var mu sync.Mutex
@@ -59,6 +60,7 @@ func TestPluginRenewsSignIns(t *testing.T) {
 	never := account("never@renew", "r-ok-never", 0)
 	gone := account("gone@renew", "r-gone", soon)
 	down := account("down@renew", "r-down", soon)
+	none := account("none@renew", "r-none", time.Now().Add(-time.Minute).UnixMilli())
 	send := func(account string) string {
 		t.Helper()
 		res, err := Fetch(ctx, FetchRequest{Provider: "renewco", Account: account, Model: "renew-1", NPM: "@ai-sdk/openai-compatible",
@@ -135,7 +137,14 @@ func TestPluginRenewsSignIns(t *testing.T) {
 		t.Fatalf("an account that couldn't renew went with %q", h)
 	}
 	send(down)
-	if got := renewals(); strings.Join(got, " ") != "r-ok r-gone r-down" {
+	// renewed nothing, its token past its end: sent as it is, and the
+	// next request doesn't ask the plugin again
+	if h := send(none); h != "Bearer old-none@renew" {
+		t.Fatalf("an account its plugin renewed nothing for went with %q", h)
+	}
+	send(none)
+	send(none)
+	if got := renewals(); strings.Join(got, " ") != "r-ok r-gone r-down r-none" {
 		t.Fatalf("renewals = %v", got)
 	}
 	if a := stored(gone); a["access"] != "old-gone@renew" {
