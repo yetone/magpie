@@ -40,7 +40,9 @@ func (u *updater) restartBeside(version string) gateway.RestartReply {
 		return gateway.RestartReply{State: "unsupported"}
 	}
 	reply := gateway.RestartReply{Handover: handsOver()}
-	if waiting, _ := u.waitingFor(); !waiting && u.idle() {
+	// nor while the user is using a window (inUseAt): the terminal's
+	// command isn't theirs in the window
+	if waiting, _ := u.waitingFor(); !waiting && u.idle() && !inUseAt(time.Now()) {
 		reply.State = "restarting"
 		go restart() // after the answer: the restart lets this request finish
 		return reply

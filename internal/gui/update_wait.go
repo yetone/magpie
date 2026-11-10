@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/yetone/magpie/internal/gateway"
@@ -24,6 +25,46 @@ var (
 	waitMost   = time.Hour
 	waitTick   = time.Second
 )
+
+// A restart by itself (Settings' AutoRestart) also waits while the user
+// is using one of magpie's own windows (BESTLJP0412 on X: the window
+// closed and came back mid-way through adding a provider). Each page
+// tells the app of the user's input (`POST /api/update/using`, a press, a
+// key, typing or the wheel, at most every 20s), and whether a dialog is
+// open (#modal); the app counts it in use for usingFor after that input,
+// or openFor with a dialog open, which may hold a form half filled in.
+// A restart the user asked for (a click, `magpie update`) doesn't wait
+// for it: they are the one using magpie.
+var (
+	usingFor = 2 * time.Minute
+	openFor  = 15 * time.Minute
+)
+
+// usedAt is when a page last told of input (Unix nanoseconds), usedOpen
+// whether a dialog was open then.
+var (
+	usedAt   atomic.Int64
+	usedOpen atomic.Bool
+)
+
+// noteUse is a page's word of the user's input at now.
+func noteUse(open bool, now time.Time) {
+	usedOpen.Store(open)
+	usedAt.Store(now.UnixNano())
+}
+
+// inUseAt is whether the user was using a window lately enough at now.
+func inUseAt(now time.Time) bool {
+	at := usedAt.Load()
+	if at == 0 {
+		return false
+	}
+	gap, most := now.Sub(time.Unix(0, at)), usingFor
+	if usedOpen.Load() {
+		most = openFor
+	}
+	return gap < most
+}
 
 // gatewayBusy is what the gateway this process serves has in flight;
 // nothing when another magpie serves it, which a restart here leaves be.
@@ -127,6 +168,12 @@ func (u *updater) waitFor(gen int) {
 			continue
 		}
 		u.mu.Lock()
+		asked := u.waitAsked
+		u.mu.Unlock()
+		if !asked && inUseAt(time.Now()) {
+			continue
+		}
+		u.mu.Lock()
 		// another magpie put the update in (restartBeside): that is what
 		// the restart goes into, whatever the feed answers now
 		in := u.replaced()
@@ -135,9 +182,6 @@ func (u *updater) waitFor(gen int) {
 		case in:
 		case st == "ready":
 			// a newer version out since is downloaded first, and waited for
-			u.mu.Lock()
-			asked := u.waitAsked
-			u.mu.Unlock()
 			waitRecheck(u, asked)
 			if u.asking() || u.json().State != "ready" {
 				continue
@@ -167,7 +211,8 @@ func (u *updater) waitFor(gen int) {
 
 // autoTick, with Settings' AutoRestart on (and automatic updates), has a
 // downloaded update restarted into once the gateway is idle (#2096). The
-// wait is waitIdle's, so a restart never cuts a request short; one that
+// wait is waitIdle's, so a restart never cuts a request short, nor comes
+// while the user is using a window (inUseAt); one that
 // ran out (gaveUp) is waited for again on the next tick, and one the user
 // called off isn't, for that version.
 func (u *updater) autoTick(s settings.Settings) {

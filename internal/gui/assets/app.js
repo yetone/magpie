@@ -4352,31 +4352,36 @@ function recoveredOnce() {
     : t("{file} was damaged (the computer likely stopped mid-write), so magpie restored it from its backup. A change made after that may be missing; the damaged file is kept beside it.", { file: files }), "warn", 20000);
 }
 
-// installFrom is what a restart to update tells the app: the window's tab,
-// for the new version to open its window there (Windows, Linux).
+// installFrom: the window's tab, for the new version to open on (Windows, Linux)
 function installFrom() {
   return mode === "window" ? { view } : {};
 }
 
-// updateBusy says what a restart would cut short (#577): the agents'
-// requests in flight through the gateway, the Claude Code turns waiting on
-// their tool results.
-function updateBusyText(b) {
-  const parts = [];
+// updateBusy: what a restart would cut short (#577), and the window in use
+function updateBusyText(b, using) {
+  const parts = using ? [t("waiting while you use magpie")] : [];
   if (b?.requests) parts.push(t("{n} in flight", { n: b.requests }));
   if (b?.tools) parts.push(t("{n} awaiting tool results", { n: b.tools }));
   return parts.join(" · ");
 }
 
-// updatePath asks for the update's state or the release notes in the
-// page's language: the notes follow Settings' language, Chinese where a
-// release has it (freecss on Discord).
+// updatePath: the update's state or notes in the page's language (freecss on Discord)
 function updatePath(p) {
   return p + (p.includes("?") ? "&" : "?") + "lang=" + encodeURIComponent(locale);
 }
 
+// input: in use, so an update waits (inUseAt)
+let usedAt = 0, usedOpen;
+for (const k of "pointerdown keydown input wheel".split(" ")) addEventListener(k, () => {
+  const open = $("#modal")?.hidden === false, now = Date.now();
+  if (now - usedAt < 2e4 && open === usedOpen) return;
+  usedAt = now, usedOpen = open;
+  api("update/using", { open }).catch(() => {});
+}, true);
+
 // renderUpdateBadge shows the header's Update pill once a newer magpie is
 // downloaded or out; Settings or its × keeps it away.
+
 async function renderUpdateBadge() {
   const b = $("#update"), label = b.querySelector("span");
   const u = await api(updatePath("update")).catch(() => null);
@@ -4427,7 +4432,7 @@ async function renderUpdateBadge() {
   // click, not as "now"
   if (u.state === "ready" && u.waiting) {
     label.textContent = t("Waiting to update");
-    const a = { v: u.latest, busy: updateBusyText(u.busy) || "…" };
+    const a = { v: u.latest, busy: updateBusyText(u.busy, u.using) || "…" };
     b.title = u.handover ? t("magpie restarts to update to {v} once the replies through a Claude subscription have finished: {busy}. Other requests carry on across the restart. Click to restart now.", a) : t("magpie restarts to update to {v} once the agents' requests through the gateway have finished: {busy}. Click to restart now.", a);
     b.onclick = () => {
       if (Date.now() - (+b.dataset.armed || 0) < 1500) return;
@@ -4469,9 +4474,8 @@ async function renderUpdateBadge() {
   };
 }
 
-// downloadingText is the pill's word while an update downloads: its percent
-// (none while the size is unknown: "NaN%", inaction on Discord) and speed,
-// then the step after the bytes, never still (esir_tech on Discord)
+// downloadingText: the pill's percent (none for an unknown size, inaction on
+// Discord) and speed, then the step after the bytes (esir_tech on Discord)
 const UPDATE_STEPS = { retry: "Reconnecting…", verify: "Verifying…", unpack: "Unpacking…", signature: "Checking signature…" };
 function downloadingText(u) {
   const p = u?.total > 0 ? Math.floor(((u.done || 0) / u.total) * 100) : NaN, s = UPDATE_STEPS[u?.step];
@@ -4480,14 +4484,12 @@ function downloadingText(u) {
 }
 const speedText = (b) => (b >= 1e6 ? t("{n} MB/s", { n: (b / 1e6).toFixed(1) }) : t("{n} KB/s", { n: Math.max(1, Math.round(b / 1e3)) }));
 
-// updatePillOff is whether the user keeps the Update pill away for v.
 function updatePillOff(v) {
   const s = state?.settings || {};
   return !!s.noUpdatePill || (!!v && s.updateSkip === v);
 }
 
-// skipUpdate hides the Update pill until a version newer than v is out
-// ("" shows it again), and says where it can be brought back.
+// skipUpdate hides the pill until a version newer than v ("" shows it again)
 async function skipUpdate(v) {
   $("#update").hidden = true;
   try {
@@ -4513,9 +4515,8 @@ async function backAsNew(was) {
   }
 }
 
-// servedAnew reloads, once, a browser's page that another version of
-// magpie now answers for (visamzh on X): its magpie restarted into an
-// update put in elsewhere. The badge and the Version row both ask.
+// servedAnew reloads, once, a page another magpie version now answers for
+// (visamzh on X); the badge and the Version row ask
 let reloadingAnew = false;
 function servedAnew(u) {
   if (!web || !pageVersion || !u?.current || u.current === pageVersion) return false;
@@ -4523,9 +4524,8 @@ function servedAnew(u) {
   return true;
 }
 
-// updateStuck says why this magpie can't replace itself where it is: off
-// the Mac, a folder it may not write to, such as C:\ (#1277), or a
-// container, whose image is what gets updated.
+// updateStuck: why magpie can't replace itself: a folder it may not write
+// to off the Mac (C:\, #1277), or a container, whose image gets updated
 function updateStuck(u) {
   const p = u.packaged;
   if (p) return p.command ? t("{manager} installed magpie ({pkg}), so {manager} updates it, not magpie: {cmd}", { manager: p.manager, pkg: p.package, cmd: p.command }) : t("{manager} installed magpie, so {manager} updates it, not magpie.", { manager: p.manager });
@@ -22455,7 +22455,7 @@ async function renderUpdate(r, u) {
         sub.textContent = t("Restarting…");
         backAsNew(u.current);
       };
-      const busyNow = updateBusyText(u.busy);
+      const busyNow = updateBusyText(u.busy, u.using);
       if (u.waiting) {
         sub.textContent += " · " + (u.handover ? t("restarts once the Claude subscription's replies have finished") : t("restarts once the gateway is idle")) + (busyNow ? " · " + busyNow : "");
         btn(t("Restart now"), () => install("now"));

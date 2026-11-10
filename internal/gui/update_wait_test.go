@@ -41,10 +41,13 @@ func quick(t *testing.T, busy *fakeBusy, u *updater) {
 	oldBusy, oldSettle, oldMost, oldTick, oldRecheck := gatewayBusy, idleSettle, waitMost, waitTick, waitRecheck
 	gatewayBusy, idleSettle, waitMost, waitTick = busy.get, 80*time.Millisecond, time.Minute, 5*time.Millisecond
 	waitRecheck = func(*updater, bool) {}
+	oldAt, oldOpen := usedAt.Swap(0), usedOpen.Swap(false) // no window used
 	t.Cleanup(func() {
 		u.cancelWait()
 		u.loops.Wait()
 		gatewayBusy, idleSettle, waitMost, waitTick, waitRecheck = oldBusy, oldSettle, oldMost, oldTick, oldRecheck
+		usedAt.Store(oldAt)
+		usedOpen.Store(oldOpen)
 	})
 }
 

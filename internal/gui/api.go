@@ -2963,9 +2963,9 @@ func held(h http.Handler) http.Handler {
 			// 5x the CPU.
 			defer tightenGC()()
 		}
-		if !(api && r.Method == http.MethodGet) {
+		if !(api && r.Method == http.MethodGet) && r.URL.Path != "/api/update/using" {
 			// anything that may have written drops what was held, once it
-			// has answered with it
+			// has answered with it (a page's word of input writes nothing)
 			defer provider.Changed()
 		}
 		h.ServeHTTP(rw, r)

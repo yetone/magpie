@@ -998,6 +998,28 @@ while the new version starts (#4521). See `TestUpdateInATerminalRestartsTheAppWi
 [`restart_test.go`](../../internal/gateway/restart_test.go) and
 `TestUpdateAsksTheRunningMagpieToRestart`.
 
+A restart magpie makes by itself (Settings' Restart automatically,
+`magpie update` from a terminal, a Remote magpie's ask, another copy
+replacing this one's binary) also waits while the user is using one of
+magpie's own windows (BESTLJP0412 on X: the window closed and came back
+in the middle of adding a provider, the gateway idle). Every page (the
+window, the tray panel, a browser on `magpie web`) posts
+`/api/update/using` on a press, a key, typing or the wheel, at most
+every 20 s and at once when the dialog (`#modal`) opens or closes, with
+whether it is open (app.js, beside `renderUpdateBadge`). `inUseAt` in
+[`update_wait.go`](../../internal/gui/update_wait.go) counts the user
+as using magpie for `usingFor` (2 minutes) after that input, or
+`openFor` (15 minutes) while a dialog was open, which may hold a form
+half filled in; `waitFor` waits through it when the wait wasn't asked
+for (`waitAsked`), and `restartBeside` doesn't restart at once. The
+post writes nothing, so `held` keeps what it holds. The wait says so
+(`using` in `/api/update`; Settings › Version and the Update pill add
+"waiting while you use magpie"). A restart the user asked for (the pill,
+Settings › Version, the tray) never waits for it. A window left open
+and unused for longer is not in use, so the restart still comes. See
+`TestAutoRestartWaitsWhileTheWindowIsUsed`,
+`TestTerminalUpdateWaitsWhileTheWindowIsUsed` and `update-using.test.cjs`.
+
 The app and `magpie web` open together each have an updater of their own
 over the same program, and the gateway's ask reaches only the one serving
 the gateway (visamzh on X: one restarted to update, and the other ran on

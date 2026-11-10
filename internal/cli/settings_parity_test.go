@@ -489,6 +489,7 @@ var notYet = map[string]string{
 	"POST /api/usage/requests/export":            U,  // usage.go
 	"POST /api/usage/trae-checkin":               U,  // usage.go
 	"GET /api/update/notes":                      W,  // update.go
+	"POST /api/update/using":                     W,  // update.go
 	"GET /api/whatsnew":                          W,  // whatsnew.go
 	"POST /api/whatsnew/seen":                    W,  // whatsnew.go
 	"POST /api/whatsnew/today":                   W,  // whatsnew.go
