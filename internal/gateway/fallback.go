@@ -2200,6 +2200,9 @@ var retryPause = time.Second
 // An upstream that answered a stream request with a whole reply
 // (didNotStream) isn't one: it fails the same every time it is asked.
 func passing(status int, header http.Header, body []byte, again int) (time.Duration, bool) {
+	if routedThere(header) {
+		return 0, false
+	}
 	wait := retryPause << again
 	if d := retryAfter(header, time.Now()); d > 0 {
 		wait = d

@@ -2826,6 +2826,46 @@ whole conversation every turn. Codex says `store: false`, so
   over the answer the other magpie kept. Tools and instructions still go
   every turn. The other magpie's kept turns are in memory only.
 
+### What runs once on a hop to another magpie
+
+A request an agent sends to a Remote magpie passes two gateways, and each
+one used to mask it and run its routing in full (YeYaka88 on X: gateway,
+routing and masking all twice). Measured with two sandboxed magpies and a
+vendor answering 503: one agent request asked the vendor 35 times over
+174s, the remote's 7 tries over 33s run again by each of this magpie's
+same-one retries and patience rounds; and the remote ran the masker over
+text already masked.
+
+- Masking runs where the request is sent from. After masking, `serve`
+  (and `countTokens`) puts what it masked by on the request's context
+  (`withMaskedAs`, `ownMaskedAs`: this build's version and
+  `masking.Fingerprint`, a hash of every setting that changes what is
+  masked, the local model and its threshold among them, never the words
+  themselves), and `passOnCaller` sends it as `X-Magpie-Masked-As`. The
+  other magpie skips its own pass only when the value is its own
+  (`maskedBefore`), and passes it on to a further magpie the same way.
+  Other settings, another build, no header, a request not a magpie's
+  (`magpieAsks`) or a remote that sends masked requests to a model of its
+  own as written (`RedactRouteTo`, which needs its own pass) mask again,
+  as before. The values stay on the sending computer: the remote records
+  and forwards placeholders, and the sender puts the values back.
+  The header comes off every request as it arrives (`withCaller`) and
+  every request to a vendor. A client holding a key could send it to skip
+  the remote's masking, of its own request only.
+- A failure the other magpie answered after its own routing names its
+  provider (`X-Magpie-Provider`, kept as `answeredThereHeader` by
+  `keepRetry`). `passing` doesn't retry it on the same remote, and
+  patience doesn't put it in its next round (`routedThere`): the remote's
+  own retries and patience had their turn. This magpie's other members
+  are still asked, and a remote that can't be reached, or refuses before
+  routing (its key, the key's limit), is asked again as before.
+- Both gateways still record the call in their own ledgers (each computer's
+  Usage), and the remote's Routing page shows its own trace.
+- `TestRemoteMagpieMasksOnce`, `TestRemoteMagpieMasksWhatItIsNotToldWasMasked`
+  and `TestRemoteMagpieRoutedFailureNotAskedAgain` in
+  [`remote_magpie_once_test.go`](../../internal/gateway/remote_magpie_once_test.go),
+  `TestFingerprint` in [`fingerprint_test.go`](../../internal/masking/fingerprint_test.go).
+
 ## A model's own system prompt
 
 The system prompt the user gave one model (`provider.ModelSystemPrompt`,

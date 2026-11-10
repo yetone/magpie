@@ -220,6 +220,61 @@ func restoring(w http.ResponseWriter) (http.ResponseWriter, func()) {
 	return w, func() {}
 }
 
+// maskedAsKey holds, on a request masked here or by the magpie that
+// passed it on, what it was masked by (ownMaskedAs).
+type maskedAsKey struct{}
+
+// withMaskedAs is r noted as masked by the settings fp names, which a
+// remote magpie it is passed on to is told (passOnCaller); r as it is
+// for "".
+func withMaskedAs(r *http.Request, fp string) *http.Request {
+	if fp == "" {
+		return r
+	}
+	return r.WithContext(context.WithValue(r.Context(), maskedAsKey{}, fp))
+}
+
+// maskedAsOf is the fingerprint ctx's request was masked by, "" for one
+// not masked.
+func maskedAsOf(ctx context.Context) string {
+	fp, _ := ctx.Value(maskedAsKey{}).(string)
+	return fp
+}
+
+// maskedBefore says r came from another magpie that masked it already by
+// the settings this one masks by (MaskedAsHeader): masking it again here
+// finds nothing the first pass left, and costs the request another run of
+// the rules and the local model (YeYaka88 on X). It goes on masked as it
+// came, and that magpie puts its values back in the answer. A magpie
+// whose settings differ masks it again by its own, and one that masks
+// nothing never says so. A client can send the header only with a key
+// this magpie takes, and only for its own request: what it leaves
+// unmasked is its own.
+//
+// A magpie that sends a request masked by its own model as written
+// (Settings › Privacy's route, maskRouteFor) needs its own pass to know
+// there was something to mask, so it masks again.
+func maskedBefore(r *http.Request) (string, bool) {
+	c := callerOf(r)
+	if c.maskedAs == "" || MaskRoute(strings.TrimSpace(settings.Shared().RedactRouteTo)) {
+		return "", false
+	}
+	fp := ownMaskedAs()
+	return fp, fp != "" && fp == c.maskedAs
+}
+
+// ownMaskedAs names what this magpie masks a request by: its masking
+// settings (masking.Fingerprint) and the masker's code, this build's
+// version, since a newer one can find what an older one let by. "" when
+// it masks nothing.
+func ownMaskedAs() string {
+	fp := masking.Fingerprint(settings.Shared())
+	if fp == "" {
+		return ""
+	}
+	return Version + "/" + fp
+}
+
 // redactionWanted: the settings ask for something to be masked. The
 // masking itself is served by the redact plugin (plugins/redact); this is
 // the core's own reading, so a request isn't sent unmasked when the plugin

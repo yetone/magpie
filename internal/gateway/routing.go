@@ -2121,6 +2121,19 @@ func keepRetryOut(dst, src http.Header, body []byte) {
 // magpie refused with its gateway key's own limit (remoteKeyLimitHeader).
 const keyLimitThereHeader = "X-Magpie-Key-Limit-There"
 
+// routedThere says a failure was another magpie's (a Remote magpie's)
+// answer after its own routing had its turn: its same-one retries, its
+// patience and its group's other members, which it was asked in full
+// (answeredThereHeader). Asked again from here, every one of them ran
+// again: one agent request sent the vendor 35 asks over 174s where the
+// remote alone would have made 7 over 33s (YeYaka88 on X). It isn't asked
+// again by this magpie's same-one retries or patience; this magpie's own
+// other members still are, and a remote that couldn't be reached, or
+// refused before routing (its key, its limit), is asked again as before.
+func routedThere(header http.Header) bool {
+	return header.Get(answeredThereHeader) != ""
+}
+
 // answeredThereHeader carries, from keepRetry to restAfter, the provider
 // another magpie named on its refusal (providerHeader): the refusal is
 // that magpie's model's (remoteModelRest).

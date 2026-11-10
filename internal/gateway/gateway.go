@@ -1916,18 +1916,24 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	// and the one as written where generation sends that, masked only
 	// then (#3973)
 	if _, ms, isGroup := provider.FindGroup(id); !ok || !unredactedRoute(p, isGroup, ms) {
-		rw, b, done, hits, err := redactedHits(maskedFor(r.Context(), p, isGroup, ms), w, body)
-		if err != nil {
-			writeError(w, provider.Anthropic, maskStatus(err), err.Error())
-			return
-		}
-		// counted where generation goes: the model set for a request
-		// masking would change, as written (maskRouteFor)
-		if to := maskRouteFor(agentTurn(r), hits); to != "" {
-			p, model, ok = provider.Resolve(to)
+		if fp, before := maskedBefore(r); before {
+			// masked by the magpie that passed it on (serve)
+			r = withMaskedAs(r, fp)
 		} else {
-			w, body = rw, b
-			defer done()
+			rw, b, done, hits, err := redactedHits(maskedFor(r.Context(), p, isGroup, ms), w, body)
+			if err != nil {
+				writeError(w, provider.Anthropic, maskStatus(err), err.Error())
+				return
+			}
+			// counted where generation goes: the model set for a request
+			// masking would change, as written (maskRouteFor)
+			if to := maskRouteFor(agentTurn(r), hits); to != "" {
+				p, model, ok = provider.Resolve(to)
+			} else {
+				w, body = rw, b
+				r = withMaskedAs(r, ownMaskedAs())
+				defer done()
+			}
 		}
 	}
 	if level := desktopSubagentEffort(r, agentOf(r), body, pick); level != "" && ok && !provider.Reasonless(p.ID, model) {
@@ -2585,27 +2591,35 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// are, and an observer that wants the bodies is handed a copy masked
 	// when it is first handed one, after the try (maskIn, #3973)
 	if sentWhole = unredactedRoute(p, isGroup, ms); !sentWhole {
-		rw, b, done, hits, err := redactedHits(maskedFor(r.Context(), p, isGroup, ms), capture.ResponseWriter, body)
-		if err != nil { // fails closed: never sent unmasked
-			log.Printf("gateway: %v", err)
-			call.Status, call.Error = maskStatus(err), err.Error()
-			writeError(w, from, call.Status, err.Error())
-			return
-		}
-		if to := maskRouteFor(r, hits); to != "" {
-			// masking would change it, and the user set a model of
-			// their own for that (Settings › Privacy, jessyoungyu on
-			// X): it goes there as written, the masked copy and its
-			// writer let go unused, and on from there only where
-			// unmasked requests may go; its failure is the answer
-			log.Printf("gateway: %d value(s) masking would change, sent as written to %s (Settings › Privacy)", hits.n, to)
-			p, model, _ = provider.Resolve(to)
-			g, ms, isGroup = provider.FindGroup(to)
-			g = g.Live()
-			sentWhole = true
-			move(to, movedPrivacy)
+		if fp, before := maskedBefore(r); before {
+			// masked by the magpie that passed it on, by the same
+			// settings: it goes on as it came, that magpie puts its
+			// values back, and a further magpie is told so too
+			r = withMaskedAs(r, fp)
 		} else {
-			capture.ResponseWriter, body, unmask, maskedHits = rw, b, done, hits
+			rw, b, done, hits, err := redactedHits(maskedFor(r.Context(), p, isGroup, ms), capture.ResponseWriter, body)
+			if err != nil { // fails closed: never sent unmasked
+				log.Printf("gateway: %v", err)
+				call.Status, call.Error = maskStatus(err), err.Error()
+				writeError(w, from, call.Status, err.Error())
+				return
+			}
+			if to := maskRouteFor(r, hits); to != "" {
+				// masking would change it, and the user set a model of
+				// their own for that (Settings › Privacy, jessyoungyu on
+				// X): it goes there as written, the masked copy and its
+				// writer let go unused, and on from there only where
+				// unmasked requests may go; its failure is the answer
+				log.Printf("gateway: %d value(s) masking would change, sent as written to %s (Settings › Privacy)", hits.n, to)
+				p, model, _ = provider.Resolve(to)
+				g, ms, isGroup = provider.FindGroup(to)
+				g = g.Live()
+				sentWhole = true
+				move(to, movedPrivacy)
+			} else {
+				capture.ResponseWriter, body, unmask, maskedHits = rw, b, done, hits
+				r = withMaskedAs(r, ownMaskedAs())
+			}
 		}
 	}
 	if sentWhole && usage.ObservedBodies() != usage.NoBodies {
@@ -4937,7 +4951,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				forbade = append(forbade, forbidden{c: c, rest: rest, try: at, words: words5xx})
 			}
 			skipped = append(skipped, c.label()+": "+call.Error)
-			if waitsOf(c.patience, patienceFallback) > 0 && !hw.turnedAway && busy(hw.code(), hw.errBody()) {
+			if waitsOf(c.patience, patienceFallback) > 0 && !hw.turnedAway && busy(hw.code(), hw.errBody()) && !routedThere(hw.header) {
 				busyNow = noteBusy(busyNow, c, hw.header)
 			}
 			continue
@@ -4956,7 +4970,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// (spentAfter) and the agent is told theirs
 		lastSpent := last && isGroup && len(busyNow) > 0 && !hw.passing && hw.failed() && !busy(hw.code(), hw.errBody()) &&
 			slices.Contains([]string{failQuota, failCredit}, failure(hw.code(), hw.errBody())) && !spentAfter([]candidate{c})
-		if _, same := passing(hw.code(), hw.header, hw.errBody(), again); last && patience > 0 && !protected && !sameRefusal && !hw.turnedAway && !hw.refused && hw.failed() && (busy(hw.code(), hw.errBody()) || lastSpent) &&
+		if _, same := passing(hw.code(), hw.header, hw.errBody(), again); last && patience > 0 && !protected && !sameRefusal && !hw.turnedAway && !hw.refused && hw.failed() && (busy(hw.code(), hw.errBody()) && (!routedThere(hw.header) || len(busyNow) > 0) || lastSpent) &&
 			(isGroup || !codexReset(hw.code(), hw.errBody())) &&
 			(len(busyNow) > 0 || waitsOf(c.patience, patienceFallback) > 0 && !same) {
 			// every member has failed, each in a way that passes — busy,
@@ -4973,7 +4987,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			if waitFrom.IsZero() {
 				waitFrom = time.Now()
 			}
-			if waitsOf(c.patience, patienceFallback) > 0 && !lastSpent {
+			if waitsOf(c.patience, patienceFallback) > 0 && !lastSpent && !routedThere(hw.header) {
+				// (another magpie's routed answer isn't asked again:
+				// its own patience had its turn, routedThere)
 				busyNow = noteBusy(busyNow, c, hw.header)
 			}
 			// nor once Codex would hang up in the pause, for want of an

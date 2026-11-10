@@ -49,6 +49,11 @@ const (
 	// (claudeTTLOf, runTTLFor; linkaww). Taken only from a magpie's
 	// request.
 	ClaudeCacheTTLHeader = "X-Magpie-Claude-Cache-TTL"
+	// MaskedAsHeader says the magpie that passed a request on masked it
+	// already, by the settings masking.Fingerprint names: this one masks
+	// it again only when its own differ (maskedBefore). Taken only from a
+	// magpie's request.
+	MaskedAsHeader = "X-Magpie-Masked-As"
 )
 
 // caller is who a request is recorded as: its agent, and the computer it
@@ -80,6 +85,9 @@ type caller struct {
 	// (claudeTTLOf)
 	cacheTTL   string
 	claudeHere bool
+	// maskedAs: the magpie that passed it on masked it by the settings
+	// this fingerprint names (MaskedAsHeader)
+	maskedAs string
 }
 
 type callerCtx struct{}
@@ -105,6 +113,7 @@ func withCaller(next http.Handler) http.Handler {
 		r.Header.Del(HopsHeader)
 		r.Header.Del(ClientUAHeader)
 		r.Header.Del(ClaudeCacheTTLHeader)
+		r.Header.Del(MaskedAsHeader)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -137,6 +146,9 @@ func callerFrom(r *http.Request) caller {
 		switch v := r.Header.Get(ClaudeCacheTTLHeader); v {
 		case "5m", "1h", "default":
 			c.cacheTTL = v
+		}
+		if v := strings.TrimSpace(r.Header.Get(MaskedAsHeader)); len(v) <= 128 {
+			c.maskedAs = v
 		}
 		if a := label(r.Header.Get(AgentHeader)); a != "" {
 			c.agent = usage.AgentOf(a)
@@ -216,6 +228,12 @@ func passOnCaller(ctx context.Context, req *http.Request) {
 	}
 	c, ok := ctx.Value(callerCtx{}).(caller)
 	req.Header.Set(HopsHeader, strconv.Itoa(c.hops+1))
+	req.Header.Del(MaskedAsHeader)
+	if fp := maskedAsOf(ctx); fp != "" {
+		// masked here already: the other magpie, masking by the same
+		// settings, doesn't again
+		req.Header.Set(MaskedAsHeader, fp)
+	}
 	if !ok {
 		return
 	}
@@ -231,6 +249,7 @@ func passOnCaller(ctx context.Context, req *http.Request) {
 	if v := claudeTTLOf(c); v != "" {
 		req.Header.Set(ClaudeCacheTTLHeader, v)
 	}
+
 	if c.agent == "" {
 		return
 	}
