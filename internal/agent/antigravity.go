@@ -1,8 +1,9 @@
 package agent
 
 // Antigravity, Google's desktop app (2.15 and later), sends its requests to
-// a gateway of the user's instead of Google when ~/.antigravity/settings.json
-// turns one on: Google's Antigravity Enterprise Gateway, documented at
+// a gateway of the user's instead of Google when its settings file turns one
+// on (~/.antigravity/settings.json up to 2.29, ~/.gemini/config/config.json
+// from 2.30; antigravityFiles): Google's Antigravity Enterprise Gateway, documented at
 // docs.cloud.google.com/gemini/enterprise/docs/ai-developer-tools/connect-enterprise-gateway
 // (ryougi_hachi on X):
 //
@@ -82,58 +83,207 @@ func antigravityAdmin() string {
 // antigravityAdminPath is antigravityAdmin, swapped by a test.
 var antigravityAdminPath = antigravityAdmin
 
-func antigravity(home string) *Agent {
-	dir := filepath.Join(home, ".antigravity")
-	path := filepath.Join(dir, "settings.json")
-	model := jsonGet(path, antigravityModel)
-	stashGateway, stashModel, stashList := "antigravity:"+path+":gateway", "antigravity:"+path+":defaultModelId", "antigravity:"+path+":list"
-	stashSource := "antigravity:" + path + ":listSource"
-	// wired: the file's gateway is on and carries a key magpie gave it
-	wired := func() bool {
-		on, _ := edit.GetJSON(path, "gateway.enabled")
-		key, _ := edit.GetJSON(path, "gateway.apiKey")
-		return on == "true" && gatewayKey(key)
+// antigravityFiles are the files Antigravity's app takes its gateway from,
+// newest first: ~/.gemini/config/config.json from 2.30 on, where the app
+// also keeps its userSettings and plugins, and ~/.antigravity/settings.json
+// up to 2.29. Each version reads its own alone (2.30.0 and 2.29.0's
+// language servers, headless: a gateway in the other file goes unread and
+// the app asks for a Google sign-in), and an update moves nothing across,
+// so a file magpie wired for 2.29 left 2.30 off magpie (YujunT46308 on
+// X, Windows). magpie writes the same block into both.
+func antigravityFiles(home string) []string {
+	return []string{
+		filepath.Join(home, ".gemini", "config", "config.json"),
+		filepath.Join(home, ".antigravity", "settings.json"),
 	}
-	gatewayBlock := func() map[string]any {
-		return map[string]any{"enabled": true, "url": gateway.URL(), "apiKey": agentKey("antigravity"), "wireProtocol": "openai"}
+}
+
+// agyFile is the wiring of one of antigravityFiles.
+type agyFile struct {
+	path                                          string
+	stashGateway, stashModel, stashList, stashSrc string
+}
+
+func newAgyFile(path string) agyFile {
+	k := "antigravity:" + path + ":"
+	return agyFile{path: path, stashGateway: k + "gateway", stashModel: k + "defaultModelId", stashList: k + "list", stashSrc: k + "listSource"}
+}
+
+func (f agyFile) model() string { return jsonGet(f.path, antigravityModel)() }
+
+// wired: the file's gateway is on and carries a key magpie gave it
+func (f agyFile) wired() bool {
+	on, _ := edit.GetJSON(f.path, "gateway.enabled")
+	key, _ := edit.GetJSON(f.path, "gateway.apiKey")
+	return on == "true" && gatewayKey(key)
+}
+
+func antigravityGateway() map[string]any {
+	return map[string]any{"enabled": true, "url": gateway.URL(), "apiKey": agentKey("antigravity"), "wireProtocol": "openai"}
+}
+
+// keepSource stashes a catalog of the user's that a file wired before
+// magpie wrote one holds, to come back with their gateway
+func (f agyFile) keepSource() {
+	v, _ := edit.GetJSON(f.path, antigravitySource)
+	if v != "" && !strings.Contains(v, "format="+gateway.AntigravityFormat) && unstashPeek(f.stashSrc) == "" {
+		raw, _ := edit.GetJSONRaw(f.path, antigravitySource)
+		stash(map[string]string{f.stashSrc: raw})
 	}
-	// keepSource stashes a catalog of the user's that a file wired before
-	// magpie wrote one holds, to come back with their gateway
-	keepSource := func() {
-		v, _ := edit.GetJSON(path, antigravitySource)
-		if v != "" && !strings.Contains(v, "format="+gateway.AntigravityFormat) && unstashPeek(stashSource) == "" {
-			raw, _ := edit.GetJSONRaw(path, antigravitySource)
-			stash(map[string]string{stashSource: raw})
-		}
-	}
-	// startOn writes the model the app starts on, cur, at the level its
-	// picker offers for want (the effort picked, "" for the row's), when
-	// it is magpie's and the file is on magpie
-	startOn := func(cur, want string) error {
-		if cur == "" || !wired() {
-			return nil
-		}
-		base, at := antigravityBase(cur), ""
-		if want == "" {
-			want = provider.AgentEffort("antigravity")
-			if _, at = provider.MemberEffort(cur); at != "" {
-				want = at // the level it starts on stays, if offered
-			}
-		}
-		if !isMagpie(base) {
-			return nil
-		}
-		if to := gateway.AntigravityModel(base, want); to != cur {
-			return edit.SetJSON(path, edit.KV{Path: antigravityModel, Value: to})
-		}
+}
+
+// startOn writes the model the app starts on, cur, at the level its
+// picker offers for want (the effort picked, "" for the row's), when it
+// is magpie's and the file is on magpie
+func (f agyFile) startOn(cur, want string) error {
+	if cur == "" || !f.wired() {
 		return nil
 	}
-	// putRaw writes back what was stashed as it was, or takes key out
-	putRaw := func(key, raw string) error {
-		if raw == "" {
-			return edit.DelJSON(path, key)
+	base, at := antigravityBase(cur), ""
+	if want == "" {
+		want = provider.AgentEffort("antigravity")
+		if _, at = provider.MemberEffort(cur); at != "" {
+			want = at // the level it starts on stays, if offered
 		}
-		return edit.SetJSON(path, edit.KV{Path: key, Value: json.RawMessage(raw)})
+	}
+	if !isMagpie(base) {
+		return nil
+	}
+	if to := gateway.AntigravityModel(base, want); to != cur {
+		return edit.SetJSON(f.path, edit.KV{Path: antigravityModel, Value: to})
+	}
+	return nil
+}
+
+// putRaw writes back what was stashed as it was, or takes key out
+func (f agyFile) putRaw(key, raw string) error {
+	if raw == "" {
+		return edit.DelJSON(f.path, key)
+	}
+	return edit.SetJSON(f.path, edit.KV{Path: key, Value: json.RawMessage(raw)})
+}
+
+// connect puts the file on magpie's gateway, starting on ref (one of
+// magpie's models, "" to leave the model as it is), the user's gateway,
+// model, list and catalog stashed the first time
+func (f agyFile) connect(ref string) error {
+	on := f.wired()
+	if !on {
+		g, _ := edit.GetJSONRaw(f.path, "gateway")
+		m, _ := edit.GetJSONRaw(f.path, antigravityModel)
+		l, _ := edit.GetJSONRaw(f.path, antigravityList)
+		c, _ := edit.GetJSONRaw(f.path, antigravitySource)
+		stash(map[string]string{f.stashGateway: g, f.stashModel: m, f.stashList: l, f.stashSrc: c})
+	}
+	// a list of the user's would hide magpie's models from the picker,
+	// and it is read ahead of the catalog that gives each its window; it
+	// is stashed with their gateway
+	if err := edit.DelJSON(f.path, antigravityList); err != nil {
+		return err
+	}
+	// set again on magpie, what the user added to its block stays
+	block := any(antigravityGateway())
+	if on {
+		f.keepSource()
+		block = theirsKept(f.path, "gateway", func() any { return antigravityGateway() })()
+	}
+	kv := []edit.KV{{Path: "gateway", Value: block}, {Path: antigravitySource, Value: antigravityCatalog()}}
+	if ref != "" {
+		kv = append(kv, edit.KV{Path: antigravityModel, Value: gateway.AntigravityModel(ref, provider.AgentEffort("antigravity"))})
+	} else if !on {
+		// a model of the user's own isn't one of the gateway's
+		if err := edit.DelJSON(f.path, antigravityModel); err != nil {
+			return err
+		}
+	}
+	return edit.SetJSON(f.path, kv...)
+}
+
+// leave takes the file off magpie onto v, a model of the user's own, or
+// what they had (""); a file not there is made for v only when always
+func (f agyFile) leave(v string, always bool) error {
+	if f.wired() {
+		// back to what the user had
+		if err := f.putRaw("gateway", unstash(f.stashGateway)); err != nil {
+			return err
+		}
+		if err := f.putRaw(antigravityList, unstash(f.stashList)); err != nil {
+			return err
+		}
+		if err := f.putRaw(antigravitySource, unstash(f.stashSrc)); err != nil {
+			return err
+		}
+		if v == "" {
+			if err := f.putRaw(antigravityModel, unstash(f.stashModel)); err != nil {
+				return err
+			}
+			return antigravityTidy(f.path)
+		}
+		forget(f.stashModel)
+	} else if !always && !isFile(f.path) {
+		// nothing of the user's to change, and no file to make for it
+		return nil
+	}
+	if v == "" {
+		if err := edit.DelJSON(f.path, antigravityModel); err != nil {
+			return err
+		}
+	} else if err := edit.SetJSON(f.path, edit.KV{Path: antigravityModel, Value: v}); err != nil {
+		return err
+	}
+	return antigravityTidy(f.path)
+}
+
+// sync brings a wired file's gateway and catalog to the gateway's current
+// address, and the model it starts on to a level the catalog lists
+func (f agyFile) sync() error {
+	if err := syncJSON(f.path, "gateway", theirsKept(f.path, "gateway", func() any { return antigravityGateway() })); err != nil {
+		return err
+	}
+	// the catalog at the gateway's address, and on a file wired before
+	// magpie wrote one, so its windows reach it too
+	if v, _ := edit.GetJSON(f.path, antigravitySource); v != antigravityCatalog() {
+		f.keepSource()
+		if err := edit.SetJSON(f.path, edit.KV{Path: antigravitySource, Value: antigravityCatalog()}); err != nil {
+			return err
+		}
+	}
+	// the model it starts on as its catalog lists it now: a model with
+	// levels is listed once a level, and an id the catalog doesn't list
+	// starts the app on its first model instead
+	return f.startOn(f.model(), "")
+}
+
+func antigravity(home string) *Agent {
+	paths := antigravityFiles(home)
+	files := make([]agyFile, len(paths))
+	for i, p := range paths {
+		files[i] = newAgyFile(p)
+	}
+	legacy := files[len(files)-1]
+	dir, path := filepath.Dir(legacy.path), legacy.path
+	// on is the first file on magpie, the one the model is read from
+	on := func() (agyFile, bool) {
+		for _, f := range files {
+			if f.wired() {
+				return f, true
+			}
+		}
+		return agyFile{}, false
+	}
+	wired := func() bool { _, ok := on(); return ok }
+	// model is the model the app starts on: the wired file's, else the
+	// first one's that names one
+	model := func() string {
+		if f, ok := on(); ok {
+			return f.model()
+		}
+		for _, f := range files {
+			if v := f.model(); v != "" {
+				return v
+			}
+		}
+		return ""
 	}
 	return &Agent{
 		ID: "antigravity", Name: "Antigravity", Icon: "antigravity-color", Aliases: []string{"antigravity-app", "agy-app"},
@@ -159,24 +309,38 @@ func antigravity(home string) *Agent {
 			return ""
 		},
 		Sync: func() error {
-			if !wired() {
+			w, ok := on()
+			if !ok {
 				return nil
 			}
-			if err := syncJSON(path, "gateway", theirsKept(path, "gateway", func() any { return gatewayBlock() })); err != nil {
-				return err
-			}
-			// the catalog at the gateway's address, and on a file wired
-			// before magpie wrote one, so its windows reach it too
-			if v, _ := edit.GetJSON(path, antigravitySource); v != antigravityCatalog() {
-				keepSource()
-				if err := edit.SetJSON(path, edit.KV{Path: antigravitySource, Value: antigravityCatalog()}); err != nil {
+			cur := w.model()
+			for _, f := range files {
+				if f.wired() {
+					if err := f.sync(); err != nil {
+						return err
+					}
+					continue
+				}
+				// a file wired by a magpie before it knew this one, or
+				// for the app's other version: the same block in it, at
+				// the level the wired file starts on
+				ref := ""
+				if b := antigravityBase(cur); isMagpie(b) {
+					ref = b
+				}
+				if err := f.connect(ref); err != nil {
+					return err
+				}
+				if ref != "" {
+					if err := edit.SetJSON(f.path, edit.KV{Path: antigravityModel, Value: cur}); err != nil {
+						return err
+					}
+				}
+				if err := f.startOn(f.model(), ""); err != nil {
 					return err
 				}
 			}
-			// the model it starts on as its catalog lists it now: a model
-			// with levels is listed once a level, and an id the catalog
-			// doesn't list starts the app on its first model instead
-			return startOn(model(), "")
+			return nil
 		},
 		Check: func() string {
 			if !wired() {
@@ -190,8 +354,13 @@ func antigravity(home string) *Agent {
 			if u := os.Getenv("AGY_LLM_GATEWAY_URL"); u != "" && u != gateway.URL() {
 				return noticeAntigravityEnv.say("url", u)
 			}
-			return wiringOff("Antigravity", path, func(k string) (string, bool) { return edit.GetJSON(path, "gateway."+k) },
-				"url", gateway.URL(), "apiKey", agentKey("antigravity"))
+			for _, f := range files {
+				if s := wiringOff("Antigravity", f.path, func(k string) (string, bool) { return edit.GetJSON(f.path, "gateway."+k) },
+					"url", gateway.URL(), "apiKey", agentKey("antigravity")); s != "" {
+					return s
+				}
+			}
+			return ""
 		},
 		Fields: []Field{{
 			Key: "model", Label: "model",
@@ -203,57 +372,20 @@ func antigravity(home string) *Agent {
 				return model()
 			},
 			Set: func(v string) error {
-				on := wired()
 				if ref, ok := strings.CutPrefix(v, magpieID+"/"); ok && isMagpie(ref) {
-					if !on {
-						g, _ := edit.GetJSONRaw(path, "gateway")
-						m, _ := edit.GetJSONRaw(path, antigravityModel)
-						l, _ := edit.GetJSONRaw(path, antigravityList)
-						c, _ := edit.GetJSONRaw(path, antigravitySource)
-						stash(map[string]string{stashGateway: g, stashModel: m, stashList: l, stashSource: c})
-					}
-					// a list of the user's would hide magpie's models from
-					// the picker, and it is read ahead of the catalog that
-					// gives each its window; it is stashed with their gateway
-					if err := edit.DelJSON(path, antigravityList); err != nil {
-						return err
-					}
-					// set again on magpie, what the user added to its block stays
-					block := any(gatewayBlock())
-					if on {
-						keepSource()
-						block = theirsKept(path, "gateway", func() any { return gatewayBlock() })()
-					}
-					return edit.SetJSON(path, edit.KV{Path: "gateway", Value: block}, edit.KV{Path: antigravityModel, Value: gateway.AntigravityModel(ref, provider.AgentEffort("antigravity"))},
-						edit.KV{Path: antigravitySource, Value: antigravityCatalog()})
-				}
-				if on {
-					// back to what the user had
-					if err := putRaw("gateway", unstash(stashGateway)); err != nil {
-						return err
-					}
-					if err := putRaw(antigravityList, unstash(stashList)); err != nil {
-						return err
-					}
-					if err := putRaw(antigravitySource, unstash(stashSource)); err != nil {
-						return err
-					}
-					if v == "" {
-						if err := putRaw(antigravityModel, unstash(stashModel)); err != nil {
+					for _, f := range files {
+						if err := f.connect(ref); err != nil {
 							return err
 						}
-						return antigravityTidy(path)
 					}
-					forget(stashModel)
+					return nil
 				}
-				if v == "" {
-					if err := edit.DelJSON(path, antigravityModel); err != nil {
+				for _, f := range files {
+					if err := f.leave(v, f.path == legacy.path); err != nil {
 						return err
 					}
-				} else if err := edit.SetJSON(path, edit.KV{Path: antigravityModel, Value: v}); err != nil {
-					return err
 				}
-				return antigravityTidy(path)
+				return nil
 			},
 			Options: func(cur map[string]string) []Option {
 				// the user's own model is Google's, on their sign-in, or their
@@ -278,7 +410,12 @@ func antigravity(home string) *Agent {
 				if err := provider.SetAgentEffort("antigravity", v); err != nil {
 					return err
 				}
-				return startOn(model(), v)
+				for _, f := range files {
+					if err := f.startOn(f.model(), v); err != nil {
+						return err
+					}
+				}
+				return nil
 			},
 			Options: func(map[string]string) []Option {
 				if !wired() {

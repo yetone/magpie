@@ -442,3 +442,105 @@ func TestAntigravitySyncAddsCatalog(t *testing.T) {
 		t.Errorf("the user's catalog lost: %s", readFile(path))
 	}
 }
+
+// antigravityConfig is ~/.gemini/config/config.json as Antigravity 2.30
+// writes it, with what the app keeps there besides a gateway.
+const antigravityConfig = `{
+  "userSettings": {"remoteControlHostname": "mote-local-zero-void"},
+  "plugins": {"github": {"enabled": true}}
+}
+`
+
+// Antigravity 2.30 takes its gateway from ~/.gemini/config/config.json and
+// no longer reads ~/.antigravity/settings.json, which 2.29 alone reads
+// (YujunT46308 on X: on Windows 2.30.0 the app was off magpie). magpie
+// writes the same block into both, and turning it off leaves each as it
+// was.
+func TestAntigravityConfigJSON(t *testing.T) {
+	home := antigravityHome(t)
+	cfg := filepath.Join(home, ".gemini", "config", "config.json")
+	legacy := filepath.Join(home, ".antigravity", "settings.json")
+	os.MkdirAll(filepath.Dir(cfg), 0o755)
+	os.WriteFile(cfg, []byte(antigravityConfig), 0o600)
+	a := antigravity(home)
+	f := a.Field("model")
+	if err := f.Set("magpie/anth/claude-sonnet-5"); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"enabled": true, "url": gateway.URL(), "apiKey": agentKey("antigravity"), "wireProtocol": "openai"}
+	models := map[string]any{"defaultModelId": "anth/claude-sonnet-5", "listSource": gateway.URL() + "/v1/models?format=antigravity"}
+	for _, p := range []string{cfg, legacy} {
+		file := antigravityFile(t, p)
+		if !sameJSON(string(file["gateway"]), want) {
+			t.Errorf("%s gateway: %s", p, file["gateway"])
+		}
+		if !sameJSON(string(file["models"]), models) {
+			t.Errorf("%s models: %s", p, file["models"])
+		}
+	}
+	file := antigravityFile(t, cfg)
+	if !sameJSON(string(file["userSettings"]), map[string]any{"remoteControlHostname": "mote-local-zero-void"}) || file["plugins"] == nil {
+		t.Errorf("what the app keeps in config.json changed:\n%s", readFile(cfg))
+	}
+	if c := a.Check(); c != "" {
+		t.Errorf("check: %q", c)
+	}
+	if got := f.Get(); got != "magpie/anth/claude-sonnet-5" {
+		t.Errorf("get: %q", got)
+	}
+	if err := f.Set(""); err != nil {
+		t.Fatal(err)
+	}
+	if !sameJSON(readFile(cfg), json.RawMessage(antigravityConfig)) {
+		t.Errorf("config.json not as it was:\n%s", readFile(cfg))
+	}
+	if !sameJSON(readFile(legacy), map[string]any{}) {
+		t.Errorf("settings.json left behind:\n%s", readFile(legacy))
+	}
+}
+
+// A settings.json a magpie before 2.30's file wired, beside the
+// config.json 2.30 wrote, gets the same block into config.json on the
+// next sync, at the level it starts on; turning it off then gives both
+// back.
+func TestAntigravitySyncWiresConfigJSON(t *testing.T) {
+	home := antigravityHome(t)
+	cfg := filepath.Join(home, ".gemini", "config", "config.json")
+	legacy := filepath.Join(home, ".antigravity", "settings.json")
+	old := `{"caCertPath":"/etc/ssl/certs/x.pem","gateway":{"enabled":true,"url":"` + gateway.URL() + `","apiKey":"` + agentKey("antigravity") + `","wireProtocol":"openai"},` +
+		`"models":{"defaultModelId":"anth/claude-sonnet-5","listSource":"` + gateway.URL() + `/v1/models?format=antigravity"}}`
+	os.MkdirAll(filepath.Dir(legacy), 0o755)
+	os.WriteFile(legacy, []byte(old), 0o600)
+	os.MkdirAll(filepath.Dir(cfg), 0o755)
+	os.WriteFile(cfg, []byte(antigravityConfig), 0o600)
+	a := antigravity(home)
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	file := antigravityFile(t, cfg)
+	want := map[string]any{"enabled": true, "url": gateway.URL(), "apiKey": agentKey("antigravity"), "wireProtocol": "openai"}
+	if !sameJSON(string(file["gateway"]), want) {
+		t.Fatalf("config.json's gateway after sync: %s", readFile(cfg))
+	}
+	var m map[string]any
+	json.Unmarshal(file["models"], &m)
+	if m["defaultModelId"] != jsonGet(legacy, antigravityModel)() || m["listSource"] != antigravityCatalog() {
+		t.Errorf("config.json's models: %s, settings.json's: %s", file["models"], antigravityFile(t, legacy)["models"])
+	}
+	before := readFile(cfg)
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if readFile(cfg) != before {
+		t.Errorf("a second sync rewrote config.json:\n%s", readFile(cfg))
+	}
+	if err := a.Field("model").Set(""); err != nil {
+		t.Fatal(err)
+	}
+	if !sameJSON(readFile(cfg), json.RawMessage(antigravityConfig)) {
+		t.Errorf("config.json not as it was:\n%s", readFile(cfg))
+	}
+	if !sameJSON(readFile(legacy), map[string]any{"caCertPath": "/etc/ssl/certs/x.pem"}) {
+		t.Errorf("settings.json:\n%s", readFile(legacy))
+	}
+}
