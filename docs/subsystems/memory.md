@@ -110,11 +110,20 @@ further (`State.Since`), unless a range is picked.
   (`memdistill.All`, -1); 0 is the 7-day default, so a state from before
   the picker keeps its own `Since` until a range is picked
   (`TestRangePicked`). Every range reads from the latest 400 conversations
-  (`Listed`) at 10 an hour (`PerRun`), so All costs at most ~240 requests
-  a day until the backlog is read; the picker's All says so.
+  (`Listed`).
+- A backlog is read at once when the user asks (`ReadAll`, through
+  `distillNow`): switched on, a model or a longer range picked, Read now.
+  It reads every conversation due, one request at a time, and the row
+  shows how far it has gone (`Progress`, `doing` of `of` in the view)
+  with a Stop (`Stop`, `POST /api/memory/distill/stop`; switching off
+  stops it too). A stop or a failure leaves the rest for the next run,
+  and the row says how many (`State.Left`) (`TestBacklogReadAtOnce`,
+  `TestStopEndsTheRun`). Before, every run read 10, and 400 took 40
+  hours (RealZeroP27 on X).
 - State is `distill.json` beside `memory.json` (`memdistill.Path`):
   the switch, the model, the reasoning level, the range, the
-  conversations done, and the last run's time, counts and error. A
+  conversations done, and the last run's time, counts, error and how
+  many it left. A
   conversation's mark is dropped once it is before `Since`, or older
   than 30 days and past the oldest conversation listed; before that a
   conversation older than 30 days was read again every hour
@@ -123,7 +132,7 @@ further (`State.Since`), unless a range is picked.
   (`TestUnreadableStateRunsNothing`).
 - `Keep` runs 5 minutes after the GUI backend starts, then hourly
   (`keepDistilling` in `internal/gui/memory_distill.go`). `Run` takes at
-  most 10 conversations (`PerRun`) quiet for 30 minutes (`Quiet`) with at
+  most 30 conversations (`PerRun`, more than a busy hour brings) quiet for 30 minutes (`Quiet`) with at
   least two turns, and skips the gateway's own records, read-only
   agents, subagent sessions and its own agent (`memory`). One run at a
   time, in this process and across processes (`.run` lock).

@@ -1129,12 +1129,12 @@ magpie.plugin("library", (ctx) => {
     return b;
   }
   // how far back conversations are read: 7 days unless picked, All the
-  // latest 400 (memdistill.Listed), PerRun an hour like any other
+  // latest 400 (memdistill.Listed); a longer range reads at once
   const rangeName = (n) => n === -1 ? t("All") : n === 365 ? t("1 year") : t("{n} days", { n });
   function memRangePick(d) {
     const cur = d.days || 7;
     const b = menuButton(rangeName(cur), "lib-distrange", () => openProtoMenu(b,
-      (d.ranges || [7, 30, 90, 365, -1]).map((n) => ({ v: String(n), name: rangeName(n), literalName: true, note: n === -1 ? "The latest 400 conversations, read 10 an hour" : "" })),
+      (d.ranges || [7, 30, 90, 365, -1]).map((n) => ({ v: String(n), name: rangeName(n), literalName: true, note: n === -1 ? "The latest 400 conversations" : "" })),
       String(cur), (v) => +v !== cur && distChange("memory/distill", { on: d.on, model: d.model || "", days: +v }), "How far back it reads"));
     b.title = t("How far back it reads");
     return b;
@@ -1149,15 +1149,19 @@ magpie.plugin("library", (ctx) => {
     w.append(el("div", "name", t("Learn from conversations")));
     let line = t("Reads each finished conversation for what to remember. You review each one before agents see it.");
     let err = false;
-    if (d.on && d.running) line = t("Reading conversations…");
-    else if (d.on && d.error) { line = t("Stopped {when}: {error}", { when: ago(d.last), error: d.error }); err = true; }
-    else if (d.on && d.last) line = t("Read {when} · {k} new to review", { when: ago(d.last), k: d.added || 0 });
+    // a run's progress, and what one left, so a long backlog is seen
+    // going and Read now reads the rest (RealZeroP27 on X)
+    const left = d.left ? " · " + t("{n} not read yet", { n: d.left }) : "";
+    if (d.on && d.running) line = d.of ? t("Reading conversations… {n} of {m}", { n: d.doing || 0, m: d.of }) : t("Reading conversations…");
+    else if (d.on && d.error) { line = t("Stopped {when}: {error}", { when: ago(d.last), error: d.error }) + left; err = true; }
+    else if (d.on && d.last) line = t("Read {when} · {k} new to review", { when: ago(d.last), k: d.added || 0 }) + left;
     else if (d.on) line = t("Reads conversations quiet for 30 minutes, every hour");
     w.append(el("div", "sub" + (err ? " err" : ""), line));
     const acts = el("div", "lib-acts");
     if (d.on) {
       acts.append(memModelPick(d), ...[memEffortPick(d)].filter(Boolean), memRangePick(d));
       if (!d.running) acts.append(button(t("Read now"), "action lib-distnow", () => distChange("memory/distill/run", {})));
+      else if (d.of > 1) acts.append(button(t("Stop"), "action lib-diststop", () => distChange("memory/distill/stop", {})));
     }
     acts.append(toggle(d.on, t("Learn from conversations"), (on) => distChange("memory/distill", { on, model: d.model || "" })));
     r.append(glyph(GLYPH.search), w, acts);

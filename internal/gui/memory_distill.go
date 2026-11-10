@@ -32,6 +32,9 @@ type distillView struct {
 	EffortNow string   `json:"effortNow,omitempty"`
 	// Ranges are the ranges, in days, reading can look back (All -1)
 	Ranges []int `json:"ranges"`
+	// Doing of Of are the run going's progress, 0 of 0 with none
+	Doing int `json:"doing,omitempty"`
+	Of    int `json:"of,omitempty"`
 }
 
 func readDistill() (*distillView, error) {
@@ -41,6 +44,9 @@ func readDistill() (*distillView, error) {
 	}
 	st.Done = nil // the marks are the run's, not the page's
 	v := &distillView{State: st, Auto: distillAuto(), Models: []modelRef{}, Running: memdistill.Running() && !memdistill.Dreaming(), Dreaming: memdistill.Dreaming(), Ranges: memdistill.Ranges}
+	if v.Running {
+		v.Doing, v.Of = memdistill.Progress()
+	}
 	inUse := st.Model
 	if inUse == "" {
 		inUse = v.Auto
@@ -131,11 +137,16 @@ func keepDistilling(ctx context.Context) {
 	memdistill.Keep(ctx, 5*time.Minute, time.Hour, distillAuto, distillComplete)
 }
 
-// distillNow starts a run in the background, for the switch turned on
-// and the Read now button; the tab polls while it runs.
+// distillNow reads every conversation due in the background, for the
+// switch turned on, a model or a longer range picked, and the Read now
+// button; the tab polls while it runs, and Stop ends it (RealZeroP27 on
+// X: the hourly 10 read 400 in 40 hours).
 var distillNow = func() {
-	go memdistill.Run(backendCtx, distillAuto(), distillComplete)
+	go memdistill.ReadAll(backendCtx, distillAuto(), distillComplete)
 }
+
+// distillStop ends the run going.
+var distillStop = memdistill.Stop
 
 func memoryDistillRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/memory/distill", func(rw http.ResponseWriter, r *http.Request) {
@@ -205,6 +216,15 @@ func memoryDistillRoutes(mux *http.ServeMux) {
 			return
 		}
 		v.Running = true
+		writeJSON(rw, v)
+	})
+	mux.HandleFunc("POST /api/memory/distill/stop", func(rw http.ResponseWriter, r *http.Request) {
+		distillStop()
+		v, err := readDistill()
+		if err != nil {
+			fail(rw, err)
+			return
+		}
 		writeJSON(rw, v)
 	})
 	// {on}: the nightly tidy switched; the first is due at the next night

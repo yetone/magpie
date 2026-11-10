@@ -4,9 +4,10 @@
 // doesn't say. What it finds waits in memory as a candidate (To review)
 // until the user keeps it; nothing it proposes reaches an agent before.
 //
-// It runs when switched on (State.On), on sessions quiet for Quiet, at
-// most PerRun of them a run, each once for what it held when read: a
-// session that goes on is read again later, whole. The model is the one
+// It runs when switched on (State.On), on sessions quiet for Quiet, each
+// once for what it held when read: a session that goes on is read again
+// later, whole. The hourly run reads at most PerRun; one the user asked
+// for (ReadAll) reads every one due, and Stop ends it. The model is the one
 // picked, else the caller's automatic choice. The request goes through
 // magpie's own gateway (Complete), so masking and routing apply as to any
 // agent's request.
@@ -44,14 +45,16 @@ const (
 	// Quiet is how long a session has had no turn before it is read: one
 	// still going is read when it stops
 	Quiet = 30 * time.Minute
-	// PerRun caps the sessions one run sends to the model
-	PerRun = 10
+	// PerRun caps the sessions an hourly run sends to the model: more
+	// than a busy hour brings, so only a backlog waits for the next run.
+	// A run the user asked for (ReadAll) reads every one due
+	// (RealZeroP27 on X: at 10 an hour, 400 took 40 hours)
+	PerRun = 30
 	// Back is how far back a run looks the first time it is switched on,
 	// when no range is picked (State.Days 0)
 	Back = 7 * 24 * time.Hour
 	// All is State.Days for every conversation listed: the latest
-	// Listed, read PerRun an hour like any other, so a long history is
-	// read over days, not at once
+	// Listed, read at once when picked (ReadAll), else PerRun an hour
 	All = -1
 	// Listed is how many of the latest sessions a run looks through
 	Listed = 400
@@ -94,6 +97,9 @@ type State struct {
 	Read      int       `json:"read,omitempty"`
 	Added     int       `json:"added,omitempty"`
 	Error     string    `json:"error,omitempty"`
+	// Left is how many were due and not read when the last run ended:
+	// stopped, failed or past PerRun
+	Left int `json:"left,omitempty"`
 	// Dream is the nightly tidy switched on (dream.go), DreamSince when
 	Dream      bool      `json:"dream,omitempty"`
 	DreamSince time.Time `json:"dreamSince,omitzero"`
@@ -117,10 +123,33 @@ var (
 	// across magpies
 	running sync.Mutex
 	busy    atomic.Bool
+	// stop ends the run going (Stop), stopped says it was asked to
+	stopMu  sync.Mutex
+	stop    context.CancelFunc
+	stopped atomic.Bool
+	// doing and of are the run's progress: sessions gone through, of
+	// how many
+	doing, of atomic.Int64
 )
 
 // Running says a run is going in this process.
 func Running() bool { return busy.Load() }
+
+// Progress is how many sessions the run going has gone through, of how
+// many it will, read or passed over; 0, 0 when none is going or it is
+// still listing them.
+func Progress() (int, int) { return int(doing.Load()), int(of.Load()) }
+
+// Stop ends the run going in this process, if any: the request in flight
+// is dropped and its session read next time. It isn't an error.
+func Stop() {
+	stopMu.Lock()
+	defer stopMu.Unlock()
+	if stop != nil {
+		stopped.Store(true)
+		stop()
+	}
+}
 
 // ErrRunning is a run asked for while one is going.
 var ErrRunning = errors.New("already reading conversations")
@@ -194,8 +223,11 @@ func since(days int, t time.Time) time.Time {
 
 // Set switches distilling on or off and picks its model ("" automatic).
 // Switched on from off, it looks back the range picked (Back by default)
-// from now.
+// from now; switched off, the run going stops.
 func Set(on bool, model string) (State, error) {
+	if !on {
+		Stop()
+	}
 	return change(func(s *State) {
 		if on && !s.On {
 			s.Since = since(s.Days, now())
@@ -239,10 +271,20 @@ type Result struct {
 	Added int
 }
 
-// Run reads the sessions due, if switched on, with model when the state
-// names none. A model that fails stops the run: the sessions not read
-// yet are read next time.
+// Run reads up to PerRun of the sessions due, if switched on, with auto
+// when the state names no model. A model that fails stops the run: the
+// sessions not read yet are read next time.
 func Run(ctx context.Context, auto string, complete Complete) (Result, error) {
+	return runUpTo(ctx, auto, complete, PerRun)
+}
+
+// ReadAll is Run over every session due, for a run the user asked for:
+// switched on, a model or a longer range picked, Read now. Stop ends it.
+func ReadAll(ctx context.Context, auto string, complete Complete) (Result, error) {
+	return runUpTo(ctx, auto, complete, Listed)
+}
+
+func runUpTo(ctx context.Context, auto string, complete Complete, limit int) (Result, error) {
 	if !running.TryLock() {
 		return Result{}, ErrRunning
 	}
@@ -258,6 +300,19 @@ func Run(ctx context.Context, auto string, complete Complete) (Result, error) {
 	if err != nil || !st.On {
 		return Result{}, err
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	stopMu.Lock()
+	stop = cancel
+	stopped.Store(false)
+	stopMu.Unlock()
+	defer func() {
+		stopMu.Lock()
+		stop = nil
+		stopMu.Unlock()
+		cancel()
+		doing.Store(0)
+		of.Store(0)
+	}()
 	model := st.Model
 	if model == "" {
 		model = auto
@@ -267,10 +322,13 @@ func Run(ctx context.Context, auto string, complete Complete) (Result, error) {
 	if model == "" {
 		runErr = errors.New("no model to read conversations with: pick one")
 	} else {
-		res, runErr = run(ctx, st, model, st.Effort, complete)
+		res, runErr = run(ctx, st, model, st.Effort, complete, limit)
+	}
+	if stopped.Load() && errors.Is(runErr, context.Canceled) {
+		runErr = nil
 	}
 	_, err = change(func(s *State) {
-		s.Last, s.LastModel, s.Read, s.Added, s.Error = now().UTC(), model, res.Read, res.Added, ""
+		s.Last, s.LastModel, s.Read, s.Added, s.Error, s.Left = now().UTC(), model, res.Read, res.Added, "", res.left
 		if runErr != nil {
 			s.Error = runErr.Error()
 		}
@@ -295,6 +353,8 @@ type ran struct {
 	// oldest is the last turn of the oldest session listed, zero when
 	// none was
 	oldest time.Time
+	// left is how many due weren't gone through
+	left int
 }
 
 // forget says a read session's mark, its last turn at, can go: the
@@ -333,17 +393,21 @@ func due(st State, t time.Time) ([]sessions.Session, time.Time) {
 
 func key(s sessions.Session) string { return s.Agent + "/" + s.ID }
 
-func run(ctx context.Context, st State, model, effort string, complete Complete) (ran, error) {
+func run(ctx context.Context, st State, model, effort string, complete Complete, limit int) (ran, error) {
 	r := ran{done: map[string]time.Time{}}
 	ss, oldest := due(st, now())
 	r.oldest = oldest
+	r.left = len(ss)
+	of.Store(int64(len(ss)))
 	for _, s := range ss {
-		if r.Read >= PerRun {
+		if r.Read >= limit {
 			break
 		}
 		if ctx.Err() != nil {
 			return r, ctx.Err()
 		}
+		r.left--
+		doing.Add(1)
 		tr, err := read(s)
 		if err != nil {
 			// one that can't be read now is tried again when it changes
@@ -358,6 +422,10 @@ func run(ctx context.Context, st State, model, effort string, complete Complete)
 		proj := memory.ProjectOf(s.Cwd)
 		reply, err := complete(ctx, model, effort, prompt, request(text, known(proj), proj))
 		if err != nil {
+			r.left++ // read again next time
+			if ctx.Err() != nil {
+				return r, ctx.Err()
+			}
 			return r, fmt.Errorf("%s: %w", model, err)
 		}
 		r.Read++

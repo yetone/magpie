@@ -430,3 +430,92 @@ func TestOldConversationReadOnce(t *testing.T) {
 		t.Fatalf("%+v", st.Done)
 	}
 }
+
+// A backlog is read at once when asked for (RealZeroP27 on X: at 10 an
+// hour, 400 conversations took 40 hours). The hourly run reads PerRun
+// and says how many it left; ReadAll reads every one left, with its
+// progress seen while it goes; what is read isn't read again.
+func TestBacklogReadAtOnce(t *testing.T) {
+	sb := newSandbox(t)
+	on(t, "")
+	if _, err := SetRange(All); err != nil {
+		t.Fatal(err)
+	}
+	for i := range Listed {
+		sb.session(fmt.Sprint("s", i), time.Hour+time.Duration(i)*time.Hour, fmt.Sprint("n", i), "more")
+	}
+	res, err := Run(context.Background(), "a/m", sb.complete)
+	if err != nil || res.Read != PerRun {
+		t.Fatalf("hourly %+v %v", res, err)
+	}
+	if st, _ := Load(); st.Left != Listed-PerRun {
+		t.Fatalf("left %d", st.Left)
+	}
+	var seen [][2]int
+	sb.reply = func(string) (string, error) {
+		n, m := Progress()
+		seen = append(seen, [2]int{n, m})
+		return "[]", nil
+	}
+	sb.asked = nil
+	res, err = ReadAll(context.Background(), "a/m", sb.complete)
+	if err != nil || res.Read != Listed-PerRun || len(sb.asked) != Listed-PerRun {
+		t.Fatalf("read all %+v %v %d", res, err, len(sb.asked))
+	}
+	if seen[0] != [2]int{1, Listed - PerRun} || seen[len(seen)-1] != [2]int{Listed - PerRun, Listed - PerRun} {
+		t.Fatalf("progress %v … %v", seen[0], seen[len(seen)-1])
+	}
+	if n, m := Progress(); n != 0 || m != 0 || Running() {
+		t.Fatalf("after the run %d of %d", n, m)
+	}
+	if st, _ := Load(); st.Left != 0 || st.Error != "" {
+		t.Fatalf("%+v", st)
+	}
+	sb.asked = nil
+	if res, _ := ReadAll(context.Background(), "a/m", sb.complete); res.Read != 0 || len(sb.asked) != 0 {
+		t.Fatalf("read again %+v", res)
+	}
+}
+
+// Stop ends a run going, and so does switching off: the request in
+// flight is dropped and read next time, and it isn't an error.
+func TestStopEndsTheRun(t *testing.T) {
+	sb := newSandbox(t)
+	on(t, "")
+	for i := range 20 {
+		sb.session(fmt.Sprint("s", i), time.Hour+time.Duration(i)*time.Minute, fmt.Sprint("n", i), "more")
+	}
+	stopAt := func(n int, stop func()) func(context.Context, string, string, string, string) (string, error) {
+		return func(ctx context.Context, model, effort, system, user string) (string, error) {
+			if len(sb.asked) == n-1 {
+				stop()
+				<-ctx.Done()
+				sb.asked = append(sb.asked, "stopped")
+				return "", ctx.Err()
+			}
+			return sb.complete(ctx, model, effort, system, user)
+		}
+	}
+	res, err := ReadAll(context.Background(), "a/m", stopAt(5, Stop))
+	if err != nil || res.Read != 4 {
+		t.Fatalf("%+v %v", res, err)
+	}
+	if st, _ := Load(); st.Error != "" || st.Left != 16 || len(st.Done) != 4 || !st.On {
+		t.Fatalf("%+v", st)
+	}
+	sb.asked = nil
+	res, err = ReadAll(context.Background(), "a/m", stopAt(3, func() { Set(false, "") }))
+	if err != nil || res.Read != 2 {
+		t.Fatalf("switched off: %+v %v", res, err)
+	}
+	if st, _ := Load(); st.On || st.Left != 14 {
+		t.Fatalf("%+v", st)
+	}
+	// with none going, Stop does nothing, and the next run reads the rest
+	Stop()
+	on(t, "")
+	sb.asked = nil
+	if res, err := ReadAll(context.Background(), "a/m", sb.complete); err != nil || res.Read != 14 {
+		t.Fatalf("%+v %v", res, err)
+	}
+}

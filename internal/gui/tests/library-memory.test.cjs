@@ -75,11 +75,13 @@ function server(lang, state, sent, dist) {
       if (route.request().method() === "POST") {
         const body = route.request().postDataJSON();
         sent.push({ path: url.pathname, body });
-        if (url.pathname === "/api/memory/distill/run") Object.assign(dist, { running: false, error: "429: too many requests", last: new Date().toISOString() });
+        if (url.pathname === "/api/memory/distill/run") Object.assign(dist, { running: false, error: "429: too many requests", last: new Date().toISOString(), left: 0 });
+        else if (url.pathname === "/api/memory/distill/stop") Object.assign(dist, { running: false, last: new Date().toISOString(), added: 0, left: 397, doing: 0, of: 0 });
         else if ("effort" in body) Object.assign(dist, { effort: body.effort, effortNow: body.effort });
-        else if ("days" in body) Object.assign(dist, { days: body.days === 7 ? 0 : body.days, running: body.days === -1 || body.days > (dist.days || 7), gets: 0 });
-        else Object.assign(dist, { on: body.on, model: body.model, running: body.on, gets: 0, error: "" });
-      } else if (dist.running && ++dist.gets > 1) {
+        else if ("days" in body) Object.assign(dist, { days: body.days === 7 ? 0 : body.days, running: body.days === -1 || body.days > (dist.days || 7), gets: 0, doing: 3, of: 400 });
+        else Object.assign(dist, { on: body.on, model: body.model, running: body.on, gets: 0, error: "", doing: 12, of: 40 });
+      } else if (dist.running && dist.of !== 400 && ++dist.gets > 1) {
+        // (All's 400 go on until stopped)
         // the run ends: it read three and proposed one
         Object.assign(dist, { running: false, last: new Date().toISOString(), read: 3, added: 1 });
         if (!state.memories.some((m) => m.id === "m9")) state.memories.push({ id: "m9", text: "Ships on Tuesdays", kind: "fact", scope: "global", origin: "inferred", status: "candidate", created: at(7), updated: at(7) });
@@ -255,6 +257,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.match(await drow.locator(".lib-distmodel").textContent(), /Small/);
         assert.equal(await trow.locator(".lib-distmodel").count(), 0, "a model picked on both rows");
         assert.equal(await drow.locator(".lib-distnow").count(), 0, "Read now while reading");
+        // how far it has gone, and a way to stop it (RealZeroP27 on X)
+        assert.match(await drow.locator(".sub").textContent(), /12\D+40/);
+        assert.equal(await drow.locator(".lib-diststop").count(), 1, "no Stop while reading");
         assert.equal(await drow.locator(".lib-disteffort").count(), 1, "no reasoning level");
         const rangeShown = await drow.locator(".lib-distrange").textContent();
         assert.match(rangeShown, /7/);
@@ -292,7 +297,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await page.locator(".proto-menu .pm-item").nth(4).click();
           assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/distill").body, { on: true, model: "dt/m1", days: -1 });
           await page.waitForFunction((was) => document.querySelector("#view-library .lib-distrange")?.textContent !== was, rangeShown);
+          // stopped: what it left is said, and Read now reads the rest
+          assert.match(await drow.locator(".sub").textContent(), /3\D+400/);
+          await drow.locator(".lib-diststop").click();
           await drow.locator(".lib-distnow").waitFor({ timeout: 8000 });
+          assert.ok(sent.some((x) => x.path === "/api/memory/distill/stop"));
+          assert.match(await drow.locator(".sub").textContent(), /397/);
+          assert.equal(await drow.locator(".lib-diststop").count(), 0);
           // a run that stopped says why
           await drow.locator(".lib-distnow").click();
           await drow.locator(".sub.err").waitFor();

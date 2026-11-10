@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -186,5 +188,30 @@ func TestDistillRangeAndEffortRoutes(t *testing.T) {
 		if code, _ := post(bad); code == 200 {
 			t.Fatalf("%s taken", bad)
 		}
+	}
+}
+
+// Stop on the row ends the run going (RealZeroP27 on X: a backlog read
+// at once needs a way to stop it), and the view says what the last run
+// left unread.
+func TestDistillStopRoute(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	stops := 0
+	prev := distillStop
+	distillStop = func() { stops++ }
+	t.Cleanup(func() { distillStop = prev })
+	mux := http.NewServeMux()
+	memoryDistillRoutes(mux)
+	os.MkdirAll(filepath.Dir(memdistill.Path()), 0o700)
+	if err := os.WriteFile(memdistill.Path(), []byte(`{"on":true,"left":37}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest("POST", "/api/memory/distill/stop", strings.NewReader(`{}`)))
+	var v distillView
+	json.Unmarshal(rec.Body.Bytes(), &v)
+	if rec.Code != 200 || stops != 1 || v.Left != 37 || v.Running || v.Of != 0 {
+		t.Fatalf("%d %d %+v", rec.Code, stops, v)
 	}
 }
