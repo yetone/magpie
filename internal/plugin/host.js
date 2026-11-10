@@ -2147,6 +2147,17 @@ function fromModelsDev(p, m) {
 // list is told as fallen back, which keeps the one magpie had. The
 // listing's caller may give up (signal), which a hook is told through
 // its own options' signal too (#4678).
+// refusedLists is each account whose models hook said its vendor refused
+// the sign-in (signIn "expired"): {sign, at, n, error}. Its list isn't
+// asked again for that sign-in until retryAfter(n) has passed, as a
+// renewal that failed isn't: two dead Zed sign-ins were listed, and
+// refused by Zed, ~30 times a minute (JZGiVvkSOA75376 on X). Signing in
+// again (another sign-in) asks at once.
+const refusedLists = new Map()
+
+// signInOf is what tells one sign-in of an account from the next.
+const signInOf = (a) => JSON.stringify([a?.access ?? "", a?.refresh ?? "", a?.key ?? ""])
+
 async function info(id, key, strict, limit, quiet, signal) {
   const md = mdev()[id]
   const cfg = providerConfig(id)
@@ -2215,6 +2226,16 @@ async function info(id, key, strict, limit, quiet, signal) {
     const began = Date.now()
     await fresh(id, k)
     const all = readAuth()
+    const held = refusedLists.get(k)
+    if (held && all[k] && held.sign === signInOf(all[k]) && Date.now() - held.at < retryAfter(held.n)) {
+      // refused before, and nothing changed since: the vendor isn't asked
+      // again, and the account stays marked as it was
+      const r = reach.getStore()
+      if (r) r.refused ??= held.error
+      out.fellBack = true
+      out.listError = held.error
+      continue
+    }
     // the hook's own signal: its listWait deadline aborts it, and so does
     // the listing's caller going away, whichever comes first (#4678)
     const ctl = new AbortController()
@@ -2235,6 +2256,7 @@ async function info(id, key, strict, limit, quiet, signal) {
       // show the plugin's short defaults as if they were the account's
       if (out.fellBack) out.listError = l.said || "the plugin couldn't get its vendor's list"
       out.models = Object.fromEntries(Object.entries(next ?? {}).map(([k, m]) => [k, { ...m, id: k, providerID: id }]))
+      refusedLists.delete(k)
     } catch (e) {
       // a listing that gave up waiting: what the hook gives later is no
       // list a request should be built from
@@ -2249,6 +2271,11 @@ async function info(id, key, strict, limit, quiet, signal) {
       if (strict && !(e?.signIn === "expired" && all[k])) throw e
       const r = reach.getStore()
       if (r && e?.signIn === "expired") r.refused ??= e?.message ?? String(e)
+      if (e?.signIn === "expired" && all[k]) {
+        const was = refusedLists.get(k)
+        const sign = signInOf(all[k])
+        refusedLists.set(k, { sign, at: Date.now(), n: was?.sign === sign ? was.n + 1 : 1, error: e?.message ?? String(e) })
+      }
       // a hook that threw on its vendor's failure has no list to tell:
       // magpie keeps the one it had, as for one that gave its defaults back
       out.fellBack = true
