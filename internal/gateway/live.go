@@ -33,6 +33,8 @@ type liveRow struct {
 	f               *inflight
 	// tr: f's trace, nil when its routes are in none
 	tr *trace
+	// curves: f's session speed meter, nil when it has none
+	curves *curveMeter
 }
 
 // liveBegin starts counting f's reply, from is the agent's protocol, which
@@ -43,9 +45,9 @@ func liveBegin(f *inflight, model string, from provider.Protocol) *liveRow {
 		return nil
 	}
 	f.mu.Lock()
-	tr := f.tr
+	tr, curves := f.tr, f.curves
 	f.mu.Unlock()
-	l := &liveRow{f: f, tr: tr, model: model, counter: liveContentCounter{proto: from}}
+	l := &liveRow{f: f, tr: tr, curves: curves, model: model, counter: liveContentCounter{proto: from}}
 	f.live.Store(l)
 	return l
 }
@@ -68,10 +70,12 @@ func (l *liveRow) observe(p []byte) {
 	if !commentOnly(p) {
 		l.contentAt = time.Now().UnixMilli()
 	}
+	was := l.counter.total
 	l.counter.add(p)
 	bytes, contentAt, content := l.bytes, l.contentAt, l.counter.total
 	provider, model := l.provider, l.model
 	l.mu.Unlock()
+	l.curves.add(l.f.agent, l.f.session, provider, model, content-was)
 	l.tell(bytes, contentAt, provider, model, content)
 }
 

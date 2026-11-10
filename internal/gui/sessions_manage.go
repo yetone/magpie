@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
@@ -37,6 +38,18 @@ type manageAgentJSON struct {
 type managedJSON struct {
 	sessions.Managed
 	Via []usage.Via `json:"via,omitempty"`
+	// Keys: the gateway's other "agent|id" keys for it than its own
+	// (sessions.GatewayKeys), for the page to find its speed by
+	Keys []string `json:"keys,omitempty"`
+}
+
+// otherKeys are s's gateway keys but its own agent|id.
+func otherKeys(s sessions.Session) []string {
+	k := sessions.GatewayKeys(s)
+	if len(k) < 2 {
+		return nil
+	}
+	return k[1:]
 }
 
 // listedGateway are the gateway sessions the session lists show: not those
@@ -114,6 +127,17 @@ func sessionManageRoutes(mux *http.ServeMux, w Windows) {
 			return
 		}
 		writeJSON(rw, map[string]bool{"recording": settings.Load().GatewayConversations})
+	})
+	// speeds: each session's output speed now (gateway.Speeds), for the
+	// page's curves while it is open. Not under /api/sessions, which
+	// holds the session files' warm-up for a page that reads them: this
+	// is asked every second and reads none.
+	mux.HandleFunc("GET /api/speeds", func(rw http.ResponseWriter, r *http.Request) {
+		sp := []gateway.Speed{}
+		if gw := served.Load(); gw != nil {
+			sp = append(sp, gw.Speeds()...)
+		}
+		writeJSON(rw, sp)
 	})
 	// manage is the agents with sessions, and every session of ?agent=
 	// (the one with the most when none is named), and the trash.
@@ -220,7 +244,7 @@ func sessionManageRoutes(mux *http.ServeMux, w Windows) {
 			vias := usage.Vias(since.Add(-time.Minute))
 			for _, s := range list {
 				s.Path = tilde(s.Path)
-				out.Sessions = append(out.Sessions, managedJSON{Managed: s, Via: viaOf(vias, s.Session)})
+				out.Sessions = append(out.Sessions, managedJSON{Managed: s, Via: viaOf(vias, s.Session), Keys: otherKeys(s.Session)})
 			}
 			sizes := sessions.GatewaySizes()
 			for _, g := range gateway {

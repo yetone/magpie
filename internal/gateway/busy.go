@@ -85,10 +85,15 @@ func (s *Server) counted(h http.Handler) http.Handler {
 		}
 		s.inFlight.Add(1)
 		r, done := s.active.add(r)
+		shut := func() {}
 		if f := inflightOf(r.Context()); f != nil {
 			f.mu.Lock()
 			f.tr = &s.trace
+			f.curves = &s.curves
 			f.mu.Unlock()
+			// the session's curve counts it in flight, its tool gaps
+			// being the time between
+			shut = s.curves.open(f.agent, f.session)
 		}
 		w, r, unwatch := s.watchUnrouted(w, r, inflightOf(r.Context()))
 		defer func() {
@@ -99,6 +104,7 @@ func (s *Server) counted(h http.Handler) http.Handler {
 				defer panic(p)
 			}
 			unwatch()
+			shut()
 			done()
 			s.lastDone.Store(time.Now().UnixNano())
 			if f := inflightOf(r.Context()); f != nil && f.agent == "codex" {
@@ -124,6 +130,8 @@ type busyCounters struct {
 	codexDone atomic.Int64 // unix ns
 	// handing back what requests left once it rests (idle_memory.go)
 	idle idleMemory
+	// each session's output speed, for the Sessions page (session_speed.go)
+	curves curveMeter
 }
 
 // parked is how many runs wait on their caller's tool results.

@@ -89,3 +89,18 @@ func resetRates() {
 	liveRates.m = map[string]rateSample{}
 	liveRates.mu.Unlock()
 }
+
+// rate is the pair's learned output tokens a content byte, false when it
+// has none yet (as estimate).
+func (t *tokenRates) rate(provider, model string) (float64, bool) {
+	if provider == "" || model == "" {
+		return 0, false
+	}
+	t.mu.Lock()
+	s, ok := t.m[rateKey(provider, model)]
+	t.mu.Unlock()
+	if !ok || s.seen < liveRateMin || s.bytes <= 0 || s.output <= 0 {
+		return 0, false
+	}
+	return float64(s.output) / float64(s.bytes), true
+}

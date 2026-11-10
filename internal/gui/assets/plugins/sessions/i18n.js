@@ -2,6 +2,11 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Avg {n} tok/s": "平均 {n} token/秒",
+    "Tool {n}s": "工具 {n} 秒",
+    "Round average": "本轮平均",
+    "Fastest second": "峰值",
+    "Out so far": "已输出",
     "Show your agents' sessions?": "显示智能体的会话吗？",
     "magpie reads no agent's session history until you allow it. Pick the agents whose sessions this page may show; what magpie's gateway served is counted either way. You can change this in Settings › Privacy.": "在你允许之前，magpie 不读取任何智能体的会话历史。选择本页可以显示哪些智能体的会话；magpie 网关处理过的请求照常计入。之后可在 设置 › 隐私 中更改。",
     "No agent's sessions were found on this computer yet.": "这台电脑上还没有找到任何智能体的会话。",
@@ -92,6 +97,11 @@ magpie.strings({
     "Searched what was said in the latest {n} of {total} sessions.": "已搜索最近 {n} 个会话的对话内容（共 {total} 个）。",
   },
   "zh-TW": {
+    "Avg {n} tok/s": "平均 {n} token/秒",
+    "Tool {n}s": "工具 {n} 秒",
+    "Round average": "本輪平均",
+    "Fastest second": "峰值",
+    "Out so far": "已輸出",
     "Show your agents' sessions?": "顯示智慧體的會話嗎？",
     "magpie reads no agent's session history until you allow it. Pick the agents whose sessions this page may show; what magpie's gateway served is counted either way. You can change this in Settings › Privacy.": "在你允許之前，magpie 不讀取任何智慧體的會話歷史。選擇本頁可以顯示哪些智慧體的會話；magpie 閘道處理過的請求照常計入。之後可在 設定 › 隱私 中變更。",
     "No agent's sessions were found on this computer yet.": "這台電腦上還沒有找到任何智慧體的會話。",
@@ -182,6 +192,11 @@ magpie.strings({
     "Searched what was said in the latest {n} of {total} sessions.": "已搜尋最近 {n} 個會話的對話內容（共 {total} 個）。",
   },
   ja: {
+    "Avg {n} tok/s": "平均 {n} トークン/秒",
+    "Tool {n}s": "ツール {n} 秒",
+    "Round average": "このターンの平均",
+    "Fastest second": "ピーク",
+    "Out so far": "出力済み",
     "Show your agents' sessions?": "エージェントのセッションを表示しますか？",
     "magpie reads no agent's session history until you allow it. Pick the agents whose sessions this page may show; what magpie's gateway served is counted either way. You can change this in Settings › Privacy.": "許可するまで、magpie はどのエージェントのセッション履歴も読みません。このページに表示してよいエージェントを選んでください。magpie のゲートウェイが処理したリクエストはどちらでも集計されます。あとから 設定 › プライバシー で変更できます。",
     "No agent's sessions were found on this computer yet.": "このコンピュータにはまだエージェントのセッションが見つかりません。",
@@ -272,6 +287,11 @@ magpie.strings({
     "Searched what was said in the latest {n} of {total} sessions.": "最新 {n} 件の会話の内容を検索しました（全 {total} 件）。",
   },
   de: {
+    "Avg {n} tok/s": "Ø {n} Token/s",
+    "Tool {n}s": "Tool {n} s",
+    "Round average": "Ø dieser Runde",
+    "Fastest second": "Spitze",
+    "Out so far": "Ausgegeben",
     "Show your agents' sessions?": "Sitzungen deiner Agenten anzeigen?",
     "magpie reads no agent's session history until you allow it. Pick the agents whose sessions this page may show; what magpie's gateway served is counted either way. You can change this in Settings › Privacy.": "magpie liest den Sitzungsverlauf keines Agenten, bis du es erlaubst. Wähle die Agenten, deren Sitzungen diese Seite zeigen darf; was das Gateway von magpie bedient hat, wird so oder so gezählt. Ändern kannst du das unter Einstellungen › Datenschutz.",
     "No agent's sessions were found on this computer yet.": "Auf diesem Computer wurden noch keine Sitzungen von Agenten gefunden.",

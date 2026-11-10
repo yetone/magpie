@@ -1078,6 +1078,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	effort := "" // the reasoning Codex asked for, which goes on as it is
 	end := func(status int, msg string, tokens, out int) {}
 	var tools *toolScan // whether the reply calls a tool, for a turn's end
+	var live *liveRow   // the reply counted as it reaches Codex (live.go)
 	if rest != "/responses" {
 		// no route of its own (a compaction, a memory): recorded alone
 		noteMasked(r, "chat", maskedHits, sentOf(maskedHits, body), 0, "openai", modelOf(body))
@@ -1114,6 +1115,8 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 			s.trace.update(tr, func(t *Route) { t.Masked = m })
 		}
 		first.onFirst = s.trace.firstContent(tr)
+		live = liveBegin(inflightOf(r.Context()), model, provider.Responses)
+		live.routed("openai", model)
 		promptRead := s.inspectPrompt(tr, provider.Responses, body, body, sentWhole)
 		end = func(status int, msg string, tokens, out int) {
 			ms := time.Since(start).Milliseconds()
@@ -1526,6 +1529,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 				}
 				m, werr := out.Write(buf[:n])
 				passed += int64(m)
+				live.observe(buf[:m])
 				if werr != nil {
 					writeErr = werr
 					break
@@ -1627,6 +1631,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	if line := codexEndedEarly(res, sniff, call.Model, callerOf(r).agent, began, passed, readErr, writeErr, r.Context()); line != "" {
 		log.Print(line)
 	}
+	live.finish(call.Status >= 400, uu.Output)
 	end(call.Status, call.Error, uu.Input+uu.Output+uu.CacheRead+uu.CacheWrite, uu.Output)
 	call.Route = tr.ID
 	call.Masked = s.trace.maskedOf(tr)

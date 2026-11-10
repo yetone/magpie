@@ -181,3 +181,35 @@ body.window .row.sm-sub-row { min-height: 42px; padding-left: calc(14px + var(--
 .sm-consent-row .lib-switch { flex: none; cursor: pointer; padding: 0; border: 0; }
 .sm-consent-row .lib-switch:disabled { opacity: .5; cursor: default; }
 .sm-consent-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+/* a session's output speed (session_speed.go): its last two minutes and
+   tokens a second now, opening the round's numbers */
+.row.sm-sess .sm-speed { flex: none; display: inline-flex; align-items: center; gap: 10px; height: 30px; padding: 0 8px; border: 0; border-radius: 7px; background: none; color: var(--muted); font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; transition: background-color .15s ease; }
+.row.sm-sess .sm-speed[hidden] { display: none; }
+@media (hover: hover) and (pointer: fine) { .row.sm-sess .sm-speed:hover { background: var(--pill); } }
+.row.sm-sess .sm-speed.open { background: var(--pill); }
+.row.sm-sess .sm-speed:active { transform: scale(.97); }
+.sm-speed .sm-curve { display: block; flex: none; }
+.sm-speed-val { min-width: 72px; text-align: right; }
+.sm-speed-val.live { color: var(--fg); }
+.sm-speed-val b { font-size: 13px; font-weight: 600; }
+.sm-speed-val small { font-size: 11px; color: var(--muted); }
+.sm-curve-line { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; }
+.sm-curve-fill { fill: var(--accent); fill-opacity: .08; }
+.sm-curve-gap { stroke: var(--faint); stroke-width: 1.5; stroke-dasharray: 3 3; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sm-curve-fill { fill-opacity: .1; } }
+:root[data-theme="dark"] .sm-curve-fill { fill-opacity: .1; }
+/* a narrow list keeps the number and leaves the curve to the popover */
+@container sm-tree (width < 620px) { .sm-speed .sm-curve { display: none; } .sm-speed-val { min-width: 0; } }
+.pop.sm-speed-pop { width: min(340px, calc(100vw - 16px)); max-height: none; padding: 14px 16px; gap: 10px; transform-origin: right top; font-variant-numeric: tabular-nums; }
+.pop.sm-speed-pop.up { transform-origin: right bottom; }
+.sm-sp-head { display: flex; align-items: baseline; gap: 6px; }
+.sm-sp-big { font-size: 28px; font-weight: 600; letter-spacing: -.02em; color: var(--fg); }
+.sm-sp-unit { font-size: 12px; color: var(--muted); }
+.sm-sp-chart { position: relative; height: 72px; }
+.sm-sp-chart .sm-curve { width: 100%; }
+.sm-sp-gap { position: absolute; bottom: 8px; font-size: 10.5px; color: var(--muted); white-space: nowrap; pointer-events: none; }
+.sm-sp-dot { position: absolute; right: -4px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--card); }
+.sm-sp-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding-top: 10px; border-top: 1px solid var(--line-2); }
+.sm-sp-stats > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sm-sp-k { font-size: 11px; color: var(--muted); }
+.sm-sp-v { font-size: 13px; font-weight: 500; color: var(--fg); white-space: nowrap; }

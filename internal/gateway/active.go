@@ -48,6 +48,8 @@ type inflight struct {
 	unrouted *unroutedHold
 	// tr: the trace its routes are in, for the phase they say (under mu)
 	tr *trace
+	// curves: the speed meter its reply is counted in (under mu)
+	curves *curveMeter
 	// redaction: its maskings, their phase and time (redact_phase.go)
 	redaction redaction
 	// live: its reply counted as it reaches the agent (live.go)

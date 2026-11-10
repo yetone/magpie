@@ -1433,8 +1433,10 @@ Cost: `observe` takes the row's lock and the trace's, neither held while
 anything blocks. A whole JSON reply (its first byte `{` or `[`) is counted
 in bytes only, never copied or decoded; a stream is cut into lines in
 place, only a line cut by the end of a write is copied, and a line over
-1 MiB is passed over. The ChatGPT backend's chain (`codex_backend.go`)
-writes past the capture writer and is not counted.
+1 MiB is passed over. The ChatGPT backend's chain (`codex_backend.go`,
+`codexUpstreamOn`) writes past the capture writer, so it begins a
+`liveRow` of its own and calls `observe` on each chunk it copies, as the
+Responses protocol.
 
 The page ([`plugins/routing/client.js`](../../internal/gui/assets/plugins/routing/client.js),
 `liveParts`, `paintLive`) shows the numbers on a request in flight's row
@@ -1443,6 +1445,42 @@ and beside the account answering it, changed in place each second; after
 the request is done. `TestLiveCountsARealStream` and the other tests in
 [`live_test.go`](../../internal/gateway/live_test.go), and
 `routing-live-bytes.test.cjs`.
+
+### A session's output speed
+
+The Sessions page draws each session's output speed over its last two
+minutes, the way a token speed chart does
+([`session_speed.go`](../../internal/gateway/session_speed.go)).
+`counted()` opens the session's track (`curveMeter.open`, by the
+request's agent and `sessionOf` id; none without a session) for as long
+as the request is in flight, and `liveRow.observe` adds the content bytes
+it counts to it (`curveMeter.add`). A track keeps a ring of 120 seconds:
+the bytes of each second, and whether anything of the session's was in
+flight in it. A second with nothing in flight is a gap (`null` on the
+curve): the agent was running a tool, or waiting. Tokens are the bytes
+at the rate `liveRates` learned for the provider and model (`rate`);
+until it has one the curve is in bytes, `rated` is false and every
+number is 0, never a guess.
+
+A round is the run of requests with no pause over `curveRound` (2 min)
+between them; its average (over the seconds it wrote in), peak (of a 3
+second moving average) and output are kept. A track idle over
+`curveForget` (10 min) is dropped, and at most `curveMost` (256) are kept.
+The meter's lock is never held while anything blocks; `add` is a map
+lookup and an add.
+
+`GET /api/speeds` (`internal/gui/sessions_manage.go`, not under
+`/api/sessions`, so a poll never counts as reading the agents' sessions)
+returns `[]gateway.Speed`, newest first. `/api/sessions/manage` gives each
+native row its other gateway keys (`keys`, `sessions.GatewayKeys` past the
+first) so a row finds its speed by any of them. The page
+([`plugins/sessions/client.js`](../../internal/gui/assets/plugins/sessions/client.js),
+`speedCell`, `openSpeed`) reads it once a second only while it is shown
+and the window is in sight, and draws a row's curve and tokens a second
+now (the round's average once nothing is in flight); a click opens the
+round's numbers and its gaps. Tests: [`session_speed_test.go`](../../internal/gateway/session_speed_test.go)
+(`TestSessionCurveFromARealStream`, `TestSessionCurveFromCodexOwnSignIn`)
+and `sessions-speed.test.cjs`.
 
 ## Turning provider search off
 
