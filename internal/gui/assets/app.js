@@ -21159,7 +21159,7 @@ function renderAlerts(s, keep) {
 // in Settings, apart from the agents they set (the owner, 10-20); Long
 // conversations is Codex's, Claude Code's and Grok Build's (uk.jent), in each one's sheet.
 const AGENT_PREFS = {
-  codex: ["codexAgentsV1Row", "codexSubagentModelRow", "fullContextRow", "codexAsyncRow", "codexTitlesRow", "codexDescriptionsRow", "codexPredictionsRow", "codexAutoReviewRow", "codexMemoriesRow"],
+  codex: ["codexAgentsV1Row", "codexSubagentModelRow", "codexServiceTierRow", "fullContextRow", "codexAsyncRow", "codexTitlesRow", "codexDescriptionsRow", "codexPredictionsRow", "codexAutoReviewRow", "codexMemoriesRow"],
   claude: ["fullContextRow"],
   grok: ["fullContextRow"],
 };
@@ -21214,16 +21214,14 @@ function renderAgentPrefs() {
   homeAgentPrefRows();
   // what each row does, in its tooltip (#2120)
   for (const [row, en] of [
+    ["#codexServiceTierRow", "Every request Codex sends goes at this tier, whatever /fast is set to in Codex; Ultrafast goes as Fast where the plan has none"],
     ["#codexTitlesRow", "Names each thread in a hidden request of its own; same as the session, it goes on the session’s model, as Codex sends it when that is one of Codex’s own"],
     ["#codexDescriptionsRow", "Writes each thread’s short description in a hidden request of its own; same as the session, it goes on the session’s model, as Codex sends it when that is one of Codex’s own"],
     ["#codexPredictionsRow", "Guesses your next message for the composer, reading the whole conversation again each time; same as the session, it goes on the session’s model"],
     ["#codexAutoReviewRow", "Decides an approval in your place when Codex’s approvals are on auto-review; Codex’s own pick is codex-auto-review, else the conversation’s model at low effort; on a ChatGPT Free plan, where codex-auto-review isn’t free, unset follows the session"],
     ["#codexMemoriesRow", "Writes Codex’s memories of past threads, in the background; same as the session, on the session’s model, or on Codex’s own memory models when that is one of Codex’s own"],
   ]) $(row + " .who").title = t(en);
-  // Codex's own models in multi-agent V1 (their subagents' tasks go as text),
-  // so a GPT lead can run a subagent on magpie's other models (#141). Where
-  // Codex's own multi_agent_v2 is on in the config magpie routes it wins, and
-  // magpie writes nothing: the row says so and the user turns it off.
+  // multi-agent V1 (#141); Codex's own multi_agent_v2 wins, said in the row
   const v1Warn = $("#codexAgentsV1Warn");
   v1Warn.hidden = !s.notice;
   v1Warn.textContent = s.notice ? tNotice(s.notice) : "";
@@ -21272,6 +21270,7 @@ function renderAgentPrefs() {
   box.append(asyncRow);
   if (held.length) box.append(el("div", "hint codex-async-held", codexHeld(held)));
   $("#codexAsyncSegs").replaceChildren(box);
+  renderCodexServiceTier(s);
   renderCodexTitles(s);
   renderCodexDescriptions(s);
   renderCodexPredictions(s);
@@ -21354,27 +21353,42 @@ function codexSidePick(s, key, aria, none, path) {
   $("#" + key + "Pick").replaceChildren(b);
 }
 
-// renderCodexDescriptions picks the model for descriptions independently
-// of titles; an empty setting preserves Codex's requested model, off
-// answers with no description.
+// Codex's service tiers, its own names (JackyFill on X)
+const CODEX_TIERS = [
+  { v: "", name: "As Codex asks", note: "/fast in Codex" },
+  { v: "default", name: "Standard", note: "" },
+  { v: "priority", name: "Fast", note: "priority" },
+  { v: "ultrafast", name: "Ultrafast", note: "ultrafast" },
+];
+function renderCodexServiceTier(s) {
+  const v = s.codexServiceTier || "";
+  const cur = CODEX_TIERS.find((o) => o.v === v) || CODEX_TIERS[0];
+  const b = el("button", "rt-cond on");
+  b.type = "button";
+  b.setAttribute("aria-label", t("Codex service tier"));
+  b.setAttribute("aria-haspopup", "menu");
+  b.append(el("span", "", t(cur.name)));
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    openProtoMenu(b, CODEX_TIERS, cur.v, (tier) => {
+      if (tier === cur.v) return;
+      prefWrite(api("settings/codex-service-tier", { tier }));
+    }, "Codex service tier", "sess-menu");
+  };
+  $("#codexServiceTierPick").replaceChildren(b);
+}
+
+// Codex's descriptions: as sent, off, or a model
 function renderCodexDescriptions(s) { codexSidePick(s, "codexDescriptions", "Codex thread descriptions", "no description, nothing sent", "codex-descriptions"); }
 
-// renderCodexPredictions: where the Codex app's guess at the user's next
-// message goes (#1970) — as Codex sends it, on the thread's own model; off,
-// answered by magpie with no prediction; or to a model of magpie's.
+// Codex's next-message guesses (#1970)
 function renderCodexPredictions(s) { codexSidePick(s, "codexPredictions", "Codex composer predictions", "no prediction, nothing sent", "codex-predictions"); }
 
-// renderCodexTitles: where Codex's requests for a thread's title go (#705)
-// — as Codex sends them, to its own model through its ChatGPT sign-in; off,
-// answered by magpie with no title; or to a model of magpie's — set on its
-// own, as Codex's subagents are.
+// Codex's thread titles (#705)
 function renderCodexTitles(s) { codexSidePick(s, "codexTitles", "Codex thread titles", "no title, nothing sent", "codex-titles"); }
 
-// renderCodexAutoReview: the model Codex's auto-review — the reviewer that
-// decides an approval in the user's place — runs on (#938): Codex's own pick
-// (its codex-auto-review, else the conversation's model), or a model of
-// magpie's named in every entry of the list magpie hands Codex, or the
-// session's own ("session": each of magpie's entries names itself).
+// Codex's auto-review model (#938)
 function renderCodexAutoReview(s) {
   const models = s.titleModels || [];
   const v = s.codexAutoReview || "";
@@ -21415,11 +21429,7 @@ function renderCodexMemories() {
   $("#codexMemoriesPick").replaceChildren(b);
 }
 
-// renderCodexSubagentModel: Codex's subagent model in its sheet, a row with
-// a name, as the memories one is: the card's square alone is easy to miss.
-// The same field and picker, so the row and the square are one setting.
-// It says its name alone, its button the choice, Same as the lead or the
-// model; what that does is the row's title.
+// Codex's subagent model: the card's field, as a row
 function renderCodexSubagentModel() {
   homeAgentPrefRows();
   const row = $("#codexSubagentModelRow");

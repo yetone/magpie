@@ -2007,6 +2007,20 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
+	// the service tier every request of Codex's goes at (JackyFill on X):
+	// "" as Codex asks it, "default" with none, "priority" or "ultrafast"
+	mux.HandleFunc("POST /api/settings/codex-service-tier", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Tier string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := provider.SetCodexServiceTier(in.Tier); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
 	// Warm up now: one Codex or Claude account's warm-up sent at once, and
 	// why it failed
 	mux.HandleFunc("POST /api/warm-now", func(rw http.ResponseWriter, r *http.Request) {

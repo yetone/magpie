@@ -2117,6 +2117,9 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 		// (Gearclickist on Discord)
 		if from == provider.Responses && (fromCodex(r.Header) || agentOf(r) == "codex") {
 			body = spawnAgentModels(r, body, model, false)
+			// the service tier set for Codex, in place of the one it
+			// asked (codexTiered)
+			body = codexTiered(r, body, model)
 		}
 		if from == provider.Chat {
 			body = thinkingEffort(body)

@@ -1,7 +1,7 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // An agent's own settings are where the agent is (the owner, 10-20: Codex's
 // and Claude Code's rows sat in Settings › General, apart from the agents
-// they set). In the window, Codex's opened row holds its eight and Claude
+// they set). In the window, Codex's opened row holds its nine and Claude
 // Code's and Grok Build's their one, Long conversations (Grok Build's since
 // uk.jent on Discord: its context_window is where it compacts); Settings has none of them, but its
 // search still finds them, as a row saying where they are whose Open shows
@@ -20,7 +20,7 @@ const { chromium, webkit } = require("playwright");
 const { watchSettingsReads, agentRow, openAgentSettings } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
-const CODEX = ["codexAgentsV1Row", "fullContextRow", "codexAsyncRow", "codexTitlesRow", "codexDescriptionsRow", "codexPredictionsRow", "codexAutoReviewRow", "codexMemoriesRow"];
+const CODEX = ["codexAgentsV1Row", "codexServiceTierRow", "fullContextRow", "codexAsyncRow", "codexTitlesRow", "codexDescriptionsRow", "codexPredictionsRow", "codexAutoReviewRow", "codexMemoriesRow"];
 
 function settingsPayload(over) {
   return {
@@ -103,7 +103,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.goto("http://magpie.test/?view=agents");
         await openAgentSettings(page, "codex");
         const codexBox = '.row.agent[data-id="codex"] .ag-prefs';
-        assert.deepEqual(await shownIn(page, codexBox), CODEX, `${lang} ${width}: Codex's eight`);
+        assert.deepEqual(await shownIn(page, codexBox), CODEX, `${lang} ${width}: Codex's nine`);
         assert(await page.locator(codexBox).evaluate((b) => b.scrollWidth <= b.clientWidth + 1), `${lang} ${width}: the rows fit the opened row`);
         await noSideScroll(page, `${lang} ${width} Codex`);
         await openAgentSettings(page, "claude");
@@ -131,7 +131,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await link.getByRole("button", { name: w.open, exact: true }).click();
         await sheet(page).waitFor();
         assert.equal(await sheet(page).locator(".ehead").textContent(), w.sheet);
-        assert.deepEqual(await shownIn(page, "#modal .editor.agent-prefs"), CODEX, `${lang} ${width}: the sheet has Codex's eight`);
+        assert.deepEqual(await shownIn(page, "#modal .editor.agent-prefs"), CODEX, `${lang} ${width}: the sheet has Codex's nine`);
         assert(await page.locator("#view-agents").isVisible(), "Open goes to the Agents page");
         await page.keyboard.press("Escape");
         await page.locator("#modal").waitFor({ state: "hidden" });

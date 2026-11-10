@@ -353,6 +353,7 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	// in their Agents rows
 	in.CodexSubagentModel = cur.CodexSubagentModel
 	in.DesktopSubagentModel = cur.DesktopSubagentModel
+	in.CodexServiceTier = cur.CodexServiceTier // codex-service-tier
 	// and the model DeepSeek Harness compacts on, set in its row
 	in.DshCompactModel = cur.DshCompactModel
 	// and the model for requests masking would change (redact-route)

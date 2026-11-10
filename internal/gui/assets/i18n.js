@@ -4,6 +4,11 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "Codex service tier": "Codex 服务层级",
+    "As Codex asks": "按 Codex 的请求",
+    "/fast in Codex": "Codex 里的 /fast",
+    "Standard": "标准",
+    "Every request Codex sends goes at this tier, whatever /fast is set to in Codex; Ultrafast goes as Fast where the plan has none": "Codex 发出的每个请求都走这个层级，不管 Codex 里的 /fast 怎么设；套餐没有极速时按快速发",
     "Check-in time": "签到时间",
     "From {at} each day, for every vendor's check-in": "每天 {at} 起签到，所有服务商的签到都按这个时间",
     "As soon as each vendor's day starts": "每个服务商的新一天一开始就签到",
@@ -4890,6 +4895,11 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "这份报告已经不在了：magpie 只保留最近 5 份。",
   },
   "zh-TW": {
+    "Codex service tier": "Codex 服務層級",
+    "As Codex asks": "依 Codex 的請求",
+    "/fast in Codex": "Codex 裡的 /fast",
+    "Standard": "標準",
+    "Every request Codex sends goes at this tier, whatever /fast is set to in Codex; Ultrafast goes as Fast where the plan has none": "Codex 送出的每個請求都走這個層級，不論 Codex 裡的 /fast 怎麼設；方案沒有極速時按快速送出",
     "Check-in time": "簽到時間",
     "From {at} each day, for every vendor's check-in": "每天 {at} 起簽到，所有服務商的簽到都按這個時間",
     "As soon as each vendor's day starts": "每個服務商的新一天一開始就簽到",
@@ -9761,6 +9771,11 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "這份報告已經不在了：magpie 只保留最近 5 份。",
   },
   ja: {
+    "Codex service tier": "Codex のサービスティア",
+    "As Codex asks": "Codex の指定どおり",
+    "/fast in Codex": "Codex の /fast",
+    "Standard": "標準",
+    "Every request Codex sends goes at this tier, whatever /fast is set to in Codex; Ultrafast goes as Fast where the plan has none": "Codex が送るすべてのリクエストをこのティアで送ります。Codex の /fast の設定は問いません。プランに超高速がなければ高速で送ります",
     "Check-in time": "チェックインの時刻",
     "From {at} each day, for every vendor's check-in": "毎日 {at} からチェックイン（すべてのサービスのチェックインに共通）",
     "As soon as each vendor's day starts": "各サービスの日付が変わったらすぐにチェックイン",
@@ -14634,6 +14649,11 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "このレポートはもう残っていません。magpie は最新の 5 件だけを保存します。",
   },
   de: {
+    "Codex service tier": "Codex-Servicestufe",
+    "As Codex asks": "Wie Codex es anfragt",
+    "/fast in Codex": "/fast in Codex",
+    "Standard": "Standard",
+    "Every request Codex sends goes at this tier, whatever /fast is set to in Codex; Ultrafast goes as Fast where the plan has none": "Jede Anfrage von Codex geht in dieser Stufe, egal wie /fast in Codex steht; Ultrafast geht als Schnell, wo der Tarif es nicht hat",
     "Check-in time": "Check-in-Zeit",
     "From {at} each day, for every vendor's check-in": "Täglich ab {at}, für den Check-in jedes Anbieters",
     "As soon as each vendor's day starts": "Sobald der Tag des jeweiligen Anbieters beginnt",
