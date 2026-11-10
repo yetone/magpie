@@ -80,14 +80,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const head = open.locator(".mnhead");
       await head.waitFor();
       assert.equal((await head.locator("b").textContent()).trim(), w.names);
-      const fold = head.locator("button");
+      const fold = head.locator("button:not(.mbig)");
       assert.equal((await fold.textContent()).trim(), w.fold);
       // the Fold stays at the top while the rows scroll
       await open.evaluate((n) => { n.scrollTop = n.scrollHeight; });
       const [nTop, hTop] = await Promise.all([open.evaluate((n) => n.getBoundingClientRect().top), head.evaluate((h) => h.getBoundingClientRect().top)]);
       assert.ok(Math.abs(hTop - nTop) <= 2, `the head scrolled away: ${hTop} vs ${nTop}`);
       const before = await scrolls(page);
-      await page.locator(".mnames:not([hidden]) .mnhead button").click();
+      await page.locator(".mnames:not([hidden]) .mnhead button:not(.mbig)").click();
       await open.waitFor({ state: "detached" }).catch(() => {});
       assert.equal(await open.count(), 0, "Fold folds it");
       assert.equal(await page.locator(".mfoot button.on", { hasText: w.names }).count(), 0, "the button under the list reads as off");

@@ -11569,8 +11569,7 @@ function renderModels(p) {
     names.hidden = naming !== p.id;
     if (names.hidden) return;
     names.style.minHeight = tall + "px";
-    // its title and a Fold where it opened (Hu9956, #868)
-    const head = el("div", "mnhead");
+    const head = el("div", "mnhead"); // its title, search and Fold (#868)
     const fold = el("button", "text action", t("Fold"));
     fold.title = t("Fold Model settings");
     fold.onclick = (e) => {
@@ -11952,6 +11951,7 @@ function renderModels(p) {
       drawReset();
       names.append(row);
     }
+    if (ids.length > 5) window.modelFind ? modelFind(names, head) : import("./modelfind.js").then(() => modelFind(names, head), () => {});
     names.style.minHeight = "";
     names.scrollTop = top;
   };
