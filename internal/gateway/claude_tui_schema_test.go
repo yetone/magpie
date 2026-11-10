@@ -137,3 +137,18 @@ func TestAnswerTool(t *testing.T) {
 		t.Fatalf("a schema's own $ref: %v", err)
 	}
 }
+
+// A schema is checked against its draft's metaschema, which the vendored
+// jsonschema (third_party/jsonschema) compiles on first use, not at
+// launch: a schema that breaks its draft is still refused.
+func TestAnswerSchemaCheckedAgainstItsDraft(t *testing.T) {
+	for _, s := range []string{
+		`{"type":5}`,
+		`{"type":"object","properties":{"a":{"minLength":"x"}}}`,
+		`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":"a"}`,
+	} {
+		if _, err := compileAnswerSchema(json.RawMessage(s)); err == nil {
+			t.Errorf("%s compiled", s)
+		}
+	}
+}
