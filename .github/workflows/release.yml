@@ -21,6 +21,8 @@ on:
 jobs:
   trigger-release:
     runs-on: ubuntu-latest
+    # room for the dispatch to wait out the owner's API rate limit (65 min)
+    timeout-minutes: 75
     outputs:
       version: ${{ steps.version.outputs.version }}
       ref: ${{ steps.version.outputs.ref }}
@@ -45,13 +47,67 @@ jobs:
           echo "Triggering release for version: $VERSION (ref: $REF)"
 
       - name: Trigger release workflow in magpie-releases
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          # PAT with contents write on yetone/magpie-releases.
-          token: ${{ secrets.RELEASES_REPO_TOKEN }}
-          repository: yetone/magpie-releases
-          event-type: release
-          client-payload: '{"ref": "${{ steps.version.outputs.ref }}", "version": "${{ steps.version.outputs.version }}"}'
+        env:
+          # PAT with contents write on yetone/magpie-releases. It is the
+          # owner's, so it shares the 5,000/hr core limit with every `gh`
+          # the owner runs: v0.1.3561 to v0.1.3573 failed here with "API
+          # rate limit exceeded" and never got a release. A rate-limited
+          # answer waits for the reset and tries again, up to 65 minutes.
+          TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+          API_URL: ${{ github.api_url }}
+          REF: ${{ steps.version.outputs.ref }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          payload=$(jq -nc --arg ref "$REF" --arg version "$VERSION" \
+            '{event_type: "release", client_payload: {ref: $ref, version: $version}}')
+          url="$API_URL/repos/yetone/magpie-releases/dispatches"
+          tmp=$(mktemp -d)
+          deadline=$(( $(date +%s) + ${DISPATCH_MAX_WAIT:-3900} ))
+          header() { awk -v k="$1" -F': *' 'tolower($1) == k { v = $2 } END { sub(/\r$/, "", v); print v }' "$tmp/headers"; }
+          for try in $(seq 1 100); do
+            code=$(curl -sS -o "$tmp/body" -D "$tmp/headers" -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer $TOKEN" \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              --data "$payload" "$url") || { echo "::error::dispatch request failed (curl exit $?)"; exit 1; }
+            if [[ "$code" == 2* ]]; then
+              echo "Dispatched release for $REF (HTTP $code, try $try)"
+              exit 0
+            fi
+            retry_after=$(header retry-after)
+            remaining=$(header x-ratelimit-remaining)
+            reset=$(header x-ratelimit-reset)
+            limited=
+            if [[ "$code" == 403 || "$code" == 429 ]]; then
+              if [[ -n "$retry_after" || "$remaining" == 0 ]] || grep -qi 'rate limit' "$tmp/body"; then
+                limited=1
+              fi
+            fi
+            if [[ -z "$limited" ]]; then
+              echo "::error::dispatch failed with HTTP $code"
+              cat "$tmp/body"; echo
+              exit 1
+            fi
+            now=$(date +%s)
+            if [[ "$retry_after" =~ ^[0-9]+$ ]]; then
+              until=$(( now + retry_after ))
+            elif [[ "$reset" =~ ^[0-9]+$ ]] && (( reset > now )); then
+              until=$reset
+            else
+              until=$(( now + 60 )) # a secondary limit may give neither
+            fi
+            until=$(( until + 5 ))
+            if (( until > deadline )); then
+              echo "::error::rate limited (HTTP $code) until $(date -u -d "@$until" 2>/dev/null || echo "$until"), past the wait allowed"
+              cat "$tmp/body"; echo
+              exit 1
+            fi
+            echo "::warning::rate limited (HTTP $code, try $try); waiting $(( until - now ))s for the limit to reset"
+            sleep $(( until - now ))
+          done
+          echo "::error::dispatch still rate limited after $try tries"
+          exit 1
 
       - name: Output status
         run: echo "Watch the build at https://github.com/yetone/magpie-releases/actions"
