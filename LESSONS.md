@@ -511,6 +511,25 @@ browser API is tried in the real Linux app too.
   reads.
 - Seen 1× (2026-10-11).
 
+**Two paths are compared with links followed on both sides.**
+- 3bb9575dc followed the rtk path's links and compared it with a winget
+  record read as written. macOS's /var is a link to /private/var, so
+  TestRTKWingetFolderWithoutRecord was red on mote (#6127), and the same
+  mismatch sat in askWingetOwns: an rtk under a junctioned folder read as
+  not winget's (a1961f5ca). The test's own expected path was the link too.
+- When one side goes through EvalSymlinks, so does the other, in the code
+  and in the test's want. Run it where the temp folder is a link (macOS).
+- Seen 1× (2026-11-11).
+
+**A path check in a test expects what the code writes, in the file's own
+encoding.**
+- TestPluginImportCarryOnOffRemove wanted filepath.Join's all-backslash
+  path in raw JSON. The import replaces ${CLAUDE_PLUGIN_ROOT} as written
+  (`C:\...\acme-kit/scripts/lint.sh`), and JSON doubles each backslash,
+  so it was red on Windows only, where CI runs no tests (#6065, fixed in
+  ff11275ae).
+- Seen 1× (2026-11-11).
+
 **Reproduce on CI's Go version.**
 - #1184 couldn't be reproduced on go1.27.1 locally. CI ran 1.26.x, and the
   cause was a Go 1.26.8 segfault. Docker `golang:1.26.8` with
