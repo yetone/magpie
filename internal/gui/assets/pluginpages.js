@@ -83,7 +83,7 @@
     f.setAttribute("referrerpolicy", "no-referrer");
     f.setAttribute("allow", "");
     f.title = titled(p.entry);
-    f.src = p.entry.url;
+    f.src = framed(p.entry.url);
     p.frame = f;
     p.hello = false;
     p.shown = true;
@@ -326,6 +326,14 @@
     console.error(`[magpie] ${p.entry.name}: panel ${p.entry.key}: ${why}`);
   }
 
+  // The address a frame loads: a browser's page names its own origin in
+  // it (the frame sends no Referer), as the server's policy for the frame
+  // can't know the address a reverse proxy that keeps no Host serves it
+  // at. The desktop window's scheme is the server's own to name.
+  function framed(url) {
+    return /^https?:$/.test(location.protocol) ? url + (url.includes("?") ? "&" : "?") + "_o=" + encodeURIComponent(location.origin) : url;
+  }
+
   // a panel's frame in body, told context once it says hello
   function panelFrame(e, context, body) {
     const f = document.createElement("iframe");
@@ -334,7 +342,7 @@
     f.setAttribute("referrerpolicy", "no-referrer");
     f.setAttribute("allow", "");
     f.title = titled(e);
-    f.src = e.url;
+    f.src = framed(e.url);
     const p = { entry: e, frame: f, context, body, hello: false, broken: false };
     p.timer = setTimeout(() => { if (!p.hello) panelBroke(p, t("{name}'s page didn't answer", { name: titled(e) })); }, HELLO_MS);
     panels.set(f, p);

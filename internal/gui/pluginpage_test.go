@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -371,5 +372,42 @@ func TestPluginPageActions(t *testing.T) {
 	}
 	if a[1].ID != "logs" || a[1].Menu != "agent" || a[1].Title != "Usage glance" || a[1].Titles["zh"] != "用量速览" {
 		t.Errorf("an action with no title: %+v, want the page's", a[1])
+	}
+}
+
+// Behind a reverse proxy that doesn't pass the browser's Host on (nginx's
+// default proxy_pass), the Host magpie sees is its own address. The page's
+// policy then named an address the browser never used, so every script and
+// style was refused and the page drew as bare HTML (xuanwo on X, Day card).
+// The window names the address the browser used in the frame's address.
+func TestPluginPagePolicyBehindProxyHost(t *testing.T) {
+	pagePlugins(t)
+	h := pageMux()
+	var pages []pluginPage
+	w := do(h, httptest.NewRequest("GET", "/api/plugin-pages", nil))
+	if err := json.Unmarshal(w.Body.Bytes(), &pages); err != nil || len(pages) != 1 {
+		t.Fatalf("pages: %s %v", w.Body, err)
+	}
+	tok := strings.Split(strings.TrimPrefix(pages[0].URL, pluginPagePrefix), "/")[0]
+	csp := func(origin string) string {
+		r := httptest.NewRequest("GET", pages[0].URL+"?"+pageOriginParam+"="+url.QueryEscape(origin), nil)
+		r.Host = "127.0.0.1:3437"
+		return do(h, r).Header().Get("Content-Security-Policy")
+	}
+	named := "https://proxy.example.com/_magpie/plugin/" + tok + "/"
+	if p := csp("https://proxy.example.com"); !strings.Contains(p, "script-src https://127.0.0.1:3437/_magpie/plugin/"+tok+"/ http://127.0.0.1:3437/_magpie/plugin/"+tok+"/ "+named+";") ||
+		!strings.Contains(p, "style-src https://127.0.0.1:3437/_magpie/plugin/"+tok+"/ http://127.0.0.1:3437/_magpie/plugin/"+tok+"/ "+named+" 'unsafe-inline'") {
+		t.Fatalf("the proxy's address isn't named: %s", p)
+	}
+	// nothing but a plain http(s) host is carried into a policy
+	for _, bad := range []string{"", "https://x.example; script-src */", "https://u:p@x.example/", "ftp://x.example/", "https://x.example,y.example/", "javascript:alert(1)"} {
+		p := csp(bad)
+		if strings.Contains(p, "x.example") || strings.Contains(p, "*") || strings.Contains(p, "alert") {
+			t.Fatalf("origin %q reached the policy: %s", bad, p)
+		}
+	}
+	// the Host's own address is named once
+	if p := csp("http://127.0.0.1:3437"); strings.Count(p, "127.0.0.1:3437/_magpie/plugin/"+tok+"/") != 10 {
+		t.Fatalf("the Host's address twice: %s", p)
 	}
 }

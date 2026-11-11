@@ -322,13 +322,20 @@ starts a Bun host.
   `magpie web` (#4198): a browser's policy names the folder
   under both `https://` and `http://` (`ownSources`), since a proxy that
   ends TLS (nginx, Cloudflare) leaves magpie nothing it trusts to say
-  which. A page's service sends its own policy, where `'self'` meant its
+  which. A proxy that keeps no Host (nginx's default `proxy_pass`) leaves
+  `r.Host` the upstream's own address, and the policy named nothing the
+  browser used: every script of the page was blocked (xuanwo on X). A
+  browser's page therefore names its own origin in the frame's address
+  (`_o=`, `framed` in pluginpages.js, since the frame sends no Referer), and
+  `ownSources` adds it (`browserOrigin`: http(s), no user info). It only
+  widens the policy to a name the page's own browser reports; the frame is
+  sandboxed and the token in the path is what grants the page. A page's service sends its own policy, where `'self'` meant its
   whole 127.0.0.1 origin; sandboxed, WebKit refused the service page's
   fetches under `connect-src 'self'`. `serviceSelf` names the service's
   root under both schemes after each `'self'` in a policy header it sends
   (and `ws://`, `wss://` in `connect-src` and `default-src`); a `<meta>`
   policy is the plugin's to write with whole sources.
-  `TestPluginPageWindowPolicy`, `TestPluginPageWebPolicyNamesItsScheme`,
+  `TestPluginPageWindowPolicy`, `TestPluginPageWebPolicyNamesItsScheme`, `TestPluginPagePolicyBehindProxyHost`,
   `TestServiceSelf` and `TestPluginPageServiceProxied` check the policies, and
   `TestPluginPageLoadsItsFilesInTheWindow` loads a page through
   `ownWindow` in a real WKWebView; Playwright, on http, can't see it.

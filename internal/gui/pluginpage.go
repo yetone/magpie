@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -266,7 +267,39 @@ func ownSources(r *http.Request, path string) []string {
 	if scheme, _ := r.Context().Value(windowSchemeKey{}).(string); scheme != "" {
 		return []string{scheme + "://" + r.Host + path}
 	}
-	return []string{"https://" + r.Host + path, "http://" + r.Host + path}
+	own := []string{"https://" + r.Host + path, "http://" + r.Host + path}
+	// A reverse proxy that doesn't pass the browser's Host on (nginx's
+	// proxy_pass does not) leaves r.Host as magpie's own address, which
+	// names nothing the browser asked for: every script and style of the
+	// page was refused and it drew as bare HTML (xuanwo on X, Day card).
+	// The window that framed the page is on the address the browser used,
+	// and says so in the frame's address (pageOriginParam): the frame
+	// sends no Referer.
+	if o := browserOrigin(r); o != "" && o != "https://"+r.Host && o != "http://"+r.Host {
+		own = append(own, o+path)
+	}
+	return own
+}
+
+// pageOriginParam is the query a window adds to its frame's address: the
+// origin the window itself is on (pluginpages.js).
+const pageOriginParam = "_o"
+
+// browserOrigin is the scheme and host the browser reached this server
+// at, from the frame's address, or "" when it names none
+// (or anything but a plain http(s) host and port, which a policy can't be
+// trusted to carry).
+func browserOrigin(r *http.Request) string {
+	u, err := url.Parse(r.URL.Query().Get(pageOriginParam))
+	if err != nil || u.Host == "" || u.User != nil || u.Scheme != "http" && u.Scheme != "https" {
+		return ""
+	}
+	for _, c := range u.Host {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune(".-:[]", c)) {
+			return ""
+		}
+	}
+	return u.Scheme + "://" + u.Host
 }
 
 // pageHostWait is how long a page's HTML waits for its plugin's host,
@@ -542,7 +575,7 @@ func pageRead(read string, params map[string]any) (any, error) {
 		}
 		return out, nil
 	case "usage:day":
-		// one day, by agent and model (pageday.go)
+		// one day, or a span of them, by agent and model (pageday.go)
 		return pageDay(params)
 	case "usage:summary":
 		period := usage.Today
