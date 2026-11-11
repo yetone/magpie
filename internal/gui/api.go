@@ -1133,6 +1133,13 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		// once another answers in its place (visamzh on X), as after its
 		// own restart to update (backAsNew)
 		boot["version"] = Version
+		// and the clock the system shows, 12 or 24 hours, which no webview
+		// tells the page (iXerol on X); a browser tab keeps its own
+		if !isWeb(w) {
+			if hc := systemHourCycle(); hc != "" {
+				boot["hourCycle"] = hc
+			}
+		}
 		if s.Colorblind {
 			boot["colorblind"] = true
 		}

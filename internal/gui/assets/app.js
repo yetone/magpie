@@ -14601,11 +14601,10 @@ async function setQuotaLeft(on) {
   }
 }
 
-// resetClock is when a window starts again, on the clock: "14:30" today,
-// "tomorrow 09:00", "Thu 14:30" later this week (Monday to Sunday), else
-// "Oct 12 08:05": a bare weekday in next week read as this week's (#181).
+// resetClock: "14:30" today, "tomorrow 09:00", "Thu 14:30" this week, else
+// "Oct 12 08:05"; a bare weekday next week read as this week's (#181).
 function resetClock(at, now = new Date()) {
-  const time = dateFmt({ hour: "2-digit", minute: "2-digit", hour12: false }).format(at);
+  const time = dateFmt({ hour: "2-digit", minute: "2-digit", ...hourClock() }).format(at);
   const day = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const days = Math.round((day(at) - day(now)) / 864e5);
   if (days <= 0) return time;
@@ -16807,13 +16806,12 @@ function quotaTimeText(at, now) {
   const d = new Date(at), lang = intlLang();
   if (Math.abs(at - now) < 60e3) return t("Now");
   const sameDay = d.toDateString() === new Date(now).toDateString();
-  const time = d.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit", hour12: false });
+  const time = d.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit", ...hourClock() });
   return sameDay ? time : d.toLocaleDateString(lang, { month: "short", day: "numeric" }) + " " + time;
 }
-// A completed cycle can end today; still say both dates in its menu and
-// axis, so a multi-day cycle doesn't read as two times on the first day.
+// A cycle ending today still says both dates.
 function quotaCycleDate(at) {
-  return new Date(at).toLocaleString(intlLang(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+  return new Date(at).toLocaleString(intlLang(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", ...hourClock() });
 }
 // drawQuotaPlot puts lines' curves for [x0, x1] in svg, a w×h box:
 // the grid, the even burns, the lines, and now.
@@ -18887,13 +18885,13 @@ const ledOthers = (by, top, list) => Object.keys(by).filter((k) => ledSpeed(by[k
 // when a point is: the hour, the day or the week it stands for
 function ledWhen(p, bucket) {
   const d = new Date(p.time), lang = intlLang();
-  if (bucket === "hour") return d.toLocaleString(lang, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+  if (bucket === "hour") return d.toLocaleString(lang, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", ...hourClock() });
   const day = d.toLocaleDateString(lang, { year: "numeric", month: "2-digit", day: "2-digit" });
   return bucket === "week" ? t("week of {label}", { label: day }) : day;
 }
 function ledTick(p, bucket) {
   const d = new Date(p.time);
-  if (bucket === "hour") return String(d.getHours()).padStart(2, "0") + ":00";
+  if (bucket === "hour") return d.toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit", ...hourClock() });
   return d.toLocaleDateString(intlLang(), { month: "numeric", day: "numeric" });
 }
 

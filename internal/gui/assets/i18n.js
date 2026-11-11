@@ -20442,9 +20442,14 @@ function sysLocale(sys) {
 // undefined: those follow the system, not the language picked here.
 const LANG_TAGS = { zh: "zh-CN", "zh-TW": "zh-TW", ja: "ja-JP", de: "de-DE" };
 function intlLang() {
-  if (LANG_TAGS[locale]) return LANG_TAGS[locale];
-  const sys = navigator.language || "";
-  return /^en(-|$)/i.test(sys) ? sys : "en";
+  const sys = navigator.language || "", hc = window.bootPrefs?.hourCycle;
+  const base = LANG_TAGS[locale] || (/^en(-|$)/i.test(sys) ? sys : "en");
+  return hc ? base.replace(/-u-.*/, "") + "-u-hc-" + hc : base;
+}
+
+// hourClock: the GUI's 24-hour times, 12 when the system is (boot.js).
+function hourClock() {
+  return { hour12: window.bootPrefs?.hourCycle === "h12" };
 }
 
 // dateFmt is intlLang()'s date formatter for opts, made once: a

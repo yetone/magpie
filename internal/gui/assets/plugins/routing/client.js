@@ -1357,7 +1357,7 @@ function routingPage(part) {
   // this browser doesn't know it
   function zoneOffset(zone, at = new Date()) {
     try {
-      const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: zone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+      const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: zone, ...hourClock(), year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
         .formatToParts(at).map((x) => [x.type, x.value]));
       return Math.round((Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second) - Math.floor(at.getTime() / 1000) * 1000) / 60000);
     } catch { return null; }
@@ -5398,7 +5398,7 @@ function routingPage(part) {
   }
   function replayBar(p, fast) {
     const d = new Date(p.real);
-    rClock.textContent = d.toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) + "." + Math.floor(d.getMilliseconds() / 100);
+    rClock.textContent = d.toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit", second: "2-digit", ...hourClock() }) + "." + Math.floor(d.getMilliseconds() / 100);
     const day = d.toDateString() === new Date().toDateString() ? t("today") : d.toLocaleDateString(intlLang(), { weekday: "short", month: "short", day: "numeric" });
     setText(rDay, day);
     // a quiet stretch cut short: the clock runs fast through it, whatever
@@ -5426,7 +5426,7 @@ function routingPage(part) {
       const [said] = outcome(r);
       row.append(el("span", "rp-n", t("request {i} of {n}", { i: g.n, n: p.plan.length })), sw,
         el("b", "", callerName(r)), el("code", "mdl", r.model), ...rowTags(r), el("span", "rp-to", "→ " + said),
-        el("span", "rp-at", t("sent {time}", { time: new Date(r.time).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) })));
+        el("span", "rp-at", t("sent {time}", { time: new Date(r.time).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit", second: "2-digit", ...hourClock() }) })));
       row.onclick = () => { cur = r; renderLog(); };
       return row;
     }) : [el("span", "rp-wait", t("starting…"))]));
@@ -9255,7 +9255,7 @@ function routingPage(part) {
     const asked = el("span", "pr-a");
     asked.append(icon(ag?.icon || "generic"), el("span", "pr-who", callerName(r)), el("code", "m", r.model));
     asked.append(...rowTags(r));
-    const when = el("span", "at", new Date(r.time).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }));
+    const when = el("span", "at", new Date(r.time).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit", second: "2-digit", ...hourClock() }));
     // where it went: the provider, the account or key, and the model that
     // answered — marked when the reply names another than the one sent
     const to = el("span", "pr-to");
