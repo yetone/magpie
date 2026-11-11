@@ -1134,6 +1134,14 @@ each one.
     red on main until 7e8214d60. Two of them had issues (#4457, #6187)
     with "still red" comments and no owner. A change to a package runs
     that package whole.
+  - The guard tests in the root package: fc615339f (Alibaba Token Plan
+    quota) and e174b5515 (library Variables tab) each added a
+    package-level `regexp.MustCompile` and ran only their own packages.
+    TestNoEagerPackageRegexps, in the root package, was red under
+    v0.1.3796 and v0.1.3797 until 4847a087f moved both onto lazyre.
+    Their CI runs were cancelled by the next push, and ubuntu fails at
+    apt (#6198), so no run showed it. A new package-level value runs
+    `go test .` at the root too.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
