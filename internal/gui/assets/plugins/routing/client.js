@@ -3022,7 +3022,7 @@ function routingPage(part) {
           : b === "sooner" && soon ? quota(w, "{n} used · renews in {d} · one renewing sooner goes first", "{n} left · renews in {d} · one renewing sooner goes first", { d: dur(soon - n) })
           : b === "expires" && soon ? quota(w, "{n} used · renews in {d} · one whose credits expire sooner goes first", "{n} left · renews in {d} · one whose credits expire sooner goes first", { d: dur(soon - n) })
           : soon ? quota(w, "{n} used · renews in {d}", "{n} left · renews in {d}", { d: dur(soon - n) }) : quota(w, "{n} used", "{n} left");
-      } else if (w.kind === "account") s = t("what's left not known yet");
+      } else if (w.kind === "account") s = (!day && winsOf(w)[0]) || t("what's left not known yet");
       else if (w.routing === "usage") s = t("{n} tokens lately", { n: tokens(w.tokens || 0) });
       else if (w.aside) s = t("{api} only · after the others", { api: API[w.speaks] || w.speaks || t("any API") });
       else if (w.speaks) s = t("{api} only", { api: API[w.speaks] || w.speaks });
@@ -4896,7 +4896,7 @@ function routingPage(part) {
       // a provider's own row: its model, the provider's name is the heading
       if (w.kind === "provider") name.append(el("b", "", w.model || w.name));
       else name.append(el("b", "", who(w)), el("span", "", planName(w.plan) || (w.kind === "key" ? t("API key") : "")));
-      let st, cls = "", asOf = "";
+      let st, cls = "", asOf = "", carded = false;
       const resting = a.rest && at(a.rest.until) > n;
       // its models resting alone, while the account answers its others:
       // a line of their own, naming them, under what the account has left
@@ -4912,8 +4912,14 @@ function routingPage(part) {
         // when it was read is on hover: the line says what is left and
         // when it renews, on one line in every language (danzi002)
         if (!(soon && soon <= n)) asOf = t("as of {time}", { time: clock(a.at) });
-      } else if (w.kind === "account") st = t("what's left not known yet");
-      else st = "";
+      } else if (w.kind === "account") {
+        // routing weighs no figure for it (every window of its card is set
+        // aside, as a plugin's pooled Cursor plan is), but the Usage page
+        // read what it has left: that is said, not "not known" (X)
+        const card = day ? [] : winsOf(w);
+        if (card.length) { st = card[0]; carded = true; }
+        else st = t("what's left not known yet");
+      } else st = "";
       const tally = el("div", "tally");
       // refused for its sign-in, and not answered since: it is to be signed
       // in again, here where the card says so. Answered since, the
@@ -4932,7 +4938,7 @@ function routingPage(part) {
       // routing went by, the others on hover and on the Usage page. Live
       // only: a kept day's requests were weighed by readings long gone.
       const ws = day ? [] : [...winsOf(w).map((text) => ({ text })), ...remoteWinsOf(w)];
-      const figure = !!st && (resting || w.known || w.unlisted || w.noURL);
+      const figure = !!st && (resting || w.known || w.unlisted || w.noURL || carded);
       if (resting && restTip(a.rest)) stEl.title = restTip(a.rest);
       else if (figure && (ws.length || asOf)) stEl.title = [...ws.map((x) => x.text), asOf].filter(Boolean).join("\n");
       row.append(name, stEl);
