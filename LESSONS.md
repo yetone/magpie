@@ -1099,6 +1099,14 @@ each one.
     budget's history. 6cc182339 counts code only. When a guard keeps
     going red the same way, fix the guard's class; don't feed it
     another cut.
+  - A commit's message belongs to that commit: 16ed1a952 carries
+    d1a2e92e8's subject and body word for word (a hint card at the
+    pointer), while its diff is the plugin-page drag order: a new
+    route, a setting and two tests. Its run record names none of them,
+    and the new route wasn't named in the CLI route map, so
+    TestEveryRouteHasACommandOrIsNamed was red on main for hours
+    (#6162, fixed in 1c95c87c2). Before pushing, check that
+    `git show --stat` matches what the subject says.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
