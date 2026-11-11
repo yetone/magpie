@@ -184,7 +184,7 @@ func TaggedRepos(ctx context.Context) ([]Tagged, error) {
 	if last == nil {
 		last = taggedOnDisk()
 	}
-	if l, whole, missing, err := askTagged(ctx, last); err == nil {
+	if l, whole, missing, err := askListOrGitHub(ctx, last); err == nil {
 		taggedL, taggedAt, taggedWhy = l, time.Now(), nil
 		if !whole {
 			taggedAt = time.Now().Add(-taggedTTL + taggedRetry)
@@ -609,4 +609,14 @@ func githubRepo(spec string) string {
 		return ""
 	}
 	return p[0] + "/" + p[1]
+}
+
+// askListOrGitHub is the list the community repo's workflow built (see
+// catalog.go) when it can be had, else GitHub's own answer, as askTagged
+// gives it. GitHub's error is the one reported when neither answers.
+func askListOrGitHub(ctx context.Context, last []Tagged) ([]Tagged, bool, *TaggedMissing, error) {
+	if l, err := askCatalog(ctx); err == nil {
+		return l, true, nil, nil
+	}
+	return askTagged(ctx, last)
 }
