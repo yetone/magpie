@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func freeAddr(t *testing.T) string {
@@ -29,7 +30,14 @@ func TestServingWritesDownWhereItListens(t *testing.T) {
 	t.Cleanup(func() { Serves = was })
 	s := New()
 	stop, done := listening(t, s)
-	l, ok := ReadListening()
+	// the note is written just after the socket is up, so wait for it
+	var l Listening
+	var ok bool
+	for end := time.Now().Add(10 * time.Second); time.Now().Before(end); time.Sleep(5 * time.Millisecond) {
+		if l, ok = ReadListening(); ok {
+			break
+		}
+	}
 	if !ok || l.Addr != addr || l.Pid != os.Getpid() || l.Serves != "web" {
 		t.Fatalf("while serving: %+v %v (want %s)", l, ok, addr)
 	}
