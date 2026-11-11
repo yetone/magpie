@@ -1107,14 +1107,18 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		// the whole session (Claude Code 2.1.316), so the branch was -p,
 		// and its prompt not the one the run's interactive mode had
 		// cached (bbfatx on X)
-		sid, err := cutSession(from.sessions, from.session, from.cut)
+		cutter, how := cutSession, "tool results another request answered first go on in a branch of their run's session, told from the results"
+		if from.cutBefore {
+			cutter, how = cutSessionBefore, "a side request that sends the conversation whole, without the calls its run still waits on, goes on in a branch of that run's session, cut before them"
+		}
+		sid, err := cutter(from.sessions, from.session, from.cut)
 		if err != nil {
 			log.Printf("claude: a branch of a run's session couldn't be cut (%v); a new Claude Code is told the whole conversation", err)
 			from, req.branch = nil, nil
 		} else {
-			log.Printf("claude: tool results another request answered first go on in a branch of their run's session, told from the results (%d messages)", len(from.since))
+			log.Printf("claude: %s (%d messages)", how, len(from.since))
 			from.mu.Lock()
-			from.session, from.cut, from.gone = sid, "", false
+			from.session, from.cut, from.cutBefore, from.gone = sid, "", false, false
 			from.mu.Unlock()
 		}
 	}
@@ -2522,6 +2526,9 @@ type savedSession struct {
 	// is cut after: the run that takes it resumes a copy of the session
 	// as far as that line (cutSession), and the file stays the run's
 	cut string
+	// cutBefore: cut before that line, not after it: the reply's words
+	// stay and its calls go (a side request that dropped them, #6128)
+	cutBefore bool
 	// tui: the session was made by Claude Code's interactive mode; a
 	// branch of it is too, where it can be (claudePrint)
 	tui bool
@@ -2716,9 +2723,9 @@ func (r *subscriptionRun) noteLines(uuid, model, msg string, ids []string) {
 // own cache marks, Claude Code in WSL (no session on disk), a session
 // taken back since (rewound), or, with the interactive mode on, a -p
 // run's session, as its branch is -p too.
-func (b *subscriptionBridge) branch(req *Request, owner string) *savedSession {
+func (b *subscriptionBridge) branch(req *Request, owner string) (*savedSession, string) {
 	if req.clientCache != nil {
-		return nil
+		return nil, "the client marks its own cache"
 	}
 	msgs := req.Messages
 	i := len(msgs)
@@ -2726,7 +2733,7 @@ func (b *subscriptionBridge) branch(req *Request, owner string) *savedSession {
 		i--
 	}
 	if i == 0 || i == len(msgs) {
-		return nil
+		return nil, "" // no reply to go on from: not a turn that branches
 	}
 	k := i
 	for k > 0 && msgs[k-1].Role == "assistant" {
@@ -2740,25 +2747,43 @@ func (b *subscriptionBridge) branch(req *Request, owner string) *savedSession {
 			}
 		}
 	}
-	if len(calls) == 0 {
-		return nil
-	}
+	// A side request that sends the conversation whole (Claude Code's
+	// AgentSummary) drops the assistant messages whose calls have no
+	// result yet, and keeps the words before them: the last reply has no
+	// call to find a line by (#6128). It is the reply of a run that waits
+	// on its calls, found by the conversation before it, and the branch
+	// is cut before the reply's first call, after the words.
+	pending := len(calls) == 0
+	told := historyKey(msgs[:k])
 	b.mu.Lock()
 	runs := make([]*subscriptionRun, 0, len(b.runs))
 	for _, run := range b.runs {
 		runs = append(runs, run)
 	}
 	b.mu.Unlock()
-	told := ""
+	why := "no run of the account made the calls"
+	if pending {
+		why = "the reply has no call, and no run waits on a reply to this conversation"
+	}
+	var found *savedSession
+	foundSeq := 0
 	for _, run := range runs {
 		if run.owned() != owner {
 			continue
 		}
 		run.mu.Lock()
 		at, seq, said := "", 0, ""
-		for _, id := range calls {
-			if l, ok := run.lines[id]; ok && l.uuid != "" && l.seq > seq {
-				at, seq, said = l.uuid, l.seq, l.told
+		if pending {
+			for _, l := range run.lines {
+				if l.uuid != "" && l.told == told && (at == "" || l.seq < seq) {
+					at, seq, said = l.uuid, l.seq, l.told
+				}
+			}
+		} else {
+			for _, id := range calls {
+				if l, ok := run.lines[id]; ok && l.uuid != "" && l.seq > seq {
+					at, seq, said = l.uuid, l.seq, l.told
+				}
 			}
 		}
 		sid, sessions, prefix := run.sessionID, slices.Clone(run.sessions), run.cachePrefix
@@ -2767,15 +2792,27 @@ func (b *subscriptionBridge) branch(req *Request, owner string) *savedSession {
 		if at == "" {
 			continue
 		}
-		if told == "" {
-			told = historyKey(msgs[:k])
+		switch {
+		case !usable:
+			why = "the run is closed, taken back, or of another mode"
+		case sid == "" || len(sessions) == 0:
+			why = "the run has no session on disk"
+		case said != told:
+			why = "the conversation before the reply isn't the one the run answered"
+		default:
+			if pending && found != nil && seq <= foundSeq {
+				continue
+			}
+			found, foundSeq = &savedSession{session: sid, sessions: sessions, owner: owner, at: time.Now(), since: msgs[i:], cut: at, cutBefore: pending, tui: run.tui, appended: run.appended, cachePrefix: prefix, gone: true}, seq
 		}
-		if !usable || sid == "" || len(sessions) == 0 || said != told {
-			return nil
+		if !pending {
+			break
 		}
-		return &savedSession{session: sid, sessions: sessions, owner: owner, at: time.Now(), since: msgs[i:], cut: at, tui: run.tui, appended: run.appended, cachePrefix: prefix, gone: true}
 	}
-	return nil
+	if found == nil {
+		return nil, why
+	}
+	return found, ""
 }
 
 // retryBranch is where a turn sent again while its run is busy answering
@@ -7035,7 +7072,11 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 		log.Printf("%s on %s: tool results %s", name, model, how)
 	}
 	if run == nil && name == "Claude Code" {
-		req.branch = s.subscription.branch(req, owner)
+		var why string
+		if req.branch, why = s.subscription.branch(req, owner); req.branch == nil && why != "" {
+			// what the match was, never what was said
+			log.Printf("claude: no branch of a run's session for this request: %s", why)
+		}
 	}
 	if run == nil {
 		run, events, err = start(r.Context(), req)

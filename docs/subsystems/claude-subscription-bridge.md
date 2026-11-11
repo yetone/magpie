@@ -836,6 +836,16 @@ branches carried none, and their runs went back to an hour under a 5m
 pick (linkaww); `everyRunKept5m` in the fork, busy-retry and side
 question tests.
 
+`branch` also takes a side request that sends the conversation whole with the
+calls its run still waits on dropped, and the words before them kept: Claude
+Code's AgentSummary (#6128). The last reply then has no call to find a line
+by, so the run is the one with a call line whose conversation is the one
+before that reply, and the session is cut before its first call line
+(`cutBefore`). Before, such a request was told the whole transcript by a new
+Claude Code (90K to 160K cache tokens written for a label). When no branch is
+found the log says why, by structure only: `no branch of a run's session for
+this request: <reason>`.
+
 A new run (and one started from a transcript, `replaySession`) picks its
 lifetime with `runTTLFor`:
 
