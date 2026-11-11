@@ -5271,7 +5271,98 @@ No. magpie stashes agents.defaults.modelPreset and takes it out (it would go ove
 
 Yes. magpie sets up a nanobot in a WSL distro too.
 
-More agents on the same models: [OpenClaw on any model](https://usemagpie.ai/docs/openclaw), [Hermes Agent on any model](https://usemagpie.ai/docs/hermes) and [OpenChamber on any model](https://usemagpie.ai/docs/openchamber). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [OpenClaw on any model](https://usemagpie.ai/docs/openclaw), [Hermes Agent on any model](https://usemagpie.ai/docs/hermes), [OpenChamber on any model](https://usemagpie.ai/docs/openchamber) and [AstrBot on any model](https://usemagpie.ai/docs/astrbot). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/astrbot
+
+# AstrBot on any model
+
+AstrBot (AstrBotDevs/AstrBot) is a chatbot framework that puts a model on QQ, Telegram, Discord, Lark and other platforms. It keeps every setting in one file, `data/cmd_config.json`. magpie adds an OpenAI-compatible magpie source there, an entry for each of magpie's models, and makes the one you pick AstrBot's default chat model. So your bot runs on any model you have in magpie: DeepSeek, GLM, Kimi, Qwen, an OpenAI or Anthropic key, or a ChatGPT or Copilot subscription, with no key typed into AstrBot's WebUI.
+
+## Set up AstrBot
+
+1. **Start AstrBot once.** Its first start writes `data/cmd_config.json`. It needs 4.10 or later (a config with `provider_sources`).
+2. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+3. **Pick a model on AstrBot's row.** On the Agents page, pick a magpie model for AstrBot.
+4. **Restart AstrBot.** AstrBot reads its config at start-up only; after a restart the bot is on the new model.
+
+```
+magpie astrbot deepseek/deepseek-v4-pro
+# then restart AstrBot
+```
+
+magpie finds AstrBot's root in this order: `ASTRBOT_ROOT`; the desktop app's `~/.astrbot`; a folder where `astrbot init` was run, either your home, `~/astrbot` or `~/AstrBot` (where its README and a clone of its source put it). For AstrBot run anywhere else, start magpie with `ASTRBOT_ROOT` set to that folder.
+
+## What goes in cmd_config.json
+
+Since 4.10 AstrBot splits a chat provider into two lists: `provider_sources` holds endpoints and keys, and each entry of `provider` is one model of a source. magpie adds a source with id `magpie` (OpenAI Compatible, at the gateway's `/v1`, with a key naming AstrBot, so its requests count as AstrBot's in magpie's usage), an entry `magpie/<provider>/<model>` for each model, and sets `agent_runner.config.model.provider_id` to the one you pick (`provider_settings.default_provider_id` in a file from before agent_runner).
+
+```
+// /data/cmd_config.json
+{
+  "provider_sources": [
+    …,
+    {"id": "magpie", "provider": "openai", "type": "openai_chat_completion",
+     "provider_type": "chat_completion", "enable": true,
+     "key": ["…"], "api_base": "http://127.0.0.1:3425/v1", …}
+  ],
+  "provider": [
+    …,
+    {"id": "magpie/deepseek/deepseek-v4-pro", "provider_source_id": "magpie",
+     "model": "deepseek/deepseek-v4-pro",
+     "modalities": ["text", "tool_use"], "max_context_tokens": …}
+  ],
+  "agent_runner": {"runner_type": "local",
+    "config": {"model": {"provider_id": "magpie/deepseek/deepseek-v4-pro"}}}
+}
+```
+
+Every model is marked `tool_use`: without it AstrBot drops the model's tools, and the gateway passes a tool call on whatever the model. Images are marked as magpie knows the model sees them. A context window magpie doesn't know is 0, and AstrBot looks it up itself.
+
+## Why it needs a restart
+
+AstrBot reads the whole file into memory at start, and its WebUI writes the whole of it back on every save. So magpie's change needs AstrBot restarted, and a WebUI save made before that restart writes over it. magpie's check notices that its source is gone and asks you to connect again.
+
+When `agent_runner.runner_type` isn't `local` (an outside agent runner), AstrBot doesn't ask its chat model, and magpie's check says so.
+
+## Your own settings
+
+Before it first writes the file, magpie copies it to `cmd_config.json.before-magpie`. Your own sources and models stay byte for byte, and so do changes you make to magpie's entries in the WebUI (a source's timeout or proxy, a model switched off, its extra body). A model picked for one chat with `/provider` lives in AstrBot's own database; it is yours and stands. AstrBot writes the file with a UTF-8 BOM, which magpie keeps.
+
+## AstrBot in Docker
+
+AstrBot in Docker isn't one magpie wires: its data folder is a volume magpie can't know, and the gateway on this machine's loopback isn't the container's.
+
+## Switching back
+
+Set the row back to default in magpie: magpie takes its source and models out and puts the default chat model back to the one AstrBot was on, unless you have picked another in AstrBot since, which stands. Or pick a model of your own; magpie's models stay in the list beside it until you disconnect. Restart AstrBot after either.
+
+```
+magpie astrbot default
+# then restart AstrBot
+```
+
+## FAQ
+
+### Can AstrBot use DeepSeek, GLM, Kimi or Qwen?
+
+Yes. magpie adds an OpenAI-compatible magpie source to cmd_config.json, an entry for each of magpie's models, and sets the one you pick as the default chat model. Restart AstrBot to use it.
+
+### Why is my bot still on the old model?
+
+AstrBot reads cmd_config.json at start-up only, so restart it. Don't save anything in the WebUI before that, or it writes over magpie's change.
+
+### magpie's source is gone. What now?
+
+A WebUI save most likely wrote the whole file back. Connect AstrBot again in magpie, then restart AstrBot.
+
+### Does it work for AstrBot in Docker?
+
+Not on its own: magpie can't know the container's data volume, and this machine's loopback isn't the container's.
+
+More agents on the same models: [nanobot on any model](https://usemagpie.ai/docs/nanobot), [OpenClaw on any model](https://usemagpie.ai/docs/openclaw) and [Every model in Cherry Studio, through magpie](https://usemagpie.ai/docs/cherry-studio). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
