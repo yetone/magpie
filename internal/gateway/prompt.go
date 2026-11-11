@@ -731,6 +731,9 @@ var (
 		"New agent types are now available for the Agent tool:",
 		"The TodoWrite tool hasn't been used recently.", "The task tools haven't been used recently.",
 		"Conversation rewind applied.", "Workspace rewind applied.",
+		// the tool list changed: Claude Code's deferred tools and MCP
+		// servers' instructions, told after a result
+		"The following deferred tools are", "# MCP Server Instructions", "The following MCP servers",
 	}
 )
 
