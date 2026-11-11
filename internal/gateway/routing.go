@@ -694,7 +694,29 @@ func failureOf(c candidate, status int, body []byte) string {
 	if dashScopeRate(c.p, status, body) {
 		return failRate
 	}
+	if grokBalanceOut(c.p, status, body) {
+		return failQuota
+	}
 	return failure(status, body)
+}
+
+// Grok Build's 402 for a plan's allowance spent says "Grok Build usage
+// balance exhausted". Its "balance" reads as money (creditWords), but the
+// allowance is a window that renews, and the usage card knows when.
+
+// grokBalanceOut says p, a Grok account (the plugin's, either id), was
+// refused with a 402 because its allowance is used up. That rests as out of
+// quota, until the window it filled renews (restAfter), not as out of
+// credit for half an hour (@justacati on X). Another vendor's 402 is its own.
+func grokBalanceOut(p provider.Provider, status int, body []byte) bool {
+	if status != http.StatusPaymentRequired || p.Account == nil {
+		return false
+	}
+	switch p.Account.UsageAgent() {
+	case "plugin:grok", "plugin:grok-plugin":
+		return bytes.Contains(bytes.ToLower(wordsOf(body)), []byte("usage balance exhausted"))
+	}
+	return false
 }
 
 // restrictedSaid says an error is one magpie already put in words as an
