@@ -174,6 +174,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		CodexSubagentModel:   "codex/gpt-6-astra",
 		CodexServiceTier:     "priority",
 		DesktopSubagentModel: "fake/m2",
+		DesktopGateway:       "https://192.168.1.20:3425",
 		DshCompactModel:      "fake/m1",
 		CodexCompactModel:    "fake/m1",
 		ChinaMirror:          true,

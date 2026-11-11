@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"path/filepath"
 
+	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/mtls"
 	"github.com/yetone/magpie/internal/settings"
@@ -74,6 +75,9 @@ func httpsRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, errFarPage)
 			return
 		}
+		// Claude Desktop pointed at this computer's https address follows
+		// the scheme (agent.Rekey)
+		on := agent.OnGateway()
 		if in.On {
 			if c, _ := gateway.ImportedFiles(); c == "" {
 				if _, _, err := gateway.CA(); err != nil {
@@ -86,6 +90,7 @@ func httpsRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, err)
 			return
 		}
+		_, _ = agent.Rekey(on)
 		writeJSON(rw, httpsNow())
 	})
 	// the user's own certificate and key: the PEM files' text, any split

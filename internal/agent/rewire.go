@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // The gateway's port is set in Settings (Magic_zero on Discord): every
@@ -60,7 +62,7 @@ func Rewire(as []*Agent) (moved []string, err error) {
 func Rekey(as []*Agent) (moved []string, err error) {
 	var away []*Agent
 	for _, a := range as {
-		if a.Gateway != nil && onAnotherMachine(a.Gateway()) {
+		if a.Gateway != nil && (onAnotherMachine(a.Gateway()) || a.ID == "claude-desktop" && settings.Load().DesktopGateway != "") {
 			away = append(away, a)
 		}
 	}

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"cmp"
+	"crypto/tls"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -36,7 +37,9 @@ var reachAge = 20 * time.Second
 var reachProbe = realReachProbe
 
 func realReachProbe(base string) bool {
-	c := &http.Client{Timeout: 2 * time.Second}
+	// a certificate magpie made itself isn't one this computer trusts, and
+	// whether something answers is all that is asked here
+	c := &http.Client{Timeout: 2 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 	res, err := c.Get(strings.TrimSuffix(base, "/") + "/v1/models")
 	if err != nil {
 		return false

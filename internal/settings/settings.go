@@ -837,6 +837,12 @@ type Settings struct {
 	// subagent tool turns on. "" leaves them on the model their lead asks
 	// for; tool-less helpers and the lead's own turns are never moved.
 	DesktopSubagentModel string `json:"desktopSubagentModel,omitempty"`
+	// DesktopGateway is the https:// address of this computer that Claude
+	// Desktop's profile is pointed at instead of loopback, so its built-in
+	// SSH remote sessions can reach the gateway ("" for this computer's
+	// own 127.0.0.1). It is one of LANURLs, and holds only while sharing is
+	// on (agent.desktopGateway).
+	DesktopGateway string `json:"desktopGateway,omitempty"`
 	// DesktopSubagentEffort fixes Desktop's subagent tool turns at this
 	// reasoning level. Empty keeps the effort each request asks for.
 	DesktopSubagentEffort string `json:"desktopSubagentEffort,omitempty"`
@@ -1586,7 +1592,8 @@ func (s Settings) Compact() int {
 // KeepOwn puts back cur's settings that are this computer's own, which a
 // sync or a restored backup never brings from another: the window's size,
 // place and whether it was maximised, the proxy (and plugin downloads'), the gateway's port, whether it
-// is shared on the local network and the addresses let in to it, what
+// is shared on the local network and the addresses let in to it, the
+// address Claude Desktop is pointed at (DesktopGateway), what
 // its MCP router says of itself, the Dock, gateway mode, whether WSL is
 // looked in, whether agents' sign-ins are read, when allowances are read, the terminal app a session resumes
 // in, the quick panel's shortcut, whether the local masking model is on
@@ -1613,6 +1620,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.QuotaReads = cur.QuotaReads
 	s.NoAccountDiscovery = cur.NoAccountDiscovery
 	s.LAN, s.AllowIPs, s.MTLS, s.HTTPS = cur.LAN, cur.AllowIPs, cur.MTLS, cur.HTTPS
+	s.DesktopGateway = cur.DesktopGateway // an address of this computer
 	s.RouterNote, s.RouterAllTools = cur.RouterNote, cur.RouterAllTools
 	s.FetchPrivate = cur.FetchPrivate
 	s.SessionTerminal = cur.SessionTerminal
@@ -2131,6 +2139,18 @@ func SetHTTPS(on bool) error {
 		return err
 	}
 	s.HTTPS = on
+	return save(s, false)
+}
+
+// SetDesktopGateway sets DesktopGateway alone, from what the file holds
+// now. A settings file that can't be read is left as it is, with the error.
+func SetDesktopGateway(u string) error {
+	defer lockFile()()
+	s, err := loadChecked()
+	if err != nil {
+		return err
+	}
+	s.DesktopGateway = strings.TrimSpace(u)
 	return save(s, false)
 }
 
