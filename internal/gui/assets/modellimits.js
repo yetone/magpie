@@ -65,3 +65,36 @@ function modelSystemFill(at, m, changed) {
   at.append(box);
   return { i, own, again: () => { if (document.activeElement !== i) i.value = own() || ""; }, saved: () => m.system || 0 };
 }
+
+// The Same as box's picker (timfang4162 on X): a button beside it opens the
+// models of the models.dev catalog magpie has synced (/api/catalog/models) in
+// the app's menu, filtered by id, name and maker. A pick fills the box, which
+// stages it as a typed one does.
+let catalogModels = null;
+window.modelSamePick = (box, same) => {
+  const label = t("Pick from models.dev"), b = el("button", "text action mpick");
+  b.type = "button";
+  b.append(svg(CHEV, 12));
+  b.title = label;
+  b.setAttribute("aria-label", label);
+  b.setAttribute("aria-haspopup", "menu");
+  const wrap = el("div", "msame-wrap");
+  box.replaceWith(wrap);
+  wrap.append(box, b);
+  b.onclick = async (e) => {
+    e.stopPropagation();
+    if (!catalogModels) {
+      try {
+        const got = await api("catalog/models");
+        if (Array.isArray(got) && got.length) catalogModels = got;
+      } catch {}
+    }
+    if (!catalogModels) { status(t("models.dev's list could not be read"), "warn"); return; }
+    const opts = catalogModels.map((c) => ({
+      v: c.id, name: c.id, literalName: true,
+      note: [c.name, c.context ? tokenSize(c.context) : "", c.input || c.cost ? "$" + c.input + " / $" + c.cost : ""].filter(Boolean).join(" · "),
+      find: [c.name, c.maker].filter(Boolean).join(" "),
+    }));
+    openProtoMenu(b, opts, same.value.trim(), (v) => { same.value = v; same.onchange(); }, "Pick from models.dev", "mpick-menu", "left", false, "Filter…");
+  };
+};

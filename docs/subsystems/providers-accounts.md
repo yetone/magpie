@@ -257,6 +257,14 @@ of an id (`untagged`: `deepseek-v4.1-flash (WB)`, `[WB] …`, full-width
 it may be a variant's (`deepseek-v4.1-flash[fast]`), and a tagged id is
 never priced. `TestUserSameGivesTheSpecs`, `TestTaggedIDHasTheModelsSpecs`,
 `TestSameAsGivesAnUnlistedModelItsSpecs`.
+The Same as box has a picker beside it (timfang4162 on X): the app's menu
+over `GET /api/catalog/models` (`catalogModels` in
+[`catalog_models.go`](../../internal/gui/catalog_models.go)), the synced
+models.dev catalog with one entry a model by `catalog.SameModel`, read from
+the cache with no fetch, filtered by id, name and maker
+(`modelSamePick` in [`modellimits.js`](../../internal/gui/assets/modellimits.js)).
+A pick only fills the box, so it is staged and saved as a typed id is.
+`TestCatalogModelsListsTheSyncedCatalogOnce`, `model-same-pick.test.cjs`.
 
 A model can also be listed by an id the user gives it at its provider
 (zeewell on X: a relay's `deepseek-v4.1-flash-1017` as
