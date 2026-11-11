@@ -26,6 +26,10 @@ const CASES = {
   rejected: { c: "c", broken: false, js: `Promise.resolve().then(() => parent.location.origin);` },
   extension: { masked: true, c: "d", broken: false, js: `setTimeout(() => { const e = new Error("inpage"); e.stack = "Error: inpage\\n    at chrome-extension://abcdef/inpage.js:1:1"; throw e; });` },
   extensionRejected: { c: "e", broken: false, js: `{ const e = new Error("inpage"); e.stack = "Error: inpage\\n    at moz-extension://abcdef/inpage.js:1:1"; Promise.reject(e); }` },
+  // the storage the sandbox has none of (nivekxft: "Failed to read the
+  // 'localStorage' property from 'Window': The document is sandboxed ...")
+  storage: { masked: true, c: "1", broken: false, js: `setTimeout(() => { void localStorage.length; });` },
+  storageRejected: { c: "2", broken: false, js: `Promise.resolve().then(() => sessionStorage.getItem("x"));` },
   // the page's own mistakes still break it
   own: { masked: true, c: "f", broken: true, js: `setTimeout(() => { throw new Error("the page's own bug"); });` },
   ownRejected: { c: "0", broken: true, js: `Promise.reject(new Error("the page's own bug"));` },

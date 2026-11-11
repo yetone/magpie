@@ -101,7 +101,8 @@
   // reach its error handlers are not that: a script the browser put in
   // the frame (a wallet's or a translator's extension, whose stack names
   // chrome-extension://…), and a read of the window or another frame the
-  // sandbox shuts out ("Blocked a frame with origin "null" from accessing
+  // sandbox shuts out (its storage, "The document is sandboxed and lacks the
+  // 'allow-same-origin' flag"; "Blocked a frame with origin "null" from accessing
   // a cross-origin frame" in Chromium, "Sandbox access violation" in
   // WebKit; a SecurityError). The page goes on without
   // either, and the window's "stopped working" over it was a page that
@@ -109,7 +110,13 @@
   function foreign(err, file) {
     const where = String(file || "") + "\n" + String(err?.stack || "");
     if (/(?:chrome|moz|safari-web)-extension:\/\//i.test(where)) return true;
-    return err?.name === "SecurityError" && /Blocked a frame (?:with origin|at )/.test(String(err?.message));
+    // storage the sandbox has none of: "Failed to read the 'localStorage'
+    // property from 'Window': The document is sandboxed and lacks the
+    // 'allow-same-origin' flag" (Chromium; WebKit says "The operation is
+    // insecure"), read by a script that isn't the page's (nivekxft on X)
+    const why = String(err?.message);
+    if (err?.name === "SecurityError" && (/The operation is insecure/.test(why) || (/(?:local|session)Storage|\bstorage\b|cookie/i.test(why) && /sandboxed|allow-same-origin/i.test(why)))) return true;
+    return err?.name === "SecurityError" && /Blocked a frame (?:with origin|at )/.test(why);
   }
   function report(err) {
     parent.postMessage({ magpie: 1, method: "error", params: { message: String(err?.message || err) } }, "*");
