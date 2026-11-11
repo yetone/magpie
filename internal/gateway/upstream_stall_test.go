@@ -3,6 +3,8 @@ package gateway
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net/http"
@@ -173,4 +175,33 @@ func TestStallBodyClock(t *testing.T) {
 		case <-time.After(4 * after):
 		}
 	})
+}
+
+// The MCP relay's client is a sender of request bodies over HTTP/2 too: a
+// remote MCP server that never opens its window is given up the same way.
+func TestMCPRelayBodyStalledIsGivenUp(t *testing.T) {
+	var hits atomic.Int32
+	vendor := starvingVendor(t, &hits)
+	was := bodyStall
+	bodyStall = 400 * time.Millisecond
+	t.Cleanup(func() { bodyStall = was })
+	pool := x509.NewCertPool()
+	pool.AddCert(vendor.Certificate())
+	c := &http.Client{Transport: mcpTransport(&tls.Config{RootCAs: pool, ServerName: "127.0.0.1"})}
+	t.Cleanup(c.CloseIdleConnections)
+	body := []byte(`{"jsonrpc":"2.0","params":"` + strings.Repeat("a", 512<<10) + `"}`)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, vendor.URL+"/mcp", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := c.Do(req)
+	if err == nil {
+		res.Body.Close()
+		t.Fatalf("a body the server never took got a %d", res.StatusCode)
+	}
+	if !strings.Contains(err.Error(), stalledWords) {
+		t.Fatalf("error = %v (ctx: %v); want one saying %q", err, ctx.Err(), stalledWords)
+	}
 }

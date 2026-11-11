@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"io"
 	"log"
@@ -18,13 +19,17 @@ import (
 // mcpClient relays the agents' requests to a remote MCP server magpie is
 // signed in to. It has no timeout: a GET's event stream stays open for as
 // long as the agent keeps it.
-var mcpClient = &http.Client{Transport: mcpTransport()}
+var mcpClient = &http.Client{Transport: mcpTransport(nil)}
 
-func mcpTransport() http.RoundTripper {
+// mcpTransport sends the relay's requests, a body that stops moving over
+// HTTP/2 given up like every upstream's (stallGuard). tc is the TLS config
+// to trust, nil for the system's.
+func mcpTransport(tc *tls.Config) http.RoundTripper {
 	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.TLSClientConfig = tc
 	t.Proxy = netproxy.Func
 	t.ResponseHeaderTimeout = 2 * time.Minute
-	return netproxy.Dispatch(t)
+	return stallGuard{netproxy.Dispatch(t)}
 }
 
 // mcpHop are the headers a relay doesn't pass on.
