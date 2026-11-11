@@ -19,6 +19,8 @@ import (
 // in readOnlyRoutes fails TestReadOnlyKeyEveryRoute, so a new one is
 // classified before it ships: the guard refuses it until then.
 var readOnlyRefused = []string{
+	// the Library's skills and prompts: a held key is a display, not a client
+	"GET /v1/magpie/library",
 	// model lists and their Ollama spellings: what the key could use
 	"GET /v1/models", "GET /models", "GET /v1/models/{id...}", "GET /muse-code/models",
 	"GET /api/hello", "GET /api/version", "GET /api/tags",

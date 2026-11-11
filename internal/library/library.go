@@ -79,6 +79,12 @@ type Library struct {
 	// BridgesOn are the Remote magpies (provider ids) the user asked to
 	// give their router a server, in the editor's switch (bridge_mcp.go)
 	BridgesOn []string `json:"bridgesOn,omitempty"`
+	// BorrowOn are the Remote magpies (provider ids) whose Library's
+	// skills and prompts this computer uses, and Borrowed what it took
+	// from each (borrow.go). This computer's own: Collect doesn't carry
+	// either.
+	BorrowOn []string             `json:"borrowOn,omitempty"`
+	Borrowed map[string]*Borrowed `json:"borrowed,omitempty"`
 	// SeenSkills are, by repository and ref ("owner/repo@ref", or a git
 	// address and ref), or by a folder the user added ("folder:<path>"),
 	// the folders of skills there the page has offered: picked or not at

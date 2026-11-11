@@ -1027,6 +1027,7 @@ func (s *Server) routes() *routeMux {
 	mux.HandleFunc("POST /v1/magpie/usage/requests", s.usageIngest)
 	mux.HandleFunc("GET /v1/magpie/quotas/history", s.quotasHistory)
 	mux.HandleFunc("GET "+provider.RemoteCardsPath, s.quotaCards)
+	mux.HandleFunc("GET "+provider.RemoteLibraryPath, s.sharedLibrary)
 	mux.HandleFunc("POST "+provider.RemoteRefreshPath, s.quotaCardsRefresh)
 	mux.HandleFunc("POST "+provider.RemoteCodexResetPath, s.codexReset)
 	mux.HandleFunc("GET /v1/magpie/route", s.sessionRoute)
@@ -1238,6 +1239,38 @@ func (s *Server) quotaCards(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeCards(w, r, scope)
+}
+
+// SharedLibrary is the Library as another magpie is told it (JSON), set
+// by the app: the gateway doesn't know the library package.
+var SharedLibrary func() ([]byte, error)
+
+// sharedLibrary tells another magpie that has this one as its provider
+// the skills and prompts of the Library, to use them as its own (KoiLx0
+// on X). Only to this computer and to a full-access key of a magpie
+// shared on the local network: a key held to models, a budget or
+// accounts is the user's limit on what that caller may use.
+func (s *Server) sharedLibrary(w http.ResponseWriter, r *http.Request) {
+	if !local(r) && !sharedWith(r) {
+		writeError(w, provider.Chat, http.StatusForbidden, "magpie's Library is told to another machine only when magpie is shared on the local network (Settings → Share on local network) and the request carries its API key (Authorization: Bearer <key> or x-api-key: <key>)")
+		return
+	}
+	if heldKey(access.Caller(r.Context())) {
+		refuseHeld(w, r, heldQuotasOff)
+		return
+	}
+	if SharedLibrary == nil {
+		writeError(w, provider.Chat, http.StatusNotFound, "this magpie has no Library to tell")
+		return
+	}
+	b, err := SharedLibrary()
+	if err != nil {
+		writeError(w, provider.Chat, http.StatusInternalServerError, "reading the Library: "+err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Write(b)
 }
 
 // remoteRefreshes is when another magpie last had each card read again

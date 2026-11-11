@@ -229,6 +229,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(s.name, "Remote magpie");
         assert.equal(s.id, "remote-magpie");
         assert.equal(s.libraryMCP, false);
+        assert.equal(s.libraryShared, false, "skills and prompts off when added");
 
         // named, its id following; then an id of its own; switched on
         await page.locator("#addProvider").click();
@@ -239,9 +240,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await ed.locator("input.provider-name").fill("Home Lab");
         assert.equal(await ed.locator("input.provider-id").getAttribute("placeholder"), "home-lab");
         await ed.locator(".library-mcp input").check();
+        await ed.locator(".library-shared input").check();
         await ed.locator(".bar button.primary", { hasText: w.add }).click();
         await page.waitForFunction(() => !document.querySelector(".editor.new"));
-        assert.deepEqual([saves[1].name, saves[1].id, saves[1].libraryMCP], ["Home Lab", "home-lab", true]);
+        assert.deepEqual([saves[1].name, saves[1].id, saves[1].libraryMCP, saves[1].libraryShared], ["Home Lab", "home-lab", true, true]);
         await page.locator("#addProvider").click();
         await tile.click();
         await ed.locator(".ehead b", { hasText: "Remote magpie" }).waitFor();
@@ -259,6 +261,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await ed.locator(".ehead b", { hasText: "OpenAI" }).waitFor();
         assert.equal(await ed.locator("input.endpoint").count(), 0);
         assert.equal(await ed.locator(".library-mcp").count(), 0, "no switch on another preset");
+        assert.equal(await ed.locator(".library-shared").count(), 0, "no skills switch on another preset");
         await page.keyboard.press("Escape");
         await ed.waitFor({ state: "detached" });
 

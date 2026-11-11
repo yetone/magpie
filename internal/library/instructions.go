@@ -861,6 +861,9 @@ func KeepLinked(ctx context.Context, interval time.Duration) {
 		keepBiliCompact()
 		// bili start, while an agent goes through its /bili/ prefix
 		keepBiliServe(ctx)
+		// the skills and prompts of a Remote magpie's Library, when
+		// switched on (borrow.go)
+		keepBorrowed(ctx)
 		// once a day, what agents saved to memory meanwhile
 		if res, err := PublishMemory(true); err != nil {
 			log.Println("library: memory:", err)

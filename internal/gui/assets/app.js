@@ -9756,6 +9756,11 @@ function drawEditor(p, presetID) {
     l.classList.add("library-mcp");
     c.onchange = () => (draft.libraryMCP = c.checked);
     ed.append(...field(t("MCP servers"), l));
+    // KoiLx0 on X
+    const [l2, c2] = tick(t("Use its skills and prompts"), (draft.libraryShared ??= !!p?.libraryShared));
+    l2.classList.add("library-shared");
+    c2.onchange = () => (draft.libraryShared = c2.checked);
+    ed.append(...field(t("Skills and prompts"), l2));
   }
   // lcc580 on X
   if ((p?.preset || pr?.id) === "remote-magpie") {
@@ -10253,6 +10258,7 @@ function drawEditor(p, presetID) {
     if (p) { body.fallback = draft.fallback; body.unlisted = draft.unlisted; body.hiddenDrawers = draft.hiddenDrawers; body.hiddenVideomakers = draft.hiddenVideomakers; body.noModels = noneChosen(); body.bestInFamily = bestChosen(); body.modelPrefs = modelPrefsOfDraft(); Object.assign(body, routingOfDraft(p)); }
     body.searches = !!draft.searches && searchable();
     if (draft.libraryMCP != null) body.libraryMCP = draft.libraryMCP;
+    if (draft.libraryShared != null) body.libraryShared = draft.libraryShared;
     body.pinUpstream = !!draft.pinUpstream;
     if (twoKeyHeaders()) body.authHeader = draft.authHeader || "";
     body.unredacted = !!draft.unredacted;

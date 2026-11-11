@@ -511,6 +511,12 @@ func remoteJSON(ctx context.Context, p Provider, method, path string, wait time.
 // gives back the body of a 2xx answer; any other is an error that says
 // what to do about it.
 func remoteBody(ctx context.Context, p Provider, method, path string, wait time.Duration) ([]byte, error) {
+	return remoteBodyAs(ctx, p, method, path, wait, 8<<20, errRemoteNoShare)
+}
+
+// remoteBodyAs is remoteBody for an answer of up to max bytes, and with
+// noShare as the word for a remote that doesn't have the path.
+func remoteBodyAs(ctx context.Context, p Provider, method, path string, wait time.Duration, max int64, noShare string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, method, p.Anthropic+path, nil)
@@ -524,7 +530,7 @@ func remoteBody(ctx context.Context, p Provider, method, path string, wait time.
 		return nil, fmt.Errorf("%s %s: %w", errRemoteUnreachable, remoteName(p), err)
 	}
 	defer res.Body.Close()
-	b, err := io.ReadAll(io.LimitReader(res.Body, 8<<20))
+	b, err := io.ReadAll(io.LimitReader(res.Body, max))
 	if err != nil && ctx.Err() != nil {
 		return nil, fmt.Errorf("%s %s: %w", errRemoteUnreachable, remoteName(p), ctx.Err())
 	}
@@ -536,7 +542,7 @@ func remoteBody(ctx context.Context, p Provider, method, path string, wait time.
 	}
 	switch {
 	case res.StatusCode == http.StatusNotFound || res.StatusCode == http.StatusMethodNotAllowed:
-		return nil, fmt.Errorf("%s", errRemoteNoShare)
+		return nil, fmt.Errorf("%s", noShare)
 	case res.StatusCode == http.StatusForbidden:
 		json.Unmarshal(b, &e)
 		switch e.Error.Code {

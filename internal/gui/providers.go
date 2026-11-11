@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -339,6 +340,11 @@ type providerJSON struct {
 	// LibraryMCP: a Remote magpie whose router is a Library server, or
 	// is to be one (library.RemoteMCPOn)
 	LibraryMCP bool `json:"libraryMCP,omitempty"`
+	// LibraryShared: a Remote magpie whose Library's skills and prompts
+	// are used here (library.BorrowedOn), and LibraryNote what its last
+	// read said went wrong or was left as the user's (KoiLx0 on X)
+	LibraryShared bool   `json:"libraryShared,omitempty"`
+	LibraryNote   string `json:"libraryNote,omitempty"`
 	// RemoteUpdate: a Remote magpie's word on its last ask to follow
 	// this magpie's version (remoteUpdateNote)
 	RemoteUpdate *remoteUpdateJSON `json:"remoteUpdate,omitempty"`
@@ -1353,6 +1359,8 @@ func providersState() providersJSON {
 				remoteMCP = library.RemoteMCPOn()
 			}
 			info.LibraryMCP = remoteMCP[p.ID]
+			info.LibraryShared = library.BorrowedOn()[p.ID]
+			info.LibraryNote = library.BorrowNote(p.ID)
 			info.RemoteUpdate = remoteUpdateNote(p.ID, time.Now())
 		}
 		s.Providers = append(s.Providers, info)
@@ -1724,6 +1732,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// router a Library server (library.SetRemoteMCP); left out,
 			// it stays as it is
 			LibraryMCP *bool `json:"libraryMCP"`
+			// LibraryShared, on a Remote magpie, is the switch for its
+			// Library's skills and prompts (library.SetBorrow)
+			LibraryShared *bool `json:"libraryShared"`
 			// CopyOf, with New, is the provider the new one is a copy of
 			// (#268): its key and what else the form doesn't carry are
 			// taken from it when left out
@@ -2426,6 +2437,24 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 						return
 					}
 					askHub = *req.LibraryMCP
+				}
+			}
+			if req.LibraryShared != nil {
+				if p, err := provider.Find(in.ID); err == nil && p.IsRemoteMagpie() && library.BorrowedOn()[in.ID] != *req.LibraryShared {
+					if _, err := library.SetBorrow(in.ID, *req.LibraryShared); err != nil {
+						fail(rw, err)
+						return
+					}
+					if *req.LibraryShared {
+						id := in.ID
+						go func() {
+							ctx, cancel := context.WithTimeout(context.Background(), 2*provider.RemoteLibraryWait)
+							defer cancel()
+							if _, err := library.UseRemoteLibrary(ctx, id); err != nil {
+								log.Printf("library: the Library of %s: %v", id, err)
+							}
+						}()
+					}
 				}
 			}
 			provider.ForgetBalances()

@@ -147,7 +147,10 @@ func orNone(xs []string) []string {
 // readSkills is each skill folder's files. Links in it, .git and what
 // isn't a plain file stay out. What goes is chosen smallest first across
 // every skill, so the text of them all comes before any big file.
-func readSkills(dirs []string) []*CarriedSkill {
+func readSkills(dirs []string) []*CarriedSkill { return readSkillsMax(dirs, maxCarried, maxCarriedAll) }
+
+// readSkillsMax is readSkills with a file's and the whole's budget given.
+func readSkillsMax(dirs []string, perFile, all int64) []*CarriedSkill {
 	type file struct {
 		skill  int
 		rel, p string
@@ -187,10 +190,10 @@ func readSkills(dirs []string) []*CarriedSkill {
 	slices.SortFunc(files, func(a, b file) int {
 		return cmp.Or(cmp.Compare(a.size, b.size), cmp.Compare(a.skill, b.skill), strings.Compare(a.rel, b.rel))
 	})
-	budget := int64(maxCarriedAll)
+	budget := all
 	for _, f := range files {
 		c := out[f.skill]
-		if f.size > maxCarried || f.size > budget {
+		if f.size > perFile || f.size > budget {
 			c.Left = append(c.Left, f.rel)
 			continue
 		}
@@ -198,7 +201,7 @@ func readSkills(dirs []string) []*CarriedSkill {
 		if err != nil {
 			continue
 		}
-		if n := int64(len(data)); n > maxCarried || n > budget { // grew since
+		if n := int64(len(data)); n > perFile || n > budget { // grew since
 			c.Left = append(c.Left, f.rel)
 			continue
 		}
