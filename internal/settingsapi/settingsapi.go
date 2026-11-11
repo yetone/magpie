@@ -341,6 +341,7 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	in.FullContext = cur.FullContext     // set on its own (full-context)
 	in.CompactAt = cur.CompactAt         // and so is the threshold
 	in.AgentCompacts = cur.AgentCompacts // and each agent's own (agent-compact)
+	in.ContextCap = cur.ContextCap       // and the longest window of every model (context-cap)
 	// Codex's background compaction, set on its own (codex-async-compact)
 	in.CodexAsyncCompact, in.CodexAsyncCompactPercent = cur.CodexAsyncCompact, cur.CodexAsyncCompactPercent
 	// Claude Desktop's list, set in its row on the Agents page

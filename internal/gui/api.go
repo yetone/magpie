@@ -1884,6 +1884,20 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
+	// the longest context window any model is told (settings.ContextCap):
+	// At 0 takes the cap away; a model's or provider's own window stays
+	mux.HandleFunc("POST /api/settings/context-cap", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ At int }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := provider.SetContextCap(in.At); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
 	// an agent's own Long conversations (settings.AgentCompacts): Own
 	// false follows the one for every agent again
 	mux.HandleFunc("POST /api/settings/agent-compact", func(rw http.ResponseWriter, r *http.Request) {

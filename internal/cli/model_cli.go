@@ -108,6 +108,10 @@ const modelUsage = `usage:
                                                  settings on the Agents page,
                                                  is the same switch; a provider's own Compact at (its
                                                  editor) comes before it
+  magpie model context-cap [<size>|off]          the longest context window any model is told, such as 200k:
+                                                 agents' lists and /v1/models say no more for every model
+                                                 that has no window of its own (magpie model context); a
+                                                 shorter or unknown window stays as it is. off takes it away
   magpie model compact <agent> [every|off|<size>] codex, claude or grok's own Long conversations: every
                                                  follows the one above; off runs to the whole window; a
                                                  size compacts there
@@ -149,6 +153,8 @@ func modelCmd(args []string) error {
 		return modelSuffix(args[1:])
 	case "compact", "full-context":
 		return modelCompact(args[1:])
+	case "context-cap", "ctx-cap":
+		return modelContextCap(args[1:])
 	case "context", "ctx":
 		return modelContext(args[1:])
 	case "output", "max-output":
@@ -786,6 +792,37 @@ func modelCompact(args []string) error {
 		fmt.Println(green.Render("✓"), "Codex, Claude Code and Grok Build run a conversation to the model's whole window", muted.Render("· every turn sends all of it"))
 	} else {
 		fmt.Println(green.Render("✓"), fmt.Sprintf("Codex, Claude Code and Grok Build compact at %dK again", settings.Load().Compact()/1000))
+	}
+	return nil
+}
+
+// modelContextCap says or sets the longest context window any model is told
+// (settings.ContextCap).
+func modelContextCap(args []string) error {
+	if len(args) == 0 {
+		if n := settings.Load().ContextCap; n > 0 {
+			fmt.Println(bold.Render(tokenCount(n)), muted.Render("· no model is told a longer window, unless you set one for it or its provider · magpie model context-cap off"))
+		} else {
+			fmt.Println("off", muted.Render("· every model takes its own window · magpie model context-cap <size>"))
+		}
+		return nil
+	}
+	var n int
+	switch v := strings.ToLower(args[0]); v {
+	case "off", "no", "none", "0":
+	default:
+		var err error
+		if n, err = provider.ParseTokens(v); err != nil || n <= 0 {
+			return fmt.Errorf("magpie model context-cap <size such as 200k>|off, not %q", args[0])
+		}
+	}
+	if err := provider.SetContextCap(n); err != nil {
+		return err
+	}
+	if n == 0 {
+		fmt.Println(green.Render("✓"), "every model takes its own window again")
+	} else {
+		fmt.Println(green.Render("✓"), "no model is told a window longer than", tokenCount(n), muted.Render("· one you set for a model or a provider stays"))
 	}
 	return nil
 }

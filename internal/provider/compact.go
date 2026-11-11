@@ -284,3 +284,22 @@ func SetCompactAt(n int) error {
 	catalog.Touched()
 	return nil
 }
+
+// SetContextCap holds every model's window to n tokens at most
+// (settings.ContextCap), where the user set none for the model or its
+// provider; 0 takes the cap away. Agents' lists are written again.
+func SetContextCap(n int) error {
+	if n < 0 {
+		return errorf("a context cap is a number of tokens, not %d", n)
+	}
+	s := settings.Load()
+	if s.ContextCap == n {
+		return nil
+	}
+	s.ContextCap = n
+	if err := settings.Save(s); err != nil {
+		return err
+	}
+	catalog.Touched()
+	return nil
+}

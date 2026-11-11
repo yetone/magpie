@@ -854,6 +854,12 @@ type Settings struct {
 	// off, in tokens: 0 is WorkingWindow (#876: 272K was the only one).
 	// A provider's or a model's own (ModelCompacts) comes before it.
 	CompactAt int `json:"compactAt,omitempty"`
+	// ContextCap is the longest context window any model is told, in
+	// tokens, for every model that has no window of its own set by the user
+	// (a model's, or its provider's "*"): the one cap that replaces setting
+	// each model's (WJaunita45604 on X). 0 is no cap. It only lowers: a
+	// model whose window is shorter, or not known, is told what it was.
+	ContextCap int `json:"contextCap,omitempty"`
 	// AgentCompacts is Long conversations of an agent's own, by its kind
 	// (CompactAgents), over CompactAt and FullContext for that agent alone
 	// (molianyin4227 on Discord: models differ, so one size for every
@@ -1479,6 +1485,15 @@ const WorkingWindow = 272000
 // minute on Windows under steady requests, #2515), but each opening then
 // waited for the page to load again.
 func (s Settings) LightweightOn() bool { return s.Lightweight != nil && *s.Lightweight }
+
+// Capped is a model's window n under ContextCap: no longer than it, and
+// as it was when the cap is off, is longer than n, or n is not known (0).
+func (s Settings) Capped(n int) int {
+	if s.ContextCap > 0 && n > s.ContextCap {
+		return s.ContextCap
+	}
+	return n
+}
 
 // Working is the context window an agent is told for a model with one of
 // n tokens (see FullContext).

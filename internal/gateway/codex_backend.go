@@ -2432,12 +2432,16 @@ func codexMerged(own []any, cached bool) []any {
 	// the windows the user set on the codex provider, as /v1/models says
 	// them (#674); a cached entry, which keeps what magpie handed Codex
 	// last, takes the account's own list's back when none is set
-	window := provider.CodexNativeWindow(cached)
+	window, capAt := provider.CodexNativeWindow(cached), settings.Shared().ContextCap
 	for _, m := range own {
 		if o, ok := m.(map[string]any); ok {
 			slug, _ := o["slug"].(string)
 			if n, most, ok := window(slug); ok {
 				codexcat.Window(o, n, most)
+			} else {
+				// none the user set: the longest context for every model
+				// holds (settings.ContextCap)
+				codexcat.Cap(o, capAt)
 			}
 		}
 	}

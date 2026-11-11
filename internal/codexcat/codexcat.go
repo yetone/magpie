@@ -1211,6 +1211,28 @@ func Window(e map[string]any, n, most int) {
 	}
 }
 
+// Cap holds one of Codex's own entries to a window of at most n tokens
+// (settings.ContextCap), where the user set none for it: its window, the
+// most it may be raised to and the threshold it compacts at come down to n
+// when they are above it, and nothing else changes.
+func Cap(e map[string]any, n int) {
+	if n <= 0 {
+		return
+	}
+	for _, k := range []string{"context_window", "max_context_window", "auto_compact_token_limit"} {
+		switch v := e[k].(type) {
+		case float64:
+			if int(v) > n {
+				e[k] = n
+			}
+		case int:
+			if v > n {
+				e[k] = n
+			}
+		}
+	}
+}
+
 // Codex keeps the model list it was handed in models_cache.json, with the
 // list's ETag, and asks again only once the cache has aged (minutes) — or
 // when a reply's X-Models-Etag differs from it; the same one only makes the

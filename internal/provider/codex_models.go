@@ -837,6 +837,7 @@ func CodexNativePicked() (map[string]bool, bool) {
 func CodexNativeWindow(restore bool) func(slug string) (n, most int, ok bool) {
 	p, _ := find(All(), "codex")
 	live, _, _ := catalog.Live("codex")
+	capped := settings.Shared()
 	return func(slug string) (int, int, bool) {
 		if n := p.ContextOf(slug); n > 0 {
 			return n, 0, true
@@ -849,7 +850,7 @@ func CodexNativeWindow(restore bool) func(slug string) (n, most int, ok bool) {
 				// a list without the max (saved before magpie kept
 				// it) leaves the cache's own; Window still raises it to
 				// the window when it's below
-				return m.Context, m.MaxContext, true
+				return capped.Capped(m.Context), capped.Capped(m.MaxContext), true
 			}
 		}
 		return 0, 0, false
@@ -870,6 +871,7 @@ func CodexWindow(user, slug string) int {
 	if n := p.ContextOf(slug); n > 0 {
 		return n
 	}
+	capped := settings.Shared()
 	var lists [][]catalog.Model
 	if user != "" {
 		if live, _, ok := catalog.Live(accountModels("codex", user)); ok {
@@ -883,7 +885,7 @@ func CodexWindow(user, slug string) int {
 	for _, ms := range lists {
 		for _, m := range ms {
 			if n := catalog.Window(m.Context); m.ID == slug && n > 0 {
-				return n
+				return capped.Capped(n)
 			}
 		}
 	}
@@ -896,6 +898,9 @@ func CodexWindow(user, slug string) int {
 func codexWindowsTag() []catalog.Model {
 	p, _ := find(All(), "codex")
 	var out []catalog.Model
+	if n := settings.Shared().ContextCap; n > 0 {
+		out = append(out, catalog.Model{ID: "~cap", Context: n})
+	}
 	for _, k := range slices.Sorted(maps.Keys(p.Contexts)) {
 		out = append(out, catalog.Model{ID: "=" + k, Context: p.Contexts[k]})
 	}
