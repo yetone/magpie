@@ -36,8 +36,39 @@ type attrList struct {
 // bufs are getattrlistbulk's answers, one a folder being read, kept for
 // the next of a poll's few hundred Codex day folders and Claude Code
 // projects (#2278). Nothing is kept of one once its folder's entries are
-// read: each name is copied.
-var bufs = sync.Pool{New: func() any { b := make([]byte, 64<<10); return &b }}
+// read: each name is copied. They are kept the way listings are, not in
+// a sync.Pool: a collection empties a pool, a Get on another P doesn't
+// take the buffer the last Put left on this one, and -race drops one Put
+// in four, so a poll made a new 64 KiB buffer after each (#5990).
+var bufs struct {
+	sync.Mutex
+	free []*[]byte
+}
+
+// keptBufs is how many read buffers are kept: as many as folders read at
+// once in a poll, give or take.
+const keptBufs = 4
+
+func getBuf() *[]byte {
+	bufs.Lock()
+	defer bufs.Unlock()
+	if n := len(bufs.free); n > 0 {
+		b := bufs.free[n-1]
+		bufs.free[n-1] = nil
+		bufs.free = bufs.free[:n-1]
+		return b
+	}
+	b := make([]byte, 64<<10)
+	return &b
+}
+
+func putBuf(b *[]byte) {
+	bufs.Lock()
+	defer bufs.Unlock()
+	if len(bufs.free) < keptBufs {
+		bufs.free = append(bufs.free, b)
+	}
+}
 
 // stats reads dir's entries with getattrlistbulk: a Sessions read stats
 // each of ~21k session files on every 15 s poll, ~10 µs a file on APFS,
@@ -72,8 +103,8 @@ func each(dir string, f func(name []byte, s Stat) bool) bool {
 	}
 	defer unix.Close(fd)
 	al := attrList{bitmapCount: attrBitMapCount, common: attrCmnReturned | attrCmnName | attrCmnObjType | attrCmnModTime, file: attrFileDataLen}
-	bp := bufs.Get().(*[]byte)
-	defer bufs.Put(bp)
+	bp := getBuf()
+	defer putBuf(bp)
 	buf := *bp
 	for {
 		n, _, errno := syscall.Syscall6(unix.SYS_GETATTRLISTBULK, uintptr(fd), uintptr(unsafe.Pointer(&al)), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)), 0, 0)

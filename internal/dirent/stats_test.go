@@ -215,8 +215,15 @@ func TestListingsOfDifferentSizesMadeOnce(t *testing.T) {
 	poll()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	for range 10 {
+	for i := range 10 {
 		poll()
+		if i == 4 {
+			// Two collections, as a busy process has between polls:
+			// the read buffers and listings are both still there after
+			// them (#5990).
+			runtime.GC()
+			runtime.GC()
+		}
 	}
 	runtime.ReadMemStats(&after)
 	if got := after.TotalAlloc - before.TotalAlloc; got > 64<<10 {
