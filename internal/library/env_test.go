@@ -1,6 +1,7 @@
 package library
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -196,5 +197,53 @@ func TestEnvChecked(t *testing.T) {
 		if _, err := SaveEnv("", e); err == nil {
 			t.Errorf("%+v was saved", e)
 		}
+	}
+}
+
+// A variable is carried with the library (anysearch's key, onducoder on
+// X). A copy without keys carries its name and no value, and putting it
+// neither blanks the key kept here nor writes an empty value into an agent.
+func TestEnvIsCarried(t *testing.T) {
+	h := sandbox(t)
+	settings := filepath.Join(h, ".claude/settings.json")
+	ok(t)(SaveEnv("", EnvVar{Name: "ANYSEARCH_API_KEY", Value: "sk-secret", Agents: []string{"claude"}}))
+	keyed, err := Collect()
+	if err != nil || keyed.Env == nil || len(*keyed.Env) != 1 || (*keyed.Env)[0].Value != "sk-secret" {
+		t.Fatalf("carried: %+v %v", keyed.Env, err)
+	}
+	bare, _ := Collect()
+	bare.WithoutSecrets(func(string) bool { return false }) // whatever the name
+	if v := (*bare.Env)[0]; v.Name != "ANYSEARCH_API_KEY" || v.Value != "" {
+		t.Fatalf("the key went with a copy without keys: %+v", v)
+	}
+	if strings.Contains(mustJSON(t, bare), "sk-secret") {
+		t.Fatal("the key is in a bundle without keys")
+	}
+	// this computer's key survives a copy without keys
+	ok(t)(Put(bare.WithSecrets(keyed, func(string) bool { return false })))
+	if got := claudeEnv(t, settings); got["ANYSEARCH_API_KEY"] != "sk-secret" {
+		t.Fatalf("the key here was blanked: %v", got)
+	}
+	// a computer with none gets the name, and nothing is written for it
+	h2 := sandbox(t)
+	ok(t)(Put(bare))
+	l, _ := Collect()
+	if len(*l.Env) != 1 || (*l.Env)[0].Value != "" {
+		t.Fatalf("name not carried: %+v", l.Env)
+	}
+	if _, err := os.Stat(filepath.Join(h2, ".claude/settings.json")); err == nil && strings.Contains(read(t, filepath.Join(h2, ".claude/settings.json")), "ANYSEARCH") {
+		t.Fatal("an empty value was written into the agent")
+	}
+	// a copy with keys brings the key
+	ok(t)(Put(keyed))
+	if got := claudeEnv(t, filepath.Join(h2, ".claude/settings.json")); got["ANYSEARCH_API_KEY"] != "sk-secret" {
+		t.Fatalf("the key didn't arrive: %v", got)
+	}
+	// one from a magpie that didn't carry them leaves this computer's alone
+	old := *keyed
+	old.Env = nil
+	ok(t)(Put(&old))
+	if l, _ := Collect(); len(*l.Env) != 1 {
+		t.Fatal("variables lost to an old bundle")
 	}
 }

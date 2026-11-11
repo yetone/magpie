@@ -252,7 +252,8 @@ func (l *Library) syncEnv(t *Target, b *backups, res *Result) {
 	a := l.applied(id)
 	want := map[string]string{}
 	for _, e := range l.Env {
-		if slices.Contains(e.Agents, id) {
+		// no value is a variable carried without its key: nothing to give
+		if slices.Contains(e.Agents, id) && e.Value != "" {
 			want[e.Name] = e.Value
 		}
 	}
