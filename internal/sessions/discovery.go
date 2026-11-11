@@ -40,17 +40,17 @@ const racyDirectory = 2 * time.Second
 // left the Sessions page, and its parses were let go with them, until a
 // later poll read the folder again and parsed them anew.
 func readDirectory(path string) []os.DirEntry {
-	st, err := os.Stat(path)
+	mod, size, dir, err := dirStat(path)
 	if err != nil {
 		return unreadDirectory(path, err)
 	}
-	if !st.IsDir() {
+	if !dir {
 		return nil
 	}
 	directoryCache.Lock()
 	old, ok := directoryCache.entries[path]
 	directoryCache.Unlock()
-	if ok && old.mod.Equal(st.ModTime()) && old.size == st.Size() && old.at.Sub(old.mod) > racyDirectory {
+	if ok && old.mod.Equal(mod) && old.size == size && old.at.Sub(old.mod) > racyDirectory {
 		return old.entries
 	}
 	at := time.Now()
@@ -65,7 +65,7 @@ func readDirectory(path string) []os.DirEntry {
 	if len(directoryCache.entries) >= 16384 {
 		directoryCache.entries = map[string]directoryEntry{}
 	}
-	directoryCache.entries[path] = directoryEntry{st.ModTime(), st.Size(), at, entries}
+	directoryCache.entries[path] = directoryEntry{mod, size, at, entries}
 	directoryCache.Unlock()
 	return entries
 }
