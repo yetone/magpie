@@ -37,6 +37,12 @@ func RenameLegacy() {
 		}
 		for i := range a.Fields {
 			f := &a.Fields[i]
+			if strings.HasSuffix(f.Key, "effort") {
+				// a thinking level, never a model: Pi's is read against
+				// the models it offers, the whole catalog built at start
+				// up for it (~52 MB with a real account's providers)
+				continue
+			}
 			if rest, ok := strings.CutPrefix(f.Get(), legacyID+"/"); ok {
 				// dial/… is what magpie wrote under its old name: magpie set
 				// the agent up (setUp)
