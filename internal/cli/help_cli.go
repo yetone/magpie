@@ -57,6 +57,8 @@ func helpFor(args []string) string {
 		return quotaUsage
 	case "statusline":
 		return statuslineUsage
+	case "status":
+		return statusUsage
 	case "mtls":
 		return mtlsUsage
 	case "https":

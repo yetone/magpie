@@ -99,7 +99,7 @@ func homeOr(root string) string {
 // files in the folders a move would take away.
 var gatewayUp = func() bool {
 	codexrelay.Leave() // what a quitting magpie left at the port lets go of it
-	return gateway.ServedBy().Running
+	return gateway.ServedAt(gateway.ClientURL()).Running
 }
 
 // movePending makes the move Settings asked for, as the app starts again

@@ -514,6 +514,8 @@ func (s *Server) Relisten() error {
 	if s.ln == nil {
 		return nil // not serving
 	}
+	// where it listens now is what a command in another shell is told
+	defer func() { recordListening(s.ln.Addr()) }()
 	to := listenAddr()
 	if s.ln.Addr().String() == to {
 		return nil

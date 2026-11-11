@@ -55,7 +55,7 @@ func goroutinesCmd(args []string) error {
 	if file == "" {
 		file = "magpie-goroutines-" + time.Now().Format("20060102-150405") + ".txt"
 	}
-	dump, stats, err := fetchGoroutines(gateway.URL())
+	dump, stats, err := fetchGoroutines(gateway.ClientURL())
 	if err != nil {
 		return err
 	}

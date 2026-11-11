@@ -20,8 +20,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
-	"github.com/yetone/magpie/internal/settings"
 )
 
 const statuslineUsage = `usage: magpie statusline [<provider|account>…]
@@ -44,7 +44,7 @@ const statuslineWait = time.Second
 
 // statuslineCmd: magpie statusline [<provider|account>…]
 func statuslineCmd(args []string) error {
-	fmt.Println(statusline(os.Stdin, args[1:], "http://"+settings.GatewayAddr(), time.Now()))
+	fmt.Println(statusline(os.Stdin, args[1:], gateway.ClientURL(), time.Now()))
 	return nil
 }
 

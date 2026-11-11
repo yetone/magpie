@@ -3468,7 +3468,12 @@ once its key is turned off, removed or rotated.
 The image has a `HEALTHCHECK`: `magpie healthcheck` exits 0 while the gateway
 answers on `MAGPIE_ADDR`, under `serve` and `web` alike, so `docker ps` shows
 the container as healthy (Compose: `depends_on: condition: service_healthy`)
-with no curl in the image. Bind-mounting a folder at `/config` in place of a
+with no curl in the image. The running magpie writes where it listens, its
+pid and how it was started (`app`, `tray`, `web`, `serve`) to `gateway.json` in
+its config folder, so `magpie healthcheck`, `magpie update` and the other
+commands find it from a shell that doesn't have `MAGPIE_ADDR` (a systemd
+service's); `--addr host:port` names it by hand, and `magpie status --json`
+prints the role, pid, version and address for a watchdog. Bind-mounting a folder at `/config` in place of a
 named volume works too; it has to be writable by uid 65532.
 
 #### NAS with agents on other machines

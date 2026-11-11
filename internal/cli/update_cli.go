@@ -178,6 +178,16 @@ func updateCmd(args []string) error {
 	if err != nil {
 		return err
 	}
+	// --addr: where the running magpie is, when it isn't where MAGPIE_ADDR
+	// or the gateway's own record says
+	args, addr, err := addrFlag(args)
+	if err != nil {
+		return fmt.Errorf("magpie update: %w", err)
+	}
+	base := addr
+	if base == "" {
+		base = gateway.ClientURL()
+	}
 	if len(args) > 1 && args[1] == "auto" {
 		return updateAutoCmd(args[2:])
 	}
@@ -188,7 +198,7 @@ func updateCmd(args []string) error {
 		return updateChannelCmd(args[2:])
 	}
 	if len(args) > 2 || len(args) == 2 && args[1] != "check" {
-		return fmt.Errorf("usage: magpie update [check] [--proxy <url>] [--mirror <prefix>]")
+		return fmt.Errorf("usage: magpie update [check] [--proxy <url>] [--mirror <prefix>] [--addr host:port]")
 	}
 	// the check is bounded; the download after it is not: a slow one
 	// still moving goes on, and one that stops sending is ended by
@@ -236,7 +246,7 @@ func updateCmd(args []string) error {
 			return err
 		}
 		fmt.Println(green.Render("✓"), "updated", tilde(app), "to", rel.Version)
-		fmt.Println(muted.Render("  " + restartRunning(gateway.URL(), rel.Version)))
+		fmt.Println(muted.Render("  " + restartRunning(base, rel.Version)))
 		if stale := update.StaleCLI(rel.Version); stale != "" {
 			// The copy won't follow the app; the fix is the link install.sh
 			// makes. `magpie update` run from the copy can't do it (it
@@ -264,7 +274,7 @@ func updateCmd(args []string) error {
 		return err
 	}
 	fmt.Println(green.Render("✓"), "updated to", rel.Version)
-	fmt.Println(muted.Render("  " + restartRunning(gateway.URL(), rel.Version)))
+	fmt.Println(muted.Render("  " + restartRunning(base, rel.Version)))
 	return nil
 }
 

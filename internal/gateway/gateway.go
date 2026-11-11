@@ -378,9 +378,12 @@ type Served struct {
 // still that one's to send: in #506 a Factory 403 came worded as v0.1.550
 // and earlier word it to two people whose magpie said v0.1.630, so none of
 // the fixes since reached their requests. Its version tells it apart.
-func ServedBy() Served {
+func ServedBy() Served { return ServedAt(URL()) }
+
+// servedAt is ServedBy for the magpie at base.
+func ServedAt(base string) Served {
 	c := &http.Client{Timeout: 700 * time.Millisecond}
-	res, err := c.Get(URL() + "/")
+	res, err := c.Get(base + "/")
 	if err != nil {
 		return Served{}
 	}
@@ -805,6 +808,8 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	s.lnMu.Lock()
 	s.ln = ln
 	s.lnMu.Unlock()
+	recordListening(ln.Addr())
+	defer forgetListening()
 	// the keys out of credit a magpie before this one rested go on
 	// resting, and climb on from their rung (rest_store.go)
 	loadRests()

@@ -79,7 +79,7 @@ type toolGateway struct {
 func newToolGateway() *toolGateway {
 	base := strings.TrimRight(os.Getenv("MAGPIE_GATEWAY"), "/")
 	if base == "" {
-		base = gateway.URL()
+		base = gateway.ClientURL()
 	}
 	return &toolGateway{base: base, client: &http.Client{Timeout: toolCallMost}}
 }
