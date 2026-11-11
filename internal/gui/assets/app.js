@@ -11639,7 +11639,6 @@ function renderModels(p) {
       same.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") same.blur(); else if (e.key === "Escape") { same.value = sameNow(); same.blur(); } };
       sameBox.append(el("span", "", t("Same as")), same);
       row.append(sameBox);
-      // its models.dev picker, in modellimits.js
       window.modelSamePick ? modelSamePick(sameBox, same) : import("./modellimits.js").then(() => modelSamePick(sameBox, same), () => {});
       // the id it is listed by here, asked for by its own (zeewell on X)
       const savedID = m.vendor ? m.id : "";
