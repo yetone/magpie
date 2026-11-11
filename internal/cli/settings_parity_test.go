@@ -427,6 +427,7 @@ var notYet = map[string]string{
 	"GET /api/plugin-pages":                      W,  // pluginpage.go
 	"GET /api/plugin-panels":                     W,  // pluginpage.go
 	"POST /api/plugin-pages/image":               W,  // pageimage.go
+	"POST /api/plugin-pages/arrange":             W,  // pluginpage.go: the sidebar's order of plugin pages, dragged
 	"POST /api/plugin-pages/options":             W,  // pluginpage.go
 	"POST /api/plugin-pages/read":                W,  // pluginpage.go
 	"GET /api/plugins/agents":                    P,  // plugins.go
