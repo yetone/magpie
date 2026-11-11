@@ -136,3 +136,22 @@ func BenchmarkReadEach(b *testing.B) {
 		}
 	}
 }
+
+// A window AllOf kept is another limit's when that limit started in the
+// same second: a 10-day limit reset, then made a 5-hour one a millisecond
+// later (TestGatewayKeyLimitCLI). The 5-hour window starts at its own
+// Since, not the 10-day one's.
+func TestAllOfKeptWindowIsOfItsOwnStart(t *testing.T) {
+	bigLedger(t, 0, 0, 0)
+	t0 := time.Unix(time.Now().Unix(), 100_000_000)
+	ten := access.Key{ID: "k", Limit: &access.Limit{Period: "days", Days: 10, Cost: 800, Since: t0}}
+	if st := All(ten, t0.Add(time.Minute)); len(st) != 1 || !st[0].Start.Equal(t0) {
+		t.Fatalf("10-day: %+v", st)
+	}
+	t1 := t0.Add(1700 * time.Microsecond)
+	five := access.Key{ID: "k", Limit: &access.Limit{Period: "hours", Hours: 5, Tokens: 200_000, Since: t1}}
+	st := All(five, t1.Add(time.Minute))
+	if len(st) != 1 || !st[0].Start.Equal(t1) || st[0].Reset.Sub(st[0].Start) != 5*time.Hour {
+		t.Fatalf("5-hour after a 10-day in the same second: %+v", st)
+	}
+}

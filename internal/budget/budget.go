@@ -339,7 +339,10 @@ func AllOf(keys []access.Key, now time.Time) [][]Status {
 					x.prefix.models = scopeModels(l)
 				}
 				kept.Lock()
-				if e, ok := kept.of[w]; ok {
+				// window keys a start by its second: what was kept is
+				// another limit's when that one started in the same
+				// second (a 10-day limit made a 5-hour one at once)
+				if e, ok := kept.of[w]; ok && e.prefix.start.Equal(start) {
 					x.prefix, x.cur = e.prefix, e.cur
 				}
 				kept.Unlock()
