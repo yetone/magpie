@@ -3962,7 +3962,65 @@ In that folder, with ~ expanded. A relative path is ignored, and magpie uses ~/.
 
 Yes. magpie sets up a Pi in a WSL distro too, its provider pointing at the gateway as the distro reaches it.
 
-More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [Kimi Code on any model](https://usemagpie.ai/docs/kimi-code). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Kimi Code on any model](https://usemagpie.ai/docs/kimi-code) and [Cursor Private Inference on any model](https://usemagpie.ai/docs/cursor-private-inference). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/cursor-private-inference
+
+# Cursor Private Inference on any model
+
+Cursor Private Inference is a build of Cursor whose agent runs on your own machine and asks a model endpoint of yours instead of Cursor’s backend. magpie is such an endpoint, so its agent can run on any model you have in magpie: DeepSeek, GLM, Qwen, an OpenAI or Anthropic key, or a ChatGPT or Copilot subscription.
+
+The build takes its endpoint from `CURSOR_LOCAL_AGENT_BASE_URL` and `CURSOR_LOCAL_AGENT_API_KEY`. magpie sets the two for your user, to the gateway’s `/v1` and a key of its own: through launchctl on the Mac, the registry’s Environment on Windows and environment.d on Linux. So the app has them when you open it from the Dock or the Start menu. magpie writes none of Cursor’s files, since regular Cursor shares them, and only this build reads the two variables. magpie finds the build by its `product.json`, in your apps folders, and on Linux as its AppImage where you downloaded it.
+
+## Connect it
+
+1. **Add providers in magpie.** In the Providers tab, add an API key or sign in to a subscription.
+2. **Pick magpie on its row.** In the Agents tab, set Cursor Private Inference’s provider to magpie.
+3. **Quit it and open it again.** Quit the app, not only its window, then open it. magpie’s models are in its model picker.
+
+To start it from a shell instead, the row gives the command that starts it with both variables set.
+
+## Its models
+
+Its model picker lists the gateway’s models, the ones its key is shown. The row’s Models button picks which. For each model the gateway also says which APIs it is served on and its limits, so the build asks Claude on Anthropic Messages, GPT on Responses and the rest on Chat, with the right context.
+
+## Effort
+
+Neither the build’s environment nor, for most models, its app says how hard a model should reason. Pick the effort on the row instead, among the levels its models have, and the gateway asks each request for it. Left on the default, requests go as the app sends them.
+
+## When it takes effect
+
+The build keeps the model list it was first given until it quits, so quit it and open it again after a change. On the Mac, launchctl’s variables are gone after a restart: magpie sets them again when it starts, with the gateway’s address then, and the app takes them the next time it opens.
+
+## Settings that come first
+
+A base URL or API key set in the build’s Open configuration dialog, or in a model’s own settings, comes before the variables. Leave both empty, or set them to the gateway’s `/v1` address and the key the row shows.
+
+## Switch back
+
+Take the row off magpie. magpie clears both variables for your user. Quit the app and open it again.
+
+## FAQ
+
+### Can Cursor’s agent run on DeepSeek or GLM?
+
+Yes, in Cursor Private Inference. Any model you have in magpie can be in its model picker: DeepSeek, GLM, Qwen, GPT, Claude and more.
+
+### Does it change my regular Cursor?
+
+No. magpie writes none of Cursor’s settings. It sets two variables that only the Private Inference build reads.
+
+### Why don’t the new models show?
+
+The build keeps its first model list until it quits. Quit the app itself, not only its window, and open it again. Check that no base URL or key is set in its Open configuration.
+
+### Does it work on Windows and Linux?
+
+Yes. magpie sets the variables in the registry’s Environment on Windows and in environment.d on Linux, and finds the Linux AppImage where you downloaded it.
+
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [Pi on any model](https://usemagpie.ai/docs/pi). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
