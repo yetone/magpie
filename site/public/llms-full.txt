@@ -3551,7 +3551,60 @@ That model doesn’t reason. For one that does, magpie gives it a starting effor
 
 No. Your custom models stay as they were and in front of magpie’s.
 
-More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [Goose on any model](https://usemagpie.ai/docs/goose). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Goose on any model](https://usemagpie.ai/docs/goose) and [Zed on any model](https://usemagpie.ai/docs/zed). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/zed
+
+# Zed on any model
+
+Zed’s agent panel runs on the language model provider in its settings. magpie adds itself to Zed as an OpenAI-compatible provider, so Zed’s agent can run on any model you have in magpie: DeepSeek, Kimi, GLM, Qwen, an OpenAI key, or a ChatGPT or Copilot subscription, with no key pasted into Zed.
+
+Zed keeps its settings in `~/.config/zed/settings.json` on macOS and Linux (under `$XDG_CONFIG_HOME` if set) and in `%APPDATA%\Zed` on Windows. magpie adds `language_models.openai_compatible.magpie`, with the gateway’s address and magpie’s models, and sets `agent.default_model` to the model you pick. Zed reads the change as it runs. The gateway translates each request for the model’s provider, tool calls and reasoning included.
+
+## Connect Zed
+
+1. **Add providers in magpie.** In the Providers tab, add an API key or sign in to a subscription.
+2. **Pick a model on Zed’s row.** In the Agents tab, choose a model on Zed’s row.
+3. **Open Zed’s agent panel.** The model is the panel’s default, and magpie’s models are in its model picker under magpie.
+
+```
+magpie zed deepseek/deepseek-v4-pro    # Zed's agent on DeepSeek
+magpie zed                             # what Zed runs on now
+```
+
+## The API key
+
+Zed keeps an OpenAI-compatible provider’s key in the system’s credential store, keyed by the provider’s address, not in settings.json. magpie saves a key of Zed’s own there for you: in the Keychain on macOS, in the Secret Service on Linux and in the Credential Manager on Windows. If Zed still asks for an API key, restart Zed.
+
+## Models and thinking
+
+Each model carries its context window and reply limit, so Zed knows when to compact, and whether it takes images. A model that thinks is written with `reasoning_effort` high, or the strongest level it has, so Zed shows its thinking switch and levels. A level you set on a model in settings.json yourself, `none` included, stays when magpie rewrites the list. If Zed reaches the gateway through a proxy of yours, magpie keeps that address.
+
+## Switch back
+
+Pick one of Zed’s own models on its row, take the row off magpie, or run `magpie zed default`. magpie puts back the default model, and the provider entry, you had before.
+
+## FAQ
+
+### Can Zed use my ChatGPT subscription?
+
+Yes. Sign in to ChatGPT in magpie and pick a GPT model on Zed’s row. Zed sends its requests to magpie, which uses the subscription.
+
+### Zed asks for an API key for magpie.
+
+magpie saved the key in the system credential store. Restart Zed so it reads it.
+
+### Why doesn’t Zed show a thinking switch for a model?
+
+That model doesn’t think. For one that does, magpie sets reasoning_effort, and Zed then shows the switch.
+
+### Does this change Zed’s edit predictions?
+
+No. magpie sets the agent panel’s default model and adds a provider; edit predictions are left as they were.
+
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [Droid on any model](https://usemagpie.ai/docs/droid). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
