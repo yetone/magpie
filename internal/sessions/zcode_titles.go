@@ -32,6 +32,9 @@ func zcodeTitleFiles() []file {
 			continue
 		}
 		parent[id] = par
+		if t, ok := zcodeTaskOf(id); ok { // a rename in the app is no change to the CLI's rows
+			updated = max(updated, t.updated)
+		}
 		out = append(out, file{agent: "zcode", path: path + "#" + id, mod: modOf(ms(updated)),
 			more: &fileMore{sid: id, oc: zcDB{ocDB{db}}}})
 	}

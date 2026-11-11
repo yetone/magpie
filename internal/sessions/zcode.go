@@ -49,6 +49,10 @@ func (s zcDB) info(sid string) (ocInfo, bool) {
 	if source == "default" {
 		i.Title = ""
 	}
+	// the name the app shows, when it has one
+	if t, ok := zcodeTaskOf(sid); ok && title(t.title) != "" && !ocDefaultTitle(title(t.title)) {
+		i.Title = t.title
+	}
 	return i, err == nil
 }
 

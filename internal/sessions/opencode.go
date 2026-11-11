@@ -350,6 +350,11 @@ func ocDBRows(db *sql.DB, query, agent, path string, store ocStore, parent map[s
 			continue
 		}
 		parent[id] = par
+		if agent == "zcode" { // a rename in the app is no change to the CLI's rows
+			if t, ok := zcodeTaskOf(id); ok {
+				updated = max(updated, t.updated)
+			}
+		}
 		out = append(out, file{agent: agent, path: path + "#" + id, size: n, mod: modOf(ms(max(updated, last))), more: &fileMore{sid: id, oc: store}})
 	}
 	return out
