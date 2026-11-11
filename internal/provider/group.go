@@ -2124,6 +2124,7 @@ func DeleteGroups(ids []string) error {
 			return fmt.Errorf("no group %q", id)
 		}
 	}
+	removedFound := slices.ContainsFunc(all, func(g Group) bool { return g.Auto && !g.Hidden && in[g.ID] })
 	for _, g := range all {
 		if g.Hidden || in[g.ID] {
 			continue
@@ -2149,6 +2150,13 @@ func DeleteGroups(ids []string) error {
 			return last
 		}
 		left = next
+	}
+	// Removing every group magpie found says the user wants none: a model
+	// a provider serves later, or one it lists after a refresh, must not
+	// bring a new one back (xwang_sh on X). The removed ones stay recorded;
+	// found groups on again (SetAutoGroups) brings them as they were.
+	if removedFound && AutoGroupsOn() && !slices.ContainsFunc(groupsIn(providerEntries()), func(g Group) bool { return g.Auto && !g.Hidden }) {
+		return SetAutoGroups(false)
 	}
 	return nil
 }

@@ -70,3 +70,49 @@ func TestDeleteGroups(t *testing.T) {
 		t.Fatalf("removed found groups: %v", got)
 	}
 }
+
+// Removing every group magpie found says the user wants none: a model a
+// provider serves later brings no new one (xwang_sh on X), and found groups
+// on again brings the removed ones back. Removing only some leaves them on.
+func TestDeletingEveryFoundGroupKeepsThemOff(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	add := func(id string, models ...string) {
+		t.Helper()
+		if err := Save(Provider{ID: id, Name: id, Key: "k", Chat: "http://127.0.0.1:1/v1", Models: models}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	shown := func() (out []string) {
+		for _, g := range Groups() {
+			if !g.Hidden {
+				out = append(out, g.ID)
+			}
+		}
+		slices.Sort(out)
+		return out
+	}
+	add("a", "x", "y")
+	add("b", "x", "y")
+	if err := DeleteGroups([]string{"auto-x"}); err != nil {
+		t.Fatal(err)
+	}
+	if !AutoGroupsOn() || !slices.Equal(shown(), []string{"auto-y"}) {
+		t.Fatalf("some removed: on %v, shown %v", AutoGroupsOn(), shown())
+	}
+	if err := DeleteGroups([]string{"auto-y"}); err != nil {
+		t.Fatal(err)
+	}
+	add("a", "x", "y", "z")
+	add("b", "x", "y", "z")
+	if AutoGroupsOn() || len(shown()) != 0 {
+		t.Fatalf("all removed, then a new model: on %v, shown %v", AutoGroupsOn(), shown())
+	}
+	if err := SetAutoGroups(true); err != nil {
+		t.Fatal(err)
+	}
+	if got := shown(); !slices.Equal(got, []string{"auto-z"}) {
+		t.Fatalf("on again: %v (the removed stay removed)", got)
+	}
+}

@@ -22,6 +22,13 @@ message digest is not migrated to a newly recognised native id, so the first
 request after upgrading can choose an account anew. Historical usage is not
 backfilled; see [Gateway Session Aggregation](gateway-sessions.md).
 
+A found group is not in providers.json; only its removal is (`{"id", "hidden":
+true}`), so taking that record out by hand brings the group back. Removing
+every found group at once (`provider.DeleteGroups`, the Routing page's
+select-all Remove) also turns found groups off (`SetAutoGroups(false)`,
+xwang_sh on X), so a model a provider lists later brings no new one; the
+removed records stay and turning them on again restores the groups as they were.
+
 ## Responsibilities and sources of truth
 
 | Part | Responsibility | Source |

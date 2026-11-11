@@ -601,7 +601,9 @@ func groupRoutes(mux *http.ServeMux) {
 			}
 		case "delete":
 			if len(body.IDs) > 0 {
-				err = provider.DeleteGroups(body.IDs)
+				// the last found group going turns found groups off, which
+				// moves an agent set to one to its model
+				moved, err = agent.Reseat(func() error { return provider.DeleteGroups(body.IDs) })
 			} else {
 				err = provider.DeleteGroup(in.ID)
 			}
