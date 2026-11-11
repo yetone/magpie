@@ -1050,6 +1050,26 @@ func FindGroup(id string) (Group, []Member, bool) {
 	return GroupFinder()(id)
 }
 
+// GroupHasNative says whether the group id has a member found now that
+// speaks api natively, kept across requests while the files stay the same
+// (keptOf, a minute at most). Pi's Drift asks it of the model an agent is
+// set to on every /api/drift poll, and finding the members was ~3.4 MB a
+// poll with real accounts, four of five bytes the window allocated a minute.
+func GroupHasNative(id string, api Protocol) bool {
+	return keptOf("group native "+string(api)+" "+id, func() bool {
+		_, ms, ok := GroupFinder()(id)
+		if !ok {
+			return false
+		}
+		for _, m := range ms {
+			if m.Provider.Native(m.Model) == api {
+				return true
+			}
+		}
+		return false
+	})
+}
+
 // FallbackGroup is the routing group a provider's fallback entry names
 // ("group/<id>", 01huadalang on Discord), as the gateway routes it (Live),
 // with its members ready now. ok is false for an entry naming a model,
