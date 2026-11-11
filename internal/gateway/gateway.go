@@ -7086,6 +7086,11 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	if res.StatusCode >= 400 {
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 		msg := explained(p, model, res, b)
+		if s.noChannelElsewhere(p, model, proto, res.StatusCode, b) {
+			s.markUnfit(p.ID, model, proto)
+			u.RequestID = ""
+			return res.StatusCode, msg, false
+		}
 		if wrongEndpoint(res.StatusCode, b) {
 			s.markUnfit(p.ID, model, proto)
 			if len(s.usable(p, model)) > 0 {
@@ -8368,7 +8373,7 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 		// cache, not because the model needs it: a model the vendor doesn't
 		// serve on it (404) is asked on Chat, as before #1578
 		cacheOnly := to == provider.Responses && res.StatusCode == http.StatusNotFound && p.ResponsesTellsCache()
-		if !cacheOnly && !wrongEndpoint(res.StatusCode, b) {
+		if !cacheOnly && !wrongEndpoint(res.StatusCode, b) && !s.noChannelElsewhere(p, model, to, res.StatusCode, b) {
 			return res, to, nil
 		}
 		s.markUnfit(p.ID, model, to)
@@ -8769,6 +8774,14 @@ func badRequest(status int) bool {
 // wrongEndpoint is catalog.WrongEndpoint, whose words a model's test
 // reads too (#3766).
 func wrongEndpoint(status int, body []byte) bool { return catalog.WrongEndpoint(status, body) }
+
+// noChannelElsewhere is whether a relay said it has no channel for model on
+// proto (catalog.NoChannel) while p speaks another API that may serve it. A
+// relay with channels per API (New API) answers a GPT asked on its Anthropic
+// URL so, and the request goes on to the next API, as for wrongEndpoint.
+func (s *Server) noChannelElsewhere(p provider.Provider, model string, proto provider.Protocol, status int, body []byte) bool {
+	return catalog.NoChannel(status, body) && slices.ContainsFunc(s.usable(p, model), func(o provider.Protocol) bool { return o != proto })
+}
 
 // wrongAPINote goes after an upstream's word that the model isn't served
 // on the API it was asked on (wrongEndpoint), when no other API is left to

@@ -478,3 +478,20 @@ func TestProviderAllocsGrowWithModels(t *testing.T) {
 		t.Errorf("after Reset, Provider(openai) = %v, want the new load's m-new", ms)
 	}
 }
+
+func TestNoChannel(t *testing.T) {
+	for _, c := range []struct {
+		status int
+		body   string
+		want   bool
+	}{
+		{503, `{"type":"error","error":{"type":"new_api_error","message":"No available channel for model gpt-6.1-sol under group default (request id: 2026)"}}`, true},
+		{503, `{"error":{"message":"当前分组 default 下对于模型 gpt-6.1-sol 无可用渠道 (request id: 2026)","type":"new_api_error","code":"model_not_found"}}`, true},
+		{503, `{"error":{"message":"upstream overloaded"}}`, false},
+		{429, `No available channel for model x`, false},
+	} {
+		if got := NoChannel(c.status, []byte(c.body)); got != c.want {
+			t.Errorf("NoChannel(%d, %s) = %v", c.status, c.body, got)
+		}
+	}
+}

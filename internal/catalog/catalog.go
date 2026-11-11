@@ -2156,6 +2156,19 @@ func WrongEndpoint(status int, body []byte) bool {
 	return false
 }
 
+// NoChannel recognizes a relay (New API and its forks) answering 503 that no
+// channel serves the model in the caller's group: the relay holds the model on
+// some of its APIs and has no channel for it on the one asked, so another API
+// of the same relay may serve it (equinox0253 on X: gpt-6.1-sol asked on a
+// relay's Anthropic URL, where only its Claude models have a channel).
+func NoChannel(status int, body []byte) bool {
+	if status != 503 && status != 404 {
+		return false
+	}
+	msg := strings.ToLower(string(Words(body)))
+	return strings.Contains(msg, "no available channel") || strings.Contains(msg, "无可用渠道")
+}
+
 // Words is an error body as its words are matched: a JSON body that
 // escapes what isn't ASCII as \uXXXX (Python's json.dumps does by default)
 // has its strings decoded and put after it, one to a line, so "用量",
