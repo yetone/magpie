@@ -224,6 +224,8 @@ func drawsFamily(p provider.Provider, id string) bool {
 		return strings.HasPrefix(id, grokDrawerFamily)
 	case drawsCodex(p):
 		return strings.HasPrefix(id, codexDrawerFamily)
+	case drawsMuse(p):
+		return strings.HasPrefix(id, "muse-image")
 	case p.Account == nil && p.Base(provider.Responses) != "" && strings.HasPrefix(id, codexDrawerFamily):
 		return slices.ContainsFunc(Drawers(p), func(m catalog.Model) bool {
 			return strings.HasPrefix(m.ID[strings.LastIndexByte(m.ID, '/')+1:], codexDrawerFamily)
@@ -277,7 +279,7 @@ func ListedDrawer(ref string) string {
 // an account's own list of models (#474), picked in the editor from the
 // chat models, can't name them, so it never bars one (heyiwei5 on X).
 func listsCantName(p provider.Provider) bool {
-	return drawsCodex(p) || drawsGrok(p) || drawsWorkBuddy(p)
+	return drawsCodex(p) || drawsGrok(p) || drawsMuse(p) || drawsWorkBuddy(p)
 }
 
 // codexDrawer is the image model Codex CLI asks a ChatGPT account for, the
@@ -306,6 +308,19 @@ func drawsCopilot(p provider.Provider) bool {
 	return p.Account != nil && p.Account.Agent == "copilot"
 }
 
+// museDrawer is Meta's image model (Muse Image), which the Muse Code
+// subscription's plans include and which draws on the Responses API, as
+// Meta's image generation page shows: model muse-image-1.0, the picture in
+// the answer's image_generation_call.
+const museDrawer = "muse-image-1.0"
+
+// drawsMuse is whether p is a Muse (Meta) subscription, a plugin's. The
+// plugin signs POST /responses only, so it draws on that, not on the
+// images endpoints.
+func drawsMuse(p provider.Provider) bool {
+	return p.Account != nil && p.PluginProvider() == "muse" && p.Base(provider.Responses) != ""
+}
+
 // drawsCodex is whether p is a ChatGPT account, which draws at its Codex
 // backend's images API.
 func drawsCodex(p provider.Provider) bool {
@@ -326,6 +341,9 @@ func Drawers(p provider.Provider) []catalog.Model { return DrawersOf(p, p.Availa
 func DrawersOf(p provider.Provider, avail func() []catalog.Model) []catalog.Model {
 	if drawsWorkBuddy(p) {
 		return wbDrawers(p)
+	}
+	if drawsMuse(p) {
+		return []catalog.Model{{ID: museDrawer, Name: "Muse Image", Provider: p.ID}}
 	}
 	if drawsCodex(p) || drawsGrok(p) {
 		out := slices.Clone(codexDrawers)
@@ -503,8 +521,8 @@ func AutoDrawer() string {
 			}
 			c := cand{ref: p.ID + "/" + m.ID, released: m.Released, cost: 1e9}
 			switch {
-			case drawsCodex(p), drawsGrok(p):
-				c.cost, c.priced = 0, true // a ChatGPT or Grok plan's images come with it
+			case drawsCodex(p), drawsGrok(p), drawsMuse(p):
+				c.cost, c.priced = 0, true // a ChatGPT, Grok or Muse plan's images come with it
 			case m.Price != nil:
 				c.cost, c.priced = m.Price.Input+m.Price.Output, true
 			}
@@ -1347,6 +1365,9 @@ func (s *Server) draw(ctx context.Context, p provider.Provider, model string, d 
 	ctx = provider.WithModel(ctx, p.ID, model)
 	if drawsWorkBuddy(p) {
 		return s.drawWorkBuddy(ctx, p, model, d)
+	}
+	if drawsMuse(p) {
+		return s.drawMuse(ctx, p, model, d)
 	}
 	if drawsCodex(p) || drawsGrok(p) {
 		return s.drawImages(ctx, p, model, d)
