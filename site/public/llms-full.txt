@@ -449,7 +449,7 @@ Yes. Sign in to Claude in magpie and its models are `claude/…` in the same pic
 
 Pick one of Claude Code’s own models in magpie, or run `magpie claude default`. What magpie wrote comes out, and what it replaced comes back.
 
-Using Codex too? See [Use any model in Codex](https://usemagpie.ai/docs/codex-models). Stuck? Ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+Using Codex too? See [Use any model in Codex](https://usemagpie.ai/docs/codex-models). On Claude Desktop? See [Claude Desktop on any model](https://usemagpie.ai/docs/claude-desktop). Stuck? Ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
@@ -3180,6 +3180,83 @@ A value the task needs as it is, such as a team address or a test key, goes in N
 - **Rules find shapes..** A phone number in another country’s format or a name in free text needs Find with a local model, or your own Masked words and Masking rules. Try your own text in Try it first.
 
 See also [Privacy](https://usemagpie.ai/docs/privacy) for everything magpie sends by itself. The code is [internal/redact](https://github.com/yetone/magpie/tree/main/internal/redact) and [internal/masking](https://github.com/yetone/magpie/blob/main/internal/masking/masking.go).
+
+---
+
+Source: https://usemagpie.ai/docs/claude-desktop
+
+# Claude Desktop on any model
+
+Claude Desktop has a third-party gateway mode: no Anthropic sign-in, and its Code and Cowork tabs work on any plan. magpie sets Desktop up in that mode with magpie’s gateway, so Desktop runs on any model you have in magpie: DeepSeek, Kimi, GLM, Qwen, an OpenAI key, or a ChatGPT or Copilot subscription.
+
+In its gateway mode Claude Desktop sends every request to one address instead of Anthropic. magpie writes that mode and a profile named magpie, pointing at its gateway, `http://127.0.0.1:3425`, into Desktop’s configuration folders. The gateway speaks Anthropic’s Messages API and translates each request for the model you picked, streaming, tool calls and reasoning included. It works on macOS, Windows (the Store package too) and Linux.
+
+## Turn it on
+
+1. **Add providers in magpie.** In the Providers tab, add an API key or sign in to a subscription.
+2. **Choose magpie on Claude Desktop’s row.** In the Agents tab, Claude Desktop’s row offers magpie: Desktop’s third-party gateway, Code and Cowork on magpie’s models, no Anthropic sign-in.
+3. **Quit and reopen Claude Desktop.** Desktop reads this only as it starts.
+
+```
+magpie claude-desktop magpie      # Desktop on magpie's gateway
+magpie claude-desktop default     # back to the Anthropic sign-in
+```
+
+## Pick a model
+
+Desktop lists the gateway’s models when it starts, so its model picker shows the models you have in magpie. A model with a 1M context window is listed once, as its 1M entry. After you add a provider in magpie, quit and reopen Desktop to see its models.
+
+## The Code tab’s tiers
+
+The Code tab runs Claude Code, which asks for models by tier: opus, sonnet, haiku. Left unset, a tier runs on the chat’s model. Pick a model for a tier on Claude Desktop’s row, or from a terminal, and restart Desktop after a change:
+
+```
+magpie claude-desktop sonnet deepseek/deepseek-v4-pro
+magpie claude-desktop haiku deepseek/deepseek-v4-flash
+```
+
+A picked model runs with the prompt of the Claude model of its tier. The row also has a subagent model, which takes effect without a restart.
+
+## Your chats and projects
+
+Desktop keeps its gateway mode in a profile of its own, so chats and projects from your Anthropic sign-in don’t show while it runs on magpie. Nothing is deleted, and switching back brings them back. To go on with them on magpie, use Settings → Import in Desktop, which copies in your Claude.ai chats and projects and leaves the originals as they are.
+
+## A separate Claude Magpie app (Mac)
+
+On a Mac, magpie can run Desktop’s gateway mode in a folder of its own, started by `~/Applications/Claude Magpie.app`. Your own Claude Desktop stays signed in with Anthropic, and both run side by side. It is off by default.
+
+```
+magpie claude-desktop launcher add      # make Claude Magpie.app
+magpie claude-desktop launcher remove
+```
+
+## Switch back
+
+Take Claude Desktop’s row off magpie, or run `magpie claude-desktop default`, then quit and reopen Desktop. magpie puts Desktop’s files back as they were, and your chats from before are there again.
+
+## FAQ
+
+### Do I need a Claude subscription for Cowork and the Code tab?
+
+No. In gateway mode, Desktop’s Code and Cowork tabs work without an Anthropic sign-in, on whatever model magpie serves.
+
+### Can I use my ChatGPT subscription in Claude Desktop?
+
+Yes. Sign in to ChatGPT in magpie, and its GPT models appear in Desktop’s model picker after a restart.
+
+### Why doesn’t Claude Desktop show a new model?
+
+Desktop reads the model list as it starts. Quit and reopen it.
+
+### Why is Claude Desktop in English on magpie?
+
+Desktop’s gateway-mode window has no translation of its own. Switching back brings your language back.
+
+### Are my old chats gone?
+
+No. They stay in Desktop’s own profile and come back when you switch back, or you can import them with Settings → Import.
+
+The same models in the terminal: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [ChatGPT in Claude Code](https://usemagpie.ai/docs/claude-code-chatgpt). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 

@@ -28,7 +28,7 @@ Key facts:
 
 ## Supported agents
 
-Claude Code, Codex, Gemini CLI, OpenCode, Pi, Goose, Cursor CLI, GitHub Copilot CLI, VS Code, Crush, Droid, Kimi Code, Grok Build, Hermes Agent, Devin, MiniMax Code, MiMo Code, DevEco Code, Command Code, ZCode, Snow CLI, Alma, Cherry Studio and more.
+Claude Code, Claude Desktop (chat, Code and Cowork), Codex, Gemini CLI, OpenCode, Pi, Goose, Cursor CLI, GitHub Copilot CLI, VS Code, Crush, Droid, Kimi Code, Grok Build, Hermes Agent, Devin, MiniMax Code, MiMo Code, DevEco Code, Command Code, ZCode, Snow CLI, Alma, Cherry Studio and more.
 
 ## Supported providers
 
@@ -60,6 +60,7 @@ DeepSeek, Kimi (Moonshot), GLM (Zhipu), Qwen, MiniMax, Anthropic (Claude), OpenA
 - [OpenAI in every agent](https://usemagpie.ai/docs/openai): an OpenAI API key (or Azure OpenAI) in Claude Code, Codex, Gemini CLI and OpenCode; Responses vs Chat Completions, prompt_cache_key, reasoning effort and Fast (priority tier), web search, cost and several keys.
 - [Intent routing](https://usemagpie.ai/docs/intent): how a turn is routed by what the user asks for.
 - [Privacy masking](https://usemagpie.ai/docs/masking): what is masked before a request leaves the computer and how values come back.
+- [Claude Desktop on any model](https://usemagpie.ai/docs/claude-desktop): run Claude Desktop's chat, Code and Cowork tabs on DeepSeek, Kimi, GLM, Qwen, GPT or a ChatGPT subscription through its third-party gateway mode, no Anthropic sign-in; model list, Code tab tiers, chats, the separate Claude Magpie app on a Mac and switching back.
 - [Cherry Studio](https://usemagpie.ai/docs/cherry-studio): add magpie to Cherry Studio as one OpenAI-compatible provider in one click, confirmed in Cherry Studio, and use every magpie model there, Claude, ChatGPT and Copilot subscriptions included; model list, status and usage.
 - [Fixing common errors](https://usemagpie.ai/docs/troubleshooting): what the gateway's errors mean and the fix: 401 and 403, 429 and rest periods, 502 and 504, model not found, an agent that doesn't show a model, port 3425 in use, agents in WSL, use from another computer and subscriptions moved to plugins.
 - [Library](https://usemagpie.ai/docs/library): instructions, MCP servers, skills, hooks and subagents for each agent.
