@@ -359,7 +359,7 @@ func (l *Library) syncInstructions(t *Target, b *backups, res *Result, auto bool
 		}
 	}
 	want := l.wanted(id)
-	raw, err := edit.Read(t.Instructions)
+	raw, err := instrRead(t)
 	if err != nil {
 		res.fail(id, "instructions", err)
 		return
@@ -428,12 +428,12 @@ func (l *Library) syncInstructions(t *Target, b *backups, res *Result, auto bool
 			// an apply never takes a whole file away (#5709): what it
 			// empties it empties in place, the file staying for the
 			// agent that reads it
-			err = edit.WriteAtomic(t.Instructions, nil)
+			err = instrEmpty(t)
 		} else {
-			err = edit.Remove(t.Instructions)
+			err = instrSave(t, "")
 		}
 	} else if next != "" {
-		err = edit.WriteAtomic(t.Instructions, []byte(next))
+		err = instrSave(t, next)
 	}
 	if err != nil {
 		res.fail(id, "instructions", err)
@@ -506,7 +506,7 @@ func (l *Library) instructionsView(targets []*Target, asleep []*agent.Agent) *In
 		id := t.Agent.ID
 		ai := AgentInstructions{Agent: id, Name: t.Agent.Name, Icon: t.Agent.Icon, Path: t.Instructions,
 			On: slices.Contains(l.Instructions.Agents, id), Extra: readText(extraPath(id)), Profile: t.Profile}
-		file := readText(t.Instructions)
+		file := instrText(t)
 		if o := own(file); o != "" {
 			ai.Own = strings.Count(o, "\n") + 1
 		}
@@ -630,7 +630,7 @@ func ImportInstructions(id string) (*Result, error) {
 		if l.isSetFile(t.Instructions) {
 			return fmt.Errorf("%s is the file the instructions set is kept in already", t.Instructions)
 		}
-		raw, err := edit.Read(t.Instructions)
+		raw, err := instrRead(t)
 		if err != nil {
 			return err
 		}
@@ -655,11 +655,7 @@ func ImportInstructions(id string) (*Result, error) {
 		if ok {
 			next = withBlock("", block)
 		}
-		if next == "" {
-			err = edit.Remove(t.Instructions)
-		} else {
-			err = edit.WriteAtomic(t.Instructions, []byte(next))
-		}
+		err = instrSave(t, next)
 		if err != nil {
 			return err
 		}

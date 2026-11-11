@@ -27,8 +27,12 @@ type Target struct {
 	// Override, when it exists, is read instead of it (Codex's
 	// AGENTS.override.md), which the page warns of.
 	Instructions, Override string
-	MCP                    *mcpFile
-	Skills                 string // the folder the agent finds skills in
+	// Field, when it is set, says the instructions are not the file itself
+	// but the string at this key path of the JSON file Instructions names
+	// (WorkBuddy's personalization.customPrompt): instr_field.go.
+	Field  string
+	MCP    *mcpFile
+	Skills string // the folder the agent finds skills in
 	// SkillsAlso are agents whose skills this one reads as well, as
 	// OpenCode reads Claude Code's.
 	SkillsAlso []string
@@ -372,6 +376,10 @@ func targetOf(a *agent.Agent) *Target {
 		// moved it to, else ~/.minimax); it has no user-wide MCP file, only
 		// plugins' own
 		t.Skills = filepath.Join(a.Dir, "skills")
+		// and AGENTS.md there before every conversation: global
+		// instructions are <dataDir>/AGENTS.md (readGlobalInstructions,
+		// @minimax-ai/code 0.7.6's chunks)
+		t.Instructions = filepath.Join(a.Dir, "AGENTS.md")
 	case "devin":
 		// Devin reads its user-wide MCP servers from mcp_config.json
 		// beside its config.json (devin mcp add --scope user)
@@ -445,6 +453,14 @@ func targetOf(a *agent.Agent) *Target {
 		// (#1266). Its skills are in skills/ there.
 		t.MCP = &mcpFile{Path: filepath.Join(a.Dir, "mcp.json"), Format: fmtClaude}
 		t.Skills = filepath.Join(a.Dir, "skills")
+		// Its instructions are the Custom Instructions of its
+		// Personalization settings: personalization.customPrompt in
+		// app/app-config.json, which the app reads each time it builds a
+		// conversation's prompt (PersonalizationCollector, trimmed, in
+		// 5.5.6's app.asar; WorkBuddy AI's has the same, its folder
+		// the CONFIG_DIR). The rest of that file is the app's own
+		t.Instructions = filepath.Join(a.Dir, "app", "app-config.json")
+		t.Field = "personalization.customPrompt"
 	case "codebuddy":
 		// CodeBuddy Code's user-wide servers are in the first of
 		// .mcp.json, mcp.json (in its folder) and .codebuddy.json (beside
