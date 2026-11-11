@@ -962,6 +962,22 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		}
 		out.KeyList[i].Spend = ks
 	}
+	// a key whose windows magpie reads takes a usage cap as an account
+	// does, and says when the cap holds it (the gateway holds it by the
+	// same reading, gateway.keyCapHeld)
+	if p.TakesUsageCap() && p.Account == nil {
+		now := time.Now()
+		for i, k := range out.KeyList {
+			out.KeyList[i].UsageCap = true
+			ka, ok := p.KeyAccountOf(k.ID)
+			if !ok {
+				continue
+			}
+			if h := p.KeyCapHeld(ka, "", now, provider.KeyAllowance); h != nil {
+				out.KeyList[i].CapHeld = &provider.KeyCapState{Used: h.Used, Cap: h.Cap, Back: h.Back}
+			}
+		}
+	}
 	// and one with a balance typed, what is left of it (the card on the
 	// Usage page shows the same, provider.ownBalanceCard)
 	out.TakesOwnBalance = p.TakesOwnBalance()

@@ -146,6 +146,18 @@ func spendHeld(p provider.Provider, k provider.KeyAccount, now time.Time) *capHo
 	return &capHold{cap: 100, used: 100 * spent / sc.USD, back: reset, spend: &spendHold{usd: sc.USD, spent: spent, period: sc.Period, since: start}}
 }
 
+// keyCapHeld is how the key k of p is held at the usage cap set on it (the
+// share of its own windows, provider/account_caps.go) for model at now, nil
+// when nothing holds it. A key whose windows aren't known (not read yet, or
+// the read failed) is not held: unknown is not spent.
+func keyCapHeld(p provider.Provider, k provider.KeyAccount, model string, now time.Time) *capHold {
+	h := p.KeyCapHeld(k, model, now, keyAllowance)
+	if h == nil {
+		return nil
+	}
+	return &capHold{cap: h.Cap, used: h.Used, back: h.Back, amount: h.Amount, count: h.Count, unit: h.Unit}
+}
+
 // label names a candidate in a call's record: the provider, and the key
 // when it has several on.
 func (c candidate) label() string {
@@ -415,6 +427,9 @@ func perKeyEvery(p provider.Provider, model string, from provider.Protocol) (out
 	spends := map[int]*capHold{}
 	on, unlisted, off, noURL := p.KeysFor(model, func(k provider.KeyOn) bool {
 		h := spendHeld(p, k.KeyAccount, now)
+		if h == nil {
+			h = keyCapHeld(p, k.KeyAccount, model, now)
+		}
 		if h != nil {
 			spends[k.Rank] = h
 		}

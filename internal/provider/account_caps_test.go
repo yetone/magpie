@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -435,5 +436,77 @@ func TestAsideWindowKeepsItsOwnCap(t *testing.T) {
 	}
 	if w := got[2]; !w.Capped || w.OwnCap || w.CapID != "total credits" {
 		t.Fatalf("Total credits: capped %v, own %v, id %q", w.Capped, w.OwnCap, w.CapID)
+	}
+}
+
+// wanggenjidev on X: an OpenCode Go key takes the usage cap an account does,
+// by the key's id; another vendor's key, whose windows aren't read, doesn't.
+// The cap goes with the key when its value is replaced.
+func TestKeyTakesUsageCap(t *testing.T) {
+	isolate(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	if err := Save(Provider{ID: "go", Name: "OpenCode Go", Chat: "https://opencode.ai/zen/go/v1", Key: "go-a", KeyName: "A", Keys: []KeyAccount{{Name: "B", Key: "go-b"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(Provider{ID: "plain", Name: "Plain", Chat: "https://plain.example/v1", Key: "pk"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetAccountCap("plain", "pk", 90); err == nil {
+		t.Fatal("a cap on a key with no windows read")
+	}
+	if err := SetAccountCap("go", "A", 99); err != nil {
+		t.Fatal(err)
+	}
+	a := keyID("go-a")
+	if c := AccountCapsOf("go", a); c.All != 99 {
+		t.Fatalf("A's cap: %+v", c)
+	}
+	if c := AccountCapsOf("go", keyID("go-b")); c.Holds() {
+		t.Fatalf("B follows no cap: %+v", c)
+	}
+	if err := SetWindowCap("go", "A", "5 hours", 50); err != nil {
+		t.Fatal(err)
+	}
+	if c := AccountCapsOf("go", a); c.Windows["5 hours"] != 50 {
+		t.Fatalf("A's window cap: %+v", c)
+	}
+	// the new value keeps the caps
+	if _, now, err := ReplaceKey("go", a, "go-a2"); err != nil {
+		t.Fatal(err)
+	} else if c := AccountCapsOf("go", now); c.All != 99 || c.Windows["5 hours"] != 50 {
+		t.Fatalf("A's caps after its key was replaced: %+v", c)
+	}
+	// 0 lifts it
+	p, _ := Find("go")
+	if err := SetAccountCap("go", "A", 0); err != nil {
+		t.Fatal(err)
+	}
+	if c := AccountCapsOf("go", keyID("go-a2")); c.All != 0 {
+		t.Fatalf("lifted: %+v", c)
+	}
+	// held by the windows read, and not by none
+	now := time.Now()
+	read := func(known bool, used float64) func(Provider) (Allowance, bool) {
+		return func(Provider) (Allowance, bool) {
+			return Allowance{{Name: "5 hours", Used: used, Resets: now.Add(time.Hour), Span: 5 * time.Hour}}, known
+		}
+	}
+	p, _ = Find("go")
+	k, ok := p.KeyAccountOf(keyID("go-a2"))
+	if !ok {
+		t.Fatal("no such key")
+	}
+	if h := p.KeyCapHeld(k, "m", now, read(true, 60)); h == nil || h.Cap != 50 {
+		t.Fatalf("5 hours at 60%% of 50%%: %+v", h)
+	}
+	if h := p.KeyCapHeld(k, "m", now, read(false, 60)); h != nil {
+		t.Fatal("held by a reading that isn't known")
+	}
+	if h := p.KeyCapHeld(k, "m", now, read(true, 40)); h != nil {
+		t.Fatal("held below its cap")
 	}
 }

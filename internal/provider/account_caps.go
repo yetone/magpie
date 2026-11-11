@@ -36,6 +36,12 @@ package provider
 // spent outside magpie (the vendor's app, another machine) counts toward
 // it as the vendor reports it; magpie can only hold back its own requests.
 //
+// A key whose own windows magpie reads has the same cap (key_allowance.go),
+// set by the key's id: once a window is at or past it, routing goes on to
+// the provider's other keys and its fallbacks, and the key is back when the
+// window renews. A key whose windows aren't known (not read yet, or the
+// read failed) is not held.
+//
 // The cap is the user's, not the vendor's: what it holds back never spends
 // a Codex reset. The resets are spent on the vendor's own 100% (weekUsedUp,
 // usedUp, BackAt, heldUp), which the cap doesn't touch.
@@ -49,6 +55,13 @@ import (
 	"strings"
 	"time"
 )
+
+// TakesUsageCap says whether p has usage windows a cap can hold it at: a
+// subscription's accounts, or the keys of a vendor whose keys tell their
+// plan's windows (an OpenCode Go key's 5 hours, week and month, a sub2api
+// key's limits: key_allowance.go). A key's cap is set and kept as an
+// account's, by the key's id, and read from the key's windows as last read.
+func (p Provider) TakesUsageCap() bool { return p.Account != nil || readsKeyWindows(p) }
 
 // MinCap and MaxCap bound an account's cap, in percent: none is no cap.
 const (
@@ -76,6 +89,35 @@ func AccountCapOf(id, user string) int {
 		return s.AccountCaps[accountKey(user)]
 	}
 	return 0
+}
+
+// KeyCapHeld is how the key k of p is held at the usage cap set on it for
+// model at now, by the windows read gives of it (KeyAllowance, or a test's):
+// nil when it has no cap, its windows aren't known (not read yet, or the
+// read failed: unknown is not spent) or each is below its share.
+func (p Provider) KeyCapHeld(k KeyAccount, model string, now time.Time, read func(Provider) (Allowance, bool)) *CapHold {
+	caps := p.CapsOf(keyID(k.Key))
+	if !caps.Holds() {
+		return nil
+	}
+	al, ok := read(p.WithKey(k))
+	if !ok {
+		return nil
+	}
+	return al.CapHeld(model, caps, now)
+}
+
+// KeyAccountOf is the key of p with the id ref (KeyInfo.ID), and whether
+// p has it.
+func (p Provider) KeyAccountOf(ref string) (KeyAccount, bool) {
+	i, ok := findKey(&p, ref)
+	switch {
+	case !ok:
+		return KeyAccount{}, false
+	case i < 0:
+		return p.first(), true
+	}
+	return p.Keys[i], true
 }
 
 // WindowCaps is what holds an account at a share of its windows: its usage
@@ -220,8 +262,8 @@ func SetWindowCaps(id, ref string, windows []string, cap int) error {
 	if err != nil {
 		return err
 	}
-	if p.Account == nil {
-		return fmt.Errorf("%s has keys, not subscription accounts with usage windows to cap", p.Name)
+	if !p.TakesUsageCap() {
+		return fmt.Errorf("%s has keys with no usage windows magpie reads, not subscription accounts with windows to cap", p.Name)
 	}
 	r, ok := p.accountRef(ref)
 	if !ok {
@@ -275,8 +317,8 @@ func SetWindowAmount(id, ref string, windows []string, amount float64) error {
 	if err != nil {
 		return err
 	}
-	if p.Account == nil {
-		return fmt.Errorf("%s has keys, not subscription accounts with usage windows to cap", p.Name)
+	if !p.TakesUsageCap() {
+		return fmt.Errorf("%s has keys with no usage windows magpie reads, not subscription accounts with windows to cap", p.Name)
 	}
 	r, ok := p.accountRef(ref)
 	if !ok {
@@ -353,8 +395,8 @@ func SetAccountCap(id, ref string, cap int) error {
 	if err != nil {
 		return err
 	}
-	if p.Account == nil {
-		return fmt.Errorf("%s has keys, not subscription accounts with usage windows to cap", p.Name)
+	if !p.TakesUsageCap() {
+		return fmt.Errorf("%s has keys with no usage windows magpie reads, not subscription accounts with windows to cap", p.Name)
 	}
 	r, ok := p.accountRef(ref)
 	if !ok {

@@ -57,6 +57,11 @@ type KeyInfo struct {
 	// Spend is the spend cap set on it and what it has spent in its
 	// period; nil with none.
 	Spend *KeySpend `json:"spend,omitempty"`
+	// UsageCap: its own usage windows are read, so it can be capped at a
+	// share of them; CapHeld is how the cap holds it now (key_allowance.go,
+	// account_caps.go), nil while it takes requests
+	UsageCap bool         `json:"usageCap,omitempty"`
+	CapHeld  *KeyCapState `json:"capHeld,omitempty"`
 	// Balance is the balance the user typed for it and what is left of
 	// it by magpie's count (key_balance_own.go); nil with none.
 	Balance *BalanceEstimate `json:"balance,omitempty"`
@@ -70,6 +75,15 @@ type KeySpend struct {
 	Spent float64    `json:"spent"`
 	Reset *time.Time `json:"reset,omitempty"`
 	Held  bool       `json:"held,omitempty"`
+}
+
+// KeyCapState is a key held at its usage cap: the share used of the fullest
+// window at its cap, that cap and when the last such window renews (zero
+// when one doesn't say).
+type KeyCapState struct {
+	Used float64   `json:"used"`
+	Cap  int       `json:"cap"`
+	Back time.Time `json:"back,omitzero"`
 }
 
 // KeyRest is a key's rest as the gateway keeps it: failQuota, failRate…,
@@ -669,6 +683,9 @@ func ReplaceKey(id, keyRef, key string) (was, now string, err error) {
 	moveKeyed(p.AccountProxies, keyRef, now)
 	moveKeyed(p.AccountConcurrency, keyRef, now)
 	moveKeyed(p.KeySpendCaps, keyRef, now)
+	moveKeyed(p.AccountCaps, keyRef, now)
+	moveKeyed(p.AccountWindowCaps, keyRef, now)
+	moveKeyed(p.AccountWindowAmounts, keyRef, now)
 	moveKeyed(p.KeyOwnBalances, keyRef, now)
 	return keyRef, now, Save(*p)
 }
