@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/dirent"
 	"github.com/yetone/magpie/internal/proc"
 )
 
@@ -711,6 +712,9 @@ func codexTurnOpen(home string, now, since time.Time) bool {
 // written in the last d. A sessions folder that can't be read counts as
 // written: a turn cut short costs more than a restart a little later.
 func codexSessionsQuietFor(home string, now time.Time, d time.Duration) bool {
+	if quiet, ok := codexSessionsQuietListed(filepath.Join(home, "sessions"), now, d); ok {
+		return quiet
+	}
 	quiet := true
 	err := filepath.WalkDir(filepath.Join(home, "sessions"), func(path string, e fs.DirEntry, err error) error {
 		if err != nil {
@@ -736,6 +740,46 @@ func codexSessionsQuietFor(home string, now time.Time, d time.Duration) bool {
 		return nil
 	})
 	return quiet && err == nil
+}
+
+// codexSessionsQuietListed is codexSessionsQuietFor read with one listing
+// a folder (dirent.Stats) where the system has one, not a listing and an
+// lstat() a file: Codex idle runs it on every look while Codex is idle,
+// over every session file of the history, and each walk allocated a
+// listing, a path and an lstat's answer a file. ok is false where a folder
+// can't be read so (no bulk listing, Windows, an error), and the caller
+// walks the folder itself. The listings are not kept for the next read:
+// held between looks minutes apart they cost more than they save.
+func codexSessionsQuietListed(dir string, now time.Time, d time.Duration) (quiet, ok bool) {
+	if _, err := os.Lstat(dir); errors.Is(err, fs.ErrNotExist) {
+		return true, true
+	}
+	quiet = true
+	var in func(dir string) bool
+	in = func(dir string) bool {
+		entries, ok := dirent.Stats(dir)
+		if !ok {
+			return false
+		}
+		for _, e := range entries {
+			switch {
+			case e.Mode == fs.ModeDir:
+				if !in(filepath.Join(dir, e.Name)) {
+					return false
+				}
+			case strings.HasSuffix(e.Name, ".jsonl") && now.Sub(e.ModTime()) < d:
+				quiet = false
+			}
+			if !quiet {
+				return true
+			}
+		}
+		return true
+	}
+	if !in(dir) {
+		return false, false
+	}
+	return quiet, true
 }
 
 // sessionFileInfo is the session file at path's own time and size, never
