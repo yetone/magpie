@@ -359,6 +359,18 @@ rate and at its largest input.**
   on the largest reply a test has.
 - Seen 2× (2026-10-14, 2026-10-18).
 
+**A new route or setting runs the packages whose guards list them.**
+TestEveryRouteHasACommandOrIsNamed (internal/cli) lists every route, and
+TestSettingsSaveKeepsWhatItDoesNotSend (internal/gui) every setting.
+- 11-11: 747632890 (context-cap) and eb56de0b5 (the catalog's model list)
+  ran chosen tests and turned both guards red on CI at 8aae124b0. An hour
+  later 58fb07095 (named proxies, 1,714 lines) did it again with three
+  routes and two settings, a minute after c1a072636 mended the first.
+  Both bodies say what they ran; neither ran `go test ./internal/cli`
+  (40s). The same day three commits that each fit the core's script
+  budget at their own base left it 4 bytes over together (61a93b531).
+- Seen 1× (2026-11-11).
+
 **A full run gives the slow packages room.** `go test ./...` at the default
 10m timeout times out in internal/gateway (#2108), and under load in
 internal/provider and internal/agent. Use -timeout 45m, so "every package
