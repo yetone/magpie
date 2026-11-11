@@ -123,9 +123,15 @@ func TestTypedBalanceCountsDown(t *testing.T) {
 	if err := SetKeyOwnBalance("plain", "nobody", one); err == nil {
 		t.Error("a key the provider hasn't got a balance")
 	}
-	for _, bad := range []float64{-1, MaxOwnBalance + 1} {
+	for _, bad := range []float64{-MaxOwnBalance - 1, MaxOwnBalance + 1} {
 		if err := SetKeyOwnBalance("plain", "Spare", &OwnBalance{USD: bad}); err == nil {
 			t.Errorf("%v was taken", bad)
+		}
+	}
+	// a key the vendor let run past its balance is typed as it is: below 0
+	for _, ok := range []float64{-1.84, -MaxOwnBalance} {
+		if err := SetKeyOwnBalance("plain", "Spare", &OwnBalance{USD: ok}); err != nil {
+			t.Errorf("%v refused: %v", ok, err)
 		}
 	}
 }
@@ -182,12 +188,12 @@ func TestOwnBalanceParsed(t *testing.T) {
 			t.Errorf("%q: %v %v, want none", in, got, err)
 		}
 	}
-	for _, in := range []string{"lots", "-5", "1000001", "NaN"} {
+	for _, in := range []string{"lots", "--5", "-1000001", "1000001", "NaN"} {
 		if _, err := ParseOwnBalance(in); err == nil {
 			t.Errorf("%q was taken", in)
 		}
 	}
-	n := normalKeyOwnBalances(map[string]OwnBalance{"ABC": {USD: 5}, "bad": {USD: -1}, " ": {USD: 1}})
+	n := normalKeyOwnBalances(map[string]OwnBalance{"ABC": {USD: 5}, "bad": {USD: -2e6}, " ": {USD: 1}})
 	if len(n) != 1 || n["abc"].USD != 5 {
 		t.Errorf("normalised %+v", n)
 	}
@@ -393,7 +399,18 @@ func TestOwnBalanceParsedInYuanAndRefill(t *testing.T) {
 	if b, err := ParseOwnBalance("12 usd"); err != nil || b.CNY != nil || b.USD != 12 {
 		t.Errorf("12 usd: %+v %v", b, err)
 	}
-	for _, in := range []string{"¥-1", "¥lots", "¥", "¥2000000"} {
+	// overdrawn: below 0, the sign before or after the currency's
+	for in, want := range map[string]float64{"-1.84": -1.84, "-$1.84": -1.84, "$-1.84": -1.84, "-1.84 usd": -1.84} {
+		if b, err := ParseOwnBalance(in); err != nil || b == nil || b.CNY != nil || b.USD != want {
+			t.Errorf("%q: %+v %v, want $%v", in, b, err, want)
+		}
+	}
+	for _, in := range []string{"-¥5", "¥-5", "-5元", "-5 cny"} {
+		if b, err := ParseOwnBalance(in); err != nil || b == nil || b.CNY == nil || *b.CNY != -5 {
+			t.Errorf("%q: %+v %v, want ¥-5", in, b, err)
+		}
+	}
+	for _, in := range []string{"¥--1", "¥lots", "¥", "¥2000000", "¥-2000000", "-$-5"} {
 		if _, err := ParseOwnBalance(in); err == nil {
 			t.Errorf("%q taken", in)
 		}

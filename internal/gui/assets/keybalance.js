@@ -16,13 +16,16 @@ const moneyText = (v, cny) => (v < 0 ? "-" : "") + (cny ? "¥" : "$") + Math.abs
 // balanceAmount reads what was typed: an amount and whether it is in
 // yuan, a sign or a word saying which, else unit; null for none
 function balanceAmount(s, unit) {
-  let a = s.trim().toLowerCase(), cny = unit === "cny";
+  let a = s.trim().toLowerCase(), cny = unit === "cny", neg = false;
+  // a sign may come before the currency's: -$1.84, -¥5
+  if (/^[-−]\s*[^\d.\s]/.test(a)) { neg = true; a = a.slice(1).trim(); }
   const yuan = /^(¥|￥|cny|rmb)\s*|\s*(元|cny|rmb|yuan)$/g, usd = /^\$\s*|\s*usd$/g;
   if (yuan.test(a)) { a = a.replace(yuan, ""); cny = true; }
   else if (usd.test(a)) { a = a.replace(usd, ""); cny = false; }
   a = a.replace(/,/g, "").trim();
-  const n = Number(a);
-  return a && n >= 0 && n <= 1e6 ? { n, cny } : null;
+  const n = Number(a.replace(/^−/, "-")) * (neg ? -1 : 1);
+  // below 0 is a key the vendor let run past its balance
+  return a && Math.abs(n) <= 1e6 ? { n, cny } : null;
 }
 // dayOf: a day as the date it is here, 2026-12-31; dateText: one shown
 const dayOf = (d) => [d.getFullYear(), d.getMonth() + 1, d.getDate()].map((n) => String(n).padStart(2, "0")).join("-");
@@ -129,7 +132,7 @@ function keyBalancePill(p, k) {
   const type = () => {
     const at = pill.parentNode;
     pillNumber(pill, b ? String(b.set) : "", "", "abal-in", "", (s) => balanceAmount(s, unit),
-      t("A balance is an amount from 0 to 1,000,000, in USD or in yuan (¥)"), null, set);
+      t("A balance is an amount from -1,000,000 to 1,000,000, in USD or in yuan (¥)"), null, set);
     const i = at?.querySelector(":scope > .abal-in");
     if (!i) return;
     const cur = el("button", "abal-cur"), save = i.onblur;

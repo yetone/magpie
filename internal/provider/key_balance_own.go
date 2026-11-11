@@ -630,8 +630,11 @@ func liveGrants(b OwnBalance, now time.Time) []Expiring {
 // nothing is.
 func checkOwnBalance(b OwnBalance) error {
 	v, _ := b.Amount()
-	if !(v >= 0 && v <= MaxOwnBalance) {
-		return fmt.Errorf("a balance is an amount from 0 to %d, in USD or in yuan (¥), not %v", MaxOwnBalance, v)
+	// below 0 is a key the vendor has let run past its balance, as the
+	// card already shows one after spending (≈$-1.20): the vendor's own
+	// page says it, so the typed balance may too
+	if !(v >= -MaxOwnBalance && v <= MaxOwnBalance) {
+		return fmt.Errorf("a balance is an amount from -%d to %d, in USD or in yuan (¥), not %v", MaxOwnBalance, MaxOwnBalance, v)
 	}
 	if b.CNY != nil && b.USD != 0 {
 		return fmt.Errorf("a balance is in USD or in yuan, not both")
@@ -703,6 +706,11 @@ func ParseOwnBalance(amount string) (*OwnBalance, error) {
 	case "off", "none", "no", "-":
 		return nil, nil
 	}
+	// a sign may come before the currency's: -$1.84, -¥5
+	neg := strings.HasPrefix(a, "-") && len(a) > 1
+	if neg {
+		a = strings.TrimSpace(a[1:])
+	}
 	cny := false
 	for _, s := range []string{"¥", "￥", "cny", "rmb"} {
 		if strings.HasPrefix(a, s) {
@@ -720,6 +728,12 @@ func ParseOwnBalance(amount string) (*OwnBalance, error) {
 	v, err := strconv.ParseFloat(strings.ReplaceAll(strings.TrimSpace(a), ",", ""), 64)
 	if err != nil {
 		return nil, fmt.Errorf("a balance is an amount in USD (20, 12.5), in yuan (¥140) or off, not %q", amount)
+	}
+	if neg {
+		if v < 0 { // -$-5: two signs
+			return nil, fmt.Errorf("a balance is an amount in USD (20, 12.5), in yuan (¥140) or off, not %q", amount)
+		}
+		v = -v
 	}
 	b := OwnBalance{USD: v}
 	if cny {
