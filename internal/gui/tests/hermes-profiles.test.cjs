@@ -1,15 +1,11 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// Hermes keeps more than one profile (hermes -p <name>), each with its own
-// config.yaml, and magpie's Hermes row picked the model of one of them only
-// (dongshanfengdongshizhcn on Discord). Each other profile comes as a field
-// keyed "profile:<name>": connected, the opened row has an Other profiles
-// section with one line per profile (its name, its model picker, the
-// command that runs it), and no square of the row's own. A click opens the
-// app's model picker with Default first, noted as putting back what the
-// profile had before magpie; a model picked is posted for that profile
-// alone. With one profile only there is no section. No click scrolls the
-// page. In every language, at a normal and a narrow width, in both engines.
-// No backend: the API is faked here.
+// The connected Hermes row has no control for its other profiles: each is an
+// agent row of its own (hermes#<name>, hermes-profile-row.test.cjs), so two
+// controls never pick one profile's model (Norethcy on X). The API still has
+// the "profile:<name>" fields (dongshanfengdongshizhcn on Discord); the row
+// draws none, no "Other profiles" section and no "hermes -p" line. In every
+// language, at a normal and a narrow width, in both engines. No backend: the
+// API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -68,7 +64,7 @@ const one = '.row.agent[data-id="hermes-one"]';
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of Object.keys(W)) {
     for (const width of [1100, 560]) {
-      test(`${engine} ${lang} ${width}px: each Hermes profile picks its own model`, async (t) => {
+      test(`${engine} ${lang} ${width}px: the Hermes row has no control for its other profiles`, async (t) => {
         const w = W[lang];
         const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
         const page = await browser.newPage({ viewport: { width, height: 800 } });
@@ -95,32 +91,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await page.locator(`${one} .ag-exp`).innerText().then((s) => s.includes(w.head)), false);
         assert.equal(await page.locator(`${one} .field[data-key^="profile:"]`).count(), 0);
 
+        // the connected row has no profile controls either: each other profile
+        // is its own row (hermes#<name>), where its model is picked
         await page.locator(`${row} .ag-link`).click();
         await page.locator(`${row} .ag-exp`).waitFor();
-        assert.ok((await page.locator(`${row} .ag-exp`).innerText()).includes(w.head));
-        const keys = await page.locator(`${row} .ag-exp .field.ag-pick[data-key^="profile:"]`).evaluateAll((es) => es.map((e) => e.dataset.key));
-        assert.deepEqual(keys, ["profile:a-profile-with-a-long-name", "profile:coder"]);
-        const pick = page.locator(`${row} .ag-exp .field.ag-pick[data-key="profile:coder"]`);
-        const line = pick.locator("xpath=..");
-        assert.equal(await line.locator(".ag-tier").textContent(), "coder");
-        assert.equal(await line.locator(".ag-hint").textContent(), "hermes -p coder");
-        assert.equal(await pick.locator(".v").textContent(), "kimi-k3.5");
-        // a long name is cut short, not pushing its picker out
-        const long = page.locator(`${row} .ag-exp .field.ag-pick[data-key="profile:a-profile-with-a-long-name"]`).locator("xpath=..").locator(".ag-tier");
-        assert.ok(await long.evaluate((e) => e.scrollWidth > e.clientWidth && getComputedStyle(e).textOverflow === "ellipsis"));
+        assert.equal((await page.locator(`${row} .ag-exp`).innerText()).includes(w.head), false);
+        assert.equal(await page.locator(`${row} .field[data-key^="profile:"]`).count(), 0);
+        assert.equal((await page.locator(`${row} .ag-exp`).innerText()).includes("hermes -p"), false);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "the Agents view overflows");
-
-        // the app's model picker, Default first, noted as putting back the profile's own
-        const y = await page.evaluate(() => scrollY);
-        await pick.click();
-        await page.locator("#pop:not([hidden]) #list li").first().waitFor();
-        assert.equal(await page.evaluate(() => scrollY), y, "the click scrolled the page");
-        assert.equal(await page.locator("#pop").evaluate((e) => e.classList.contains("model-picker")), true);
-        const first = await page.locator("#pop #list li").first().innerText();
-        assert.ok(first.includes(w.def) && first.includes(w.note), first);
-        await page.locator("#pop #list li", { hasText: "Flash" }).first().click();
-        await page.waitForFunction(() => document.querySelector('.row.agent[data-id="hermes"] .ag-exp .field[data-key="profile:coder"] .v')?.textContent === "Flash");
-        assert.deepEqual(sets, [{ agent: "hermes", field: "profile:coder", value: "magpie/v/flash" }]);
         assert.deepEqual(errors, []);
       });
     }
