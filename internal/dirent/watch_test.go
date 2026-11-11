@@ -161,3 +161,25 @@ func TestUnwatchedFolderReadEachTime(t *testing.T) {
 		}
 	}
 }
+
+// Each wait's folder is gone after it: two Watch calls a Sessions poll,
+// and nothing of them is left in the probe's folder.
+func TestProbeLeavesNothing(t *testing.T) {
+	root, _, _ := dayFolder(t)
+	for range 5 {
+		Watch(root)
+	}
+	watched.Lock()
+	dir := watched.probe.dir
+	watched.Unlock()
+	if dir == "" {
+		t.Skip("no watch here")
+	}
+	left, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) != 0 {
+		t.Fatalf("the probe's folder holds %d entries after its waits", len(left))
+	}
+}

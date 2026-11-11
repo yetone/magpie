@@ -179,7 +179,11 @@ func sync1() {
 			ok = false
 		}
 	}
-	os.RemoveAll(sub)
+	// the file, then its folder: RemoveAll's look, open and listing of the
+	// folder were half of each wait's time, two a Sessions poll
+	if os.Remove(filepath.Join(sub, "probe")) != nil || os.Remove(sub) != nil {
+		os.RemoveAll(sub)
+	}
 	watched.Lock()
 	defer watched.Unlock()
 	watched.probe.heard, watched.probe.want = nil, ""
