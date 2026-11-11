@@ -139,6 +139,15 @@ type Settings struct {
 	PluginProxy string `json:"pluginProxy,omitempty"`
 	// PluginProxyCustom is PluginProxy's ProxyCustom.
 	PluginProxyCustom string `json:"pluginProxyCustom,omitempty"`
+	// UpdateProxy is the proxy magpie's own update goes through: the
+	// update feed, the release notes and the release's file (moonlityu on
+	// X: models direct, updates through a proxy). "" follows Proxy, as
+	// updates always did; "direct" uses none; anything else is the proxy,
+	// as Proxy takes it. A proxy given to one `magpie update --proxy` run
+	// comes first. This computer's own (KeepOwn), as Proxy is.
+	UpdateProxy string `json:"updateProxy,omitempty"`
+	// UpdateProxyCustom is UpdateProxy's ProxyCustom.
+	UpdateProxyCustom string `json:"updateProxyCustom,omitempty"`
 	// Proxies are the proxies kept by name (NamedProxy); a proxy choice
 	// "@"+id anywhere (Proxy, PluginProxy, a provider's, a key's, an
 	// account's) uses one. This computer's own (KeepOwn).
@@ -1580,6 +1589,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.DockNever, s.DockSettled = cur.DockNever, cur.DockSettled
 	s.ProxyCustom, s.Proxies, s.ProxyNames = cur.ProxyCustom, cur.Proxies, cur.ProxyNames
 	s.PluginProxy, s.PluginProxyCustom = cur.PluginProxy, cur.PluginProxyCustom
+	s.UpdateProxy, s.UpdateProxyCustom = cur.UpdateProxy, cur.UpdateProxyCustom
 	s.WindowMaximised, s.KeepAwake, s.KeepAwakeDisplay = cur.WindowMaximised, cur.KeepAwake, cur.KeepAwakeDisplay
 	s.WindowAt = cur.WindowAt
 	s.TrayUsages, s.TrayUsage, s.TrayUsageEvery, s.TrayNoLogos, s.TrayNoBird, s.TrayPace, s.TrayNoCost = cur.TrayUsages, cur.TrayUsage, cur.TrayUsageEvery, cur.TrayNoLogos, cur.TrayNoBird, cur.TrayPace, cur.TrayNoCost
@@ -2439,6 +2449,13 @@ func saveOwn(s Settings, recording, reads bool) error {
 	}
 	if s.PluginProxy != "" && s.PluginProxy != "direct" && !IsProxyRef(s.PluginProxy) {
 		s.PluginProxyCustom = s.PluginProxy
+	}
+	s.UpdateProxy = strings.TrimSpace(s.UpdateProxy)
+	if err := CheckProxyIn(s.UpdateProxy, s.Proxies); err != nil {
+		return fmt.Errorf("updates: %w", err)
+	}
+	if s.UpdateProxy != "" && s.UpdateProxy != "direct" && !IsProxyRef(s.UpdateProxy) {
+		s.UpdateProxyCustom = s.UpdateProxy
 	}
 	s.Vision = strings.TrimSpace(s.Vision)
 	if s.Vision != "" && s.Vision != "off" && !strings.Contains(s.Vision, "/") {

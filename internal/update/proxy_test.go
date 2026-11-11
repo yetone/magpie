@@ -66,3 +66,69 @@ func TestUpdateGoesThroughTheProxy(t *testing.T) {
 		t.Fatalf("through the proxy: %v, want %v", seen, want)
 	}
 }
+
+// Updates take a proxy of their own (moonlityu on X: models direct, updates
+// through a proxy): UpdateProxy is used while the global proxy is direct,
+// a proxy given to the run comes first, and unset follows the global one.
+func TestUpdateTakesItsOwnProxy(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	for _, k := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy"} {
+		t.Setenv(k, "")
+	}
+	var mu sync.Mutex
+	hits := map[string]int{}
+	serve := func(name string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			hits[name]++
+			mu.Unlock()
+			json.NewEncoder(w).Encode(Release{Version: "9.9.9"})
+		}))
+	}
+	own, global, run := serve("own"), serve("global"), serve("run")
+	defer own.Close()
+	defer global.Close()
+	defer run.Close()
+	t.Setenv("MAGPIE_UPDATE_FEED", "http://feed.magpie.invalid/api/latest")
+	ask := func(ctx context.Context, s settings.Settings) {
+		t.Helper()
+		if err := settings.Save(s); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Latest(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := func(own_, global_, run_ int) {
+		t.Helper()
+		mu.Lock()
+		defer mu.Unlock()
+		if hits["own"] != own_ || hits["global"] != global_ || hits["run"] != run_ {
+			t.Fatalf("hits own/global/run = %d/%d/%d, want %d/%d/%d", hits["own"], hits["global"], hits["run"], own_, global_, run_)
+		}
+	}
+	// global direct, updates through their own proxy
+	ask(context.Background(), settings.Settings{Proxy: "direct", UpdateProxy: own.URL})
+	want(1, 0, 0)
+	// the global proxy elsewhere: the update's own still wins
+	ask(context.Background(), settings.Settings{Proxy: global.URL, UpdateProxy: own.URL})
+	want(2, 0, 0)
+	// a proxy given to this run (magpie update --proxy) comes first
+	ask(WithProxy(context.Background(), run.URL), settings.Settings{Proxy: global.URL, UpdateProxy: own.URL})
+	want(2, 0, 1)
+	// unset: the global proxy, as before
+	ask(context.Background(), settings.Settings{Proxy: global.URL})
+	want(2, 1, 1)
+	// direct for updates while the global proxy is set: neither proxy is asked
+	// (the feed host resolves nowhere, so the request fails)
+	if err := settings.Save(settings.Settings{Proxy: global.URL, UpdateProxy: "direct"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Latest(context.Background()); err == nil {
+		t.Fatal("a direct update reached a host that resolves nowhere")
+	}
+	want(2, 1, 1)
+}

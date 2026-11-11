@@ -212,6 +212,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 	was.RequestArchiveLocal, was.RequestArchiveLocalMB = true, 256
 	was.ProxyCustom = "http://me:secret@proxy.example:8080"
 	was.PluginProxyCustom = "http://me:secret@plugins.example:8080"
+	was.UpdateProxyCustom = "http://me:secret@updates.example:8080"
 	was.PanelShortcut = "Ctrl+Alt+K"
 	was.Proxies = []settings.NamedProxy{{ID: "p1", Name: "Office", URL: "http://proxy.example:8080"}} // their own routes, /api/proxies/*
 	was.ProxyNames = map[string]string{"p1": "Office"}

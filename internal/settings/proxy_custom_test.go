@@ -54,3 +54,30 @@ func TestPluginProxySaved(t *testing.T) {
 		t.Fatal("a refused value overwrote the saved one")
 	}
 }
+
+func TestUpdateProxyOwn(t *testing.T) {
+	from := Settings{Theme: "dark", UpdateProxy: "socks5://a:b@there:1080", UpdateProxyCustom: "socks5://a:b@there:1080"}
+	from.KeepOwn(Settings{UpdateProxy: "direct", UpdateProxyCustom: "http://c:d@here:8080"})
+	if from.UpdateProxy != "direct" || from.UpdateProxyCustom != "http://c:d@here:8080" || from.Theme != "dark" {
+		t.Fatalf("a sync changed this computer's update proxy: %+v", from)
+	}
+}
+
+func TestUpdateProxySaved(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := Save(Settings{UpdateProxy: " socks5://u:p@127.0.0.1:1080 "}); err != nil {
+		t.Fatal(err)
+	}
+	if s := Load(); s.UpdateProxy != "socks5://u:p@127.0.0.1:1080" || s.UpdateProxyCustom != s.UpdateProxy || s.Proxy != "" || s.PluginProxy != "" {
+		t.Fatalf("saved %+v", s)
+	}
+	if err := Save(Settings{UpdateProxy: "direct", UpdateProxyCustom: Load().UpdateProxyCustom}); err != nil {
+		t.Fatal(err)
+	}
+	if s := Load(); s.UpdateProxy != "direct" || s.UpdateProxyCustom != "socks5://u:p@127.0.0.1:1080" {
+		t.Fatalf("direct lost the remembered address: %+v", s)
+	}
+	if Save(Settings{UpdateProxy: "ftp://x:21"}) == nil {
+		t.Fatal("ftp:// taken as a proxy")
+	}
+}

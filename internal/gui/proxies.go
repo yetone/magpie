@@ -33,7 +33,7 @@ type savedProxyJSON struct {
 }
 
 type proxyUseJSON struct {
-	Where    string `json:"where,omitempty"` // "global" or "plugins"; else a provider
+	Where    string `json:"where,omitempty"` // "global", "plugins" or "updates"; else a provider
 	Provider string `json:"provider,omitempty"`
 	Account  string `json:"account,omitempty"`
 }
@@ -70,6 +70,9 @@ func savedProxies() []savedProxyJSON {
 		}
 		if strings.TrimSpace(cur.PluginProxy) == ref {
 			row.Uses = append(row.Uses, proxyUseJSON{Where: "plugins"})
+		}
+		if strings.TrimSpace(cur.UpdateProxy) == ref {
+			row.Uses = append(row.Uses, proxyUseJSON{Where: "updates"})
 		}
 		for _, u := range provider.ProxyUses(p.ID) {
 			row.Uses = append(row.Uses, proxyUseJSON{Provider: u.Provider, Account: u.Account})

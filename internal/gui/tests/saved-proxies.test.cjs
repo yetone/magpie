@@ -63,7 +63,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       test(`${engine} ${lang} ${width}px: saved proxies are listed, tested and chosen`, async (t) => {
         const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
         t.after(() => browser.close());
-        const context = await browser.newContext({ viewport: { width, height: 760 }, reducedMotion: "reduce" });
+        const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
         const page = await context.newPage();
         page.setDefaultTimeout(4000);
         page.setDefaultNavigationTimeout(60000);

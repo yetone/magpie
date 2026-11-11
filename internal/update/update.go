@@ -36,6 +36,7 @@ import (
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/rosetta"
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/source"
 )
 
@@ -98,7 +99,27 @@ func proxied() http.RoundTripper {
 	// trusted beside the system's; the file is still checked against the
 	// feed's SHA-256 and, on macOS, the signer
 	netproxy.TrustEnvRoots(t)
-	return netproxy.Dispatch(t)
+	return updateProxy{netproxy.Dispatch(t)}
+}
+
+// updateProxy has a request that names no proxy of its own (WithProxy,
+// magpie update --proxy) go through Settings' UpdateProxy when it is set
+// (moonlityu on X: models direct, updates through a proxy); unset, it
+// follows the global proxy as updates always did.
+type updateProxy struct{ http.RoundTripper }
+
+func (u updateProxy) RoundTrip(req *http.Request) (*http.Response, error) {
+	if c := strings.TrimSpace(settings.Load().UpdateProxy); c != "" && netproxy.Choice(req.Context()) == "" {
+		req = req.WithContext(netproxy.With(req.Context(), c))
+	}
+	return u.RoundTripper.RoundTrip(req)
+}
+
+// CloseIdleConnections passes on to the transport underneath.
+func (u updateProxy) CloseIdleConnections() {
+	if c, ok := u.RoundTripper.(interface{ CloseIdleConnections() }); ok {
+		c.CloseIdleConnections()
+	}
 }
 
 // Latest asks the feed for the newest release, its notes in English.

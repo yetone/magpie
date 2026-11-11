@@ -37,7 +37,7 @@ var Keys = []string{
 	// usage and alerts
 	"currency", "chineseUnits", "usageAlert", "balanceAlert", "resetReminder", "turnDoneAlert", "maskAlert",
 	// network
-	"proxy", "pluginProxy",
+	"proxy", "pluginProxy", "updateProxy",
 	// privacy
 	"redact", "redactPersonal", "redactKinds", "redactWords", "redactWordsAnyCase", "redactWordsWhole", "redactShape",
 	"noStats", "noUsageStats", "otel",
@@ -297,6 +297,7 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	in.GitHubToken = cur.GitHubToken             // set on its own (github-token), never sent to the page
 	in.ProxyCustom = cur.ProxyCustom             // set by settings.Save from the proxy, never by the page
 	in.PluginProxyCustom = cur.PluginProxyCustom // and plugin downloads' from theirs
+	in.UpdateProxyCustom = cur.UpdateProxyCustom // and updates'
 	in.ProxyNames = cur.ProxyNames
 	in.Proxies = cur.Proxies                           // set on its own (proxies), the password never sent to the page
 	in.RequestArchive = cur.RequestArchive             // the Gateway page's, set on its own

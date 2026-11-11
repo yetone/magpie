@@ -2089,7 +2089,6 @@ function appRestart(a) {
   return go;
 }
 
-// Air's own Codex and Claude Agent: the IDE plugin's run this computer's codex and claude, the app's never go through magpie (jumy_18634)
 const AIR_KINDS = new Set(["air", "air-ide"]);
 function airSaid(a, line) {
   const warn = (s) => { const w = line(el("span", "ag-dot"), el("span", "", s)); w.classList.add("ag-warn", "ag-air-own"); return w; };
@@ -6138,7 +6137,6 @@ function renderProviders(quiet) {
       key = el("span", "key " + (p.key.set ? (keyPill(p) === p.key.masked ? "on" : "on acct") : p.ready ? "free" : "none"), p.key.set ? keyPill(p) : p.ready ? t("no key") : t("needs a key"));
       key.title = p.key.set ? t("API key {masked}", { masked: p.key.masked }) : p.ready ? t("Local servers need no key") : t("Open the row and paste an API key");
     }
-    // every pill is one width so the dots line up down the list; a label too long for it ends in "…" and is said whole on hover
     const label = key.textContent;
     key.textContent = "";
     key.append(el("span", "", label));
@@ -8512,7 +8510,6 @@ function iconPicker(ed) {
 // spring, and closing folds it back into that (still there, re-rendered or
 // not); with nothing pressed it rises from a little below.
 const SPRING = CSS.supports?.("animation-timing-function", "linear(0, 1)")
-  // a damped spring (damping .8): 1.5% over, settled by the end of the duration it runs for (460 ms)
   ? "linear(0, 0.0203, 0.0723, 0.1448, 0.2292, 0.3188, 0.4086, 0.4951, 0.576, 0.6498, 0.7157, 0.7735, 0.8232, 0.8654, 0.9005, 0.9293, 0.9525, 0.9708, 0.9849, 0.9956, 1.0033, 1.0087, 1.0122, 1.0142, 1.015, 1.0151, 1.0146, 1.0136, 1.0124, 1.0111, 1.0097, 1.0084, 1.0071, 1.0059, 1.0049, 1.0039, 1.0031, 1.0024, 1.0018, 1.0013, 1)"
   : "cubic-bezier(.2, .9, .25, 1.02)";
 const IOS_EASE = "cubic-bezier(.32, .72, 0, 1)";
@@ -9195,7 +9192,6 @@ function vertexRoot(u) {
   if (!u.includes("://")) u = "https://" + u;
   return u.replace(/\/v1(?:beta1)?$/, "");
 }
-// with a key (keyed) the project is optional: express mode asks at the global endpoint, and a base URL stands in for Google's host
 function vertexBase(v, keyed) {
   const project = (v?.project || "").trim().toLowerCase(), loc = (v?.location || "").trim().toLowerCase() || "global";
   const root = keyed ? vertexRoot(v?.baseUrl) : "";
@@ -9908,7 +9904,6 @@ function drawEditor(p, presetID) {
     advIn.append(...field(t("Images"), itk, t("Off: an agent's images are sent inline on every turn.")));
   }
 
-  // a balance token of the vendor's own (AiHubMix), or a custom one's (balanceFix), its URL above (balSlot)
   let balFix = null, balSlot = null;
   if (custom) {
     balSlot = el("div", "bal-slot");
@@ -14438,7 +14433,6 @@ function to100(v) { return Math.max(0, Math.min(100, v)); }
 // quotaNoShare: no share was said (0 is one, absent is not, #3650), or the
 // window is a wallet's balance (#3950): its text or figure is all there is
 function quotaNoShare(w) { return !!w.text || w.used == null || w.balance != null; }
-// spanBtn: a span as a button: a <button> in a wrapping line keeps WebKit's row one line high till the next layout
 function spanBtn(b) {
   b.tabIndex = 0;
   b.setAttribute("role", "button");
@@ -20774,17 +20768,21 @@ function renderProxy(s, keep) {
 }
 const proxyState = { custom: false };
 // plugin downloads' proxy (JonahFu on X); plugins' vendor requests follow the one above
-const pluginProxyState = { custom: false };
+const pluginProxyState = { custom: false }, updateProxyState = { custom: false };
 function renderPluginProxy(s, keep) {
-  const v = (s.pluginProxy || "").trim();
-  const cur = !v ? "auto" : v === "direct" ? "off" : v.startsWith("@") ? "saved" : "custom";
-  $("#pluginProxySub").textContent = cur === "auto" ? t("Plugins, npm and GitHub go through the proxy above")
-    : cur === "off" ? t("Plugins, npm and GitHub go direct") : t("Plugins, npm and GitHub go through {proxy}", { proxy: v.startsWith("@") ? savedProxyName(v) : proxyDisplay(v) });
-  proxyRow(s, keep, {
-    key: "pluginProxy", box: $("#pluginProxySegs"), cur, state: pluginProxyState,
-    modes: withSavedMode([["auto", t("Same as above")], ["off", t("Direct")], ["custom", t("Custom")]], cur === "saved"),
-    again: () => renderPluginProxy(s, keep),
-  });
+  for (const [key, state, sub] of [
+    ["pluginProxy", pluginProxyState, (p) => [t("Plugins, npm and GitHub go through the proxy above"), t("Plugins, npm and GitHub go direct"), t("Plugins, npm and GitHub go through {proxy}", p)]],
+    ["updateProxy", updateProxyState, (p) => [t("Updates go through the proxy above"), t("Updates go direct"), t("Updates go through {proxy}", p)]], // moonlityu on X
+  ]) {
+    const v = (s[key] || "").trim();
+    const cur = !v ? "auto" : v === "direct" ? "off" : v.startsWith("@") ? "saved" : "custom";
+    $("#" + key + "Sub").textContent = sub({ proxy: v.startsWith("@") ? savedProxyName(v) : proxyDisplay(v) })[cur === "auto" ? 0 : cur === "off" ? 1 : 2];
+    proxyRow(s, keep, {
+      key, box: $("#" + key + "Segs"), cur, state,
+      modes: withSavedMode([["auto", t("Same as above")], ["off", t("Direct")], ["custom", t("Custom")]], cur === "saved"),
+      again: () => renderPluginProxy(s, keep),
+    });
+  }
 }
 // proxyRow: o.key's modes, and Custom's address and login; o.state.custom is Custom not saved yet.
 function proxyRow(s, keep, o) {
@@ -20860,7 +20858,6 @@ function proxyRow(s, keep, o) {
   return row;
 }
 
-// renderProxyCheck: Test (#2076), the exits through the proxy and direct; one both ways fails only if it didn't connect (#2369).
 let proxyCheck = null; // { key, busy, out, err }
 function renderProxyCheck(s, row) {
   const key = (s.proxySource || "") + "|" + (s.proxyNow || "");
@@ -22749,7 +22746,7 @@ function dockChoice(s) {
 
 // prefsKeep is what the settings page sends of s, all of it each time.
 function prefsKeep(s) {
-  return { theme: s.theme, colorblind: !!s.colorblind, reduceMotion: !!s.reduceMotion, noBird: !!s.noBird, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, dockNever: !!s.dockNever, lightweight: s.lightweight, keepAwake: !!s.keepAwake, keepAwakeDisplay: !!s.keepAwakeDisplay, noWSLAgents: !!s.noWSLAgents, quitNoAsk: !!s.quitNoAsk, proxy: s.proxy || "", pluginProxy: s.pluginProxy || "",
+  return { theme: s.theme, colorblind: !!s.colorblind, reduceMotion: !!s.reduceMotion, noBird: !!s.noBird, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, dockNever: !!s.dockNever, lightweight: s.lightweight, keepAwake: !!s.keepAwake, keepAwakeDisplay: !!s.keepAwakeDisplay, noWSLAgents: !!s.noWSLAgents, quitNoAsk: !!s.quitNoAsk, proxy: s.proxy || "", pluginProxy: s.pluginProxy || "", updateProxy: s.updateProxy || "",
     sessionTerminal: s.sessionTerminal || "",
     uiFont: s.uiFont || null, codeFont: s.codeFont || null,
     otel: s.otel || {},

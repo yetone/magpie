@@ -186,6 +186,7 @@ func TestAutoBackupHoldsNoSecrets(t *testing.T) {
 	s := settings.Load()
 	s.GitHubToken, s.LANKey, s.Proxy = "ghp_SYNTHETIC_PRIVATE_TOKEN", "lan-SYNTHETIC-KEY", "http://user:proxy-SYNTHETIC-pass@10.0.0.1:8080"
 	s.PluginProxy = "socks5://user:plugin-SYNTHETIC-pass@10.0.0.2:1080"
+	s.UpdateProxy = "socks5://user:update-SYNTHETIC-pass@10.0.0.3:1080"
 	if err := settings.Save(s); err != nil {
 		t.Fatal(err)
 	}
@@ -218,6 +219,7 @@ func TestAutoBackupHoldsNoSecrets(t *testing.T) {
 	ws := *want.Settings
 	ws.Proxy, ws.ProxyCustom = "", ""
 	ws.PluginProxy, ws.PluginProxyCustom = "", ""
+	ws.UpdateProxy, ws.UpdateProxyCustom = "", ""
 	want.Settings, want.Created, want.App = &ws, time.Time{}, ""
 	raw, _ := json.Marshal(want)
 	var wantBack Bundle
