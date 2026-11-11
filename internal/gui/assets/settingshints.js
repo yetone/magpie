@@ -44,9 +44,13 @@ function show(r) {
   card.hidden = false;
   // a .who the editor lays out as display: contents has no box of its own: its name's stands for it
   const lead = r.querySelector(":scope > .who, :scope > .txt") || r;
-  const who = (getComputedStyle(lead).display === "contents" ? lead.querySelector(".name") || r : lead).getBoundingClientRect(), box = r.getBoundingClientRect();
+  const at = getComputedStyle(lead).display === "contents" ? lead.querySelector(".name") || r : lead;
+  const who = at.getBoundingClientRect(), box = r.getBoundingClientRect();
   const w = card.offsetWidth, h = card.offsetHeight;
-  const left = Math.max(16, Math.min(who.left, innerWidth - 16 - w));
+  // the card's text, not its edge, lines up with the row's name (a row with
+  // no name of its own has the card's edge at its own)
+  const pad = at === r ? 0 : parseFloat(getComputedStyle(card).paddingLeft) || 0;
+  const left = Math.max(16, Math.min(who.left - pad, innerWidth - 16 - w));
   // under the row, or over it where the window ends first
   const top = box.bottom + 4 + h <= innerHeight - 8 ? box.bottom + 4 : Math.max(8, box.top - 4 - h);
   card.style.left = left + "px";

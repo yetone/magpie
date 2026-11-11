@@ -120,6 +120,11 @@ for (const engine of engines) {
         const name = await mcp.locator(":scope > .who > .name").boundingBox(), cb = await card.boundingBox();
         assert.ok(cb.y >= name.y + name.height || cb.y + cb.height <= name.y, "the card covers the row's name");
         assert.ok(cb.x >= 15 && cb.x + cb.width <= width - 15, `the card runs out of the window: ${JSON.stringify(cb)}`);
+        // its text starts where the row's name does (11-11, mmmg_btc on X: "设置里面的提示也没有对齐"),
+        // where the window leaves room for the card's padding to the left of it
+        const line = await card.locator("p").first().boundingBox();
+        if (name.x >= 16 + 12) assert.ok(Math.abs(line.x - name.x) <= 1, `the card's text is at x=${line.x}, the row's name at x=${name.x}`);
+        else assert.ok(line.x >= name.x - 1, `the card's text is at x=${line.x}, left of the row's name at x=${name.x}`);
         assert.deepEqual(await page.evaluate(boxes), before, "a row moved when the card showed");
         assert.equal(await card.evaluate((e) => getComputedStyle(e).pointerEvents), "none");
 
