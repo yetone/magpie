@@ -3897,7 +3897,72 @@ Yes. Where there is no ~/.kimi-code, magpie writes to kimi-cli’s ~/.kimi, with
 
 Yes. magpie sets up a Kimi Code in a WSL distro too, its provider pointing at the gateway as the distro reaches it.
 
-More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [Qwen Code on any model](https://usemagpie.ai/docs/qwen-code). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Qwen Code on any model](https://usemagpie.ai/docs/qwen-code) and [Pi on any model](https://usemagpie.ai/docs/pi). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/pi
+
+# Pi on any model
+
+Pi, the `pi` coding agent, takes providers of your own in its `models.json`. magpie adds itself there, so pi can run on any model you have in magpie: DeepSeek, GLM, Qwen, an OpenAI or Anthropic key, or a ChatGPT or Copilot subscription, with no key pasted into pi.
+
+Pi keeps its settings in `~/.pi/agent`, or in the folder `$PI_CODING_AGENT_DIR` names. magpie adds a provider named `magpie` to `models.json`, with the gateway’s address, a key of its own and the models you have in magpie, so they join pi’s model picker. Then it sets `defaultProvider` and `defaultModel` in `settings.json` to your pick. A Pi in WSL is set up the same way.
+
+## Connect Pi
+
+1. **Add providers in magpie.** In the Providers tab, add an API key or sign in to a subscription.
+2. **Pick a model on Pi’s row.** In the Agents tab, choose a model under magpie.
+3. **Run pi.** It starts on that model, and every model of magpie’s is in its model picker.
+
+```
+magpie pi deepseek/deepseek-v4-pro    # Pi on DeepSeek
+magpie pi                             # what Pi runs on now
+```
+
+## What each model gets
+
+- **Its own API.** Each model is asked on its provider’s native API: GPT and ChatGPT models on Responses, Claude on Messages, the rest on Chat Completions. A Claude model that thinks only adaptively gets `forceAdaptiveThinking`.
+- **Name, context and replies.** The name pi shows, `reasoning` for models that think, `contextWindow`, image input where the model takes images, and `maxTokens`. A `maxTokens` you typed in yourself stays.
+- **Thinking level.** The level you pick in magpie goes in `defaultThinkingLevel`, held to the levels Pi offers.
+
+Pi sends its session with each request (`sendSessionAffinityHeaders`), so magpie’s usage shows each pi session and Record gateway conversations keeps them. A value you set there yourself stays.
+
+## The Ctrl+P list
+
+Pi cycles models with Ctrl+P through `enabledModels`, the list `/scoped-models` edits. If you have such a list, magpie adds the model you picked to it. If you don’t, magpie never makes one, so Ctrl+P keeps cycling every model.
+
+## Decision and image models
+
+magpie also puts an extension, `extensions/magpie.ts`, in Pi’s folder. It adds magpie’s decision models and image models, for codemode. It is there while the `magpie` provider is, and goes with it.
+
+## Your own files
+
+Before its first write, magpie copies `settings.json` and `models.json` to `.before-magpie` files beside them. Your own providers and settings stay as they are, and Pi’s row lists your models beside magpie’s.
+
+## Switch back
+
+Pick one of your own models on the row, take the row off magpie, or run `magpie pi default`. If you changed nothing since, magpie puts both files back byte for byte. Otherwise it removes only its own provider and keeps your changes.
+
+## FAQ
+
+### Can Pi run on DeepSeek or GLM?
+
+Yes. Any model you have in magpie is in pi’s model picker: DeepSeek, GLM, Qwen, GPT, Claude and more.
+
+### Can Pi use my ChatGPT subscription?
+
+Yes. Sign in to ChatGPT in magpie and pick a GPT model under magpie on Pi’s row. pi sends its requests to magpie, which uses the subscription on the Responses API.
+
+### Where does magpie write if I set PI_CODING_AGENT_DIR?
+
+In that folder, with ~ expanded. A relative path is ignored, and magpie uses ~/.pi/agent.
+
+### Does it work with Pi in WSL?
+
+Yes. magpie sets up a Pi in a WSL distro too, its provider pointing at the gateway as the distro reaches it.
+
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [Kimi Code on any model](https://usemagpie.ai/docs/kimi-code). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
