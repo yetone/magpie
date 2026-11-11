@@ -5972,7 +5972,82 @@ The default profile applies to new conversations. Change an open one in its own 
 
 No. magpie deletes only the model ids it made; one you made by hand, even at the gateway, stays yours.
 
-More agents on the same models: [AtomCode on any model](https://usemagpie.ai/docs/atomcode), [Reasonix Studio on any model](https://usemagpie.ai/docs/reasonix) and [jcode on any model](https://usemagpie.ai/docs/jcode). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [AtomCode on any model](https://usemagpie.ai/docs/atomcode), [Reasonix Studio on any model](https://usemagpie.ai/docs/reasonix), [jcode on any model](https://usemagpie.ai/docs/jcode) and [Cindy on any model](https://usemagpie.ai/docs/cindy). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/cindy
+
+# Cindy on any model
+
+Cindy is a desktop app that runs Claude Code, Codex and Pi. It keeps its providers in its own database, their keys encrypted, and takes a new one only through its own import link, which you confirm in Cindy. So magpie writes nothing into Cindy: it gives Cindy an import link with magpie as one custom provider, an endpoint for each runtime. Claude Code, Codex and Pi in Cindy then run on any model in magpie: DeepSeek, GLM, Kimi, Qwen, an OpenAI or Anthropic key, and the ChatGPT or Copilot subscription you signed in to.
+
+## Add magpie to Cindy
+
+1. **Open Cindy once.** Once Cindy has run, its data folder is there (`~/Library/Application Support/Cindy` on a Mac, `CindyGlobal` for its global build) and magpie's Agents page lists it.
+2. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+3. **Click Add magpie.** On Cindy's row, click Add magpie; magpie hands the import link to Cindy.
+4. **Confirm it in Cindy.** Nothing is added until you do. Then pick a model from the Magpie provider for Claude Code, Codex or Pi in Cindy.
+
+If nothing happens, nothing on this computer opens Cindy's links (`cindy://`), or the program that registered them was moved. magpie checks for that first and says why instead of doing nothing: open Cindy once or install it again, then click again.
+
+## What the link holds
+
+The link's `data` is base64url-encoded JSON. Decoded, it is:
+
+```
+cindy://provider/import?v=1&data=
+{
+  "kind": "custom", "name": "Magpie", "id": "magpie",
+  "auth": {"method": "apiKey", "apiKey": "…"},
+  "endpoints": [
+    {"protocol": "anthropic-messages", "baseUrl": "http://127.0.0.1:3425",
+     "targets": ["claude-code"], "modelsUrl": "http://127.0.0.1:3425/v1/models"},
+    {"protocol": "openai-responses", "baseUrl": "http://127.0.0.1:3425/v1",
+     "targets": ["codex"], "modelsUrl": "http://127.0.0.1:3425/v1/models"},
+    {"protocol": "openai-chat", "baseUrl": "http://127.0.0.1:3425/v1",
+     "targets": ["pi"], "modelsUrl": "http://127.0.0.1:3425/v1/models"}
+  ]
+}
+```
+
+Claude Code speaks Anthropic Messages at the gateway itself; Codex speaks OpenAI Responses and Pi OpenAI Chat, both at the gateway's `/v1`. Each endpoint lists its models from the gateway's `/v1/models`, so a provider you add to magpie later shows up when Cindy fetches models again.
+
+## From the command line
+
+```
+magpie cindy add      # opens Cindy to add magpie; confirm it there
+```
+
+The command prints the link it opened. When nothing here can open it, it says why rather than reporting success.
+
+## How magpie knows it was added
+
+magpie reads Cindy's databases read-only: one per account (`cindy-<account>.db`) once you sign in, `cindy-local-v1.db` before. When any of them has a custom provider with the id or name magpie, or the gateway's address in its endpoints, the row says it's added. It can read them while Cindy runs, and never writes them. When a database can't be read, magpie says it doesn't know, not that it isn't added.
+
+## Usage and keys
+
+The key in the link is Cindy's own, so its requests are counted as Cindy's in magpie's usage, apart from other agents.
+
+## FAQ
+
+### Can Claude Code in Cindy use DeepSeek or GLM?
+
+Yes. Once magpie is added to Cindy, Claude Code uses any model in magpie, DeepSeek and GLM included, through the Magpie provider's Anthropic endpoint.
+
+### Does magpie change Cindy's settings?
+
+No. Cindy takes a new provider only through its own import link, which you confirm in Cindy. magpie only reads Cindy's databases to show whether magpie was added.
+
+### Add magpie does nothing. What now?
+
+Nothing on this computer opens cindy:// links, or the program that registered them is gone. Open Cindy once or install it again, then click again; magpie says which it is.
+
+### Cindy isn't on magpie's Agents page.
+
+magpie lists Cindy once it has run on this computer and made its data folder. Open Cindy once, then look again.
+
+More desktop apps on the same models: [AionUi on any model](https://usemagpie.ai/docs/aionui), [Every model in Cherry Studio, through magpie](https://usemagpie.ai/docs/cherry-studio) and [Shelley on any model](https://usemagpie.ai/docs/shelley). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 

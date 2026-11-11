@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cindy with DeepSeek, GLM, Kimi, Qwen, GPT or a ChatGPT subscription: add magpie for Claude Code, Codex and Pi in one click · magpie</title>
+<meta name="description" content="Use DeepSeek, GLM, Kimi, Qwen, GPT or a ChatGPT subscription in Cindy (the desktop app that runs Claude Code, Codex and Pi) through magpie: Cindy's import link adds Magpie as a custom provider with an endpoint for each runtime, confirmed in Cindy, how magpie knows it was added, and what to do when nothing opens.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/cindy">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/cindy">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/cindy">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/cindy">
+<link rel="canonical" href="https://usemagpie.ai/docs/cindy">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Cindy on any model">
+<meta property="og:description" content="Use DeepSeek, GLM, Kimi, Qwen, GPT or a ChatGPT subscription in Cindy (the desktop app that runs Claude Code, Codex and Pi) through magpie: Cindy's import link adds Magpie as a custom provider with an endpoint for each runtime, confirmed in Cindy, how magpie knows it was added, and what to do when nothing opens.">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/cindy">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Cindy on any model",
+   "description": "Use DeepSeek, GLM, Kimi, Qwen, GPT or a ChatGPT subscription in Cindy (the desktop app that runs Claude Code, Codex and Pi) through magpie: Cindy's import link adds Magpie as a custom provider with an endpoint for each runtime, confirmed in Cindy, how magpie knows it was added, and what to do when nothing opens.",
+   "inLanguage": "en",
+   "url": "https://usemagpie.ai/docs/cindy",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Can Claude Code in Cindy use DeepSeek or GLM?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Once magpie is added to Cindy, Claude Code uses any model in magpie, DeepSeek and GLM included, through the Magpie provider's Anthropic endpoint."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Does magpie change Cindy's settings?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "No. Cindy takes a new provider only through its own import link, which you confirm in Cindy. magpie only reads Cindy's databases to show whether magpie was added."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Add magpie does nothing. What now?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Nothing on this computer opens cindy:// links, or the program that registered them is gone. Open Cindy once or install it again, then click again; magpie says which it is."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Cindy isn't on magpie's Agents page.",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie lists Cindy once it has run on this computer and made its data folder. Open Cindy once, then look again."
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "Docs",
+     "item": "https://usemagpie.ai/docs/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "Cindy on any model",
+     "item": "https://usemagpie.ai/docs/cindy"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>Docs</small></a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/start">Get started</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a class="toc-only" href="/docs/remote">Remote magpie</a>
+    <a class="toc-only" href="/docs/docker">Docker</a>
+    <a class="toc-only" href="/docs/privacy">Privacy</a>
+    <a class="toc-only" href="/docs/masking">Privacy masking</a>
+    <a class="toc-only" href="/docs/mcp-router">MCP router</a>
+    <a class="toc-only" href="/docs/library">Library</a>
+    <a class="toc-only" href="/docs/claude-code-models">Models in Claude Code</a>
+    <a class="toc-only" href="/docs/codex-models">Models in Codex</a>
+    <a class="toc-only" href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a class="toc-only" href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a class="toc-only" href="/docs/local-models">Local models</a>
+    <a class="toc-only" href="/docs/opencode-models">Models in OpenCode</a>
+    <a class="toc-only" href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/cindy" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/cindy" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/cindy" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">Download</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Cindy</p>
+    <a href="#overview">How it works</a>
+    <a href="#add">Add magpie to Cindy</a>
+    <a href="#link">What the link holds</a>
+    <a href="#cli">From the command line</a>
+    <a href="#status">How magpie knows it was added</a>
+    <a href="#usage">Usage and keys</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">Docs · Guide</p>
+    <h1>Cindy on any model</h1>
+    <p class="lede">Cindy is a desktop app that runs Claude Code, Codex and Pi. It keeps its providers in its own database, their keys encrypted, and takes a new one only through its own import link, which you confirm in Cindy. So magpie writes nothing into Cindy: it gives Cindy an import link with magpie as one custom provider, an endpoint for each runtime. Claude Code, Codex and Pi in Cindy then run on any model in magpie: DeepSeek, GLM, Kimi, Qwen, an OpenAI or Anthropic key, and the ChatGPT or Copilot subscription you signed in to.</p>
+    <h2 id="add"><a class="anchor" href="#add">Add magpie to Cindy</a></h2>
+    <ol class="steps">
+      <li><b>Open Cindy once</b>Once Cindy has run, its data folder is there (<code>~/Library/Application Support/Cindy</code> on a Mac, <code>CindyGlobal</code> for its global build) and magpie's <span class="ui">Agents</span> page lists it.</li>
+      <li><b>Add a provider in magpie</b>Add an API key on the <span class="ui">Providers</span> page, or sign in to a subscription.</li>
+      <li><b>Click Add magpie</b>On Cindy's row, click <span class="ui">Add magpie</span>; magpie hands the import link to Cindy.</li>
+      <li><b>Confirm it in Cindy</b>Nothing is added until you do. Then pick a model from the Magpie provider for Claude Code, Codex or Pi in Cindy.</li>
+    </ol>
+    <p>If nothing happens, nothing on this computer opens Cindy's links (<code>cindy://</code>), or the program that registered them was moved. magpie checks for that first and says why instead of doing nothing: open Cindy once or install it again, then click again.</p>
+    <h2 id="link"><a class="anchor" href="#link">What the link holds</a></h2>
+    <p>The link's <code>data</code> is base64url-encoded JSON. Decoded, it is:</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="cindy-link">Copy</button><pre id="cindy-link">cindy://provider/import?v=1&data=<base64url of:>
+{
+  "kind": "custom", "name": "Magpie", "id": "magpie",
+  "auth": {"method": "apiKey", "apiKey": "…"},
+  "endpoints": [
+    {"protocol": "anthropic-messages", "baseUrl": "http://127.0.0.1:3425",
+     "targets": ["claude-code"], "modelsUrl": "http://127.0.0.1:3425/v1/models"},
+    {"protocol": "openai-responses", "baseUrl": "http://127.0.0.1:3425/v1",
+     "targets": ["codex"], "modelsUrl": "http://127.0.0.1:3425/v1/models"},
+    {"protocol": "openai-chat", "baseUrl": "http://127.0.0.1:3425/v1",
+     "targets": ["pi"], "modelsUrl": "http://127.0.0.1:3425/v1/models"}
+  ]
+}</pre></div>
+    <p>Claude Code speaks Anthropic Messages at the gateway itself; Codex speaks OpenAI Responses and Pi OpenAI Chat, both at the gateway's <code>/v1</code>. Each endpoint lists its models from the gateway's <code>/v1/models</code>, so a provider you add to magpie later shows up when Cindy fetches models again.</p>
+    <h2 id="cli"><a class="anchor" href="#cli">From the command line</a></h2>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="cindy-cli">Copy</button><pre id="cindy-cli">magpie cindy add      # opens Cindy to add magpie; confirm it there</pre></div>
+    <p>The command prints the link it opened. When nothing here can open it, it says why rather than reporting success.</p>
+    <h2 id="status"><a class="anchor" href="#status">How magpie knows it was added</a></h2>
+    <p>magpie reads Cindy's databases read-only: one per account (<code>cindy-&lt;account&gt;.db</code>) once you sign in, <code>cindy-local-v1.db</code> before. When any of them has a custom provider with the id or name magpie, or the gateway's address in its endpoints, the row says it's added. It can read them while Cindy runs, and never writes them. When a database can't be read, magpie says it doesn't know, not that it isn't added.</p>
+    <h2 id="usage"><a class="anchor" href="#usage">Usage and keys</a></h2>
+    <p>The key in the link is Cindy's own, so its requests are counted as Cindy's in magpie's usage, apart from other agents.</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
+    <h3>Can Claude Code in Cindy use DeepSeek or GLM?</h3>
+    <p>Yes. Once magpie is added to Cindy, Claude Code uses any model in magpie, DeepSeek and GLM included, through the Magpie provider's Anthropic endpoint.</p>
+    <h3>Does magpie change Cindy's settings?</h3>
+    <p>No. Cindy takes a new provider only through its own import link, which you confirm in Cindy. magpie only reads Cindy's databases to show whether magpie was added.</p>
+    <h3>Add magpie does nothing. What now?</h3>
+    <p>Nothing on this computer opens cindy:// links, or the program that registered them is gone. Open Cindy once or install it again, then click again; magpie says which it is.</p>
+    <h3>Cindy isn't on magpie's Agents page.</h3>
+    <p>magpie lists Cindy once it has run on this computer and made its data folder. Open Cindy once, then look again.</p>
+
+    <p style="margin-top:48px">More desktop apps on the same models: <a href="/docs/aionui">AionUi on any model</a>, <a href="/docs/cherry-studio">Every model in Cherry Studio, through magpie</a> and <a href="/docs/shelley">Shelley on any model</a>. Something fails? See <a href="/docs/troubleshooting">Fixing common errors</a>, or ask on <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>.</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a href="/docs/remote">Remote magpie</a>
+    <a href="/docs/docker">Docker</a>
+    <a href="/docs/privacy">Privacy</a>
+    <a href="/docs/masking">Privacy masking</a>
+    <a href="/docs/mcp-router">MCP router</a>
+    <a href="/docs/library">Library</a>
+    <a href="/docs/claude-code-models">Models in Claude Code</a>
+    <a href="/docs/codex-models">Models in Codex</a>
+    <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a href="/docs/local-models">Local models</a>
+    <a href="/docs/opencode-models">Models in OpenCode</a>
+    <a href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/contributors">Contributors</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
