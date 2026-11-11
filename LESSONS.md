@@ -1091,6 +1091,14 @@ each one.
     f54920280 cut a comment (#5918). A `-run` of a package's own tests
     is not a run of the package; its guards take a second, so run it
     whole.
+  - A red on main had three "seen again" comments and no owner: #5918
+    (TestCoreScriptBudget, red from 16ed1a952) was commented on at
+    11:51, 12:22 and 13:14, and 8016205e3 shipped past it "commented".
+    The cause was the measure. It counted comments, so each red was paid
+    for by cutting the comments that said why, about 40 times in the
+    budget's history. 6cc182339 counts code only. When a guard keeps
+    going red the same way, fix the guard's class; don't feed it
+    another cut.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
