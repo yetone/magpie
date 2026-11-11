@@ -288,11 +288,6 @@ const PENCIL = "M3.5 12.5l.5-2.5 6.8-6.8a1.2 1.2 0 0 1 1.7 0l.3.3a1.2 1.2 0 0 1 
 const PUZZLE = "M6.2 2.8h2.3a1.3 1.3 0 1 1 2.5 0h2.2V5a1.3 1.3 0 1 0 0 2.6v5.6H3V7.6a1.3 1.3 0 1 1 0-2.6V2.8z";
 
 // A brand icon: colour logos are images, mono logos take the text colour.
-// Nothing is ever invented: a model with no known vendor keeps the slot
-// empty, and a custom provider shows a plain outline ("generic").
-// A page redrawn whole (the Providers page, as a dialog opens or closes)
-// hands its icons to keptIcons first and the new rows take them back: a
-// logo made afresh loads its picture again and blinks out for a moment.
 let keptIcons = null;
 function keepIcons(...roots) {
   keptIcons = new Map();
@@ -2686,9 +2681,6 @@ function updatedSay() {
 // ---------- installing the agents not here (#727) ----------
 // Under the list, the agents magpie knows that aren't on this machine, each
 // with its vendor's install commands to copy into a terminal: the vendor's
-// installer first, then Homebrew's or npm's. magpie doesn't run them — a
-// new computer may have no Node.js for npm yet, and an installer may ask
-// for things in the terminal. Folded unless no agent is here at all.
 
 let installInfo = []; // [{ id, name, icon, commands: [{ via, command }] }]
 
@@ -2864,10 +2856,6 @@ const isHidden = (a) => hiddenIds().includes(a.id);
 
 // unhideCleared: a hidden agent whose settings change so that nothing is set
 // on it any more goes under Not set up, its hiding dropped (Hu9956, #842):
-// put back to its defaults it kept Hidden and its Show until the switch was
-// turned on and off. One hidden while nothing was set on it stays hidden
-// until something on it changes. True when the arrangement is saved, which
-// renders the list again.
 const agentSeen = new Map(); // each agent's settings when last rendered
 const agentSig = (a) => JSON.stringify([!!a.wired, !!a.added, !!a.drift, a.fields.filter((f) => !tweak(f)).map((f) => [f.key, f.value || ""])]);
 function unhideCleared() {
@@ -4628,9 +4616,6 @@ function score(q, o) {
 // popTop is the highest a popover's top edge may go, pad under the window's
 // own chrome: on a Mac window the traffic lights are drawn over the page's
 // header.top, so a list that opens upward in a short window stops under it
-// rather than over them (#1573, lyston11). Elsewhere the header is the
-// page's own row and the edge is pad, as it always was. The header's
-// measured bottom already counts the text size (--zoom).
 function popTop(pad) {
   const b = document.body.classList;
   if (!b.contains("window") || !b.contains("mac")) return pad;
@@ -6124,6 +6109,7 @@ function renderProviders(quiet) {
     if (p.off) name.append(el("span", "badge off", t("Switched off")));
     if (p.self) name.append(Object.assign(el("span", "badge" + (p.keepSelf ? "" : " off"), t("This magpie")), { title: selfNote(p) }));
     if (p.move && p.move.state !== "plugin") name.append(deprecatedBadge());
+    if (p.proxyGone) name.append(Object.assign(el("span", "badge off", t("Proxy missing: {name}", { name: p.proxyGone })), { title: t("This provider's proxy isn't on this computer, so its requests fail until another is picked") }));
     const n = p.models.filter((m) => m.on).length;
     // rate windows: what it bills at now (#2463)
     if (p.rateNow > 0) {
@@ -7187,9 +7173,6 @@ function renderAdd() {
     // one moved onto its plugin stays where it was, signing in through it;
     // a deprecated one whose plugin is installed is that plugin's row alone
     // (ARNO on Discord: Qoder CN twice), and one with no account isn't
-    // offered at all: it is the Plugins page's, installed from there
-    // (yetone: 对于新用户来说，这里应该只显示内置的 provider), unless it is
-    // signing in now. A search naming one finds it there.
     const named = (x) => !f || x.name.toLowerCase().includes(f) || x.agent.includes(f) || "subscription".includes(f);
     const subs = SUBS.filter((x) => !(replacedSub(x.agent) || unusedSub(x.agent)) || signing?.agent === x.agent).map((x) => subOf(x.agent)).filter(named);
     const inPlugins = f && SUBS.some((x) => unusedSub(x.agent) && signing?.agent !== x.agent && named(subOf(x.agent)));
@@ -7702,7 +7685,39 @@ const PROXY_HINT = {
   "": "Follows the proxy in Settings",
   direct: "Requests to it go direct, whatever the proxy in Settings",
   custom: "Requests to it go through this proxy: http://, https:// or socks5://",
+  saved: "Requests to it go through this saved proxy, kept in Settings",
 };
+// the named proxies of Settings › Network, chosen as "@id" wherever a proxy can be
+function savedProxyList() { return prefs?.proxies || []; }
+function savedProxyName(ref) {
+  const p = savedProxyList().find((x) => x.id === String(ref || "").slice(1));
+  return p ? p.name : t("A proxy that is gone");
+}
+// a Saved mode beside the others, once a proxy is saved (or one is chosen)
+function withSavedMode(modes, saved) {
+  return savedProxyList().length || saved ? [...modes, ["saved", t("Saved")]] : modes;
+}
+function firstSavedRef() {
+  const p = savedProxyList()[0];
+  return p ? "@" + p.id : "";
+}
+// savedProxyButton: the saved proxy chosen, a menu of the others
+function savedProxyButton(ref, onPick) {
+  const b = el("button", "text proxy-saved", ref ? savedProxyName(ref) : t("Choose a proxy"));
+  b.type = "button";
+  b.setAttribute("aria-haspopup", "menu");
+  b.title = b.textContent;
+  b.onclick = (e) => {
+    e.stopPropagation();
+    const opts = savedProxyList().map((x) => ({ v: "@" + x.id, name: x.name, literalName: true }));
+    openProtoMenu(b, opts, ref || "", (v) => {
+      ref = v;
+      b.textContent = b.title = savedProxyName(v);
+      onPick(v);
+    }, "Choose a proxy");
+  };
+  return b;
+}
 function proxyPicker() {
   const box = el("div", "stack proxy-pick");
   const hint = el("div", "hint", t(PROXY_HINT[draft.proxyMode || ""]));
@@ -7710,16 +7725,28 @@ function proxyPicker() {
   addr.className = "proxy-url";
   addr.classList.toggle("off", draft.proxyMode !== "custom");
   const login = proxyLoginRow(addr, (v) => { draft.proxyURL = v; });
-  const seg = segs([["", t("Global proxy")], ["direct", t("Direct")], ["custom", t("Custom")]], draft.proxyMode || "", (v) => {
-    draft.proxyMode = v;
+  const saved = savedProxyButton(draft.proxyRef, (v) => { draft.proxyRef = v; });
+  const place = (v) => {
     addr.classList.toggle("off", v !== "custom");
+    addr.classList.toggle("gone", v === "saved");
     login.classList.toggle("off", v !== "custom");
+    login.classList.toggle("gone", v === "saved");
+    saved.hidden = v !== "saved";
+  };
+  const seg = segs(withSavedMode([["", t("Global proxy")], ["direct", t("Direct")], ["custom", t("Custom")]], draft.proxyMode === "saved"), draft.proxyMode || "", (v) => {
+    draft.proxyMode = v;
+    if (v === "saved" && !draft.proxyRef) {
+      draft.proxyRef = firstSavedRef();
+      saved.textContent = saved.title = savedProxyName(draft.proxyRef);
+    }
+    place(v);
     hint.textContent = t(PROXY_HINT[v]);
   });
   seg.classList.add("proxy-mode");
+  place(draft.proxyMode || "");
   // its room kept while not asked for: a pick never moves the dialog
   const row = el("div", "proxy-row");
-  row.append(seg, addr);
+  row.append(seg, addr, saved);
   box.append(row, login, hint);
   return box;
 }
@@ -7975,8 +8002,11 @@ function proxyDraft(p) {
   const v = (p?.proxy || "").trim();
   // each account's own (accountProxies), by its name in lower case
   const accountProxies = {};
-  for (const [u, x] of Object.entries(p?.accountProxies || {})) accountProxies[u] = { mode: x === "direct" ? "direct" : "custom", url: x === "direct" ? "" : x };
-  return { proxyMode: !v ? "" : v === "direct" ? "direct" : "custom", proxyURL: v && v !== "direct" ? v : "", accountProxies };
+  for (const [u, x] of Object.entries(p?.accountProxies || {})) {
+    accountProxies[u] = x === "direct" ? { mode: "direct", url: "" } : x.startsWith("@") ? { mode: "saved", url: "", ref: x } : { mode: "custom", url: x };
+  }
+  const ref = v.startsWith("@");
+  return { proxyMode: !v ? "" : v === "direct" ? "direct" : ref ? "saved" : "custom", proxyURL: v && v !== "direct" && !ref ? v : "", proxyRef: ref ? v : "", accountProxies };
 }
 // asTyped: the editor's form as it stands, for Refresh and the Tests to
 // ask with before a Save — a key just pasted over the saved one is the one
@@ -8013,6 +8043,7 @@ const CERT_FIELDS = ["clientCert", "clientKey", "serverCA"];
 // has no address yet.
 function proxyOfDraft() {
   if (draft.proxyMode === "direct") return "direct";
+  if (draft.proxyMode === "saved") return draft.proxyRef || null;
   if (draft.proxyMode !== "custom") return "";
   return (draft.proxyURL || "").trim() || null;
 }
@@ -8020,9 +8051,6 @@ function proxyOfDraft() {
 // accountProxyPicker: one proxy per account of a subscription holding
 // several (gakki: one Codex account through one proxy, another through
 // another) — the provider's own (the row above), none, or its own address.
-// Each account is a line of its name over the same row as the provider's,
-// the address's room kept while it isn't asked for, so a pick moves
-// nothing. null for a subscription with one account: the row above is its.
 const ACCOUNT_PROXY_HINT = "Each account can go through a proxy of its own; Provider's proxy is the one above";
 function accountProxyPicker(a, p) {
   const ls = [...(a?.logins || [])];
@@ -8100,14 +8128,27 @@ function proxyLine(it) {
   addr.className = "proxy-url";
   addr.classList.toggle("off", cur.mode !== "custom");
   const login = proxyLoginRow(addr, (v) => { draft.accountProxies[k] = { ...(draft.accountProxies[k] || { mode: "custom" }), url: v }; });
-  const seg = segs([["", t("Provider's proxy")], ["direct", t("Direct")], ["custom", t("Custom")]], cur.mode || "", (v) => {
-    draft.accountProxies[k] = { ...(draft.accountProxies[k] || {}), mode: v };
+  const saved = savedProxyButton(cur.ref, (v) => { draft.accountProxies[k] = { ...(draft.accountProxies[k] || {}), ref: v }; });
+  const place = (v) => {
     addr.classList.toggle("off", v !== "custom");
+    addr.classList.toggle("gone", v === "saved");
     login.classList.toggle("off", v !== "custom");
+    login.classList.toggle("gone", v === "saved");
+    saved.hidden = v !== "saved";
+  };
+  const seg = segs(withSavedMode([["", t("Provider's proxy")], ["direct", t("Direct")], ["custom", t("Custom")]], cur.mode === "saved"), cur.mode || "", (v) => {
+    const now = { ...(draft.accountProxies[k] || {}), mode: v };
+    if (v === "saved" && !now.ref) {
+      now.ref = firstSavedRef();
+      saved.textContent = saved.title = savedProxyName(now.ref);
+    }
+    draft.accountProxies[k] = now;
+    place(v);
   });
   seg.classList.add("proxy-mode");
+  place(cur.mode || "");
   const row = el("div", "proxy-row");
-  row.append(seg, addr);
+  row.append(seg, addr, saved);
   line.append(who, row, login);
   return line;
 }
@@ -8118,6 +8159,7 @@ function accountProxiesOfDraft() {
   const out = {};
   for (const [u, x] of Object.entries(draft.accountProxies || {})) {
     if (x.mode === "direct") out[u] = "direct";
+    else if (x.mode === "saved" && x.ref) out[u] = x.ref;
     else if (x.mode === "custom") {
       const v = (x.url || "").trim();
       if (!v) return { missing: u };
@@ -8514,9 +8556,6 @@ const BIRD = `<svg viewBox="0 0 44 44"><use href="#bird" clip-path="url(#bird-bo
 // what is loading, with magpie's bird on it (the owner, after the plugin
 // page's README): skeletons still up after a moment, as on a slow page, get
 // the bird. It drops onto one, hops from bar to bar, each bar giving under
-// its feet, and flies off once none is left. One bird for the window, over
-// whatever page or dialog shows them; a quick load never sees it, and with
-// reduced motion the bars stand still and no bird comes.
 const SKEL = ".skeleton, .pm-card.ghost .sk";
 // the skeletons a reader sees now: on screen, big enough to stand on, and
 // not under a dialog or out of their scroller
@@ -12818,6 +12857,7 @@ function cancelSignIn() {
 // A sign-in goes through its account's proxy (#1663); another can be
 // picked. proxyShown hides the name and password.
 function proxyShown(u) {
+  if (String(u || "").startsWith("@")) return savedProxyName(u);
   return String(u || "").replace(/^([a-z][a-z0-9+.-]*:\/\/)[^@/]*@/i, "$1");
 }
 function proxyName(v) {
@@ -12851,6 +12891,7 @@ function signInProxyChoices(sub) {
   opts.push({ v: "direct", name: "Direct", note: "Through no proxy" });
   if (own) add(own, t("{name}'s proxy", { name: sub.name }));
   for (const [u, v] of Object.entries(p?.accountProxies || {})) add((v || "").trim(), t("{user}'s proxy", { user: u }));
+  for (const x of savedProxyList()) add("@" + x.id, "");
   if (signing.proxy) add(signing.proxy, "");
   opts.push({ v: "\x01", name: "Custom…", note: "http://, https:// or socks5://" });
   return opts;
@@ -15337,9 +15378,6 @@ const urlHint = (api) => api === "anthropic" ? "https://…" : api === "gemini" 
 // respellURL turns a base URL into the one protocol api is asked at: the
 // root for Anthropic, which adds /v1 itself, …/v1 for OpenAI's two,
 // …/v1beta for Gemini's (as Google's SDKs add it).
-// WORKSPACE stands for a Bailian workspace's id in a decision API's
-// address (provider.WorkspaceID); workspaceOf is the id url has in its
-// place in tmpl ("" for none), or null when url isn't at tmpl's host.
 const WORKSPACE = "{WorkspaceId}";
 function workspaceOf(tmpl, url) {
   if (!tmpl || !url) return null;
@@ -15764,9 +15802,6 @@ function unrollSheet(view, sheet, e) {
 // unrollInView: the agents' scroll unrolls under the button clicked for it,
 // and in a view with no more room below (the panel at its tallest, the
 // window scrolled to its end) the view goes down with it, led by the scroll's
-// foot frame by frame, so what unrolls comes into sight — but never so far
-// that the button goes out of it at the top. The reader scrolling meanwhile
-// has the view from then on.
 function unrollInView(fold, button, e) {
   const v = fold.closest(".view");
   if (!v || !scrollOnPurpose(e, UNROLL.ms + 400)) return;
@@ -15820,9 +15855,6 @@ let quotaHist = []; // each account's windows over time, for the curves (#651)
 // quotasOpened: the reader opened what shows the allowances (the Usage
 // page's Overview, the tray panel's Allowances tab, a menu bar cell, either
 // brought back to the front): an asked read (#1588, #1518), which reads
-// every account again, so opening within QUOTAS_OPEN_GAP of the last one
-// (tabs, focus and visibility both firing) asks nothing. Refresh always
-// asks, saved Claude accounts too ("all", #5380).
 const QUOTAS_OPEN_GAP = 30e3;
 let quotasAskedAt = -Infinity;
 function quotasOpened() {
@@ -19838,9 +19870,6 @@ function searchSettings(q) {
 // Settings' Command line (PAMI on Discord): whether `magpie` in a terminal
 // opened now runs this app, in each shell, and a button that puts it there
 // — a link in a folder already on PATH, on Windows the app's folder first
-// in the user's PATH. A shell's profile is written only from that shell's
-// own button, with the file it names. Asked once a load and again after
-// half a minute: each shell is run to read its PATH.
 let cliView = null, cliAt = 0, cliAsk = null;
 const exeName = (p) => String(p || "").split(/[\\/]/).pop();
 function renderCLI(r) {
@@ -20051,6 +20080,7 @@ function renderSettings() {
   renderPluginCheckins(s);
   renderTrayUsage(s, keep);
   renderProxy(s, keep);
+  window.renderSavedProxies ? renderSavedProxies(s) : import("./proxies.js").then(() => renderSavedProxies(s), () => {});
   renderGitHubToken(s);
   renderImages(s, keep);
   renderSearch(s, keep);
@@ -20723,7 +20753,7 @@ function proxyDisplay(value) {
   return (value || "").replace(/^(\w+:\/\/)?[^/?#]*@/, "$1");
 }
 function renderProxy(s, keep) {
-  const cur = !s.proxy ? "auto" : s.proxy === "direct" ? "off" : "custom";
+  const cur = !s.proxy ? "auto" : s.proxy === "direct" ? "off" : s.proxy.startsWith("@") ? "saved" : "custom";
   const sub = $("#proxySub");
   sub.textContent = {
     settings: t("Requests to vendors without a proxy of their own, and update checks, go through {proxy}", { proxy: proxyDisplay(s.proxyNow) }),
@@ -20734,7 +20764,7 @@ function renderProxy(s, keep) {
   }[s.proxySource] || "";
   const row = proxyRow(s, keep, {
     key: "proxy", box: $("#proxySegs"), cur, state: proxyState,
-    modes: [["auto", t("Auto")], ["off", t("Off")], ["custom", t("Custom")]],
+    modes: withSavedMode([["auto", t("Auto")], ["off", t("Off")], ["custom", t("Custom")]], cur === "saved"),
     again: () => renderProxy(s, keep),
   });
   renderProxyCheck(s, row);
@@ -20745,12 +20775,12 @@ const proxyState = { custom: false };
 const pluginProxyState = { custom: false };
 function renderPluginProxy(s, keep) {
   const v = (s.pluginProxy || "").trim();
-  const cur = !v ? "auto" : v === "direct" ? "off" : "custom";
+  const cur = !v ? "auto" : v === "direct" ? "off" : v.startsWith("@") ? "saved" : "custom";
   $("#pluginProxySub").textContent = cur === "auto" ? t("Plugins, npm and GitHub go through the proxy above")
-    : cur === "off" ? t("Plugins, npm and GitHub go direct") : t("Plugins, npm and GitHub go through {proxy}", { proxy: proxyDisplay(v) });
+    : cur === "off" ? t("Plugins, npm and GitHub go direct") : t("Plugins, npm and GitHub go through {proxy}", { proxy: v.startsWith("@") ? savedProxyName(v) : proxyDisplay(v) });
   proxyRow(s, keep, {
     key: "pluginProxy", box: $("#pluginProxySegs"), cur, state: pluginProxyState,
-    modes: [["auto", t("Same as above")], ["off", t("Direct")], ["custom", t("Custom")]],
+    modes: withSavedMode([["auto", t("Same as above")], ["off", t("Direct")], ["custom", t("Custom")]], cur === "saved"),
     again: () => renderPluginProxy(s, keep),
   });
 }
@@ -20767,6 +20797,7 @@ function proxyRow(s, keep, o) {
     o.state.custom = id === "custom";
     if (id === "auto") savePrefs({ ...keep, [o.key]: "" });
     else if (id === "off") savePrefs({ ...keep, [o.key]: "direct" });
+    else if (id === "saved") savePrefs({ ...keep, [o.key]: firstSavedRef() });
     else o.again();
   };
   if (mode === "custom") {
@@ -20818,6 +20849,7 @@ function proxyRow(s, keep, o) {
     box.append(auth);
     if (o.state.custom) queueMicrotask(() => i.focus());
   }
+  if (mode === "saved") row.append(savedProxyButton(s[o.key], (v) => savePrefs({ ...keep, [o.key]: v })));
   const modes = segs(o.modes, mode, pick);
   // WebKit doesn't focus clicked buttons
   modes.onpointerdown = () => { picking = true; };
@@ -22764,13 +22796,6 @@ function savePrefs(body) {
 
 // ---------- where the reader is ----------
 // For every view (gui-shell.md, "A click never moves"):
-// - A view moves only for the reader (wheel, touch, scroll keys, Tab, a
-//   drag); any other scroll (a shorter redraw, WebKit centring a focused
-//   field, code) is put back before paint.
-// - What the reader clicks stays put on screen while the click redraws
-//   around it, till they scroll, click again or it settles. A shorter page
-//   keeps room at its foot; data-unrolls goes down with what it opens.
-// Code scrolls only with the reader's event: scrollOnPurpose(e).
 let purposeUntil = 0, held = null;
 // guardUntil is purposeUntil when the window is the click guard's own (a
 // field brought back into sight, backToReader): it lets that scroll stand,
@@ -22995,9 +23020,6 @@ const onScreen = (n, v) => n.getBoundingClientRect().top - v.getBoundingClientRe
 // Only a play that moves it counts: a colour or a fade easing in (the hover
 // of the button just clicked, its label fading to its new words) leaves it
 // where it is. Were those passed over too, the page would be held by
-// something further up while the button slid away, and snap back to the
-// button once its hover had faded — and a button slid out from under the
-// pointer and back fades its hover again, so the page swung between the two.
 const MOVES = /^(transform|translate|rotate|scale|top|bottom|left|right|inset|margin|offset-|position)/;
 const moving = (a) => a.playState === "running" && (a.transitionProperty ? MOVES.test(a.transitionProperty)
   : !a.effect?.getKeyframes || a.effect.getKeyframes().some((k) => Object.keys(k).some((p) => MOVES.test(p.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase())))));
@@ -23047,9 +23069,6 @@ function standIn(h) {
 // where the held parts are in the page, and how tall it is: what the hold
 // left (h.lay), and a redraw changes, a scroll not. Only parts that scroll
 // with the page and are in it: one drawn again (the Usage page's tabs, the
-// agents' list under an agent opened or closed) or stuck to the view's edge
-// (Settings' tabs, sticky) read as moved at every scroll, and for the hold's
-// 4s every scroll was put back (issennknight on macOS 13)
 const scrolls = (n, v) => { for (; n && n !== v; n = n.parentElement) if (/sticky|fixed/.test(getComputedStyle(n).position)) return false; return !!n; };
 function laid(h) {
   const at = [];
@@ -23095,9 +23114,6 @@ let heldWidth = innerWidth;
 // It is the reader's place that is kept instead: where they were, or as far
 // down as the page goes, while it is laid out again. Crossing SIDE_AT, the
 // browser clamps the view to each layout it passes through (app.css's
-// side-nav rules before layoutNav has moved the tabs, then a part a few
-// pixels short of its new height), and the page ended short of its foot:
-// at the foot of Settings, 960 to 1440 wide in WebKit left it 6px up (#911).
 let relaidUntil = 0;
 const relaid = new ResizeObserver(() => {
   if (performance.now() > relaidUntil) { relaid.disconnect(); return; }
@@ -24219,9 +24235,6 @@ setInterval(async () => {
 // the Usage head is made tight, as at a narrow window, wherever its sum
 // would be cut (#1599, sean908): between 640px and the width its tabs, its
 // periods with Custom named and the refresh need, the sum was the one
-// thing left to give way, and read ≈$0. for ≈$0.001. Tight, Custom is its
-// icon and the sum may go to a line of its own, whole, in every language.
-// Decided on the next frame, as the class changes the head's height.
 {
   const head = $("#usageCost").parentElement;
   let frame = 0;

@@ -93,6 +93,10 @@ type Bundle struct {
 	// the providers they serve come with them. Their sign-ins don't, as a
 	// subscription's don't. Nil from a magpie before them.
 	Plugins *[]plugin.Entry `json:"plugins,omitempty"`
+	// Proxies are the proxies kept by name, which providers, accounts and
+	// Settings name as "@id". They travel with the providers, passwords
+	// only when the providers' keys do; nil from a magpie before them.
+	Proxies *[]settings.NamedProxy `json:"proxies,omitempty"`
 	// Sync can carry one part's credentials without changing the others'
 	// Keys policy; these are absent from older backups and whole collects.
 	ProvidersKeys *bool `json:"providersKeys,omitempty"`
@@ -161,6 +165,8 @@ func (b Bundle) scopedKeys(part string) bool {
 		own = b.SettingsKeys
 	case "library":
 		own = b.LibraryKeys
+	case "providers":
+		own = b.ProvidersKeys
 	}
 	if own != nil {
 		return *own
@@ -236,6 +242,14 @@ func Collect(keys bool, app string) (Bundle, error) {
 		searches = append(searches, a)
 	}
 	b.Searches = &searches
+	// the saved proxies ride with the providers that name them
+	proxies := settings.Load().Proxies
+	if !keys {
+		proxies = settings.WithoutProxyPasswords(proxies)
+	}
+	if len(proxies) > 0 {
+		b.Proxies = &proxies
+	}
 	// a settings.json that can't be read stops it too: carried as the
 	// defaults, it would put them over the settings where it is put back,
 	// or on every other computer sync mirrors it to (#2269)
@@ -244,6 +258,8 @@ func Collect(keys bool, app string) (Bundle, error) {
 		if err != nil {
 			return b, err
 		}
+		// the saved proxies hold passwords and are this computer's own (KeepOwn)
+		s.Proxies = nil
 		if !keys {
 			s.LANKey, s.LANKeyID = "", ""
 			s.OTel.Headers = nil
@@ -431,6 +447,12 @@ func Restore(b Bundle, parts Parts) (Result, error) {
 		r.SignIns = &res
 	}
 	if parts.Providers {
+		// the proxies first: a provider's choice of one is checked against them
+		if b.Proxies != nil {
+			if err := settings.RestoreProxies(*b.Proxies, b.scopedKeys("providers")); err != nil {
+				return r, fmt.Errorf("putting the saved proxies in: %w", err)
+			}
+		}
 		for name, data := range b.Icons {
 			if f := provider.IconFile(name); f != "" && len(data) <= provider.MaxIcon {
 				if _, err := os.Stat(f); err != nil {

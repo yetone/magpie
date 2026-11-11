@@ -3429,6 +3429,13 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .editor .proxy-row .proxy-mode { flex: none; }
 .editor .proxy-row input.proxy-url { flex: 1 1 auto; width: auto; min-width: 0; }
 .editor .proxy-row input.proxy-url.off { visibility: hidden; }
+.editor .proxy-row .gone { display: none; }
+.editor .proxy-row .proxy-saved { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.saved-proxy .sub { overflow-wrap: anywhere; }
+.proxy-form { flex-wrap: wrap; }
+.proxy-form .proxy-controls { justify-content: flex-end; flex: 1 1 100%; }
+.proxy-form .proxy-credential { flex: 1 1 10rem; min-width: 0; }
+.proxy-form .sub.err { flex: 1 1 100%; }
 .editor :is(input.concurrency, input.queue-limit, input.queue-wait)[type] { width: 12em; max-width: 100%; }
 .editor input[type="number"] { -moz-appearance: textfield; }
 .editor input[type="number"]::-webkit-inner-spin-button, .editor input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }

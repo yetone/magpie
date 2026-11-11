@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/netproxy"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // claudeTwoAccounts signs Claude Code in to a@example.com, then to
@@ -240,5 +242,43 @@ func TestClaudeAccountProxyLogsNoCredentials(t *testing.T) {
 		if v := claudeEnvOf(t, settingsPath, "HTTPS_PROXY"); v != c.env {
 			t.Errorf("%s: Claude Code's HTTPS_PROXY = %q, want %q", c.proxy, v, c.env)
 		}
+	}
+}
+
+// An account that chose a saved proxy has Claude Code's env hold its
+// address with the login; editing the saved proxy writes the new one, and
+// deleting it leaves a proxy that goes nowhere, not direct.
+func TestClaudeAccountSavedProxy(t *testing.T) {
+	settingsPath := claudeTwoAccounts(t)
+	saved := func(url string) {
+		t.Helper()
+		var ps []settings.NamedProxy
+		if url != "" {
+			ps = []settings.NamedProxy{{ID: "pxc", Name: "C", URL: url, User: "me", Pass: "pw"}}
+		}
+		s := settings.Load()
+		s.Proxies = ps
+		if err := settings.Save(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	saved("10.0.0.9:8080")
+	if err := Save(Provider{ID: "claude", AccountProxies: map[string]string{"b@example.com": "@pxc"}}); err != nil {
+		t.Fatal(err)
+	}
+	if v := claudeEnvOf(t, settingsPath, "HTTPS_PROXY"); v != "http://me:pw@10.0.0.9:8080" {
+		t.Fatalf("HTTPS_PROXY = %q", v)
+	}
+	saved("10.0.0.10:9090")
+	ProxyEdited()
+	if v := claudeEnvOf(t, settingsPath, "HTTPS_PROXY"); v != "http://me:pw@10.0.0.10:9090" {
+		t.Fatalf("after the edit HTTPS_PROXY = %q", v)
+	}
+	s := settings.Load()
+	s.Proxies = nil
+	settings.Save(s)
+	ProxyEdited()
+	if v := claudeEnvOf(t, settingsPath, "HTTPS_PROXY"); v != netproxy.DeadProxy {
+		t.Fatalf("with the saved proxy gone HTTPS_PROXY = %q, want a proxy that goes nowhere", v)
 	}
 }

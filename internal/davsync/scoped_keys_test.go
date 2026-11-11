@@ -282,3 +282,19 @@ func TestTakeScopedPartCredentials(t *testing.T) {
 		}
 	}
 }
+
+// A providers upload carries the saved proxies they name, and a keyless one
+// keeps the passwords the server already has.
+func TestTakeSavedProxies(t *testing.T) {
+	to := backup.Bundle{Version: backup.BundleVersion, Keys: true, ProvidersKeys: backup.Flag(true),
+		Proxies: &[]settings.NamedProxy{{ID: "px1", Name: "Office", URL: "http://o:1", Pass: "server"}}}
+	from := backup.Bundle{Version: backup.BundleVersion, ProvidersKeys: backup.Flag(false),
+		Proxies: &[]settings.NamedProxy{{ID: "px1", Name: "Office", URL: "http://o:2"}, {ID: "px2", Name: "Home", URL: "http://h:1"}}}
+	take(&to, from, "providers")
+	if to.Proxies == nil || len(*to.Proxies) != 2 || (*to.Proxies)[0].URL != "http://o:2" || (*to.Proxies)[0].Pass != "server" {
+		t.Fatalf("%+v", to.Proxies)
+	}
+	if backup.Bundle(to).Proxies == nil || hashes(to)["providers"] == hashes(backup.Bundle{Version: backup.BundleVersion})["providers"] {
+		t.Fatal("a change in the saved proxies doesn't change the providers' hash")
+	}
+}

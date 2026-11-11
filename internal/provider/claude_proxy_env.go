@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yetone/magpie/internal/settings"
 	"log"
 	"os"
 	"path/filepath"
@@ -103,6 +104,10 @@ func claudeAccountProxy(user string) string {
 		return ""
 	}
 	u, err := netproxy.Parse(v)
+	if err != nil && settings.IsProxyRef(v) {
+		// a saved proxy that is gone: sessions fail, they don't leave direct
+		return netproxy.DeadProxy
+	}
 	if err != nil || u.Host == "" {
 		return ""
 	}
@@ -243,3 +248,8 @@ func syncClaudeProxyEnvNow() {
 		log.Printf("claude: writing the account's proxy to settings.json: %v", err)
 	}
 }
+
+// ProxyEdited has Claude Code's env follow a saved proxy that was edited:
+// its settings.json holds the address as a snapshot, so an account that
+// chose the proxy by name needs it written again.
+func ProxyEdited() { syncClaudeProxyEnvNow() }

@@ -286,17 +286,19 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	// Bark has its own route (bark); the page never sees its key
 	in.BarkServer, in.BarkKey, in.BarkDaily = cur.BarkServer, cur.BarkKey, cur.BarkDaily
 
-	in.Port = cur.Port                                 // set on its own (port), which moves the gateway
-	in.CORSOrigins = cur.CORSOrigins                   // set on its own (cors)
-	in.AllowIPs = cur.AllowIPs                         // set on its own (allowips)
-	in.MTLS = cur.MTLS                                 // set on its own (mtls)
-	in.HTTPS = cur.HTTPS                               // set on its own (https)
-	in.FetchPrivate = cur.FetchPrivate                 // in settings.json only
-	in.RouterNote = cur.RouterNote                     // set on its own (the Library's servers/hub-note)
-	in.RouterAllTools = cur.RouterAllTools             // set on its own (the Library's servers/hub-tools)
-	in.GitHubToken = cur.GitHubToken                   // set on its own (github-token), never sent to the page
-	in.ProxyCustom = cur.ProxyCustom                   // set by settings.Save from the proxy, never by the page
-	in.PluginProxyCustom = cur.PluginProxyCustom       // and plugin downloads' from theirs
+	in.Port = cur.Port                           // set on its own (port), which moves the gateway
+	in.CORSOrigins = cur.CORSOrigins             // set on its own (cors)
+	in.AllowIPs = cur.AllowIPs                   // set on its own (allowips)
+	in.MTLS = cur.MTLS                           // set on its own (mtls)
+	in.HTTPS = cur.HTTPS                         // set on its own (https)
+	in.FetchPrivate = cur.FetchPrivate           // in settings.json only
+	in.RouterNote = cur.RouterNote               // set on its own (the Library's servers/hub-note)
+	in.RouterAllTools = cur.RouterAllTools       // set on its own (the Library's servers/hub-tools)
+	in.GitHubToken = cur.GitHubToken             // set on its own (github-token), never sent to the page
+	in.ProxyCustom = cur.ProxyCustom             // set by settings.Save from the proxy, never by the page
+	in.PluginProxyCustom = cur.PluginProxyCustom // and plugin downloads' from theirs
+	in.ProxyNames = cur.ProxyNames
+	in.Proxies = cur.Proxies                           // set on its own (proxies), the password never sent to the page
 	in.RequestArchive = cur.RequestArchive             // the Gateway page's, set on its own
 	in.RequestArchiveMaxMB = cur.RequestArchiveMaxMB   // in settings.json only
 	in.ClaudeRunsMost = cur.ClaudeRunsMost             // magpie claude-code runs, or settings.json (#2956)

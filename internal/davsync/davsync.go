@@ -880,6 +880,9 @@ func hashes(b backup.Bundle) map[string]string {
 	if b.Plugins != nil && len(*b.Plugins) > 0 { // as before them, without one
 		providers = append(providers, map[string][]plugin.Entry{"plugins": *b.Plugins})
 	}
+	if b.Proxies != nil && len(*b.Proxies) > 0 { // as before them, without one
+		providers = append(providers, map[string][]settings.NamedProxy{"proxies": *b.Proxies})
+	}
 	lib := b.Library
 	if lib != nil && lib.Subagents != nil && len(*lib.Subagents) == 0 { // as before them, without one
 		c := *lib
@@ -915,7 +918,7 @@ func hashes(b backup.Bundle) map[string]string {
 func unset(b backup.Bundle, p string) bool {
 	switch p {
 	case "providers":
-		return len(b.Providers) == 0 && len(b.Groups) == 0
+		return len(b.Providers) == 0 && len(b.Groups) == 0 && (b.Proxies == nil || len(*b.Proxies) == 0)
 	case "settings":
 		var s settings.Settings
 		if b.Settings != nil {
@@ -1008,6 +1011,17 @@ func take(to *backup.Bundle, from backup.Bundle, part string) {
 		}
 		to.Providers, to.Icons, to.Groups, to.Searches, to.Order, to.GroupOrder = ps, from.Icons, from.Groups, searches, from.Order, from.GroupOrder
 		to.Plugins = from.Plugins
+		if from.Proxies != nil { // the saved proxies the providers name, their passwords as the keys are
+			px := slices.Clone(*from.Proxies)
+			if !keys && to.Proxies != nil && (to.Keys || (to.ProvidersKeys != nil && *to.ProvidersKeys)) {
+				for i := range px {
+					if j := slices.IndexFunc(*to.Proxies, func(o settings.NamedProxy) bool { return o.ID == px[i].ID }); j >= 0 && px[i].Pass == "" {
+						px[i].Pass = (*to.Proxies)[j].Pass
+					}
+				}
+			}
+			to.Proxies = &px
+		}
 		to.ProvidersKeys = backup.Flag(keys || (to.ProvidersKeys != nil && *to.ProvidersKeys))
 		to.Keys = to.Keys || keys // the whole-bundle bit follows it, for a magpie that reads no per-part ones: it keeps the server's keys on its own upload then
 	case "settings":

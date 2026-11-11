@@ -1918,6 +1918,10 @@ func forHost(choice string) string {
 		if u, err := netproxy.Parse(c); err == nil {
 			return netproxy.ForBun(u.String())
 		}
+		if settings.IsProxyRef(c) {
+			// a saved proxy that is gone: the request goes nowhere, not direct
+			return netproxy.DeadProxy
+		}
 		return c
 	}
 }

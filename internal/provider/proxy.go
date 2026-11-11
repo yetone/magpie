@@ -210,3 +210,64 @@ func checkAccountProxies(m map[string]string) error {
 	}
 	return nil
 }
+
+// ProxyUse is a place a saved proxy is chosen: a provider (Account empty),
+// or an account or key of one.
+type ProxyUse struct {
+	Provider string `json:"provider"`
+	Account  string `json:"account,omitempty"`
+}
+
+// ProxyUses lists where the saved proxy id is chosen among the providers, so
+// that deleting it can say what would lose it. Settings' own two (global,
+// plugin downloads) are the caller's.
+func ProxyUses(id string) []ProxyUse {
+	ref := settings.ProxyRef(id)
+	var out []ProxyUse
+	for _, p := range storedFile().Providers {
+		name := p.Name
+		if name == "" {
+			name = p.ID
+		}
+		if strings.TrimSpace(p.Proxy) == ref {
+			out = append(out, ProxyUse{Provider: name})
+		}
+		accts := make([]string, 0, len(p.AccountProxies))
+		for a, v := range p.AccountProxies {
+			if strings.TrimSpace(v) == ref {
+				accts = append(accts, a)
+			}
+		}
+		slices.Sort(accts)
+		for _, a := range accts {
+			out = append(out, ProxyUse{Provider: name, Account: a})
+		}
+	}
+	return out
+}
+
+// ProxyGone is the name of a saved proxy p chooses (its own, or an
+// account's) that isn't on this computer, "" when none is missing: what a
+// sync from a magpie that didn't bring the proxy list leaves.
+func ProxyGone(p Provider) string {
+	gone := func(v string) string {
+		v = strings.TrimSpace(v)
+		if !settings.IsProxyRef(v) {
+			return ""
+		}
+		if _, ok := settings.ResolveProxy(v); ok {
+			return ""
+		}
+		return settings.ProxyLabel(settings.ProxyID(v))
+	}
+	if n := gone(p.Proxy); n != "" {
+		return n
+	}
+	keys := slices.Sorted(maps.Keys(p.AccountProxies))
+	for _, k := range keys {
+		if n := gone(p.AccountProxies[k]); n != "" {
+			return n
+		}
+	}
+	return ""
+}
