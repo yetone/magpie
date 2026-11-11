@@ -100,6 +100,8 @@ var featured = []MarketServer{
 	searchServer(),
 	visionServer(),
 	memoryServer(),
+	evermeServer(),
+	nowledgeServer(),
 	remoteServer("context7", "Context7", "Upstash", gh("upstash"), "https://mcp.context7.com/mcp",
 		"Up-to-date documentation and code examples for any library, straight into the prompt.", false,
 		Input{Key: "CONTEXT7_API_KEY", Where: "header", Label: "API key", Description: "Optional — raises the rate limit. From context7.com/dashboard", Secret: true, format: "{}"}),
@@ -250,6 +252,33 @@ func memoryServer() MarketServer {
 		"Memory shared by every agent: your preferences, rules and what each project needs, kept in Magpie. Agents search it before asking again, and save what you ask them to remember.", magpieCommand, []string{"mcp", "memory"})
 }
 
+// evermeServer is EverMe's memory (EverMind-AI/EverMe, @everme/memory-mcp,
+// the generic stdio server its README gives for any MCP host): mem_search,
+// mem_context, mem_save_fact and mem_save_turn against the EverMe backend.
+// The agent id and token are what `evercli auth login` and the EverMe
+// console issue (evt_...); the managed backend's address is the README's
+// own and EVERME_API_BASE can be edited for a self-hosted one (OipsAnthony
+// on X).
+func evermeServer() MarketServer {
+	m := localServer("everme-memory", "EverMe Memory", "EverMind", gh("EverMind-AI"), "https://github.com/EverMind-AI/EverMe",
+		"Cross-device, cross-agent memory from EverMe, as a second memory beside Magpie Memory: agents search it and save facts to it.", "npx", []string{"-y", "@everme/memory-mcp"},
+		Input{Key: "EVERME_AGENT_ID", Where: "env", Label: "Agent ID", Description: "agt_… , from EverMe (evercli auth login)", Placeholder: "agt_…", Required: true},
+		Input{Key: "EVERME_AGENT_TOKEN", Where: "env", Label: "Agent token", Description: "evt_… , never an emk_ account key", Placeholder: "evt_…", Secret: true, Required: true})
+	m.server.Env = map[string]string{"EVERME_API_BASE": "https://api.everme.evermind.ai"}
+	return m
+}
+
+// nowledgeServer is Nowledge Mem's own MCP endpoint, the Streamable HTTP
+// one Mem serves at 127.0.0.1:14242/mcp on the computer it runs on
+// (mem.nowledge.co/docs/integrations). A Mem reached through Access
+// Anywhere takes its API key in the Authorization header and its tunnel's
+// address, both edited after adding (OipsAnthony on X).
+func nowledgeServer() MarketServer {
+	return remoteServer("nowledge-mem", "Nowledge Mem", "Nowledge", gh("nowledge-co"), "http://127.0.0.1:14242/mcp",
+		"Nowledge Mem's graph memory, as a second memory beside Magpie Memory. Mem must be running on this computer; for a remote Mem, edit the address and add its API key.", false,
+		Input{Key: "Authorization", Where: "header", Label: "API key", Description: "Optional — only for a Mem reached over Access Anywhere", Placeholder: "nmem_…", Secret: true, format: "Bearer {}"})
+}
+
 // selfCommand is the server's command and env for this magpie: its binary
 // by full path, and the gateway's address when it isn't the default one.
 func selfCommand(s *Server) {
@@ -285,6 +314,7 @@ var homepages = map[string]string{
 	"cloudflare-docs": "https://github.com/cloudflare/mcp-server-cloudflare",
 	"microsoft-learn": "https://github.com/MicrosoftDocs/mcp",
 	"huggingface":     "https://huggingface.co/settings/mcp",
+	"nowledge-mem":    "https://mem.nowledge.co/docs/integrations",
 }
 
 func init() {

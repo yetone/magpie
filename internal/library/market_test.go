@@ -500,3 +500,26 @@ func TestMemoryServerInDiscover(t *testing.T) {
 		t.Fatalf("keys %q and %q", serverKey(&other), serverKey(s))
 	}
 }
+
+// EverMe and Nowledge Mem are offered as memory sources, each added in one
+// step with what its own docs give (OipsAnthony on X).
+func TestThirdPartyMemoryServers(t *testing.T) {
+	sandbox(t)
+	ok(t)(InstallServer("nowledge-mem", nil, []string{"claude"}))
+	if _, err := InstallServer("everme-memory", nil, []string{"claude"}); err == nil {
+		t.Fatal("EverMe added without its token")
+	}
+	ok(t)(InstallServer("everme-memory", map[string]string{"EVERME_AGENT_ID": "agt_1", "EVERME_AGENT_TOKEN": "evt_x"}, []string{"claude"}))
+	l, err := load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, e := l.server("nowledge-mem"), l.server("everme-memory")
+	if n == nil || n.Transport != "http" || n.URL != "http://127.0.0.1:14242/mcp" || len(n.Headers) != 0 {
+		t.Fatalf("nowledge %+v", n)
+	}
+	if e == nil || e.Command != "npx" || strings.Join(e.Args, " ") != "-y @everme/memory-mcp" ||
+		e.Env["EVERME_API_BASE"] != "https://api.everme.evermind.ai" || e.Env["EVERME_AGENT_TOKEN"] != "evt_x" || e.Env["EVERME_AGENT_ID"] != "agt_1" {
+		t.Fatalf("everme %+v", e)
+	}
+}
