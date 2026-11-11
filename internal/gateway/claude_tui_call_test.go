@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http/httptest"
@@ -64,6 +65,9 @@ func (c *tuiCalls) write(lines ...string) {
 func (c *tuiCalls) call(id, args string) {
 	done := make(chan struct{})
 	c.called[id] = done
+	// a call the test never answers ends with the test, not the package
+	ctx, cancel := context.WithCancel(context.Background())
+	c.t.Cleanup(func() { cancel(); <-done })
 	go func() {
 		defer close(done)
 		body := `{"tool_call_id":"` + id + `","name":"Read"`
@@ -71,7 +75,7 @@ func (c *tuiCalls) call(id, args string) {
 			body += `,"arguments":` + args
 		}
 		body += `}`
-		r := httptest.NewRequest("POST", "/", strings.NewReader(body))
+		r := httptest.NewRequestWithContext(ctx, "POST", "/", strings.NewReader(body))
 		r.SetPathValue("token", "run")
 		c.bridge.mcpCall(httptest.NewRecorder(), r)
 	}()
