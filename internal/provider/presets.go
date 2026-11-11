@@ -724,6 +724,14 @@ var presets = []PresetDef{
 		Chat: "http://localhost:8000/v1", Responses: "http://localhost:8000/v1", Anthropic: "http://localhost:8000",
 		Decide: "http://localhost:8000/v1",
 		Note:   "local server, port 8000 by default", Website: "https://omlx.ai"},
+	// GPUStack (github.com/gpustack/gpustack), a self-hosted model server:
+	// its OpenAI-compatible API is at <server>/v1 (/v1-openai is the legacy
+	// path), a Bearer API key from its UI, and GET /v1/models lists the
+	// ready models the key may use. The server is the user's own: port 80 by
+	// default, on this machine or another.
+	{ID: GPUStackPreset, Name: "GPUStack", Icon: "gpustack", Kind: KindLocal,
+		Chat: "http://localhost/v1",
+		Note: "your own server and API key", Website: "https://github.com/gpustack/gpustack"},
 	// its decision models (Clef, Clef-Flash, Kev, Laya, D1), served at
 	// /v1/systemone, are marked by capabilities in /v1/models (mlxserve_decide.go)
 	{ID: MLXServePreset, Name: "MLX-Serve", Icon: "mlx-serve", Kind: KindLocal, NoKey: true,

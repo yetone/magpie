@@ -12,6 +12,9 @@ import (
 // MLXServePreset is the MLX-Serve preset's id.
 const MLXServePreset = "mlx-serve"
 
+// GPUStackPreset is GPUStack's preset id.
+const GPUStackPreset = "gpustack"
+
 // MLX-Serve (github.com/ddalcu/mlx-serve) serves decision models —
 // Clef, Clef-Flash, Kev, Laya, D1 — at POST /v1/systemone (and /v1/decisions),
 // System One's questions and answers. Its /v1/models lists them alongside
