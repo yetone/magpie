@@ -41,7 +41,7 @@ var Vars = []string{
 	// Antigravity's gateway, which wins over its settings.json
 	"AGY_LLM_GATEWAY_URL",
 	// Cline: its folder, its data, its sessions and its MCP settings file
-	"CLINE_DIR", "CLINE_DATA_DIR", "CLINE_SESSION_DATA_DIR", "CLINE_MCP_SETTINGS_PATH",
+	"CLINE_DIR", "CLINE_DATA_DIR", "CLINE_SESSION_DATA_DIR", "CLINE_MCP_SETTINGS_PATH", "CLINE_GLOBAL_SETTINGS_PATH",
 	// Pi and its forks (OmO, Senpi), whose profile and config are apart
 	"PI_CODING_AGENT_DIR", "PI_CODING_AGENT_SESSION_DIR", "PI_CONFIG_DIR", "PI_PROFILE",
 	"OMO_CODING_AGENT_DIR", "SENPI_CODING_AGENT_DIR",

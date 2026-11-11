@@ -20,6 +20,25 @@ package agent
 //     which is no telemetry.
 //   - Gemini CLI and Qwen Code: privacy.usageStatisticsEnabled = false in
 //     settings.json (settingsSchema.ts of each, default true).
+//   - Crush: options.disable_metrics = true in crush.json (Options in
+//     internal/config/config.go, read from its binary; crush also takes
+//     DO_NOT_TRACK).
+//   - Kimi Code: telemetry = false at the top of config.toml (app.py:
+//     telemetry_disabled = not config.telemetry or KIMI_DISABLE_TELEMETRY).
+//   - Goose: GOOSE_TELEMETRY_ENABLED: false in config.yaml (the key its
+//     `goose configure` telemetry choice writes).
+//   - Pi: enableInstallTelemetry = false in settings.json (docs/settings.md:
+//     anonymous install/update reporting, default true; its env
+//     PI_TELEMETRY wins over the file).
+//   - Cline CLI: telemetryOptOut = true in data/settings/global-settings.json
+//     (the setting its core reads for every telemetry event; default
+//     false).
+//
+// Antigravity, Droid, OpenCode, Cursor CLI, Hermes and omp have none to
+// write: Antigravity's agy keeps it as the Google account's server-side
+// setting (its EnableTelemetry field is json:"-"), Droid's are set by an
+// organisation, OpenCode's and omp's OpenTelemetry export is opt-in,
+// Cursor's privacy mode is the account's, and Hermes sends none.
 //
 // None is written unless the user turns it off here. Off writes each key
 // the file doesn't have and remembers it in the stash; a key the user has
@@ -33,13 +52,16 @@ package agent
 // each look, which would start a stopped distro (#3896).
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"strings"
 
+	toml "github.com/pelletier/go-toml/v2"
 	"github.com/tidwall/jsonc"
+	"gopkg.in/yaml.v3"
 
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/filememo"
@@ -94,6 +116,7 @@ type telemetryFile struct {
 }
 
 func isFalse(v any) bool { return v == false }
+func isTrue(v any) bool  { return v == true }
 
 // anyValue: an environment variable that is set, to anything but empty
 func anyValue(v any) bool {
@@ -263,6 +286,58 @@ func jsonTelemetryFile(path string) telemetryFile {
 	}
 }
 
+// topTelemetryFile is a file whose keys sit at the top level, TOML or
+// YAML (the Kimi and Goose switches): parse reads it strictly, so a file
+// that doesn't parse is unknown and nothing is written to it.
+func topTelemetryFile(path, tag string, parse func([]byte, *map[string]any) error,
+	set func(path string, k telemetryKey) error, del func(path, name string) error) telemetryFile {
+	return telemetryFile{
+		path: path,
+		get: func(k telemetryKey) (any, bool, error) {
+			m, err := filememo.ReadNow(tag, path, func(raw []byte) (map[string]any, error) {
+				m := map[string]any{}
+				if len(bytes.TrimSpace(edit.TrimBOM(raw))) == 0 {
+					return m, nil
+				}
+				if err := parse(edit.TrimBOM(raw), &m); err != nil {
+					return nil, err
+				}
+				return m, nil
+			})
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil, false, nil
+			}
+			if err != nil {
+				return nil, false, fmt.Errorf("%s: %w", path, err)
+			}
+			v, has := m[k.name]
+			return v, has, nil
+		},
+		set: func(k telemetryKey) error { return set(path, k) },
+		del: func(k telemetryKey) error { return del(path, k.name) },
+	}
+}
+
+// tomlTopTelemetryFile is a TOML config's top-level keys.
+func tomlTopTelemetryFile(path string) telemetryFile {
+	return topTelemetryFile(path, "telemetry toml",
+		func(b []byte, m *map[string]any) error { return toml.Unmarshal(b, m) },
+		func(path string, k telemetryKey) error {
+			return edit.SetTOMLTop(path, edit.KV{Path: k.name, Value: k.value})
+		},
+		func(path, name string) error { return edit.DelTOMLTop(path, name) })
+}
+
+// yamlTopTelemetryFile is a YAML config's top-level keys.
+func yamlTopTelemetryFile(path string) telemetryFile {
+	return topTelemetryFile(path, "telemetry yaml",
+		func(b []byte, m *map[string]any) error { return yaml.Unmarshal(b, m) },
+		func(path string, k telemetryKey) error {
+			return edit.SetYAMLTop(path, edit.KV{Path: k.name, Value: k.value})
+		},
+		func(path, name string) error { return edit.DelYAMLTop(path, name) })
+}
+
 // codexTelemetry is Codex's: [analytics] enabled = false in config.toml.
 func codexTelemetry(at place, path string) *Telemetry {
 	f := telemetryFile{
@@ -322,6 +397,36 @@ func claudeTelemetry(at place, path string) *Telemetry {
 func usageStatsTelemetry(at place, path, id string) *Telemetry {
 	return telemetrySwitch(at, jsonTelemetryFile(path), at.key(id+".telemetry"),
 		telemetryKey{name: "privacy.usageStatisticsEnabled", value: false, off: isFalse})
+}
+
+// crushTelemetry is Crush's: options.disable_metrics in crush.json.
+func crushTelemetry(at place, path string) *Telemetry {
+	return telemetrySwitch(at, jsonTelemetryFile(path), at.key("crush.telemetry"),
+		telemetryKey{name: "options.disable_metrics", value: true, off: isTrue})
+}
+
+// kimiTelemetry is Kimi Code's: telemetry in config.toml.
+func kimiTelemetry(at place, path string) *Telemetry {
+	return telemetrySwitch(at, tomlTopTelemetryFile(path), at.key("kimi.telemetry"),
+		telemetryKey{name: "telemetry", value: false, off: isFalse})
+}
+
+// gooseTelemetry is Goose's: GOOSE_TELEMETRY_ENABLED in config.yaml.
+func gooseTelemetry(at place, path string) *Telemetry {
+	return telemetrySwitch(at, yamlTopTelemetryFile(path), at.key("goose.telemetry"),
+		telemetryKey{name: "GOOSE_TELEMETRY_ENABLED", value: false, off: isFalse})
+}
+
+// piTelemetry is Pi's: its install and update reporting in settings.json.
+func piTelemetry(at place, path string) *Telemetry {
+	return telemetrySwitch(at, jsonTelemetryFile(path), at.key("pi.telemetry"),
+		telemetryKey{name: "enableInstallTelemetry", value: false, off: isFalse})
+}
+
+// clineTelemetry is Cline CLI's: telemetryOptOut in its global settings.
+func clineTelemetry(at place, path string) *Telemetry {
+	return telemetrySwitch(at, jsonTelemetryFile(path), at.key("cline.telemetry"),
+		telemetryKey{name: "telemetryOptOut", value: true, off: isTrue})
 }
 
 // ErrNoTelemetry: the agent has no telemetry switch magpie knows.

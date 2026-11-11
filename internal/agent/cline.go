@@ -161,8 +161,14 @@ func clineIn(at place) *Agent {
 		}
 		return "cline"
 	}
+	// the setting its CLI reads for every telemetry event; its env path wins
+	settingsPath := at.getenv("CLINE_GLOBAL_SETTINGS_PATH")
+	if settingsPath == "" {
+		settingsPath = filepath.Join(data, "settings", "global-settings.json")
+	}
 	return &Agent{
-		ID: "cline", Name: "Cline", Icon: "cline", Aliases: []string{"cline-cli"}, Spelled: prefixed,
+		Telemetry: clineTelemetry(at, settingsPath),
+		ID:        "cline", Name: "Cline", Icon: "cline", Aliases: []string{"cline-cli"}, Spelled: prefixed,
 		UA:  []string{"cline"},
 		Bin: "cline", Dir: dir, Path: path,
 		Sync: func() error {

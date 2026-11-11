@@ -1526,8 +1526,13 @@ func piLikeKeyed(at place, id, name, dir string, key func() string) *Agent {
 	before := beforeMagpie{at.key(id + ".before.absent"), []string{path, modelsPath}}
 	// the entries of enabledModels a sync took out (scope_gone.go)
 	gone := at.key(id + ".scope.gone")
+	var telemetry *Telemetry
+	if id == "pi" {
+		telemetry = piTelemetry(at, path)
+	}
 	return &Agent{
-		ID: id, Name: name, Icon: id, Bin: id, Dir: dir, Path: path, Spelled: prefixed,
+		Telemetry: telemetry,
+		ID:        id, Name: name, Icon: id, Bin: id, Dir: dir, Path: path, Spelled: prefixed,
 		Restore: before.restore,
 		Check: func() string {
 			if p, _ := get("defaultProvider"); p != magpieID {
@@ -1663,7 +1668,8 @@ func gooseIn(at place, cfg string) *Agent {
 		keyEnv = func(string) string { return "" }
 	}
 	return &Agent{
-		ID: "goose", Name: "Goose", Icon: "goose", Bin: "goose", Dir: filepath.Dir(path), Path: path, Spelled: prefixed, NoNames: true,
+		Telemetry: gooseTelemetry(at, path),
+		ID:        "goose", Name: "Goose", Icon: "goose", Bin: "goose", Dir: filepath.Dir(path), Path: path, Spelled: prefixed, NoNames: true,
 		UA: []string{"goose"},
 		Check: func() string {
 			if p, _ := gooseActive(path); p != gooseProviderID {
@@ -2052,7 +2058,8 @@ func crushAt(at place, path, data string) *Agent {
 		}
 	}
 	return &Agent{
-		ID: "crush", Name: "Crush", Icon: "crush", Bin: "crush", Dir: filepath.Dir(path), Path: path, Spelled: prefixed,
+		Telemetry: crushTelemetry(at, path),
+		ID:        "crush", Name: "Crush", Icon: "crush", Bin: "crush", Dir: filepath.Dir(path), Path: path, Spelled: prefixed,
 		UA: []string{"crush"},
 		Check: func() string {
 			large, _ := pick("models.large.provider")
