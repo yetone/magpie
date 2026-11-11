@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // holdApp puts a macOS app bundle, its Info.plist saying id, in the sandbox
@@ -24,17 +26,20 @@ func holdApp(t *testing.T, h, name, id string) {
 // listed at all.
 func TestGoneAgentListedToTakeOut(t *testing.T) {
 	h := sandbox(t)
-	write(t, filepath.Join(h, ".hermes/config.yaml"), "")
+	// Hermes's own home: ~/.hermes, or %LOCALAPPDATA%\hermes on Windows
+	t.Setenv("LOCALAPPDATA", filepath.Join(h, "AppData", "Local"))
+	hh := appdir.HermesHome()
+	write(t, filepath.Join(hh, "config.yaml"), "")
 	holdCLI(t, h, "hermes")
 	src := filepath.Join(h, "src/skills")
 	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs")
 	skill(t, filepath.Join(src, "csv"), "csv", "Read CSVs")
 	ok(t)(InstallSkills(src, []string{"pdf", "csv"}, []string{"claude", "hermes"}))
-	pdf, csv := filepath.Join(h, ".hermes/skills/pdf"), filepath.Join(h, ".hermes/skills/csv")
+	pdf, csv := filepath.Join(hh, "skills/pdf"), filepath.Join(hh, "skills/csv")
 	if !ours(pdf, "pdf") || !ours(csv, "csv") {
 		t.Fatal("hermes wasn't given the skills")
 	}
-	cfg := filepath.Join(h, ".hermes/config.yaml")
+	cfg := filepath.Join(hh, "config.yaml")
 	ok(t)(SaveServer("", Server{Name: "fs", Transport: "stdio", Command: "npx", Args: []string{"-y", "@mcp/fs"}, Agents: []string{"claude", "hermes"}}))
 	if !strings.Contains(read(t, cfg), "@mcp/fs") {
 		t.Fatalf("hermes wasn't given the server:\n%s", read(t, cfg))
