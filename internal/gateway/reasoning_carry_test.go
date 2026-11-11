@@ -3,6 +3,7 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -45,6 +47,7 @@ func grokReasoningItem(t *testing.T, stream []byte) map[string]any {
 type grokCallUp struct {
 	mu    sync.Mutex
 	sent  []map[string]any
+	seen  []string // what each request was and when, for a failure (#6154)
 	reply []byte
 }
 
@@ -54,6 +57,7 @@ func (u *grokCallUp) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	json.Unmarshal(b, &q)
 	u.mu.Lock()
 	u.sent = append(u.sent, q)
+	u.seen = append(u.seen, fmt.Sprintf("%s %s %dB tool-output=%v %s", r.Method, r.URL.Path, len(b), bytes.Contains(b, []byte(`"function_call_output"`)), time.Now().Format("15:04:05.000")))
 	u.mu.Unlock()
 	w.Header().Set("Content-Type", "text/event-stream")
 	if !bytes.Contains(b, []byte(`"function_call_output"`)) {
@@ -166,7 +170,7 @@ func TestGrokReasoningGoesBackThroughOtherAPIs(t *testing.T) {
 	for _, from := range []provider.Protocol{provider.Anthropic, provider.Chat} {
 		for _, stream := range []bool{true, false} {
 			up.mu.Lock()
-			up.sent = nil
+			up.sent, up.seen = nil, nil
 			up.mu.Unlock()
 			ask := func(id string) []byte {
 				rec := httptest.NewRecorder()
@@ -182,10 +186,10 @@ func TestGrokReasoningGoesBackThroughOtherAPIs(t *testing.T) {
 			}
 			ask(id)
 			up.mu.Lock()
-			sent := up.sent
+			sent, seen := up.sent, up.seen
 			up.mu.Unlock()
 			if len(sent) != 2 {
-				t.Fatalf("%s stream=%v: Grok was asked %d times", from, stream, len(sent))
+				t.Fatalf("%s stream=%v: Grok was asked %d times:\n%s", from, stream, len(sent), strings.Join(seen, "\n"))
 			}
 			inc, _ := json.Marshal(sent[0]["include"])
 			if !strings.Contains(string(inc), `"reasoning.encrypted_content"`) {
