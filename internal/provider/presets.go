@@ -412,8 +412,10 @@ var presets = []PresetDef{
 	// token-plan.maas.qianwenaiapi.com, and on Alibaba Cloud Bailian
 	// (bailian.console.aliyun.com) at token-plan.cn-beijing.maas.aliyuncs.com
 	// (#1506). The models given are the plans' text models as their
-	// overviews list them, for when the host gives no list. Neither has an
-	// API for the plan's credits: its console's subscription page shows them.
+	// overviews list them, for when the host gives no list. Only the
+	// two at aliyuncs.com have a way to read the plan's credits, with the
+	// account's AccessKey (alibaba_usage.go); the Qwen AI platform's console
+	// takes a browser sign-in (#5829).
 	{ID: "qwen-token-plan", Name: "Qwen Token Plan", Short: "Qwen Plan", Icon: "qwen-color", Kind: KindVendor,
 		Chat: "https://token-plan.maas.qianwenaiapi.com/compatible-mode/v1", Anthropic: "https://token-plan.maas.qianwenaiapi.com/apps/anthropic",
 		Note:    "Qwen AI platform · subscription",
@@ -428,6 +430,14 @@ var presets = []PresetDef{
 		Decide:  "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
 		Note:    "Alibaba Cloud Bailian · subscription",
 		Website: "https://help.aliyun.com/zh/model-studio/token-plan-overview", KeysURL: "https://bailian.console.aliyun.com/cn-beijing/subscription/token-plan/personal",
+		Models: alibabaPlanModels},
+	// Alibaba Cloud's international Token Plan, the same plan at the
+	// Singapore host (sk-sp- keys, #2940). Its quota is read like Bailian's,
+	// with the account's AccessKey (alibaba_usage.go).
+	{ID: "alibaba-token-plan", Name: "Alibaba Cloud Token Plan", Short: "Alibaba Plan", Icon: "bailian-color", Kind: KindVendor,
+		Chat: "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1", Anthropic: "https://token-plan.ap-southeast-1.maas.aliyuncs.com/apps/anthropic",
+		Note:    "Alibaba Cloud Model Studio · subscription",
+		Website: "https://www.alibabacloud.com/help/en/model-studio/token-plan-personal-quick-start", KeysURL: "https://modelstudio.console.alibabacloud.com/ap-southeast-1/?tab=globalset#/efm/token_plan",
 		Models: alibabaPlanModels},
 	// Qwen Cloud (qwencloud.com) is Alibaba's international Qwen platform,
 	// on keys of its own made at home.qwencloud.com, at

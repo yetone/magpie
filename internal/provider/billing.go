@@ -25,7 +25,7 @@ func BillingOK(s string) bool { return s == "" || s == BillingPlan || s == Billi
 // you go endpoints of their own to tell them apart by.
 var planPresets = map[string]bool{
 	"kimi-code": true, "kimi-code-cn": true,
-	"qwen-token-plan": true, "bailian-token-plan": true, "qwencloud-token-plan": true,
+	"qwen-token-plan": true, "bailian-token-plan": true, "alibaba-token-plan": true, "qwencloud-token-plan": true,
 	"opencode-go": true, "clinepass": true,
 }
 

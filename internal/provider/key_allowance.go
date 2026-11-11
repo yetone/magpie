@@ -72,8 +72,9 @@ func readsKeyWindows(p Provider) bool {
 
 // accountPlanOf is which plan p's key is on whose windows the key's
 // account tells, not the key: Volcengine Ark's Coding and Agent Plans and
-// Tencent Cloud's Token Plan Enterprise, read with the account's access
-// key (volcengine_usage.go, tencent_usage.go), and StepFun's Step Plan,
+// Tencent Cloud's Token Plan Enterprise and Alibaba Cloud's Token Plan, read
+// with the account's access key (volcengine_usage.go, tencent_usage.go,
+// alibaba_usage.go), and StepFun's Step Plan,
 // read with magpie's sign-in to its platform (stepfun_plan.go). The
 // Usage page had their windows while routing had none, and the Routing
 // page said "one key" of a plan with them (chen on Discord). "" for any
@@ -89,6 +90,9 @@ func accountPlanOf(p Provider) string {
 	}
 	if _, ok := tencentPlanRegion(p); ok && keyed {
 		return "tencent"
+	}
+	if _, ok := aliPlanSite(p); ok && keyed {
+		return "alibaba"
 	}
 	if StepFunSite(p) != "" {
 		return "stepfun"
@@ -112,6 +116,9 @@ func accountPlanWindows(ctx context.Context, q Provider) (keyReading, error) {
 			return keyReading{}, nil
 		}
 		c = cs[0]
+	case "alibaba":
+		site, _ := aliPlanSite(q)
+		c = aliPlanQuota(q.Via(ctx), q, site)
 	case "stepfun":
 		if !StepFunSignedIn(q.ID) {
 			return keyReading{}, nil
@@ -279,6 +286,9 @@ func keyCardTag(p Provider) string {
 			return keyTag("volc "+action, p.AccessKeyID)
 		case "tencent":
 			return keyTag("tencent", p.AccessKeyID)
+		case "alibaba":
+			site, _ := aliPlanSite(p)
+			return keyTag("alibaba "+site.region, p.AccessKeyID)
 		case "stepfun":
 			return keyTag("stepfun", p.ID)
 		}

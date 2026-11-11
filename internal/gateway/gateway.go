@@ -9634,7 +9634,7 @@ func render(proto provider.Protocol, res Result, r *Request) []byte {
 // custom provider.
 func dashScope(p provider.Provider) bool {
 	switch p.VendorPreset() {
-	case "qwen", "qwen-cn", "qwen-token-plan", "bailian-token-plan", "qwencloud", "qwencloud-token-plan":
+	case "qwen", "qwen-cn", "qwen-token-plan", "bailian-token-plan", "alibaba-token-plan", "qwencloud", "qwencloud-token-plan":
 		return true
 	}
 	h := p.VendorHost()

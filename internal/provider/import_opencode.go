@@ -49,7 +49,7 @@ var openCodePresets = map[string]string{
 	"kimi-code-plan-cn": "kimi-code-cn", "kimi-code-plan-global": "kimi-code",
 	"stepfun-step-plan": "stepfun-cn", "stepfun-ai-step-plan": "stepfun", "longcat": "longcat",
 	"volcengine-coding-plan": "volcengine",
-	"alibaba-token-plan-cn":  "bailian-token-plan", "tencent-token-plan": "tencent-cloud",
+	"alibaba-token-plan-cn":  "bailian-token-plan", "alibaba-token-plan": "alibaba-token-plan", "tencent-token-plan": "tencent-cloud",
 }
 
 func readOpenCodeAuth(path string) ([]AppImport, error) {
