@@ -12215,7 +12215,7 @@ function routingOfDraft(p) {
   if (draft?.sink !== undefined && draft.sink !== !!p.sink) out.sink = draft.sink;
   return out;
 }
-// signInMovesLine: how magpie moves the agent's own sign-in (provider.SignInMovesOf)
+// how magpie moves the agent's sign-in (provider.SignInMovesOf)
 function signInMovesLine(p, agent) {
   const m = p.signInMoves;
   if (!m) return "";
@@ -13556,7 +13556,7 @@ function renderAccounts(a, p) {
     if (amBox) row.append(amBox);
     list.append(row);
   }
-  // moving the agent's sign-in is a switch (the owner, 11-11); off: the account it stays on (#524)
+  // the owner, 11-11; off: the account kept (#524)
   if ((a.agent === "codex" || a.agent === "claude") && several && p) {
     const box = el("div", "auto-switch"), on = !!p.switchOnly || !p.keepLogin;
     const head = el("label", "as-head");
@@ -13568,6 +13568,7 @@ function renderAccounts(a, p) {
     }
     head.append(name, sw);
     box.append(head);
+    import("./autoswitchtip.js").then(() => autoSwitchTip(box, head, p), () => {});
     let keepAs = kept;
     const post = (keepLogin) => {
       const body = { id: p.id, keepLogin };

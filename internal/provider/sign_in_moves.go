@@ -20,6 +20,10 @@ type SignInMoves struct {
 	// Back: once the account moved off has room again, the agent is
 	// signed back in to it (returnsToFirst). Only "moves".
 	Back bool `json:"back,omitempty"`
+	// Routed: kept, but Claude Code goes through the gateway, so turning
+	// the switch on moves requests, not its sign-in (mode "gateway"
+	// then). Only "kept".
+	Routed bool `json:"routed,omitempty"`
 }
 
 // SignInMovesOf is SignInMoves for agent; nil for one whose sign-in magpie
@@ -32,10 +36,11 @@ func SignInMovesOf(agent string) *SignInMoves {
 		return &SignInMoves{Mode: "off"}
 	}
 	share, keep := loginSwitching(agent)
+	routed := agent == "claude" && ClaudeThroughMagpie() && !SwitchOnly(agent)
 	switch {
 	case keep:
-		return &SignInMoves{Mode: "kept"}
-	case agent == "claude" && ClaudeThroughMagpie() && !SwitchOnly(agent):
+		return &SignInMoves{Mode: "kept", Routed: routed}
+	case routed:
 		return &SignInMoves{Mode: "gateway"}
 	}
 	return &SignInMoves{Mode: "moves", Share: share, Back: returnsToFirst(agent)}

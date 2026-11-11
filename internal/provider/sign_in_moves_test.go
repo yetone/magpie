@@ -77,14 +77,14 @@ func TestSignInMovesSaysWhatSwitchDoes(t *testing.T) {
 		routing            string
 		mode               string
 		share              float64
-		back               bool
+		back, kRouted      bool
 	}{
 		{name: "not routed", mode: "moves", share: SpentShare},
 		{name: "not routed, in order", routing: Ordered, mode: "moves", share: 100, back: true},
 		{name: "routed", routed: true, mode: "gateway"},
 		{name: "routed, switch only", routed: true, only: true, mode: "moves", share: SpentShare},
 		{name: "kept on the first", keep: true, mode: "kept"},
-		{name: "kept, routed", keep: true, routed: true, mode: "kept"},
+		{name: "kept, routed", keep: true, routed: true, mode: "kept", kRouted: true},
 	}
 	for _, c := range cases {
 		routed = c.routed
@@ -102,7 +102,7 @@ func TestSignInMovesSaysWhatSwitchDoes(t *testing.T) {
 		}
 		setLoginReturn("claude", loginReturn{})
 		m := SignInMovesOf("claude")
-		if m == nil || m.Mode != c.mode || m.Share != c.share || m.Back != c.back {
+		if m == nil || m.Mode != c.mode || m.Share != c.share || m.Back != c.back || m.Routed != c.kRouted {
 			t.Fatalf("%s: says %+v, want mode %s share %g back %v", c.name, m, c.mode, c.share, c.back)
 		}
 		to := switched()

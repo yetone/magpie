@@ -6,7 +6,10 @@
 // the server tells it (signInMoves): moved on at 98% or once used up, back
 // to the first or not, or left alone while its requests go through the
 // gateway. Off, the account it stays on. Switch-only holds it on. Nothing
-// with one account. English and Chinese, Chromium and WebKit.
+// with one account. Beside the switch, a mark whose hover card says how
+// the switch works and why it is Claude Code's own use of the account
+// ("提示这个原理是啥，以及它为什么不会让你的账号被封禁"), only where the
+// sign-in moves. English and Chinese, Chromium and WebKit.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -64,6 +67,11 @@ const words = {
     name: "Switch Claude Code's account automatically",
     keep: "Keep Claude Code signed in to",
     gateway: "Claude Code's requests go through magpie, which sends each one to an account with room; its own sign-in stays where you put it.",
+    tip: [
+      "magpie writes the next account's sign-in where Claude Code keeps its own, as /login does, and reads what is left by running Claude Code's own /usage. Sessions already open keep their account until they are restarted.",
+      "Claude Code itself still sends every request, straight to Anthropic and unchanged; magpie sends none of them. An account with its own proxy keeps it.",
+      "So it is the same as switching accounts by hand. Use only accounts that are yours: sharing one is against Anthropic's terms.",
+    ],
   },
   zh: {
     at98: "Claude Code 登录的账号用到 98% 时，magpie 把它登录到下一个已勾选且有额度的账号。之后一直用这个账号，直到它的额度也快用完。",
@@ -71,6 +79,11 @@ const words = {
     name: "自动切换 Claude Code 的账号",
     keep: "Claude Code 始终登录",
     gateway: "Claude Code 的请求经过 magpie，每个请求都发给有额度的账号；Claude Code 自己的登录保持你选的账号不变。",
+    tip: [
+      "magpie 把下一个账号的登录写到 Claude Code 自己保存登录的地方，和 /login 一样；剩余额度通过运行 Claude Code 自己的 /usage 读取。已经打开的会话继续用原来的账号，直到重新启动。",
+      "每个请求仍由 Claude Code 本身发出，直接发往 Anthropic，原样不改；magpie 一个都不发。设了自己代理的账号继续走它的代理。",
+      "所以这和你手动切换账号是一样的。请只用你自己的账号：共享账号违反 Anthropic 的条款。",
+    ],
   },
 };
 
@@ -144,6 +157,48 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(posts.length, 2, "one post a click");
       assert.equal(await page.evaluate(() => document.scrollingElement.scrollTop), top, "the page doesn't move");
       assert.deepEqual(errors, []);
+    });
+
+    test(`${engine} ${lang}: the mark beside the switch shows how it works on hover, and only where the sign-in moves`, async (t) => {
+      for (const [opts, shown] of [
+        [{}, true],
+        [{ signInMoves: { mode: "kept" }, keepLogin: true }, true],
+        [{ signInMoves: { mode: "kept", routed: true }, keepLogin: true }, false],
+        [{ signInMoves: { mode: "gateway" } }, false],
+      ]) {
+        const { page, errors, posts } = await open(t, opts);
+        const mark = page.locator(".editor .accts .auto-switch .as-head .as-tip");
+        if (!shown) {
+          // the module is in by the time a shown one's mark is drawn
+          await page.waitForFunction(() => !!window.autoSwitchTip);
+          assert.equal(await mark.count(), 0, JSON.stringify(opts));
+          assert.equal(await page.locator(".editor .accts .auto-switch > .hint").count(), 0);
+          assert.deepEqual(errors, []);
+          await page.close();
+          continue;
+        }
+        await mark.waitFor();
+        // beside the switch, on its line
+        const [m, s] = await Promise.all([mark.boundingBox(), sw(page).boundingBox()]);
+        assert.ok(s.x - (m.x + m.width) >= 0 && s.x - (m.x + m.width) < 16, `the mark sits beside the switch: ${JSON.stringify([m, s])}`);
+        assert.ok(Math.abs(m.y + m.height / 2 - (s.y + s.height / 2)) < 3, "on the switch's line");
+        // its lines rest out of sight, read by a screen reader
+        const lines = page.locator(".editor .accts .auto-switch > .hint");
+        assert.deepEqual((await lines.allTextContents()).map((x) => x.trim()), w.tip);
+        assert.ok((await lines.first().boundingBox()).width <= 1, "out of sight till asked");
+        await mark.hover();
+        const card = page.locator(".set-hint.on");
+        await card.waitFor();
+        assert.deepEqual((await card.locator("p").allTextContents()).map((x) => x.trim()), w.tip);
+        const c = await card.boundingBox(), box = await page.locator(".editor .accts .auto-switch").boundingBox();
+        assert.ok(c.y >= box.y + box.height - 1 || c.y + c.height <= box.y + 1, "the card is beside the row, not over it");
+        // a press on the mark is no press on the switch
+        await mark.click();
+        assert.deepEqual(posts, []);
+        assert.equal(await sw(page).getAttribute("aria-checked"), opts.keepLogin ? "false" : "true");
+        assert.deepEqual(errors, []);
+        await page.close();
+      }
     });
 
     test(`${engine} ${lang}: switch-only holds it on; nothing with one account, no line when off in magpie`, async (t) => {
