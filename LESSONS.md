@@ -530,6 +530,26 @@ encoding.**
   ff11275ae).
 - Seen 1× (2026-11-11).
 
+**A fix that keeps something past a collection keeps its siblings
+too.**
+- #2278 took dirent's listings out of a sync.Pool, because "each
+  collection emptied the pool before the next folder was read", and
+  left the 64 KiB read buffer beside them in one. A collection, a Get
+  on another P or -race's dropped Put made a new buffer inside
+  TestListingsOfDifferentSizesMadeOnce's 64 KiB window, so it went red
+  on macOS CI (#5990). The issue sat 19 hours with no owner before
+  6b31147b6 kept the buffers the way listings are, with two
+  collections in the test's window: red 5 of 5 on the old code.
+- Seen 1× (2026-11-11).
+
+**A release step that waits on a vendor has its own timeout-minutes.**
+- notarytool's `--timeout 30m` bounds only its wait for Apple's
+  answer. v0.1.3737's mac job hung in "Notarise and staple" for over
+  90 minutes, under GitHub's six-hour job limit, holding a macOS
+  runner; magpie's mirror job timed out waiting and the version never
+  published. magpie-releases c856019a gives the step 45 minutes.
+- Seen 1× (2026-11-11).
+
 **Reproduce on CI's Go version.**
 - #1184 couldn't be reproduced on go1.27.1 locally. CI ran 1.26.x, and the
   cause was a Go 1.26.8 segfault. Docker `golang:1.26.8` with
