@@ -589,6 +589,13 @@ magpie.plugin("sessions", (ctx) => {
         ? "These {agent} sessions were seen only through magpie's gateway: {agent}'s own files of them aren't on this computer (it may run on another one, in a container or with another config folder), so they can't be resumed here. Delete takes one off this list and moves any conversation magpie recorded of it to its trash; Usage keeps what it spent."
         : "Sessions under \"Seen through the gateway\" have no {agent} files on this computer, so they can't be resumed here. Delete takes one off this list and moves any conversation magpie recorded of it to its trash; Usage keeps what it spent.", { agent: a.name })));
     }
+    // output speed is measured as the reply streams through the gateway; a
+    // session file has no per-token times, so with none of the rows measured
+    // the page says where the speed is and where the files' own figures are
+    // (simonzyzy on X: sessions with no provider set up)
+    if (!data.reads?.gateway && data.sessions.length && !data.sessions.some((s) => speedOf(s))) {
+      box.append(el("p", "usage-note sm-note sm-speed-note", t("Live output speed is measured on requests that go through magpie's gateway. For agents that don't, each call's tokens and time are in Usage › Requests, read from their session files.")));
+    }
     const prov = providerBar();
     if (prov) box.append(prov);
     box.append(selectBar(), el("div", "sm-tree"));

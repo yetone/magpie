@@ -1631,6 +1631,8 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .led-hscroll::-webkit-scrollbar-thumb { background: var(--faint); border: 2px solid transparent; border-radius: 10px; background-clip: padding-box; }
 .led-hscroll::-webkit-scrollbar-thumb:hover { background-color: var(--muted); }
 .led-hscroll::-webkit-scrollbar-button, .led-hscroll::-webkit-scrollbar-corner { display: none; }
+.reads-note { margin-top: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.reads-note p { margin: 0; }
 .led-none { padding: 18px 16px; color: var(--muted); text-align: center; line-height: 1.5; }
 .led-sk { padding: 11px 14px; }
 .led-sk + .led-sk { border-top: 1px solid var(--line-2); }

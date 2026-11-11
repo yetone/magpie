@@ -2,6 +2,7 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Live output speed is measured on requests that go through magpie's gateway. For agents that don't, each call's tokens and time are in Usage › Requests, read from their session files.": "实时输出速度是在请求经过 magpie 网关时测得的。没有经过网关的 Agent，每次调用的 token 数和耗时可在「用量 › 请求」查看，数据读自它们的会话文件。",
     "Avg {n} tok/s": "平均 {n} token/秒",
     "Tool {n}s": "工具 {n} 秒",
     "Round average": "本轮平均",
@@ -97,6 +98,7 @@ magpie.strings({
     "Searched what was said in the latest {n} of {total} sessions.": "已搜索最近 {n} 个会话的对话内容（共 {total} 个）。",
   },
   "zh-TW": {
+    "Live output speed is measured on requests that go through magpie's gateway. For agents that don't, each call's tokens and time are in Usage › Requests, read from their session files.": "即時輸出速度是在請求經過 magpie 閘道時量測的。沒有經過閘道的 Agent，每次呼叫的 token 數和耗時可在「用量 › 請求」查看，資料讀自它們的會話檔案。",
     "Avg {n} tok/s": "平均 {n} token/秒",
     "Tool {n}s": "工具 {n} 秒",
     "Round average": "本輪平均",
@@ -192,6 +194,7 @@ magpie.strings({
     "Searched what was said in the latest {n} of {total} sessions.": "已搜尋最近 {n} 個會話的對話內容（共 {total} 個）。",
   },
   ja: {
+    "Live output speed is measured on requests that go through magpie's gateway. For agents that don't, each call's tokens and time are in Usage › Requests, read from their session files.": "リアルタイムの出力速度は、リクエストが magpie のゲートウェイを通るときに計測されます。通らないエージェントについては、各呼び出しのトークン数と所要時間をセッションファイルから読み取り、「使用量 › リクエスト」で確認できます。",
     "Avg {n} tok/s": "平均 {n} トークン/秒",
     "Tool {n}s": "ツール {n} 秒",
     "Round average": "このターンの平均",
@@ -287,6 +290,7 @@ magpie.strings({
     "Searched what was said in the latest {n} of {total} sessions.": "最新 {n} 件の会話の内容を検索しました（全 {total} 件）。",
   },
   de: {
+    "Live output speed is measured on requests that go through magpie's gateway. For agents that don't, each call's tokens and time are in Usage › Requests, read from their session files.": "Die Live-Ausgabegeschwindigkeit wird bei Anfragen gemessen, die über das magpie-Gateway laufen. Bei Agenten, die das nicht tun, stehen Tokens und Dauer jedes Aufrufs unter Nutzung › Anfragen, gelesen aus ihren Sitzungsdateien.",
     "Avg {n} tok/s": "Ø {n} Token/s",
     "Tool {n}s": "Tool {n} s",
     "Round average": "Ø dieser Runde",

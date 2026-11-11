@@ -317,6 +317,33 @@ function typedTime(v, end) {
   const m = /^([01]?\d|2[0-3]):?([0-5]\d)$/.exec(v);
   return m ? m[1].padStart(2, "0") + ":" + m[2] : null;
 }
+// readsNote: on an empty page, whether magpie is not yet allowed to read the
+// agents' session files, the only reason Claude Code's and Codex's own calls
+// (tokens, time, speed) are missing with no provider set up (simonzyzy on X).
+// It asks once what the Sessions page's consent knows, and says so with the
+// one button that grants it for the agents found.
+async function readsNote(host) {
+  let r;
+  try { r = await api("sessions/reads"); } catch { return; }
+  if (!r || r.asked || r.gateway || !r.found?.length || !host.isConnected) return;
+  const box = el("div", "reads-note");
+  const names = r.found.map((x) => x.name).join(t(", "));
+  box.append(el("p", "", t("magpie reads no agent's session files until you allow it, so {names} calls aren't counted here yet.", { names })));
+  const go = el("button", "text primary", t("Count {names}", { names }));
+  go.type = "button";
+  go.onclick = async () => {
+    go.disabled = true;
+    const agents = {};
+    for (const x of r.found) agents[x.agent] = true;
+    try {
+      await api("sessions/reads", { all: false, agents });
+      await loadUsage();
+    } catch (e) { status(e.message, "err"); go.disabled = false; }
+  };
+  box.append(go);
+  host.append(box);
+}
+
 // noCallsIn is what an empty page says of the period it is on
 function noCallsIn(p) {
   if (periodDays(p)) return "No calls on the days picked.";
@@ -747,7 +774,8 @@ function renderUsage() {
   if (empty) {
     stats.classList.add("empty");
     const none = noCallsIn(period);
-    stats.append(el("div", "none", t(none) + " " + t("Point an agent at a catalog model and use it; every call through the gateway is counted here.")));
+    stats.append(el("div", "none", t(none) + " " + t("Calls through the gateway and the calls Claude Code's and Codex's own session files record are counted here, with no provider set up.")));
+    readsNote(stats);
     $("#usageNote").textContent = "";
     $("#usageClear").hidden = true;
     return;
@@ -2880,6 +2908,7 @@ function renderLedger() {
     const filtered = ledPurpose || ledDay || ledRoute || ledAgent || ledProvider || ledAccount || ledComputer || ledCallerKey || ledModel || ledVia || ledFailed || ledRetried || ledQuery.trim();
     const none = noCallsIn(period);
     wrap.replaceChildren(el("div", "led-none", filtered ? t("No requests match these filters.") : t(none)));
+    if (!filtered) readsNote(wrap.firstChild);
     ledFit();
     ledHScroll();
     pager.hidden = true;
