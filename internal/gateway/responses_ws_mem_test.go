@@ -73,10 +73,13 @@ func TestSocketTurnBodiesFreed(t *testing.T) {
 	}
 	c.c.CloseNow()
 	// the socket's handler ends after its client goes (drain waits for
-	// it); nothing of a turn is kept after, but the trace's routes. Not a
-	// wait for the collector: a weak pointer is gone at the first
-	// collection after its body is unreachable (#5250: a stopped timer
-	// kept the last turn's request for up to unroutedMost).
+	// it); nothing of a turn is kept after, but the trace's routes. A
+	// held body is let go by a context.AfterFunc (holdBody, body room),
+	// which runs in a goroutine of its own once the turn's context ends,
+	// so under load a collection can come before it: collect until each
+	// is gone, within a bar far under what a real holder keeps one for
+	// (#5250: a stopped timer kept the last turn's request for up to
+	// unroutedMost, 2m; unroutedShow is 15s).
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	s.sockets.drain(ctx)
@@ -88,12 +91,19 @@ func TestSocketTurnBodiesFreed(t *testing.T) {
 	if len(bodies) != turns {
 		t.Fatalf("%d turn bodies for %d turns", len(bodies), turns)
 	}
-	runtime.GC()
 	var kept []int
-	for i, b := range bodies {
-		if b.Value() != nil {
-			kept = append(kept, i)
+	for bar := time.Now().Add(10 * time.Second); ; {
+		runtime.GC()
+		kept = kept[:0]
+		for i, b := range bodies {
+			if b.Value() != nil {
+				kept = append(kept, i)
+			}
 		}
+		if len(kept) == 0 || time.Now().After(bar) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 	if len(kept) > 0 {
 		t.Fatalf("turn bodies %v of %d still kept after the socket's handler ended", kept, turns)

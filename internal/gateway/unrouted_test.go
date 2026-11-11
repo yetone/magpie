@@ -659,3 +659,28 @@ func TestUnroutedTimersLetGoOfRequest(t *testing.T) {
 	}
 	runtime.KeepAlive(timers)
 }
+
+// TestUnroutedContextLetsGoOfRequest: the same for a context timer. A
+// WithTimeout under the request's context, stopped as its call ended,
+// keeps that context, and its values, in the timer heap as long, and
+// through the watch's value or the inflight's one kept the request's
+// body (#5250 again: a socket's turn bodies on ubuntu CI). The test
+// holds the context as that heap does.
+func TestUnroutedContextLetsGoOfRequest(t *testing.T) {
+	body := make([]byte, 64<<10)
+	gone := weak.Make(&body[0])
+	f := &inflight{}
+	r := httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	body = nil
+	r = r.WithContext(context.WithValue(r.Context(), inflightKey{}, f))
+	_, r, unwatch := (&Server{}).watchUnrouted(httptest.NewRecorder(), r, f)
+	ctx, cancel := context.WithTimeout(r.Context(), time.Hour)
+	cancel()
+	unwatch()
+	r, f = nil, nil
+	runtime.GC()
+	if gone.Value() != nil {
+		t.Fatal("a context kept after its handler returned still reaches its request's body")
+	}
+	runtime.KeepAlive(ctx)
+}
