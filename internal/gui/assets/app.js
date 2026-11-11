@@ -14601,8 +14601,7 @@ async function setQuotaLeft(on) {
   }
 }
 
-// resetClock: "14:30" today, "tomorrow 09:00", "Thu 14:30" this week, else
-// "Oct 12 08:05"; a bare weekday next week read as this week's (#181).
+// resetClock: "14:30", "tomorrow 09:00", "Thu 14:30", else "Oct 12 08:05" (#181).
 function resetClock(at, now = new Date()) {
   const time = dateFmt({ hour: "2-digit", minute: "2-digit", ...hourClock() }).format(at);
   const day = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
