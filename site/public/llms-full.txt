@@ -1394,7 +1394,7 @@ Kimi Code’s model list prices its models at $0, so magpie prices each call at 
 
 Yes. A Kimi Code key searches the web through the membership’s own search endpoint, so a Kimi Code model that can’t search by itself is given magpie’s search on your plan.
 
-Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
+Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Kimi Code on any model](https://usemagpie.ai/docs/kimi-code). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
 
 ---
 
@@ -3836,7 +3836,68 @@ Qwen Code reads a session’s model when the session starts. Start a new one, or
 
 Yes. magpie sets up a Qwen Code in a WSL distro too.
 
-More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [Copilot CLI on any model](https://usemagpie.ai/docs/copilot-cli). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Copilot CLI on any model](https://usemagpie.ai/docs/copilot-cli) and [Kimi Code on any model](https://usemagpie.ai/docs/kimi-code). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/kimi-code
+
+# Kimi Code on any model
+
+Kimi Code, Moonshot’s `kimi` coding agent, takes providers and models of your own in its config. magpie adds its models there, so kimi can run on any model you have in magpie, not only Kimi: DeepSeek, GLM, Qwen, an OpenAI or Anthropic key, or a ChatGPT or Copilot subscription, with no key pasted into kimi. For Kimi’s own models in other agents, see [Kimi in Claude Code, Codex and more](https://usemagpie.ai/docs/kimi).
+
+Kimi Code keeps its settings in `~/.kimi-code/config.toml` (`$KIMI_CODE_HOME`). magpie adds a provider named `magpie`, of Kimi’s own type, with the gateway’s address and a key of its own, then one `[models."magpie/<provider>/<model>"]` table per model, so magpie’s models join kimi’s `/model` picker. Then it sets `default_model` to your pick. Thinking travels both ways as `reasoning_content`, and the gateway translates each request for the model’s provider. The old Python `kimi-cli` is set up in `~/.kimi` (`$KIMI_SHARE_DIR`) only where there is no Kimi Code folder, since Kimi Code reads `~/.kimi-code` alone once it has taken over. A Kimi Code in WSL is set up the same way.
+
+## Connect Kimi Code
+
+1. **Add providers in magpie.** In the Providers tab, add an API key or sign in to a subscription.
+2. **Pick a model on Kimi Code’s row.** In the Agents tab, choose a model under magpie.
+3. **Use it in kimi.** Kimi Code picks the change up as it runs. Every model of magpie’s is in `/model` too.
+
+```
+magpie kimi deepseek/deepseek-v4-pro    # Kimi Code on DeepSeek
+magpie kimi                             # what Kimi Code runs on now
+```
+
+## What each model gets
+
+- **Name and context.** The name kimi’s picker and status line show, and `max_context_size`, so kimi compacts in time.
+- **Thinking levels.** A model with levels gets `thinking`, with `support_efforts` and a `default_effort` for Kimi Code’s thinking picker. A model that always thinks gets `always_thinking`.
+- **Images and tools.** `image_in` for models that take images, `tool_use` on Kimi Code, and `max_output_size` where magpie knows the model’s reply limit.
+
+A value you set in one of magpie’s tables yourself, such as a `default_effort`, stays there on the next sync.
+
+## When it takes effect
+
+Kimi Code 2.x watches its config, so an open session has the new models at once. In its web or desktop app, open Settings › Providers again, or reload the page, to see them in the picker. The old `kimi-cli` reads its config at start-up: restart open kimi sessions.
+
+## Your own settings
+
+Your Kimi Code sign-in, your own providers and models stay, and are listed on Kimi Code’s row beside magpie’s. Keys you added to the `magpie` provider table, such as `custom_headers` or `env`, stay too. The `default_model` you had is kept aside to be put back.
+
+## Switch back
+
+Pick one of your own models on the row, take the row off magpie, or run `magpie kimi default`. magpie puts back the default model you had, if Kimi still has it, then removes its model tables and its provider.
+
+## FAQ
+
+### Can Kimi Code run on models other than Kimi?
+
+Yes. Any model you have in magpie is in kimi’s /model list: DeepSeek, GLM, Qwen, GPT, Claude and more.
+
+### Can Kimi Code use my ChatGPT subscription?
+
+Yes. Sign in to ChatGPT in magpie and pick a GPT model under magpie on Kimi Code’s row. kimi sends its requests to magpie, which uses the subscription.
+
+### Does it work with the old Python kimi-cli?
+
+Yes. Where there is no ~/.kimi-code, magpie writes to kimi-cli’s ~/.kimi, without the keys only Kimi Code reads. Restart open sessions after a change.
+
+### Does it work with Kimi Code in WSL?
+
+Yes. magpie sets up a Kimi Code in a WSL distro too, its provider pointing at the gateway as the distro reaches it.
+
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [Qwen Code on any model](https://usemagpie.ai/docs/qwen-code). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
