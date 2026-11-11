@@ -168,6 +168,12 @@ func TestObsidianCopilot(t *testing.T) {
 		t.Fatal("found with nothing of it here")
 	}
 	odir := obsidianDirs(home, cfg)[0]
+	// Obsidian is here, with a vault that has no Copilot: nothing to set,
+	// so no row (iEthan333 on X)
+	obsidianVault(t, odir, "0000000000000000", filepath.Join(home, "NoAI"), "", "")
+	if obsidian(home, cfg).Detected() {
+		t.Fatal("found with only a vault that has no Copilot")
+	}
 	notes := filepath.Join(home, "Documents", "Notes")
 	path := obsidianVault(t, odir, "a1b2c3d4e5f60718", notes, "4.0.19", obsCopilotUser)
 	// a second vault without Copilot, and one listed that is gone

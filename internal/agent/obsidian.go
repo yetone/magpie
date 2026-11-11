@@ -136,8 +136,14 @@ func obsidian(home, cfg string) *Agent {
 	return atomic(&Agent{
 		ID: "obsidian", Name: "Obsidian", Icon: "obsidian", Aliases: []string{"obsidian-copilot"},
 		Dir: dir, Path: filepath.Join(dir, "obsidian.json"),
+		// Obsidian has no AI of its own: it is listed when a vault has
+		// Copilot (installed, or magpie's provider already written), since
+		// the app or its config folder alone gives magpie nothing to set
+		// and a row that can't be used (iEthan333 on X)
 		detect: func() bool {
-			return slices.ContainsFunc(dirs, isDir) || macBundle(obsidianApp)
+			return slices.ContainsFunc(vaults, func(v string) bool {
+				return obsCopilotHere(v) || obsCopilotWired(obsCopilotData(v))
+			})
 		},
 		Notice: func() string {
 			if wired() && Running(obsidianProc...) {
