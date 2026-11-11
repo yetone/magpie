@@ -265,6 +265,9 @@ var notYet = map[string]string{
 	"POST /api/gateway/held/reveal":              W,  // api.go
 	"POST /api/profile/{action}":                 A,  // api.go
 	"POST /api/proxy/check":                      S2, // api.go
+	"POST /api/proxies/save":                     S2, // proxies.go: Settings › Network's saved proxies
+	"POST /api/proxies/delete":                   S2, // proxies.go
+	"POST /api/proxies/test":                     S2, // proxies.go
 	"POST /api/set":                              S2, // api.go
 	"POST /api/settings/agent-telemetry":         A,  // api.go
 	"POST /api/settings/bark":                    S2, // api.go: Bark server, key and daily time
