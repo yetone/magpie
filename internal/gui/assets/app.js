@@ -19988,6 +19988,7 @@ function renderSettings() {
   $("#birdSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.noBird ? "off" : "on", (v) => savePrefs({ ...keep, noBird: v === "off" })));
   renderLangPick(s, keep);
   renderGatewayMode(s);
+  window.renderNavPages ? renderNavPages() : import("./navpages.js").then(() => renderNavPages(), () => {});
   // a browser tab has its own zoom, and magpie leaves it to it
   $("#textSizeRow").hidden = web;
   // the keys that do it too, in the choices' tooltip
@@ -20217,9 +20218,6 @@ function renderSettings() {
   setSetTab(setTab);
 }
 
-// Gateway mode's switch, in magpie web alone (gatewaymode.go): Automatic
-// (on with --gateway or no agents here), On or Off. Turned, the tabs follow
-// at once.
 function renderGatewayMode(s) {
   $("#gatewayModeRow").hidden = !web;
   if (!web) return;
@@ -23193,9 +23191,7 @@ async function show(v) {
   jumpNext = false;
   // a built-in page a plugin's page replaces (magpie.page.replaces) opens that
   v = magpie.replacing?.(v) || v;
-  // a page gateway mode leaves out (a link to it, an address kept) opens Providers
   if (gatewayMode && GATEWAY_HIDES.includes(v)) v = "providers";
-  // and one a built-in plugin switched off has, offView
   v = offView(v);
   if (v !== view) {
     if (v === "plugins" && pluginUpdates) window.pluginTabTo?.("installed");
@@ -23223,7 +23219,6 @@ async function show(v) {
   view = v;
   renderBack();
   window.hideAccounts?.page();
-  // the page the reader leaves is the one the window opens on next (keptView)
   if (mode === "window") { try { localStorage.setItem("magpie.lastView", v); } catch { /* not kept */ } }
   const title = pageName(v);
   $("#pageTitle").dataset.en = title;
@@ -23289,23 +23284,18 @@ function setGatewayMode(on) {
 }
 // offView: v, or the page a plugin switched off sends it to (yyddbds)
 function offView(v) {
-  if (!featureHides($(`#nav button[data-view="${v}"]`))) return v;
-  if (v === "groups" && !featureHides($('#nav button[data-view="routing"]'))) return "routing";
-  return gatewayMode ? "providers" : "agents";
+  const gone = (x) => featureHides($(`#nav button[data-view="${x}"]`)) || navMine().includes(x);
+  if (!gone(v)) return v;
+  if (v === "groups" && !gone("routing")) return "routing";
+  return gatewayMode || gone("agents") ? "providers" : "agents";
 }
-// navHides leaves out the tabs of the pages gateway mode or a built-in
-// plugin switched off leaves out
+const navMine = () => { try { return JSON.parse(localStorage.getItem("magpie.navHidden") || "[]"); } catch { return []; } }; // navpages.js
 function navHides() {
   if (mode !== "window") return;
-  for (const b of $("#nav").querySelectorAll("button[data-view]")) b.hidden = (gatewayMode && GATEWAY_HIDES.includes(b.dataset.view)) || featureHides(b);
+  for (const b of $("#nav").querySelectorAll("button[data-view]")) b.hidden = (gatewayMode && GATEWAY_HIDES.includes(b.dataset.view)) || featureHides(b) || navMine().includes(b.dataset.view);
 }
-// applyFeatures takes the built-in plugins' state from a read of the
-// settings, or a switch on Plugins › Built-in:
-// what is off leaves the window, and the page open, if it went, gives way
-// to Agents (Providers in gateway mode)
 function applyFeatures(list) {
   if (!Array.isArray(list)) return;
-  // each plugin's settings to its code in the page (kernel.js)
   for (const f of list) if (f.schema) magpie.configure(f.id, f.config);
   const off = new Set(list.filter((f) => !f.on).map((f) => f.id));
   if (off.size === featuresOff.size && [...off].every((id) => featuresOff.has(id))) return;
@@ -23320,8 +23310,6 @@ function applyFeatures(list) {
   setSetTab(setTab);
   navSubs();
 }
-// Plugins › Built-in: a row and a switch each (plugins.yml, builtins.go);
-// one in use can't be switched off; its settings under it (ui.form)
 function renderBuiltins(box, list, done) {
   const broken = list.find((f) => f.broken)?.broken;
   const rows = list.flatMap((f) => {
