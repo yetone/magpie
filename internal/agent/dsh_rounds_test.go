@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -46,11 +47,28 @@ func dshListed(web, model string) bool {
 func TestDshRoundWithNothingChangedBuildsNothing(t *testing.T) {
 	r, web := dshSettled(t)
 	before, _ := os.ReadFile(web)
-	if n := testing.AllocsPerRun(10, func() { r.once() }); n > 300 {
-		t.Fatalf("a round with nothing changed made %.0f allocations", n)
-	}
+	few := testing.AllocsPerRun(10, func() { r.once() })
 	if after, _ := os.ReadFile(web); string(after) != string(before) {
 		t.Fatalf("a round with nothing changed wrote:\n%s", after)
+	}
+	// the bar is the same round over a few models, not a count: reading the
+	// files allocates differently on each system (421 on Windows CI against
+	// a fixed 300), while building the catalog grows with the models
+	models := []string{"pro", "flash"}
+	for i := range 400 {
+		models = append(models, fmt.Sprintf("m%d", i))
+	}
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: models}); err != nil {
+		t.Fatal(err)
+	}
+	r.once()
+	r.once()
+	if !r.done {
+		t.Fatal("a round with nothing to write over 400 models is not kept")
+	}
+	many := testing.AllocsPerRun(10, func() { r.once() })
+	if many > few*1.5+50 {
+		t.Fatalf("a round with nothing changed made %.0f allocations over 402 models, %.0f over 2", many, few)
 	}
 }
 
