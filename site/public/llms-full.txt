@@ -5817,7 +5817,89 @@ Reasonix reads global settings at startup. Start a new Studio or CLI process; a 
 
 No. magpie adds and removes only the provider named magpie and MAGPIE_REASONIX_API_KEY, and stops with an error on a same-named entry it didn't make.
 
-More agents on the same models: [jcode on any model](https://usemagpie.ai/docs/jcode), [Crush on any model](https://usemagpie.ai/docs/crush) and [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [jcode on any model](https://usemagpie.ai/docs/jcode), [Crush on any model](https://usemagpie.ai/docs/crush), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models) and [AtomCode on any model](https://usemagpie.ai/docs/atomcode). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/atomcode
+
+# AtomCode on any model
+
+AtomCode is a Rust terminal coding agent on AtomGit (atomgit.com/atomgit_atomcode/atomcode). Its models live in `config.toml`: a `[models."…"]` table names a `[provider_accounts.…]` table, the shape AtomCode's own CodingPlan sign-in writes since 5.0.7. magpie writes the same shape, a magpie account and one table per model, so AtomCode can use any model you have in magpie: DeepSeek, GLM, Kimi, Qwen, GPT or a ChatGPT subscription.
+
+## Set up AtomCode
+
+1. **Open magpie's Agents page.** Find the AtomCode row. Its list has the models you set up in AtomCode yourself, and the ones via magpie.
+2. **Pick a magpie model.** magpie writes the account and model tables and points `default_provider` and `default_model` at your pick; with both set, AtomCode goes by `default_model`.
+3. **Restart atomcode.** AtomCode reads its settings at start-up, so reopen any running session.
+
+```
+magpie atomcode deepseek/deepseek-v4-pro
+magpie atomcode effort high
+```
+
+## What magpie writes
+
+AtomCode's folder is `ATOMCODE_HOME` (an absolute path), else `~/.atomcode`. An AtomCode in WSL uses Linux's `~/.atomcode`, with the gateway as the distro reaches it. magpie writes:
+
+```
+# ~/.atomcode/config.toml
+default_provider = "magpie/deepseek/deepseek-v4-pro"
+default_model = "magpie/deepseek/deepseek-v4-pro"
+
+[provider_accounts."magpie"]
+provider = "openai-compatible"
+base_url = "http://127.0.0.1:3425/v1"
+api_key = "…"
+
+[models."magpie/deepseek/deepseek-v4-pro"]
+account = "magpie"
+model = "deepseek/deepseek-v4-pro"
+context_window = …
+max_tokens = …
+supports_vision = false
+reasoning_effort_levels = ["…"]
+```
+
+The account uses `openai-compatible`, AtomCode's documented preset for a custom endpoint, at magpie's gateway `/v1`, with a key magpie issues to AtomCode alone. A model table's key is `magpie/<provider>/<model>`, and its `model` goes to the gateway as written. Each carries the context window (AtomCode compacts as it nears it; 128000 when magpie doesn't know it), the output limit (never above the window), image support and the effort levels on offer. When magpie's models change, magpie rewrites its own tables; your own model tables and legacy `providers.*` entries are left alone.
+
+Requests are Chat Completions with Bearer auth and a User-Agent of `atomcode/<version>`; the key is AtomCode's own, so magpie knows a request is AtomCode's even when the header is changed.
+
+## Effort
+
+Effort is the current model table's `reasoning_effort`, sent with every request to it and kept per model. magpie picks none for you, so the vendor's default stands until you do. Only the levels that model supports (some of low, medium, high, xhigh, max) are offered.
+
+## When it takes effect
+
+AtomCode reads its settings at start-up. While atomcode is running, magpie tells you to restart open atomcode sessions.
+
+## Switching back
+
+Switching back removes magpie's account and model tables and puts back the `default_provider` and `default_model` you had before, where AtomCode still has that model (otherwise they go). Picking one of your own AtomCode models in magpie also removes magpie's tables.
+
+```
+magpie atomcode default
+```
+
+## FAQ
+
+### How do I use DeepSeek, GLM or a ChatGPT subscription in AtomCode?
+
+On magpie's Agents page, pick a via-magpie model for AtomCode. magpie adds [provider_accounts."magpie"] and one [models."magpie/…"] table per model to ~/.atomcode/config.toml and points the defaults at your pick.
+
+### What context window does AtomCode get?
+
+magpie writes each model's context_window, or 128000 when it doesn't know it. AtomCode compacts as it nears the window.
+
+### I changed it and AtomCode didn't notice. Why?
+
+AtomCode reads its settings at start-up. Restart the open atomcode sessions.
+
+### Do my own defaults come back when I switch back?
+
+Yes. magpie stashes default_provider and default_model when it steps in and puts them back when it steps out, where AtomCode still has that model.
+
+More agents on the same models: [Reasonix Studio on any model](https://usemagpie.ai/docs/reasonix), [jcode on any model](https://usemagpie.ai/docs/jcode) and [Crush on any model](https://usemagpie.ai/docs/crush). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
