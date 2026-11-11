@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -172,7 +173,11 @@ func TestWSLClaudePick(t *testing.T) {
 		n.Field("model").Set("relay/glm-4.6")
 		n.Field("effort").Set("max")
 		want := strings.ReplaceAll(readFile(filepath.Join(nat, ".claude", "settings.json")), `"`+gateway.URL()+`"`, `"`+gw+`"`)
-		if got := readFile(path); got != want {
+		// native Claude Code's main model is a tier alias for the id the
+		// distro's file keeps (writeTiers' mainWord)
+		got := regexp.MustCompile(`"model":\s*"[^"]*"`).ReplaceAllString(readFile(path), `"model": "relay/glm-4.6"`)
+		want = regexp.MustCompile(`"model":\s*"[^"]*"`).ReplaceAllString(want, `"model": "relay/glm-4.6"`)
+		if got != want {
 			t.Fatalf("mirrored %v:\n got %s\nwant %s", mirrored, got, want)
 		}
 		// a tier of its own

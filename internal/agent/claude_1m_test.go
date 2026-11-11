@@ -32,7 +32,13 @@ func TestClaude1MMarked(t *testing.T) {
 	path := filepath.Join(home, ".claude", "settings.json")
 	writeFile(t, path, `{}`)
 	a := claude(home)
-	get := func(k string) string { v, _ := edit.GetJSON(path, k); return v }
+	get := func(k string) string {
+		if k == "model" {
+			return writtenModel(path)
+		}
+		v, _ := edit.GetJSON(path, k)
+		return v
+	}
 	set := func(key, v string) {
 		t.Helper()
 		if err := a.Field(key).Set(v); err != nil {

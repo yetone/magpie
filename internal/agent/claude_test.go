@@ -124,7 +124,7 @@ func TestClaudeSubagentModel(t *testing.T) {
 	if err := a.Field("model").Set("deepseek/lite"); err != nil {
 		t.Fatal(err)
 	}
-	if m, _ := edit.GetJSON(path, "model"); env("CLAUDE_CODE_SUBAGENT_MODEL") != "deepseek/flash" || m != "deepseek/lite" {
+	if m := writtenModel(path); env("CLAUDE_CODE_SUBAGENT_MODEL") != "deepseek/flash" || m != "deepseek/lite" {
 		t.Fatalf("own subagent model lost: %v", a.Values())
 	}
 	if err := sub.Set(""); err != nil {

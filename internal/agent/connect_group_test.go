@@ -4,7 +4,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -31,7 +30,7 @@ func TestConnectOnARoutingGroupAlone(t *testing.T) {
 	if err := c.Connect(); err != nil {
 		t.Fatal(err)
 	}
-	if m, _ := edit.GetJSON(path, "model"); m != "group/folia-1" {
+	if m := writtenModel(path); m != "group/folia-1" {
 		t.Fatalf("connected on %q:\n%s", m, readFile(path))
 	}
 }

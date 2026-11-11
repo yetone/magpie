@@ -65,7 +65,7 @@ func TestClaudeTierEffort(t *testing.T) {
 	if a.Field("haiku").Get() != "v/flash" || a.Field("haiku_effort").Get() != "low" || a.Field("sonnet_effort").Get() != "" {
 		t.Fatalf("read back: %v", a.Values())
 	}
-	if v, _ := edit.GetJSON(path, "model"); v != "v/glm" || env("ANTHROPIC_MODEL") != "" || a.Field("effort").Get() != "high" || env("ANTHROPIC_DEFAULT_OPUS_MODEL") != "v/glm" {
+	if v := writtenModel(path); v != "v/glm" || env("ANTHROPIC_MODEL") != "" || a.Field("effort").Get() != "high" || env("ANTHROPIC_DEFAULT_OPUS_MODEL") != "v/glm" {
 		t.Fatalf("the main model's effort changed: %v", a.Values())
 	}
 	// a tier following the main model, at another effort

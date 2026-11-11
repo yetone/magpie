@@ -40,7 +40,7 @@ func TestClaudeDottedVersionsGoInDashed(t *testing.T) {
 		`{"env": {"ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-4.5"}}`)
 	a := claude(home)
 	env := func(k string) string { v, _ := edit.GetJSON(path, "env."+k); return v }
-	model := func() string { v, _ := edit.GetJSON(path, "model"); return v }
+	model := func() string { return writtenModel(path) }
 	set := func(key, v string) {
 		t.Helper()
 		if err := a.Field(key).Set(v); err != nil {
@@ -169,7 +169,7 @@ func TestClaudeDottedServedDashedToo(t *testing.T) {
 	home, path := claudeDottedHome(t, provider.Provider{ID: "both", Name: "Both", Anthropic: "https://example.test", Key: "k",
 		Models: []string{"claude-opus-4.6", "claude-opus-4-6"}}, `{}`)
 	a := claude(home)
-	model := func() string { v, _ := edit.GetJSON(path, "model"); return v }
+	model := func() string { return writtenModel(path) }
 	for _, m := range []string{"both/claude-opus-4.6", "both/claude-opus-4-6"} {
 		if err := a.Field("model").Set(m); err != nil {
 			t.Fatal(err)

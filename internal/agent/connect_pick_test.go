@@ -25,7 +25,7 @@ func TestConnectKeepsTheModel(t *testing.T) {
 	if err := c.Connect(); err != nil {
 		t.Fatal(err)
 	}
-	if m, _ := edit.GetJSON(path, "model"); m != "aaa/claude-opus-5-5" {
+	if m := writtenModel(path); m != "aaa/claude-opus-5-5" {
 		t.Fatalf("connected on %q:\n%s", m, readFile(path))
 	}
 }
@@ -428,7 +428,7 @@ func TestConnectSaysHow(t *testing.T) {
 	if how, err := c.ConnectHow(); err != nil || how.How != "again" {
 		t.Fatalf("switched on again: %+v %v", how, err)
 	}
-	if m, _ := edit.GetJSON(path, "model"); m != "aaa/claude-sonnet-5-5" {
+	if m := writtenModel(path); m != "aaa/claude-sonnet-5-5" {
 		t.Fatalf("back on %q", m)
 	}
 	if err := c.Disconnect(); err != nil {
