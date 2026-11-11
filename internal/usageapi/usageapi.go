@@ -303,6 +303,9 @@ type Ledger struct {
 	Speeds []ModelSpeed `json:"speeds"`
 	// SpeedMin is the fewest output tokens a request wrote to count in it
 	SpeedMin int `json:"speed_min"`
+	// BigWrite: the request that wrote the most to the cache, of the rows
+	// the filter keeps
+	BigWrite usage.BigWrite `json:"big_write"`
 }
 
 // Share is a usage.Share with the name and logo the page shows it by.
@@ -367,6 +370,7 @@ func LedgerPage(p usage.Period, f usage.Filter, offset, limit int) Ledger {
 	out.Through, out.Direct, out.Reported = l.Through, l.Direct, l.Reported
 	out.Bucket, out.Series = l.Bucket, l.Series
 	out.Purposes = l.Purposes
+	out.BigWrite = l.Big
 	out.Day = f.Day
 	out.CallerKeys = inKeyOrder(callerGroups(usage.Summary{CallerKeys: l.CallerKeys}))
 	callerLabels := map[string]string{}

@@ -989,6 +989,27 @@ arguments are never kept, not even masked.
   Failed. The Purpose filter names `kind:mcp` "MCP tool"
   (`purposeKinds`, `purposes.js`).
 
+### Claude Code's helper requests and the largest cache write
+
+Claude Code's AgentSummary ("Describe your most recent action in 3-5
+words.") and its auto mode classifier name themselves nowhere in the
+request, so `inferredKind` (observe.go) tells them by their content, for
+a `claude-cli/` request on the Messages API only, and the ledger row's
+Kind is `agent_summary_inferred` or `auto_mode_check_inferred`
+(`usage.InferredSuffix`). The name says "(inferred)"; both spellings share
+the plain kind's purpose, which a client marker would use. Anything else
+stays unmarked.
+
+A requests page also holds `BigWrite` (big_write.go): the gateway-served
+row that wrote the most to the cache, kept per chunk (`chunkPart.big`) and
+merged as the cells are. Rows read from session files have no request to
+open and are left out. The Requests line shows it as a button that opens
+that request (`openUsageRoute`). The counting is keyed by
+`settledCountVersion`. `TestRequestPageBigWrite`,
+`TestClaudeHelperRequestsAreLabelled` and `usage-big-write.test.cjs`
+cover it. The per-request branch recovery result asked for in #6199 is not
+recorded: no structured field holds it.
+
 `TestMCPToolCallIsARequestRow`, `TestMCPHubCallIsARequestRow`,
 `TestMCPCalledFromStdioIsARow` and the others in `mcp_calls_test.go`,
 `TestToolCallsAreReported` (imagemcp), `TestMCPCallRowsListedNotCounted`

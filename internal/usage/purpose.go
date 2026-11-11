@@ -36,8 +36,27 @@ var purposeKinds = func() map[string]PurposeKind {
 	add("Model list", "model_list")             // probelog.KindList
 	add("MCP tool", KindMCP)                    // an MCP tool call (SourceMCP)
 	add("Cache keep-alive", KindKeepalive)      // a plugin's own ping (plugin_calls.go)
+	// Claude Code names neither of these requests, so the gateway tells them
+	// by their content: the *_inferred kinds. They share the purpose of the
+	// plain kind (a client's own marker, were one sent), and say in their
+	// name that magpie read it from the body, not that the client said so.
+	pair := func(name, kind string) {
+		out[kind] = PurposeKind{"kind:" + kind, name}
+		out[kind+InferredSuffix] = PurposeKind{"kind:" + kind, name + " (inferred)"}
+	}
+	pair("Progress summary", KindAgentSummary) // Claude Code's AgentSummary
+	pair("Auto mode check", KindAutoMode)      // Claude Code's auto mode classifier
 	return out
 }()
+
+// KindAgentSummary and KindAutoMode are the kinds of Claude Code's
+// sub-agent progress summary and its auto mode classifier; InferredSuffix
+// follows one that was told by the request's content.
+const (
+	KindAgentSummary = "agent_summary"
+	KindAutoMode     = "auto_mode_check"
+	InferredSuffix   = "_inferred"
+)
 
 // PurposeKinds returns a copy of the catalog used to generate the UI's catalog.
 // Add aliases here, then run go generate ./internal/usage from the repo root.

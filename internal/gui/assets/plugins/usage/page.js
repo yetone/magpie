@@ -2829,6 +2829,13 @@ function renderLedger() {
     if (l.canceled) say("{n} canceled", l.canceled);
   }
   $("#ledSum").textContent = sum.join(" · ");
+  // the request that wrote the most to the cache, one click from its detail (recih on X, #6199)
+  const big = l.big_write;
+  if (l.total && big?.route) {
+    const jump = el("button", "text", t("{n} largest write", { n: fmtN(big.n) }));
+    jump.onclick = () => window.openUsageRoute({ id: big.route, time: big.at, model: big.model });
+    $("#ledSum").append(" · ", jump);
+  }
   $("#ledSum").title = sum.join() == exact.join() ? "" : exact.join(" · ");
   // the two sources and their total, in the same block of cells as the totals
   // above them: what magpie carried, what it only read about in the agents'

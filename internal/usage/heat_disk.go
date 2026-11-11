@@ -34,7 +34,7 @@ import (
 // history again on its first start, the cold start's peak (#2278). Raise
 // it with any change to what a row counts as; TestSettledCountedAsVersioned
 // fails until it is raised.
-const settledCountVersion = "2"
+const settledCountVersion = "3"
 
 func heatDiskPath() string {
 	return filepath.Join(filepath.Dir(sessions.CachePath()), "heat-v1.json")

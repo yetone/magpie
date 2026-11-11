@@ -91,6 +91,9 @@ type chunkPart struct {
 	// speeds are the counted requests of the rows the filter keeps, by
 	// model (speed_rank.go)
 	speeds speedRank
+	// big is the request of the rows the filter keeps that wrote the most
+	// to the cache (BigWrite)
+	big BigWrite
 	// newest is the chunk's newest rows a page read of it (newest)
 	newest atomic.Pointer[chunkNewest]
 }
@@ -237,6 +240,7 @@ func (pass *cellPass) part(ps *pairedRows, rows *chunkRows, c *rowChunk, r *Row)
 					part.speeds = speedRank{}
 				}
 				part.speeds.add(r)
+				part.big.add(r)
 			}
 		}
 	})

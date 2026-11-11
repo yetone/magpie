@@ -1,11 +1,14 @@
 package gateway
 
 import (
+	"bytes"
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/yetone/magpie/internal/access"
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -62,6 +65,48 @@ func observedKind(agent, kind string, body []byte) string {
 		return "auxiliary"
 	}
 	return kind
+}
+
+// inferredKind is the kind of Claude Code's helper requests it names
+// nowhere in the request: its auto mode classifier and its AgentSummary,
+// told by their content. They are recorded as inferred
+// (usage.InferredSuffix), never as the client's word; "" for any other.
+func inferredKind(in http.Header, from provider.Protocol, body []byte) string {
+	if !fromClaudeCode(in) || from != provider.Anthropic {
+		return ""
+	}
+	switch {
+	case autoModeClassifierAsk(body):
+		return usage.KindAutoMode + usage.InferredSuffix
+	case agentSummaryAsk(body):
+		return usage.KindAgentSummary + usage.InferredSuffix
+	}
+	return ""
+}
+
+// agentSummaryAsk reports whether body, a Messages API request, is Claude
+// Code's AgentSummary: the sub-agent's conversation with a last user
+// message that ends in the ask for a few words of progress ("Describe
+// your most recent action in 3-5 words."). The bytes are looked at first:
+// every request passes here.
+func agentSummaryAsk(body []byte) bool {
+	if !bytes.Contains(body, []byte("3-5 words")) {
+		return false
+	}
+	req, err := parseAnthropic(body)
+	if err != nil || len(req.Messages) == 0 {
+		return false
+	}
+	last := req.Messages[len(req.Messages)-1]
+	if last.Role != "user" || len(last.Parts) == 0 {
+		return false
+	}
+	p := last.Parts[len(last.Parts)-1]
+	if p.Kind != Text {
+		return false
+	}
+	ask := strings.TrimSpace(p.Text)
+	return strings.HasPrefix(ask, "Describe your ") && strings.Contains(ask, " in 3-5 words")
 }
 
 func (o *observed) end(call Call, millis int64) {

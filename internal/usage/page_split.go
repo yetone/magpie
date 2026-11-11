@@ -218,7 +218,8 @@ func effortKeyOf(f Filter, k string) string {
 // addCells is the cells of a and of b, the later, as one part: a cell of
 // the same names, bits and bucket added up, in the order of their last.
 func addCells(a, b *chunkPart) *chunkPart {
-	out := &chunkPart{kept: a.kept + b.kept, first: a.first}
+	out := &chunkPart{kept: a.kept + b.kept, first: a.first, big: a.big}
+	out.big.merge(b.big)
 	if a.speeds != nil || b.speeds != nil {
 		out.speeds = speedRank{}
 		out.speeds.merge(a.speeds)
@@ -265,6 +266,7 @@ func (ps *pairedRows) cellsBefore(pass *cellPass, cut time.Time) *chunkPart {
 	for _, c := range ps.all {
 		part := pass.part(&before, &rows, c, &r)
 		out.kept += part.kept
+		out.big.merge(part.big)
 		if part.speeds != nil {
 			if out.speeds == nil {
 				out.speeds = speedRank{}
@@ -336,6 +338,9 @@ type pageDiskEntry struct {
 	Cells []pageDiskCell `json:"cells"`
 	// Speeds are the model speed ranking's counts (speed_rank.go)
 	Speeds speedRank `json:"speeds,omitempty"`
+	// Big is the largest cache write (BigWrite); settledCountVersion 3
+	// keys the entries that hold one
+	Big BigWrite `json:"big,omitzero"`
 }
 
 // pageDiskPages bounds the pages the file holds, the last written or read
@@ -369,7 +374,7 @@ func pageDiskRead(key string) (*chunkPart, int, bool) {
 
 // pageDiskPart is e's cells as one part.
 func pageDiskPart(e pageDiskEntry) *chunkPart {
-	part := &chunkPart{kept: e.Kept, cells: make([]pageCell, len(e.Cells)), speeds: e.Speeds}
+	part := &chunkPart{kept: e.Kept, cells: make([]pageCell, len(e.Cells)), speeds: e.Speeds, big: e.Big}
 	if !e.First.IsZero() {
 		part.first = e.First.In(time.Local)
 	}
@@ -386,7 +391,7 @@ func pageDiskPart(e pageDiskEntry) *chunkPart {
 // pageDiskWrite keeps part, a page's cells before cut from since, under
 // key with the pages written last, through a file renamed over the last.
 func pageDiskWrite(key string, cut, since time.Time, part *chunkPart) error {
-	e := pageDiskEntry{Key: key, Cut: cut, Since: since, At: time.Now(), Kept: part.kept, First: part.first, Cells: make([]pageDiskCell, len(part.cells)), Speeds: part.speeds}
+	e := pageDiskEntry{Key: key, Cut: cut, Since: since, At: time.Now(), Kept: part.kept, First: part.first, Cells: make([]pageDiskCell, len(part.cells)), Speeds: part.speeds, Big: part.big}
 	for i := range part.cells {
 		c := &part.cells[i]
 		e.Cells[i] = pageDiskCell{

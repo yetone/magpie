@@ -67,6 +67,9 @@ type RequestPage struct {
 	// Heat is the rows by day, as the chart's filter keeps them: only for
 	// the heatmap's own period (HeatmapOf)
 	Heat *Heatmap
+	// Big is the request that wrote the most to the cache, of the rows the
+	// filter keeps
+	Big BigWrite
 }
 
 type packedRow struct {
@@ -2573,6 +2576,7 @@ func buildRequestBlocksIn(p Period, f Filter, offset, limit int, now time.Time, 
 	}
 	for _, part := range parts {
 		speeds.merge(part.speeds)
+		out.Big.merge(part.big)
 		if !part.first.IsZero() && (first.IsZero() || part.first.Before(first)) {
 			first = part.first
 		}
@@ -2810,6 +2814,7 @@ func pageFromLedgerAt(p Period, f Filter, offset, limit int, all Ledgered, now t
 	for _, r := range l.Rows {
 		if !r.IsRejected() && !r.IsProbe() {
 			speeds.add(&r)
+			out.Big.add(&r)
 		}
 	}
 	out.Speeds = speeds.result()
