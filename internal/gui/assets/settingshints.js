@@ -42,7 +42,9 @@ function show(r) {
   if (!subs.length) return hide();
   card.replaceChildren(...subs.map((s) => el("p", "", s.textContent.trim())));
   card.hidden = false;
-  const who = (r.querySelector(":scope > .who, :scope > .txt") || r).getBoundingClientRect(), box = r.getBoundingClientRect();
+  // a .who the editor lays out as display: contents has no box of its own: its name's stands for it
+  const lead = r.querySelector(":scope > .who, :scope > .txt") || r;
+  const who = (getComputedStyle(lead).display === "contents" ? lead.querySelector(".name") || r : lead).getBoundingClientRect(), box = r.getBoundingClientRect();
   const w = card.offsetWidth, h = card.offsetHeight;
   const left = Math.max(16, Math.min(who.left, innerWidth - 16 - w));
   // under the row, or over it where the window ends first
