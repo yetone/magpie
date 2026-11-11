@@ -1,5 +1,7 @@
 package sessions
 
+import "slices"
+
 // zcodeTitleFiles are ZCode's sessions as a title lookup needs them: the
 // session rows alone, without the message join zcodeFiles makes for a
 // session's size and last activity. Titles asks again every 15s, and that
@@ -47,8 +49,11 @@ func zcodeTitleFiles() []file {
 // the row's time alone missed a first prompt typed since the last poll, and
 // a stamp unlike the full listing's had the Sessions page and the poll each
 // read the session again after the other. A session whose messages can't
-// be read keeps its row's stamp.
-func zcodeTitleStamps(files []file, want map[string]bool) {
+// be read keeps its row's stamp. files is shared (allFilesForTitles keeps
+// it from poll to poll, and other polls read it meanwhile), so the stamps
+// go in a copy, made at the first one: the answer is files or that copy.
+func zcodeTitleStamps(files []file, want map[string]bool) []file {
+	own := false
 	for i := range files {
 		f := &files[i]
 		if f.agent != "zcode" || !want[f.key] {
@@ -62,6 +67,14 @@ func zcodeTitleStamps(files []file, want map[string]bool) {
 		if zc.db.QueryRow(`SELECT COUNT(id), COALESCE(MAX(time_updated), 0) FROM message WHERE session_id = ?`, f.m().sid).Scan(&n, &last) != nil {
 			continue
 		}
-		f.size, f.mod = n, modOf(ms(max(f.mod.UnixMilli(), last)))
+		size, mod := n, modOf(ms(max(f.mod.UnixMilli(), last)))
+		if size == f.size && mod == f.mod {
+			continue
+		}
+		if !own {
+			files, own = slices.Clone(files), true
+		}
+		files[i].size, files[i].mod = size, mod
 	}
+	return files
 }

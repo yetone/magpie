@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -264,5 +265,36 @@ func TestZCodeTitleIsTheAppsTaskName(t *testing.T) {
 	put("sess_aaaa", "Renamed", 1790496100000)
 	if got := Titles(keys); got["zcode:sess_aaaa"] != "Renamed" {
 		t.Fatalf("after a rename: %q, want Renamed", got["zcode:sess_aaaa"])
+	}
+}
+
+// A name poll stamps a ZCode session with its messages' count and time,
+// but the list it reads is allFilesForTitles' kept one, shared with every
+// poll meanwhile: the stamps go in a copy, and the kept list stays as the
+// rows gave it.
+func TestZCodeTitleStampsLeaveKeptListAlone(t *testing.T) {
+	home := setupAgents(t)
+	const id = "sess_9d0b1c8e-2f3a-4b5c-8d7e-6f5a4b3c2d1e"
+	db, err := sql.Open("sqlite", filepath.Join(home, ".zcode", "cli", "db", "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if _, err := db.Exec(`INSERT INTO session (id, project_id, parent_id, slug, directory, title, title_source, version, time_created, time_updated) VALUES (?, 'p', NULL, 's', '/work/zc', 'Stamped', 'generated', '0.16.9', 1790496000000, 1790496000000)`, id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES ('m1', ?, 1790496500000, 1790496500000, '{}')`, id); err != nil {
+		t.Fatal(err)
+	}
+	if got := Titles([]string{"zcode:" + id}); got["zcode:"+id] != "Stamped" {
+		t.Fatalf("title %v", got)
+	}
+	kept := allKept[1].last()
+	i := slices.IndexFunc(kept, func(f file) bool { return f.agent == "zcode" && f.m().sid == id })
+	if i < 0 {
+		t.Fatalf("no kept ZCode file for %s in %d files", id, len(kept))
+	}
+	if f := kept[i]; f.size != 0 || f.mod.UnixMilli() != 1790496000000 {
+		t.Fatalf("the kept list was stamped in place: size %d, mod %d", f.size, f.mod.UnixMilli())
 	}
 }

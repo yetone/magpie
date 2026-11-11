@@ -3067,7 +3067,7 @@ func Titles(keys []string) map[string]string {
 			subAsked[k] = f.path
 		}
 	}
-	zcodeTitleStamps(files, want)
+	files = zcodeTitleStamps(files, want)
 	groups := byKey(files, func(f *file) bool { return want[f.key] })
 	var fs []file
 	for _, f := range files {
