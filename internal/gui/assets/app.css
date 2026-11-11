@@ -5217,7 +5217,6 @@ body .row.agent .ag-prefs .row.pref .who { display: block; }
 .editor .prov-prefs .warm-at:not(.times) { flex-wrap: wrap-reverse; }
 /* the editor's Claude Code runs as row switches it; magpie web as a
    gateway has that row's switch off, so this one shows there */
-.prov-prefs #claudeRunList:not(.gw) #claudeTuiRow { display: none; }
 /* Settings' search finds them; not searching, the links stay out */
 #view-settings:not(.set-searching) :is(#agentPrefLinks, #provPrefLinks) { display: none; }
 

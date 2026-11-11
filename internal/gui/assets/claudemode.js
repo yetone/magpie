@@ -72,8 +72,6 @@ window.claudeModeDraw = function (box, m) {
   });
   pick.classList.add("cc-pick");
   pick.classList.toggle("tui", m.tui);
-  // magpie web shows the gateway's, which only its own Settings change
-  for (const b of pick.querySelectorAll(".opt")) b.disabled = gatewayMode;
   // Chromium has no onfocusin property: the events are listened for
   pick.onmouseenter = () => ccTip(pick, on);
   pick.addEventListener("focusin", () => ccTip(pick, on));
