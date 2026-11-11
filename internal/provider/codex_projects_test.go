@@ -440,3 +440,80 @@ func anyStrings(v any) []string {
 	}
 	return out
 }
+
+// linsm66 on X: "为什么codex在触发自动更换账号后侧边栏已有的项目文件夹会消失呢".
+// A switch while the Codex app runs loads the new account's list from the
+// app's memory, so a list not shared before (the app never closed since)
+// shows nothing, and a file written under the app is lost. magpie can't
+// quit the app unasked; it says so, until the app is closed and shared.
+func TestCodexAppProjectsShortAfterALiveSwitch(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CODEX_HOME", home)
+	a, b := codexTestAuth("user-a", "acct-a"), codexTestAuth("user-b", "acct-b")
+	path := codexStateFixture(t, home, a, b)
+	t.Cleanup(codexProjectsClosed)
+	codexProjectsClosed()
+
+	app := codexAppLaunch(t, path)
+	app.signIn(a)
+	app.save(t, path)
+	codexProjectsLook(home)
+	if CodexAppProjectsShort() {
+		t.Fatal("the app on the account that has the projects is short of none")
+	}
+	app.signIn(b) // the auto switch: auth.json, the app-server's restart
+	app.save(t, path)
+	codexProjectsLook(home)
+	if !CodexAppProjectsShort() {
+		t.Fatal("the app now shows b's empty list; magpie should say so")
+	}
+	DismissCodexAppProjects()
+	if CodexAppProjectsShort() {
+		t.Fatal("Got it should hush it")
+	}
+	// back on a: nothing is missing, and a hush is no more
+	app.signIn(a)
+	app.save(t, path)
+	codexProjectsLook(home)
+	if CodexAppProjectsShort() {
+		t.Fatal("a has every project")
+	}
+	// the app closed and shared: a switch then loses nothing
+	codexProjectsClosed()
+	if _, err := shareCodexProjects(home, [][]byte{a, b}, filepath.Join(t.TempDir(), "r.json")); err != nil {
+		t.Fatal(err)
+	}
+	app = codexAppLaunch(t, path)
+	app.signIn(a)
+	app.save(t, path)
+	codexProjectsLook(home)
+	app.signIn(b)
+	app.save(t, path)
+	codexProjectsLook(home)
+	if CodexAppProjectsShort() {
+		t.Fatal("b has the shared list; nothing is missing")
+	}
+}
+
+// A project the user removed on the account they are on is not a switch.
+func TestCodexAppProjectsRemovedByHandIsNoHint(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CODEX_HOME", home)
+	a, b := codexTestAuth("user-a", "acct-a"), codexTestAuth("user-b", "acct-b")
+	path := codexStateFixture(t, home, a, b)
+	t.Cleanup(codexProjectsClosed)
+	codexProjectsClosed()
+	// b parked with a folder a doesn't have
+	var st map[string]any
+	bs, _ := os.ReadFile(path)
+	_ = json.Unmarshal(bs, &st)
+	inact := st[codexRendererKey].(map[string]any)["inactive"].(map[string]any)
+	inact[codexRendererOwner(b)].(map[string]any)["globals"] = map[string]any{"local-projects": map[string]any{
+		"p-x": map[string]any{"id": "p-x", "rootPaths": []string{"/Users/me/x"}}}}
+	bs, _ = json.Marshal(st)
+	_ = os.WriteFile(path, bs, 0o644)
+	codexProjectsLook(home) // short, but the first look is no switch
+	if CodexAppProjectsShort() {
+		t.Fatal("no switch seen, no hint")
+	}
+}

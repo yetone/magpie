@@ -13640,6 +13640,7 @@ function renderAccounts(a, p) {
   const pv = a.agent === "codex" ? providers || {} : {};
   if (pv.codexDaemon) list.append(renderCodexDaemon(pv.codexDaemon));
   if (pv.codexApp) list.append(renderCodexApp(pv.codexApp));
+  if (pv.codexProjects) import("./codexprojects.js").then(() => list.append(codexProjectsNote(codexNote, accountAction)), () => {});
   if (signing?.agent === a.agent) list.append(renderSigning(sub));
   else {
     list.append(addRow(t(sub.single && sub.plugin ? "Sign in again" : sub.single ? "Sign in to another {name} account" : "Add another {name} account", { name: sub.name }), () => startSignIn(a.agent)));

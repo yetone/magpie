@@ -825,7 +825,125 @@ func codexProjectsStep(ctx context.Context) {
 		return
 	}
 	if open, known := codexAppOpenNow(ctx); !known || open {
+		if open {
+			codexProjectsLook(codexHome())
+		}
 		return // carried once it is closed: what it has open it writes over
 	}
+	codexProjectsClosed()
 	CodexAppClosed()
+}
+
+// codexProjectsShort says whether the Codex app, open, shows fewer
+// projects than its identities have together: the folders of the owner's
+// local projects (the identity the app is on, whose list is the file's
+// own) against those parked under the other identities. owner is that
+// identity's key; ok is false when the file isn't the shape magpie knows
+// or has no per-identity state.
+func codexProjectsShort(home string) (owner string, short, ok bool) {
+	raw, err := os.ReadFile(codexGlobalStatePath(home))
+	if err != nil {
+		return "", false, false
+	}
+	var top map[string]json.RawMessage
+	if json.Unmarshal(raw, &top) != nil || top == nil {
+		return "", false, false
+	}
+	var r struct {
+		Owner    *string                    `json:"owner"`
+		Inactive map[string]json.RawMessage `json:"inactive"`
+	}
+	if rs, has := top[codexRendererKey]; !has || json.Unmarshal(rs, &r) != nil || r.Owner == nil || *r.Owner == "" {
+		return "", false, false
+	}
+	folders := func(g map[string]json.RawMessage) (map[string]bool, bool) {
+		lp, _, err := codexLocalProjects(g)
+		if err != nil {
+			return nil, false
+		}
+		out := map[string]bool{}
+		for _, p := range lp {
+			if k := codexRootKey(p); k != "" {
+				out[k] = true
+			}
+		}
+		return out, true
+	}
+	mine, good := folders(top)
+	if !good {
+		return "", false, false
+	}
+	for h, v := range r.Inactive {
+		if h == *r.Owner {
+			continue
+		}
+		var s struct {
+			Globals map[string]json.RawMessage `json:"globals"`
+		}
+		if json.Unmarshal(v, &s) != nil {
+			return "", false, false
+		}
+		theirs, good := folders(s.Globals)
+		if !good {
+			return "", false, false
+		}
+		for k := range theirs {
+			if !mine[k] {
+				short = true
+			}
+		}
+	}
+	return *r.Owner, short, true
+}
+
+// codexProjectsHint is whether the open Codex app has been left showing
+// fewer projects than its identities have, after the account it is on
+// changed (a switch while it ran: it loads the new identity's list from
+// memory, and a file written under it is lost). A project the user
+// removed on the account they are on is no switch, and says nothing.
+var codexProjectsHint struct {
+	sync.Mutex
+	owner  string
+	short  bool
+	hushed bool
+}
+
+// codexProjectsLook is one look at the open app's file, from the loop.
+func codexProjectsLook(home string) {
+	owner, short, ok := codexProjectsShort(home)
+	codexProjectsHint.Lock()
+	defer codexProjectsHint.Unlock()
+	h := &codexProjectsHint
+	switch {
+	case !ok:
+		return
+	case h.owner != "" && owner != h.owner:
+		h.short, h.hushed = short, false // the app changed account
+	case !short:
+		h.short = false
+	}
+	h.owner = owner
+}
+
+// codexProjectsClosed forgets the hint: a closed app is shared and loads
+// every identity's projects as it opens.
+func codexProjectsClosed() {
+	codexProjectsHint.Lock()
+	codexProjectsHint.owner, codexProjectsHint.short, codexProjectsHint.hushed = "", false, false
+	codexProjectsHint.Unlock()
+}
+
+// CodexAppProjectsShort says the open Codex app shows fewer projects than
+// its accounts have, until it is quit and opened again.
+func CodexAppProjectsShort() bool {
+	codexProjectsHint.Lock()
+	defer codexProjectsHint.Unlock()
+	return codexProjectsHint.short && !codexProjectsHint.hushed
+}
+
+// DismissCodexAppProjects stops saying so.
+func DismissCodexAppProjects() {
+	codexProjectsHint.Lock()
+	codexProjectsHint.hushed = true
+	codexProjectsHint.Unlock()
 }

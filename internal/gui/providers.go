@@ -702,6 +702,9 @@ type providersJSON struct {
 	// after Codex was switched to another, until it is quit and opened
 	// again (provider.CodexAppStale)
 	CodexApp string `json:"codexApp,omitempty"`
+	// CodexProjects says the open Codex app shows fewer projects than
+	// Codex's accounts have, after a switch (provider.CodexAppProjectsShort)
+	CodexProjects bool `json:"codexProjects,omitempty"`
 	// Plugins are the providers the plugins sign in to, for the add sheet
 	Plugins []pluginSubJSON `json:"plugins"`
 	// OnPlugins are the built-in subscriptions moved onto their plugins,
@@ -1406,6 +1409,7 @@ func providersState() providersJSON {
 	s.Gateway.Archive = archiveState()
 	s.CodexDaemon = provider.CodexDaemonStale()
 	s.CodexApp = provider.CodexAppStale()
+	s.CodexProjects = provider.CodexAppProjectsShort()
 	s.Plugins = pluginSubs()
 	s.Fetching = provider.FetchingNew()
 	return s
@@ -2973,6 +2977,8 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			provider.DismissCodexDaemon()
 		case "dismiss-app":
 			provider.DismissCodexApp()
+		case "dismiss-projects":
+			provider.DismissCodexAppProjects()
 		case "restart-app":
 			// the Codex app left on the account before: its app-server
 			// restarted now, after the user said yes (nb5p_hQ on X)
