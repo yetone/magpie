@@ -2102,7 +2102,7 @@ Yes. Both are subscriptions: `magpie accounts add gemini` or `magpie accounts ad
 
 **By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
-Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
+Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). To run Google’s Antigravity app on other models, see [Antigravity on any model](https://usemagpie.ai/docs/antigravity). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
 
 ---
 
@@ -4020,7 +4020,72 @@ The build keeps its first model list until it quits. Quit the app itself, not on
 
 Yes. magpie sets the variables in the registry’s Environment on Windows and in environment.d on Linux, and finds the Linux AppImage where you downloaded it.
 
-More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [Pi on any model](https://usemagpie.ai/docs/pi). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Pi on any model](https://usemagpie.ai/docs/pi) and [Antigravity on any model](https://usemagpie.ai/docs/antigravity). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/antigravity
+
+# Antigravity on any model
+
+Antigravity, Google’s agent app, can send its requests to a gateway of yours instead of Google, through its Enterprise Gateway setting. magpie is such a gateway, so Antigravity and its CLI, `agy`, can run on any model you have in magpie: DeepSeek, GLM, Qwen, an OpenAI or Anthropic key, or a ChatGPT or Copilot subscription.
+
+Antigravity 2.15 and later reads a `gateway` block from its settings file: `~/.antigravity/settings.json` up to 2.29, `~/.gemini/config/config.json` from 2.30. magpie writes that block, turned on, with its gateway’s address, a key that names the app and the `openai` wire protocol, and sets `models.defaultModelId` to the model you pick. The app then lists the gateway’s models in its picker and sends its chats to magpie, which translates each one for the model’s provider. Your own gateway, default model, model list and catalog are kept aside and put back when magpie steps out.
+
+## Connect the app
+
+1. **Add providers in magpie.** In the Providers tab, add an API key or sign in to a subscription.
+2. **Pick a model on Antigravity’s row.** In the Agents tab, choose a model under magpie.
+3. **Restart Antigravity.** It reads its gateway at start-up. magpie’s models are then in its model picker.
+
+```
+magpie antigravity deepseek/deepseek-v4-pro    # the app on DeepSeek
+magpie agy deepseek/deepseek-v4-pro            # agy on DeepSeek
+```
+
+## Its models
+
+The picker lists the gateway’s models, the ones the app’s key is shown, under the names magpie’s catalog gives them. On its own the app gives every model it doesn’t know a 200K window. magpie points its `models.listSource` at the gateway’s catalog, which gives each model its real context window, so long sessions compact when they should.
+
+## Effort
+
+The catalog lists a model at each of its reasoning levels, so the app’s own picker offers them, and the level picked there goes with the request. The effort on magpie’s row is the level the app starts on, and what a model with no levels in the picker is asked for. Left on the default, requests go as the app sends them.
+
+## Your Google sign-in
+
+On a gateway, Antigravity uses no Google sign-in and its backend asks Google for nothing. What Google turns on for your account, its experiments and commands such as `/boost`, `/teamwork`, `/plugin` and `/generative_ui`, is gone while it is on magpie. Taking the row off magpie gives it back.
+
+## The agy CLI
+
+`agy` follows the app’s gateway unless it is connected on its own row. Connected there, it runs on magpie through the Gemini API: magpie keeps its models in `magpie-settings.json`, beside agy’s own `~/.gemini/antigravity-cli/settings.json`, and starts agy with that file, `GOOGLE_GEMINI_BASE_URL`, `GEMINI_API_KEY` and `--model` for that session. So that typing `agy` just works, magpie adds a function named `agy` to each shell’s profile while agy is on one of its models. A terminal opened before takes the command from the row. Your `settings.json` stays yours, so `agy remote-control` still runs on your Google sign-in.
+
+## Settings that come first
+
+An `admin_settings.json` your organisation installs, and the `AGY_LLM_GATEWAY_*` variables, win over the settings file field by field. If either sets a gateway of its own, Antigravity doesn’t reach magpie, and the row says so.
+
+## Switch back
+
+Pick one of your own models on the row, or take the row off magpie. magpie puts back your own gateway, default model, model list and catalog. For agy, it removes the shell function too. Restart Antigravity.
+
+## FAQ
+
+### Can Antigravity run on models other than Gemini?
+
+Yes. Any model you have in magpie is in its picker: DeepSeek, GLM, Qwen, GPT, Claude and more.
+
+### Do I still need to sign in with Google?
+
+No. On a gateway Antigravity uses no Google sign-in. What Google turns on for your account, such as /boost and /teamwork, is off while it is on magpie.
+
+### Why does every model show a 200K context?
+
+That is the app’s default for models it doesn’t know. magpie points its catalog at the gateway, which gives each model its real window. Restart Antigravity after connecting.
+
+### Does the agy CLI work too?
+
+Yes. agy follows the app’s gateway, or runs on its own row through the Gemini API, with an agy shell function so the command just works.
+
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models) and [Cursor Private Inference on any model](https://usemagpie.ai/docs/cursor-private-inference). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
