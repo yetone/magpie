@@ -5899,7 +5899,80 @@ AtomCode reads its settings at start-up. Restart the open atomcode sessions.
 
 Yes. magpie stashes default_provider and default_model when it steps in and puts them back when it steps out, where AtomCode still has that model.
 
-More agents on the same models: [Reasonix Studio on any model](https://usemagpie.ai/docs/reasonix), [jcode on any model](https://usemagpie.ai/docs/jcode) and [Crush on any model](https://usemagpie.ai/docs/crush). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Reasonix Studio on any model](https://usemagpie.ai/docs/reasonix), [jcode on any model](https://usemagpie.ai/docs/jcode), [Crush on any model](https://usemagpie.ai/docs/crush) and [Shelley on any model](https://usemagpie.ai/docs/shelley). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/shelley
+
+# Shelley on any model
+
+Shelley (boldsoftware/shelley) is the coding agent for exe.dev, a web app that `shelley serve` runs. Its models live in its database, not in a file magpie can edit, so magpie tells it through the same API Shelley's own Models and Profiles pages use: a custom model at magpie's gateway, made the default. New Shelley conversations then run on any model you have in magpie: DeepSeek, GLM, Kimi, Qwen, GPT or a ChatGPT subscription.
+
+## Set up Shelley
+
+1. **Start Shelley first.** magpie talks to a running Shelley. When it isn't running, magpie says so: start `shelley serve` and try again.
+2. **Pick a model on magpie's Agents page.** Shelley's row lists the models Shelley can use itself and the ones via magpie. Pick one of the latter.
+3. **Start a new conversation.** New conversations start on the default profile's model, the one you just picked.
+
+```
+shelley serve                              # Shelley must be running
+magpie shelley deepseek/deepseek-v4-pro
+```
+
+## How magpie tells Shelley
+
+Shelley opens a Unix socket for its CLI: `$SHELLEY_SOCKET`, else `$XDG_CONFIG_HOME/shelley/shelley.sock` (`~/.config/shelley` by default, on a Mac too), or `shelley-2.sock` and on when a second server took the first. magpie tries them in the order Shelley's CLI does and calls `/api/custom-models` and `/api/profiles`:
+
+```
+POST /api/custom-models   (over ~/.config/shelley/shelley.sock)
+{
+  "display_name": "deepseek/deepseek-v4-pro (magpie)",
+  "provider_type": "openai",
+  "endpoint": "http://127.0.0.1:3425/v1",
+  "api_key": "…",
+  "model_name": "deepseek/deepseek-v4-pro",
+  "reasoning_support": "yes",
+  "image_support": "no",
+  "max_tokens": …
+}
+```
+
+Each model you pick in magpie is a custom model of type openai at the gateway's `/v1` (Shelley adds `/chat/completions`), with a key magpie issues to Shelley alone. Shelley usually learns reasoning and image support from models.dev by endpoint and name, which magpie's models aren't in, so magpie says what it knows. Then magpie sets the default profile's `model` to it; for a model that doesn't reason it clears `thinking_level`, which Shelley would refuse.
+
+magpie keeps the ids of the models it made, so a model you made by hand at the gateway stays yours. When the gateway's address changes, magpie updates its models.
+
+## Which conversations change
+
+New conversations use the new model; an open one keeps its model until you pick another in its model menu. magpie says so after the switch.
+
+## Switching back
+
+Switching back puts the default profile's model and thinking level back to what they were (or to the server's default when that model can't be used any more), then deletes every custom model magpie made. You can also pick one of Shelley's own models in magpie. If Shelley was uninstalled, magpie notes it and takes its models out when Shelley runs again.
+
+```
+magpie shelley default
+```
+
+## FAQ
+
+### How do I use DeepSeek, GLM or a ChatGPT subscription in Shelley?
+
+Run shelley serve, then pick a via-magpie model for Shelley on magpie's Agents page. magpie adds an openai custom model at its gateway to Shelley and makes it the default profile's model.
+
+### Why does magpie say Shelley isn't running?
+
+Shelley's models are in its database, which magpie changes only through a running Shelley's socket. Start shelley serve and try again.
+
+### Why is an open conversation still on the old model?
+
+The default profile applies to new conversations. Change an open one in its own model menu.
+
+### Will my own custom models be deleted?
+
+No. magpie deletes only the model ids it made; one you made by hand, even at the gateway, stays yours.
+
+More agents on the same models: [AtomCode on any model](https://usemagpie.ai/docs/atomcode), [Reasonix Studio on any model](https://usemagpie.ai/docs/reasonix) and [jcode on any model](https://usemagpie.ai/docs/jcode). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
