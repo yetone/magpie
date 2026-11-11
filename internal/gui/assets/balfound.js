@@ -7,10 +7,22 @@ let balFoundAt = null;
 window.balFound = function (box, p, draft, bal, pathOf) {
   const line = el("div", "bal-found");
   line.hidden = true;
-  balFoundAt = { line, draft, bal, pathOf };
+  balFoundAt = { line, draft, bal, pathOf, p };
   box.append(line);
-  bal.addEventListener("input", () => { line.hidden = !line.dataset.url || !!bal.value.trim(); });
-  window.balFoundShow({ found: p.balanceFound, foundField: p.balanceFoundField });
+  // the look for it can be turned off, for a relay that has no balance
+  let row = null;
+  if (p.balanceProbe) {
+    const [rk, cb] = tick(t("Auto-detect"), !draft.noBalanceProbe);
+    row = rk;
+    cb.onchange = () => { draft.noBalanceProbe = !cb.checked; if (!cb.checked) line.hidden = true; };
+    box.append(row);
+  }
+  bal.addEventListener("input", () => {
+    const typed = !!bal.value.trim();
+    line.hidden = !line.dataset.show || typed;
+    if (row) row.hidden = typed;
+  });
+  window.balFoundShow({ found: p.balanceFound, foundField: p.balanceFoundField, undetected: p.balanceUndetected });
 };
 // what the editor's Check balance found (app.js), drawn again
 window.balFoundShow = function (r) {
@@ -18,8 +30,19 @@ window.balFoundShow = function (r) {
   if (!s || !s.line.isConnected) return;
   const { line, draft, bal, pathOf } = s;
   line.replaceChildren();
+  const miss = !r.found && !!r.undetected && !draft.noBalanceProbe;
   line.dataset.url = r.found || "";
-  line.hidden = !r.found || !!(draft.balanceURL || "").trim();
+  line.dataset.show = r.found || miss ? "1" : "";
+  line.hidden = !line.dataset.show || !!(draft.balanceURL || "").trim();
+  if (miss) {
+    const none = el("span", "", t("Not detected"));
+    none.title = t("magpie asked this relay where relays tell a key its balance, and found none. Put in a Balance URL of your own, or detect again");
+    const again = el("button", "text action", t("Detect again"));
+    again.type = "button";
+    again.onclick = () => document.querySelector(".editor .bal-check")?.click();
+    line.append(none, again);
+    return;
+  }
   if (!r.found) return;
   const txt = el("span", "", t("Found by magpie: {url}", { url: r.found + (r.foundField ? " " + r.foundField : "") }));
   txt.title = t("magpie asked this relay where relays tell a key its balance, and reads it here. If the amount is wrong, put in your own Balance URL and field; magpie looks again each day");

@@ -14,11 +14,12 @@ const relay = {
   id: "relay", name: "Relay", icon: "generic", chat: "https://relay.example.com/v1", responses: "", anthropic: "", catalog: "",
   models: [{ id: "model-a", name: "Model A", on: true }], agents: [], fallback: [], headers: {},
   key: { set: true, masked: "sk-…one" }, keyList: [],
-  balanceURL: "", balancePath: "",
+  balanceURL: "", balancePath: "", balanceProbe: true,
   balanceFound: "https://relay.example.com/v1/usage", balanceFoundField: "$remaining",
   balanceToken: { takes: true, set: false },
 };
 const plain = { ...relay, id: "plain", name: "Plain", balanceFound: "", balanceFoundField: "" };
+const miss = { ...plain, id: "miss", name: "Miss", balanceUndetected: true };
 const own = { ...relay, id: "own", name: "Own", balanceURL: "https://relay.example.com/mine" };
 
 function server(lang, list, checks) {
@@ -55,7 +56,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const checks = (b) => b.id === "plain"
             ? (b.balanceURL ? { ok: true, amount: "$1.00" } : { ok: false, amount: "", looked: true, found: "", foundField: "" })
             : { ok: true, amount: "$5.00", looked: !b.balanceURL, found: b.balanceURL ? "" : "https://relay.example.com/api/usage/token", foundField: "$data.total_available / 500000" };
-          await page.route("**/*", server(lang, [relay, plain, own], checks));
+          await page.route("**/*", server(lang, [relay, plain, miss, own], checks));
           await page.goto("http://magpie.test/?view=providers");
           const tr = (k, v) => page.evaluate(([k, v]) => t(k, v), [k, v]);
           const open = async (name) => {
@@ -97,6 +98,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await page.locator(".editor").getByRole("button", { name: await tr("Check balance"), exact: true }).click();
           await page.waitForFunction(() => document.querySelector(".editor .bal-res")?.textContent !== "…");
           assert.equal(await page.locator(".editor .bal-res").textContent(), await tr("No balance at /v1/usage or /api/usage/token"));
+
+          // looked at and found nothing: said in the editor, with Detect again
+          await open("Miss");
+          assert(await line.isVisible(), "not detected is said");
+          assert.equal(await line.locator("span").textContent(), await tr("Not detected"));
+          if (lang !== "en") assert.notEqual(await line.locator("span").textContent(), "Not detected", "translated");
+          const tickBox = page.locator(".editor .bal-ask label.tick input");
+          assert(await tickBox.isChecked(), "Auto-detect is on");
+          const asked = page.waitForRequest((r) => r.url().endsWith("/api/provider/balance"));
+          await line.getByRole("button", { name: await tr("Detect again"), exact: true }).click();
+          assert.equal(JSON.parse((await asked).postData()).noBalanceProbe, false);
+          await tickBox.uncheck();
+          assert(await line.isHidden(), "off: nothing said");
+          assert.equal(await page.evaluate(() => draft.noBalanceProbe), true);
 
           // the user's own Balance URL: nothing of magpie's
           await open("Own");

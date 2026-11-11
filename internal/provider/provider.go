@@ -586,6 +586,9 @@ type Provider struct {
 	// no body, for an endpoint that answers only a POST (#2368). Any other
 	// is refused when the balance is read (balanceMethodOf).
 	BalanceMethod string `json:"balanceMethod,omitempty"`
+	// NoBalanceProbe turns off the look for a balance query on a relay
+	// added with no Balance URL (balance_probe.go).
+	NoBalanceProbe bool `json:"noBalanceProbe,omitempty"`
 	// BalanceToken is what a vendor tells the whole account's balance to,
 	// where a key is told only what is left on itself: AiHubMix's system
 	// access token, or a new-api relay's for its /api/user/self named in

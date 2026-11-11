@@ -2,9 +2,12 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -44,6 +47,83 @@ var probed struct {
 	m map[string]probeFound
 }
 
+// What was found, or not found, is kept in balance-probes.json beside
+// providers.json, so a restart does not ask every relay again: an entry
+// holds until its time (balanceProbeHit, balanceProbeMiss), and the key
+// is only a hash of the origins and the key.
+type probeSaved struct {
+	URL   string    `json:"url,omitempty"`
+	Until time.Time `json:"until"`
+}
+
+func probesPath() string { return filepath.Join(filepath.Dir(Path()), "balance-probes.json") }
+
+// probedLocked is the map, read from the file the first time. A file that
+// can't be read or doesn't parse is no entries: the relays are asked again.
+// The caller holds probed.
+func probedLocked() map[string]probeFound {
+	if probed.m != nil {
+		return probed.m
+	}
+	probed.m = map[string]probeFound{}
+	var saved map[string]probeSaved
+	if b, err := os.ReadFile(probesPath()); err == nil && json.Unmarshal(b, &saved) == nil {
+		for k, v := range saved {
+			if v.Until.After(time.Now()) {
+				probed.m[k] = probeFound{v.URL, v.Until}
+			}
+		}
+	}
+	return probed.m
+}
+
+// saveProbedLocked writes the entries still holding, for the next start.
+// The caller holds probed.
+func saveProbedLocked() {
+	saved := map[string]probeSaved{}
+	for k, v := range probed.m {
+		if v.until.After(time.Now()) {
+			saved[k] = probeSaved{v.url, v.until}
+		}
+	}
+	b, err := json.Marshal(saved)
+	if err != nil {
+		return
+	}
+	_ = os.MkdirAll(filepath.Dir(probesPath()), 0o700)
+	_ = writeFileAtomic(probesPath(), b)
+}
+
+// ForgetBalanceProbe drops what was found for p, so its balance is looked
+// for again at the next read (the editor's Check balance).
+func ForgetBalanceProbe(p Provider) {
+	p = keyQueryOf(p)
+	if !probesBalance(p) {
+		return
+	}
+	probed.Lock()
+	delete(probedLocked(), balanceProbeKey(probeOrigins(p), p.Key))
+	saveProbedLocked()
+	probed.Unlock()
+	ForgetBalances()
+}
+
+// errBalanceUndetected is the card of a relay looked at, with neither
+// query telling a balance. It is not a balance of 0, and the editor has
+// the Balance URL for one of its own.
+const errBalanceUndetected = "no balance query found at this address: give its Balance URL in the provider's settings"
+
+// balanceUndetected says p was looked at and no query told a balance.
+func balanceUndetected(p Provider) bool {
+	if !probesBalance(p) {
+		return false
+	}
+	probed.Lock()
+	defer probed.Unlock()
+	f, ok := probedLocked()[balanceProbeKey(probeOrigins(p), p.Key)]
+	return ok && f.url == "" && time.Now().Before(f.until)
+}
+
 // balanceProbeKey is what a probe is kept by: the origins and the key
 // (hashed, never kept as it is).
 func balanceProbeKey(origins []string, key string) string {
@@ -55,7 +135,7 @@ func balanceProbeKey(origins []string, key string) string {
 // knows the query of, and at a relay's address, never a model vendor's own
 // or this computer's.
 func probesBalance(p Provider) bool {
-	if p.Account != nil || p.Key == "" || strings.TrimSpace(p.BalanceURL) != "" || !relayPreset(p.Preset) {
+	if p.NoBalanceProbe || p.Account != nil || p.Key == "" || strings.TrimSpace(p.BalanceURL) != "" || !relayPreset(p.Preset) {
 		return false
 	}
 	if _, ok := balanceSourceOf(p); ok || clineKeyCard(p) || openCodeZen(p) {
@@ -186,7 +266,7 @@ func probedBalanceURL(p Provider) string {
 	}
 	probed.Lock()
 	defer probed.Unlock()
-	return probed.m[balanceProbeKey(probeOrigins(p), p.Key)].url
+	return probedLocked()[balanceProbeKey(probeOrigins(p), p.Key)].url
 }
 
 // BalanceFound is the balance query magpie found for p by itself, with
@@ -205,6 +285,19 @@ func BalanceFound(p Provider) (u, field string, looked bool) {
 	return u, field, true
 }
 
+// BalanceProbeState says whether magpie looks for p's balance query (the
+// off switch aside, so the editor can offer to turn it on again), and
+// whether it looked and found none.
+func BalanceProbeState(p Provider) (eligible, undetected bool) {
+	p = keyQueryOf(p)
+	off := p.NoBalanceProbe
+	p.NoBalanceProbe = false
+	if !probesBalance(p) {
+		return false, false
+	}
+	return true, !off && balanceUndetected(p)
+}
+
 // probeBalance looks for p's balance query, asking each origin's relay
 // queries in turn, and is what was found (false: none told a balance).
 // A query that answers 200 with its field read is the one; a failure to
@@ -213,7 +306,7 @@ func probeBalance(ctx context.Context, p Provider) (string, bool) {
 	origins := probeOrigins(p)
 	k := balanceProbeKey(origins, p.Key)
 	probed.Lock()
-	f, seen := probed.m[k]
+	f, seen := probedLocked()[k]
 	probed.Unlock()
 	if seen && time.Now().Before(f.until) {
 		return f.url, f.url != ""
@@ -253,10 +346,10 @@ func probeBalance(ctx context.Context, p Provider) (string, bool) {
 		wait = balanceProbeDown
 	}
 	probed.Lock()
-	if probed.m == nil {
-		probed.m = map[string]probeFound{}
+	probedLocked()[k] = probeFound{found, time.Now().Add(wait)}
+	if wait != balanceProbeDown {
+		saveProbedLocked() // a relay that was down is asked again at once
 	}
-	probed.m[k] = probeFound{found, time.Now().Add(wait)}
 	probed.Unlock()
 	return found, found != ""
 }

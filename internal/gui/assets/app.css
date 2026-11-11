@@ -3529,6 +3529,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .editor .pair.bal-ask { flex-wrap: wrap; }
 .editor .pair.bal-ask input { flex: 1 1 160px; min-width: 0; }
 .editor .pair.bal-ask .segs { flex: none; align-self: center; }
+.editor .pair.bal-ask > .tick { flex-basis: 100%; }
 .editor .bal-found { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 12px; line-height: 1.45; color: var(--muted); }
 .editor .bal-found span { overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
 .editor .side { display: flex; gap: 4px; align-items: center; flex: none; min-width: 52px; justify-content: flex-end; }
