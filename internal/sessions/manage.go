@@ -55,6 +55,8 @@ type Managed struct {
 	Messages  int   `json:"messages"`
 	Files     int   `json:"files"`
 	Deletable bool  `json:"deletable"`
+	// Forget: Delete takes it off the list, its agent's files untouched
+	Forget bool `json:"forget,omitempty"`
 	// Undeletable: why a session of an agent whose sessions can be deleted
 	// can't be: "cursor-editor", a chat Cursor's editor keeps in its own
 	// database, or "read-only" (rowDeletable). The page says it on the
@@ -142,7 +144,7 @@ func agentCounts(all []file) []AgentCount {
 	}
 	out := []AgentCount{}
 	for a, keys := range n {
-		out = append(out, AgentCount{Agent: a, Count: len(keys), Deletable: Deletable(a)})
+		out = append(out, AgentCount{Agent: a, Count: len(keys), Deletable: Removable(a)})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Count != out[j].Count {
@@ -319,6 +321,8 @@ func listAgentWith(agent string, all []file, quick bool) []Managed {
 		// a WSL distro's too (TJHHHH): moved out over \\wsl.localhost
 		m := Managed{Session: s, Files: len(fs)}
 		m.Deletable, m.Undeletable = rowDeletable(agent, s, fs)
+		m.Forget = !Deletable(agent) && Forgettable(agent)
+		m.Deletable = m.Deletable || m.Forget
 		for _, f := range fs {
 			m.Size += f.size
 			m.Pending = m.Pending || pending[f.path]
@@ -377,7 +381,7 @@ func keptSubagents(out []Managed) []Managed {
 // whether its conversation can be read.
 func listed(s *Session) {
 	if s.Resume == "" && !s.ReadOnly {
-		s.Resume = resumeCommand(s.WSL, s.Agent, s.ID, s.Cwd, s.Path)
+		s.Resume = resumeFor(s.WSL, s.Agent, s.ID, s.Cwd, s.Path)
 	}
 	if s.Carry == nil {
 		s.Carry = carries(*s)
@@ -402,6 +406,9 @@ type Trashed struct {
 	// Gateway: a session seen only through magpie's gateway, whose items
 	// are the conversation text magpie recorded of it (gateway_delete.go)
 	Gateway bool `json:"gateway,omitempty"`
+	// Forgot: a session of an agent that is gone, taken off the list
+	// (Forget); nothing of it was moved, Restore lists it again
+	Forgot bool `json:"forgot,omitempty"`
 	// CodexCatalog: a Codex thread's rows in the Codex app's catalog,
 	// taken out with it and put back on Restore (codex_catalog.go)
 	CodexCatalog []codexCatalogRow `json:"codex_catalog,omitempty"`

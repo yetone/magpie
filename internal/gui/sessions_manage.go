@@ -223,6 +223,11 @@ func sessionManageRoutes(mux *http.ServeMux, w Windows) {
 		out.Agent = view.Agent
 		if out.Agent != "" {
 			list := view.Sessions
+			if !sessions.Deletable(out.Agent) {
+				// the ones taken off the list (sessions.Forget), until used again
+				hidden := sessions.GatewayHidden()
+				list = slices.DeleteFunc(slices.Clone(list), func(m sessions.Managed) bool { return hidden(m.Agent, m.ID, m.Last) })
+			}
 			var modelEffort map[string][]sessions.ModelEffort
 			if out.Agent == "codex" {
 				modelEffort = usage.CodexModelEffort(usage.All)
@@ -314,6 +319,10 @@ func sessionManageRoutes(mux *http.ServeMux, w Windows) {
 			var err error
 			if g, ok := listed[id]; ok {
 				_, err = sessions.DeleteGateway(g.Agent, g.ID, g.ID, g.Last)
+			} else if sessions.Forgettable(in.Agent) {
+				// an uninstalled agent's rows of a database magpie only
+				// reads: they leave the list, its files are not touched
+				_, err = sessions.Forget(in.Agent, id)
 			} else if !sessions.Deletable(in.Agent) {
 				err = errors.New("magpie can't delete this agent's sessions")
 			} else {

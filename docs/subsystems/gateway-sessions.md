@@ -322,6 +322,14 @@ list the session), and `HasGatewayConversations` counts it.
 Implementation: [`internal/sessions/gateway_delete.go`](../../internal/sessions/gateway_delete.go),
 `Restore` in [`internal/sessions/manage.go`](../../internal/sessions/manage.go), and
 [`internal/gui/sessions_manage.go`](../../internal/gui/sessions_manage.go).
+An agent whose sessions magpie cannot delete (OpenCode, Cline, Grok, Kimi, Hermes:
+rows in the agent's own database or store) and whose command is no longer on
+PATH (`cliGone`) is forgettable (_SekiBetu_ on X): its rows get Delete, which
+only hides them through the same hidden list (`sessions.Forget`, trash note
+marked `forgot`; the agent's own files are not touched), and no Resume
+(`resumeFor`). Restore unhides. With the command installed nothing changes.
+Tests: `TestUninstalledAgentSessionsAreForgotten`,
+`TestManageDeleteOfAnUninstalledAgentTakesItOffTheList`, `sessions-forget.test.cjs`.
 A deleted Codex session also leaves the Codex app's list (zhuddan on Discord).
 The app (ChatGPT.app's Codex, 26.x) lists threads from its own catalog,
 `<CODEX_HOME>/sqlite/codex.db` (`codex-dev.db` for a non-prod build), table

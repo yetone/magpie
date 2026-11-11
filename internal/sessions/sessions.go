@@ -2053,7 +2053,7 @@ func assemble(fs []file, price func(string) *catalog.Price, codexTitle func(stri
 		return s, false
 	}
 	if !s.ReadOnly {
-		s.Resume = resumeCommand(s.WSL, s.Agent, s.ID, s.Cwd, s.Path)
+		s.Resume = resumeFor(s.WSL, s.Agent, s.ID, s.Cwd, s.Path)
 	}
 	s.Carry, s.Transcript = carries(s), readable(s)
 	if s.Transcript {
@@ -2874,6 +2874,16 @@ func ResumeCommand(agent, id, cwd string) string { return resumeCommand("", agen
 
 // resumeCommand is ResumeCommand for a session in a WSL distro too, when
 // distro is set: see wslResume.
+// resumeFor is resumeCommand for a listed row: none for an agent whose
+// command is gone from this computer, which the line would fail to start.
+// A WSL distro's agent is looked for there, not here.
+func resumeFor(distro, agent, id, cwd, path string) string {
+	if distro == "" && cliGone(agent) {
+		return ""
+	}
+	return resumeCommand(distro, agent, id, cwd, path)
+}
+
 func resumeCommand(distro, agent, id, cwd, path string) string {
 	if !safeID.MatchString(id) {
 		return ""
