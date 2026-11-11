@@ -1105,6 +1105,9 @@ func responsesParts(raw json.RawMessage) []Part {
 		Text     string `json:"text"`
 		ImageURL string `json:"image_url"`
 		Detail   string `json:"detail"`
+		FileData string `json:"file_data"`
+		FileURL  string `json:"file_url"`
+		Filename string `json:"filename"`
 	}
 	decodeJSON(raw, &items)
 	var out []Part
@@ -1117,6 +1120,14 @@ func responsesParts(raw json.RawMessage) []Part {
 				im := imagePart(it.ImageURL)
 				im.Detail = it.Detail
 				out = append(out, im)
+			}
+		case "input_file":
+			// a video alone (#6135); another file is still left out (#5452)
+			src := cmp.Or(it.FileData, it.FileURL)
+			if mt := videoFileType(src, it.Filename); mt != "" {
+				if v, ok := videoPart(src, mt, it.Filename); ok {
+					out = append(out, v)
+				}
 			}
 		}
 	}

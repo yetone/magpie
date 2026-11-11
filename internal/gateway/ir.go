@@ -247,6 +247,10 @@ type Request struct {
 	// client asked prompt_cache_retention "in_memory", or the upstream
 	// turned the ttl away (hourMarksRefused).
 	hourMarks bool
+	// videoOff is set on a request built for a model known not to take
+	// video (videoInput): a video of an earlier turn is told of in words
+	// (attachmentText) where it would go as a video block (video_input.go)
+	videoOff bool
 	// draws asks the model for images beside text: a drawing asked on
 	// Gemini's API of a model not named for images (drawCodeAssist).
 	draws bool

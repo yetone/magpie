@@ -214,7 +214,7 @@ func renderedCacheBlock(b aBlock) bool {
 		return b.Thinking != ""
 	case "redacted_thinking":
 		return false
-	case "image":
+	case "image", "video":
 		return b.Source != nil && (b.Source.Data != "" || b.Source.URL != "")
 	}
 	return true

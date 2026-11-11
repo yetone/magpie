@@ -205,6 +205,16 @@ func readAnthropic(body []byte, clientMarks, facts bool) (*Request, error) {
 					if b.Source != nil {
 						msg.Parts = append(msg.Parts, Part{Kind: Image, MediaType: b.Source.MediaType, Data: b.Source.Data, URL: b.Source.URL, block: true})
 					}
+				case "video":
+					// MiniMax's Anthropic endpoint takes a video in the image
+					// block's shape (#6135): a File of the video, which every
+					// builder sends on or turns away, never leaves out
+					if b.Source != nil {
+						if v, ok := videoPart(cmp.Or(b.Source.Data, b.Source.URL), cmp.Or(b.Source.MediaType, "video/mp4"), ""); ok {
+							v.block = true
+							msg.Parts = append(msg.Parts, v)
+						}
+					}
 				case "tool_use":
 					msg.Parts = append(msg.Parts, Part{Kind: ToolCall, ID: anthropicInID(b.ID), Name: b.Name, Args: b.Input, block: true})
 				case "tool_result":
@@ -943,6 +953,12 @@ func anthropicBody(r *Request, model, host string, replay bool) []byte {
 					rest = append(rest, aBlock{Type: "text", Text: p.Text, CacheControl: partMark(p.cache)})
 				}
 			case File:
+				if isVideo(p) && !r.videoOff {
+					b := videoBlock(p)
+					b.CacheControl = partMark(p.cache)
+					rest = append(rest, b)
+					break
+				}
 				rest = append(rest, aBlock{Type: "text", Text: attachmentText(p)})
 			case Image:
 				b := imageBlock(p)

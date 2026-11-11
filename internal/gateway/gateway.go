@@ -2942,6 +2942,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			return
 		}
 	}
+	// a video for a model its list says takes none is turned away, not
+	// left out for the model to answer the words alone (#6135); a group's
+	// members are picked by it below
+	if !isGroup && bytes.Contains(body, []byte("video")) && noVideo(p.ID, model) && hasCurrentVideo(from, body) {
+		call.Status, call.Error = 400, "model does not support video input"
+		writeError(w, from, 400, videoRefused(call.Model, ""))
+		turnedAway()
+		return
+	}
 	// a careful provider's capped accounts read again now where what is
 	// known of their usage is too old to send on (plugins#349)
 	if isGroup {
@@ -3283,6 +3292,31 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				turnedAway()
 				return
 			}
+		}
+	}
+	if isGroup && hasCurrentVideo(from, body) {
+		// a video goes only to the members that take one, else to those
+		// magpie knows nothing of, else is turned away: a member that takes
+		// none would answer the words alone (#6135)
+		var takes, unknown []candidate
+		var takesAt, unknownAt []Weighed
+		for i, c := range cands {
+			switch v := videoInput(c.p.ID, c.model); {
+			case v == nil:
+				unknown, unknownAt = append(unknown, c), append(unknownAt, pl.order[i])
+			case *v:
+				takes, takesAt = append(takes, c), append(takesAt, pl.order[i])
+			}
+		}
+		cands, pl.order = takes, takesAt
+		if len(takes) == 0 {
+			cands, pl.order = unknown, unknownAt
+		}
+		if len(cands) == 0 {
+			call.Status, call.Error = 400, "model does not support video input"
+			writeError(w, from, 400, videoRefused(call.Model, g.Name))
+			turnedAway()
+			return
 		}
 	}
 	pin := strings.TrimSpace(r.Header.Get(AccountHeader))
@@ -8962,6 +8996,10 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 			return s.searchReply(w, r, from, p.Name, request, u, ask)
 		}
 	}
+	if msg := unportableVideo(to, request); msg != "" {
+		// told, not left out for the model to answer the words alone (#6135)
+		return writeError(w, from, 400, msg), msg
+	}
 	stream := request.Stream
 	request.Stream = true
 	if stream {
@@ -9327,6 +9365,13 @@ func buildFor(p provider.Provider, proto provider.Protocol, r *Request, model st
 		// fold would move them out of conversation order (#4632)
 		c := *r
 		c.instructionsKept = true
+		r = &c
+	}
+	if !r.videoOff && anyVideo(r) && noVideo(p.ID, model) {
+		// a video of an earlier turn, to a model that takes none, is told
+		// of in words (#6135)
+		c := *r
+		c.videoOff = true
 		r = &c
 	}
 	return build(proto, r, model, buildHost(p), p.RejectsTemperature(model))

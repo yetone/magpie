@@ -195,6 +195,14 @@ func chatParts(raw json.RawMessage) []Part {
 			FileID   string `json:"file_id"`
 			Filename string `json:"filename"`
 		} `json:"file"`
+		VideoURL struct {
+			URL string `json:"url"`
+		} `json:"video_url"`
+		// the AI SDK's file part, flat (#4101: ZCode's), whose video
+		// alone is read here
+		Data      string `json:"data"`
+		MediaType string `json:"mediaType"`
+		Filename  string `json:"filename"`
 	}
 	decodeJSON(raw, &items)
 	var out []Part
@@ -209,6 +217,17 @@ func chatParts(raw json.RawMessage) []Part {
 		case "file":
 			if p, ok := chatFile(it.File.FileData, it.File.FileID, it.File.Filename); ok {
 				out = append(out, p)
+			} else if strings.HasPrefix(strings.ToLower(it.MediaType), "video/") {
+				if v, ok := videoPart(it.Data, it.MediaType, it.Filename); ok {
+					out = append(out, v)
+				}
+			}
+		case "video_url":
+			// a video, as DashScope's, Kimi's and OpenRouter's Chat take
+			// one (#4101, #6135): left out before, and the model answered
+			// for the words alone
+			if v, ok := videoPart(it.VideoURL.URL, "", ""); ok {
+				out = append(out, v)
 			}
 		}
 	}
@@ -490,6 +509,11 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 			case Text:
 				content = append(content, map[string]any{"type": "text", "text": p.Text})
 			case File:
+				if isVideo(p) && !r.videoOff {
+					plain = false
+					content = append(content, chatVideo(p))
+					break
+				}
 				content = append(content, map[string]any{"type": "text", "text": attachmentText(p)})
 			case Image:
 				plain = false

@@ -2,6 +2,7 @@ package provider
 
 import (
 	"maps"
+	"slices"
 	"testing"
 )
 
@@ -77,6 +78,30 @@ func TestGroupImagesFromAMemberThatSees(t *testing.T) {
 	groups := groupEntries(entries)
 	if len(groups) != 1 || !groups[0].Images || groups[0].ImageInput == nil || !*groups[0].ImageInput {
 		t.Fatalf("group with a member that sees lost images: %+v", groups)
+	}
+}
+
+// A group takes every kind a member takes, not text and image alone
+// (#2898, #6135), and says nothing of the kinds when no member did.
+func TestGroupInputsAreItsMembers(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "")
+	entries := []Entry{
+		{ID: "a/m", Model: "m", Provider: Provider{ID: "a"}, Images: true, Inputs: []string{"text", "image"}, Outputs: []string{"text"}},
+		{ID: "b/m", Model: "m", Provider: Provider{ID: "b"}, Images: true, Inputs: []string{"text", "image", "video"}, Outputs: []string{"text"}},
+		{ID: "a/n", Model: "n", Provider: Provider{ID: "a"}},
+		{ID: "b/n", Model: "n", Provider: Provider{ID: "b"}},
+	}
+	got := map[string]Entry{}
+	for _, g := range groupEntries(entries) {
+		got[g.Model] = g
+	}
+	if g := got["m"]; !slices.Equal(g.Inputs, []string{"text", "image", "video"}) || !slices.Equal(g.Outputs, []string{"text"}) {
+		t.Errorf("group of m takes %v, gives %v", g.Inputs, g.Outputs)
+	}
+	if g, ok := got["n"]; !ok || g.Inputs != nil || g.Outputs != nil {
+		t.Errorf("group of n, no member said of: %+v (%v)", g, ok)
 	}
 }
 

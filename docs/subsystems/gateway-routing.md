@@ -2308,6 +2308,38 @@ user group and auto group, over Chat, Responses and Messages) and
 `TestImageRefused`
 ([`vision_refused_test.go`](../../internal/gateway/vision_refused_test.go)).
 
+## A video the client gives the model
+
+A video is a `File` part whose media type is `video/*` (`isVideo` in
+[`video_input.go`](../../internal/gateway/video_input.go)). It is read from
+Messages' `video` block (MiniMax's Anthropic endpoint takes one), Chat's
+`video_url`, a Chat `file` of a video (the nested form, or the AI SDK's flat
+`{type, data, mediaType}`), a Responses `input_file` of one, and Gemini's
+`inlineData`/`fileData`. It is built in each API's own shape: a `video`
+block on Messages (`videoBlock`), `video_url` on Chat (`chatVideo`),
+`inlineData` on Gemini's API. Responses has none, so a video in the latest
+user message translated there is a 400 that says so (`unportableVideo`, in
+`translate`). Before, Messages' block and Chat's `video_url` had no case in
+the parsers: the request was answered 200 and billed, and the model never
+saw the video (#6135, #4101). A relayed body keeps its video as it came.
+
+Whether a model takes video is its source's list of kinds
+(`Entry.Inputs`: a plugin's capabilities, a list's `input_modalities`,
+models.dev); nil is unknown (`videoInput`). A latest-turn video for a
+model known to take none is a 400 before any upstream is asked
+(`videoRefused`, in `serve` after the image gate). A video of an earlier
+turn to such a model is told of in words (`Request.videoOff`, set in
+`buildFor`, `attachmentText`). A routing group takes the union of its
+members' kinds (`unionKinds` in `buildGroupEntries`, so `/v1/models` lists
+`video` for a group with a member that takes it, #2898), and a video goes
+only to the members that take one, else those nothing is known of, else a
+400 naming the group. Audio (`input_audio`, #4101) and PDFs (#5452) are not
+handled here.
+
+Covered by `TestPluginGetsTheVideoBlock` (the reporter's body to a plugin),
+`TestVideoReachesEveryAPI`, `TestVideoForAModelThatTakesNone`,
+`TestGroupVideoGoesToMembersThatTakeIt` and `TestGroupInputsAreItsMembers`.
+
 ## An image the describer can't describe
 
 `seer` names one describer, and before kelvinjason11 on X ("图片识别好像只支持一个模型识别 没有fallback") that was the only one asked: when it
