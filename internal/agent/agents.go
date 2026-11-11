@@ -359,7 +359,7 @@ func onMachineAll(home, cfg string) []*Agent {
 		aionui(),
 		cherryStudio(home),
 		lody(home),
-	}, append(append(ompProfiles(home), qwenpawAgents(home)...), hermesProfileAgents(home)...)...)
+	}, append(append(append(ompProfiles(home), qwenpawAgents(home)...), hermesProfileAgents(home)...), claudeDirAgents(home)...)...)
 }
 
 // ---- accessors -------------------------------------------------------------
