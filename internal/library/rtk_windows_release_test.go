@@ -319,8 +319,14 @@ func TestRTKWingetFolderWithoutRecord(t *testing.T) {
 
 	// winget has records, none of them this folder
 	wingetOn(t, h, wingetUnlisted, 0, func() ([]string, bool) { return []string{filepath.Join(h, "elsewhere")}, true })
-	if c := rtkUpgrader(link); len(c) != 2 || c[0] != rtkWindowsRelease || c[1] != real {
-		t.Fatalf("no record: upgrader %q; want %s %s", c, rtkWindowsRelease, real)
+	// the link is followed to its file, and macOS's temp folder is itself a
+	// link (/var to /private/var)
+	want, err := filepath.EvalSymlinks(real)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := rtkUpgrader(link); len(c) != 2 || c[0] != rtkWindowsRelease || c[1] != want {
+		t.Fatalf("no record: upgrader %q; want %s %s", c, rtkWindowsRelease, want)
 	}
 	v, err := UpgradeRTK()
 	if err != nil || v.Version != "0.51.0" {

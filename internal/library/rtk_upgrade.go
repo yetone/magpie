@@ -704,6 +704,12 @@ func askWingetOwns(bin, real string) (yes, known bool) {
 			if inFolder(real, l) || inFolder(bin, l) {
 				return true, true
 			}
+			// real has its links followed, so the record's folder is too:
+			// a folder reached through a link or junction (macOS's /var is
+			// /private/var) is the same folder
+			if lr, err := filepath.EvalSymlinks(l); err == nil && lr != l && inFolder(real, lr) {
+				return true, true
+			}
 		}
 		return false, true
 	}
