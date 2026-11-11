@@ -24,6 +24,10 @@ const (
 type newAPI struct {
 	mu    sync.Mutex
 	calls map[string]int
+	// a fork's refusal of a GPT on Anthropic, where it differs from New
+	// API's 503 (WandAPI answers 404)
+	status int
+	body   string
 }
 
 func (f *newAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +46,12 @@ func (f *newAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case r.URL.Path == "/v1/messages" && gpt:
+		if f.status != 0 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(f.status)
+			io.WriteString(w, f.body)
+			return
+		}
 		refuse(newAPINoChannelClaude)
 	case r.URL.Path != "/v1/messages" && !gpt:
 		refuse(newAPINoChannelOpenAI)
@@ -136,5 +146,44 @@ func TestNoChannelWithNothingElseIsTheError(t *testing.T) {
 	}
 	if !srv.fits("relay", "gpt-6.1-sol", provider.Anthropic) {
 		t.Error("the only API was marked unfit")
+	}
+}
+
+// WandAPI answers 404 where New API answers 503 (equinox0253 on X). The
+// fallback follows the body's shape (New API's model_not_found code, its
+// message naming the group), not the status alone: a 404 of any other kind
+// is the relay's word, and nothing is remembered.
+func TestNoChannelAs404FromAFork(t *testing.T) {
+	for _, c := range []struct {
+		name, body string
+		falls      bool
+	}{
+		{"fork no channel", `{"error":{"message":"分组 default 下模型 gpt-6.1-sol 暂无渠道","type":"new_api_error","code":"model_not_found"}}`, true},
+		{"missing model", `{"error":{"message":"The model gpt-6.1-sol does not exist or you do not have access to it.","type":"invalid_request_error","code":"model_not_found"}}`, false},
+		{"wrong base URL", `404 page not found`, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			t.Setenv("XDG_CACHE_HOME", t.TempDir())
+			f := &newAPI{status: 404, body: c.body}
+			up := httptest.NewServer(f)
+			t.Cleanup(up.Close)
+			if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k", Models: []string{"gpt-6.1-sol"},
+				Chat: up.URL + "/v1", Anthropic: up.URL}); err != nil {
+				t.Fatal(err)
+			}
+			srv := New()
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"relay/gpt-6.1-sol","max_tokens":100,"stream":true,"messages":[{"role":"user","content":"hi"}]}`)))
+			if c.falls {
+				if rec.Code != 200 || !strings.Contains(rec.Body.String(), "gpt ok") || srv.fits("relay", "gpt-6.1-sol", provider.Anthropic) {
+					t.Fatalf("no fallback: %d %s", rec.Code, rec.Body.String())
+				}
+				return
+			}
+			if rec.Code != 404 || !srv.fits("relay", "gpt-6.1-sol", provider.Anthropic) || f.count("/v1/chat/completions gpt") != 0 {
+				t.Fatalf("a real 404 was turned into a protocol switch: %d %s %v", rec.Code, rec.Body.String(), f.calls)
+			}
+		})
 	}
 }

@@ -489,6 +489,20 @@ func TestNoChannel(t *testing.T) {
 		{503, `{"error":{"message":"当前分组 default 下对于模型 gpt-6.1-sol 无可用渠道 (request id: 2026)","type":"new_api_error","code":"model_not_found"}}`, true},
 		{503, `{"error":{"message":"upstream overloaded"}}`, false},
 		{429, `No available channel for model x`, false},
+		// a fork answering 404 where New API answers 503 (equinox0253 on X,
+		// WandAPI): New API's model_not_found code, the message naming
+		// the group or channel; shapes built from New API's message
+		// templates, not a captured WandAPI body
+		{404, `{"error":{"message":"No available channel for model gpt-6.1-sol under group default","type":"new_api_error","code":"model_not_found"}}`, true},
+		{404, `{"error":{"message":"分组 default 下模型 gpt-6.1-sol 暂无渠道","type":"invalid_request_error","code":"model_not_found"}}`, true},
+		{404, `{"type":"error","error":{"type":"model_not_found","message":"model gpt-6.1-sol has no channel in group vip"}}`, true},
+		// a real 404 stays one: a wrong base URL, a model that does not
+		// exist, Anthropic's own not_found_error
+		{404, `404 page not found`, false},
+		{404, `<html><body>Not Found</body></html>`, false},
+		{404, `{"error":{"message":"The model gpt-9 does not exist or you do not have access to it.","type":"invalid_request_error","code":"model_not_found"}}`, false},
+		{404, `{"type":"error","error":{"type":"not_found_error","message":"model: gpt-6.1-sol"}}`, false},
+		{404, `{"error":{"message":"Invalid URL (POST /v1/messages)","type":"invalid_request_error","code":null}}`, false},
 	} {
 		if got := NoChannel(c.status, []byte(c.body)); got != c.want {
 			t.Errorf("NoChannel(%d, %s) = %v", c.status, c.body, got)
