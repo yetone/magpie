@@ -2,6 +2,8 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "This computer follows the server: what you change here is replaced by the next sync.": "这台电脑跟随服务器：你在这里的改动会被下一次同步替换。",
+    "Sync settings": "同步设置",
     "Stop picking memories": "不再选择记忆",
     "Learned in {projects}": "在 {projects} 中学到",
     "Use everywhere": "在所有项目中使用",
@@ -973,6 +975,8 @@ magpie.strings({
     "{name} read again from its source": "已重新从来源读取 {name}",
   },
   "zh-TW": {
+    "This computer follows the server: what you change here is replaced by the next sync.": "這台電腦跟隨伺服器：你在這裡的變更會被下一次同步取代。",
+    "Sync settings": "同步設定",
     "Stop picking memories": "不再選擇記憶",
     "Learned in {projects}": "在 {projects} 中學到",
     "Use everywhere": "在所有專案中使用",
@@ -1944,6 +1948,8 @@ magpie.strings({
     "{name} read again from its source": "已重新從來源讀取 {name}",
   },
   ja: {
+    "This computer follows the server: what you change here is replaced by the next sync.": "このコンピュータはサーバーに従います。ここでの変更は次の同期で置き換えられます。",
+    "Sync settings": "同期の設定",
     "Stop picking memories": "メモリの選択を終える",
     "Learned in {projects}": "{projects} で学んだこと",
     "Use everywhere": "すべてのプロジェクトで使う",
@@ -2915,6 +2921,8 @@ magpie.strings({
     "{name} read again from its source": "{name} をソースから読み直しました",
   },
   de: {
+    "This computer follows the server: what you change here is replaced by the next sync.": "Dieser Computer folgt dem Server: Änderungen hier werden bei der nächsten Synchronisierung ersetzt.",
+    "Sync settings": "Sync-Einstellungen",
     "Stop picking memories": "Keine Erinnerungen mehr auswählen",
     "Learned in {projects}": "Gelernt in {projects}",
     "Use everywhere": "Überall verwenden",

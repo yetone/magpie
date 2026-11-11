@@ -900,3 +900,4 @@ body.window .lib-list .lib-row { --lib-indent: 38px; }
 .lib-memdetail .lib-memwhy { height: 28px; }
 input.lib-memq, input.lib-memtags, input.lib-memwhy { padding: 0 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font-size: 12.5px; outline: none; box-sizing: border-box; transition: border-color .12s, box-shadow .12s; }
 input.lib-memq:focus, input.lib-memtags:focus, input.lib-memwhy:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.lib-follow .link { font-size: inherit; padding: 0; margin-left: 2px; }

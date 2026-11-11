@@ -149,6 +149,10 @@ kept in the sync folder like a join's and said in the notice
 (`Notice.Followed`). The join rules still hold: an `unset` part on the
 server leaves this computer's, and own agent fields and agents only here
 stay. Following a server with no file yet is an error, nothing sent.
+The Library page says so above its Instructions, MCP, Skills, Hooks,
+Subagents and Plugins tabs (and Memory while memory is synced), with a link
+to that setting (`followNote` in `plugins/library/client.js`,
+`library-follow-server.test.cjs`).
 `Configure` keeps the choice, as it keeps `AutoEvery`. The computer
 followed is an ordinary two-way one (`TestFollowServer`,
 `TestFollowServerSendsNoSignIn`, `sync-follow-server.test.cjs`).
