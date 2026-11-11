@@ -125,7 +125,10 @@ func (l *Limit) sameLimit(o *Limit) bool {
 }
 
 // Periods are the windows a limit can be set for.
-var Periods = []string{"day", "week", "month", "days", "hours"}
+//
+// "total" never resets by the calendar: it counts from when it was set,
+// or last reset, and only a reset starts it again.
+var Periods = []string{"day", "week", "month", "days", "hours", "total"}
 
 // MaxDays is the longest "days" cycle, ten years.
 const MaxDays = 3650
@@ -165,7 +168,7 @@ func (l *Limit) Valid() (*Limit, error) {
 		v.Period = "day"
 	}
 	switch v.Period {
-	case "day", "week", "month":
+	case "day", "week", "month", "total":
 		v.Days, v.Hours = 0, 0
 	case "days":
 		v.Hours = 0
@@ -178,7 +181,7 @@ func (l *Limit) Valid() (*Limit, error) {
 			return nil, fmt.Errorf("A limit's cycle is a whole number of hours from 1 to %d", MaxHours)
 		}
 	default:
-		return nil, errors.New("A limit's period is day, week, month, every N days or every N hours")
+		return nil, errors.New("A limit's period is day, week, month, total, every N days or every N hours")
 	}
 	v.Cost = math.Round(v.Cost*1e4) / 1e4
 	ms, err := CleanModels(v.Models)
@@ -198,7 +201,7 @@ func (l *Limit) Valid() (*Limit, error) {
 }
 
 // Per is the window as a sentence ends it: "day", "week", "month",
-// "10-day cycle" or "5-hour cycle".
+// "total", "10-day cycle" or "5-hour cycle".
 func (l *Limit) Per() string {
 	switch l.Period {
 	case "days":
@@ -218,9 +221,9 @@ func (l *Limit) Counts(model string) bool {
 // sinceOf is the Since a limit set as next keeps, with prev the key's
 // limit before: its own while the period and cycle stay the same (a new
 // cap doesn't restart the window), else a new cycle from now for "days"
-// and "hours", and none for a calendar period.
+// and "hours" and for "total", and none for a calendar period.
 func sinceOf(prev, next *Limit, now time.Time) time.Time {
-	cyclic := next.cycle() > 0
+	cyclic := next.cycle() > 0 || next.Period == "total"
 	if prev != nil && prev.Period == next.Period && prev.Days == next.Days && prev.Hours == next.Hours && (!cyclic || !prev.Since.IsZero()) {
 		return prev.Since
 	}
@@ -241,6 +244,16 @@ var epoch = time.Unix(0, 0)
 // in it.
 func (l *Limit) Window(now time.Time) (start, reset time.Time) {
 	loc := now.Location()
+	if l.Period == "total" {
+		// counted from when it was set or reset (a hand-written one with
+		// no Since, from the epoch), and never ends: the reset a refusal
+		// names is a hundred years off
+		start = l.Since
+		if start.Before(epoch) {
+			start = epoch
+		}
+		return start.In(loc), start.AddDate(100, 0, 0).In(loc)
+	}
 	if n := l.cycle(); n > 0 {
 		anchor := l.Since
 		if anchor.Before(epoch) {

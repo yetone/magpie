@@ -1002,9 +1002,10 @@ function gatewayTierBadge(k) {
 // ---- a gateway key's own limit (#585) ----
 
 // "days" is every N days from when the limit is set or reset (#1509),
-// "hours" every N hours (#2102), a subscription's 5-hour window's pace
-const limitPeriods = ["day", "week", "month", "days", "hours"];
-const limitPer = { day: "per day", week: "per week", month: "per month", days: "Every N days", hours: "Every N hours" };
+// "hours" every N hours (#2102), a subscription's 5-hour window's pace,
+// "total" never resets by itself, only by Reset (@Cyrus_4433 on X)
+const limitPeriods = ["day", "week", "month", "days", "hours", "total"];
+const limitPer = { day: "per day", week: "per week", month: "per month", days: "Every N days", hours: "Every N hours", total: "in total" };
 const cyclic = (period) => period === "days" || period === "hours";
 // perWords is a limit's window as the badge says it: "per week", "every
 // 10 days", "every 5 hours"
@@ -1103,11 +1104,14 @@ function gatewayLimitLine(k, u) {
   if (u.tokenLimit) parts.push(t("{used} of {limit} tokens · {left} left", { used: fmtN(u.tokens), limit: fmtN(u.tokenLimit), left: fmtN(u.tokensLeft) }));
   if (u.costLimit) parts.push(t("{used} of {limit} estimated · {left} left", { used: usd(u.cost), limit: usd(u.costLimit), left: usd(u.costLeft) }));
   const at = new Date(u.reset);
-  parts.push(t(u.spent ? "refused until {when}" : "resets {when}", { when: resetClock(at) }));
+  if (u.period !== "total") parts.push(t(u.spent ? "refused until {when}" : "resets {when}", { when: resetClock(at) }));
+  else if (u.spent) parts.push(t("refused until reset"));
   if (u.inFlight) parts.push(t(u.inFlight === 1 ? "1 in flight" : "{n} in flight", { n: u.inFlight }));
   line.textContent = parts.join(" · ");
   line.title = (u.models?.length ? u.models.join(", ") + "\n" : "")
-    + t("Counted from {start}; resets {when}", { start: new Date(u.start).toLocaleString(intlLang()), when: at.toLocaleString(intlLang()) })
+    + (u.period === "total"
+      ? t("Counted from {start}", { start: new Date(u.start).toLocaleString(intlLang()) })
+      : t("Counted from {start}; resets {when}", { start: new Date(u.start).toLocaleString(intlLang()), when: at.toLocaleString(intlLang()) }))
     + (u.unpriced ? "\n" + t("{n} calls without a known price aren't in the cost", { n: u.unpriced }) : "");
   return line;
 }
@@ -1350,6 +1354,7 @@ function askResetLimit(k, n) {
   ed.append(head, el("p", "lib-confirm", u.period === "days"
     ? t("The tokens and cost {name} has used go back to 0 together, and a new {n}-day cycle starts now.", { name: k.name, n: u.days })
     : u.period === "hours" ? t("The tokens and cost {name} has used go back to 0 together, and a new {n}-hour cycle starts now.", { name: k.name, n: u.hours })
+    : u.period === "total" ? t("The tokens and cost {name} has used go back to 0 together, and counting starts again from now.", { name: k.name })
     : t("The tokens and cost {name} has used go back to 0 together. Calls so far in this window stop counting; it still resets {when}.", { name: k.name, when: resetClock(new Date(u.reset)) })));
   const bar = el("div", "bar");
   const cancel = el("button", "text", t("Cancel"));

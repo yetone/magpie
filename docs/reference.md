@@ -669,6 +669,7 @@ magpie gateway-key remove <id>         # revokes remote access
 magpie gateway-key limit <id> week --tokens 2m --cost 5   # its own limit
 magpie gateway-key limit <id> list     # each limit, used, left and reset
 magpie gateway-key limit <id> 10d --tokens 5m   # every 10 days, from now
+magpie gateway-key limit <id> total --cost 300  # $300 in total, until reset
 magpie gateway-key limit <id> 5h --tokens 200k  # every 5 hours, from now
 magpie gateway-key limit <id> add week --cost 20   # one more limit; all must pass
 magpie gateway-key limit <id> add month --cost 20 --model openai/*   # a limit of only OpenAI's models
@@ -692,7 +693,10 @@ Each gateway key can have its own **limit**: a token total, an estimated
 cost in US$, or both, per day, week or month (calendar windows in local
 time: from midnight, from Monday, from the 1st), every N days (#1509;
 N from 1 to 3650) or every N hours (#2102; N from 1 to 8760, such as 5 for
-a subscription's 5-hour pace). An N-day or N-hour cycle starts when the
+a subscription's 5-hour pace), or **in total** (`total`, @Cyrus_4433 on X):
+a limit that never resets by the clock, counted from when it is set and
+started again only by **Reset usage** (`magpie gateway-key limit <id> total
+--cost 300`); its 429 says it stays refused until it is reset or raised. An N-day or N-hour cycle starts when the
 limit is set and runs N×24 or N hours, then the next one starts where it
 ended, so a restart, a time-zone change or a daylight-saving shift doesn't
 move it. Changing only

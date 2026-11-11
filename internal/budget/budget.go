@@ -524,6 +524,9 @@ func (r *Refusal) Error() string {
 	if len(r.Models) > 0 {
 		on = " on " + strings.Join(r.Models, ", ")
 	}
+	if r.Period == "total" {
+		return fmt.Sprintf("magpie gateway key %q has used %s%s of its total limit; it stays refused until the limit is reset or raised", r.Key, what, on)
+	}
 	return fmt.Sprintf("magpie gateway key %q has used %s%s for this %s; it resets at %s",
 		r.Key, what, on, (&access.Limit{Period: r.Period, Days: r.Days, Hours: r.Hours}).Per(), r.Reset.Format("2006-01-02 15:04 MST"))
 }

@@ -460,3 +460,42 @@ func TestSeveralLimits(t *testing.T) {
 		t.Fatalf("authenticated without its second limit: %+v", who.More)
 	}
 }
+
+// A "total" limit (@Cyrus_4433 on X) is a kept period: it starts when set
+// or reset, ends a century off, and an old file without it reads the same.
+func TestLimitTotal(t *testing.T) {
+	since := time.Date(2026, 3, 4, 5, 6, 0, 0, time.UTC)
+	l := &Limit{Period: "total", Cost: 300, Since: since}
+	for _, now := range []time.Time{since, since.AddDate(0, 7, 0), since.AddDate(40, 0, 0)} {
+		start, reset := l.Window(now)
+		if !start.Equal(since) || !reset.After(now.AddDate(50, 0, 0)) {
+			t.Errorf("at %s: %s – %s", now, start, reset)
+		}
+	}
+	if start, _ := (&Limit{Period: "total", Cost: 1}).Window(since); !start.Equal(epoch) {
+		t.Errorf("no Since starts at %s", start)
+	}
+	v, err := (&Limit{Period: "total", Days: 3, Hours: 4, Cost: 300}).Valid()
+	if err != nil || v.Period != "total" || v.Days != 0 || v.Hours != 0 || v.Per() != "total" {
+		t.Fatalf("%+v %v", v, err)
+	}
+	if v, _ := (&Limit{Period: "month", Cost: 5}).Valid(); v.Period != "month" {
+		t.Errorf("month: %+v", v)
+	}
+	// setting it starts it, a new cap keeps it, a period change starts anew
+	now := time.Date(2026, 10, 10, 8, 0, 0, 0, time.UTC)
+	if got := sinceOf(nil, v0("total"), now); !got.Equal(now) {
+		t.Errorf("new total since %s", got)
+	}
+	if got := sinceOf(&Limit{Period: "total", Since: since}, v0("total"), now); !got.Equal(since) {
+		t.Errorf("a new cap restarted it: %s", got)
+	}
+	if got := sinceOf(&Limit{Period: "month"}, v0("total"), now); !got.Equal(now) {
+		t.Errorf("month to total since %s", got)
+	}
+	if got := sinceOf(&Limit{Period: "total", Since: since}, v0("month"), now); !got.IsZero() {
+		t.Errorf("total to month since %s", got)
+	}
+}
+
+func v0(period string) *Limit { return &Limit{Period: period, Cost: 1} }
