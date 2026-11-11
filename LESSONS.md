@@ -556,6 +556,22 @@ holds the context, a stopped timer included.**
   50 allocations: 51 on Linux and 130 on Windows with the lists kept as
   meant (#5123). c1b8010a2 compares 400 models against 4, as the
   AutoVision half did, and is still red with the cache broken by hand.
+- The same day TestDshRoundWithNothingChangedBuildsNothing's fixed 300
+  read 421 on Windows CI. It now compares a settled round over 402
+  models with one over 2; with the skip broken by hand that is 78375
+  against 1780.
+- Seen 1× (2026-11-11).
+
+**A new route or setting field is run against the guard tests that list
+every route and field, not only its own tests.**
+- f5e1b1091 (11-11) added POST /api/settings/context-cap-mode and
+  Settings.ContextCapAll and ran `cli -run ContextCap`. The CLI parity
+  test (#6102) and the GUI keep test (#6103) list every route and
+  field, and both went red on main; its usage line also broke the help
+  column a test checks (#6104). e0cadc312 added three /api/memory
+  routes the same day with no parity entry.
+- Run the whole internal/cli and internal/gui packages for a new route
+  or field; `grep -n` the parity map for the route before pushing.
 - Seen 1× (2026-11-11).
 
 ## Red tests and releases
