@@ -172,7 +172,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         // the tab, with its count, between Hooks and RTK
         const tabs = (await v.locator(".lib-tabs button").allTextContents()).map((x) => x.trim());
-        assert.deepEqual(tabs.slice(4, 8), [w("Hooks"), w("Subagents") + " · 1", w("Claude plugins"), "RTK"]);
+        assert.deepEqual(tabs.slice(4, 9), [w("Hooks"), w("Variables"), w("Subagents") + " · 1", w("Claude plugins"), "RTK"]);
         // the row: what it is for, and what it binds
         assert.equal((await row("reviewer").locator(".lib-subagentdesc").textContent()).trim(), LONG);
         assert.equal((await row("reviewer").locator(".lib-subagentuses").textContent()).trim(), w("Skills: {names}", { names: "tdd" }) + " · " + w("MCP servers: {names}", { names: "github" }));
@@ -199,8 +199,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForTimeout(200);
         assert.deepEqual(posts.shift(), { what: "subagents/agents", body: { name: "reviewer", agents: ["claude", "codex", "cursor"] } });
         assert.deepEqual(agentsOf("reviewer"), ["claude", "codex", "cursor"]);
-        await press(page, v.locator(".lib-tabs button").nth(4));
         await press(page, v.locator(".lib-tabs button").nth(5));
+        await press(page, v.locator(".lib-tabs button").nth(6));
         await v.locator(".lib-subagents-cursor").filter({ hasText: w("The Cursor app has these subagents; its cursor-agent command reads only a project's own .cursor/agents.") }).waitFor();
         await v.locator(".lib-subagents-noskills").filter({ hasText: w("{agents} can't bind skills to a subagent: theirs gets its prompt, and every skill the agent has.", { agents: "Codex, Cursor" }) }).waitFor();
 

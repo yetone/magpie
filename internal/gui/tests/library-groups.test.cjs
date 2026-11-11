@@ -79,14 +79,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       t.after(() => context.close());
       await page.waitForFunction(() => document.querySelector("#side .nav-sub .nav-sl"));
       const rows = await order(page);
-      assert.equal(rows.length, 13, rows.join(","));
+      assert.equal(rows.length, 14, rows.join(","));
       assert.deepEqual(rows.filter((x) => x[0] === "#"), ["#" + a, "#" + b, "#" + c]);
-      // the order inside each: the shared six, then Claude's and Pi's, then magpie's
+      // the order inside each: the shared seven, then Claude's and Pi's, then magpie's
       assert.equal(rows[0], "#" + a);
-      assert.equal(rows[7], "#" + b);
-      assert.equal(rows[10], "#" + c);
+      assert.equal(rows[8], "#" + b);
+      assert.equal(rows[11], "#" + c);
       // a name is no tab: picking by keyboard skips it, the rows are still the tabs
-      assert.equal(await page.locator("#side .nav-sub .nav-s").count(), 10);
+      assert.equal(await page.locator("#side .nav-sub .nav-s").count(), 11);
       // the page's own strip is as it was: no names in it
       assert.equal(await page.locator("#view-library .lib-tabs .nav-sl").count(), 0);
       // the name is quiet: the muted ink, no left border, no ground
@@ -105,11 +105,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForFunction(() => document.querySelector("#side .nav-sub .nav-sl"));
       // Claude plugins and Pi packages hidden: "One agent" has nothing to list
       await page.evaluate(() => { for (const b of document.querySelectorAll("#view-library .lib-tabs button")) if (["plugins", "pi"].includes(b.dataset.seg)) b.hidden = true; navSubs(); });
-      await page.waitForFunction(() => !document.querySelector("#side .nav-sub .nav-s[data-of]") || document.querySelectorAll("#side .nav-sub .nav-s").length === 8);
+      await page.waitForFunction(() => !document.querySelector("#side .nav-sub .nav-s[data-of]") || document.querySelectorAll("#side .nav-sub .nav-s").length === 9);
       assert.deepEqual(await heads(page), ["Every agent", "magpie"]);
       // one section left: no names at all
       await page.evaluate(() => { for (const b of document.querySelectorAll("#view-library .lib-tabs button")) if (["rtk", "bili"].includes(b.dataset.seg)) b.hidden = true; navSubs(); });
-      await page.waitForFunction(() => document.querySelectorAll("#side .nav-sub .nav-s").length === 6);
+      await page.waitForFunction(() => document.querySelectorAll("#side .nav-sub .nav-s").length === 7);
       assert.deepEqual(await heads(page), []);
     });
 

@@ -73,7 +73,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.equal(await skel.getAttribute("aria-busy"), "true");
 
     const tabs = v.locator(".lib-head .lib-tabs .opt");
-    assert.deepEqual(await tabs.allTextContents(), ["Instructions", "Memory", "MCP servers", "Skills", "Hooks", "Subagents", "RTK", "billion-context"]);
+    assert.deepEqual(await tabs.allTextContents(), ["Instructions", "Memory", "MCP servers", "Skills", "Hooks", "Variables", "Subagents", "RTK", "billion-context"]);
     assert.equal(await v.locator(".lib-tabs .opt.on").textContent(), "Skills");
     assert.ok(await v.locator(".lib-head .lib-more").isDisabled(), "the folder waits for the library");
     // Skills in outline: rows with a switch, no section heading
@@ -90,7 +90,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     open();
     await v.locator(".lib-head .lib-more:not([disabled])").waitFor();
     assert.equal(await v.locator(".lib-skel").count(), 0, "the outline goes");
-    assert.deepEqual(await v.locator(".lib-tabs .opt").allTextContents(), ["Instructions", "Memory", "MCP servers · 1", "Skills · 1", "Hooks", "Subagents", "RTK", "billion-context", "Pi packages"]);
+    assert.deepEqual(await v.locator(".lib-tabs .opt").allTextContents(), ["Instructions", "Memory", "MCP servers · 1", "Skills · 1", "Hooks", "Variables", "Subagents", "RTK", "billion-context", "Pi packages"]);
     assert.equal(await v.locator(".lib-tabs .opt.on").textContent(), "Instructions");
     assert.equal(await v.locator(".lib-head .lib-more").getAttribute("title"), "~/.magpie/library");
     const after = await v.locator(".lib-tabs").boundingBox();

@@ -111,6 +111,7 @@ func syncSteps(all, gone []*Target, b *backups, res *Result) []func(*Library) {
 			l.syncInstructions(t, b, res, true)
 			l.syncMCP(t, b, res)
 			l.syncHooks(t, b, res)
+			l.syncEnv(t, b, res)
 			l.syncSubagents(t, b, res)
 		})
 	}
@@ -122,6 +123,7 @@ func syncSteps(all, gone []*Target, b *backups, res *Result) []func(*Library) {
 		steps = append(steps, func(l *Library) {
 			l.syncMCP(t, b, res)
 			l.syncHooks(t, b, res)
+			l.syncEnv(t, b, res)
 			l.syncSkills(t, res, all)
 		})
 	}
@@ -510,6 +512,10 @@ type View struct {
 	// this computer can take of them (hooks.go)
 	Hooks      []HookView      `json:"hooks"`
 	HookAgents []HookAgentView `json:"hookAgents"`
+	// Env are the library's variables, and EnvAgents what each agent on
+	// this computer can take of them (env.go)
+	Env       []EnvView      `json:"env"`
+	EnvAgents []EnvAgentView `json:"envAgents"`
 	// Subagents are the library's subagents, and SubagentAgents what
 	// each agent on this computer makes of them (subagents.go)
 	Subagents      []SubagentView      `json:"subagents"`
@@ -709,6 +715,7 @@ func readView(problems []Problem, glance bool) (*View, error) {
 		v.Servers = append(v.Servers, sv)
 	}
 	v.Hooks, v.HookAgents = l.hooksView(append(slices.Clone(targets), gone...), asleep, of)
+	v.Env, v.EnvAgents = l.envView(append(slices.Clone(targets), gone...), of)
 	v.Subagents, v.SubagentAgents = l.subagentsView(targets, asleep, of)
 	v.Plugins = l.pluginsView()
 	tr := &tracer{}

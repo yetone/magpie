@@ -659,7 +659,8 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			Paths       []string
 			Names       []string // the skills to update, of those a check found changed; to bring in, of those found in the agents
 			Server      library.Server
-			Hook        library.Hook // a hook saved (#1790)
+			Hook        library.Hook   // a hook saved (#1790)
+			Env         library.EnvVar // a variable saved
 			// a subagent saved (#2283)
 			Subagent library.Subagent
 			Agent    string            // the agent whose own skill is in the library's way
@@ -740,6 +741,12 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.RemoveFoundServer(in.Name)
 		case "hooks/save":
 			res, err = library.SaveHook(in.Old, in.Hook)
+		case "env/save":
+			res, err = library.SaveEnv(in.Old, in.Env)
+		case "env/agents":
+			res, err = library.EnvAgents(in.Name, in.Agents)
+		case "env/remove":
+			res, err = library.RemoveEnv(in.Name)
 		case "hooks/agents":
 			res, err = library.HookAgents(in.Name, in.Agents)
 		case "hooks/agents-some":
