@@ -5362,7 +5362,7 @@ A WebUI save most likely wrote the whole file back. Connect AstrBot again in mag
 
 Not on its own: magpie can't know the container's data volume, and this machine's loopback isn't the container's.
 
-More agents on the same models: [nanobot on any model](https://usemagpie.ai/docs/nanobot), [OpenClaw on any model](https://usemagpie.ai/docs/openclaw) and [Every model in Cherry Studio, through magpie](https://usemagpie.ai/docs/cherry-studio). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [nanobot on any model](https://usemagpie.ai/docs/nanobot), [QwenPaw on any model](https://usemagpie.ai/docs/qwenpaw), [OpenClaw on any model](https://usemagpie.ai/docs/openclaw) and [Every model in Cherry Studio, through magpie](https://usemagpie.ai/docs/cherry-studio). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
@@ -5424,6 +5424,86 @@ Platform custom (OpenAI-compatible), at http://127.0.0.1:3425/v1, or the gateway
 magpie lists AionUi once it has run on this computer. Open AionUi once, then look again.
 
 More desktop apps on the same models: [Every model in Cherry Studio, through magpie](https://usemagpie.ai/docs/cherry-studio) and [AstrBot on any model](https://usemagpie.ai/docs/astrbot). Using coding agents too? See [Subscriptions in any agent](https://usemagpie.ai/docs/subscriptions). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/qwenpaw
+
+# QwenPaw on any model
+
+QwenPaw (agentscope-ai/QwenPaw, formerly CoPaw) is a personal assistant app with agents of its own. magpie adds an OpenAI-compatible magpie provider to QwenPaw with every model in magpie listed, and sets the model you pick as an agent's `active_model`. So QwenPaw's agents run on any model you have in magpie: DeepSeek, GLM, Kimi, Qwen, an OpenAI or Anthropic key, or a ChatGPT or Copilot subscription, a different one for each agent if you like.
+
+## Set up QwenPaw
+
+1. **Start QwenPaw once.** Run `qwenpaw app` so it writes its agents' settings (`agent.json`).
+2. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+3. **Pick a model on QwenPaw's row.** On the Agents page, pick a magpie model for QwenPaw, and an effort if you want one.
+4. **Restart QwenPaw after the first connect.** QwenPaw reads its provider files at start-up only; after one restart it is on magpie.
+
+```
+magpie qwenpaw deepseek/deepseek-v4-pro          # the default agent
+magpie qwenpaw#writer deepseek/deepseek-v4-flash  # the agent named writer
+magpie qwenpaw effort high                        # thinking_level
+```
+
+## What magpie writes
+
+QwenPaw's working folder is `QWENPAW_WORKING_DIR`; without it, a legacy `~/.copaw` when there is one, else `~/.qwenpaw`. Its secret folder is `QWENPAW_SECRET_DIR` (which the working folder's `.env` may set too), else `<working folder>.secret`, such as `~/.qwenpaw.secret`.
+
+magpie writes `<secret folder>/providers/custom/magpie.json`, the way QwenPaw's console saves a provider from Add provider: OpenAI Chat Completions (`OpenAIChatModel`) at the gateway's `/v1`, a key naming QwenPaw, and each of magpie's models in `extra_models`. It then sets `active_model` in the agent's `agent.json` to provider magpie and the model you pick; the effort goes in `thinking_level` (minimal, low, medium, high, xhigh, max, or empty for inherit, the model's own).
+
+```
+// ~/.qwenpaw.secret/providers/custom/magpie.json
+{"id": "magpie", "name": "magpie", "base_url": "http://127.0.0.1:3425/v1",
+ "api_key": "…", "chat_model": "OpenAIChatModel", "is_custom": true,
+ "extra_models": [{"id": "deepseek/deepseek-v4-pro", …}, …]}
+
+// ~/.qwenpaw/workspaces/default/agent.json
+{"active_model": {"provider_id": "magpie", "model": "deepseek/deepseek-v4-pro"},
+ "thinking_level": "high", …}
+```
+
+QwenPaw keeps keys encrypted (starting `ENC:`). magpie writes the key in plain text and QwenPaw encrypts it at its next start, which is how its own files hold a key, so the key goes nowhere QwenPaw doesn't keep it. The provider file is readable by you alone (0600).
+
+## When it takes effect
+
+QwenPaw reads its provider files once, at start, so restart it after the first connect and after magpie's models change; until then a turn on magpie's model fails with `Provider 'magpie' not found`. A model picked for an agent after that needs no restart: QwenPaw reads `agent.json` again when it changes and asks for the model on every turn, so the new one is used from the next message.
+
+## Several agents
+
+Each of QwenPaw's agents is a row in magpie: `qwenpaw` is the default agent, which is always there, and any other is `qwenpaw#<id>`. Only an agent on QwenPaw's own backend (qwenpaw, the default) runs that model; one on an ACP backend runs another program, so magpie doesn't wire it and asks you to switch it to QwenPaw's own backend first.
+
+## Your own settings
+
+The agent's `active_model` from before is stashed and put back when magpie steps out. `fallback_models` and `subagent_model` are left alone. What you change in magpie's provider in QwenPaw's console (a model's window, its generation settings, the provider's headers) stays. If you switch magpie's provider off or delete it in QwenPaw, magpie's check says it no longer reaches magpie.
+
+## Switching back
+
+Set the row back to default in magpie: magpie puts the agent's `active_model` back. It removes `custom/magpie.json` only once no agent names magpie's provider any more, in a fallback or subagent model either. Or pick a model of one of your own providers; magpie's provider stays in the list until you disconnect.
+
+```
+magpie qwenpaw default
+```
+
+## FAQ
+
+### Can QwenPaw use DeepSeek, GLM, Kimi or Qwen?
+
+Yes. magpie writes an OpenAI-compatible magpie provider into QwenPaw's secret folder and sets the model you pick as the agent's active_model. Restart QwenPaw once after the first connect.
+
+### Why does it say Provider 'magpie' not found?
+
+QwenPaw reads its provider files at start-up only. Restart QwenPaw once after connecting; after that a new model is used from the next message, with no restart.
+
+### Does it work for CoPaw?
+
+Yes. QwenPaw was CoPaw; with a legacy ~/.copaw there, magpie uses it as the working folder, as QwenPaw does.
+
+### Can each agent use a different model?
+
+Yes. The default agent is the qwenpaw row in magpie and any other is qwenpaw#, each with its own model and effort.
+
+More agents on the same models: [AstrBot on any model](https://usemagpie.ai/docs/astrbot), [nanobot on any model](https://usemagpie.ai/docs/nanobot) and [OpenClaw on any model](https://usemagpie.ai/docs/openclaw). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
