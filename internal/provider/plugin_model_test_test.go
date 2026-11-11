@@ -81,8 +81,8 @@ func TestPluginModelTestSaysQueued(t *testing.T) {
 		got[r.Model] = r
 	}
 	q := got["fake-1"]
-	if q.OK || !strings.Contains(q.Error, "queued the request for fake-1") {
-		t.Errorf("the queued model's test: ok %v, %q (%v); want the plugin's queue message", q.OK, q.Error, took)
+	if !q.OK || q.Error != "" || !strings.Contains(q.Queued, "queued the request for fake-1") {
+		t.Errorf("the queued model's test: ok %v, error %q, queued %q (%v); want OK with the plugin's queue message", q.OK, q.Error, q.Queued, took)
 	}
 	if strings.Contains(q.Error, "deadline") {
 		t.Errorf("the queued model's test ran out of time: %q", q.Error)

@@ -38,6 +38,11 @@ type Result struct {
 	// otherAPI: the vendor said the model isn't served on the API asked
 	// (catalog.WrongEndpoint), so another may be asked instead
 	otherAPI bool
+	// Queued is the vendor's queue message when a plugin's model was
+	// queued instead of answered (Qoder's "queued the request for ...").
+	// The model is served, so the test is OK: it waits where an agent's
+	// turn waits it out.
+	Queued string `json:"queued,omitempty"`
 	// V1 is the base the request was answered at once the /v1 it was
 	// typed without was added (missingV1): the editor's URL takes it
 	V1 string `json:"v1,omitempty"`
@@ -1008,6 +1013,14 @@ func probeOnce(ctx context.Context, p Provider, proto Protocol, url string, body
 	}
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
 	r.Error = APIError(b, res.Status)
+	if p.IsPlugin() && res.StatusCode == http.StatusServiceUnavailable && res.Header.Get("Retry-After") != "" && strings.Contains(strings.ToLower(r.Error), "queued") {
+		// asked not to wait (FallbackHeader), a plugin says its vendor's
+		// queue at once. A model in a queue is served, and an agent's
+		// turn waits it out: not a failed test (Mr7Faith on X: Qoder's
+		// models were red all day while queued)
+		r.OK, r.Queued, r.Error = true, r.Error, ""
+		return r
+	}
 	r.otherAPI = catalog.WrongEndpoint(res.StatusCode, b)
 	return r
 }
