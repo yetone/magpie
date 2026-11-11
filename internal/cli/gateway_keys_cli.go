@@ -16,6 +16,7 @@ import (
 	"github.com/yetone/magpie/internal/budget"
 	"github.com/yetone/magpie/internal/oidc"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 func gatewayKeys(args []string) error { return gatewayKeysTo(os.Stdout, args) }
@@ -52,6 +53,10 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 	if action == "concurrency" {
 		access.MigrateLegacyLANKeyBestEffort()
 		return gatewayKeyConcurrency(out, args[1:])
+	}
+	if action == "tier" {
+		access.MigrateLegacyLANKeyBestEffort()
+		return gatewayKeyTier(out, args[1:])
 	}
 	if action == "mcp" {
 		access.MigrateLegacyLANKeyBestEffort()
@@ -106,7 +111,7 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		args = args[:2]
 	}
 	if (action == "list" && len(args) != 1) || (action != "list" && len(args) != 2) {
-		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] [--read-only] | rotate <id> [--key <value> | --key -] | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|<N>d|<N>h [--tokens N] [--cost USD] [--cache-reads] [--model <provider>/<model>|<provider>/* ...]] | models <id> [all | <provider>/<model>|<provider>/*|re:<regexp> ...] | aliases <id> [none | <name>=<provider>/<model> ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off] | concurrency <id> [<n> | off] | mcp <id> [all | none | <server>|<server>/<tool> ...] | access <id> [read-only | full] | move <id> <place> | issue --ttl <duration> [--name <name>] [--models a,b] [--accounts a,b] [--tokens N] [--cost USD] [--read-only] [--from <id>] | issuer <id> [on | off] | oidc [list | add --key <id> --repo owner/name … | remove <rule id>]")
+		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] [--read-only] | rotate <id> [--key <value> | --key -] | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|<N>d|<N>h [--tokens N] [--cost USD] [--cache-reads] [--model <provider>/<model>|<provider>/* ...]] | models <id> [all | <provider>/<model>|<provider>/*|re:<regexp> ...] | aliases <id> [none | <name>=<provider>/<model> ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off] | concurrency <id> [<n> | off] | tier <id> [follow | standard | fast | ultrafast] | mcp <id> [all | none | <server>|<server>/<tool> ...] | access <id> [read-only | full] | move <id> <place> | issue --ttl <duration> [--name <name>] [--models a,b] [--accounts a,b] [--tokens N] [--cost USD] [--read-only] [--from <id>] | issuer <id> [on | off] | oidc [list | add --key <id> --repo owner/name … | remove <rule id>]")
 	}
 	switch action {
 	case "list", "add", "rotate", "remove":
@@ -814,6 +819,35 @@ func gatewayKeyConcurrency(out io.Writer, args []string) error {
 	} else {
 		_, err = fmt.Fprintf(out, "%s: no concurrency limit\n", k.Name)
 	}
+	return err
+}
+
+// gatewayKeyTier shows or sets the service tier a key's OpenAI-API requests
+// are sent at whatever the client asked (JackyFill on X):
+//
+//	magpie gateway-key tier <id>                                    its tier
+//	magpie gateway-key tier <id> follow|standard|fast|ultrafast     set it
+func gatewayKeyTier(out io.Writer, args []string) error {
+	if len(args) == 0 || len(args) > 2 {
+		return fmt.Errorf("usage: magpie gateway-key tier <id> [follow | standard | fast | ultrafast]")
+	}
+	id := args[0]
+	if len(args) == 2 {
+		if _, err := access.Update("tier-key", access.Change{Key: id, ServiceTier: args[1]}); err != nil {
+			return err
+		}
+	}
+	keys, err := access.List()
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(keys, func(k access.Key) bool { return k.ID == id })
+	if i < 0 {
+		return fmt.Errorf("Key not found")
+	}
+	k := keys[i]
+	word := map[string]string{"": "follows the request", settings.CodexTierStandard: "standard", "priority": "fast", "ultrafast": "ultrafast"}[k.ServiceTier]
+	_, err = fmt.Fprintf(out, "%s: service tier %s\n", k.Name, word)
 	return err
 }
 

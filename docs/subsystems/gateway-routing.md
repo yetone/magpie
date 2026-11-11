@@ -873,6 +873,21 @@ and `TestKeySlotEveryRoute` in `key_slots_test.go`, `TestKeyConcurrency` in
 `internal/access`, `TestGatewayKeyConcurrencyCLI`,
 `gateway-key-concurrency.test.cjs`.
 
+A key's `ServiceTier` (JackyFill on X; `access.Key`, set by the `tier-key`
+action, the key row's service-tier badge or `magpie gateway-key tier <id>
+follow|standard|fast|ultrafast`; stored as "", "default", "priority" or
+"ultrafast") sends its Responses and Chat requests at that tier whatever the
+client asked, and over Codex's own setting (`keyTiered` in `codex_tier.go`,
+after `codexTiered` in `handle` and in `codexBackend`): standard takes the
+tier off, and Ultrafast on a bare model no account lists it on goes as
+priority, as `codexTiered` does. Unset follows the request. It only sets the
+request's `service_tier`: what is then sent upstream is the providers' own
+rule (`fits`, `takesTier`, the ultrafast to priority fallback), so a vendor
+that honours no service tier is sent none, and Anthropic-protocol requests
+(Claude's `speed`) are left alone. Tests: `TestGatewayKeyServiceTier`,
+`TestKeyTieredChat`, `TestKeyServiceTier` in `internal/access`,
+`TestGatewayKeyTierCLI`, `gateway-key-tier.test.cjs`.
+
 `GET /me` is the key page: a gateway key's holder opens it in a browser at
 the address they reach the gateway at, types their key, and sees that key's
 own name, limits, usage (today, 7 and 30 days, its most used models) and

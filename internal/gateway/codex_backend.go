@@ -120,6 +120,7 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 		noteAsked(r.Context(), model)
 		// the service tier set for Codex, in place of the one it asked
 		body = codexTiered(r, body, model)
+		body = keyTiered(r, body, model)
 		// a turn of the conversation's own: the model its side calls may
 		// follow (codexFollowTo)
 		meta := requestSessionMetadata(r.Header, body)

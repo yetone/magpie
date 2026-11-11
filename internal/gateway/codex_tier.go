@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -23,6 +24,26 @@ import (
 func codexTiered(r *http.Request, body []byte, model string) []byte {
 	set := provider.CodexServiceTier()
 	if set == "" || !fromCodex(r.Header) && agentOf(r) != "codex" {
+		return body
+	}
+	if set == "ultrafast" && !strings.Contains(model, "/") && !provider.UltraModels()[model] {
+		set = "priority"
+	}
+	if set == settings.CodexTierStandard {
+		set = ""
+	}
+	return withServiceTier(body, set)
+}
+
+// keyTiered is body with the service tier the gateway key behind r is set
+// to (access.Key.ServiceTier, JackyFill on X) in place of the one the client
+// asked, for any OpenAI-API request. "" follows the request. A bare model
+// that no account lists Ultrafast on is asked for priority instead, as
+// codexTiered does. Whether the tier is then sent is the providers' own
+// say (serve, fits), so a vendor without service tiers never sees it.
+func keyTiered(r *http.Request, body []byte, model string) []byte {
+	set := access.Caller(r.Context()).ServiceTier
+	if set == "" {
 		return body
 	}
 	if set == "ultrafast" && !strings.Contains(model, "/") && !provider.UltraModels()[model] {

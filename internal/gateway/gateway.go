@@ -2182,6 +2182,11 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 			// asked (codexTiered)
 			body = codexTiered(r, body, model)
 		}
+		// the service tier the gateway key is set to, over the client's
+		// ask and the Codex setting (keyTiered)
+		if from == provider.Responses || from == provider.Chat {
+			body = keyTiered(r, body, model)
+		}
 		if from == provider.Chat {
 			body = thinkingEffort(body)
 			// OpenCode 1's promptCacheKey (#5468)

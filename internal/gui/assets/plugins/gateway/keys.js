@@ -234,7 +234,7 @@ function renderGatewayKeys() {
     tick.onclick = () => gatewayKeyAction(k.off ? "on-key" : "off-key", { key: k.id });
     // the copy sits by the key it copies (the owner: stranded among the
     // badges it read as nobody's); Rotate and Remove wait in the row's menu
-    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), copyCallerKeyBtn(k), el("span", "grow"), ...(k.browser ? [gatewayBrowserTag()] : k.readOnly ? [gatewayReadOnlyTag()] : []), gatewayModelsBadge(k), ...gatewayKeptOutBadge(k), ...gatewayMCPBadge(k), gatewayQuotasBadge(k), ...(k.browser || k.readOnly ? [] : [gatewayConcurrencyBadge(k)]), gatewayLimitBadge(k), gatewayKeyMore(k));
+    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), copyCallerKeyBtn(k), el("span", "grow"), ...(k.browser ? [gatewayBrowserTag()] : k.readOnly ? [gatewayReadOnlyTag()] : []), gatewayModelsBadge(k), ...gatewayKeptOutBadge(k), ...gatewayMCPBadge(k), gatewayQuotasBadge(k), ...(k.browser || k.readOnly ? [] : [gatewayConcurrencyBadge(k), gatewayTierBadge(k)]), gatewayLimitBadge(k), gatewayKeyMore(k));
     const under = gatewayLimit?.id === k.id ? [gatewayLimitEditor(k)] : keyUsed(k).map((u) => gatewayLimitLine(k, u));
     if (under.length) row.classList.add("with-limit"), row.append(...under);
     list.append(row);
@@ -964,6 +964,37 @@ function gatewayConcurrencyBadge(k) {
       if (v === -1) return other();
       if (v !== own) set(v);
     }, "Requests at once", "sess-menu");
+  };
+  return b;
+}
+
+// the service tier a key's requests go at (JackyFill on X): as they ask, or
+// standard, Fast or Ultrafast whatever they ask; a provider with no service
+// tiers is sent none
+const KEY_TIERS = [
+  { v: "", name: "As the request asks", note: "" },
+  { v: "default", name: "Standard", note: "" },
+  { v: "priority", name: "Fast", note: "priority" },
+  { v: "ultrafast", name: "Ultrafast", note: "ultrafast" },
+];
+function gatewayTierBadge(k) {
+  const own = k.serviceTier || "";
+  const cur = KEY_TIERS.find((o) => o.v === own) || KEY_TIERS[0];
+  const b = el("button", "amodels key-tier" + (own ? " set" : ""));
+  b.type = "button";
+  b.textContent = t(own ? cur.name : "Service tier");
+  b.title = t(own ? "This key's requests go at this service tier, whatever they ask" : "This key's requests keep the service tier they ask for");
+  b.setAttribute("aria-label", t("Service tier"));
+  b.setAttribute("aria-haspopup", "menu");
+  b.setAttribute("aria-expanded", "false");
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    openProtoMenu(b, KEY_TIERS, cur.v, async (v) => {
+      if (v === cur.v) return;
+      const out = await gatewayKeyAction("tier-key", { key: k.id, serviceTier: v });
+      if (out) status(t("{who}: service tier {tier}", { who: k.name, tier: t(KEY_TIERS.find((o) => o.v === v).name) }), "ok");
+    }, "Service tier", "sess-menu");
   };
   return b;
 }

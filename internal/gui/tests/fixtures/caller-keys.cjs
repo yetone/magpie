@@ -228,6 +228,7 @@ function fixture(lang, theme, events, options = {}) {
         if (!Number.isInteger(body.maxConcurrency) || body.maxConcurrency < 0 || body.maxConcurrency > 1000) return route.fulfill({ status: 400, json: { error: "Concurrency: a whole number from 0 to 1000" } });
         k.maxConcurrency = body.maxConcurrency || undefined;
       }
+      if (action === "tier-key") k.serviceTier = body.serviceTier || undefined;
       if (action === "access-key") k.readOnly = body.readOnly || undefined;
       // a key put at a place in the list, as access.Update keeps it;
       // options.refuseMove: the store can't be written

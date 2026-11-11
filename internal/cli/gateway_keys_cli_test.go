@@ -739,3 +739,42 @@ func TestGatewayKeyAccountGroupsCLI(t *testing.T) {
 		t.Fatal(got, err)
 	}
 }
+
+// JackyFill on X: `gateway-key tier <id> [follow|standard|fast|ultrafast]`
+// shows or sets a key's service tier; a word it doesn't know is refused.
+func TestGatewayKeyTierCLI(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := settings.Save(settings.Settings{LAN: true}); err != nil {
+		t.Fatal(err)
+	}
+	call := func(args ...string) (string, error) {
+		var out bytes.Buffer
+		err := gatewayKeysTo(&out, append([]string{"gateway-key"}, args...))
+		return out.String(), err
+	}
+	if _, err := call("add", "Team"); err != nil {
+		t.Fatal(err)
+	}
+	keys, _ := access.List()
+	id := keys[0].ID
+	for _, c := range [][3]string{{"", "", "follows the request"}, {"fast", "", "fast"}, {"ultrafast", "", "ultrafast"}, {"standard", "", "standard"}, {"follow", "", "follows the request"}} {
+		args := []string{"tier", id}
+		if c[0] != "" {
+			args = append(args, c[0])
+		}
+		if got, err := call(args...); err != nil || got != "Team: service tier "+c[2]+"\n" {
+			t.Fatalf("%v: %q %v", args, got, err)
+		}
+	}
+	call("tier", id, "fast")
+	for _, args := range [][]string{{"tier"}, {"tier", id, "turbo"}, {"tier", id, "--help"}, {"tier", id, "fast", "x"}, {"tier", "missing", "fast"}, {"tier", "missing"}} {
+		if _, err := call(args...); err == nil {
+			t.Error("accepted", args)
+		}
+	}
+	if keys, _ = access.List(); keys[0].ServiceTier != "priority" {
+		t.Fatalf("a refused call changed it: %q", keys[0].ServiceTier)
+	}
+}
