@@ -721,3 +721,36 @@ func mkFile(p string) error {
 	}
 	return os.WriteFile(p, nil, 0o755)
 }
+
+// A harness adapter bun installed globally is found in bun's bin, where
+// BUN_INSTALL puts it, and on Windows npm's in %APPDATA%\npm.
+func TestKiroCrewFindsBunAndWindowsNpm(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("PATH", t.TempDir())
+	bunHome := filepath.Join(t.TempDir(), "bun-home")
+	getenv := func(k string) string {
+		if k == "BUN_INSTALL" {
+			return bunHome
+		}
+		return ""
+	}
+	ext := ""
+	if kiroCrewOS == "windows" {
+		ext = ".exe"
+	}
+	h := kiroCrewHarness{agent: "zzbun-agent"}
+	if kiroCrewFinds(h, home, getenv) {
+		t.Fatal("found one that is not installed")
+	}
+	os.MkdirAll(filepath.Join(bunHome, "bin"), 0o755)
+	os.WriteFile(filepath.Join(bunHome, "bin", "zzbun-agent"+ext), []byte("x"), 0o755)
+	if !kiroCrewFinds(h, home, getenv) {
+		t.Error("BUN_INSTALL's bin not searched")
+	}
+	h2 := kiroCrewHarness{agent: "zzbun-two"}
+	os.MkdirAll(filepath.Join(home, ".bun", "bin"), 0o755)
+	os.WriteFile(filepath.Join(home, ".bun", "bin", "zzbun-two"+ext), []byte("x"), 0o755)
+	if !kiroCrewFinds(h2, home, func(string) string { return "" }) {
+		t.Error("~/.bun/bin not searched")
+	}
+}

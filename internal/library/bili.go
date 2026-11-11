@@ -16,7 +16,6 @@ import (
 
 	"github.com/tidwall/jsonc"
 	"github.com/yetone/magpie/internal/agent"
-	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
@@ -114,28 +113,12 @@ type BiliView struct {
 
 var biliMu sync.Mutex
 
-// biliPath is bili's, "" when it isn't installed: on PATH, or where its
-// documented install (npm -g with ~/.local as the prefix) puts it, which
-// may not be on magpie's PATH yet.
-var biliPath = func() string {
-	name := "bili"
-	if runtime.GOOS == "windows" {
-		name = "bili.cmd"
-	}
-	if p, err := proc.Look(name); err == nil {
-		return p
-	}
-	dirs := []string{filepath.Join(home(), ".local", "bin")}
-	if runtime.GOOS == "windows" {
-		dirs = []string{filepath.Join(appdir.Getenv("APPDATA"), "npm")}
-	}
-	for _, d := range dirs {
-		if p := filepath.Join(d, name); exists(p) {
-			return p
-		}
-	}
-	return ""
-}
+// biliPath is bili's, "" when it isn't installed: on PATH, or in a folder
+// a user's tools are installed in (proc.FindTool: npm -g's, with ~/.local
+// as its prefix where the documented install puts it, bun's including a
+// BUN_INSTALL), which may not be on magpie's PATH yet. On Windows npm's
+// shim is bili.cmd and bun's is bili.exe.
+var biliPath = func() string { return proc.FindTool("bili") }
 
 // biliInstaller is billion-context's documented install: npm's global
 // install with ~/.local as the prefix, so it needs no administrator; on

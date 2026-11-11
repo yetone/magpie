@@ -40,6 +40,7 @@ func UserBinDirs() []string {
 	known := []string{
 		filepath.Join(appdir.Getenv("APPDATA"), "npm"),
 		filepath.Join(home, ".local", "bin"),
+		bunBin(),
 		filepath.Join(home, ".bun", "bin"),
 		filepath.Join(appdir.Getenv("LOCALAPPDATA"), "Volta", "bin"),
 		filepath.Join(appdir.Getenv("LOCALAPPDATA"), "pnpm"),

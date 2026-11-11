@@ -130,3 +130,13 @@ func npmShimExe(path string) string {
 	}
 	return exe
 }
+
+// bunBin is the folder `bun add -g` puts programs in when BUN_INSTALL says
+// where bun lives (a Windows user's bun is often installed elsewhere than
+// ~\.bun); "" without it, when ~/.bun/bin is the one.
+func bunBin() string {
+	if d := os.Getenv("BUN_INSTALL"); filepath.IsAbs(d) {
+		return filepath.Join(d, "bin")
+	}
+	return ""
+}

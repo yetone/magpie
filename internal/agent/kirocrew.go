@@ -250,6 +250,17 @@ func kiroCrewFinds(h kiroCrewHarness, home string, getenv func(string) string) b
 		filepath.Join(home, ".npm-global", "bin"),
 		filepath.Join(mise, "shims"),
 		filepath.Join(home, ".volta", "bin"),
+		filepath.Join(home, ".bun", "bin"),
+	}
+	if d := getenv("BUN_INSTALL"); filepath.IsAbs(d) {
+		dirs = append(dirs, filepath.Join(d, "bin"))
+	}
+	if kiroCrewOS == "windows" {
+		appdata := getenv("APPDATA")
+		if appdata == "" {
+			appdata = filepath.Join(home, "AppData", "Roaming")
+		}
+		dirs = append(dirs, filepath.Join(appdata, "npm"))
 	}
 	if kiroCrewOS != "windows" {
 		dirs = append(dirs, "/opt/homebrew/bin", "/usr/local/bin")
