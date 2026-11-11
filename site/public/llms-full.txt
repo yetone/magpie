@@ -1153,7 +1153,7 @@ OpenCode’s config in ~/.config/opencode (or $OPENCODE_CONFIG_DIR): the first o
 
 Pick one of OpenCode’s own models on its row in magpie, or run `magpie opencode default`. It puts back the model and `small_model` you had and removes magpie’s provider.
 
-Other agents: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models). Stuck? Ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+Other agents: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [OpenClaw on any model](https://usemagpie.ai/docs/openclaw). Stuck? Ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
@@ -3257,6 +3257,64 @@ Desktop’s gateway-mode window has no translation of its own. Switching back br
 No. They stay in Desktop’s own profile and come back when you switch back, or you can import them with Settings → Import.
 
 The same models in the terminal: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [ChatGPT in Claude Code](https://usemagpie.ai/docs/claude-code-chatgpt). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/openclaw
+
+# OpenClaw on any model
+
+OpenClaw answers you on WhatsApp, Telegram, Discord and more, on whatever model its config names. magpie adds itself to OpenClaw as one provider, so OpenClaw can run on any model you have in magpie: DeepSeek, Kimi, GLM, Qwen, an OpenAI key, or a ChatGPT or Copilot subscription, with no key pasted into OpenClaw.
+
+OpenClaw keeps its settings in `~/.openclaw/openclaw.json`. magpie adds a provider named magpie there: its gateway’s `/v1` address, OpenAI’s chat completions API, a key of OpenClaw’s own, and one entry per model you have in magpie. Then it makes the model you pick OpenClaw’s default. The gateway translates each request for that model’s provider, tool calls and reasoning included.
+
+## Connect OpenClaw
+
+1. **Add providers in magpie.** In the Providers tab, add an API key or sign in to a subscription.
+2. **Pick a model on OpenClaw’s row.** In the Agents tab, choose a model on OpenClaw’s row. OpenClaw takes it up without a restart.
+
+```
+magpie openclaw deepseek/deepseek-v4-pro    # OpenClaw on DeepSeek
+magpie openclaw                             # what OpenClaw runs on now
+```
+
+## Pick a model
+
+In OpenClaw a model is named `provider/model`, so magpie’s models show up as `magpie/deepseek/deepseek-v4-pro`, `magpie/openai/gpt-6.1` and so on. magpie sets the primary model and keeps your fallbacks. If your config has a list of allowed models, magpie adds `magpie/*` to it so its models aren’t refused. A model whose context magpie doesn’t know is given 128K.
+
+## Chats that already have a model
+
+A change to the default model reaches new chats at once. A chat that already has a model keeps it: send `/model default` in that chat to move it onto the new one.
+
+## What magpie writes
+
+Only `models.providers.magpie`, the default model, and the allow list when you have one. Your other providers, channels and keys stay as you wrote them, and so do keys you add to magpie’s provider yourself (headers, timeoutSeconds, a model’s maxTokens). A model set for one agent (`agents.entries.*.model`) stays yours, and a config split with `$include` isn’t changed.
+
+magpie finds the file where OpenClaw does: `$OPENCLAW_CONFIG_PATH`, else `openclaw.json` in `$OPENCLAW_STATE_DIR`, else `~/.openclaw-<profile>` for `$OPENCLAW_PROFILE`, else `~/.openclaw`. A file written in JSON5 that isn’t plain JSON is left alone, and magpie says so.
+
+## Switch back
+
+Take OpenClaw’s row off magpie, or run `magpie openclaw default`. magpie removes its provider and puts back the model OpenClaw ran on before, as long as magpie’s model is still the default; a model you picked since stays.
+
+## FAQ
+
+### Can OpenClaw use my ChatGPT subscription?
+
+Yes. Sign in to ChatGPT in magpie and pick a GPT model on OpenClaw’s row. OpenClaw sends its requests to magpie, which uses the subscription.
+
+### Do I need to restart OpenClaw?
+
+No. OpenClaw’s gateway takes up a change of models and default model by itself. Chats that already have a model keep it until you send /model default there.
+
+### Does magpie touch my channels or other providers?
+
+No. It writes only its own provider, the default model and, if you have one, the allow list.
+
+### I use an OpenClaw profile. Does magpie find it?
+
+Yes. It reads OPENCLAW_PROFILE, OPENCLAW_STATE_DIR, OPENCLAW_CONFIG_PATH and OPENCLAW_HOME the way OpenClaw does.
+
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models) and [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
