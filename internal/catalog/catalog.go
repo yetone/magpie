@@ -1454,7 +1454,44 @@ func contextIn(b string, spellings, user bool) int {
 	if t, ok := untagged(b); spellings && ok {
 		return contextIn(t, true, user)
 	}
+	if spellings {
+		return geminiKinWindow(b)
+	}
 	return 0
+}
+
+// geminiKinWindow is the window a Gemini model models.dev doesn't list
+// yet takes: the one every Gemini of its generation it does list agrees
+// on, or 0. models.dev lags a new Gemini by a day or more, while Google's
+// lists name it at once; Gemini 4 Carbon came after Argon and read no
+// window (stockAAAAA on X), where Google's model page gives both 1M.
+// Siblings that differ give no guess.
+func geminiKinWindow(b string) int {
+	rest, ok := strings.CutPrefix(b, "gemini-")
+	if !ok {
+		return 0
+	}
+	i := 0
+	for i < len(rest) && rest[i] >= '0' && rest[i] <= '9' {
+		i++
+	}
+	// a whole generation then a name (gemini-4-carbon); gemini-3.8-flash,
+	// a point release, is not guessed from the 3.x before it
+	if i == 0 || i+1 >= len(rest) || rest[i] != '-' {
+		return 0
+	}
+	prefix := "gemini-" + rest[:i+1]
+	w := 0
+	for id, n := range windows {
+		if !strings.HasPrefix(id, prefix) || n <= 0 {
+			continue
+		}
+		if w != 0 && w != n {
+			return 0
+		}
+		w = n
+	}
+	return w
 }
 
 // OutputOf is the most tokens a reply from a model of this id may hold, as
