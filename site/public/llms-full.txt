@@ -1621,7 +1621,7 @@ Tencent moved the personal plan to tokenhub.tencentmaas.com. A provider in magpi
 
 For the enterprise plan, yes: add the account's SecretId and SecretKey in the provider's editor, and the Usage page shows the cycle's use and its reset. The personal plan has no API for it; see Tencent Cloud's console.
 
-The same for other providers: [Volcengine Ark](https://usemagpie.ai/docs/volcengine), [GLM Coding Plan](https://usemagpie.ai/docs/glm), [Kimi](https://usemagpie.ai/docs/kimi), [DeepSeek](https://usemagpie.ai/docs/deepseek), [Qwen](https://usemagpie.ai/docs/qwen). Hit an error? See [troubleshooting](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+The same for other providers: [Volcengine Ark](https://usemagpie.ai/docs/volcengine), [GLM Coding Plan](https://usemagpie.ai/docs/glm), [Kimi](https://usemagpie.ai/docs/kimi), [DeepSeek](https://usemagpie.ai/docs/deepseek), [Qwen](https://usemagpie.ai/docs/qwen). Tencent's own coding agent: [CodeBuddy on any model](https://usemagpie.ai/docs/codebuddy). Hit an error? See [troubleshooting](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
@@ -4802,7 +4802,87 @@ Usually a provider key such as OPENAI_API_KEY is set in the environment Air star
 
 Yes, through the Air plugin (bundled with 2026.3, from Marketplace in 2026.2). Connect the Air (JetBrains IDEs) row and restart the IDE.
 
-More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Antigravity on any model](https://usemagpie.ai/docs/antigravity) and [Snow CLI on any model](https://usemagpie.ai/docs/snow-cli). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Antigravity on any model](https://usemagpie.ai/docs/antigravity), [CodeBuddy on any model](https://usemagpie.ai/docs/codebuddy) and [Snow CLI on any model](https://usemagpie.ai/docs/snow-cli). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/codebuddy
+
+# CodeBuddy on any model
+
+CodeBuddy is Tencent's AI coding tool: the CodeBuddy Code CLI (`codebuddy`, `cbc`) and the CodeBuddy IDE. Both the international edition (codebuddy.ai) and the China one (codebuddy.cn) take custom models. magpie writes your magpie models into that list, so CodeBuddy runs on DeepSeek, GLM, Kimi, Qwen, an OpenAI or Anthropic key, or a ChatGPT or Copilot subscription, and those models need no CodeBuddy sign-in.
+
+CodeBuddy Code is one npm package, `@tencent-ai/codebuddy-code`, for both editions; the China one is told apart by `CODEBUDDY_INTERNET_ENVIRONMENT=internal`. Both read custom models from `~/.codebuddy/models.json` (or `$CODEBUDDY_CONFIG_DIR`), and the CodeBuddy IDE reads the same file. So magpie has one row, CodeBuddy, for the CLI and the IDE.
+
+## Set up CodeBuddy
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model on CodeBuddy's row.** On the Agents page, pick a model under magpie. magpie writes every model into models.json and the one you picked into settings.json's `model`.
+3. **Start a new session.** CodeBuddy Code reads its model when a session starts: restart `codebuddy`, or run `/clear` in an open session.
+
+```
+magpie codebuddy deepseek/deepseek-v4-pro
+magpie codebuddy            # show what it is set to
+```
+
+## models.json
+
+Each model magpie writes points at the magpie gateway on this computer and is asked under a Bearer key magpie gives CodeBuddy. CodeBuddy calls that address itself, not through Tencent's servers, with no CodeBuddy sign-in.
+
+```
+{"models": [{
+  "id": "deepseek/deepseek-v4-pro", "name": "DeepSeek V4 Pro", "vendor": "magpie",
+  "apiKey": "…", "url": "http://127.0.0.1:3425/v1/chat/completions",
+  "maxInputTokens": …, "maxOutputTokens": …,
+  "supportsToolCall": true, "supportsImages": …, "reasoning": {…}
+}, …]}
+```
+
+`maxInputTokens` and `maxOutputTokens` come from magpie's catalog; without `maxOutputTokens` CodeBuddy caps every reply at its own default. A model that thinks carries its levels (`supportedEfforts`, `defaultEffort`) and `canDisableThinking` when thinking can be turned off; a model with a window over 200K offers two sizes in `contextWindow`. CodeBuddy picks up a change to the file without a restart.
+
+## CodeBuddy Code
+
+In the CLI, the model a session starts on is `settings.json`'s `model`: one of magpie's ids from models.json, or one of CodeBuddy's own. magpie tells CodeBuddy's requests apart by their key, so Usage counts them under CodeBuddy.
+
+## CodeBuddy IDE
+
+CodeBuddy.app (codebuddy.ai) and CodeBuddy CN.app (codebuddy.cn) read the same `~/.codebuddy/models.json`. They watch the file, sync their model list when it changes, and list magpie's models in the IDE's own model picker. The IDE needs no CLI; with only the IDE installed, magpie still shows the CodeBuddy row. Two differences: the IDE always reads `.codebuddy` in your home folder, whatever `CODEBUDDY_CONFIG_DIR` says, and it doesn't read settings.json's `model`, so the model is picked in the IDE.
+
+## Your own models
+
+Models you added to models.json yourself stay as they are; magpie updates only its own, in the place they were. A magpie model you turned off in CodeBuddy stays off, and a default thinking level you set on one stays while the model still offers it. When the file has `availableModels` (the models to show), magpie's are added to it and the rest you listed stay.
+
+## WSL
+
+On Windows, a WSL distro with CodeBuddy Code installed has its own row. It writes the distro's `~/.codebuddy/models.json`, naming the gateway as the distro reaches it, with the key it takes from there. `CODEBUDDY_CONFIG_DIR` isn't read there.
+
+## Switching back
+
+Pick one of CodeBuddy's own models on the row: magpie takes its models out of models.json and sets settings.json's `model` to yours. Or from a terminal:
+
+```
+magpie codebuddy default
+```
+
+## FAQ
+
+### Can CodeBuddy use DeepSeek, GLM, Kimi or Qwen?
+
+Yes. magpie writes them as custom models into ~/.codebuddy/models.json, and they show in both CodeBuddy Code's and the CodeBuddy IDE's model list.
+
+### Do magpie's models need a CodeBuddy sign-in?
+
+No. They call the magpie gateway on this computer under the key magpie gives CodeBuddy, not through a CodeBuddy account.
+
+### Does the China edition and CodeBuddy CN work?
+
+Yes. Both CLI editions are one npm package, and CodeBuddy.app and CodeBuddy CN.app read the same models.json, so one row covers them all.
+
+### I changed the model and nothing happened.
+
+CodeBuddy Code reads its model when a session starts. Restart codebuddy or run /clear. In the IDE, pick the model in its model picker.
+
+More agents on the same models: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Kimi Code on any model](https://usemagpie.ai/docs/kimi-code) and [Qwen Code on any model](https://usemagpie.ai/docs/qwen-code). Tencent Cloud's models: [Tencent Cloud](https://usemagpie.ai/docs/tencent-cloud). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
