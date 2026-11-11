@@ -140,7 +140,7 @@ func CachedCards(now time.Time) []SubscriptionQuota {
 	}
 	plans, balances = withKeyReadings(plans, ps, "plan"), withKeyReadings(balances, ps, "balance")
 	plans, subs = seatCards(plans, subs)
-	subs = withAccountNames(subs)
+	subs = WithImageLane(withAccountNames(subs), now)
 	out := []SubscriptionQuota{}
 	for _, g := range []struct {
 		kind string

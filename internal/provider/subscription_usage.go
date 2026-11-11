@@ -41,6 +41,11 @@ type QuotaWindow struct {
 	// "100% left". Claude's "Extra usage" row (claudeOveragesWindow) is
 	// the one Text window with Used 100: the account counts as spent.
 	Text bool `json:"text,omitempty"`
+	// Lane names a window of an allowance apart from the account's own
+	// ("images", ImageLane): its row is Text, and says only when it comes
+	// back, if known. Added as cards are handed out (WithImageLane), never
+	// cached.
+	Lane string `json:"lane,omitempty"`
 	// Amount of Limit is the window's own count in Unit, when the vendor
 	// counts it so (WorkBuddy's credits): Used is Amount as a share of
 	// Limit. The GUI says it as used or left, as it says the share (#659).
