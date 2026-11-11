@@ -840,6 +840,11 @@ type Settings struct {
 	// compacts on the old model first, and failed with it (#5395). ""
 	// leaves each compaction on the model it asks for.
 	DshCompactModel string `json:"dshCompactModel,omitempty"`
+	// CodexCompactModel is the model the gateway puts Codex's own
+	// compaction of its context on, when it is made by magpie (a model of
+	// magpie's, not a ChatGPT account's sealed one). "" leaves each on the
+	// session's model.
+	CodexCompactModel string `json:"codexCompactModel,omitempty"`
 	// FullContext has Codex, Claude Code and Grok Build told a model's whole context
 	// window. Off, a window above WorkingWindow is told as WorkingWindow,
 	// so they compact a long conversation there instead of sending ever
@@ -2499,6 +2504,10 @@ func saveOwn(s Settings, recording, reads bool) error {
 	s.DshCompactModel = strings.TrimSpace(s.DshCompactModel)
 	if s.DshCompactModel != "" && !strings.Contains(s.DshCompactModel, "/") {
 		return fmt.Errorf("the model for DeepSeek Harness's compaction must be a model's id such as deepseek/deepseek-v4, not %q", s.DshCompactModel)
+	}
+	s.CodexCompactModel = strings.TrimSpace(s.CodexCompactModel)
+	if s.CodexCompactModel != "" && !strings.Contains(s.CodexCompactModel, "/") {
+		return fmt.Errorf("the model for Codex's compaction must be a model's id such as deepseek/deepseek-v4, not %q", s.CodexCompactModel)
 	}
 	s.DesktopSubagentEffort = strings.ToLower(strings.TrimSpace(s.DesktopSubagentEffort))
 	if e := s.DesktopSubagentEffort; e != "" && (!slices.Contains(catalog.EffortRank, e) || e == "ultra") {

@@ -210,8 +210,13 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 			// or group has, or is turned away (serve, sealedReader)
 			// a provider set to compact natively is asked Codex's own
 			// compaction, and its sealed item goes back as it came (#1099)
-			body, compact := codexInputAs(body, true, s.nativeCompactionFor(model))
+			native := s.nativeCompactionFor(model)
+			body, compact := codexInputAs(body, true, native)
 			if compact {
+				// a compaction magpie makes goes on the model set for it
+				if to := codexCompactTo(r, model, native, s.nativeCompactionFor); to != "" {
+					body = withModel(body, to)
+				}
 				s.codexCompact(w, r, body)
 				return
 			}

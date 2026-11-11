@@ -2365,6 +2365,34 @@ func codexIn(at place) *Agent {
 				},
 			},
 			{
+				// the model magpie puts Codex's compaction on, whatever the
+				// session is on: kept in magpie's settings and read by the
+				// gateway on each compaction (codexCompactTo), so a change
+				// needs no restart. Only a compaction magpie makes is moved;
+				// a ChatGPT account's own, whose summary only that account
+				// reads, stays where it is (0neB1aze on X)
+				Key: "compact_model", Label: "compaction model", Quiet: true, Live: true,
+				Get: provider.CodexCompactModel,
+				Set: provider.SetCodexCompactModel,
+				Options: func(map[string]string) []Option {
+					var out, groups []Option
+					for _, e := range provider.CodexSubagentModels() {
+						if e.Group != "" {
+							groups = append(groups, Option{Value: e.ID, Label: e.Name, Note: "routing group · via magpie",
+								Icon: e.Provider.Icon, Icons: e.Icons, Group: RoutingGroups, Ref: e.ID})
+							continue
+						}
+						note := e.Provider.Name + " · via magpie"
+						if a := e.Provider.Account; a != nil && a.User != "" {
+							note = a.User + " · via magpie"
+						}
+						out = append(out, Option{Value: e.ID, Label: e.Name, Note: note, Icon: e.Provider.Icon,
+							Group: e.Provider.Name, Ref: e.ID, Context: e.Context})
+					}
+					return append(out, groups...)
+				},
+			},
+			{
 				// [agents] default_subagent_reasoning_effort: unset, a
 				// subagent runs at the session's effort, or at its model's
 				// default when it has a model of its own

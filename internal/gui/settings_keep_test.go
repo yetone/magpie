@@ -175,6 +175,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		CodexServiceTier:     "priority",
 		DesktopSubagentModel: "fake/m2",
 		DshCompactModel:      "fake/m1",
+		CodexCompactModel:    "fake/m1",
 		ChinaMirror:          true,
 		NPMRegistry:          "https://npm.corp.example",
 		CodexAutoReset:       []string{"me@example.com"},
