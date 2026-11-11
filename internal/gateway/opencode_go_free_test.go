@@ -36,7 +36,7 @@ func goFreeServer(t *testing.T, models, serves []string, zenStatus int, zenRefus
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	if err := provider.Save(provider.Provider{ID: "go", Name: "OpenCode Go", Preset: "opencode-go", Key: "sk-go-users-own",
-		Chat: "https://opencode.ai/zen/go/v1", Responses: "https://opencode.ai/zen/go/v1", Anthropic: "https://opencode.ai/zen/go",
+		Chat: provider.OpenCodeGoChat, Responses: provider.OpenCodeGoChat, Anthropic: provider.OpenCodeGoAnthropic,
 		Models: models}); err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func goFreeServer(t *testing.T, models, serves []string, zenStatus int, zenRefus
 				model = m
 			}
 		}
-		if strings.HasPrefix(r.URL.Path, "/zen/go/") {
+		if strings.HasPrefix(r.URL.Path, "/inference/go/") {
 			for _, m := range serves {
 				if m == model {
 					return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/event-stream"}},
@@ -96,8 +96,8 @@ func TestOpenCodeGoFreeModelAskedAtZen(t *testing.T) {
 	}
 	a := asked()
 	// on the API Go was asked on, at Zen's free tier
-	want := map[string]string{"opencode.ai/zen/go/v1/messages": "opencode.ai/inference/anthropic/v1/messages",
-		"opencode.ai/zen/go/v1/chat/completions": "opencode.ai/inference/openai/v1/chat/completions"}
+	want := map[string]string{"opencode.ai/inference/go/anthropic/v1/messages": "opencode.ai/inference/anthropic/v1/messages",
+		"opencode.ai/inference/go/openai/v1/chat/completions": "opencode.ai/inference/openai/v1/chat/completions"}
 	if len(a) != 2 || want[a[0].url] == "" || a[1].url != want[a[0].url] {
 		t.Fatalf("asked %+v", a)
 	}
@@ -114,7 +114,7 @@ func TestOpenCodeGoOwnFreeModelStaysOnGo(t *testing.T) {
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "from go") {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
-	if a := asked(); len(a) != 1 || !strings.HasPrefix(a[0].url, "opencode.ai/zen/go/") {
+	if a := asked(); len(a) != 1 || !strings.HasPrefix(a[0].url, "opencode.ai/inference/go/") {
 		t.Fatalf("asked %+v", a)
 	}
 }
@@ -137,7 +137,7 @@ func TestOpenCodeGoUnavailableSaysWhere(t *testing.T) {
 		t.Fatalf("%d %s", rec.Code, body)
 	}
 	for _, a := range asked()[n:] {
-		if !strings.HasPrefix(a.url, "opencode.ai/zen/go/") {
+		if !strings.HasPrefix(a.url, "opencode.ai/inference/go/") {
 			t.Fatalf("a paid model asked at %s", a.url)
 		}
 	}

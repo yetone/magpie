@@ -3,6 +3,7 @@ package provider
 import (
 	"cmp"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -20,7 +21,16 @@ func openCodeRoot(base string) (root, catalogID string) {
 	if !openCodeHost(u.Hostname()) {
 		return "", ""
 	}
-	switch path := strings.TrimSuffix(strings.TrimRight(u.Path, "/"), "/v1"); path {
+	path := strings.TrimRight(u.Path, "/")
+	if r, ok := strings.CutSuffix(path, "/google/v1beta"); ok {
+		path = r
+	} else {
+		path = strings.TrimSuffix(path, "/v1")
+		for _, api := range []string{"/openai", "/anthropic", "/google"} {
+			path = strings.TrimSuffix(path, api)
+		}
+	}
+	switch path {
 	case "/zen/go", "/inference/go":
 		return u.Scheme + "://" + u.Host + path, "opencode-go"
 	case "/zen", "/inference":
@@ -63,14 +73,53 @@ func openCodeGateway(base string) string {
 // root is: models/{model}:streamGenerateContent is asked under it. Zen's
 // /zen/v1 relays it to the inference API's Google route, reading the key
 // from x-goog-api-key; Go's /zen/go/v1 has no such route (404), so Go's
-// Gemini models are asked at the inference API's /inference/go/v1, where
-// Go's docs give their endpoint (opencode.ai/v2/docs/console/go, #2168).
+// Gemini models are asked at the inference API, where Go's docs give
+// their endpoint: /inference/go/google/v1beta/models/{model} (since
+// November 2026; before it /inference/go/v1, #2168).
 func openCodeGemini(root string) string {
 	if r, ok := strings.CutSuffix(root, "/zen/go"); ok {
-		return r + "/inference/go/v1"
+		return r + "/inference/go/google/v1beta"
+	}
+	if strings.HasSuffix(root, "/inference/go") {
+		return root + "/google/v1beta"
 	}
 	return root + "/v1"
 }
+
+// openCodeGoSplit is whether a Go URL names its API in the path, the way
+// Go's docs give them since November 2026: …/inference/go/openai/v1 (chat
+// and Responses), …/inference/go/anthropic (Messages) and
+// …/inference/go/google/v1beta (Gemini).
+func openCodeGoSplit(u string) bool {
+	pu, err := url.Parse(strings.TrimSpace(u))
+	if err != nil || openCodeGateway(u) != "go" {
+		return false
+	}
+	for _, seg := range strings.Split(pu.Path, "/") {
+		if seg == "openai" || seg == "anthropic" || seg == "google" {
+			return true
+		}
+	}
+	return false
+}
+
+// openCodeGoOld are the URLs the OpenCode Go preset gave before Go's docs
+// named an endpoint per API; a provider of the preset saved with them is
+// moved to where the docs have them (openCodeEndpoints).
+var openCodeGoOld = map[string]bool{
+	"https://opencode.ai/zen/go/v1":       true,
+	"https://opencode.ai/zen/go":          true,
+	"https://opencode.ai/inference/go/v1": true,
+	"https://opencode.ai/inference/go":    true,
+}
+
+// OpenCodeGo are the URLs Go's docs give each API (opencode.ai/docs/console/go,
+// Endpoints).
+const (
+	OpenCodeGoChat      = "https://opencode.ai/inference/go/openai/v1"
+	OpenCodeGoAnthropic = "https://opencode.ai/inference/go/anthropic"
+	OpenCodeGoGemini    = "https://opencode.ai/inference/go/google/v1beta"
+)
 
 // openCodeEndpoints fills in the APIs of OpenCode's gateway a provider at
 // it was saved without. Zen and Go serve each model on one API of three,
@@ -96,9 +145,31 @@ func (p *Provider) openCodeEndpoints() {
 	if root == "" {
 		return
 	}
-	p.Chat = cmp.Or(p.Chat, root+"/v1")
-	p.Responses = cmp.Or(p.Responses, root+"/v1")
-	p.Anthropic = cmp.Or(p.Anthropic, root)
+	chat, anthropic := root+"/v1", root
+	if strings.HasSuffix(root, "/inference/go") && slices.ContainsFunc([]string{p.Chat, p.Responses, p.Anthropic, p.Gemini}, openCodeGoSplit) {
+		chat, anthropic = root+"/openai/v1", root+"/anthropic"
+	}
+	if p.Preset == "opencode-go" {
+		// the preset's own URLs, saved before Go's docs named one per API
+		for _, f := range []struct {
+			have *string
+			to   string
+		}{{&p.Chat, OpenCodeGoChat}, {&p.Responses, OpenCodeGoChat}, {&p.Anthropic, OpenCodeGoAnthropic}} {
+			if openCodeGoOld[strings.ToLower(*f.have)] {
+				*f.have = f.to
+			}
+		}
+		if strings.EqualFold(p.Gemini, "https://opencode.ai/inference/go/v1") {
+			p.Gemini = OpenCodeGoGemini
+		}
+		root, catalogID = openCodeRoot(cmp.Or(p.Chat, p.Responses, p.Anthropic, p.Gemini))
+		if strings.HasSuffix(root, "/inference/go") {
+			chat, anthropic = root+"/openai/v1", root+"/anthropic"
+		}
+	}
+	p.Chat = cmp.Or(p.Chat, chat)
+	p.Responses = cmp.Or(p.Responses, chat)
+	p.Anthropic = cmp.Or(p.Anthropic, anthropic)
 	p.Gemini = cmp.Or(p.Gemini, openCodeGemini(root))
 	p.Catalog = cmp.Or(p.Catalog, catalogID)
 }
