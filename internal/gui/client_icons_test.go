@@ -54,6 +54,14 @@ func TestEveryClientHasNameAndIcon(t *testing.T) {
 			if !exists(a.Icon + ".png") {
 				t.Errorf("%s's icon: pngIcons names %s, with no icons/%[2]s.png", a.ID, a.Icon)
 			}
+		case exists(a.Icon+".svg") && !strings.HasSuffix(a.Icon, "-color"):
+			// an SVG without -color is drawn as a mask: one tone, its
+			// shape. A logo that is a filled tile (OpenMausBot's black
+			// square with a silver cursor) turns into a plain black square.
+			b, _ := os.ReadFile("assets/icons/" + a.Icon + ".svg")
+			if strings.Contains(string(b), "Gradient") {
+				t.Errorf("%s's icon %s has its own colours but isn't named -color, so it is drawn as one-tone mask", a.ID, a.Icon)
+			}
 		case !exists(a.Icon + ".svg"):
 			if exists(a.Icon + ".png") {
 				t.Errorf("%s's icon %s is a PNG app.js's pngIcons doesn't name, so it is drawn as the cube", a.ID, a.Icon)

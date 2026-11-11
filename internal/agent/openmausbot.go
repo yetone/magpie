@@ -138,7 +138,7 @@ func openMausBot(home string) *Agent {
 	path := filepath.Join(dir, "config.json")
 	wired := func() bool { _, ok := edit.GetJSON(path, ombInstance); return ok }
 	return atomic(&Agent{
-		ID: "openmausbot", Name: "OpenMausBot", Icon: "openmausbot", Aliases: []string{"omb", "openmaus", "open-maus-bot"},
+		ID: "openmausbot", Name: "OpenMausBot", Icon: "openmausbot-color", Aliases: []string{"omb", "openmaus", "open-maus-bot"},
 		Dir: dir, Path: path,
 		detect: func() bool { return isDir(dir) || macBundle(ombApp) || ombWindowsApp() },
 		Notice: func() string {
