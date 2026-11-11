@@ -335,6 +335,16 @@ type Group struct {
 	// (SaveGroup), so a caller that doesn't know of them leaves them be;
 	// empty clears them.
 	Keys []string `json:"keys,omitempty"`
+	// Redact is whether a request through the group is masked (1dwsdqwd2
+	// on X: some groups masked, some not): "" follows each member's
+	// provider ("Send requests unmasked") and Settings, RedactOn masks it
+	// as Settings say whichever provider, RedactOff sends it as written.
+	// It is the user's alone: Settings with masking off mask nothing, a
+	// shared group carries none, and in a group inside a group any RedactOn
+	// among them wins over RedactOff. Saved, "" keeps the group's
+	// (SaveGroup) and RedactFollow clears it, so a caller that doesn't
+	// know of it leaves it be.
+	Redact string `json:"redact,omitempty"`
 	// Auto is set on a group magpie found: one model served by several
 	// providers. It is derived, never stored.
 	Auto bool `json:"auto,omitempty"`
@@ -369,7 +379,11 @@ type Member struct {
 	Path []string
 	// Via are the groups in the group it is of, the outermost first: the
 	// group each of Path's members but the last names.
-	Via      []Group
+	Via []Group
+	// Redact is what the groups it is reached through say of masking, the
+	// group itself and each in Via (Group.Redact): RedactOn if any says so,
+	// else RedactOff if any does, else "".
+	Redact   string
 	Provider Provider
 	Model    string // what the vendor is asked for
 	// Effort is the reasoning the member is fixed at ("provider/model:low"),
@@ -459,7 +473,7 @@ func (m Member) Groups() []string {
 // Below is the member as the group at depth (0 the group itself, 1 the
 // group in it Path[0] names, …) has it.
 func (m Member) Below(depth int) Member {
-	out := Member{ID: m.Path[depth], Path: m.Path[depth:], Via: m.Via[depth:], Provider: m.Provider, Model: m.Model, Effort: m.Effort, Levels: m.Levels, EffortMap: m.EffortMap, Fast: m.Fast, Account: m.Account, At: m.At}
+	out := Member{ID: m.Path[depth], Path: m.Path[depth:], Via: m.Via[depth:], Redact: m.Redact, Provider: m.Provider, Model: m.Model, Effort: m.Effort, Levels: m.Levels, EffortMap: m.EffortMap, Fast: m.Fast, Account: m.Account, At: m.At}
 	// its other places in the same group at depth
 	for _, o := range m.Also {
 		if len(o.Path) > depth && slices.Equal(o.Path[:depth], m.Path[:depth]) {
@@ -1281,8 +1295,9 @@ func membersFound(entries []Entry, find entryOf, all []Group, g Group, off func(
 	out := make([]Member, 0, n)
 	seen := make(map[string]int, n) // where in out
 	at := 0
-	var walk func(g Group, path []string, via []Group, in []string)
-	walk = func(g Group, path []string, via []Group, in []string) {
+	var walk func(g Group, path []string, via []Group, in []string, redact string)
+	walk = func(g Group, path []string, via []Group, in []string, redact string) {
+		redact = RedactWith(redact, g.Redact)
 		for _, id := range g.routes() {
 			if gid, ok := strings.CutPrefix(id, GroupPrefix); ok {
 				sub, ok := groupOf(all, gid)
@@ -1292,7 +1307,7 @@ func membersFound(entries []Entry, find entryOf, all []Group, g Group, off func(
 				// its own copy: all may be the groups held (sharedGroupsIn),
 				// and a member's Via and EffortMap are its caller's
 				sub = cloneGroup(sub).Within(g)
-				walk(sub, append(slices.Clone(path), id), append(slices.Clone(via), sub.Live()), append(slices.Clone(in), gid))
+				walk(sub, append(slices.Clone(path), id), append(slices.Clone(via), sub.Live()), append(slices.Clone(in), gid), redact)
 				continue
 			}
 			model, effort := memberEffortIn(entries, id)
@@ -1309,7 +1324,7 @@ func membersFound(entries []Entry, find entryOf, all []Group, g Group, off func(
 			key := WithMemberAccount(WithMemberEffort(p.ID+"/"+m, effort), acct)
 			here := append(slices.Clone(path), id)
 			fixed, levels := MemberLevels(effort)
-			mem := Member{ID: here[0], Path: here, Via: via, Provider: p, Model: m, Effort: fixed, Levels: levels, Fast: g.IsFast(id), Account: acct, At: at}
+			mem := Member{ID: here[0], Path: here, Via: via, Redact: redact, Provider: p, Model: m, Effort: fixed, Levels: levels, Fast: g.IsFast(id), Account: acct, At: at}
 			if fixed == "" && levels == nil {
 				mem.EffortMap = g.MemberEffortMap(id)
 			}
@@ -1327,7 +1342,7 @@ func membersFound(entries []Entry, find entryOf, all []Group, g Group, off func(
 			out = append(out, mem)
 		}
 	}
-	walk(g, nil, nil, []string{g.ID})
+	walk(g, nil, nil, []string{g.ID}, "")
 	if len(out) == 0 {
 		return nil // none, as before it was made at its size
 	}
@@ -1795,8 +1810,16 @@ func SaveGroup(g Group) error {
 		return err
 	}
 	var was, keysWas, formerWas []string
+	var redactWas string
 	if i := slices.IndexFunc(f.Groups, func(x Group) bool { return x.ID == g.ID }); i >= 0 {
-		was, keysWas, formerWas = f.Groups[i].Accounts, f.Groups[i].Keys, f.Groups[i].Former
+		was, keysWas, formerWas, redactWas = f.Groups[i].Accounts, f.Groups[i].Keys, f.Groups[i].Former, f.Groups[i].Redact
+	}
+	switch g.Redact {
+	case "":
+		g.Redact = redactWas // a caller that doesn't know of it
+	case RedactOn, RedactOff:
+	default:
+		g.Redact = "" // RedactFollow, or a word it doesn't know
 	}
 	if g.Former == nil {
 		g.Former = slices.Clone(formerWas) // a caller that doesn't know of them
@@ -2385,4 +2408,58 @@ func renameGroupPicks(old, now string) error {
 	}
 	catalog.Touched()
 	return nil
+}
+
+// A Group's Redact: what a request through it is masked by.
+const (
+	RedactOn     = "on"     // masked as Settings say, whatever its provider says
+	RedactOff    = "off"    // sent as written
+	RedactFollow = "follow" // saved: clears it, the providers' own say
+)
+
+// RedactWith is what two say of masking together: on wins over off, and
+// either over nothing.
+func RedactWith(a, b string) string {
+	if a == RedactOn || b == RedactOn {
+		return RedactOn
+	}
+	if a == RedactOff || b == RedactOff {
+		return RedactOff
+	}
+	return ""
+}
+
+// Masking is what the groups the member is reached through say of
+// masking, all its places counted (Also, the same model met again in
+// another group): RedactOn if any says so, RedactOff only if all do, else
+// "". The model's provider is the same in each place.
+func (m Member) Masking() string {
+	out := m.Redact
+	for _, o := range m.Also {
+		switch o := o.Masking(); {
+		case o == RedactOn || out == RedactOn:
+			out = RedactOn
+		case o != out:
+			out = ""
+		}
+	}
+	return out
+}
+
+// Unmasked says a request to the member goes as written: its groups say
+// so (Masking), or none says otherwise and its provider is set to send
+// unmasked (Provider.SkipsRedaction).
+func (m Member) Unmasked() bool { return UnmaskedBy(m.Masking(), m.Provider) }
+
+// UnmaskedBy says a request to p goes as written under what groups say of
+// masking (Group.Redact, Member.Masking): RedactOn never, RedactOff
+// always, else as p is set.
+func UnmaskedBy(redact string, p Provider) bool {
+	switch redact {
+	case RedactOn:
+		return false
+	case RedactOff:
+		return true
+	}
+	return p.SkipsRedaction()
 }

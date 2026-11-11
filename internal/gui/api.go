@@ -910,8 +910,9 @@ func settingsState() settingsJSON {
 		}
 	}
 	s.TitleModels, s.MaskRouteModels = []modelRef{}, []modelRef{}
-	// only a provider set to go unmasked can take one (most have none)
-	unmaskedAny := slices.ContainsFunc(provider.All(), provider.Provider.SkipsRedaction)
+	// only a provider or a group set to go unmasked can take one (most have none)
+	unmaskedAny := slices.ContainsFunc(provider.All(), provider.Provider.SkipsRedaction) ||
+		slices.ContainsFunc(provider.Groups(), func(g provider.Group) bool { return g.Redact == provider.RedactOff })
 	s.UnmaskedProviders = []modelRef{}
 	for _, p := range provider.All() {
 		if p.SkipsRedaction() {

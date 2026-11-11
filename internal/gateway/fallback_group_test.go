@@ -148,13 +148,13 @@ func TestFallbackGroupKeepsMasking(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !unredactedRoute(*near, false, nil) {
+	if !unredactedRoute(*near, "", false, nil) {
 		t.Fatal("a group of unmasked local models masked the request")
 	}
 	if err := provider.SaveGroup(provider.Group{ID: "backup", Name: "Backup", Members: []string{"near2/m", "far/m"}}); err != nil {
 		t.Fatal(err)
 	}
-	if unredactedRoute(*near, false, nil) {
+	if unredactedRoute(*near, "", false, nil) {
 		t.Fatal("a fallback group with a remote member left the request unmasked")
 	}
 }

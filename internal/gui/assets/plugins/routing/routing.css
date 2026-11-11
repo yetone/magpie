@@ -822,6 +822,7 @@ body.window .rt-gedit > .bar { --vfoot: 8px; }
 /* a group bound to gateway keys (Group.Keys): a long key name ellipsizes */
 .rt-gedit > .rt-gkeys[hidden] { display: none; }
 .rt-gkey { min-width: 0; }
+.rt-gredact-b { min-width: 0; }
 .rt-gadd {
   justify-self: start; display: inline-flex; align-items: center; gap: 6px;
   height: 28px; padding: 0 11px 0 9px; border-radius: 8px;

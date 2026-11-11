@@ -1026,7 +1026,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		if on != nil {
 			to = *on
 		}
-		w, body, unmask, maskedHits, err = redactedHits(maskedFor(r.Context(), to, false, nil), w, body)
+		w, body, unmask, maskedHits, err = redactedHits(maskedFor(r.Context(), to, "", false, nil), w, body)
 		defer unmask()
 		if err != nil {
 			writeError(w, provider.Responses, maskStatus(err), err.Error())
@@ -1677,13 +1677,13 @@ func codexBusy(status int, msg []byte) bool {
 // unmasked, and every fallback of it too (unredactedRoute).
 func codexRouteUnmasked(on *provider.Provider) bool {
 	if on != nil {
-		return unredactedRoute(*on, false, nil)
+		return unredactedRoute(*on, "", false, nil)
 	}
 	p, err := provider.Find("codex")
 	if err != nil || p.Account == nil || p.Account.Agent != "codex" {
 		return false
 	}
-	return unredactedRoute(*p, false, nil)
+	return unredactedRoute(*p, "", false, nil)
 }
 
 // codexAccountOut says the ChatGPT backend turned away a turn on Codex's

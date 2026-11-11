@@ -222,7 +222,7 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 	side := s.beginSide(r, start, asked, tries[0].p.ID, grp)
 	// unless every try is on this machine or the local network, set
 	// to go unmasked (provider.SkipsRedaction)
-	if slices.ContainsFunc(tries, func(c candidate) bool { return !c.p.SkipsRedaction() }) {
+	if slices.ContainsFunc(tries, func(c candidate) bool { return !c.unmasked() }) {
 		var done func()
 		var err error
 		var hits maskHits

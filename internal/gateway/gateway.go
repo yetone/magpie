@@ -1988,12 +1988,12 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	// Count the same masked prompt that generation sends to the vendor,
 	// and the one as written where generation sends that, masked only
 	// then (#3973)
-	if _, ms, isGroup := provider.FindGroup(id); !ok || !unredactedRoute(p, isGroup, ms) {
+	if _, ms, isGroup := provider.FindGroup(id); !ok || !unredactedRoute(p, model, isGroup, ms) {
 		if fp, before := maskedBefore(r); before {
 			// masked by the magpie that passed it on (serve)
 			r = withMaskedAs(r, fp)
 		} else {
-			rw, b, done, hits, err := redactedHits(maskedFor(r.Context(), p, isGroup, ms), w, body)
+			rw, b, done, hits, err := redactedHits(maskedFor(r.Context(), p, model, isGroup, ms), w, body)
 			if err != nil {
 				writeError(w, provider.Anthropic, maskStatus(err), err.Error())
 				return
@@ -2682,14 +2682,14 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// keeps it as it went, its secrets taken out as every archived body's
 	// are, and an observer that wants the bodies is handed a copy masked
 	// when it is first handed one, after the try (maskIn, #3973)
-	if sentWhole = unredactedRoute(p, isGroup, ms); !sentWhole {
+	if sentWhole = unredactedRoute(p, model, isGroup, ms); !sentWhole {
 		if fp, before := maskedBefore(r); before {
 			// masked by the magpie that passed it on, by the same
 			// settings: it goes on as it came, that magpie puts its
 			// values back, and a further magpie is told so too
 			r = withMaskedAs(r, fp)
 		} else {
-			rw, b, done, hits, err := redactedHits(maskedFor(r.Context(), p, isGroup, ms), capture.ResponseWriter, body)
+			rw, b, done, hits, err := redactedHits(maskedFor(r.Context(), p, model, isGroup, ms), capture.ResponseWriter, body)
 			if err != nil { // fails closed: never sent unmasked
 				log.Printf("gateway: %v", err)
 				call.Status, call.Error = maskStatus(err), err.Error()

@@ -193,7 +193,7 @@ func (s *Server) serveDecideTries(w http.ResponseWriter, r *http.Request, body [
 	// translated here (decisions_systemone.go), was masked on its own
 	// route. A masker that fails or is wanted and missing sends nothing.
 	went := asked // the model the last try asked for
-	if slices.ContainsFunc(cs, func(c candidate) bool { return !c.p.SkipsRedaction() }) {
+	if slices.ContainsFunc(cs, func(c candidate) bool { return !c.unmasked() }) {
 		mw, masked, done, hits, err := redactedHits(r.Context(), w, body)
 		defer done()
 		if err != nil { // fails closed

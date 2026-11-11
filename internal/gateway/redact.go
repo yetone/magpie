@@ -347,42 +347,51 @@ func (l *laterMasked) body() []byte {
 	return l.b
 }
 
-// unredactedRoute says a request resolved to p, or to the group whose
-// models are ms, goes only where the user set requests to go unmasked
-// (provider.SkipsRedaction): p and each of its fallbacks, or every model of
-// the group (a member's own fallbacks are not the group's, see planGroup).
-// One that may go on to anyone else stays masked for all of them.
-func unredactedRoute(p provider.Provider, isGroup bool, ms []provider.Member) bool {
+// unredactedRoute says a request resolved to model of p, or to the group
+// whose models are ms, goes only where the user set requests to go
+// unmasked (provider.SkipsRedaction, or a group's Redact): p and each of
+// its fallbacks, the groups built around the model that it goes on to when
+// it can't take the request (provider.GroupsAfter, for a model named), or
+// every model of the group (a member's own fallbacks are not the group's,
+// see planGroup). One that may go on to anyone else stays masked for all
+// of them. model is "" for a route with none to name.
+func unredactedRoute(p provider.Provider, model string, isGroup bool, ms []provider.Member) bool {
 	if isGroup {
-		if len(ms) == 0 {
-			return false
-		}
-		for _, m := range ms {
-			if !m.Provider.SkipsRedaction() {
-				return false
-			}
-		}
-		return true
+		return unmaskedMembers(ms)
 	}
 	if !p.SkipsRedaction() {
 		return false
 	}
-	// one that resolves to nothing isn't tried (plan); a routing group
-	// among them is each of its members
-	for _, m := range provider.FallbackModels(p) {
-		if !m.Provider.SkipsRedaction() {
-			return false
-		}
-	}
-	return true
+	after := afterMembers(p, model)
+	return len(after) == 0 || unmaskedMembers(after)
 }
 
-// unmaskedMembers says every model in ms, the ones a picture, a video or
-// a vendor's own route may go to, is a provider the user set to go
-// unmasked (provider.SkipsRedaction), so the request goes as written, as
-// a chat's does on such a route (unredactedRoute). None is masked.
+// afterMembers are the models a request to model of p may go on to: its
+// fallbacks (a routing group among them is each of its members; one that
+// resolves to nothing isn't tried, see plan) and the members of the groups
+// built around it (provider.GroupsAfter), each as its groups' Redact has
+// it.
+func afterMembers(p provider.Provider, model string) []provider.Member {
+	ms := provider.FallbackModels(p)
+	if model == "" {
+		return ms
+	}
+	for _, gid := range provider.GroupsAfter(p.ID + "/" + model) {
+		if !slices.Contains(p.Fallback, gid) {
+			_, gms, _ := provider.FallbackGroup(gid)
+			ms = append(ms, gms...)
+		}
+	}
+	return ms
+}
+
+// unmaskedMembers says every model in ms, the ones a picture, a video, a
+// group or a vendor's own route may go to, goes as written: its provider
+// is one the user set to go unmasked (provider.SkipsRedaction), or its
+// group says so (Group.Redact), so the request goes as written, as a
+// chat's does on such a route (unredactedRoute). None is masked.
 func unmaskedMembers(ms []provider.Member) bool {
-	return len(ms) > 0 && !slices.ContainsFunc(ms, func(m provider.Member) bool { return !m.Provider.SkipsRedaction() })
+	return len(ms) > 0 && !slices.ContainsFunc(ms, func(m provider.Member) bool { return !m.Unmasked() })
 }
 
 // maskedFor is ctx for masking a request resolved to p, or to the group
@@ -391,11 +400,11 @@ func unmaskedMembers(ms []provider.Member) bool {
 // on that route before goes on it again as it went (masking.WithRoute),
 // so a prefix a vendor cached isn't rewritten by what was found in it
 // since; another route masks it afresh.
-func maskedFor(ctx context.Context, p provider.Provider, isGroup bool, ms []provider.Member) context.Context {
+func maskedFor(ctx context.Context, p provider.Provider, model string, isGroup bool, ms []provider.Member) context.Context {
 	var ids []string
 	if !isGroup {
 		ids = append(ids, p.ID)
-		ms = provider.FallbackModels(p)
+		ms = afterMembers(p, model)
 	}
 	for _, m := range ms {
 		ids = append(ids, m.Provider.ID)
@@ -437,7 +446,7 @@ func MaskRoute(id string) bool {
 		return false
 	}
 	_, ms, isGroup := provider.FindGroup(id)
-	return unredactedRoute(p, isGroup, ms)
+	return unredactedRoute(p, model, isGroup, ms)
 }
 
 // maskRouteFor is the model the user set for an agent's request that
