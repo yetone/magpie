@@ -2992,9 +2992,12 @@ text already masked.
   `masking.Fingerprint`, a hash of every setting that changes what is
   masked, the local model and its threshold among them, never the words
   themselves), and `passOnCaller` sends it as `X-Magpie-Masked-As`. The
-  other magpie skips its own pass only when the value is its own
-  (`maskedBefore`), and passes it on to a further magpie the same way.
-  Other settings, another build, no header, a request not a magpie's
+  other magpie skips its own pass when the settings fingerprint is its own
+  and the sender's build is no older than `maskerSince` (`sameMasking`),
+  whichever of the two builds is newer; raise `maskerSince` with a change
+  that makes the masker find more. It passes the header on to a further
+  magpie as it came (`maskedBefore`). Other settings, a build older than
+  `maskerSince`, no header, a request not a magpie's
   (`magpieAsks`) or a remote that sends masked requests to a model of its
   own as written (`RedactRouteTo`, which needs its own pass) mask again,
   as before. The values stay on the sending computer: the remote records

@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/gwmw"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/masking"
 	"github.com/yetone/magpie/internal/maskrec"
 	"github.com/yetone/magpie/internal/provider"
@@ -260,8 +262,51 @@ func maskedBefore(r *http.Request) (string, bool) {
 		return "", false
 	}
 	fp := ownMaskedAs()
-	return fp, fp != "" && fp == c.maskedAs
+	if fp == "" {
+		return "", false
+	}
+	// goes on as told: the build that masked it is the one a further
+	// magpie judges by
+	return c.maskedAs, sameMasking(fp, c.maskedAs)
 }
+
+// maskerSince is the first build whose masker finds what this one does: a
+// request masked by the same settings (masking.Fingerprint) by a build
+// from it on needs no second pass, whichever of the two is newer (Luxzinw
+// on X: 0.1.3771 into 0.1.3638 masked twice, the version being part of
+// what had to match). Raise it with the commit that makes the masker find
+// something more, so a request from an older build is masked again.
+const maskerSince = 3584
+
+// sameMasking says a request masked as told (maskedAs, a sender's
+// ownMaskedAs) needs no pass by own's settings: the same settings
+// (masking.Fingerprint) and a masker of the sender's build no older than
+// maskerSince. A build that isn't a release's, or one older than it, or a
+// header of another form, masks again.
+func sameMasking(own, told string) bool {
+	_, ownFP, ok1 := strings.Cut(own, "/")
+	ver, fp, ok2 := strings.Cut(told, "/")
+	if !ok1 || !ok2 || fp == "" || fp != ownFP {
+		return false
+	}
+	if told == own {
+		return true
+	}
+	return buildOf(ver) >= maskerSince
+}
+
+// buildOf is the release number of a version as 0.1.3771, v0.1.3771 or
+// v0.1.3771-dirty names it, 0 for any other.
+func buildOf(v string) int {
+	m := buildRe.FindStringSubmatch(v)
+	if m == nil {
+		return 0
+	}
+	n, _ := strconv.Atoi(m[1])
+	return n
+}
+
+var buildRe = lazyre.New(`^v?0\.1\.(\d{1,7})(?:$|[-+])`)
 
 // ownMaskedAs names what this magpie masks a request by: its masking
 // settings (masking.Fingerprint) and the masker's code, this build's
