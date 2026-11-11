@@ -16,6 +16,7 @@ import (
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/proc"
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/testenv"
 )
 
@@ -596,6 +597,67 @@ func TestBiliHermesThroughPrefix(t *testing.T) {
 	}
 	if !strings.Contains(read(t, cfg), "base_url: "+gw+"\n") || stopped != 1 || biliOnFor(t)["hermes"] {
 		t.Fatalf("stopped %d, config:\n%s", stopped, read(t, cfg))
+	}
+	if len(filter(f.runs, "plugin install", "plugin remove")) != 0 {
+		t.Fatalf("ran %v", f.runs)
+	}
+}
+
+// TestBiliDshThroughPrefix (VantH_off on X): DeepSeek Harness had no row
+// on billion-context's page. bili's plugin for dsh rides proxy settings of
+// dsh's process, which magpie's http://127.0.0.1 route never takes, so dsh
+// goes through the /bili/ prefix as Hermes does: switched on, bili start
+// answers and the baseURL of magpie's route is behind the prefix; off, it is
+// on the gateway again and magpie's bili start ends. bili's plugin
+// installer never runs for it.
+func TestBiliDshThroughPrefix(t *testing.T) {
+	h := sandbox(t)
+	f := newFakeBili(t, h)
+	holdCLI(t, h, "dsh")
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro"}}); err != nil {
+		t.Fatal(err)
+	}
+	web := filepath.Join(h, ".dsh/profiles/web/cordis.patch.yml")
+	gw := gateway.URL() + "/v1"
+	write(t, web, "# mine\n- id: llm-pi-ai\n  name: \"@deepseek-ai/dsh-llm-pi-ai\"\n  config:\n    providers:\n      magpie:\n        displayName: Magpie\n        apiKeyEnv: MAGPIE_API_KEY\n        api: openai-completions\n        baseURL: "+gw+"\n        models:\n          - id: deepseek/pro\n            name: pro\n- id: agent-default-model\n  config:\n    provider: magpie\n    model: deepseek/pro\n")
+
+	serving, served, stopped := false, 0, 0
+	was := []any{biliServe, biliStop, biliServing}
+	biliServe = func(string) error { served++; serving = true; return nil }
+	biliStop = func() { stopped++; serving = false }
+	biliServing = func() bool { return serving }
+	t.Cleanup(func() {
+		biliServe = was[0].(func(string) error)
+		biliStop = was[1].(func())
+		biliServing = was[2].(func() bool)
+	})
+
+	if on, ok := biliOnFor(t)["dsh"]; !ok || on {
+		t.Fatalf("dsh offered %v, on %v", ok, on)
+	}
+	v, err := SetBili("dsh", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(v.Restart, []string{"dsh"}) || v.Backup == "" {
+		t.Fatalf("restart %v, backup %q", v.Restart, v.Backup)
+	}
+	if !strings.Contains(read(t, web), "baseURL: "+biliPrefix+gw+"\n") || !strings.Contains(read(t, web), "# mine") || served != 1 {
+		t.Fatalf("served %d, config:\n%s", served, read(t, web))
+	}
+	if !biliOnFor(t)["dsh"] {
+		t.Fatal("dsh isn't shown on")
+	}
+	serving = false
+	keepBiliServe(context.Background())
+	if served != 2 {
+		t.Fatalf("bili start run %d times, want 2", served)
+	}
+	if _, err := SetBili("dsh", false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(read(t, web), "baseURL: "+gw+"\n") || stopped != 1 || biliOnFor(t)["dsh"] {
+		t.Fatalf("stopped %d, config:\n%s", stopped, read(t, web))
 	}
 	if len(filter(f.runs, "plugin install", "plugin remove")) != 0 {
 		t.Fatalf("ran %v", f.runs)

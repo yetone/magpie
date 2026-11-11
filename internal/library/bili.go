@@ -36,12 +36,11 @@ import (
 // bili's local proxy, which forwards to the gateway (ANTHROPIC_BASE_URL
 // .../bili/<magpie's address>). Codex's lane is an MCP server only, ZCode's
 // routes only its own provider, Kimi Code's renames the default model in
-// config.toml at each start (bili-kimi) and dsh's installs through dsh's
-// package manager: none of those is offered.
+// config.toml at each start (bili-kimi): none of those is offered.
 //
-// Zed has no plugin of bili's, and Hermes' sets HTTPS_PROXY alone, which
-// magpie's http://127.0.0.1 provider never takes: their magpie provider
-// goes through bili's /bili/ prefix with bili start answering there
+// Zed has no plugin of bili's, and Hermes' and dsh's ride proxy settings of
+// the agent's process, which magpie's http://127.0.0.1 provider never takes:
+// their magpie provider goes through bili's /bili/ prefix with bili start answering there
 // (biliURLLanes, bili_url.go).
 //
 // bili's remove doesn't put a file back as it was: it leaves "packages": []

@@ -179,7 +179,14 @@ func dshModern(dir string, fresh func() string) bool {
 // start is shown ("" for the first). The caller names the agent, and gives
 // it its sign, notice and restore.
 func dshOn(at place, dir, list string, fresh, lead func() string) *Agent {
-	gw := at.gw
+	// the gateway's address as dsh's route has it: behind the prefix a
+	// local proxy took it through, when it did (DshThrough)
+	gw := func() string {
+		if at.cold {
+			return at.gw()
+		}
+		return dshReach(dir, at.gw())
+	}
 	// profiles' patch lists, or one magpie makes, are what dsh reads
 	modern := func() bool { return dshModern(dir, fresh) }
 	path := filepath.Join(dir, "config.yaml")
@@ -285,6 +292,7 @@ func dshOn(at place, dir, list string, fresh, lead func() string) *Agent {
 	if list == "dsh" {
 		a.Fields = append(a.Fields, dshCompactField(func() bool { return !at.cold && joined() }, list))
 	}
+	a.through = func(prefix string) error { return dshThrough(at, dir, prefix, fresh) }
 	return a
 }
 
@@ -1077,6 +1085,85 @@ func dshGetLegacy(path string) string {
 		return magpieID + "/" + model
 	}
 	return model
+}
+
+// DshThrough points magpie's route in dsh's patch lists (a, DeepSeek
+// Harness) at the gateway through prefix, an address a local proxy takes the
+// gateway's after (billion-context's http://127.0.0.1:8787/bili/), "" for
+// the gateway itself. dsh must be on magpie already. bili's own plugin for
+// dsh (dsh plugin add billion-context) rides proxy settings of dsh's
+// process, which a provider at http://127.0.0.1 never takes; its docs'
+// /bili/ prefix takes any client whose model address can be edited. A
+// sync, a pick and the serving round keep the prefix (dshReach).
+func DshThrough(a *Agent, prefix string) error {
+	if a == nil || a.ID != "dsh" || a.through == nil {
+		return fmt.Errorf("not DeepSeek Harness")
+	}
+	return a.through(prefix)
+}
+
+// DshURL is the baseURL of magpie's first route in dsh's connected patch
+// list (a, DeepSeek Harness), "" without one.
+func DshURL(a *Agent) string {
+	_, items, err := dshLook(a.Path)
+	if err != nil {
+		return ""
+	}
+	r := dshRoutesIn(dshOver(a.Dir, items))
+	for _, k := range dshKinds {
+		if n := r[k.key]; n != nil {
+			if v := yamlKey(n, "baseURL"); v != nil && v.Kind == yaml.ScalarNode {
+				return v.Value
+			}
+		}
+	}
+	return ""
+}
+
+// dshReach is gw behind the prefix magpie's routes in dsh's profiles go
+// through (a local proxy's route on loopback before the gateway's address,
+// DshThrough), gw itself when they go to the gateway or anywhere else.
+func dshReach(dir, gw string) string {
+	for _, f := range dshProfiles(dir) {
+		_, items, err := dshLook(f)
+		if err != nil {
+			continue
+		}
+		for _, n := range dshRoutesIn(dshOver(dir, items)) {
+			v := yamlKey(n, "baseURL")
+			if v == nil || v.Kind != yaml.ScalarNode {
+				continue
+			}
+			base := strings.TrimSuffix(strings.TrimSpace(v.Value), "/")
+			base = strings.TrimSuffix(base, "/v1")
+			if p, ok := strings.CutSuffix(base, gw); ok && p != "" && loopbackWithPath(strings.TrimSuffix(p, "/")) {
+				return p + gw
+			}
+		}
+	}
+	return gw
+}
+
+// dshThrough is DshThrough for the dsh at a place.
+func dshThrough(at place, dir, prefix string, fresh func() string) error {
+	if !dshWired(dshOverAll(dir)) {
+		return fmt.Errorf("connect DeepSeek Harness to magpie first: pick one of magpie's models for it on the Agents page")
+	}
+	if len(magpieModels(dshListFor(dir))) == 0 {
+		return fmt.Errorf("magpie lists no models for DeepSeek Harness yet")
+	}
+	return dshSyncFresh(at, dir, prefix+at.gw(), fresh)
+}
+
+// dshOverAll is the profiles' patch lists as dsh goes by them, one list.
+func dshOverAll(dir string) []dshItem {
+	var all []dshItem
+	for _, f := range dshProfiles(dir) {
+		if _, items, err := dshLook(f); err == nil {
+			all = append(all, dshOver(dir, items)...)
+		}
+	}
+	return all
 }
 
 // dshCheck says what keeps a dsh on one of magpie's models from reaching
@@ -2712,6 +2799,8 @@ func (r *dshRounds) once() string {
 // dshWiredWith is a round's work, with the models it writes the route from.
 func dshWiredWith(dir string, files []string, models []catalog.Model) string {
 	var trouble []string
+	// a prefix a local proxy has put before the gateway stays (DshThrough)
+	gw := dshReach(dir, gateway.URL())
 	// a profile dsh has just made — the desktop app's, opened for the first
 	// time while magpie runs — is its empty template: given magpie's route
 	// and start as the catalog sync would, rather than left listing dsh's
@@ -2730,13 +2819,13 @@ func dshWiredWith(dir string, files []string, models []catalog.Model) string {
 		}
 	}
 	if fresh {
-		if err := dshFillNewProfiles(fill, models, gateway.URL()); err != nil {
+		if err := dshFillNewProfiles(fill, models, gw); err != nil {
 			trouble = append(trouble, "giving dsh's new profile magpie's route: "+dshWriteError(err))
 		}
 	}
 	files = append(files, dshHomePatch(dir)) // left as it is without magpie's route
 	for _, f := range files {
-		what, err := dshRouteAgainSaid(f, models, gateway.URL())
+		what, err := dshRouteAgainSaid(f, models, gw)
 		if err != nil {
 			trouble = append(trouble, fmt.Sprintf("writing dsh's route again in %s: %s", f, dshWriteError(err)))
 			continue
@@ -2750,7 +2839,7 @@ func dshWiredWith(dir string, files []string, models []catalog.Model) string {
 		}
 	}
 	// deepseek-acp's, which dsh 0.2 takes away at each start
-	if err := dshSettingsAgain(dir, models, gateway.URL()); err != nil {
+	if err := dshSettingsAgain(dir, models, gw); err != nil {
 		trouble = append(trouble, "writing dsh's route again in "+dshSettings(dir)+": "+dshWriteError(err))
 	}
 	return strings.Join(trouble, "; ")

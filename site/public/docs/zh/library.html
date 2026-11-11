@@ -285,9 +285,9 @@ magpie library sync     # 重新写进各个 Agent</pre>
     <p>RTK 标签可以按 Agent 打开 <a href="https://www.rtk-ai.app/">RTK</a>：Agent 的 shell 命令经过 RTK 运行，输出被压短以节省 token。magpie 可以帮你安装 RTK；RTK 卸掉后也能关闭。</p>
 
     <h2 id="billion-context"><a class="anchor" href="#billion-context">billion-context</a></h2>
-    <p>billion-context 标签可以按 Agent 打开 <a href="https://github.com/ranxianglei/billion-context">billion-context</a> 的插件：它把长会话里较早的对话折叠成模型可以再展开的摘要，让会话始终留在模型的上下文窗口内。支持 Pi、omp、OpenCode、Claude Code、Hermes 和 Zed，打开后它们的请求仍经过 magpie。magpie 可以帮你安装（<code>npm install -g billion-context --prefix=~/.local</code>），并运行它自己的安装和卸载命令；关闭时会把安装改动过的 Agent 设置恢复原样。在这里打开的 Agent 不能再同时使用 billion-context-pi 或 opencode-acp。</p>
+    <p>billion-context 标签可以按 Agent 打开 <a href="https://github.com/ranxianglei/billion-context">billion-context</a> 的插件：它把长会话里较早的对话折叠成模型可以再展开的摘要，让会话始终留在模型的上下文窗口内。支持 Pi、omp、OpenCode、Claude Code、Hermes、DeepSeek Harness 和 Zed，打开后它们的请求仍经过 magpie。magpie 可以帮你安装（<code>npm install -g billion-context --prefix=~/.local</code>），并运行它自己的安装和卸载命令；关闭时会把安装改动过的 Agent 设置恢复原样。在这里打开的 Agent 不能再同时使用 billion-context-pi 或 opencode-acp。</p>
     <p>对 Claude Code，billion-context 的安装会关掉 Claude Code 自带的自动压缩。magpie 会把它重新打开，这样 billion-context 没有折叠的会话（比如 Claude 桌面版 Code 标签里的会话）会自动压缩，而不是停在 “Prompt is too long”。你自己设置的 <code>DISABLE_AUTO_COMPACT</code> 保持不变。</p>
-    <p>Zed 没有 billion-context 插件；Hermes 的插件只接管 HTTPS 流量，而 magpie 的本机地址不是 HTTPS。打开后，magpie 会运行 <code>bili start</code>，并把 Agent 里 magpie 提供方的地址改成 <code>http://127.0.0.1:8787/bili/</code> 加上 magpie 的地址，这是 billion-context 为任意客户端给出的接法；Hermes 的每个配置了 magpie 提供方的 profile 都会改。请先在 Agents 页给这个 Agent 选一个 magpie 的模型；打开或关闭后重启它。</p>
+    <p>Zed 没有 billion-context 插件；Hermes 和 DeepSeek Harness 的插件只接管 HTTPS 流量，而 magpie 的本机地址不是 HTTPS。打开后，magpie 会运行 <code>bili start</code>，并把 Agent 里 magpie 提供方的地址改成 <code>http://127.0.0.1:8787/bili/</code> 加上 magpie 的地址，这是 billion-context 为任意客户端给出的接法；Hermes 和 DeepSeek Harness 的每个配置了 magpie 提供方的 profile 都会改。请先在 Agents 页给这个 Agent 选一个 magpie 的模型；打开或关闭后重启它。</p>
     <p>卡片会显示 billion-context 节省了多少 token，用的是它自己的统计：它的面板上的净节省，已扣除折叠后的重建和摘要的开销，并附上折叠次数和会话数，覆盖这台电脑上它运行过的所有会话。magpie 向正在运行的 billion-context 读取这些数字（<code>/__bili/overview</code>）；它没在运行时，卡片显示上次读到的数字和时间。billion-context 为 Agent 运行过之前，这里不显示数字。</p>
 
     <h2 id="touch"><a class="anchor" href="#touch">magpie 会改什么</a></h2>

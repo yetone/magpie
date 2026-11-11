@@ -66,6 +66,14 @@ var biliURLLanes = map[string]biliURLLane{
 		on:  func(a *agent.Agent) bool { return strings.HasPrefix(agent.HermesURL(a), biliPrefix) },
 		set: agent.HermesThrough,
 	},
+	// dsh's own plugin for bili (dsh plugin add billion-context) rides proxy
+	// settings of dsh's process, which magpie's http://127.0.0.1 route never
+	// takes; its route's baseURL is editable, so it goes through the prefix
+	// as Hermes does, in every profile (VantH_off on X).
+	"dsh": {
+		on:  func(a *agent.Agent) bool { return strings.HasPrefix(agent.DshURL(a), biliPrefix) },
+		set: agent.DshThrough,
+	},
 }
 
 // biliServing says bili start answers at biliOrigin: its health is
