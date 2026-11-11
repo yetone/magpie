@@ -410,7 +410,9 @@ any more (`claudePrint` keeps an image known by its URL, which
 
 The one exception to "nothing runs as `-p`" with it On is a turn Anthropic
 refuses in the interactive mode as a third-party app's: a 400 "Third-party
-apps now draw from your extra usage" (#4503). Anthropic judges the agent's
+apps now draw from your extra usage" (#4503), or on a Team or
+Enterprise workspace "draw from extra usage" with no "your" (#5645; both
+wordings are `thirdPartyIn`). Anthropic judges the agent's
 own system prompt, as a whole, there and serves the same prompt to `-p`
 (isjiajia01's controlled tests; Raven on Discord: Pi in Cindy through
 `group/auto`, every turn refused). When the refusal comes with nothing of

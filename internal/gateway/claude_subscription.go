@@ -7155,7 +7155,7 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 		}
 		run.ended(req, said, stop, ok)
 	})
-	if req.interactive && strings.Contains(msg, thirdPartyWords) {
+	if req.interactive && thirdPartyIn(msg) {
 		s.subscription.refusedTUI(req)
 	}
 	if code == redoAsPrint {
@@ -7211,6 +7211,17 @@ func bridgeFailed(name, msg string, status int) (int, string) {
 // (sdk-cli) was served the same prompt.
 const thirdPartyWords = "Third-party apps now draw from your extra usage"
 
+// thirdPartyTeamWords is the same refusal on a Claude Team or Enterprise
+// workspace, which has no "your": "API Error: 400 Third-party apps now
+// draw from extra usage, not plan limits. Ask your workspace admin to
+// add more and keep going." (#5645, pidal20 on X).
+const thirdPartyTeamWords = "Third-party apps now draw from extra usage"
+
+// thirdPartyIn is whether msg holds either wording of the refusal.
+func thirdPartyIn(msg string) bool {
+	return strings.Contains(msg, thirdPartyWords) || strings.Contains(msg, thirdPartyTeamWords)
+}
+
 // thirdPartyRefused is msg, the words a Claude Code run's failure is
 // answered with, with what happened and what to do said after it when
 // Anthropic refused the turn as a third-party app's (#4503). The bare
@@ -7241,7 +7252,7 @@ func thirdPartyRefused(name string, req *Request, code int, msg string) string {
 // thirdPartySaid is whether a Claude Code run's failure is Anthropic's
 // refusal of its turn as a third-party app's.
 func thirdPartySaid(name string, code int, msg string) bool {
-	return name == "Claude Code" && code == http.StatusBadRequest && strings.Contains(msg, thirdPartyWords)
+	return name == "Claude Code" && code == http.StatusBadRequest && thirdPartyIn(msg)
 }
 
 // thirdPartyCode is claudePrint's code for a run that is claude -p
