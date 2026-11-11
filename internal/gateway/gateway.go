@@ -5624,6 +5624,12 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	if relay && !keep && customOff() {
 		relay, ownAPI = false, true
 	}
+	// and a backend that turned a request for one body away because it
+	// only streams (stream_only.go) is asked streamed, translated
+	streamOnly := (from == provider.Chat || from == provider.Responses) && !streamOf(body) && !s.fits(p.ID, streamOnlyRefused(model), from)
+	if relay && !keep && streamOnly {
+		relay, ownAPI = false, true
+	}
 	if keep && relayable {
 		relay, ownAPI = true, false
 	}
@@ -5644,7 +5650,7 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 		// the model isn't served on the client's own API: speak another;
 		// or it turned the custom tools away just now: speak it translated,
 		// except a compaction, which a translation would leave out
-		if customOff() {
+		if customOff() || !s.fits(p.ID, streamOnlyRefused(model), from) && !streamOf(body) {
 			if keep {
 				return writeError(w, from, status, msg), msg
 			}
@@ -6795,6 +6801,14 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			// and from then on
 			res.Body.Close()
 			s.markUnfit(p.ID, customToolRefused(model), proto)
+			return res.StatusCode, p.Name + ": " + provider.APIError(b, res.Status), false
+		}
+		if gather == nil && refusesWhole(proto, body, b) {
+			// a backend that only streams (stream_only.go): the request
+			// is translated on the same API, which asks it streamed and
+			// gives the client one body, and so from then on
+			res.Body.Close()
+			s.markUnfit(p.ID, streamOnlyRefused(model), proto)
 			return res.StatusCode, p.Name + ": " + provider.APIError(b, res.Status), false
 		}
 		fs := refusedOptional(res.StatusCode, b, body)

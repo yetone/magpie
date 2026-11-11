@@ -814,6 +814,14 @@ func probeAt(ctx context.Context, p Provider, proto Protocol, url string, body [
 			return probeOnce(ctx, p, proto, url, b, model, wait)
 		}
 	}
+	if (r.Status == http.StatusBadRequest || r.Status == http.StatusUnprocessableEntity) && StreamRequired([]byte(r.Error)) {
+		// a backend that only streams (a claude-relay-service's
+		// Responses, Cyrus_4433 on X: "Stream must be set to true") is
+		// asked once more streamed, as the gateway asks it
+		if b, ok := WithStream(body); ok {
+			return probeOnce(ctx, p, proto, url, b, model, wait)
+		}
+	}
 	return r
 }
 
