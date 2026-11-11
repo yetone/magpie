@@ -225,7 +225,7 @@ func windowOf(spec string) (name string, reads []string, ok bool) {
 // inline styles, data: pictures, and nothing over the network. sandbox
 // keeps a page opened by itself (not in the window's frame) as shut in as
 // the frame keeps it.
-func pagePolicy(r *http.Request, tok string) string {
+func pagePolicy(r *http.Request, tok string, hashes ...string) string {
 	own := "'self'"
 	if r.Host != "" {
 		// the page's own folder: not the window's files, nor /api
@@ -234,7 +234,7 @@ func pagePolicy(r *http.Request, tok string) string {
 	return strings.Join([]string{
 		"sandbox allow-scripts",
 		"default-src 'none'",
-		"script-src " + own,
+		"script-src " + strings.Join(append([]string{own}, hashes...), " "),
 		"style-src " + own + " 'unsafe-inline'",
 		"img-src " + own + " data:",
 		"font-src " + own,
@@ -388,6 +388,26 @@ func servePluginPage(rw http.ResponseWriter, r *http.Request, web bool) {
 		pageHost(r.Context())
 	}
 	h := rw.Header()
+	// A page in a browser comes as one document (pageinline.go): its
+	// sandboxed frame sends no cookie for its files, which a proxy that
+	// signs readers in by cookie turns away.
+	if web && rel == entry && isHTML(rel) {
+		if file, ok := plugin.FileIn(dir, rel); ok {
+			b, err := os.ReadFile(file)
+			if err != nil {
+				http.NotFound(rw, r)
+				return
+			}
+			doc, hashes := inlinePage(b, dir)
+			h.Set("Content-Security-Policy", pagePolicy(r, tok, append(hashes, "data:")...))
+			h.Set("X-Content-Type-Options", "nosniff")
+			h.Set("Referrer-Policy", "no-referrer")
+			h.Set("Cache-Control", "no-cache")
+			h.Set("Content-Type", "text/html; charset=utf-8")
+			http.ServeContent(rw, r, "index.html", time.Time{}, strings.NewReader(string(doc)))
+			return
+		}
+	}
 	h.Set("Content-Security-Policy", pagePolicy(r, tok))
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Referrer-Policy", "no-referrer")
@@ -619,4 +639,9 @@ func pageRead(read string, params map[string]any) (any, error) {
 		return out, nil
 	}
 	return nil, fmt.Errorf("no read %q", read)
+}
+
+func isHTML(rel string) bool {
+	ext := strings.ToLower(filepath.Ext(rel))
+	return ext == ".html" || ext == ".htm"
 }

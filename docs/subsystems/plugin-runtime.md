@@ -339,6 +339,18 @@ starts a Bun host.
   `TestServiceSelf` and `TestPluginPageServiceProxied` check the policies, and
   `TestPluginPageLoadsItsFilesInTheWindow` loads a page through
   `ownWindow` in a real WKWebView; Playwright, on http, can't see it.
+  Behind a proxy that signs readers in by a SameSite=Lax cookie (Cloudflare
+  Access) the sandboxed frame's files carried none and were redirected to
+  the sign-in (xuanwo on X, Day card). In `magpie web` the page's HTML comes
+  as one document (`inlinePage`, pageinline.go): its classic scripts (the
+  bridge included) and url()-free stylesheets are written in, the scripts
+  allowed by hash, and a script the page adds later is fetched by the window
+  (`asset` in pluginpages.js, under the page's folder only) and loaded from
+  a `data:` address (`data:` in script-src; WebKit finds no blob made in a
+  sandboxed frame). Left as they were: modules, stylesheets with url(),
+  images and fonts the page loads itself. index.html's manifest link asks
+  with `crossorigin="use-credentials"`. `TestPluginPageWebComesAsOneDocument`,
+  `plugin-page-cookie-proxy.test.cjs`.
 - **Slots.** A page names a slot with `<div class="plugin-slot"
   data-slot="…" hidden>` in its markup, or app.js draws one with
   `magpie.slot(name, context)` ([`pluginpages.js`](../../internal/gui/assets/pluginpages.js)).

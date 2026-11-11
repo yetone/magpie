@@ -411,3 +411,55 @@ func TestPluginPagePolicyBehindProxyHost(t *testing.T) {
 		t.Fatalf("the Host's address twice: %s", p)
 	}
 }
+
+// Behind a proxy that signs readers in by cookie (Cloudflare Access), a
+// page's sandboxed frame sends no cookie for its stylesheet and scripts,
+// and the proxy turns them away. In magpie web the page comes as one
+// document, its scripts allowed by hash (xuanwo on X, Day card).
+func TestPluginPageWebComesAsOneDocument(t *testing.T) {
+	on, _ := pagePlugins(t)
+	dir := filepath.Join(on, "page")
+	html := `<!doctype html><link rel="stylesheet" href="s.css"><script src="_magpie/bridge.js"></script><script src="a.js"></script><script src="b.js" defer></script><script src="https://x.example/c.js"></script><body><p id=p></p></body>`
+	for name, body := range map[string]string{"index.html": html, "s.css": "p{color:red}", "a.js": "window.A=1", "b.js": "window.B=document.getElementById('p')"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// the proxy: no cookie, no file
+	proxy := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			c, _ := r.Cookie("CF_Authorization")
+			sub := r.URL.Path != "" && !strings.HasSuffix(r.URL.Path, "/index.html")
+			if sub && c == nil {
+				http.Redirect(rw, r, "https://team.cloudflareaccess.com/cdn-cgi/access/login", http.StatusFound)
+				return
+			}
+			next.ServeHTTP(rw, r)
+		})
+	}
+	mux := http.NewServeMux()
+	pluginPageRoutes(mux, true)
+	var pages []pluginPage
+	_ = json.Unmarshal(do(mux, httptest.NewRequest("GET", "/api/plugin-pages", nil)).Body.Bytes(), &pages)
+	w := do(proxy(mux), httptest.NewRequest("GET", pages[0].URL, nil))
+	body := w.Body.String()
+	if w.Code != 200 || strings.Contains(body, `src="a.js"`) || strings.Contains(body, `href="s.css"`) {
+		t.Fatalf("the files aren't in the page: %d %s", w.Code, body)
+	}
+	if !strings.Contains(body, "window.A=1") || !strings.Contains(body, "p{color:red}") || !strings.Contains(body, "__magpieInlined") || !strings.Contains(body, `src="https://x.example/c.js"`) {
+		t.Errorf("the page: %s", body)
+	}
+	if strings.Index(body, "window.B=") < strings.Index(body, "<p id=p>") {
+		t.Errorf("a deferred script runs before the page is read: %s", body)
+	}
+	csp := w.Header().Get("Content-Security-Policy")
+	if n := strings.Count(csp, "'sha256-"); n != 3 || !strings.Contains(csp, "data:") {
+		t.Errorf("hashes of the three scripts: %s", csp)
+	}
+	// not in a browser (the desktop window): files as they are
+	mux = http.NewServeMux()
+	pluginPageRoutes(mux, false)
+	if b := do(mux, httptest.NewRequest("GET", pages[0].URL, nil)).Body.String(); !strings.Contains(b, `src="a.js"`) {
+		t.Errorf("the window's page was rewritten: %s", b)
+	}
+}

@@ -65,6 +65,36 @@
       parent.postMessage({ magpie: 1, id, method, params }, "*");
     });
   }
+  // A page that came as one document (pageinline.go) can't ask for its
+  // other files itself: a proxy that signs readers in by cookie turns away
+  // a sandboxed frame's requests. A script it adds is fetched by the
+  // window, which has the cookie, and loaded from a data: address.
+  if (globalThis.__magpieInlined) {
+    const put = (node, ref) => {
+      let abs;
+      try { abs = new URL(ref, location.href).href; } catch { return false; }
+      call("asset", { url: abs }).then(({ type, data }) => {
+        // a data: address, not a blob's: WebKit finds no blob made in a
+        // sandboxed frame
+        let bin = "";
+        const bytes = new Uint8Array(data);
+        for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
+        node.setAttribute("src", "data:text/javascript;base64," + btoa(bin));
+        node.__magpiePut(node);
+      }, () => node.__magpiePut(node));
+      return true;
+    };
+    const add = (orig) => function (node, ...rest) {
+      if (node instanceof HTMLScriptElement && node.hasAttribute("src") && !node.__magpieDone && !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(node.getAttribute("src"))) {
+        const ref = node.getAttribute("src");
+        node.__magpiePut = (n) => { n.__magpieDone = true; orig.call(this, n, ...rest); };
+        if (put(node, ref)) return node;
+      }
+      return orig.call(this, node, ...rest);
+    };
+    Node.prototype.appendChild = add(Node.prototype.appendChild);
+    Node.prototype.insertBefore = add(Node.prototype.insertBefore);
+  }
   function paint(theme) {
     const root = document.documentElement;
     root.dataset.theme = theme.dark ? "dark" : "light";
