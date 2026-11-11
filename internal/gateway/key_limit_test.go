@@ -252,6 +252,9 @@ func TestKeyLimitWindowResets(t *testing.T) {
 // reservation. A late check or release of it cannot spend the new window.
 func TestKeyLimitReservationsStayInTheirWindow(t *testing.T) {
 	for _, period := range access.Periods {
+		if period == "total" {
+			continue // one window that never ends: no boundary to cross (internal/budget's total_test.go holds it)
+		}
 		for _, cap := range []struct {
 			name   string
 			tokens int64
