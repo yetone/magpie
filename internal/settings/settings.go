@@ -867,6 +867,10 @@ type Settings struct {
 	// each model's (WJaunita45604 on X). 0 is no cap. It only lowers: a
 	// model whose window is shorter, or not known, is told what it was.
 	ContextCap int `json:"contextCap,omitempty"`
+	// ContextCapAll makes ContextCap hold a window the user set themselves
+	// too (a model's, or its provider's "*"): the shorter of the two is
+	// told. Off, the user's own window wins even when it is longer.
+	ContextCapAll bool `json:"contextCapAll,omitempty"`
 	// AgentCompacts is Long conversations of an agent's own, by its kind
 	// (CompactAgents), over CompactAt and FullContext for that agent alone
 	// (molianyin4227 on Discord: models differ, so one size for every
@@ -1498,6 +1502,15 @@ func (s Settings) LightweightOn() bool { return s.Lightweight != nil && *s.Light
 func (s Settings) Capped(n int) int {
 	if s.ContextCap > 0 && n > s.ContextCap {
 		return s.ContextCap
+	}
+	return n
+}
+
+// CappedOwn is a window n the user set themselves under ContextCap: as it
+// was unless ContextCapAll, then no longer than the cap.
+func (s Settings) CappedOwn(n int) int {
+	if s.ContextCapAll {
+		return s.Capped(n)
 	}
 	return n
 }

@@ -154,7 +154,23 @@ function renderContextCap(s) {
   };
   field.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") field.blur(); if (e.key === "Escape") { field.value = s.contextCap ? contextsText({ "*": s.contextCap }) : ""; field.blur(); } };
   field.onchange = save;
-  $("#contextCapVal").replaceChildren(field);
+  // which windows it holds: only models with none of the user's own, or
+  // every model (the shorter of the two is told; settings.ContextCapAll)
+  const mode = el("button", "proto pick context-cap-mode");
+  mode.type = "button";
+  mode.setAttribute("aria-label", t("Longest context holds"));
+  mode.replaceChildren(el("span", "", t(s.contextCapAll ? "Every model" : "Models without their own")), svg(CHEV, 11, 1.6));
+  mode.onclick = (e) => {
+    e.stopPropagation();
+    if (mode.classList.contains("open")) return closeProtoMenu();
+    openProtoMenu(mode, [{ v: "own", name: t("Models without their own") }, { v: "all", name: t("Every model") }], s.contextCapAll ? "all" : "own",
+      (v) => { if ((v === "all") === !!s.contextCapAll) return; writingPrefs(api("settings/context-cap-mode", { all: v === "all" })).then((ns) => { prefs = state.settings = ns; renderSettings(); }).catch((er) => { status(t(er.message), "err"); renderSettings(); }); },
+      "Longest context holds", "context-cap-menu");
+  };
+  const box = el("div", "");
+  box.style.cssText = "display:flex;gap:8px;align-items:center;justify-content:flex-end";
+  box.append(mode, field);
+  $("#contextCapVal").replaceChildren(box);
 }
 
 // renderCORS: the web pages whose scripts may call the gateway from a

@@ -30,6 +30,12 @@ function server(lang, posted) {
       cur = { ...cur, contextCap: body.at || undefined };
       return json(cur);
     }
+    if (url.pathname === "/api/settings/context-cap-mode") {
+      const body = req.postDataJSON();
+      posted.push(["context-cap-mode", body]);
+      cur = { ...cur, contextCapAll: body.all || undefined };
+      return json(cur);
+    }
     if (url.pathname === "/api/settings") {
       if (req.method() === "POST") posted.push(["settings", req.postDataJSON()]);
       return json(cur);
@@ -46,8 +52,8 @@ function server(lang, posted) {
 }
 
 const want = {
-  en: { name: "Longest context", none: "None", bad: "Longest context: lots is not a number of tokens like 272k" },
-  zh: { name: "最长上下文", none: "无", bad: "最长上下文：lots 不是 272k 这样的 token 数" },
+  en: { all: "Every model", own: "Models without their own", name: "Longest context", none: "None", bad: "Longest context: lots is not a number of tokens like 272k" },
+  zh: { all: "每个模型", own: "没有自带窗口的模型", name: "最长上下文", none: "无", bad: "最长上下文：lots 不是 272k 这样的 token 数" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -87,6 +93,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await row.locator("input.context-cap").press("Enter");
       await page.waitForFunction(() => document.querySelector("#contextCapRow input")?.value === "");
       assert.deepEqual(posted.at(-1), ["context-cap", { at: 0 }]);
+      const mode = row.locator("button.context-cap-mode");
+      assert.equal((await mode.textContent()).trim(), w.own);
+      await mode.click();
+      await page.locator(".context-cap-menu [role=menuitemradio], .context-cap-menu button").filter({ hasText: w.all }).first().click();
+      await page.waitForFunction((x) => document.querySelector("#contextCapRow .context-cap-mode")?.textContent.trim() === x, w.all);
+      assert.deepEqual(posted.at(-1), ["context-cap-mode", { all: true }]);
       assert(!posted.some((p) => p[0] === "settings"), "set on its own, not with the other preferences");
       assert.equal(await view(), before, "typing scrolled the page");
       assert(await row.boundingBox().then((b) => b.height < 80), "the row stays one line");

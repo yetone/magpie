@@ -285,6 +285,21 @@ func SetCompactAt(n int) error {
 	return nil
 }
 
+// SetContextCapAll chooses whether the longest context (SetContextCap) also
+// holds a window the user set for a model or its provider.
+func SetContextCapAll(all bool) error {
+	s := settings.Load()
+	if s.ContextCapAll == all {
+		return nil
+	}
+	s.ContextCapAll = all
+	if err := settings.Save(s); err != nil {
+		return err
+	}
+	catalog.Touched()
+	return nil
+}
+
 // SetContextCap holds every model's window to n tokens at most
 // (settings.ContextCap), where the user set none for the model or its
 // provider; 0 takes the cap away. Agents' lists are written again.

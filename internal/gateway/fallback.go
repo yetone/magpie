@@ -2246,7 +2246,7 @@ func windowIn(served func() []provider.Entry, p provider.Provider, model string)
 			return e.Context
 		}
 	}
-	return p.ContextOf(model)
+	return settings.Shared().CappedOwn(p.ContextOf(model))
 }
 
 const (

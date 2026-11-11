@@ -840,7 +840,7 @@ func CodexNativeWindow(restore bool) func(slug string) (n, most int, ok bool) {
 	capped := settings.Shared()
 	return func(slug string) (int, int, bool) {
 		if n := p.ContextOf(slug); n > 0 {
-			return n, 0, true
+			return capped.CappedOwn(n), 0, true
 		}
 		if !restore {
 			return 0, 0, false
@@ -868,10 +868,10 @@ func CodexNativeWindow(restore bool) func(slug string) (n, most int, ok bool) {
 // Codex Plus account.
 func CodexWindow(user, slug string) int {
 	p, _ := find(All(), "codex")
-	if n := p.ContextOf(slug); n > 0 {
-		return n
-	}
 	capped := settings.Shared()
+	if n := p.ContextOf(slug); n > 0 {
+		return capped.CappedOwn(n)
+	}
 	var lists [][]catalog.Model
 	if user != "" {
 		if live, _, ok := catalog.Live(accountModels("codex", user)); ok {
@@ -899,7 +899,11 @@ func codexWindowsTag() []catalog.Model {
 	p, _ := find(All(), "codex")
 	var out []catalog.Model
 	if n := settings.Shared().ContextCap; n > 0 {
-		out = append(out, catalog.Model{ID: "~cap", Context: n})
+		id := "~cap"
+		if settings.Shared().ContextCapAll {
+			id = "~capall"
+		}
+		out = append(out, catalog.Model{ID: id, Context: n})
 	}
 	for _, k := range slices.Sorted(maps.Keys(p.Contexts)) {
 		out = append(out, catalog.Model{ID: "=" + k, Context: p.Contexts[k]})

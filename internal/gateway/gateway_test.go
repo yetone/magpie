@@ -1113,6 +1113,13 @@ func TestModelsListContextCap(t *testing.T) {
 	if got := windows(); got["fake/m1"] != 200000 || got["fake/m2"] != 900000 {
 		t.Fatalf("under a 200K cap: %v, want m1 200000 and m2's own 900000", got)
 	}
+	if err := provider.SetContextCapAll(true); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { provider.SetContextCapAll(false) })
+	if got := windows(); got["fake/m1"] != 200000 || got["fake/m2"] != 200000 {
+		t.Fatalf("under a 200K cap on every model: %v, want both 200000", got)
+	}
 }
 
 func TestModelsListReasoning(t *testing.T) {

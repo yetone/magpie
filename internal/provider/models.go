@@ -3724,17 +3724,18 @@ func (p Provider) WindowIn(m catalog.Model, s settings.Settings) int { return p.
 
 // windowIn is WindowOf under settings s: a window the user typed, for the
 // model or for all the provider's (which is no larger than the model's own
-// where it says), is theirs as it is; any other is held to the longest
-// context the user set for every model (settings.ContextCap).
+// where it says), is theirs as it is, or held to the longest context too
+// when the user chose that (settings.ContextCapAll); any other is held to
+// the longest context the user set for every model (settings.ContextCap).
 func (p Provider) windowIn(m catalog.Model, s settings.Settings) int {
 	if n := p.Contexts[m.ID]; n > 0 {
-		return n
+		return s.CappedOwn(n)
 	}
 	if n := p.Contexts["*"]; n > 0 {
 		if most := max(catalog.Window(m.Context), m.MaxContext); most > 0 && most < n {
-			return most
+			return s.CappedOwn(most)
 		}
-		return n
+		return s.CappedOwn(n)
 	}
 	return s.Capped(ListedWindow(m))
 }
