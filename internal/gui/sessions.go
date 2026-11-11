@@ -747,8 +747,15 @@ func statsForGen(days int) (sessions.Stats, uint64) {
 		return st, gen
 	}
 	statsMemo.Unlock()
-	st, gen := combinedSessionStats(days), statsGen.Add(1)
+	return keepStats(days, combinedSessionStats(days))
+}
+
+// keepStats keeps st as days' stats unless another ask kept them first,
+// and gives what is kept.
+func keepStats(days int, st sessions.Stats) (sessions.Stats, uint64) {
+	gen := statsGen.Add(1)
 	statsMemo.Lock()
+	defer statsMemo.Unlock()
 	if statsMemo.m == nil {
 		statsMemo.m = map[int]*statsKept{}
 	}
@@ -765,8 +772,34 @@ func statsForGen(days int) (sessions.Stats, uint64) {
 		statsMemo.asks++
 		statsMemo.m[days] = &statsKept{at: time.Now(), st: st, gen: gen, used: statsMemo.asks}
 	}
-	statsMemo.Unlock()
 	return st, gen
+}
+
+// statsAndNative is sessions.StatsAndNativeAll, for a test that counts
+// the passes over the session files.
+var statsAndNative = sessions.StatsAndNativeAll
+
+// warmStats reads each of days' stats not kept yet in one pass over the
+// session files. The warm-up read every day and 30 days one after the
+// other, each listing every file, grouping the sessions and finding
+// Claude Code's copies and branches again: ~100 MB of garbage apiece
+// with a real account's history.
+func warmStats(days ...int) {
+	keepStatsWhileAsked()
+	statsMemo.Lock()
+	var todo []int
+	for _, d := range days {
+		if statsMemo.m[d] == nil {
+			todo = append(todo, d)
+		}
+	}
+	statsMemo.Unlock()
+	if len(todo) == 0 {
+		return
+	}
+	for i, st := range combinedSessionStatsAll(todo) {
+		keepStats(todo[i], st)
+	}
 }
 
 // statsIdle is how long the Sessions page's stats are kept after the last
@@ -832,7 +865,7 @@ func combinedSessionStats(days int) sessions.Stats {
 // combinedSessionStatsAll is combinedSessionStats for each of days, the
 // session files read once for all of them.
 func combinedSessionStatsAll(days []int) []sessions.Stats {
-	sts, nativeKeys := sessions.StatsAndNativeAll(days)
+	sts, nativeKeys := statsAndNative(days)
 	for i := range sts {
 		sts[i] = withGatewaySessions(sts[i], days[i], nativeKeys)
 	}
@@ -893,8 +926,7 @@ func warmStart() {
 // waited (#2776), and every later ask is answered from what it kept.
 func warmSteps() []func() {
 	return []func(){
-		func() { statsFor(0) },
-		func() { statsFor(30) },
+		func() { warmStats(0, 30) },
 		func() { underTightGC(func() { usage.QueryPage(usage.All, usage.Filter{}, 0, 50) }) },
 		func() {
 			if slices.ContainsFunc(statsFor(0).Keys, func(k string) bool { return strings.HasPrefix(k, "codex:") }) {

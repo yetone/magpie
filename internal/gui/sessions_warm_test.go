@@ -70,3 +70,39 @@ func TestWarmUpReadsCodexEffort(t *testing.T) {
 		}
 	}
 }
+
+// The warm-up reads every day's and 30 days' stats in one pass over the
+// session files, not one pass each (~100 MB of garbage apiece with a real
+// history), and keeps both.
+func TestWarmUpReadsTheStatsInOnePass(t *testing.T) {
+	statsMemo.Lock()
+	saved := statsMemo.m
+	statsMemo.m = nil
+	statsMemo.Unlock()
+	old := statsAndNative
+	t.Cleanup(func() {
+		statsMemo.Lock()
+		statsMemo.m = saved
+		statsMemo.Unlock()
+		statsAndNative = old
+	})
+	var passes [][]int
+	statsAndNative = func(days []int) ([]sessions.Stats, map[string]bool) {
+		passes = append(passes, days)
+		return make([]sessions.Stats, len(days)), nil
+	}
+	warmStats(0, 30)
+	if len(passes) != 1 || len(passes[0]) != 2 {
+		t.Fatalf("the warm-up's stats were read in passes %v, want one for both ranges", passes)
+	}
+	statsMemo.Lock()
+	kept := statsMemo.m[0] != nil && statsMemo.m[30] != nil
+	statsMemo.Unlock()
+	if !kept {
+		t.Fatal("the warm-up's stats are not kept for the page")
+	}
+	warmStats(0, 30)
+	if len(passes) != 1 {
+		t.Fatalf("stats kept were read again: passes %v", passes)
+	}
+}
