@@ -1122,6 +1122,7 @@ magpie.plugin("library", (ctx) => {
     bar.append(button("+ " + t("Add"), "action lib-memadd", () => { endMemPick(); openMemory(null); render(); }));
     body.append(bar);
 
+    if (memStatus === "active" && !words.length && !memScope && !memPicking && (mem.suggestions || []).length) body.append(memSuggestions());
     const list = el("div", "list lib-list lib-mems" + (memPicking ? " picking" : ""));
     if (memOpen === "new") list.append(memDetail(null));
     for (const m of shown) list.append(...memRow(m));
@@ -1133,6 +1134,31 @@ magpie.plugin("library", (ctx) => {
     }
     body.append(list);
     if (memPicking) body.append(memPickBar());
+  }
+
+  // what memory suggests (memory.Suggest): a memory learned in several
+  // projects to hold everywhere, a procedure searched for often to be a
+  // skill; each taken or turned down for good
+  function memSuggestions() {
+    const list = el("div", "list lib-list lib-memsugg");
+    for (const s of mem.suggestions) {
+      const r = el("div", "row lib-row");
+      r.dataset.sugg = s.key;
+      const w = el("div", "who");
+      w.append(el("div", "name", s.text));
+      const acts = el("div", "lib-acts");
+      if (s.to === "global") {
+        w.append(el("div", "sub", t("Learned in {projects}", { projects: s.projects.map((k) => mem.projects?.[k]?.name || k).join(", ") })));
+        acts.append(button(t("Use everywhere"), "action", () => memChange("memory/promote", { ids: s.ids }, t("It holds everywhere now"))));
+      } else {
+        w.append(el("div", "sub", t("Searched {n} times", { n: s.uses })));
+        acts.append(button(t("Make a skill"), "action", async () => { if (await memChange("memory/skill", { id: s.ids[0] }, t("It is a skill in the library now"))) load(true); }));
+      }
+      acts.append(button(t("Not now"), "action", () => memChange("memory/decline", { key: s.key })));
+      r.append(glyph(s.to === "global" ? GLYPH.web : GLYPH.skill), w, acts);
+      list.append(r);
+    }
+    return list;
   }
 
   // ---------- some memories, picked, acted on at once ----------

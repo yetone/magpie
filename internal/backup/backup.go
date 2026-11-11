@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"maps"
 	"os"
 	"path/filepath"
@@ -33,6 +34,7 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/library"
+	"github.com/yetone/magpie/internal/memory"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/profile"
 	"github.com/yetone/magpie/internal/provider"
@@ -106,6 +108,10 @@ type Bundle struct {
 	// with their credentials: only when the user asked for them
 	// (WithSignIns). Nil otherwise, and from a magpie before them.
 	SignIns *provider.SignIns `json:"signIns,omitempty"`
+	// Memory is what the agents know (memory.Collect): merged where it is
+	// put back, memory by memory, never put over what is there. Nil from
+	// a magpie before it, or with no memory.
+	Memory *memory.Bundle `json:"memory,omitempty"`
 }
 
 // WithSignIns puts this computer's sign-ins in b. One that can't be read
@@ -284,6 +290,10 @@ func Collect(keys bool, app string) (Bundle, error) {
 	if !keys && b.Library != nil {
 		b.Library.WithoutSecrets(Secret)
 	}
+	// a memory.json that can't be read stops it too: unknown, not none
+	if b.Memory, err = memory.Collect(); err != nil {
+		return b, fmt.Errorf("memory: %w", err)
+	}
 	return b, nil
 }
 
@@ -402,10 +412,13 @@ type Parts struct {
 	// SignIns puts the backup's sign-ins in, when it has them
 	// (provider.RestoreSignIns: nothing renewed later here is written over).
 	SignIns bool
+	// Memory merges the backup's memory into this computer's
+	// (memory.Put): a memory here is never taken away by it.
+	Memory bool
 }
 
 // All is every part.
-var All = Parts{Providers: true, Settings: true, Profiles: true, Agents: true, Library: true, SignIns: true}
+var All = Parts{Providers: true, Settings: true, Profiles: true, Agents: true, Library: true, SignIns: true, Memory: true}
 
 // Result says what a restore did.
 type Result struct {
@@ -423,6 +436,7 @@ type Result struct {
 	Agents          int               // agent fields changed
 	Skipped         []string          // agent fields left alone: the agent is not on this machine, or the value failed
 	Library         bool              // the library was put in
+	Memory          bool              `json:",omitempty"` // memory changed: the backup's merged in
 	LibraryProblems []library.Problem `json:",omitempty"` // what of it couldn't be given to an agent
 	// SignIns is what putting the backup's sign-ins in did; nil when it
 	// had none, or they weren't asked for.
@@ -613,6 +627,19 @@ func Restore(b Bundle, parts Parts) (Result, error) {
 			return r, fmt.Errorf("the library: %w", err)
 		}
 		r.Library, r.LibraryProblems = true, res.Problems
+	}
+	if parts.Memory && b.Memory != nil {
+		changed, err := memory.Put(b.Memory)
+		if err != nil {
+			return r, fmt.Errorf("memory: %w", err)
+		}
+		if r.Memory = changed; changed {
+			// the agents' instructions given what came, as after a change
+			// the user made to memory
+			if _, err := library.PublishMemory(false); err != nil {
+				log.Printf("backup: memory digest: %v", err)
+			}
+		}
 	}
 	return r, nil
 }

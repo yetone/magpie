@@ -27,6 +27,7 @@ func backupRoutes(mux *http.ServeMux, w Windows) {
 			Pass    string
 			Keys    bool
 			Library *bool // nil is yes
+			Memory  *bool // nil is yes
 			SignIns bool  // the subscriptions' and plugins' sign-ins too
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -40,6 +41,9 @@ func backupRoutes(mux *http.ServeMux, w Windows) {
 		}
 		if in.Library != nil && !*in.Library {
 			b.Library = nil
+		}
+		if in.Memory != nil && !*in.Memory {
+			b.Memory = nil
 		}
 		if in.SignIns {
 			if err := backup.WithSignIns(&b); err != nil {
@@ -74,6 +78,7 @@ func backupRoutes(mux *http.ServeMux, w Windows) {
 			Pass    string
 			Agents  bool
 			Library *bool // nil is yes
+			Memory  *bool // nil is yes: merged with the memories here
 			SignIns *bool // nil is yes: the backup's sign-ins, when it has them
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -93,6 +98,7 @@ func backupRoutes(mux *http.ServeMux, w Windows) {
 		parts := backup.All
 		parts.Agents = in.Agents
 		parts.Library = in.Library == nil || *in.Library
+		parts.Memory = in.Memory == nil || *in.Memory
 		parts.SignIns = in.SignIns == nil || *in.SignIns
 		res, err := backup.Restore(b, parts)
 		if err != nil {

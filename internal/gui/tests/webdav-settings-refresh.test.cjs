@@ -93,8 +93,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // off, nothing changed by anything: the description of the whole lot
       assert.equal(await first.locator(".name").textContent(), zh ? "WebDAV / S3 / GitHub 同步" : "WebDAV, S3 or GitHub sync");
       assert.equal(await first.locator(".sub").textContent(), zh
-        ? "让每台电脑上的供应商（含 API Key）、设置、Profile、agent 的模型、资源库保持一致"
-        : "Keeps providers with their API keys, settings, profiles, agents' models, library the same on every computer");
+        ? "让每台电脑上的供应商（含 API Key）、设置、Profile、agent 的模型、资源库、记忆保持一致"
+        : "Keeps providers with their API keys, settings, profiles, agents' models, library, memory the same on every computer");
 
       // an open form is someone typing: a focus while one is open must not
       // rebuild it under them (#104)
@@ -126,7 +126,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await form.waitFor({ state: "visible" });
       const tick = (word) => form.locator("label.tick", { hasText: word }).locator("input");
       assert.equal(await tick("API Key").isChecked(), true);
-      assert.equal(await tick(zh ? "agent" : "Agents' models").isChecked(), false, "agents' models must be unticked, as the CLI left it");
+      assert.equal(await tick(zh ? "各 agent 选的模型" : "Agents' models").isChecked(), false, "agents' models must be unticked, as the CLI left it");
       assert.equal(await tick(zh ? "资源库" : "Library").isChecked(), false, "the library must be unticked, as the CLI left it");
       await first.locator(".val button", { hasText: zh ? "关闭" : "Close" }).click();
       await form.waitFor({ state: "detached" });
@@ -139,9 +139,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         "an S3 setup changed behind the window must reach the page too");
       assert.equal(await first.locator(".name").textContent(), zh ? "S3 同步" : "S3 sync");
 
-      // off again, keys and agents out: the description names what is on,
+      // off again, keys, agents and memory out: the description names what is on,
       // as the CLI's list does
-      sync.value = { on: false, keys: false, agents: false, library: true };
+      sync.value = { on: false, keys: false, agents: false, library: true, memory: false };
       await focus();
       assert.equal(await settle(async () => (await first.locator(".sub").textContent()) === (zh
         ? "让每台电脑上的供应商（不含 API Key）、设置、Profile、资源库保持一致"
@@ -154,8 +154,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       sync.value = { on: false };
       await focus();
       assert.equal(await settle(async () => (await first.locator(".sub").textContent()) === (zh
-        ? "让每台电脑上的供应商（含 API Key）、设置、Profile、agent 的模型、资源库保持一致"
-        : "Keeps providers with their API keys, settings, profiles, agents' models, library the same on every computer")), true,
+        ? "让每台电脑上的供应商（含 API Key）、设置、Profile、agent 的模型、资源库、记忆保持一致"
+        : "Keeps providers with their API keys, settings, profiles, agents' models, library, memory the same on every computer")), true,
         "a view with no toggles must read as the defaults");
 
       assert.deepEqual(errors, []);

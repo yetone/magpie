@@ -189,7 +189,13 @@ func Untidy(cs []Change) (int, error) {
 				}
 			}
 			if c.New {
-				f.Memories = slices.DeleteFunc(f.Memories, func(m *Memory) bool { return m.ID == c.Into && !Fixed(m) })
+				f.Memories = slices.DeleteFunc(f.Memories, func(m *Memory) bool {
+					if m.ID == c.Into && !Fixed(m) {
+						removed(f, m.ID)
+						return true
+					}
+					return false
+				})
 			}
 		}
 		return nil

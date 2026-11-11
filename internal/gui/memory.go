@@ -17,6 +17,9 @@ type memoryView struct {
 	Projects map[string]*memory.Project `json:"projects"`
 	Digest   bool                       `json:"digest"`
 	Agents   []string                   `json:"agents"` // ticked for instructions
+	// Suggestions are memories to make global, and procedures to make
+	// skills (memory.Suggest)
+	Suggestions []memory.Suggestion `json:"suggestions"`
 }
 
 func readMemory() (*memoryView, error) {
@@ -34,7 +37,14 @@ func readMemory() (*memoryView, error) {
 	if ps == nil {
 		ps = map[string]*memory.Project{}
 	}
-	return &memoryView{Memories: ms, Projects: ps, Digest: on, Agents: agents}, nil
+	sg, err := memory.Suggest()
+	if err != nil {
+		return nil, err
+	}
+	if sg == nil {
+		sg = []memory.Suggestion{}
+	}
+	return &memoryView{Memories: ms, Projects: ps, Digest: on, Agents: agents, Suggestions: sg}, nil
 }
 
 // memoryChanged publishes the user's change to the agents' instructions
@@ -122,6 +132,50 @@ func memoryRoutes(mux *http.ServeMux) {
 			return
 		}
 		if _, err := memory.SetStatus(in.Status, in.IDs...); err != nil {
+			fail(rw, err)
+			return
+		}
+		memoryChanged(rw)
+	})
+	// a suggestion taken: memories learned in several projects made one
+	// that holds everywhere, or a procedure made a skill of the library's
+	mux.HandleFunc("POST /api/memory/promote", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			IDs []string `json:"ids"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if _, err := memory.Promote(in.IDs); err != nil {
+			fail(rw, err)
+			return
+		}
+		memoryChanged(rw)
+	})
+	mux.HandleFunc("POST /api/memory/skill", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			ID string `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if _, _, err := library.MemorySkill(in.ID); err != nil {
+			fail(rw, err)
+			return
+		}
+		memoryChanged(rw)
+	})
+	mux.HandleFunc("POST /api/memory/decline", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Key string `json:"key"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := memory.Decline(in.Key); err != nil {
 			fail(rw, err)
 			return
 		}

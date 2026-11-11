@@ -103,7 +103,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await box(L.phrase).fill("correct horse");
       await toEnd();
       await form.locator(".bar .primary").click();
-      assert.deepEqual(posts, [{ url: "github://alice/private/magpie-sync", branch: "", password: "fixture-token", passphrase: "correct horse", keys: true, agents: true, library: true }]);
+      assert.deepEqual(posts, [{ url: "github://alice/private/magpie-sync", branch: "", password: "fixture-token", passphrase: "correct horse", keys: true, agents: true, library: true, memory: true }]);
       await page.waitForFunction((name) => document.querySelector("#syncList .row.pref .name")?.textContent === name, tr("GitHub sync"));
       assert.equal(await first.locator(".name").textContent(), tr("GitHub sync"));
       await toStart();

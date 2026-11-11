@@ -20286,12 +20286,13 @@ async function renderSync(v) {
   };
   const btn = (label, fn, cls = "text") => { const b = el("button", cls, label); b.onclick = fn; return b; };
   const toggle = (id) => () => { syncOpen = syncOpen === id ? "" : id; renderSync(); };
-  const parts = (ps) => ps.map((p) => t({ providers: "providers", settings: "settings", profiles: "profiles", agents: "agents' models", library: "library", usage: "usage", signins: "sign-ins" }[p])).join(t(", "));
+  const parts = (ps) => ps.map((p) => t({ providers: "providers", settings: "settings", profiles: "profiles", agents: "agents' models", library: "library", memory: "memory", usage: "usage", signins: "sign-ins" }[p])).join(t(", "));
 
   // off: what it would keep the same, from the view's toggles (none: all on)
   const goes = ["settings", "profiles"];
   if (v.agents !== false) goes.push("agents");
   if (v.library !== false) goes.push("library");
+  if (v.memory !== false) goes.push("memory");
   if (v.usage) goes.push("usage");
   if (v.signIns) goes.push("signins");
   let line = t("Keeps {parts} the same on every computer", {

@@ -268,13 +268,81 @@ meaning, since it downloads a model (~135 MB).
   `{on}` give the row its state: the download's progress, the memories
   read, and why either failed.
 
+### Backups and sync
+
+Memory goes to another computer in a backup file (the scheduled backups
+too) and in sync (WebDAV, S3, GitHub), merged memory by memory, never one
+computer's memory.json over the other's.
+[sync.go](../../internal/memory/sync.go) owns it.
+
+- What goes (`memory.Bundle`, `Collect`): the memories in every state, the
+  projects, the dismissed distilled texts, the suggestions turned down and
+  the deletions. The digest published into the agents' instructions and the
+  vectors (memembed) are this computer's own and are made again after a
+  change. A memory.json that can't be read stops the backup or sync instead
+  of going as no memory (`TestCollectUnreadableIsAnError`,
+  `TestCollectStopsOnUnreadableMemory`).
+- Merging (`Combine`, the same either way round): of two copies of one
+  memory, the one changed later stays, unless that change wasn't the user's
+  (`Edited` is when the user last changed it) and the other copy is pinned
+  or the user's while it isn't: an agent's forget or a tidy on one computer
+  never undoes a pin made on another (`TestSyncMachineChangeNeverOverUsersOwn`).
+  `Used` and `Uses` are the most of both, and leave `Hash` alone, so a
+  search is no change to push (`TestSyncKeepsMostUses`).
+- Deleting: `Remove`, and Untidy's delete of a merged memory, note the id
+  in `removed` for 180 days (`keepRemoved`), so a computer that still has
+  it doesn't bring it back; a copy changed after the deletion stays
+  (`TestSyncDeletionStaysDeleted`, `TestSyncEditAfterDeletionKeepsIt`).
+- Switches: sync's **Memory** tick (`davsync.Config.Memory`, on unless
+  turned off, since a sync file is always sealed with a passphrase), and
+  Export's **With memory** and Import's **Bring in memory too**, both on.
+  A computer with the tick off sends none and takes none, and leaves the
+  server's copy as it was (`TestSyncMemory`, `TestBackupMergesMemory`).
+- After a sync or restore changes memory, `library.PublishMemory` writes the
+  digests again.
+
+### Promotion
+
+Memory suggests making more of what it holds
+([promote.go](../../internal/memory/promote.go)). The suggestions sit
+over the In use list, unsearched and not narrowed to a scope
+(`memSuggestions` in the library plugin's client.js), and come with
+`GET /api/memory` (`suggestions`).
+
+- To hold everywhere (`ToGlobal`): active project memories that say the
+  same in two or more projects. The same means the same text (`norm`), or
+  at least 60% of their words in common with six words or more on each
+  side (`sameWords`); two short texts sharing words are as often two
+  facts. A memory whose sources' folders (`Source.Dir`, by the projects'
+  roots) are in two projects counts for both. Taken (`Promote`,
+  `POST /api/memory/promote`), the one kept first (the user's own or
+  pinned, the most used, the latest) becomes global and the others are
+  superseded by it, their tags, sources and uses carried over; a global
+  memory with the same text already is the one kept. It is the user's
+  change, so a sync keeps it (`TestPromoteKeepsTheUsersOwn`,
+  `TestPromoteIntoTheGlobalOne`, `TestSuggestGlobalAcrossProjects`,
+  `TestSuggestGlobalBySourceFolder`).
+- To be a skill (`ToSkill`): an active procedure that searches returned
+  five times or more (`skillUses`). Taken (`library.MemorySkill`,
+  `POST /api/memory/skill`), it becomes a skill of the library's own: a
+  SKILL.md with the first line as its description, named from its first
+  words (from its id when it has fewer than two Latin words), given to the
+  agents ticked for instructions, or to every agent with skills when none
+  is. The memory is archived then, noted with the skill's name
+  (`MadeSkill`), so it isn't in the digest beside the skill
+  (`TestMemorySkill`, `TestSuggestSkillAndDecline`).
+- Turned down (`Decline`, `POST /api/memory/decline`): the key goes in
+  `declined` (the last 500), which goes with sync, so it isn't suggested
+  on another computer either. A global suggestion's key is its memories'
+  ids, so another project joining it is a new suggestion.
+
 ## Verification
 
 ```sh
-mote-run go test ./internal/memory ./internal/memdistill ./internal/memembed ./internal/library
+mote-run go test ./internal/memory ./internal/backup ./internal/davsync ./internal/memdistill ./internal/memembed ./internal/library
 mote-run sh -c 'MAGPIE_EMBED_DIR=$HOME/models/pml go test -run Embedder ./internal/pii/guard'
 mote-run go test -run 'Distill|Dream' ./internal/gui
 mote-run go test -tags nogui -run 'MemoryMCP|OwnMCP' ./internal/gateway
 mote-run go test ./internal/browsermcp ./internal/cli
-mote-run node --test internal/gui/tests/library-memory.test.cjs internal/gui/tests/library-memory-select.test.cjs
+mote-run node --test internal/gui/tests/library-memory.test.cjs internal/gui/tests/library-memory-select.test.cjs internal/gui/tests/library-memory-suggest.test.cjs
 ```

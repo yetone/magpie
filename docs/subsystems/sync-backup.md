@@ -223,6 +223,9 @@ clock.
   `auto-backup.test.cjs`).
 - **Sign-ins:** off unless picked (`SignIns`, with `Passphrase`); see
   [Sign-ins, when picked](#sign-ins-when-picked).
+- **Memory:** on unless turned off (`Memory`), merged memory by memory in
+  `syncOnce` after the sign-ins, never replaced as a part; see
+  [Memory's backups and sync](memory.md#backups-and-sync).
 
 ## Data folder on another disk
 

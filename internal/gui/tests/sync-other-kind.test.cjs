@@ -137,7 +137,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       await save.click();
       await form.waitFor({ state: "detached" });
-      assert.deepEqual(posts, [{ url: DAV.url, user: "me", password: "", passphrase: "", keys: true, agents: true, library: true }]);
+      assert.deepEqual(posts, [{ url: DAV.url, user: "me", password: "", passphrase: "", keys: true, agents: true, library: true, memory: true }]);
       assert.equal(await first.locator(".name").textContent(), w.davRow);
       assert.ok((await first.locator(".sub").textContent()).endsWith(" · " + w.s3Kept), "the row says S3's settings are kept");
       assert.deepEqual(errors, []);

@@ -88,9 +88,16 @@ type Memory struct {
 	Sources      []Source  `json:"sources,omitempty"`
 	Created      time.Time `json:"created"`
 	Updated      time.Time `json:"updated"`
+	// Edited is when the user last changed it (Edit by the user, Save
+	// of what they typed): a change made then is theirs, which a sync
+	// from another computer tells apart from an agent's or a tidy's
+	// (Combine)
+	Edited time.Time `json:"edited,omitzero"`
 	// Used is when a search last returned it, Uses how many times
 	Used time.Time `json:"used,omitzero"`
 	Uses int       `json:"uses,omitempty"`
+	// Skill is the Library skill this procedure was made (MadeSkill)
+	Skill string `json:"skill,omitempty"`
 }
 
 // Source is where a memory was said or found.
@@ -126,6 +133,13 @@ type file struct {
 	// conversations that the user deleted or archived, the last
 	// maxDismissed: never proposed again
 	Dismissed []string `json:"dismissed,omitempty"`
+	// Removed is when each memory deleted for good was deleted, kept
+	// keepRemoved: a sync doesn't bring it back from a computer that
+	// still has it (Combine)
+	Removed map[string]time.Time `json:"removed,omitempty"`
+	// Declined are the suggestions the user turned down (Suggest), by
+	// key, the last maxDeclined
+	Declined []string `json:"declined,omitempty"`
 }
 
 // maxDismissed is how many dismissed texts are kept.
@@ -357,6 +371,9 @@ func norm(s string) string {
 func Save(in Input, origin string, src *Source, proj *Project) (m *Memory, added bool, err error) {
 	t := now().UTC()
 	m = &Memory{Kind: Fact, Scope: Global, Origin: origin, Status: Active, Created: t, Updated: t}
+	if origin == FromUser {
+		m.Edited = t
+	}
 	apply(m, in)
 	if err := check(m); err != nil {
 		return nil, false, err
@@ -405,6 +422,9 @@ func Save(in Input, origin string, src *Source, proj *Project) (m *Memory, added
 			}
 			o.Sources = keepSources(append(o.Sources, m.Sources...))
 			o.Updated = t
+			if origin == FromUser {
+				o.Edited = t
+			}
 			m = o
 			return nil
 		}
@@ -493,6 +513,9 @@ func editIn(f *file, m *Memory, in Input, byUser bool) error {
 		c.Origin = FromUser
 	}
 	c.Updated = now().UTC()
+	if byUser {
+		c.Edited = c.Updated
+	}
 	*m = c
 	return nil
 }
@@ -538,6 +561,7 @@ func Remove(ids ...string) error {
 		f.Memories = slices.DeleteFunc(f.Memories, func(m *Memory) bool {
 			if slices.Contains(ids, m.ID) {
 				dismiss(f, m)
+				removed(f, m.ID)
 				return true
 			}
 			return false

@@ -35,6 +35,7 @@ window.davForm = function (v) {
   const [keysL, keys] = tick(t("Providers' API keys"), v.keys !== false);
   const [agentsL, agents] = tick(t("Agents' models"), v.agents !== false);
   const [libL, lib] = tick(t("Library: instructions, MCP servers, skills, hooks and subagents"), v.library !== false);
+  const [memL, mem] = tick(t("Memory: what the agents know, merged memory by memory"), v.memory !== false);
   // usage: off unless picked, each computer its own (#542)
   const [useL, use] = tick(t("Usage: this computer's calls, for the Usage page on the others"), !!v.usage);
   // sign-ins: off unless picked, sealed with the passphrase like the rest
@@ -44,7 +45,7 @@ window.davForm = function (v) {
   siSay.hidden = !si.checked;
   si.onchange = () => { siSay.hidden = !si.checked; };
   const what = el("div", "stack");
-  what.append(keysL, agentsL, libL, useL, siL, siSay);
+  what.append(keysL, agentsL, libL, memL, useL, siL, siSay);
   const davFields = [...field(t("Address"), url, t("A folder named magpie is made in it.")),
     ...field(t("User"), user),
     ...field(t("Password"), pass)];
@@ -99,7 +100,7 @@ window.davForm = function (v) {
       ? { url: "s3://" + b + (p ? "/" + p : ""), user: keyID.value.trim(), password: secret.value, endpoint: endpoint.value.trim(), region: region.value.trim(), pathStyle: pathStyle.checked }
       : { url: url.value.trim(), user: user.value.trim(), password: pass.value };
     try {
-      const r = await api("davsync/save", { ...where, passphrase: phrase.value, keys: keys.checked, agents: agents.checked, library: lib.checked, ...(use.checked || v.usage ? { usage: use.checked } : {}), ...(si.checked || v.signIns ? { signIns: si.checked } : {}) });
+      const r = await api("davsync/save", { ...where, passphrase: phrase.value, keys: keys.checked, agents: agents.checked, library: lib.checked, memory: mem.checked, ...(use.checked || v.usage ? { usage: use.checked } : {}), ...(si.checked || v.signIns ? { signIns: si.checked } : {}) });
       if (!r.error) syncOpen = "";
       renderSync(r);
       if (r.error) return;
@@ -118,10 +119,11 @@ window.exportForm = function () {
   const p2 = input("", t("again"), "password");
   const [keysL, keys] = tick(t("With the providers' API keys"), true);
   const [libL, lib] = tick(t("With the library: instructions, MCP servers, skills, hooks and subagents"), true);
+  const [memL, mem] = tick(t("With memory: what the agents know"), true);
   // sign-ins: off unless picked (qianxunji, curtinp118 on Discord)
   const [siL, si] = tick(t("With the sign-ins: subscription accounts and plugin sign-ins"), false);
   const what = el("div", "stack");
-  what.append(keysL, libL, siL);
+  what.append(keysL, libL, memL, siL);
   const passF = field(t("Passphrase"), p1, t("Needed to open the file. Subscriptions aren't in it: sign in to them on the other computer."));
   const passSay = passF[1].querySelector(".hint");
   si.onchange = () => {
@@ -138,7 +140,7 @@ window.exportForm = function () {
     if (p1.value !== p2.value) return say(t("The two passphrases differ"));
     go.classList.add("busy");
     try {
-      const r = await api("backup/export", { pass: p1.value, keys: keys.checked, library: lib.checked, signIns: si.checked });
+      const r = await api("backup/export", { pass: p1.value, keys: keys.checked, library: lib.checked, memory: mem.checked, signIns: si.checked });
       ed.replaceChildren(el("div", "done", t("Saved to {path}", { path: r.path })));
     } catch (e) {
       go.classList.remove("busy");
@@ -181,9 +183,10 @@ window.importForm = function () {
   const pass = input("", t("passphrase"), "password");
   const [agentsL, agents] = tick(t("Set the agents' models too"), true);
   const [libL, lib] = tick(t("Bring in the library too: instructions, MCP servers, skills, hooks and subagents"), true);
+  const [memL, mem] = tick(t("Bring in memory too, merged with the memories here"), true);
   const [siL, si] = tick(t("Bring in the sign-ins too, when the file has them"), true);
   const what = el("div", "stack");
-  what.append(agentsL, libL, siL);
+  what.append(agentsL, libL, memL, siL);
   ed.append(...field(t("File"), pf), ...field(t("Passphrase"), pass), ...field("", what, t("Providers with the same id are replaced; one that came without a key keeps the key it has here. The library replaces the one here, which is kept with its backups.")));
   const go = el("button", "text primary", t("Import"));
   const cancel = el("button", "text", t("Cancel"));
@@ -193,7 +196,7 @@ window.importForm = function () {
     if (!data) return say(t("Choose a file first"));
     go.classList.add("busy");
     try {
-      const r = await api("backup/import", { data, pass: pass.value, agents: agents.checked, library: lib.checked, signIns: si.checked });
+      const r = await api("backup/import", { data, pass: pass.value, agents: agents.checked, library: lib.checked, memory: mem.checked, signIns: si.checked });
       const lines = [t("Providers: {added} added, {replaced} replaced; {profiles} profiles; {agents} agent settings changed", { added: r.Added, replaced: r.Replaced, profiles: r.Profiles, agents: r.Agents })];
       if (r.NeedKey?.length) lines.push(t("Needs a key: {names}", { names: r.NeedKey.join(", ") }));
       if (r.SignIns) lines.push(...signInsSaid(r.SignIns));

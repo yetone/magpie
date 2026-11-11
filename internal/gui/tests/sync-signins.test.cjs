@@ -164,7 +164,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await p2.fill("correct horse");
         await noneWider(page);
         await click(form.locator("button.primary"));
-        assert.deepEqual(await waitPost("/api/backup/export"), { pass: "correct horse", keys: true, library: true, signIns: true });
+        assert.deepEqual(await waitPost("/api/backup/export"), { pass: "correct horse", keys: true, library: true, signIns: true, memory: true });
         await form.locator(".done").waitFor();
         await click(exportRow.locator("button"));
 
