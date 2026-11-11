@@ -408,7 +408,7 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 				}
 			case Image, File:
 				if p.Data != "" {
-					parts = append(parts, map[string]any{"inlineData": map[string]any{"mimeType": p.MediaType, "data": p.Data}})
+					parts = append(parts, geminiInline(p.MediaType, p.Data))
 				} else if p.URL != "" {
 					parts = append(parts, map[string]any{"fileData": map[string]any{"mimeType": p.MediaType, "fileUri": p.URL}})
 				}
@@ -456,7 +456,7 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 				var ims []map[string]any
 				for _, im := range p.Images {
 					if im.Data != "" {
-						ims = append(ims, map[string]any{"inlineData": map[string]any{"mimeType": im.MediaType, "data": im.Data}})
+						ims = append(ims, geminiInline(im.MediaType, im.Data))
 					} else if im.URL != "" {
 						ims = append(ims, map[string]any{"fileData": map[string]any{"mimeType": im.MediaType, "fileUri": im.URL}})
 					}
