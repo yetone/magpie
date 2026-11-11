@@ -312,7 +312,7 @@ Users report that this works. Trae keeps custom models in your Trae account, on 
 
 The model id is magpie’s (`magpie models`). Sharing lets other computers on your network in with a gateway key; see [Remote magpie](https://usemagpie.ai/docs/remote#share).
 
-An error from the gateway? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting). Stuck, or have a setup worth sharing? Ask on [Discord](https://discord.gg/vGSnD3ZKQF). Vendors who want to hand their users a ready-made provider: see [Add to magpie](https://usemagpie.ai/docs/import).
+An error from the gateway? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting). Stuck, or have a setup worth sharing? Ask on [Discord](https://discord.gg/vGSnD3ZKQF). Chatting in Cherry Studio? See [Every model in Cherry Studio](https://usemagpie.ai/docs/cherry-studio). Vendors who want to hand their users a ready-made provider: see [Add to magpie](https://usemagpie.ai/docs/import).
 
 ---
 
@@ -3180,6 +3180,73 @@ A value the task needs as it is, such as a team address or a test key, goes in N
 - **Rules find shapes..** A phone number in another country’s format or a name in free text needs Find with a local model, or your own Masked words and Masking rules. Try your own text in Try it first.
 
 See also [Privacy](https://usemagpie.ai/docs/privacy) for everything magpie sends by itself. The code is [internal/redact](https://github.com/yetone/magpie/tree/main/internal/redact) and [internal/masking](https://github.com/yetone/magpie/blob/main/internal/masking/masking.go).
+
+---
+
+Source: https://usemagpie.ai/docs/cherry-studio
+
+# Every model in Cherry Studio, through magpie
+
+Cherry Studio is a desktop chat client that takes any OpenAI-compatible provider. magpie adds itself there as one provider, named magpie, so every model you have in magpie shows up in Cherry Studio: providers with an API key and the Claude, ChatGPT or Copilot subscriptions you signed in to.
+
+magpie runs a gateway on your computer at `http://127.0.0.1:3425`. It speaks the OpenAI Chat Completions API and translates each request for the provider behind the model, Anthropic’s, Google’s or a subscription’s, with streaming, tool calls and reasoning. Cherry Studio sees one OpenAI-compatible provider at `http://127.0.0.1:3425/v1`.
+
+Cherry Studio keeps its providers in its own database, and magpie never writes to it. It adds itself through Cherry Studio’s add-provider link instead, and you confirm it in Cherry Studio. This works in Cherry Studio 1.x and 2.x.
+
+## Add magpie to Cherry Studio
+
+1. **Add providers in magpie.** In the Providers tab, add an API key (DeepSeek, Kimi, GLM, Qwen, OpenRouter…) or sign in to a subscription.
+2. **Open the Agents tab.** magpie lists Cherry Studio once it has run on this computer, including a data folder you moved elsewhere.
+3. **Click Add magpie.** On Cherry Studio’s row, press Add magpie. Cherry Studio opens its model provider settings with magpie filled in: name magpie, type OpenAI, the gateway’s address and a key.
+4. **Confirm it in Cherry Studio.** Nothing is added until you do.
+
+If nothing opens, no app on this computer handles Cherry Studio’s links yet: open Cherry Studio once, or install it again, then click Add magpie again.
+
+## Pick the models
+
+Cherry Studio lists a provider’s models from `/v1/models`, so the magpie provider offers every model magpie has, named `provider/model` (for example `deepseek/deepseek-v4-pro`). Add the ones you want to the magpie provider in Cherry Studio, and choose them in a chat like any other model.
+
+A provider you add in magpie later shows up the next time Cherry Studio fetches the list; there is nothing to change in Cherry Studio. Several accounts behind one model, rest periods after a 429 and failover work as they do for every agent.
+
+## From a terminal
+
+```
+magpie cherrystudio add      # opens Cherry Studio to add magpie, confirm it there
+```
+
+`cherry-studio` works as the name too.
+
+## How magpie knows it was added
+
+Once Cherry Studio has a provider at the gateway’s address, the row shows magpie instead of the button. magpie reads Cherry Studio 2.x’s database for this, read-only. Cherry Studio 1.x keeps providers where magpie doesn’t read them, so there the button stays.
+
+## Usage and keys
+
+On a gateway that isn’t shared, the key in the link is Cherry Studio’s own, so its requests are counted as Cherry Studio’s in magpie’s Usage, apart from your coding agents. When the gateway is shared on your network with gateway keys, the link carries a key that works there.
+
+## FAQ
+
+### Do I need an API key to use Claude or ChatGPT in Cherry Studio?
+
+No. Sign in to a Claude, ChatGPT or Copilot subscription in magpie, and its models appear in the magpie provider in Cherry Studio.
+
+### Does magpie change Cherry Studio’s settings?
+
+No. magpie opens Cherry Studio’s own add-provider dialog, and you confirm it. It only reads Cherry Studio’s database to show whether magpie was added.
+
+### What address and type does the magpie provider use?
+
+Type OpenAI, at http://127.0.0.1:3425/v1, or the gateway address you set in magpie.
+
+### Why don’t I see a new model in Cherry Studio?
+
+Cherry Studio shows models you added to the provider. Fetch the magpie provider’s model list again and add the new one.
+
+### Cherry Studio isn’t in magpie’s Agents tab.
+
+magpie lists it once Cherry Studio has run on this computer. Open Cherry Studio once, then look again.
+
+Using a coding agent too? See [Subscriptions in any agent](https://usemagpie.ai/docs/subscriptions) and [Get started](https://usemagpie.ai/docs/start). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
