@@ -38,12 +38,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 const (
@@ -371,7 +372,7 @@ func aliGateway(ctx context.Context, token string, site aliSite) ([]byte, error)
 	return node, nil
 }
 
-var aliWindowField = regexp.MustCompile(`^per(\d+)(Hour|Day|Week|Month)(Percentage|ResetTime)$`)
+var aliWindowField = lazyre.New(`^per(\d+)(Hour|Day|Week|Month)(Percentage|ResetTime)$`)
 
 // aliReadWindows reads the per<N><Unit>Percentage and ResetTime pairs of
 // the usage data as windows, the shortest first. Percentage is the share
