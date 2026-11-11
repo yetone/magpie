@@ -589,6 +589,17 @@ interactive, so its `/usage` asks the usage endpoint alone
 setup-token, which magpie never reads, or an API key) gets the session's
 cost instead. `TestClaudeUsageStartsNoInteractiveRun` holds it.
 
+The text omits the extra-usage cap. The same run prints `--output-format
+json --verbose` (`claudeUsageArgs`), whose messages carry
+`usage_report.rate_limits.extra_usage` (cap and spend in cents);
+`claudeExtraUsage` turns an enabled one with a cap into one more line
+(`provider.ClaudeExtraLine`), read as the "Usage credits" window: an
+`Aside` row with the month's spend over the cap, which never marks the
+account used up. It is not the prepaid balance (a separate endpoint magpie
+does not call), and only Anthropic decides whether a request spends it
+(X, Shinji_Zl). Tried against fakes only; the owner's account has extra
+usage off.
+
 A turn's run (`claudeRunEnv`) is not given
 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, which the one-off runs above
 keep (`cleanClaudeEnv`). With it, or `DISABLE_TELEMETRY` or

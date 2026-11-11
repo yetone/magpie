@@ -224,7 +224,7 @@ func claudeUsage(ctx context.Context, configDir string) (string, error) {
 		if res.IsError {
 			return "", errors.New("Claude Code: " + clip(res.Result))
 		}
-		return res.Result, nil
+		return res.Result + claudeExtraUsage(out.Bytes()), nil
 	}
 	msg := strings.TrimSpace(stderr.String())
 	if msg == "" {
@@ -234,6 +234,43 @@ func claudeUsage(ctx context.Context, configDir string) (string, error) {
 		return "", runErr
 	}
 	return "", errors.New("Claude Code: " + clip(msg))
+}
+
+// claudeExtraUsage is the line (provider.ClaudeExtraLine) for the extra
+// usage, Anthropic's usage credits, an account has on and a monthly cap
+// for, from the usage_report Claude Code's verbose json carries with its
+// /usage; "" when out has none, as from a Claude Code that sends none.
+func claudeExtraUsage(out []byte) string {
+	var all []struct {
+		Report *struct {
+			Limits *struct {
+				Extra *struct {
+					On       bool     `json:"is_enabled"`
+					Limit    *float64 `json:"monthly_limit"`
+					Used     *float64 `json:"used_credits"`
+					Currency string   `json:"currency"`
+				} `json:"extra_usage"`
+			} `json:"rate_limits"`
+		} `json:"usage_report"`
+	}
+	if json.Unmarshal(out, &all) != nil {
+		return ""
+	}
+	for _, m := range all {
+		if m.Report == nil || m.Report.Limits == nil || m.Report.Limits.Extra == nil {
+			continue
+		}
+		x := m.Report.Limits.Extra
+		if !x.On || x.Limit == nil || *x.Limit <= 0 {
+			return ""
+		}
+		used := 0.0
+		if x.Used != nil {
+			used = *x.Used
+		}
+		return "\n" + provider.ClaudeExtraLine(used, *x.Limit, x.Currency)
+	}
+	return ""
 }
 
 // claudeUsageEnv is the environment a /usage read runs Claude Code in:
@@ -471,6 +508,9 @@ const disableDeepLinkSettings = `{"disableDeepLinkRegistration":"disable"}`
 
 func claudeUsageArgs() []string {
 	return []string{"-p", "/usage", "--output-format", "json",
+		// verbose: the array of every message, whose usage_report holds
+		// the extra usage (claudeExtraUsage); claudeResult reads it
+		"--verbose",
 		"--tools", "", "--strict-mcp-config", "--setting-sources", "", "--settings", disableDeepLinkSettings, "--no-session-persistence"}
 }
 

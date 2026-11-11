@@ -7,6 +7,8 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
+	"math"
 	"regexp"
 	"slices"
 	"strconv"
@@ -114,6 +116,43 @@ var claudeUsageCounts = lazyre.New(`(?: · )?Last [0-9]+[a-z]+ · [0-9][0-9,]* r
 // with other accounts that had room (StringKe, #4532).
 var claudeOverages = lazyre.New(`(?i)using your overages`)
 
+// claudeExtraLineRE is the line the gateway adds under /usage's text for an
+// account with extra usage on ("usage credits"): Claude Code's -p /usage
+// prints no figure for it, but the usage_report it carries (verbose json)
+// has the month's cap and spend, which Claude Code read from Anthropic, so
+// magpie asks Anthropic nothing. "Extra usage: 271.40 / 500.00 USD spent".
+// ClaudeExtraLine writes it.
+var claudeExtraLineRE = lazyre.New(`^Extra usage: ([0-9.]+) / ([0-9.]+) ([A-Za-z]{3}) spent$`)
+
+// ClaudeExtraLine is the line for spent and limit, in cents of currency.
+func ClaudeExtraLine(spent, limit float64, currency string) string {
+	if currency == "" {
+		currency = "USD"
+	}
+	return fmt.Sprintf("Extra usage: %.2f / %.2f %s spent", spent/100, limit/100, strings.ToUpper(currency))
+}
+
+// claudeExtraWindow reads that line, when text has it: the month's spend of
+// the cap set aside (Aside), so a cap spent never stops the account the way
+// a plan window used up does: only Anthropic decides whether a request
+// spends it.
+func claudeExtraWindow(lines []string) (QuotaWindow, bool) {
+	for _, line := range lines {
+		m := claudeExtraLineRE.FindStringSubmatch(strings.TrimSpace(line))
+		if m == nil {
+			continue
+		}
+		spent, err1 := strconv.ParseFloat(m[1], 64)
+		limit, err2 := strconv.ParseFloat(m[2], 64)
+		if err1 != nil || err2 != nil || limit <= 0 {
+			continue
+		}
+		return QuotaWindow{Name: "Usage credits", Used: math.Min(100, spent/limit*100), Aside: true,
+			Amount: spent, Limit: limit, Unit: strings.ToUpper(m[3])}, true
+	}
+	return QuotaWindow{}, false
+}
+
 // claudeOveragesWindow is the window an account on overages is read with,
 // beside ws: spent (usedPast, roomLeft), so the switch moves Claude Code
 // off it as off one whose window is used up, and told as its text. It
@@ -209,6 +248,9 @@ func parseClaudeUsage(text string, now time.Time) ([]QuotaWindow, error) {
 			return out, errors.New("Claude Code's /usage showed no usage figures")
 		}
 		return out, errors.New("Claude Code's /usage showed no usage figures: " + clipReason(strings.Join(said, " · ")))
+	}
+	if w, ok := claudeExtraWindow(lines); ok {
+		out = append(out, w)
 	}
 	return out, nil
 }
