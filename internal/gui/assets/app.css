@@ -465,6 +465,9 @@ body.side-nav #nav button.has-dot::after { top: 50%; right: 10px; margin-top: -3
 /* the open page's tabs, under it on a thin line */
 .nav-sub { position: relative; display: flex; flex-direction: column; gap: 1px; margin: 2px 0 6px 16px; padding-left: 8px; }
 .nav-sub.moving { overflow: hidden; }
+/* a section's name over its rows, as a Mac source list's */
+.nav-sl { position: relative; z-index: 1; padding: 8px 10px 2px; font-size: 11px; font-weight: 500; letter-spacing: .04em; color: var(--muted); white-space: nowrap; }
+.nav-sl:first-of-type { padding-top: 2px; }
 /* Settings' tabs, over its button at the sidebar's foot (app.js navSubs),
    close to the button they come from; the foot takes more of a short
    sidebar while they show */

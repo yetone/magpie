@@ -23852,9 +23852,7 @@ function navSubs() {
   navSubsAt = sig;
   let box = document.querySelector(".nav-sub:not(.leaving)");
   const want = side && at && items.length > 1;
-  // Settings' list is over its button, which stays put (jen_celeus on X)
   const above = at?.id === "prefs";
-  // another page's list folds away as this one's opens, both at once
   if (box && (!want || box.dataset.view !== view || (above ? box.nextElementSibling : box.previousElementSibling) !== at)) { navSubLeave(box); box = null; }
   if (want && !NAV_SUB_IC) import("./navicons.js").then(() => { navSubsAt = ""; navSubs(); }, () => {});
   if (want) {
@@ -23874,8 +23872,9 @@ function navSubs() {
       if (above) at.before(box); else at.after(box);
     }
     box.setAttribute("aria-label", (at.querySelector("span[data-t]") || at.querySelector("span"))?.textContent || "");
-    for (const s of box.querySelectorAll(".nav-s")) s.remove();
-    items.forEach((b, i) => {
+    for (const s of box.querySelectorAll(".nav-s, .nav-sl")) s.remove();
+    (window.navSections?.(view, items, t) || items.map((b, i) => [b, i])).forEach(([b, i, head]) => {
+      if (head) box.append(el("span", "nav-sl", head));
       const [name, n] = b.textContent.trim().split(" · ");
       const s = el("button", "nav-s");
       s.type = "button";
@@ -23896,7 +23895,6 @@ function navSubs() {
       s.onpointerdown = (e) => { if (e.button === 0) navSubGlide(box, s); };
       s.onpointercancel = () => navSubGlide(box, box.querySelector(".nav-s.cur"));
       s.onpointerleave = (e) => { if (e.buttons & 1) navSubGlide(box, box.querySelector(".nav-s.cur")); };
-      // the strip's tab is clicked at once; another tab opens at its top
       s.onclick = (e) => {
         navSubGlide(box, s);
         for (const o of box.querySelectorAll(".nav-s")) o.classList.toggle("cur", o === s);

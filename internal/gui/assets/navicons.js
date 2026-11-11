@@ -2,6 +2,20 @@
 // data-seg, Settings' data-set). app.js imports this with the first list it
 // draws, so it weighs nothing on the core; a tab with none (a plugin's) keeps
 // its place in line all the same.
+// The sections a page's list is cut into, by tab id: a section none of whose
+// tabs shows has no name (app.js navSubs), as does a list of one section.
+window.NAV_SUB_GROUPS = {
+  library: { instructions: "Every agent", memory: "Every agent", mcp: "Every agent", skills: "Every agent", hooks: "Every agent", subagents: "Every agent", plugins: "One agent", pi: "One agent", rtk: "magpie", bili: "magpie" },
+};
+// the tabs [tab, its place in the strip, its section's name where one starts],
+// in sections in order, each in the strip's order
+window.navSections = (view, items, t) => {
+  const gs = window.NAV_SUB_GROUPS[view], grp = (b) => gs?.[b.dataset.seg], ranks = gs ? [...new Set(Object.values(gs))] : [];
+  const named = new Set(items.map(grp)).size > 1;
+  let sect;
+  return items.map((b, i) => [b, i]).sort(([a], [b]) => ranks.indexOf(grp(a)) - ranks.indexOf(grp(b)))
+    .map(([b, i]) => [b, i, named && grp(b) !== sect ? t((sect = grp(b)) || "") : ""]);
+};
 window.NAV_SUB_IC = {
   library: {
     instructions: "M4 2.5h5.5L12 5v8.5H4z M9.5 2.5V5H12 M6 8h4 M6 10.5h3",
