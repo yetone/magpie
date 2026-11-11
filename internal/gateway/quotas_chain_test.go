@@ -96,6 +96,13 @@ func TestRemoteChainPassesOnCards(t *testing.T) {
 		w.Write(told)
 	}))
 	defer m2.Close()
+	// one process plays both magpies; magpie3 knows magpie2 alone, as the
+	// same account by two paths would be shown once
+	m1Saved := provider.Provider{ID: "m1", Name: "M1", Preset: provider.RemoteMagpiePreset, Key: "sk-magpie-m1", Chat: m1.URL}
+	if err := provider.Delete("m1"); err != nil {
+		t.Fatal(err)
+	}
+	provider.ForgetRemoteCardsForTest()
 	if err := provider.Save(provider.Provider{ID: "m2", Name: "M2", Preset: provider.RemoteMagpiePreset, Key: "sk-magpie-m2", Chat: m2.URL}); err != nil {
 		t.Fatal(err)
 	}
@@ -136,6 +143,12 @@ func TestRemoteChainPassesOnCards(t *testing.T) {
 		}
 	}
 
+	if err := provider.Delete("m2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.Save(m1Saved); err != nil {
+		t.Fatal(err)
+	}
 	// a refresh pressed at magpie3 is read again at magpie1, by magpie2
 	res, err := http.Post(gw.URL+provider.RemoteRefreshPath+"?provider=m1/codex&user=a@x.com", "", nil)
 	if err != nil {

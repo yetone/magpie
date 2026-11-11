@@ -67,3 +67,23 @@ func TestFetchLeavesOutWhatCameFromHere(t *testing.T) {
 		t.Errorf("an older magpie's model = %v, %v; want kept, through nothing said", v, ok)
 	}
 }
+
+// A way that names one magpie twice came round, even through magpies this
+// one doesn't know by name: this magpie restarted since, and its old
+// name is not Self.
+func TestLoopsOnARepeatedMagpie(t *testing.T) {
+	defer SetSelfForTest("me")()
+	for via, want := range map[string]bool{
+		"a":            false,
+		"a,b,c":        false,
+		"me":           false,
+		"a,me":         true,
+		"c,b,a,b":      true,
+		"a,b,c,a2,b,c": true,
+		"a,a":          true,
+	} {
+		if got := Loops(strings.Split(via, ",")); got != want {
+			t.Errorf("Loops(%s) = %v, want %v", via, got, want)
+		}
+	}
+}
