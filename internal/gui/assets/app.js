@@ -20077,6 +20077,7 @@ function renderSettings() {
   renderGitHubToken(s);
   renderImages(s, keep);
   renderSearch(s, keep);
+  window.pipeCheckFill ? pipeCheckFill() : import("./pipecheck.js").then(() => pipeCheckFill(), () => {});
   renderReplies(s, keep);
   renderDisabledModels(s);
   renderRedact(s, keep);
