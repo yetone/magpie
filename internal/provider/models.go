@@ -2996,8 +2996,17 @@ func PriceRateOK(r float64) string {
 // reply limit is keyed: both are stored under the id the provider has now, and
 // both outlive the provider they were set for, so the spelling the user typed
 // is the one that has to be checked before a name is resolved at all.
+//
+// It looks among the shared providers and copies only the one it found:
+// through All every price of every model of a Sessions poll copied every
+// provider's keys, headers and models (~10 MB per 40 polls on a real
+// history, #2278).
 func byIDOrWas(id string) (Provider, bool) {
-	return byIDOrWasIn(All(), id)
+	p, ok := byIDOrWasIn(sharedAll(), id)
+	if ok {
+		p = p.clone() // the caller's to change, as All's are
+	}
+	return p, ok
 }
 
 // byIDOrWasIn is byIDOrWas among the providers given.
