@@ -683,6 +683,12 @@ type Settings struct {
 	// again" sets it, and Settings › General › Ask before quitting turns
 	// it back off (zhujiu on Discord).
 	QuitNoAsk bool `json:"quitNoAsk,omitempty"`
+	// RestoreOnQuit puts every connected agent's config back as it was
+	// before magpie when the app quits, and connects them again at the
+	// next start (tudjam17795 on X; agent.RestoreOnQuit). Off by default:
+	// a connected agent keeps magpie as it quits. A quit then needs no
+	// question, as nothing is left pointing at a gateway that's gone.
+	RestoreOnQuit bool `json:"restoreOnQuit,omitempty"`
 	// KeepAwake keeps this computer from going to sleep by itself while
 	// agents work through the gateway and for a while after (xiao_wang24004
 	// on X; internal/awake). This computer's own (KeepOwn).

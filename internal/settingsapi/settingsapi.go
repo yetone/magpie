@@ -31,7 +31,7 @@ var Keys = []string{
 	"theme", "colorblind", "reduceMotion", "noBird", "lang", "uiFont", "codeFont",
 	// the tray, the Dock and this computer
 	"tray", "dock", "dockWindow", "dockNever", "lightweight", "keepAwake", "keepAwakeDisplay",
-	"noWSLAgents", "sessionTerminal", "signInLinkOnly", "quitNoAsk",
+	"noWSLAgents", "sessionTerminal", "signInLinkOnly", "quitNoAsk", "restoreOnQuit",
 	// the menu bar's allowance cards
 	"trayUsages", "trayUsage", "trayUsageEvery", "trayNoLogos", "trayNoBird", "trayNoNumber", "trayPace", "trayNoCost", "trayWindows",
 	// usage and alerts
@@ -240,6 +240,10 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	// (zhujiu on Discord), which the Quit question sets too
 	if _, sent := fields["quitNoAsk"]; !sent {
 		in.QuitNoAsk = cur.QuitNoAsk
+	}
+	// nor whether a quit puts the agents back as they were
+	if _, sent := fields["restoreOnQuit"]; !sent {
+		in.RestoreOnQuit = cur.RestoreOnQuit
 	}
 	// nor what a reply's model name says, which they sent as memberModel:
 	// a change of it is that, and else the name stays as it is (vendor

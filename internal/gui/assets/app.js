@@ -6735,6 +6735,7 @@ function copyBtn(text, what, message) {
 const decideEntry = (m) => !m.group && !!m.provider?.id && decidesModel(m.provider, m.id.slice(m.provider.id.length + 1));
 
 let segsMade = 0;
+const segsOO = (on, fn) => segs([["off", t("Off")], ["on", t("On")]], on ? "on" : "off", (v) => fn(v === "on"));
 function segs(items, current, onPick) {
   const box = el("div", "segs");
   const kind = items.map(([id]) => id).join("|");
@@ -19975,11 +19976,11 @@ function renderSettings() {
   renderFonts(s);
   $("#themeSegs").replaceChildren(segs(THEMES.map(([id, name]) => [id, t(name)]), s.theme, (theme) => savePrefs({ ...keep, theme })));
   $("#colorblindSegs").title = t("Colorblind-safe chart colors, and each allowance window's line in a dash of its own");
-  $("#colorblindSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.colorblind ? "on" : "off", (v) => savePrefs({ ...keep, colorblind: v === "on" })));
+  $("#colorblindSegs").replaceChildren(segsOO(s.colorblind, (v) => savePrefs({ ...keep, colorblind: v })));
   $("#reduceMotionSegs").title = t("Animations stand still, as with the system's Reduce Motion, so magpie keeps the computer less busy");
-  $("#reduceMotionSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.reduceMotion ? "on" : "off", (v) => savePrefs({ ...keep, reduceMotion: v === "on" })));
+  $("#reduceMotionSegs").replaceChildren(segsOO(s.reduceMotion, (v) => savePrefs({ ...keep, reduceMotion: v })));
   $("#birdSegs").title = t("magpie's bird hops on what is still loading; Off keeps it away, and magpie stops looking for it");
-  $("#birdSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.noBird ? "off" : "on", (v) => savePrefs({ ...keep, noBird: v === "off" })));
+  $("#birdSegs").replaceChildren(segsOO(!s.noBird, (v) => savePrefs({ ...keep, noBird: !v })));
   renderLangPick(s, keep);
   renderGatewayMode(s);
   window.renderNavPages ? renderNavPages() : import("./navpages.js").then(() => renderNavPages(), () => {});
@@ -20014,7 +20015,9 @@ function renderSettings() {
   $("#gatewayPauseSegs").replaceChildren(segs([["on", t("On")], ["paused", t("Paused")]], s.gatewayPaused ? "paused" : "on",
     (v) => setGatewayPaused(v === "paused")));
   // quitask.js's question
-  $("#quitAskSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.quitNoAsk ? "off" : "on", (v) => savePrefs({ ...keep, quitNoAsk: v === "off" })));
+  $("#quitAskSegs").replaceChildren(segsOO(!s.quitNoAsk, (v) => savePrefs({ ...keep, quitNoAsk: !v })));
+  // agents put back as they were at a quit, connected again at the start
+  $("#restoreQuitSegs").replaceChildren(segsOO(s.restoreOnQuit, (v) => savePrefs({ ...keep, restoreOnQuit: v })));
   // WSL's distros, looked in on Windows unless turned off (#1264)
   $("#wslAgentsRow").hidden = !s.wsl;
   $("#wslAgentsSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.noWSLAgents ? "off" : "on",
@@ -20128,7 +20131,7 @@ function renderSettings() {
   // whether magpie asks for a newer version by itself, and how often;
   // off, only the version row's Check asks (#472)
   row(t("Automatic updates"), t("Checks for a newer magpie by itself"),
-    "", segs([["off", t("Off")], ["on", t("On")]], s.noAutoUpdate ? "off" : "on", (v) => savePrefs({ ...keep, noAutoUpdate: v === "off" }))).classList.add("update-auto-row");
+    "", segsOO(!s.noAutoUpdate, (v) => savePrefs({ ...keep, noAutoUpdate: !v }))).classList.add("update-auto-row");
   // kept in place while off, dimmed, its height the same (a row or a line
   // taken away would shorten the page under the click), for when they are
   // turned on again
@@ -20150,9 +20153,9 @@ function renderSettings() {
   row(t("Download updates automatically"), s.noAutoDownload
     ? t("Off: a newer version is only shown, with its size; it downloads when you click Download update. For metered networks and proxies billed by traffic")
     : t("Downloads a newer version as soon as it is found. Turn off on a metered network or a proxy billed by traffic"), "",
-    segs([["off", t("Off")], ["on", t("On")]], s.noAutoDownload ? "off" : "on", (v) => savePrefs({ ...keep, noAutoDownload: v === "off" }))).classList.add("update-download-row");
+    segsOO(!s.noAutoDownload, (v) => savePrefs({ ...keep, noAutoDownload: !v }))).classList.add("update-download-row");
   row(t("Restart automatically"), s.noAutoUpdate ? t("While automatic updates are on") : t("Once an update is downloaded, restarts into it without cutting off an agent's request"), "",
-    segs([["off", t("Off")], ["on", t("On")]], s.autoRestart ? "on" : "off", (v) => savePrefs({ ...keep, autoRestart: v === "on" }))).classList.add("update-restart-row", ...(s.noAutoUpdate ? ["off"] : []));
+    segsOO(s.autoRestart, (v) => savePrefs({ ...keep, autoRestart: v }))).classList.add("update-restart-row", ...(s.noAutoUpdate ? ["off"] : []));
   renderUpdateMirror(row(t("Download source"), "", ""), s);
   const open = el("button", "text", t("Open"));
   open.onclick = () => api("settings/reveal", {}).catch(statusErr);
@@ -21853,7 +21856,7 @@ function renderDiscovery(s, keep) {
   ow.append(el("div", "name", t("Open sign-in pages in the browser")),
     el("div", "sub", t("Adding an account opens its sign-in page in your default browser. Off, magpie only shows the link, to copy into the browser you sign in with")));
   const ov = el("div", "val");
-  ov.append(segs([["off", t("Off")], ["on", t("On")]], s.signInLinkOnly ? "off" : "on", (v) => savePrefs({ ...keep, signInLinkOnly: v === "off" })));
+  ov.append(segsOO(!s.signInLinkOnly, (v) => savePrefs({ ...keep, signInLinkOnly: !v })));
   o.append(ow, ov);
   box.replaceChildren(r);
   $("#signInOpenList").replaceChildren(o);
@@ -22733,7 +22736,7 @@ function dockChoice(s) {
 
 // prefsKeep is what the settings page sends of s, all of it each time.
 function prefsKeep(s) {
-  return { theme: s.theme, colorblind: !!s.colorblind, reduceMotion: !!s.reduceMotion, noBird: !!s.noBird, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, dockNever: !!s.dockNever, lightweight: s.lightweight, keepAwake: !!s.keepAwake, keepAwakeDisplay: !!s.keepAwakeDisplay, noWSLAgents: !!s.noWSLAgents, quitNoAsk: !!s.quitNoAsk, proxy: s.proxy || "", pluginProxy: s.pluginProxy || "", updateProxy: s.updateProxy || "",
+  return { theme: s.theme, colorblind: !!s.colorblind, reduceMotion: !!s.reduceMotion, noBird: !!s.noBird, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, dockNever: !!s.dockNever, lightweight: s.lightweight, keepAwake: !!s.keepAwake, keepAwakeDisplay: !!s.keepAwakeDisplay, noWSLAgents: !!s.noWSLAgents, quitNoAsk: !!s.quitNoAsk, restoreOnQuit: !!s.restoreOnQuit, proxy: s.proxy || "", pluginProxy: s.pluginProxy || "", updateProxy: s.updateProxy || "",
     sessionTerminal: s.sessionTerminal || "",
     uiFont: s.uiFont || null, codeFont: s.codeFont || null,
     otel: s.otel || {},

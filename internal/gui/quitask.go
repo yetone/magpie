@@ -72,7 +72,7 @@ func quitNow(asked int64, now time.Time, wired int) bool {
 // user said not to ask (settings.QuitNoAsk, the question's "Don't ask
 // again"), or quitNow. A settings file that can't be read asks.
 func quitAtOnce(asked int64, now time.Time) bool {
-	if s, err := settings.LoadChecked(); err == nil && s.QuitNoAsk {
+	if s, err := settings.LoadChecked(); err == nil && (s.QuitNoAsk || s.RestoreOnQuit) {
 		return true
 	}
 	return quitNow(asked, now, len(quitAgents()))

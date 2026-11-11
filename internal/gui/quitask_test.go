@@ -170,3 +170,57 @@ func TestQuitDontAskAgain(t *testing.T) {
 		t.Fatal("the question's Quit without Don't ask again saved it")
 	}
 }
+
+// tudjam17795 on X: with Settings › General › Put agents back when
+// quitting on, the app's quit restores the connected agents and its next
+// start connects them again; off (the default), a quit leaves them as
+// they are. With it on a Quit needs no question, and a gateway served by
+// another magpie leaves its agents alone.
+func TestRestoreAgentsOnQuit(t *testing.T) {
+	sandboxHome(t)
+	old := [...]any{servedHere, quitDetect, quitRestore, startAgents, startRewire}
+	t.Cleanup(func() {
+		servedHere, quitDetect, quitRestore = old[0].(func() bool), old[1].(func() []*agent.Agent), old[2].(func([]*agent.Agent) ([]string, error))
+		startAgents, startRewire = old[3].(func() []*agent.Agent), old[4].(func([]*agent.Agent) ([]string, error))
+	})
+	restored, rewired := 0, 0
+	servedHere = func() bool { return true }
+	quitDetect = func() []*agent.Agent { return nil }
+	quitRestore = func([]*agent.Agent) ([]string, error) { restored++; return nil, nil }
+	startAgents = func() []*agent.Agent { return nil }
+	startRewire = func([]*agent.Agent) ([]string, error) { rewired++; return nil, nil }
+	oldAgents := quitAgents
+	t.Cleanup(func() { quitAgents = oldAgents })
+	quitAgents = func() []quitAgentJSON { return []quitAgentJSON{{ID: "codex"}} }
+	if quitAtOnce(0, time.Now()) {
+		t.Fatal("off by default, a Quit with Codex connected quit without asking")
+	}
+
+	restoreAgentsOnQuit()
+	if restored != 0 {
+		t.Fatal("off by default, a quit put the agents back")
+	}
+	s := settings.Load()
+	s.RestoreOnQuit = true
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	servedHere = func() bool { return false }
+	restoreAgentsOnQuit()
+	if restored != 0 {
+		t.Fatal("another magpie serves the gateway, yet the quit put its agents back")
+	}
+	servedHere = func() bool { return true }
+	restoreAgentsOnQuit()
+	if restored != 1 {
+		t.Fatalf("with the setting on, restored %d times", restored)
+	}
+	// nothing to ask: agents are put back
+	if !quitAtOnce(0, time.Now()) {
+		t.Fatal("with the setting on a Quit asks")
+	}
+	rewireAgentsOnStart()
+	if rewired != 1 {
+		t.Fatalf("a start rewired %d times", rewired)
+	}
+}

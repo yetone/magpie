@@ -337,3 +337,25 @@ func TestReplyModelSaves(t *testing.T) {
 		}
 	})
 }
+
+// Put agents back when quitting: a save from a page that doesn't send
+// restoreOnQuit (the tray panel, or a page from before it) keeps it, and
+// one that sends it false turns it off.
+func TestRestoreOnQuitKeptUnlessSent(t *testing.T) {
+	cur := settings.Defaults()
+	cur.RestoreOnQuit = true
+	in, err := Merge([]byte(`{"theme":"dark"}`), cur, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !in.RestoreOnQuit {
+		t.Error("a save that didn't send restoreOnQuit turned it off")
+	}
+	in, err = Merge([]byte(`{"theme":"dark","restoreOnQuit":false}`), cur, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if in.RestoreOnQuit {
+		t.Error("restoreOnQuit sent false left it on")
+	}
+}

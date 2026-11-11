@@ -411,6 +411,7 @@ func Run(version string, showMain bool, link string) error {
 	var gw *gateway.Server
 	if ownPage {
 		gw = startBackend()
+		go rewireAgentsOnStart()
 		handler = Handler(h, gw)
 	}
 	// Linux: the magpie before holds the app's D-Bus name until it quits,
@@ -470,6 +471,7 @@ func Run(version string, showMain bool, link string) error {
 			// Codex's own, for the threads no Codex has open: with magpie
 			// gone they still go on (LukeMa on X)
 			agent.PortCodexRollouts(3 * time.Second)
+			restoreAgentsOnQuit()
 			updates.install(false)
 		},
 		// Wails exits on some webview errors; say why before it does.

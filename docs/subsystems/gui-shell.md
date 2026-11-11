@@ -811,6 +811,25 @@ that one keeps serving the agents and the Quit goes on).
   Ask before quitting (`#quitAskRow`, the app's only) shows it as On/Off
   and saves `quitNoAsk` through `POST /api/settings`, which keeps it when a
   page doesn't send it.
+- Put agents back when quitting (tudjam17795 on X: after magpie quits,
+  the harness it was connected to can't go on) is Settings › General ›
+  `#restoreQuitRow`, the app's only, Off by default: a connected agent
+  keeps magpie as it quits, which is what this page's question names. On
+  (`settings.RestoreOnQuit`, `restoreOnQuit`), `OnShutdown` runs
+  `agent.RestoreOnQuit` over the agents with magpie in their config
+  (`restoreAgentsOnQuit`), only when this process serves the gateway: each
+  agent's own `Disconnect`, so its files come back as they were before
+  magpie, `*.before-magpie` byte for byte. Unlike the Disconnect button it
+  leaves no `.disconnected` mark, and it records the ids it put back in the
+  stash (`quit.restored`). The next start (`rewireAgentsOnStart`, unless
+  the gateway is paused) connects exactly those again
+  (`agent.RewireOnStart`, once: the record is taken out first), skipping
+  one the user disconnected meanwhile (the mark) or connected by hand. An
+  agent the user disconnected before the quit is neither touched nor
+  connected again. `quitAtOnce` quits without asking while it is on, as
+  nothing is left to cut off. `TestRestoreOnQuitAndRewireOnStart`,
+  `TestRestoreOnQuitLeavesUserDisconnected`, `TestRestoreAgentsOnQuit`,
+  `TestRestoreOnQuitKeptUnlessSent` and `restore-on-quit.test.cjs`.
 - Not asked: a restart to update, Uninstall, a browser's page (`magpie
   web`), logging out or shutting down, and the Dock's Quit (AppKit's
   `terminate:`).
