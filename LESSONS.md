@@ -289,6 +289,20 @@ writes it.**
   a bit is used twice. After a rebase, grep the values both sides claim.
 - Seen 1× (2026-10-13).
 
+**A cache entry is reused only when every field read back from it
+matches what the key rounded away.**
+- 059d995d5 (11-11) kept AllOf's counted windows under window{key,
+  start's Unix second, scope}, and reused the kept prefix, start and
+  all. A 10-day limit reset and made a 5-hour one 1.7ms later shared
+  the key, so the 5-hour window reported the 10-day start and counted
+  its rows. TestGatewayKeyLimitCLI was red on ubuntu and macOS CI;
+  8b2fb6b08 reuses an entry only when its start equals the limit's.
+  The same commit's package regexps skipped lazyre and turned
+  TestNoEagerPackageRegexps red (d62220d43): it ran chosen tests, not
+  the packages it touched.
+- Test two values that round to one key, in the same second.
+- Seen 1× (2026-11-11).
+
 **A command never takes a flag, or a value it doesn't know, as data to
 write.**
 - `magpie snow --help` took "--help" as a model: it deleted
@@ -522,6 +536,27 @@ Two habits from them:
   TestProviderListReadsSettingsOnce's 2s bar, now a count of parses
   (a36319d60), and TestCursorEditorCopiedOncePerChange's 100ms linger
   (2efb71ea0).
+
+**A value put in a request's context lives as long as anything that
+holds the context, a stopped timer included.**
+- #5250: TestSocketTurnBodiesFreed kept 1 of 12 turn bodies in full
+  runs. A `context.WithTimeout` under the request's context, cancelled,
+  stays in an idle P's timer heap with its closure, and reached the
+  request through the unrouted watch held as a context value and as
+  the inflight's f.unrouted. 032340056 puts the watch behind a pointer
+  unwatch clears and drops f.unrouted when it ends; the test is red
+  with either half alone.
+- Found by reading a heap path after a goroutine dump showed no
+  holder, not by adding delays: a 300ms injected delay in the first
+  suspect still passed.
+- Seen 1× (2026-11-11).
+
+**An allocation bar is relative to the same call at the small size.**
+- TestAutoVisionDoesNotBuildListsAgain held searcherModel to a fixed
+  50 allocations: 51 on Linux and 130 on Windows with the lists kept as
+  meant (#5123). c1b8010a2 compares 400 models against 4, as the
+  AutoVision half did, and is still red with the cache broken by hand.
+- Seen 1× (2026-11-11).
 
 ## Red tests and releases
 
