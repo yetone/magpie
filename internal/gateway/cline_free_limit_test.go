@@ -80,10 +80,11 @@ func TestClineFreeLimitRestsTheModel(t *testing.T) {
 		}
 	}
 
-	// another vendor saying the same rests its key, as before
+	// another vendor saying the same names the model, so it rests that
+	// model alone (modelNamed), not by Cline's day
 	c := at(other, "deepseek-v4-flash")
-	if r := s.restAfter(c, 429, http.Header{}, []byte(`{"error":{"message":"`+clineFreeLimitMsg+`"}}`)); r.Key != c.restKey() || r.By == "resets" {
-		t.Fatalf("another vendor's refusal rests %s by %s, want its key %s", r.Key, r.By, c.restKey())
+	if r := s.restAfter(c, 429, http.Header{}, []byte(`{"error":{"message":"`+clineFreeLimitMsg+`"}}`)); r.Key != c.restID() || r.By == "resets" {
+		t.Fatalf("another vendor's refusal rests %s by %s, want its model %s", r.Key, r.By, c.restID())
 	}
 	// a Cline 429 that doesn't name the model's limit rests the key
 	cline.ID = "cline2"

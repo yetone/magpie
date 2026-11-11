@@ -37,8 +37,10 @@ const (
 // Coding Plan model is still served by it (#3661,
 // orion-nebula-dev: GLM-5.3-Flash-Trial and GLM-5.3-Trial rested
 // "zcode@zcode", and GLM-5.3 and GLM-5.3-Flash with it). A refusal of the
-// account — its quota, its key, another model named, a model that isn't a
-// trial — and the same words from another vendor still rest the account.
+// account — its quota, its key, another model named — still rests the
+// account. A quota refusal that names the very model asked (the same words
+// from another vendor) rests that model
+// alone, as any vendor's does (modelNamed).
 // After skygunner's TestZCodeTrialQuotaRestsTheModelAlone (e04a1b994).
 func TestZCodeTrialRefusalRestsTheTrialAlone(t *testing.T) {
 	for _, tc := range []struct {
@@ -58,9 +60,10 @@ func TestZCodeTrialRefusalRestsTheTrialAlone(t *testing.T) {
 		{"account key", "zcode", "GLM-5.3", `{"error":{"message":"invalid api key"}}`, 401, false, true},
 		{"another trial named", "zcode", "GLM-5.3-Flash-Trial", zcodeTrialEnded, 400, false, true},
 		{"spent names another", "zcode", "GLM-5.3-Flash-Trial", zcodeTrialSpent, 429, true, true},
-		{"not a trial", "zcode", "GLM-5.3", `{"type":"error","error":{"type":"invalid_request_error","message":"ZCode has no active limited quota for GLM-5.3"}}`, 400, false, true},
-		{"ended words on a 429", "zcode", "GLM-5.3-Trial", zcodeTrialEnded, 429, false, true},
-		{"another vendor's words", "factory", "GLM-5.3-Trial", zcodeTrialEnded, 400, false, true},
+		// "not a trial": a quota refusal naming a plain model rests that model
+		// alone, which TestModelNamedLimitRestsTheModelNotTheKey covers
+		{"ended words on a 429", "zcode", "GLM-5.3-Trial", zcodeTrialEnded, 429, false, false},
+		{"another vendor's words", "factory", "GLM-5.3-Trial", zcodeTrialEnded, 400, false, false},
 		// a trial entry goes to zcode.z.ai's Start Plan, and a dual
 		// account's GLM Coding Plan to api.z.ai: zcode.z.ai's firewall
 		// blocking the trial says nothing of the plan's host, so the trial

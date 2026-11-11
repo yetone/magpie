@@ -1525,7 +1525,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 			// under below; another computer's magpie rests its model
 			// for it, as before
 			id := c.restKey()
-			if c.p.PaidBesideFree(c.model) || modelCooledDown(why, body) {
+			if c.p.PaidBesideFree(c.model) || modelLimited(c, why, body) {
 				id = c.restID()
 			}
 			d, r.By, r.Failures, guessed = creditBackoff(id, header, body, now)
@@ -1591,7 +1591,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 			// key's own limit apart): the sink keeps the same scope, or
 			// one model's 429 would send the remote's other models, never
 			// limited, behind the others too
-			if remoteModelRest(c, failRate, header) || modelCooledDown(failRate, body) {
+			if remoteModelRest(c, failRate, header) || modelLimited(c, failRate, body) {
 				sink(c.restID(), now)
 			} else {
 				sink(c.restKey(), now)
@@ -1743,11 +1743,12 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	if zcodeTrialRestricted(c, why) {
 		id = c.restID()
 	}
-	// a relay's 429 that names the model whose credentials cooled down is
+	// a relay's 429 that names the model whose credentials cooled down, or a
+	// vendor's that names the model it limits (modelNamed), is
 	// that model's: its siblings on the same key still answer upstream,
 	// and the model's own sentence rests with the model, not on every
 	// sibling's refusal (#3039)
-	if modelCooledDown(why, body) {
+	if modelLimited(c, why, body) {
 		id = c.restID()
 	}
 	// out of credit, or of a quota, on a model that costs credits where
@@ -1841,6 +1842,72 @@ func vendorOverloaded(status int, body []byte) bool {
 // as a remote magpie's are (remoteModelRest).
 func modelCooledDown(why string, body []byte) bool {
 	return (why == failQuota || why == failCredit || why == failRate) && modelCooling.Match(wordsOf(body))
+}
+
+// modelLimited says a refusal for want of quota, credit or rate is the
+// model's own, not the key's or account's: a relay's pooled credentials of
+// the model cooled down (modelCooledDown), or the vendor's words name the
+// model it limited (modelNamed).
+func modelLimited(c candidate, why string, body []byte) bool {
+	return modelCooledDown(why, body) || modelNamed(c, why, body)
+}
+
+// modelNamed says a rate or quota refusal names c's model in the vendor's
+// words, as the vendors that count per model do: OpenAI's "Rate limit
+// reached for gpt-4o in organization … on tokens per min", Groq's "Rate
+// limit reached for model `llama-3.3-70b-versatile` … on tokens per day",
+// Gemini's quota failure with the model in its quotaDimensions (#2120324393599729686,
+// WJaunita45604 on X). The limit is that model's, on that key or account:
+// its other models are still asked, where the whole key used to rest until
+// the one model came back. A refusal that names no model, or another, is the
+// key's as before, and so is one for want of credit, a balance every model
+// draws on.
+func modelNamed(c candidate, why string, body []byte) bool {
+	if c.model == "" || why != failRate && why != failQuota {
+		return false
+	}
+	words := bytes.ToLower(wordsOf(body))
+	name := strings.ToLower(c.model)
+	if namesModel(words, name) {
+		return true
+	}
+	// a name the router prefixed (vendor/model) is said without it
+	if i := strings.LastIndexByte(name, '/'); i >= 0 && i < len(name)-1 {
+		return namesModel(words, name[i+1:])
+	}
+	return false
+}
+
+// namesModel says name stands in words as a whole id: not the front of a
+// longer one (gpt-4o in gpt-4o-mini), nor the end of one. A full stop or
+// colon that ends a sentence still ends the id.
+func namesModel(words []byte, name string) bool {
+	n := []byte(name)
+	if len(n) == 0 {
+		return false
+	}
+	idByte := func(b byte) bool {
+		return b >= 'a' && b <= 'z' || b >= '0' && b <= '9' || b == '-' || b == '_' || b == '.'
+	}
+	for from := 0; ; {
+		i := bytes.Index(words[from:], n)
+		if i < 0 {
+			return false
+		}
+		i += from
+		end := i + len(n)
+		from = i + 1
+		if i > 0 && (idByte(words[i-1]) || words[i-1] == ':' && i > 1 && idByte(words[i-2])) {
+			continue
+		}
+		if end < len(words) {
+			b := words[end]
+			if idByte(b) && !(b == '.' && (end+1 == len(words) || !idByte(words[end+1]))) {
+				continue
+			}
+		}
+		return true
+	}
 }
 
 // remoteModelRest says a refusal for want of quota, credit or rate rests
@@ -1955,7 +2022,7 @@ func vendorSaidWhen(header http.Header, body []byte) bool {
 // count where it is, so one request's own retries don't stretch it.
 func (s *Server) rateRest(c candidate, header http.Header, body []byte, sharedPool bool, now time.Time) (time.Duration, string, int) {
 	id := c.restKey()
-	if c.isOpenRouterFree() && sharedPool || remoteModelRest(c, failRate, header) || modelCooledDown(failRate, body) {
+	if c.isOpenRouterFree() && sharedPool || remoteModelRest(c, failRate, header) || modelLimited(c, failRate, body) {
 		id = c.restID()
 	}
 	n := 1
