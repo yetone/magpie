@@ -6197,7 +6197,86 @@ Yes. A project's .empryo/config.json goes over ~/.empryo/config.json; if it sets
 
 Yes. magpie kept the defaultModel you had and puts it back; your own providers were never changed.
 
-More agents on the same models: [Lody on any model](https://usemagpie.ai/docs/lody), [AtomCode on any model](https://usemagpie.ai/docs/atomcode) and [Crush on any model](https://usemagpie.ai/docs/crush). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Lody on any model](https://usemagpie.ai/docs/lody), [AtomCode on any model](https://usemagpie.ai/docs/atomcode), [Crush on any model](https://usemagpie.ai/docs/crush) and [miniQ on any model](https://usemagpie.ai/docs/miniq). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/miniq
+
+# miniQ on any model
+
+miniQ is a desktop AI coworker with a `miniq` terminal client, both clients of one miniq-daemon. Its models come from one OpenAI- or Anthropic-compatible endpoint, the `provider` in `settings.json`. magpie makes that provider the local gateway, so miniQ runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, GPT or a ChatGPT subscription.
+
+## Set up miniQ
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model for miniQ on the Agents page.** miniQ's row lists your current miniQ model and the models via magpie. Pick one of the latter.
+3. **Keep working.** A running daemon is told the new provider, and open chats move onto the new model, with no restart.
+
+```
+magpie miniq deepseek/deepseek-v4-pro
+```
+
+On Windows, miniQ in a WSL distro is found too and set up the same way.
+
+## Where settings.json is
+
+`settings.json` sits in the daemon's data folder, found as miniQ finds it. `MINIQ_DATA_DIR` comes first. Next is the folder named by `miniq-data-dir.json` beside the default, which exists when you moved the data folder in miniQ's Settings. Otherwise it is the default. macOS uses `~/.local/share/miniq` too.
+
+```
+macOS / Linux: ~/.local/share/miniq/settings.json
+Windows:       %LOCALAPPDATA%\miniq\settings.json
+MINIQ_DATA_DIR set: $MINIQ_DATA_DIR/settings.json
+```
+
+## What gets written
+
+```
+{
+  "provider": {
+    "baseUrl": "http://127.0.0.1:3425/v1",
+    "apiKey": "",
+    "model": "deepseek/deepseek-v4-pro",
+    "apiProtocol": "chat_completions"
+  }
+}
+```
+
+`baseUrl` is the gateway's `/v1`. `apiKey` is magpie's own key for miniQ: miniQ sends no User-Agent of its own, so the key is how magpie knows the request is miniQ's. `model` is the model's catalog id. `apiProtocol` is `chat_completions`, because `auto` would guess Responses or Anthropic Messages from a model's name.
+
+magpie changes only `provider`. It stashes your own provider whole. The rest of settings.json stays as it is: MCP servers, approvals, hooks and remote access. Where there is no file, magpie makes one with 0600 permissions, as miniQ does.
+
+## A running daemon
+
+The daemon reads settings.json once, when it starts, and writes its own copy back on every settings change. So after writing the file, magpie also calls `settings.update` over the local WebSocket that `daemon.json` names, as miniQ's own Settings does. A daemon magpie can't reach keeps the old provider until it restarts. magpie then asks you to restart miniQ.
+
+## Switching back
+
+Switching back puts your own provider back whole and tells the daemon. If you had no provider, magpie removes its own, and miniQ goes back to its default. If magpie made settings.json and nothing is left in it, the file goes too. You can also pick your own miniQ model in magpie; it goes into your restored provider.
+
+```
+magpie miniq default
+```
+
+## FAQ
+
+### How do I use DeepSeek, GLM or a ChatGPT subscription in miniQ?
+
+Pick a via-magpie model for miniQ on magpie's Agents page. magpie sets settings.json's provider to the local gateway's /v1 and tells the running miniq-daemon.
+
+### Do I need to restart miniQ?
+
+Usually not. magpie tells a running daemon through settings.update, and open chats move onto the new model. Only a daemon magpie can't reach needs a restart, and magpie says so.
+
+### Why chat_completions and not auto?
+
+auto guesses the protocol from a model's name and could pick Responses or Anthropic Messages. The gateway's /v1 speaks Chat Completions, so magpie names it.
+
+### Are my MCP servers and other settings changed?
+
+No. magpie changes only settings.json's provider, and switching back restores the one you had.
+
+More agents on the same models: [Empryo on any model](https://usemagpie.ai/docs/empryo), [Lody on any model](https://usemagpie.ai/docs/lody) and [Cindy on any model](https://usemagpie.ai/docs/cindy). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
