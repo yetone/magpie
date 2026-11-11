@@ -145,7 +145,7 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 		// told so without the rows being made, encoded and hashed again,
 		// ~60% of an unchanged poll's ~22 MB over ~17k real sessions
 		logV, logKnown := usage.LogVersion()
-		now := listTag{log: logV, drawn: drawn.String(), names: provider.UsageNamesKey()}
+		now := listTag{log: logV, drawn: drawn.String(), names: provider.UsageNamesKey() + sessions.HiddenStamp()}
 		made := -1
 		listTags.Lock()
 		if t, ok := listTags.m[n]; ok && logKnown && t.same(now) && r.Header.Get("X-Magpie-Had") == t.tag {
@@ -159,6 +159,8 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			rw.WriteHeader(http.StatusOK)
 			return
 		}
+		// an uninstalled agent's rows that were taken off the list
+		list = sessions.ForgottenOut(list)
 		nativeKeys := make(map[string]bool, len(list))
 		for _, s := range list {
 			// its copies' and subagents' ids among them

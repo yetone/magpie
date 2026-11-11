@@ -2,6 +2,8 @@ package sessions
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"slices"
 	"testing"
 	"time"
@@ -68,6 +70,35 @@ func forgetSession(agent, id, title string, last time.Time) (Trashed, error) {
 		return t, errors.New("no such deleted session")
 	}
 	return t, writeManifest(dir, t)
+}
+
+// ForgottenOut leaves out of a listing the rows of an agent that is gone
+// (Forgettable) that Forget took off the list, up to their last request.
+// The list is returned as it is when nothing is left out.
+func ForgottenOut(list []Session) []Session {
+	gone := map[string]bool{}
+	out := func(hidden func(agent, id string, last time.Time) bool, s Session) bool {
+		g, ok := gone[s.Agent]
+		if !ok {
+			g = Forgettable(s.Agent)
+			gone[s.Agent] = g
+		}
+		return g && hidden(s.Agent, s.ID, s.Last)
+	}
+	hidden := GatewayHidden()
+	if !slices.ContainsFunc(list, func(s Session) bool { return out(hidden, s) }) {
+		return list
+	}
+	return slices.DeleteFunc(slices.Clone(list), func(s Session) bool { return out(hidden, s) })
+}
+
+// HiddenStamp changes whenever the hidden list is written, for a poll's tag.
+func HiddenStamp() string {
+	fi, err := os.Stat(gatewayHiddenPath())
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprint(fi.ModTime().UnixNano(), "/", fi.Size())
 }
 
 // ForceCLIGone says, for a test in another package, which agents' commands

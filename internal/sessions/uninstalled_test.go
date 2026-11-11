@@ -50,10 +50,26 @@ func TestUninstalledAgentSessionsAreForgotten(t *testing.T) {
 	if got := Trash(); len(got) != 1 || !got[0].Forgot {
 		t.Fatalf("trash %+v", got)
 	}
+	// the Usage page's list (ForgottenOut) leaves it out, and only while the
+	// command is gone
+	has := func() bool {
+		for _, x := range ForgottenOut(List(0)) {
+			if x.Agent == "opencode" && x.ID == ocMain {
+				return true
+			}
+		}
+		return false
+	}
+	if has() {
+		t.Fatal("a forgotten session is still in the Usage list")
+	}
 	if _, err := Restore(tr.Key); err != nil {
 		t.Fatal(err)
 	}
 	if GatewayHidden()("opencode", ocMain, m.Last) {
 		t.Fatal("still hidden after Restore")
+	}
+	if !has() {
+		t.Fatal("a restored session is not in the Usage list")
 	}
 }
