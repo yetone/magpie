@@ -53,15 +53,15 @@ func CodexHomes() []string {
 func CodexHomesIn(home string) []string {
 	main := CodexHomeIn(home)
 	out := []string{main}
-	seen := map[string]bool{sameDir(main): true}
+	seen := map[dirKey]bool{keyOf(main): true}
 	add := func(dir string) {
-		if k := sameDir(dir); !seen[k] {
+		if k := keyOf(dir); !seen[k] {
 			seen[k] = true
 			out = append(out, dir)
 		}
 	}
 	roots := []string{home}
-	if p := filepath.Dir(main); sameDir(p) != sameDir(home) {
+	if p := filepath.Dir(main); keyOf(p) != keyOf(home) {
 		roots = append(roots, p)
 	}
 	for _, root := range roots {
@@ -75,7 +75,7 @@ func CodexHomesIn(home string) []string {
 				continue
 			}
 			dir := filepath.Join(root, e.Name())
-			if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+			if _, _, isDir, err := DirStat(dir); err != nil || !isDir {
 				continue
 			}
 			if codexHomeAt(dir) {
@@ -99,14 +99,6 @@ func codexHomeAt(dir string) bool {
 	if fi, err := os.Stat(filepath.Join(dir, "auth.json")); err == nil && fi.Mode().IsRegular() {
 		return true
 	}
-	fi, err := os.Stat(filepath.Join(dir, "sessions"))
-	return err == nil && fi.IsDir()
-}
-
-// sameDir is the key two names of one folder share: where its links lead.
-func sameDir(dir string) string {
-	if r, err := filepath.EvalSymlinks(dir); err == nil {
-		dir = r
-	}
-	return filepath.Clean(dir)
+	_, _, isDir, err := DirStat(filepath.Join(dir, "sessions"))
+	return err == nil && isDir
 }

@@ -25,15 +25,15 @@ func ClaudeHomes() []string {
 func ClaudeHomesIn(home string) []string {
 	main := ClaudeDirIn(home)
 	out := []string{main}
-	seen := map[string]bool{sameDir(main): true}
+	seen := map[dirKey]bool{keyOf(main): true}
 	add := func(dir string) {
-		if k := sameDir(dir); !seen[k] {
+		if k := keyOf(dir); !seen[k] {
 			seen[k] = true
 			out = append(out, dir)
 		}
 	}
 	roots := []string{home}
-	if p := filepath.Dir(main); sameDir(p) != sameDir(home) {
+	if p := filepath.Dir(main); keyOf(p) != keyOf(home) {
 		roots = append(roots, p)
 	}
 	for _, root := range roots {
@@ -47,7 +47,7 @@ func ClaudeHomesIn(home string) []string {
 				continue
 			}
 			dir := filepath.Join(root, e.Name())
-			if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+			if _, _, isDir, err := DirStat(dir); err != nil || !isDir {
 				continue
 			}
 			if claudeHomeAt(dir) {
@@ -75,6 +75,6 @@ func ClaudeHomesIn(home string) []string {
 
 // claudeHomeAt says dir is a folder Claude Code has kept a session in.
 func claudeHomeAt(dir string) bool {
-	fi, err := os.Stat(filepath.Join(dir, "projects"))
-	return err == nil && fi.IsDir()
+	_, _, isDir, err := DirStat(filepath.Join(dir, "projects"))
+	return err == nil && isDir
 }

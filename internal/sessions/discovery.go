@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // Directory membership changes with the directory's mtime; file contents don't.
@@ -40,7 +42,7 @@ const racyDirectory = 2 * time.Second
 // left the Sessions page, and its parses were let go with them, until a
 // later poll read the folder again and parsed them anew.
 func readDirectory(path string) []os.DirEntry {
-	mod, size, dir, err := dirStat(path)
+	mod, size, dir, err := appdir.DirStat(path)
 	if err != nil {
 		return unreadDirectory(path, err)
 	}
