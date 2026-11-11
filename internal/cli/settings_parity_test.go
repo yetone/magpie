@@ -385,6 +385,7 @@ var notYet = map[string]string{
 	"POST /api/library/bili":                     L,  // library.go
 	"POST /api/library/bili/install":             L,  // library.go
 	"POST /api/library/market/about":             L,  // library.go
+	"POST /api/library/mcp-account":              L,  // library.go
 	"POST /api/library/mcp-signin":               L,  // library.go
 	"POST /api/library/mcp-signin/{id}/cancel":   L,  // library.go
 	"POST /api/library/mcp-signout":              L,  // library.go
