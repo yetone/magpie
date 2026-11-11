@@ -1029,6 +1029,22 @@ gateway calls on under mTLS (call the gateway's own port); there is no
 `.p12` for a browser yet (`openssl pkcs12 -export -in client.pem -inkey
 client-key.pem -out laptop.p12` makes one).
 
+**A self-signed certificate.** A Remote magpie, a provider of your own,
+or a preset pointed at a server of yours (Ollama or LM Studio on another
+computer behind `https://`), on a domain whose certificate this computer
+doesn't trust, such as a self-signed one, or one macOS calls "not
+standards compliant", can be trusted as it is (Zhangzhangi on X): Advanced → Server certificate → Trust
+its certificate… shows the certificate the server answers with, its
+SHA-256 fingerprint, names and dates. Check the fingerprint against the
+server's (`openssl x509 -in cert.pem -noout -fingerprint -sha256`) and
+Trust it. From then on that provider's own host is taken with that one
+certificate alone, its chain, name and dates unchecked, and any other
+certificate is refused; the editor says so in red. A certificate renewed
+later has to be trusted again. Verify it again takes the pin off. It is
+off by default and kept for that provider alone. A preset's own vendor
+addresses never take one: the row shows only for an `https://` address
+at a host the preset doesn't name.
+
 Caddy is the alternative that also gets the certificate for you: run
 `relay.example.com { reverse_proxy 127.0.0.1:3425 }` with sharing on and a
 gateway key per client. A proxy on this computer adds forwarding headers,

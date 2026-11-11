@@ -1,9 +1,12 @@
 package netproxy
 
 import (
+	"cmp"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -22,8 +25,8 @@ type clientCertKey struct{}
 // the server, and the PEM CA its server's certificate may also be signed
 // by (a magpie's own, `magpie mtls`), at the hosts of its own base URLs.
 type clientCert struct {
-	cert, key, ca string
-	hosts         map[string]bool
+	cert, key, ca, pin string
+	hosts              map[string]bool
 }
 
 // WithClientCert is ctx for requests made on behalf of a provider that
@@ -37,12 +40,18 @@ type clientCert struct {
 // — is sent without them, and an https:// proxy is refused for it, as the
 // proxy's TLS would be dialled with them (clientTLS). With (a request
 // made for another provider) drops it.
-func WithClientCert(ctx context.Context, cert, key, ca string, bases ...string) context.Context {
-	c := clientCert{cert: strings.TrimSpace(cert), key: strings.TrimSpace(key), ca: strings.TrimSpace(ca), hosts: map[string]bool{}}
+//
+// pin, the SHA-256 of a server certificate the user trusted as it is
+// (Zhangzhangi on X: a magpie at home on a domain of its own with a
+// self-signed certificate), has the certificate's chain and name left
+// unchecked at those hosts, and the handshake refused unless the
+// server's own certificate is that one (pinTLS).
+func WithClientCert(ctx context.Context, cert, key, ca, pin string, bases ...string) context.Context {
+	c := clientCert{cert: strings.TrimSpace(cert), key: strings.TrimSpace(key), ca: strings.TrimSpace(ca), pin: NormalPin(pin), hosts: map[string]bool{}}
 	if c.cert == "" || c.key == "" {
 		c.cert, c.key = "", ""
 	}
-	if c.cert == "" && c.ca == "" {
+	if c.cert == "" && c.ca == "" && c.pin == "" {
 		return ctx
 	}
 	for _, b := range bases {
@@ -68,7 +77,8 @@ func clientCertOf(ctx context.Context) *clientCert {
 
 // clientRoute is the route's name for req's own TLS identity
 // (WithClientCert), "" when it has none: the files, and when each was
-// last changed, so a certificate renewed in place is dialled with anew.
+// last changed, so a certificate renewed in place is dialled with anew,
+// and the pinned server certificate.
 func clientRoute(req *http.Request) string {
 	c := clientCertOf(req.Context())
 	if c == nil || req.URL == nil || !strings.EqualFold(req.URL.Scheme, "https") || !c.hosts[hostKey(req.URL)] {
@@ -84,6 +94,7 @@ func clientRoute(req *http.Request) string {
 		}
 		b.WriteByte(0)
 	}
+	b.WriteString(c.pin)
 	return b.String()
 }
 
@@ -106,7 +117,7 @@ func clientTLS(t *http.Transport, route string) {
 		f, _, _ := strings.Cut(parts[i], "\x01")
 		return f
 	}
-	cert, key, ca := file(0), file(1), file(2)
+	cert, key, ca, pin := file(0), file(1), file(2), file(3)
 	if t.TLSClientConfig == nil {
 		t.TLSClientConfig = &tls.Config{}
 	}
@@ -127,6 +138,9 @@ func clientTLS(t *http.Transport, route string) {
 			return pair, perr
 		}
 	}
+	if pin != "" {
+		pinTLS(cfg, pin)
+	}
 	if ca != "" {
 		pool, err := caPool(ca)
 		if err != nil {
@@ -146,6 +160,10 @@ func clientTLS(t *http.Transport, route string) {
 		}
 	}
 }
+
+// CAPool is caPool for a caller outside: the system's roots with the
+// PEM file ca's beside them.
+func CAPool(ca string) (*x509.CertPool, error) { return caPool(ca) }
 
 // caPool is the system's roots with the CA in the PEM file ca beside
 // them: a server signed by either is taken.
@@ -191,4 +209,64 @@ func CheckClientCert(cert, key, ca string) error {
 		}
 	}
 	return nil
+}
+
+// pinTLS has cfg take the server certificate whose SHA-256 is pin, and
+// no other: its chain, its name and its dates aren't checked (a
+// self-signed one, or one macOS calls not standards compliant), and any
+// other certificate fails the handshake, a CA's that checks included.
+func pinTLS(cfg *tls.Config, pin string) {
+	cfg.InsecureSkipVerify = true
+	cfg.VerifyConnection = func(cs tls.ConnectionState) error {
+		if len(cs.PeerCertificates) == 0 {
+			return errors.New("the server showed no certificate")
+		}
+		if got := CertSHA256(cs.PeerCertificates[0]); got != pin {
+			return &PinMismatchError{Host: cmp.Or(cs.ServerName, "the server"), Got: got, Want: pin}
+		}
+		return nil
+	}
+}
+
+// PinMismatchError is why a server whose certificate was pinned isn't
+// spoken to: it showed another one.
+type PinMismatchError struct{ Host, Got, Want string }
+
+func (e *PinMismatchError) Error() string {
+	return fmt.Sprintf("%s showed a certificate other than the one trusted (SHA-256 %s, trusted %s): if the server's certificate was renewed, trust the new one in its editor; if not, another machine may be answering at its address", e.Host, ColonHex(e.Got), ColonHex(e.Want))
+}
+
+// CertSHA256 is c's fingerprint as a pin is kept: the SHA-256 of its DER,
+// in lower-case hex.
+func CertSHA256(c *x509.Certificate) string {
+	h := sha256.Sum256(c.Raw)
+	return hex.EncodeToString(h[:])
+}
+
+// NormalPin is a typed SHA-256 fingerprint as a pin is kept: lower-case
+// hex, its colons, spaces and a "sha256:" before it taken out; "" for
+// one that isn't 64 hex digits.
+func NormalPin(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.TrimPrefix(strings.TrimPrefix(s, "sha256:"), "sha256/")
+	s = strings.NewReplacer(":", "", " ", "", "-", "").Replace(s)
+	if len(s) != 64 {
+		return ""
+	}
+	if _, err := hex.DecodeString(s); err != nil {
+		return ""
+	}
+	return s
+}
+
+// ColonHex is a pin as people read fingerprints: AB:CD:….
+func ColonHex(pin string) string {
+	var b strings.Builder
+	for i := 0; i+1 < len(pin); i += 2 {
+		if i > 0 {
+			b.WriteByte(':')
+		}
+		b.WriteString(strings.ToUpper(pin[i : i+2]))
+	}
+	return b.String()
 }

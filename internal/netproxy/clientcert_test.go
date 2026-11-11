@@ -98,7 +98,7 @@ func TestClientCertOnlyItsHost(t *testing.T) {
 	t.Cleanup(d.CloseIdleConnections)
 	c := &http.Client{Transport: d}
 	bg := context.Background()
-	mine := WithClientCert(bg, cert, key, ca, own.URL+"/v1")
+	mine := WithClientCert(bg, cert, key, ca, "", own.URL+"/v1")
 
 	if _, err := body(t, c, bg, own.URL); !certRefused(err) {
 		t.Fatalf("without them: want a certificate error, got %v", err)
@@ -115,7 +115,7 @@ func TestClientCertOnlyItsHost(t *testing.T) {
 	if _, err := body(t, c, With(mine, ""), own.URL); !certRefused(err) {
 		t.Fatalf("a request made for another provider: want a certificate error, got %v", err)
 	}
-	if _, err := body(t, c, WithClientCert(bg, cert, key, ca, "http://"+strings.TrimPrefix(own.URL, "https://")), own.URL); !certRefused(err) {
+	if _, err := body(t, c, WithClientCert(bg, cert, key, ca, "", "http://"+strings.TrimPrefix(own.URL, "https://")), own.URL); !certRefused(err) {
 		t.Fatalf("an http:// base: want a certificate error, got %v", err)
 	}
 }
@@ -131,7 +131,7 @@ func TestServerCAAlone(t *testing.T) {
 	d := Dispatch(&http.Transport{Proxy: Func}).(*dispatch)
 	t.Cleanup(d.CloseIdleConnections)
 	c := &http.Client{Transport: d}
-	ctx := WithClientCert(context.Background(), "", "", ca, lenient.URL, strict.URL)
+	ctx := WithClientCert(context.Background(), "", "", ca, "", lenient.URL, strict.URL)
 	if got, err := body(t, c, ctx, lenient.URL); err != nil || got != "none" {
 		t.Fatalf("CA alone: %q, %v", got, err)
 	}
@@ -148,7 +148,7 @@ func TestClientCertRenewedInPlace(t *testing.T) {
 	cert, key, ca := device(t, st, "old")
 	d := Dispatch(&http.Transport{Proxy: Func, DisableKeepAlives: true}).(*dispatch)
 	c := &http.Client{Transport: d}
-	ctx := WithClientCert(context.Background(), cert, key, ca, s.URL)
+	ctx := WithClientCert(context.Background(), cert, key, ca, "", s.URL)
 	if got, _ := body(t, c, ctx, s.URL); got != "old" {
 		t.Fatalf("got %q", got)
 	}

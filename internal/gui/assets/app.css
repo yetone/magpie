@@ -5243,3 +5243,11 @@ body .row.agent .ag-prefs .row.pref .who { display: block; }
 .notices-text { grid-column: 1 / -1; min-width: 0; margin: 0; font: 11px/1.5 var(--code); white-space: pre-wrap; overflow-wrap: anywhere; }
 .client-cert { display: grid; gap: 6px; min-width: 0; }
 .client-cert input { width: 100%; min-width: 0; }
+.server-pin { display: grid; gap: 6px; min-width: 0; justify-items: start; }
+.server-pin .pin-fp { font: 11px/1.5 var(--code); overflow-wrap: anywhere; word-break: break-all; }
+.server-pin .pin-off { display: flex; align-items: center; gap: 6px; color: var(--red); font-weight: 600; }
+.server-pin .pin-off::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--red); flex: none; }
+.server-pin .pin-seen { display: grid; gap: 4px; min-width: 0; }
+.server-pin .hint.err { color: var(--red); overflow-wrap: anywhere; }
+.server-pin .pin-acts { display: flex; flex-wrap: wrap; gap: 12px; }
+.server-pin .pin-peek.busy { pointer-events: none; opacity: .6; }
