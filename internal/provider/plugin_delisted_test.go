@@ -398,3 +398,55 @@ func TestListedAsPickLeavesWithItsModel(t *testing.T) {
 		t.Fatalf("the list-as is %q after the model came back", got)
 	}
 }
+
+// A model its plugin lists for part of the day only (ZCode's
+// GLM-5.3-Flash-Trial, from 23:00) comes back picked on every day, also
+// when the user saves the provider's picks meanwhile with the editor, which
+// shows the models listed then (WJaunita45604 on X).
+func TestDailyPluginModelStaysPicked(t *testing.T) {
+	claudeHome(t)
+	t.Setenv("MAGPIE_BUN", "")
+	if err := os.MkdirAll(settings.Dir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, v := range map[string]any{
+		"plugins.json":     map[string]any{"plugins": []map[string]any{{"spec": "magpie-our-free-model"}}},
+		"plugin-auth.json": map[string]any{"our-free-model": map[string]any{"type": "api", "key": "managed"}},
+	} {
+		b, _ := json.Marshal(v)
+		if err := os.WriteFile(filepath.Join(settings.Dir(), name), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	night := ourFree("pool-a", "pool-b", "daily-trial")
+	day := ourFree("pool-a", "pool-b")
+	plugin.UseCached(night)
+	t.Cleanup(func() { plugin.UseCached(nil) })
+	if err := Save(Provider{ID: "our-free-model", Models: []string{"pool-a", "daily-trial"}}); err != nil {
+		t.Fatal(err)
+	}
+	for d := 0; d < 3; d++ {
+		plugin.UseCached(day)
+		if got := dropGonePluginPicks(night, day)["our-free-model"]; !slices.Equal(got, []string{"daily-trial"}) {
+			t.Fatalf("day %d: dropped %v", d, got)
+		}
+		// the editor lists pool-a and pool-b: the user ticks pool-b
+		p, _ := Find("our-free-model")
+		p.Models = []string{"pool-a", "pool-b"}
+		if d == 1 {
+			p.Models = []string{"pool-a"}
+		}
+		if err := Save(*p); err != nil {
+			t.Fatal(err)
+		}
+		plugin.UseCached(night)
+		dropGonePluginPicks(day, night)
+		p, _ = Find("our-free-model")
+		if !slices.Contains(p.Models, "daily-trial") || len(p.Delisted) != 0 {
+			t.Fatalf("day %d: back, picks %v, set aside %v", d, p.Models, p.Delisted)
+		}
+		if got := servedIDs(t, "our-free-model"); !slices.Contains(got, "daily-trial") {
+			t.Fatalf("day %d: not served: %v", d, got)
+		}
+	}
+}

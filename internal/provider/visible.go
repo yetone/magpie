@@ -276,6 +276,22 @@ func SetHiddenModels(agent string, ids []string) error {
 			keep = append(keep, id)
 		}
 	}
+	// a model taken out that its provider's list lacks now (ZCode's
+	// -Trial entries are listed from 23:00 only) isn't in the list the
+	// editor sent, so it stays taken out for when it is listed again, as
+	// SetPickedModels keeps a pick of it
+	if was := HiddenModels(agent); len(was) > 0 {
+		listed, _ := ListedFor(agent)
+		now := map[string]bool{}
+		for _, e := range listed {
+			now[e.ID] = true
+		}
+		for id := range was {
+			if !now[id] && !slices.Contains(keep, id) {
+				keep = append(keep, id)
+			}
+		}
+	}
 	slices.Sort(keep)
 	s := settings.Load()
 	if slices.Equal(s.HiddenModels[agent], keep) {

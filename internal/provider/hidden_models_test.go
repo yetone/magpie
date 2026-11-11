@@ -219,3 +219,49 @@ func TestOnlyPickedModels(t *testing.T) {
 		t.Fatal("picks set for an agent shown every model")
 	}
 }
+
+// A model taken out of an agent's lists that its provider's list lacks for
+// part of the day (ZCode's GLM-5.3-Flash-Trial is listed from 23:00) stays
+// taken out when the editor saves the hidden models meanwhile, as a pick of
+// it stays picked (SetPickedModels): it is still off when it is listed again
+// (WJaunita45604 on X).
+func TestHiddenModelAbsentStaysHidden(t *testing.T) {
+	isolate(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	save := func(models ...string) {
+		t.Helper()
+		if err := Save(Provider{ID: "daily", Name: "Daily", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: models}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	save("m1", "trial")
+	if err := SetHiddenModels("codex", []string{"daily/trial"}); err != nil {
+		t.Fatal(err)
+	}
+	// the day: the model isn't listed, and the editor sends the hidden
+	// models it can show, none
+	save("m1")
+	if err := SetHiddenModels("codex", nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := settings.Load().HiddenModels["codex"]; !slices.Equal(got, []string{"daily/trial"}) {
+		t.Fatalf("an unlisted model's off choice lost: %v", got)
+	}
+	// 23:00: it is listed again, still off
+	save("m1", "trial")
+	if slices.Contains(ids(shownOf("codex")), "daily/trial") {
+		t.Fatal("the model came back on")
+	}
+	// listed, the editor's word is the user's: turning it on works
+	if err := SetHiddenModels("codex", nil); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(ids(shownOf("codex")), "daily/trial") {
+		t.Fatal("turning a listed model on did nothing")
+	}
+}
+
+func shownOf(agent string) []Entry { s, _ := CatalogFor(agent); return s }
