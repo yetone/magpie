@@ -210,6 +210,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.ok(p.anims.includes("::view-transition-old(side)"), `the sidebar slides away: ${p.anims}`);
       assert.ok(p.anims.includes("::view-transition-group(nav-usage)"), "each tab flies to the header");
       assert.ok(p.anims.includes("::view-transition-group(page)"), "the page moves over");
+      // no tab is left out (#5434, invzhi on X): every tab drawn in the nav
+      // has a name of its own while the morph plays, the masking tab's
+      // group animating like the rest
+      assert.ok(p.anims.includes("::view-transition-group(nav-masking)"), `the masking tab flies too: ${p.anims}`);
+      const names = await page.evaluate(() => [...document.querySelectorAll("#nav button[data-view]")]
+        .filter((b) => b.getClientRects().length)
+        .map((b) => [b.dataset.view, getComputedStyle(b).viewTransitionName]));
+      assert.ok(names.some(([v]) => v === "masking"), "the fixture draws the masking tab");
+      for (const [v, n] of names) assert.ok(n && n !== "none", `${v} has a view-transition-name while morphing`);
+      assert.equal(new Set(names.map(([, n]) => n)).size, names.length, `each name differs: ${JSON.stringify(names)}`);
       // off from rest and settling, in a third of a second, as a Mac's
       // sidebar: a curve leaving at speed made a frame the webview drops at
       // the start a visible jerk (wangye1644294 on X), and every piece, the

@@ -595,8 +595,10 @@ body:not(.side-nav) .side-toggle .st-pane { opacity: 0; }
 .nav-morph #nav button[data-view="library"] { view-transition-name: nav-library; }
 .nav-morph #nav button[data-view="providers"] { view-transition-name: nav-providers; }
 .nav-morph #nav button[data-view="routing"] { view-transition-name: nav-routing; }
+.nav-morph #nav button[data-view="groups"] { view-transition-name: nav-groups; }
 .nav-morph #nav button[data-view="gateway"] { view-transition-name: nav-gateway; }
 .nav-morph #nav button[data-view="usage"] { view-transition-name: nav-usage; }
+.nav-morph #nav button[data-view="masking"] { view-transition-name: nav-masking; }
 .nav-morph #nav button[data-view="plugins"] { view-transition-name: nav-plugins; }
 ::view-transition-group(*) { z-index: 1; animation-duration: var(--morph-t); animation-timing-function: var(--morph-ease); }
 ::view-transition-old(*), ::view-transition-new(*) { inline-size: auto; block-size: auto; }
