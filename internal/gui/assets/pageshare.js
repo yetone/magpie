@@ -31,11 +31,48 @@ window.pageShare = async function (spec, save, params) {
       setTimeout(() => URL.revokeObjectURL(a.href), 60e3);
       return { path: "" };
     }
-    await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
-    return { ok: true };
+    // navigator.clipboard is missing on plain http (a LAN address) and in
+    // some webviews: the picture is copied as a selected <img> instead, and
+    // when neither works the page is told to save, not handed a TypeError
+    if (navigator.clipboard?.write && window.ClipboardItem) {
+      try { await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]); return { ok: true }; } catch {}
+    }
+    if (await copyPicture(png)) return { ok: true };
+    throw new Error(t("This browser can't copy a picture on this address (it needs https or localhost). Save it instead."));
   }
   const bytes = new Uint8Array(await png.arrayBuffer());
   let bin = "";
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
   return api("plugin-pages/image", { spec, action: save ? "save" : "copy", name, png: btoa(bin) });
 };
+
+// copyPicture selects an <img> of the PNG in a box out of sight and uses the
+// page's copy command, which puts the picture on the clipboard where the
+// async API is missing; it says whether the browser took the copy.
+async function copyPicture(png) {
+  const url = await new Promise((res) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => res(""); r.readAsDataURL(png); });
+  if (!url) return false;
+  const was = document.activeElement;
+  const box = document.createElement("div");
+  box.contentEditable = "true";
+  box.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none";
+  const img = new Image();
+  img.src = url;
+  box.append(img);
+  document.body.append(box);
+  let ok = false;
+  try {
+    await img.decode().catch(() => {});
+    box.focus({ preventScroll: true });
+    const sel = getSelection();
+    const r = document.createRange();
+    r.selectNode(img);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    ok = document.execCommand("copy");
+    sel.removeAllRanges();
+  } catch { ok = false; }
+  box.remove();
+  was?.focus?.({ preventScroll: true });
+  return ok;
+}
