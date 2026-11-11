@@ -237,6 +237,8 @@ func airAt(home string, a *Agent, path string, done notice) *Agent {
 	ocPath := filepath.Join(dir, "magpie-opencode.json")
 	entry := "agent_servers." + airAgent
 	id := a.ID
+	// the IDE's agent reaches WSL projects too (air_wsl.go)
+	wsl := id == "air-ide"
 	provider := openCodeKept(ocPath, func() any { return magpieProviderJSONFor("opencode", id) })
 	// ours: acp.json's Magpie is the agent magpie added, on its file
 	ours := func() bool {
@@ -264,11 +266,20 @@ func airAt(home string, a *Agent, path string, done notice) *Agent {
 		if !ours() {
 			return "Air's Magpie agent (" + filepath.Base(path) + ") is gone, so Air no longer reaches magpie"
 		}
-		return wiringOff("Air", ocPath, func(k string) (string, bool) { return edit.GetJSON(ocPath, "provider."+magpieID+".options."+k) },
-			"baseURL", gatewayV1(), "apiKey", hereKey())
+		if s := wiringOff("Air", ocPath, func(k string) (string, bool) { return edit.GetJSON(ocPath, "provider."+magpieID+".options."+k) },
+			"baseURL", gatewayV1(), "apiKey", hereKey()); s != "" {
+			return s
+		}
+		if wsl {
+			return airWSLCheck(path)
+		}
+		return ""
 	}
 	a.ListOnly = true
 	a.Sync = func() error {
+		if wsl && ours() {
+			airWSLSync(path, id, model)
+		}
 		return syncJSONInOrder(ocPath, "provider."+magpieID, provider)
 	}
 	a.Fields = []Field{{
@@ -281,6 +292,9 @@ func airAt(home string, a *Agent, path string, done notice) *Agent {
 				}
 				if err := edit.Remove(ocPath); err != nil && !os.IsNotExist(err) {
 					return err
+				}
+				if wsl {
+					return airWSLDrop(path)
 				}
 				return nil
 			}
@@ -304,10 +318,16 @@ func airAt(home string, a *Agent, path string, done notice) *Agent {
 			if bin == "" {
 				bin = "opencode"
 			}
-			return edit.SetJSON(path, edit.KV{Path: entry, Value: map[string]any{
+			if err := edit.SetJSON(path, edit.KV{Path: entry, Value: map[string]any{
 				"command": bin, "args": []string{"acp"},
 				"env": map[string]string{"OPENCODE_CONFIG": ocPath},
-			}})
+			}}); err != nil {
+				return err
+			}
+			if wsl {
+				airWSLPut(path, id, v)
+			}
+			return nil
 		},
 		Options: func(map[string]string) []Option { return viaMagpie(id, magpieID+"/") },
 	}}

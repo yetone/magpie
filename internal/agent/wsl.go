@@ -226,6 +226,10 @@ type distro struct {
 	// Versions is what the CLIs of wslKinds that ask (version) said their
 	// versions are at the last probe, by the kind's id
 	Versions map[string]string `json:"versions,omitempty"`
+	// Paths is where the probe found each command in the distro, by name
+	// ("opencode": /home/me/.opencode/bin/opencode); a distro probed
+	// before this has none until it is probed again
+	Paths map[string]string `json:"paths,omitempty"`
 	// OmpProfiles are the named omp profiles the probe found under
 	// ~/.omp/profiles there: each is an agent of its own (omp#<name>).
 	// Kept so a stopped distro lists them without being started.
@@ -1859,6 +1863,12 @@ func parseProbe(name, out string) *distro {
 	for bin, path := range bins {
 		if !onWindowsDrive(path, win) {
 			d.Has["bin:"+bin] = true
+			if strings.HasPrefix(path, "/") {
+				if d.Paths == nil {
+					d.Paths = map[string]string{}
+				}
+				d.Paths[bin] = path
+			}
 		}
 	}
 	if d.Gateway == "" {
