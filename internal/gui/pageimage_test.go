@@ -52,6 +52,20 @@ func TestPluginPageReadsADay(t *testing.T) {
 	if w := pagePost(h, "/api/plugin-pages/read", map[string]any{"spec": on, "read": "usage:day", "params": map[string]any{"date": "2999-01-01"}}); w.Code == 200 {
 		t.Errorf("a day after today: %d %s", w.Code, w.Body)
 	}
+	// a from makes it a span: a week's, a month's or all time's
+	for _, from := range []string{"2000-01-01", "all"} {
+		w := pagePost(h, "/api/plugin-pages/read", map[string]any{"spec": on, "read": "usage:day", "params": map[string]any{"from": from}})
+		var span map[string]any
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &span) != nil {
+			t.Fatalf("usage:day from %s: %d %s", from, w.Code, w.Body)
+		}
+		if f, _ := span["from"].(string); f == "" || f > day["date"].(string) {
+			t.Errorf("usage:day from %s has from %q: %s", from, f, w.Body)
+		}
+	}
+	if w := pagePost(h, "/api/plugin-pages/read", map[string]any{"spec": on, "read": "usage:day", "params": map[string]any{"from": "2999-01-01"}}); w.Code == 200 {
+		t.Errorf("a from after the day: %d %s", w.Code, w.Body)
+	}
 	if w := pagePost(h, "/api/plugin-pages/read", map[string]any{"spec": on, "read": "usage:summary"}); w.Code != http.StatusForbidden {
 		t.Errorf("a read it no longer declares: %d", w.Code)
 	}

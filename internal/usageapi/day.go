@@ -78,7 +78,10 @@ type DayCount struct {
 
 // Day is a day's usage.
 type Day struct {
-	Date  string `json:"date"`  // YYYY-MM-DD, in the zone asked for
+	// From is the first day of the span asked for (SpanOf), the same as
+	// Date for a day
+	From  string `json:"from"`
+	Date  string `json:"date"`  // YYYY-MM-DD, in the zone asked for; a span's last day
 	Today string `json:"today"` // the zone's today
 	DayTotals
 	Agents     []DayAgent `json:"agents"`
@@ -90,7 +93,18 @@ type Day struct {
 
 // DayOf is the day date (YYYY-MM-DD; "" for today) in zone (nil is this
 // computer's). A day after today is an error.
-func DayOf(date string, zone *time.Location) (Day, error) {
+func DayOf(date string, zone *time.Location) (Day, error) { return SpanOf("", date, zone) }
+
+// SpanAll as SpanOf's from is every day there is a call for, up to date.
+const SpanAll = "all"
+
+// SpanOf is the days from from to date, both included (YYYY-MM-DD; date ""
+// is today, from "" is date alone and SpanAll the first day with calls), in
+// zone (nil is this computer's), as DayOf is one day: a week's, a month's or
+// all time's totals and the agents and models that made them. A day after
+// today is an error, as is a from after date.
+func SpanOf(from, date string, zone *time.Location) (Day, error) {
+	span := from
 	if zone == nil {
 		zone = time.Local
 	}
@@ -106,10 +120,39 @@ func DayOf(date string, zone *time.Location) (Day, error) {
 	if date > today {
 		return Day{}, fmt.Errorf("%s is after today, %s", date, today)
 	}
-	p, _ := usage.RangeOf(date, date)
 	f := usage.Filter{Zone: zone}
+	var p usage.Period
+	switch from {
+	case "", date:
+		from = date
+		p, _ = usage.RangeOf(date, date)
+	case SpanAll:
+		// every day through date: the ledger's whole span is through today,
+		// so an earlier date is the range from the first day with calls
+		first := usage.QueryPage(usage.All, f, 0, 1)
+		from = date
+		for _, pt := range first.Series {
+			if pt.Calls > 0 {
+				if day := pt.Time.In(zone).Format(time.DateOnly); day < from {
+					from = day
+				}
+				break
+			}
+		}
+		p, _ = usage.RangeOf(from, date)
+	default:
+		a, err := time.ParseInLocation(time.DateOnly, from, zone)
+		if err != nil {
+			return Day{}, fmt.Errorf("no date %q: YYYY-MM-DD", from)
+		}
+		from = a.Format(time.DateOnly)
+		if from > date {
+			return Day{}, fmt.Errorf("%s is after %s", from, date)
+		}
+		p, _ = usage.RangeOf(from, date)
+	}
 	all := usage.QueryPage(p, f, 0, 1)
-	out := Day{Date: date, Today: today, DayTotals: dayTotals(all.Sum), Agents: []DayAgent{}, Days: []DayCount{}}
+	out := Day{From: from, Date: date, Today: today, DayTotals: dayTotals(all.Sum), Agents: []DayAgent{}, Days: []DayCount{}}
 
 	agents := clients()
 	face := providerFaces(provider.All())
@@ -149,6 +192,11 @@ func DayOf(date string, zone *time.Location) (Day, error) {
 		if h.Date <= date && h.Calls > 0 {
 			out.Days = append(out.Days, DayCount{Date: h.Date, Calls: h.Calls, Tokens: h.Tokens, Cost: h.Cost})
 		}
+	}
+	if span == SpanAll && len(out.Days) > 0 && out.Days[0].Date > out.From {
+		// the ledger keeps older calls in wider buckets, which start before
+		// the first call: all time begins at the first day with calls
+		out.From = out.Days[0].Date
 	}
 	return out, nil
 }

@@ -75,12 +75,15 @@ func dataURL(name string, b []byte) string {
 	return "data:" + ctype + ";base64," + base64.StdEncoding.EncodeToString(b)
 }
 
-// pageDay is the usage:day read: params {date: "YYYY-MM-DD", tz: an IANA
-// zone}, both optional (today, this computer's zone).
+// pageDay is the usage:day read: params {date: "YYYY-MM-DD", from:
+// "YYYY-MM-DD" or "all", tz: an IANA zone}, all optional (today, the day
+// alone, this computer's zone): with a from it is the days from there to
+// date (usageapi.SpanOf), a week's or a month's or all time's.
 func pageDay(params map[string]any) (any, error) {
 	date, _ := params["date"].(string)
+	from, _ := params["from"].(string)
 	tz, _ := params["tz"].(string)
-	d, err := usageapi.DayOf(date, usage.Zone(tz))
+	d, err := usageapi.SpanOf(from, date, usage.Zone(tz))
 	if err != nil {
 		return nil, err
 	}
