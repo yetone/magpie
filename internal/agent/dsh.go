@@ -27,6 +27,8 @@ package agent
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -40,6 +42,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	satomic "sync/atomic"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -2660,6 +2663,8 @@ type dshRounds struct {
 	// else wrote while it ran, and nothing troubled it
 	last dshRoundKey
 	done bool
+	// the last magpie's rounds were looked at (dshRoundKept)
+	seeded bool
 }
 
 // dshRoundKey is what a round goes by: dsh's files it reads, the gateway's
@@ -2670,29 +2675,27 @@ type dshRoundKey struct {
 	models uint64
 }
 
-var dshSumSeed = maphash.MakeSeed()
-
 // dshFilesSum sums the files a round reads, by path and bytes: each
 // profile's patch list, the home layer, and the settings, keys and old
 // config dsh reads beside them. A file that can't be read for another
 // reason than not being there sums differently every time: unknown, never
-// taken for what it was last round.
+// taken for what it was last round. The sum is the same in every magpie
+// process, so a start can go by the last one's (dshRoundKept).
 func dshFilesSum(dir string, files []string) uint64 {
-	var h maphash.Hash
-	h.SetSeed(dshSumSeed)
+	h := sha256.New()
 	bp := dshSumBufs.Get().(*[]byte)
 	defer dshSumBufs.Put(bp)
 	sum := func(f string) {
-		h.WriteString(f)
-		h.WriteByte(0)
-		switch err := dshSumFile(&h, f, *bp); {
+		io.WriteString(h, f)
+		h.Write([]byte{0})
+		switch err := dshSumFile(h, f, *bp); {
 		case err == nil:
 		case errors.Is(err, os.ErrNotExist):
-			h.WriteByte(2)
+			h.Write([]byte{2})
 		default:
-			h.WriteString(time.Now().String())
+			io.WriteString(h, time.Now().String())
 		}
-		h.WriteByte(0)
+		h.Write([]byte{0})
 	}
 	for _, f := range files {
 		sum(f)
@@ -2700,20 +2703,23 @@ func dshFilesSum(dir string, files []string) uint64 {
 	for _, name := range []string{"cordis.patch.yml", "settings.yaml", ".env", ".credentials.yaml", "config.yaml"} {
 		sum(filepath.Join(dir, name))
 	}
-	return h.Sum64()
+	return dshSum64(h.Sum(nil))
 }
+
+// dshSum64 is a sha256 sum's first 8 bytes.
+func dshSum64(b []byte) uint64 { return binary.BigEndian.Uint64(b[:8]) }
 
 // dshSumFile writes 1 and f's bytes into h, read through buf rather than
 // whole: a patch list names every model magpie serves, and each round of
 // both dsh homes read every file of them into memory again only to hash
 // it. The sum is the same as for the bytes written at once.
-func dshSumFile(h *maphash.Hash, f string, buf []byte) error {
+func dshSumFile(h io.Writer, f string, buf []byte) error {
 	r, err := os.Open(f)
 	if err != nil {
 		return err
 	}
 	defer r.Close()
-	h.WriteByte(1)
+	h.Write([]byte{1})
 	for {
 		n, err := r.Read(buf)
 		h.Write(buf[:n])
@@ -2735,7 +2741,8 @@ func dshModelsSum(models []catalog.Model) uint64 {
 	if err != nil {
 		return uint64(time.Now().UnixNano()) // unknown: done again
 	}
-	return maphash.Bytes(dshSumSeed, b)
+	sum := sha256.Sum256(b)
+	return dshSum64(sum[:])
 }
 
 // dshWiredOnce writes magpie's route again in every patch list whose route
@@ -2783,16 +2790,26 @@ func (r *dshRounds) once() string {
 		r.stamp, r.at, r.built = stamp, time.Now(), true
 		key.models = dshModelsSum(models)
 	}
+	if !r.done && !r.seeded {
+		// a start's first round: the last magpie's, when it found nothing
+		// to write with what this one reads
+		r.seeded = true
+		r.last, r.done = dshRoundKept(dir, list)
+	}
 	if r.done && key == r.last {
 		return ""
 	}
 	if models == nil {
 		models = magpieModels(list)
 	}
+	dshRoundsWorked.Add(1)
 	trouble := dshWiredWith(dir, files, models)
 	// kept only when the round wrote nothing and nothing else wrote while
 	// it ran: a file written by either is read again next round
 	r.last, r.done = key, trouble == "" && dshFilesSum(dir, dshProfiles(dir)) == key.files
+	if r.done {
+		dshKeepRound(dir, list, key)
+	}
 	return trouble
 }
 
@@ -3166,4 +3183,96 @@ func dshDocStart(l string) bool {
 	}
 	r = strings.TrimSpace(r)
 	return r == "" || strings.HasPrefix(r, "#")
+}
+
+// dshRoundRecord is what the last magpie's rounds found nothing to write with:
+// a start's first round reads every dsh profile through the yaml emitter,
+// ~43 MB of a real account's first minute, to learn the same again.
+// It is this magpie version's only: another may write the files otherwise.
+type dshRoundRecord struct {
+	Version string                      `json:"version"`
+	Rounds  map[string]dshRoundRecorded `json:"rounds"`
+}
+
+type dshRoundRecorded struct {
+	Files  uint64 `json:"files"`
+	GW     string `json:"gw"`
+	Models uint64 `json:"models"`
+}
+
+var dshKeptMu sync.Mutex
+
+// dshRoundsWorked counts the rounds that read and wrote dsh's files.
+var dshRoundsWorked satomic.Int64
+
+func dshKeptPath() string {
+	c := appdir.Cache()
+	if c == "" {
+		return ""
+	}
+	return filepath.Join(c, "dsh-rounds.json")
+}
+
+// dshKeptRead is the record, or none when it can't be read, is
+// another version's or this magpie is a dev build.
+func dshKeptRead() (dshRoundRecord, bool) {
+	p := dshKeptPath()
+	if p == "" || gateway.Version == "" || gateway.Version == "dev" {
+		return dshRoundRecord{}, false
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return dshRoundRecord{}, false
+	}
+	var k dshRoundRecord
+	if json.Unmarshal(b, &k) != nil || k.Version != gateway.Version {
+		return dshRoundRecord{}, false
+	}
+	return k, true
+}
+
+// dshRoundKept is the key the last magpie's round of dir and list ended
+// on with nothing to write, and whether there is one.
+func dshRoundKept(dir, list string) (dshRoundKey, bool) {
+	dshKeptMu.Lock()
+	defer dshKeptMu.Unlock()
+	k, ok := dshKeptRead()
+	if !ok {
+		return dshRoundKey{}, false
+	}
+	r, ok := k.Rounds[dir+"\x00"+list]
+	if !ok {
+		return dshRoundKey{}, false
+	}
+	return dshRoundKey{files: r.Files, gw: r.GW, models: r.Models}, true
+}
+
+// dshKeepRound records a round that found nothing to write, for the next
+// magpie's first round.
+func dshKeepRound(dir, list string, key dshRoundKey) {
+	p := dshKeptPath()
+	if p == "" || gateway.Version == "" || gateway.Version == "dev" {
+		return
+	}
+	dshKeptMu.Lock()
+	defer dshKeptMu.Unlock()
+	k, ok := dshKeptRead()
+	if !ok {
+		k = dshRoundRecord{Version: gateway.Version}
+	}
+	r := dshRoundRecorded{Files: key.files, GW: key.gw, Models: key.models}
+	id := dir + "\x00" + list
+	if was, ok := k.Rounds[id]; ok && was == r {
+		return
+	}
+	if k.Rounds == nil {
+		k.Rounds = map[string]dshRoundRecorded{}
+	}
+	k.Rounds[id] = r
+	b, err := json.Marshal(k)
+	if err != nil {
+		return
+	}
+	os.MkdirAll(filepath.Dir(p), 0o700)
+	edit.WriteAtomic(p, b)
 }

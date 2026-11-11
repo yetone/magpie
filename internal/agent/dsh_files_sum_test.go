@@ -2,7 +2,7 @@ package agent
 
 import (
 	"bytes"
-	"hash/maphash"
+	"crypto/sha256"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -33,21 +33,20 @@ func TestDshFilesSumReadsNoFileWhole(t *testing.T) {
 
 	// the sum as it was, each file's bytes written at once
 	whole := func() uint64 {
-		var h maphash.Hash
-		h.SetSeed(dshSumSeed)
+		h := sha256.New()
 		for _, f := range append(files, filepath.Join(dir, "cordis.patch.yml"), filepath.Join(dir, "settings.yaml"),
 			filepath.Join(dir, ".env"), filepath.Join(dir, ".credentials.yaml"), filepath.Join(dir, "config.yaml")) {
-			h.WriteString(f)
-			h.WriteByte(0)
+			h.Write([]byte(f))
+			h.Write([]byte{0})
 			if b, err := os.ReadFile(f); err == nil {
-				h.WriteByte(1)
+				h.Write([]byte{1})
 				h.Write(b)
 			} else {
-				h.WriteByte(2)
+				h.Write([]byte{2})
 			}
-			h.WriteByte(0)
+			h.Write([]byte{0})
 		}
-		return h.Sum64()
+		return dshSum64(h.Sum(nil))
 	}
 	if got, want := dshFilesSum(dir, files), whole(); got != want {
 		t.Fatalf("sum %x, want %x as for the files read whole", got, want)
