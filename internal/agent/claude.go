@@ -660,13 +660,21 @@ func claudeIn(at place) *Agent {
 	env := func(k string) string {
 		v := rawEnv(k)
 		if contains(claudeModelEnv, k) {
-			v = provider.ClaudeRead(v)
+			v = claudeReadOwn(v)
 		}
 		return v
 	}
 	// spell is a model of magpie's as Claude Code is given it: a dotted
 	// Claude version dashed, which it would read as Claude Opus 4
-	spell := provider.ClaudeSpelled
+	// and on this computer's own file a Claude model of Claude Code's own
+	// subscription is Anthropic's bare id (ClaudeBare), which Desktop's Code
+	// tab can send to Anthropic as it is
+	spell := func(ref string) string {
+		if at.id == "" {
+			ref = provider.ClaudeBare(ref)
+		}
+		return provider.ClaudeSpelled(ref)
+	}
 	model := jsonGet(path, "model")
 	// routed: on magpie's gateway, or on a proxy to it where magpie has
 	// answered (#1985, claudeProxied), which a pick keeps (gwAt)
@@ -2398,8 +2406,8 @@ func claudeIn(at place) *Agent {
 				raw = append(raw, rawEnv(k))
 			}
 			if slices.ContainsFunc(raw, func(v string) bool {
-				m, _ := tierAt(provider.ClaudeRead(v))
-				return v != "" && isMagpie(m) && spell(provider.ClaudeRead(v)) != v
+				m, _ := tierAt(claudeReadOwn(v))
+				return v != "" && isMagpie(m) && spell(claudeReadOwn(v)) != v
 			}) {
 				return writeTiers(curTiers())
 			}
@@ -2408,7 +2416,7 @@ func claudeIn(at place) *Agent {
 			if m, ts := curTiers(); m != "" {
 				word, cur := mainWord(m, ts), jsonGet(path, "model")()
 				if cur != word && word != spell(m) {
-					if r, _ := tierAt(provider.ClaudeRead(cur)); isMagpie(strings.TrimSuffix(r, "[1m]")) {
+					if r, _ := tierAt(claudeReadOwn(cur)); isMagpie(strings.TrimSuffix(r, "[1m]")) {
 						return writeTiers(m, ts)
 					}
 				}
@@ -2985,7 +2993,7 @@ func ClassifierStandIn(agent, model string) string {
 // mode model set for the classifier, is left as it is.
 func claudeClassifierIn(at place, model string) string {
 	path := filepath.Join(at.claudeDir(), "settings.json")
-	env := func(k string) string { v, _ := edit.GetJSON(path, "env."+k); return provider.ClaudeRead(v) }
+	env := func(k string) string { v, _ := edit.GetJSON(path, "env."+k); return claudeReadOwn(v) }
 	if u := env("ANTHROPIC_BASE_URL"); u != at.gw() && !claudeProxied(at, path, u) {
 		return ""
 	}
@@ -2998,7 +3006,7 @@ func claudeClassifierIn(at place, model string) string {
 	}
 	bare := func(v string) string { m, _ := tierAt(v); return strings.TrimSuffix(m, "[1m]") }
 	tier, effort := tierAt(env(tierEnv("sonnet")))
-	if tier == "" || bare(provider.ClaudeRead(model)) != bare(tier) {
+	if tier == "" || bare(claudeReadOwn(model)) != bare(tier) {
 		return ""
 	}
 	was := bare(cmp.Or(st[at.key("claude.main")], env("ANTHROPIC_MODEL")))
@@ -3017,7 +3025,7 @@ func claudeStandIn(path, model string) string { return claudeStandInAt(here(""),
 // claudeStandInAt is claudeStandIn for the Claude Code at a place, which
 // reaches the gateway at its own address.
 func claudeStandInAt(at place, path, model string) string {
-	env := func(k string) string { v, _ := edit.GetJSON(path, "env."+k); return provider.ClaudeRead(v) }
+	env := func(k string) string { v, _ := edit.GetJSON(path, "env."+k); return claudeReadOwn(v) }
 	if u := env("ANTHROPIC_BASE_URL"); u != at.gw() && !claudeProxied(at, path, u) {
 		return ""
 	}
@@ -3111,9 +3119,16 @@ func claudeMain(path string) string {
 	if m == "" {
 		m = env(tierEnv("sonnet"))
 	}
-	m, _ = tierAt(provider.ClaudeRead(m))
+	m, _ = tierAt(claudeReadOwn(m))
 	return m
 }
+
+// claudeReadOwn is a model as settings.json says it, read as magpie serves
+// it: a dashed spelling taken back (ClaudeRead), a Claude model by its bare
+// id taken to Claude Code's own subscription (ClaudeBare). Only where
+// Claude Code goes through magpie: on Anthropic's own endpoint a bare id is
+// Anthropic's, not magpie's (claudeMagpieModel).
+func claudeReadOwn(v string) string { return provider.ClaudeRead(provider.ClaudeUnbare(v)) }
 
 // what an open Claude Code session keeps (notice.go)
 var (
