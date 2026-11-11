@@ -14,15 +14,18 @@ import (
 
 // `magpie agy run [args…]` is what the function agy magpie puts in the
 // user's shells runs (agent/agy.go): the agy on PATH, given magpie's
-// gateway, key and model while settings.json's model is one of magpie's,
-// and as it is otherwise. Every argument is agy's, --help too. `magpie agy
+// gateway, key, model and settings file (--settings, magpie-settings.json
+// beside agy's own settings.json) while that file names one of magpie's
+// models, and as it is otherwise, remote control's too (it needs agy's
+// Google sign-in). Every argument is agy's, --help too. `magpie agy
 // env` prints those variables and the model, one NAME=value a line and
 // nothing off magpie, for PowerShell's function.
 
 const agyRunUsage = `magpie agy run [args…]   start agy, on magpie while its model is one of magpie's
 
 The agy on your PATH starts with GEMINI_API_KEY, GOOGLE_GEMINI_BASE_URL and
---model <its model> (not when you give --model yourself); every argument is
+--settings <magpie's file> and --model <its model> (not when you give
+--model yourself, nor for remote-control, which needs your Google sign-in); every argument is
 agy's. Off magpie's models it starts as it is. The function agy magpie puts
 in your shell's profile runs this.
 
@@ -53,6 +56,7 @@ func agyCmd(args []string) (ok bool, err error) {
 		for _, kv := range env {
 			fmt.Println(kv)
 		}
+		fmt.Println("settings=" + agent.AgySettings())
 		fmt.Println("model=" + model)
 		return true, nil
 	}
@@ -76,6 +80,11 @@ func agyRun(args []string) error {
 	}
 	env := os.Environ()
 	start, model := agent.AgyStart()
+	// remote control needs the Google sign-in, which a session on an API
+	// key (magpie's models) doesn't have: it runs as agy is on its own
+	if slices.ContainsFunc(args, agent.AgyRemote) {
+		model = ""
+	}
 	if model != "" {
 		env = slices.DeleteFunc(env, func(kv string) bool {
 			k, _, _ := strings.Cut(kv, "=")
@@ -85,6 +94,7 @@ func agyRun(args []string) error {
 		if !slices.ContainsFunc(args, modelFlag) {
 			args = append([]string{"--model", model}, args...)
 		}
+		args = append([]string{"--settings", agent.AgySettings()}, args...)
 	}
 	return agyExec(bin, args, env)
 }

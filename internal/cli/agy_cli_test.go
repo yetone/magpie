@@ -17,7 +17,7 @@ import (
 // as it is off magpie.
 func TestAgyRun(t *testing.T) {
 	home := helpHome(t)
-	settings := filepath.Join(home, ".gemini", "antigravity-cli", "settings.json")
+	settings := filepath.Join(home, ".gemini", "antigravity-cli", "magpie-settings.json")
 	os.MkdirAll(filepath.Dir(settings), 0o755)
 	t.Setenv("GEMINI_API_KEY", "users-own")
 	t.Setenv("GOOGLE_GEMINI_BASE_URL", "")
@@ -43,11 +43,11 @@ func TestAgyRun(t *testing.T) {
 
 	os.WriteFile(settings, []byte(`{"model": "magpie/deepseek/pro", "modelProvider": "gemini"}`), 0o644)
 	for _, c := range []struct{ in, want []string }{
-		{nil, []string{"--model", "magpie/deepseek/pro"}},
-		{[]string{"--help"}, []string{"--model", "magpie/deepseek/pro", "--help"}},
-		{[]string{"-p", "hi", "--model", "mine"}, []string{"-p", "hi", "--model", "mine"}},
-		{[]string{"--model=mine"}, []string{"--model=mine"}},
-		{[]string{"-model", "mine"}, []string{"-model", "mine"}},
+		{nil, []string{"--settings", settings, "--model", "magpie/deepseek/pro"}},
+		{[]string{"--help"}, []string{"--settings", settings, "--model", "magpie/deepseek/pro", "--help"}},
+		{[]string{"-p", "hi", "--model", "mine"}, []string{"--settings", settings, "-p", "hi", "--model", "mine"}},
+		{[]string{"--model=mine"}, []string{"--settings", settings, "--model=mine"}},
+		{[]string{"-model", "mine"}, []string{"--settings", settings, "-model", "mine"}},
 	} {
 		if _, err := runOut(t, append([]string{"agy", "run"}, c.in...)...); err != nil {
 			t.Fatal(err)
@@ -60,8 +60,19 @@ func TestAgyRun(t *testing.T) {
 		}
 	}
 	out, err := runOut(t, "agy", "env")
-	if want := "GEMINI_API_KEY=" + gateway.TokenFor("agy") + "\nGOOGLE_GEMINI_BASE_URL=" + gateway.URL() + "\nmodel=magpie/deepseek/pro\n"; err != nil || out != want {
+	if want := "GEMINI_API_KEY=" + gateway.TokenFor("agy") + "\nGOOGLE_GEMINI_BASE_URL=" + gateway.URL() + "\nsettings=" + settings + "\nmodel=magpie/deepseek/pro\n"; err != nil || out != want {
 		t.Fatalf("agy env: %q %v", out, err)
+	}
+
+	// remote control needs agy's Google sign-in: plain, with the user's own
+	// environment, however magpie has agy wired (baysonfox on X)
+	for _, in := range [][]string{{"remote-control", "start"}, {"--remote-control"}, {"-p", "hi", "--remote-control"}} {
+		if _, err := runOut(t, append([]string{"agy", "run"}, in...)...); err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(args, in) || !slices.Equal(envOf("GEMINI_API_KEY"), []string{"users-own"}) {
+			t.Fatalf("agy run %v: %v, key %v", in, args, envOf("GEMINI_API_KEY"))
+		}
 	}
 
 	// off magpie: as it is

@@ -89,9 +89,14 @@ func TestWSLAgyPick(t *testing.T) {
 	if !strings.HasPrefix(key, "wsl-") || !strings.HasSuffix(key, "-agy") {
 		t.Fatalf("key %q", key)
 	}
-	settings := filepath.Join(dhome, ".gemini", "antigravity-cli", "settings.json")
-	if m, _ := edit.GetJSON(settings, "model"); m != "magpie/relay/glm-4.6" {
-		t.Fatalf("settings.json:\n%s", readFile(settings))
+	over := filepath.Join(dhome, ".gemini", "antigravity-cli", "magpie-settings.json")
+	if m, _ := edit.GetJSON(over, "model"); m != "magpie/relay/glm-4.6" {
+		t.Fatalf("magpie-settings.json:\n%s", readFile(over))
+	}
+	// agy's own settings.json is left as it is (remote control needs agy
+	// off an API key)
+	if m, _ := edit.GetJSON(filepath.Join(dhome, ".gemini", "antigravity-cli", "settings.json"), "modelProvider"); m != "" {
+		t.Fatalf("settings.json has modelProvider %q", m)
 	}
 	for _, p := range []string{bashrc, zshrc} {
 		body := readFile(p)
@@ -169,6 +174,7 @@ func TestWSLAgyFunctionRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	gw := "http://172.20.0.1:" + gateway.Port()
+	over := filepath.Join(dhome, ".gemini", "antigravity-cli", "magpie-settings.json")
 	bin := t.TempDir()
 	writeFile(t, filepath.Join(bin, "agy"), "#!/bin/sh\necho \"key=$GEMINI_API_KEY url=$GOOGLE_GEMINI_BASE_URL args=$*\"\n")
 	os.Chmod(filepath.Join(bin, "agy"), 0o755)
@@ -188,16 +194,21 @@ func TestWSLAgyFunctionRuns(t *testing.T) {
 			}
 			return strings.TrimSpace(string(out))
 		}
-		if got := run("-p 'hi there'"); got != on+" args=--model magpie/relay/glm-4.6 -p hi there" {
+		if got := run("-p 'hi there'"); got != on+" args=--settings "+over+" --model magpie/relay/glm-4.6 -p hi there" {
 			t.Errorf("%s: %s", c.sh, got)
 		}
-		if got := run("--model=own -p hi"); got != on+" args=--model=own -p hi" {
+		if got := run("--model=own -p hi"); got != on+" args=--settings "+over+" --model=own -p hi" {
 			t.Errorf("%s, a model given: %s", c.sh, got)
 		}
 	}
+	// remote control needs the Google sign-in: plain, whatever the model
+	rc := exec.Command("bash", "-c", `. "$HOME/.bashrc"; agy remote-control start; agy --remote-control`)
+	rc.Env = []string{"HOME=" + dhome, "PATH=" + bin + ":/usr/bin:/bin"}
+	if out, err := rc.CombinedOutput(); err != nil || strings.TrimSpace(string(out)) != "key= url= args=remote-control start\nkey= url= args=--remote-control" {
+		t.Fatalf("remote control: %v %s", err, out)
+	}
 	// the user picked their own model in agy: it starts as it is
-	settings := filepath.Join(dhome, ".gemini", "antigravity-cli", "settings.json")
-	if err := edit.SetJSON(settings, edit.KV{Path: "model", Value: "gemini-3-pro"}); err != nil {
+	if err := a.Field("model").Set("gemini-3-pro"); err != nil {
 		t.Fatal(err)
 	}
 	cmd := exec.Command("bash", "-c", `. "$HOME/.bashrc"; agy -p hi`)
