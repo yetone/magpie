@@ -234,7 +234,7 @@ function renderGatewayKeys() {
     tick.onclick = () => gatewayKeyAction(k.off ? "on-key" : "off-key", { key: k.id });
     // the copy sits by the key it copies (the owner: stranded among the
     // badges it read as nobody's); Rotate and Remove wait in the row's menu
-    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), copyCallerKeyBtn(k), el("span", "grow"), ...(k.browser ? [gatewayBrowserTag()] : k.readOnly ? [gatewayReadOnlyTag()] : []), gatewayModelsBadge(k), ...gatewayKeptOutBadge(k), ...gatewayMCPBadge(k), gatewayQuotasBadge(k), ...(k.browser || k.readOnly ? [] : [gatewayConcurrencyBadge(k), gatewayTierBadge(k)]), gatewayLimitBadge(k), gatewayKeyMore(k));
+    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), copyCallerKeyBtn(k), el("span", "grow"), ...(k.browser ? [gatewayBrowserTag()] : k.readOnly ? [gatewayReadOnlyTag()] : []), gatewayModelsBadge(k), ...gatewayKeptOutBadge(k), ...gatewayMCPBadge(k), gatewayQuotasBadge(k), ...(k.browser || k.readOnly ? [] : [gatewayConcurrencyBadge(k), gatewayTierBadge(k), gatewayRedactBadge(k)]), gatewayLimitBadge(k), gatewayKeyMore(k));
     const under = gatewayLimit?.id === k.id ? [gatewayLimitEditor(k)] : keyUsed(k).map((u) => gatewayLimitLine(k, u));
     if (under.length) row.classList.add("with-limit"), row.append(...under);
     list.append(row);
@@ -995,6 +995,36 @@ function gatewayTierBadge(k) {
       const out = await gatewayKeyAction("tier-key", { key: k.id, serviceTier: v });
       if (out) status(t("{who}: service tier {tier}", { who: k.name, tier: t(KEY_TIERS.find((o) => o.v === v).name) }), "ok");
     }, "Service tier", "sess-menu");
+  };
+  return b;
+}
+
+// A key's masking (y0ngb1n on X): as Settings › Privacy says, always on, or
+// off for a device the user trusts. A request with no key (this
+// computer's own) follows the settings.
+const KEY_REDACT = [
+  { v: "", name: "Follow Settings", note: "" },
+  { v: "on", name: "On", note: "" },
+  { v: "off", name: "Off", note: "" },
+];
+function gatewayRedactBadge(k) {
+  const own = k.redact || "";
+  const cur = KEY_REDACT.find((o) => o.v === own) || KEY_REDACT[0];
+  const b = el("button", "amodels key-redact" + (own ? " set" : ""));
+  b.type = "button";
+  b.textContent = t(own === "on" ? "Masking on" : own === "off" ? "Masking off" : "Masking");
+  b.title = t(own === "on" ? "This key's requests are always masked" : own === "off" ? "This key's requests are never masked" : "This key's requests are masked as Settings › Privacy says");
+  b.setAttribute("aria-label", t("Masking"));
+  b.setAttribute("aria-haspopup", "menu");
+  b.setAttribute("aria-expanded", "false");
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    openProtoMenu(b, KEY_REDACT, cur.v, async (v) => {
+      if (v === cur.v) return;
+      const out = await gatewayKeyAction("redact-key", { key: k.id, redact: v });
+      if (out) status(t("{who}: masking {mode}", { who: k.name, mode: t(KEY_REDACT.find((o) => o.v === v).name) }), "ok");
+    }, "Masking", "sess-menu");
   };
   return b;
 }

@@ -10,6 +10,9 @@
 package redact
 
 import (
+	"slices"
+
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/gwmw"
 	"github.com/yetone/magpie/internal/masking"
 	"github.com/yetone/magpie/internal/pluginrt"
@@ -41,6 +44,14 @@ func InUse() (int, error) {
 		return 0, err
 	}
 	if masking.Wanted(st) {
+		return 1, nil
+	}
+	// a key held to masking (access.RedactOn) uses it with the setting off
+	keys, err := access.List()
+	if err != nil {
+		return 0, err
+	}
+	if slices.ContainsFunc(keys, func(k access.Key) bool { return k.Redact == access.RedactOn && !k.Off }) {
 		return 1, nil
 	}
 	return 0, nil

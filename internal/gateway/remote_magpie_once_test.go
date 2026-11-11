@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -105,7 +106,7 @@ func TestRemoteMagpieMasksWhatItIsNotToldWasMasked(t *testing.T) {
 		body, _ := seen()
 		return body
 	}
-	own := ownMaskedAs()
+	own := ownMaskedAs(context.Background())
 	if own == "" {
 		t.Fatal("no fingerprint with masking on")
 	}

@@ -3161,12 +3161,12 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 #gatewayKeys .amodels.key-models { display: inline-block; flex: 0 1 auto; min-width: 24px; max-width: 180px; line-height: 20px; overflow: hidden; text-overflow: ellipsis; }
 /* a key's quotas and concurrency badges (#2216) take no room until the
    row is hovered, and give way before the row runs past a narrow window */
-#gatewayKeys .amodels:is(.key-quotas, .key-conc, .key-tier) { display: inline-block; flex: 0 1 auto; min-width: 0; line-height: 20px; overflow: hidden; text-overflow: ellipsis; }
+#gatewayKeys .amodels:is(.key-quotas, .key-conc, .key-tier, .key-redact) { display: inline-block; flex: 0 1 auto; min-width: 0; line-height: 20px; overflow: hidden; text-overflow: ellipsis; }
 /* unset, shown by a hover, they give way before the masked key does: the
    key squeezed by them on a narrow window slid its copy button under the
    pointer that came to drag the row */
-#gatewayKeys .acc > :is(.key-quotas, .key-conc, .key-tier):not(.set) { flex-shrink: 8; }
-#gatewayKeys .acc:not(:hover) > :is(.key-quotas, .key-conc, .key-tier):not(.set, .open, :focus) { max-width: 0; padding: 0; margin-left: -9px; box-shadow: none; }
+#gatewayKeys .acc > :is(.key-quotas, .key-conc, .key-tier, .key-redact):not(.set) { flex-shrink: 8; }
+#gatewayKeys .acc:not(:hover) > :is(.key-quotas, .key-conc, .key-tier, .key-redact):not(.set, .open, :focus) { max-width: 0; padding: 0; margin-left: -9px; box-shadow: none; }
 /* the MCP servers a key held to some may use: cut, and gives way first */
 #gatewayKeys .amodels.key-mcp { display: inline-block; flex: 0 1 auto; min-width: 24px; max-width: 180px; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* a read-only key's tag, always shown, never a button */
@@ -4574,8 +4574,8 @@ body.panel .modal { padding: 16px 12px; }
   body.web .accts.keys .acc > :is(.amodels, .proto, .alane, .aspend, .abal):not(.set) { margin-left: 0 !important; }
   body.web .accts.keys .acc > .abal.abal-many { flex-shrink: 1 !important; padding-block: 2px !important; }
   body.web .accts.keys .key-acts > .text.quiet { margin-right: 0 !important; }
-  body.web #gatewayKeys .acc > :is(.key-quotas, .key-conc, .key-tier) { max-width: none !important; padding: 0 7px !important; margin-left: 0 !important; flex-shrink: 0; }
-  body.web #gatewayKeys .acc > :is(.key-quotas, .key-conc, .key-tier):not(.set) { box-shadow: inset 0 0 0 1px var(--line) !important; }
+  body.web #gatewayKeys .acc > :is(.key-quotas, .key-conc, .key-tier, .key-redact) { max-width: none !important; padding: 0 7px !important; margin-left: 0 !important; flex-shrink: 0; }
+  body.web #gatewayKeys .acc > :is(.key-quotas, .key-conc, .key-tier, .key-redact):not(.set) { box-shadow: inset 0 0 0 1px var(--line) !important; }
 }
 
 /* Import from other apps: a checklist per app */

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/gwmw"
 	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/masking"
@@ -19,6 +20,34 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
+
+// maskingFor is the masker for a request whose caller is ctx's, and the
+// ctx to mask on. A key's own setting (access.Key.Redact, y0ngb1n on X)
+// holds where Settings › Privacy says otherwise: off sends the key's
+// requests as they are, on masks them with the settings' own rules, or the
+// default ones (masking.WithForced) where the settings mask nothing. A
+// request with no key follows the settings. Every place that masks what
+// goes to a vendor asks here. Fail closed: a forced pass needs a masker
+// that reads ctx, and one that doesn't is an error.
+func maskingFor(ctx context.Context) (context.Context, gwmw.Masker, error) {
+	switch access.Caller(ctx).Redact {
+	case access.RedactOff:
+		return ctx, nil, nil
+	case access.RedactOn:
+		if !redactionWanted() {
+			m, err := gwmw.Masking(true)
+			if err != nil {
+				return ctx, nil, err
+			}
+			if _, ok := m.(gwmw.ContextTeller); !ok {
+				return ctx, nil, gwmw.ErrUnmasked
+			}
+			return masking.WithForced(ctx), m, nil
+		}
+	}
+	m, err := gwmw.Masking(redactionWanted())
+	return ctx, m, err
+}
 
 // redacted masks a request's secrets, as the settings say, before it goes
 // to a vendor, and wraps w so what the vendor answers has them back; done
@@ -34,7 +63,7 @@ func redacted(ctx context.Context, w http.ResponseWriter, body []byte) (http.Res
 // (noteMasked). A masker that waits (for the local model's turn) stops
 // waiting when ctx ends, and the request goes nowhere.
 func redactedHits(ctx context.Context, w http.ResponseWriter, body []byte) (http.ResponseWriter, []byte, func(), maskHits, error) {
-	m, err := gwmw.Masking(redactionWanted())
+	ctx, m, err := maskingFor(ctx)
 	if m == nil {
 		return w, body, func() {}, maskHits{}, err
 	}
@@ -125,7 +154,7 @@ func maskedText(ctx context.Context, s string) (string, int, error) {
 // swapped. Its wait for the local model ends with ctx, as redactedHits'
 // does.
 func maskTextHits(ctx context.Context, s string) (gwmw.Masker, string, maskHits, error) {
-	m, err := gwmw.Masking(redactionWanted())
+	ctx, m, err := maskingFor(ctx)
 	if m == nil {
 		return nil, s, maskHits{}, err
 	}
@@ -261,7 +290,7 @@ func maskedBefore(r *http.Request) (string, bool) {
 	if c.maskedAs == "" || MaskRoute(strings.TrimSpace(settings.Shared().RedactRouteTo)) {
 		return "", false
 	}
-	fp := ownMaskedAs()
+	fp := ownMaskedAs(r.Context())
 	if fp == "" {
 		return "", false
 	}
@@ -312,7 +341,12 @@ var buildRe = lazyre.New(`^v?0\.1\.(\d{1,7})(?:$|[-+])`)
 // settings (masking.Fingerprint) and the masker's code, this build's
 // version, since a newer one can find what an older one let by. "" when
 // it masks nothing.
-func ownMaskedAs() string {
+func ownMaskedAs(ctx context.Context) string {
+	if access.Caller(ctx).Redact != "" {
+		// a key's own setting: the settings' fingerprint isn't what masked
+		// it (off masked nothing, on may have masked by the defaults)
+		return ""
+	}
 	fp := masking.Fingerprint(settings.Shared())
 	if fp == "" {
 		return ""
@@ -324,6 +358,16 @@ func ownMaskedAs() string {
 // masking itself is served by the redact plugin (plugins/redact); this is
 // the core's own reading, so a request isn't sent unmasked when the plugin
 // isn't there to mask it.
+func redactionWantedFor(ctx context.Context) bool {
+	switch access.Caller(ctx).Redact {
+	case access.RedactOff:
+		return false
+	case access.RedactOn:
+		return true
+	}
+	return redactionWanted()
+}
+
 func redactionWanted() bool {
 	return masking.Wanted(settings.Shared())
 }

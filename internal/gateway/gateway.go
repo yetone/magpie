@@ -2004,7 +2004,7 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 				p, model, ok = provider.Resolve(to)
 			} else {
 				w, body = rw, b
-				r = withMaskedAs(r, ownMaskedAs())
+				r = withMaskedAs(r, ownMaskedAs(r.Context()))
 				defer done()
 			}
 		}
@@ -2715,7 +2715,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				move(to, movedPrivacy)
 			} else {
 				capture.ResponseWriter, body, unmask, maskedHits = rw, b, done, hits
-				r = withMaskedAs(r, ownMaskedAs())
+				r = withMaskedAs(r, ownMaskedAs(r.Context()))
 			}
 		}
 	}

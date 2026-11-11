@@ -396,7 +396,7 @@ func (s *Server) nativeAny(w http.ResponseWriter, r *http.Request, p provider.Pr
 			fail(http.StatusForbidden, msg)
 			return
 		}
-		if redactionWanted() && !p.SkipsRedaction() {
+		if redactionWantedFor(r.Context()) && !p.SkipsRedaction() {
 			var v any
 			dec := json.NewDecoder(bytes.NewReader(body))
 			dec.UseNumber() // a seed or an id goes as it came

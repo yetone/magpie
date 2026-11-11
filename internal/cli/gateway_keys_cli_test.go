@@ -778,3 +778,42 @@ func TestGatewayKeyTierCLI(t *testing.T) {
 		t.Fatalf("a refused call changed it: %q", keys[0].ServiceTier)
 	}
 }
+
+// y0ngb1n on X: `gateway-key redact <id> [follow|on|off]` shows or sets
+// whether Settings › Privacy's masking applies to a key's requests.
+func TestGatewayKeyRedactCLI(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := settings.Save(settings.Settings{LAN: true}); err != nil {
+		t.Fatal(err)
+	}
+	call := func(args ...string) (string, error) {
+		var out bytes.Buffer
+		err := gatewayKeysTo(&out, append([]string{"gateway-key"}, args...))
+		return out.String(), err
+	}
+	if _, err := call("add", "Team"); err != nil {
+		t.Fatal(err)
+	}
+	keys, _ := access.List()
+	id := keys[0].ID
+	for _, c := range [][3]string{{"", "", "follows Settings › Privacy"}, {"off", "", "off"}, {"on", "", "on"}, {"follow", "", "follows Settings › Privacy"}} {
+		args := []string{"redact", id}
+		if c[0] != "" {
+			args = append(args, c[0])
+		}
+		if got, err := call(args...); err != nil || got != "Team: masking "+c[2]+"\n" {
+			t.Fatalf("%v: %q %v", args, got, err)
+		}
+	}
+	call("redact", id, "off")
+	for _, args := range [][]string{{"redact"}, {"redact", id, "maybe"}, {"redact", id, "--help"}, {"redact", id, "on", "x"}, {"redact", "missing", "on"}, {"redact", "missing"}} {
+		if _, err := call(args...); err == nil {
+			t.Error("accepted", args)
+		}
+	}
+	if keys, _ = access.List(); keys[0].Redact != "off" {
+		t.Fatalf("a refused call changed it: %q", keys[0].Redact)
+	}
+}

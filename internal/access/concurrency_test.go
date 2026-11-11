@@ -79,3 +79,53 @@ func TestKeyConcurrency(t *testing.T) {
 		t.Fatal("the sharing key:", who.MaxConcurrency, who.Default)
 	}
 }
+
+// y0ngb1n on X: a key's masking setting is "", on or off; redact-key sets
+// it, Authenticate tells it, a word it doesn't know is refused and leaves
+// it as it was, and an issued key is held on by its issuer's on.
+func TestKeyRedact(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	clockAt(t, time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC))
+	id, secret := addKey(t, "Team")
+	if who, _ := Authenticate(secret); who.Redact != "" {
+		t.Fatal("a new key has a setting:", who.Redact)
+	}
+	for in, want := range map[string]string{"off": RedactOff, "ON": RedactOn, "follow": "", "off ": RedactOff} {
+		if _, err := Update("redact-key", Change{Key: id, Redact: in}); err != nil {
+			t.Fatal(in, err)
+		}
+		if who, ok := Authenticate(secret); !ok || who.Redact != want {
+			t.Fatalf("set %q: %q %v", in, who.Redact, ok)
+		}
+	}
+	if _, err := Update("redact-key", Change{Key: id, Redact: "off"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Update("redact-key", Change{Key: id, Redact: "sometimes"}); err == nil {
+		t.Fatal("accepted sometimes")
+	}
+	if keys, _ := List(); keys[0].Redact != RedactOff {
+		t.Fatal("a refused word changed it:", keys[0].Redact)
+	}
+
+	// issued: its own off is told, but its issuer's on holds
+	if _, err := Update("issuer-key", Change{Key: id, Issues: true}); err != nil {
+		t.Fatal(err)
+	}
+	child, err := IssueKey(Issue{TTL: time.Hour, Issuer: id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Update("redact-key", Change{Key: child.ID, Redact: "off"}); err != nil {
+		t.Fatal(err)
+	}
+	if who, _ := Authenticate(child.Key); who.Redact != RedactOff {
+		t.Fatal("issued under off:", who.Redact)
+	}
+	if _, err := Update("redact-key", Change{Key: id, Redact: "on"}); err != nil {
+		t.Fatal(err)
+	}
+	if who, _ := Authenticate(child.Key); who.Redact != RedactOn {
+		t.Fatal("issued under on, its own off:", who.Redact)
+	}
+}

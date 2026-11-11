@@ -43,6 +43,15 @@ func WithRoute(ctx context.Context, route string) context.Context {
 	return context.WithValue(ctx, routeKey{}, route)
 }
 
+type forcedKey struct{}
+
+// WithForced is ctx for masking a request a gateway key holds to masking
+// (access.RedactOn) whatever the settings say: where they mask nothing it
+// is masked for secrets and personal data by the defaults.
+func WithForced(ctx context.Context) context.Context {
+	return context.WithValue(ctx, forcedKey{}, true)
+}
+
 // optionsCtx is options with the model's wait ending with ctx, for the
 // route ctx has (WithRoute).
 func optionsCtx(ctx context.Context) redact.Options {
@@ -50,6 +59,10 @@ func optionsCtx(ctx context.Context) redact.Options {
 	o := redact.Options{Secrets: st.Redact, Personal: st.RedactPersonal, Kinds: st.RedactKinds, Words: st.RedactWords, WordsAnyCase: st.RedactWordsAnyCase, WordsWhole: st.RedactWordsWhole, Rules: st.RedactRules,
 		Actions: st.RedactActions, Allow: st.RedactAllow, Shape: st.RedactShape}
 	o.Route, _ = ctx.Value(routeKey{}).(string)
+	if forced, _ := ctx.Value(forcedKey{}).(bool); forced && !Wanted(st) {
+		o.Secrets, o.Personal = true, true
+		st.Redact, st.RedactPersonal = true, true
+	}
 	if (st.Redact || st.RedactPersonal) && ModelWanted(st) {
 		// until the model is on disk the rules mask alone, and nothing is
 		// held back for a download (it is started here)

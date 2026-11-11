@@ -888,6 +888,27 @@ that honours no service tier is sent none, and Anthropic-protocol requests
 `TestKeyTieredChat`, `TestKeyServiceTier` in `internal/access`,
 `TestGatewayKeyTierCLI`, `gateway-key-tier.test.cjs`.
 
+A key's `Redact` (y0ngb1n on X; `access.Key`, set by the `redact-key` action,
+the key row's masking badge or `magpie gateway-key redact <id>
+follow|on|off`; stored as "", "on" or "off") decides whether Settings ›
+Privacy's masking applies to its requests. Unset follows the settings, as a
+request with no key (this computer's own) always does. Off sends the key's
+requests as written, for a device the user trusts; on masks them where the
+settings mask nothing too, with the default rules for secrets and personal
+data (`masking.WithForced`). Every place that masks what goes to a vendor
+asks `maskingFor` (`redactedHits`, `maskTextHits`, so chat, count_tokens,
+searches, drawing, video, speech and embeddings alike), and a native call
+asks `redactionWantedFor`; a masker that doesn't read the request's context
+can't be held to a forced pass, so that is an error, not a request sent as
+it is. A request with the key's own setting is never reported to a Remote
+magpie as masked (`ownMaskedAs`), whichever way it was set, so the remote
+masks by its own settings. An issued key keeps its own setting, and its
+issuer's `on` holds for it (`Identity.Redact`). Records of requests kept
+locally (`maskedCopy`) stay masked by the settings. `InUse` of the redact
+plugin counts a key set on. Tests: `TestKeyRedactSetting`,
+`TestKeyRedactEveryRoute`, `TestKeyRedact` in `internal/access`,
+`TestGatewayKeyRedactCLI`, `gateway-key-redact.test.cjs`.
+
 `GET /me` is the key page: a gateway key's holder opens it in a browser at
 the address they reach the gateway at, types their key, and sees that key's
 own name, limits, usage (today, 7 and 30 days, its most used models) and
