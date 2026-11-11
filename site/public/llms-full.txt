@@ -5039,7 +5039,7 @@ No. Codex's settings are launch arguments of the magpie · Codex instance alone;
 
 Check the env in ~/.claude/settings.json: a Claude Code routed elsewhere there, or with a cloud switch such as Bedrock on, takes the magpie instance's requests there.
 
-More agents on the same models: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [CodeBuddy on any model](https://usemagpie.ai/docs/codebuddy) and [Craft Agents on any model](https://usemagpie.ai/docs/craft-agents). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [CodeBuddy on any model](https://usemagpie.ai/docs/codebuddy), [Craft Agents on any model](https://usemagpie.ai/docs/craft-agents) and [Every magpie model in Paseo](https://usemagpie.ai/docs/paseo). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
@@ -5661,6 +5661,76 @@ jcode reads its settings at start-up. Restart the open jcode session.
 Yes. magpie removes only [providers.magpie], and puts [provider] back when jcode still starts on magpie; every other key stays as written.
 
 More agents on the same models: [Crush on any model](https://usemagpie.ai/docs/crush), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models) and [Goose on any model](https://usemagpie.ai/docs/goose). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/paseo
+
+# Every magpie model in Paseo
+
+Paseo (getpaseo/paseo) is an app that runs Claude Code, Codex and others for you. It starts the same Claude Code, so a Claude Code connected to magpie goes through magpie in Paseo too. But Paseo lists models itself, and most of the models magpie serves aren't in its picker. magpie writes them into Paseo's own `additionalModels`, so Paseo's Claude model picker offers every model you have in magpie: DeepSeek, GLM, Kimi, Qwen, GPT or a ChatGPT subscription.
+
+## Set up Paseo
+
+1. **Connect Claude Code to magpie first.** On magpie's Agents page, pick a magpie model for Claude Code. The ids Paseo lists are served by a Claude Code that is on magpie.
+2. **Switch Paseo's row on.** With a `~/.paseo` folder, magpie has a Paseo row. Pick magpie: every magpie model in Paseo's Claude model picker.
+3. **Restart Paseo's daemon.** Paseo reads its model list when its daemon starts; after a restart magpie's models are there.
+
+```
+magpie claude deepseek/deepseek-v4-pro   # Claude Code on magpie first
+magpie paseo magpie                      # every magpie model in Paseo's picker
+```
+
+## Why Paseo needs its own switch
+
+Claude Code's own `/model` reads modelPicker in `~/.claude/settings.json`, where magpie writes every model when it connects Claude Code. Paseo never reads modelPicker: its list is its own first-party models plus settings.json's `model` and a few `ANTHROPIC_*_MODEL` tier variables. So with only Claude Code connected, magpie's models other than the main one and the tiers aren't in Paseo's picker. Paseo also appends `agents.providers.claude.additionalModels` from its own config, each id passed to Claude Code as written, and that is where magpie writes.
+
+## What magpie writes
+
+Paseo's folder is `PASEO_HOME`, else `~/.paseo`. In `config.json` magpie adds one `{id, label, description}` entry per model to `agents.providers.claude.additionalModels`: the same ids, [1m] marks and names as Claude Code's `/model`, with a description ending `via magpie`, which is how magpie knows its own entries.
+
+```
+// ~/.paseo/config.json
+{"agents": {"providers": {"claude": {"additionalModels": [
+  {"id": "my-own-model", "label": "…", "description": "…"},
+  {"id": "…", "label": "…", "description": "via magpie"},
+  {"id": "…", "label": "…", "description": "1M context · via magpie"}
+]}}}}
+```
+
+Your own entries keep their place and come first. An id you listed yourself stays yours, and magpie doesn't add it again. A list magpie can't read is left as it is. When magpie's models change, magpie updates its entries.
+
+## When it takes effect
+
+Paseo reads its model list when its daemon starts, so restart Paseo's daemon to see magpie's models; magpie says so while Paseo is running. Claude Code itself must be connected to magpie too, for those ids to be served.
+
+## Switching back
+
+Set Paseo's row back to default in magpie: magpie takes out only the entries whose description ends `via magpie`, and yours stay; with none left, `additionalModels` goes.
+
+```
+magpie paseo default
+```
+
+## FAQ
+
+### Why doesn't Paseo's model picker show magpie's models?
+
+Paseo doesn't read Claude Code's modelPicker; it lists its own models, settings.json's model and a few ANTHROPIC_*_MODEL variables. Switch Paseo's row on in magpie and magpie writes every model into Paseo's additionalModels.
+
+### Does Claude Code need to be connected first?
+
+Yes. Paseo passes those ids as written to the Claude Code it starts, and magpie serves them once Claude Code is connected to magpie.
+
+### I switched it on and still see nothing. Why?
+
+Paseo reads its model list when its daemon starts. Restart Paseo's daemon.
+
+### Will my own additionalModels be changed?
+
+No. magpie adds and removes only entries whose description ends via magpie; yours come first and keep their place.
+
+More agents on the same models: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [T3 Code on any model](https://usemagpie.ai/docs/t3-code) and [Craft Agents on any model](https://usemagpie.ai/docs/craft-agents). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 

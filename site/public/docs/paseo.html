@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paseo with DeepSeek, GLM, Kimi, Qwen, GPT or a ChatGPT subscription: every magpie model in Paseo's Claude model picker · magpie</title>
+<meta name="description" content="Use DeepSeek, GLM, Kimi, Qwen, GPT or a ChatGPT subscription in Paseo (getpaseo/paseo) through magpie: why Paseo's model picker misses magpie's models, additionalModels in ~/.paseo/config.json, connecting Claude Code first, restarting Paseo's daemon, and how your own entries stay.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/paseo">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/paseo">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/paseo">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/paseo">
+<link rel="canonical" href="https://usemagpie.ai/docs/paseo">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Every magpie model in Paseo">
+<meta property="og:description" content="Use DeepSeek, GLM, Kimi, Qwen, GPT or a ChatGPT subscription in Paseo (getpaseo/paseo) through magpie: why Paseo's model picker misses magpie's models, additionalModels in ~/.paseo/config.json, connecting Claude Code first, restarting Paseo's daemon, and how your own entries stay.">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/paseo">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Every magpie model in Paseo",
+   "description": "Use DeepSeek, GLM, Kimi, Qwen, GPT or a ChatGPT subscription in Paseo (getpaseo/paseo) through magpie: why Paseo's model picker misses magpie's models, additionalModels in ~/.paseo/config.json, connecting Claude Code first, restarting Paseo's daemon, and how your own entries stay.",
+   "inLanguage": "en",
+   "url": "https://usemagpie.ai/docs/paseo",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Why doesn't Paseo's model picker show magpie's models?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Paseo doesn't read Claude Code's modelPicker; it lists its own models, settings.json's model and a few ANTHROPIC_*_MODEL variables. Switch Paseo's row on in magpie and magpie writes every model into Paseo's additionalModels."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Does Claude Code need to be connected first?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Paseo passes those ids as written to the Claude Code it starts, and magpie serves them once Claude Code is connected to magpie."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "I switched it on and still see nothing. Why?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Paseo reads its model list when its daemon starts. Restart Paseo's daemon."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Will my own additionalModels be changed?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "No. magpie adds and removes only entries whose description ends via magpie; yours come first and keep their place."
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "Docs",
+     "item": "https://usemagpie.ai/docs/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "Every magpie model in Paseo",
+     "item": "https://usemagpie.ai/docs/paseo"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>Docs</small></a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/start">Get started</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a class="toc-only" href="/docs/remote">Remote magpie</a>
+    <a class="toc-only" href="/docs/docker">Docker</a>
+    <a class="toc-only" href="/docs/privacy">Privacy</a>
+    <a class="toc-only" href="/docs/masking">Privacy masking</a>
+    <a class="toc-only" href="/docs/mcp-router">MCP router</a>
+    <a class="toc-only" href="/docs/library">Library</a>
+    <a class="toc-only" href="/docs/claude-code-models">Models in Claude Code</a>
+    <a class="toc-only" href="/docs/codex-models">Models in Codex</a>
+    <a class="toc-only" href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a class="toc-only" href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a class="toc-only" href="/docs/local-models">Local models</a>
+    <a class="toc-only" href="/docs/opencode-models">Models in OpenCode</a>
+    <a class="toc-only" href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/paseo" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/paseo" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/paseo" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">Download</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Paseo</p>
+    <a href="#overview">How it works</a>
+    <a href="#on">Set up Paseo</a>
+    <a href="#why">Why Paseo needs its own switch</a>
+    <a href="#files">What magpie writes</a>
+    <a href="#restart">When it takes effect</a>
+    <a href="#off">Switching back</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">Docs · Guide</p>
+    <h1>Every magpie model in Paseo</h1>
+    <p class="lede">Paseo (getpaseo/paseo) is an app that runs Claude Code, Codex and others for you. It starts the same Claude Code, so a Claude Code connected to magpie goes through magpie in Paseo too. But Paseo lists models itself, and most of the models magpie serves aren't in its picker. magpie writes them into Paseo's own <code>additionalModels</code>, so Paseo's Claude model picker offers every model you have in magpie: DeepSeek, GLM, Kimi, Qwen, GPT or a ChatGPT subscription.</p>
+    <h2 id="on"><a class="anchor" href="#on">Set up Paseo</a></h2>
+    <ol class="steps">
+      <li><b>Connect Claude Code to magpie first</b>On magpie's <span class="ui">Agents</span> page, pick a magpie model for Claude Code. The ids Paseo lists are served by a Claude Code that is on magpie.</li>
+      <li><b>Switch Paseo's row on</b>With a <code>~/.paseo</code> folder, magpie has a Paseo row. Pick magpie: every magpie model in Paseo's Claude model picker.</li>
+      <li><b>Restart Paseo's daemon</b>Paseo reads its model list when its daemon starts; after a restart magpie's models are there.</li>
+    </ol>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="pas-on">Copy</button><pre id="pas-on">magpie claude deepseek/deepseek-v4-pro   # Claude Code on magpie first
+magpie paseo magpie                      # every magpie model in Paseo's picker</pre></div>
+    <h2 id="why"><a class="anchor" href="#why">Why Paseo needs its own switch</a></h2>
+    <p>Claude Code's own <code>/model</code> reads modelPicker in <code>~/.claude/settings.json</code>, where magpie writes every model when it connects Claude Code. Paseo never reads modelPicker: its list is its own first-party models plus settings.json's <code>model</code> and a few <code>ANTHROPIC_*_MODEL</code> tier variables. So with only Claude Code connected, magpie's models other than the main one and the tiers aren't in Paseo's picker. Paseo also appends <code>agents.providers.claude.additionalModels</code> from its own config, each id passed to Claude Code as written, and that is where magpie writes.</p>
+    <h2 id="files"><a class="anchor" href="#files">What magpie writes</a></h2>
+    <p>Paseo's folder is <code>PASEO_HOME</code>, else <code>~/.paseo</code>. In <code>config.json</code> magpie adds one <code>{id, label, description}</code> entry per model to <code>agents.providers.claude.additionalModels</code>: the same ids, [1m] marks and names as Claude Code's <code>/model</code>, with a description ending <code>via magpie</code>, which is how magpie knows its own entries.</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="pas-json">Copy</button><pre id="pas-json">// ~/.paseo/config.json
+{"agents": {"providers": {"claude": {"additionalModels": [
+  {"id": "my-own-model", "label": "…", "description": "…"},
+  {"id": "…", "label": "…", "description": "via magpie"},
+  {"id": "…", "label": "…", "description": "1M context · via magpie"}
+]}}}}</pre></div>
+    <p>Your own entries keep their place and come first. An id you listed yourself stays yours, and magpie doesn't add it again. A list magpie can't read is left as it is. When magpie's models change, magpie updates its entries.</p>
+    <h2 id="restart"><a class="anchor" href="#restart">When it takes effect</a></h2>
+    <p>Paseo reads its model list when its daemon starts, so restart Paseo's daemon to see magpie's models; magpie says so while Paseo is running. Claude Code itself must be connected to magpie too, for those ids to be served.</p>
+    <h2 id="off"><a class="anchor" href="#off">Switching back</a></h2>
+    <p>Set Paseo's row back to default in magpie: magpie takes out only the entries whose description ends <code>via magpie</code>, and yours stay; with none left, <code>additionalModels</code> goes.</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="pas-off">Copy</button><pre id="pas-off">magpie paseo default</pre></div>
+
+    <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
+    <h3>Why doesn't Paseo's model picker show magpie's models?</h3>
+    <p>Paseo doesn't read Claude Code's modelPicker; it lists its own models, settings.json's model and a few ANTHROPIC_*_MODEL variables. Switch Paseo's row on in magpie and magpie writes every model into Paseo's additionalModels.</p>
+    <h3>Does Claude Code need to be connected first?</h3>
+    <p>Yes. Paseo passes those ids as written to the Claude Code it starts, and magpie serves them once Claude Code is connected to magpie.</p>
+    <h3>I switched it on and still see nothing. Why?</h3>
+    <p>Paseo reads its model list when its daemon starts. Restart Paseo's daemon.</p>
+    <h3>Will my own additionalModels be changed?</h3>
+    <p>No. magpie adds and removes only entries whose description ends via magpie; yours come first and keep their place.</p>
+
+    <p style="margin-top:48px">More agents on the same models: <a href="/docs/claude-code-models">Models in Claude Code</a>, <a href="/docs/t3-code">T3 Code on any model</a> and <a href="/docs/craft-agents">Craft Agents on any model</a>. Something fails? See <a href="/docs/troubleshooting">Fixing common errors</a>, or ask on <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>.</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a href="/docs/remote">Remote magpie</a>
+    <a href="/docs/docker">Docker</a>
+    <a href="/docs/privacy">Privacy</a>
+    <a href="/docs/masking">Privacy masking</a>
+    <a href="/docs/mcp-router">MCP router</a>
+    <a href="/docs/library">Library</a>
+    <a href="/docs/claude-code-models">Models in Claude Code</a>
+    <a href="/docs/codex-models">Models in Codex</a>
+    <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a href="/docs/local-models">Local models</a>
+    <a href="/docs/opencode-models">Models in OpenCode</a>
+    <a href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/contributors">Contributors</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
