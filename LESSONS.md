@@ -573,6 +573,10 @@ cause:
   CI at f191d6423 and was fixed with that patch (50a703190). #2737 got
   three "Not taking it; recording the numbers" comments before a3b48e0f7
   fixed it.
+- 11-11: the same on a third occasion. #5433 had skygunner's patch, with
+  a test red on the old code, for three days with no owner. It went red
+  on ubuntu CI at 296a9292c and was landed unchanged in 855b97a40. A
+  patch on an open red issue is reviewed in the tick it is posted.
   - One test's subtests were filed three times: #2169, #2711 and #2737
     are all TestTranslatedStreamKeepsClientAlive. Search the test's name
     before filing, and file per test.
