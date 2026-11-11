@@ -1183,14 +1183,21 @@ function connectedSaid(a, c) {
   return CONNECTED_HOW[c?.how] && model ? t(CONNECTED_HOW[c.how], { agent: a.name, model }) : plain;
 }
 
+// menuOf: b opens a menu, closed now
+const menuOf = (b) => (b.setAttribute("aria-haspopup", "menu"), b.setAttribute("aria-expanded", "false"));
+// libSwitch: a lib-switch button, on or not, named label
+function libSwitch(cls, on, label) {
+  const b = el("button", "lib-switch " + cls + (on ? " on" : ""));
+  b.type = "button";
+  b.setAttribute("role", "switch");
+  b.setAttribute("aria-checked", String(!!on));
+  if (label) b.setAttribute("aria-label", label);
+  b.append(el("i"));
+  return b;
+}
 function connectSwitch(a) {
-  const s = el("button", "lib-switch ag-conn" + (a.wired ? " on" : ""));
-  s.type = "button";
-  s.setAttribute("role", "switch");
-  s.setAttribute("aria-checked", a.wired ? "true" : "false");
-  s.setAttribute("aria-label", t("Connect {agent} to magpie", { agent: a.name }));
+  const s = libSwitch("ag-conn", a.wired, t("Connect {agent} to magpie", { agent: a.name }));
   s.title = a.wired ? t("Connected · switch off to put back what {agent} had before magpie", { agent: a.name }) : t("Switch on and {agent}'s model list gets magpie's models", { agent: a.name });
-  s.append(el("i"));
   // the list opened from a failed connect, drawn again while it is open
   if (!a.wired) holdAgentModels(a, s);
   s.onclick = async (e) => {
@@ -1567,14 +1574,9 @@ function connectRow(a, row, who, { fields, extras, fieldBtn, sw, kind }) {
     const add = el("button", "ag-add", t("Add a provider"));
     add.type = "button";
     add.onclick = (e) => { e.stopPropagation(); addProviderFromAgents(); };
-    const off = el("button", "lib-switch ag-conn");
-    off.type = "button";
+    const off = libSwitch("ag-conn", false, t("Connect {agent} to magpie", { agent: a.name }));
     off.disabled = true;
-    off.setAttribute("role", "switch");
-    off.setAttribute("aria-checked", "false");
-    off.setAttribute("aria-label", t("Connect {agent} to magpie", { agent: a.name }));
     off.title = t("Add a key or a subscription first; then there are models to connect");
-    off.append(el("i"));
     row.append(add, off);
   } else if (kind === "link") {
     // its link where a model stands, the switch's room kept (the owner)
@@ -1934,12 +1936,7 @@ async function addProviderFromAgents() {
 // Claude Magpie app; go posts the new value and says what came of it
 function agSwitchLine(cls, on, say, hint, go) {
   const l = el("label", "ag-vl " + cls);
-  const b = el("button", "lib-switch use-credits" + (on ? " on" : ""));
-  b.type = "button";
-  b.setAttribute("role", "switch");
-  b.setAttribute("aria-checked", String(on));
-  b.setAttribute("aria-label", say);
-  b.append(el("i"));
+  const b = libSwitch("use-credits", on, say);
   l.append(b, el("span", cls + "-say", say), el("span", "ag-hint", hint));
   b.onclick = async (e) => {
     e.stopPropagation();
@@ -3355,13 +3352,8 @@ async function openAgentModels(a, anchor, ev) {
   // picker beside magpie's or left out (MizuIro-H, #1642): not in the list
   // below, which is magpie's catalog, so a switch of their own
   const ownBox = el("label", "am-own");
-  const ownSw = el("button", "lib-switch use-credits" + (ownHidden ? "" : " on"));
-  ownSw.type = "button";
-  ownSw.setAttribute("role", "switch");
-  ownSw.setAttribute("aria-checked", String(!ownHidden));
-  ownSw.append(el("i"));
   const ownSay = el("span", "", t("Show {agent}'s own models", { agent: a.name }));
-  ownSw.setAttribute("aria-label", ownSay.textContent);
+  const ownSw = libSwitch("use-credits", !ownHidden, ownSay.textContent);
   ownBox.title = t("The models {agent} reaches itself, not through magpie. Off: its model picker offers magpie's alone; the one it is set to stays", { agent: a.name });
   ownBox.append(ownSw, ownSay);
   if (own) head.append(ownBox);
@@ -3391,13 +3383,8 @@ async function openAgentModels(a, anchor, ev) {
   // whether a model that comes later is shown, or stays off until ticked:
   // the agent's own switch, not every agent's (nianlee-official, #1337)
   const onlyBox = el("label", "am-only");
-  const onlySw = el("button", "lib-switch use-credits" + (only ? " on" : ""));
-  onlySw.type = "button";
-  onlySw.setAttribute("role", "switch");
-  onlySw.setAttribute("aria-checked", String(only));
-  onlySw.append(el("i"));
   const onlySay = el("span", "", t("Only models I pick"));
-  onlySw.setAttribute("aria-label", onlySay.textContent);
+  const onlySw = libSwitch("use-credits", only, onlySay.textContent);
   onlyBox.title = t("Off: new models are shown. On: only the models ticked here are shown, and a model added later, of any provider, stays off until you tick it");
   onlyBox.append(onlySw, onlySay);
   // takes back a first click on Hide all or Show all (twice, below)
@@ -6357,12 +6344,8 @@ let providerArrangeSeq = 0;
 // goes to it (a key out of quota, say), without removing it.
 function providerSwitch(p) {
   const on = !p.off;
-  const s = el("button", "lib-switch pswitch" + (on ? " on" : ""));
-  s.setAttribute("role", "switch");
-  s.setAttribute("aria-checked", on ? "true" : "false");
-  s.setAttribute("aria-label", t("Use {name}", { name: p.name }));
+  const s = libSwitch("pswitch", on, t("Use {name}", { name: p.name }));
   s.title = on ? t("On · switch it off and agents no longer get its models; its keys and settings are kept") : t("Off · switch it on and agents get its models again");
-  s.append(el("i"));
   s.onclick = (e) => { e.stopPropagation(); switchProvider(p, !on, s); };
   return s;
 }
@@ -8437,8 +8420,7 @@ function iconPicker(ed) {
     // the site's icon, a picture's address or the name's letters (usrname1833)
     const base = () => draft[apiField[draft.api]] || draft.chat || draft.responses || draft.anthropic || "";
     const site = el("button", "text", t("Get icon"));
-    site.setAttribute("aria-haspopup", "menu");
-    site.setAttribute("aria-expanded", "false");
+    menuOf(site);
     site.append(svg(CHEV, 11, 1.7));
     // true when the picture is the icon now (hoobnn)
     const get = async (path, body) => {
@@ -12233,9 +12215,7 @@ function routingOfDraft(p) {
   if (draft?.sink !== undefined && draft.sink !== !!p.sink) out.sink = draft.sink;
   return out;
 }
-// signInMovesLine says how magpie moves Codex's or Claude Code's own
-// sign-in between its accounts (provider.SignInMovesOf), "" when it
-// doesn't: the subscription is off
+// signInMovesLine: how magpie moves the agent's own sign-in (provider.SignInMovesOf)
 function signInMovesLine(p, agent) {
   const m = p.signInMoves;
   if (!m) return "";
@@ -12258,7 +12238,7 @@ function renderRouting(p) {
   // — at 98%, In order once used up (#530), never when kept on the first (#524)
   const own = (routing) => !a || (a.agent !== "codex" && a.agent !== "claude") ? ""
     : " " + (p.signInMoves?.mode === "gateway" && !keptLogin(p) && !p.keepLogin
-      ? t("{agent}'s requests go through magpie, which sends each one to an account with room; its own sign-in stays where you put it.", { agent: a.agentName })
+      ? signInMovesLine(p, a.agentName)
       : keptLogin(p)
       ? t("Routing picks the account for each request through magpie, in the accounts' order; {agent} on its own stays signed in to {user}, whatever it has left.", { agent: a.agentName, user: keptLogin(p) })
       : p.keepLogin && !p.switchOnly
@@ -13576,20 +13556,12 @@ function renderAccounts(a, p) {
     if (amBox) row.append(amBox);
     list.append(row);
   }
-  // magpie moving the agent's own sign-in to an account with room is a
-  // switch of its own (the owner, 11-11: 这个轮换做成一个开关). On, a line
-  // says when it moves (provider.SignInMovesOf); off, the account it stays
-  // on (#524). Switch-only always moves, so it stays on there (#1907).
+  // moving the agent's sign-in is a switch (the owner, 11-11); off: the account it stays on (#524)
   if ((a.agent === "codex" || a.agent === "claude") && several && p) {
     const box = el("div", "auto-switch"), on = !!p.switchOnly || !p.keepLogin;
     const head = el("label", "as-head");
     const name = el("span", "as-name", t("Switch {agent}'s account automatically", { agent: a.agentName }));
-    const sw = el("button", "lib-switch use-credits" + (on ? " on" : ""));
-    sw.type = "button";
-    sw.setAttribute("role", "switch");
-    sw.setAttribute("aria-checked", String(on));
-    sw.setAttribute("aria-label", name.textContent);
-    sw.append(el("i"));
+    const sw = libSwitch("use-credits", on, name.textContent);
     if (p.switchOnly) {
       sw.disabled = true;
       sw.title = t("Always on while magpie only switches {agent}'s sign-in", { agent: a.agentName });
@@ -13603,11 +13575,7 @@ function renderAccounts(a, p) {
       accountAction("provider/keeplogin", body, !keepLogin ? t("magpie moves {agent} to an account with room again", { agent: a.agentName })
         : keepAs ? t("{agent} stays signed in to {user}", { agent: a.agentName, user: keepAs }) : t("{agent} stays signed in to the first account", { agent: a.agentName }));
     };
-    sw.onclick = () => {
-      if (sw.disabled) return;
-      sw.disabled = true;
-      post(on);
-    };
+    sw.onclick = () => { sw.disabled = true; post(on); };
     if (on) {
       const say = signInMovesLine(p, a.agentName);
       if (say) box.append(el("div", "sign-in-moves", say));
@@ -13618,8 +13586,7 @@ function renderAccounts(a, p) {
       as.type = "button";
       as.title = t("The account {agent} stays signed in to", { agent: a.agentName });
       as.dataset.value = keepAs;
-      as.setAttribute("aria-haspopup", "menu");
-      as.setAttribute("aria-expanded", "false");
+      menuOf(as);
       as.append(el("span", "", keepAs || t("the first account")), svg(CHEV, 11, 1.6));
       as.onclick = (e) => {
         e.stopPropagation();
@@ -14371,8 +14338,7 @@ function accountCapPill(p, user, cap, direct) {
     : t("Used to 100% of its usage windows. Click to cap it at a share of each, so magpie goes on to the other accounts past it"))
     + "\n" + t("A window can have a cap of its own: click its meter below")
     + (direct ? "\n\n" + directNote(direct) : "");
-  pill.setAttribute("aria-haspopup", "menu");
-  pill.setAttribute("aria-expanded", "false");
+  menuOf(pill);
   const set = (v) => accountAction("provider/accountcap", { id: p.id, account: user, cap: v },
     v ? t("{who} stops at {n}% of each window", { who: user, n: v }) : t("{who} has no usage cap", { who: user }));
   // a share of the user's own, typed where the pill was
@@ -14430,8 +14396,7 @@ function laneLimitPill(p, ref, who, name) {
   pill.dataset.provider = p.id;
   pill.dataset.ref = ref;
   pill.dataset.who = who;
-  pill.setAttribute("aria-haspopup", "menu");
-  pill.setAttribute("aria-expanded", "false");
+  menuOf(pill);
   laneText(pill);
   const own = laneOwnOf(p, ref);
   const set = (v) => accountAction("provider/accountconcurrency", { id: p.id, account: ref, limit: v },
@@ -17674,8 +17639,7 @@ function panelFirstMenu(qs, f) {
   b.type = "button";
   b.title = t("{n} accounts", { n: qs.length });
   b.setAttribute("aria-label", b.title);
-  b.setAttribute("aria-haspopup", "menu");
-  b.setAttribute("aria-expanded", "false");
+  menuOf(b);
   b.append(el("span", "", String(qs.length)), svg(CHEV, 9, 1.8));
   b.onclick = (e) => { e.stopPropagation(); if (b.classList.contains("open")) return closeProtoMenu(); import("./panelfirst.js").then(() => panelFirstOpen(b, qs, f), statusErr); };
   return b;
@@ -18059,14 +18023,9 @@ function autoResetBrief(q) {
 // autoResetButton: a switch; with c, that time alone, else both (the brief's).
 function autoResetButton(q, c) {
   const on = c ? autoResetWhen(q)[c.id] : autoResetOn(q);
-  const b = el("button", "lib-switch auto-reset" + (on ? " on" : ""));
-  b.type = "button";
-  b.setAttribute("role", "switch");
-  b.setAttribute("aria-checked", String(on));
-  b.setAttribute("aria-label", t("Auto-use resets") + (c ? " · " + t(c.say) : ""));
+  const b = libSwitch("auto-reset", on, t("Auto-use resets") + (c ? " · " + t(c.say) : ""));
   b.title = c ? t(on ? c.on : c.off, resetLeadVars()) : autoResetTitle(on);
   if (c) b.dataset.case = c.id;
-  b.append(el("i"));
   b.onclick = async (e) => {
     e.stopPropagation();
     if (b.disabled) return;
@@ -18136,13 +18095,8 @@ function creditsButton(q) {
   return creditsSwitch(q, "use-credits", on, creditsTitle(on), { on: !on }, t("Use credits"), on ? "{who} no longer spends its credits: held when a window runs out" : "{who} spends its credits when its windows run out");
 }
 function creditsSwitch(q, cls, on, title, body, label, said) {
-  const b = el("button", "lib-switch " + cls + (on ? " on" : ""));
-  b.type = "button";
-  b.setAttribute("role", "switch");
-  b.setAttribute("aria-checked", String(on));
-  b.setAttribute("aria-label", label);
+  const b = libSwitch(cls, on, label);
   b.title = title;
-  b.append(el("i"));
   b.onclick = async (e) => {
     e.stopPropagation();
     if (b.disabled) return;
@@ -23376,12 +23330,7 @@ function renderBuiltins(box, list, done) {
     featWho[f.id]?.(line, f, who); // what it does now (plugins/search)
     featGo(line, f);
     if (line.childNodes.length) who.append(line);
-    const b = el("button", "lib-switch use-credits" + (f.on ? " on" : ""));
-    b.type = "button";
-    b.setAttribute("role", "switch");
-    b.setAttribute("aria-checked", String(f.on));
-    b.setAttribute("aria-label", t(f.name));
-    b.append(el("i"));
+    const b = libSwitch("use-credits", f.on, t(f.name));
     b.disabled = f.inUse > 0 || !!broken;
     if (f.inUse > 0) b.title = t("In use, so it stays on");
     b.onclick = async () => {
