@@ -1,8 +1,10 @@
 package gui
 
 import (
+	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 // #1806 (ufec): Wails' "WebView2" is "" when its lookup fails, the version
@@ -53,5 +55,48 @@ func TestWebView2Notice(t *testing.T) {
 	}
 	if title, _ := webView2Notice("pt"); title != "magpie needs WebView2" {
 		t.Errorf("pt: %q, want English", title)
+	}
+}
+
+func TestWebView2Folder(t *testing.T) {
+	if got := webView2Folder(`D:\p\webview2`, `C:\A`, `C:\x\magpie.exe`); got != `D:\p\webview2` {
+		t.Fatal(got)
+	}
+	if got := webView2Folder("", "", "magpie.exe"); got != "" {
+		t.Fatal(got)
+	}
+}
+
+func TestWebView2Failure(t *testing.T) {
+	for err, want := range map[error]bool{
+		errors.New("timed out after 1m0s waiting for the WebView2 controller; x"): true,
+		errors.New("error calling Webview2Loader: boom"):                          true,
+		errors.New("something else"):                                              false,
+		nil:                                                                       false,
+	} {
+		if got := webView2Failure(err); got != want {
+			t.Errorf("%v: %t", err, got)
+		}
+	}
+}
+
+func TestWebView2Try(t *testing.T) {
+	if webView2Try("") != 0 || webView2Try("2") != 2 || webView2Try("-1") != 0 || webView2Try("x") != 0 {
+		t.Fatal("try")
+	}
+}
+
+// the start waits for the folder to be let go, and gives up after max
+func TestAwaitWebView2Folder(t *testing.T) {
+	n := 0
+	var slept time.Duration
+	free := func() bool { n++; return n > 3 }
+	sleep := func(d time.Duration) { slept += d }
+	if !awaitWebView2Folder(free, time.Second, 100*time.Millisecond, sleep) || slept != 300*time.Millisecond {
+		t.Fatal(n, slept)
+	}
+	slept = 0
+	if awaitWebView2Folder(func() bool { return false }, time.Second, 100*time.Millisecond, sleep) || slept != time.Second {
+		t.Fatal(slept)
 	}
 }

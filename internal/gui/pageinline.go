@@ -94,9 +94,10 @@ func inlinePage(html []byte, dir string) (out []byte, hashes []string) {
 		if !ok {
 			return tag
 		}
-		body = strings.ReplaceAll(body, "</script", `<\/script`)
-		hash(body)
-		s := "<script>" + body + "\n</script>"
+		// the hash covers the exact text between the tags, the newline
+		// before </script> included
+		s := "<script>" + strings.ReplaceAll(body, "</script", `<\/script`) + "\n</script>"
+		hash(strings.TrimSuffix(strings.TrimPrefix(s, "<script>"), "</script>"))
 		if attrDefer.MatchString(attrs) {
 			deferred = append(deferred, s)
 			return ""

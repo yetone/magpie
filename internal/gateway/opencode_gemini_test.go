@@ -63,7 +63,7 @@ func openCodeGeminiServer(t *testing.T, s *Server) func() []openCodeAsk {
 		switch {
 		case r.Method != http.MethodPost:
 			return reply(404, "application/json", `{}`)
-		case gemini && (strings.HasPrefix(path, "/zen/v1/models/") || strings.HasPrefix(path, "/inference/go/v1/models/")):
+		case gemini && (strings.HasPrefix(path, "/zen/v1/models/") || strings.HasPrefix(path, "/inference/go/google/v1beta/models/")):
 			return reply(200, "text/event-stream", openCodeGeminiSSE)
 		case strings.Contains(path, ":") || strings.Contains(path, "/models/"):
 			return reply(404, "text/html", `<html>Not Found</html>`)
@@ -113,7 +113,7 @@ func TestOpenCodeGoGeminiModelOnGeminiAPI(t *testing.T) {
 	}
 	s := New()
 	took := openCodeGeminiServer(t, s)
-	const want = "opencode.ai/inference/go/v1/models/gemini-4-argon-contributor:streamGenerateContent?alt=sse"
+	const want = "opencode.ai/inference/go/google/v1beta/models/gemini-4-argon-contributor:streamGenerateContent?alt=sse"
 	check := func(what string, code int, body string) openCodeAsk {
 		t.Helper()
 		asked := took()
