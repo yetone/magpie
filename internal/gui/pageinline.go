@@ -5,9 +5,9 @@ import (
 	"encoding/base64"
 	"net/url"
 	"os"
-	"regexp"
 	"strings"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/plugin"
 )
 
@@ -26,13 +26,13 @@ import (
 // asset call), which carries the cookie.
 
 var (
-	inlineScript = regexp.MustCompile(`(?is)<script\b([^>]*?)\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)')([^>]*)>\s*</script\s*>`)
-	inlineLink   = regexp.MustCompile(`(?is)<link\b[^>]*>`)
-	attrRel      = regexp.MustCompile(`(?is)\brel\s*=\s*["']?\s*stylesheet\b`)
-	attrHref     = regexp.MustCompile(`(?is)\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')`)
-	attrType     = regexp.MustCompile(`(?is)\btype\s*=\s*["']?\s*([^"'\s>]*)`)
-	attrDefer    = regexp.MustCompile(`(?is)\bdefer\b`)
-	bodyClose    = regexp.MustCompile(`(?i)</body\s*>`)
+	inlineScript = lazyre.New(`(?is)<script\b([^>]*?)\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)')([^>]*)>\s*</script\s*>`)
+	inlineLink   = lazyre.New(`(?is)<link\b[^>]*>`)
+	attrRel      = lazyre.New(`(?is)\brel\s*=\s*["']?\s*stylesheet\b`)
+	attrHref     = lazyre.New(`(?is)\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')`)
+	attrType     = lazyre.New(`(?is)\btype\s*=\s*["']?\s*([^"'\s>]*)`)
+	attrDefer    = lazyre.New(`(?is)\bdefer\b`)
+	bodyClose    = lazyre.New(`(?i)</body\s*>`)
 )
 
 // maxInlinePage bounds a page written as one document.
