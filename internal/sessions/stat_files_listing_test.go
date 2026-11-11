@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 	"unsafe"
@@ -228,5 +230,51 @@ func TestListedRolloutsKeepTheirNames(t *testing.T) {
 	}
 	if unsafe.StringData(again[2].path) == unsafe.StringData(first[2].path) {
 		t.Error("a new rollout took another's path")
+	}
+}
+
+// A stat that fails for any reason but the file's absence says nothing of
+// the file: the poll keeps the size and time it last had, and only a file
+// found gone leaves. A link is asked after alone on every system.
+func TestStatFilesKeepsAFileWhoseStatFailed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no links to ask after alone")
+	}
+	dir, elsewhere := t.TempDir(), t.TempDir()
+	real := filepath.Join(elsewhere, "real.jsonl")
+	if err := os.WriteFile(real, []byte("some session"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link.jsonl")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	one := func() []file {
+		return statFiles([]file{{agent: "claude", key: "claude:link", path: link}}, true)
+	}
+	first := one()
+	if len(first) != 1 || first[0].size != int64(len("some session")) {
+		t.Fatalf("a good stat gave %v", first)
+	}
+	was := statOne
+	t.Cleanup(func() { statOne = was })
+	statOne = func(string, bool) (os.FileInfo, error) {
+		return nil, &os.PathError{Op: "stat", Path: link, Err: syscall.EIO}
+	}
+	if got := one(); !reflect.DeepEqual(got, first) {
+		t.Fatalf("a stat that failed with EIO gave %v, want %v", got, first)
+	}
+	statOne = was
+	if err := os.Remove(real); err != nil {
+		t.Fatal(err)
+	}
+	if got := one(); len(got) != 0 {
+		t.Fatalf("a file gone was kept: %v", got)
+	}
+	statOne = func(string, bool) (os.FileInfo, error) {
+		return nil, &os.PathError{Op: "stat", Path: link, Err: syscall.EIO}
+	}
+	if got := one(); len(got) != 0 {
+		t.Fatalf("a gone file came back from a failed stat: %v", got)
 	}
 }
