@@ -743,35 +743,39 @@ func codexSessionsQuietFor(home string, now time.Time, d time.Duration) bool {
 }
 
 // codexSessionsQuietListed is codexSessionsQuietFor read with one listing
-// a folder (dirent.Stats) where the system has one, not a listing and an
+// a folder (dirent.Each) where the system has one, not a listing and an
 // lstat() a file: Codex idle runs it on every look while Codex is idle,
 // over every session file of the history, and each walk allocated a
-// listing, a path and an lstat's answer a file. ok is false where a folder
-// can't be read so (no bulk listing, Windows, an error), and the caller
-// walks the folder itself. The listings are not kept for the next read:
-// held between looks minutes apart they cost more than they save.
+// listing, a path and an lstat's answer a file. Nothing is made for a
+// file now, only a path for each folder. ok is false where a folder can't
+// be read so (no bulk listing, Windows, an error), and the caller walks
+// the folder itself.
 func codexSessionsQuietListed(dir string, now time.Time, d time.Duration) (quiet, ok bool) {
 	if _, err := os.Lstat(dir); errors.Is(err, fs.ErrNotExist) {
 		return true, true
 	}
 	quiet = true
+	since := now.Add(-d).UnixNano()
 	var in func(dir string) bool
 	in = func(dir string) bool {
-		entries, ok := dirent.Stats(dir)
-		if !ok {
-			return false
-		}
-		for _, e := range entries {
+		var sub []string // folders, read after this one's listing is done
+		if !dirent.Each(dir, func(name string, s dirent.Stat) bool {
 			switch {
-			case e.Mode == fs.ModeDir:
-				if !in(filepath.Join(dir, e.Name)) {
-					return false
-				}
-			case strings.HasSuffix(e.Name, ".jsonl") && now.Sub(e.ModTime()) < d:
+			case s.Mode == fs.ModeDir:
+				sub = append(sub, filepath.Join(dir, name))
+			case s.Mod > since && strings.HasSuffix(name, ".jsonl"):
 				quiet = false
 			}
+			return quiet
+		}) {
+			return false
+		}
+		for _, f := range sub {
 			if !quiet {
-				return true
+				break
+			}
+			if !in(f) {
+				return false
 			}
 		}
 		return true

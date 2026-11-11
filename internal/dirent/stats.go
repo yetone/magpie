@@ -64,6 +64,16 @@ func Stats(dir string) (Listing, bool) {
 	return l, true
 }
 
+// Each gives f each entry of dir as Stats has it, in the order the
+// system lists them, with nothing made for an entry: name is valid only
+// during the call, and f copies what it keeps of it. f returning false
+// stops the listing. ok is false where Stats' is: the system has no such
+// listing, or the folder or an entry couldn't be read (some entries may
+// have been given f by then).
+func Each(dir string, f func(name string, s Stat) bool) (ok bool) {
+	return eachIn(dir, f)
+}
+
 // listings are Stats' answers given back: a listing made new for each
 // folder, grown an entry at a time, and each entry's name copied again,
 // was ~95 MB of a minute of the page's polls (#2278). A folder's last

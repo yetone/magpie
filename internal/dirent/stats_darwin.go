@@ -44,84 +44,107 @@ var bufs = sync.Pool{New: func() any { b := make([]byte, 64<<10); return &b }}
 // and this is one call for every few hundred.
 // old is dir's last listing, whose names are taken where they are the same.
 func stats(dir string, out, old Listing) (Listing, bool) {
+	out = out[:0]
+	ok := each(dir, func(name []byte, s Stat) bool {
+		out = append(out, Entry{nameOf(name, old), s})
+		return true
+	})
+	if !ok {
+		return nil, false
+	}
+	return out, true
+}
+
+// eachIn is Each where the system has getattrlistbulk.
+func eachIn(dir string, f func(name string, s Stat) bool) bool {
+	return each(dir, func(name []byte, s Stat) bool {
+		return f(unsafe.String(&name[0], len(name)), s)
+	})
+}
+
+// each reads dir's entries with getattrlistbulk and gives f each one's
+// name, in the call's buffer, and Stat, until f says stop. It is false
+// when the folder or an entry couldn't be read.
+func each(dir string, f func(name []byte, s Stat) bool) bool {
 	fd, err := unix.Open(dir, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 	if err != nil {
-		return nil, false
+		return false
 	}
 	defer unix.Close(fd)
 	al := attrList{bitmapCount: attrBitMapCount, common: attrCmnReturned | attrCmnName | attrCmnObjType | attrCmnModTime, file: attrFileDataLen}
 	bp := bufs.Get().(*[]byte)
 	defer bufs.Put(bp)
 	buf := *bp
-	out = out[:0]
 	for {
 		n, _, errno := syscall.Syscall6(unix.SYS_GETATTRLISTBULK, uintptr(fd), uintptr(unsafe.Pointer(&al)), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)), 0, 0)
 		if errno == syscall.EINTR {
 			continue
 		}
 		if errno != 0 {
-			return nil, false
+			return false
 		}
 		if n == 0 {
-			return out, true
+			return true
 		}
 		b := buf
 		for range int(n) {
-			if !entry(b, &out, old) {
-				return nil, false
+			name, s, ok := entry(b)
+			if !ok {
+				return false
+			}
+			if !f(name, s) {
+				return true
 			}
 			b = b[binary.NativeEndian.Uint32(b):]
 		}
 	}
 }
 
-// entry reads one entry of getattrlistbulk's answer into out: its length,
-// the attributes it returned, then each in the order of their bits, a
-// file's data length after the common ones. A name old has is its string.
-func entry(b []byte, out *Listing, old Listing) bool {
+// entry reads one entry of getattrlistbulk's answer: its length, the
+// attributes it returned, then each in the order of their bits, a file's
+// data length after the common ones. name is in b.
+func entry(b []byte) (name []byte, s Stat, ok bool) {
 	if len(b) < 4 {
-		return false
+		return nil, s, false
 	}
 	size := int(binary.NativeEndian.Uint32(b))
 	if size < 4+20 || size > len(b) {
-		return false
+		return nil, s, false
 	}
 	e := b[:size]
 	common := binary.NativeEndian.Uint32(e[4:])
 	file := binary.NativeEndian.Uint32(e[16:])
 	p := e[24:]
-	var s Stat
-	var name string
 	if common&attrCmnName != 0 {
 		if len(p) < 8 {
-			return false
+			return nil, s, false
 		}
 		off, n := int(int32(binary.NativeEndian.Uint32(p))), int(binary.NativeEndian.Uint32(p[4:]))
 		at := len(e) - len(p) + off
 		if off < 0 || n < 1 || at+n > len(e) {
-			return false
+			return nil, s, false
 		}
-		name = nameOf(e[at:at+n-1], old)
+		name = e[at : at+n-1]
 		p = p[8:]
 	}
 	typ := uint32(0)
 	if common&attrCmnObjType != 0 {
 		if len(p) < 4 {
-			return false
+			return nil, s, false
 		}
 		typ = binary.NativeEndian.Uint32(p)
 		p = p[4:]
 	}
 	if common&attrCmnModTime != 0 {
 		if len(p) < 16 {
-			return false
+			return nil, s, false
 		}
 		s.Mod = int64(binary.NativeEndian.Uint64(p))*1e9 + int64(binary.NativeEndian.Uint64(p[8:]))
 		p = p[16:]
 	}
 	if file&attrFileDataLen != 0 {
 		if len(p) < 8 {
-			return false
+			return nil, s, false
 		}
 		s.Size = int64(binary.NativeEndian.Uint64(p))
 	}
@@ -134,11 +157,10 @@ func entry(b []byte, out *Listing, old Listing) bool {
 	default:
 		s.Mode = fs.ModeIrregular
 	}
-	if name == "" || common&attrCmnName == 0 || common&attrCmnObjType == 0 || common&attrCmnModTime == 0 || typ == vReg && file&attrFileDataLen == 0 {
-		return false
+	if len(name) == 0 || common&attrCmnName == 0 || common&attrCmnObjType == 0 || common&attrCmnModTime == 0 || typ == vReg && file&attrFileDataLen == 0 {
+		return nil, s, false
 	}
-	*out = append(*out, Entry{name, s})
-	return true
+	return name, s, true
 }
 
 // nameOf is b as a string, old's where old has it.
