@@ -1385,6 +1385,15 @@ func fetch(ctx context.Context, a Asset, path string) error {
 			have = 0
 			continue
 		}
+		if res.StatusCode == http.StatusPartialContent && have > 0 && !restarted && !strings.HasPrefix(res.Header.Get("Content-Range"), fmt.Sprintf("bytes %d-", have)) {
+			// a 206 that doesn't say it starts where it was asked to (a
+			// host whose Content-Range is bytes NaN-NaN/…, usemagpie.ai
+			// before 0.1.3733): what came can't be laid after what was kept,
+			// so once more, whole
+			res.Body.Close()
+			have = 0
+			continue
+		}
 		break
 	}
 	defer res.Body.Close()

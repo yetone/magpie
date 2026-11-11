@@ -43,14 +43,14 @@ export function bucket() {
       if (!m || (m[1] === "" && m[2] === "")) throw new Error("bad range");
       let range, start, end;
       if (m[1] === "") {
-        range = { suffix: +m[2] };
+        range = { offset: undefined, length: undefined, suffix: +m[2] };
         start = Math.max(0, o.bytes.length - +m[2]);
         end = o.bytes.length;
       } else {
         start = +m[1];
         if (start >= o.bytes.length) throw new Error("range not satisfiable");
         end = m[2] === "" ? o.bytes.length : Math.min(o.bytes.length, +m[2] + 1);
-        range = { offset: start, length: end - start };
+        range = { offset: start, length: end - start, suffix: undefined };
       }
       return b.view(key, o, new Blob([o.bytes.slice(start, end)]).stream(), range);
     },

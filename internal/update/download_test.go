@@ -151,6 +151,45 @@ func TestDownloadResumedFileIsStillChecked(t *testing.T) {
 	}
 }
 
+// A 206 whose Content-Range doesn't start where the ask did (usemagpie.ai
+// sent "bytes NaN-NaN/n", JohnnyN70389377 on X) is not laid after what was
+// kept and is not a failure: the file is asked for whole.
+func TestDownloadBadContentRangeIsFetchedWhole(t *testing.T) {
+	quickRetries(t)
+	body := bytes.Repeat([]byte("magpie"), 50<<10)
+	sum := sha256.Sum256(body)
+	var ranges []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ranges = append(ranges, r.Header.Get("Range"))
+		if len(ranges) == 1 {
+			w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+			w.Write(body[:1000])
+			w.(http.Flusher).Flush()
+			conn, _, _ := w.(http.Hijacker).Hijack()
+			conn.Close()
+			return
+		}
+		if r.Header.Get("Range") != "" {
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes NaN-NaN/%d", len(body)))
+			w.WriteHeader(http.StatusPartialContent)
+			w.Write(body[1000:])
+			return
+		}
+		w.Write(body)
+	}))
+	defer srv.Close()
+	path := filepath.Join(t.TempDir(), "magpie.new")
+	if err := download(context.Background(), Asset{URL: srv.URL, SHA256: hex.EncodeToString(sum[:])}, path); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"", "bytes=1000-", ""}; !slices.Equal(ranges, want) {
+		t.Fatalf("ranges asked = %q, want %q", ranges, want)
+	}
+	if b, _ := os.ReadFile(path); !bytes.Equal(b, body) {
+		t.Fatalf("file has %d bytes, not the release's", len(b))
+	}
+}
+
 // A connection dropped before any answer (EOF at the connect, what the
 // reporter's Windows box got from GitHub's asset host) is tried again
 // every time retryWaits allows, and the error that ends it names the file

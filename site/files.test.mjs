@@ -37,6 +37,15 @@ test("files: R2's file whole, a Range of it, its HEAD, and a 304 for its own ETa
   assert.equal(res.headers.get("Content-Range"), "bytes 7-9/10");
   assert.equal(await res.text(), "789");
 
+  // R2 names every key of the range it served, the unasked ones undefined:
+  // a Content-Range is never NaN (JohnnyN70389377 on X)
+  for (const [range, want] of [["bytes=1-3", "bytes 1-3/10"], ["bytes=-100", "bytes 0-9/10"], ["bytes=0-", "bytes 0-9/10"], ["bytes=8-99", "bytes 8-9/10"]]) {
+    res = await ask(env, "/files/v0.1.3/magpie-linux-amd64", { Range: range });
+    assert.equal(res.status, 206, range);
+    assert.equal(res.headers.get("Content-Range"), want, range);
+    assert.equal(String((await res.arrayBuffer()).byteLength), res.headers.get("Content-Length"), range);
+  }
+
   res = await ask(env, "/files/v0.1.3/magpie-linux-amd64", {}, "HEAD");
   assert.equal(res.status, 200);
   assert.equal(res.headers.get("Content-Length"), "10");

@@ -51,10 +51,20 @@ export async function serve(req, env, repo, tag, name) {
   }
   // onlyIf not met: the object comes without its body
   if (!("body" in obj) || !obj.body) return new Response(null, { status: req.headers.has("If-None-Match") ? 304 : 412, headers });
-  const r = obj.range;
-  if (req.headers.has("Range") && r) {
-    const start = "suffix" in r ? Math.max(0, obj.size - r.suffix) : r.offset || 0;
-    const length = "suffix" in r ? obj.size - start : r.length ?? obj.size - start;
+  if (req.headers.has("Range") && obj.range) {
+    // R2 hands back every key of its range, the ones not asked for as
+    // undefined (a suffix range has offset and length undefined, an
+    // offset range has suffix undefined), so a key's being there says
+    // nothing: only a number does
+    const { offset, length: len, suffix } = obj.range;
+    const num = (n) => typeof n === "number" && Number.isFinite(n);
+    const start = num(suffix) ? Math.max(0, obj.size - suffix) : num(offset) ? offset : 0;
+    const length = num(suffix) ? obj.size - start : num(len) ? Math.min(len, obj.size - start) : obj.size - start;
+    if (start >= obj.size || length <= 0) {
+      // a range this can't state is not sent with a made-up Content-Range
+      try { await obj.body.cancel(); } catch {}
+      return toGitHub();
+    }
     headers.set("Content-Range", `bytes ${start}-${start + length - 1}/${obj.size}`);
     headers.set("Content-Length", String(length));
     return new Response(obj.body, { status: 206, headers });
