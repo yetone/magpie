@@ -1860,6 +1860,11 @@ func pricer() func(string) *catalog.Price {
 		if p, ok := prices[model]; ok {
 			return p
 		}
+		// held: a model's price looks its provider up among every
+		// provider, and with nothing held each look built them all again
+		// (~40 MB in 4 minutes of the Sessions page open, a check of every
+		// kept price on each 10 s refresh); held, a pass builds them once
+		defer provider.Hold()()
 		var pp *catalog.Price
 		if p, ok := PriceOf(s, model); ok {
 			pp = &p
