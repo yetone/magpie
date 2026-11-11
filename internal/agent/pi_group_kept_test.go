@@ -3,7 +3,6 @@ package agent
 import (
 	"fmt"
 	"os"
-	"runtime"
 	"testing"
 
 	"github.com/yetone/magpie/internal/catalog"
@@ -14,8 +13,8 @@ import (
 // writing the entry of a routing group found the group's members each
 // time, to see whether one speaks Anthropic's Messages API (#5037's
 // promptCache): ~3.4 MB a poll with real accounts. What it found is kept
-// across requests while the files stay the same, so a poll's entry
-// allocates less than half of one look-up of the group.
+// across requests while the files stay the same, so a poll after the
+// first finds no group's members.
 func TestPiGroupEntryKeepsItsMembers(t *testing.T) {
 	syncHome(t)
 	models := ""
@@ -40,34 +39,28 @@ func TestPiGroupEntryKeepsItsMembers(t *testing.T) {
 		t.Fatal(err)
 	}
 	group := catalog.Model{ID: "group/auto", Name: "Auto"}
-	// one request: what it allocates, the least of a few tries (other
-	// goroutines allocate meanwhile too)
-	request := func(fn func()) uint64 {
-		least := ^uint64(0)
-		for range 5 {
-			release := provider.Hold()
-			var a, b runtime.MemStats
-			runtime.ReadMemStats(&a)
-			fn()
-			runtime.ReadMemStats(&b)
-			release()
-			least = min(least, b.TotalAlloc-a.TotalAlloc)
-		}
-		return least
+	// one request, as an /api/drift poll is
+	request := func(fn func()) {
+		release := provider.Hold()
+		defer release()
+		fn()
 	}
 	if e := piModelJSON(group, "", true); e["promptCache"] == nil {
 		t.Fatalf("group/auto: no promptCache: %v", e)
 	}
-	// what is held within a request (the entries) is warm in both
-	request(func() { provider.FindGroup("group/auto") })
-	request(func() { piModelJSON(group, "", true) })
-	find := request(func() { provider.FindGroup("group/auto") })
-	entry := request(func() { piModelJSON(group, "", true) })
-	t.Logf("a look-up of the group %d bytes, the group's entry %d", find, entry)
-	if entry*2 > find {
-		t.Fatalf("a poll's group entry allocated %d bytes, a look-up of its members %d: the members are found again", entry, find)
+	request(func() { piModelJSON(group, "", true) }) // the first request finds them
+	// counted, not measured in bytes: the process's allocations include
+	// every goroutine earlier tests left running (#6178)
+	before := provider.GroupsFound()
+	for range 5 {
+		request(func() { piModelJSON(group, "", true) })
 	}
-	if e := piModelJSON(group, "", true); e["promptCache"] == nil {
-		t.Fatalf("group/auto: no promptCache kept: %v", e)
+	if n := provider.GroupsFound() - before; n != 0 {
+		t.Fatalf("5 polls' group entries found the group's members %d times: they are found again on every poll", n)
 	}
+	request(func() {
+		if e := piModelJSON(group, "", true); e["promptCache"] == nil {
+			t.Fatalf("group/auto: no promptCache kept: %v", e)
+		}
+	})
 }

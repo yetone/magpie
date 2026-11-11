@@ -1213,12 +1213,21 @@ func GroupFinder() func(id string) (Group, []Member, bool) {
 			all, find = sharedGroupsIn(entries), heldFrom("entries by", entries, entriesBy)
 		}
 		if g, ok := routedGroupOf(all, gid); ok && !g.Disabled {
+			groupsFound.Add(1)
 			g = cloneGroup(g)
 			return g, membersFound(entries, find, all, g, disabledNow(), nil), true
 		}
 		return Group{}, nil, false
 	}
 }
+
+// groupsFound counts the groups GroupFinder found members for, for a test
+// that counts them.
+var groupsFound atomic.Int64
+
+// GroupsFound is how many times a group's members were found, for another
+// package's test that counts them.
+func GroupsFound() int64 { return groupsFound.Load() }
 
 // FindDrawingGroup is FindGroup for a drawing (the gateway's images API):
 // a member that is one of its provider's image models, as draws says, is
