@@ -210,11 +210,11 @@ func StatsAndNative(days int) (Stats, map[string]bool) {
 // are the same whatever the range, and the page keeps 7, 30 and every
 // day, each read again behind it (statsFor in internal/gui, #2278).
 func StatsAndNativeAll(days []int) ([]Stats, map[string]bool) {
-	alias := provider.UsageAlias()
+	alias, names := provider.UsageAliasKeyed()
 	out, native := statsKept(days, time.Now(), true)
 	if alias != nil {
 		for i := range out {
-			out[i] = aliasStats(out[i], alias)
+			out[i] = aliasKept(days[i], out[i], alias, names)
 		}
 	}
 	return out, native
@@ -225,10 +225,10 @@ func statsAt(days int, now time.Time) Stats { return statsIn(days, now, nil) }
 // statsIn is statsAt, filling native as StatsAndNative says when not nil.
 func statsIn(days int, now time.Time, native map[string]bool) Stats {
 	// read before the locks: it reads settings.json
-	alias := provider.UsageAlias()
+	alias, names := provider.UsageAliasKeyed()
 	st := statsRead(days, now, native)
 	if alias != nil {
-		st = aliasStats(st, alias)
+		st = aliasKept(days, st, alias, names)
 	}
 	return st
 }

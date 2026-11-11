@@ -170,7 +170,18 @@ func usageAliasesNow() map[string]string {
 // old session files. Read once before any usage lock; the returned function
 // reads no settings or providers. It is nil when no names need mapping.
 func UsageAlias() func(string) string {
-	alias, groups := usageAliasOf(usageAliasesNow()), usageGroupNames()
+	return usageAliasFrom(usageAliasesNow(), usageGroupNames())
+}
+
+// UsageAliasKeyed is UsageAlias and the UsageNamesKey of the names it was
+// made from, from one read of them.
+func UsageAliasKeyed() (func(string) string, string) {
+	aliases, groups := usageAliasesNow(), usageGroupNames()
+	return usageAliasFrom(aliases, groups), usageNamesKey(aliases, groups)
+}
+
+func usageAliasFrom(aliases, groups map[string]string) func(string) string {
+	alias := usageAliasOf(aliases)
 	if len(groups) == 0 {
 		return alias
 	}
@@ -211,10 +222,12 @@ func usageGroupNames() map[string]string {
 
 // UsageNamesKey changes when an alias or a found group's public spelling does,
 // so a cached view never holds the names from before a catalog change.
-func UsageNamesKey() string {
+func UsageNamesKey() string { return usageNamesKey(usageAliasesNow(), usageGroupNames()) }
+
+func usageNamesKey(aliases, groups map[string]string) string {
 	b, _ := json.Marshal(struct {
 		Aliases, Groups map[string]string
-	}{usageAliasesNow(), usageGroupNames()})
+	}{aliases, groups})
 	return string(b)
 }
 

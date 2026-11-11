@@ -3,6 +3,8 @@ package sessions
 import (
 	"slices"
 	"sort"
+	"sync"
+	"unsafe"
 )
 
 // A session's models are counted under the names the user gave them
@@ -70,6 +72,57 @@ func aliasManaged(ms []Managed, alias func(string) string) {
 			aliasSession(&ms[i].Session, alias)
 		}
 	}
+}
+
+// aliasedKept is each range's kept Stats as aliasStats last named them,
+// and the names it was asked under. The Sessions page reads 7, 30 and
+// every day again every 10 s, and each read copied every session's
+// summary of every range when one model was aliased (~5 MB for a long
+// history), to the same answer while nothing changed.
+var aliasedKept struct {
+	sync.Mutex
+	m map[int]aliasedRange
+}
+
+type aliasedRange struct {
+	names string
+	// src is held so that a new range is never taken for it by an
+	// address it gave back
+	src, st Stats
+}
+
+// aliasKept is aliasStats of a range's kept Stats st, made once for st
+// and the names (provider.UsageNamesKey). Kept Stats are never written,
+// so the same slices are the same Stats.
+func aliasKept(days int, st Stats, alias func(string) string, names string) Stats {
+	aliasedKept.Lock()
+	defer aliasedKept.Unlock()
+	if a, ok := aliasedKept.m[days]; ok && a.names == names && sameKept(a.src, st) {
+		return a.st
+	}
+	out := aliasStats(st, alias)
+	if aliasedKept.m == nil || len(aliasedKept.m) >= 2*keptRanges {
+		aliasedKept.m = map[int]aliasedRange{}
+	}
+	aliasedKept.m[days] = aliasedRange{names, st, out}
+	return out
+}
+
+func forgetAliasedKept() {
+	aliasedKept.Lock()
+	aliasedKept.m = nil
+	aliasedKept.Unlock()
+}
+
+// sameKept reports whether a and b are one kept Stats.
+func sameKept(a, b Stats) bool {
+	return a.From == b.From && a.To == b.To && a.shift == b.shift &&
+		sameSlice(a.Days, b.Days) && sameSlice(a.Sessions, b.Sessions) &&
+		sameSlice(a.Keys, b.Keys) && sameSlice(a.gateway, b.gateway)
+}
+
+func sameSlice[T any](a, b []T) bool {
+	return len(a) == len(b) && unsafe.SliceData(a) == unsafe.SliceData(b)
 }
 
 // aliasStats is st with each day's usage and each session's models counted

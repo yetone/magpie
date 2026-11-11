@@ -203,6 +203,7 @@ func keepDesktop(st Stats) {
 func forgetKeptStats() {
 	keptStats.files, keptStats.ranges, keptStats.native = nil, nil, nil
 	keptStats.prices, keptStats.titles, keptStats.desktop = nil, titleAnswers{}, nil
+	forgetAliasedKept()
 }
 
 // ForgetKeptRanges lets go of the ranges' Stats kept for the next read,
