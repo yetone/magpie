@@ -48,6 +48,7 @@ func relaysAny() bool {
 // given it. Only a streamable HTTP server is relayed: an SSE one's stream
 // names the address to post to, which would have to be rewritten.
 func through(s *Server, base string) *Server {
+	s = s.live()
 	if s.Plugin != "" {
 		// a plugin's tools, which the gateway serves itself
 		c := *s
@@ -99,6 +100,10 @@ var errNotHTTP = errors.New("magpie signs in only to a server reached over strea
 // SignInServer starts signing magpie in to the library's server called
 // name: the State's URL is the page to open in a browser.
 func SignInServer(ctx context.Context, name string) (mcpauth.State, error) {
+	return signInServer(ctx, name, nil)
+}
+
+func signInServer(ctx context.Context, name string, label *string) (mcpauth.State, error) {
 	mu.Lock()
 	l, err := load()
 	mu.Unlock()
@@ -115,6 +120,9 @@ func SignInServer(ctx context.Context, name string) (mcpauth.State, error) {
 	var app *mcpauth.App
 	if s.OAuth != nil {
 		app = &mcpauth.App{ClientID: s.OAuth.ClientID, ClientSecret: s.OAuth.ClientSecret, CallbackPort: s.OAuth.CallbackPort}
+	}
+	if label != nil {
+		return mcpauth.StartAccount(ctx, s.Name, s.URL, app, *label)
 	}
 	return mcpauth.StartWith(ctx, s.Name, s.URL, app)
 }

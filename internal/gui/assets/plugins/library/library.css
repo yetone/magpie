@@ -901,3 +901,21 @@ body.window .lib-list .lib-row { --lib-indent: 38px; }
 input.lib-memq, input.lib-memtags, input.lib-memwhy { padding: 0 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font-size: 12.5px; outline: none; box-sizing: border-box; transition: border-color .12s, box-shadow .12s; }
 input.lib-memq:focus, input.lib-memtags:focus, input.lib-memwhy:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 .lib-follow .link { font-size: inherit; padding: 0; margin-left: 2px; }
+
+/* a server's accounts, one in use (Elorynth on X) */
+.lib-accts { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.lib-acct { display: flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); transition: background-color .12s ease, border-color .12s ease; }
+.lib-acct.on { border-color: var(--accent); background: var(--accent-soft); }
+.lib-acct-pick { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 0; background: none; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.lib-acct.on .lib-acct-pick { cursor: default; }
+.lib-acct-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-acct-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--faint); box-sizing: border-box; transition: background-color .12s ease, border-color .12s ease; }
+.lib-acct.on .lib-acct-dot { background: var(--accent); border-color: var(--accent); }
+.lib-acct .lib-x { margin-right: 4px; }
+.lib-acct-new { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.lib-acct-new input { width: 11em; max-width: 100%; }
+.lib-acct-form { display: flex; flex-direction: column; gap: 6px; }
+.lib-acct-form > input { max-width: 16em; }
+.lib-acct-act { display: flex; gap: 8px; }
+@media (hover: hover) and (pointer: fine) { .lib-acct:not(.on):hover { background: var(--hover, var(--accent-soft)); } }
+@media (prefers-reduced-motion: reduce) { .lib-acct, .lib-acct-dot { transition: none; } }

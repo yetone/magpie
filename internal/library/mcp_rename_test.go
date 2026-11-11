@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/yetone/magpie/internal/gateway"
@@ -66,7 +67,7 @@ func TestSaveServerRenameKeepsOAuth(t *testing.T) {
 			}
 			assertRecord := func(name string, want mcpauth.Record) {
 				t.Helper()
-				if got, found := mcpauth.Get(name); !found || got != want {
+				if got, found := mcpauth.Get(name); !found || !reflect.DeepEqual(got, want) {
 					t.Errorf("OAuth record for %s changed: found=%v got=%+v want=%+v", name, found, got, want)
 				}
 				if token, err := mcpauth.Token(t.Context(), name); err != nil || token != want.Access {

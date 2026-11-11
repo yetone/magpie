@@ -805,6 +805,7 @@ func exitHealth(err error, errs *tail) ServerHealth {
 // remoteHeaders are the server's own headers, with magpie's token when it
 // is signed in to it: the agents reach it with that too.
 func remoteHeaders(ctx context.Context, s *Server) (http.Header, *ServerHealth) {
+	s = s.live()
 	h := http.Header{}
 	headers, unset := expandAll(s.Headers)
 	if len(unset) > 0 {

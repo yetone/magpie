@@ -812,6 +812,11 @@ func SaveServer(old string, s Server) (*Result, error) {
 			if s.DisabledTools == nil {
 				s.DisabledTools = l.MCP[i].DisabledTools
 			}
+			// so do the accounts, which have calls of their own
+			if s.Accounts == nil && s.Account == "" {
+				s.Accounts, s.Account = l.MCP[i].Accounts, l.MCP[i].Account
+				_ = s.checkAccounts()
+			}
 			// a plugin's server stays the plugin's, and on this computer
 			if p := l.MCP[i].Plugin; p != "" && s.Plugin == "" {
 				s.Plugin, s.Local = p, true

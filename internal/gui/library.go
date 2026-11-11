@@ -519,12 +519,22 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 	})
 	// magpie signs in to a remote server once, for every agent given it (#615)
 	mux.HandleFunc("POST /api/library/mcp-signin", func(rw http.ResponseWriter, r *http.Request) {
-		var in struct{ Name string }
+		var in struct {
+			Name  string
+			Add   bool // as another account of the server, called Label
+			Label string
+		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Name == "" {
 			http.Error(rw, "no server", http.StatusBadRequest)
 			return
 		}
-		st, err := library.SignInServer(r.Context(), in.Name)
+		var st mcpauth.State
+		var err error
+		if in.Add {
+			st, err = library.SignInServerAccount(r.Context(), in.Name, in.Label)
+		} else {
+			st, err = library.SignInServer(r.Context(), in.Name)
+		}
 		if err != nil {
 			fail(rw, err)
 			return
@@ -542,6 +552,45 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 	mux.HandleFunc("POST /api/library/mcp-signin/{id}/cancel", func(rw http.ResponseWriter, r *http.Request) {
 		mcpauth.Cancel(r.PathValue("id"))
 		rw.WriteHeader(http.StatusNoContent)
+	})
+	// a server's accounts (Elorynth on X): Kind "signin" is magpie's OAuth
+	// sign-ins to it, "header" the sets of headers it is asked with; ID "" in
+	// a use is the server's own headers
+	mux.HandleFunc("POST /api/library/mcp-account", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Name, Kind, Op, ID, Label string
+			Headers                   map[string]string
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Name == "" {
+			http.Error(rw, "no server", http.StatusBadRequest)
+			return
+		}
+		var err error
+		switch in.Kind + "/" + in.Op {
+		case "signin/use":
+			err = library.UseSignIn(in.Name, in.ID)
+		case "signin/remove":
+			err = library.RemoveSignIn(in.Name, in.ID)
+		case "header/add":
+			_, err = library.AddServerAccount(in.Name, in.Label, in.Headers)
+		case "header/use":
+			_, err = library.UseServerAccount(in.Name, in.ID)
+		case "header/remove":
+			_, err = library.RemoveServerAccount(in.Name, in.ID)
+		default:
+			http.Error(rw, "not an account call", http.StatusBadRequest)
+			return
+		}
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		v, err := libraryView(nil)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, v)
 	})
 	mux.HandleFunc("POST /api/library/mcp-signout", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct{ Name string }

@@ -2,6 +2,8 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "＋ Add account": "＋ 添加账号",
+    "Account {n}": "账号 {n}",
     "New skill": "新建技能",
     "e.g. my-skill": "例如 my-skill",
     "e.g. Writes release notes. Use when asked for a changelog.": "例如：撰写发布说明。需要更新日志时使用。",
@@ -979,6 +981,8 @@ magpie.strings({
     "{name} read again from its source": "已重新从来源读取 {name}",
   },
   "zh-TW": {
+    "＋ Add account": "＋ 新增帳號",
+    "Account {n}": "帳號 {n}",
     "New skill": "新增技能",
     "e.g. my-skill": "例如 my-skill",
     "e.g. Writes release notes. Use when asked for a changelog.": "例如：撰寫發佈說明。需要更新日誌時使用。",
@@ -1956,6 +1960,8 @@ magpie.strings({
     "{name} read again from its source": "已重新從來源讀取 {name}",
   },
   ja: {
+    "＋ Add account": "＋ アカウントを追加",
+    "Account {n}": "アカウント {n}",
     "New skill": "新しいスキル",
     "e.g. my-skill": "例: my-skill",
     "e.g. Writes release notes. Use when asked for a changelog.": "例: リリースノートを書く。変更履歴を求められたときに使う。",
@@ -2933,6 +2939,8 @@ magpie.strings({
     "{name} read again from its source": "{name} をソースから読み直しました",
   },
   de: {
+    "＋ Add account": "＋ Konto hinzufügen",
+    "Account {n}": "Konto {n}",
     "New skill": "Neuer Skill",
     "e.g. my-skill": "z. B. my-skill",
     "e.g. Writes release notes. Use when asked for a changelog.": "z. B. Schreibt Release Notes. Zu verwenden, wenn ein Changelog verlangt wird.",

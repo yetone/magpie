@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/yetone/magpie/internal/mcpauth"
@@ -68,7 +69,7 @@ func TestSaveServerRenameSignInWriteFailure(t *testing.T) {
 			t.Errorf("file changed after failed sign-in rename: %s", p)
 		}
 	}
-	if got, found := mcpauth.Get("alpha"); !found || got != before {
+	if got, found := mcpauth.Get("alpha"); !found || !reflect.DeepEqual(got, before) {
 		t.Errorf("failed rename changed the old sign-in: found=%v record=%+v", found, got)
 	}
 	if _, found := mcpauth.Get("gamma"); found {

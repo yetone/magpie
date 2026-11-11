@@ -419,10 +419,12 @@ var hubPool = struct {
 // hubKey is the server as it is run: an edit, or a sign-in since, is
 // another to start.
 func hubKey(s *Server) string {
-	c := *s
-	c.Agents, c.DisabledTools = nil, nil
+	c := *s.live()
+	c.Agents, c.DisabledTools, c.Accounts, c.Account = nil, nil, nil, ""
 	b, _ := json.Marshal(c)
-	return fmt.Sprintf("%s|%v", b, s.Transport == "http" && mcpauth.SignedIn(s.Name, s.URL))
+	// the sign-in in use too: another account is another to start
+	in := s.Transport == "http" && mcpauth.SignedIn(s.Name, s.URL)
+	return fmt.Sprintf("%s|%v|%s", b, in, map[bool]string{true: mcpauth.InUse(s.Name)}[in])
 }
 
 func backendOf(s *Server) *backend {

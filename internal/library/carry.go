@@ -317,6 +317,11 @@ func (b *Bundle) WithoutSecrets(secret func(string) bool) {
 	for i, s := range b.MCP {
 		c := *s
 		c.Env, c.Headers = blank(s.Env, secret), blank(s.Headers, secret)
+		c.Accounts = nil
+		for _, a := range s.Accounts {
+			a.Headers = blank(a.Headers, secret)
+			c.Accounts = append(c.Accounts, a)
+		}
 		// an OAuth app's secret is a key too; its client ID isn't
 		if s.OAuth != nil && s.OAuth.ClientSecret != "" {
 			a := *s.OAuth
@@ -355,6 +360,13 @@ func (b *Bundle) WithSecrets(have *Bundle, secret func(string) bool) *Bundle {
 		i := slices.IndexFunc(have.MCP, func(h *Server) bool { return h.Name == s.Name })
 		if i >= 0 {
 			c.Env, c.Headers = filled(s.Env, have.MCP[i].Env, secret), filled(s.Headers, have.MCP[i].Headers, secret)
+			c.Accounts = nil
+			for _, a := range s.Accounts {
+				if j := slices.IndexFunc(have.MCP[i].Accounts, func(h Account) bool { return h.ID == a.ID }); j >= 0 {
+					a.Headers = filled(a.Headers, have.MCP[i].Accounts[j].Headers, secret)
+				}
+				c.Accounts = append(c.Accounts, a)
+			}
 			// the same app's secret, kept here
 			if h := have.MCP[i].OAuth; s.OAuth != nil && s.OAuth.ClientSecret == "" && h != nil && h.ClientID == s.OAuth.ClientID {
 				a := *s.OAuth

@@ -32,6 +32,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -118,6 +120,18 @@ type Record struct {
 	// Dead is a sign-in the server refused to renew: the page asks for it
 	// again
 	Dead bool `json:"dead,omitempty"`
+
+	// More than one sign-in to a server (Elorynth on X: several accounts,
+	// one in use). This record is always the one in use, so every reader of
+	// a server's sign-in (the gateway's relay, the check, a renewal) reads
+	// the account in use without knowing there are others; the others wait
+	// in Spare, and a switch swaps them. Seq keeps each account's place in
+	// the list, which a swap doesn't move. A sign-in made before accounts
+	// has none of these: it is account 1, with no label.
+	ID    string    `json:"id,omitempty"`
+	Label string    `json:"label,omitempty"`
+	Seq   int       `json:"seq,omitempty"`
+	Spare []*Record `json:"spare,omitempty"`
 }
 
 // fileMu is held for a change to mcp-signins.json read afresh under it,
@@ -200,7 +214,9 @@ func Get(name string) (Record, bool) {
 	if r == nil {
 		return Record{}, false
 	}
-	return *r, true
+	c := *r
+	c.Spare = nil
+	return c, true
 }
 
 // SignedIn says whether magpie holds a sign-in to the server by that name
@@ -217,6 +233,8 @@ type Status struct {
 	SignedIn bool  `json:"signedIn"`
 	Dead     bool  `json:"dead,omitempty"`
 	At       int64 `json:"at,omitempty"`
+	// Accounts are the sign-ins, when there is more than one
+	Accounts []Account `json:"accounts,omitempty"`
 }
 
 // StatusOf is the sign-in to the server by that name at that URL.
@@ -225,7 +243,11 @@ func StatusOf(name, serverURL string) Status {
 	if !ok || r.URL != serverURL {
 		return Status{}
 	}
-	return Status{SignedIn: true, Dead: r.Dead, At: r.At}
+	st := Status{SignedIn: true, Dead: r.Dead, At: r.At}
+	if l := Accounts(name); len(l) > 1 {
+		st.Accounts = l
+	}
+	return st
 }
 
 // SignOut forgets magpie's sign-in to the server.
@@ -250,6 +272,157 @@ func Forget(name string) error {
 		delete(m, name)
 		return had
 	})
+}
+
+// Account is one of a server's sign-ins, as the page lists it.
+type Account struct {
+	ID     string `json:"id"`
+	Label  string `json:"label,omitempty"` // "" for one made before labels
+	Active bool   `json:"active,omitempty"`
+	Dead   bool   `json:"dead,omitempty"`
+	At     int64  `json:"at,omitempty"`
+}
+
+var (
+	// ErrNoAccount is an account the server has no sign-in for.
+	ErrNoAccount = errors.New("magpie has no such sign-in to this server")
+	// ErrLabelUsed is a label another sign-in to the server has.
+	ErrLabelUsed = errors.New("another sign-in to this server has that name")
+)
+
+// the record's id and place, which a sign-in made before accounts lacks
+func idOf(r *Record) string {
+	if r.ID == "" {
+		return "1"
+	}
+	return r.ID
+}
+
+func seqOf(r *Record) int {
+	if r.Seq == 0 {
+		return 1
+	}
+	return r.Seq
+}
+
+// all is the record with its spares, in the order they were signed in.
+func all(r *Record) []*Record {
+	a := *r
+	a.Spare = nil
+	out := append([]*Record{&a}, r.Spare...)
+	slices.SortStableFunc(out, func(x, y *Record) int { return seqOf(x) - seqOf(y) })
+	return out
+}
+
+// Accounts are the sign-ins to the server by that name, in the order they
+// were made; none when magpie isn't signed in to it.
+func Accounts(name string) []Account {
+	fileMu.Lock()
+	defer fileMu.Unlock()
+	r := load()[name]
+	if r == nil {
+		return nil
+	}
+	var out []Account
+	for _, x := range all(r) {
+		out = append(out, Account{ID: idOf(x), Label: x.Label, Active: x == nil || idOf(x) == idOf(r), Dead: x.Dead, At: x.At})
+	}
+	return out
+}
+
+// InUse is the id of the sign-in in use, "" when there is none.
+func InUse(name string) string {
+	for _, a := range Accounts(name) {
+		if a.Active {
+			return a.ID
+		}
+	}
+	return ""
+}
+
+// Use puts the sign-in by that id in use: what the gateway sends the
+// server, and the check, from the next request on. The agents are told
+// through Changed as for a new sign-in.
+func Use(name, id string) error {
+	found := false
+	err := update(func(m map[string]*Record) bool {
+		cur := m[name]
+		if cur == nil {
+			return false
+		}
+		if idOf(cur) == id {
+			found = true
+			return false
+		}
+		i := slices.IndexFunc(cur.Spare, func(x *Record) bool { return idOf(x) == id })
+		if i < 0 {
+			return false
+		}
+		found = true
+		was := *cur
+		was.ID, was.Seq, was.Spare = idOf(cur), seqOf(cur), nil
+		next := *cur.Spare[i]
+		next.ID, next.Seq = idOf(&next), seqOf(&next)
+		rest := slices.Clone(cur.Spare)
+		rest[i] = &was
+		next.Spare = rest
+		m[name] = &next
+		return true
+	})
+	if err != nil {
+		return err
+	}
+	if !found {
+		return ErrNoAccount
+	}
+	if Changed != nil {
+		Changed(name)
+	}
+	return nil
+}
+
+// RemoveAccount forgets one sign-in to the server. The one in use going
+// puts the first of the others in use; the last going is a sign-out.
+func RemoveAccount(name, id string) error {
+	found := false
+	err := update(func(m map[string]*Record) bool {
+		cur := m[name]
+		if cur == nil {
+			return false
+		}
+		l := all(cur)
+		i := slices.IndexFunc(l, func(x *Record) bool { return idOf(x) == id })
+		if i < 0 {
+			return false
+		}
+		found = true
+		active := idOf(cur)
+		l = slices.Delete(l, i, i+1)
+		if len(l) == 0 {
+			delete(m, name)
+			return true
+		}
+		// the one in use stays, unless it is the one removed
+		next := 0
+		if id != active {
+			next = slices.IndexFunc(l, func(x *Record) bool { return idOf(x) == active })
+		}
+		n := *l[next]
+		n.ID, n.Seq = idOf(&n), seqOf(&n)
+		n.Spare = slices.Delete(slices.Clone(l), next, next+1)
+		m[name] = &n
+		return true
+	})
+	if err != nil {
+		return err
+	}
+	if !found {
+		return ErrNoAccount
+	}
+	if Changed != nil {
+		Changed(name)
+	}
+	return nil
 }
 
 // Rename moves a sign-in to the server's new name.
@@ -829,6 +1002,28 @@ func Start(ctx context.Context, name, serverURL string) (State, error) {
 // StartWith is Start as app when there is one, which magpie then doesn't
 // register in its place.
 func StartWith(ctx context.Context, name, serverURL string, app *App) (State, error) {
+	return start(ctx, name, serverURL, app, nil)
+}
+
+// StartAccount is StartWith as another account of the server: the sign-in
+// it makes is added to the ones there are and put in use, with the label,
+// and the others are kept. With no sign-in yet it is the first.
+func StartAccount(ctx context.Context, name, serverURL string, app *App, label string) (State, error) {
+	label = strings.TrimSpace(label)
+	if len([]rune(label)) > 60 {
+		return State{}, errors.New("the name of a sign-in is at most 60 characters")
+	}
+	if label != "" {
+		for _, a := range Accounts(name) {
+			if strings.EqualFold(a.Label, label) {
+				return State{}, ErrLabelUsed
+			}
+		}
+	}
+	return start(ctx, name, serverURL, app, &label)
+}
+
+func start(ctx context.Context, name, serverURL string, app *App, add *string) (State, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	m, err := discover(ctx, serverURL)
@@ -930,7 +1125,7 @@ func StartWith(ctx context.Context, name, serverURL string, app *App) (State, er
 		if t.Scope != "" {
 			r2.Scope = t.Scope
 		}
-		if err := f.keep(name, r2); err != nil {
+		if err := f.keep(name, r2, add); err != nil {
 			page(w, http.StatusOK, "Magpie couldn't keep the sign-in: "+err.Error())
 			return
 		}
@@ -960,13 +1155,13 @@ func (f *flow) status() State {
 // keep commits the callback only while the flow is still live. Cancel or
 // timeout and the write take the same lock, so a late token cannot save a
 // sign-in the user already ended, or replace their previous sign-in.
-func (f *flow) keep(name string, r Record) error {
+func (f *flow) keep(name string, r Record, add *string) error {
 	f.mu.Lock()
 	if f.finished {
 		f.mu.Unlock()
 		return errors.New("the sign-in has ended; start it again")
 	}
-	err := update(func(m map[string]*Record) bool { m[name] = &r; return true })
+	err := update(func(m map[string]*Record) bool { m[name] = signedAs(m[name], r, add); return true })
 	f.finished = true
 	f.mu.Unlock()
 	if err != nil {
@@ -980,6 +1175,31 @@ func (f *flow) keep(name string, r Record) error {
 	}
 	f.end(State{State: "done"})
 	return nil
+}
+
+// signedAs is the record a new sign-in leaves for the server: an added
+// account joins the ones there are, in use; any other replaces the one in
+// use (signing in again), and the other accounts stay.
+func signedAs(old *Record, r Record, add *string) *Record {
+	if old == nil || old.URL != r.URL {
+		if add != nil {
+			r.Label = *add
+		}
+		return &r
+	}
+	if add == nil {
+		r.ID, r.Label, r.Seq, r.Spare = old.ID, old.Label, old.Seq, old.Spare
+		return &r
+	}
+	l := all(old)
+	top := 0
+	for _, x := range l {
+		top = max(top, seqOf(x))
+		x.ID, x.Seq = idOf(x), seqOf(x)
+	}
+	r.Seq, r.ID, r.Label = top+1, strconv.Itoa(top+1), *add
+	r.Spare = l
+	return &r
 }
 
 func (f *flow) finish(st State) {

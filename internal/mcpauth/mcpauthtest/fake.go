@@ -321,6 +321,19 @@ func (f *Fake) SignIn(t *testing.T, name string) mcpauth.State {
 func SignIn(t *testing.T, name, u string) mcpauth.State {
 	t.Helper()
 	st, err := mcpauth.Start(t.Context(), name, u)
+	return finishSignIn(t, st, err)
+}
+
+// SignInAccount signs magpie in to the server at u as name as another
+// account, labelled, standing in for the browser.
+func SignInAccount(t *testing.T, name, u, label string) mcpauth.State {
+	t.Helper()
+	st, err := mcpauth.StartAccount(t.Context(), name, u, nil, label)
+	return finishSignIn(t, st, err)
+}
+
+func finishSignIn(t *testing.T, st mcpauth.State, err error) mcpauth.State {
+	t.Helper()
 	if err != nil {
 		t.Fatal(err)
 	}
