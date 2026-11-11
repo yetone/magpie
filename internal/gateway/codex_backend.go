@@ -147,6 +147,10 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 				s.codexSummary(w, r, body, to)
 				return
 			}
+			if to := codexCommitsTo(r.Header, body, false, session); to != "" {
+				s.codexCommit(w, r, body, to)
+				return
+			}
 			if to := codexPredictionsTo(r.Header, body, false, session); to != "" {
 				s.codexPrediction(w, r, body, to)
 				return

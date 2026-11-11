@@ -2228,6 +2228,10 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 				s.codexSummary(w, r, body, to)
 				return
 			}
+			if to := codexCommitsTo(r.Header, body, true, session); to != "" {
+				s.codexCommit(w, r, body, to)
+				return
+			}
 			if to := codexPredictionsTo(r.Header, body, true, session); to != "" {
 				s.codexPrediction(w, r, body, to)
 				return

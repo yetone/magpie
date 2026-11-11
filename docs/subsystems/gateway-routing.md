@@ -65,6 +65,13 @@ not an error) and keeps the thread's as it was. Title Off does not turn
 descriptions off, nor the other way round (cybercaius on Discord asked for
 the description's).
 
+The Codex app's "generate commit message" and pull request text
+(`commit_message`, `pull_request_message`, `commit_pull_request_message`) are
+side turns of the same kind, each asked for in a schema of its own
+(`{"message"}`, `{"title","body"}`). A model behind the Chat or Anthropic API
+never sees the schema, so `codexCommit` hands its plain text back in that
+shape (`commitJSON`, the first line of `message` cut to 72 characters).
+
 The Codex app asks for titles, descriptions and one-line thread summaries
 (`thread_summary`, after each message) on a model of its own (`gpt-6-luna`),
 whatever the conversation is on, and composer predictions

@@ -108,6 +108,147 @@ func codexSummariesTo(h http.Header, body []byte, ours bool, session func() stri
 	return codexSideTo(body, ours, session)
 }
 
+// codexCommitsTo is where the Codex app's request to write a commit
+// message or a pull request's text goes (makenxis on X): an ephemeral turn
+// on a model it picks as it does for a title, with the text in a schema
+// of its own ({"message"}, {"title","body"}). A model behind the Chat or
+// Anthropic API never sees that schema and answers in plain text, which
+// the app turns down, so on one of magpie's models the answer is handed
+// back in the schema's shape (codexCommit). "" leaves the request as Codex
+// sent it.
+func codexCommitsTo(h http.Header, body []byte, ours bool, session func() string) string {
+	if !isCommitKind(requestCallKind(h, requestSessionMetadata(h, body))) {
+		return ""
+	}
+	return codexSideTo(body, ours, session)
+}
+
+// codexCommit answers a commit message request as codexCommitsTo says, by
+// that model, its text handed back as the JSON the request's schema asks
+// for.
+func (s *Server) codexCommit(w http.ResponseWriter, r *http.Request, body []byte, to string) {
+	shape := titleShapeOf(body)
+	s.codexShaped(w, r, body, to, "commit message", false, func(said string) string { return commitJSON(said, shape) }, noCommit)
+}
+
+func noCommit(said string) string {
+	said = strings.Join(strings.Fields(said), " ")
+	if said == "" {
+		return "commit message: the model answered with no text, so Codex got no message"
+	}
+	if r := []rune(said); len(r) > 80 {
+		said = string(r[:80]) + "…"
+	}
+	return "commit message: no usable text in the model's answer, so Codex got none: " + said
+}
+
+// commitJSON is a model's answer to a commit message or pull request
+// request as Codex reads one: the JSON object its schema asks for, the
+// model's own when it gave every required string, else made from its text.
+// message is the whole text, its subject (first line) cut to 72 characters,
+// as the app's schema requires; title is the first line (a leading "#" or
+// "Title:" dropped) and body the rest, or the whole text when that is
+// short. "" when the answer holds no text.
+func commitJSON(said string, shape titleShape) string {
+	t := strings.TrimSpace(said)
+	t = afterThought(t)
+	if strings.HasPrefix(t, "```") {
+		t = strings.TrimPrefix(t, "```")
+		if i := strings.IndexByte(t, '\n'); i >= 0 && !strings.Contains(t[:i], "{") {
+			t = t[i+1:]
+		}
+		t = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(t), "```"))
+	}
+	fields := map[string]any{}
+	if strings.HasPrefix(t, "{") {
+		if json.NewDecoder(bytes.NewReader([]byte(t))).Decode(&fields) != nil {
+			return ""
+		}
+	}
+	names := shape.Required
+	if len(names) == 0 {
+		names = []string{"message"}
+	}
+	given := func(name string) string {
+		v, _ := fields[name].(string)
+		return strings.TrimSpace(v)
+	}
+	if len(fields) == 0 {
+		t = strings.TrimSpace(strings.Trim(t, "`"))
+		if low := strings.ToLower(t); strings.HasPrefix(low, "message:") {
+			t = strings.TrimSpace(t[len("message:"):])
+		}
+	}
+	whole := t
+	if len(fields) > 0 {
+		whole = given("message")
+	}
+	var title, body string
+	if len(fields) > 0 {
+		title, body = given("title"), given("body")
+	} else {
+		first, rest, _ := strings.Cut(t, "\n")
+		title = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(first), "# "))
+		if low := strings.ToLower(title); strings.HasPrefix(low, "title:") {
+			title = strings.TrimSpace(title[len("title:"):])
+		}
+		title = strings.Trim(title, "\"'`*")
+		body = strings.TrimSpace(rest)
+		if low := strings.ToLower(body); strings.HasPrefix(low, "body:") {
+			body = strings.TrimSpace(body[len("body:"):])
+		}
+	}
+	clip := func(name, v string) string {
+		if n := shape.Properties[name].MaxLength; n > 0 {
+			if r := []rune(v); len(r) > n {
+				v = strings.TrimSpace(string(r[:n]))
+			}
+		}
+		return v
+	}
+	out := map[string]string{}
+	for _, name := range names {
+		if ty := shape.Properties[name].Type; ty != "" && ty != "string" {
+			continue
+		}
+		var v string
+		switch name {
+		case "message":
+			v = whole
+			if v == "" {
+				v = title
+			}
+			// the subject is the first line, 72 characters at most
+			first, rest, more := strings.Cut(v, "\n")
+			if r := []rune(strings.TrimSpace(first)); len(r) > 72 {
+				first = strings.TrimSpace(string(r[:72]))
+			}
+			v = strings.TrimSpace(first)
+			if more && strings.TrimSpace(rest) != "" {
+				v += "\n\n" + strings.TrimSpace(rest)
+			}
+		case "title":
+			v = title
+		case "body":
+			v = body
+			if v == "" {
+				v = title
+			}
+		default:
+			v = given(name)
+			if v == "" {
+				v = title
+			}
+		}
+		if v == "" {
+			return ""
+		}
+		out[name] = clip(name, v)
+	}
+	b, _ := json.Marshal(out)
+	return string(b)
+}
+
 // codexPredictionsTo is where the Codex app's request to predict the
 // user's next message goes (#1970, pluo): a hidden turn on a fork of the
 // whole conversation (composer_predictions), which the app sends on the

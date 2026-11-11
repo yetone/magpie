@@ -11,6 +11,13 @@ func isTitleKind(kind string) bool {
 	return kind == "thread_title" || kind == "thread_title_reconsideration" || kind == "title_generation"
 }
 
+// isCommitKind: the Codex app's commit message, pull request text and
+// both at once (commit_message, pull_request_message,
+// commit_pull_request_message), each asked for in a schema of its own
+func isCommitKind(kind string) bool {
+	return kind == "commit_message" || kind == "pull_request_message" || kind == "commit_pull_request_message"
+}
+
 func isDescriptionKind(kind string) bool {
 	return kind == "thread_description"
 }
