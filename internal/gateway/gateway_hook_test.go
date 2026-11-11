@@ -513,3 +513,107 @@ func TestGatewayHookSeesOptionsSavedFromItsPage(t *testing.T) {
 		t.Fatalf("tag=%v after the page saved, want second", got)
 	}
 }
+
+// An async hook is told, per request, which ones a subagent made, as the
+// client says it: Claude Code's x-claude-code-agent-id (real headers of
+// 2.1.312's subagent in #4655), Codex's x-openai-subagent: collab_spawn.
+// The main conversation after a subagent in the same session is not marked,
+// and neither is a request whose history merely mentions the Agent tool.
+func TestHookKindFromClientHeaders(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		agent string
+		h     http.Header
+		want  string
+	}{
+		{"claude subagent", "claude", http.Header{"X-Claude-Code-Agent-Id": {"a1b2"}, "X-Claude-Code-Session-Id": {"s"}}, "subagent"},
+		{"claude main, same session", "claude", http.Header{"X-Claude-Code-Session-Id": {"s"}}, ""},
+		{"codex subagent", "codex", http.Header{"X-Openai-Subagent": {"collab_spawn"}}, "subagent"},
+		{"codex review is not a subagent", "codex", http.Header{"X-Openai-Subagent": {"review"}}, ""},
+		{"codex main", "codex", http.Header{}, ""},
+		{"no client headers", "", http.Header{}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest("POST", "/v1/messages", nil)
+			r.Header = tc.h
+			if got := hookKind(r, tc.agent); got != tc.want {
+				t.Fatalf("kind %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// The kind reaches the plugin host's onRequest and the same request's
+// onResponse, through the real gateway and Bun.
+func TestAsyncGatewayHookKindReachesPlugin(t *testing.T) {
+	t.Setenv("MAGPIE_BUN", testenv.Bun(t))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Cleanup(plugin.Settle)
+	seen := make(chan string, 8)
+	observer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		seen <- string(b)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer observer.Close()
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"c1","model":"m1","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":2}}`)
+	}))
+	defer up.Close()
+	if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Key: "synthetic", Models: []string{"m1"}, Chat: up.URL + "/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	abs := filepath.Join(t.TempDir(), "kind.hooks.js")
+	script := `export async function onRequest(body,ctx){ctx.state.kind=ctx.kind;return body}
+export async function onResponse(body,ctx){await fetch(ctx.options.url,{method:"POST",body:JSON.stringify({request:ctx.state.kind,response:ctx.kind}),signal:ctx.signal})}`
+	if err := os.WriteFile(abs, []byte(script), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := plugin.Add(t.Context(), abs); err != nil {
+		t.Fatal(err)
+	}
+	if err := plugin.SetOptions(abs, map[string]any{"url": observer.URL, "gatewayTimeoutMs": 5000}); err != nil {
+		t.Fatal(err)
+	}
+	gw := httptest.NewServer(lanGuard(New().Handler()))
+	defer gw.Close()
+	ask := func(h map[string]string) string {
+		t.Helper()
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", gw.URL+"/v1/chat/completions", strings.NewReader(`{"model":"fake/m1","messages":[{"role":"user","content":"question"}]}`))
+		req.Header.Set("Authorization", "Bearer magpie")
+		for k, v := range h {
+			req.Header.Set(k, v)
+		}
+		res, err := gw.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		io.Copy(io.Discard, res.Body)
+		res.Body.Close()
+		select {
+		case s := <-seen:
+			return s
+		case <-time.After(15 * time.Second):
+			t.Fatal("no completion notification")
+		}
+		return ""
+	}
+	sess := map[string]string{"x-claude-code-session-id": "parent", "User-Agent": "claude-cli/2.1.312 (external, sdk-cli)"}
+	sub := map[string]string{"x-claude-code-session-id": "parent", "x-claude-code-agent-id": "child-1", "User-Agent": "claude-cli/2.1.312 (external, sdk-cli)"}
+	for _, c := range []struct {
+		name string
+		h    map[string]string
+		want string
+	}{
+		{"main", sess, `{"request":"","response":""}`},
+		{"subagent", sub, `{"request":"subagent","response":"subagent"}`},
+		{"main again", sess, `{"request":"","response":""}`},
+	} {
+		if got := ask(c.h); got != c.want {
+			t.Errorf("%s: hook saw %s, want %s", c.name, got, c.want)
+		}
+	}
+}

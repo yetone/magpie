@@ -42,11 +42,19 @@ reply it asked for). A rolled-back hook counts as failed and gets no `onResponse
 for that request. It cannot reject requests or register tools. The synchronous middleware API remains available separately.
 
 Context fields: `protocol` (`chat`, `responses`, `anthropic`, `gemini`), `model`,
-`stream`, `path`, `origin`, `agent`, `session`, `cwd`, `query`, package `options`, private
+`stream`, `path`, `origin`, `agent`, `session`, `cwd`, `query`, `kind`, package `options`, private
 request `state`, an `AbortSignal` and `report(code, bytes)`. Headers and client
 credentials are not forwarded to the hook. Query extraction keeps original model
 input intact while excluding client environment/instruction notices from recall.
 Empty identity fields must not be interpreted as authenticated user identity.
+
+`kind` is `"subagent"` when the client says the request is a subagent's
+(Claude Code's `x-claude-code-agent-id`, Codex's `x-openai-subagent:
+collab_spawn`; `hookKind` in `internal/gateway/middleware.go`) and `""`
+otherwise. It is read from each request's own headers and is the same in
+`onRequest` and that request's `onResponse`; a main-conversation request
+after a subagent in the same session is `""`. The prompt and tool history
+are never used to guess it.
 
 `origin` is host-derived: `local` for a direct loopback request without
 forwarding headers or a named gateway key; `magpie-key` for the sharing key

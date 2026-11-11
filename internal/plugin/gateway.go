@@ -90,6 +90,11 @@ type GatewayContext struct {
 	Session  string `json:"session"`
 	Cwd      string `json:"cwd"`
 	Query    string `json:"query"`
+	// Kind is "subagent" for a request an agent's subagent made, as the
+	// client says it (Claude Code's x-claude-code-agent-id, Codex's
+	// x-openai-subagent), and "" for any other: the main conversation,
+	// and a client that doesn't say. Per request, never per session.
+	Kind string `json:"kind"`
 }
 
 // GatewayState is aggregate diagnostics for this host's lifetime. Outcomes

@@ -11,6 +11,7 @@ import (
 	"github.com/yetone/magpie/internal/middleware"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // serveAgent is serve for a request an agent sent: the agent middleware
@@ -160,7 +161,7 @@ func gatewayHooks(w http.ResponseWriter, r *http.Request, from provider.Protocol
 	if !plugin.HasGateway() {
 		return w, body, func() {}
 	}
-	info := plugin.GatewayContext{Origin: gatewayOrigin(r), Protocol: string(from), Model: modelOf(body), Stream: streamOf(body), Path: r.URL.Path, Agent: agentOf(r), Session: sessionOf(r.Header)}
+	info := plugin.GatewayContext{Origin: gatewayOrigin(r), Protocol: string(from), Model: modelOf(body), Stream: streamOf(body), Path: r.URL.Path, Agent: agentOf(r), Session: sessionOf(r.Header), Kind: hookKind(r, agentOf(r))}
 	if req, err := parse(from, body); err == nil {
 		info.Cwd = workDir(req)
 		info.Query = gatewayQuery(req)
@@ -244,4 +245,19 @@ func ownComputer(r *http.Request) bool {
 	}
 	ip := net.IP(a.AsSlice())
 	return slices.ContainsFunc(WSLNets(), func(n *net.IPNet) bool { return n.Contains(ip) })
+}
+
+// hookKind is the kind a request tells an async hook: "subagent" when the
+// client names one (Claude Code's x-claude-code-agent-id; Codex's
+// collab_spawn in x-openai-subagent), else "". Only what the client sends
+// counts, never the prompt or a tool call in the history, so the main
+// conversation after a subagent is not marked.
+func hookKind(r *http.Request, agent string) string {
+	if subOf(r.Header) != "" {
+		return "subagent"
+	}
+	if (agent == "codex" || fromCodex(r.Header)) && usage.PurposeOf(callKind(r.Header)) == "kind:collab_spawn" {
+		return "subagent"
+	}
+	return ""
 }
