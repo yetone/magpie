@@ -1082,6 +1082,15 @@ each one.
     TestNoEagerPackageRegexps went red on ubuntu and macOS CI. It was
     found by yinwu01 (#6020) and fixed in a68f114d9. A new package-level
     var runs the guards in `.` too.
+- **11-11, criteria still missed.**
+  - The suite, a second day for the same two guards: 55dff77b4 (plugin
+    pages behind a cookie proxy) ran `go test -run PluginPage
+    ./internal/gui`. Seven new package-level regexps tripped
+    TestNoEagerPackageRegexps (fixed in de10c6676, #6145), and its 11
+    lines in assets/pluginpages.js put TestCoreScriptBudget over until
+    f54920280 cut a comment (#5918). A `-run` of a package's own tests
+    is not a run of the package; its guards take a second, so run it
+    whole.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
