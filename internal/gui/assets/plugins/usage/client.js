@@ -88,6 +88,7 @@ magpie.plugin("usage", (ctx) => {
           <div class="led-rail" id="ledRail" hidden><i></i></div>
         </div>
       </section>
+      <section class="led-speed" id="ledSpeed" hidden></section>
     </div>
     <section class="led-heat" id="ledHeat" hidden>
       <div class="led-bar">

@@ -1435,6 +1435,21 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .led-strip .meter { height: 5px; margin-top: 8px; border-radius: 3px; background: var(--pill); overflow: hidden; }
 .led-strip .meter i { display: block; height: 100%; border-radius: 3px; background: var(--green); }
 .led-trend { padding: 10px 14px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.led-speed { margin-top: 10px; padding: 10px 14px 6px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.led-speed[hidden] { display: none; }
+.led-spd-t { font-size: 13px; font-weight: 600; }
+.led-spd-scroll { max-height: 280px; overflow: auto; }
+.led-spd { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.led-spd th, .led-spd td { padding: 5px 0 5px 12px; text-align: right; white-space: nowrap; }
+.led-spd th:first-child, .led-spd td:first-child { padding-left: 0; text-align: left; }
+.led-spd td.nm { width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.led-spd thead th { position: sticky; top: 0; background: var(--card); z-index: 1; font-weight: 400; }
+.led-spd tbody td { border-top: 1px solid var(--line-2); }
+.led-spd td.faint { color: var(--faint); }
+.led-spd-h { padding: 2px 0; border: 0; background: none; color: var(--muted); font: inherit; cursor: pointer; }
+.led-spd-h:hover, .led-spd-h.on { color: var(--fg); }
+.led-spd th[aria-sort="descending"] .led-spd-h::after { content: " ↓"; }
+.led-spd th[aria-sort="ascending"] .led-spd-h::after { content: " ↑"; }
 .led-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-bottom: 8px; }
 .led-bar .grow { flex: 1; }
 .led-by { font-size: 11.5px; color: var(--muted); }

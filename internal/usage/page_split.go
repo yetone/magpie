@@ -134,7 +134,7 @@ func pageSplit(p Period, f Filter, now time.Time, take int, pass *cellPass, gate
 // pageKeyOf is the key of a page's cells until, read through pass, of
 // the settled chunks heatSettledKey names k.
 func pageKeyOf(until time.Time, pass *cellPass, k string) string {
-	return fmt.Sprintf("%x", sha256.Sum256(fmt.Appendf(nil, "page-v1\x00%d\x00%t\x00%t\x00%s", until.UnixNano(), pass.names, pass.hours, k)))
+	return fmt.Sprintf("%x", sha256.Sum256(fmt.Appendf(nil, "page-v2\x00%d\x00%t\x00%t\x00%s", until.UnixNano(), pass.names, pass.hours, k)))
 }
 
 // pageAdvance is a page's cells before cut, from a page of the file's
@@ -219,6 +219,11 @@ func effortKeyOf(f Filter, k string) string {
 // the same names, bits and bucket added up, in the order of their last.
 func addCells(a, b *chunkPart) *chunkPart {
 	out := &chunkPart{kept: a.kept + b.kept, first: a.first}
+	if a.speeds != nil || b.speeds != nil {
+		out.speeds = speedRank{}
+		out.speeds.merge(a.speeds)
+		out.speeds.merge(b.speeds)
+	}
 	if !b.first.IsZero() && (out.first.IsZero() || b.first.Before(out.first)) {
 		out.first = b.first
 	}
@@ -260,6 +265,12 @@ func (ps *pairedRows) cellsBefore(pass *cellPass, cut time.Time) *chunkPart {
 	for _, c := range ps.all {
 		part := pass.part(&before, &rows, c, &r)
 		out.kept += part.kept
+		if part.speeds != nil {
+			if out.speeds == nil {
+				out.speeds = speedRank{}
+			}
+			out.speeds.merge(part.speeds)
+		}
 		if !part.first.IsZero() && (out.first.IsZero() || part.first.Before(out.first)) {
 			out.first = part.first
 		}
@@ -323,6 +334,8 @@ type pageDiskEntry struct {
 	Kept  int            `json:"kept"`
 	First time.Time      `json:"first"`
 	Cells []pageDiskCell `json:"cells"`
+	// Speeds are the model speed ranking's counts (speed_rank.go)
+	Speeds speedRank `json:"speeds,omitempty"`
 }
 
 // pageDiskPages bounds the pages the file holds, the last written or read
@@ -356,7 +369,7 @@ func pageDiskRead(key string) (*chunkPart, int, bool) {
 
 // pageDiskPart is e's cells as one part.
 func pageDiskPart(e pageDiskEntry) *chunkPart {
-	part := &chunkPart{kept: e.Kept, cells: make([]pageCell, len(e.Cells))}
+	part := &chunkPart{kept: e.Kept, cells: make([]pageCell, len(e.Cells)), speeds: e.Speeds}
 	if !e.First.IsZero() {
 		part.first = e.First.In(time.Local)
 	}
@@ -373,7 +386,7 @@ func pageDiskPart(e pageDiskEntry) *chunkPart {
 // pageDiskWrite keeps part, a page's cells before cut from since, under
 // key with the pages written last, through a file renamed over the last.
 func pageDiskWrite(key string, cut, since time.Time, part *chunkPart) error {
-	e := pageDiskEntry{Key: key, Cut: cut, Since: since, At: time.Now(), Kept: part.kept, First: part.first, Cells: make([]pageDiskCell, len(part.cells))}
+	e := pageDiskEntry{Key: key, Cut: cut, Since: since, At: time.Now(), Kept: part.kept, First: part.first, Cells: make([]pageDiskCell, len(part.cells)), Speeds: part.speeds}
 	for i := range part.cells {
 		c := &part.cells[i]
 		e.Cells[i] = pageDiskCell{

@@ -1871,10 +1871,84 @@ function ledShowStatus(to) {
   loadLedger().catch((e) => status(e.message, "err"));
 }
 
+// ---------- model speed ranking ----------
+//
+// Each model's median speed and first-token wait over the period's
+// requests (@flying_crp on X: how slow is gpt, really), counted by the
+// ledger with the page (usage.ModelSpeed): failed, canceled and short
+// replies are left out. Sortable by any column; the fastest first.
+let ledSpeedSort = { key: "tps", dir: -1 };
+const LED_SPEED_COLS = [
+  { key: "name", label: "Model", dir: 1 },
+  { key: "tps", label: "Speed", dir: -1 },
+  { key: "ttft_ms", label: "First token", dir: 1 },
+  { key: "requests", label: "Requests", dir: -1 },
+];
+function ledSpeedOrder(list) {
+  const { key, dir } = ledSpeedSort;
+  return [...list].sort((a, b) => {
+    // a model with nothing measured goes last, whichever way it is sorted
+    if (key === "tps" || key === "ttft_ms") {
+      const x = a[key] || 0, y = b[key] || 0;
+      if (!x !== !y) return x ? -1 : 1;
+      if (x !== y) return dir * (x - y);
+    } else if (key === "name") {
+      const c = (a.name || a.model).localeCompare(b.name || b.model);
+      if (c) return dir * c;
+    } else if (a[key] !== b[key]) return dir * (a[key] - b[key]);
+    return b.requests - a.requests || (a.name || a.model).localeCompare(b.name || b.model);
+  });
+}
+function drawLedSpeed(l) {
+  const box = $("#ledSpeed");
+  const list = l.speeds || [];
+  box.hidden = !list.length;
+  box.replaceChildren();
+  if (box.hidden) return;
+  const head = el("div", "led-bar");
+  const title = el("b", "led-spd-t", t("Model speed"));
+  title.title = t("Medians of the answered requests that wrote {n} tokens or more", { n: l.speed_min || 100 });
+  head.append(title);
+  const table = el("table", "led-spd");
+  const hr = el("tr");
+  for (const c of LED_SPEED_COLS) {
+    const th = el("th", c.key === "name" ? "nm" : "n");
+    const on = ledSpeedSort.key === c.key;
+    th.setAttribute("aria-sort", on ? (ledSpeedSort.dir > 0 ? "ascending" : "descending") : "none");
+    const b = el("button", "led-spd-h" + (on ? " on" : ""), t(c.label));
+    b.type = "button";
+    b.onclick = () => {
+      ledSpeedSort = on ? { key: c.key, dir: -ledSpeedSort.dir } : { key: c.key, dir: c.dir };
+      drawLedSpeed(l);
+      $("#ledSpeed .led-spd-h.on")?.focus({ preventScroll: true });
+    };
+    th.append(b);
+    hr.append(th);
+  }
+  const thead = el("thead");
+  thead.append(hr);
+  const body = el("tbody");
+  for (const x of ledSpeedOrder(list)) {
+    const tr = el("tr");
+    const name = el("td", "nm", x.name || x.model);
+    name.title = x.name || x.model;
+    tr.append(name,
+      el("td", "n" + (x.tps ? "" : " faint"), x.tps ? t("{n} tok/s", { n: ledNum(Math.round(x.tps)) }) : "—"),
+      el("td", "n" + (x.ttft_ms ? "" : " faint"), x.ttft_ms ? ledTook(x.ttft_ms) : "—"),
+      el("td", "n", ledNum(x.requests)));
+    body.append(tr);
+  }
+  table.append(thead, body);
+  const scroll = el("div", "led-spd-scroll");
+  scroll.append(table);
+  box.append(head, scroll);
+}
+
 function renderLedgerDash(l) {
   const dash = $("#ledDash");
   dash.hidden = !l.total && !l.day;
   if (dash.hidden) return;
+  drawLedSpeed(l);
   const total = allTokens(l);
   // of the calls whose vendor counted the cache: none when no call's was (#3464)
   const rate = cacheHitOf(l);

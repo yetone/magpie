@@ -88,6 +88,9 @@ type chunkPart struct {
 	first time.Time // the oldest charted row's time
 	// days are the heatmap's sums of the chunk, oldest first (heatOf)
 	days []Day
+	// speeds are the counted requests of the rows the filter keeps, by
+	// model (speed_rank.go)
+	speeds speedRank
 	// newest is the chunk's newest rows a page read of it (newest)
 	newest atomic.Pointer[chunkNewest]
 }
@@ -229,6 +232,12 @@ func (pass *cellPass) part(ps *pairedRows, rows *chunkRows, c *rowChunk, r *Row)
 		last[i] = n
 		if !uncounted {
 			cells[i].d.addRow(*r)
+			if keep {
+				if part.speeds == nil {
+					part.speeds = speedRank{}
+				}
+				part.speeds.add(r)
+			}
 		}
 	})
 	for i := range cells {

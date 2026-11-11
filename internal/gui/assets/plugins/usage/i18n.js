@@ -2,6 +2,8 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Model speed": "模型速度",
+    "Medians of the answered requests that wrote {n} tokens or more": "写出 {n} 个及以上 token 的已完成请求的中位数",
     "Set price…": "设置价格…",
     "Price of {model}": "{model} 的价格",
     "What {model} costs from every provider that has no price of its own for it. The Usage and Sessions pages count its calls at it, past ones too.": "{model} 在每个没有单独为它设价格的供应商处的价格。用量和会话页按它计算这个模型的调用，过去的也一样。",
@@ -256,6 +258,8 @@ magpie.strings({
     "Sent upstream as {to}, as the agent spoke it": "以 {to} 协议发往上游，与 agent 所用协议相同",
   },
   "zh-TW": {
+    "Model speed": "模型速度",
+    "Medians of the answered requests that wrote {n} tokens or more": "寫出 {n} 個及以上 token 的已完成請求的中位數",
     "Set price…": "設定價格…",
     "Price of {model}": "{model} 的價格",
     "What {model} costs from every provider that has no price of its own for it. The Usage and Sessions pages count its calls at it, past ones too.": "{model} 在每個沒有單獨為它設價格的供應商處的價格。用量和會話頁依它計算這個模型的呼叫，過去的也一樣。",
@@ -510,6 +514,8 @@ magpie.strings({
     "Sent upstream as {to}, as the agent spoke it": "以 {to} 協議發往上游，與 agent 所用協議相同",
   },
   ja: {
+    "Model speed": "モデルの速度",
+    "Medians of the answered requests that wrote {n} tokens or more": "{n} トークン以上を出力した完了リクエストの中央値",
     "Set price…": "価格を設定…",
     "Price of {model}": "{model} の価格",
     "What {model} costs from every provider that has no price of its own for it. The Usage and Sessions pages count its calls at it, past ones too.": "{model} 用の価格を持たないすべてのプロバイダでの {model} の価格です。使用量とセッションのページは、過去の呼び出しも含めてこの価格で計算します。",
@@ -764,6 +770,8 @@ magpie.strings({
     "Sent upstream as {to}, as the agent spoke it": "エージェントと同じ {to} で上流へ送信",
   },
   de: {
+    "Model speed": "Modelltempo",
+    "Medians of the answered requests that wrote {n} tokens or more": "Mediane der beantworteten Anfragen mit mindestens {n} Tokens",
     "Set price…": "Preis festlegen…",
     "Price of {model}": "Preis von {model}",
     "What {model} costs from every provider that has no price of its own for it. The Usage and Sessions pages count its calls at it, past ones too.": "Was {model} bei jedem Anbieter kostet, der keinen eigenen Preis dafür hat. Die Seiten Nutzung und Sitzungen rechnen seine Aufrufe damit, auch frühere.",
