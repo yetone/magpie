@@ -1196,6 +1196,15 @@ func wslHomes() []sessions.WSLHome {
 	return out
 }
 
+// wslAnswered is whether wsl.exe answered the last list of distros, so an
+// empty wslHomes means no distro has an agent (sessions.WSLListed).
+func wslAnswered() bool {
+	wslDistros()
+	wsl.Lock()
+	defer wsl.Unlock()
+	return wsl.listed
+}
+
 // wslCopilotDir is the Copilot CLI's folder under a distro's $HOME: not an
 // agent magpie sets up, but a sign-in it uses (provider.CopilotWSLDirs),
 // so a distro that has only it is kept as one agents are found in (#723).
