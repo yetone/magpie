@@ -55,8 +55,8 @@ func readsNow() readsJSON {
 	looks := agentLooks()
 	for _, a := range agents {
 		j := readAgentJSON{Agent: a, Name: a, Icon: "generic", On: r.Reads(a)}
-		if l := looks[a]; l != nil {
-			j.Name, j.Icon = l.SharedName(), l.Icon
+		if l, ok := looks[a]; ok {
+			j.Name, j.Icon = l.Shared, l.Icon
 		}
 		out.Found = append(out.Found, j)
 	}

@@ -126,12 +126,12 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 		if n <= 0 {
 			n = sessions.All
 		}
-		agents := map[string]*agent.Agent{}
+		agents := map[string]agent.Look{}
 		// what a row is named and drawn as, beside the list, for listTag
 		var drawn strings.Builder
-		for _, a := range agent.Clients() {
+		for _, a := range agent.Looks() {
 			agents[a.ID] = a
-			drawn.WriteString(a.ID + "\x00" + a.SharedName() + "\x00" + a.Icon + "\x00")
+			drawn.WriteString(a.ID + "\x00" + a.Shared + "\x00" + a.Icon + "\x00")
 		}
 		out := sessionsJSON{Sessions: []sessionJSON{}, Terminal: terminalHere() && !isWeb(w),
 			Dirs: []string{}}
@@ -199,8 +199,8 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			// drawn as the agent it ran in: Claude Desktop's Code tab's
 			// sessions are in Claude Code's folder (Session.App)
 			j.Name, j.Icon, j.Via = s.Agent, "generic", viaOf(vias, s)
-			if a := agents[cmp.Or(s.App, s.Agent)]; a != nil {
-				j.Name, j.Icon = a.SharedName(), a.Icon
+			if a, ok := agents[cmp.Or(s.App, s.Agent)]; ok {
+				j.Name, j.Icon = a.Shared, a.Icon
 			}
 			j.Name = wslName(j.Name, s)
 			j.Path = tilde(j.Path)
@@ -228,8 +228,8 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 		n, _ := strconv.Atoi(r.URL.Query().Get("days"))
 		st, gen := statsForGen(n)
 		names := map[string]string{}
-		for _, a := range agent.Clients() {
-			names[a.ID] = a.SharedName()
+		for _, a := range agent.Looks() {
+			names[a.ID] = a.Shared
 		}
 		agents := map[string]string{}
 		for _, d := range st.Days {
@@ -298,9 +298,9 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			addCodexModelEffort(&s, usage.CodexModelEffort(usage.All))
 		}
 		j := sessionJSON{Session: s, Name: s.Agent, Icon: "generic"}
-		for _, a := range agent.Clients() {
+		for _, a := range agent.Looks() {
 			if a.ID == cmp.Or(s.App, s.Agent) {
-				j.Name, j.Icon = a.SharedName(), a.Icon
+				j.Name, j.Icon = a.Shared, a.Icon
 			}
 		}
 		j.Name = wslName(j.Name, s)
@@ -499,9 +499,9 @@ func sessionMarkdown(agentID, id string) (stem string, md []byte, err error) {
 		s = gatewaySession(g)
 	}
 	name := s.Agent
-	for _, a := range agent.Clients() {
+	for _, a := range agent.Looks() {
 		if a.ID == s.Agent {
-			name = a.SharedName()
+			name = a.Shared
 		}
 	}
 	var b bytes.Buffer

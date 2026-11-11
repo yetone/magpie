@@ -42,7 +42,7 @@ var (
 func init() {
 	usageapi.Clients = func() []usageapi.Client {
 		var out []usageapi.Client
-		for _, a := range agent.Clients() {
+		for _, a := range agent.Looks() {
 			out = append(out, usageapi.Client{ID: a.ID, Name: a.Name, Icon: a.Icon})
 		}
 		return out

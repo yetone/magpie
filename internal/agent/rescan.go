@@ -15,6 +15,7 @@ import (
 // server), and where each command was found on PATH (proc.LookPath).
 func Rescan() {
 	proc.Forget()
+	forgetLooks() // a profile made since shows by its name
 
 	// where updates come from is asked again, too: a version published
 	// after magpie started showed no update until the memo ran out (#4980)
