@@ -213,3 +213,31 @@ func TestCallerKeyModelsOfferImageAndVideoModels(t *testing.T) {
 		seen[m.Provider], last = true, m.Provider
 	}
 }
+
+// A provider that serves no model now can still be allowed whole,
+// <provider>/*, for the models it serves later (CoderCCz on X): the
+// models list names it in "providers".
+func TestCallerKeyModelsOfferAnEmptyProviderWhole(t *testing.T) {
+	sandboxHome(t)
+	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"m"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.Save(provider.Provider{ID: "later", Name: "Later", Key: "k", Chat: "http://127.0.0.1:1/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	callerKeyRoutes(mux)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/caller-keys/models", nil))
+	var l struct{ Providers []keyModelJSON }
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &l) != nil {
+		t.Fatal(w.Code, w.Body)
+	}
+	var ids []string
+	for _, p := range l.Providers {
+		ids = append(ids, p.ID)
+	}
+	if !slices.Contains(ids, "later/*") || slices.Contains(ids, "relay/*") {
+		t.Fatal("providers", ids)
+	}
+}

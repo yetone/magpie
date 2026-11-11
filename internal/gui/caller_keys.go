@@ -162,11 +162,22 @@ func callerKeyRoutes(mux *http.ServeMux) {
 				out = slices.Insert(out, at, m)
 			}
 		}
+		// a provider that serves no model now (a plugin still starting, a
+		// list not fetched yet) can still be allowed whole, <provider>/*,
+		// for the models it serves later
+		listed := map[string]bool{}
+		for _, m := range out {
+			listed[m.Provider] = true
+		}
+		empty := []keyModelJSON{}
 		for _, p := range provider.All() {
 			if !p.On() {
 				continue
 			}
 			name := cmp.Or(p.Name, p.ID)
+			if !listed[p.ID] {
+				empty = append(empty, keyModelJSON{ID: p.ID + "/*", Name: name, Provider: p.ID, ProviderName: name})
+			}
 			// an account by its stable id, kept through renames, shown by the
 			// name the user gave it, else who is signed in; a key by its
 			// fingerprint
@@ -176,7 +187,7 @@ func callerKeyRoutes(mux *http.ServeMux) {
 		}
 		// the account groups a key's accounts may name, "@<id>" or "!@<id>"
 		// (LeiWang_2000 on X), each with its accounts
-		writeJSON(w, map[string]any{"models": out, "accounts": accounts, "groups": accountGroupsJSON()})
+		writeJSON(w, map[string]any{"models": out, "accounts": accounts, "providers": empty, "groups": accountGroupsJSON()})
 	})
 	// the MCP servers and tools a key may be held to (wakaka on Discord):
 	// magpie's own, then the Library's, each with its tools by name

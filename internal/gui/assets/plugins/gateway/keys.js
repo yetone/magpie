@@ -650,7 +650,7 @@ function gatewayModelsBadge(k) {
   b.setAttribute("aria-label", t("Models this key may use"));
   b.setAttribute("aria-haspopup", "menu");
   b.setAttribute("aria-expanded", "false");
-  const open = (models, accounts, groups) => {
+  const open = (models, accounts, groups, bare) => {
     if (!b.isConnected) return;
     const opts = [{ v: "", name: "All models", note: "Any model and any account, now and later" }];
     const seen = new Set();
@@ -715,6 +715,15 @@ function gatewayModelsBadge(k) {
       opts.push({ v: m.id, find: m.id, name: m.name, note: m.decides ? m.id + " · " + t("Decision model: a routing group asks it whatever this key may use; pick it so the key may ask it itself") : m.id, literalName: true });
     }
     endBlock();
+    // a provider serving no model now can still be allowed whole, for the
+    // models it serves later, its accounts after it
+    for (const m of bare || []) {
+      if (seen.has(m.provider)) continue;
+      seen.add(m.provider);
+      opts.push({ v: m.provider + "/*", name: t("Every {provider} model", { provider: m.providerName }), note: m.provider + "/*", literalName: true });
+      for (const o of ofProvider.get(m.provider) || []) opts.push(o);
+      ofProvider.delete(m.provider);
+    }
     // a provider with accounts and no model in the list (one kept
     // unlisted, or serving none now) keeps its accounts after the models
     for (const os of ofProvider.values()) opts.push(...os);
@@ -761,15 +770,15 @@ function gatewayModelsBadge(k) {
     e.stopPropagation();
     if (b.classList.contains("open")) return closeProtoMenu();
     const loading = keyModelsLoading = { id: k.id, open };
-    let models = [], accounts = [], groups = [];
-    try { ({ models, accounts, groups } = await api("caller-keys/models")); } catch (err) {
+    let models = [], accounts = [], groups = [], bare = [];
+    try { ({ models, accounts, groups, providers: bare } = await api("caller-keys/models")); } catch (err) {
       if (keyModelsLoading === loading) keyModelsLoading = null;
       status(t(err.message), "err");
       return;
     }
     if (keyModelsLoading !== loading) return;
     keyModelsLoading = null;
-    loading.open(models, accounts, groups);
+    loading.open(models, accounts, groups, bare);
   };
   if (keyModelsLoading?.id === k.id) keyModelsLoading.open = open;
   return b;
