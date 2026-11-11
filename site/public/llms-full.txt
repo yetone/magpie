@@ -5039,7 +5039,84 @@ No. Codex's settings are launch arguments of the magpie · Codex instance alone;
 
 Check the env in ~/.claude/settings.json: a Claude Code routed elsewhere there, or with a cloud switch such as Bedrock on, takes the magpie instance's requests there.
 
-More agents on the same models: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models) and [CodeBuddy on any model](https://usemagpie.ai/docs/codebuddy). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [CodeBuddy on any model](https://usemagpie.ai/docs/codebuddy) and [Craft Agents on any model](https://usemagpie.ai/docs/craft-agents). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/craft-agents
+
+# Craft Agents on any model
+
+Craft Agents (lukilabs/craft-agents-oss) is an Electron app that runs Claude and Pi sessions. Its models come from connections, and a custom endpoint is one. magpie adds a connection named magpie and makes it the one new sessions start on, so Craft Agents runs on any model you have in magpie: DeepSeek, GLM, Kimi, Qwen, an OpenAI or Anthropic key, or a ChatGPT or Copilot subscription.
+
+## Set up Craft Agents
+
+1. **Open Craft Agents once.** Craft Agents won't load a config.json without its workspaces, so magpie never makes one. It is there once Craft Agents has run.
+2. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+3. **Pick a model on Craft Agents' row.** On the Agents page, pick a magpie model for Craft Agents. Craft Agents watches config.json, so a running app takes it at once, from its next new session.
+
+```
+magpie craft-agents deepseek/deepseek-v4-pro
+```
+
+## The magpie connection
+
+Connections are in `config.json` in Craft Agents' config folder (`CRAFT_CONFIG_DIR` when set, else `~/.craft-agent`). magpie's is a `pi_compat` connection on OpenAI-compatible Chat Completions; its `models` are the models picked for Craft Agents in magpie, and `defaultModel` is the one you chose.
+
+```
+"llmConnections": [
+  …,
+  {"slug": "magpie", "name": "magpie", "providerType": "pi_compat",
+   "authType": "none",
+   "baseUrl": "http://127.0.0.1:3425/agent/craft-agents/v1",
+   "customEndpoint": {"api": "openai-completions"},
+   "models": [{"id": "deepseek/deepseek-v4-pro", "name": …}, …],
+   "defaultModel": "deepseek/deepseek-v4-pro"}
+],
+"defaultLlmConnection": "magpie"
+```
+
+Craft Agents resets a `defaultModel` that isn't in `models` to the first one there, so magpie always puts the model you picked in the list. A name or other field you give the connection in Craft Agents is kept when magpie syncs it.
+
+## No key to enter
+
+Craft Agents keeps keys apart from config.json, sealed in `credentials.enc`, which magpie doesn't open. magpie's connection has `authType: none`, which is what Craft Agents itself saves for an endpoint on this computer with no key ("Local Model"); its Pi server then sends a placeholder key, which the gateway takes from this computer. Craft Agents sends no User-Agent of its own, so `/agent/craft-agents` in the address tells the gateway which agent is asking.
+
+## New and open sessions
+
+New sessions start on the connection `defaultLlmConnection` names; a workspace's own default goes over it. A session keeps the connection it started on, so start a new one after switching to magpie. magpie says so while Craft Agents is running.
+
+## Your own connections
+
+Your connections and every other key in config.json stay as written. Before taking over the default, magpie stashes the one you had and puts it back when it steps out, where that connection is still there (else Craft Agents picks its first). If you delete the magpie connection in Craft Agents, magpie's check says it no longer reaches magpie.
+
+## Switching back
+
+Set the row back to default in magpie: magpie takes its connection out and puts your default back. Or pick a model of one of your own connections, and magpie makes it that connection's default model.
+
+```
+magpie craft-agents default
+```
+
+## FAQ
+
+### Can Craft Agents use DeepSeek, GLM, Kimi or Qwen?
+
+Yes. magpie adds a magpie connection to Craft Agents' config.json and makes it the default for new sessions; every model you picked in magpie is in it.
+
+### Do I enter an API key in Craft Agents?
+
+No. magpie's connection has authType none, as Craft Agents saves an endpoint on this computer with no key, and the gateway takes requests from this computer.
+
+### Why is a session still on my old model?
+
+A session keeps the connection it started on. Start a new session; a workspace's own default connection goes over the global one.
+
+### magpie says to open Craft Agents first?
+
+Craft Agents won't load a config.json without its workspaces, so magpie never makes one. Run Craft Agents once, then set it up.
+
+More agents on the same models: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [T3 Code on any model](https://usemagpie.ai/docs/t3-code) and [CodeBuddy on any model](https://usemagpie.ai/docs/codebuddy). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
