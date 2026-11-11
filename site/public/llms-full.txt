@@ -3895,7 +3895,7 @@ No. It writes only its own provider, the default model and, if you have one, the
 
 Yes. It reads OPENCLAW_PROFILE, OPENCLAW_STATE_DIR, OPENCLAW_CONFIG_PATH and OPENCLAW_HOME the way OpenClaw does.
 
-More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Hermes Agent on any model](https://usemagpie.ai/docs/hermes) and [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Hermes Agent on any model](https://usemagpie.ai/docs/hermes), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [nanobot on any model](https://usemagpie.ai/docs/nanobot). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
@@ -5191,6 +5191,87 @@ That project has a default model of its own in settings.json, which goes first t
 The small model: smallModelOverride once smallModelUseDefault is false, else OpenCode's small_model.
 
 More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [T3 Code on any model](https://usemagpie.ai/docs/t3-code) and [Craft Agents on any model](https://usemagpie.ai/docs/craft-agents). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/nanobot
+
+# nanobot on any model
+
+nanobot (HKUDS/nanobot, `pip install nanobot-ai`) is a personal AI assistant that answers in chat apps, its CLI and its WebUI. Its model comes from `~/.nanobot/config.json`, where any key under `providers` that isn't one of its own is an OpenAI-compatible endpoint. magpie adds a magpie provider there and sets the default model to one of magpie's, so nanobot runs on any model you have in magpie: DeepSeek, GLM, Kimi, Qwen, an OpenAI or Anthropic key, or a ChatGPT or Copilot subscription.
+
+## Set up nanobot
+
+1. **Run nanobot once.** `nanobot onboard` or its first run makes `~/.nanobot`.
+2. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+3. **Pick a model on nanobot's row.** On the Agents page, pick a magpie model for nanobot. A nanobot in WSL is set up there too.
+
+```
+pip install nanobot-ai && nanobot onboard   # nanobot makes ~/.nanobot
+magpie nanobot deepseek/deepseek-v4-pro
+```
+
+## What goes in config.json
+
+magpie adds `providers.magpie` at the gateway's `/v1`, with the gateway's key and a User-Agent of `nanobot` (the OpenAI SDK's otherwise, which tells it from no one), and sets `agents.defaults` to provider magpie, model `magpie/<model id>` and the context window magpie knows the model to take. nanobot strips the `magpie/` prefix before it sends the model.
+
+```
+// ~/.nanobot/config.json
+{
+  "providers": {
+    …,
+    "magpie": {"apiBase": "http://127.0.0.1:3425/v1", "apiKey": "…",
+               "extraHeaders": {"User-Agent": "nanobot"}}
+  },
+  "agents": {"defaults": {
+    "provider": "magpie",
+    "model": "magpie/deepseek/deepseek-v4-pro",
+    "contextWindowTokens": …
+  }}
+}
+```
+
+nanobot's pydantic models read camelCase and snake_case keys alike. magpie writes nanobot's own camelCase, and takes out a snake_case spelling of the same key, so no two settings disagree.
+
+## modelPreset
+
+When `agents.defaults.modelPreset` names one of `modelPresets`, it goes over both provider and model. So magpie stashes it and takes it out while magpie's model is on, and puts it back when it steps out; your `modelPresets` stay as they are.
+
+## When it takes effect
+
+nanobot's gateway (`nanobot gateway`, the WebUI's) watches the file and takes a change at its next reply. `nanobot agent` reads it once, so restart an open `nanobot agent` chat. magpie says so while nanobot is running.
+
+## Your own settings
+
+The provider, model, context window and modelPreset you had under `agents.defaults` are stashed and put back when magpie steps out. Your other providers, presets and keys stay as they are. A config.json magpie made goes again once nothing is left in it. If you delete the magpie provider in nanobot, magpie's check says it no longer reaches magpie.
+
+## Switching back
+
+Set the row back to default in magpie: magpie takes out `providers.magpie` and puts `agents.defaults` back. Or pick a model of your own, and magpie puts things back and then sets it as the model.
+
+```
+magpie nanobot default
+```
+
+## FAQ
+
+### Can nanobot use DeepSeek, GLM, Kimi or Qwen?
+
+Yes. magpie adds an OpenAI-compatible magpie provider to ~/.nanobot/config.json and sets the default model to the one you pick in magpie.
+
+### Why is nanobot still on the old model?
+
+nanobot's gateway and WebUI take the change at their next reply; nanobot agent reads its config once, so restart the chat.
+
+### Do I lose my modelPreset?
+
+No. magpie stashes agents.defaults.modelPreset and takes it out (it would go over magpie's model), and puts it back when it steps out; modelPresets stay.
+
+### Does it work for nanobot in WSL?
+
+Yes. magpie sets up a nanobot in a WSL distro too.
+
+More agents on the same models: [OpenClaw on any model](https://usemagpie.ai/docs/openclaw), [Hermes Agent on any model](https://usemagpie.ai/docs/hermes) and [OpenChamber on any model](https://usemagpie.ai/docs/openchamber). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
