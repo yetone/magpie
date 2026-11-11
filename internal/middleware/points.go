@@ -363,7 +363,7 @@ func Points() usage.Observer { return &observer{} }
 type observer struct {
 	mu      sync.Mutex
 	queue   chan *usage.Record // a pointer each: a 1024-row queue of Records held ~1 MB from the start, for every user, with or without an onUsage
-	using   atomic.Bool // the set served has an onUsage
+	using   atomic.Bool        // the set served has an onUsage
 	serving *set
 	removes []func()
 }
