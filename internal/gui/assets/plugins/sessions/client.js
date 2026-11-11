@@ -974,7 +974,7 @@ magpie.plugin("sessions", (ctx) => {
         openRowMenu(more, acts);
       };
       r.append(more);
-      r.oncontextmenu = (e) => { e.preventDefault(); openRowMenu(more, acts); };
+      r.oncontextmenu = (e) => { e.preventDefault(); openRowMenu(more, acts, { x: e.clientX, y: e.clientY }); };
     } else r.append(folderSlot());
 
     r.title = path;

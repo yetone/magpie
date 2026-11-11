@@ -13,6 +13,17 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
+const atPointer = async (page, target, menu) => {
+  const b = await target.boundingBox(), vw = page.viewportSize().width;
+  const px = b.x + b.width / 2, py = b.y + b.height / 2;
+  // the menu's own placement, not its bounding box, which an entrance transform scales
+  const m = await menu.evaluate((e) => ({ x: parseFloat(e.style.left), y: parseFloat(e.style.top), w: e.offsetWidth, h: e.offsetHeight }));
+  // opens at the pointer, or pushed in to the window's edge (mmmg_btc on X)
+  const x = Math.max(8, Math.min(px - 4, vw - m.w - 8));
+  assert(Math.abs(m.x - x) <= 2, `menu at x=${m.x}, expected ${x} for a pointer at ${px}`);
+  // below the pointer, or above it where there is no room below
+  assert((m.y >= py - 2 && m.y <= py + 14) || (m.y + m.h >= py - 14 && m.y + m.h <= py + 2), `menu at y=${m.y}-${m.y + m.h}, pointer at ${py}`);
+};
 const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
@@ -107,6 +118,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await folder("old-app").hover();
         const box = await more.boundingBox();
         assert(box && box.x + box.width <= width, "the ⋯ fits in the row");
+        // a right-click on the row opens the same menu at the pointer, not under the ⋯ (mmmg_btc on X)
+        const nameAt = folder("old-app").locator(".fold .name");
+        await nameAt.click({ button: "right" });
+        await page.locator(".row-menu").waitFor();
+        await atPointer(page, nameAt, page.locator(".row-menu"));
+        await page.keyboard.press("Escape");
+        await page.locator(".row-menu").waitFor({ state: "detached" });
         const open0 = await folder("old-app").locator(".fold").getAttribute("aria-expanded");
         const y0 = await page.evaluate(() => document.querySelector("#view-sessions").scrollTop);
         await more.click();

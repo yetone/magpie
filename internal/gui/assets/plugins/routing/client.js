@@ -6984,7 +6984,7 @@ function routingPage(part) {
       if (s && !s.isCollapsed && row.contains(s.focusNode) && String(s) !== selAtDown) return;
       open();
     };
-    row.oncontextmenu = (e) => { e.preventDefault(); groupMenu(ics, g); };
+    row.oncontextmenu = (e) => { e.preventDefault(); groupMenu(ics, g, { x: e.clientX, y: e.clientY }); };
     row.append(ics, main, tags, edit);
     // a group of the user's switches off as a whole, kept as it is (PAMI
     // on Discord); one magpie found is removed rather (provider.SwitchGroup)
@@ -7076,7 +7076,7 @@ function routingPage(part) {
     };
     return b;
   }
-  function groupMenu(anchor, g) {
+  function groupMenu(anchor, g, at) {
     const again = agentMenu?.anchor === anchor;
     closeAgentMenu();
     if (again) return;
@@ -7091,7 +7091,7 @@ function routingPage(part) {
       // the group as text for someone else's magpie (laincatx on X)
       { name: "Copy to share", icon: OUT, tip: t("{name} as text to paste into another magpie: its models, routing and rules, no key", { name: g.name }),
         run: () => shareGroup(g) },
-    ]);
+    ], at);
   }
   // nextTo: where a group moved one up (-1) or down goes, among them all:
   // the place of the card listed next to it, so a filtered list moves it

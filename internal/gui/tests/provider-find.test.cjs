@@ -14,6 +14,17 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
+const atPointer = async (page, target, menu) => {
+  const b = await target.boundingBox(), vw = page.viewportSize().width;
+  const px = b.x + b.width / 2, py = b.y + b.height / 2;
+  // the menu's own placement, not its bounding box, which an entrance transform scales
+  const m = await menu.evaluate((e) => ({ x: parseFloat(e.style.left), y: parseFloat(e.style.top), w: e.offsetWidth, h: e.offsetHeight }));
+  // opens at the pointer, or pushed in to the window's edge (mmmg_btc on X)
+  const x = Math.max(8, Math.min(px - 4, vw - m.w - 8));
+  assert(Math.abs(m.x - x) <= 2, `menu at x=${m.x}, expected ${x} for a pointer at ${px}`);
+  // below the pointer, or above it where there is no room below
+  assert((m.y >= py - 2 && m.y <= py + 14) || (m.y + m.h >= py - 14 && m.y + m.h <= py + 2), `menu at y=${m.y}-${m.y + m.h}, pointer at ${py}`);
+};
 const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
@@ -177,6 +188,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await row.locator(".name").click({ button: "right" });
         const menu = page.locator(".pop.row-menu");
         await menu.waitFor();
+        await atPointer(page, row.locator(".name"), menu);
         const names = await menu.locator(".rm-name").allTextContents();
         assert.deepEqual(names, [await tr("Move to top"), await tr("Move up"), await tr("Move down"), await tr("Move to bottom"), await tr("Use first"), await tr("Never a fallback")]);
         assert.deepEqual(await menu.locator(".rm-item").evaluateAll((bs) => bs.map((b) => b.disabled)), [false, false, true, true, false, false]);
