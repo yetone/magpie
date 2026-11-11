@@ -4152,7 +4152,76 @@ magpie sets maxContextTokens and maxTokens from its catalog for the model you pi
 
 Chat Completions (requestMethod chat). The row warns when magpie’s profile is set to another one.
 
-More agents on the same models: [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Cursor Private Inference on any model](https://usemagpie.ai/docs/cursor-private-inference) and [Antigravity on any model](https://usemagpie.ai/docs/antigravity). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Cursor Private Inference on any model](https://usemagpie.ai/docs/cursor-private-inference), [Antigravity on any model](https://usemagpie.ai/docs/antigravity) and [JetBrains Air on any model](https://usemagpie.ai/docs/jetbrains-air). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/jetbrains-air
+
+# JetBrains Air on any model
+
+JetBrains Air runs its own agents (Claude Agent, Codex, Gemini CLI, Junie) on accounts signed in under its settings, with no base URL to point elsewhere. It also takes any agent that speaks the Agent Client Protocol. magpie adds one, named Magpie, so Air can run on any model you have in magpie: DeepSeek, GLM, Qwen, an OpenAI or Anthropic key, or a ChatGPT or Copilot subscription.
+
+Air lists custom ACP agents from `acp.json` in its config folder: `~/Library/Application Support/JetBrains/Air` on macOS, `$XDG_CONFIG_HOME/JetBrains/Air` on Linux, `%APPDATA%\JetBrains\Air` on Windows. magpie adds an entry named `Magpie` there that starts `opencode acp`, OpenCode’s ACP server, with `OPENCODE_CONFIG` set to `magpie-opencode.json`, a file magpie keeps beside `acp.json`. That file holds magpie’s provider, its models, the model a task starts on, and `enabled_providers` narrowed to magpie. OpenCode merges it over your own config and leaves your plugins, agents and MCP servers as they are. Air’s own agents, and the accounts they run on, aren’t touched.
+
+## Connect Air
+
+1. **Add providers in magpie.** In the Providers tab, add an API key or sign in to a subscription.
+2. **Pick a model on JetBrains Air’s row.** In the Agents tab, choose a model under magpie.
+3. **Start a new task in Air.** Pick Magpie in its agent menu. magpie’s models and routing groups are in its model menu.
+
+```
+magpie air deepseek/deepseek-v4-pro        # the Air app
+magpie air-ide deepseek/deepseek-v4-pro    # Air in JetBrains IDEs
+```
+
+## OpenCode
+
+The Magpie agent is OpenCode, so OpenCode has to be installed. magpie gives Air its full path, since an app may not have your shell’s PATH: the one on PATH, else `~/.opencode/bin`, else one a JetBrains IDE or Zed installed from the ACP registry. If none is found, the row says to install it:
+
+```
+npm i -g --allow-scripts=@opencode/cli @opencode/cli
+```
+
+## The model menu
+
+Air’s model menu for the Magpie agent is the list OpenCode reports, which is magpie’s models and routing groups and nothing of OpenCode’s own. The model picked on the row is the one a new task starts on, and also OpenCode’s small model for titles and summaries. You can pick another in Air’s menu for each task.
+
+## Air in JetBrains IDEs
+
+Air is also a plugin in JetBrains IDEs: bundled with 2026.3, and installed from JetBrains Marketplace in 2026.2. The plugin reads custom agents from `~/.jetbrains/acp.json` on every system, so it has a row of its own, Air (JetBrains IDEs), which adds the same Magpie agent there. Restart the IDE if Magpie isn’t listed yet. In the IDE, Air’s own Codex and Claude Agent, on their own login, run this computer’s `codex` and `claude`, so they are on magpie too while Codex and Claude Code are connected in magpie. The model on Air’s row is the Magpie agent’s alone.
+
+## WSL projects
+
+An IDE on Windows starts the agent of a project that lives in a WSL distro inside that distro, and refuses a Windows command there. So each running distro with OpenCode gets an entry of its own, such as `Magpie (WSL Ubuntu)`, with OpenCode’s path in the distro and a config that names the gateway as the distro reaches it.
+
+## Provider keys in the environment
+
+One gap is OpenCode’s: when a provider’s key is set in the environment Air starts it with (`OPENAI_API_KEY`, `DEEPSEEK_API_KEY` and so on, not empty), its ACP server lists that provider and none from its config, so magpie’s models don’t show. Unset the variable, or keep the key in OpenCode’s `auth.json` instead.
+
+## Switch back
+
+Take the row off magpie. magpie removes the Magpie entry from `acp.json` and deletes `magpie-opencode.json`. Air’s own agents were never changed. If the Magpie entry is removed by hand, the row says Air no longer reaches magpie.
+
+## FAQ
+
+### Can JetBrains Air use DeepSeek, GLM or Qwen?
+
+Yes. Pick the Magpie agent in a new Air task, and every model you have in magpie is in its model menu: DeepSeek, GLM, Qwen, GPT, Claude and more.
+
+### Does magpie change Air’s own agents or accounts?
+
+No. It adds one ACP agent, Magpie, to acp.json. Claude Agent, Codex, Gemini CLI and Junie keep their own accounts.
+
+### Why doesn’t the Magpie agent show magpie’s models?
+
+Usually a provider key such as OPENAI_API_KEY is set in the environment Air starts with. OpenCode then lists only that provider. Unset it, or keep the key in OpenCode’s auth.json.
+
+### Does it work in IntelliJ IDEA, PyCharm and other JetBrains IDEs?
+
+Yes, through the Air plugin (bundled with 2026.3, from Marketplace in 2026.2). Connect the Air (JetBrains IDEs) row and restart the IDE.
+
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Antigravity on any model](https://usemagpie.ai/docs/antigravity) and [Snow CLI on any model](https://usemagpie.ai/docs/snow-cli). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
