@@ -66,6 +66,12 @@ magpie.plugin("sessions", (ctx) => {
   let speeds = new Map();
   let speedT = 0;
   let speedBusy = false;
+  // speedSkips: ticks left before the next ask while no session has a
+  // speed: nothing heard in curveForget, so a new one's curve, kept by
+  // the gateway, shows within speedRestTicks seconds, and a resting page
+  // asks a fifth as often
+  let speedSkips = 0;
+  const speedRestTicks = 5;
   let speedPop = null;    // { anchor, draw } of the popover open
   let focus = null;           // { agent, id, until }: a session to bring into sight once drawn
   let recordingBusy = false;
@@ -1812,16 +1818,19 @@ magpie.plugin("sessions", (ctx) => {
   async function speedTick() {
     if (!speedsShown()) { clearInterval(speedT); speedT = 0; return; }
     if (speedBusy) return;
+    if (speedSkips > 0) { speedSkips--; return; }
     speedBusy = true;
     try {
       const list = await api("speeds");
       speeds = new Map((Array.isArray(list) ? list : []).map((sp) => [sp.agent + "|" + sp.session, sp]));
     } catch { return; } finally { speedBusy = false; }
+    if (!speeds.size) speedSkips = speedRestTicks - 1;
     page?.querySelectorAll(".sm-speed").forEach(fillSpeed);
     speedPop?.draw();
   }
   function speedsOn() {
     if (speedT || !speedsShown()) return;
+    speedSkips = 0;
     speedT = setInterval(speedTick, 1000);
     speedTick();
   }
