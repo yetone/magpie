@@ -6047,7 +6047,83 @@ Nothing on this computer opens cindy:// links, or the program that registered th
 
 magpie lists Cindy once it has run on this computer and made its data folder. Open Cindy once, then look again.
 
-More desktop apps on the same models: [AionUi on any model](https://usemagpie.ai/docs/aionui), [Every model in Cherry Studio, through magpie](https://usemagpie.ai/docs/cherry-studio) and [Shelley on any model](https://usemagpie.ai/docs/shelley). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More desktop apps on the same models: [AionUi on any model](https://usemagpie.ai/docs/aionui), [Every model in Cherry Studio, through magpie](https://usemagpie.ai/docs/cherry-studio), [Shelley on any model](https://usemagpie.ai/docs/shelley) and [Lody on any model](https://usemagpie.ai/docs/lody). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/lody
+
+# Lody on any model
+
+Lody is a desktop app that runs coding agents such as Claude Code, Codex, Pi, dsh, Kimi Code, Grok and Bub. It adds a provider through its own import link, in a dialog you confirm. magpie gives it that link, with magpie as one custom provider named Magpie and three endpoints by protocol, covering every runtime it supports. Once confirmed, those agents in Lody run on any model in magpie: DeepSeek, GLM, Kimi, Qwen, an OpenAI or Anthropic key, and the ChatGPT or Copilot subscription you signed in to.
+
+## Add magpie to Lody
+
+1. **Open Lody once.** Once Lody has run, its home folder `~/.lody` (`~/.lody-oss` for its OSS build) or data folder (`~/Library/Application Support/Lody` on a Mac) is there, and magpie's Agents page lists it. Lody OSS and Lody Nightly count too.
+2. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+3. **Click Add magpie.** On Lody's row, click Add magpie; magpie hands the import link to Lody.
+4. **Confirm it in Lody.** Lody shows its local provider dialog, and nothing is added until you confirm. Then pick a model from the Magpie provider for each agent in Lody.
+
+```
+magpie lody add      # opens Lody to add magpie; confirm it there
+```
+
+The row never says it's added: Lody has no public status API, and magpie doesn't guess from a click, files it generates or Lody's private store. Click again whenever you need to.
+
+## What the link holds
+
+The link's `data` is base64url-encoded JSON. Decoded, it is:
+
+```
+lody://provider/import?v=1&data=
+{
+  "kind": "custom", "id": "magpie", "name": "Magpie",
+  "auth": {"method": "apiKey", "apiKey": "…"},
+  "endpoints": [
+    {"protocol": "anthropic-messages", "baseUrl": "http://127.0.0.1:3425",
+     "targets": ["claude-code"], "modelsUrl": "http://127.0.0.1:3425/v1/models"},
+    {"protocol": "openai-responses", "baseUrl": "http://127.0.0.1:3425/v1",
+     "targets": ["codex"], "modelsUrl": "http://127.0.0.1:3425/v1/models"},
+    {"protocol": "openai-chat", "baseUrl": "http://127.0.0.1:3425/v1",
+     "targets": ["pi", "dsh", "kimi-code", "grok", "bub"],
+     "modelsUrl": "http://127.0.0.1:3425/v1/models"}
+  ]
+}
+```
+
+Claude Code speaks Anthropic Messages at the gateway itself; Codex speaks OpenAI Responses; Pi, dsh, Kimi Code, Grok and Bub speak OpenAI Chat, all at the gateway's `/v1`. Every endpoint lists its models from the gateway's `/v1/models`.
+
+## Loopback addresses only
+
+Lody takes only HTTP on a loopback address (127.0.0.1, localhost or ::1), and only its public attribution token as the key, never a LAN key or a vendor credential. So when the gateway isn't on loopback, say you set magpie's address to a LAN one, magpie doesn't open Lody and says why.
+
+## Lody on Linux
+
+On macOS and Windows, Lody's bundle and installer claim `lody://` themselves, and magpie opens the link. On Linux, Lody's AppImage makes itself the default only for its own channel's scheme and leaves `lody://` to the desktop database, which nothing builds without update-desktop-database, so xdg-open and browsers turn the link away (“failed to open uri”). So on Linux magpie runs Lody with the link, as its desktop entry (`ai.lody.desktop`, or the Nightly or OSS one) says; a Lody already running takes the link and the second one quits. With no entry of Lody's, it hands the link to the system.
+
+## Usage and keys
+
+The key in the link is Lody's own, so its requests are counted as Lody's in magpie's usage, apart from other agents.
+
+## FAQ
+
+### Can Claude Code in Lody use DeepSeek or GLM?
+
+Yes. Once magpie is added to Lody, Claude Code uses any model in magpie, DeepSeek and GLM included, through the Magpie provider's Anthropic endpoint; Codex, Pi, Kimi Code and the rest do the same.
+
+### Why does magpie say Lody takes only a loopback address?
+
+Lody accepts HTTP providers on loopback only. Set magpie's gateway address back to 127.0.0.1 or localhost, then click Add magpie again.
+
+### On Linux, Add magpie says failed to open uri.
+
+That is xdg-open finding no handler for lody://. magpie runs Lody from its desktop entry instead; if that still fails, open Lody once so it writes its entry, then click again.
+
+### Why doesn't Lody's row say it's added?
+
+Lody has no public status API, and magpie doesn't guess. Once you've confirmed, Magpie is in Lody's provider list.
+
+More desktop apps on the same models: [Cindy on any model](https://usemagpie.ai/docs/cindy), [AionUi on any model](https://usemagpie.ai/docs/aionui) and [Shelley on any model](https://usemagpie.ai/docs/shelley). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
