@@ -684,7 +684,7 @@ func pluginRoutes(mux *http.ServeMux, w Windows) {
 		writeJSON(rw, map[string]any{"hits": hits})
 	})
 	mux.HandleFunc("GET /api/plugins/page", func(rw http.ResponseWriter, r *http.Request) {
-		p, err := plugin.Readme(r.Context(), r.URL.Query().Get("name"))
+		p, err := plugin.ReadmeIn(r.Context(), r.URL.Query().Get("name"), r.URL.Query().Get("lang"))
 		if err != nil {
 			fail(rw, err)
 			return

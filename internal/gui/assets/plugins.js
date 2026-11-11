@@ -1838,7 +1838,8 @@
     }
     if (l.replaces) main.append(el("p", "pm-note", t("magpie's own sign-in to this subscription is deprecated: this plugin takes its place, and accounts signed in there move to it.")));
     const readme = el("div", "pm-readme");
-    const had = pages.get(l.package);
+    const pageKey = l.package + "\n" + (document.documentElement.lang || "en");
+    const had = pages.get(pageKey);
     const day = (p) => {
       const at = l.github && !entryOf(l.package) ? l.github.pushed : p.updated;
       upd.textContent = at && !at.startsWith("0001") ? new Date(at).toLocaleDateString(intlLang(), { year: "numeric", month: "short", day: "numeric" }) : "—";
@@ -1882,8 +1883,8 @@
       n.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 240, easing: "ease-out" });
     };
     try {
-      const p = await api("plugins/page?name=" + encodeURIComponent(l.package));
-      keep(l.package, p);
+      const p = await api("plugins/page?name=" + encodeURIComponent(l.package) + "&lang=" + encodeURIComponent(document.documentElement.lang || "en"));
+      keep(pageKey, p);
       day(p);
       if (!had) fill(markdown(p.readme || t("No README")));
       else if (p.readme !== had.readme) readme.replaceChildren(markdown(p.readme || t("No README")));
