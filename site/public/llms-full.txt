@@ -4244,7 +4244,7 @@ Lighter tasks next to the main work. Set it on Crush’s row as small, to any mo
 
 Yes. magpie sets up a Crush in a WSL distro too, with the gateway’s address as the distro reaches it.
 
-More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Zed on any model](https://usemagpie.ai/docs/zed) and [Raycast on any model](https://usemagpie.ai/docs/raycast). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Zed on any model](https://usemagpie.ai/docs/zed), [Raycast on any model](https://usemagpie.ai/docs/raycast) and [jcode on any model](https://usemagpie.ai/docs/jcode). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
@@ -5581,6 +5581,86 @@ No. The JetBrains build is handed an empty configuration on every start, so the 
 An imported profile lives in Zoo Code's encrypted secret storage, which magpie can't write. magpie stops the import and puts the setting back; the profile is yours to switch from or delete in Zoo Code.
 
 More agents on the same models: [Cline on any model](https://usemagpie.ai/docs/cline), [Goose on any model](https://usemagpie.ai/docs/goose) and [Hermes Agent on any model](https://usemagpie.ai/docs/hermes). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/jcode
+
+# jcode on any model
+
+jcode (1jehuang/jcode) is a coding agent in Rust that keeps its settings in `config.toml`. A provider of your own is a named profile, `[providers.<name>]`, as `jcode provider add` writes it. magpie adds itself as the profile magpie, at the local gateway, with every magpie model listed, and starts jcode on the model you pick. So jcode runs on any model you have in magpie: DeepSeek, GLM, Kimi, Qwen, an OpenAI or Anthropic key, or a ChatGPT or Copilot subscription.
+
+## Set up jcode
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model on jcode's row.** With jcode installed, magpie's Agents page has a jcode row; pick a model.
+3. **Start jcode.** A new jcode starts on that model; restart a session that is already open.
+
+```
+magpie jcode deepseek/deepseek-v4-pro
+jcode   # /model lists every magpie model, /effort its levels
+```
+
+## What magpie writes
+
+jcode's folder is `$JCODE_HOME`, else `~/.jcode`. In its `config.toml` magpie writes `[providers.magpie]`: `type = "openai-compatible"` (jcode's Chat Completions client), `base_url` at the gateway's `/v1`, an `api_key` naming jcode, and `requires_api_key = true`. That last one is there because jcode takes a gateway on loopback as needing no key and then sends none, and the key is how the gateway knows the request is jcode's. It then sets `default_provider` and `default_model` in `[provider]` to magpie and the model you pick.
+
+```
+# ~/.jcode/config.toml
+[provider]
+default_provider = "magpie"
+default_model = "deepseek/deepseek-v4-pro"
+
+[providers.magpie]
+type = "openai-compatible"
+base_url = "http://127.0.0.1:3425/v1"
+api_key = "…"
+requires_api_key = true
+models = [
+  { id = "deepseek/deepseek-v4-pro", context_window = …, input = ["text"], reasoning = true },
+  …
+]
+```
+
+## /model and /effort
+
+Each of magpie's models is an entry in `models`, so jcode's `/model` picker lists them all and switches between them. Each entry carries the context window (128K when magpie doesn't know it; jcode would take 200K) and whether it takes images; a model with effort levels gets `reasoning = true`, so jcode's `/effort` offers them. A `reasoning_effort` you set on one of magpie's models stays while the model has that level. When magpie's models change, magpie updates the list.
+
+## When it takes effect
+
+jcode reads its settings at start-up, so restart an open jcode session to use a new model or list; magpie says so while jcode is running.
+
+## Your own settings
+
+The profile and model `[provider]` named before are stashed and put back when magpie steps out. Every other key of the file is yours and stays as written, your own keys in magpie's profile too (headers, extra_body, a model's reasoning_effort). A `config.toml` that doesn't parse is an error and left as it is, never taken as empty. When jcode saves its settings itself it writes the models as `[[providers.magpie.models]]` tables; magpie folds them back into one array on its next write.
+
+## Switching back
+
+Set the row back to default in magpie: when jcode still starts on magpie, magpie puts `[provider]` back as it was; a pick you made in jcode since is yours and stands. Then the whole `[providers.magpie]` goes, with your own keys in it. Or pick one of jcode's own models, and magpie sets `default_model` to it.
+
+```
+magpie jcode default
+```
+
+## FAQ
+
+### Can jcode use DeepSeek, GLM, Kimi or Qwen?
+
+Yes. magpie writes an openai-compatible [providers.magpie] profile into jcode's config.toml at the local gateway, and starts jcode on the model you pick.
+
+### Can I switch magpie's models in jcode's /model?
+
+Yes. Every magpie model is in the magpie profile's models, so /model lists and switches them; a model with effort levels offers them in /effort.
+
+### Why didn't jcode change after I picked a model?
+
+jcode reads its settings at start-up. Restart the open jcode session.
+
+### Do my settings stay after switching back?
+
+Yes. magpie removes only [providers.magpie], and puts [provider] back when jcode still starts on magpie; every other key stays as written.
+
+More agents on the same models: [Crush on any model](https://usemagpie.ai/docs/crush), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models) and [Goose on any model](https://usemagpie.ai/docs/goose). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
