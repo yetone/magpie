@@ -4236,12 +4236,8 @@ async function load(again) {
     // the panel's allowances asked beside the state, not after it (#3134)
     const early = mode === "panel" && !load.done;
     if (early) panelQuotasNow(again);
-    // the first load draws the state magpie kept from its last read while
-    // the fresh one is read (#1519, fatkun): reading every agent's config,
-    // and a WSL distro's through \\wsl.localhost, took seconds after a
-    // start or after light mode let the window go. The fresh state
-    // replaces it the moment it is in, so an agent leaves the list only
-    // once that says it is gone.
+    // the first load draws the state kept from the last read while the
+    // fresh one (seconds, #1519) is read; an agent leaves only once that says so
     let relang = false, shown = null;
     if (!load.done) {
       const last = await Promise.race([api("state?last=1").catch(() => null), asked.then(() => null, () => null)]);
@@ -4511,11 +4507,8 @@ function updateStuck(u) {
 }
 
 // ---------- what's new ----------
-// After an update the window (or magpie web's page) shows what changed in
-// every release since the one last run, once (a Discord user: to see if
-// their issue was fixed). Not in the tray's panel, where a dialog has no
-// room; Settings' version row opens it again, and with an update waiting,
-// that one's notes first.
+// After an update the window (or magpie web) shows each release's changes
+// since the one last run, once; Settings' version row opens it again.
 const ISSUES = "https://github.com/yetone/magpie/issues/";
 let whatsNewAsked = false;
 // cliBehindOnce: the terminal's magpie is a copy, not the installer's
@@ -5408,10 +5401,8 @@ function renderList() {
 
 // fastToggle: a model with a fast mode (a ChatGPT account's GPT, Cursor's
 // -fast, …) is sent in it, or not, for the agent the picker is of (#954),
-// switched by the model as a routing group's member is; the pick itself
-// stays as it is. Where an account offers it Ultrafast too (ultraOk,
-// #1954), a click steps usual → Fast → Ultrafast → usual, as a camera's
-// flash button steps its modes
+// switched by the model as a routing group's member is. Where ultraOk
+// (#1954), a click steps usual → Fast → Ultrafast → usual
 const BOLT = "M9.25 1.75 3.75 9h4l-1 5.25L12.25 7h-4z";
 function fastToggle(o) {
   const b = el("button", "fast" + (o.fast ? " on" : "") + (o.fast && o.ultra ? " ultra" : ""));
@@ -7544,11 +7535,9 @@ function providerDirty() {
     (active?.matches(".editor .mprice input") && active.value !== active.defaultValue));
 }
 // backdropClick(el, on) says whether a click on el is one on its backdrop:
-// pressed and let go both where on(e) says the backdrop is. A press inside
-// the dialog let go out over the backdrop, a selection dragged out of a
-// field (#1373), clicks the two's nearest shared ancestor, the backdrop, so
-// the click's own target can't tell it apart. Every dialog that closes from
-// its backdrop asks this.
+// pressed and let go both where on(e) says the backdrop is: a selection
+// dragged out of a field (#1373) clicks the backdrop too. Every dialog that
+// closes from its backdrop asks this.
 function backdropClick(el, on = (e) => e.target === el) {
   let down = false, up = false;
   el.addEventListener("pointerdown", (e) => { down = on(e); up = false; }, true);
@@ -15280,7 +15269,8 @@ function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key sp
   const multi = Array.isArray(value);
   let picked = multi ? [...value] : null;
   // an item with its own ticked (true or false) is a setting beside the pick
-  const isOn = (v, o) => typeof o?.ticked === "boolean" ? o.ticked : !multi ? v === value : v === "" ? !picked.length : picked.includes(v);
+  // a group heading (o.group, its values) is ticked when all of them are
+  const isOn = (v, o) => o?.group ? o.group.every((g) => picked.includes(g)) : typeof o?.ticked === "boolean" ? o.ticked : !multi ? v === value : v === "" ? !picked.length : picked.includes(v);
   const box = el("div", "pop proto-menu" + (cls ? " " + cls : ""));
   box.setAttribute("role", "menu");
   box.append(el("div", "pm-head", t(head)));
@@ -15295,14 +15285,15 @@ function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key sp
   }
   const tick = (b, o) => {
     b.classList.toggle("on", isOn(o.v, o));
+    if (o.group) b.classList.toggle("mixed", !isOn(o.v, o) && o.group.some((g) => picked.includes(g)));
     b.setAttribute("aria-checked", isOn(o.v, o));
     b.firstChild.replaceChildren(...(isOn(o.v, o) ? [svg(CHECK, 12, 1.9)] : []));
   };
   const items = opts.map((o) => {
-    const b = el("button", "pm-item");
+    const b = el("button", "pm-item" + (o.group ? " pm-group" : ""));
     b.type = "button";
     if (o.title) b.title = o.title;
-    b.setAttribute("role", multi && o.v && o.v !== "\x00" || typeof o.ticked === "boolean" ? "menuitemcheckbox" : "menuitemradio");
+    b.setAttribute("role", o.group || multi && o.v && o.v !== "\x00" || typeof o.ticked === "boolean" ? "menuitemcheckbox" : "menuitemradio");
     const words = el("span", "pm-words");
     words.append(el("span", "pm-name", o.literalName ? o.name : t(o.name)), el("span", "pm-note", t(o.note)));
     b.append(el("span", "pm-tick"), words);
@@ -15310,6 +15301,12 @@ function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key sp
     b.onclick = (e) => {
       e.stopPropagation();
       if (!multi) { closeProtoMenu(); choose(o.v, e); return; }
+      if (o.group) {
+        picked = isOn(o.v, o) ? picked.filter((v) => !o.group.includes(v)) : [...new Set([...picked, ...o.group])];
+        items.forEach((it, i) => tick(it, opts[i]));
+        if (live) choose(opts.map((o) => o.v).filter((v) => picked.includes(v)));
+        return;
+      }
       if (o.v === "\x00") return;
       if (!o.v) { picked = []; closeProtoMenu(); if (live) choose([]); return; }
       picked = picked.includes(o.v) ? picked.filter((v) => v !== o.v) : [...picked, o.v];
@@ -15326,7 +15323,8 @@ function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key sp
   bareTicks(box, items);
   if (filter) filter.oninput = () => {
     const q = filter.value.trim().toLocaleLowerCase();
-    items.forEach((b, i) => { b.hidden = !opts[i].always && !(opts[i].name + " " + (opts[i].find || "")).toLocaleLowerCase().includes(q); });
+    items.forEach((b, i) => { if (!opts[i].group) b.hidden = !opts[i].always && !(opts[i].name + " " + (opts[i].find || "")).toLocaleLowerCase().includes(q); });
+    items.forEach((b, i) => { if (opts[i].group) b.hidden = !opts[i].group.some((v) => items.some((m, j) => opts[j].v === v && !m.hidden)); });
   };
   document.body.append(box);
   placeMenu(box, anchor, align);
@@ -15344,7 +15342,7 @@ function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key sp
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       stepFocus(e, shown, i);
     } else if (filter && e.key === "Enter" && document.activeElement === filter) {
-      const first = shown.find((b) => !opts[items.indexOf(b)].always);
+      const first = shown.find((b) => !opts[items.indexOf(b)].always && !opts[items.indexOf(b)].group);
       if (first) { e.preventDefault(); first.click(); }
     } else if (filter && (e.key === "Home" || e.key === "End") && i >= 0) {
       e.preventDefault();
@@ -22758,11 +22756,9 @@ function prefsKeep(s) {
 }
 
 // savePrefs sends what the page was drawn with (prefsBase) and the choice
-// made on it. The saves go one after another, each with the choices before
-// it: two made quickly (a theme, then a language) each sent the page as it
-// was drawn, the second undoing the first, and their answers could come
-// back in either order. The page is painted and drawn again once the last
-// is in.
+// made on it. Saves go one after another, each with the choices before it:
+// two quick ones (a theme, then a language) undid each other. The page is
+// drawn again once the last is in.
 let prefsBase = {}, prefsQueue = Promise.resolve(), prefsQueued = 0;
 function savePrefs(body) {
   const change = Object.fromEntries(Object.entries(body).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(prefsBase[k])));

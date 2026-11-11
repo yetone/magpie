@@ -4874,16 +4874,17 @@ magpie.plugin("library", (ctx) => {
   const SKILL_SORTS = () => [["source", t("By source")], ...NAME_SORTS];
   // the groups, and each skill's text to filter by, worked out once for
   // each answer from magpie and each pick
-  let grouped = null;
-  function skillGroups() {
-    const pick = sortOf("libSkills", SKILL_SORTS());
-    if (grouped?.lib === lib && grouped.pick === pick) return grouped.groups;
+  let grouped = {}; // sort → { lib, groups }
+  // bySource: the project picker's grouping, whatever sort the list has
+  function skillGroups(bySource = false) {
+    const pick = bySource ? "source" : sortOf("libSkills", SKILL_SORTS());
+    if (grouped[pick]?.lib === lib) return grouped[pick].groups;
     if (pick !== "source") {
       const skills = [...lib.skills].sort(byName(pick));
       const g = { key: "flat", repo: "", skills, parts: null,
         text: new Map(skills.map((s) => [s, (s.name + " " + (s.note || "") + " " + (s.description || "") + " " + skillRepo(s)).toLowerCase()])) };
-      grouped = { lib, pick, groups: [g] };
-      return grouped.groups;
+      grouped[pick] = { lib, groups: [g] };
+      return grouped[pick].groups;
     }
     // the user's own groups first, in the order made, each skill in its
     // group rather than its source's (#791)
@@ -4932,7 +4933,7 @@ magpie.plugin("library", (ctx) => {
       g.text = new Map(g.skills.map((s) => [s, (s.name + " " + (s.note || "") + " " + (s.description || "") + " " + (g.mine || (g.owner ? skillRepo(s) : g.repo))).toLowerCase()]));
       g.parts = g.mine ? null : partsOf(g);
     }
-    grouped = { lib, pick, groups };
+    grouped[pick] = { lib, groups };
     return groups;
   }
 
@@ -5943,7 +5944,14 @@ magpie.plugin("library", (ctx) => {
       const global = (s) => (s.agents || []).filter((id) => offIds.includes(id) && !routedOff(agentOf(id) || { name: id }, s));
       const inherited = (s) => !p.skills[s.name]?.length && global(s).some((id) => !(p.skillsOff?.[s.name] || []).includes(id));
       const now = lib.skills.filter((s) => p.skills[s.name]?.length || p.problems?.[s.name] || inherited(s)).map((s) => s.name);
-      const opts = lib.skills.map((s) => ({ v: s.name, name: s.name, literalName: true, note: "" }));
+      // by source, as the Library lists them, a heading ticking its group
+      const gs = skillGroups(true);
+      const opts = gs.length < 2 ? lib.skills.map((s) => ({ v: s.name, name: s.name, literalName: true, note: "" }))
+        : gs.flatMap((g) => {
+          const title = g.mine || g.repo || t("On this computer");
+          return [{ v: "\x00" + g.key, group: g.skills.map((s) => s.name), name: title, literalName: true, note: "" },
+            ...g.skills.map((s) => ({ v: s.name, name: s.name, literalName: true, note: "", find: title }))];
+        });
       openProtoMenu(b, opts, now, async (next) => {
         const byName = (n) => lib.skills.find((s) => s.name === n);
         let adds = next.filter((n) => !now.includes(n)), outs = now.filter((n) => !next.includes(n));
@@ -5977,7 +5985,7 @@ magpie.plugin("library", (ctx) => {
             ? t("{skill} is out of {name}", { skill: outs[0], name: p.name })
             : t("{skills} are out of {name}", { skills: names(outs), name: p.name }));
         }
-      }, "Pick the skills it gets", "", "right", false, opts.length > 8 ? "Find a skill" : "");
+      }, "Pick the skills it gets", "", "right", false, lib.skills.length > 8 ? "Find a skill" : "");
     });
     b.setAttribute("aria-expanded", "false");
     if (!lib.skills.length || !all.length) b.disabled = true;
