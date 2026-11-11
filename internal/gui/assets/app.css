@@ -2861,10 +2861,15 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc + .acc, .accts .signing { border-top: 1px solid var(--line-2); }
 /* every row of the box ruled off from the one above it, a setting's too
    (the owner, 10-29: Add another sat unruled under Only switch) */
-.accts > :is(.keep-login, .switch-only, .restart-app, .pool-ends) + .acc { border-top: 1px solid var(--line-2); }
-.editor .accts .keep-login, .editor .accts .switch-only, .editor .accts .restart-app, .editor .accts .pool-ends { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 34px; padding: 6px 11px; font-size: 12px; border-top: 1px solid var(--line-2); }
-.editor .accts .keep-login .keep-as { max-width: 240px; }
-.editor .accts .sign-in-moves { margin: 0; padding: 8px 11px; font-size: 12px; line-height: 1.5; color: var(--fg-2); border-top: 1px solid var(--line-2); }
+.accts > :is(.auto-switch, .switch-only, .restart-app, .pool-ends) + .acc { border-top: 1px solid var(--line-2); }
+.editor .accts .switch-only, .editor .accts .restart-app, .editor .accts .pool-ends { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 34px; padding: 6px 11px; font-size: 12px; border-top: 1px solid var(--line-2); }
+.editor .accts .auto-switch { display: flex; flex-direction: column; gap: 6px; padding: 8px 11px; font-size: 12px; border-top: 1px solid var(--line-2); }
+.editor .accts .auto-switch .as-head { display: flex; text-align: left; padding-top: 0; align-items: center; gap: 8px; min-height: 18px; cursor: pointer; }
+.editor .accts .auto-switch .as-name { flex: 1; min-width: 0; }
+.editor .accts .auto-switch .as-head .lib-switch { flex: none; }
+.editor .accts .auto-switch .sign-in-moves { line-height: 1.5; color: var(--fg-2); }
+.editor .accts .auto-switch .as-keep { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--fg-2); }
+.editor .accts .auto-switch .keep-as { max-width: 240px; }
 /* Claude Code's interactive mode or -p, with why (claudeModeRow) */
 .claude-mode { display: contents; }
 .cc-run { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-height: 26px; }

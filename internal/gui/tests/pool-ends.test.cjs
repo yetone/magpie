@@ -87,7 +87,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(await ticks.nth(i).locator("input").isChecked(), false, "off by default");
         }
         assert.equal((await page.locator(".editor .accts .pool-ends .note").textContent()).trim(), label[lang][2], "the uncapped account is named");
-        assert.equal(await page.locator(".editor .accts .keep-login.pool-ends, .editor .accts .keep-login .pool-ends").count(), 0, "apart from keep-login's box");
+        assert.equal(await page.locator(".editor .accts .auto-switch.pool-ends, .editor .accts .auto-switch .pool-ends").count(), 0, "apart from the auto-switch box");
         if (lang === "en") {
           const strings = await page.evaluate(() => [...document.querySelectorAll(".editor .accts .pool-ends label")].map((l) => l.title));
           const keys = ["Stop when every account is at its cap", "Check usage again near a cap", "No cap on {users}: used to 100% of each window",

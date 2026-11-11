@@ -12239,9 +12239,6 @@ function routingOfDraft(p) {
 function signInMovesLine(p, agent) {
   const m = p.signInMoves;
   if (!m) return "";
-  if (m.mode === "kept") return keptLogin(p)
-    ? t("Automatic switching is off: {agent} stays signed in to {user}, even once it runs out.", { agent, user: keptLogin(p) })
-    : t("Automatic switching is off: {agent} stays signed in to the first account, even once it runs out.", { agent });
   if (m.mode === "gateway") return t("{agent}'s requests go through magpie, which sends each one to an account with room; its own sign-in stays where you put it.", { agent });
   if (m.mode !== "moves") return "";
   const on = m.share >= 100
@@ -13579,49 +13576,67 @@ function renderAccounts(a, p) {
     if (amBox) row.append(amBox);
     list.append(row);
   }
-  // what magpie does with the agent's own sign-in, said where the
-  // accounts are: a tick left on, or Claude Code on the gateway, had it
-  // never switch with nothing on the page saying so (the owner, 11-11)
+  // magpie moving the agent's own sign-in to an account with room is a
+  // switch of its own (the owner, 11-11: 这个轮换做成一个开关). On, a line
+  // says when it moves (provider.SignInMovesOf); off, the account it stays
+  // on (#524). Switch-only always moves, so it stays on there (#1907).
   if ((a.agent === "codex" || a.agent === "claude") && several && p) {
-    const say = signInMovesLine(p, a.agentName);
-    if (say) list.append(el("div", "hint sign-in-moves", say));
-  }
-  // one account (#209, #408, #524)
-  if ((a.agent === "codex" || a.agent === "claude") && several && p && !p.switchOnly) {
-    const box = el("div", "keep-login");
-    const [keep, cb] = tick(t("Keep {agent} signed in to", { agent: a.agentName }), !!p.keepLogin);
-    keep.title = t("{agent} stays on this account even when it runs low. Requests through magpie still follow Routing.", { agent: a.agentName });
+    const box = el("div", "auto-switch"), on = !!p.switchOnly || !p.keepLogin;
+    const head = el("label", "as-head");
+    const name = el("span", "as-name", t("Switch {agent}'s account automatically", { agent: a.agentName }));
+    const sw = el("button", "lib-switch use-credits" + (on ? " on" : ""));
+    sw.type = "button";
+    sw.setAttribute("role", "switch");
+    sw.setAttribute("aria-checked", String(on));
+    sw.setAttribute("aria-label", name.textContent);
+    sw.append(el("i"));
+    if (p.switchOnly) {
+      sw.disabled = true;
+      sw.title = t("Always on while magpie only switches {agent}'s sign-in", { agent: a.agentName });
+    }
+    head.append(name, sw);
+    box.append(head);
     let keepAs = kept;
-    const opts = [{ v: "", name: t("the first account"), note: "", literalName: true }];
-    for (const l of ls) if (!l.lapsed && !l.accessOnly) opts.push({ v: l.user, name: l.user, note: "", literalName: true });
-    const as = el("button", "sess-pick keep-as" + (keepAs ? " set" : ""));
-    as.type = "button";
-    as.title = t("The account {agent} stays signed in to", { agent: a.agentName });
-    as.dataset.value = keepAs;
-    as.setAttribute("aria-haspopup", "menu");
-    as.setAttribute("aria-expanded", "false");
-    as.append(el("span", "", keepAs || t("the first account")), svg(CHEV, 11, 1.6));
     const post = (keepLogin) => {
       const body = { id: p.id, keepLogin };
       if (keepLogin && keepAs) body.keepLoginAs = keepAs;
       accountAction("provider/keeplogin", body, !keepLogin ? t("magpie moves {agent} to an account with room again", { agent: a.agentName })
         : keepAs ? t("{agent} stays signed in to {user}", { agent: a.agentName, user: keepAs }) : t("{agent} stays signed in to the first account", { agent: a.agentName }));
     };
-    cb.onchange = () => post(cb.checked);
-    as.onclick = (e) => {
-      e.stopPropagation();
-      if (as.classList.contains("open")) return closeProtoMenu();
-      openProtoMenu(as, opts, keepAs, (v) => {
-        if (v === keepAs && cb.checked) return;
-        keepAs = v;
-        as.dataset.value = v;
-        as.classList.toggle("set", !!v);
-        as.firstChild.textContent = v || t("the first account");
-        cb.checked = true;
-        post(true);
-      }, "Account to stay signed in to", "sess-menu");
+    sw.onclick = () => {
+      if (sw.disabled) return;
+      sw.disabled = true;
+      post(on);
     };
-    box.append(keep, as);
+    if (on) {
+      const say = signInMovesLine(p, a.agentName);
+      if (say) box.append(el("div", "sign-in-moves", say));
+    } else {
+      const opts = [{ v: "", name: t("the first account"), note: "", literalName: true }];
+      for (const l of ls) if (!l.lapsed && !l.accessOnly) opts.push({ v: l.user, name: l.user, note: "", literalName: true });
+      const as = el("button", "sess-pick keep-as" + (keepAs ? " set" : ""));
+      as.type = "button";
+      as.title = t("The account {agent} stays signed in to", { agent: a.agentName });
+      as.dataset.value = keepAs;
+      as.setAttribute("aria-haspopup", "menu");
+      as.setAttribute("aria-expanded", "false");
+      as.append(el("span", "", keepAs || t("the first account")), svg(CHEV, 11, 1.6));
+      as.onclick = (e) => {
+        e.stopPropagation();
+        if (as.classList.contains("open")) return closeProtoMenu();
+        openProtoMenu(as, opts, keepAs, (v) => {
+          if (v === keepAs) return;
+          keepAs = v;
+          as.dataset.value = v;
+          as.classList.toggle("set", !!v);
+          as.firstChild.textContent = v || t("the first account");
+          post(true);
+        }, "Account to stay signed in to", "sess-menu");
+      };
+      const keepRow = el("div", "as-keep");
+      keepRow.append(el("span", "", t("Keep {agent} signed in to", { agent: a.agentName })), as);
+      box.append(keepRow);
+    }
     list.append(box);
   }
   const cx = a.agent === "codex", ag = { agent: a.agentName };
