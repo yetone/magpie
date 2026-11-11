@@ -1573,7 +1573,7 @@ DashScope turns away a thinking Qwen model asked for one whole reply (`enable_th
 
 No. Neither Token Plan has an API for its credits; the plan’s subscription page in Alibaba’s console shows them. magpie’s Usage tab still counts the tokens each agent spent.
 
-Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
+Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Qwen Code on any model](https://usemagpie.ai/docs/qwen-code). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
 
 ---
 
@@ -3783,7 +3783,60 @@ Copilot names a model of one of its providers as provider/model, and magpie’s 
 
 Yes. magpie only touches its own provider and models in providers.json; yours stay as they are.
 
-More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [Raycast on any model](https://usemagpie.ai/docs/raycast). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Raycast on any model](https://usemagpie.ai/docs/raycast) and [Qwen Code on any model](https://usemagpie.ai/docs/qwen-code). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/qwen-code
+
+# Qwen Code on any model
+
+Qwen Code, the `qwen` coding agent from the Qwen team, takes models of your own in its settings. magpie adds its models there, so qwen can run on any model you have in magpie, not only Qwen: DeepSeek, Kimi, GLM, an OpenAI or Anthropic key, or a ChatGPT or Copilot subscription, with no key pasted into qwen.
+
+Qwen Code keeps its settings in `~/.qwen/settings.json` (under `$QWEN_HOME` if set). magpie appends one entry per model to `modelProviders.openai` there, each with the gateway’s address, the model’s id, its name as qwen’s `/model` shows it, and its context window. Then it points `model` at your pick. The gateway translates each request for the model’s provider, tool calls and reasoning included. A Qwen Code in WSL is set up the same way.
+
+## Connect Qwen Code
+
+1. **Add providers in magpie.** In the Providers tab, add an API key or sign in to a subscription.
+2. **Pick a model on Qwen Code’s row.** In the Agents tab, choose a model under magpie.
+3. **Start a new qwen session.** Qwen Code reads a session’s model when it starts, so start a new session, or pick the model again with `/model`, where magpie’s models are listed too.
+
+```
+magpie qwen deepseek/deepseek-v4-pro    # Qwen Code on DeepSeek
+magpie qwen                             # what Qwen Code runs on now
+```
+
+## The key and /auth
+
+Every magpie entry takes its key from `MAGPIE_QWEN_API_KEY`, which magpie sets in the settings’ `env` object. The name is Qwen Code’s own, so a variable you exported in your shell or in `~/.qwen/.env` is unlikely to shadow it. magpie also sets `security.auth.selectedType` to `openai`, so qwen starts without asking `/auth`.
+
+## Your own models
+
+Your own `modelProviders` entries stay as they were, in front of magpie’s, so their ids don’t move, and they are listed on Qwen Code’s row beside magpie’s. When you pick a model of magpie’s, the model and auth type you had, with their address, are kept aside to be put back.
+
+## Switch back
+
+Pick one of your own models on the row, take the row off magpie, or run `magpie qwen default`. magpie puts back the model and auth type you had before, and removes its entries and its key once no model of magpie’s is in use.
+
+## FAQ
+
+### Can Qwen Code run on models other than Qwen?
+
+Yes. Any model you have in magpie is in qwen’s list: DeepSeek, Kimi, GLM, GPT, Claude and more.
+
+### Can Qwen Code use my ChatGPT subscription?
+
+Yes. Sign in to ChatGPT in magpie and pick a GPT model under magpie on Qwen Code’s row. qwen sends its requests to magpie, which uses the subscription.
+
+### Why doesn’t a running session change model?
+
+Qwen Code reads a session’s model when the session starts. Start a new one, or pick the model with /model.
+
+### Does it work with Qwen Code in WSL?
+
+Yes. magpie sets up a Qwen Code in a WSL distro too.
+
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [Copilot CLI on any model](https://usemagpie.ai/docs/copilot-cli). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
