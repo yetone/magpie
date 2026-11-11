@@ -203,8 +203,39 @@
       b.append(s);
     }
     b.append(el("span", "", titled(e)));
-    b.onclick = () => { show(e.key); b.blur(); };
+    b.onclick = () => { if (b.dataset.dragged) return; show(e.key); b.blur(); };
+    b.addEventListener("pointerdown", (ev) => hold(b, ev));
     return b;
+  }
+
+  // a press held 400ms on a tab picks it up; it is dragged to its place
+  // and the order kept (settings PluginPageOrder)
+  function hold(b, ev) {
+    if (ev.button !== 0 || !document.body.classList.contains("side-nav")) return;
+    let last = ev;
+    const mv = (m) => { last = m; if (Math.hypot(m.clientX - ev.clientX, m.clientY - ev.clientY) > 6) stop(); };
+    const stop = () => {
+      clearTimeout(timer);
+      document.removeEventListener("pointermove", mv);
+      document.removeEventListener("pointerup", stop);
+      document.removeEventListener("pointercancel", stop);
+    };
+    const timer = setTimeout(() => {
+      stop();
+      const nav = $("#nav");
+      const rows = [...nav.querySelectorAll("button[data-plugin-page]")].filter((x) => !pages.get(x.dataset.view)?.entry.replaces);
+      b.dataset.dragged = "1";
+      const at = { button: 0, isPrimary: true, pointerId: ev.pointerId, clientX: last.clientX, clientY: last.clientY };
+      if (!dragRows(at, b, b, nav, rows, (to) => {
+        const rest = rows.filter((x) => x !== b);
+        rest.splice(to, 0, b);
+        rows[to][to > rows.indexOf(b) ? "after" : "before"](b);
+        api("plugin-pages/arrange", { order: rest.map((x) => x.dataset.view) }).catch((err) => { statusErr(err); load(); });
+      })) delete b.dataset.dragged;
+    }, 400);
+    document.addEventListener("pointermove", mv);
+    document.addEventListener("pointerup", stop);
+    document.addEventListener("pointercancel", stop);
   }
 
   async function load() {

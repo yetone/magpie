@@ -461,6 +461,12 @@ body.side-nav #prefs svg { flex: none; width: 15px; height: 15px; margin: 0 .5px
    text's own ink; the accent is kept for what acts */
 body.side-nav :is(#nav button.on .nav-ic, #prefs.on svg) { color: var(--fg); }
 body.side-nav .side-l { display: inline; }
+body.side-nav #nav > button[data-plugin-page] { position: relative; }
+body.side-nav #nav > button[data-plugin-page]::before { content: ""; position: absolute; left: 2px; top: 50%; width: 6px; height: 11px; margin-top: -5.5px; background: radial-gradient(circle, var(--muted) .9px, transparent 1.2px) 0 0 / 3px 3.75px; opacity: 0; transition: opacity .15s; }
+body.side-nav #nav > button[data-plugin-page]:is(:hover, .dragging)::before { opacity: 1; }
+#nav.sorting { user-select: none; -webkit-user-select: none; }
+#nav.sorting > button[data-plugin-page] { transition: transform .22s cubic-bezier(.22, 1, .36, 1); }
+#nav > button[data-plugin-page].dragging { position: relative; z-index: 2; background: var(--card); box-shadow: 0 6px 18px rgba(20, 22, 30, .12), 0 0 0 1px var(--line); transition: none; }
 body.side-nav #nav button.has-dot::after { top: 50%; right: 10px; margin-top: -3px; width: 6px; height: 6px; }
 /* the open page's tabs, under it on a thin line */
 .nav-sub { position: relative; display: flex; flex-direction: column; gap: 1px; margin: 2px 0 6px 16px; padding-left: 8px; }

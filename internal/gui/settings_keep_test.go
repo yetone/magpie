@@ -157,6 +157,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		GatewayConversations: true,
 		QuotaLeft:            true,
 		UsageOrder:           []string{"kimi", "codex"},
+		PluginPageOrder:      []string{"plugin-b", "plugin-a"},
 		PanelUsageHidden:     []string{"deepseek"},
 		UsageAgentsHidden:    []string{"curl"},
 		UsageCardsHidden:     []string{"stepfun|balance"},

@@ -933,6 +933,9 @@ type Settings struct {
 	// own order. Only the page's: the order providers are tried in is the
 	// Providers page's.
 	UsageOrder []string `json:"usageOrder,omitempty"`
+	// PluginPageOrder is how the sidebar lists the plugins' pages, by page
+	// key, as they were dragged there; a page it doesn't name follows.
+	PluginPageOrder []string `json:"pluginPageOrder,omitempty"`
 	// PanelUsageHidden are the subscriptions, by provider id, that the tray
 	// panel's Allowances tab leaves out (H20 on Discord). It is what the
 	// panel shows, nothing more: routing, caps, the Usage page and the menu
@@ -2542,6 +2545,7 @@ func saveOwn(s Settings, recording, reads bool) error {
 	s.AgentOrder, s.AgentsHidden, s.AgentsShown = ids(s.AgentOrder), ids(s.AgentsHidden), ids(s.AgentsShown)
 	s.AgentsHere = ids(s.AgentsHere)
 	s.UsageOrder = ids(s.UsageOrder)
+	s.PluginPageOrder = ids(s.PluginPageOrder)
 	s.PanelUsageHidden = ids(s.PanelUsageHidden)
 	s.UsageAgentsHidden = ids(s.UsageAgentsHidden)
 	s.UsageCardsHidden = ids(s.UsageCardsHidden)

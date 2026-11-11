@@ -24,6 +24,7 @@ import (
 
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -473,12 +474,45 @@ func pluginPageRoutes(mux *http.ServeMux, web bool) {
 		if out == nil {
 			out = []pluginPage{}
 		}
+		rank := map[string]int{}
+		for i, k := range settings.Load().PluginPageOrder {
+			rank[k] = i + 1
+		}
+		// the sidebar order the reader dragged; a page it doesn't name follows
+		slices.SortStableFunc(out, func(a, b pluginPage) int {
+			ra, rb := rank[a.Key], rank[b.Key]
+			if ra == 0 {
+				ra = len(rank) + 1
+			}
+			if rb == 0 {
+				rb = len(rank) + 1
+			}
+			return ra - rb
+		})
 		for i := range out {
 			if web && out[i].servicePort() > 0 {
 				out[i].Service = strings.Repeat("../", strings.Count(out[i].file, "/")) + pageServicePath
 			}
 		}
 		writeJSON(rw, out)
+	})
+	mux.HandleFunc("POST /api/plugin-pages/arrange", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Order []string }
+		if err := json.NewDecoder(http.MaxBytesReader(rw, r.Body, 64<<10)).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		s, err := settings.LoadChecked()
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		s.PluginPageOrder = in.Order
+		if err := settings.Save(s); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
 	})
 	mux.HandleFunc("GET /api/plugin-panels", func(rw http.ResponseWriter, r *http.Request) {
 		_, out := windowParts()
