@@ -911,14 +911,14 @@ func listCCFiles(agent, dir string) []file {
 // files.
 var filesHook func()
 
-func allFiles() []file { return allFilesWith(zcodeFiles) }
+func allFiles() []file { return allFilesWith(&allKept[0], zcodeFiles) }
 
 // allFilesForTitles is allFiles with ZCode's sessions listed from their own
 // rows alone: a name poll needs titles, not every message counted
 // (zcodeFiles joins them for a session's size and last activity).
-func allFilesForTitles() []file { return allFilesWith(zcodeTitleFiles) }
+func allFilesForTitles() []file { return allFilesWith(&allKept[1], zcodeTitleFiles) }
 
-func allFilesWith(zcode func() []file) []file {
+func allFilesWith(kept *filesKept, zcode func() []file) []file {
 	if filesHook != nil {
 		filesHook()
 	}
@@ -929,7 +929,7 @@ func allFilesWith(zcode func() []file) []file {
 		antigravityFiles()) // #2190
 	// each lister asked Reads already; a file listed under another
 	// agent's name is held to that agent too
-	return allowed(distinctOf(lists...))
+	return allowed(kept.distinct(lists...))
 }
 
 // distinctOf is lists one after another with each path kept once, the
