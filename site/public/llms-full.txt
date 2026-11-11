@@ -3498,7 +3498,60 @@ Yes. The CLI and the desktop app read the same config, so both use the model on 
 
 Yes. magpie sets up a Goose in a WSL distro too, with the gateway’s address as the distro reaches it.
 
-More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [Cline on any model](https://usemagpie.ai/docs/cline). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Cline on any model](https://usemagpie.ai/docs/cline) and [Droid on any model](https://usemagpie.ai/docs/droid). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/droid
+
+# Droid on any model
+
+Droid, Factory’s coding agent, can run on custom models of your own. magpie adds the models you have in magpie to Droid as custom models, so droid can run on DeepSeek, Kimi, GLM, Qwen, an OpenAI key, or a ChatGPT or Copilot subscription, with no key pasted into Droid.
+
+Droid keeps its settings in `~/.factory/settings.json` (under `$FACTORY_HOME_OVERRIDE` when set). magpie adds one entry to its `customModels` per model in magpie, with the gateway’s address and a key of Droid’s own, and sets `sessionDefaultSettings.model`, the model sessions start on. Each model goes on the API its provider speaks, Anthropic Messages, OpenAI Responses or Chat Completions, so the gateway relays it as it is. A droid in WSL is set up the same way, reaching the gateway as the distro sees it.
+
+## Connect Droid
+
+1. **Add providers in magpie.** In the Providers tab, add an API key or sign in to a subscription.
+2. **Pick a model on Droid’s row.** In the Agents tab, choose a model on Droid’s row.
+3. **Restart droid.** Droid reads its settings as it starts: open sessions keep what they have, so start droid again.
+
+```
+magpie droid deepseek/deepseek-v4-pro    # Droid on DeepSeek
+magpie droid                             # what Droid runs on now
+```
+
+## Models and thinking levels
+
+magpie’s models are in droid’s `/model` picker too, under Custom models, so you can switch inside a session. A model that reasons is given a starting effort, so the picker offers its levels (off, low, medium and high); one that is a model Droid has built in takes Droid’s own levels and default. A model whose name Droid reads as OpenAI’s or Claude’s is written on the API Droid expects for it, so Droid doesn’t warn at each session start.
+
+## Your own models
+
+Custom models you added yourself stay as they were, ahead of magpie’s, so their ids don’t move. If you change a field of one of magpie’s entries in settings.json, such as its name or effort, magpie keeps your value; only the address and key are put back at each sync. The older `~/.factory/config.json` is left alone.
+
+## Switch back
+
+Take Droid’s row off magpie, or run `magpie droid default`. magpie removes its custom models and puts back the default model you had.
+
+## FAQ
+
+### Can Droid use my ChatGPT subscription?
+
+Yes. Sign in to ChatGPT in magpie and pick a GPT model on Droid’s row. droid sends its requests to magpie, which uses the subscription.
+
+### I changed the model but droid still uses the old one.
+
+Droid reads its settings as it starts. Restart droid, or switch with /model inside the session.
+
+### Why does /model show no thinking levels for a model?
+
+That model doesn’t reason. For one that does, magpie gives it a starting effort, and droid then offers its levels.
+
+### Will magpie touch my own BYOK models?
+
+No. Your custom models stay as they were and in front of magpie’s.
+
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [Goose on any model](https://usemagpie.ai/docs/goose). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
