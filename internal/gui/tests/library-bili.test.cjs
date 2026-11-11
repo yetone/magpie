@@ -95,6 +95,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // the page's tabs, or the side nav's at a wide window
         const tabs = page.locator(":is(#view-library .lib-tabs .opt, .nav-s):visible");
         await tabs.first().waitFor();
+        // the sidebar's list is drawn again in sections once its marks are loaded
+        await page.waitForFunction(() => !document.querySelector(".nav-sub .nav-s") || window.navSections);
         const names = await tabs.allTextContents();
         assert.equal(names[names.indexOf("RTK") + 1], "billion-context");
         await tabs.nth(names.indexOf("billion-context")).click();
@@ -166,6 +168,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const v = page.locator("#view-library");
         const tabs = page.locator(":is(#view-library .lib-tabs .opt, .nav-s):visible");
         await tabs.first().waitFor();
+        // the sidebar's list is drawn again in sections once its marks are loaded
+        await page.waitForFunction(() => !document.querySelector(".nav-sub .nav-s") || window.navSections);
         const names = await tabs.allTextContents();
         await tabs.nth(names.indexOf("billion-context")).click();
         const line = v.locator(".lib-bili .lib-bili-saved");
