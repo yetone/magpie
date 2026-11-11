@@ -5660,7 +5660,7 @@ jcode reads its settings at start-up. Restart the open jcode session.
 
 Yes. magpie removes only [providers.magpie], and puts [provider] back when jcode still starts on magpie; every other key stays as written.
 
-More agents on the same models: [Crush on any model](https://usemagpie.ai/docs/crush), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models) and [Goose on any model](https://usemagpie.ai/docs/goose). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Crush on any model](https://usemagpie.ai/docs/crush), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Goose on any model](https://usemagpie.ai/docs/goose) and [Reasonix Studio on any model](https://usemagpie.ai/docs/reasonix). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
@@ -5731,6 +5731,93 @@ Paseo reads its model list when its daemon starts. Restart Paseo's daemon.
 No. magpie adds and removes only entries whose description ends via magpie; yours come first and keep their place.
 
 More agents on the same models: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [T3 Code on any model](https://usemagpie.ai/docs/t3-code) and [Craft Agents on any model](https://usemagpie.ai/docs/craft-agents). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/reasonix
+
+# Reasonix Studio on any model
+
+Reasonix Studio 2.x and its CLI share one `config.toml` and `.env`. magpie adds a provider named magpie there, pointing at magpie's local gateway, so Reasonix's executor and planner can each be any model you have in magpie: DeepSeek, GLM, Kimi, Qwen, GPT or a ChatGPT subscription. Your other providers, keys and project or session settings are left alone.
+
+## Set up Reasonix
+
+1. **Open magpie's Agents page.** Find the Reasonix Studio row. Its model field is called executor.
+2. **Pick a magpie model.** The list has two groups: Reasonix Studio's own models and the ones via magpie. Pick one of the latter; magpie writes the provider and key, then sets `default_model` to `magpie/<model>`.
+3. **Set effort and a planner if you want.** A model with effort levels can take an effort. The planner can be a different model, or off to turn the separate planner off.
+
+```
+magpie reasonix magpie/deepseek/deepseek-v4-pro   # executor
+magpie reasonix effort high
+magpie reasonix planner magpie/deepseek/deepseek-v4-flash # a separate planner, or: off
+```
+
+## What magpie writes
+
+Reasonix's folder is `REASONIX_HOME`; without it, `%APPDATA%\reasonix` on Windows and `~/.reasonix` elsewhere. A Reasonix in WSL uses Linux's `~/.reasonix`, with the gateway as the distro reaches it. magpie writes:
+
+```
+# ~/.reasonix/config.toml
+default_model = "magpie/deepseek/deepseek-v4-pro"
+
+[[providers]]
+name = "magpie"
+kind = "openai"
+base_url = "http://127.0.0.1:3425/v1"
+api_key_env = "MAGPIE_REASONIX_API_KEY"
+models = ["…", "…"]
+default = "deepseek/deepseek-v4-pro"
+reasoning_protocol = "openai"
+no_proxy = true
+
+[providers.model_overrides."deepseek/deepseek-v4-pro"]
+supported_efforts = ["…"]
+context_window = …
+max_output_tokens = …
+
+# ~/.reasonix/.env
+MAGPIE_REASONIX_API_KEY=…
+```
+
+Each model carries its context window, max output, image support and effort levels; a model with no effort levels gets `reasoning_protocol = "none"`. When magpie's models change, magpie updates the provider. When Studio has a `[desktop] provider_access` list, magpie adds magpie to it. The key goes only in `.env`; config.toml names the variable.
+
+magpie only touches its own entry. If there is already a magpie provider magpie didn't make, another provider uses `MAGPIE_REASONIX_API_KEY`, or `.env` sets it twice, magpie stops with an error rather than overwrite. magpie keeps a restore record in its own config folder (settings only, never an upstream credential) to put your `default_model` back when you switch back.
+
+## Executor and planner
+
+The executor is `default_model` and the planner is `[agent] planner_model`; each can come from magpie or from one of Reasonix's own providers. While the planner still uses magpie, magpie's provider stays, even with the executor back on your own model.
+
+## When it takes effect
+
+Reasonix Studio 2.x and the native 1.39.x/2.x CLI read global settings at startup, so start a new process after a change. A model set for a project or session overrides the executor and planner.
+
+## Switching back
+
+Switching back undoes only what magpie added: the magpie provider goes, `default_model` returns to what it was before (or goes if there was none), magpie leaves `provider_access`, and magpie's key leaves `.env`; a file magpie created is removed once empty. A model you picked later, and edits to other providers and keys, stay. You can also just pick a model from the Reasonix Studio group.
+
+```
+magpie reasonix default
+```
+
+## FAQ
+
+### How do I use DeepSeek, GLM or a ChatGPT subscription in Reasonix Studio?
+
+On magpie's Agents page, pick a via-magpie model as Reasonix Studio's executor. magpie adds a magpie provider to config.toml, the key to .env, and sets default_model to magpie/.
+
+### Can the planner be a different model?
+
+Yes. The planner field writes [agent] planner_model: another magpie model, one of Reasonix's own, or off.
+
+### I changed it and Reasonix didn't notice. Why?
+
+Reasonix reads global settings at startup. Start a new Studio or CLI process; a model set for a project or session also overrides the global one.
+
+### Will my own providers and keys change?
+
+No. magpie adds and removes only the provider named magpie and MAGPIE_REASONIX_API_KEY, and stops with an error on a same-named entry it didn't make.
+
+More agents on the same models: [jcode on any model](https://usemagpie.ai/docs/jcode), [Crush on any model](https://usemagpie.ai/docs/crush) and [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
