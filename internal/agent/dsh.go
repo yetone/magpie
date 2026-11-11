@@ -1149,7 +1149,7 @@ func dshThrough(at place, dir, prefix string, fresh func() string) error {
 	if !dshWired(dshOverAll(dir)) {
 		return fmt.Errorf("connect DeepSeek Harness to magpie first: pick one of magpie's models for it on the Agents page")
 	}
-	if len(magpieModels(dshListFor(dir))) == 0 {
+	if len(sharedModels(dshListFor(dir))) == 0 {
 		return fmt.Errorf("magpie lists no models for DeepSeek Harness yet")
 	}
 	return dshSyncFresh(at, dir, prefix+at.gw(), fresh)
