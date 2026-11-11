@@ -231,6 +231,7 @@ var cliForRoute = map[string]string{
 	"POST /api/settings/agent-compact":     "magpie model compact",
 	"POST /api/settings/agent-suffix":      "magpie model suffix",
 	"POST /api/settings/context-cap":       "magpie model context-cap",
+	"POST /api/settings/context-cap-mode":  "magpie model context-cap",
 	"POST /api/update/install":             "magpie update",
 	"GET /api/model-price":                 "magpie model price",
 	"POST /api/model-price":                "magpie model price",
@@ -410,6 +411,9 @@ var notYet = map[string]string{
 	"POST /api/memory/distill":                   L,  // memory_distill.go
 	"POST /api/memory/distill/run":               L,  // memory_distill.go
 	"POST /api/memory/distill/stop":              L,  // memory_distill.go
+	"POST /api/memory/promote":                   L,  // memory.go
+	"POST /api/memory/skill":                     L,  // memory.go
+	"POST /api/memory/decline":                   L,  // memory.go
 	"POST /api/memory/dream":                     L,  // memory_distill.go
 	"POST /api/memory/dream/run":                 L,  // memory_distill.go
 	"POST /api/memory/dream/undo":                L,  // memory_distill.go
