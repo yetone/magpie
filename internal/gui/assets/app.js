@@ -12030,7 +12030,9 @@ function renderModels(p) {
   // with the first ticked key that serves it (keySeeing, water5433)
   const byKey = p.keyList?.filter((k) => k.on)[1] ? "\n" + t("Each model is tested with the first ticked key that can serve it") : "";
   const testAll = testButton(p, t("Test models"), t("Send a tiny request to each model agents see, to find the ones that don't answer") + byKey + "\n" + t("Right-click a model to test just it"), async () => {
-    const ids = servedIds(p).filter((id) => p.decideTest || !decidesModel(p, id));
+    let ids = servedIds(p).filter((id) => p.decideTest || !decidesModel(p, id));
+    // a provider of image models alone: the ones ticked are drawn with (AlphaChatFun)
+    if (!ids.length) { const off = draft.hiddenDrawers || p.hiddenDrawers || []; ids = (p.drawIds || []).filter((id) => !off.includes(id)); }
     if (!ids.length) { status(t("Pick a model first."), "err"); return; }
     const got = modelTests[p.id] = {};
     for (const id of ids) got[id] = null;
