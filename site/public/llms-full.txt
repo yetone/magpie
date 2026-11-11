@@ -5366,6 +5366,67 @@ More agents on the same models: [nanobot on any model](https://usemagpie.ai/docs
 
 ---
 
+Source: https://usemagpie.ai/docs/aionui
+
+# AionUi on any model
+
+AionUi is an Electron desktop app that runs Claude Code, Codex and Gemini CLI, and has a chat of its own. It keeps its model providers in its own database, their keys encrypted, so magpie writes nothing there. It opens AionUi's own add-provider link instead, which brings up AionUi's add-model form with magpie filled in, for you to confirm in AionUi. AionUi then has every model in magpie: DeepSeek, GLM, Kimi, Qwen, an OpenAI or Anthropic key, and the Claude, ChatGPT or Copilot subscription you signed in to.
+
+## Add magpie to AionUi
+
+1. **Open AionUi once.** Once AionUi has run, its data folder has an `aionui` folder and magpie's Agents page lists it.
+2. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+3. **Click Add magpie.** On AionUi's row, click Add magpie. AionUi opens Settings → Model's add form with magpie filled in: name magpie, platform custom (OpenAI-compatible), the gateway's address and a key.
+4. **Confirm it in AionUi.** Nothing is added until you do.
+
+The link magpie opens looks like this:
+
+```
+aionui://add-provider?api_key=…&base_url=http%3A%2F%2F127.0.0.1%3A3425%2Fv1&name=magpie&platform=custom
+```
+
+If nothing opens, nothing on this computer handles AionUi's links yet: open AionUi once or install it again, then click Add magpie again.
+
+## Picking models
+
+The magpie provider's address ends in `/v1`, as AionUi's own OpenAI preset does, and it lists every model in magpie from the gateway, named provider/model (for example `deepseek/deepseek-v4-pro`). A provider you add to magpie later shows up when AionUi fetches the list again, with nothing changed in AionUi. Several accounts behind one model, the rest after a 429 and fallback work as they do for every other agent.
+
+## From the command line
+
+```
+magpie aionui add      # opens AionUi to add magpie; confirm it there
+```
+
+## How magpie knows it was added
+
+magpie reads AionUi's database (`aionui/aionui-backend.db` in AionUi's data folder: `~/Library/Application Support/AionUi` on macOS, `%APPDATA%\AionUi` on Windows, `~/.config/AionUi` on Linux) read-only, for a provider at the gateway's address. It can read it while AionUi runs, and never writes it. Once there is one, the row says it's added, and you can click again to add it again. When the database can't be read, magpie says it doesn't know, not that it isn't added.
+
+## Usage and keys
+
+The key in the link is AionUi's own, so its requests are counted as AionUi's in magpie's usage, apart from other agents.
+
+## FAQ
+
+### Do I need an API key to use Claude or ChatGPT in AionUi?
+
+No. Sign in to a Claude, ChatGPT or Copilot subscription in magpie and its models show up under AionUi's magpie provider.
+
+### Does magpie change AionUi's settings?
+
+No. magpie opens AionUi's own add-model form, and you confirm it. It only reads AionUi's database to show whether magpie was added.
+
+### What address and platform does the magpie provider use?
+
+Platform custom (OpenAI-compatible), at http://127.0.0.1:3425/v1, or the gateway address you set in magpie.
+
+### AionUi isn't on magpie's Agents page.
+
+magpie lists AionUi once it has run on this computer. Open AionUi once, then look again.
+
+More desktop apps on the same models: [Every model in Cherry Studio, through magpie](https://usemagpie.ai/docs/cherry-studio) and [AstrBot on any model](https://usemagpie.ai/docs/astrbot). Using coding agents too? See [Subscriptions in any agent](https://usemagpie.ai/docs/subscriptions). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
 Source: https://usemagpie.ai/docs/cherry-studio
 
 # Every model in Cherry Studio, through magpie
@@ -5429,7 +5490,7 @@ Cherry Studio shows models you added to the provider. Fetch the magpie provider�
 
 magpie lists it once Cherry Studio has run on this computer. Open Cherry Studio once, then look again.
 
-Using a coding agent too? See [Subscriptions in any agent](https://usemagpie.ai/docs/subscriptions) and [Get started](https://usemagpie.ai/docs/start). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+Another desktop app on the same models: [AionUi on any model](https://usemagpie.ai/docs/aionui). Using a coding agent too? See [Subscriptions in any agent](https://usemagpie.ai/docs/subscriptions) and [Get started](https://usemagpie.ai/docs/start). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 

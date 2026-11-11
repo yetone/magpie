@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AionUi 接入 DeepSeek、GLM、Kimi、Qwen、GPT、Claude 或 ChatGPT 订阅：通过 magpie 一键添加 OpenAI 兼容供应商 · magpie</title>
+<meta name="description" content="通过 magpie 让 AionUi 用上 DeepSeek、GLM、Kimi、Qwen、GPT、Claude 或 ChatGPT 订阅：用 AionUi 的 add-provider 链接一键添加 magpie 供应商、在 AionUi 里确认、模型列表、magpie 怎么知道已添加，以及用量和 Key。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/aionui">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/aionui">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/aionui">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/aionui">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/aionui">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="让 AionUi 用任意模型">
+<meta property="og:description" content="通过 magpie 让 AionUi 用上 DeepSeek、GLM、Kimi、Qwen、GPT、Claude 或 ChatGPT 订阅：用 AionUi 的 add-provider 链接一键添加 magpie 供应商、在 AionUi 里确认、模型列表、magpie 怎么知道已添加，以及用量和 Key。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/aionui">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "让 AionUi 用任意模型",
+   "description": "通过 magpie 让 AionUi 用上 DeepSeek、GLM、Kimi、Qwen、GPT、Claude 或 ChatGPT 订阅：用 AionUi 的 add-provider 链接一键添加 magpie 供应商、在 AionUi 里确认、模型列表、magpie 怎么知道已添加，以及用量和 Key。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/aionui",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "在 AionUi 里用 Claude 或 ChatGPT 需要 API Key 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "不需要。在 magpie 里登录 Claude、ChatGPT 或 Copilot 订阅，它的模型就会出现在 AionUi 的 magpie 供应商里。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie 会改 AionUi 的设置吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "不会。magpie 打开的是 AionUi 自己的添加模型表单，由你确认。它只读取 AionUi 的数据库，用来显示是否已添加。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie 供应商用什么地址和平台？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "平台 custom（OpenAI 兼容），地址 http://127.0.0.1:3425/v1，或你在 magpie 里设置的网关地址。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie 的 Agent 页里没有 AionUi。",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "AionUi 在这台电脑上运行过之后 magpie 才会列出它。先打开一次 AionUi，再回来看。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/zh/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "文档",
+     "item": "https://usemagpie.ai/docs/zh/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "让 AionUi 用任意模型",
+     "item": "https://usemagpie.ai/docs/zh/aionui"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/aionui" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/aionui" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/aionui" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>AionUi</p>
+    <a href="#overview">工作原理</a>
+    <a href="#add">把 magpie 加进 AionUi</a>
+    <a href="#models">选择模型</a>
+    <a href="#cli">命令行</a>
+    <a href="#status">magpie 怎么知道已添加</a>
+    <a href="#usage">用量与 Key</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 指南</p>
+    <h1>让 AionUi 用任意模型</h1>
+    <p class="lede">AionUi 是一个 Electron 桌面应用，能运行 Claude Code、Codex、Gemini CLI，也有自己的对话。它的模型供应商存在自己的数据库里，Key 是加密的，所以 magpie 不往里写任何东西，而是用 AionUi 自己的“添加供应商”链接打开它的添加模型表单，填好 magpie，由你在 AionUi 里确认。之后 AionUi 就能用 magpie 里的每个模型：DeepSeek、GLM、Kimi、Qwen、OpenAI 或 Anthropic Key，以及你登录的 Claude、ChatGPT、Copilot 订阅。</p>
+    <h2 id="add"><a class="anchor" href="#add">把 magpie 加进 AionUi</a></h2>
+    <ol class="steps">
+      <li><b>先打开一次 AionUi</b>AionUi 运行过之后，它的数据目录里有了 <code>aionui</code> 文件夹，magpie 的 <span class="ui">Agent</span> 页才会列出它。</li>
+      <li><b>在 magpie 里添加供应商</b>在 <span class="ui">供应商</span> 页添加 API Key，或登录一个订阅。</li>
+      <li><b>点「添加 magpie」</b>在 AionUi 那一行点 <span class="ui">添加 magpie</span>。AionUi 会打开 设置 → 模型 的添加表单，已填好 magpie：名称 magpie、平台 custom（OpenAI 兼容）、网关地址和 Key。</li>
+      <li><b>在 AionUi 里确认</b>确认之前什么都不会添加。</li>
+    </ol>
+    <p>magpie 打开的链接是这样的：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="aion-link">复制</button><pre id="aion-link">aionui://add-provider?api_key=…&base_url=http%3A%2F%2F127.0.0.1%3A3425%2Fv1&name=magpie&platform=custom</pre></div>
+    <p>如果什么都没打开，说明这台电脑上还没有程序能处理 AionUi 的链接：先打开一次 AionUi 或重新安装，再点 <span class="ui">添加 magpie</span>。</p>
+    <h2 id="models"><a class="anchor" href="#models">选择模型</a></h2>
+    <p>magpie 供应商的地址以 <code>/v1</code> 结尾，和 AionUi 自带的 OpenAI 预设一样，它从网关获取 magpie 里的全部模型，名称是 供应商/模型（例如 <code>deepseek/deepseek-v4-pro</code>）。之后在 magpie 里新增的供应商，AionUi 重新获取模型列表就能看到，AionUi 这边无需改动。一个模型背后的多个账号、429 后的休息时间和故障转移，都和其他 Agent 一样生效。</p>
+    <h2 id="cli"><a class="anchor" href="#cli">命令行</a></h2>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="aion-cli">复制</button><pre id="aion-cli">magpie aionui add      # 打开 AionUi 添加 magpie，在其中确认</pre></div>
+    <h2 id="status"><a class="anchor" href="#status">magpie 怎么知道已添加</a></h2>
+    <p>magpie 以只读方式读取 AionUi 的数据库（<code>aionui/aionui-backend.db</code>，在 AionUi 的数据目录下：macOS 的 <code>~/Library/Application Support/AionUi</code>、Windows 的 <code>%APPDATA%\AionUi</code>、Linux 的 <code>~/.config/AionUi</code>），看里面有没有指向网关地址的供应商。AionUi 开着也能读，magpie 从不写它。有了之后这一行显示已添加，需要时也可以再点一次重新添加。读不了数据库时，magpie 不会说没添加，而是说不知道。</p>
+    <h2 id="usage"><a class="anchor" href="#usage">用量与 Key</a></h2>
+    <p>链接里的 Key 是 AionUi 专用的，所以它的请求在 magpie 的用量里单独记为 AionUi，和其他 Agent 分开。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>在 AionUi 里用 Claude 或 ChatGPT 需要 API Key 吗？</h3>
+    <p>不需要。在 magpie 里登录 Claude、ChatGPT 或 Copilot 订阅，它的模型就会出现在 AionUi 的 magpie 供应商里。</p>
+    <h3>magpie 会改 AionUi 的设置吗？</h3>
+    <p>不会。magpie 打开的是 AionUi 自己的添加模型表单，由你确认。它只读取 AionUi 的数据库，用来显示是否已添加。</p>
+    <h3>magpie 供应商用什么地址和平台？</h3>
+    <p>平台 custom（OpenAI 兼容），地址 http://127.0.0.1:3425/v1，或你在 magpie 里设置的网关地址。</p>
+    <h3>magpie 的 Agent 页里没有 AionUi。</h3>
+    <p>AionUi 在这台电脑上运行过之后 magpie 才会列出它。先打开一次 AionUi，再回来看。</p>
+
+    <p style="margin-top:48px">更多桌面应用用同样的模型：<a href="/docs/zh/cherry-studio">通过 magpie 在 Cherry Studio 里用所有模型</a>、<a href="/docs/zh/astrbot">让 AstrBot 用任意模型</a>。也在用编程 Agent？见 <a href="/docs/zh/subscriptions">在任意 Agent 中使用订阅</a>。遇到报错？见 <a href="/docs/zh/troubleshooting">常见错误排查</a>，或到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
