@@ -53,6 +53,14 @@ import (
 // addPlugins is backup.AddPlugins: a var so a test installs nothing.
 var addPlugins = backup.AddPlugins
 
+// removePlugin is provider.RemovePlugin, as Settings → Plugins removes one:
+// a var so a test removes nothing.
+var removePlugin = func(name string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	return provider.RemovePlugin(ctx, name)
+}
+
 // Every is how often the gateway's magpie syncs.
 const Every = 3 * time.Minute
 
@@ -258,6 +266,11 @@ type state struct {
 	// when not known (never synced with them, or a blind write went
 	// over), when none is taken for removed.
 	SignIns map[string]string `json:"signIns"`
+	// Plugins is the plugins (by name) the last sync left both on the
+	// server and here: one gone from a side since was removed there, and
+	// goes from the other (pluginPlan). Nil when not known (never synced
+	// with them, or a blind write went over), when none is taken for removed.
+	Plugins []string `json:"plugins,omitempty"`
 }
 
 // blind is a write the server didn't check: the file it wrote (Sum), and
@@ -1236,6 +1249,7 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 		if !unchanged && sum(data) != b.Sum {
 			st.Remote, st.Local = b.Remote, b.Local
 			st.SignIns = nil // what went up may be gone: nothing is taken for removed
+			st.Plugins = nil
 		}
 		st.Blind = nil
 	}
@@ -1312,6 +1326,7 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 		if c.SignIns {
 			st.SignIns = local.SignIns.Hashes()
 		}
+		st.Plugins = pluginNames(local.Plugins)
 		return nil
 	}
 	if sum(data) == st.Sum && maps.Equal(L, st.Local) && !follow && !moved {
@@ -1383,6 +1398,13 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 	// below changes remote (a join's unseen gateway keys)
 	R, Rafter := hashesOwn(remote, prev), hashesOwn(remote, afterW)
 	first := st.Local == nil
+	// plugins removed on one side since the last sync: gone from the other
+	// too, and not brought back by the part that carries them
+	goneHere, goneThere := pluginPlan(st.Plugins, local.Plugins, remote.Plugins)
+	if len(goneHere) > 0 && remote.Plugins != nil {
+		kept := without(*remote.Plugins, goneHere)
+		remote.Plugins = &kept
+	}
 	merged := remote
 	var bringIn, here, there []string
 	for _, p := range Parts {
@@ -1492,9 +1514,23 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 		}
 	}
 	st.Own, st.Here, R = after, kept, Rafter
+	// the plugins the other computers removed, removed here as Settings
+	// removes one; one that can't be (its agent is on magpie) is tried
+	// again at the next sync, and isn't sent up meanwhile
+	var stuck []string
+	for _, name := range goneThere {
+		if err := removePlugin(name); err != nil {
+			log.Printf("sync: removing plugin %s, which another computer removed: %v", name, err)
+			stuck = append(stuck, name)
+		}
+	}
+	if gone := slices.Concat(goneHere, goneThere); len(gone) > 0 && merged.Plugins != nil {
+		kept := without(*merged.Plugins, gone)
+		merged.Plugins = &kept
+	}
 	// the server's file is in; what is pushed next counts as changed here
 	// until the push is done
-	if len(bringIn) > 0 || follow {
+	if len(bringIn) > 0 || follow || len(goneThere) > 0 {
 		if local, err = collect(c); err != nil {
 			return err
 		}
@@ -1563,7 +1599,61 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 	if c.SignIns {
 		st.SignIns = bothSides(shared, local.SignIns.Hashes())
 	}
+	st.Plugins = nil
+	if merged.Plugins != nil {
+		// on both sides now; a removal that failed here stays known, so
+		// the next sync tries it again
+		both := slices.DeleteFunc(pluginNames(local.Plugins), func(n string) bool {
+			return !slices.Contains(pluginNames(merged.Plugins), n)
+		})
+		st.Plugins = append(both, stuck...)
+	}
 	return nil
+}
+
+// pluginNames is the names of the plugins in es, nil for none.
+func pluginNames(es *[]plugin.Entry) []string {
+	if es == nil {
+		return nil
+	}
+	var out []string
+	for _, e := range *es {
+		out = append(out, plugin.Name(e.Spec))
+	}
+	return out
+}
+
+// without is es less the plugins named.
+func without(es []plugin.Entry, names []string) []plugin.Entry {
+	out := []plugin.Entry{}
+	for _, e := range es {
+		if !slices.Contains(names, plugin.Name(e.Spec)) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// pluginPlan tells which plugins one side removed since the last sync (base,
+// the names both had then), as sign-ins are told: a plugin base had that
+// here lacks was removed here (goneHere), and one the server lacks was
+// removed there (goneThere, still here). A plugin on one side that base
+// never had is a new one, and stays. Nothing is told when base is unknown
+// or the server's file carries no plugin list (an older magpie).
+func pluginPlan(base []string, local, remote *[]plugin.Entry) (goneHere, goneThere []string) {
+	if len(base) == 0 || remote == nil {
+		return nil, nil
+	}
+	here, there := pluginNames(local), pluginNames(remote)
+	for _, n := range base {
+		switch inHere, inThere := slices.Contains(here, n), slices.Contains(there, n); {
+		case !inHere && inThere:
+			goneHere = append(goneHere, n)
+		case inHere && !inThere:
+			goneThere = append(goneThere, n)
+		}
+	}
+	return goneHere, goneThere
 }
 
 // bothSides is the sign-ins on the server (shared) that are here too, as

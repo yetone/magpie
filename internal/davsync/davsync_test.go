@@ -660,7 +660,7 @@ func TestConfigurePassword(t *testing.T) {
 // them, and its status names the subscriptions it brought the settings of
 // with no account there (yapechan on Discord: after a WebDAV sync no
 // providers showed, and nothing said why). A plugin taken off one computer
-// stays on the others.
+// goes from the others too (TestSyncPluginRemovalSpreads).
 func TestSyncPluginsAndSignIn(t *testing.T) {
 	fake := &fakeDAV{files: map[string][]byte{}, etags: map[string]string{}, dirs: map[string]bool{"/dav": true}}
 	srv := httptest.NewServer(fake)
@@ -712,7 +712,7 @@ func TestSyncPluginsAndSignIn(t *testing.T) {
 		t.Fatalf("b's status names %v to sign in to, want claude", got)
 	}
 
-	// a takes the plugin away: b keeps its own
+	// a takes the plugin away: b asks for nothing more
 	a.use(t)
 	if err := os.WriteFile(pluginsJSON, []byte(`{"plugins":[]}`), 0o600); err != nil {
 		t.Fatal(err)

@@ -239,6 +239,9 @@ func Collect(keys bool, app string) (Bundle, error) {
 		}
 	}
 	plugins := provider.Carried(keys)
+	if plugins == nil {
+		plugins = []plugin.Entry{} // none, as against a file that carries no list
+	}
 	b.Plugins = &plugins
 	searches := []provider.SearchAPI{}
 	for _, a := range provider.StoredSearchAPIs() {

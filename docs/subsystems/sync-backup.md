@@ -223,6 +223,13 @@ clock.
   `auto-backup.test.cjs`).
 - **Sign-ins:** off unless picked (`SignIns`, with `Passphrase`); see
   [Sign-ins, when picked](#sign-ins-when-picked).
+- **Plugins:** ride the providers part. `AddPlugins` only adds, so a removal is
+  `syncOnce`'s: it keeps the names both sides had after the last sync
+  (`state.Plugins`), and a name one side has since lost is removed on the other
+  (`pluginPlan`, `removePlugin`), however the providers part came out. One that
+  can't be removed (its agent is on magpie) is tried again next sync. A plugin
+  added on one side stays (dolacmeo on X; `TestSyncPluginRemovalSpreads`). Not
+  yet: an older sync with no record (`state.Plugins` empty) removes nothing.
 - **Memory:** on unless turned off (`Memory`), merged memory by memory in
   `syncOnce` after the sign-ins, never replaced as a part; see
   [Memory's backups and sync](memory.md#backups-and-sync).
