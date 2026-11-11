@@ -1,6 +1,8 @@
 package sessions
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,9 +32,19 @@ type directoryEntry struct {
 // hidden. Such a listing is read again until it's older than this.
 const racyDirectory = 2 * time.Second
 
+// readDirectory is path's entries. A folder that isn't there lists as none.
+// One that couldn't be read (a stat or listing refused: too many files open
+// under a long history's parse, a sharing violation while an antivirus or
+// a sync client holds it, a network home that stalled) is unknown, not
+// empty: its last good listing stands. Taken for none, every session in it
+// left the Sessions page, and its parses were let go with them, until a
+// later poll read the folder again and parsed them anew.
 func readDirectory(path string) []os.DirEntry {
 	st, err := os.Stat(path)
-	if err != nil || !st.IsDir() {
+	if err != nil {
+		return unreadDirectory(path, err)
+	}
+	if !st.IsDir() {
 		return nil
 	}
 	directoryCache.Lock()
@@ -44,6 +56,9 @@ func readDirectory(path string) []os.DirEntry {
 	at := time.Now()
 	entries, err := os.ReadDir(path)
 	if err != nil {
+		if kept := unreadDirectory(path, err); kept != nil {
+			return kept
+		}
 		return nil
 	}
 	directoryCache.Lock()
@@ -53,6 +68,21 @@ func readDirectory(path string) []os.DirEntry {
 	directoryCache.entries[path] = directoryEntry{st.ModTime(), st.Size(), at, entries}
 	directoryCache.Unlock()
 	return entries
+}
+
+// unreadDirectory is what a folder lists as when reading it failed with
+// err: nothing when it is gone, else the last good listing, if there is
+// one.
+func unreadDirectory(path string, err error) []os.DirEntry {
+	if errors.Is(err, fs.ErrNotExist) {
+		directoryCache.Lock()
+		delete(directoryCache.entries, path)
+		directoryCache.Unlock()
+		return nil
+	}
+	directoryCache.Lock()
+	defer directoryCache.Unlock()
+	return directoryCache.entries[path].entries
 }
 
 // SessionGlob is filepath.Glob for session discovery, with directory listings
