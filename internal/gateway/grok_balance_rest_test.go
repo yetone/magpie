@@ -16,6 +16,8 @@ const grokBalanceOut402 = `{"error":{"message":"Grok: Grok Build usage balance e
 func TestGrokBalanceExhaustedRestsToReset(t *testing.T) {
 	old, oldAwait := allowances, awaitAllowance
 	defer func() { allowances, awaitAllowance = old, oldAwait }()
+	// the unread case's narrowWhenRead reads awaitAllowance off the test
+	defer narrowing.Wait()
 	fresh(t)
 	now := time.Now()
 	reset := now.Add(4 * 24 * time.Hour)
