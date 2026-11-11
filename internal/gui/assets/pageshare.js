@@ -3,7 +3,20 @@
 // clipboard, and the app's window can't copy a picture, so magpie does it
 // (pageimage.go); in magpie web this server is another computer, and the
 // browser's window does it here. pluginpages.js imports this the first
-// time a page shares one, so it weighs nothing on the core.
+// time a page shares one (or asks for a file), so it weighs nothing on the core.
+
+// A file of the page's own folder, for a page that cannot ask for it itself
+// (a proxy that signs readers in by cookie turns its frame away,
+// pageinline.go); this request carries the window's cookie. page is the
+// page's own address, want the file's.
+window.pageAsset = async function (page, want) {
+  const dir = new URL(page.replace(/[^/]*$/, ""), location.href).href;
+  const u = new URL(String(want || ""), location.href);
+  if (!u.href.startsWith(dir) || u.hash) throw new Error(t("No such call: {what}", { what: "asset" }));
+  const res = await fetch(u.href, { credentials: "same-origin" });
+  if (!res.ok) throw new Error(String(res.status));
+  return { type: res.headers.get("content-type") || "", data: await res.arrayBuffer() };
+};
 
 window.pageShare = async function (spec, save, params) {
   const png = params?.png;

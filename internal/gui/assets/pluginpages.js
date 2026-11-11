@@ -141,17 +141,8 @@
         if (!e.reads.includes(name)) throw new Error(t("{name} doesn't ask to read {what}", { name: titled(e), what: name }));
         return api("plugin-pages/read", { spec: e.spec, read: name, params: m.params?.params || {} });
       }
-      case "asset": {
-        // a file of the page's own folder, for a page that cannot ask for
-        // it itself (pageinline.go): this request carries the window's
-        // cookie
-        const dir = new URL(e.url.replace(/[^/]*$/, ""), location.href).href;
-        const u = new URL(String(m.params?.url || ""), location.href);
-        if (!u.href.startsWith(dir) || u.hash) throw new Error(t("No such call: {what}", { what: "asset" }));
-        const res = await fetch(u.href, { credentials: "same-origin" });
-        if (!res.ok) throw new Error(String(res.status));
-        return { type: res.headers.get("content-type") || "", data: await res.arrayBuffer() };
-      }
+      case "asset":
+        return import("./pageshare.js").then(() => pageAsset(e.url, m.params?.url));
       case "image.copy":
       case "image.save":
         return import("./pageshare.js").then(() => pageShare(e.spec, m.method === "image.save", m.params));
