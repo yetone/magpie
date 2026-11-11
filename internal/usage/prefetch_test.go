@@ -98,7 +98,7 @@ func TestPrefetchEachMakeIsAReadersOwn(t *testing.T) {
 			t.Fatalf("source %d: %q", i, got)
 		}
 	}
-	if n := makes.Load(); n != 9 { // 8 readers and the loop's own
-		t.Fatalf("%d makes, want 9", n)
+	if n := makes.Load(); n != 5 { // 4 readers and the loop's own
+		t.Fatalf("%d makes, want 5", n)
 	}
 }

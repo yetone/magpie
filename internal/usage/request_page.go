@@ -2942,7 +2942,11 @@ func prefetchEach[T any](sources []sessions.CallSource, want func(sessions.CallS
 	if len(order) < 2 {
 		return alone
 	}
-	workers := min(8, len(order))
+	// Four, not eight: each worker holds a file's calls while it reads,
+	// and a first build (any upgrade that changes this package) peaked
+	// ~19 MB higher with eight (physical footprint 258 MB against 240,
+	// five cold starts each on a real history) for no shorter build.
+	workers := min(4, len(order))
 	window := make(chan struct{}, 4*workers)
 	next := make(chan int)
 	go func() {
