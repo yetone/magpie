@@ -109,7 +109,10 @@ var errNotObject = errors.New("sessions: not a JSON object")
 // name given twice is its last. b is the cache file's own bytes, which are
 // not kept: names are held once (unique) for all the parses that use them.
 func (n *named[V]) UnmarshalJSON(b []byte) error {
-	r := gjson.ParseBytes(b)
+	// read in place: ParseBytes copied every object whole (8.5 MB of a
+	// real history's start), and nothing read here is kept but through
+	// unique and Unmarshal, which copy
+	r := gjson.Parse(unsafe.String(unsafe.SliceData(b), len(b)))
 	if r.Type == gjson.Null {
 		*n = nil
 		return nil

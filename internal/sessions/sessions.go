@@ -1493,8 +1493,10 @@ func loadCache() {
 	cacheGeneration++
 	cache = map[string]*state{}
 	saved() // the kept file as the last save left it
-	if b, err := os.ReadFile(CachePath()); err == nil {
-		if files, ok := decodeCache(b, z); ok {
+	if b, done, err := readCacheFile(CachePath()); err == nil {
+		files, ok := decodeCache(b, z)
+		done()
+		if ok {
 			cache = files
 		}
 	}
