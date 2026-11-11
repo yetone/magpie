@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/access"
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -165,6 +166,46 @@ func TestCallerKeyModelsOfferDeciders(t *testing.T) {
 	// a provider's models stay together
 	seen := map[string]bool{}
 	last := ""
+	for _, m := range l.Models {
+		if m.Provider != last && seen[m.Provider] {
+			t.Fatalf("%s's models split: %v", m.Provider, ids)
+		}
+		seen[m.Provider], last = true, m.Provider
+	}
+}
+
+// The key editor offers the image and video models too (aipha2025 on X:
+// "can't pick an image model for a key"): the gateway holds a key to them
+// on /v1/images and /v1/videos as to a chat model, so a key held to some
+// models had no way to be let draw but All models.
+func TestCallerKeyModelsOfferImageAndVideoModels(t *testing.T) {
+	sandboxHome(t)
+	live := []catalog.Model{{ID: "gpt-5.5"}, {ID: "gpt-image-2", Draws: true}, {ID: "gpt-image-1", Draws: true}}
+	p := provider.Provider{ID: "pix", Name: "Pix", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"gpt-5.5"}, HiddenDrawers: []string{"gpt-image-1"}}
+	if err := provider.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.SaveLive(p.ID, p.Chat, live); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	callerKeyRoutes(mux)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/caller-keys/models", nil))
+	var l struct{ Models []keyModelJSON }
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &l) != nil {
+		t.Fatal(w.Code, w.Body)
+	}
+	var ids []string
+	for _, m := range l.Models {
+		ids = append(ids, m.ID)
+	}
+	for _, want := range []string{"pix/gpt-5.5", "pix/gpt-image-2", "pix/gpt-image-1"} {
+		if n := strings.Count(" "+strings.Join(ids, " ")+" ", " "+want+" "); n != 1 {
+			t.Fatalf("%s offered %d times: %v", want, n, ids)
+		}
+	}
+	seen, last := map[string]bool{}, ""
 	for _, m := range l.Models {
 		if m.Provider != last && seen[m.Provider] {
 			t.Fatalf("%s's models split: %v", m.Provider, ids)
