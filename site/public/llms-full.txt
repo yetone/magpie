@@ -1153,7 +1153,7 @@ OpenCode’s config in ~/.config/opencode (or $OPENCODE_CONFIG_DIR): the first o
 
 Pick one of OpenCode’s own models on its row in magpie, or run `magpie opencode default`. It puts back the model and `small_model` you had and removes magpie’s provider.
 
-Other agents: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [OpenClaw on any model](https://usemagpie.ai/docs/openclaw). Stuck? Ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+Other agents: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [OpenClaw on any model](https://usemagpie.ai/docs/openclaw), [OpenChamber on any model](https://usemagpie.ai/docs/openchamber). Stuck? Ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
@@ -5117,6 +5117,80 @@ A session keeps the connection it started on. Start a new session; a workspace's
 Craft Agents won't load a config.json without its workspaces, so magpie never makes one. Run Craft Agents once, then set it up.
 
 More agents on the same models: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [T3 Code on any model](https://usemagpie.ai/docs/t3-code) and [CodeBuddy on any model](https://usemagpie.ai/docs/codebuddy). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/openchamber
+
+# OpenChamber on any model
+
+OpenChamber is a desktop, web and VS Code front end for OpenCode. It runs an OpenCode of its own (the desktop app bundles OpenCode 2) on your OpenCode config. magpie sets OpenChamber's default model to one of magpie's and puts magpie's provider in the OpenCode config, so OpenChamber runs on any model you have in magpie: DeepSeek, GLM, Kimi, Qwen, an OpenAI or Anthropic key, or a ChatGPT or Copilot subscription.
+
+## Set up OpenChamber
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model on OpenChamber's row.** On the Agents page, pick OpenChamber's default model, and a small model if you like.
+3. **Start a new session.** OpenChamber takes the new model for new sessions.
+
+```
+magpie openchamber deepseek/deepseek-v4-pro          # new sessions
+magpie openchamber small deepseek/deepseek-v4-flash  # titles, commit messages
+```
+
+OpenChamber's settings are under `$OPENCHAMBER_DATA_DIR`, `~/.config/openchamber` by default (not moved by `XDG_CONFIG_HOME`). magpie writes its profile, `preferences.json`, and the copy in `settings.json` that older builds read, where that file is:
+
+```
+// ~/.config/openchamber/preferences.json
+{"version": 1, "fields": {
+  "defaultModel": {"value": "magpie/deepseek/deepseek-v4-pro", "updatedAt": …},
+  "smallModelUseDefault": {"value": false, …},
+  "smallModelOverride": {"value": "magpie/deepseek/deepseek-v4-flash", …}
+}}
+```
+
+## Which model a session gets
+
+OpenChamber sends each new session the model it picks, in this order: the project's `defaultModel` (settings.json's projects), the profile's `defaultModel`, the agent's own, and only then OpenCode's `model`. So setting OpenCode's model alone doesn't reach OpenChamber; magpie sets the profile's `defaultModel`. A project with a default model of its own keeps it there, and magpie names the project and its model. On a new model magpie also clears the old one's `defaultVariant`, as OpenChamber's own picker does.
+
+## The small model
+
+OpenChamber's small model writes session titles and commit messages. It is `smallModelOverride` once `smallModelUseDefault` is false, else OpenCode's `small_model`. Picking a small model in magpie writes those two keys; switching back takes both out and leaves it to OpenCode.
+
+## The OpenCode config
+
+A model in OpenChamber is OpenCode's `provider/model`, so one of magpie's needs magpie's provider in the OpenCode config: `$OPENCODE_CONFIG_DIR`, else `$XDG_CONFIG_HOME/opencode`. A provider of your own that already sends that model to magpie's gateway is used instead of a second list of the same models. An OpenCode 2 config is written in OpenCode 2's words. Once OpenChamber steps off magpie, magpie's provider goes too, when nothing else in the OpenCode config names one of its models. Its requests count as OpenCode's, since OpenChamber's OpenCode sends them.
+
+## New and open sessions
+
+OpenChamber takes the new model for new sessions; sessions already open keep theirs. magpie says so while OpenChamber is running.
+
+## Switching back
+
+Set the row back to default in magpie: magpie takes out the profile's `defaultModel` and `defaultVariant`, and OpenChamber goes back to the OpenCode config's model.
+
+```
+magpie openchamber default
+```
+
+## FAQ
+
+### Can OpenChamber use DeepSeek, GLM, Kimi or Qwen?
+
+Yes. magpie sets OpenChamber's default model to the one you pick in magpie and puts magpie's provider in the OpenCode config.
+
+### OpenCode is on magpie already; why is OpenChamber still on my old model?
+
+OpenChamber takes a project's and its profile's own defaultModel before OpenCode's model. Pick a model on OpenChamber's own row in magpie.
+
+### One project is still on the old model?
+
+That project has a default model of its own in settings.json, which goes first there. magpie names the project.
+
+### Which model writes session titles and commit messages?
+
+The small model: smallModelOverride once smallModelUseDefault is false, else OpenCode's small_model.
+
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [T3 Code on any model](https://usemagpie.ai/docs/t3-code) and [Craft Agents on any model](https://usemagpie.ai/docs/craft-agents). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
