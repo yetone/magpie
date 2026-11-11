@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -101,5 +102,40 @@ func TestUpdateThatWontStart(t *testing.T) {
 	// once this version is the one running, the note goes
 	if update.ReadBlocked("0.1.11") != nil {
 		t.Error("the note outlived the version")
+	}
+}
+
+// ShipInSand on X: magpie "often disappears by itself" after an update. A
+// restart whose new version couldn't be started (not a refusal by the
+// system: the program wouldn't run at all) still told the caller to quit,
+// and nothing was left running. It stays up and says why.
+func TestRestartThatCouldNotStartStaysUp(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("there a start that fails is always the system's refusal (BlockedError)")
+	}
+	exe := filepath.Join(t.TempDir(), "magpie")
+	os.WriteFile(exe, []byte("running magpie"), 0o755)
+	self, _ := os.Stat(exe)
+	staged := exe + ".new"
+	os.WriteFile(staged, []byte("new magpie"), 0o755)
+
+	o := updates
+	u := &updater{exe: exe, self: self, staged: staged, state: "ready", latest: &update.Release{Version: "0.1.11"}}
+	updates = u
+	defer func() { updates = o }()
+	wasRelaunch := relaunchBinary
+	relaunchBinary = func(string, string, bool, string) error {
+		return &os.PathError{Op: "fork/exec", Path: exe, Err: syscall.ENOENT}
+	}
+	defer func() { relaunchBinary = wasRelaunch }()
+
+	if restartToUpdate(false, true, "") {
+		t.Fatal("restartToUpdate said to quit, though the new version didn't start")
+	}
+	if j := u.json(); j.Error == "" {
+		t.Errorf("nothing says why: %+v", j)
+	}
+	if _, err := os.Stat(filepath.Join(settings.Dir(), updatedInAppFile)); !os.IsNotExist(err) {
+		t.Errorf("noted as updated in the app: %v", err)
 	}
 }

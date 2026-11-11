@@ -141,8 +141,22 @@ func beginHandover(bundle, exe string, window bool, view string, quiet bool) boo
 
 // failed gives the handover up before it began, and quits.
 func (ho *handover) failed(err error) {
-	ho.fail(err)
+	if !ho.fail(err) {
+		ho.stay()
+		return
+	}
 	(<-ho.quit)()
+}
+
+// stay lets this magpie run on: the restart's new version couldn't be
+// started either, so quitting would leave nothing running. A later
+// restart is let through again.
+func (ho *handover) stay() {
+	pending.Store(nil)
+	select {
+	case <-ho.quit: // the caller's quit, not made
+	default:
+	}
 }
 
 // leave quits once a handover under way is done, else at once.
@@ -164,7 +178,10 @@ func (ho *handover) run() {
 	c, err := ho.offer.Accept(ctx)
 	cancel()
 	if err != nil {
-		ho.fail(err)
+		if !ho.fail(err) {
+			ho.stay()
+			return
+		}
 		quit()
 		return
 	}
@@ -196,7 +213,10 @@ func (ho *handover) run() {
 			cbLn.Close()
 		}
 		retakeInstance()
-		ho.fail(err)
+		if !ho.fail(err) {
+			ho.stay()
+			return
+		}
 		quit()
 		return
 	}
@@ -253,7 +273,7 @@ var fallbackWait = 15 * time.Minute
 // fail gives the handover up: once the requests in flight have finished
 // (the restart didn't wait for them), the new version opens once this one
 // has exited, as a restart did before.
-func (ho *handover) fail(err error) {
+func (ho *handover) fail(err error) bool {
 	log.Println("update: the gateway wasn't handed over, restarting as before once its requests have finished:", err)
 	if ho.offer != nil {
 		ho.offer.Close()
@@ -262,8 +282,11 @@ func (ho *handover) fail(err error) {
 		time.Sleep(200 * time.Millisecond)
 	}
 	if ferr := ho.fallback(); ferr != nil {
-		log.Println("update:", ferr)
+		// nothing will start the new version: this one stays up
+		log.Println("update: the new version couldn't be started, this one runs on:", ferr)
+		return false
 	}
+	return true
 }
 
 // takeOver, in the new magpie, takes the gateway from the one that
