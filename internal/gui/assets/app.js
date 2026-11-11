@@ -14045,8 +14045,9 @@ function accountQuota(data, user, capFor = () => 0, settable = null, prov) {
     return line;
   }
   if (!q || q.error || !q.windows?.length) {
-    line.append(el("span", "aq-none", [...noPlan, q?.error ? quotaError(q.error, q) : t("No allowance reported")].join(" · ")));
-    if (q?.error) line.title = q.error;
+    const none = el("span", "aq-none", [...noPlan, q?.error ? quotaError(q.error, q) : t("No allowance reported")].join(" · "));
+    line.append(none);
+    if (q?.error) line.title = none.title = q.error;
     return line;
   }
   if (q.balance) {
@@ -17729,7 +17730,7 @@ function panelQuotaCard(q, first = false) {
   card.title = [q.name, q.alias, q.user, q.seat && q.seat !== q.alias && "≡ " + q.seat, planName(q.plan), q.until ? planTerm(q) : "", q.balance && t("Balance") + " " + q.balance].filter(Boolean).join(" · ");
   if (q.error) {
     card.classList.add("err");
-    card.append(pqLine(quotaError(q.error, q), q, " err"));
+    card.append(pqLine(quotaError(q.error, q), q, " err", q.error));
     card.title += "\n" + q.error;
     return card;
   }
@@ -18474,9 +18475,14 @@ function keepQuotaRefresh(box) {
   };
 }
 // a tray line, its refresh kept (#3569)
-function pqLine(say, q, c = "") {
+// why: the reason the words give in brief. It is a title of the line's own,
+// since the page's hover over cut-short text writes the words themselves
+// as a title on any ellipsis element without one, over the card's (FangChangBDG on X).
+function pqLine(say, q, c = "", why = "") {
   const l = el("span", "pq-sub pq-line" + c);
-  l.append(say.nodeType ? say : el("span", "pq-say", say), quotaRefresh(q));
+  const s = say.nodeType ? say : el("span", "pq-say", say);
+  if (why) l.title = s.title = why;
+  l.append(s, quotaRefresh(q));
   return l;
 }
 // then: what else its turn waits for
