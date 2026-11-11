@@ -2,8 +2,11 @@ package gui
 
 import (
 	"fmt"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // magpie's windows are WebView2 on Windows, a runtime Windows 10 doesn't
@@ -126,4 +129,81 @@ func splitArgs(s string) []string {
 		out = append(out, cur.String())
 	}
 	return out
+}
+
+// WebView2 that does not come up. A magpie started while the one before it
+// is still going down finds the profile folder held by the old
+// msedgewebview2, and Wails waits a minute for a controller that never
+// arrives, then exits (@ljlwlcz on X, 0.1.3688: a restart by a script left
+// no window). Two things answer it: the start waits for the folder to be
+// free, and a start that still fails is tried again, a few times.
+
+// webView2TryEnv counts the starts that ended in a WebView2 failure; each
+// relaunch passes it on.
+const webView2TryEnv = "MAGPIE_WV2_TRY"
+
+// webView2Tries is how many starts are made before the failure is shown.
+const webView2Tries = 3
+
+// webView2Folder is the folder WebView2 keeps its profile in: the one magpie
+// passes Wails (webViewUserDataPath), else Wails' own default,
+// %AppData%\<exe name>.
+func webView2Folder(userDataPath, appData, exe string) string {
+	if userDataPath != "" {
+		return userDataPath
+	}
+	if appData == "" || exe == "" {
+		return ""
+	}
+	return filepath.Join(appData, filepath.Base(exe))
+}
+
+// webView2Failure says whether err is the webview not coming up, the
+// errors Wails' Embed reports: the controller timeout and the loader's.
+func webView2Failure(err error) bool {
+	if err == nil {
+		return false
+	}
+	m := strings.ToLower(err.Error())
+	return strings.Contains(m, "webview2")
+}
+
+// webView2Try is the number of starts already made, from the env value.
+func webView2Try(v string) int {
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
+// webView2Backoff is how long a start waits before the n-th try (n >= 1).
+func webView2Backoff(n int) time.Duration {
+	return time.Duration(n) * 2 * time.Second
+}
+
+// awaitWebView2Folder polls free until it says so or max passes, and says
+// whether it was free. sleep is a var for tests.
+func awaitWebView2Folder(free func() bool, max, step time.Duration, sleep func(time.Duration)) bool {
+	for waited := time.Duration(0); ; waited += step {
+		if free() {
+			return true
+		}
+		if waited >= max {
+			return false
+		}
+		sleep(step)
+	}
+}
+
+// webView2FailedNotice is the box shown when the webview would not start
+// after every try: what failed and what to do, in lang (English where it
+// has none of its own).
+func webView2FailedNotice(lang, reason, version string) (title, body string) {
+	if strings.HasPrefix(lang, "zh") {
+		return "magpie 的窗口没能打开",
+			fmt.Sprintf("WebView2 在 %d 次启动里都没有就绪（运行时 %s）。\r\n\r\n%s\r\n\r\n请结束残留的 msedgewebview2.exe 后重新打开 magpie；也可以用 \"magpie web\" 在浏览器里打开。详情见 magpie 的日志。", webView2Tries, version, reason)
+	}
+	return "magpie's window didn't open",
+		fmt.Sprintf("WebView2 was not ready in %d starts (runtime %s).\r\n\r\n%s\r\n\r\nEnd any leftover msedgewebview2.exe and open magpie again, or use \"magpie web\" in your browser. The details are in magpie's log.", webView2Tries, version, reason)
 }
