@@ -645,13 +645,24 @@ func ClaudeDirs() []string { return appdir.ClaudeHomes() }
 // copied to the other) is counted under the first.
 func claudeFiles() []file {
 	dirs := ClaudeDirs()
-	if len(dirs) == 1 {
+	switch len(dirs) {
+	case 0:
+		return nil
+	case 1:
 		return ccFiles("claude", dirs[0])
 	}
-	var out []file
-	owner := map[string]string{}
-	for _, d := range dirs {
-		for _, f := range ccFiles("claude", d) {
+	// listed first, so the answer is made at its size: grown file by file
+	// it was ~1 MB a pass with a few folders, a pass every 10 s while the
+	// Sessions page is open
+	lists, n := make([][]file, len(dirs)), 0
+	for i, d := range dirs {
+		lists[i] = ccFiles("claude", d)
+		n += len(lists[i])
+	}
+	out := make([]file, 0, n)
+	owner := make(map[string]string, len(lists[0]))
+	for i, d := range dirs {
+		for _, f := range lists[i] {
 			// a subagent's key is its session's: it goes where its session is
 			if o, ok := owner[f.key]; ok && o != d {
 				continue
