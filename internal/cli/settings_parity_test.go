@@ -230,6 +230,7 @@ var cliForRoute = map[string]string{
 	"POST /api/update/check":               "magpie update check",
 	"POST /api/settings/agent-compact":     "magpie model compact",
 	"POST /api/settings/agent-suffix":      "magpie model suffix",
+	"POST /api/settings/context-cap":       "magpie model context-cap",
 	"POST /api/update/install":             "magpie update",
 	"GET /api/model-price":                 "magpie model price",
 	"POST /api/model-price":                "magpie model price",
@@ -332,6 +333,7 @@ var notYet = map[string]string{
 	"GET /api/plugins/builtin":                   P,  // builtins.go
 	"POST /api/plugins/builtin":                  P,  // builtins.go
 	"GET /api/plugins/counts":                    P,  // plugins_counts.go: Discover's installs and likes
+	"GET /api/catalog/models":                    P,  // catalog_models.go: the model editor's Same as picker
 	"POST /api/plugins/like":                     P,  // plugins_counts.go
 	"GET /api/library/browser":                   L,  // browser.go
 	"POST /api/library/browser/setup":            L,  // browser.go

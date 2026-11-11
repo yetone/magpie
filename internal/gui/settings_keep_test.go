@@ -213,6 +213,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 	was.ProxyCustom = "http://me:secret@proxy.example:8080"
 	was.PluginProxyCustom = "http://me:secret@plugins.example:8080"
 	was.PanelShortcut = "Ctrl+Alt+K"
+	was.ContextCap = 200000                           // its own route, POST /api/settings/context-cap
 	was.SearcherThen = []string{"fake/m1", "fake/m2"} // set in its own row
 	was.RouterNote = "Los Angeles"                    // the Library's servers/hub-note
 	was.RouterAllTools = true                         // the Library's servers/hub-tools
