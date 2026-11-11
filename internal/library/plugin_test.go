@@ -1,6 +1,7 @@
 package library
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,8 +72,12 @@ func TestPluginImportCarryOnOffRemove(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(h, ".claude/skills/tdd")); err != nil {
 		t.Errorf("claude skill: %v", err)
 	}
+	// ${CLAUDE_PLUGIN_ROOT} is replaced as written, so the rest of the path
+	// keeps its forward slashes (as Claude Code expands it on Windows), and
+	// the files hold it JSON-escaped
+	inJSON := func(s string) string { b, _ := json.Marshal(s); return string(b[1 : len(b)-1]) }
 	settings := read(t, filepath.Join(h, ".claude/settings.json"))
-	for _, want := range []string{filepath.Join(root, "scripts/lint.sh"), "Bash", "echo done"} {
+	for _, want := range []string{inJSON(root + "/scripts/lint.sh"), "Bash", "echo done"} {
 		if !strings.Contains(settings, want) {
 			t.Errorf("claude settings lack %q:\n%s", want, settings)
 		}
@@ -84,7 +89,7 @@ func TestPluginImportCarryOnOffRemove(t *testing.T) {
 		t.Errorf("codex was given claude's own event:\n%s", codexHooks)
 	}
 	cj := read(t, filepath.Join(h, ".claude.json"))
-	if !strings.Contains(cj, filepath.Join(root, "bin/db")) || !strings.Contains(cj, data) {
+	if !strings.Contains(cj, inJSON(root+"/bin/db")) || !strings.Contains(cj, inJSON(data)) {
 		t.Errorf("claude's server lacks the plugin's folders:\n%s", cj)
 	}
 	if !strings.Contains(read(t, filepath.Join(h, ".codex/config.toml")), "acme-db") {
