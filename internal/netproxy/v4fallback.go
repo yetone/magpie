@@ -42,6 +42,9 @@ func v4Since(addr string) time.Time {
 }
 
 func markV4(addr string) {
+	if v6Literal(addr) {
+		return
+	}
 	v4Only.Lock()
 	defer v4Only.Unlock()
 	if v4Only.at == nil {
@@ -59,17 +62,47 @@ func v4Fallback(t *http.Transport) {
 	}
 	t.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 		if network == "tcp" && !v4Since(addr).IsZero() {
-			network = "tcp4"
+			// An IPv6-only host (a remote magpie with no A record, or
+			// an IPv6 address typed in) has nothing to answer over
+			// IPv4: that dial failing clears the mark and goes on over
+			// tcp, so IPv6 is tried again at once, not in 30 minutes
+			// (ZeHeaton23141 on X).
+			if c, err := dial(ctx, "tcp4", addr); err == nil {
+				return watchV6(c, addr), nil
+			}
+			clearV4(addr)
 		}
 		c, err := dial(ctx, network, addr)
 		if err != nil || c == nil {
 			return c, err
 		}
-		if a, ok := c.RemoteAddr().(*net.TCPAddr); ok && a.IP.To4() == nil {
-			return &v6Conn{Conn: c, addr: addr}, nil
-		}
-		return c, nil
+		return watchV6(c, addr), nil
 	}
+}
+
+// watchV6 wraps a connection to an IPv6 address in a v6Conn.
+func watchV6(c net.Conn, addr string) net.Conn {
+	if a, ok := c.RemoteAddr().(*net.TCPAddr); ok && a.IP.To4() == nil {
+		return &v6Conn{Conn: c, addr: addr}
+	}
+	return c
+}
+
+func clearV4(addr string) {
+	v4Only.Lock()
+	defer v4Only.Unlock()
+	delete(v4Only.at, addr)
+}
+
+// v6Literal reports whether addr's host is an IPv6 address, which has no
+// IPv4 to fall back to.
+func v6Literal(addr string) bool {
+	h, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.To4() == nil
 }
 
 // v6Conn is a connection to an IPv6 address, marking its host:port for
