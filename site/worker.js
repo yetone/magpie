@@ -87,6 +87,7 @@ export default {
       return Response.redirect(url.toString(), 301);
     }
     if (url.pathname === "/api/plugins/tagged") return taggedPlugins(ctx);
+    if (url.pathname === "/api/plugins/readme") return pluginReadme(ctx, url.searchParams.get("name"));
     if (url.pathname.startsWith("/api/plugins/")) {
       const got = await pluginStats(req, env, ctx);
       if (got) return got;
@@ -1193,4 +1194,45 @@ export async function taggedPlugins(ctx) {
   const good = await cached("tagged-good");
   if (good && Array.isArray(good.plugins)) return json(good, 200, { "Cache-Control": "public, max-age=60" });
   return json({ error: "no list yet" }, 503, NO_STORE);
+}
+
+// pluginReadme is a Discover plugin's README, as the `tagged` workflow keeps
+// it on the dist branch (readmes/<key>.md), passed on for the desktops npm's
+// human check or GitHub's block holds back (River_WLan on X). name is the
+// package's npm name or github:owner/repo, as magpie installs it. The edge
+// keeps a README ten minutes; one the branch doesn't have is a 404, which
+// magpie answers by asking npm or GitHub itself.
+const PKG_NAME = /^(@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
+export function readmeKey(name) {
+  name = String(name ?? "");
+  if (name.startsWith("github:")) {
+    const repo = name.slice(7).split("#")[0];
+    return /^[\w.-]+\/[\w.-]+$/.test(repo) && !repo.includes("..") ? "github/" + repo : "";
+  }
+  return PKG_NAME.test(name) ? name : "";
+}
+export async function pluginReadme(ctx, name) {
+  const key = readmeKey(name);
+  if (!key) return json({ error: "not a plugin name" }, 400, NO_STORE);
+  const hit = await cached("readme/" + key);
+  if (hit && typeof hit.readme === "string") return readmeText(hit.readme, 600);
+  for (const base of [
+    "https://raw.githubusercontent.com/magpie-community/plugins/dist/readmes/",
+    "https://cdn.jsdelivr.net/gh/magpie-community/plugins@dist/readmes/",
+  ]) {
+    try {
+      const res = await fetch(base + key.split("/").map(encodeURIComponent).join("/") + ".md", { headers: UA });
+      if (!res.ok) continue;
+      const readme = await res.text();
+      if (!readme.trim()) continue;
+      remember(ctx, "readme/" + key, { readme }, 600);
+      return readmeText(readme, 600);
+    } catch (e) {
+      console.log("readme", key, e);
+    }
+  }
+  return json({ error: "no README kept" }, 404, NO_STORE);
+}
+function readmeText(readme, age) {
+  return new Response(readme, { status: 200, headers: { "Content-Type": "text/markdown; charset=utf-8", "Cache-Control": `public, max-age=${age}` } });
 }

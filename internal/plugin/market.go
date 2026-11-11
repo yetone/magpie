@@ -676,6 +676,9 @@ func ReadmeIn(ctx context.Context, name, lang string) (Page, error) {
 		// README as GitHub has it
 		if _, err := os.Stat(Target(name)); err != nil {
 			if repo := githubRepo(name); repo != "" {
+				if r, ok := cachedReadme(ctx, name); ok {
+					return Page{Readme: r}, nil
+				}
 				if r, ok := githubLangReadme(ctx, repo, lang); ok {
 					return Page{Readme: r}, nil
 				}
@@ -697,6 +700,11 @@ func ReadmeIn(ctx context.Context, name, lang string) (Page, error) {
 	if p, ok := folderLangReadme(Target(name), lang); ok {
 		return p, nil // installed: its own file, as it was installed
 	}
+	// the copy the community repo keeps, before npm, which a human check
+	// can stand in front of
+	if r, ok := cachedReadme(ctx, name); ok {
+		return Page{Readme: r}, nil
+	}
 	b, err := fetchNPM(ctx, name, "/"+npmPath(name), 32<<20)
 	if err != nil {
 		// one npm doesn't have (yet): the README the community repo's
@@ -716,7 +724,8 @@ func ReadmeIn(ctx context.Context, name, lang string) (Page, error) {
 		DistTags map[string]string    `json:"dist-tags"`
 	}
 	if err := json.Unmarshal(b, &d); err != nil {
-		return Page{}, err
+		// a page that isn't npm's entry (a human check, a portal)
+		return Page{}, errors.New("the answer isn't the package's page; npm may be asking for a human check")
 	}
 	const most = 200 << 10
 	if len(d.Readme) > most {

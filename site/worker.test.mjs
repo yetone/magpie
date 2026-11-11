@@ -936,3 +936,43 @@ test("plugins/tagged: the dist branch's list passed on, jsDelivr and the last co
     globalThis.fetch = was;
   }
 });
+
+test("plugins/readme: a plugin's kept README passed on, from jsDelivr when raw fails, 404 when none", async () => {
+  const was = globalThis.fetch;
+  const asked = [];
+  let rawDown = false;
+  globalThis.fetch = async (u) => {
+    u = String(u);
+    asked.push(u);
+    const raw = "https://raw.githubusercontent.com/magpie-community/plugins/dist/readmes/";
+    const cdn = "https://cdn.jsdelivr.net/gh/magpie-community/plugins@dist/readmes/";
+    for (const [base, down] of [[raw, rawDown], [cdn, false]]) {
+      if (!u.startsWith(base)) continue;
+      if (down) return new Response("x", { status: 503 });
+      if (u.endsWith("/rsshub-plugin.md")) return new Response("# kept");
+      if (u.endsWith("/%40sc/scoped.md")) return new Response("# scoped");
+      if (u.endsWith("/github/o/r.md")) return new Response("# repo");
+      return new Response("nope", { status: 404 });
+    }
+    throw new Error("a test reached " + u);
+  };
+  try {
+    const ask = (n) => worker.fetch(new Request("https://usemagpie.ai/api/plugins/readme?name=" + encodeURIComponent(n)), {}, ctx);
+    for (const [n, want] of [["rsshub-plugin", "# kept"], ["@sc/scoped", "# scoped"], ["github:o/r", "# repo"]]) {
+      store.delete("https://usemagpie.ai/__v2/readme/" + (n.startsWith("github:") ? "github/" + n.slice(7) : n));
+      const res = await ask(n);
+      assert.equal(res.status, 200, n);
+      assert.equal(await res.text(), want);
+    }
+    const before = asked.length;
+    assert.equal(await (await ask("rsshub-plugin")).text(), "# kept");
+    assert.equal(asked.length, before, "the edge keeps it");
+    store.delete("https://usemagpie.ai/__v2/readme/rsshub-plugin");
+    rawDown = true;
+    assert.equal(await (await ask("rsshub-plugin")).text(), "# kept", "jsDelivr stands in");
+    assert.equal((await ask("missing-one")).status, 404);
+    for (const bad of ["../x", "github:../../x", "", "A B"]) assert.equal((await ask(bad)).status, 400, bad);
+  } finally {
+    globalThis.fetch = was;
+  }
+});
