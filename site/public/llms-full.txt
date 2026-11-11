@@ -417,7 +417,7 @@ With several keys or accounts, magpie can spread Claude Code’s requests over t
 
 The routing modes are in [Get started](https://usemagpie.ai/docs/start#routing).
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Tencent Cloud](https://usemagpie.ai/docs/tencent-cloud) · [Baidu Qianfan](https://usemagpie.ai/docs/baidu-qianfan) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 ## FAQ
 
@@ -549,7 +549,7 @@ Requests on a Claude subscription run through the Claude Code installed on your 
 
 The routing modes are in [Get started](https://usemagpie.ai/docs/start#routing).
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Tencent Cloud](https://usemagpie.ai/docs/tencent-cloud) · [Baidu Qianfan](https://usemagpie.ai/docs/baidu-qianfan) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 ## FAQ
 
@@ -666,7 +666,7 @@ Gemini CLI still speaks the Gemini API; magpie translates each request for the m
 
 The routing modes and rules are in [Get started](https://usemagpie.ai/docs/start#routing).
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Tencent Cloud](https://usemagpie.ai/docs/tencent-cloud) · [Baidu Qianfan](https://usemagpie.ai/docs/baidu-qianfan) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 ## FAQ
 
@@ -1125,7 +1125,7 @@ magpie opencode default
 
 It puts back the `model` and `small_model` OpenCode had before magpie, and takes the `magpie` provider out of the file.
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Tencent Cloud](https://usemagpie.ai/docs/tencent-cloud) · [Baidu Qianfan](https://usemagpie.ai/docs/baidu-qianfan) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 ## FAQ
 
@@ -1558,6 +1558,133 @@ The same for other providers: [GLM Coding Plan](https://usemagpie.ai/docs/glm), 
 
 ---
 
+Source: https://usemagpie.ai/docs/tencent-cloud
+
+# Tencent Cloud Token Plan in Claude Code and Codex
+
+Tencent Cloud's models are on TokenHub: the Token Plan subscription (personal and enterprise) and pay as you go, each on keys of its own — an sk-tp- plan key, or TokenHub's own API key. Add one Tencent Cloud provider in magpie with each key's plan, and Claude Code, Codex, Gemini CLI, OpenCode and other tools use Hy, GLM, Kimi, DeepSeek and MiniMax through magpie's local gateway on 127.0.0.1:3425.
+
+## Add Tencent Cloud
+
+1. **Add the provider and pick the plan.** On Providers, click ＋ Add provider, pick Tencent Cloud, set the key's plan to Plan · China, Pay as you go · China, Pay as you go · Global, Enterprise plan · Global, paste the key and save.
+2. **Pick it for a tool.** On Agents, pick a model such as tc-code-latest or glm-5.3 on a tool's row.
+
+```
+magpie claude tencent-cloud/tc-code-latest
+magpie codex tencent-cloud/glm-5.3
+magpie opencode tencent-cloud/kimi-k3
+```
+
+## Plans and endpoints
+
+| Plan | Chat Completions and Responses | Anthropic Messages |
+| --- | --- | --- |
+| Token Plan (personal, enterprise) · China | `https://tokenhub.tencentmaas.com/plan/v3` | `https://tokenhub.tencentmaas.com/plan/anthropic` |
+| Pay as you go · China | `https://tokenhub.tencentmaas.com/v1` | `https://tokenhub.tencentmaas.com` |
+| Pay as you go · Global | `https://tokenhub-intl.tencentmaas.com/v1` | `https://tokenhub-intl.tencentmaas.com` |
+| Enterprise · Singapore | `https://tokenhub-intl.tencentmaas.com/plan/v3` | `https://tokenhub-intl.tencentmaas.com/plan/anthropic` |
+
+The personal and enterprise plans share endpoints; the key tells the plan. China is one region for both, so its models are the two plans' together; Singapore sells the enterprise plan alone. Each key in the provider names its plan, so pay-as-you-go and plan keys can share one provider.
+
+The personal plan used to be at `api.lkeap.cloud.tencent.com` until Tencent moved it to TokenHub. A provider saved at the old host is moved to the new one.
+
+## The plans' models
+
+The plans give no model list of their own, and the public catalog names only their Hy models, so magpie gives the models from Tencent's plan docs: tc-code-latest, auto, glm-5.3, glm-5.3-flash, kimi-k3, kimi-k2.7-code, deepseek-v4-pro, deepseek-v4.1-flash, minimax-m3, hy4-preview, hy3, mimo-v2.6-pro, among others. tc-code-latest is whichever model the console has picked. A pay-as-you-go key reads TokenHub's `/v1/models`, which has other makers' models such as Qwen too.
+
+## In each agent
+
+- **Claude Code.** speaks Anthropic Messages. The plan and pay as you go both have Anthropic endpoints, so requests go as they are. See [Claude Code with other models](https://usemagpie.ai/docs/claude-code-models).
+- **Codex.** speaks only OpenAI Responses. TokenHub's plan and pay as you go both serve Responses, so Codex's requests go as they are. The models show in Codex's `/model`. See [Codex with other models](https://usemagpie.ai/docs/codex-models).
+- **Gemini CLI.** speaks Gemini's API; magpie points it at the local gateway and translates. See [Gemini CLI with other models](https://usemagpie.ai/docs/gemini-cli-models).
+- **OpenCode.** : magpie writes the models into opencode.json. See [OpenCode with other models](https://usemagpie.ai/docs/opencode-models).
+
+## Enterprise quota
+
+The enterprise plan's cycle quota (credits on 专业套餐, tokens on 轻享套餐) is told only to Tencent Cloud's API, signed with the account's SecretId and SecretKey, never to the plan key. Add them in the provider's editor, and magpie's Usage page shows a card for each enterprise plan the SecretId can see: what the cycle has used and when it resets. The personal plan has no API for its usage, only the console; pay as you go has no windows.
+
+## FAQ
+
+### How do I use the Tencent Cloud Token Plan in Claude Code?
+
+Add Tencent Cloud in magpie with the key's plan set to Plan · China, then pick tc-code-latest or glm-5.3 on Claude Code's row, or run magpie claude tencent-cloud/tc-code-latest. Requests go to the plan's Anthropic endpoint, https://tokenhub.tencentmaas.com/plan/anthropic.
+
+### What is the difference between a Token Plan key and a TokenHub pay-as-you-go key?
+
+A plan key starts with sk-tp- and works only at the plan endpoints under /plan; pay as you go uses TokenHub's own API key at /v1. Set each key's plan in magpie; both can share one provider.
+
+### Does the personal plan's old host api.lkeap.cloud.tencent.com still work?
+
+Tencent moved the personal plan to tokenhub.tencentmaas.com. A provider in magpie saved at the old host is moved to the new one by itself.
+
+### Can magpie show what is left of a Tencent Cloud plan?
+
+For the enterprise plan, yes: add the account's SecretId and SecretKey in the provider's editor, and the Usage page shows the cycle's use and its reset. The personal plan has no API for it; see Tencent Cloud's console.
+
+The same for other providers: [Volcengine Ark](https://usemagpie.ai/docs/volcengine), [GLM Coding Plan](https://usemagpie.ai/docs/glm), [Kimi](https://usemagpie.ai/docs/kimi), [DeepSeek](https://usemagpie.ai/docs/deepseek), [Qwen](https://usemagpie.ai/docs/qwen). Hit an error? See [troubleshooting](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/baidu-qianfan
+
+# Baidu Qianfan Token Plan in Claude Code and Codex
+
+Baidu Qianfan (百度千帆) has two Token Plans, personal and enterprise, and pay as you go, each with endpoints and keys of its own. Add Baidu Qianfan in magpie with each key's plan, and Claude Code, Codex, Gemini CLI, OpenCode and other tools use Qianfan's DeepSeek and GLM through magpie's local gateway on 127.0.0.1:3425.
+
+## Add Baidu Qianfan
+
+1. **Add the provider and pick the plan.** On Providers, click ＋ Add provider, pick Baidu Qianfan, set the key's plan to Token Plan Personal, Token Plan Enterprise, Pay as you go, paste the key and save.
+2. **Pick it for a tool.** On Agents, pick a model such as qianfan-code-latest or deepseek-v4-pro on a tool's row.
+
+```
+magpie claude baidu-qianfan/qianfan-code-latest
+magpie codex baidu-qianfan/deepseek-v4-pro
+magpie opencode baidu-qianfan/glm-5.3
+```
+
+## Plans and endpoints
+
+| Plan | Chat Completions and Responses | Anthropic Messages |
+| --- | --- | --- |
+| Token Plan personal | `https://qianfan.baidubce.com/v2/tokenplan/personal` | `https://qianfan.baidubce.com/anthropic/tokenplan/personal` |
+| Token Plan enterprise | `https://qianfan.baidubce.com/v2/tokenplan/team` | `https://qianfan.baidubce.com/anthropic/tokenplan/team` |
+| Pay as you go | `https://qianfan.baidubce.com/v2` | `https://qianfan.baidubce.com/anthropic` |
+
+Each plan's key works at its own endpoints. Each key in the provider names its plan, so personal, enterprise and pay-as-you-go keys can share one provider, and each key's requests go to its own plan's endpoint.
+
+## The plans' models
+
+The plans' `/models` answers 404, so magpie gives the models from both plans' docs: qianfan-code-latest, deepseek-v4.1-flash, deepseek-v4-pro, deepseek-v4-pro-0813, deepseek-v4-flash-0731, glm-5.3, glm-5.3-flash, glm-5.2, glm-5.1, among others. deepseek-v4-flash, deepseek-v3.2 and glm-5 are the enterprise plan's alone. qianfan-code-latest is whichever model the console has picked. A pay-as-you-go key reads Qianfan's `/v2/models`.
+
+## In each agent
+
+- **Claude Code.** speaks Anthropic Messages. Qianfan's plans and pay as you go have Anthropic endpoints, so requests go as they are. See [Claude Code with other models](https://usemagpie.ai/docs/claude-code-models).
+- **Codex.** speaks only OpenAI Responses. Qianfan's plan endpoints serve Responses too, so Codex's requests go as they are. The models show in Codex's `/model`. See [Codex with other models](https://usemagpie.ai/docs/codex-models).
+- **Gemini CLI.** speaks Gemini's API; magpie points it at the local gateway and translates. See [Gemini CLI with other models](https://usemagpie.ai/docs/gemini-cli-models).
+- **OpenCode.** : magpie writes the models into opencode.json. See [OpenCode with other models](https://usemagpie.ai/docs/opencode-models).
+
+## FAQ
+
+### How do I use the Baidu Qianfan Token Plan in Claude Code?
+
+Add Baidu Qianfan in magpie with the key's plan set to Token Plan Personal or Enterprise, then pick qianfan-code-latest on Claude Code's row, or run magpie claude baidu-qianfan/qianfan-code-latest. Requests go to the plan's Anthropic endpoint, such as https://qianfan.baidubce.com/anthropic/tokenplan/personal.
+
+### Which model is qianfan-code-latest?
+
+The one you picked for the plan in Qianfan's console. Change it there; the name in magpie and your tools stays the same.
+
+### Do the personal and enterprise plans have the same models?
+
+Mostly. deepseek-v4-flash, deepseek-v3.2 and glm-5 are the enterprise plan's alone; deepseek-v4-pro, glm-5.3 and the others are in both.
+
+### Does Baidu Qianfan work in Codex?
+
+Yes. Qianfan's plan endpoints serve OpenAI Responses, so magpie passes Codex's requests through. Run magpie codex baidu-qianfan/deepseek-v4-pro, or pick it on Codex's row.
+
+The same for other providers: [Volcengine Ark](https://usemagpie.ai/docs/volcengine), [Tencent Cloud](https://usemagpie.ai/docs/tencent-cloud), [GLM Coding Plan](https://usemagpie.ai/docs/glm), [Kimi](https://usemagpie.ai/docs/kimi), [DeepSeek](https://usemagpie.ai/docs/deepseek), [Qwen](https://usemagpie.ai/docs/qwen). Hit an error? See [troubleshooting](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
 Source: https://usemagpie.ai/docs/qwen
 
 # Qwen in Claude Code, Codex, Gemini CLI and OpenCode
@@ -1870,7 +1997,7 @@ Yes. magpie reads OpenRouter’s credits endpoint and shows what is left in doll
 
 Asked at the Anthropic base, OpenRouter answers with its catalog under `anthropic/` names it doesn’t serve. magpie fetches the list from the Chat Completions base, `https://openrouter.ai/api/v1`, and a provider given only OpenRouter’s Anthropic base is told to add that Chat base.
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Tencent Cloud](https://usemagpie.ai/docs/tencent-cloud) · [Baidu Qianfan](https://usemagpie.ai/docs/baidu-qianfan) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
 
@@ -2173,7 +2300,7 @@ Yes. Add the Google Vertex AI preset with your project’s id, for example `magp
 
 Yes. Both are subscriptions: `magpie accounts add gemini` or `magpie accounts add antigravity`, then pick a `gemini/…` or `antigravity/…` model. Code Assist needs a Standard or Enterprise account with a Google Cloud project of its own.
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Tencent Cloud](https://usemagpie.ai/docs/tencent-cloud) · [Baidu Qianfan](https://usemagpie.ai/docs/baidu-qianfan) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). To run Google’s Antigravity app on other models, see [Antigravity on any model](https://usemagpie.ai/docs/antigravity). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
 
@@ -2311,7 +2438,7 @@ xAI can’t read reasoning that another vendor sealed, and answers “Could not 
 
 No. The Usage tab counts tokens, cache and cost for every Grok call, priced from models.dev, but magpie reads no balance from xAI. You can type the balance in with `magpie provider key-balance`, and the Usage page shows it less what magpie has priced since.
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Tencent Cloud](https://usemagpie.ai/docs/tencent-cloud) · [Baidu Qianfan](https://usemagpie.ai/docs/baidu-qianfan) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
 
@@ -2444,7 +2571,7 @@ Mistral turns away any field it doesn’t know. magpie sends an earlier turn’s
 
 Yes. A Vibe key from a Le Chat plan (Pro, Student or Team) shows how much of the month’s Vibe budget is used, in the currency Mistral bills in, and when it resets, with the plan’s name. A Studio key made in the console shows the organization’s API budget instead, as “API · Month”.
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Tencent Cloud](https://usemagpie.ai/docs/tencent-cloud) · [Baidu Qianfan](https://usemagpie.ai/docs/baidu-qianfan) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
 
@@ -2628,7 +2755,7 @@ No. The Ollama preset takes none. Ollama Cloud needs one.
 
 Other local servers, such as LM Studio, oMLX, vLLM and llama.cpp’s server, are in [Local models](https://usemagpie.ai/docs/local-models). To let a local model classify each request for routing, see [Intent routing](https://usemagpie.ai/docs/intent).
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Tencent Cloud](https://usemagpie.ai/docs/tencent-cloud) · [Baidu Qianfan](https://usemagpie.ai/docs/baidu-qianfan) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot)
 
 Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
 
@@ -2772,7 +2899,7 @@ Yes. A request from Codex, Gemini CLI or OpenCode has no cache marks of its own,
 
 Newer Claude models don’t all take `thinking` `disabled`. magpie sends Sonnet 5.5 `between_tools`, leaves thinking out for Opus 5.5 and Fable 5, which always think, and asks Opus 5 and Haiku 5.5 at high in place of xhigh or max. Older Claudes get it as sent.
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Tencent Cloud](https://usemagpie.ai/docs/tencent-cloud) · [Baidu Qianfan](https://usemagpie.ai/docs/baidu-qianfan) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
 
@@ -2923,7 +3050,7 @@ OpenAI reads only reasoning it sealed for the same key, organization or account.
 
 Yes, as its own provider, Azure OpenAI. Give it the resource’s endpoint and key; magpie uses the v1 API under `/openai/v1`, sends the key in the `api-key` header and lists the resource’s deployments as models.
 
-**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
+**By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Tencent Cloud](https://usemagpie.ai/docs/tencent-cloud) · [Baidu Qianfan](https://usemagpie.ai/docs/baidu-qianfan) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
 Every agent: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Ask on [Discord](https://discord.gg/vGSnD3ZKQF) if you get stuck.
 

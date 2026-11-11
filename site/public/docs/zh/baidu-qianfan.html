@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>百度千帆 Token Plan 接入 Claude Code、Codex、OpenCode：DeepSeek、GLM 用在任意 Agent · magpie</title>
+<meta name="description" content="在 magpie 里添加百度千帆的 Token Plan（个人版、企业版）或按量付费 Key，让 Claude Code、Codex、Gemini CLI、OpenCode 用上千帆里的 DeepSeek 和 GLM：各套餐的接口地址、套餐里的模型、qianfan-code-latest，以及按量付费的模型列表。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/baidu-qianfan">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/baidu-qianfan">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/baidu-qianfan">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/baidu-qianfan">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/baidu-qianfan">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="百度千帆 Token Plan 接入 Claude Code 和 Codex">
+<meta property="og:description" content="在 magpie 里添加百度千帆的 Token Plan（个人版、企业版）或按量付费 Key，让 Claude Code、Codex、Gemini CLI、OpenCode 用上千帆里的 DeepSeek 和 GLM：各套餐的接口地址、套餐里的模型、qianfan-code-latest，以及按量付费的模型列表。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/baidu-qianfan">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "百度千帆 Token Plan 接入 Claude Code 和 Codex",
+   "description": "在 magpie 里添加百度千帆的 Token Plan（个人版、企业版）或按量付费 Key，让 Claude Code、Codex、Gemini CLI、OpenCode 用上千帆里的 DeepSeek 和 GLM：各套餐的接口地址、套餐里的模型、qianfan-code-latest，以及按量付费的模型列表。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/baidu-qianfan",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "百度千帆 Token Plan 怎么接入 Claude Code？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "在 magpie 里添加 Baidu Qianfan，把 Key 的套餐选成 Token Plan Personal 或 Enterprise，然后在 Claude Code 那一行选 qianfan-code-latest 这类模型，或运行 magpie claude baidu-qianfan/qianfan-code-latest。请求走套餐的 Anthropic 接口，比如 https://qianfan.baidubce.com/anthropic/tokenplan/personal。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "qianfan-code-latest 是哪个模型？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "是你在千帆控制台为套餐选定的模型。换模型在控制台改，magpie 和工具里的名字不用变。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "千帆个人版和企业版的模型一样吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "大部分一样。deepseek-v4-flash、deepseek-v3.2 和 glm-5 只在企业版里，其他如 deepseek-v4-pro、glm-5.3 两个套餐都有。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "百度千帆能在 Codex 里用吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。千帆的套餐地址提供 OpenAI Responses，magpie 把 Codex 的请求原样转过去。运行 magpie codex baidu-qianfan/deepseek-v4-pro，或在 Codex 那一行选上。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/zh/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "文档",
+     "item": "https://usemagpie.ai/docs/zh/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "百度千帆 Token Plan 接入 Claude Code 和 Codex",
+     "item": "https://usemagpie.ai/docs/zh/baidu-qianfan"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/baidu-qianfan" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/baidu-qianfan" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/baidu-qianfan" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>百度千帆</p>
+    <a href="#overview">概览</a>
+    <a href="#add">添加百度千帆</a>
+    <a href="#plans">套餐与接口地址</a>
+    <a href="#models">套餐里的模型</a>
+    <a href="#agents">在各个工具里用</a>
+    <a href="#faq">常见问题</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 供应商</p>
+    <h1>百度千帆 Token Plan 接入 Claude Code 和 Codex</h1>
+    <p class="lede">百度千帆有两种 Token Plan（个人版和企业版）和按量付费，各自有接口地址和 Key。在 magpie 里添加百度千帆并给每个 Key 选好套餐，Claude Code、Codex、Gemini CLI、OpenCode 和其他工具就都能通过本地网关 127.0.0.1:3425 用上千帆里的 DeepSeek 和 GLM。</p>
+
+    <h2 id="add"><a class="anchor" href="#add">添加百度千帆</a></h2>
+    <ol class="steps">
+      <li><b>添加供应商并选套餐</b>在 <span class="ui">供应商</span> 页点 <span class="ui">＋ 添加供应商</span>，选 <span class="ui">Baidu Qianfan</span>，给 Key 选 <span class="ui">Token Plan Personal</span>、<span class="ui">Token Plan Enterprise</span>、<span class="ui">Pay as you go</span>，粘贴 Key 并保存。</li>
+      <li><b>给工具选上</b>在 <span class="ui">Agent</span> 页给某个工具选 qianfan-code-latest 或 deepseek-v4-pro 这类模型。</li>
+    </ol>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="qf-cli">复制</button><pre id="qf-cli">magpie claude baidu-qianfan/qianfan-code-latest
+magpie codex baidu-qianfan/deepseek-v4-pro
+magpie opencode baidu-qianfan/glm-5.3</pre></div>
+
+    <h2 id="plans"><a class="anchor" href="#plans">套餐与接口地址</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>套餐</th><th>Chat Completions 与 Responses</th><th>Anthropic Messages</th></tr>
+      <tr><td>Token Plan 个人版</td><td><code>https://qianfan.baidubce.com/v2/tokenplan/personal</code></td><td><code>https://qianfan.baidubce.com/anthropic/tokenplan/personal</code></td></tr>
+      <tr><td>Token Plan 企业版</td><td><code>https://qianfan.baidubce.com/v2/tokenplan/team</code></td><td><code>https://qianfan.baidubce.com/anthropic/tokenplan/team</code></td></tr>
+      <tr><td>按量付费</td><td><code>https://qianfan.baidubce.com/v2</code></td><td><code>https://qianfan.baidubce.com/anthropic</code></td></tr>
+    </table></div>
+    <p>每个套餐的 Key 只用在自己的地址上。供应商里的每个 Key 都标明自己的套餐，所以个人版、企业版和按量付费的 Key 可以放在同一个供应商里，每个 Key 的请求发到它自己套餐的地址。</p>
+
+    <h2 id="models"><a class="anchor" href="#models">套餐里的模型</a></h2>
+    <p>套餐的 <code>/models</code> 返回 404，所以 magpie 按千帆两个套餐的文档给出模型：qianfan-code-latest, deepseek-v4.1-flash, deepseek-v4-pro, deepseek-v4-pro-0813, deepseek-v4-flash-0731, glm-5.3, glm-5.3-flash, glm-5.2, glm-5.1 等。deepseek-v4-flash、deepseek-v3.2 和 glm-5 只在企业版里。qianfan-code-latest 是控制台当前选定的模型。按量付费的 Key 读取千帆的 <code>/v2/models</code>。</p>
+
+    <h2 id="agents"><a class="anchor" href="#agents">在各个工具里用</a></h2>
+    <ul>
+      <li><b>Claude Code</b> 说的是 Anthropic Messages。千帆的套餐和按量付费都有 Anthropic 接口，请求原样转过去。见 <a href="/docs/zh/claude-code-models">Claude Code 接入国产模型</a>。</li>
+      <li><b>Codex</b> 只说 OpenAI Responses。千帆的套餐地址也提供 Responses，Codex 的请求原样转过去。模型会出现在 Codex 的 <code>/model</code> 里。见 <a href="/docs/zh/codex-models">Codex 接入第三方模型</a>。</li>
+      <li><b>Gemini CLI</b> 说 Gemini 的 API，magpie 把它指向本地网关并做转换。见 <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>。</li>
+      <li><b>OpenCode</b>：magpie 把模型写进 opencode.json。见 <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>。</li>
+    </ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>百度千帆 Token Plan 怎么接入 Claude Code？</h3>
+    <p>在 magpie 里添加 Baidu Qianfan，把 Key 的套餐选成 Token Plan Personal 或 Enterprise，然后在 Claude Code 那一行选 qianfan-code-latest 这类模型，或运行 magpie claude baidu-qianfan/qianfan-code-latest。请求走套餐的 Anthropic 接口，比如 https://qianfan.baidubce.com/anthropic/tokenplan/personal。</p>
+    <h3>qianfan-code-latest 是哪个模型？</h3>
+    <p>是你在千帆控制台为套餐选定的模型。换模型在控制台改，magpie 和工具里的名字不用变。</p>
+    <h3>千帆个人版和企业版的模型一样吗？</h3>
+    <p>大部分一样。deepseek-v4-flash、deepseek-v3.2 和 glm-5 只在企业版里，其他如 deepseek-v4-pro、glm-5.3 两个套餐都有。</p>
+    <h3>百度千帆能在 Codex 里用吗？</h3>
+    <p>能。千帆的套餐地址提供 OpenAI Responses，magpie 把 Codex 的请求原样转过去。运行 magpie codex baidu-qianfan/deepseek-v4-pro，或在 Codex 那一行选上。</p>
+
+    <p style="margin-top:48px">同一套方法用在其他国产模型：<a href="/docs/zh/volcengine">火山方舟</a>、<a href="/docs/zh/tencent-cloud">腾讯云</a>、<a href="/docs/zh/glm">GLM 编程套餐</a>、<a href="/docs/zh/kimi">Kimi</a>、<a href="/docs/zh/deepseek">DeepSeek</a>、<a href="/docs/zh/qwen">通义千问</a>。遇到报错？见 <a href="/docs/zh/troubleshooting">常见错误排查</a>，或到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
