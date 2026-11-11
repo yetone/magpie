@@ -127,3 +127,29 @@ func TestDshRoundAfterAChangeWritesAgain(t *testing.T) {
 		}
 	})
 }
+
+// A round that writes builds the catalog once, though it asks for public
+// and renamed refs of an auto start and for every route: outside a Hold
+// each of them built every provider's models again (158 MB in a real
+// account's first minute).
+func TestDshRoundBuildsTheCatalogOnce(t *testing.T) {
+	r, web := dshSettled(t)
+	b, _ := os.ReadFile(web)
+	start := strings.NewReplacer("model: deepseek/flash\n", "model: auto/nothing-listed\n", `model: "deepseek/flash"`, "model: auto/nothing-listed").Replace(string(b))
+	if !strings.Contains(start, "auto/nothing-listed") {
+		t.Fatalf("no start in the patch list:\n%s", b)
+	}
+	os.WriteFile(web, []byte(start), 0o644)
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash", "max"}}); err != nil {
+		t.Fatal(err)
+	}
+	before := provider.EntriesBuilt()
+	r.once()
+	if !dshListed(web, "deepseek/max") {
+		t.Fatal("the round wrote no route")
+	}
+	t.Logf("%d catalog builds", provider.EntriesBuilt()-before)
+	if n := provider.EntriesBuilt() - before; n > 1 {
+		t.Fatalf("a round built the catalog %d times", n)
+	}
+}

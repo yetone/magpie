@@ -337,6 +337,10 @@ func heldEntries(build func() []Entry) []Entry {
 // that counts them.
 var entriesBuilt atomic.Int64
 
+// EntriesBuilt is how many times the catalog was built from every
+// provider's files, for another package's test that counts them.
+func EntriesBuilt() int64 { return entriesBuilt.Load() }
+
 // keptFor is how long what kept has is used while the Stamp stays the
 // same: an account another program signed in to or out of, or a model
 // retired by its date, moves no stamp, and is seen this long after.

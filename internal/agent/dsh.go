@@ -2148,7 +2148,16 @@ func dshStartOnItsRoute(items []dshItem, models []catalog.Model) []dshItem {
 			continue
 		}
 		want, id := "", c["model"]
-		for _, ref := range []string{id, provider.PublicRef(id), provider.RenamedRef(id), provider.PublicRef(provider.RenamedRef(id))} {
+		// each ref is worked out only when the one before it isn't listed:
+		// PublicRef and RenamedRef of an auto ref look at the whole catalog
+		refs := []func(string) string{
+			func(id string) string { return id },
+			provider.PublicRef,
+			provider.RenamedRef,
+			func(id string) string { return provider.PublicRef(provider.RenamedRef(id)) },
+		}
+		for _, of := range refs {
+			ref := of(c["model"])
 			for _, m := range models {
 				if m.ID == ref {
 					want, id = dshRouteOf(m), ref
@@ -2673,6 +2682,11 @@ func (r *dshRounds) once() string {
 		r.done = false
 		return ""
 	}
+	// one catalog for the whole round: outside a Hold, each PublicRef,
+	// RenamedRef and Exposed the round asks built every provider's models
+	// again, 158 MB of what a real account's magpie allocated in its first
+	// minute
+	defer provider.Hold()()
 	key := dshRoundKey{files: dshFilesSum(dir, files), gw: gateway.URL(), models: r.last.models}
 	// the stamp is read before the models are built: a change while they
 	// are moves it past the one kept, and the next round builds them again
