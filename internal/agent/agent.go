@@ -465,15 +465,15 @@ func (a *Agent) Detected() bool {
 // and added that to the user's PATH, or a self-update restarting with the
 // PATH it had then, never listed it, while the sign-in, which asked
 // FindTool, found it (#839, #1482). A mise wrapper script found there is
-// given as the program it runs (proc.LookPath). "" when it is in none.
+// given as the program it runs (proc.LookPath). Linux and macOS are no
+// different when magpie is started from a desktop launcher: its PATH has no
+// ~/.local/bin, where the official Antigravity CLI installer puts agy
+// (Xuanwo on X). "" when it is in none.
 func binAt(name string) string {
 	if p, err := proc.LookPath(name); err == nil {
 		return p
 	}
-	if runtime.GOOS == "windows" {
-		return proc.FindTool(name)
-	}
-	return ""
+	return proc.FindTool(name)
 }
 
 // agentDir reports whether p is a folder an agent itself made. Skill
