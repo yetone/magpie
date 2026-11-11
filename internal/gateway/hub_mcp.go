@@ -205,12 +205,24 @@ func HubVisitorOf(ctx context.Context) HubVisitor {
 
 // hubVisitor is who r is from (HubVisitor).
 func hubVisitor(r *http.Request) HubVisitor {
-	away := !local(r) || fromBrowser(r)
+	away := !local(r) || hubFromPage(r)
 	v := HubVisitor{Away: away, Held: away && nativeHeld(access.Caller(r.Context()))}
-	if !local(r) && !fromBrowser(r) {
+	if !local(r) && !hubFromPage(r) {
 		v.Key = access.Caller(r.Context()).KeyID
 	}
 	return v
+}
+
+// hubFromPage: a hub request is a web page's. The hub takes POST only, and a
+// browser puts Origin on every POST (null under a no-referrer policy), puts
+// Sec-Fetch-Site on it from a page it trusts, and sends a Mozilla/ agent
+// always, none of which a page's script can take off. Sec-Fetch-Mode alone
+// is not a page's mark: Node's fetch, which Alma's MCP client uses, sends
+// it on every request with no Origin (the Alma report, chang_lochuan on X),
+// and a page sends it only with an Origin as well, which this judges.
+// Everything else fromBrowser reads stays as it was (heap, memory, join…).
+func hubFromPage(r *http.Request) bool {
+	return r.Header.Get("Origin") != "" || r.Header.Get("Sec-Fetch-Site") != "" || strings.HasPrefix(r.UserAgent(), "Mozilla/")
 }
 
 // RouterHeader marks a request of magpie's own router to another magpie's

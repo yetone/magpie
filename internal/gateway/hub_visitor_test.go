@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
@@ -143,5 +144,84 @@ func TestHubGivesAKeyItsBrowser(t *testing.T) {
 	}
 	if (HubVisitor{Away: true, Key: "k"}).Gives(HubServer{Name: "magpie-image", HereOnly: true}) {
 		t.Error("a key from elsewhere is given magpie's image server")
+	}
+}
+
+// Alma's MCP client is Node's fetch: Sec-Fetch-Mode: cors, no Origin, no
+// Sec-Fetch-Site, no browser agent. It is this computer's own agent and is
+// given magpie's image server (the Alma report, chang_lochuan on X). A web
+// page, whatever Origin a browser can send it with, still isn't, with no
+// key.
+func TestHubGivesAlmaItsHereOnlyServersNotAPage(t *testing.T) {
+	fresh(t)
+	t.Setenv("MAGPIE_ADDR", "")
+	t.Setenv("MAGPIE_PUBLIC_URL", "")
+	t.Setenv("MAGPIE_TRUST_PROXY", "")
+	servers := []HubServer{{Name: "magpie-image", HereOnly: true, Program: true}, {Name: "magpie-vision"}}
+	var tools []HubTool
+	for _, s := range servers {
+		tools = append(tools, HubTool{Server: s.Name, Tool: "do", Spec: hubSpec("do")})
+	}
+	f := &fakeHub{on: true, tools: map[string][]HubTool{"alma": tools}, servers: map[string][]HubServer{"alma": servers}}
+	withHub(t, f)
+	h := lanGuard(New().Handler())
+	listed := func(host string, hdr ...string) (int, []string) {
+		t.Helper()
+		w := hubPostAt(h, HubMCPPath+"alma", here, toolsList, hdr...)
+		if host != "" {
+			r := httptest.NewRequest(http.MethodPost, HubMCPPath+"alma", strings.NewReader(toolsList))
+			r.RemoteAddr, r.Host = here, host
+			for i := 0; i+1 < len(hdr); i += 2 {
+				r.Header.Set(hdr[i], hdr[i+1])
+			}
+			w = httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+		}
+		if w.Code != http.StatusOK {
+			return w.Code, nil
+		}
+		var out []string
+		for _, x := range readMCP(t, w).Result.Tools {
+			out = append(out, strings.TrimSuffix(x.Name, hubSep+"do"))
+		}
+		slices.Sort(out)
+		return w.Code, out
+	}
+	if code, got := listed("", "Sec-Fetch-Mode", "cors", "User-Agent", "node"); code != 200 || !slices.Equal(got, []string{"magpie-image", "magpie-vision"}) {
+		t.Errorf("Alma's fetch is given %d %v", code, got)
+	}
+	pages := [][]string{
+		{"Origin", "null"},
+		{"Origin", "null", "Sec-Fetch-Mode", "cors"},
+		{"Origin", "https://evil.example", "Sec-Fetch-Site", "cross-site", "Sec-Fetch-Mode", "cors"},
+		{"Origin", "http://localhost:5173", "Sec-Fetch-Site", "same-site", "Sec-Fetch-Mode", "cors"},
+		{"Origin", "http://evil.localhost:3425", "Sec-Fetch-Site", "same-site", "Sec-Fetch-Mode", "cors"},
+		{"Origin", "http://tauri.localhost", "Sec-Fetch-Mode", "cors"},
+		{"Origin", "app://obsidian.md", "Sec-Fetch-Mode", "cors"},
+		{"Origin", "chrome-extension://abcdefghijklmnopabcdefghijklmnop", "Sec-Fetch-Mode", "cors"},
+		{"Sec-Fetch-Site", "cross-site", "Sec-Fetch-Mode", "no-cors"},
+		{"Sec-Fetch-Site", "none", "Sec-Fetch-Mode", "navigate"},
+		{"User-Agent", "Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 Safari/605.1.15"},
+		{"User-Agent", "Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 Safari/605.1.15", "Sec-Fetch-Mode", "cors"},
+	}
+	for _, hdr := range pages {
+		if _, got := listed("", hdr...); slices.Contains(got, "magpie-image") {
+			t.Errorf("a page %v is given %v", hdr, got)
+		}
+		w := hubPostAt(h, HubMCPPath+"alma", here, toolsCall("magpie-image"+hubSep+"do", `{}`), hdr...)
+		if w.Code == http.StatusOK {
+			if m := readMCP(t, w); m.Error == nil && !m.Result.IsError {
+				t.Errorf("a page %v ran magpie-image", hdr)
+			}
+		}
+	}
+	// a page rebound to 127.0.0.1 under its own name, with and without an Origin
+	for _, hdr := range [][]string{{"Origin", "http://rebind.example:3425", "Sec-Fetch-Site", "same-origin"}, {"Sec-Fetch-Mode", "cors", "User-Agent", "Mozilla/5.0"}, {"Origin", "http://rebind.example:3425"}} {
+		if _, got := listed("rebind.example:3425", hdr...); slices.Contains(got, "magpie-image") {
+			t.Errorf("a rebound page %v is given %v", hdr, got)
+		}
+	}
+	if got := f.ran(); len(got) != 0 {
+		t.Fatalf("ran for a page: %q", got)
 	}
 }
