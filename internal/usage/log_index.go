@@ -8,9 +8,11 @@ import (
 	"crypto/sha256"
 	"encoding"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
+	"io/fs"
 	"maps"
 	"os"
 	"slices"
@@ -110,6 +112,12 @@ func readLogSnapshot() *logSnapshot {
 	info, err := statLogFile(path)
 	settled := settledLogStamp(info, start)
 	old := logIndex.snapshot
+	if err != nil && !errors.Is(err, fs.ErrNotExist) && old != nil && old.path == path {
+		// A stat that failed but for the log's absence (a busy disk, a share
+		// that blinked) says nothing of the log: the last good read stays, or
+		// every page reads an empty ledger until the next good stat.
+		return old
+	}
 	unchanged := old != nil && old.path == path && (err != nil && old.info == nil || err == nil && sameLogInfo(old.info, info))
 	if unchanged && info != nil {
 		if !old.settled && !settled && old.hash != "" && logChangeStamp(info) != "" {
@@ -171,13 +179,21 @@ func readLogSnapshot() *logSnapshot {
 		}
 	}
 	logIndex.reads++
+	// never publish an incomplete read as current, nor hand one to a reader
+	// while there is a good one: what stands is kept
+	kept := func() *logSnapshot {
+		if old != nil && old.path == path {
+			return old
+		}
+		return next
+	}
 	f, err := os.Open(path)
 	if err != nil {
-		return next
-	} // never publish an incomplete read as current
+		return kept()
+	}
 	defer f.Close()
 	if _, err = f.Seek(next.off, 0); err != nil {
-		return next
+		return kept()
 	}
 	var tail *rowChunk
 	routes := routeRows{}
