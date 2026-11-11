@@ -3,6 +3,8 @@ package sessions
 import (
 	"slices"
 	"sync"
+
+	"github.com/yetone/magpie/internal/dirent"
 )
 
 // held is the session folders' listings kept while a request that reads
@@ -20,6 +22,9 @@ var held struct {
 	// listing as its own (#4114)
 	gen   uint64
 	lists map[string]*heldList
+	// mark is dirent's as the latest hold began: its folders are watched
+	// from it, so a poll's first probe vouches for the rest (#2278)
+	mark int
 }
 
 type heldList struct {
@@ -38,6 +43,7 @@ func OneListing() (done func()) {
 	held.Lock()
 	held.n++
 	held.gen++
+	held.mark = dirent.Mark()
 	held.Unlock()
 	return letGo()
 }
@@ -53,6 +59,7 @@ func ShareListing() (done func()) {
 	defer held.Unlock()
 	if held.n++; held.n == 1 {
 		held.gen++
+		held.mark = dirent.Mark()
 	}
 	return letGo()
 }
@@ -65,6 +72,18 @@ func letGo() func() {
 		}
 		held.Unlock()
 	})
+}
+
+// watch is dirent.Watch of dir, from the latest hold's mark under one.
+func watch(dir string) {
+	held.Lock()
+	n, mark := held.n, held.mark
+	held.Unlock()
+	if n == 0 {
+		dirent.Watch(dir)
+		return
+	}
+	dirent.WatchSince(dir, mark)
 }
 
 // heldWaiting is a test's: called as a read waits for another's listing.

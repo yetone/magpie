@@ -904,7 +904,7 @@ func joinedIs(s, a, b string, sep ...byte) bool {
 
 func listCCFiles(agent, dir string) []file {
 	projects := filepath.Join(dir, "projects")
-	dirent.Watch(dir) // statFiles reads only the projects that changed
+	watch(dir) // statFiles reads only the projects that changed
 	last, _ := ccListed.Load(dir)
 	names := ccNames{last: func() []ccName { l, _ := last.([]ccName); return l }()}
 	// listed into a list of its own kept from the last pass, and given as
@@ -1234,7 +1234,7 @@ func codexFilesIn(dir string) []file {
 	}
 	// its unchanged day folders aren't read again; a change in dir itself
 	// (history.jsonl, at each prompt) has them all read
-	dirent.Watch(dir)
+	watch(dir)
 	var lists [2][]file
 	for i, folder := range []string{"sessions", "archived_sessions"} {
 		root := filepath.Join(dir, folder)

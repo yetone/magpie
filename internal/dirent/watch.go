@@ -28,16 +28,17 @@ import (
 // does a listing older than listedFor, should an event never come.
 var watched struct {
 	sync.Mutex
-	roots  []watchRoot
-	seq    uint64             // counts listings begun and changes heard
-	all    uint64             // seq when everything last changed
-	dirty  map[string]uint64  // a folder's seq when it last changed
-	at     map[uintptr]listed // a listing's seq and time, by its array
-	since  uint64             // seq when the watch last started
-	active bool
-	tried  map[string]bool // roots asked for
-	synced time.Time       // when every change before was last heard
-	probe  probe
+	roots   []watchRoot
+	seq     uint64             // counts listings begun and changes heard
+	all     uint64             // seq when everything last changed
+	dirty   map[string]uint64  // a folder's seq when it last changed
+	at      map[uintptr]listed // a listing's seq and time, by its array
+	since   uint64             // seq when the watch last started
+	active  bool
+	tried   map[string]bool // roots asked for
+	synced  time.Time       // when every change before was last heard
+	vouched int             // the number of the last probe whose write was heard
+	probe   probe
 }
 
 type watchRoot struct {
@@ -83,17 +84,38 @@ const (
 // heard: a reader calls it before each read of dir's folders, and Stats
 // of a folder in it then skips listing one that hasn't changed. A Stats
 // with no Watch of its root in the last trustFor reads its folder.
-func Watch(dir string) {
+func Watch(dir string) { WatchSince(dir, Mark()) }
+
+// Mark is the point a WatchSince waits from: every change made before it.
+func Mark() int {
+	watched.Lock()
+	defer watched.Unlock()
+	return watched.probe.n
+}
+
+// WatchSince is Watch, waiting only until every change made before mark
+// is heard: a probe begun after mark, its own or another's, vouches for
+// them. A Sessions poll watches each Claude Code and Codex folder in turn,
+// and each Watch wrote, waited on and removed a probe of its own, ~1/6 of
+// the poll's CPU (#2278); the poll marks once, and its first probe does
+// for every folder after.
+func WatchSince(dir string, mark int) {
 	dir = filepath.Clean(dir)
 	starting.Lock()
 	defer starting.Unlock()
 	watched.Lock()
 	tried := watched.tried[dir]
+	covered := watched.active && watched.vouched > mark
 	watched.Unlock()
-	if !tried && !add(dir) {
-		return
+	if !tried {
+		if !add(dir) {
+			return
+		}
+		covered = false // a watch begun again hears only what comes after
 	}
-	sync1()
+	if !covered {
+		sync1()
+	}
 }
 
 // starting is held while a watch is made or waited on, outside watched:
@@ -189,6 +211,7 @@ func sync1() {
 	watched.probe.heard, watched.probe.want = nil, ""
 	if ok {
 		watched.synced = at
+		watched.vouched = max(watched.vouched, p.n)
 		return
 	}
 	watched.seq++
