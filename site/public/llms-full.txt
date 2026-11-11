@@ -3314,7 +3314,71 @@ No. It writes only its own provider, the default model and, if you have one, the
 
 Yes. It reads OPENCLAW_PROFILE, OPENCLAW_STATE_DIR, OPENCLAW_CONFIG_PATH and OPENCLAW_HOME the way OpenClaw does.
 
-More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models) and [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Hermes Agent on any model](https://usemagpie.ai/docs/hermes) and [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/hermes
+
+# Hermes Agent on any model
+
+Hermes Agent, from Nous Research, runs on the model its config.yaml names. magpie adds itself to Hermes as one provider, so Hermes and each of its bots can run on any model you have in magpie: DeepSeek, Kimi, GLM, Qwen, an OpenAI key, or a ChatGPT or Copilot subscription, with no key pasted into Hermes.
+
+Hermes keeps its settings in `~/.hermes/config.yaml` (`%LOCALAPPDATA%\hermes` on Windows, or `$HERMES_HOME`). magpie adds a provider named magpie to its `providers`: the gateway, spoken to as chat completions, with your models in magpie as its models. Then it points `model.provider` at it and sets `model.default` to the model you pick. The provider and model you had are kept aside and put back when you switch back.
+
+## Connect Hermes
+
+1. **Add providers in magpie.** In the Providers tab, add an API key or sign in to a subscription.
+2. **Pick a model on Hermes Agent’s row.** In the Agents tab, choose a model on Hermes Agent’s row.
+3. **Restart open Hermes sessions.** Hermes reads its settings as it starts.
+
+```
+magpie hermes deepseek/deepseek-v4-pro    # Hermes on DeepSeek
+magpie hermes                             # what Hermes runs on now
+```
+
+## Model and reasoning effort
+
+In Hermes’s own model picker, magpie’s models are named `magpie/<provider>/<model>`. The row also sets the reasoning effort, the same setting as Hermes’s `/reasoning`: none, minimal, low, medium, high or xhigh. Left unset, Hermes asks for medium.
+
+```
+magpie hermes effort high
+magpie hermes effort default    # back to Hermes's own
+```
+
+## Bots and profiles
+
+Each Hermes bot is a profile with a config.yaml of its own. magpie connects the profile `hermes` starts in: the one `$HERMES_HOME` names, else the one `hermes profile use` made sticky, else the default. It also adds its provider to every other profile, so magpie’s models are in every bot’s picker. A bot’s own model is left as you set it. With more than one profile, each other bot gets a model picker of its own on the Agents page; a bot still on the model magpie last set follows the next one, until you pick one for it.
+
+## Your own models stay
+
+Pick one of your own models in Hermes, or on the Agents page, and Hermes runs on it, but magpie’s provider stays: Hermes is still connected, and its picker still offers magpie’s models beside yours. Only switching back takes the provider out.
+
+Hermes inside WSL on Windows is found too: magpie writes the distro’s `~/.hermes`, with the gateway at the address the distro reaches it.
+
+## Switch back
+
+Take Hermes Agent’s row off magpie, or run `magpie hermes default`. magpie removes its provider from every profile, puts back the provider and model you had, and leaves each bot on a model it can start with. Connecting again puts the bots back on the models they had.
+
+## FAQ
+
+### Can Hermes Agent use my ChatGPT subscription?
+
+Yes. Sign in to ChatGPT in magpie and pick a GPT model on Hermes Agent’s row. Hermes sends its requests to magpie, which uses the subscription.
+
+### I picked a model in magpie but my bot still uses the old one.
+
+Restart the bot’s Hermes session: Hermes reads config.yaml as it starts. A bot you gave a model of its own on the Agents page doesn’t follow the main one.
+
+### Why does Hermes still say connected after I picked my own model?
+
+magpie’s provider stays so its models remain in Hermes’s picker. Switch back to take it out.
+
+### Does magpie touch my other Hermes providers?
+
+No. It adds its own provider and changes only model.provider, model.default and, when you set it, the reasoning effort.
+
+More agents on the same models: [OpenClaw on any model](https://usemagpie.ai/docs/openclaw) and [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
