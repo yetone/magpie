@@ -3,6 +3,7 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -269,4 +270,142 @@ func copilotTurnFake(t *testing.T, models map[string]string, refuse func(model s
 	oldTok, oldUser := provider.CopilotTokenURL, provider.CopilotUserURL
 	provider.CopilotTokenURL, provider.CopilotUserURL = ghSrv.URL+"/token", ghSrv.URL+"/user"
 	t.Cleanup(func() { provider.CopilotTokenURL, provider.CopilotUserURL = oldTok, oldUser })
+}
+
+// copilotNullableRequest carries Codex Desktop's real move_thread_to_project
+// (#4374, RoyShen12's isolation and yuushabu_buyinn's report): projectId a
+// nullable string as anyOf, and the other shapes a nullable takes — oneOf,
+// inside an array's items, behind a $def.
+const copilotNullableRequest = `{"model":"copilot/gemini-3.8-flash","stream":true,"store":false,
+  "input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}],
+  "tools":[{"type":"function","name":"move_thread_to_project","description":"Move a thread.",
+    "parameters":{"type":"object","properties":{
+      "projectId":{"anyOf":[{"type":"string"},{"type":"null"}],"description":"Destination, or null."},
+      "alt":{"oneOf":[{"type":"integer"},{"type":"null"}]},
+      "many":{"type":"array","items":{"anyOf":[{"type":"string"},{"type":"null"}]}},
+      "ref":{"$ref":"#/$defs/maybe"}},
+      "$defs":{"maybe":{"anyOf":[{"type":"number"},{"type":"null"}]}},
+      "required":["projectId"],"additionalProperties":false}}]}`
+
+// TestCopilotGeminiKeepsNullableUnionsUntyped: the type written beside a
+// nullable union (Vertex wants one) is what Copilot's Gemini turns away
+// 400 "invalid request body": removing that one field made the live
+// request 200 (#4374). Every union goes as its client wrote it.
+func TestCopilotGeminiKeepsNullableUnionsUntyped(t *testing.T) {
+	var mu sync.Mutex
+	var sent []string
+	copilotTurnFake(t, map[string]string{
+		"gemini-3.8-flash": `["/chat/completions"]`,
+	}, nil, func(m string, b []byte) bool {
+		bad := false
+		var walk func(v any)
+		walk = func(v any) {
+			switch x := v.(type) {
+			case map[string]any:
+				_, a := x["anyOf"]
+				_, o := x["oneOf"]
+				if _, ty := x["type"]; (a || o) && ty {
+					bad = true
+				}
+				for _, c := range x {
+					walk(c)
+				}
+			case []any:
+				for _, c := range x {
+					walk(c)
+				}
+			}
+		}
+		var req map[string]any
+		json.Unmarshal(b, &req)
+		walk(req["tools"])
+		return bad
+	}, "invalid request body", http.StatusBadRequest, &sent)
+
+	rec := httptest.NewRecorder()
+	New().Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/responses", strings.NewReader(copilotNullableRequest)))
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "hi") {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(sent) != 1 || !strings.Contains(sent[0], `"anyOf"`) {
+		t.Fatalf("Copilot was asked %q", sent)
+	}
+}
+
+// TestGeminiTypesOtherVendorsKeepTheirs: only Copilot's Gemini leaves a
+// union untyped; a Vertex-bound Gemini behind any other provider is still
+// given the type Vertex requires.
+func TestGeminiTypesOtherVendorsKeepTheirs(t *testing.T) {
+	body := []byte(`{"model":"gemini-3.8-flash","tools":[{"type":"function","function":{"name":"f","parameters":{"type":"object","properties":{"p":{"anyOf":[{"type":"string"},{"type":"null"}]}}}}}]}`)
+	other := provider.Provider{Account: &provider.Account{Agent: "claude"}}
+	if copilotGemini(other, body) {
+		t.Fatal("another provider counted as Copilot")
+	}
+	if got := geminiTypes(body, copilotGemini(other, body)); !strings.Contains(string(got), `"p":{"type":"string","anyOf"`) {
+		t.Errorf("another vendor's union lost its type: %s", got)
+	}
+	cp := provider.Provider{Account: &provider.Account{Agent: "copilot"}}
+	if got := geminiTypes(body, copilotGemini(cp, body)); strings.Contains(string(got), `"type":"string","anyOf"`) {
+		t.Errorf("Copilot's union was typed: %s", got)
+	}
+}
+
+// copilotNamespaceRequest is Codex Desktop's turn with an ordinary
+// namespace (an MCP server's tools) and a function whose parameters are a
+// root union.
+const copilotNamespaceRequest = `{"model":"copilot/%s","stream":true,"store":false,
+  "input":[{"role":"user","content":"hi"}],
+  "tools":[{"type":"namespace","name":"mcp__codex_app","description":"Codex app.",
+     "tools":[{"type":"function","name":"move_thread_to_project","description":"Move.","parameters":{"type":"object","properties":{"projectId":{"type":"string"}}}}]},
+    {"type":"function","name":"automation_update","description":"Update.","parameters":{"oneOf":[
+      {"type":"object","properties":{"mode":{"type":"string","enum":["a"]}},"required":["mode"]},
+      {"type":"object","properties":{"mode":{"type":"string","enum":["b"]}},"required":["mode"]}]}}]}`
+
+// TestCopilotGrokTakesNamespacesFlat: Grok behind Copilot turns a request
+// with a namespace tool, or a function whose parameters are a root union,
+// away; flat names and object roots gave 200 (#4374). GPT on the same
+// /responses is handed the tools as they came.
+func TestCopilotGrokTakesNamespacesFlat(t *testing.T) {
+	var mu sync.Mutex
+	var sent []string
+	copilotTurnFake(t, map[string]string{
+		"grok-4.7": `["/responses"]`,
+		"gpt-6.1":  `["/responses"]`,
+	}, func(m string, b []byte) (int, string) {
+		if m == "grok-4.7" && (bytes.Contains(b, []byte(`"type":"namespace"`)) || bytes.Contains(b, []byte(`"oneOf"`))) {
+			return http.StatusBadRequest, `{"error":{"message":"Bad Request","type":"invalid_request_error"}}`
+		}
+		return 0, ""
+	}, nil, "", 0, &sent)
+	turn := func(model string) {
+		rec := httptest.NewRecorder()
+		New().Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/responses", strings.NewReader(fmt.Sprintf(copilotNamespaceRequest, model))))
+		if rec.Code != 200 || !strings.Contains(rec.Body.String(), "DONE") {
+			t.Fatalf("%s: %d %s", model, rec.Code, rec.Body.String())
+		}
+	}
+	turn("grok-4.7")
+	turn("gpt-6.1")
+	mu.Lock()
+	defer mu.Unlock()
+	for _, s := range sent {
+		switch {
+		case strings.HasPrefix(s, "grok-4.7 "):
+			if !strings.Contains(s, `"name":"mcp__codex_app__move_thread_to_project"`) || strings.Contains(s, `"namespace"`) {
+				t.Errorf("Grok's namespace not flat: %s", s)
+			}
+			if !strings.Contains(s, `"name":"automation_update"`) {
+				t.Errorf("a plain function was lost: %s", s)
+			}
+		case strings.HasPrefix(s, "gpt-6.1 "):
+			if !strings.Contains(s, `"type":"namespace"`) || !strings.Contains(s, `"oneOf"`) {
+				t.Errorf("GPT's tools were changed: %s", s)
+			}
+		}
+	}
+	if len(sent) != 2 {
+		t.Fatalf("Copilot took %d turns", len(sent))
+	}
 }

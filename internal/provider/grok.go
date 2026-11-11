@@ -737,3 +737,63 @@ func GrokUser(home string) (string, bool) {
 	c, ok := readGrokCredential(home)
 	return c.Email, ok
 }
+
+// GrokFlatBody is a Responses body with Codex's namespaced functions flat
+// (namespace__name) and every function's parameters an object at the root,
+// the two things Grok's backend turns a request away over wherever it is
+// served (Copilot's grok-4.7, #4374), and nothing else: tool types, reasoning
+// and the rest go as they came. The model's call to a flat name is given its
+// namespace back by the gateway (namespacedIn).
+func GrokFlatBody(body []byte) []byte {
+	if !bytes.Contains(body, []byte(`"namespace"`)) && !bytes.Contains(body, []byte(`"anyOf"`)) && !bytes.Contains(body, []byte(`"oneOf"`)) && !bytes.Contains(body, []byte(`"allOf"`)) {
+		return body
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	var m map[string]any
+	if dec.Decode(&m) != nil || m == nil {
+		return body
+	}
+	dirty := false
+	if tools, ok := m["tools"].([]any); ok {
+		var out []any
+		for _, t := range tools {
+			tm, _ := t.(map[string]any)
+			switch {
+			case tm != nil && tm["type"] == "namespace":
+				dirty = true
+				for _, f := range grokFlat(tm) {
+					if fm, ok := f.(map[string]any); ok {
+						objectRoot(fm)
+					}
+					out = append(out, f)
+				}
+			case tm != nil && tm["type"] == "function":
+				if objectRoot(tm) {
+					dirty = true
+				}
+				out = append(out, t)
+			default:
+				out = append(out, t)
+			}
+		}
+		m["tools"] = out
+	}
+	if tc, ok := m["tool_choice"].(map[string]any); ok && flatCall(tc) {
+		dirty = true
+	}
+	input, _ := m["input"].([]any)
+	for _, it := range input {
+		if im, ok := it.(map[string]any); ok && flatCall(im) {
+			dirty = true
+		}
+	}
+	if !dirty {
+		return body
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return body
+	}
+	return b
+}

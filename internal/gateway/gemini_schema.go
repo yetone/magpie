@@ -38,7 +38,15 @@ import (
 // Google's own Gemini API and Code Assist are sent parametersJsonSchema,
 // which takes JSON Schema whole, and Antigravity its own cut-down schema
 // (plainSchema), so a Gemini-shaped body isn't walked.
-func geminiToolTypes(body []byte) []byte {
+func geminiToolTypes(body []byte) []byte { return geminiTypes(body, false) }
+
+// geminiTypes is geminiToolTypes, with keepUnions leaving a union node
+// (anyOf or oneOf) without the type written beside it: Copilot's Gemini
+// turns the request away over `type: string` next to a nullable
+// `anyOf: [string, null]` (#4374, isolated by one field in a live request),
+// whatever the union's branches say, so a union goes as its client wrote it.
+// Its branches are typed as ever.
+func geminiTypes(body []byte, keepUnions bool) []byte {
 	if !geminiNamed(gjson.GetBytes(body, "model").String()) {
 		return body
 	}
@@ -51,7 +59,7 @@ func geminiToolTypes(body []byte) []byte {
 	tools.ForEach(func(_, tool gjson.Result) bool {
 		for _, at := range []string{"function.parameters", "parameters", "input_schema"} {
 			if root := tool.Get(at); root.IsObject() {
-				collectGeminiUntyped(body, root, root, true, &ins)
+				collectGeminiUntyped(body, root, root, true, keepUnions, &ins)
 			}
 		}
 		return true
@@ -71,15 +79,16 @@ func geminiNamed(id string) bool {
 
 // collectGeminiUntyped adds, for node and each schema under it that has no
 // type, where it opens and the type Vertex is told.
-func collectGeminiUntyped(body []byte, root, node gjson.Result, isRoot bool, ins *[]typeInsert) {
+func collectGeminiUntyped(body []byte, root, node gjson.Result, isRoot, keepUnions bool, ins *[]typeInsert) {
 	switch {
 	case node.IsArray():
 		node.ForEach(func(_, v gjson.Result) bool {
-			collectGeminiUntyped(body, root, v, false, ins)
+			collectGeminiUntyped(body, root, v, false, keepUnions, ins)
 			return true
 		})
 	case node.IsObject():
-		if !node.Get("type").Exists() && node.Index > 0 && node.Index < len(body) && body[node.Index] == '{' {
+		union := keepUnions && !isRoot && (node.Get("anyOf").Exists() || node.Get("oneOf").Exists())
+		if !union && !node.Get("type").Exists() && node.Index > 0 && node.Index < len(body) && body[node.Index] == '{' {
 			if t := geminiSchemaType(root, node, isRoot); t != "" {
 				*ins = append(*ins, typeInsert{node.Index, `"` + t + `"`})
 			}
@@ -88,11 +97,11 @@ func collectGeminiUntyped(body []byte, root, node gjson.Result, isRoot bool, ins
 			switch key.String() {
 			case "properties", "$defs", "definitions", "dependentSchemas", "patternProperties":
 				v.ForEach(func(_, s gjson.Result) bool {
-					collectGeminiUntyped(body, root, s, false, ins)
+					collectGeminiUntyped(body, root, s, false, keepUnions, ins)
 					return true
 				})
 			case "items", "additionalProperties", "contains", "propertyNames", "then", "else", "allOf", "anyOf", "oneOf", "prefixItems", "unevaluatedProperties", "unevaluatedItems", "contentSchema":
-				collectGeminiUntyped(body, root, v, false, ins)
+				collectGeminiUntyped(body, root, v, false, keepUnions, ins)
 			}
 			return true
 		})
