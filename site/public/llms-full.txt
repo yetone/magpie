@@ -3663,7 +3663,67 @@ Lighter tasks next to the main work. Set it on Crush’s row as small, to any mo
 
 Yes. magpie sets up a Crush in a WSL distro too, with the gateway’s address as the distro reaches it.
 
-More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [Zed on any model](https://usemagpie.ai/docs/zed). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Zed on any model](https://usemagpie.ai/docs/zed) and [Raycast on any model](https://usemagpie.ai/docs/raycast). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/raycast
+
+# Raycast on any model
+
+Raycast AI takes models of your own as custom providers (Raycast Pro, on Mac and Windows). magpie adds itself to Raycast as one, so Quick AI, AI Chat and AI Commands can run on any model you have in magpie: DeepSeek, Kimi, GLM, Qwen, an OpenAI key, or a ChatGPT or Copilot subscription, with no key pasted into Raycast.
+
+Raycast reads its custom providers from `~/.config/raycast/ai/providers.yaml` in your user folder, on Mac and on Windows. magpie adds one entry to its `providers` list, with the id `magpie`: the gateway’s OpenAI-compatible address, a key of Raycast’s own and magpie’s models. Raycast watches the file, so the models show up without a restart. The gateway translates each request for the model’s provider, tool calls and reasoning included.
+
+## Connect Raycast
+
+1. **Add providers in magpie.** In the Providers tab, add an API key or sign in to a subscription.
+2. **Put magpie on Raycast’s row.** In the Agents tab, set Raycast’s provider to magpie.
+3. **Pick a model in Raycast.** Open Raycast’s model picker in Quick AI, AI Chat or an AI Command. magpie’s models are listed under magpie.
+
+```
+magpie raycast magpie     # magpie's models in Raycast AI's picker
+magpie raycast            # what Raycast is set to now
+```
+
+On Windows, Raycast makes its config folder when you open Reveal Providers Config in its settings; magpie finds Raycast by that folder there.
+
+## Which models it lists
+
+The model is picked in Raycast, not in a file, so Raycast’s picker lists the models picked for Raycast on the Agents page. Hide one there and it leaves Raycast’s list. Each model comes with its name, context window and abilities, all spelled out, because Raycast assumes tools and vision off when they aren’t:
+
+- **Tools.** on for every model, so AI Extensions work.
+- **Vision.** on for a model that takes images.
+- **Reasoning effort.** on for a model with effort levels.
+- **Temperature.** off for a model that refuses it.
+
+## Your providers.yaml
+
+magpie writes only its own entry. Your other providers, the top-level `tools` block and your comments stay. So do keys you add to magpie’s entry yourself, such as `include_user_email`, `additional_parameters` or a model’s `description`. The file is written only when magpie’s entry would change.
+
+## Switch back
+
+Take Raycast’s row off magpie, or run `magpie raycast default`. magpie removes its entry, the `providers` list too if it was the only one, and the file if nothing else is left in it.
+
+## FAQ
+
+### Do I need Raycast Pro?
+
+Yes. Custom providers are a Raycast Pro feature, so magpie’s models show in Raycast’s picker on a Pro plan.
+
+### Can Raycast use my ChatGPT subscription?
+
+Yes. Sign in to ChatGPT in magpie and put magpie on Raycast’s row, then pick a GPT model in Raycast. Raycast sends its requests to magpie, which uses the subscription.
+
+### Do I need to restart Raycast?
+
+No. Raycast watches providers.yaml and picks up magpie’s entry when it changes.
+
+### Do AI Extensions work?
+
+Yes. Every model is listed with tools on, and the gateway carries tool calls to each model’s provider.
+
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [Crush on any model](https://usemagpie.ai/docs/crush). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
