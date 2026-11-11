@@ -2,6 +2,10 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "New skill": "新建技能",
+    "e.g. my-skill": "例如 my-skill",
+    "e.g. Writes release notes. Use when asked for a changelog.": "例如：撰写发布说明。需要更新日志时使用。",
+    "What it does and when to use it: the agent reads this to decide when to load it": "它做什么、何时使用：Agent 据此决定何时加载它",
     "This computer follows the server: what you change here is replaced by the next sync.": "这台电脑跟随服务器：你在这里的改动会被下一次同步替换。",
     "Sync settings": "同步设置",
     "Stop picking memories": "不再选择记忆",
@@ -975,6 +979,10 @@ magpie.strings({
     "{name} read again from its source": "已重新从来源读取 {name}",
   },
   "zh-TW": {
+    "New skill": "新增技能",
+    "e.g. my-skill": "例如 my-skill",
+    "e.g. Writes release notes. Use when asked for a changelog.": "例如：撰寫發佈說明。需要更新日誌時使用。",
+    "What it does and when to use it: the agent reads this to decide when to load it": "它做什麼、何時使用：Agent 據此決定何時載入它",
     "This computer follows the server: what you change here is replaced by the next sync.": "這台電腦跟隨伺服器：你在這裡的變更會被下一次同步取代。",
     "Sync settings": "同步設定",
     "Stop picking memories": "不再選擇記憶",
@@ -1948,6 +1956,10 @@ magpie.strings({
     "{name} read again from its source": "已重新從來源讀取 {name}",
   },
   ja: {
+    "New skill": "新しいスキル",
+    "e.g. my-skill": "例: my-skill",
+    "e.g. Writes release notes. Use when asked for a changelog.": "例: リリースノートを書く。変更履歴を求められたときに使う。",
+    "What it does and when to use it: the agent reads this to decide when to load it": "何をするか、いつ使うか。エージェントはこれを読んで読み込むかを決めます",
     "This computer follows the server: what you change here is replaced by the next sync.": "このコンピュータはサーバーに従います。ここでの変更は次の同期で置き換えられます。",
     "Sync settings": "同期の設定",
     "Stop picking memories": "メモリの選択を終える",
@@ -2921,6 +2933,10 @@ magpie.strings({
     "{name} read again from its source": "{name} をソースから読み直しました",
   },
   de: {
+    "New skill": "Neuer Skill",
+    "e.g. my-skill": "z. B. my-skill",
+    "e.g. Writes release notes. Use when asked for a changelog.": "z. B. Schreibt Release Notes. Zu verwenden, wenn ein Changelog verlangt wird.",
+    "What it does and when to use it: the agent reads this to decide when to load it": "Was er tut und wann er gebraucht wird: Der Agent entscheidet danach, ob er ihn lädt",
     "This computer follows the server: what you change here is replaced by the next sync.": "Dieser Computer folgt dem Server: Änderungen hier werden bei der nächsten Synchronisierung ersetzt.",
     "Sync settings": "Sync-Einstellungen",
     "Stop picking memories": "Keine Erinnerungen mehr auswählen",

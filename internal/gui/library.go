@@ -604,11 +604,13 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			// Agents is named as the page sends it, so that it is this
 			// and not the instructions' own Agents that "agents" fills
 			Agents []string `json:"agents"`
-			Source string
-			Paths  []string
-			Names  []string // the skills to update, of those a check found changed; to bring in, of those found in the agents
-			Server library.Server
-			Hook   library.Hook // a hook saved (#1790)
+			// Description is a new skill's (skills/create)
+			Description string `json:"description"`
+			Source      string
+			Paths       []string
+			Names       []string // the skills to update, of those a check found changed; to bring in, of those found in the agents
+			Server      library.Server
+			Hook        library.Hook // a hook saved (#1790)
 			// a subagent saved (#2283)
 			Subagent library.Subagent
 			Agent    string            // the agent whose own skill is in the library's way
@@ -715,6 +717,8 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.RemoveSubagents([]string{in.Name})
 		case "skills/install":
 			res, err = library.InstallSkills(in.Source, in.Paths, in.Agents)
+		case "skills/create":
+			res, err = library.CreateSkill(in.Name, in.Description, in.Agents)
 		case "skills/update":
 			res, err = library.UpdateSkill(in.Name, in.Replace)
 			var gone *library.GoneError

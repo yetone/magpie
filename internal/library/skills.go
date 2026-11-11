@@ -1731,6 +1731,53 @@ func (l *Library) offered(p *Probe, path string, shown bool) {
 	}
 }
 
+// CreateSkill makes a skill of the user's own in the library's folder: a
+// SKILL.md with a name and description in its front matter, listed with no
+// source and given to the agents like any other. The name can't be one the
+// library has, one an agent has of its own, or a folder in the way.
+func CreateSkill(name, description string, agents []string) (*Result, error) {
+	name = strings.TrimSpace(name)
+	if err := checkName("skill", name); err != nil {
+		return nil, err
+	}
+	description = strings.Join(strings.Fields(description), " ")
+	if description == "" {
+		return nil, errors.New("a skill needs a description: it is how an agent knows when to load it")
+	}
+	if len([]rune(description)) > 1024 {
+		return nil, errors.New("the description is over 1024 characters")
+	}
+	return change(func(l *Library) error {
+		same := func(n string) bool { return strings.EqualFold(n, name) }
+		if slices.ContainsFunc(l.Skills, func(s *Skill) bool { return same(s.Name) }) ||
+			slices.ContainsFunc(foundSkills(l), func(f FoundSkill) bool { return same(f.Name) }) {
+			return fmt.Errorf("there is a skill called %s already", name)
+		}
+		dir := skillDir(name)
+		if _, err := os.Lstat(dir); err == nil {
+			return fmt.Errorf("the library's folder already has a %s in it (%s)", name, dir)
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		head, err := yaml.Marshal(meta{Name: name, Description: description})
+		if err != nil {
+			return err
+		}
+		text := "---\n" + string(head) + "---\n\n# " + name + "\n\nWrite what the agent should do when this skill is used.\n"
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(text), 0o644); err != nil {
+			os.RemoveAll(dir)
+			return err
+		}
+		ag := slices.Clone(agents)
+		slices.Sort(ag)
+		l.Skills = append(l.Skills, &Skill{Name: name, Agents: slices.Compact(ag)})
+		return nil
+	})
+}
+
 // UpdateSkill fetches a skill from GitHub again, in place: the agents'
 // links go on pointing at it. One changed here since it was fetched is
 // an *EditedError unless replace is set, and then the changed version is
