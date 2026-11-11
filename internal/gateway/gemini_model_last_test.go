@@ -199,7 +199,9 @@ func vertexTurnsAway(_ int, body map[string]any) (int, string) {
 		for _, p := range parts {
 			part, _ := p.(map[string]any)
 			response = response || part["functionResponse"] != nil
-			text = text || part["text"] != nil
+			// an image beside the response, as Codex's view_image
+			// gives it, is refused the same way (Voo_Ler on X)
+			text = text || part["text"] != nil || part["inlineData"] != nil || part["fileData"] != nil
 		}
 		if response && text {
 			return http.StatusBadRequest, vertexModelLast
@@ -247,6 +249,17 @@ func TestGeminiToolResponseTurnHoldsNoText(t *testing.T) {
 			continue
 		}
 		tools, said := q.Contents[2], q.Contents[3]
+		if name == "vertex" {
+			// Vertex AI takes no image in a response turn: it goes with
+			// what the user said, in the turn after
+			if len(tools.Parts) != 2 || tools.Parts[0]["functionResponse"] == nil || tools.Parts[1]["functionResponse"] == nil {
+				t.Errorf("vertex: the tools' turn is %v", tools)
+			}
+			if said.Role != "user" || len(said.Parts) != 2 || said.Parts[0]["inlineData"] == nil || said.Parts[1]["text"] != codexCompactPrompt {
+				t.Errorf("vertex: the user's turn after it is %v", said)
+			}
+			continue
+		}
 		if tools.Role != "user" || len(tools.Parts) != 3 || tools.Parts[0]["functionResponse"] == nil || tools.Parts[1]["inlineData"] == nil || tools.Parts[2]["functionResponse"] == nil {
 			t.Errorf("%s: the tools' turn is %v", name, tools)
 		}

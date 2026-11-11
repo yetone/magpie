@@ -499,14 +499,24 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 		// in one, the tool_result turn Anthropic reads them as.
 		var said []map[string]any
 		if role == "user" && !(ag && claude) && hasResponse(parts) {
-			var tools []map[string]any
+			var tools, images []map[string]any
 			for i, part := range parts {
-				if part["functionResponse"] != nil || toolImage[i] {
+				switch {
+				case part["functionResponse"] != nil:
 					tools = append(tools, part)
-				} else {
+				case toolImage[i] && !vx:
+					tools = append(tools, part)
+				case toolImage[i]:
+					// Vertex AI turns a response turn with an image in
+					// it away the same way (Codex's view_image: "Viewed
+					// an image", then the 400; Voo_Ler on X): the image
+					// goes in the user turn after the response
+					images = append(images, part)
+				default:
 					said = append(said, part)
 				}
 			}
+			said = append(images, said...)
 			parts = tools
 		}
 		for _, ps := range [][]map[string]any{parts, said} {
