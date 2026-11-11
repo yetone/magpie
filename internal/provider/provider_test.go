@@ -166,7 +166,7 @@ func TestAddSameKeyOtherFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Go beside Zen, same key: %v", err)
 	}
-	if p, err := Find(id); err != nil || p.Chat != "https://opencode.ai/zen/go/v1" {
+	if p, err := Find(id); err != nil || p.Chat != "https://opencode.ai/inference/go/openai/v1" {
 		t.Fatalf("go: %+v %v", p, err)
 	}
 	if _, err := Add(gop); err == nil {

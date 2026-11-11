@@ -288,7 +288,9 @@ func TestKeptQuotaReportAsksNobody(t *testing.T) {
 		c.Unlock()
 	})
 	qs := KeptQuotaReport(time.Now())
-	if len(qs) != 1 || qs[0].Provider != "codex" || qs[0].Kind != "subscription" || len(qs[0].Windows) != 1 || qs[0].Windows[0].Used != 62 || qs[0].Windows[0].ResetsAt == nil {
+	// a ChatGPT card's image row (#6160, WithImageLane) is made from what
+	// the gateway remembers, not read
+	if len(qs) != 1 || qs[0].Provider != "codex" || qs[0].Kind != "subscription" || len(qs[0].Windows) != 2 || qs[0].Windows[0].Used != 62 || qs[0].Windows[0].ResetsAt == nil || qs[0].Windows[1].Lane != "images" {
 		t.Fatalf("report: %+v", qs)
 	}
 	if SubscriptionUsageReading() {

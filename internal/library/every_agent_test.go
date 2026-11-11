@@ -48,6 +48,7 @@ var noLibrary = map[string]string{
 	"miniq":             "not looked at (#5897)",
 	"avibe":             "not looked at (#5897)",
 	"obsidian":          "not looked at (#5897)",
+	"paseo":             "not looked at (#5897)",
 	"paimon":            "not looked at (#5897)",
 	"shelley":           "not looked at (#5897)",
 	"kun":               "not looked at (#5897)",
