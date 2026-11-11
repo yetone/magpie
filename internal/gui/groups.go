@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/access"
@@ -168,6 +169,10 @@ type memberJSON struct {
 	// model has one (provider.CanFast)
 	Fast    bool `json:"fast,omitempty"`
 	CanFast bool `json:"canFast,omitempty"`
+	// Ultra: it is sent in the faster mode still; UltraOK: an account
+	// offers one (provider.UltraOn, kdajenks on X)
+	Ultra   bool `json:"ultra,omitempty"`
+	UltraOK bool `json:"ultraOK,omitempty"`
 	// OwnFast: that fast mode is asked of a provider the user added by its
 	// address, which may or may not serve it (provider.OwnFast, #1615)
 	OwnFast bool `json:"ownFast,omitempty"`
@@ -205,6 +210,9 @@ type modelRef struct {
 	// CanFast: a group's member of it may be sent in its vendor's fast
 	// mode (provider.CanFast)
 	CanFast bool `json:"canFast,omitempty"`
+	// UltraOK: an account serves it Ultrafast (provider.UltraOn), so a
+	// member of it may be sent so
+	UltraOK bool `json:"ultraOK,omitempty"`
 	// OwnFast: asked of a provider the user added by its address, which may
 	// or may not serve it (provider.OwnFast, #1615)
 	OwnFast bool `json:"ownFast,omitempty"`
@@ -373,10 +381,13 @@ func groupsState() groupsJSON {
 	served := provider.Served()
 	chat := map[string]bool{}
 	set := settings.Shared() // the prices the user set, for each model's free tag
+	ultra := sync.OnceValue(provider.UltraModels)
 	for _, e := range served {
 		if e.Group == "" {
 			chat[e.ID] = true
-			out.Models = append(out.Models, servedRef(e, set))
+			ref := servedRef(e, set)
+			ref.UltraOK = ref.CanFast && provider.UltraOn(e.Provider, e.Model, ultra())
+			out.Models = append(out.Models, ref)
 		}
 	}
 	// the image models, as Settings › Models › Images lists them: each provider's
@@ -431,6 +442,7 @@ func groupsState() groupsJSON {
 				}
 			}
 		}
+		ultraModels := sync.OnceValue(provider.UltraModels)
 		for _, id := range g.Members {
 			m := memberJSON{ID: id}
 			if gid, ok := strings.CutPrefix(id, provider.GroupPrefix); ok {
@@ -470,6 +482,8 @@ func groupsState() groupsJSON {
 				m.CanFast = provider.CanFast(p, model)
 				m.OwnFast = m.CanFast && provider.OwnFast(p, model)
 				m.Fast = m.CanFast && g.IsFast(id)
+				m.UltraOK = m.CanFast && provider.UltraOn(p, model, ultraModels())
+				m.Ultra = m.Fast && m.UltraOK && g.IsUltra(id)
 				m.Free = p.FreeModel(model)
 				m.Billing = p.BillingKind()
 				for _, e := range served {

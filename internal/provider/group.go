@@ -296,6 +296,10 @@ type Group struct {
 	// beside Members, not in their ids, so a version before it still
 	// routes to them, only not fast.
 	Fast []string `json:"fast,omitempty"`
+	// Ultra are the members of Fast sent in the vendor's faster mode
+	// still (Codex's Ultra Fast, kdajenks on X), where the account
+	// offers it and priority where not. Always a part of Fast.
+	Ultra []string `json:"ultra,omitempty"`
 	// Weights are the members' shares (as Members spells them) when the
 	// group routes by weight (Weighted, #1910): one weighing 3 takes three
 	// requests for every one a member weighing 1 takes. One not in it
@@ -402,6 +406,8 @@ type Member struct {
 	// Fast is set on a member the group sends in its vendor's fast mode
 	// (Group.Fast), where its model has one.
 	Fast bool
+	// Ultra is set on a Fast member the group sends in the faster mode.
+	Ultra bool
 	// Account is the one account or key of Provider the member is sent
 	// on, "<provider>/<stable id>", as Group.Accounts has them
 	// ("provider/model#<id>", groupaccount.go); "" for every one the
@@ -473,7 +479,7 @@ func (m Member) Groups() []string {
 // Below is the member as the group at depth (0 the group itself, 1 the
 // group in it Path[0] names, …) has it.
 func (m Member) Below(depth int) Member {
-	out := Member{ID: m.Path[depth], Path: m.Path[depth:], Via: m.Via[depth:], Redact: m.Redact, Provider: m.Provider, Model: m.Model, Effort: m.Effort, Levels: m.Levels, EffortMap: m.EffortMap, Fast: m.Fast, Account: m.Account, At: m.At}
+	out := Member{ID: m.Path[depth], Path: m.Path[depth:], Via: m.Via[depth:], Redact: m.Redact, Provider: m.Provider, Model: m.Model, Effort: m.Effort, Levels: m.Levels, EffortMap: m.EffortMap, Fast: m.Fast, Ultra: m.Ultra, Account: m.Account, At: m.At}
 	// its other places in the same group at depth
 	for _, o := range m.Also {
 		if len(o.Path) > depth && slices.Equal(o.Path[:depth], m.Path[:depth]) {
@@ -539,7 +545,7 @@ func cloneGroups(gs []Group) []Group {
 	out := make([]Group, len(gs))
 	for i, g := range gs {
 		g.Members, g.Match, g.Matched, g.Placed = slices.Clone(g.Members), slices.Clone(g.Match), slices.Clone(g.Matched), slices.Clone(g.Placed)
-		g.Off, g.Levels, g.Fast = slices.Clone(g.Off), slices.Clone(g.Levels), slices.Clone(g.Fast)
+		g.Off, g.Levels, g.Fast, g.Ultra = slices.Clone(g.Off), slices.Clone(g.Levels), slices.Clone(g.Fast), slices.Clone(g.Ultra)
 		g.Accounts, g.Seen, g.Keys = slices.Clone(g.Accounts), slices.Clone(g.Seen), slices.Clone(g.Keys)
 		g.Former = slices.Clone(g.Former)
 		g.Weights = maps.Clone(g.Weights)
@@ -647,6 +653,7 @@ func withoutRemoved(g Group, have map[string]bool) Group {
 	g.Members = kept
 	g.Off = slices.DeleteFunc(slices.Clone(g.Off), gone)
 	g.Fast = slices.DeleteFunc(slices.Clone(g.Fast), gone)
+	g.Ultra = slices.DeleteFunc(slices.Clone(g.Ultra), gone)
 	g.Weights = renamedWeights(g.Weights, func(m string) string {
 		if gone(m) {
 			return ""
@@ -735,6 +742,7 @@ func (g Group) own() Group {
 	g.Off = slices.Clone(g.Off)
 	g.Levels = slices.Clone(g.Levels)
 	g.Fast = slices.Clone(g.Fast)
+	g.Ultra = slices.Clone(g.Ultra)
 	g.Accounts = slices.Clone(g.Accounts)
 	g.Keys = slices.Clone(g.Keys)
 	g.Seen = slices.Clone(g.Seen)
@@ -1353,7 +1361,7 @@ func membersFound(entries []Entry, find entryOf, all []Group, g Group, off func(
 			key := WithMemberAccount(WithMemberEffort(p.ID+"/"+m, effort), acct)
 			here := append(slices.Clone(path), id)
 			fixed, levels := MemberLevels(effort)
-			mem := Member{ID: here[0], Path: here, Via: via, Redact: redact, Provider: p, Model: m, Effort: fixed, Levels: levels, Fast: g.IsFast(id), Account: acct, At: at}
+			mem := Member{ID: here[0], Path: here, Via: via, Redact: redact, Provider: p, Model: m, Effort: fixed, Levels: levels, Fast: g.IsFast(id), Ultra: g.IsUltra(id), Account: acct, At: at}
 			if fixed == "" && levels == nil {
 				mem.EffortMap = g.MemberEffortMap(id)
 			}

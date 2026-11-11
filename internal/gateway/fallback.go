@@ -786,7 +786,7 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 		// the same model at another effort is another member's
 		for _, l := range [][]candidate{cs, aside, left, barred} {
 			for i := range l {
-				l[i].effort, l[i].levels, l[i].effortMap, l[i].fast = m.Effort, m.Levels, m.EffortMap, m.Fast
+				l[i].effort, l[i].levels, l[i].effortMap, l[i].fast, l[i].ultra = m.Effort, m.Levels, m.EffortMap, m.Fast, m.Ultra
 				l[i].firstToken = innerFirstToken(m)
 				l[i].redact = m.Masking()
 				l[i].patience = innerPatience(m)

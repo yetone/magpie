@@ -1955,6 +1955,7 @@ magpie model api relay/claude-opus-5-5 relay/claude-sonnet-5 anthropic   # sever
 magpie model api relay/gpt-5.5 --reset                          # auto again: the vendor's list and every URL
 magpie model apis                                               # the models you set an API for
 magpie model apis relay                                         # each of relay's models and its API
+magpie model tier relay/gpt-5.5 ultrafast                      # fast, ultrafast or usual: the speed every request for it is sent at
 ```
 
 It is saved as the editor's Save saves it (`provider.SetModelPrefs`, into

@@ -74,6 +74,12 @@ type modelJSON struct {
 	// System is the system prompt the user gave the model, added after the
 	// agent's own (provider.SetModelSystemPrompt)
 	System string `json:"system,omitempty"`
+	// Tier is the speed the user gave the model, "priority" or "ultrafast"
+	// (provider.SetModelTier); CanFast says it has a fast mode to give,
+	// CanUltra that an account offers the faster one (kdajenks on X)
+	Tier     string `json:"tier,omitempty"`
+	CanFast  bool   `json:"canFast,omitempty"`
+	CanUltra bool   `json:"canUltra,omitempty"`
 	// Vendor is the provider's own id of a model the user lists by
 	// another (provider.SetModelID), "" for one listed by its own; IDs
 	// says the provider's models can be given ids at all (a key's)
@@ -1061,6 +1067,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 	// Discord, Windows)
 	set := held
 	noAPI := p.NoAPI()
+	ultraModels := sync.OnceValue(provider.UltraModels)
 	// the provider's catalogs worked out once, and each model priced once
 	// for its list price and whether it is free
 	pricer := p.Pricer()
@@ -1120,6 +1127,10 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 			j.Headers = held.ModelHeaders[ref]
 		}
 		j.System = held.ModelSystemPrompts[ref]
+		if j.CanFast = provider.CanFast(p, m.ID); j.CanFast {
+			j.Tier = held.ModelTiers[ref]
+			j.CanUltra = provider.UltraOn(p, m.ID, ultraModels())
+		}
 		j.Merge = provider.MergeName(m.ID)
 		j.Desktop = desktop[ref]
 		if mp, ok := held.ModelPrices[ref]; ok {

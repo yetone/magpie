@@ -221,15 +221,37 @@ func cleanFast(entries []Entry, g *Group) error {
 		out = append(out, f)
 	}
 	g.Fast = out
+	// Ultra is a part of Fast: a member kept out of it is kept out here
+	g.Ultra = slices.DeleteFunc(slices.Clone(g.Ultra), func(u string) bool { return !slices.Contains(out, key(u)) })
 	return nil
+}
+
+// IsUltra reports whether the group sends member id in the faster mode.
+func (g Group) IsUltra(id string) bool {
+	return slices.Contains(g.Ultra, id) && slices.Contains(g.Fast, id)
 }
 
 // SetMemberFast sends the group's member id fast, or not, where it is in
 // the group.
 func (g *Group) SetMemberFast(id string, fast bool) {
+	tier := ""
+	if fast {
+		tier = "priority"
+	}
+	g.SetMemberTier(id, tier)
+}
+
+// SetMemberTier sends the group's member id at tier: "" the usual speed,
+// "priority" fast, "ultrafast" the faster mode of an account that offers
+// it. Only a member that is in the group is switched on.
+func (g *Group) SetMemberTier(id, tier string) {
 	g.Fast = slices.DeleteFunc(slices.Clone(g.Fast), func(x string) bool { return x == id })
-	if fast && slices.Contains(g.Members, id) {
+	g.Ultra = slices.DeleteFunc(slices.Clone(g.Ultra), func(x string) bool { return x == id })
+	if tier != "" && slices.Contains(g.Members, id) {
 		g.Fast = append(g.Fast, id)
+		if tier == "ultrafast" {
+			g.Ultra = append(g.Ultra, id)
+		}
 	}
 }
 
@@ -256,6 +278,11 @@ func (g *Group) RenameMember(from, to string) {
 	for i, f := range g.Fast {
 		if f == from {
 			g.Fast[i] = to
+		}
+	}
+	for i, f := range g.Ultra {
+		if f == from {
+			g.Ultra[i] = to
 		}
 	}
 	for i, p := range g.Placed {

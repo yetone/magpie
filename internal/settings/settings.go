@@ -1140,6 +1140,12 @@ type Settings struct {
 	// agent sends it (liucl on X). Absent is the agent's prompt as sent
 	// (provider.ModelSystemPrompt).
 	ModelSystemPrompts map[string]string `json:"modelSystemPrompts,omitempty"`
+	// ModelTiers is the speed the user gave one model, by "<provider
+	// id>/<model id>": "priority" (Codex's Fast) or "ultrafast", sent on
+	// every request for the model of an agent with no fast pick of its own
+	// for it (kdajenks on X). Absent is the usual speed
+	// (provider.ModelTier).
+	ModelTiers map[string]string `json:"modelTiers,omitempty"`
 	// ModelKinds is what the user said a model makes, by "<provider
 	// id>/<model id>": "image" or "video", for a provider set up with a
 	// base URL whose own model list doesn't say so (shen-joe, #1399).

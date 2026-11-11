@@ -41,6 +41,8 @@ const groupUsage = `usage:
                                           counting; empty is the 0.4 groups have always asked),
                                           pick=<model> (routing=manual, every request to that one of its models),
                                           fast=<m1>[,m2…] (the models sent in their vendor's fast mode; empty for none),
+                                          ultra=<m1>[,m2…] (those of them sent in the faster Ultrafast mode of a ChatGPT
+                                          account that offers it, priority otherwise; each is made fast too; empty for none),
                                           weight=<m1>=<n>[,m2=<n>…] (each model's share under routing=weight,
                                           1 to 1000; a model not named keeps its own, 1 by default; empty for all 1),
                                           listed=no (its models leave the lists agents see, offered through the
@@ -446,7 +448,7 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 			// the whole list, patterns too: what the old ones matched goes
 			g.Members, err = members(v)
 			g.Match, g.Matched = patterns, nil
-			g.Fast = nil // the list as typed: :fast on those sent fast
+			g.Fast, g.Ultra = nil, nil // the list as typed: :fast on those sent fast
 		case "models+", "members+", "model+":
 			var add []string
 			if add, err = members(v); err == nil {
@@ -573,6 +575,18 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 					return perr
 				}
 				g.Fast = append(g.Fast, id)
+			}
+		case "ultra":
+			// the fast members sent in the faster mode: each named is fast
+			// too, the rest are not ultra
+			g.Ultra = nil
+			for _, m := range splitIDs(v, inGroup(g.Members)) {
+				m, _ = provider.MemberFast(m)
+				id, perr := pickMember(g.Members, m)
+				if perr != nil {
+					return perr
+				}
+				g.SetMemberTier(id, "ultrafast")
 			}
 		case "weight", "weights":
 			// each member's share when the group routes by weight (#1910):
@@ -1231,7 +1245,9 @@ func showGroup(g provider.Group) error {
 			line = green.Render(fmt.Sprintf("%d %s ●", i+1, typedMember(g, id)))
 		}
 		if l, ok := memberLabel(id, names); ok {
-			if g.IsFast(id) {
+			if g.IsUltra(id) {
+				l += " · ultrafast"
+			} else if g.IsFast(id) {
 				l += " · fast"
 			}
 			if g.Routing == provider.Weighted {

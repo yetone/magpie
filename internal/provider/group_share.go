@@ -213,6 +213,7 @@ func importGroup(text string, over bool) (Imported, error) {
 		p, id, ok := resolveIn(entries, model)
 		return ok && !CanFast(p, id)
 	})
+	g.Ultra = slices.DeleteFunc(kept(g.Ultra), func(f string) bool { return !slices.Contains(g.Fast, f) })
 	g.Weights = renamedWeights(g.Weights, func(m string) string { return here[strings.TrimSpace(m)] })
 	g.EffortMaps = renamedEffortMaps(g.EffortMaps, func(m string) string { return here[strings.TrimSpace(m)] })
 	if g.Routing != Manual && len(g.Off) == len(g.Members) {

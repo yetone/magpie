@@ -141,6 +141,9 @@ func mapModelRefs(f *file, to func(string) string) {
 		for k, m := range g.Fast {
 			g.Fast[k] = to(m)
 		}
+		for k, m := range g.Ultra {
+			g.Ultra[k] = to(m)
+		}
 		for k, m := range g.Placed {
 			g.Placed[k] = to(m)
 		}

@@ -859,7 +859,7 @@ func ruleEffort(c candidate, hit *RuleHit, nested []NestedRule, ms []provider.Me
 func homeCands(cs []candidate, ms []provider.Member) {
 	for i := range cs {
 		if j := slices.IndexFunc(ms, func(m provider.Member) bool { return ofMember(cs[i], m) }); j >= 0 {
-			cs[i].fast, cs[i].firstToken = ms[j].Fast, innerFirstToken(ms[j])
+			cs[i].fast, cs[i].ultra, cs[i].firstToken = ms[j].Fast, ms[j].Ultra, innerFirstToken(ms[j])
 		}
 	}
 }

@@ -605,6 +605,9 @@ type ModelPref struct {
 	// System is the model's own system prompt, as SetModelSystemPrompt
 	// takes it, in place of the one it had: "" takes it away
 	System *string `json:"system,omitempty"`
+	// Tier is the model's own speed, as SetModelTier: "" usual, "priority"
+	// or "ultrafast".
+	Tier *string `json:"tier,omitempty"`
 }
 
 // SetModelPrefs makes the changes to a provider's models, by model id, as
@@ -665,6 +668,12 @@ func SetModelPrefs(pid string, prefs map[string]ModelPref) error {
 			// its requests
 			if m.System != nil {
 				if _, err := setModelSystemPrompt(ref, *m.System); err != nil {
+					return err
+				}
+			}
+			// nor is its speed, which the gateway reads for each request
+			if m.Tier != nil {
+				if _, err := setModelTier(ref, *m.Tier); err != nil {
 					return err
 				}
 			}

@@ -118,7 +118,7 @@ func withoutMemberAccounts(g *Group) {
 			g.RenameMember(m, base)
 		}
 	}
-	g.Members, g.Fast, g.Off, g.Placed = cleanList(g.Members), cleanList(g.Fast), cleanList(g.Off), cleanList(g.Placed)
+	g.Members, g.Fast, g.Ultra, g.Off, g.Placed = cleanList(g.Members), cleanList(g.Fast), cleanList(g.Ultra), cleanList(g.Off), cleanList(g.Placed)
 }
 
 // wasMembers are the members the stored group id has, those its patterns

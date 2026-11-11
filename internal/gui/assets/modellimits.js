@@ -41,8 +41,32 @@ window.modelLimitsFill = function (at, m, p, changed) {
     at.append(box);
     const again = () => { if (document.activeElement !== i) i.value = shownOf(); i.placeholder = placeholder(); };
     return { i, own, again, saved: () => saved?.[id] || 0 };
-  }), modelSystemFill(at, m, changed)];
+  }), modelSystemFill(at, m, changed), ...modelSpeedFill(at, m, changed)];
 };
+
+// Its speed (kdajenks on X): the standard one, Codex's Fast, or Ultrafast
+// where an account offers it, staged as modelPrefs[id].tier. Fast is
+// "priority" on the wire; an agent's own fast pick still goes first.
+function modelSpeedFill(at, m, changed) {
+  if (!m.canFast) return [];
+  const id = m.id, prefs = draft.modelPrefs = draft.modelPrefs || {};
+  const own = () => (prefs[id]?.tier ?? m.tier) || "";
+  const items = [["", t("Standard speed")], ["priority", t("Fast")]];
+  if (m.canUltra || own() === "ultrafast") items.push(["ultrafast", t("Ultrafast")]);
+  const box = el("div", "mspeed");
+  box.title = t("Sent at this speed with every request for {id} from an agent with no fast pick of its own; where an account has no Ultrafast it goes fast", { id });
+  const draw = () => { box.replaceChildren(segs(items, own(), (v) => stage(v))); };
+  const stage = (v) => {
+    const x = prefs[id] = prefs[id] || {};
+    if (v === (m.tier || "")) delete x.tier; else x.tier = v;
+    changed();
+  };
+  draw();
+  at.append(box);
+  // the reset's call: empty is the standard speed
+  const i = { value: "", onchange: () => { stage(""); draw(); } };
+  return [{ i, own, again: () => draw(), saved: () => m.tier || 0 }];
+}
 
 function modelSystemFill(at, m, changed) {
   const id = m.id, prefs = draft.modelPrefs = draft.modelPrefs || {};
