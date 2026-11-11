@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Volcengine Ark（火山方舟）の Coding Plan・Agent Plan を Claude Code、Codex、OpenCode で使う：Doubao、GLM、DeepSeek、Kimi を任意のエージェントで · magpie</title>
+<meta name="description" content="Volcengine Ark（火山方舟）の Coding Plan、Agent Plan、従量課金キーを magpie に追加し、Claude Code、Codex、Gemini CLI、OpenCode で Doubao Seed、GLM、DeepSeek、Kimi を使う方法：プランごとのエンドポイント、モデル、Web 検索、Seedream 画像、Seedance 動画、5 時間・週・月の枠。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/volcengine">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/volcengine">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/volcengine">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/volcengine">
+<link rel="canonical" href="https://usemagpie.ai/docs/ja/volcengine">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Volcengine Ark Coding Plan を Claude Code と Codex で">
+<meta property="og:description" content="Volcengine Ark（火山方舟）の Coding Plan、Agent Plan、従量課金キーを magpie に追加し、Claude Code、Codex、Gemini CLI、OpenCode で Doubao Seed、GLM、DeepSeek、Kimi を使う方法：プランごとのエンドポイント、モデル、Web 検索、Seedream 画像、Seedance 動画、5 時間・週・月の枠。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/ja/volcengine">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Volcengine Ark Coding Plan を Claude Code と Codex で",
+   "description": "Volcengine Ark（火山方舟）の Coding Plan、Agent Plan、従量課金キーを magpie に追加し、Claude Code、Codex、Gemini CLI、OpenCode で Doubao Seed、GLM、DeepSeek、Kimi を使う方法：プランごとのエンドポイント、モデル、Web 検索、Seedream 画像、Seedance 動画、5 時間・週・月の枠。",
+   "inLanguage": "ja",
+   "url": "https://usemagpie.ai/docs/ja/volcengine",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Volcengine Ark の Coding Plan を Claude Code で使うには？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie に Volcengine Ark を追加してキーのプランを Coding Plan にし、Claude Code の行で ark-code-latest などを選ぶか、magpie claude volcengine/ark-code-latest を実行します。リクエストはプランの Anthropic エンドポイント https://ark.cn-beijing.volces.com/api/coding に送られます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Coding Plan のキーなのに従量課金されるのはなぜ？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "プランの枠は専用のエンドポイントでだけ消費されます。Coding Plan は /api/coding/v3 と /api/coding、Agent Plan は /api/plan/v3 と /api/plan です。/api/v3 は従量課金です。magpie でキーのプランを選べば、プランのエンドポイントに送られます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Volcengine Ark は Codex で使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。プランのエンドポイントが OpenAI Responses を提供するので、magpie は Codex のリクエストをそのまま送り、Web 検索も Ark が実行します。magpie codex volcengine/doubao-seed-2.1-pro を実行するか、Codex の行で選びます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Ark のプランの残りを見るには？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Volcengine Ark プロバイダーを編集してアカウントの AccessKey ID と Secret を入力します。行に 5 時間、週、月の枠が表示されます。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/ja/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "ドキュメント",
+     "item": "https://usemagpie.ai/docs/ja/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "Volcengine Ark Coding Plan を Claude Code と Codex で",
+     "item": "https://usemagpie.ai/docs/ja/volcengine"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/ja/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>ドキュメント</small></a>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/start">はじめに</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a class="toc-only" href="/docs/ja/remote">リモート magpie</a>
+    <a class="toc-only" href="/docs/ja/docker">Docker</a>
+    <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
+    <a class="toc-only" href="/docs/ja/masking">プライバシーマスキング</a>
+    <a class="toc-only" href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a class="toc-only" href="/docs/ja/library">ライブラリ</a>
+    <a class="toc-only" href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a class="toc-only" href="/docs/ja/local-models">ローカルモデル</a>
+    <a class="toc-only" href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="言語" title="言語" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/volcengine" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/volcengine" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/volcengine" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="Discord の magpie" title="Discord に参加"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="GitHub の magpie" title="GitHub のソースコード"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">ダウンロード</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Volcengine Ark</p>
+    <a href="#overview">概要</a>
+    <a href="#add">Volcengine Ark を追加</a>
+    <a href="#plans">プランとエンドポイント</a>
+    <a href="#models">プランのモデル</a>
+    <a href="#agents">各エージェントで</a>
+    <a href="#search">Web 検索</a>
+    <a href="#media">画像と動画</a>
+    <a href="#usage">利用枠</a>
+    <a href="#faq">よくある質問</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">ドキュメント · プロバイダー</p>
+    <h1>Volcengine Ark Coding Plan を Claude Code と Codex で</h1>
+    <p class="lede">Volcengine Ark（火山方舟）には Coding Plan、Agent Plan、従量課金の 3 つがあります。プランはそれぞれ専用のエンドポイントを持ち、プランの枠はそこでだけ消費されます。従量課金の /api/v3 に送ると別に課金されます。magpie にキーとプランを追加すれば、Claude Code、Codex、Gemini CLI、OpenCode などが 127.0.0.1:3425 のローカルゲートウェイ経由で Ark の Doubao、GLM、DeepSeek、Kimi を使えます。</p>
+
+    <h2 id="add"><a class="anchor" href="#add">Volcengine Ark を追加</a></h2>
+    <ol class="steps">
+      <li><b>キーを取得</b>Ark の API キー管理ページ（ark.volcengine.com）で作成します。プランの枠はプランを契約してから消費されます。</li>
+      <li><b>プロバイダーを追加してプランを選ぶ</b><span class="ui">プロバイダー</span> で <span class="ui">＋ プロバイダーを追加</span> を押し、<span class="ui">Volcengine Ark</span> を選び、キーのプランを <span class="ui">Coding Plan</span>、<span class="ui">Agent Plan</span>、<span class="ui">Pay as you go</span> から選んで保存します。</li>
+      <li><b>ツールで選ぶ</b><span class="ui">エージェント</span> でツールの行に ark-code-latest や doubao-seed-2.1-pro などを選びます。</li>
+    </ol>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ve-cli">コピー</button><pre id="ve-cli">magpie claude volcengine/ark-code-latest
+magpie codex volcengine/doubao-seed-2.1-pro
+magpie opencode volcengine/glm-5.3</pre></div>
+
+    <h2 id="plans"><a class="anchor" href="#plans">プランとエンドポイント</a></h2>
+    <div class="table-wrap"><table>
+      <tr><th>プラン</th><th>ベース URL（Chat Completions と Responses）</th><th>Anthropic Messages</th></tr>
+      <tr><td>Coding Plan</td><td><code>https://ark.cn-beijing.volces.com/api/coding/v3</code></td><td><code>https://ark.cn-beijing.volces.com/api/coding</code></td></tr>
+      <tr><td>Agent Plan</td><td><code>https://ark.cn-beijing.volces.com/api/plan/v3</code></td><td><code>https://ark.cn-beijing.volces.com/api/plan</code></td></tr>
+      <tr><td>従量課金</td><td><code>https://ark.cn-beijing.volces.com/api/v3</code></td><td>—（プリセットに Anthropic エンドポイントなし）</td></tr>
+    </table></div>
+    <p>プランのパスはバージョン付きでそのまま使われ、<code>/v1</code> は付きません。プロバイダー内の各キーが自分のプランを持つので、1 つのプロバイダーに Coding Plan、Agent Plan、従量課金のキーを並べられ、各キーのリクエストは自分のプランのエンドポイントに送られます。</p>
+
+    <h2 id="models"><a class="anchor" href="#models">プランのモデル</a></h2>
+    <p>2 つのプランのモデルは同じです。プランの <code>/models</code> はプランのモデルを返さない（Coding Plan は Ark の一般カタログ、Agent Plan は 404）ため、magpie は Ark のプラン資料にあるテキストモデルを使います。先頭は ark-code-latest で、ark-code-latest, doubao-seed-evolving, doubao-seed-2.1-pro, doubao-seed-2.1-lite, doubao-seed-2.0-mini, glm-5.3, deepseek-v4-pro, deepseek-v4.1-flash, kimi-k3 and kimi-k3.1-pro などです。画像を受け付けるモデルも資料どおりで、glm-5.3-flash と deepseek-v4.1-flash は画像をそのまま受け取ります。従量課金キーは Ark 自身のモデル一覧を読みます。</p>
+
+    <h2 id="agents"><a class="anchor" href="#agents">各エージェントで</a></h2>
+    <ul>
+      <li><b>Claude Code</b> は Anthropic Messages を話します。プランには専用の Anthropic エンドポイント（<code>/api/coding</code>、<code>/api/plan</code>）があり、リクエストはそのまま送られてプランの枠を使います。<a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>。</li>
+      <li><b>Codex</b> は OpenAI Responses だけを話します。Ark のプランのエンドポイントは Responses を提供するので、Codex のリクエストはそのまま送られ、モデルは <code>/model</code> に出ます。<a href="/docs/ja/codex-models">Codex で他のモデル</a>。</li>
+      <li><b>Gemini CLI</b> は Gemini の API を話し、magpie がローカルゲートウェイで変換します。<a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>。</li>
+      <li><b>OpenCode</b>：magpie がモデルを opencode.json に書きます。<a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>。</li>
+    </ul>
+
+    <h2 id="search"><a class="anchor" href="#search">Web 検索</a></h2>
+    <p>Ark の Responses API は <code>web_search</code> ツールを自分で実行します（従量課金と両プラン。Chat API は非対応）。そのため Codex の Web 検索はリクエストから削られず、Ark が実行します。Ark が受け付けない <code>include</code> の値は外され、リクエスト全体が拒否されることはありません。</p>
+
+    <h2 id="media"><a class="anchor" href="#media">画像と動画</a></h2>
+    <p>Agent Plan には Seedream 画像モデル（doubao-seedream-5-0-pro、doubao-seedream-5.0-flash）と Seedance 動画モデル（doubao-seedance-2.0、2.0-fast、2.0-mini、2.5）も含まれます。<span class="ui">設定 → 画像</span> で選ぶと magpie の画像・動画ツールで使えます。Ark には OpenAI 形式の動画 API がないため、magpie は Ark の非同期生成タスクを使います。</p>
+
+    <h2 id="usage"><a class="anchor" href="#usage">利用枠</a></h2>
+    <p>Coding Plan と Agent Plan には 5 時間、週、月の枠があります。Ark はそれをアカウントのコントロールプレーン（open.volcengineapi.com）にだけ伝え、推論キーには伝えないため、プロバイダーの編集画面でアカウントの AccessKey ID と Secret を求められます。入力すると行にプランの残りが表示されます。従量課金には枠がありません。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
+    <h3>Volcengine Ark の Coding Plan を Claude Code で使うには？</h3>
+    <p>magpie に Volcengine Ark を追加してキーのプランを Coding Plan にし、Claude Code の行で ark-code-latest などを選ぶか、magpie claude volcengine/ark-code-latest を実行します。リクエストはプランの Anthropic エンドポイント https://ark.cn-beijing.volces.com/api/coding に送られます。</p>
+    <h3>Coding Plan のキーなのに従量課金されるのはなぜ？</h3>
+    <p>プランの枠は専用のエンドポイントでだけ消費されます。Coding Plan は /api/coding/v3 と /api/coding、Agent Plan は /api/plan/v3 と /api/plan です。/api/v3 は従量課金です。magpie でキーのプランを選べば、プランのエンドポイントに送られます。</p>
+    <h3>Volcengine Ark は Codex で使えますか？</h3>
+    <p>使えます。プランのエンドポイントが OpenAI Responses を提供するので、magpie は Codex のリクエストをそのまま送り、Web 検索も Ark が実行します。magpie codex volcengine/doubao-seed-2.1-pro を実行するか、Codex の行で選びます。</p>
+    <h3>Ark のプランの残りを見るには？</h3>
+    <p>Volcengine Ark プロバイダーを編集してアカウントの AccessKey ID と Secret を入力します。行に 5 時間、週、月の枠が表示されます。</p>
+
+    <p style="margin-top:48px">ほかのプロバイダーも同じ方法で：<a href="/docs/ja/glm">GLM Coding Plan</a>、<a href="/docs/ja/kimi">Kimi</a>、<a href="/docs/ja/deepseek">DeepSeek</a>、<a href="/docs/ja/qwen">Qwen</a>。エージェント別ガイド：<a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>、<a href="/docs/ja/codex-models">Codex で他のモデル</a>。エラーは <a href="/docs/ja/troubleshooting">トラブルシューティング</a> へ、または <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> で質問してください。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a href="/docs/ja/remote">リモート magpie</a>
+    <a href="/docs/ja/docker">Docker</a>
+    <a href="/docs/ja/privacy">プライバシー</a>
+    <a href="/docs/ja/masking">プライバシーマスキング</a>
+    <a href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a href="/docs/ja/library">ライブラリ</a>
+    <a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a href="/docs/ja/local-models">ローカルモデル</a>
+    <a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/ja/contributors">コントリビューター</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "コピーしました"; setTimeout(() => (b.textContent = "コピー"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
