@@ -398,3 +398,47 @@ func TestWebBoxSignInChecksItsValue(t *testing.T) {
 		t.Errorf("the box's headers without MAGPIE_WEB_SIGN_IN: %d, reached %v", w.Code, reached)
 	}
 }
+
+// The box's headers are the caller's own from anywhere but the box's
+// network: an administrator's headers, forged, from a public address (the
+// app's port published past the ingress), or from a peer that isn't an
+// address, open nothing, with Fetch Metadata that suits.
+func TestLazyCatSignInIgnoresAPublicPeer(t *testing.T) {
+	var reached bool
+	h := lazyCatBox(t, &reached)
+	for _, peer := range []string{"203.0.113.9:50000", "[2001:db8::1]:50000", "8.8.8.8:1", "not-an-address", ""} {
+		reached = false
+		w := onePortCall(t, h, "GET", "/api/state", peer, lazyCatDomain, "", over(lazyCatSignedIn, lazyCatAPI...)...)
+		if w.Code != http.StatusUnauthorized || reached {
+			t.Errorf("peer %q: %d, reached %v", peer, w.Code, reached)
+		}
+		w = onePortCall(t, h, "GET", "/", peer, lazyCatDomain, "", over(lazyCatSignedIn, lazyCatPage...)...)
+		if w.Code != http.StatusUnauthorized || reached {
+			t.Errorf("peer %q, the page: %d, reached %v", peer, w.Code, reached)
+		}
+	}
+	for _, peer := range []string{"172.28.2.130:1", "10.0.0.2:1", "127.0.0.1:1", "[fd00::2]:1"} {
+		reached = false
+		if w := onePortCall(t, h, "GET", "/api/state", peer, lazyCatDomain, "", over(lazyCatSignedIn, lazyCatAPI...)...); w.Code != http.StatusTeapot || !reached {
+			t.Errorf("peer %q: %d, reached %v", peer, w.Code, reached)
+		}
+	}
+}
+
+// A sandboxed frame's request (Origin: null) from the box's network, with
+// the administrator's headers, is another page's request: it opens nothing.
+func TestLazyCatSignInTurnsAwayOriginNull(t *testing.T) {
+	var reached bool
+	h := lazyCatBox(t, &reached)
+	for _, fetch := range [][]string{
+		{"Origin", "null", "Sec-Fetch-Site", "cross-site", "Sec-Fetch-Mode", "cors", "Sec-Fetch-Dest", "empty"},
+		{"Origin", "null", "Sec-Fetch-Site", "cross-site", "Sec-Fetch-Mode", "navigate", "Sec-Fetch-Dest", "iframe"},
+		{"Origin", "null"},
+	} {
+		reached = false
+		w := onePortCall(t, h, "POST", "/api/state", lazyCatPeer, lazyCatDomain, "", over(lazyCatSignedIn, fetch...)...)
+		if w.Code != http.StatusUnauthorized || reached {
+			t.Errorf("%v: %d, reached %v", fetch, w.Code, reached)
+		}
+	}
+}

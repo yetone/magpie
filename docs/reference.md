@@ -3573,6 +3573,7 @@ application:
     - /mcp
     - /me
     - /join
+    - /magpie-ca.crt
 services:
   magpie:
     image: ghcr.io/yetone/magpie:0.1.N
@@ -3615,6 +3616,11 @@ the box's login page. Let nothing but the box's ingress reach the page's
 port (3430): not a TCP ingress (`application.ingress`) or the box's LAN port
 forwarding. There the box passes every header as the caller wrote it, and
 anyone who reaches that port could say they are the box's administrator.
+magpie turns away a peer on a public address whatever it sends, but it
+can't tell a private one from the ingress: LazyCat's docs
+(developer.lazycat.cloud/en/http-request-headers.html) say the ingress sets
+`X-HC-*` after authenticating and clears them when it fails, and name no
+address for it.
 Another app's container reaches the app through the ingress alone, unless
 its manifest puts it in the box's own network (`network_mode: host`, as
 some of the box's own apps are): from there, as from the box itself, the

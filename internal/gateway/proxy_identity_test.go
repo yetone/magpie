@@ -136,3 +136,30 @@ func TestPassthroughDropsProxyIdentity(t *testing.T) {
 		t.Errorf("mcp: the MCP server was told %v", l)
 	}
 }
+
+// The translated routes build the vendor's request themselves, so none of
+// the caller's headers should reach it, a LazyCat box's X-HC-* among them:
+// a Chat completion and an Anthropic Messages turn to a Chat vendor.
+func TestTranslatedRoutesDropProxyIdentity(t *testing.T) {
+	fresh(t)
+	t.Setenv("MAGPIE_TRUST_PROXY", "1")
+	up := newVendorAPI(t)
+	saveVendor(t, provider.Provider{ID: "vendor", Name: "Vendor", Chat: up.URL + "/v1", Key: "vk", Models: []string{"m"}})
+	h := nativeServe(t)
+	for _, c := range []struct{ path, body string }{
+		{"/v1/chat/completions", `{"model":"vendor/m","messages":[{"role":"user","content":"hi"}]}`},
+		{"/v1/messages", `{"model":"vendor/m","max_tokens":8,"messages":[{"role":"user","content":"hi"}]}`},
+	} {
+		hdr := append(identityHeadersOn(), "Authorization", "Bearer "+Token)
+		nativeDo(h, "POST", "http://127.0.0.1:3425"+c.path, "127.0.0.1:50000", c.body, hdr...)
+	}
+	seen := up.asked()
+	if len(seen) == 0 {
+		t.Fatal("the vendor was never asked")
+	}
+	for _, s := range seen {
+		if l := leakedIdentity(s.header); len(l) > 0 {
+			t.Errorf("%s: the vendor was told %v", s.uri, l)
+		}
+	}
+}

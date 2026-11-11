@@ -3,7 +3,9 @@ package gui
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/netip"
 	"os"
 
 	"github.com/yetone/magpie/internal/gateway"
@@ -76,6 +78,12 @@ func webBoxSignIn() (boxSignIn, error) {
 // the box sends is read; X-HC-User-Groups least of all, which the ingress
 // passed on as the caller wrote it (lzcos 1.6.2).
 func lazyCatSignIn(r *http.Request) (why, short string) {
+	// The ingress reaches the app over the box's own network. LazyCat's
+	// docs don't give its address, so this can't name it; but a peer on a
+	// public address is never it, whatever headers it sends.
+	if !boxPeer(r.RemoteAddr) {
+		return "This request didn't come from the box's network, so the headers it carries (X-HC-*) are the caller's own, not the box's ingress's.", "peer " + r.RemoteAddr + " is not on the box's network"
+	}
 	for _, k := range []string{"X-HC-User-ID", "X-HC-User-Role", "X-HC-Source"} {
 		if n := len(r.Header.Values(k)); n > 1 {
 			return fmt.Sprintf("This request names %s %d times, and the box's ingress names it once, in place of what the caller sent: it didn't come through the box's sign-in alone.", k, n), fmt.Sprintf("%s sent %d times", k, n)
@@ -121,4 +129,20 @@ func boxFetched(r *http.Request) (why, short string) {
 	default:
 		return fmt.Sprintf("This browser says the request came from %q (Sec-Fetch-Site), which the box's sign-in doesn't take.", site), fmt.Sprintf("Sec-Fetch-Site %q", site)
 	}
+}
+
+// boxPeer says addr, a request's peer, is on a private, loopback or
+// link-local network, where a box's ingress is, and not a public address. An
+// address it can't read is not.
+func boxPeer(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	ip, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	ip = ip.Unmap()
+	return ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast()
 }
