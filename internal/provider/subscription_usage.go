@@ -896,7 +896,12 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 	// limit since (claudeLimitHitAfter, #4443)
 	due := e.tried.IsZero() || claudeAsked.Load() != 0 && asked > e.asked ||
 		active && now.Sub(e.tried) >= claudeWaitOf(e, now) && (e.heard.After(e.tried) || claudeUsedSince(e.tried)) ||
-		active && claudeLimitHitAfter(e.tried)
+		active && claudeLimitHitAfter(e.tried) ||
+		// a first reading that failed (Claude Code not on a GUI's PATH, a
+		// network blink) is tried again after the wait, as nothing is kept
+		// to show and nobody need have used Claude Code since: a user who
+		// never routes Claude through magpie would see "not read" for good
+		active && e.ws == nil && e.err != nil && now.Sub(e.tried) >= e.wait
 	// a saved account the switch off a spent one has no reading of
 	// (spareRead): read once, and again only after a wait while its read
 	// keeps failing, never every look

@@ -499,3 +499,37 @@ func soon(n int) string { return time.Now().UTC().AddDate(0, 0, n).Format("Jan 2
 func sessionReset() string {
 	return time.Now().UTC().Add(3*time.Hour).Format("Jan 2 at 3:04pm") + " (UTC)"
 }
+
+// A first reading that failed is tried again after the wait even when
+// Claude Code wasn't used since: with nothing kept, an account whose
+// Claude Code is never run through magpie showed "not read" for good.
+func TestClaudeFirstReadFailureTriedAgain(t *testing.T) {
+	var out atomic.Value
+	out.Store("Current session: 40% used · resets " + sessionReset() + "\nCurrent week (all models): 10% used · resets " + soon(3) + " at 2pm (UTC)\n")
+	var fail atomic.Bool
+	runs := fakeClaudeUsage(t, &out, &fail)
+	claudeUsedSince = func(time.Time) bool { return false }
+	ctx := context.Background()
+	fail.Store(true)
+	if _, err := claudeWindows(ctx, "me@x", true); err == nil || runs.Load() != 1 {
+		t.Fatalf("a failing first read: %v, %d runs", err, runs.Load())
+	}
+	// before the wait is up it is not run again
+	if _, err := claudeWindows(ctx, "me@x", true); err == nil || runs.Load() != 1 {
+		t.Fatalf("before the wait: %v, %d runs", err, runs.Load())
+	}
+	claudeUsage.Lock()
+	e := claudeUsage.m["me@x"]
+	e.tried = e.tried.Add(-time.Hour)
+	claudeUsage.m["me@x"] = e
+	claudeUsage.Unlock()
+	fail.Store(false)
+	ws, err := claudeWindows(ctx, "me@x", true)
+	if err != nil || len(ws) == 0 || runs.Load() != 2 {
+		t.Fatalf("after the wait: %v %v, %d runs", ws, err, runs.Load())
+	}
+	// and once read, it is kept without another run
+	if _, err := claudeWindows(ctx, "me@x", true); err != nil || runs.Load() != 2 {
+		t.Fatalf("kept: %v, %d runs", err, runs.Load())
+	}
+}
