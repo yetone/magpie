@@ -1454,7 +1454,7 @@ function connectLine(a, kind) {
   const at = PICKS_IN[kindOf(a)];
   if (menuFromList(a)) say(connectSaid(a));
   else if (kindOf(a) === "claude") say(t("Connected · switch the opus · sonnet · haiku tiers in /model"));
-  else if (NO_PICKER.has(kindOf(a))) say(t("Connected · starts on the model picked here")); else if (at && a.models) say(t("Connected · {n} models in {agent}'s {cmd}", { n: a.models.shown, agent: a.name, cmd: at }));
+  else if (NO_PICKER.has(kindOf(a).split("#")[0])) say(t("Connected · starts on the model picked here")); else if (at && a.models) say(t("Connected · {n} models in {agent}'s {cmd}", { n: a.models.shown, agent: a.name, cmd: at }));
   else say(connectSaid(a));
   return line;
 }

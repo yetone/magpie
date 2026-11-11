@@ -50,6 +50,8 @@ func toolsOffOf(t *Target) toolsOffHow {
 		return toolsNone
 	}
 	id, _, _ := strings.Cut(t.Agent.ID, "@")
+	// another Hermes profile (hermes#coder) reads tools.exclude as the first
+	id, _, _ = strings.Cut(id, "#")
 	switch {
 	case id == "claude" && t.MCP.Format == fmtClaude && t.Settings != "":
 		return toolsClaudeDeny

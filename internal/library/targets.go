@@ -146,6 +146,14 @@ func targetOf(a *agent.Agent) *Target {
 	}
 	h := home()
 	t := &Target{Agent: a}
+	if strings.HasPrefix(a.ID, "hermes#") {
+		// another Hermes profile (agent.hermesProfileAgents) is a Hermes
+		// home of its own: its config.yaml holds its mcp_servers, and its
+		// skills folder is beside it
+		t.MCP = &mcpFile{Path: a.Path, Format: fmtHermes}
+		t.Skills = filepath.Join(a.Dir, "skills")
+		return t
+	}
 	if n := a.SharedName(); n != a.Name {
 		// the files are another app's too (the Cursor editor's ~/.cursor):
 		// named for both, not for the CLI alone

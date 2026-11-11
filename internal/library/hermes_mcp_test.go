@@ -1,6 +1,7 @@
 package library
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -148,5 +149,52 @@ func TestHermesMCPFound(t *testing.T) {
 	}
 	if s := found["remote"]; s == nil || s.Transport != "sse" || s.URL != "https://r.example/sse" {
 		t.Errorf("remote: %+v", s)
+	}
+}
+
+// Norethcy on X: Hermes's profiles got a model each but no skills or MCP
+// servers, which reached the connected profile alone. Each other profile is
+// an agent of its own (hermes#<name>) with its own config.yaml and skills
+// folder (hermes_cli/profiles.py): a server or skill given to one lands in
+// that profile and in no other.
+func TestHermesProfilesGetTheirOwnLibrary(t *testing.T) {
+	h := sandbox(t)
+	t.Setenv("HERMES_HOME", "")
+	root := appdir.HermesHomeIn(h)
+	main := filepath.Join(root, "config.yaml")
+	coder := filepath.Join(root, "profiles", "coder", "config.yaml")
+	write(t, main, hermesConfig)
+	write(t, coder, "model:\n  default: kimi-k3\n  provider: moonshot\n")
+	holdCLI(t, h, "hermes")
+
+	tg := targetByID("hermes#coder")
+	if tg == nil || tg.MCP == nil || tg.MCP.Path != coder || tg.Skills != filepath.Join(root, "profiles", "coder", "skills") {
+		t.Fatalf("coder's target: %+v", tg)
+	}
+	if m := targetByID("hermes"); m == nil || m.MCP.Path != main || m.Skills != filepath.Join(root, "skills") {
+		t.Fatalf("the default profile's target: %+v", m)
+	}
+
+	ok(t)(SaveServer("", Server{Name: "fs", Transport: "stdio", Command: "npx", Args: []string{"-y", "@mcp/fs"}, Agents: []string{"hermes#coder"}}))
+	if !strings.Contains(read(t, coder), "fs:") || !strings.Contains(read(t, coder), "provider: moonshot") {
+		t.Errorf("coder has no fs, or lost its own settings:\n%s", read(t, coder))
+	}
+	if strings.Contains(read(t, main), "fs:") {
+		t.Errorf("the server reached the default profile:\n%s", read(t, main))
+	}
+
+	src := filepath.Join(h, "src/skills")
+	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs")
+	ok(t)(InstallSkills(src, []string{"pdf"}, []string{"hermes#coder"}))
+	if !ours(filepath.Join(root, "profiles", "coder", "skills", "pdf"), "pdf") {
+		t.Error("coder's skills folder has no pdf")
+	}
+	if _, err := os.Lstat(filepath.Join(root, "skills", "pdf")); !os.IsNotExist(err) {
+		t.Error("the skill reached the default profile")
+	}
+
+	ok(t)(RemoveServer("fs"))
+	if strings.Contains(read(t, coder), "fs:") {
+		t.Errorf("fs stays in coder:\n%s", read(t, coder))
 	}
 }

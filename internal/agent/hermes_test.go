@@ -1005,3 +1005,56 @@ func TestHermesProfileModels(t *testing.T) {
 		t.Fatalf("default profile:\n%s", b)
 	}
 }
+
+// Norethcy on X: Hermes's other profiles are agents of their own
+// (hermes#<name>), so the Library can give each its skills and servers. The
+// row is the profile's model picker, and none is listed with Hermes gone.
+func TestHermesProfilesAreAgents(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HERMES_HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	root := appdir.HermesHomeIn(home)
+	write := func(rel, s string) string {
+		p := filepath.Join(root, rel)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(s), 0o644)
+		return p
+	}
+	write("config.yaml", "model:\n  default: anthropic/claude-opus-5\n  provider: openrouter\n")
+	write("hermes-agent/run_agent.py", "")
+	coder := write("profiles/coder/config.yaml", "model:\n  default: kimi-k3\n  provider: moonshot\n")
+	write("profiles/old/config.yaml", "model:\n  default: x\n")
+	write("profiles/.deleted/old", "")
+	ids := func() (out []string) {
+		for _, a := range onMachine(home, filepath.Join(home, ".config")) {
+			if strings.HasPrefix(a.ID, "hermes") {
+				out = append(out, a.ID)
+			}
+		}
+		return
+	}
+	if got := ids(); !slices.Equal(got, []string{"hermes", "hermes#coder"}) {
+		t.Fatalf("agents %v", got)
+	}
+	// Hermes uninstalled, its folder left behind: no profile is an agent
+	os.RemoveAll(filepath.Join(root, "hermes-agent"))
+	if got := ids(); len(got) != 1 {
+		t.Fatalf("with Hermes gone: %v", got)
+	}
+	write("hermes-agent/run_agent.py", "")
+	var row *Agent
+	for _, a := range onMachine(home, filepath.Join(home, ".config")) {
+		if a.ID == "hermes#coder" {
+			row = a
+		}
+	}
+	if row.Name != "Hermes · coder" || row.Dir != filepath.Dir(coder) || row.Path != coder || !row.Detected() {
+		t.Fatalf("row: %+v", row)
+	}
+	if f := row.Field("model"); f == nil || f.Get() != "kimi-k3" {
+		t.Fatalf("model field: %+v", f)
+	}
+}
