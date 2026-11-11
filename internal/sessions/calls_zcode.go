@@ -113,6 +113,12 @@ func readZCodeCalls(f file) (*callFile, bool) {
 		}
 		if c, ok := ocCall(st, m, info.Directory); ok {
 			c.Agent = "zcode"
+			// a request names its session without the prefix the database
+			// gives it (zcodeBareID), and a call is paired with the
+			// gateway's record of it by that session: under sess_… none was,
+			// and a call magpie had routed was counted again as a local
+			// session's (nori_tsukiji on X)
+			c.Session = zcodeBareID(c.Session)
 			st.Calls = append(st.Calls, c)
 		}
 	}

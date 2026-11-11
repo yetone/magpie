@@ -77,13 +77,13 @@ func TestZCodeCopiesCountedOnce(t *testing.T) {
 			t.Errorf("the copy %s was counted as a call: %+v", id, c)
 		}
 	}
-	if c := cs["msg_m1"]; c.Session != "sess_main" || c.Tokens != (Tokens{400, 100, 600, 0, 0}) {
+	if c := cs["msg_m1"]; c.Session != "main" || c.Tokens != (Tokens{400, 100, 600, 0, 0}) {
 		t.Errorf("the original: %+v", c)
 	}
-	if c := cs["msg_c2"]; c.Session != "sess_side" || c.Tokens != (Tokens{20, 2, 0, 0, 0}) {
+	if c := cs["msg_c2"]; c.Session != "side" || c.Tokens != (Tokens{20, 2, 0, 0, 0}) {
 		t.Errorf("the side chat's own reply: %+v", c)
 	}
-	if c := cs["msg_o1"]; c.Session != "sess_orphan" || c.Tokens != (Tokens{300, 30, 0, 0, 0}) {
+	if c := cs["msg_o1"]; c.Session != "orphan" || c.Tokens != (Tokens{300, 30, 0, 0, 0}) {
 		t.Errorf("a copy whose original is gone: %+v", c)
 	}
 

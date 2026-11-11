@@ -260,6 +260,13 @@ database gives it, so `Titles` looks a `zcode:` key up under both and
 answers under the id asked for (#5195). Verification:
 `TestZCodeTitlesByRequestID`.
 
+The calls read from ZCode's database name their session the same way
+(`readZCodeCalls`, `zcodeBareID`). The Usage page pairs a gateway record with
+the session file's call by session, tokens and end time, so under `sess_…` a
+call magpie had routed was counted again as a local session's whatever
+provider id ZCode wrote beside it (nori_tsukiji on X). Verification:
+`TestZCodeCallsPairWithTheGatewaysRecords`.
+
 A ZCode session's name is the app's: its task index
 (`v2/tasks-index.sqlite` in the data folder, `tasks.title` by `task_id`,
 the session's id) holds what the app shows and what the user renamed it to,
