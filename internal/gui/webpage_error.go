@@ -2,13 +2,14 @@ package gui
 
 import (
 	"html"
-	"regexp"
 	"strings"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 var (
-	webPageStart = regexp.MustCompile(`(?i)<(!doctype|html|head|body)\b`)
-	webPageTitle = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
+	webPageStart = lazyre.New(`(?i)<(!doctype|html|head|body)\b`)
+	webPageTitle = lazyre.New(`(?is)<title[^>]*>(.*?)</title>`)
 )
 
 // webPageSaid is a proxy's own web page inside an error text of magpie's:
