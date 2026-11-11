@@ -121,9 +121,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(calls.filter((c) => c.path === "transcript").length, 0, "the conversation wasn't shown");
 
         // an agent whose sessions can't be read has nothing to export
+        // at 560px the head's tabs give way to the agent menu in some
+        // languages (#5947): choose OpenCode through whichever is shown
         const oc = view.locator(".sm-agents .opt", { hasText: "OpenCode" });
-        await reach(page, oc); // back up, past the export the reader wheeled to
-        await oc.click();
+        const pick = view.locator(".sm-agent-pick");
+        const ctl = (await pick.isVisible()) ? pick : oc;
+        await reach(page, ctl); // back up, past the export the reader wheeled to
+        await ctl.click();
+        if (ctl === pick) await page.locator(".sm-agent-menu").getByRole("menuitemradio", { name: /OpenCode/ }).click();
         const o = view.locator('.row.sm-sess[data-id="o-1"]');
         await o.waitFor();
         await o.locator(".who").click();

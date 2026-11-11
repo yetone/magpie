@@ -244,7 +244,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await row("a-old").waitFor();
       await view.locator(".sm-agents .opt", { hasText: "OpenCode" }).click();
       await view.locator('.row.sm-sess[data-id="o-1"]').waitFor();
-      assert.equal((await view.locator(".sm-note").textContent()).trim(), w.cant);
+      assert.equal((await view.locator(".sm-note:not(.sm-speed-note)").textContent()).trim(), w.cant);
       assert.equal(await view.locator(".sm-del, .sm-check").count(), 0);
       assert(!(await view.locator(".sm-select").isVisible()), "no Select where nothing can be deleted");
       assert(!(await view.locator(".sm-bar").isVisible()));
@@ -252,7 +252,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await view.locator(".sm-agents .opt", { hasText: "Hermes" }).click();
       const hermes = view.locator('.row.sm-sess[data-id="h-1"]');
       await hermes.waitFor();
-      assert.equal((await view.locator(".sm-note").textContent()).trim(), w.hermesNote);
+      assert.equal((await view.locator(".sm-note:not(.sm-speed-note)").textContent()).trim(), w.hermesNote);
       assert.equal(await hermes.locator(".sm-resume, .sess-resume, .sess-term, .sm-del, .sm-check").count(), 0);
       assert.equal(await view.locator(".sm-folder-del").count(), 0);
       assert(!(await view.locator(".sm-bar").isVisible()));
