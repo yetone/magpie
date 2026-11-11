@@ -407,8 +407,12 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-rowacts { display: flex; gap: 2px; flex: none; opacity: 0; transition: opacity .14s; }
 .lib-row:hover .lib-rowacts, .lib-rowacts:focus-within { opacity: 1; }
 .lib-icon { width: 26px; height: 26px; padding: 0; display: inline-grid; place-items: center; }
-.lib-icon.busy svg { animation: lib-bob .8s var(--ease) infinite alternate; }
-@keyframes lib-bob { to { transform: translateY(-2px); } }
+.lib-rowacts.busy { opacity: 1; }
+.lib-icon.busy, .lib-icon.busy:disabled { opacity: 1; color: var(--muted); }
+.lib-icon.busy svg { animation: lib-spin .8s linear infinite; }
+@keyframes lib-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .lib-icon.busy svg { animation: lib-pulse 1.2s ease infinite alternate; } }
+@keyframes lib-pulse { to { opacity: .35; } }
 
 /* the skill finder */
 .lib-install { margin-bottom: 4px; }

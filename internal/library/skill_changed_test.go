@@ -255,3 +255,22 @@ func TestEditStateUnknownForAnUnreadableCopy(t *testing.T) {
 		t.Fatalf("an unreadable copy's state: edited %v, known %v; want unknown", edited, known)
 	}
 }
+
+// An update of one skill says whether it brought anything: the GUI tells
+// "updated" from "already up to date" by Current (zhexuanliuoutl1 on X).
+func TestUpdateSkillSaysWhenNothingChanged(t *testing.T) {
+	sandbox(t)
+	version := "one"
+	fakeSkillTarball(t, &version)
+	ok(t)(InstallSkills("owner/current", []string{"skills/pdf"}, []string{"claude"}))
+	if res := ok(t)(UpdateSkill("pdf", false)); !slices.Equal(res.Current, []string{"pdf"}) {
+		t.Errorf("nothing new on GitHub: current %v", res.Current)
+	}
+	version = "two"
+	if res := ok(t)(UpdateSkill("pdf", false)); len(res.Current) != 0 {
+		t.Errorf("a changed skill is said to be current: %v", res.Current)
+	}
+	if res := ok(t)(UpdateSkill("pdf", false)); !slices.Equal(res.Current, []string{"pdf"}) {
+		t.Errorf("updated again: current %v", res.Current)
+	}
+}

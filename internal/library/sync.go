@@ -24,6 +24,9 @@ type Result struct {
 	// fetched again and the ones that couldn't be (What is skill:<name>)
 	Updated   []string  `json:"updated,omitempty"`
 	Unupdated []Problem `json:"unupdated,omitempty"`
+	// Current is, for an update of one skill, that skill when what was
+	// fetched is the files it already had
+	Current []string `json:"current,omitempty"`
 	// Gone are, for an update of skills, the ones their sources no longer
 	// have: removed there, not failed (skill_gone.go)
 	Gone []string `json:"gone,omitempty"`

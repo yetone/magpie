@@ -615,7 +615,7 @@ magpie.plugin("library", (ctx) => {
     }
     const n = res.changed?.length || 0;
     const out = given ? (res.changed || []).filter((id) => !given.includes(id)).length : 0;
-    if (done) status(done, "ok");
+    if (done) status(typeof done === "function" ? done(res) : done, "ok");
     else if (out && out === n) status(n === 1 ? t("Removed from {agent}", { agent: nameOf(res.changed[0]) }) : t("Removed from {n} agents", { n }), "ok");
     else if (out) status(t("{n} agents updated", { n }), "ok");
     else if (n) status(n === 1 ? t("Written to {agent}", { agent: nameOf(res.changed[0]) }) : t("Written to {n} agents", { n }), "ok");
@@ -6871,9 +6871,14 @@ magpie.plugin("library", (ctx) => {
     if (!gone && (s.kind === "github" || s.kind === "git" || s.origin)) {
       const u = button("", "lib-icon", async (e, b) => {
         if (s.edited) return confirmUpdateEdited(s);
+        // spinning, with the row's actions kept in view while the fetch
+        // runs; then what came of it: updated, nothing new, or the error
         b.classList.add("busy");
-        await change("skills/update", { name: s.name }, t("{name} is up to date", { name: s.name }));
+        b.parentElement?.classList.add("busy");
+        await change("skills/update", { name: s.name }, (res) => res?.current?.includes(s.name)
+          ? t("{name} is already up to date", { name: s.name }) : t("{name} is updated", { name: s.name }));
         b.classList.remove("busy");
+        b.parentElement?.classList.remove("busy");
       });
       u.append(svg(GLYPH.up, 13, 1.5));
       const gitRepo = gitRepoOf(s);
