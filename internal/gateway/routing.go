@@ -566,7 +566,7 @@ func carriedStatus(status int, body []byte) int {
 // failure says why a reply failed.
 func failure(status int, body []byte) string {
 	status = carriedStatus(status, body)
-	if status == http.StatusBadGateway && (proxyDown.Match(body) || bytes.Contains(body, []byte(closedUnsentWords))) {
+	if status == http.StatusBadGateway && (proxyDown.Match(body) || bytes.Contains(body, []byte(closedUnsentWords)) || bytes.Contains(body, []byte(stalledWords))) {
 		// the proxy didn't take the connection, or the network closed
 		// each new one before the request was sent (errClosedUnsent):
 		// nothing reached the vendor, and the account is as good as it
