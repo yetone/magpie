@@ -322,8 +322,12 @@ var codexApp struct {
 	// the app showed that page and magpie couldn't reopen it, while the
 	// app-servers in snagPids (those running then) run
 	crashSince, crashBy time.Time
-	snag                bool
-	snagPids            []int
+	// crashSpent: an end in that window was made for a used-up account
+	// (spent), where the app was greyed already and what it shows after
+	// is no working window to leave alone (codexAppCrashStep)
+	crashSpent bool
+	snag       bool
+	snagPids   []int
 }
 
 // codexAppBackEvery is how often the app-servers left on the takeover
@@ -671,6 +675,7 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 	if len(ended) > 0 {
 		log.Printf("codex: ended the Codex app's app-server %v for the app to start another: %s", ended, c.why)
 		watchCodexAppCrashLocked(now)
+		c.crashSpent = c.crashSpent || spent
 	}
 	return ended
 }

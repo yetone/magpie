@@ -49,6 +49,7 @@ func stubCodexApp(t *testing.T) *codexAppStub {
 		codexApp.ended, codexApp.backBy, codexApp.spent, codexApp.why = nil, time.Time{}, false, ""
 		codexApp.back, codexApp.backAt = nil, time.Time{}
 		codexApp.crashSince, codexApp.crashBy, codexApp.snag, codexApp.snagPids = time.Time{}, time.Time{}, false, nil
+		codexApp.crashSpent = false
 		codexApp.Unlock()
 	}
 	oldCrashed, oldRelaunch, oldOff := CodexAppCrashed, CodexAppRelaunch, CodexTakeoverOff

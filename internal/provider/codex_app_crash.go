@@ -24,12 +24,16 @@ import (
 // and no Codex turn has started since nor a request gone through magpie
 // (the page has no composer: one that ran means it came back), magpie
 // quits the app and opens it again, once (CodexAppRelaunch: ⌘Q's quit on
-// macOS, never forced; the Agents row's Restart on Windows), but only
-// with the user's "Restart the Codex app" on (RestartApp): unasked, a
-// quit of the user's app read as magpie force-restarting it whenever
-// quota ran out (Michael25651150 on X). Where that is off or can't be
-// done, or the app didn't quit, the Agents row says to (snag,
-// CodexAppSnagged) until the app-servers seen then are gone.
+// macOS, never forced; the Agents row's Restart on Windows). After an end
+// for a used-up account (crashSpent) that follows magpie's account switch
+// itself, with nothing to turn on: the page is all the window shows, the
+// switch is what the user asked magpie for, and only a quit and open
+// clears it (RealZeroP27 on X: "只能通过手动重启 codex 解决"). After any
+// other end it needs the user's "Restart the Codex app" (RestartApp):
+// unasked, a quit of a working app read as magpie force-restarting it
+// (Michael25651150 on X). Where it is off or can't be done, or the app
+// didn't quit, the Agents row says to (snag, CodexAppSnagged) until the
+// app-servers seen then are gone.
 
 // CodexAppCrashed and CodexAppRelaunch are set by the agent package.
 // CodexAppCrashed says whether the Codex app logged the page it shows
@@ -78,6 +82,7 @@ func codexAppCrashStep(ctx context.Context, now time.Time, busy func() (int, tim
 	c := &codexApp
 	c.Lock()
 	since, by, snag, snagPids := c.crashSince, c.crashBy, c.snag, slices.Clone(c.snagPids)
+	spentEnd := c.crashSpent
 	c.Unlock()
 	home := codexHome()
 	if snag {
@@ -108,14 +113,14 @@ func codexAppCrashStep(ctx context.Context, now time.Time, busy func() (int, tim
 		if !now.Before(by) {
 			c.Lock()
 			if c.crashBy.Equal(by) {
-				c.crashSince, c.crashBy = time.Time{}, time.Time{}
+				c.crashSince, c.crashBy, c.crashSpent = time.Time{}, time.Time{}, false
 			}
 			c.Unlock()
 		}
 		return
 	}
 	c.Lock()
-	c.crashSince, c.crashBy = time.Time{}, time.Time{}
+	c.crashSince, c.crashBy, c.crashSpent = time.Time{}, time.Time{}, false
 	c.Unlock()
 	// the page has no composer: a request or a turn since means the app
 	// came back (its Try again) and is in use, never cut short
@@ -134,7 +139,7 @@ func codexAppCrashStep(ctx context.Context, now time.Time, busy func() (int, tim
 	cancel()
 	err := errNoRelaunch
 	switch {
-	case !codexRestartsApp():
+	case !codexRestartsApp() && !spentEnd:
 		// quitting the user's app and opening it again, unasked, takes
 		// their window with it (Michael25651150 on X: "额度用尽时会强制重启
 		// codex 客户端"); the Agents row says to, and its Try again or

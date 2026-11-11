@@ -279,11 +279,12 @@ func TestCodexAppRowRestartWatchesForTheErrorPage(t *testing.T) {
 }
 
 // Michael25651150 on X: "额度用尽时会强制重启 codex 客户端". With the
-// user's "Restart the Codex app" off (as it ships), quota running out
-// still restarts the app's app-server, which the takeover needs, but the
-// app showing its error page after it is never quit and opened again
-// unasked: the Agents row says to, and the app's Try again or the row's
-// Restart is the user's. Nor is a Windows app that started no app-server.
+// user's "Restart the Codex app" off (as it ships), a change magpie makes
+// that isn't a used-up account's (where Codex sends its requests) still
+// restarts the app's app-server, but the app showing its error page after
+// it is never quit and opened again unasked: the Agents row says to, and
+// the app's Try again or the row's Restart is the user's. Nor is a Windows
+// app that started no app-server.
 func TestCodexAppNotQuitUnasked(t *testing.T) {
 	signIn(t)
 	s := stubCodexApp(t)
@@ -293,9 +294,9 @@ func TestCodexAppNotQuitUnasked(t *testing.T) {
 	idle := func() (int, time.Time) { return 0, now.Add(-time.Minute) }
 	s.running = []int{60}
 	codexAppStep(context.Background(), now, idle)
-	s.on = true // the account used up: magpie serves it
+	s.route = "other" // where Codex sends changed, no account used up
 	if got := codexAppStep(context.Background(), now, idle); !slices.Equal(got, []int{60}) {
-		t.Fatalf("ended %v, want [60]: the takeover needs the app-server's restart", got)
+		t.Fatalf("ended %v, want [60]: the route change needs the app-server's restart", got)
 	}
 	c.page, c.at = true, now.Add(2*time.Second)
 	now = now.Add(3 * time.Second)
@@ -307,5 +308,52 @@ func TestCodexAppNotQuitUnasked(t *testing.T) {
 	CodexAppReopen = func(context.Context) error { reopened++; return nil }
 	if stuck := codexAppGotNone(context.Background()); !stuck || reopened != 0 {
 		t.Fatalf("no app-server: reopened %d, stuck %v", reopened, stuck)
+	}
+}
+
+// RealZeroP27 on X (switch only, requests not through magpie): quota ran
+// out, magpie signed Codex in to the next account, ended the app's
+// app-server for the app to read it, and the ChatGPT app showed "hit a
+// snag" till the user quit and opened it. The account was used up, so the
+// app was greyed already and the page is all its window shows: it is
+// quit and opened once with "Restart the Codex app" off too, for a
+// switch off a used-up account and for the takeover in.
+func TestCodexAppReopenedAfterASpentEndUnasked(t *testing.T) {
+	for _, name := range []string{"switch", "takeover"} {
+		t.Run(name, func(t *testing.T) {
+			signIn(t)
+			s := stubCodexApp(t)
+			c := stubCodexCrash(t)
+			codexRestartsApp = func() bool { return false }
+			now := time.Now()
+			idle := func() (int, time.Time) { return 0, now.Add(-time.Minute) }
+			s.running = []int{60}
+			codexAppStep(context.Background(), now, idle)
+			if name == "switch" {
+				codexAppSwitched(true, true)
+			} else {
+				s.on = true
+			}
+			if got := codexAppStep(context.Background(), now, idle); !slices.Equal(got, []int{60}) {
+				t.Fatalf("ended %v, want [60]", got)
+			}
+			c.page, c.at = true, now.Add(2*time.Second)
+			now = now.Add(3 * time.Second)
+			codexAppStep(context.Background(), now, idle)
+			if c.relaunch != 1 || CodexAppSnagged() {
+				t.Fatalf("relaunched %d, snag %v: want reopened once", c.relaunch, CodexAppSnagged())
+			}
+			// the next end, for a route change, is not a spent one's
+			s.on = false
+			s.running = []int{100}
+			s.route = "other"
+			codexAppStep(context.Background(), now, idle)
+			c.at = now.Add(2 * time.Second)
+			now = now.Add(3 * time.Second)
+			codexAppStep(context.Background(), now, idle)
+			if c.relaunch != 1 {
+				t.Fatalf("relaunched %d after a later end that was not a used-up account's", c.relaunch)
+			}
+		})
 	}
 }
