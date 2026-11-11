@@ -556,6 +556,13 @@ var presets = []PresetDef{
 	{ID: "vercel", Name: "Vercel AI Gateway", Icon: "vercel", Kind: KindRelay, Catalog: "vercel",
 		Chat: "https://ai-gateway.vercel.sh/v1", Responses: "https://ai-gateway.vercel.sh/v1", Anthropic: "https://ai-gateway.vercel.sh",
 		Website: "https://vercel.com/docs/ai-gateway", KeysURL: "https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai-gateway%2Fapi-keys"},
+	// GMI Cloud (aiandcloud on X): OpenAI-compatible chat completions at
+	// api.gmi-serving.com/v1, its model list at /v1/models, the key as Bearer
+	// (docs.gmicloud.ai quickstart and LLM API reference). Its docs name no
+	// Responses or Messages endpoint, so only Chat is set
+	{ID: "gmicloud", Name: "GMI Cloud", Icon: "gmicloud", Kind: KindRelay,
+		Chat:    "https://api.gmi-serving.com/v1",
+		Website: "https://www.gmicloud.ai", KeysURL: "https://console.gmicloud.ai"},
 	{ID: "opencode-go", Name: "OpenCode Go", Icon: "opencode", Kind: KindRelay, Catalog: "opencode-go",
 		Chat: "https://opencode.ai/zen/go/v1", Responses: "https://opencode.ai/zen/go/v1", Anthropic: "https://opencode.ai/zen/go",
 		Note:    "open coding models, $10/month",
