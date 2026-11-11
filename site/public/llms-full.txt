@@ -6123,7 +6123,81 @@ That is xdg-open finding no handler for lody://. magpie runs Lody from its deskt
 
 Lody has no public status API, and magpie doesn't guess. Once you've confirmed, Magpie is in Lody's provider list.
 
-More desktop apps on the same models: [Cindy on any model](https://usemagpie.ai/docs/cindy), [AionUi on any model](https://usemagpie.ai/docs/aionui) and [Shelley on any model](https://usemagpie.ai/docs/shelley). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More desktop apps on the same models: [Cindy on any model](https://usemagpie.ai/docs/cindy), [AionUi on any model](https://usemagpie.ai/docs/aionui), [Shelley on any model](https://usemagpie.ai/docs/shelley) and [Empryo on any model](https://usemagpie.ai/docs/empryo). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/empryo
+
+# Empryo on any model
+
+Empryo keeps its settings in `~/.empryo/config.json` (a project's `.empryo/config.json` goes over it). Its providers are a `providers` array of OpenAI-compatible endpoints that it lists models from and sends `/chat/completions` to. magpie adds a provider of its own there and sets the model sessions start on to one of magpie's. Empryo then runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, GPT or a ChatGPT subscription.
+
+## Set up Empryo
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model for Empryo on the Agents page.** Empryo's row lists your current Empryo model and the models via magpie. Pick one of the latter.
+3. **Restart empryo.** Empryo reads its settings at start-up, so reopen sessions that are already open.
+
+```
+magpie empryo deepseek/deepseek-v4-pro
+```
+
+On Windows, Empryo in a WSL distro is found too and set up the same way, at a gateway address that distro can reach.
+
+## What gets written
+
+```
+{
+  "providers": [
+    …your own providers, left as they are…,
+    {"id": "magpie", "name": "Magpie",
+     "baseURL": "http://127.0.0.1:3425/v1",
+     "modelsAPI": "http://127.0.0.1:3425/v1/models"}
+  ],
+  "defaultModel": "magpie/deepseek/deepseek-v4-pro"
+}
+```
+
+`defaultModel` is `<provider id>/<model id>`, split at the first `/`, so `magpie/deepseek/deepseek-v4-pro` is `deepseek/deepseek-v4-pro` under the magpie provider. Your own providers and other settings stay as they are.
+
+magpie checks the wiring: when config.json's magpie provider is gone, or its `baseURL` isn't the gateway's address any more, Empryo's row says so.
+
+## Why there is no envVar
+
+An Empryo provider can name an `envVar` to read its key from; with none, Empryo sends no key of yours. magpie's provider has none, so you put no key in your environment. With no `envVar`, Empryo lists a provider only when its `baseURL` answers (2xx, 401 or 403), which the gateway's `GET /v1` does.
+
+## When it takes effect
+
+Empryo reads its settings only at start-up. While empryo is running, magpie reminds you to restart open empryo sessions.
+
+## Switching back
+
+Switching back puts `defaultModel` back to what it was and removes the magpie provider. If magpie made config.json and nothing is left in it, the file goes too. You can also pick your own Empryo model again.
+
+```
+magpie empryo default
+```
+
+## FAQ
+
+### How do I use DeepSeek, GLM or a ChatGPT subscription in Empryo?
+
+Pick a via-magpie model for Empryo on magpie's Agents page. magpie adds a provider with id magpie to ~/.empryo/config.json and sets defaultModel to magpie/provider/model. Restart empryo to use it.
+
+### Do I need an API key environment variable?
+
+No. magpie's provider has no envVar, so Empryo sends no key of yours; the magpie gateway forwards requests to the providers you added in magpie.
+
+### Does a project's .empryo/config.json matter?
+
+Yes. A project's .empryo/config.json goes over ~/.empryo/config.json; if it sets its own defaultModel, that one wins in that project.
+
+### Is my old model still there after switching back?
+
+Yes. magpie kept the defaultModel you had and puts it back; your own providers were never changed.
+
+More agents on the same models: [Lody on any model](https://usemagpie.ai/docs/lody), [AtomCode on any model](https://usemagpie.ai/docs/atomcode) and [Crush on any model](https://usemagpie.ai/docs/crush). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
