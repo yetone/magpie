@@ -4085,7 +4085,74 @@ That is the app’s default for models it doesn’t know. magpie points its cata
 
 Yes. agy follows the app’s gateway, or runs on its own row through the Gemini API, with an agy shell function so the command just works.
 
-More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models) and [Cursor Private Inference on any model](https://usemagpie.ai/docs/cursor-private-inference). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Cursor Private Inference on any model](https://usemagpie.ai/docs/cursor-private-inference) and [Snow CLI on any model](https://usemagpie.ai/docs/snow-cli). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/snow-cli
+
+# Snow CLI on any model
+
+Snow CLI (`snow`, the npm package `snow-ai`) keeps each API setup as a profile. magpie adds one of its own that points Snow at magpie’s gateway, so Snow can run on any model you have in magpie: DeepSeek, GLM, Qwen, an OpenAI or Anthropic key, or a ChatGPT or Copilot subscription.
+
+Snow keeps its settings in `~/.snow` (or `$SNOW_CONFIG_DIR`). Each profile is a file in `profiles/`, `active-profile.json` names the one in use, and `config.json` is a copy of it. magpie writes `profiles/magpie.json`: a copy of the profile you were on, with magpie’s gateway as its base URL, a key that names Snow, Chat Completions as its protocol and the model you pick as its model. It makes that profile the active one and copies it to `config.json`, as Snow’s own profile switch does. The gateway then sends each request to the model’s provider.
+
+## Connect Snow
+
+1. **Add providers in magpie.** In the Providers tab, add an API key or sign in to a subscription.
+2. **Pick a model on Snow CLI’s row.** In the Agents tab, choose a model under magpie.
+3. **Restart open snow sessions.** Snow reads its profile at start-up.
+
+```
+magpie snow deepseek/deepseek-v4-pro    # Snow on DeepSeek
+magpie snow default                     # back to your own profile
+```
+
+It works the same for Snow in a WSL distro on Windows: the profile there names the gateway as the distro reaches it.
+
+## Your profiles
+
+Your own profiles are not changed. magpie’s copies your other settings from the one you were on, but leaves out a subscription sign-in of yours (`snowcfg.oauth`). A profile of your own that happens to be named `magpie` is kept and put back. On the row, the models of your own profiles are listed too: picking one makes Snow switch to that profile.
+
+## Windows and images
+
+magpie sets `maxContextTokens`, `maxTokens` and `supportsVision` from its catalog for the model you pick, so Snow knows its real window and whether it takes images. A model magpie knows no limits for gets Snow’s own defaults, 200K and 64K. If you change one of these in Snow’s settings, it stays as you set it. A vision model of your own is kept only with an endpoint and key of its own. Images for a model that can’t see go through magpie’s Vision, which describes them at the gateway.
+
+## The light model
+
+Snow asks a light model (`basicModel`) for summaries, compaction and file search. On magpie’s profile it follows the main model, unless you pick another magpie model in the row’s small field. That pick stays when you change the main model.
+
+## Thinking
+
+The row’s thinking field sets `chatThinking` on magpie’s profile: a level sends `reasoning_effort` with each request, and off is Snow’s default. Only models that list reasoning levels offer it.
+
+## Snow App
+
+Snow App keeps API setups of its own. Its Sync Snow CLI API config button copies Snow CLI’s profiles into it, magpie’s among them, so the app can use magpie’s models too.
+
+## Switch back
+
+Pick one of your own models on the row, run `magpie snow default`, or take the row off magpie. Snow goes back to the profile you were on, `profiles/magpie.json` is removed, and `config.json` is a copy of your profile again.
+
+## FAQ
+
+### Can Snow CLI use DeepSeek, GLM or Qwen?
+
+Yes. Any model you have in magpie can be Snow’s model: DeepSeek, GLM, Qwen, GPT, Claude and more.
+
+### Does magpie change my own Snow profiles?
+
+No. It adds a profile of its own, profiles/magpie.json, and makes it the active one. Switching back makes your profile active again.
+
+### Why does Snow show the wrong context size?
+
+magpie sets maxContextTokens and maxTokens from its catalog for the model you pick. A value you changed in Snow yourself stays as you set it.
+
+### Which protocol does Snow use with magpie?
+
+Chat Completions (requestMethod chat). The row warns when magpie’s profile is set to another one.
+
+More agents on the same models: [Models in Gemini CLI](https://usemagpie.ai/docs/gemini-cli-models), [Cursor Private Inference on any model](https://usemagpie.ai/docs/cursor-private-inference) and [Antigravity on any model](https://usemagpie.ai/docs/antigravity). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
