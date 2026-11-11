@@ -1447,6 +1447,22 @@ function routingPage(part) {
     } else add("vendor", "Reading the reply", (tr.ms || 0) - head);
     return out;
   }
+  // why a run was claude -p, by gateway.claudePrint's code
+  const ENTRY_WHY = {
+    off: "the interactive mode is turned off",
+    os: "this system can't run the interactive mode",
+    "no-shim": "this system can't run the interactive mode",
+    missing: "Claude Code isn't installed on this computer",
+    image: "the request has an image known by its URL, which only claude -p takes",
+    "third-party": "the interactive mode was turned away over this agent's system prompt",
+    "cache-marks": "the client's cache marks keep history that a fresh interactive run would write again",
+  };
+  // entryNote: what a try's entry point chip says (Try.Entry)
+  function entryNote(tr) {
+    if (tr.entry === "tui") return t("Claude Code ran this request in its interactive mode (TUI)");
+    const why = ENTRY_WHY[tr.entryWhy];
+    return t("Claude Code ran this request as claude -p") + (why ? ": " + t(why) : "");
+  }
   const WHO = { magpie: "magpie {ms}", net: "network {ms}", vendor: "vendor {ms}" };
   // why a try that went out some other way has no split (gateway.sentBy)
   const SENT_BY = {
@@ -4274,7 +4290,7 @@ function routingPage(part) {
     // all the row says, and its titles
     const title = reqTitle(r, how, tr);
     const sig = JSON.stringify([lang, said, how, title, r.time, r.agent, name, ag?.icon, r.model, r.provider, tagKind(r), r.effort,
-      tr?.effort, tr?.picked, tr?.fixed, tr?.fast, tr?.swapped && tr.done && tryOk(tr) ? [tr.model, tr.served] : 0, tr?.routed && tr.done && tryOk(tr) ? tr.served : 0, tr?.done && tryOk(tr) ? tr.upstream : 0, meta, metrics, cost]);
+      tr?.effort, tr?.picked, tr?.fixed, tr?.fast, tr?.entry, tr?.entryWhy, tr?.swapped && tr.done && tryOk(tr) ? [tr.model, tr.served] : 0, tr?.routed && tr.done && tryOk(tr) ? tr.served : 0, tr?.done && tryOk(tr) ? tr.upstream : 0, meta, metrics, cost]);
     s = { lang, shows, name, icon, cost, said, how, tr, ag, meta, metrics, title, sig };
     rowSaid.set(r, s);
     return s;
@@ -4607,6 +4623,12 @@ function routingPage(part) {
       const ft = el("span", "ef", t("fast"));
       ft.title = t("Sent in its vendor's fast mode, as the group says");
       to.append(ft);
+    }
+    if (tr?.entry) {
+      // how Claude Code ran it, whose cost to the plan differs (Anotiaww on X)
+      const en = el("span", "ef", tr.entry === "tui" ? "TUI" : "-p");
+      en.title = entryNote(tr);
+      to.append(en);
     }
     if (tr?.swapped && tr.done && tryOk(tr)) to.append(swapTag(tr, true)); // beside the model asked for
     else if (tr?.routed && tr.done && tryOk(tr)) to.append(routedTag(tr));

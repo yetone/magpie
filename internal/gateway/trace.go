@@ -503,6 +503,12 @@ type Try struct {
 	// client didn't, so it has no Net and the Routing page says why
 	// (sentBy)
 	SentBy string `json:"sentBy,omitempty"`
+	// Entry: how Claude Code ran a Claude subscription's request, "tui" for
+	// its interactive mode or "print" for claude -p, whose cost to the
+	// plan differs; EntryWhy is claudePrint's code for why it was -p
+	// (claude_entry.go). "" for a try that ran no Claude Code.
+	Entry    string `json:"entry,omitempty"`
+	EntryWhy string `json:"entryWhy,omitempty"`
 	// FirstReasoning is the start of paced visible reasoning, absent for hidden reasoning.
 	FirstReasoning  int64 `json:"firstReasoning,omitempty"`
 	ReasoningHidden bool  `json:"reasoningHidden,omitempty"`

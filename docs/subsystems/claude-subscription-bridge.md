@@ -387,8 +387,7 @@ it has stayed so for 300ms (`ready`, `trustSettle`). Pressing Enter blind
 chose "No, exit" in the real gateway, and no run started.
 
 Every run is `-p` only when the Claude Code editor's "Claude Code runs
-as" row is on claude -p (`claudePrintMode`; magpie web as a gateway
-switches it with the editor's *Claude Code's interactive mode* row), or in the gateway's own
+as" row is on claude -p (`claudePrintMode`; the one row, in the editor and, in magpie web as a gateway, there too), or in the gateway's own
 tests, whose fake Claude Codes are `-p` ones (`claudeTUIRuns`, code
 `no-shim`). With it On, nothing ever runs as `-p` (the owner, 11-01): the
 plan counts a `-p` request as another client's, at about twice the
@@ -715,10 +714,11 @@ each, which they remove: `-p` asks nothing about trust.
 The Claude Code provider editor's "Claude Code runs as" row
 (`claudeModeRow` in app.js, drawn by claudemode.js, which it loads with
 its first read) is a switch between Interactive mode (TUI) and claude
--p: pressing one saves `claudePrintMode` as Settings' row does
-(`savePrefs`) and reads the mode again. In magpie web it is the
-gateway's, and only its own Settings change it, so the switch is
-disabled. Hovering or focusing it opens what tells the two apart. It
+-p: pressing one saves `claudePrintMode` (`savePrefs`) and reads the mode again.
+It is the only control for it: Settings' second row, which wrote the same
+setting and was the one that worked in magpie web (the editor's was
+disabled there, and read as a switch that doesn't switch), is gone
+(Anotiaww on X, `claude-tui-setting.test.cjs`). Hovering or focusing it opens what tells the two apart. It
 reads `GET /api/claude/mode` (`gateway.ClaudeModeNow`) as the page
 opens, kept 30 seconds and dropped when the setting changes, not in
 `/api/providers`' polls. What decides it for every run on the machine is
@@ -1913,3 +1913,28 @@ go test -tags nogui ./internal/gateway/ -run 'TestClaudeTaskNotification|TestWit
 rule that keeps another conversation out; `claude_lost_media_test.go` does
 the same for images taken out, from Hana's request bodies. `claude_resume_test.go`'s harness
 stands in for Claude Code with a script that keeps sessions as it does.
+
+## Which entry a request used
+
+Each request the bridge answers notes how its run started: `startRun` calls
+`noteEntry(ctx, tui, code)` beside `noteClaudeRun`, which is the process's
+last mode and so says nothing of one request. The note rides the request's
+context (`withEntry`, `claude_entry.go`) and `serve` copies it onto the try
+(`Try.Entry` "tui" or "print", `Try.EntryWhy` the `claudePrint` code that
+chose -p: off, os, missing, no-shim, image, third-party, cache-marks). The
+Routing page's request row shows a TUI or -p chip with the reason in its
+title (`entryNote` in the routing plugin's client.js), so the plan cost of
+a request can be told from how it ran (Anotiaww on X,
+`TestEntryNoted`, `routing-entry.test.cjs`).
+
+## Claude Code on a remote magpie
+
+A local Claude Code that uses a remote magpie holding the account sends its
+whole history each turn to the remote gateway, as any API client does. The
+remote bridge keeps the run's session and resumes it (`--resume`), typing
+only the turn that is new (`from.since`), so Anthropic is not sent the
+history twice. A new run (first request, a restart, a branch, a session that
+isn't found) replays the conversation once as one message, with a cache
+miss. The remote Claude Code adds its own system prompt (about 1K tokens,
+cached) beside the caller's, which the Short Claude system prompt setting
+(`claudeLeanPrompt`) removes (Tossipe on X).

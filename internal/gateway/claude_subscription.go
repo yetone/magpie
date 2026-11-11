@@ -1209,6 +1209,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	}
 	defer turn()
 	noteClaudeRun(code)
+	noteEntry(ctx, tui, code)
 	var cmd *exec.Cmd
 	if tui {
 		if cmd, err = binary.tuiCommand(context.Background(), args...); err != nil {

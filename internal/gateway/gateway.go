@@ -4020,6 +4020,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// the models Copilot's Auto picked for it, where from, and which
 		// were refused (#256)
 		autoPicked := func() []provider.AutoPick { return nil }
+		entryOf := func() (string, string) { return "", "" }
 		if said, ok := verifyHeld(c); ok && last {
 			// the account must be verified first (#152): the agent's
 			// reconnects are told so again, not sent on to a vendor that
@@ -4099,6 +4100,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				ctx = withFallback(ctx)
 			}
 			hw.stop = stop
+			if sentBy(c.p) == "claude" {
+				// the entry point its Claude Code run takes, for the
+				// try's row (Try.Entry)
+				ctx, entryOf = withEntry(ctx)
+			}
 			if autoPicks(c) {
 				// the reply names the pick it went as last (#256: it
 				// named one Copilot refused)
@@ -4317,6 +4323,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			try.Reset, resetFirst = resetFirst, nil
 		}
 		asName := provider.SentNameOnIn(wiresOf(r.Context()), c.p.ID, accountAgent(c.p), c.model, sent)
+		try.Entry, try.EntryWhy = entryOf()
 		try.Swapped, try.Routed = swapped(asName, call.Usage.Served) && !usage.ListedAs(c.p.ID, c.model, call.Usage.Served), usage.GroupRouted(asName, call.Usage.Served)
 		try.TTFT, try.FirstText = hw.first.ms()
 		try.FirstReasoning = hw.first.reasoningMs(call.To)
