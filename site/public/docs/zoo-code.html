@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zoo Code with DeepSeek, GLM, Kimi, Qwen, GPT, Claude or a ChatGPT subscription: any model in VS Code's Zoo Code through magpie · magpie</title>
+<meta name="description" content="Run VS Code's Zoo Code (a fork of Roo Code) on DeepSeek, GLM, Kimi, Qwen, GPT, Claude or a ChatGPT subscription through magpie: the magpie profile imported through autoImportSettingsPath, why it needs Reload Window, every VS Code profile, why Zoo Code for JetBrains isn't wired, and the profile left after Disconnect.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/zoo-code">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/zoo-code">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/zoo-code">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/zoo-code">
+<link rel="canonical" href="https://usemagpie.ai/docs/zoo-code">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Zoo Code on any model">
+<meta property="og:description" content="Run VS Code's Zoo Code (a fork of Roo Code) on DeepSeek, GLM, Kimi, Qwen, GPT, Claude or a ChatGPT subscription through magpie: the magpie profile imported through autoImportSettingsPath, why it needs Reload Window, every VS Code profile, why Zoo Code for JetBrains isn't wired, and the profile left after Disconnect.">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zoo-code">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Zoo Code on any model",
+   "description": "Run VS Code's Zoo Code (a fork of Roo Code) on DeepSeek, GLM, Kimi, Qwen, GPT, Claude or a ChatGPT subscription through magpie: the magpie profile imported through autoImportSettingsPath, why it needs Reload Window, every VS Code profile, why Zoo Code for JetBrains isn't wired, and the profile left after Disconnect.",
+   "inLanguage": "en",
+   "url": "https://usemagpie.ai/docs/zoo-code",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Can Zoo Code use DeepSeek, GLM, Kimi or Qwen?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. magpie writes a magpie profile Zoo Code imports when it starts, on the local gateway's Chat Completions and the model you pick in magpie. Reload the window once after you pick."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Why didn't Zoo Code change after I picked a model?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Zoo Code imports profiles only when it starts. Run Developer: Reload Window from VS Code's Command Palette."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Does it work in Zoo Code for JetBrains?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "No. The JetBrains build is handed an empty configuration on every start, so the import setting can't reach it, and its secrets file has no documented format; magpie writes neither."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Why is the magpie profile still there after Disconnect?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "An imported profile lives in Zoo Code's encrypted secret storage, which magpie can't write. magpie stops the import and puts the setting back; the profile is yours to switch from or delete in Zoo Code."
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "Docs",
+     "item": "https://usemagpie.ai/docs/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "Zoo Code on any model",
+     "item": "https://usemagpie.ai/docs/zoo-code"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>Docs</small></a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/start">Get started</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a class="toc-only" href="/docs/remote">Remote magpie</a>
+    <a class="toc-only" href="/docs/docker">Docker</a>
+    <a class="toc-only" href="/docs/privacy">Privacy</a>
+    <a class="toc-only" href="/docs/masking">Privacy masking</a>
+    <a class="toc-only" href="/docs/mcp-router">MCP router</a>
+    <a class="toc-only" href="/docs/library">Library</a>
+    <a class="toc-only" href="/docs/claude-code-models">Models in Claude Code</a>
+    <a class="toc-only" href="/docs/codex-models">Models in Codex</a>
+    <a class="toc-only" href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a class="toc-only" href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a class="toc-only" href="/docs/local-models">Local models</a>
+    <a class="toc-only" href="/docs/opencode-models">Models in OpenCode</a>
+    <a class="toc-only" href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/zoo-code" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/zoo-code" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/zoo-code" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">Download</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Zoo Code</p>
+    <a href="#overview">How it works</a>
+    <a href="#on">Set up Zoo Code</a>
+    <a href="#files">What magpie writes</a>
+    <a href="#reload">When it takes effect</a>
+    <a href="#profiles">VS Code profiles</a>
+    <a href="#jetbrains">Zoo Code for JetBrains</a>
+    <a href="#off">Switching back</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">Docs · Guide</p>
+    <h1>Zoo Code on any model</h1>
+    <p class="lede">Zoo Code (Zoo-Code-Org/Zoo-Code, the VS Code extension ZooCodeOrganization.zoo-code, a fork of Roo Code) keeps its provider profiles in VS Code's secret storage, encrypted and out of reach. But on every start it imports the file its <code>zoo-code.autoImportSettingsPath</code> setting names, as its own Settings → Import does. magpie writes that file: one OpenAI-compatible profile named magpie, at the local gateway, on the model you pick. So Zoo Code runs on any model you have in magpie: DeepSeek, GLM, Kimi, Qwen, an OpenAI or Anthropic key, or a ChatGPT or Copilot subscription.</p>
+    <h2 id="on"><a class="anchor" href="#on">Set up Zoo Code</a></h2>
+    <ol class="steps">
+      <li><b>Add a provider in magpie</b>Add an API key on the <span class="ui">Providers</span> page, or sign in to a subscription.</li>
+      <li><b>Pick a model on Zoo Code's row</b>With the Zoo Code extension installed, magpie's <span class="ui">Agents</span> page has a Zoo Code row; pick a model.</li>
+      <li><b>Reload the VS Code window</b>Run <b>Developer: Reload Window</b> from the Command Palette; Zoo Code imports magpie's profile as it starts and switches to it.</li>
+    </ol>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="zoo-on">Copy</button><pre id="zoo-on">magpie zoo-code deepseek/deepseek-v4-pro
+# VS Code: Developer: Reload Window</pre></div>
+    <h2 id="files"><a class="anchor" href="#files">What magpie writes</a></h2>
+    <p>magpie writes the file to import in Zoo Code's own folder in VS Code's User folder, <code>globalStorage/zoocodeorganization.zoo-code/settings/magpie-import.json</code>, beside the settings files Zoo Code keeps itself. It then points <code>zoo-code.autoImportSettingsPath</code> at it in VS Code's <code>settings.json</code>. A value of your own is kept aside and put back on Disconnect.</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="zoo-json">Copy</button><pre id="zoo-json">// <VS Code User>/globalStorage/zoocodeorganization.zoo-code/settings/magpie-import.json
+{"providerProfiles": {"currentApiConfigName": "magpie",
+  "apiConfigs": {"magpie": {"id": "magpie", "apiProvider": "openai",
+    "openAiBaseUrl": "http://127.0.0.1:3425/v1", "openAiApiKey": "…",
+    "openAiModelId": "deepseek/deepseek-v4-pro", "openAiStreamingEnabled": true,
+    "openAiCustomModelInfo": {"contextWindow": …, "maxTokens": …, "supportsImages": …}}}}}
+
+// <VS Code User>/settings.json
+"zoo-code.autoImportSettingsPath": "…/magpie-import.json"</pre></div>
+    <p>The profile uses Zoo Code's OpenAI Compatible provider on the gateway's Chat Completions (<code>/v1</code>), with a key naming Zoo Code; its requests say <code>ZooCode/&lt;version&gt;</code> as their User-Agent, so magpie's usage counts them under Zoo Code. <code>openAiCustomModelInfo</code> carries the model's window (Zoo Code trims a conversation to it; 128K when it isn't told), what a reply may take, and whether it sends images. Imported profiles are merged over yours, which stay.</p>
+    <h2 id="reload"><a class="anchor" href="#reload">When it takes effect</a></h2>
+    <p>Zoo Code reads the file only when it starts, so reload the window once after you pick. While connected it imports the file again on every start, so each start puts it back on magpie's profile; a profile you switch to inside Zoo Code meanwhile is one magpie can't see, and the next start comes back. When magpie's models or the key change, magpie updates the file, used from the next start.</p>
+    <h2 id="profiles"><a class="anchor" href="#profiles">VS Code profiles</a></h2>
+    <p>VS Code's default profile and each profile you made has its own <code>settings.json</code>; magpie points the setting at its file in every one, and in a profile made later too. If any of them can't be written, all are put back as they were.</p>
+    <h2 id="jetbrains"><a class="anchor" href="#jetbrains">Zoo Code for JetBrains</a></h2>
+    <p>Zoo Code for JetBrains runs the same extension in its own extension host, which is handed an empty configuration on every start, so the setting can't reach it; and it keeps its secrets in <code>~/.zoo-code/secrets.json</code>, a store of its own with no lock and no documented format. magpie writes neither, so the JetBrains build isn't wired.</p>
+    <h2 id="off"><a class="anchor" href="#off">Switching back</a></h2>
+    <p>Set the row back to default in magpie: magpie puts the setting back in every <code>settings.json</code> and removes the import file. A profile once imported lives in Zoo Code's secret storage, which magpie can't write, so the magpie profile stays in Zoo Code's list; switch from it or delete it in Zoo Code.</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="zoo-off">Copy</button><pre id="zoo-off">magpie zoo-code default</pre></div>
+
+    <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
+    <h3>Can Zoo Code use DeepSeek, GLM, Kimi or Qwen?</h3>
+    <p>Yes. magpie writes a magpie profile Zoo Code imports when it starts, on the local gateway's Chat Completions and the model you pick in magpie. Reload the window once after you pick.</p>
+    <h3>Why didn't Zoo Code change after I picked a model?</h3>
+    <p>Zoo Code imports profiles only when it starts. Run Developer: Reload Window from VS Code's Command Palette.</p>
+    <h3>Does it work in Zoo Code for JetBrains?</h3>
+    <p>No. The JetBrains build is handed an empty configuration on every start, so the import setting can't reach it, and its secrets file has no documented format; magpie writes neither.</p>
+    <h3>Why is the magpie profile still there after Disconnect?</h3>
+    <p>An imported profile lives in Zoo Code's encrypted secret storage, which magpie can't write. magpie stops the import and puts the setting back; the profile is yours to switch from or delete in Zoo Code.</p>
+
+    <p style="margin-top:48px">More agents on the same models: <a href="/docs/cline">Cline on any model</a>, <a href="/docs/goose">Goose on any model</a> and <a href="/docs/hermes">Hermes Agent on any model</a>. Something fails? See <a href="/docs/troubleshooting">Fixing common errors</a>, or ask on <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>.</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a href="/docs/remote">Remote magpie</a>
+    <a href="/docs/docker">Docker</a>
+    <a href="/docs/privacy">Privacy</a>
+    <a href="/docs/masking">Privacy masking</a>
+    <a href="/docs/mcp-router">MCP router</a>
+    <a href="/docs/library">Library</a>
+    <a href="/docs/claude-code-models">Models in Claude Code</a>
+    <a href="/docs/codex-models">Models in Codex</a>
+    <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a href="/docs/local-models">Local models</a>
+    <a href="/docs/opencode-models">Models in OpenCode</a>
+    <a href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/contributors">Contributors</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

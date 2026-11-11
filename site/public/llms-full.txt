@@ -4021,7 +4021,7 @@ Cline refuses a provider it doesn’t know when a session starts, so magpie uses
 
 Its picker lists magpie’s models under magpie; pick the model there, since the app doesn’t read it from Cline’s files.
 
-More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Hermes Agent on any model](https://usemagpie.ai/docs/hermes) and [Goose on any model](https://usemagpie.ai/docs/goose). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Hermes Agent on any model](https://usemagpie.ai/docs/hermes), [Goose on any model](https://usemagpie.ai/docs/goose) and [Zoo Code on any model](https://usemagpie.ai/docs/zoo-code). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
@@ -5504,6 +5504,83 @@ Yes. QwenPaw was CoPaw; with a legacy ~/.copaw there, magpie uses it as the work
 Yes. The default agent is the qwenpaw row in magpie and any other is qwenpaw#, each with its own model and effort.
 
 More agents on the same models: [AstrBot on any model](https://usemagpie.ai/docs/astrbot), [nanobot on any model](https://usemagpie.ai/docs/nanobot) and [OpenClaw on any model](https://usemagpie.ai/docs/openclaw). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/zoo-code
+
+# Zoo Code on any model
+
+Zoo Code (Zoo-Code-Org/Zoo-Code, the VS Code extension ZooCodeOrganization.zoo-code, a fork of Roo Code) keeps its provider profiles in VS Code's secret storage, encrypted and out of reach. But on every start it imports the file its `zoo-code.autoImportSettingsPath` setting names, as its own Settings → Import does. magpie writes that file: one OpenAI-compatible profile named magpie, at the local gateway, on the model you pick. So Zoo Code runs on any model you have in magpie: DeepSeek, GLM, Kimi, Qwen, an OpenAI or Anthropic key, or a ChatGPT or Copilot subscription.
+
+## Set up Zoo Code
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model on Zoo Code's row.** With the Zoo Code extension installed, magpie's Agents page has a Zoo Code row; pick a model.
+3. **Reload the VS Code window.** Run **Developer: Reload Window** from the Command Palette; Zoo Code imports magpie's profile as it starts and switches to it.
+
+```
+magpie zoo-code deepseek/deepseek-v4-pro
+# VS Code: Developer: Reload Window
+```
+
+## What magpie writes
+
+magpie writes the file to import in Zoo Code's own folder in VS Code's User folder, `globalStorage/zoocodeorganization.zoo-code/settings/magpie-import.json`, beside the settings files Zoo Code keeps itself. It then points `zoo-code.autoImportSettingsPath` at it in VS Code's `settings.json`. A value of your own is kept aside and put back on Disconnect.
+
+```
+// /globalStorage/zoocodeorganization.zoo-code/settings/magpie-import.json
+{"providerProfiles": {"currentApiConfigName": "magpie",
+  "apiConfigs": {"magpie": {"id": "magpie", "apiProvider": "openai",
+    "openAiBaseUrl": "http://127.0.0.1:3425/v1", "openAiApiKey": "…",
+    "openAiModelId": "deepseek/deepseek-v4-pro", "openAiStreamingEnabled": true,
+    "openAiCustomModelInfo": {"contextWindow": …, "maxTokens": …, "supportsImages": …}}}}}
+
+// /settings.json
+"zoo-code.autoImportSettingsPath": "…/magpie-import.json"
+```
+
+The profile uses Zoo Code's OpenAI Compatible provider on the gateway's Chat Completions (`/v1`), with a key naming Zoo Code; its requests say `ZooCode/<version>` as their User-Agent, so magpie's usage counts them under Zoo Code. `openAiCustomModelInfo` carries the model's window (Zoo Code trims a conversation to it; 128K when it isn't told), what a reply may take, and whether it sends images. Imported profiles are merged over yours, which stay.
+
+## When it takes effect
+
+Zoo Code reads the file only when it starts, so reload the window once after you pick. While connected it imports the file again on every start, so each start puts it back on magpie's profile; a profile you switch to inside Zoo Code meanwhile is one magpie can't see, and the next start comes back. When magpie's models or the key change, magpie updates the file, used from the next start.
+
+## VS Code profiles
+
+VS Code's default profile and each profile you made has its own `settings.json`; magpie points the setting at its file in every one, and in a profile made later too. If any of them can't be written, all are put back as they were.
+
+## Zoo Code for JetBrains
+
+Zoo Code for JetBrains runs the same extension in its own extension host, which is handed an empty configuration on every start, so the setting can't reach it; and it keeps its secrets in `~/.zoo-code/secrets.json`, a store of its own with no lock and no documented format. magpie writes neither, so the JetBrains build isn't wired.
+
+## Switching back
+
+Set the row back to default in magpie: magpie puts the setting back in every `settings.json` and removes the import file. A profile once imported lives in Zoo Code's secret storage, which magpie can't write, so the magpie profile stays in Zoo Code's list; switch from it or delete it in Zoo Code.
+
+```
+magpie zoo-code default
+```
+
+## FAQ
+
+### Can Zoo Code use DeepSeek, GLM, Kimi or Qwen?
+
+Yes. magpie writes a magpie profile Zoo Code imports when it starts, on the local gateway's Chat Completions and the model you pick in magpie. Reload the window once after you pick.
+
+### Why didn't Zoo Code change after I picked a model?
+
+Zoo Code imports profiles only when it starts. Run Developer: Reload Window from VS Code's Command Palette.
+
+### Does it work in Zoo Code for JetBrains?
+
+No. The JetBrains build is handed an empty configuration on every start, so the import setting can't reach it, and its secrets file has no documented format; magpie writes neither.
+
+### Why is the magpie profile still there after Disconnect?
+
+An imported profile lives in Zoo Code's encrypted secret storage, which magpie can't write. magpie stops the import and puts the setting back; the profile is yours to switch from or delete in Zoo Code.
+
+More agents on the same models: [Cline on any model](https://usemagpie.ai/docs/cline), [Goose on any model](https://usemagpie.ai/docs/goose) and [Hermes Agent on any model](https://usemagpie.ai/docs/hermes). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
