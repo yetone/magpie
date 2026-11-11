@@ -609,9 +609,11 @@ every route and field, not only its own tests.**
   field, and both went red on main; its usage line also broke the help
   column a test checks (#6104). e0cadc312 added three /api/memory
   routes the same day with no parity entry.
+- 11-12: 60fde6fb1 added POST /api/library/mcp-account the same way,
+  and the parity test stayed red on main until 5a36e46d6.
 - Run the whole internal/cli and internal/gui packages for a new route
   or field; `grep -n` the parity map for the route before pushing.
-- Seen 1× (2026-11-11).
+- Seen 2× (2026-11-11, 2026-11-12).
 
 ## Red tests and releases
 
