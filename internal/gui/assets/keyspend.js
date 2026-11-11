@@ -55,9 +55,26 @@ window.keySpendFill = function (row, p, k) {
   if (window.keyBalanceFill) keyBalanceFill(row, p, k);
   else if (p.takesOwnBalance) import("./keybalance.js").then(() => keyBalanceFill(row, p, k), () => {});
   row.querySelector(":scope > .aspend")?.remove();
+  row.querySelector(":scope > .acap")?.remove();
+  row.querySelector(":scope > .key-cap-line")?.remove();
   row.querySelector(":scope > .key-spend-line")?.remove();
   const pill = keySpendPill(p, k), gap = row.querySelector(":scope > .grow");
   gap ? gap.before(pill) : row.append(pill);
+  // a key whose usage windows magpie reads takes the usage cap an account
+  // does (@wanggenjidev on X): the same pill, the same note when held
+  if (k.usageCap) {
+    const cp = accountCapPill(p, k.id, accountCapOf(p, k.id), "", true);
+    pill.before(cp);
+    if (k.capHeld) {
+      const h = k.capHeld;
+      const n = capHeldNote({ used: h.used, cap: h.cap, back: h.back ? Date.parse(h.back) : 0, all: true, some: [] }, h.cap, p.keyList?.filter((x) => x.on).length > 1, "");
+      const cl = el("div", "key-rest-line key-cap-line");
+      cl.append(n);
+      const at = row.querySelector(":scope > .key-rest-line") || row.querySelector(":scope > .key-acts");
+      at ? at.after(cl) : row.append(cl);
+      row.classList.add("resting");
+    }
+  }
   const line = keySpendLine(k);
   if (!line) return;
   const at = row.querySelector(":scope > .key-rest-line") || row.querySelector(":scope > .key-acts");

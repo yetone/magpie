@@ -14320,14 +14320,14 @@ function windowCapMeter(m, p, user, w) {
   };
   return b;
 }
-function accountCapPill(p, user, cap, direct) {
+function accountCapPill(p, user, cap, direct, forKey) {
   // with no cap of its own but some windows', it says so
   const byWindow = !cap && windowCapsOf(p, user) > 0;
   const pill = el("button", "acap" + (cap || byWindow ? " set" : ""), cap ? t("Cap {n}%", { n: cap }) : byWindow ? t("Caps by window") : t("No cap"));
   pill.type = "button";
   pill.title = (cap ? t("Stops at {n}% of each usage window: once magpie reads a window at {n}% or past it, it counts this account as used up and sends it nothing more until the window renews. A turn already under way can still take it past {n}%, so the cap doesn't promise the rest is left. Click to change", { n: cap })
     : t("Used to 100% of its usage windows. Click to cap it at a share of each, so magpie goes on to the other accounts past it"))
-    + "\n" + t("A window can have a cap of its own: click its meter below")
+    + (forKey ? "" : "\n" + t("A window can have a cap of its own: click its meter below"))
     + (direct ? "\n\n" + directNote(direct) : "");
   menuOf(pill);
   const set = (v) => accountAction("provider/accountcap", { id: p.id, account: user, cap: v },
