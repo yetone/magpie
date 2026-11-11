@@ -42,10 +42,10 @@ window.agentCompactFill = function (list, a) {
   };
   draw();
   list.querySelector(".agent-compact")?.remove();
-  list.querySelectorAll(".claude-cache").forEach((r) => r.remove());
+  list.querySelectorAll(".claude-cache, .claude-attribution").forEach((r) => r.remove());
   const above = list.querySelector("#fullContextRow");
   above ? above.after(row) : list.append(row);
-  if (kind === "claude") row.after(...claudeCacheRows(list));
+  if (kind === "claude") row.after(...claudeCacheRows(list), claudeAttributionRow(list));
   // every agent's size, in its label, changes when the row above is drawn
   const seen = new MutationObserver(() => row.isConnected ? draw() : seen.disconnect());
   // Details can build this list before attaching it to the page.
@@ -101,4 +101,44 @@ function claudeCacheRows(list) {
     if (box) seen.observe(box, { childList: true });
     return row;
   });
+}
+
+// Claude Code's Co-Authored-By trailer on the commits it makes (9_bishi on
+// X): On is Claude Code's own default, Off writes attribution.commit = "" in
+// its settings.json (agent.ClaudeAttributionSet). The user's own trailer
+// text is shown as it is and not changed here.
+function claudeAttributionRow(list) {
+  const label = "Commit signature (Co-Authored-By)";
+  const row = el("div", "row pref claude-attribution");
+  const who = el("div", "who"), val = el("div", "val");
+  who.append(el("div", "name", t(label)));
+  row.append(who, val);
+  let drawn;
+  const draw = () => {
+    const cur = (prefs || {}).claudeAttribution || "on";
+    if (cur === drawn) return;
+    drawn = cur;
+    const b = el("button", "sess-pick");
+    b.type = "button";
+    b.setAttribute("aria-label", t(label));
+    b.setAttribute("aria-haspopup", "menu");
+    b.setAttribute("aria-expanded", "false");
+    b.append(el("span", "", t(cur === "off" ? "Off" : cur === "custom" ? "Your own text" : "On")), svg(CHEV, 11, 1.6));
+    b.disabled = cur === "custom";
+    b.onclick = (e) => {
+      e.stopPropagation();
+      if (b.classList.contains("open")) return closeProtoMenu();
+      openProtoMenu(b, [["on", "On"], ["off", "Off"]].map(([v, name]) => ({ v, name, note: "" })), cur, (v) => {
+        if (v === cur) return;
+        writingPrefs(api("settings/claude-attribution", { on: v === "on" }))
+          .then((ns) => { prefs = ns; renderSettings(); if (row.isConnected) draw(); }).catch(settingsErr);
+      }, label, "sess-menu", "right");
+    };
+    val.replaceChildren(b);
+  };
+  draw();
+  const seen = new MutationObserver(() => row.isConnected ? draw() : seen.disconnect());
+  const box = list.querySelector("#fullContextSegs");
+  if (box) seen.observe(box, { childList: true });
+  return row;
 }

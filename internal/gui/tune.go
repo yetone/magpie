@@ -386,6 +386,20 @@ func tuneRoutes(mux *http.ServeMux) {
 		tuneForget()
 		writeJSON(rw, settingsState())
 	})
+	// Claude Code's commit trailer (Co-Authored-By) on or off
+	// (agent.ClaudeAttributionSet; 9_bishi on X)
+	mux.HandleFunc("POST /api/settings/claude-attribution", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ On bool }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := agent.ClaudeAttributionSet("", in.On); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
 	mux.HandleFunc("POST /api/tune/undo", func(rw http.ResponseWriter, r *http.Request) {
 		if gatewayRefused(rw) {
 			return

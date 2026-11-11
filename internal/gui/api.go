@@ -587,6 +587,9 @@ type settingsJSON struct {
 	// Claude Code's two prompt-cache lifetimes as it reads them
 	// (agent.TuneRead): the rows beside its compaction in its settings
 	ClaudeCache []claudeCacheJSON `json:"claudeCache,omitempty"`
+	// ClaudeAttribution: whether Claude Code adds its Co-Authored-By trailer
+	// ("on", "off", or "custom" for the user's own text)
+	ClaudeAttribution string `json:"claudeAttribution,omitempty"`
 	// the magpie model Codex's config runs, when its own window is no
 	// larger than Long conversations' threshold: Codex compacts it at 90%
 	// of that window (codexWindowUnder)
@@ -886,6 +889,7 @@ func settingsState() settingsJSON {
 	s.CodexAsyncHeld = agent.CodexAsyncHeld()
 	s.CodexCompactKeys = codexKeysText(agent.CodexCompactHeld(""))
 	s.ClaudeCache = claudeCacheState()
+	s.ClaudeAttribution = agent.ClaudeAttribution("")
 	s.CodexWindow = codexWindowUnder(s.Settings.ForAgent("codex"), agent.CodexModel(""))
 	s.WorkBuddy, s.WorkBuddyCheckins = provider.HasWorkBuddy(), provider.WorkBuddyCheckins()
 	s.Trae, s.TraeCheckins = provider.HasTrae(), provider.TraeCheckins()
