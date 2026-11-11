@@ -3955,6 +3955,20 @@ func (r *subscriptionRun) emit(ev Event) {
 			r.unended = false
 		case KToolStart:
 			r.shown = append(r.shown, shownCall{id: ev.ID, name: ev.Name})
+			// The call answers the conversation the run last heard from
+			// the moment it is shown, not from park: a side request that
+			// arrives while the reply still streams (Claude Code's
+			// AgentSummary, #6128) finds the call by it (branch).
+			if r.lines == nil {
+				r.lines = map[string]callLine{}
+			}
+			if l := r.lines[ev.ID]; l.told == "" && r.told != "" {
+				if l.uuid == "" {
+					l.seq = r.lineSeq
+				}
+				l.told = r.told
+				r.lines[ev.ID] = l
+			}
 		case KToolArgs:
 			if n := len(r.shown); n > 0 {
 				r.shown[n-1].args += ev.Text

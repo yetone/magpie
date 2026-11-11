@@ -128,3 +128,30 @@ func TestClaudeBranchForSummaryBeforeTheCallLineIsRead(t *testing.T) {
 		t.Fatalf("branch keeps %q, want the words", s)
 	}
 }
+
+// #6128 (recih, v0.1.3782): the summary arrives while the run's reply still
+// streams, a call already shown to the client and park not yet run, so no
+// line has the conversation the call answers. The call is registered when
+// it is shown.
+func TestClaudeBranchForSummaryWhileTheReplyStreams(t *testing.T) {
+	user := func(s string) Message { return Message{Role: "user", Parts: []Part{{Kind: Text, Text: s}}} }
+	words := Message{Role: "assistant", Parts: []Part{{Kind: Text, Text: "I will write the file."}}}
+	history := []Message{user("task")}
+	b := newSubscriptionBridge()
+	run := &subscriptionRun{sessionID: "lead-session", sessions: []string{t.TempDir()}, tui: true, told: historyKey(history)}
+	own := "claude\x00u"
+	run.owner.Store(&own)
+	b.runs["r"] = run
+	ch := run.attach()
+	run.emit(Event{Kind: KStart})
+	run.emit(Event{Kind: KToolStart, ID: "toolu_1", Name: "Write"})
+	_ = ch // the reply goes on: no park yet
+	req := &Request{Messages: append(append(append([]Message{}, history...), words), user("Describe your progress in 3-5 words."))}
+	got, why := b.branch(req, own)
+	if got == nil {
+		t.Fatalf("no branch while the reply streams: %s", why)
+	}
+	if !got.cutBefore || len(got.cutCalls) != 1 || got.cutCalls[0] != "toolu_1" {
+		t.Fatalf("branch = %+v, want cut before the call toolu_1", got)
+	}
+}
