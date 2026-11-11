@@ -216,6 +216,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 	was.Proxies = []settings.NamedProxy{{ID: "p1", Name: "Office", URL: "http://proxy.example:8080"}} // their own routes, /api/proxies/*
 	was.ProxyNames = map[string]string{"p1": "Office"}
 	was.ContextCap = 200000                           // its own route, POST /api/settings/context-cap
+	was.ContextCapAll = true                          // its own route, POST /api/settings/context-cap-mode
 	was.SearcherThen = []string{"fake/m1", "fake/m2"} // set in its own row
 	was.RouterNote = "Los Angeles"                    // the Library's servers/hub-note
 	was.RouterAllTools = true                         // the Library's servers/hub-tools

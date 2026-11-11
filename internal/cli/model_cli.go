@@ -108,7 +108,7 @@ const modelUsage = `usage:
                                                  settings on the Agents page,
                                                  is the same switch; a provider's own Compact at (its
                                                  editor) comes before it
-  magpie model context-cap [<size>|off|all|own]          the longest context window any model is told, such as 200k:
+  magpie model context-cap [<size>|off|all|own]  the longest context window any model is told, such as 200k:
                                                  agents' lists and /v1/models say no more for every model
                                                  that has no window of its own (magpie model context); a
                                                  shorter or unknown window stays as it is. off takes it away;
