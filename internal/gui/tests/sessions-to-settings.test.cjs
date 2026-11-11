@@ -75,6 +75,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         }
         await go.click();
         await page.locator("#view-settings #sessionReadsList .row.flash").first().waitFor();
+        // the page stays where it is: Settings' held-out lines sat against the
+        // window, so reaching the row scrolled the whole page and cut its top
+        // off (kalicyh on X)
+        await page.waitForTimeout(600);
+        const place = await page.evaluate(() => ({ doc: document.scrollingElement.scrollTop, top: document.querySelector("#view-settings").getBoundingClientRect().top, tall: document.documentElement.scrollHeight - innerHeight }));
+        assert.equal(place.doc, 0, "the window itself is not scrolled");
+        assert(place.top >= 0, "Settings starts inside the window");
+        assert(place.tall <= 1, "nothing of Settings runs past the window");
         const back = page.locator("#navBack");
         await back.waitFor();
         await back.click();
