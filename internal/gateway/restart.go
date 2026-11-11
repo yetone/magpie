@@ -33,6 +33,13 @@ type RestartReply struct {
 	// finishes its requests (Busy is then the Claude subscription's turns)
 	Handover bool  `json:"handover,omitempty"`
 	Busy     *Busy `json:"busy,omitempty"`
+	// Forced: asked with force, restarting at once whatever is in flight
+	Forced bool `json:"forced,omitempty"`
+	// Drain is the seconds a waiting restart waits at most; past it the
+	// restart goes ahead and cuts what is still in flight (ljlwlcz on X: a
+	// Windows magpie with long streams waited on "N requests" for good).
+	// 0 from a magpie that waits without a bound.
+	Drain int `json:"drain,omitempty"`
 }
 
 var restarter atomic.Pointer[func(version string) RestartReply]
@@ -46,6 +53,19 @@ func SetRestarter(f func(version string) RestartReply) {
 		return
 	}
 	restarter.Store(&f)
+}
+
+var forceRestarter atomic.Pointer[func(version string) RestartReply]
+
+// SetForceRestarter is SetRestarter's for `magpie update --force`: f
+// restarts at once, whatever is in flight. Without one a forced ask gets
+// the ordinary answer, with Forced unset.
+func SetForceRestarter(f func(version string) RestartReply) {
+	if f == nil {
+		forceRestarter.Store(nil)
+		return
+	}
+	forceRestarter.Store(&f)
 }
 
 // restartRefused says why r may not restart this magpie, "" when it may:
@@ -71,10 +91,17 @@ func (s *Server) restartToUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	var in struct {
 		Version string `json:"version"`
+		Force   bool   `json:"force"`
 	}
 	json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&in)
 	reply := RestartReply{State: "unsupported", Version: Version}
-	if f := restarter.Load(); f != nil {
+	f := restarter.Load()
+	if in.Force {
+		if ff := forceRestarter.Load(); ff != nil {
+			f = ff
+		}
+	}
+	if f != nil {
 		reply = (*f)(in.Version)
 		reply.Version = Version
 	}

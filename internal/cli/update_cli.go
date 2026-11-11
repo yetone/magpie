@@ -140,41 +140,52 @@ func updateChannelCmd(args []string) error {
 // updateFlags takes --proxy and --mirror (each as --flag value or
 // --flag=value) out of args.
 func updateFlags(args []string) (rest []string, proxy, mirror string, err error) {
+	rest, proxy, mirror, _, err = updateFlagsForce(args)
+	return
+}
+
+// updateFlagsForce is updateFlags that also takes --force: restart the
+// running magpie now, whatever it has in flight.
+func updateFlagsForce(args []string) (rest []string, proxy, mirror string, force bool, err error) {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		name, val, eq := strings.Cut(a, "=")
+		if a == "--force" {
+			force = true
+			continue
+		}
 		if name != "--proxy" && name != "--mirror" {
 			rest = append(rest, a)
 			continue
 		}
 		if !eq {
 			if i+1 >= len(args) {
-				return nil, "", "", fmt.Errorf("%s needs a value", name)
+				return nil, "", "", false, fmt.Errorf("%s needs a value", name)
 			}
 			i++
 			val = args[i]
 		}
 		if name == "--proxy" {
 			if err := update.CheckProxy(val); err != nil {
-				return nil, "", "", err
+				return nil, "", "", false, err
 			}
 			proxy = val
 			continue
 		}
 		if val != "off" {
 			if err := update.CheckMirror(val); err != nil {
-				return nil, "", "", err
+				return nil, "", "", false, err
 			}
 		}
 		mirror = val
 	}
-	return rest, proxy, mirror, nil
+	return rest, proxy, mirror, force, nil
 }
 
 // updateCmd is `magpie update [check] [--proxy <url>] [--mirror <prefix>]`:
 // the app replaces its bundle, the terminal build its binary.
 func updateCmd(args []string) error {
-	args, proxy, mirror, err := updateFlags(args)
+	args, proxy, mirror, force, err := updateFlagsForce(args)
 	if err != nil {
 		return err
 	}
@@ -184,10 +195,7 @@ func updateCmd(args []string) error {
 	if err != nil {
 		return fmt.Errorf("magpie update: %w", err)
 	}
-	base := addr
-	if base == "" {
-		base = gateway.ClientURL()
-	}
+	base := updateBase(addr)
 	if len(args) > 1 && args[1] == "auto" {
 		return updateAutoCmd(args[2:])
 	}
@@ -198,7 +206,7 @@ func updateCmd(args []string) error {
 		return updateChannelCmd(args[2:])
 	}
 	if len(args) > 2 || len(args) == 2 && args[1] != "check" {
-		return fmt.Errorf("usage: magpie update [check] [--proxy <url>] [--mirror <prefix>] [--addr host:port]")
+		return fmt.Errorf("usage: magpie update [check] [--proxy <url>] [--mirror <prefix>] [--addr host:port] [--force]")
 	}
 	// the check is bounded; the download after it is not: a slow one
 	// still moving goes on, and one that stops sending is ended by
@@ -246,7 +254,7 @@ func updateCmd(args []string) error {
 			return err
 		}
 		fmt.Println(green.Render("✓"), "updated", tilde(app), "to", rel.Version)
-		fmt.Println(muted.Render("  " + restartRunning(base, rel.Version)))
+		fmt.Println(muted.Render("  " + restartAsk(base, rel.Version, force)))
 		if stale := update.StaleCLI(rel.Version); stale != "" {
 			// The copy won't follow the app; the fix is the link install.sh
 			// makes. `magpie update` run from the copy can't do it (it
@@ -274,7 +282,7 @@ func updateCmd(args []string) error {
 		return err
 	}
 	fmt.Println(green.Render("✓"), "updated to", rel.Version)
-	fmt.Println(muted.Render("  " + restartRunning(base, rel.Version)))
+	fmt.Println(muted.Render("  " + restartAsk(base, rel.Version, force)))
 	return nil
 }
 
@@ -285,9 +293,15 @@ func updateCmd(args []string) error {
 // serves ran the update, and restarting magpie cut it off). The app
 // restarts as its own update does, handing the gateway over on a Mac or
 // Linux, so this command's own agent isn't cut short.
-var restartRunning = func(base, version string) string {
+var restartRunning = func(base, version string) string { return restartAsk(base, version, false) }
+
+// restartAsk is restartRunning that can force the restart (--force): at
+// once, whatever the magpie running has in flight. Without it a restart
+// that has to wait is bounded by the magpie itself (gateway.RestartReply
+// Drain), so the old version never runs on for good (ljlwlcz on X).
+func restartAsk(base, version string, force bool) string {
 	c := &http.Client{Timeout: 10 * time.Second}
-	res, err := c.Post(base+gateway.RestartPath, "application/json", strings.NewReader(`{"version":`+strconv.Quote(version)+`}`))
+	res, err := c.Post(base+gateway.RestartPath, "application/json", strings.NewReader(`{"version":`+strconv.Quote(version)+`,"force":`+strconv.FormatBool(force)+`}`))
 	if err != nil {
 		return "magpie isn't running; it starts as " + version + " next time"
 	}
@@ -303,13 +317,22 @@ var restartRunning = func(base, version string) string {
 	if r.Handover {
 		carried = ", handing its gateway over: nothing in flight is cut"
 	}
+	if force && !r.Forced && (r.State == "restarting" || r.State == "waiting") {
+		carried += "; this magpie is too old to know --force, so it restarts as it would have"
+	}
 	switch r.State {
 	case "restarting":
+		if r.Forced {
+			return "magpie " + r.Version + " restarts into " + version + " now, whatever it has in flight (--force)"
+		}
 		return "magpie " + r.Version + " restarts into " + version + " now" + carried
 	case "waiting":
 		n := 0
 		if r.Busy != nil {
 			n = r.Busy.Requests + r.Busy.Tools
+		}
+		if r.Drain > 0 {
+			return fmt.Sprintf("magpie %s restarts into %s once the %d request(s) it would cut short are done, or in %d min at the latest, which cuts what is still running (magpie update --force restarts now)%s", r.Version, version, n, (r.Drain+59)/60, carried)
 		}
 		return fmt.Sprintf("magpie %s restarts into %s once the %d request(s) it would cut short are done%s", r.Version, version, n, carried)
 	case "unsupported":

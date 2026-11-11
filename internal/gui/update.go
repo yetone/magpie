@@ -79,11 +79,15 @@ type updater struct {
 	// waitMost first (gaveUp). onWait tells the tray what it waits on.
 	waiting  bool
 	waitFrom time.Time
-	waitGen  int
-	gaveUp   bool
-	whenIdle func() bool
-	onWait   func()
-	loops    sync.WaitGroup // the waits going on
+	// drainMost, with a wait `magpie update` armed: past it the restart
+	// goes ahead whatever is in flight (restartDrain); 0 waits as long as
+	// waitMost
+	drainMost time.Duration
+	waitGen   int
+	gaveUp    bool
+	whenIdle  func() bool
+	onWait    func()
+	loops     sync.WaitGroup // the waits going on
 	// With Settings' AutoRestart, the clock has autoRestart run (the app's
 	// or magpie web's restart) once a downloaded update is ready and the
 	// gateway idle (#2096); autoSkip is the version whose wait the user
@@ -165,7 +169,8 @@ func updateDue(s settings.Settings, last, now time.Time) bool {
 
 func (u *updater) start() {
 	u.place(runtime.GOOS, update.GUI)
-	gateway.SetRestarter(u.restartBeside)               // magpie update in a terminal
+	gateway.SetRestarter(u.restartBesideAsked) // magpie update in a terminal
+	gateway.SetForceRestarter(u.restartBesideNow)
 	gateway.SetUpdater(u.updateAsked)                   // a magpie using this one updated
 	go provider.KeepRemotesUpdated(backendCtx, Version) // and this one's remotes
 	go u.followReplaced(backendCtx)                     // the app's or magpie web's update (visamzh on X)

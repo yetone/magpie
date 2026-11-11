@@ -43,7 +43,9 @@ func TestServeFollowWaitsForIdle(t *testing.T) {
 	if f.check(now) || stops != 0 {
 		t.Fatal("restarted with a request in flight")
 	}
-	if a := f.answer(""); a.State != "waiting" || a.Busy == nil || a.Busy.Requests != 1 {
+	// (its own follow: an ask starts the bound of TestServeFollowDrainIsBounded)
+	asker := &serveFollow{exe: exe, started: st, busy: f.busy, released: true, stop: func() {}}
+	if a := asker.answer(""); a.State != "waiting" || a.Busy == nil || a.Busy.Requests != 1 {
 		t.Fatalf("magpie update's ask while busy: %+v", a)
 	}
 	busy = gateway.Busy{Last: now.Add(-time.Second)}
@@ -70,5 +72,49 @@ func TestServeFollowWaitsForIdle(t *testing.T) {
 	d.run(t.Context())
 	if a := d.answer(""); a.State != "unsupported" || stops != 2 || d.restartTo() != "" {
 		t.Fatalf("a build of one's own: %+v, stops %d", a, stops)
+	}
+}
+
+// A restart magpie update asked for waits at most serveDrainMost, then goes
+// ahead whatever is in flight; --force goes at once (ljlwlcz on X: a wait
+// on "N requests" that long streams never let end).
+func TestServeFollowDrainIsBounded(t *testing.T) {
+	exe := filepath.Join(t.TempDir(), "magpie")
+	if err := os.WriteFile(exe, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := os.Stat(exe)
+	if err := os.WriteFile(exe, []byte("the new version"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	busy := func() gateway.Busy { return gateway.Busy{Requests: 2, Last: time.Now()} }
+	stops := 0
+	f := &serveFollow{exe: exe, started: st, busy: busy, released: true, stop: func() { stops++ }}
+	a := f.answer("")
+	if a.State != "waiting" || a.Drain != int(serveDrainMost/time.Second) {
+		t.Fatalf("ask while busy: %+v", a)
+	}
+	if f.check(time.Now().Add(serveDrainMost-time.Minute)) || stops != 0 {
+		t.Fatal("restarted before the bound")
+	}
+	if !f.check(time.Now().Add(serveDrainMost+time.Minute)) || stops != 1 {
+		t.Fatal("never restarted past the bound")
+	}
+
+	// no ask, no bound: the autonomous follow never cuts a request
+	g := &serveFollow{exe: exe, started: st, busy: busy, released: true, stop: func() { stops++ }}
+	if g.check(time.Now().Add(24 * time.Hour)) {
+		t.Fatal("an unasked follow cut a request")
+	}
+	h := &serveFollow{exe: exe, started: st, busy: busy, released: true, stop: func() { stops++ }}
+	if a := h.answerNow(""); a.State != "restarting" || !a.Forced {
+		t.Fatalf("forced: %+v", a)
+	}
+	eventually := time.Now().Add(3 * time.Second)
+	for stops < 2 && time.Now().Before(eventually) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if stops != 2 {
+		t.Fatal("--force didn't stop serve while busy")
 	}
 }

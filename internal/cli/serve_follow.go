@@ -38,6 +38,9 @@ var (
 	serveFollowTick = 5 * time.Second
 	serveIdleSettle = 10 * time.Second
 	serveWaitMost   = time.Hour
+	// serveDrainMost is how long a restart `magpie update` asked for
+	// waits for what is in flight; then serve restarts anyway
+	serveDrainMost = 10 * time.Minute
 )
 
 // serveReexec runs the new program in serve's place; a var for the tests.
@@ -56,6 +59,7 @@ type serveFollow struct {
 
 	mu      sync.Mutex
 	due     time.Time // when the replaced program was first seen
+	asked   time.Time // when `magpie update` asked for the restart while busy
 	stopped bool
 }
 
@@ -105,8 +109,11 @@ func (f *serveFollow) check(now time.Time) bool {
 	}
 	waited := now.Sub(f.due)
 	f.mu.Unlock()
+	f.mu.Lock()
+	drained := !f.asked.IsZero() && now.Sub(f.asked) >= serveDrainMost
+	f.mu.Unlock()
 	b := f.busy()
-	if b.Any() || now.Sub(b.Last) < serveIdleSettle && waited < serveWaitMost {
+	if !drained && (b.Any() || now.Sub(b.Last) < serveIdleSettle && waited < serveWaitMost) {
 		return false
 	}
 	f.mu.Lock()
@@ -147,5 +154,26 @@ func (f *serveFollow) answer(string) gateway.RestartReply {
 		go f.check(time.Now())
 		return gateway.RestartReply{State: "restarting"}
 	}
-	return gateway.RestartReply{State: "waiting", Busy: &b}
+	f.mu.Lock()
+	if f.asked.IsZero() {
+		f.asked = time.Now()
+	}
+	f.mu.Unlock()
+	return gateway.RestartReply{State: "waiting", Busy: &b, Drain: int(serveDrainMost / time.Second)}
+}
+
+// answerNow is answer for `magpie update --force`: serve restarts at once,
+// whatever is in flight.
+func (f *serveFollow) answerNow(string) gateway.RestartReply {
+	switch {
+	case f == nil || !f.released:
+		return gateway.RestartReply{State: "unsupported"}
+	case !update.Replaced(f.exe, f.started):
+		return gateway.RestartReply{State: "current"}
+	}
+	f.mu.Lock()
+	f.asked = time.Now().Add(-serveDrainMost)
+	f.mu.Unlock()
+	go f.check(time.Now())
+	return gateway.RestartReply{State: "restarting", Forced: true}
 }

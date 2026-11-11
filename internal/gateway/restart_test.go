@@ -74,3 +74,29 @@ func TestRestartAskedOnlyFromThisComputer(t *testing.T) {
 		t.Fatalf("without a restarter: %d %q", w.Code, w.Body.String())
 	}
 }
+
+// A forced ask reaches the forcing restarter; an ordinary one doesn't.
+func TestRestartForceReachesTheForcingRestarter(t *testing.T) {
+	fresh(t)
+	t.Setenv("MAGPIE_ADDR", "")
+	var which []string
+	SetRestarter(func(string) RestartReply { which = append(which, "wait"); return RestartReply{State: "waiting"} })
+	SetForceRestarter(func(string) RestartReply {
+		which = append(which, "force")
+		return RestartReply{State: "restarting", Forced: true}
+	})
+	t.Cleanup(func() { SetRestarter(nil); SetForceRestarter(nil) })
+	srv := New()
+	for _, body := range []string{`{"version":"v1"}`, `{"version":"v1","force":true}`} {
+		r := httptest.NewRequest("POST", RestartPath, strings.NewReader(body))
+		r.RemoteAddr, r.Host = "127.0.0.1:5555", "127.0.0.1:3425"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, r)
+		if w.Code != 200 {
+			t.Fatalf("%s: %d %s", body, w.Code, w.Body)
+		}
+	}
+	if len(which) != 2 || which[0] != "wait" || which[1] != "force" {
+		t.Errorf("asked %v", which)
+	}
+}

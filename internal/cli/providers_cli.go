@@ -1649,6 +1649,7 @@ func serve() error {
 	follow := newServeFollow(s, stop)
 	if follow != nil {
 		gateway.SetRestarter(follow.answer)
+		gateway.SetForceRestarter(follow.answerNow)
 		go follow.run(ctx)
 	}
 	// another magpie using this one updated (serve_update.go), and this

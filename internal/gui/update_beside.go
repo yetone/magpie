@@ -18,6 +18,24 @@ import (
 // that is done (waitIdle). A magpie that wasn't the one replaced (another
 // copy) stays as it is.
 func (u *updater) restartBeside(version string) gateway.RestartReply {
+	return u.restartBesideWith(version, false, false)
+}
+
+// restartBesideAsked is restartBeside for the ask of `magpie update`: a
+// wait is bounded by restartDrain, where the app's own look at the disk
+// (followReplaced) waits as long as Settings' AutoRestart does.
+func (u *updater) restartBesideAsked(version string) gateway.RestartReply {
+	return u.restartBesideWith(version, false, true)
+}
+
+// restartBesideNow is restartBeside for `magpie update --force`: it
+// restarts at once, whatever is in flight and whether or not a window is
+// in use.
+func (u *updater) restartBesideNow(version string) gateway.RestartReply {
+	return u.restartBesideWith(version, true, false)
+}
+
+func (u *updater) restartBesideWith(version string, force, bound bool) gateway.RestartReply {
 	u.mu.Lock()
 	restart := u.autoRestart
 	in := u.replaced()
@@ -42,12 +60,24 @@ func (u *updater) restartBeside(version string) gateway.RestartReply {
 	reply := gateway.RestartReply{Handover: handsOver()}
 	// nor while the user is using a window (inUseAt): the terminal's
 	// command isn't theirs in the window
+	if force {
+		u.cancelWait()
+		reply.State, reply.Forced = "restarting", true
+		go restart()
+		return reply
+	}
 	if waiting, _ := u.waitingFor(); !waiting && u.idle() && !inUseAt(time.Now()) {
 		reply.State = "restarting"
 		go restart() // after the answer: the restart lets this request finish
 		return reply
 	}
 	u.waitIdle(restart, false)
+	if bound {
+		u.mu.Lock()
+		u.drainMost = restartDrain
+		u.mu.Unlock()
+		reply.Drain = int(restartDrain / time.Second)
+	}
 	b := restartBusy()
 	reply.State, reply.Busy = "waiting", &b
 	return reply

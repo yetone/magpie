@@ -173,3 +173,50 @@ func TestTerminalUpdateWaitsWhileTheWindowIsUsed(t *testing.T) {
 	}
 	eventually(t, "never restarted once the window was left", func() bool { return restarts.Load() == 1 })
 }
+
+// A wait magpie update armed ends at restartDrain and restarts whatever is
+// in flight; one the app's own look at the disk armed does not, and --force
+// restarts at once (ljlwlcz on X, Windows: long streams kept the old
+// version running for good).
+func TestTerminalUpdateWaitIsBoundedAndCanBeForced(t *testing.T) {
+	busy := &fakeBusy{}
+	busy.set(gateway.Busy{Requests: 1, Last: time.Now()})
+	exe := filepath.Join(t.TempDir(), "magpie")
+	if err := os.WriteFile(exe, []byte("v0.1.1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	u := &updater{state: "latest", exe: exe}
+	u.self, _ = os.Stat(exe)
+	quick(t, busy, u)
+	oldDrain := restartDrain
+	restartDrain = 150 * time.Millisecond
+	t.Cleanup(func() { restartDrain = oldDrain })
+	var restarts atomic.Int32
+	u.autoRestart = func() bool { restarts.Add(1); return true }
+	if err := os.WriteFile(exe, []byte("v0.1.2 is longer"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	r := u.restartBesideAsked("v0.1.2")
+	if r.State != "waiting" {
+		t.Fatalf("busy: %+v", r)
+	}
+	eventually(t, "never restarted past the bound with a request in flight", func() bool { return restarts.Load() == 1 })
+
+	// the app's own look at the disk keeps waiting for the request
+	u.cancelWait()
+	restarts.Store(0)
+	if r := u.restartBeside("v0.1.2"); r.State != "waiting" {
+		t.Fatalf("followReplaced's: %+v", r)
+	}
+	time.Sleep(3 * restartDrain)
+	if restarts.Load() != 0 {
+		t.Fatal("an unasked wait cut a request")
+	}
+
+	// --force: at once, with the wait armed and a request in flight
+	if r := u.restartBesideNow("v0.1.2"); r.State != "restarting" || !r.Forced {
+		t.Fatalf("forced: %+v", r)
+	}
+	eventually(t, "--force never restarted", func() bool { return restarts.Load() == 1 })
+}

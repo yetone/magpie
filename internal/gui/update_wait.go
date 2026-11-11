@@ -24,6 +24,11 @@ var (
 	idleSettle = 10 * time.Second
 	waitMost   = time.Hour
 	waitTick   = time.Second
+	// restartDrain is how long a restart `magpie update` asked for waits
+	// for what is in flight; then it restarts anyway. Without a bound a
+	// long stream kept the old version running for good (ljlwlcz on X, on
+	// Windows, where nothing is handed over).
+	restartDrain = 10 * time.Minute
 )
 
 // A restart by itself (Settings' AutoRestart) also waits while the user
@@ -93,6 +98,9 @@ func (u *updater) idle() bool { return idleAt(restartBusy(), time.Now()) }
 func (u *updater) waitIdle(restart func() bool, asked bool) {
 	u.mu.Lock()
 	u.whenIdle, u.gaveUp, u.waitAsked = restart, false, asked
+	if !u.waiting {
+		u.drainMost = 0
+	}
 	if u.waiting {
 		u.mu.Unlock()
 		return
@@ -156,6 +164,20 @@ func (u *updater) waitFor(gen int) {
 			u.waiting, u.gaveUp, u.whenIdle = false, true, nil
 			u.mu.Unlock()
 			u.told()
+			return
+		}
+		drained := u.drainMost > 0 && time.Since(u.waitFrom) >= u.drainMost
+		if drained {
+			// the bound `magpie update` was told: what is still in
+			// flight is cut now, as a restart does (the gateway's own
+			// shutdown lets a stream end its turn first)
+			restart := u.whenIdle
+			u.waiting, u.whenIdle = false, nil
+			u.mu.Unlock()
+			u.told()
+			if restart != nil {
+				restart()
+			}
 			return
 		}
 		u.mu.Unlock()

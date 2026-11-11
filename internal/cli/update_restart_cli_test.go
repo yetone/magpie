@@ -40,7 +40,7 @@ func TestUpdateAsksTheRunningMagpieToRestart(t *testing.T) {
 		if got := restartRunning(ts.URL, "v0.1.2"); !strings.Contains(got, c.want) {
 			t.Errorf("%s: %q", c.reply.State, got)
 		}
-		if asked != `{"version":"v0.1.2"}` {
+		if asked != `{"version":"v0.1.2","force":false}` {
 			t.Errorf("asked %q", asked)
 		}
 	}
