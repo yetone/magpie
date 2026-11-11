@@ -1107,6 +1107,12 @@ each one.
     TestEveryRouteHasACommandOrIsNamed was red on main for hours
     (#6162, fixed in 1c95c87c2). Before pushing, check that
     `git show --stat` matches what the subject says.
+    The same day 85e6ec540 (the Paseo agent, 36 files, 887 lines out)
+    was committed on a stale index and took out the six commits before
+    it (WebView2, library skills, OpenCode Go endpoints, remote quotas);
+    its body records runs that passed on that tree. b52c71114 restored
+    them. A stat with files the change never touched is a stale index:
+    stop, don't push.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
