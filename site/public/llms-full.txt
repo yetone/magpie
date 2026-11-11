@@ -4882,7 +4882,7 @@ Yes. Both CLI editions are one npm package, and CodeBuddy.app and CodeBuddy CN.a
 
 CodeBuddy Code reads its model when a session starts. Restart codebuddy or run /clear. In the IDE, pick the model in its model picker.
 
-More agents on the same models: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Kimi Code on any model](https://usemagpie.ai/docs/kimi-code) and [Qwen Code on any model](https://usemagpie.ai/docs/qwen-code). Tencent Cloud's models: [Tencent Cloud](https://usemagpie.ai/docs/tencent-cloud). Notes on the same models: [Obsidian on any model](https://usemagpie.ai/docs/obsidian). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Kimi Code on any model](https://usemagpie.ai/docs/kimi-code), [Qwen Code on any model](https://usemagpie.ai/docs/qwen-code) and [T3 Code on any model](https://usemagpie.ai/docs/t3-code). Tencent Cloud's models: [Tencent Cloud](https://usemagpie.ai/docs/tencent-cloud). Notes on the same models: [Obsidian on any model](https://usemagpie.ai/docs/obsidian). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
@@ -4961,6 +4961,85 @@ Reload Copilot in Obsidian's Settings › Community plugins, or restart Obsidian
 No. Its free plugin embeds with a local model only; its API providers are in the closed Pro plugin, with keys in the keychain magpie can't write.
 
 More apps on the same models: [Raycast](https://usemagpie.ai/docs/raycast), [Cherry Studio](https://usemagpie.ai/docs/cherry-studio) and [CodeBuddy on any model](https://usemagpie.ai/docs/codebuddy). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/t3-code
+
+# T3 Code on any model
+
+T3 Code (pingdotgg/t3code) is a GUI that drives Claude Code, Codex, Cursor and others. Each provider it lists is an instance of a driver, and it takes instances of your own. magpie adds two: **magpie**, on Claude Code, and **magpie · Codex**, on Codex. So T3 Code's model picker lists every model you have in magpie: DeepSeek, GLM, Kimi, Qwen, an OpenAI or Anthropic key, or a ChatGPT or Copilot subscription, on the harness you choose.
+
+## Set up T3 Code
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick magpie on T3 Code's row.** On the Agents page, pick magpie. magpie writes both instances into T3 Code's settings.json.
+3. **Pick a model in T3 Code.** T3 Code's server watches the file and reloads it on an outside edit. In the model picker, models under magpie run on Claude Code, those under magpie · Codex on Codex.
+
+```
+magpie t3code provider magpie
+```
+
+The settings file is `~/.t3/userdata/settings.json` (`$T3CODE_HOME/userdata` when set). These are the two instances magpie writes:
+
+```
+"providerInstances": {
+  "magpie": {"driver": "claudeAgent", "displayName": "magpie",
+    "environment": [{"name": "ANTHROPIC_BASE_URL", "value": "http://127.0.0.1:3425", …}, …],
+    "config": {"customModels": [{"slug": "deepseek/deepseek-v4-pro", "name": …,
+      "capabilities": {"optionDescriptors": […]}}, …]}},
+  "magpie-codex": {"driver": "codex", "displayName": "magpie · Codex",
+    "config": {"launchArgs": […]}}
+}
+```
+
+## magpie, on Claude Code
+
+The magpie instance is a `claudeAgent` instance: T3 Code runs Claude Code through Anthropic's Agent SDK, reading your `~/.claude` settings, with the instance's environment added. magpie sets `ANTHROPIC_BASE_URL` to the gateway and the token Claude Code is routed with, so its requests are Claude Code's to the gateway. Every magpie model is one of its custom models, a 1M one marked `[1m]` as magpie marks it for Claude Code. A binary path or Claude home you gave T3's own Claude is carried over, so it runs the same Claude Code.
+
+## magpie · Codex, on Codex
+
+T3 Code runs each thread on the harness of the instance its model is picked from, so with the Claude Code instance alone every magpie model ran there. So magpie adds a `codex` instance, magpie · Codex. Its `launchArgs`, which T3 passes to `codex app-server` and `codex exec`, are Codex's own `-c` overrides: magpie as its model provider, and `magpie-codex-models.json` beside settings.json as its catalog, so T3 lists every magpie model under it from Codex's model list. Your `~/.codex/config.toml` isn't written, and T3's own Codex stays as it is. If you remove the instance in T3, a sync doesn't bring it back; turning T3 Code's row on again in magpie does.
+
+## Reasoning
+
+Without capabilities, T3 Code shows no picks beside a custom model and sends no effort. So each of magpie's custom models gets a Reasoning pick of the Claude Code levels it takes, medium first (else the lowest), which T3 hands to Claude Code as it is. A model that thinks also gets a Thinking switch, on at first; T3 sets Claude Code's `alwaysThinkingEnabled` by it, and with it off requests ask for no thinking.
+
+## Your own settings
+
+The instances' names, whether they are on, and every key magpie doesn't write (such as `autoCompactWindow` and `accentColor`) are yours, and what you change in T3 Code stays. Environment variables you add on magpie's instance stay too. Your own instances, their custom models and T3's other settings are untouched. magpie's are only the custom models, the gateway's variables, and the Codex instance's launch arguments and catalog.
+
+## Claude Code's own routing
+
+The `env` in `~/.claude/settings.json` is applied over the process', so a Claude Code routed elsewhere in its own settings takes the magpie instance's requests there; one routed through magpie or not routed at all asks the gateway. A provider switch on there, such as `CLAUDE_CODE_USE_BEDROCK`, takes it to that cloud, and magpie's check says so.
+
+## Switching back
+
+Turn the row off in magpie. magpie takes out only its two instances; your others and your settings stay.
+
+```
+magpie t3code default
+```
+
+## FAQ
+
+### Can T3 Code use DeepSeek, GLM, Kimi or Qwen?
+
+Yes. magpie adds two provider instances to T3 Code's settings.json, and every model you have in magpie is in T3's model picker, on Claude Code or on Codex.
+
+### What is the difference between magpie and magpie · Codex?
+
+The same models on a different harness: those under magpie run on Claude Code, those under magpie · Codex on Codex.
+
+### Does it change my ~/.codex/config.toml or T3's own Claude and Codex?
+
+No. Codex's settings are launch arguments of the magpie · Codex instance alone; T3's own instances and yours stay as they are.
+
+### Why don't requests go through magpie?
+
+Check the env in ~/.claude/settings.json: a Claude Code routed elsewhere there, or with a cloud switch such as Bedrock on, takes the magpie instance's requests there.
+
+More agents on the same models: [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Models in Codex](https://usemagpie.ai/docs/codex-models) and [CodeBuddy on any model](https://usemagpie.ai/docs/codebuddy). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
