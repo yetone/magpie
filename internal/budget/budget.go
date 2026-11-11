@@ -203,6 +203,9 @@ func Forget() {
 	defer state.Unlock()
 	state.sums = map[string][]*sums{}
 	state.held = map[window]*held{}
+	kept.Lock()
+	clear(kept.of)
+	kept.Unlock()
 }
 
 // Append writes rec to usage.jsonl and, for a key's call, counts it
@@ -301,23 +304,153 @@ func Of(k access.Key, now time.Time) *Status {
 // order k keeps them; none for a key with no limit. A window two
 // limits share is read once.
 func All(k access.Key, now time.Time) []Status {
-	ls := k.Limits()
-	var out []Status
-	read1 := map[window]*sums{}
-	for _, l := range ls {
-		start, reset := l.Window(now)
-		w := window{slot(k.ID), start.Unix(), l.Scope()}
-		s := read1[w]
-		if s == nil {
-			s = read(k.ID, start, l)
-			read1[w] = s
+	return AllOf([]access.Key{k}, now)[0]
+}
+
+// AllOf is All for each of keys, in their order, from one pass over the
+// ledger, and from what the last pass counted: the Gateway page asked for
+// every key's limits and read a month of the log again for each window of
+// each key, on every poll, which timed out behind a proxy for a user with
+// 12,000 calls a day (aiandcloud on X). A window's full blocks of the log
+// are counted once and kept (usage.VisitFrom); each call counts the rows
+// after them. The gateway's own count (sumsFor) is the one a limit is
+// held by, and still reads the file on its own.
+func AllOf(keys []access.Key, now time.Time) [][]Status {
+	type want struct {
+		w      window
+		prefix sums // the full blocks' rows
+		cur    usage.Cursor
+		total  *sums // and the rows after them
+	}
+	out := make([][]Status, len(keys))
+	wants := make([][]*want, len(keys))
+	byKey := map[string][]*want{} // by the key a call is recorded under, or issued under
+	var all []*want
+	for i, k := range keys {
+		seen := map[window]*want{}
+		for _, l := range k.Limits() {
+			start, _ := l.Window(now)
+			w := window{slot(k.ID), start.Unix(), l.Scope()}
+			x := seen[w]
+			if x == nil {
+				x = &want{w: w}
+				x.prefix = sums{start: start, scope: l.Scope()}
+				if l.Scoped() {
+					x.prefix.models = scopeModels(l)
+				}
+				kept.Lock()
+				if e, ok := kept.of[w]; ok {
+					x.prefix, x.cur = e.prefix, e.cur
+				}
+				kept.Unlock()
+				seen[w] = x
+				byKey[k.ID] = append(byKey[k.ID], x)
+				all = append(all, x)
+			}
+			wants[i] = append(wants[i], x)
 		}
-		state.Lock()
-		h := state.held[w]
-		out = append(out, status(k.ID, l, s, h, reset))
-		state.Unlock()
+	}
+	if len(all) > 0 {
+		cost := usage.NewCoster()
+		// the windows that stopped at the same place read together
+		for len(all) > 0 {
+			cur := all[0].cur
+			var group, rest []*want
+			for _, x := range all {
+				if x.cur == cur {
+					group = append(group, x)
+				} else {
+					rest = append(rest, x)
+				}
+			}
+			all = rest
+			since := group[0].prefix.start
+			for _, x := range group {
+				if x.prefix.start.Before(since) {
+					since = x.prefix.start
+				}
+			}
+			ofGroup := map[string][]*want{}
+			for _, x := range group {
+				for id, ws := range byKey {
+					if slices.Contains(ws, x) {
+						ofGroup[id] = append(ofGroup[id], x)
+					}
+				}
+			}
+			count := func(into func(*want) *sums) func(usage.Record) {
+				return func(r usage.Record) {
+					ws := ofGroup[r.CallerKeyID]
+					if r.CallerIssuerID != "" && r.CallerIssuerID != r.CallerKeyID {
+						ws = append(slices.Clone(ws), ofGroup[r.CallerIssuerID]...)
+					}
+					if len(ws) == 0 || !counts(r) {
+						return
+					}
+					var c float64
+					var ok, priced bool
+					for _, x := range ws {
+						// a key issued under keyID spends from its limits too
+						if s := into(x); !r.Time.Before(s.start) && s.counts(r) {
+							if !priced {
+								c, ok = cost(r)
+								priced = true
+							}
+							s.add(r, c, ok)
+						}
+					}
+				}
+			}
+			next := usage.VisitFrom(since, cur,
+				func() {
+					for _, x := range group {
+						x.prefix = sums{start: x.prefix.start, scope: x.prefix.scope, models: x.prefix.models}
+					}
+				},
+				count(func(x *want) *sums { return &x.prefix }),
+				count(func(x *want) *sums {
+					if x.total == nil {
+						c := x.prefix
+						x.total = &c
+					}
+					return x.total
+				}))
+			for _, x := range group {
+				x.cur = next
+				if x.total == nil {
+					c := x.prefix
+					x.total = &c
+				}
+				kept.Lock()
+				if len(kept.of) > 1024 {
+					clear(kept.of)
+				}
+				kept.of[x.w] = keptSums{prefix: x.prefix, cur: next}
+				kept.Unlock()
+			}
+		}
+	}
+	state.Lock()
+	defer state.Unlock()
+	for i, k := range keys {
+		for j, l := range k.Limits() {
+			x := wants[i][j]
+			_, reset := l.Window(now)
+			out[i] = append(out[i], status(k.ID, l, x.total, state.held[x.w], reset))
+		}
 	}
 	return out
+}
+
+// kept is what AllOf counted of each window's full blocks of the log.
+var kept = struct {
+	sync.Mutex
+	of map[window]keptSums
+}{of: map[window]keptSums{}}
+
+type keptSums struct {
+	prefix sums
+	cur    usage.Cursor
 }
 
 // Binding is the one of a key's statuses that holds it most: of those

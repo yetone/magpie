@@ -54,8 +54,9 @@ type keyMCPJSON struct {
 func withLimits(keys []access.Key) []keyRow {
 	now := time.Now()
 	out := make([]keyRow, 0, len(keys))
-	for _, k := range keys {
-		row := keyRow{Key: k, UsedAll: budget.All(k, now)}
+	all := budget.AllOf(keys, now)
+	for i, k := range keys {
+		row := keyRow{Key: k, UsedAll: all[i]}
 		if len(row.UsedAll) > 0 {
 			row.Used = &row.UsedAll[0]
 		}

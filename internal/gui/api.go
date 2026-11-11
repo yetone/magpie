@@ -3489,6 +3489,11 @@ func fail(rw http.ResponseWriter, err error) {
 		out["code"], out["bun"], out["bunWhy"] = "bun_unstartable", bun.Bun, bun.Why
 		out["said"] = bunSaid[bun.Why]
 	}
+	// a proxy's web page inside the text: its title, said in the reader's
+	// language, never the markup
+	if what, ok := webPageSaid(out["error"]); ok && out["said"] == "" {
+		out["error"], out["said"], out["what"] = "A proxy in front of magpie answered, not magpie ("+what+")", "A proxy in front of magpie answered, not magpie ({what})", what
+	}
 	_ = json.NewEncoder(rw).Encode(out)
 }
 
