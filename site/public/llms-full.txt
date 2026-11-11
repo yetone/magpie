@@ -3440,7 +3440,65 @@ Cline refuses a provider it doesn’t know when a session starts, so magpie uses
 
 Its picker lists magpie’s models under magpie; pick the model there, since the app doesn’t read it from Cline’s files.
 
-More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [Hermes Agent on any model](https://usemagpie.ai/docs/hermes). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Hermes Agent on any model](https://usemagpie.ai/docs/hermes) and [Goose on any model](https://usemagpie.ai/docs/goose). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/goose
+
+# Goose on any model
+
+Goose, Block’s open-source agent, runs on the provider and model in its config. magpie adds itself to Goose as a custom provider, so Goose’s CLI and desktop app can run on any model you have in magpie: DeepSeek, Kimi, GLM, Qwen, an OpenAI key, or a ChatGPT or Copilot subscription, with no key pasted into Goose.
+
+Goose keeps its settings in `~/.config/goose/config.yaml` (under `$XDG_CONFIG_HOME` if set; `%APPDATA%\Block\goose\config` on Windows). magpie writes a custom provider, `custom_providers/magpie.json` beside it, with the gateway’s address, a key of Goose’s own and magpie’s models, then makes it the provider Goose uses. The gateway translates each request for the model’s provider, tool calls and reasoning included. A Goose in WSL is set up the same way, reaching the gateway as the distro sees it.
+
+## Connect Goose
+
+1. **Add providers in magpie.** In the Providers tab, add an API key or sign in to a subscription.
+2. **Pick a model on Goose’s row.** In the Agents tab, choose a model on Goose’s row. The picker also lists the models of providers Goose is set up with itself.
+3. **Restart Goose.** Goose loads its custom providers as it starts: quit and reopen the desktop app, and open `goose` sessions again.
+
+```
+magpie goose deepseek/deepseek-v4-pro    # Goose on DeepSeek
+magpie goose                             # what Goose runs on now
+```
+
+## Model and thinking effort
+
+Each model magpie lists for Goose carries its context window, so Goose doesn’t have to guess it, and whether it takes a thinking level. The row also sets `GOOSE_THINKING_EFFORT`, the effort Goose asks of a model that thinks: off, low, medium, high or max.
+
+```
+magpie goose effort high
+magpie goose effort default    # back to Goose's own
+```
+
+## What magpie writes
+
+Goose has two layouts for the provider in use: `active_provider` with `providers.magpie.model`, and the older `GOOSE_PROVIDER` and `GOOSE_MODEL`. magpie writes the one your config already uses. Keys you added to magpie’s provider file yourself, such as `timeout_seconds`, `headers` or `toolshim`, stay when magpie rewrites the models.
+
+## Switch back
+
+Pick one of your own providers’ models on Goose’s row, take the row off magpie, or run `magpie goose default`. Once Goose no longer uses a model of magpie’s, magpie removes its provider file.
+
+## FAQ
+
+### Can Goose use my ChatGPT subscription?
+
+Yes. Sign in to ChatGPT in magpie and pick a GPT model on Goose’s row. Goose sends its requests to magpie, which uses the subscription.
+
+### Goose doesn’t show magpie’s models.
+
+Goose reads custom providers only as it starts. Quit and reopen Goose, and start a new goose session.
+
+### Does this work in the Goose desktop app?
+
+Yes. The CLI and the desktop app read the same config, so both use the model on Goose’s row after a restart.
+
+### Does it work with goose in WSL?
+
+Yes. magpie sets up a Goose in a WSL distro too, with the gateway’s address as the distro reaches it.
+
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [Cline on any model](https://usemagpie.ai/docs/cline). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
