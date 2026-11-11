@@ -10,7 +10,6 @@ import (
 	"cmp"
 	"context"
 	"crypto/sha256"
-	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -150,9 +149,6 @@ var cliBehindVal string
 
 // Version is the build's version string, shown in Settings.
 var Version = "dev"
-
-//go:embed assets
-var assets embed.FS
 
 // Windows is what the API needs from the host application.
 type Windows interface {

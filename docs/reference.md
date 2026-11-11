@@ -3293,6 +3293,11 @@ make release-windows  # dist/: the Windows app, amd64 and arm64 (cross-compiles)
 make release-linux    # dist/: the Linux app for this machine's arch
 ```
 
+The release targets and `make app` pack the UI's files into one zip first
+(`make assets-pack`, `build/assetpack`; embedded by `-tags packedassets`),
+which takes about 6 MB off each binary. `make build`, `make cli` and the
+tests embed the tree as it is.
+
 Linux needs `libgtk-3-dev` and `libwebkit2gtk-4.1-dev` for the app build
 (the Makefile adds the `gtk3` tag; with plain `go build`, pass `-tags gtk3`);
 Windows uses the WebView2 runtime that ships with the OS.
