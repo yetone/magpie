@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cline で DeepSeek・Kimi・GLM・GPT・ChatGPT サブスクを使う：CLI、VS Code、デスクトップを magpie で · magpie</title>
+<meta name="description" content="magpie を通して、Cline の CLI、VS Code 拡張、デスクトップアプリを DeepSeek、Kimi、GLM、Qwen、GPT、ChatGPT サブスクで動かします。magpie が設定する内容、モデルと推論の強さ、新しいセッション、VS Code の再読み込み、元に戻す方法。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/cline">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/cline">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/cline">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/cline">
+<link rel="canonical" href="https://usemagpie.ai/docs/ja/cline">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Cline を任意のモデルで">
+<meta property="og:description" content="magpie を通して、Cline の CLI、VS Code 拡張、デスクトップアプリを DeepSeek、Kimi、GLM、Qwen、GPT、ChatGPT サブスクで動かします。magpie が設定する内容、モデルと推論の強さ、新しいセッション、VS Code の再読み込み、元に戻す方法。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/ja/cline">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Cline を任意のモデルで",
+   "description": "magpie を通して、Cline の CLI、VS Code 拡張、デスクトップアプリを DeepSeek、Kimi、GLM、Qwen、GPT、ChatGPT サブスクで動かします。magpie が設定する内容、モデルと推論の強さ、新しいセッション、VS Code の再読み込み、元に戻す方法。",
+   "inLanguage": "ja",
+   "url": "https://usemagpie.ai/docs/ja/cline",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Cline で ChatGPT サブスクを使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。magpie で ChatGPT にサインインし、Cline の行で GPT モデルを選びます。Cline のリクエストは magpie に届き、magpie がサブスクを使います。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "モデルを変えたのに Cline が古いモデルのままです。",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "セッションは開始時のモデルを使い続けます。新しいセッションを始めてください。VS Code 拡張ではウィンドウを再読み込みします。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie が Cline に自分のプロバイダを加えないのはなぜですか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Cline はセッション開始時に知らないプロバイダを拒むため、magpie は Cline 内蔵の OpenAI 互換プロバイダを使います。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Cline のデスクトップアプリでも使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。選択の magpie の下に magpie のモデルが出ます。アプリは Cline のファイルから読まないので、そこで選んでください。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/ja/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "ドキュメント",
+     "item": "https://usemagpie.ai/docs/ja/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "Cline を任意のモデルで",
+     "item": "https://usemagpie.ai/docs/ja/cline"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/ja/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>ドキュメント</small></a>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/start">はじめに</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a class="toc-only" href="/docs/ja/remote">リモート magpie</a>
+    <a class="toc-only" href="/docs/ja/docker">Docker</a>
+    <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
+    <a class="toc-only" href="/docs/ja/masking">プライバシーマスキング</a>
+    <a class="toc-only" href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a class="toc-only" href="/docs/ja/library">ライブラリ</a>
+    <a class="toc-only" href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a class="toc-only" href="/docs/ja/local-models">ローカルモデル</a>
+    <a class="toc-only" href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="言語" title="言語" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/cline" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/cline" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/cline" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="Discord の magpie" title="Discord に参加"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="GitHub の magpie" title="GitHub のソースコード"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">ダウンロード</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Cline</p>
+    <a href="#overview">しくみ</a>
+    <a href="#on">Cline をつなぐ</a>
+    <a href="#models">モデルと推論の強さ</a>
+    <a href="#vscode">VS Code 拡張</a>
+    <a href="#desktop">デスクトップアプリ</a>
+    <a href="#off">元に戻す</a>
+    <a href="#faq">よくある質問</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">ドキュメント · ガイド</p>
+    <h1>Cline を任意のモデルで</h1>
+    <p class="lede">Cline は設定にあるプロバイダとモデルで動きます。magpie は Cline 内蔵の OpenAI 互換プロバイダを magpie のゲートウェイに向けるので、Cline の CLI、VS Code 拡張、デスクトップアプリが magpie にあるどのモデルでも動きます：DeepSeek、Kimi、GLM、Qwen、OpenAI キー、ChatGPT や Copilot のサブスクリプション。Cline にキーを貼る必要はありません。</p>
+
+    <p>Cline はプロバイダを <code>~/.cline/data/settings/providers.json</code>（または <code>$CLINE_DIR</code> の下）に置きます。magpie は Cline 自身の openai-compatible プロバイダをゲートウェイのアドレスと Cline 専用のキーに設定し、使用中のプロバイダにして、<code>models.json</code> に magpie のモデルを並べます。このプロバイダが自分で出す一つのモデルの代わりです。元の内容と使っていたプロバイダは控えておき、元に戻すときに戻します。ゲートウェイは各リクエストをそのモデルのプロバイダ向けに変換し、ツール呼び出しと推論もそのままです。</p>
+
+    <h2 id="on"><a class="anchor" href="#on">Cline をつなぐ</a></h2>
+    <ol class="steps">
+      <li><b>magpie にプロバイダを追加</b><span class="ui">プロバイダ</span> タブで API キーを追加するか、サブスクリプションにサインインします。</li>
+      <li><b>Cline の行でモデルを選ぶ</b><span class="ui">エージェント</span> タブの Cline の行でモデルを選びます。</li>
+      <li><b>新しい Cline セッションを始める</b>Cline はセッション開始時にプロバイダを読みます。開いているセッションは元のモデルのままで、新しいセッションがこれを使います。</li>
+    </ol>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="cl-on">コピー</button><pre id="cl-on">magpie cline deepseek/deepseek-v4-pro    # Cline を DeepSeek で
+magpie cline                             # 今のモデルを見る</pre></div>
+
+    <h2 id="models"><a class="anchor" href="#models">モデルと推論の強さ</a></h2>
+    <p>行では Cline が求める推論の強さも設定できます：none、low、medium、high、xhigh。none は Cline 自身の選択と同じく思考をオフにします。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="cl-effort">コピー</button><pre id="cl-effort">magpie cline effort high
+magpie cline effort default    # Cline の既定に戻す</pre></div>
+
+    <h2 id="vscode"><a class="anchor" href="#vscode">VS Code 拡張</a></h2>
+    <p>Cline の VS Code 拡張は同じフォルダを使いますが、プロバイダ、モデル、アドレス、キーを自分の状態から先に読みます：Act と Plan モードのプロバイダとモデル、そして OpenAI 互換のキーです。magpie はこれらも設定し、元の値を控えます。拡張は起動時に一度だけ読むので、変更後は VS Code で <span class="ui">Developer: Reload Window</span> を実行してください。</p>
+
+    <h2 id="desktop"><a class="anchor" href="#desktop">デスクトップアプリ</a></h2>
+    <p>Cline のデスクトップアプリは、入力欄で選んだモデルと推論の強さを自分で持ち、これらのファイルからは読みません。選択には magpie の下に magpie のモデルが出るので、そこで選んでください。magpie の行が設定するのは CLI と VS Code 拡張です。</p>
+
+    <h2 id="off"><a class="anchor" href="#off">元に戻す</a></h2>
+    <p>Cline の行で magpie を外すか、<code>magpie cline default</code> を実行します。magpie は使っていたプロバイダ、モデル一覧、拡張の設定を元どおりに戻します。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
+    <h3>Cline で ChatGPT サブスクを使えますか？</h3>
+    <p>使えます。magpie で ChatGPT にサインインし、Cline の行で GPT モデルを選びます。Cline のリクエストは magpie に届き、magpie がサブスクを使います。</p>
+    <h3>モデルを変えたのに Cline が古いモデルのままです。</h3>
+    <p>セッションは開始時のモデルを使い続けます。新しいセッションを始めてください。VS Code 拡張ではウィンドウを再読み込みします。</p>
+    <h3>magpie が Cline に自分のプロバイダを加えないのはなぜですか？</h3>
+    <p>Cline はセッション開始時に知らないプロバイダを拒むため、magpie は Cline 内蔵の OpenAI 互換プロバイダを使います。</p>
+    <h3>Cline のデスクトップアプリでも使えますか？</h3>
+    <p>使えます。選択の magpie の下に magpie のモデルが出ます。アプリは Cline のファイルから読まないので、そこで選んでください。</p>
+
+    <p style="margin-top:48px">同じモデルを他のエージェントでも：<a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>、<a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>、<a href="/docs/ja/hermes">Hermes Agent を任意のモデルで</a>。エラーが出るときは <a href="/docs/ja/troubleshooting">よくあるエラーの直し方</a>、または <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> で質問してください。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a href="/docs/ja/remote">リモート magpie</a>
+    <a href="/docs/ja/docker">Docker</a>
+    <a href="/docs/ja/privacy">プライバシー</a>
+    <a href="/docs/ja/masking">プライバシーマスキング</a>
+    <a href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a href="/docs/ja/library">ライブラリ</a>
+    <a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a href="/docs/ja/local-models">ローカルモデル</a>
+    <a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/ja/contributors">コントリビューター</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "コピーしました"; setTimeout(() => (b.textContent = "コピー"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

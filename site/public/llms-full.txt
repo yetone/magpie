@@ -3378,7 +3378,69 @@ magpie’s provider stays so its models remain in Hermes’s picker. Switch back
 
 No. It adds its own provider and changes only model.provider, model.default and, when you set it, the reasoning effort.
 
-More agents on the same models: [OpenClaw on any model](https://usemagpie.ai/docs/openclaw) and [Models in OpenCode](https://usemagpie.ai/docs/opencode-models). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [OpenClaw on any model](https://usemagpie.ai/docs/openclaw), [Models in OpenCode](https://usemagpie.ai/docs/opencode-models) and [Cline on any model](https://usemagpie.ai/docs/cline). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/cline
+
+# Cline on any model
+
+Cline runs on the provider and model in its settings. magpie sets Cline’s built-in OpenAI-compatible provider to magpie’s gateway, so Cline’s CLI, VS Code extension and desktop app can run on any model you have in magpie: DeepSeek, Kimi, GLM, Qwen, an OpenAI key, or a ChatGPT or Copilot subscription, with no key pasted into Cline.
+
+Cline keeps its providers in `~/.cline/data/settings/providers.json` (or under `$CLINE_DIR`). magpie sets Cline’s own openai-compatible provider to the gateway’s address with a key of Cline’s own, makes it the provider in use, and lists magpie’s models for it in `models.json`, in place of the one model that provider lists by itself. What was there, and the provider you used, are kept aside and put back when you switch back. The gateway translates each request for the model’s provider, tool calls and reasoning included.
+
+## Connect Cline
+
+1. **Add providers in magpie.** In the Providers tab, add an API key or sign in to a subscription.
+2. **Pick a model on Cline’s row.** In the Agents tab, choose a model on Cline’s row.
+3. **Start a new Cline session.** Cline reads its provider as a session starts: open sessions keep the model they have, new ones use this.
+
+```
+magpie cline deepseek/deepseek-v4-pro    # Cline on DeepSeek
+magpie cline                             # what Cline runs on now
+```
+
+## Model and reasoning effort
+
+The row also sets the reasoning effort Cline asks for: none, low, medium, high or xhigh. None turns thinking off, as Cline’s own picker does.
+
+```
+magpie cline effort high
+magpie cline effort default    # back to Cline's own
+```
+
+## The VS Code extension
+
+Cline’s VS Code extension uses the same folder but reads the provider, model, address and key from its own state first: the Act and Plan modes’ provider and model, and the OpenAI-compatible key. magpie sets those too, keeping what they were. The extension reads them once, as it starts, so after a change run Developer: Reload Window in VS Code.
+
+## The desktop app
+
+Cline’s desktop app keeps the model and effort you pick in its own composer and doesn’t read them from these files. magpie’s models are in its picker, under magpie: pick one there. magpie’s row sets the CLI and the VS Code extension.
+
+## Switch back
+
+Take Cline’s row off magpie, or run `magpie cline default`. magpie puts back the provider you used, the model list, and the extension’s settings as they were.
+
+## FAQ
+
+### Can Cline use my ChatGPT subscription?
+
+Yes. Sign in to ChatGPT in magpie and pick a GPT model on Cline’s row. Cline sends its requests to magpie, which uses the subscription.
+
+### I changed the model but Cline still uses the old one.
+
+A session keeps the model it started with. Start a new one; for the VS Code extension, reload the window.
+
+### Why doesn’t magpie add its own provider to Cline?
+
+Cline refuses a provider it doesn’t know when a session starts, so magpie uses Cline’s built-in OpenAI-compatible provider instead.
+
+### Does this work in Cline’s desktop app?
+
+Its picker lists magpie’s models under magpie; pick the model there, since the app doesn’t read it from Cline’s files.
+
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models) and [Hermes Agent on any model](https://usemagpie.ai/docs/hermes). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
