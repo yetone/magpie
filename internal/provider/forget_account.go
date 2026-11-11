@@ -32,7 +32,19 @@ func ForgetAccount(id string) error {
 		}
 		return forgetPluginAccounts(pp)
 	}
-	return forgetLogins(p.Account.Agent)
+	err := forgetLogins(p.Account.Agent)
+	// the sign-in an agent is signed in to is one magpie never signs out
+	// (Claude Code's may be in the keychain): the refusal is no reason for
+	// the removed row to stay for good (ikunbots on X). It leaves the
+	// list of the removed, the sign-in itself left as it is.
+	var kept *SignedInError
+	if errors.As(err, &kept) {
+		if terr := forgetKeptAccount(p.ID); terr != nil {
+			return terr
+		}
+		return nil
+	}
+	return err
 }
 
 // forgetLogins forgets each of a built-in's accounts, the one in use first

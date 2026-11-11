@@ -705,6 +705,11 @@ type Provider struct {
 	// it is listed there only behind "Show N hidden", or when searched
 	// for by name (#116).
 	Tucked bool `json:"tucked,omitempty"`
+	// Forgot is set on a removed account the user signed out of magpie
+	// while its agent stays signed in, which magpie never signs out
+	// (Claude Code): it is no longer listed among the removed, and stays
+	// hidden until it is added back by a new sign-in (ikunbots on X).
+	Forgot bool `json:"forgot,omitempty"`
 
 	// Account is set when the provider is an agent the user signed in to
 	// (see account.go); it is derived, never stored.
@@ -1674,6 +1679,22 @@ func QuietAccount(id string) error {
 	return nil
 }
 
+// forgetKeptAccount marks a removed account signed out of magpie while its
+// agent's own sign-in stays: Excluded leaves it out.
+func forgetKeptAccount(id string) error {
+	f, err := read()
+	if err != nil {
+		return err
+	}
+	for i := range f.Providers {
+		if f.Providers[i].ID == id && f.Providers[i].Hidden {
+			f.Providers[i].Forgot = true
+			return store(f)
+		}
+	}
+	return nil
+}
+
 // ShowAccount brings back the signed-in account of an agent the user had
 // removed from magpie.
 func ShowAccount(id string) error {
@@ -1683,7 +1704,7 @@ func ShowAccount(id string) error {
 	}
 	for i := range f.Providers {
 		if f.Providers[i].ID == id && f.Providers[i].Hidden {
-			f.Providers[i].Hidden, f.Providers[i].Quiet, f.Providers[i].Tucked = false, false, false
+			f.Providers[i].Hidden, f.Providers[i].Quiet, f.Providers[i].Tucked, f.Providers[i].Forgot = false, false, false, false
 			return store(f)
 		}
 	}

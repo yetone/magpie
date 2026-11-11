@@ -369,7 +369,14 @@ type Exclusion struct {
 // signed in here (a magpie serve under another HOME, say).
 func Excluded() []Exclusion {
 	var out []Exclusion
+	forgot := map[string]bool{}
+	for _, p := range storedFile().Providers {
+		forgot[p.ID] = p.Forgot
+	}
 	for _, a := range Hidden() {
+		if forgot[a.ID] {
+			continue
+		}
 		x := Exclusion{Agent: a.Account.Agent, Provider: a.ID, Why: "You removed it from magpie.", Quiet: a.Quiet, Tucked: a.Tucked}
 		if a.IsPlugin() {
 			x.Name = a.Name
