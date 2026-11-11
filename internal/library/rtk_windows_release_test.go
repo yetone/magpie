@@ -286,3 +286,50 @@ func TestRTKWindowsReleaseUpgradeRunsTheInstall(t *testing.T) {
 		t.Fatalf("the rtk changed to %q", got)
 	}
 }
+
+// netube99 on X: an rtk.exe in winget's own folder (…\WinGet\Packages\
+// rtk-ai.rtk_…, or its link in WinGet\Links) that winget has no record of
+// got `winget upgrade`, which failed with 0x8A150014 "winget finds no
+// rtk-ai.rtk package". It is upgraded from rtk's own release now, over the
+// file the link points to; one winget does list still goes to winget.
+func TestRTKWingetFolderWithoutRecord(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fakes are shell scripts")
+	}
+	h := sandbox(t)
+	arch, base := rtkArch, rtkDownloadBase
+	rtkArch = "amd64"
+	t.Cleanup(func() { rtkArch, rtkDownloadBase = arch, base })
+	latestServer(t, "v0.51.0")
+	pkg := filepath.Join(h, "AppData", "Local", "Microsoft", "WinGet", "Packages", "rtk-ai.rtk_x")
+	real := filepath.Join(pkg, "rtk")
+	ver := filepath.Join(pkg, "VERSION")
+	testenv.Program(t, real, strings.ReplaceAll(versionedRTK, "VERSION", ver))
+	write(t, ver, "0.50.0")
+	links := filepath.Join(h, "AppData", "Local", "Microsoft", "WinGet", "Links")
+	os.MkdirAll(links, 0o755)
+	link := filepath.Join(links, "rtk")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", links+string(os.PathListSeparator)+filepath.Join(h, "tools"))
+	newRTK := strings.ReplaceAll(versionedRTK, `"VERSION"`, `"`+ver+`"`)
+	newRTK = strings.ReplaceAll(newRTK, "$(/bin/cat \""+ver+"\")", "0.51.0")
+	rtkDownloadBase = fakeRTKRelease(t, newRTK, false)
+
+	// winget has records, none of them this folder
+	wingetOn(t, h, wingetUnlisted, 0, func() ([]string, bool) { return []string{filepath.Join(h, "elsewhere")}, true })
+	if c := rtkUpgrader(link); len(c) != 2 || c[0] != rtkWindowsRelease || c[1] != real {
+		t.Fatalf("no record: upgrader %q; want %s %s", c, rtkWindowsRelease, real)
+	}
+	v, err := UpgradeRTK()
+	if err != nil || v.Version != "0.51.0" {
+		t.Fatalf("%+v, %v", v, err)
+	}
+
+	// winget has it: winget upgrades it
+	wingetOn(t, h, wingetListed, 0, func() ([]string, bool) { return []string{pkg}, true })
+	if c := rtkUpgrader(link); len(c) == 0 || c[0] != "winget" {
+		t.Fatalf("recorded: upgrader %q; want winget upgrade", c)
+	}
+}
