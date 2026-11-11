@@ -15,10 +15,9 @@ import (
 // the same account at different hours).
 //
 //   - A card is shown for a Remote only when the Remote is enabled for a
-//     model of the provider the card is of (remoteCardWanted): the
-//     card's id is the provider path of one of those models' ids, or a
-//     parent of it, whole parts only (provider/model, as that remote lists
-//     them; relay/strata enabled does not tell relay/kiro).
+//     model of the provider the card is of (remoteCardWanted): the first
+//     part of the card's id is the first part of those models' ids
+//     (provider/model, as that remote lists them).
 //   - A card whose way names a magpie twice, or this one and another, is
 //     no card (catalog.Loops): it isn't kept (keepRemoteCards) nor told.
 //   - One account's copies are one card, the newest complete reading
@@ -36,37 +35,18 @@ func remoteCardWanted(p Provider) func(id string) bool {
 	if len(ms) == 0 {
 		return func(string) bool { return true }
 	}
-	ids := make([]string, len(ms))
-	for i, m := range ms {
-		ids[i] = m.ID
-	}
-	return cardWantedFor(ids)
-}
-
-// cardWantedFor is remoteCardWanted for the enabled model ids as the remote
-// lists them: a model's provider path is its id less the last part
-// ("relay/strata/m" is of relay/strata). A card is wanted when its id is
-// such a path or one of its parents, whole parts only: relay/strata
-// enabled tells relay/strata and relay, never relay/kiro or relay/strat.
-// A model with no provider before its name leaves it unknown, so wanted.
-func cardWantedFor(ids []string) func(id string) bool {
-	paths := map[string]bool{}
-	for _, mid := range ids {
-		i := strings.LastIndex(mid, "/")
-		if i <= 0 {
+	heads := map[string]bool{}
+	for _, m := range ms {
+		head, _, ok := strings.Cut(m.ID, "/")
+		if !ok {
 			return func(string) bool { return true }
 		}
-		path := mid[:i]
-		for {
-			paths[path] = true
-			j := strings.LastIndex(path, "/")
-			if j < 0 {
-				break
-			}
-			path = path[:j]
-		}
+		heads[head] = true
 	}
-	return func(id string) bool { return paths[id] }
+	return func(id string) bool {
+		head, _, _ := strings.Cut(id, "/")
+		return heads[head]
+	}
 }
 
 // withoutLoops is cards less those whose way comes back to this magpie.

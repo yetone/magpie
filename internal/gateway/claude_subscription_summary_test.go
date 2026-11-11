@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 // recih on X (#6128): Claude Code's AgentSummary sends the sub-agent's
@@ -69,62 +68,5 @@ func TestClaudeBranchForSummaryWithoutThePendingCall(t *testing.T) {
 	run.mu.Unlock()
 	if got, why := b.branch(req, own); got != nil || !strings.Contains(why, "closed") {
 		t.Fatalf("closed run: %v %q", got, why)
-	}
-}
-
-// #6128 (recih, v0.1.3757): the run parks on a call it streamed before the
-// call's session line is read or written (Claude Code writes it after the
-// tool ran), so the line has no uuid. The summary is found by the history
-// the call answered, and the branch is cut before the call by its id,
-// whether the line is on disk by then or not.
-func TestClaudeBranchForSummaryBeforeTheCallLineIsRead(t *testing.T) {
-	was := cutWait
-	cutWait = 300 * time.Millisecond
-	t.Cleanup(func() { cutWait = was })
-	dir := t.TempDir()
-	const sid = "lead-session"
-	path := filepath.Join(dir, sid+".jsonl")
-	head := `{"uuid":"u1","sessionId":"` + sid + `","type":"user"}` + "\n" + `{"uuid":"a-words","sessionId":"` + sid + `","type":"assistant"}` + "\n"
-	if err := os.WriteFile(path, []byte(head), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	user := func(s string) Message { return Message{Role: "user", Parts: []Part{{Kind: Text, Text: s}}} }
-	words := Message{Role: "assistant", Parts: []Part{{Kind: Text, Text: "I will run the tests."}}}
-	history := []Message{user("task")}
-	b := newSubscriptionBridge()
-	run := &subscriptionRun{sessionID: sid, sessions: []string{dir}, tui: true}
-	own := "claude\x00u"
-	run.owner.Store(&own)
-	run.lines = map[string]callLine{"toolu_1": {seq: 1, told: historyKey(history)}} // parked, no uuid yet
-	b.runs["r"] = run
-	req := &Request{Messages: append(append(append([]Message{}, history...), words), user("Describe your progress in 3-5 words."))}
-	got, why := b.branch(req, own)
-	if got == nil {
-		t.Fatalf("no branch while the call's line is unread: %s", why)
-	}
-	if !got.cutBefore || len(got.cutCalls) != 1 || got.cutCalls[0] != "toolu_1" {
-		t.Fatalf("branch = %+v, want cut before the call toolu_1", got)
-	}
-	// the line is written while the cut waits for it: the cut is before it
-	go func() {
-		time.Sleep(60 * time.Millisecond)
-		f, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
-		defer f.Close()
-		f.WriteString(`{"uuid":"a-call","sessionId":"` + sid + `","type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_1"}]}}` + "\n")
-	}()
-	id, err := cutSessionBeforeCalls(got.sessions, got.session, got.cutCalls)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if s, _ := os.ReadFile(filepath.Join(dir, id+".jsonl")); !strings.Contains(string(s), "a-words") || strings.Contains(string(s), "a-call") {
-		t.Fatalf("branch keeps %q, want the words and not the call", s)
-	}
-	// the line never comes: what is on disk is what came before the call
-	id, err = cutSessionBeforeCalls(got.sessions, got.session, []string{"toolu_9"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if s, _ := os.ReadFile(filepath.Join(dir, id+".jsonl")); !strings.Contains(string(s), "a-words") {
-		t.Fatalf("branch keeps %q, want the words", s)
 	}
 }

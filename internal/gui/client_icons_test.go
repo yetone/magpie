@@ -13,7 +13,7 @@ import (
 // genericIcon are the clients magpie has no logo for yet, drawn with the
 // generic cube on purpose (#4487). Each leaves this list when its real
 // logo, from the app or its vendor, is added.
-var genericIcon = map[string]bool{"ante": true, "pencil": true, "openpencil": true, "newmax": true, "kirocrew": true, "raft": true}
+var genericIcon = map[string]bool{"ante": true, "pencil": true, "paseo": true, "openpencil": true, "newmax": true, "kirocrew": true, "raft": true}
 
 // Every client a request can be recorded as is drawn by its own name and
 // icon in the Routing page's request list, Usage and Sessions, which all

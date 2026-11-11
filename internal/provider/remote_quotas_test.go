@@ -668,36 +668,3 @@ func TestRemoteCardsFollowEnabledModelsAndDedupe(t *testing.T) {
 		}
 	}
 }
-
-// @748975219 on X (0.1.3771): with only relay/strata/model enabled, the
-// cards of relay/kiro and relay/codex still passed, as only the first part
-// of the card's id was compared.
-func TestRemoteCardWantedByWholePath(t *testing.T) {
-	cases := []struct {
-		name string
-		ids  []string
-		yes  []string
-		no   []string
-	}{
-		{"two levels", []string{"relay/strata/m"}, []string{"relay/strata", "relay"}, []string{"relay/kiro", "relay/codex", "kiro", "relay/strata/x"}},
-		{"three levels", []string{"a/b/c/m"}, []string{"a/b/c", "a/b", "a"}, []string{"a/b/d", "a/x", "a/b/c/d", "b"}},
-		{"not at a boundary", []string{"relay/kiro/m"}, []string{"relay/kiro"}, []string{"relay/kir", "relay/kiro2", "relay/kiroo", "rel"}},
-		{"prefix of the other way", []string{"relay/kir/m"}, []string{"relay/kir"}, []string{"relay/kiro"}},
-		{"several", []string{"relay/strata/m", "relay/kiro/n"}, []string{"relay/strata", "relay/kiro"}, []string{"relay/codex"}},
-		{"one level", []string{"kiro/m"}, []string{"kiro"}, []string{"codex", "kiro/x"}},
-		{"unknown provider", []string{"m"}, []string{"anything", "a/b"}, nil},
-	}
-	for _, c := range cases {
-		w := cardWantedFor(c.ids)
-		for _, id := range c.yes {
-			if !w(id) {
-				t.Errorf("%s: %v should tell %q", c.name, c.ids, id)
-			}
-		}
-		for _, id := range c.no {
-			if w(id) {
-				t.Errorf("%s: %v should not tell %q", c.name, c.ids, id)
-			}
-		}
-	}
-}

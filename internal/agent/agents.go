@@ -337,6 +337,7 @@ func onMachineAll(home, cfg string) []*Agent {
 		workbuddyAI(home),
 		codebuddy(home),
 		pencil(home),
+		paseo(home),
 		openPencil(home, cfg),
 		openBot(home, cfg),
 		craftAgents(home),

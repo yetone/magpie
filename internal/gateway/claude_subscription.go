@@ -1100,7 +1100,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		log.Printf("claude: a branch of a claude -p run's session goes to a new interactive Claude Code, told the whole conversation")
 		from, req.branch = nil, nil
 	}
-	if from != nil && (from.cut != "" || len(from.cutCalls) > 0) {
+	if from != nil && from.cut != "" {
 		// a branch is a copy of the run's session as far as the reply
 		// that made the calls, a session of its own: Claude Code's
 		// interactive mode doesn't take --resume-session-at, and resumes
@@ -1111,20 +1111,14 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		if from.cutBefore {
 			cutter, how = cutSessionBefore, "a side request that sends the conversation whole, without the calls its run still waits on, goes on in a branch of that run's session, cut before them"
 		}
-		var sid string
-		var err error
-		if from.cut == "" {
-			sid, err = cutSessionBeforeCalls(from.sessions, from.session, from.cutCalls)
-		} else {
-			sid, err = cutter(from.sessions, from.session, from.cut)
-		}
+		sid, err := cutter(from.sessions, from.session, from.cut)
 		if err != nil {
 			log.Printf("claude: a branch of a run's session couldn't be cut (%v); a new Claude Code is told the whole conversation", err)
 			from, req.branch = nil, nil
 		} else {
 			log.Printf("claude: %s (%d messages)", how, len(from.since))
 			from.mu.Lock()
-			from.session, from.cut, from.cutCalls, from.cutBefore, from.gone = sid, "", nil, false, false
+			from.session, from.cut, from.cutBefore, from.gone = sid, "", false, false
 			from.mu.Unlock()
 		}
 	}
@@ -2536,9 +2530,6 @@ type savedSession struct {
 	// cutBefore: cut before that line, not after it: the reply's words
 	// stay and its calls go (a side request that dropped them, #6128)
 	cutBefore bool
-	// cutCalls: the cut is before the line of these tool calls, found by
-	// their ids, when the line's uuid isn't known yet (#6128).
-	cutCalls []string
 	// tui: the session was made by Claude Code's interactive mode; a
 	// branch of it is too, where it can be (claudePrint)
 	tui bool
@@ -2783,27 +2774,10 @@ func (b *subscriptionBridge) branch(req *Request, owner string) (*savedSession, 
 		}
 		run.mu.Lock()
 		at, seq, said := "", 0, ""
-		var unread []string // pending calls whose line isn't read yet
 		if pending {
-			for id, l := range run.lines {
-				switch {
-				case l.told != told:
-				case l.uuid == "":
-					unread = append(unread, id)
-					if seq == 0 || l.seq < seq {
-						seq, said = l.seq, l.told
-					}
-				}
-			}
-			// A reply is parked on once its calls were streamed; its
-			// session line may not be read yet, nor on disk (#6128): the
-			// calls are found in the session by their ids, and a line
-			// already read is a surer place.
-			slices.Sort(unread)
 			for _, l := range run.lines {
 				if l.uuid != "" && l.told == told && (at == "" || l.seq < seq) {
 					at, seq, said = l.uuid, l.seq, l.told
-					unread = nil
 				}
 			}
 		} else {
@@ -2816,7 +2790,7 @@ func (b *subscriptionBridge) branch(req *Request, owner string) (*savedSession, 
 		sid, sessions, prefix := run.sessionID, slices.Clone(run.sessions), run.cachePrefix
 		usable := !run.closed && !run.rewound && run.lean == req.leanPrompt && !run.clientMarks && (run.tui || !wantTUI(req))
 		run.mu.Unlock()
-		if at == "" && len(unread) == 0 {
+		if at == "" {
 			continue
 		}
 		switch {
@@ -2830,7 +2804,7 @@ func (b *subscriptionBridge) branch(req *Request, owner string) (*savedSession, 
 			if pending && found != nil && seq <= foundSeq {
 				continue
 			}
-			found, foundSeq = &savedSession{session: sid, sessions: sessions, owner: owner, at: time.Now(), since: msgs[i:], cut: at, cutCalls: unread, cutBefore: pending, tui: run.tui, appended: run.appended, cachePrefix: prefix, gone: true}, seq
+			found, foundSeq = &savedSession{session: sid, sessions: sessions, owner: owner, at: time.Now(), since: msgs[i:], cut: at, cutBefore: pending, tui: run.tui, appended: run.appended, cachePrefix: prefix, gone: true}, seq
 		}
 		if !pending {
 			break
@@ -3031,47 +3005,6 @@ func cutAfterReply(b []byte, msg string) int {
 // session as it stood before that message was told.
 func cutSessionBefore(dirs []string, sid, uuid string) (string, error) {
 	return cutSessionAt(dirs, sid, uuid, cutBefore)
-}
-
-// cutSessionBeforeCalls is cutSession as far as the line before the first
-// assistant line that calls one of ids, the calls a run's reply made that
-// its line uuid isn't known for (#6128). Claude Code writes that line late,
-// after its tool ran: asked again until cutWait is over, then, with the
-// line not there, the session as it stands is what came before the calls.
-func cutSessionBeforeCalls(dirs []string, sid string, ids []string) (string, error) {
-	if len(ids) == 0 {
-		return "", errors.New("no session to cut")
-	}
-	return cutSessionWhere(dirs, sid, "calls "+strings.Join(ids, ","), func(b []byte, last bool) int {
-		if end := cutBeforeCalls(b, ids); end >= 0 {
-			return end
-		}
-		if last {
-			return len(b)
-		}
-		return -1
-	})
-}
-
-// cutBeforeCalls is where in a session's lines b the first whole assistant
-// line calling one of ids begins, -1 when none is there; a line with no
-// newline yet is not whole.
-func cutBeforeCalls(b []byte, ids []string) int {
-	for at := 0; at < len(b); {
-		nl := bytes.IndexByte(b[at:], '\n')
-		if nl < 0 {
-			break
-		}
-		line := b[at : at+nl]
-		start := at
-		at += nl + 1
-		for _, id := range ids {
-			if bytes.Contains(line, []byte(`"id":"`+id+`"`)) {
-				return start
-			}
-		}
-	}
-	return -1
 }
 
 // cutSessionWhere copies session sid as far as the place at finds in its

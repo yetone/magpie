@@ -6680,53 +6680,6 @@ magpie.plugin("library", (ctx) => {
     };
   }
 
-  // A skill of the user's own: a name and a description make its SKILL.md
-  // in the library's folder (josephBenchap on X); it opens in the reader,
-  // whose path opens it in their editor.
-  function newSkill() {
-    const all = skillAgents();
-    const d = { name: "", description: "", agents: all.map((a) => a.id) };
-    const ed = el("div", "editor lib-editor lib-newskill");
-    const head = el("div", "ehead");
-    head.append(glyph(GLYPH.skill), el("b", "", t("New skill")));
-    ed.append(head);
-    const err = el("div", "editor-error");
-    const name = field2("", t("e.g. my-skill"), (v) => { d.name = v.trim(); });
-    name.classList.add("mono");
-    ed.append(...field(t("Name"), name, t("Letters, digits, - and _ — what the agents call it")));
-    const desc = el("textarea", "lib-text small lib-newskilldesc");
-    desc.placeholder = t("e.g. Writes release notes. Use when asked for a changelog.");
-    desc.spellcheck = false;
-    desc.rows = 2;
-    desc.maxLength = 1024;
-    desc.oninput = () => { d.description = desc.value; };
-    desc.onkeydown = (e) => { e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return; if (e.key === "Escape") closeLibModal(); else if (e.key === "Enter") { e.preventDefault(); modal?.save?.(); } };
-    ed.append(...field(t("Description"), desc, t("What it does and when to use it: the agent reads this to decide when to load it")));
-    const agentsBox = el("div");
-    ed.append(...field(t("Agents"), agentsBox));
-    ed.append(err);
-    const drawAgents = () => agentsBox.replaceChildren(agentChips(all, d.agents, (next) => { d.agents = next; drawAgents(); }, { names: true, all: true }));
-    drawAgents();
-    const bar = el("div", "bar");
-    bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal));
-    const save = async () => {
-      err.textContent = "";
-      try {
-        take(await api("library/skills/create", { name: d.name, description: d.description, agents: d.agents }));
-        report(lib.result, t("{name} is in the library now", { name: d.name }));
-        render();
-        const made = lib.skills.find((x) => x.name === d.name);
-        if (made) viewSkill(made); else closeLibModal(true);
-      } catch (e) { err.textContent = e.message; }
-    };
-    bar.append(button(t("Create"), "primary", save));
-    ed.append(bar);
-    const original = JSON.stringify(d);
-    modal = { save, dirty: () => JSON.stringify(d) !== original };
-    openLib(ed);
-    requestAnimationFrame(() => name.focus());
-  }
-
   function installCard() {
     const card = el("div", "list lib-card lib-install");
     const line = el("div", "lib-find");
@@ -6742,9 +6695,7 @@ magpie.plugin("library", (ctx) => {
     if (probing) go.classList.add("busy");
     inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") find(); else if (e.key === "Escape" && probe) { probe = null; render(); } };
     const g = glyph(GLYPH.search, "lib-mini");
-    const mk = button(t("New skill"), "", () => newSkill());
-    mk.dataset.lib = "new-skill";
-    line.append(g, inp, go, mk);
+    line.append(g, inp, go);
     card.append(line);
     async function find() {
       const src = inp.value.trim();
