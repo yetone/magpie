@@ -16,7 +16,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       page.setDefaultNavigationTimeout(60000);
       const events = [], errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
-      await page.route("**/*", fixture(lang, "light", events, { lan: true, limits: { server: { models: ["openai/*", "relay/m"] } } }));
+      await page.route("**/*", fixture(lang, "light", events, { lan: true, emptyProvider: true, limits: { server: { models: ["openai/*", "relay/m"] } } }));
       const zh = lang === "zh";
       const w = zh
         ? { label: "此密钥可用的模型", all: "全部模型", two: "2 个模型", relay: "Relay 的全部模型", only: /仅限这些模型/ }
@@ -48,6 +48,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal((await menu.locator(".pm-head").textContent()).trim(), w.label);
       assert.deepEqual(await scrolled(), at, "opening the menu moved the page");
       assert.equal(await menu.locator(".pm-item.on").count(), 1, "All models is ticked for a free key");
+      // a provider that serves no model now can be allowed whole, for later
+      const later = menu.locator(".pm-item", { hasText: zh ? "Later 的全部模型" : "Every Later model" });
+      assert.equal(await later.count(), 1, "no every-model entry for a provider with no model yet");
       // a short window: the menu stays in it, scrolling, rather than running off it
       // (reduced motion still runs a .01ms transition, so it is waited for)
       await page.waitForFunction(() => {

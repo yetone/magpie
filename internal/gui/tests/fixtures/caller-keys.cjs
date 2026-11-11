@@ -151,7 +151,7 @@ function fixture(lang, theme, events, options = {}) {
       { id: "relay/me@example.com", name: "me@example.com", provider: "relay", providerName: "Relay", account: true, plan: "Pro" },
       { id: "relay/spare@example.com", name: "spare@example.com", provider: "relay", providerName: "Relay", account: true },
       { id: "openai/k-1a2b3c", name: "k-1a2b3c", provider: "openai", providerName: "OpenAI", key: true },
-    ], groups: accountGroups });
+    ], providers: options.emptyProvider ? [{ id: "later/*", name: "Later", provider: "later", providerName: "Later" }] : [], groups: accountGroups });
     // the MCP servers and tools a key may be held to: magpie's own, then
     // the Library's (wakaka on Discord)
     if (url.pathname === "/api/caller-keys/mcp") return json({ servers: [
