@@ -89,7 +89,8 @@ func dropIdleCache() bool {
 	codexIdentityMemo.kept = nil
 	codexIdentityMemo.Unlock()
 	rolloutsSeen.Clear()
-	ccListed.Clear() // every Claude Code file's path and key (~2 MB)
+	forgetListsKept() // each lister's last list (~5 MB)
+	ccListed.Clear()  // every Claude Code file's path and key (~2 MB)
 	dirent.Forget()
 	cacheDrops.Add(1)
 	return true

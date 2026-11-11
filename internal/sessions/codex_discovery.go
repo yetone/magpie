@@ -134,7 +134,12 @@ func distinctCodexFiles(files []file) []file {
 		}
 		more[name] = append(more[name], i)
 	}
-	out := files[:0]
+	// files may be a list kept and read elsewhere: one left out is left
+	// out of a copy, and files is given back when none is
+	if !slices.Contains(keep, false) {
+		return files
+	}
+	out := make([]file, 0, len(files)-1)
 	for i, f := range files {
 		if keep[i] {
 			out = append(out, f)

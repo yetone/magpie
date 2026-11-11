@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"unsafe"
 )
 
 // Claude run with CLAUDE_CONFIG_DIR set to a folder of each account's
@@ -57,8 +58,8 @@ func TestListReadsEveryClaudeFolderOnce(t *testing.T) {
 
 // Every Claude folder's files are listed into one slice made at their
 // size, not grown file by file on every pass (a pass every 10 s while
-// the Sessions page is open), and a session kept in two folders is
-// still listed once.
+// the Sessions page is open), a pass like the last gives the last one's
+// list, and a session kept in two folders is still listed once.
 func TestClaudeFilesMadeAtTheirSize(t *testing.T) {
 	d := setupCalls(t)
 	home, _ := os.UserHomeDir()
@@ -80,7 +81,10 @@ func TestClaudeFilesMadeAtTheirSize(t *testing.T) {
 	if len(fs) != 40 {
 		t.Fatalf("%d files, want 40", len(fs))
 	}
-	if cap(fs) != 41 {
-		t.Fatalf("listed into room for %d, want the 41 listed", cap(fs))
+	if cap(fs) != 40 {
+		t.Fatalf("listed into room for %d, want the 40 kept", cap(fs))
+	}
+	if again := claudeFiles(); unsafe.SliceData(again) != unsafe.SliceData(fs) {
+		t.Fatal("an unchanged pass made its list again")
 	}
 }

@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"slices"
 	"sync"
 	"unsafe"
 	"weak"
@@ -82,4 +83,100 @@ func (k *filesKept) distinct(lists ...[]file) []file {
 	}
 	k.Unlock()
 	return out
+}
+
+// sameFiles builds a lister's list a file at a time against the list it
+// made last, and allocates nothing while each file is the last list's at
+// its place. Every 15 s Sessions poll listed every rollout and Claude Code
+// file again into lists made new, ~2.5 MB a poll on a real history while
+// nothing in them had changed, and that garbage was a third of a poll's
+// collections (#2278). Its lists are only read (heldFiles' contract), and
+// clipped, so an append to one is made elsewhere.
+type sameFiles struct {
+	last, out []file
+	i         int
+	made      bool
+	hint      int // the least room out is made with
+}
+
+func (s *sameFiles) add(f file) {
+	if !s.made {
+		if s.i < len(s.last) && s.last[s.i] == f {
+			s.i++
+			return
+		}
+		s.made = true
+		s.out = append(make([]file, 0, max(len(s.last)+len(s.last)/16, s.hint)), s.last[:s.i]...)
+	}
+	s.out = append(s.out, f)
+}
+
+// n is how many files were added.
+func (s *sameFiles) n() int {
+	if s.made {
+		return len(s.out)
+	}
+	return s.i
+}
+
+// list is the files added, the last list itself when they are all of it,
+// and whether it is another list than the last.
+func (s *sameFiles) list() ([]file, bool) {
+	switch {
+	case s.made:
+		return slices.Clip(s.out), true
+	case s.i == len(s.last):
+		return s.last, false
+	}
+	// files gone from its end
+	return append(make([]file, 0, s.i), s.last[:s.i]...), true
+}
+
+// listsKept are the listers' last lists, by lister and folder. Unlike
+// filesKept's they are held strongly: nothing else holds a lister's list
+// from one poll to the next. forgetListsKept lets them go when the cache
+// does.
+var listsKept sync.Map // key → []file
+
+func keptFiles(key string) []file {
+	l, _ := listsKept.Load(key)
+	fs, _ := l.([]file)
+	return fs
+}
+
+// sameAsKept is s's list, kept under key for the next pass when it is new.
+func sameAsKept(key string, s *sameFiles) []file {
+	l, changed := s.list()
+	if changed {
+		listsKept.Store(key, l)
+	}
+	return l
+}
+
+// concatKept is lists one after another: the one list itself when the
+// others are empty, else the last such list when it is the same.
+func concatKept(key string, lists ...[]file) []file {
+	var one []file
+	n := 0
+	for _, l := range lists {
+		if len(l) > 0 {
+			n++
+			one = l
+		}
+	}
+	if n <= 1 {
+		return one
+	}
+	s := sameFiles{last: keptFiles(key)}
+	for _, l := range lists {
+		for _, f := range l {
+			s.add(f)
+		}
+	}
+	return sameAsKept(key, &s)
+}
+
+func forgetListsKept() {
+	listsKept.Clear()
+	ccScratch.Clear()
 }
