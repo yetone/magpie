@@ -518,7 +518,7 @@ magpie.strings({
     "Medians of the answered requests that wrote {n} tokens or more": "{n} トークン以上を出力した完了リクエストの中央値",
     "Set price…": "価格を設定…",
     "Price of {model}": "{model} の価格",
-    "What {model} costs from every provider that has no price of its own for it. The Usage and Sessions pages count its calls at it, past ones too.": "{model} 用の価格を持たないすべてのプロバイダでの {model} の価格です。使用量とセッションのページは、過去の呼び出しも含めてこの価格で計算します。",
+    "What {model} costs from every provider that has no price of its own for it. The Usage and Sessions pages count its calls at it, past ones too.": "{model} の専用価格を持たないすべてのプロバイダでの価格です。使用量とセッションのページは、過去の呼び出しも含めてこの価格で計算します。",
     "{model} is counted at the price you set": "{model} は設定した価格で計算されます",
     "{model} is counted at its list price again": "{model} は再び定価で計算されます",
     "Saved by image files": "画像ファイルで節約",
