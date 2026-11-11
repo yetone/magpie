@@ -66,7 +66,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const card = page.locator(".set-hint.on");
         await card.waitFor();
         const name = await row.locator(":scope > .who > .name").boundingBox(), cb = await card.boundingBox();
-        assert.ok(Math.abs(cb.x - name.x) <= 24 || width < 500 && cb.x >= 15, `the card is at x=${cb.x}, its row's name at x=${name.x}`);
+        const px = name.x + name.width / 2; // the card starts at the pointer
+        assert.ok(Math.abs(cb.x - (px - 12)) <= 24 || width < 500 && cb.x >= 15, `the card is at x=${cb.x}, the pointer at x=${px}`);
         assert.ok(cb.y >= name.y + name.height - 2 && cb.y - name.y < 80 || cb.y + cb.height <= name.y + 2 && name.y - (cb.y + cb.height) < 80, `the card is at y=${cb.y}, its row's name at y=${name.y}`);
         assert.ok(cb.x >= 15 && cb.x + cb.width <= width - 15, `the card runs out of the window: ${JSON.stringify(cb)}`);
         assert.deepEqual(errors, []);

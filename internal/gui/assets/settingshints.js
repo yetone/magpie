@@ -13,7 +13,7 @@ const LINES = ":scope > .who > .sub, :scope > .hint, :scope > .txt > .expl";
 const card = el("div", "set-hint");
 card.setAttribute("aria-hidden", "true"); // a screen reader reads the lines in the row
 document.body.append(card);
-let row = null, wait = 0;
+let row = null, wait = 0, px = -1; // px: the pointer's x, -1 when focus brought the card
 
 // a line holding a link or a control is one to use, so it stays in sight
 const acts = (root) => {
@@ -37,7 +37,7 @@ function hide() {
   card.classList.remove("on");
   card.hidden = true;
 }
-function show(r) {
+function show(r, ptr) {
   const subs = r.isConnected && !r.closest("[hidden]") ? hints(r) : [];
   if (!subs.length) return hide();
   card.replaceChildren(...subs.map((s) => el("p", "", s.textContent.trim())));
@@ -47,15 +47,15 @@ function show(r) {
   const at = getComputedStyle(lead).display === "contents" ? lead.querySelector(".name") || r : lead;
   const who = at.getBoundingClientRect(), box = r.getBoundingClientRect();
   const w = card.offsetWidth, h = card.offsetHeight;
-  // the card's text, not its edge, lines up with the row's name (a row with
-  // no name of its own has the card's edge at its own)
+  // the card's text, not its edge, lines up with the name
   const pad = at === r ? 0 : parseFloat(getComputedStyle(card).paddingLeft) || 0;
-  const left = Math.max(16, Math.min(who.left - pad, innerWidth - 16 - w));
+  // asked by the pointer, it starts there
+  const left = Math.max(16, Math.min(ptr && px >= 0 ? px - 12 : who.left - pad, innerWidth - 16 - w));
   // under the row, or over it where the window ends first
   const top = box.bottom + 4 + h <= innerHeight - 8 ? box.bottom + 4 : Math.max(8, box.top - 4 - h);
   card.style.left = left + "px";
   card.style.top = top + "px";
-  card.style.transformOrigin = (top < box.top ? "bottom " : "top ") + Math.round(Math.min(Math.max(who.left - left, 0), w)) + "px";
+  card.style.transformOrigin = (top < box.top ? "bottom " : "top ") + Math.round(Math.min(Math.max((ptr && px >= 0 ? px : who.left) - left, 0), w)) + "px";
   requestAnimationFrame(() => row === r && card.classList.add("on"));
 }
 function point(r, now) {
@@ -64,7 +64,7 @@ function point(r, now) {
   if (!r) return;
   row = r;
   // a pointer passing over rows on its way shows nothing; resting does
-  wait = setTimeout(() => show(r), now ? 0 : 450);
+  wait = setTimeout(() => show(r, !now), now ? 0 : 450);
 }
 // rowOf: the row a node is in; an editor field's name, beside it in the
 // grid, is the field's too
@@ -74,14 +74,15 @@ function rowOf(n) {
   if (l?.nextElementSibling?.matches(".fld")) return l.nextElementSibling;
   return n.closest(ROWS);
 }
-document.addEventListener("pointerover", (e) => e.pointerType !== "touch" && point(rowOf(e.target)));
+document.addEventListener("pointermove", (e) => { px = e.clientX; }, { passive: true });
+document.addEventListener("pointerover", (e) => { if (e.pointerType !== "touch") { px = e.clientX; point(rowOf(e.target)); } });
 // the pointer gone from the window
 document.addEventListener("pointerout", (e) => !e.relatedTarget && hide());
 document.addEventListener("pointerdown", () => hide(), true);
 document.addEventListener("focusin", (e) => {
   let key = true;
   try { key = e.target.matches(":focus-visible"); } catch {} // Safari before 15.4
-  if (key) point(rowOf(e.target), true);
+  if (key) { px = -1; point(rowOf(e.target), true); }
 });
 document.addEventListener("focusout", (e) => {
   if (!rowOf(e.relatedTarget) || rowOf(e.relatedTarget) !== row) hide();

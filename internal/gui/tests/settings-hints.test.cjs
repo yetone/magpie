@@ -120,11 +120,9 @@ for (const engine of engines) {
         const name = await mcp.locator(":scope > .who > .name").boundingBox(), cb = await card.boundingBox();
         assert.ok(cb.y >= name.y + name.height || cb.y + cb.height <= name.y, "the card covers the row's name");
         assert.ok(cb.x >= 15 && cb.x + cb.width <= width - 15, `the card runs out of the window: ${JSON.stringify(cb)}`);
-        // its text starts where the row's name does (11-11, mmmg_btc on X: "设置里面的提示也没有对齐"),
-        // where the window leaves room for the card's padding to the left of it
-        const line = await card.locator("p").first().boundingBox();
-        if (name.x >= 16 + 12) assert.ok(Math.abs(line.x - name.x) <= 1, `the card's text is at x=${line.x}, the row's name at x=${name.x}`);
-        else assert.ok(line.x >= name.x - 1, `the card's text is at x=${line.x}, left of the row's name at x=${name.x}`);
+        // the card starts at the pointer (11-11, mmmg_btc on X: it stood at the far left of the row)
+        const px = name.x + name.width / 2, want = Math.max(16, Math.min(px - 12, width - 16 - cb.width));
+        assert.ok(Math.abs(cb.x - want) <= 1, `the card is at x=${cb.x}, the pointer at x=${px}`);
         assert.deepEqual(await page.evaluate(boxes), before, "a row moved when the card showed");
         assert.equal(await card.evaluate((e) => getComputedStyle(e).pointerEvents), "none");
 
@@ -142,6 +140,13 @@ for (const engine of engines) {
         assert.equal(await mcp.evaluate((r) => r.contains(document.activeElement)), true, "Tab didn't come back to the row's copy button");
         await card.waitFor();
         assert.equal((await card.textContent()).includes(text), true, "focus showed another row's card");
+        // asked by a key, its text starts where the row's name does (11-11, mmmg_btc on X: "设置里面的提示也没有对齐"),
+        // where the window leaves room for the card's padding to the left of it
+        {
+          const nm = await mcp.locator(":scope > .who > .name").boundingBox(), line = await card.locator("p").first().boundingBox();
+          if (nm.x >= 16 + 12) assert.ok(Math.abs(line.x - nm.x) <= 1, `the card's text is at x=${line.x}, the row's name at x=${nm.x}`);
+          else assert.ok(line.x >= nm.x - 1, `the card's text is at x=${line.x}, left of the row's name at x=${nm.x}`);
+        }
         await page.mouse.move(1, 1);
 
         // the search: explanations in place, and a row found by one
