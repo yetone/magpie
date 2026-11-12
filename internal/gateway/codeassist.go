@@ -436,7 +436,7 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 				}
 			case ToolCall:
 				names[p.ID] = p.Name
-				call := map[string]any{"name": p.Name, "args": json.RawMessage(argsOf(p))}
+				call := map[string]any{"name": geminiFuncName(p.Name), "args": json.RawMessage(argsOf(p))}
 				if id := toolID(p.ID); id != "" {
 					call["id"] = id
 				}
@@ -452,7 +452,7 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 				}
 				parts = append(parts, part)
 			case ToolResult:
-				name := names[p.CallID]
+				name := geminiFuncName(names[p.CallID])
 				if name == "" {
 					name = "tool"
 				}
@@ -575,7 +575,7 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 	if len(r.Tools) > 0 && r.ToolChoice != "none" {
 		var decls []map[string]any
 		for _, t := range r.Tools {
-			d := map[string]any{"name": t.Name}
+			d := map[string]any{"name": geminiFuncName(t.Name)}
 			if t.Description != "" {
 				d["description"] = t.Description
 			}
@@ -598,7 +598,7 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 			mode = "ANY"
 		case strings.HasPrefix(r.ToolChoice, "name:"):
 			mode = "ANY"
-			fc["allowedFunctionNames"] = []string{strings.TrimPrefix(r.ToolChoice, "name:")}
+			fc["allowedFunctionNames"] = []string{geminiFuncName(strings.TrimPrefix(r.ToolChoice, "name:"))}
 		case ag && claude:
 			// Antigravity's Claude wants its calls checked against the schema
 			mode = "VALIDATED"
@@ -1165,6 +1165,12 @@ func plainSchema(raw json.RawMessage) json.RawMessage {
 					props := map[string]any{}
 					if m, ok := v.(map[string]any); ok {
 						for pk, pv := range m {
+							if pk == "" {
+								// Google turns a request away over a property
+								// with no name ("Request contains an invalid
+								// argument", fwxkogaia on X)
+								continue
+							}
 							// a property whose schema is false is one the
 							// call may not have: it is left out, and so is
 							// its name in required
@@ -1530,6 +1536,20 @@ func (d *codeAssistDecoder) decode(data string, emit func(Event)) error {
 		}
 		if cand.FinishReason != "" && !d.stopped {
 			d.flush(emit)
+			if !d.tools && (cand.FinishReason == "MALFORMED_FUNCTION_CALL" || cand.FinishReason == "UNEXPECTED_TOOL_CALL") {
+				// the model made a call and Google would not take it as one
+				// ("Malformed function call: call:default_api:Name{…}"): the
+				// call is in the message, whole, and the client can run it.
+				// Left alone the reply read as empty, though it had cost
+				// tokens, and was asked again for nothing (fwxkogaia on X)
+				if i := strings.Index(cand.FinishMessage, callMarker); i >= 0 {
+					if name, args, n := textCall(cand.FinishMessage[i:]); n > 0 {
+						d.tools = true
+						emit(Event{Kind: KToolStart, ID: "call_" + newID(), Name: toolOfCall(name)})
+						emit(Event{Kind: KToolArgs, Text: string(args)})
+					}
+				}
+			}
 			d.stopped = true
 			stop := stopFromGemini(cand.FinishReason)
 			if d.tools && stop == "stop" {
@@ -1557,14 +1577,30 @@ const callMarker = "call:" + geminiNamespace + ":"
 
 const geminiNamespace = "default_api"
 
+// nameLead stands before a tool name Google would turn away.
+const nameLead = "_x_"
+
+// geminiFuncName is a tool's name as Google takes it: a function name
+// starts with a letter or an underscore, so one that starts with a digit or
+// a dash (MCP tools named for their server's id) turned the whole request
+// away as "Request contains an invalid argument" (fwxkogaia on X). The
+// decoder takes nameLead off again.
+func geminiFuncName(n string) string {
+	if n != "" && (n[0] >= '0' && n[0] <= '9' || n[0] == '-' || n[0] == '.' || n[0] == ':') {
+		return nameLead + n
+	}
+	return n
+}
+
 // toolOfCall is a call's tool name without Gemini's namespace.
 func toolOfCall(name string) string {
 	for _, sep := range []string{":", "."} {
 		if t, ok := strings.CutPrefix(name, geminiNamespace+sep); ok && t != "" {
-			return t
+			name = t
+			break
 		}
 	}
-	return name
+	return strings.TrimPrefix(name, nameLead)
 }
 
 // maxHeld bounds a call written out as text: one that goes on longer is
@@ -1777,6 +1813,7 @@ type geminiChunk struct {
 			Parts []gPart `json:"parts"`
 		} `json:"content"`
 		FinishReason      string `json:"finishReason"`
+		FinishMessage     string `json:"finishMessage"`
 		GroundingMetadata *struct {
 			WebSearchQueries []string `json:"webSearchQueries"`
 			GroundingChunks  []struct {

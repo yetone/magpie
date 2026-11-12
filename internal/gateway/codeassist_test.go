@@ -297,6 +297,8 @@ func TestCodeAssistTextCalls(t *testing.T) {
 			"", []call{{"bash", `{"command":"ls"}`}}, "tool"},
 		{"unfinished", []string{chunk(text("look call:default_api:bash{command:ls"), "MAX_TOKENS")},
 			"look call:default_api:bash{command:ls", nil, "length"},
+		{"malformed", []string{`{"response":{"candidates":[{"content":{"role":"model","parts":[{"text":"x","thought":true}]},"finishReason":"MALFORMED_FUNCTION_CALL","finishMessage":"Malformed function call: call:default_api:bash{command:ls -la}"}]}}`},
+			"", []call{{"bash", `{"command":"ls -la"}`}}, "tool"},
 		{"not a call", []string{chunk(text("say call:default_api: or recall"), ""), chunk(text(" ca"), "STOP")},
 			"say call:default_api: or recall ca", nil, "stop"},
 	} {

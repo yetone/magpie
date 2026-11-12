@@ -2301,6 +2301,14 @@ func passing(status int, header http.Header, body []byte, again int) (time.Durat
 			// (#2972). A group's next member still is.
 			return 0, false
 		}
+		if bytes.Contains(body, []byte(emptyReply)) {
+			// a model that answered nothing was asked again in place
+			// already (emptyRetries); asking the whole request again as
+			// often as a vendor's outage multiplied the two, nine asks of a
+			// minute each for one turn (fwxkogaia on X: 170 to 230s
+			// before the 502). Once more, for a try that was not.
+			return wait, again < 1
+		}
 		return wait, again < lastRetries
 	case status == 429:
 		// a relay's 429 often says nothing of when (#503: "负载已饱和，请稍
