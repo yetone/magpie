@@ -4,12 +4,14 @@
 // (navMine in app.js reads it). app.js imports this when Settings draws,
 // so it weighs nothing on the core.
 window.renderNavPages = function () {
-  const row = $("#navPagesRow");
+  const row = $("#navPagesRow"), nav = $("#nav");
   if (!row) return;
-  const pages = [...$("#nav").querySelectorAll("button[data-view]")]
+  // only a window has a sidebar: the panel has no #nav (#6139)
+  if (mode !== "window" || !nav) { row.hidden = true; return; }
+  const pages = [...nav.querySelectorAll("button[data-view]")]
     .filter((b) => b.dataset.view !== "providers" && !(gatewayMode && GATEWAY_HIDES.includes(b.dataset.view)) && !featureHides(b))
     .map((b) => ({ v: b.dataset.view, name: b.querySelector("[data-t]")?.dataset.en || b.textContent.trim() }));
-  row.hidden = mode !== "window" || !pages.length;
+  row.hidden = !pages.length;
   if (row.hidden) return;
   const mine = navMine();
   const n = pages.filter((p) => mine.includes(p.v)).length;
