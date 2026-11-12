@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -1056,5 +1057,55 @@ func TestHermesProfilesAreAgents(t *testing.T) {
 	}
 	if f := row.Field("model"); f == nil || f.Get() != "kimi-k3" {
 		t.Fatalf("model field: %+v", f)
+	}
+}
+
+// geekbb on X (0.1.3900): a Hermes profile named in Chinese is a folder
+// with an escaped id (u64cd-u4f5c), and the Agents list showed that id.
+// A row reads the name Hermes keeps in profile.yaml, else the id decoded
+// the way Hermes's slugifyProfileName made it. Ids are the reporter's own.
+func TestHermesProfileRowsReadAsNames(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HERMES_HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	root := appdir.HermesHomeIn(home)
+	write := func(rel, s string) {
+		p := filepath.Join(root, rel)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(s), 0o644)
+	}
+	write("config.yaml", "model:\n  default: a/b\n  provider: openrouter\n")
+	write("hermes-agent/run_agent.py", "")
+	for _, id := range []string{"excel--u64cd-u4f5c-u5458", "github", "u4e2a-u4eba-u6570-u636e-u7ba1-u7406", "u81ea-u52a8-u5316-u673a-u5668-u4eba", "u968f-u4fbf-u95ee-u95ee", "u0041", "test-u673a-u5668-u4eba", "nick"} {
+		write("profiles/"+id+"/config.yaml", "model:\n  default: x\n")
+	}
+	write("profiles/nick/profile.yaml", "display_name: Nick Bot\nui_meta:\n  hermes-bots:\n    title: 小尼克\n")
+	want := map[string]string{
+		"hermes#excel--u64cd-u4f5c-u5458":            "Hermes · excel操作员",
+		"hermes#github":                              "Hermes · github",
+		"hermes#u4e2a-u4eba-u6570-u636e-u7ba1-u7406": "Hermes · 个人数据管理",
+		"hermes#u81ea-u52a8-u5316-u673a-u5668-u4eba": "Hermes · 自动化机器人",
+		"hermes#u968f-u4fbf-u95ee-u95ee":             "Hermes · 随便问问",
+		"hermes#u0041":                               "Hermes · u0041",
+		"hermes#test-u673a-u5668-u4eba":              "Hermes · test机器人",
+		"hermes#nick":                                "Hermes · 小尼克",
+	}
+	got := map[string]string{}
+	for _, a := range onMachine(home, filepath.Join(home, ".config")) {
+		if strings.HasPrefix(a.ID, "hermes#") {
+			got[a.ID] = a.Name
+		}
+	}
+	if !maps.Equal(got, want) {
+		t.Fatalf("names:\n got %v\nwant %v", got, want)
+	}
+	write("profiles/nick/profile.yaml", "display_name: Nick Bot\n")
+	for _, a := range onMachine(home, filepath.Join(home, ".config")) {
+		if a.ID == "hermes#nick" && a.Name != "Hermes · Nick Bot" {
+			t.Fatalf("display_name: %q", a.Name)
+		}
 	}
 }

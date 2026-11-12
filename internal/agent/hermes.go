@@ -37,7 +37,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
@@ -335,7 +337,7 @@ func hermesProfileFields(at place, dir string) []Field {
 	var out []Field
 	for _, p := range hermesOthers(at, dir) {
 		name := hermesProfileName(at, p)
-		out = append(out, hermesProfileField(at, p, hermesProfileKey+name, name))
+		out = append(out, hermesProfileField(at, p, hermesProfileKey+name, hermesProfileLabel(p, name)))
 	}
 	return out
 }
@@ -347,6 +349,45 @@ func hermesProfileName(at place, p string) string {
 		return filepath.Base(d)
 	}
 	return "default"
+}
+
+// hermesProfileLabel is how a profile reads in a list: the name Hermes shows
+// for it (profile.yaml's ui_meta.hermes-bots.title, then display_name, as the
+// Bots roster picks them), else the id with its \uXXXX runs decoded
+// (hermesUnslug). The id stays the key; only the label changes.
+func hermesProfileLabel(p, name string) string {
+	f := filepath.Join(filepath.Dir(p), "profile.yaml")
+	for _, k := range []string{"ui_meta.hermes-bots.title", "display_name"} {
+		if v, _ := edit.GetYAML(f, k); strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return hermesUnslug(name)
+}
+
+// hermesSlugRun is a run of the tokens Hermes's slugifyProfileName
+// (apps/desktop hermes-bots/labels.ts) gives each non-ASCII letter or digit:
+// "-u" and the code point in hex, then "-" ("小助手" is u5c0f-u52a9-u624b,
+// "test机器人" is test-u673a-u5668-u4eba).
+var hermesSlugRun = lazyre.New(`(?:^|-+)(u[0-9a-f]{4,6}(?:-+u[0-9a-f]{4,6})*)(?:-+|$)`)
+
+// hermesUnslug turns those runs back into the characters, dropping the
+// hyphens Hermes put around them. A token that is not a letter or digit
+// beyond ASCII stays as written, so a name like "u1234" is untouched.
+func hermesUnslug(name string) string {
+	out := hermesSlugRun.ReplaceAllStringFunc(name, func(m string) string {
+		var b strings.Builder
+		for _, t := range strings.FieldsFunc(m, func(r rune) bool { return r == '-' }) {
+			n, err := strconv.ParseUint(t[1:], 16, 32)
+			r := rune(n)
+			if err != nil || r < 0x80 || !(unicode.IsLetter(r) || unicode.IsNumber(r)) {
+				return m
+			}
+			b.WriteRune(r)
+		}
+		return b.String()
+	})
+	return out
 }
 
 // hermesProfileField is the model field of the profile whose config is at
@@ -435,7 +476,7 @@ func hermesProfileAgents(home string) []*Agent {
 		name := hermesProfileName(at, p)
 		dir := filepath.Dir(p)
 		out = append(out, &Agent{
-			ID: "hermes#" + name, Name: "Hermes · " + name, Icon: "hermes",
+			ID: "hermes#" + name, Name: "Hermes · " + hermesProfileLabel(p, name), Icon: "hermes",
 			Spelled: prefixed, NoNames: true,
 			Dir: dir, Path: p,
 			Fields: []Field{func() Field {
