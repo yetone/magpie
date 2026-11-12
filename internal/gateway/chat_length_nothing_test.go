@@ -69,6 +69,10 @@ func TestChatLengthVoidFailsAtOnce(t *testing.T) {
 	if code != 502 || !strings.Contains(body, "an empty reply") || calls != 1 {
 		t.Errorf("a void cut, not streamed: %d %s (after %d calls)", code, body, calls)
 	}
+	// the error names the limit the request itself set, and what to do
+	if !strings.Contains(body, "limit was 128000 tokens") || !strings.Contains(body, "raise max_tokens") {
+		t.Errorf("a void cut's error doesn't name the request's limit: %s", body)
+	}
 }
 
 // The void, on the relay: a Chat client in front of a Chat upstream, as

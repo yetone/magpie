@@ -3865,6 +3865,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// short (DeepSeek's 8K), asks for the model's own, relayed or
 		// translated (withOwnOutput)
 		attemptBody = withOwnOutput(c.p, c.model, from, attemptBody)
+		attemptBody = withThinkingRoom(c.p, c.model, from, attemptBody)
 		if roomFor == c.who()+"|"+c.model {
 			if b, ok := withReplyCap(from, attemptBody, roomCap); ok {
 				attemptBody = b
@@ -7729,7 +7730,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			// it: the held end is dropped, the error said in its place,
 			// [DONE] after — no reply that ended as it should with nothing
 			// in it, and no ask again for the budget to burn twice (#2972)
-			msg := cutVoidFailed(p.Name)
+			msg := cutVoidFailed(p.Name, capped)
 			dropHalf()
 			w.Write(append(apart(), streamFailure(provider.Chat, msg)...))
 			w.Write([]byte("data: [DONE]\n\n"))
@@ -7760,7 +7761,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		}
 		if cutVoid(upstreamStop(heldBody), !sniff.tail.said(), spent, capped) &&
 			replyCheck(r.Context()) == nil {
-			msg := cutVoidFailed(p.Name)
+			msg := cutVoidFailed(p.Name, capped)
 			return writeError(w, proto, 502, msg), msg, true
 		}
 		w.WriteHeader(res.StatusCode)
@@ -9231,7 +9232,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		// at once, asked again nowhere: a void's budget is spent, and a
 		// second ask at the same max_tokens would mostly spend it twice
 		// over before the error (#2972, its review)
-		msg := cutVoidFailed(p.Name)
+		msg := cutVoidFailed(p.Name, request.MaxTokens)
 		return writeError(w, from, 502, msg), msg
 	}
 	if zen != nil {
@@ -9321,8 +9322,13 @@ const cutVoidWords = "cut at its length, the whole output spent on reasoning"
 // with: the empty reply's error — a group asks its next member for one
 // and rests nobody (#1221) — said with why, for the agent to try again or
 // ask for less reasoning rather than go on (#2972).
-func cutVoidFailed(name string) string {
-	return name + ": " + emptyReply + " — " + cutVoidWords
+func cutVoidFailed(name string, cappedAt int) string {
+	msg := name + ": " + emptyReply + " — " + cutVoidWords
+	if cappedAt > 0 {
+		// the limit the request itself named, and what to do about it
+		msg += fmt.Sprintf(" (the request's limit was %d tokens: raise max_tokens in the agent, or ask for less reasoning)", cappedAt)
+	}
+	return msg
 }
 
 // saysSomething tells whether an event is any of a reply an agent shows or

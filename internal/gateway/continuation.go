@@ -763,7 +763,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 				// nowhere: its budget is spent, and a second ask at the
 				// same max_tokens would mostly spend it twice over before
 				// the error (#2972, its review)
-				failed = cutVoidFailed(p.Name)
+				failed = cutVoidFailed(p.Name, request.MaxTokens)
 				break
 			}
 			for _, ev := range kept {

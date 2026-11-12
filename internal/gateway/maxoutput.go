@@ -336,3 +336,68 @@ func outputFieldRefused(status int, body []byte) bool {
 // away the reply limit magpie filled in: a request naming none is sent
 // none there from then on, as before.
 func outputFillRefused(model string) string { return "filled-output:" + model }
+
+// thinksByDefault is whether p's API runs a model's thinking on a request
+// that names none, and counts it in the reply limit: Tencent Cloud's
+// TokenHub and Token Plan serve DeepSeek with thinking "enabled" and
+// reasoning_effort "high" unless the request says otherwise, and advise
+// max_tokens of at least 2048 in thinking mode (cloud.tencent.com/document/
+// product/1823/132248). A memory tool's max_tokens of 4096 was spent on
+// reasoning alone, every reply cut at its length with no answer (WaiooT on X).
+func thinksByDefault(p provider.Provider, model string) bool {
+	return strings.HasSuffix(p.VendorHost(), "tencentmaas.com") && strings.Contains(strings.ToLower(model), "deepseek")
+}
+
+// namesReasoning is whether body, in proto's words, says how the model is
+// to reason (or not to): the client's own choice, which goes as it is.
+func namesReasoning(proto provider.Protocol, body []byte) bool {
+	switch proto {
+	case provider.Chat:
+		for _, k := range []string{"reasoning_effort", "thinking", "enable_thinking", "chat_template_kwargs", "reasoning"} {
+			if gjson.GetBytes(body, k).Exists() {
+				return true
+			}
+		}
+		return false
+	case provider.Responses:
+		return gjson.GetBytes(body, "reasoning").Exists()
+	}
+	return true
+}
+
+// withThinkingRoom is body, in proto's words, with the reply limit a client
+// named raised by the room a default-thinking model (thinksByDefault) needs
+// to think in before it answers (replyRoom at its default effort, high),
+// when the client asked for no reasoning of its own, the user set no Max
+// output for the model, and the limit is a small one (at most
+// thinkingRoomBelow). The model's own limit, where known, still caps it.
+func withThinkingRoom(p provider.Provider, model string, proto provider.Protocol, body []byte) []byte {
+	if !thinksByDefault(p, model) || namesReasoning(proto, body) || userOutput(p, model) > 0 {
+		return body
+	}
+	var field string
+	switch proto {
+	case provider.Chat:
+		field = "max_tokens"
+		if !gjson.GetBytes(body, field).Exists() {
+			field = "max_completion_tokens"
+		}
+	case provider.Responses:
+		field = "max_output_tokens"
+	default:
+		return body
+	}
+	n := int(gjson.GetBytes(body, field).Int())
+	if n <= 0 || n > thinkingRoomBelow {
+		return body
+	}
+	n = replyRoom(n, "high")
+	if own := askedOutput(p, model); own > 0 && n > own {
+		n = own
+	}
+	return withFields(body, map[string]any{field: n})
+}
+
+// thinkingRoomBelow is the largest reply limit a request names that is
+// raised for thinking: a client that asked for more has made room.
+const thinkingRoomBelow = 16384
