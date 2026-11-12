@@ -92,6 +92,8 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && rest == "/models":
 		s.codexModels(w, r)
 		return
+	case r.Method == http.MethodPost && (rest == "/images/generations" || rest == "/images/edits") && s.codexDrawsOnPool(w, r, rest, body):
+		return
 	case r.Method == http.MethodPost && rest == AlphaSearchPath:
 		// web.run on a magpie model is searched where the model is
 		// served, never relayed on Codex's own sign-in; one of Codex's
