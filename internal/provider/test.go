@@ -1315,9 +1315,12 @@ func apiError(b []byte, fallback string) string {
 		}
 		var e struct {
 			Message string `json:"message"`
+			Type    string `json:"type"`
+			Code    any    `json:"code"`
+			Param   string `json:"param"`
 		}
 		if json.Unmarshal(v.Error, &e) == nil && e.Message != "" {
-			return e.Message
+			return withErrorFields(e.Message, e.Type, e.Code, e.Param)
 		}
 		var s string
 		if json.Unmarshal(v.Error, &s) == nil && s != "" {
@@ -1386,6 +1389,30 @@ func PageTitle(b []byte) string {
 
 // tagRe is a markup tag, taken out of a title that holds one.
 var tagRe = lazyre.New(`<[^>]*>`)
+
+// withErrorFields is a vendor's message with the error's own type, code
+// and param after it when the message is only an HTTP status's text
+// ("Bad Request"), which says nothing of what the vendor refused; any
+// other message says it already.
+func withErrorFields(msg, typ string, code any, param string) string {
+	if !statusLine(strings.TrimSpace(msg)) {
+		return msg
+	}
+	var f []string
+	c := ""
+	if code != nil {
+		c = fmt.Sprint(code)
+	}
+	for _, x := range []string{typ, c, param} {
+		if x != "" && !slices.Contains(f, x) {
+			f = append(f, x)
+		}
+	}
+	if len(f) == 0 {
+		return msg
+	}
+	return msg + " (" + strings.Join(f, ", ") + ")"
+}
 
 // statusLine says a fallback is an HTTP error's status ("403 Forbidden",
 // or its text alone, "Forbidden"), what an error body was answered with,
