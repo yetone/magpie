@@ -28,6 +28,11 @@ A memory is one short text (`MaxText` runes) with:
 | `status` | active, candidate, archived, superseded | only active ones are searched by default and digested. Candidates wait under "To review". |
 | `pinned` | bool | first in lists and digests. |
 
+Times (`created`, `updated`) are RFC3339 in the zone the memory was saved
+in, with its offset. `memory_search` and the dream's notes show them in the
+reader's local zone (`memoryStamp`, `TestMemorySearchDatesInLocalTime`); a
+memory saved earlier, stored as UTC, reads the same way.
+
 `Save` keeps one memory per scope and text (`TestSaveKeepsOneOfTheSameText`)
 and refuses empty or over-long text, an unknown kind and a bad scope
 (`TestSaveRefusesWhatIsntAMemory`).

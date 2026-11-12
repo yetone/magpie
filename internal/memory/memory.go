@@ -369,7 +369,7 @@ func norm(s string) string {
 // user threw the same text away before (dismissed), or set it aside in
 // that scope: m is nil then, or the one set aside, and added false.
 func Save(in Input, origin string, src *Source, proj *Project) (m *Memory, added bool, err error) {
-	t := now().UTC()
+	t := now()
 	m = &Memory{Kind: Fact, Scope: Global, Origin: origin, Status: Active, Created: t, Updated: t}
 	if origin == FromUser {
 		m.Edited = t
@@ -512,7 +512,7 @@ func editIn(f *file, m *Memory, in Input, byUser bool) error {
 	if byUser && (in.Text != nil || in.Kind != nil || in.Scope != nil || in.Why != nil) {
 		c.Origin = FromUser
 	}
-	c.Updated = now().UTC()
+	c.Updated = now()
 	if byUser {
 		c.Edited = c.Updated
 	}
@@ -579,7 +579,7 @@ func touch(ids []string) {
 	if len(ids) == 0 {
 		return
 	}
-	t := now().UTC()
+	t := now()
 	f, err := view()
 	if err != nil {
 		return

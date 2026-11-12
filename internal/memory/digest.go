@@ -113,7 +113,7 @@ func publish(f *file) {
 		}
 	}
 	f.Digest = d
-	f.Published = now().UTC()
+	f.Published = now()
 }
 
 // Publish makes what memory holds now the digest agents are given. It

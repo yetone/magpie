@@ -68,7 +68,7 @@ func live(m *Memory) bool { return m != nil && (m.Status == Active || m.Status =
 func Tidy(p Plan) ([]Change, error) {
 	var out []Change
 	err := change(func(f *file) error {
-		t := now().UTC()
+		t := now()
 		for _, mg := range p.Merges {
 			var ms []*Memory
 			for _, id := range mg.IDs {
@@ -175,7 +175,7 @@ func Tidy(p Plan) ([]Change, error) {
 func Untidy(cs []Change) (int, error) {
 	n := 0
 	err := change(func(f *file) error {
-		t := now().UTC()
+		t := now()
 		for i := len(cs) - 1; i >= 0; i-- {
 			c := cs[i]
 			for k, id := range c.IDs {

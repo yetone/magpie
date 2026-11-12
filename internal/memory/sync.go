@@ -23,7 +23,7 @@ func removed(f *file, id string) {
 	if f.Removed == nil {
 		f.Removed = map[string]time.Time{}
 	}
-	f.Removed[id] = now().UTC()
+	f.Removed[id] = now()
 }
 
 // Bundle is what of memory goes to another computer, in a backup or a
@@ -99,7 +99,7 @@ func Combine(a, b *Bundle) *Bundle {
 		b = &Bundle{}
 	}
 	out := &Bundle{Memories: []*Memory{}}
-	cut := now().UTC().Add(-keepRemoved)
+	cut := now().Add(-keepRemoved)
 	for _, r := range []map[string]time.Time{a.Removed, b.Removed} {
 		for id, t := range r {
 			if t.Before(cut) {

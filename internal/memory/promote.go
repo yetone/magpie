@@ -246,7 +246,7 @@ func Promote(ids []string) (*Memory, error) {
 			ms = append(ms, m)
 		}
 		slices.SortFunc(ms, keptFirst)
-		t := now().UTC()
+		t := now()
 		// the same text global already: that one is kept, and these go into it
 		for _, g := range f.Memories {
 			if g.Scope == Global && (g.Status == Active || g.Status == Candidate) && norm(g.Text) == norm(ms[0].Text) {
@@ -291,7 +291,7 @@ func MadeSkill(id, name string) error {
 		if m == nil {
 			return ErrNotFound
 		}
-		t := now().UTC()
+		t := now()
 		m.Skill = name
 		m.Status = Archived
 		m.Updated, m.Edited = t, t

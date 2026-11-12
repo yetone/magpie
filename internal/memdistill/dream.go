@@ -181,7 +181,7 @@ func listing(ms []*memory.Memory) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Today: %s\n\nNotes:\n", now().Format("2006-01-02"))
 	for i, m := range ms {
-		fmt.Fprintf(&b, "n%d | %s | %s | used %d× | ", i+1, m.Kind, m.Created.Format("2006-01-02"), m.Uses)
+		fmt.Fprintf(&b, "n%d | %s | %s | used %d× | ", i+1, m.Kind, m.Created.In(time.Local).Format("2006-01-02"), m.Uses)
 		if memory.Fixed(m) {
 			b.WriteString("fixed | ")
 		}

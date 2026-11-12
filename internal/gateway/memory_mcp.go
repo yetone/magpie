@@ -369,7 +369,7 @@ func memoryLine(m *memory.Memory, c memoryCaller) string {
 	if m.Pinned {
 		l += ", pinned"
 	}
-	l += ", " + m.Updated.Format(time.DateOnly) + ": " + strings.Join(strings.Fields(m.Text), " ")
+	l += ", " + memoryStamp(m.Updated) + ": " + strings.Join(strings.Fields(m.Text), " ")
 	if m.Why != "" {
 		l += " (why: " + strings.Join(strings.Fields(m.Why), " ") + ")"
 	}
@@ -463,3 +463,10 @@ func memoryForget(a memoryArgs) (string, error) {
 	}
 	return "Forgotten: [" + m.ID + "] " + strings.Join(strings.Fields(m.Text), " "), nil
 }
+
+// memoryStamp is when a memory was last changed, in the reader's own zone
+// with its offset (2026-11-11T04:30+08:00). A date alone, taken in UTC,
+// put a memory on the day before or after the one the user lived
+// (Norethcy on X). Memories saved before this are stored in UTC ("…Z")
+// and are shown the same way.
+func memoryStamp(t time.Time) string { return t.In(time.Local).Format("2006-01-02T15:04Z07:00") }
