@@ -3264,6 +3264,8 @@ magpie provider add anthropic <key> id=anthropic-ws2 name="Anthropic WS2" header
 - **“this is an Anthropic API key, not a setup-token”..** The key went to the Claude subscription’s sign-in. Add it as the Anthropic provider instead.
 - **Checking a key..** `magpie provider test anthropic` sends a tiny request through each endpoint, or to each model you name. Add `--as codex` or `--as claude-code` to send it the way that agent would.
 
+Claude on AWS: [Amazon Bedrock in Claude Code, Codex and other agents](https://usemagpie.ai/docs/bedrock).
+
 ## FAQ
 
 ### How do I use an Anthropic API key in Claude Code?
@@ -9461,6 +9463,90 @@ Each location serves models of its own: global has the most, us and eu the newer
 The account that signs needs Agent Platform User (roles/aiplatform.user) on the project; when it impersonates a service account, it also needs Service Account Token Creator on that account.
 
 Related: [Gemini in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/gemini), [DeepSeek in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/deepseek). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/bedrock
+
+# Amazon Bedrock in Claude Code, Codex and other agents
+
+magpie has two Amazon Bedrock presets: `bedrock`, the Bedrock runtime, and `bedrock-mantle`, Bedrock's Mantle endpoint. Both take the same Bedrock API key, with no AWS access keys and no SigV4 signing. Once added, Claude Code, Codex, OpenCode and other agents can use Claude, OpenAI's GPT models, and gpt-oss, Qwen, DeepSeek, Kimi, GLM and MiniMax on Bedrock, billed to your AWS account.
+
+## Add it
+
+1. **Get a key..** Create a Bedrock API key on the Bedrock page of the AWS console.
+2. **Add it and pick a region..** The default region is us-east-1. Change it in the app's editor under Region, or from the CLI:
+
+```
+magpie provider add bedrock 
+magpie provider set bedrock region=eu-west-1
+magpie provider test bedrock
+```
+
+The runtime preset's regions are us-east-1, us-east-2, us-west-2, eu-central-1, eu-west-1, eu-west-3, ap-northeast-1, ap-southeast-1, ap-southeast-2, ap-south-1. Each has its own Claude (Anthropic Messages), Chat Completions and Responses address, and a change of region moves all three.
+
+## Models
+
+The Bedrock runtime has no model list to ask, so magpie gives it one:
+
+- Claude: `global.anthropic.claude-opus-5-5`, `global.anthropic.claude-sonnet-5-5`, `global.anthropic.claude-haiku-4-5-20251001-v1:0` and more, as global. inference profiles, which every commercial region routes.
+- OpenAI GPT: `global.openai.gpt-6-astra`, `global.openai.gpt-6-sol`, `global.openai.gpt-6-luna`, global. profiles too.
+- Other makers: in-region ids such as `openai.gpt-oss-120b-1:0`, `qwen.qwen3-coder-480b-a35b-v1:0`, `deepseek.v3.2`, `moonshotai.kimi-k2.5`, `zai.glm-5`, `minimax.minimax-m2.5`, which not every region serves (gpt-oss isn't in ap-southeast-1).
+
+A profile kept in one geography (`us.`, `eu.`, `apac.`, `jp.`, `au.`) isn't in the list; type it in, as any model of your own is.
+
+## Use it in an agent
+
+magpie picks Bedrock's API per model: Claude on Anthropic Messages alone, OpenAI's GPT models (not gpt-oss) on Responses first, the rest on Chat Completions. Whatever API an agent speaks, magpie translates, so Codex can use Claude on Bedrock and Claude Code can use GPT there:
+
+```
+magpie claude bedrock/global.anthropic.claude-sonnet-5-5
+magpie codex bedrock/global.openai.gpt-6-sol
+```
+
+## Bedrock Mantle
+
+Mantle is Bedrock's other endpoint (`bedrock-mantle.<region>.api.aws`), with the same key:
+
+```
+magpie provider add bedrock-mantle  region=us-west-2
+magpie provider test bedrock-mantle
+```
+
+- Unlike the runtime, Mantle lists its models, so the list is your account's own, models only Mantle serves among them.
+- Model ids are in-region ones alone, such as `anthropic.claude-sonnet-5` and `openai.gpt-oss-120b`; there are no `global.` or `us.` profiles.
+- Mantle serves its OpenAI APIs under two prefixes: OpenAI's closed GPT models and xAI's Grok at `/openai/v1`, the rest at `/v1`. magpie picks per model; when a maker it doesn't know yet is refused, it asks once more at the other prefix and remembers the one that worked.
+- Mantle has 17 regions; the runtime's eu-west-3 has no Mantle.
+
+## Claude Code's CLAUDE_CODE_USE_BEDROCK
+
+With `CLAUDE_CODE_USE_BEDROCK` (or `_VERTEX`, `_MANTLE` and the like) on, Claude Code goes to that cloud's own endpoint and never reaches magpie. When magpie wires Claude Code in, it takes such a switch out of the settings it writes, keeps its value, and puts it back as written when it steps out, unless you set it again since. The cloud's own variables (`AWS_*`) stay. When the switch is somewhere magpie doesn't write (the managed settings, `~/.claude.json`'s env, or the login shell's environment), the Agents page's check names the variable and where it is.
+
+## Notes
+
+- When Claude Code sends an `anthropic-beta` Bedrock doesn't take, Bedrock answers 400 "Unexpected value(s) … for the anthropic-beta header". magpie asks again at once without those betas, and leaves them out for that provider from then on.
+- The key goes in `x-api-key` alone on Claude's API, as Bedrock asks.
+- A custom provider added at a runtime or Mantle address is recognised too, and gets the same rules.
+
+## FAQ
+
+### Does magpie need AWS access keys for Bedrock?
+
+No. One Bedrock API key is enough, and magpie does no SigV4 signing. Create it on the Bedrock page of the AWS console.
+
+### Can Claude Code use Claude on Bedrock through magpie?
+
+Yes. Pick a model such as bedrock/global.anthropic.claude-sonnet-5-5. Leave CLAUDE_CODE_USE_BEDROCK off, or Claude Code goes around magpie; magpie takes it out of the settings it writes.
+
+### Why can't I use some models in my region?
+
+The global. Claude and GPT profiles are routed in every commercial region; other makers' in-region ids aren't in every region. Pick another region, or type in an id your region serves.
+
+### Bedrock or Bedrock Mantle?
+
+Both take the same key. The runtime has global. profiles and a given model list; Mantle lists your account's own models, Mantle-only ones included, under in-region ids alone.
+
+Related: [Anthropic in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/anthropic), [Google Vertex AI in Claude Code, Codex and other agents](https://usemagpie.ai/docs/vertex). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 

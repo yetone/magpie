@@ -294,6 +294,8 @@ magpie provider add anthropic &lt;key&gt; id=anthropic-ws2 name="Anthropic WS2" 
       <li><b>检查 Key。</b><code>magpie provider test anthropic</code> 会向每个接口发一个很小的请求，或者发给你指定的每个模型。加上 <code>--as codex</code> 或 <code>--as claude-code</code>，就按那个工具的方式发送。</li>
     </ul>
 
+    <p>在 AWS 上用 Claude：<a href="/docs/zh/bedrock">Amazon Bedrock 接入 Claude Code、Codex 等 Agent</a>。</p>
+
     <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
     <h3>怎么在 Claude Code 里用 Anthropic API Key？</h3>
     <p>在 magpie 里添加 Anthropic API Key（供应商、添加供应商、Anthropic），然后在 Claude Code 那一行选一个 Claude 模型，比如 <code>claude-opus-5-5</code>，或者运行 <code>magpie claude anthropic/claude-opus-5-5</code>。Claude Code 说的是 Anthropic Messages，所以请求按它发出的样子发到 <code>https://api.anthropic.com</code>，只在路上修掉模型会拒绝的内容。</p>

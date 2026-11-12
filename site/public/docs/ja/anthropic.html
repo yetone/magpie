@@ -294,6 +294,8 @@ magpie provider add anthropic &lt;key&gt; id=anthropic-ws2 name="Anthropic WS2" 
       <li><b>キーの確認。</b><code>magpie provider test anthropic</code> は各エンドポイントに、または指定した各モデルに小さなリクエストを送ります。<code>--as codex</code> や <code>--as claude-code</code> を付けると、そのツールと同じ形で送ります。</li>
     </ul>
 
+    <p>AWS で Claude を使う：<a href="/docs/ja/bedrock">Amazon Bedrock を Claude Code・Codex などのエージェントで使う</a>。</p>
+
     <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
     <h3>Claude Code で Anthropic の API キーを使うには？</h3>
     <p>magpie に Anthropic の API キーを追加し（プロバイダ、プロバイダを追加、Anthropic）、Claude Code の行で <code>claude-opus-5-5</code> などの Claude モデルを選ぶか、<code>magpie claude anthropic/claude-opus-5-5</code> を実行します。Claude Code は Anthropic Messages を話すので、リクエストは送ったとおりに <code>https://api.anthropic.com</code> へ届き、途中で直すのはモデルが拒否するものだけです。</p>

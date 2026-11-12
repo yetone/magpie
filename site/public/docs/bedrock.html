@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Amazon Bedrock in Claude Code and Codex: Claude, GPT, DeepSeek, Kimi and GLM with a Bedrock API key · magpie</title>
+<meta name="description" content="Connect Amazon Bedrock to Claude Code, Codex, OpenCode and other agents with magpie: one Bedrock API key and no SigV4, a region to pick, Claude and GPT through global inference profiles, gpt-oss, Qwen, DeepSeek, Kimi, GLM and MiniMax, and the Bedrock Mantle endpoint that lists your account's own models.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/bedrock">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/bedrock">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/bedrock">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/bedrock">
+<link rel="canonical" href="https://usemagpie.ai/docs/bedrock">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Amazon Bedrock in Claude Code, Codex and other agents">
+<meta property="og:description" content="Connect Amazon Bedrock to Claude Code, Codex, OpenCode and other agents with magpie: one Bedrock API key and no SigV4, a region to pick, Claude and GPT through global inference profiles, gpt-oss, Qwen, DeepSeek, Kimi, GLM and MiniMax, and the Bedrock Mantle endpoint that lists your account's own models.">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/bedrock">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Amazon Bedrock in Claude Code, Codex and other agents",
+   "description": "Connect Amazon Bedrock to Claude Code, Codex, OpenCode and other agents with magpie: one Bedrock API key and no SigV4, a region to pick, Claude and GPT through global inference profiles, gpt-oss, Qwen, DeepSeek, Kimi, GLM and MiniMax, and the Bedrock Mantle endpoint that lists your account's own models.",
+   "inLanguage": "en",
+   "url": "https://usemagpie.ai/docs/bedrock",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Does magpie need AWS access keys for Bedrock?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "No. One Bedrock API key is enough, and magpie does no SigV4 signing. Create it on the Bedrock page of the AWS console."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can Claude Code use Claude on Bedrock through magpie?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Pick a model such as bedrock/global.anthropic.claude-sonnet-5-5. Leave CLAUDE_CODE_USE_BEDROCK off, or Claude Code goes around magpie; magpie takes it out of the settings it writes."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Why can't I use some models in my region?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "The global. Claude and GPT profiles are routed in every commercial region; other makers' in-region ids aren't in every region. Pick another region, or type in an id your region serves."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Bedrock or Bedrock Mantle?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Both take the same key. The runtime has global. profiles and a given model list; Mantle lists your account's own models, Mantle-only ones included, under in-region ids alone."
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "Docs",
+     "item": "https://usemagpie.ai/docs/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "Amazon Bedrock in Claude Code, Codex and other agents",
+     "item": "https://usemagpie.ai/docs/bedrock"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>Docs</small></a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/start">Get started</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a class="toc-only" href="/docs/remote">Remote magpie</a>
+    <a class="toc-only" href="/docs/docker">Docker</a>
+    <a class="toc-only" href="/docs/privacy">Privacy</a>
+    <a class="toc-only" href="/docs/masking">Privacy masking</a>
+    <a class="toc-only" href="/docs/mcp-router">MCP router</a>
+    <a class="toc-only" href="/docs/library">Library</a>
+    <a class="toc-only" href="/docs/claude-code-models">Models in Claude Code</a>
+    <a class="toc-only" href="/docs/codex-models">Models in Codex</a>
+    <a class="toc-only" href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a class="toc-only" href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a class="toc-only" href="/docs/local-models">Local models</a>
+    <a class="toc-only" href="/docs/opencode-models">Models in OpenCode</a>
+    <a class="toc-only" href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/bedrock" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/bedrock" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/bedrock" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">Download</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Amazon Bedrock</p>
+    <a href="#overview">What it is</a>
+    <a href="#add">Add it</a>
+    <a href="#models">Models</a>
+    <a href="#agents">Use it in an agent</a>
+    <a href="#mantle">Bedrock Mantle</a>
+    <a href="#claude-switch">Claude Code's CLAUDE_CODE_USE_BEDROCK</a>
+    <a href="#notes">Notes</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">Docs · Guide</p>
+    <h1>Amazon Bedrock in Claude Code, Codex and other agents</h1>
+    <p class="lede">magpie has two Amazon Bedrock presets: <code>bedrock</code>, the Bedrock runtime, and <code>bedrock-mantle</code>, Bedrock's Mantle endpoint. Both take the same Bedrock API key, with no AWS access keys and no SigV4 signing. Once added, Claude Code, Codex, OpenCode and other agents can use Claude, OpenAI's GPT models, and gpt-oss, Qwen, DeepSeek, Kimi, GLM and MiniMax on Bedrock, billed to your AWS account.</p>
+    <h2 id="add"><a class="anchor" href="#add">Add it</a></h2>
+    <ol class="steps">
+      <li><b>Get a key.</b>Create a Bedrock API key on the Bedrock page of the AWS console.</li>
+      <li><b>Add it and pick a region.</b>The default region is us-east-1. Change it in the app's editor under <span class="ui">Region</span>, or from the CLI:</li>
+    </ol>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="br-add">Copy</button><pre id="br-add">magpie provider add bedrock <Bedrock API key>
+magpie provider set bedrock region=eu-west-1
+magpie provider test bedrock</pre></div>
+    <p>The runtime preset's regions are us-east-1, us-east-2, us-west-2, eu-central-1, eu-west-1, eu-west-3, ap-northeast-1, ap-southeast-1, ap-southeast-2, ap-south-1. Each has its own Claude (Anthropic Messages), Chat Completions and Responses address, and a change of region moves all three.</p>
+    <h2 id="models"><a class="anchor" href="#models">Models</a></h2>
+    <p>The Bedrock runtime has no model list to ask, so magpie gives it one:</p>
+    <ul><li>Claude: <code>global.anthropic.claude-opus-5-5</code>, <code>global.anthropic.claude-sonnet-5-5</code>, <code>global.anthropic.claude-haiku-4-5-20251001-v1:0</code> and more, as global. inference profiles, which every commercial region routes.</li><li>OpenAI GPT: <code>global.openai.gpt-6-astra</code>, <code>global.openai.gpt-6-sol</code>, <code>global.openai.gpt-6-luna</code>, global. profiles too.</li><li>Other makers: in-region ids such as <code>openai.gpt-oss-120b-1:0</code>, <code>qwen.qwen3-coder-480b-a35b-v1:0</code>, <code>deepseek.v3.2</code>, <code>moonshotai.kimi-k2.5</code>, <code>zai.glm-5</code>, <code>minimax.minimax-m2.5</code>, which not every region serves (gpt-oss isn't in ap-southeast-1).</li></ul>
+    <p>A profile kept in one geography (<code>us.</code>, <code>eu.</code>, <code>apac.</code>, <code>jp.</code>, <code>au.</code>) isn't in the list; type it in, as any model of your own is.</p>
+    <h2 id="agents"><a class="anchor" href="#agents">Use it in an agent</a></h2>
+    <p>magpie picks Bedrock's API per model: Claude on Anthropic Messages alone, OpenAI's GPT models (not gpt-oss) on Responses first, the rest on Chat Completions. Whatever API an agent speaks, magpie translates, so Codex can use Claude on Bedrock and Claude Code can use GPT there:</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="br-use">Copy</button><pre id="br-use">magpie claude bedrock/global.anthropic.claude-sonnet-5-5
+magpie codex bedrock/global.openai.gpt-6-sol</pre></div>
+    <h2 id="mantle"><a class="anchor" href="#mantle">Bedrock Mantle</a></h2>
+    <p>Mantle is Bedrock's other endpoint (<code>bedrock-mantle.&lt;region&gt;.api.aws</code>), with the same key:</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="br-mantle">Copy</button><pre id="br-mantle">magpie provider add bedrock-mantle <Bedrock API key> region=us-west-2
+magpie provider test bedrock-mantle</pre></div>
+    <ul><li>Unlike the runtime, Mantle lists its models, so the list is your account's own, models only Mantle serves among them.</li><li>Model ids are in-region ones alone, such as <code>anthropic.claude-sonnet-5</code> and <code>openai.gpt-oss-120b</code>; there are no <code>global.</code> or <code>us.</code> profiles.</li><li>Mantle serves its OpenAI APIs under two prefixes: OpenAI's closed GPT models and xAI's Grok at <code>/openai/v1</code>, the rest at <code>/v1</code>. magpie picks per model; when a maker it doesn't know yet is refused, it asks once more at the other prefix and remembers the one that worked.</li><li>Mantle has 17 regions; the runtime's eu-west-3 has no Mantle.</li></ul>
+    <h2 id="claude-switch"><a class="anchor" href="#claude-switch">Claude Code's CLAUDE_CODE_USE_BEDROCK</a></h2>
+    <p>With <code>CLAUDE_CODE_USE_BEDROCK</code> (or <code>_VERTEX</code>, <code>_MANTLE</code> and the like) on, Claude Code goes to that cloud's own endpoint and never reaches magpie. When magpie wires Claude Code in, it takes such a switch out of the settings it writes, keeps its value, and puts it back as written when it steps out, unless you set it again since. The cloud's own variables (<code>AWS_*</code>) stay. When the switch is somewhere magpie doesn't write (the managed settings, <code>~/.claude.json</code>'s env, or the login shell's environment), the Agents page's check names the variable and where it is.</p>
+    <h2 id="notes"><a class="anchor" href="#notes">Notes</a></h2>
+    <ul><li>When Claude Code sends an <code>anthropic-beta</code> Bedrock doesn't take, Bedrock answers 400 "Unexpected value(s) … for the anthropic-beta header". magpie asks again at once without those betas, and leaves them out for that provider from then on.</li><li>The key goes in <code>x-api-key</code> alone on Claude's API, as Bedrock asks.</li><li>A custom provider added at a runtime or Mantle address is recognised too, and gets the same rules.</li></ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
+    <h3>Does magpie need AWS access keys for Bedrock?</h3>
+    <p>No. One Bedrock API key is enough, and magpie does no SigV4 signing. Create it on the Bedrock page of the AWS console.</p>
+    <h3>Can Claude Code use Claude on Bedrock through magpie?</h3>
+    <p>Yes. Pick a model such as bedrock/global.anthropic.claude-sonnet-5-5. Leave CLAUDE_CODE_USE_BEDROCK off, or Claude Code goes around magpie; magpie takes it out of the settings it writes.</p>
+    <h3>Why can't I use some models in my region?</h3>
+    <p>The global. Claude and GPT profiles are routed in every commercial region; other makers' in-region ids aren't in every region. Pick another region, or type in an id your region serves.</p>
+    <h3>Bedrock or Bedrock Mantle?</h3>
+    <p>Both take the same key. The runtime has global. profiles and a given model list; Mantle lists your account's own models, Mantle-only ones included, under in-region ids alone.</p>
+
+    <p style="margin-top:48px">Related: <a href="/docs/anthropic">Anthropic in Claude Code, Codex, Gemini CLI and OpenCode</a>, <a href="/docs/vertex">Google Vertex AI in Claude Code, Codex and other agents</a>. If something fails, see <a href="/docs/troubleshooting">Fixing common errors: 401, 429, 502, 504 and more</a> or ask on <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>.</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a href="/docs/remote">Remote magpie</a>
+    <a href="/docs/docker">Docker</a>
+    <a href="/docs/privacy">Privacy</a>
+    <a href="/docs/masking">Privacy masking</a>
+    <a href="/docs/mcp-router">MCP router</a>
+    <a href="/docs/library">Library</a>
+    <a href="/docs/claude-code-models">Models in Claude Code</a>
+    <a href="/docs/codex-models">Models in Codex</a>
+    <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a href="/docs/local-models">Local models</a>
+    <a href="/docs/opencode-models">Models in OpenCode</a>
+    <a href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/contributors">Contributors</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
