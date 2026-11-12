@@ -357,6 +357,19 @@ could match the same key.**
   it once with TZ=UTC and once in a far zone.
 - Seen 1× (2026-10-15).
 
+**A test never swaps time.Local: the code it tests takes its zone from a
+variable of its own.**
+- 4028687b8 (11-12) set time.Local to +08:00 in
+  TestMemorySearchDatesInLocalTime. Every time.Now reads time.Local, so
+  the swap raced an http conn goroutine an earlier test had left
+  finishing, and main's Test run at 727e23637 went red on macOS -race.
+  af212c945 gave memoryStamp a memoryZone variable and moved the
+  saved-zone check into memory, where the clock is already a variable.
+- #2949 (TestHeldClock) and #4360 (testenv.Zone's cleanup) are the same
+  race and still open. testenv.Zone waits for its own stand-ins only, not
+  for whatever another test left running.
+- Seen 1× (2026-11-12).
+
 **Work added to a path every request or poll takes is costed at that
 rate and at its largest input.**
 - 644f4316f's Codex model/effort consumption was read again on every 15s
