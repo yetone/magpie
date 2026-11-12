@@ -41,14 +41,20 @@ endif
 assets-pack:
 	@go run ./build/assetpack internal/gui/assets internal/gui/assets.zip
 
+# Every build but the test runs takes Go's runtime with the macOS page
+# release of build/darwin/footprint-overlay.sh: with Go's own, heap Go
+# gave back stayed in Activity Monitor's Memory on macOS 27. It replaces
+# a darwin-only file, so other systems' builds are the same with it.
+OVERLAY = F=$$(sh build/darwin/footprint-overlay.sh .overlay) || exit 1;
+
 build:
-	go build -tags "$(TAGS)" -trimpath -ldflags="$(LDFLAGS)" -o magpie .
+	$(OVERLAY) go build $$F -tags "$(TAGS)" -trimpath -ldflags="$(LDFLAGS)" -o magpie .
 
 cli:
-	CGO_ENABLED=0 go build -tags nogui -trimpath -ldflags="$(LDFLAGS)" -o magpie .
+	$(OVERLAY) CGO_ENABLED=0 go build $$F -tags nogui -trimpath -ldflags="$(LDFLAGS)" -o magpie .
 
 build-release: assets-pack
-	go build -tags "$(TAGS) packedassets" -trimpath -ldflags="$(LDFLAGS)" -o magpie .
+	$(OVERLAY) go build $$F -tags "$(TAGS) packedassets" -trimpath -ldflags="$(LDFLAGS)" -o magpie .
 
 install:
 	go install -tags "$(TAGS)" -trimpath -ldflags="$(LDFLAGS)" .
@@ -110,10 +116,10 @@ release: clean build-release
 
 release-cli: assets-pack
 	@mkdir -p dist
-	@for t in $(TARGETS); do \
+	@$(OVERLAY) for t in $(TARGETS); do \
 		os=$${t%/*}; arch=$${t#*/}; ext=""; [ $$os = windows ] && ext=.exe; \
 		echo "  $$os/$$arch (cli)"; \
-		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -tags "nogui packedassets" -trimpath -ldflags="$(LDFLAGS)" -o dist/magpie-cli-$$os-$$arch$$ext . || exit 1; \
+		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build $$F -tags "nogui packedassets" -trimpath -ldflags="$(LDFLAGS)" -o dist/magpie-cli-$$os-$$arch$$ext . || exit 1; \
 	done
 
 # The desktop app for Windows: the system WebView2 needs no cgo, so both
@@ -144,7 +150,7 @@ release-linux: assets-pack
 	@go build -tags "$(TAGS) packedassets" -trimpath -ldflags="$(LDFLAGS)" -o dist/magpie-linux-$(shell go env GOARCH) .
 
 clean:
-	rm -rf magpie magpie.exe magpie.app dist internal/gui/assets.zip rsrc_windows_*.syso internal/update/launcher-*.com
+	rm -rf magpie magpie.exe magpie.app dist .overlay internal/gui/assets.zip rsrc_windows_*.syso internal/update/launcher-*.com
 
 # Development: the UI is served from internal/gui/assets and the window
 # reloads itself when a file there is saved. With fswatch installed, the
