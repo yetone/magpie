@@ -8269,7 +8269,81 @@ OpenAI Completions, at the gateway's /v1, for every model.
 
 No. magpie writes only its own magpie provider.
 
-More agents on the same models: [OpenPencil on any model](https://usemagpie.ai/docs/openpencil), [WorkBuddy on any model](https://usemagpie.ai/docs/workbuddy) and [Pi on any model](https://usemagpie.ai/docs/pi). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [OpenPencil on any model](https://usemagpie.ai/docs/openpencil), [WorkBuddy on any model](https://usemagpie.ai/docs/workbuddy), [Pi on any model](https://usemagpie.ai/docs/pi) and [Mistral Vibe on any model](https://usemagpie.ai/docs/mistral-vibe). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/mistral-vibe
+
+# Mistral Vibe on any model
+
+Mistral Vibe is Mistral's open-source coding agent, the `vibe` CLI. It keeps its settings in `config.toml` in `$VIBE_HOME`, else `~/.vibe`. magpie adds a magpie provider there with one model per catalog model, so Vibe's /model picker lists DeepSeek, GLM, Kimi, Qwen, Claude, a ChatGPT subscription or any other model in magpie. For Mistral's own models in other agents, see [Mistral in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/mistral).
+
+## Set up Mistral Vibe
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model for Mistral Vibe on the Agents page.** Pick one via magpie; magpie points Vibe's active_model at it.
+3. **Restart open vibe sessions.** Vibe reads its settings at start-up. Afterwards you can switch to another magpie model in Vibe's /model too.
+
+## config.toml
+
+magpie writes a `[[providers]]` entry with the gateway's `/v1` as OpenAI chat completions, and one `[[models]]` entry per catalog model. A model's alias is `magpie/<provider>/<model>`, which is what /model shows and active_model holds:
+
+```
+# ~/.vibe/config.toml
+active_model = "magpie/deepseek/deepseek-v4-pro"
+
+[[providers]]
+name = "magpie"
+api_base = "http://127.0.0.1:3425/v1"
+api_style = "openai"
+backend = "generic"
+extra_headers = { Authorization = "Bearer " }
+
+[[models]]
+name = "deepseek/deepseek-v4-pro"
+provider = "magpie"
+alias = "magpie/deepseek/deepseek-v4-pro"
+thinking_levels = ["off", …]
+supports_images = …
+max_context_length = …
+```
+
+## Where the key goes
+
+Vibe reads a provider's key only from the environment variable its api_key_env_var names, or the keyring, never from config.toml. A keyless provider sends its extra_headers as they are, so magpie's key for Vibe goes there as an Authorization header. Nothing of magpie's is put in your environment or in `~/.vibe/.env`. Vibe's requests say Mistral-Vibe/<version> as their User-Agent, which the gateway tells apart.
+
+## Models and thinking
+
+A model with effort levels offers them in thinking_levels beside off; one without offers off alone. A thinking level you chose in Vibe on one of magpie's models stays while the model still has it. A model whose context magpie doesn't know is given 128K, since without one Vibe takes a default window with a warning.
+
+## What stays yours
+
+Every other key and entry of the file is yours and stays as written. magpie rewrites its own entries only when its models changed. Avibe, whose command is also vibe, is not taken for Mistral Vibe. Vibe's skills and AGENTS.md, in `~/.vibe/skills` and `~/.vibe/AGENTS.md`, are kept by magpie's [Library](https://usemagpie.ai/docs/library).
+
+## Switching back
+
+magpie notes what active_model was when it first takes over. When you pick Vibe's own model in magpie, or switch Vibe off, magpie puts active_model back to that value (or the model you picked) and removes its provider and model entries.
+
+## FAQ
+
+### Can Mistral Vibe use DeepSeek or Claude?
+
+Yes. magpie adds a magpie provider and its models to config.toml; pick a model starting with magpie/ in Vibe's /model.
+
+### Where does magpie put its key?
+
+Vibe doesn't read keys from config.toml, so magpie puts its key in extra_headers as an Authorization header, not in your environment.
+
+### Why is Vibe still on its old model?
+
+Vibe reads its settings at start-up. Restart open vibe sessions.
+
+### Is my old model back when I switch back?
+
+Yes. magpie noted what active_model was and puts it back.
+
+More agents on the same models: [Avibe on any model](https://usemagpie.ai/docs/avibe), [Pencil on any model](https://usemagpie.ai/docs/pencil) and [WorkBuddy on any model](https://usemagpie.ai/docs/workbuddy). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
