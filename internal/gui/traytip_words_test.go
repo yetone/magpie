@@ -65,7 +65,7 @@ func TestPluginWindowWordsSaidInEveryLanguage(t *testing.T) {
 	}
 	for _, lang := range []string{"zh", "zh-TW", "ja", "de"} {
 		for _, w := range words {
-			if _, ok := pageWords()[lang][w]; !ok {
+			if _, ok := pageWords(lang)[w]; !ok {
 				t.Errorf("i18n.js's %s doesn't say %q", lang, w)
 			}
 		}
@@ -82,5 +82,18 @@ func TestParsePageWords(t *testing.T) {
 	}
 	if _, ok := got["zh"]["not"]; ok || len(got) != 2 {
 		t.Errorf("parsed a comment or past the table: %v", got)
+	}
+}
+
+// parsePageWordsIn reads only the language asked for: the tray holds one
+// language's words, not the page's four.
+func TestParsePageWordsInOneLanguage(t *testing.T) {
+	src := "const I18N = {\n  zh: {\n    \"Credits\": \"积分\",\n  },\n  \"zh-TW\": {\n    \"Credits\": \"積分\",\n  },\n};\n"
+	got := parsePageWordsIn(src, "zh-TW")
+	if len(got) != 1 || got["zh-TW"]["Credits"] != "積分" {
+		t.Errorf("parsed %v", got)
+	}
+	if pageWords("ja")["Credits"] == "" || pageWords("zh")["Credits"] == pageWords("ja")["Credits"] {
+		t.Errorf("ja then zh: %q %q", pageWords("ja")["Credits"], pageWords("zh")["Credits"])
 	}
 }

@@ -8,20 +8,37 @@ import (
 	"github.com/yetone/magpie/internal/lazyre"
 )
 
-// pageWords are the page's own translations (assets/i18n.js's I18N), by
-// language, read once: the words a usage card's window is named and
-// counted in ("Credits", "credits", "5 hours") come from the vendor or a
-// plugin in English, and the Usage page says them with t(). The tray's
-// tooltip says them with the same table (pageWord), so a window reads in
-// the tray as on its card, in every language the page has (yi_time on
-// Discord: "Credits 0 / 500 credits · 已用 0%").
-var pageWords = sync.OnceValue(func() map[string]map[string]string {
+// pageWords are the page's own translations (assets/i18n.js's I18N) in
+// one language, read when first asked for it: the words a usage card's
+// window is named and counted in ("Credits", "credits", "5 hours") come
+// from the vendor or a plugin in English, and the Usage page says them
+// with t(). The tray's tooltip says them with the same table (pageWord),
+// so a window reads in the tray as on its card, in every language the
+// page has (yi_time on Discord: "Credits 0 / 500 credits · 已用 0%").
+// Only the language last asked for is kept: all four blocks held ~4.5 MB
+// of an idle tray magpie's heap, for the few words one language needs.
+func pageWords(lang string) map[string]string {
+	pageWordsMu.Lock()
+	defer pageWordsMu.Unlock()
+	if pageWordsLang == lang && pageWordsHeld != nil {
+		return pageWordsHeld
+	}
 	b, err := assets.ReadFile("assets/i18n.js")
 	if err != nil {
 		return nil
 	}
-	return parsePageWords(string(b))
-})
+	pageWordsLang, pageWordsHeld = lang, parsePageWordsIn(string(b), lang)[lang]
+	if pageWordsHeld == nil {
+		pageWordsHeld = map[string]string{}
+	}
+	return pageWordsHeld
+}
+
+var (
+	pageWordsMu   sync.Mutex
+	pageWordsLang string
+	pageWordsHeld map[string]string
+)
 
 var (
 	pageLangHead = lazyre.New(`^  "?([\w-]+)"?: \{`)
@@ -34,6 +51,12 @@ var (
 // JSON can't read (a JS-only escape) is left out: that word reads in
 // English, as the page's own fallback does.
 func parsePageWords(src string) map[string]map[string]string {
+	return parsePageWordsIn(src, "")
+}
+
+// parsePageWordsIn is parsePageWords with only lang's block read ("" for
+// every block).
+func parsePageWordsIn(src, lang string) map[string]map[string]string {
 	if i := strings.Index(src, "\n};"); i >= 0 {
 		src = src[:i]
 	}
@@ -41,8 +64,11 @@ func parsePageWords(src string) map[string]map[string]string {
 	var cur map[string]string
 	for _, line := range strings.Split(src, "\n") {
 		if m := pageLangHead.FindStringSubmatch(line); m != nil {
-			cur = map[string]string{}
-			out[m[1]] = cur
+			cur = nil
+			if lang == "" || m[1] == lang {
+				cur = map[string]string{}
+				out[m[1]] = cur
+			}
 			continue
 		}
 		if cur == nil || !strings.HasPrefix(line, "    \"") {
@@ -62,7 +88,7 @@ func parsePageWords(src string) map[string]map[string]string {
 // pageWord is s as the page says it in lang (its t()): s itself in
 // English, or where the page has no word for it.
 func pageWord(lang, s string) string {
-	if v, ok := pageWords()[lang][s]; ok && v != "" {
+	if v, ok := pageWords(lang)[s]; ok && v != "" {
 		return v
 	}
 	return s
