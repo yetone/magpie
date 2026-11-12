@@ -1279,7 +1279,7 @@ func claudeIn(at place) *Agent {
 		// unless Full window. It is the model's own entry, so Desktop's
 		// models have it with Claude Code itself off magpie too, where
 		// Claude's own models compact as they did
-		work := func(ref string) int {
+		work := func(ref string, listed1M bool) int {
 			if n := provider.CompactSet(ref); n > 0 {
 				return n
 			}
@@ -1292,6 +1292,13 @@ func claudeIn(at place) *Agent {
 			if s.CompactAt == 0 && provider.WindowTyped(ref) {
 				return -1
 			}
+			// a model Desktop lists by its 1M id alone, which the user asked
+			// for with Only each model's largest window, runs to that 1M:
+			// held to the working window, Desktop's 1M entry compacted at
+			// 272K (henglu486729 on X). A threshold they typed still wins
+			if s.CompactAt == 0 && listed1M {
+				return -1
+			}
 			return cmp.Or(s.Compact(), -1)
 		}
 		var models []claudeBudget
@@ -1302,7 +1309,7 @@ func claudeIn(at place) *Agent {
 			for _, e := range shown {
 				for _, id := range append([]string{gateway.DesktopID(e)}, again[e.ID]...) {
 					if claudeName(id) == "" {
-						models = append(models, claudeBudget{id: id, window: e.Context, long: gateway.DesktopListed1M(e), compact: work(e.ID), behaves: behaves[id] != ""})
+						models = append(models, claudeBudget{id: id, window: e.Context, long: gateway.DesktopListed1M(e), compact: work(e.ID, gateway.DesktopListed1M(e)), behaves: behaves[id] != ""})
 					}
 				}
 			}
@@ -1326,7 +1333,7 @@ func claudeIn(at place) *Agent {
 				if v == "" || claudeModel(bare) || provider.ClaudeGroup(bare) {
 					continue
 				}
-				models = append(models, claudeBudget{id: spell(v), window: window[bare], long: strings.HasSuffix(v, "[1m]"), compact: work(bare)})
+				models = append(models, claudeBudget{id: spell(v), window: window[bare], long: strings.HasSuffix(v, "[1m]"), compact: work(bare, false)})
 			}
 			// the one for every model else, as the variable gave it: none
 			// on a Claude main model, which Anthropic runs to its own

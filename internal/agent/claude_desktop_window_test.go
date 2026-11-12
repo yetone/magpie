@@ -488,3 +488,50 @@ func TestClaudeDesktopWSLContextWindow(t *testing.T) {
 		t.Fatalf("Desktop off: %s", readFile(distroSettings))
 	}
 }
+
+// TestClaudeDesktopLongestRunsTo1M (henglu486729 on X, Windows Desktop
+// 5.1231.2): Only each model's largest window lists a 1M model by its 1M
+// id, and Full window off held it to the working window (272K) under
+// modelSettings' top-level autoCompactWindow, so the 1M entry compacted and
+// showed 272K. It runs to its 1M; a model beside it listed plain, and one
+// whose threshold the user typed, keep theirs.
+func TestClaudeDesktopLongestRunsTo1M(t *testing.T) {
+	home, path := desktopWindowSandbox(t)
+	if err := provider.SetHiddenModels("claude-desktop", []string{"v/grok", "v/plain", "v/claude-opus-4-6"}); err != nil {
+		t.Fatal(err)
+	}
+	s := settings.Load()
+	s.DesktopLongest = true
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	a := claude(home)
+	if err := a.Field("model").Set("v/plain"); err != nil {
+		t.Fatal(err)
+	}
+	if err := claudeDesktop(home).Field("provider").Set("magpie"); err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]string{}
+	for _, e := range provider.Catalog() {
+		ids[e.ID] = gateway.DesktopID(e)
+	}
+	budget := func(ref string) string { v, _ := edit.GetJSON(path, budgetPath(ids[ref])); return v }
+	if budget("v/glm") != "1000000" || budget("v/gpt") != "" {
+		t.Fatalf("glm %q gpt %q: %s", budget("v/glm"), budget("v/gpt"), readFile(path))
+	}
+	if v, _ := edit.GetJSON(path, "autoCompactWindow"); v != "272000" {
+		t.Fatalf("top-level %q: a model without an entry keeps the working window", v)
+	}
+	// a threshold typed for every model is theirs
+	s.CompactAt = 400000
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if top, _ := edit.GetJSON(path, "autoCompactWindow"); budget("v/glm") != "" || top != "400000" {
+		t.Fatalf("typed 400K: glm %q top %q: %s", budget("v/glm"), top, readFile(path))
+	}
+}
