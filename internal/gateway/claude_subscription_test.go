@@ -43,7 +43,7 @@ func TestClaudeSubscriptionPromptKeepsForeignHarnessOutOfSystem(t *testing.T) {
 	// the setting is passed as flag settings, which --setting-sources does
 	// not control.
 	for _, want := range []string{"--input-format stream-json", "--include-partial-messages", "--strict-mcp-config", "--effort medium",
-		`--settings {"disableDeepLinkRegistration":"disable"}`} {
+		`--settings {"disableDeepLinkRegistration":"disable","showThinkingSummaries":true}`} {
 		if !strings.Contains(args, want) {
 			t.Fatalf("missing CLI contract %q in %q", want, args)
 		}
