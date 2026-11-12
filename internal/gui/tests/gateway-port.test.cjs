@@ -65,7 +65,7 @@ function server(lang, over, posts) {
 
 const words = {
   en: {
-    name: "Gateway address", apply: "Apply",
+    name: "Gateway port", addr: "Gateway address", apply: "Apply",
     now: (u) => "Only the port is set here, 1024 to 65535; MAGPIE_ADDR=host:port sets the whole address instead. Agents magpie connected move with it. Now " + u,
     range: "A port is a number from 1024 to 65535",
     taken: "Port 3500 is in use by another program: pick another one",
@@ -73,7 +73,7 @@ const words = {
     env: "MAGPIE_ADDR=127.0.0.1:3426 sets the gateway’s whole address, host:port: unset it to set the port here",
   },
   zh: {
-    name: "网关地址", apply: "应用",
+    name: "网关端口", addr: "网关地址", apply: "应用",
     now: (u) => "这里只设端口（1024 到 65535）；MAGPIE_ADDR=主机:端口 可指定完整地址。改了之后，已接入 magpie 的 Agent 会一起换过去。当前 " + u,
     range: "端口是 1024 到 65535 之间的数字",
     taken: "端口 3500 已被其他程序占用，请换一个",
@@ -191,8 +191,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const row = page.locator("#portList .port-row");
           assert(await row.locator("input.gateway-port").isDisabled());
           assert.equal(await row.locator("input.gateway-port").inputValue(), "127.0.0.1:3426");
-          assert.equal((await row.locator(".name").textContent()).trim(), w.name);
-          assert.equal(await row.locator("input.gateway-port").getAttribute("aria-label"), w.name);
+          // the whole host:port shown: an address, not a port
+          assert.equal((await row.locator(".name").textContent()).trim(), w.addr);
+          assert.equal(await row.locator("input.gateway-port").getAttribute("aria-label"), w.addr);
           assert(await row.getByRole("button", { name: w.apply }).isDisabled());
           assert.equal((await row.locator(".sub").textContent()).trim(), w.env);
           assert.deepEqual(posts, []);

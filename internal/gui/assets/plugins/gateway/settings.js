@@ -10,7 +10,8 @@
 // port, 1024 up, is typed here; magpie moves its gateway there and every
 // agent it connected with it, or says why it can't (another program has
 // it). MAGPIE_ADDR, a whole host:port, comes first and the field shows it,
-// off (Chicring on Discord: the row was titled a port while it showed one).
+// off, the row titled an address then (Chicring on Discord: the row was
+// titled a port while it showed one).
 let portDraft = { value: null, err: "" };
 // portSays is the gateway's word on a port it couldn't take, in the page's
 // language: it says the port, so it is matched rather than looked up
@@ -25,14 +26,18 @@ function renderPort(s) {
   const box = $("#portList");
   const r = el("div", "row pref port-row");
   const who = el("div", "who");
-  who.append(el("div", "name", t("Gateway address")));
+  // a port is all that is typed here, so it is called one; MAGPIE_ADDR's
+  // whole host:port is an address (the owner, 11-12: the row titled an
+  // address over a field that takes 3425)
+  const title = t(s.addrEnv ? "Gateway address" : "Gateway port");
+  who.append(el("div", "name", title));
   const sub = el("div", "sub");
   const d = portDraft;
   const now = s.addrEnv ? "" : String(s.port || 3425);
   const field = input(d.value ?? now, "3425");
   field.className = "words gateway-port";
   field.inputMode = "numeric";
-  field.setAttribute("aria-label", t("Gateway address"));
+  field.setAttribute("aria-label", title);
   const save = el("button", "text", t("Apply"));
   if (s.addrEnv) {
     field.value = s.addrEnv;
