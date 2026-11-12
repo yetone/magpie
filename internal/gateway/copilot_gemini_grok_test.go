@@ -88,7 +88,8 @@ const copilotOverlappingRequest = `{"model":"copilot/gemini-3.8-flash","stream":
 
 // TestCopilotGeminiKeepsUnprovenUnions: only what is provably disjoint
 // goes as oneOf. A union whose branches can't be told apart stays an
-// anyOf, and Copilot's refusal of it still reaches the client, as it did
+// anyOf (one of mixed types: same-type branches are merged,
+// TestCopilotGeminiTakesToolShapes), and Copilot's refusal of it still reaches the client, as it did
 // before (#4374's Gemini turns were all refused; this union is one the
 // conversion leaves as it came).
 func TestCopilotGeminiKeepsUnprovenUnions(t *testing.T) {
@@ -101,7 +102,8 @@ func TestCopilotGeminiKeepsUnprovenUnions(t *testing.T) {
 	}, "invalid request body", http.StatusBadRequest, &sent)
 
 	rec := httptest.NewRecorder()
-	New().Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/responses", strings.NewReader(copilotOverlappingRequest)))
+	New().Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/responses", strings.NewReader(strings.Replace(copilotOverlappingRequest,
+		`{"type":"object","properties":{"square":{"type":"boolean"}}}`, `{"type":"array","items":{"type":"string"}}`, 1))))
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid request body") {
 		t.Fatalf("%d %s", rec.Code, rec.Body.String())
 	}

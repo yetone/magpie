@@ -1217,6 +1217,14 @@ func plainSchema(raw json.RawMessage) json.RawMessage {
 					out["enum"] = []any{s}
 				}
 			}
+			if es, ok := out["enum"]; ok && out["type"] == "array" {
+				// an enum on an array is its items' values; Google takes enum on a string
+				delete(out, "enum")
+				if it, ok := out["items"].(map[string]any); ok && it["enum"] == nil && (it["type"] == nil || it["type"] == "string") {
+					it["type"] = "string"
+					it["enum"] = es
+				}
+			}
 			if out["type"] == nil {
 				switch {
 				case out["properties"] != nil:
