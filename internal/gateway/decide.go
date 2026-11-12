@@ -888,6 +888,35 @@ func withFixedEffort(proto provider.Protocol, body []byte, effort string) []byte
 	return body
 }
 
+// agyLevelAsked is whether Antigravity CLI's own request names a thinking
+// level: its /effort on a Google model it knows, or --effort at launch.
+// That is the user's pick of the moment and beats the row's, which stands
+// for the sessions that send only thinkingBudget -1.
+func agyLevelAsked(agent string, proto provider.Protocol, body []byte) bool {
+	if agent != "agy" || proto != provider.Gemini {
+		return false
+	}
+	var v struct {
+		GC *struct {
+			TC *struct {
+				Level string `json:"thinkingLevel"`
+			} `json:"thinkingConfig"`
+		} `json:"generationConfig"`
+		GC2 *struct {
+			TC *struct {
+				Level string `json:"thinking_level"`
+			} `json:"thinking_config"`
+		} `json:"generation_config"`
+	}
+	if decodeJSON(body, &v) != nil {
+		return false
+	}
+	if v.GC != nil && v.GC.TC != nil && strings.TrimSpace(v.GC.TC.Level) != "" {
+		return true
+	}
+	return v.GC2 != nil && v.GC2.TC != nil && strings.TrimSpace(v.GC2.TC.Level) != ""
+}
+
 // withModelEffort is withFixedEffort for a request going to model: a
 // Gemini request's thinkingConfig is the one model takes (withGeminiEffort),
 // which the model the client named needn't tell.

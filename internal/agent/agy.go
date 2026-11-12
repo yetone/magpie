@@ -467,9 +467,10 @@ func agyIn(at place) *Agent {
 func agyEffortField(on func() bool) Field { return effortField("agy", on) }
 
 // effortField is how hard agy's models reason, picked in its row. agy
-// 1.5 has --effort for one session only, which it allows for a model
-// whose name it knows and turns away for magpie's ("not adjustable" in
-// /effort, xyenon on Discord), and settings.json has no key for it
+// 1.5 has --effort (low, medium, high) and /effort for one session only;
+// /effort is turned away for magpie's models ("not adjustable", xyenon on
+// Discord) and works on the Google names agy knows, and either one's level
+// goes over the row's (agyLevelAsked). settings.json has no key for it
 // (--settings: unknown setting "effort"). Its request asks
 // thinkingBudget -1, the model's own choice. The gateway asks its
 // requests for the level picked here (provider.AgentEffort), as the

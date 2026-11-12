@@ -3890,7 +3890,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				fixed = ""
 			}
 		}
-		if fixed == "" && ruled == "" && effort == "" && agentPick != "" && c.p.Thinks(c.model) {
+		if fixed == "" && ruled == "" && effort == "" && agentPick != "" && !agyLevelAsked(agent, from, attemptBody) && c.p.Thinks(c.model) {
 			// the effort picked in magpie for an agent whose config can't
 			// carry one (Cursor Private Inference, #1003), in place of the
 			// level it sent, on a model that reasons; a member fixed at

@@ -48,7 +48,7 @@ func TestAgyAgentEffort(t *testing.T) {
 	}
 	s := New()
 	// agy's own request, as captured from agy 1.5.3 against a stub
-	const body = `{"contents":[{"role":"user","parts":[{"text":"hi"}]}],"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingBudget":-1}}}`
+	body := `{"contents":[{"role":"user","parts":[{"text":"hi"}]}],"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingBudget":-1}}}`
 	// the thinkingConfig the relay was sent
 	asked := func(agent, model string) gjson.Result {
 		t.Helper()
@@ -102,6 +102,16 @@ func TestAgyAgentEffort(t *testing.T) {
 			t.Errorf("picked %s for agy, opencode's to %s went %s, want %s", c.pick, c.model, got.Raw, asSent)
 		}
 	}
+	// agy's own /effort or --effort names a level in its request: that is
+	// the user's pick of the moment, over the row's (haohaolee on X)
+	if err := provider.SetAgentEffort("agy", "low"); err != nil {
+		t.Fatal(err)
+	}
+	body = strings.Replace(body, `"thinkingBudget":-1`, `"thinkingLevel":"HIGH"`, 1)
+	if got := asked("agy", pro); got.Get("thinkingLevel").String() != "HIGH" {
+		t.Errorf("agy asked HIGH with the row at low: sent %s", got.Raw)
+	}
+	body = strings.Replace(body, `"thinkingLevel":"HIGH"`, `"thinkingBudget":-1`, 1)
 	if err := provider.SetAgentEffort("agy", ""); err != nil {
 		t.Fatal(err)
 	}
