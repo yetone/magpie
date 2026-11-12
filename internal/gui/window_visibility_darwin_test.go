@@ -36,6 +36,14 @@ import (
 // the host before the panel's Escape was told, and the panel's second
 // round failed with marked=false play="running" (#5322). Only a
 // visibilitychange outside the shown signal counts as a hiding now.
+//
+// On mica (macOS 26) WebKit fired a visibilitychange of its own as the
+// panel ordered out, hidden by its own value and before magpie's signal
+// was in. The page took it for the hiding, and the host showed the panel
+// again before the page was ever told: 4 of 6 runs failed with
+// marked=false play="running" (#6203). Only a visibilitychange once
+// magpie's signal says hidden counts now; without that signal the host
+// still waits in vain and the test fails.
 func TestClosingWindowMarksPageOutOfSight(t *testing.T) {
 	out, err := runAppKit(t, 2*time.Minute, []string{"MAGPIE_TEST_WINDOW_VISIBILITY=1"})
 	if err != nil || !strings.Contains(string(out), "window visibility: ok") {
@@ -96,10 +104,11 @@ window.magpieWindowVisibility = (visible) => {
   document.dispatchEvent(new Event("visibilitychange"));
   showing = false;
 };
-// a hiding is what follows a hide: the shown signal's own event is not one,
-// though WebKit may still say hidden then
+// a hiding is what follows magpie's hide signal: the shown signal's own
+// event is not one, and neither is WebKit's own, which it may fire as the
+// window orders out before magpie's signal is in
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden && !showing) {
+  if (outOfSight && !showing) {
     localStorage.setItem("hiddenProbe", JSON.stringify({
       hidden: document.hidden,
       state: document.visibilityState,
