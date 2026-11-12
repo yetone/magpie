@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -55,8 +56,10 @@ func gatewayMode(web bool) (bool, string) {
 	return false, ""
 }
 
-// agentsHere says whether an agent is found on this computer; a test's own.
-var agentsHere = func() bool { return len(agent.Detected()) > 0 }
+// agentsHere says whether an agent is found on this computer, stopping at
+// the first: each agent's check can read app bundles and ask Spotlight.
+// A test's own.
+var agentsHere = func() bool { return slices.ContainsFunc(agent.All(), (*agent.Agent).Detected) }
 
 // gatewayModeRoutes: POST /api/settings/gateway-mode {"mode": "on" | "off"
 // | ""} sets Settings' choice, "" leaving it to magpie again.
