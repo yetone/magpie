@@ -101,6 +101,47 @@ func TestTemplatesPickStrongAndCheap(t *testing.T) {
 	}
 }
 
+// The routing recipes (plan first, fastest first, spread evenly) are the
+// strongest models set to a routing the engine already has.
+func TestRecipeTemplates(t *testing.T) {
+	sub := tm("sub", "claude-opus-5.5", 50, true, "2026-08-01")
+	sub.e.Provider.Billing = BillingPlan
+	key := tm("openai", "gpt-6.1", 40, true, "2026-09-20")
+	key.e.Provider.Billing = BillingPAYG
+	relay := tm("relay", "gpt-6.1", 40, true, "2026-09-20")
+	ms := []rated{key, relay, sub, tm("openai", "gpt-6-mini", 4, true, "2026-07-01")}
+
+	// the plan's model first, though the key's model is newer
+	plan := templateOf(TemplatePlan, ms, nil)
+	if want := []string{"sub/claude-opus-5.5", "openai/gpt-6.1", "relay/gpt-6.1"}; plan.Why != "" || !slices.Equal(plan.Group.Members, want) || plan.Group.Routing != Ordered {
+		t.Errorf("plan = %+v, want %v in order", plan, want)
+	}
+	// nothing on a plan: nothing to put first
+	if tp := templateOf(TemplatePlan, []rated{key, relay}, nil); tp.Need != NeedPlan || len(tp.Group.Members) > 0 {
+		t.Errorf("plan without a plan: %+v", tp)
+	}
+	fast := templateOf(TemplateFast, ms, nil)
+	if fast.Group.Routing != Fastest || len(fast.Group.Members) != 3 {
+		t.Errorf("fast = %+v", fast)
+	}
+	if tp := templateOf(TemplateFast, []rated{key, ms[3]}, nil); tp.Need != NeedProviders {
+		t.Errorf("fast with one provider: %+v", tp)
+	}
+	// one model, every provider that serves it; the other model stays out
+	even := templateOf(TemplateEven, ms, nil)
+	if even.Group.Routing != Rotate || !slices.Equal(even.Group.Members, []string{"openai/gpt-6.1", "relay/gpt-6.1"}) {
+		t.Errorf("even = %+v, want the one strongest model from both providers", even)
+	}
+	if even = templateOf(TemplateEven, []rated{sub, ms[3]}, nil); !slices.Equal(even.Group.Members, []string{"sub/claude-opus-5.5"}) {
+		t.Errorf("even with one provider = %+v, want it alone", even)
+	}
+	for _, k := range TemplateKinds {
+		if TemplateNames[k] == "" || TemplateIDs[k] == "" {
+			t.Errorf("template %s has no name or id", k)
+		}
+	}
+}
+
 func TestTemplatesSayWhatIsMissing(t *testing.T) {
 	if tp := templateOf(TemplateSmart, nil, nil); tp.Need != NeedProvider || len(tp.Group.Members) > 0 {
 		t.Errorf("no models: %+v", tp)
