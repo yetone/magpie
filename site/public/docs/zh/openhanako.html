@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenHanako（HanaAgent）接入 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：通过 magpie 添加供应商 · magpie</title>
+<meta name="description" content="通过 magpie 让 OpenHanako（HanaAgent）用上 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：magpie 在 ~/.hanako 的供应商目录里加的 magpie 供应商、主 Agent 的聊天模型、运行时走本地 API 立即生效、1.0 起加密的目录要先打开 OpenHanako，以及切回原来的模型。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/openhanako">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/openhanako">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/openhanako">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/openhanako">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/openhanako">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="让 OpenHanako 用任意模型">
+<meta property="og:description" content="通过 magpie 让 OpenHanako（HanaAgent）用上 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：magpie 在 ~/.hanako 的供应商目录里加的 magpie 供应商、主 Agent 的聊天模型、运行时走本地 API 立即生效、1.0 起加密的目录要先打开 OpenHanako，以及切回原来的模型。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/openhanako">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "让 OpenHanako 用任意模型",
+   "description": "通过 magpie 让 OpenHanako（HanaAgent）用上 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：magpie 在 ~/.hanako 的供应商目录里加的 magpie 供应商、主 Agent 的聊天模型、运行时走本地 API 立即生效、1.0 起加密的目录要先打开 OpenHanako，以及切回原来的模型。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/openhanako",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "OpenHanako 能用 DeepSeek、GLM 或 Kimi 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。在 magpie 的 Agent 页给 OpenHanako 选一个 via magpie 的模型，magpie 会加上 magpie 供应商，并把主 Agent 的聊天模型设成它。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "提示“OpenHanako keeps its providers encrypted”怎么办？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "OpenHanako 1.0 起加密了供应商目录，magpie 只能在它运行时通过它的 API 改动。打开 OpenHanako，再试一次。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "要重启 OpenHanako 才生效吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "运行中不用，magpie 走它的本地 API，模型立刻重新加载。没运行时，下次打开就生效。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "切回后会回到我原来的模型吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "会。magpie 记下了原来的模型并放回去；如果那个模型已经没了，就用 OpenHanako 自己的第一个模型。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/zh/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "文档",
+     "item": "https://usemagpie.ai/docs/zh/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "让 OpenHanako 用任意模型",
+     "item": "https://usemagpie.ai/docs/zh/openhanako"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/openhanako" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/openhanako" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/openhanako" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>OpenHanako</p>
+    <a href="#overview">工作原理</a>
+    <a href="#on">接入 OpenHanako</a>
+    <a href="#files">写了哪些内容</a>
+    <a href="#live">运行中立即生效</a>
+    <a href="#sealed">加密的供应商目录</a>
+    <a href="#off">切回</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 指南</p>
+    <h1>让 OpenHanako 用任意模型</h1>
+    <p class="lede">OpenHanako（HanaAgent）是一款桌面个人 Agent，数据放在 <code>~/.hanako</code>，或 <code>$HANA_HOME</code> 指定的目录。magpie 在它的供应商里加一个 <code>magpie</code>，再把主 Agent 的聊天模型设成你选的模型，OpenHanako 就能用 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅等 magpie 里的任意模型。</p>
+    <h2 id="on"><a class="anchor" href="#on">接入 OpenHanako</a></h2>
+    <ol class="steps">
+      <li><b>在 magpie 里添加供应商</b>在 <span class="ui">供应商</span> 页添加 API Key，或登录一个订阅。</li>
+      <li><b>先打开一次 OpenHanako</b>它第一次打开时创建 Agent。还没有 Agent 时，magpie 会提示先打开它。</li>
+      <li><b>在 <span class="ui">Agent</span> 页给 OpenHanako 选模型</b>选一个 via magpie 的模型，主 Agent 就用它聊天。</li>
+    </ol>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="oh-on">复制</button><pre id="oh-on">magpie hanako deepseek/deepseek-v4-pro</pre></div>
+    <h2 id="files"><a class="anchor" href="#files">写了哪些内容</a></h2>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="oh-files">复制</button><pre id="oh-files">~/.hanako/                       （或 $HANA_HOME）
+  provider-catalog.json          providers.magpie: 网关的 /v1，
+                                 api openai-completions，magpie 的 Key 和模型
+  provider-plugins/magpie/...    OpenHanako 挪过去后的同一个供应商
+  agents/<id>/config.yaml        models.chat: {id, provider: magpie}</pre></div>
+    <p>magpie 是 OpenHanako 里的一个供应商，id 为 <code>magpie</code>，以 Chat Completions（<code>openai-completions</code>）连到网关的 <code>/v1</code>，模型就是 magpie 的模型目录，带上上下文长度、最大输出、是否能看图和是否会思考。OpenHanako 基于 Pi 的 SDK，思考强度以 <code>reasoning_effort</code> 发出。</p>
+    <p>magpie 设置的是主 Agent 的 <code>models.chat</code>：<code>user/preferences.json</code> 里的 <code>primaryAgent</code>；没有的话，就是第一个有配置的 Agent，和 OpenHanako 启动时挑的一样。</p>
+    <h2 id="live"><a class="anchor" href="#live">运行中立即生效</a></h2>
+    <p>OpenHanako 在运行时，magpie 通过它的本地 API 加供应商、换聊天模型，OpenHanako 保存后立刻重新加载模型，不用重启。没在运行时，magpie 直接写文件，OpenHanako 下次启动时读取。</p>
+    <h2 id="sealed"><a class="anchor" href="#sealed">加密的供应商目录</a></h2>
+    <p>从 1.0 起，OpenHanako 用存在系统钥匙串里的密钥加密供应商目录，文件变成 <code>HANA-SECRET-1.AES-256-GCM.…</code>，不再是 JSON。magpie 读不了也写不了它，也绝不覆盖它。</p>
+    <p>供应商的定义在 <code>provider-plugins/magpie</code> 的插件文件里，不在加密目录中，magpie 仍会保持它最新；Key 留在加密目录里。所以加入或去掉 magpie 需要 OpenHanako 正在运行，通过它的 API 来做。没运行时 magpie 会提示：打开 OpenHanako 再试一次。</p>
+    <h2 id="off"><a class="anchor" href="#off">切回</a></h2>
+    <p>magpie 第一次接入时记下主 Agent 原来的模型，切回时放回去。如果没有记下的模型，或者那个模型已经没了，就换成 OpenHanako 自己的第一个模型，因为 1.0 起它的 API 不接受没有模型的 Agent。然后去掉 magpie 的供应商。</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="oh-off">复制</button><pre id="oh-off">magpie hanako default</pre></div>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>OpenHanako 能用 DeepSeek、GLM 或 Kimi 吗？</h3>
+    <p>能。在 magpie 的 Agent 页给 OpenHanako 选一个 via magpie 的模型，magpie 会加上 magpie 供应商，并把主 Agent 的聊天模型设成它。</p>
+    <h3>提示“OpenHanako keeps its providers encrypted”怎么办？</h3>
+    <p>OpenHanako 1.0 起加密了供应商目录，magpie 只能在它运行时通过它的 API 改动。打开 OpenHanako，再试一次。</p>
+    <h3>要重启 OpenHanako 才生效吗？</h3>
+    <p>运行中不用，magpie 走它的本地 API，模型立刻重新加载。没运行时，下次打开就生效。</p>
+    <h3>切回后会回到我原来的模型吗？</h3>
+    <p>会。magpie 记下了原来的模型并放回去；如果那个模型已经没了，就用 OpenHanako 自己的第一个模型。</p>
+
+    <p style="margin-top:48px">更多桌面应用用同样的模型：<a href="/docs/zh/ds-bot">让 DS Bot 用任意模型</a>、<a href="/docs/zh/tuanjie-cowork">让团结 Cowork 用任意模型</a>、<a href="/docs/zh/openbot">让 OpenBot 用任意模型</a>。遇到报错？见 <a href="/docs/zh/troubleshooting">常见错误排查</a>，或到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

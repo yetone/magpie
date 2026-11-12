@@ -6535,7 +6535,7 @@ Yes. magpie reads dataDir from DS Bot's locations.json. When it can't be read, m
 
 The plugin runs on ~/.dsh, so its model follows magpie's DSH row: pick a model for DSH on the Agents page.
 
-More desktop apps on the same models: [Tuanjie Cowork on any model](https://usemagpie.ai/docs/tuanjie-cowork), [OpenBot on any model](https://usemagpie.ai/docs/openbot) and [miniQ on any model](https://usemagpie.ai/docs/miniq). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More desktop apps on the same models: [Tuanjie Cowork on any model](https://usemagpie.ai/docs/tuanjie-cowork), [OpenBot on any model](https://usemagpie.ai/docs/openbot), [miniQ on any model](https://usemagpie.ai/docs/miniq) and [OpenHanako on any model](https://usemagpie.ai/docs/openhanako). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
@@ -6611,6 +6611,76 @@ Your allowedModels doesn't list it. magpie leaves that list to you; add the mode
 By the key magpie gives it, magpie-prime-agent, since its requests carry no User-Agent.
 
 More agents on the same models: [Pi on any model](https://usemagpie.ai/docs/pi), [Kimi Code on any model](https://usemagpie.ai/docs/kimi-code) and [DS Bot on any model](https://usemagpie.ai/docs/ds-bot). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/openhanako
+
+# OpenHanako on any model
+
+OpenHanako (HanaAgent) is a desktop personal agent that keeps what it knows in `~/.hanako`, or the folder `$HANA_HOME` names. magpie adds a provider, `magpie`, there and makes your pick the primary agent's chat model, so OpenHanako runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription.
+
+## Set up OpenHanako
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Open OpenHanako once.** It makes its agent the first time. Until it has one, magpie asks you to open it.
+3. **Pick a model for OpenHanako on the Agents page.** Pick a model via magpie; the primary agent chats on it.
+
+```
+magpie hanako deepseek/deepseek-v4-pro
+```
+
+## What gets written
+
+```
+~/.hanako/                       (or $HANA_HOME)
+  provider-catalog.json          providers.magpie: the gateway's /v1,
+                                 api openai-completions, magpie's key, models
+  provider-plugins/magpie/...    the same provider, once OpenHanako moves it
+  agents//config.yaml        models.chat: {id, provider: magpie}
+```
+
+magpie is one provider in OpenHanako, `magpie`, spoken to as Chat Completions (`openai-completions`) at the gateway's `/v1`, with magpie's catalog as its models: each with its context, max output, and whether it takes images and reasons. OpenHanako runs on Pi's SDK, so the effort goes as `reasoning_effort`.
+
+The model set is the primary agent's `models.chat`: `primaryAgent` in `user/preferences.json`, else the first agent with a config, as OpenHanako picks at start-up.
+
+## Changes while it runs
+
+While OpenHanako runs, magpie adds its provider and changes the chat model through OpenHanako's local API, which saves them and reloads its models at once, with no restart. Otherwise magpie writes the files, which OpenHanako reads when it starts.
+
+## The sealed catalog
+
+Since 1.0 OpenHanako seals its provider catalog under a key kept in the system keychain: the file is then `HANA-SECRET-1.AES-256-GCM.…`, not JSON. magpie can't read it or write it, and never writes over it.
+
+A provider's definition is in its plugin file under `provider-plugins/magpie`, out of the catalog, so magpie still keeps that up to date; its key stays sealed. Adding or removing magpie needs OpenHanako running, to do it through its API. When it isn't, magpie says to open OpenHanako and try again.
+
+## Switching back
+
+magpie stashes the primary agent's model when it first steps in and puts it back when it steps out. With none stashed, or one OpenHanako no longer has, the agent goes to the first of OpenHanako's own models, as since 1.0 its API takes no agent without a model. Then magpie's provider is removed.
+
+```
+magpie hanako default
+```
+
+## FAQ
+
+### Can OpenHanako run on DeepSeek, GLM or Kimi?
+
+Yes. Pick a via-magpie model for OpenHanako on magpie's Agents page. magpie adds the magpie provider and makes it the primary agent's chat model.
+
+### magpie says OpenHanako keeps its providers encrypted. What now?
+
+Since 1.0 OpenHanako seals its catalog, so magpie can change it only through its API while it runs. Open OpenHanako and try again.
+
+### Do I restart OpenHanako for the change?
+
+Not while it runs: magpie goes through its local API and the models reload at once. When it isn't running, the change is there the next time it opens.
+
+### Does switching back give me my old model?
+
+Yes. magpie stashed it and puts it back; if OpenHanako no longer has it, the agent goes to OpenHanako's first model of its own.
+
+More desktop apps on the same models: [DS Bot on any model](https://usemagpie.ai/docs/ds-bot), [Tuanjie Cowork on any model](https://usemagpie.ai/docs/tuanjie-cowork) and [OpenBot on any model](https://usemagpie.ai/docs/openbot). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
