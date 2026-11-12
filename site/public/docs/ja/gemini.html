@@ -317,6 +317,8 @@ magpie claude google-vertex/gemini-3.1-pro-preview</pre></div>
       <li><b>キーの確認。</b><code>magpie provider test google</code> は各エンドポイントに、または指定した各モデルに小さなリクエストを送ります。<code>--as codex</code> や <code>--as claude-code</code> を付けると、そのツールと同じ形で送ります。</li>
     </ul>
 
+    <p>Vertex AI の詳細：<a href="/docs/ja/vertex">Google Vertex AI を Claude Code・Codex などのエージェントで使う</a>。</p>
+
     <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
     <h3>Claude Code で Gemini を使うには？</h3>
     <p>magpie に Gemini API キーを追加し（プロバイダ、プロバイダを追加、Google Gemini）、Claude Code の行で <code>gemini-3.1-pro-preview</code> などのモデルを選ぶか、<code>magpie claude google/gemini-3.1-pro-preview</code> を実行します。magpie が Claude Code の <code>settings.json</code> を書き、Messages のリクエストを一つずつ Gemini の Chat Completions に変換します。ツール呼び出しもストリーミングもそのまま使えます。</p>

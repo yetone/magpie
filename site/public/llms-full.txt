@@ -2659,6 +2659,8 @@ Two Google sign-ins give Gemini models without a key. They are subscriptions, se
 - **Vertex AI won’t save..** “Google Vertex AI needs the id of your Google Cloud project”: add `project=`. A credentials file has to be given by its full path.
 - **Checking a key..** `magpie provider test google` sends a tiny request through each endpoint, or to each model you name. Add `--as codex` or `--as claude-code` to send it the way that agent would.
 
+More on Vertex AI: [Google Vertex AI in Claude Code, Codex and other agents](https://usemagpie.ai/docs/vertex).
+
 ## FAQ
 
 ### How do I use Gemini in Claude Code?
@@ -9351,6 +9353,114 @@ Yes. magpie usage --csv exports each request with its models, tokens, cost, time
 A call with no known price is left out of the total, and the Usage page says how many are unpriced. Give the model a price and they are counted.
 
 Related: [Quota left on every subscription and key](https://usemagpie.ai/docs/quota), [Round robin and failover across accounts, keys and providers](https://usemagpie.ai/docs/routing-groups). Hit an error? See [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/vertex
+
+# Google Vertex AI in Claude Code, Codex and other agents
+
+Google Vertex AI, which Google's documentation now calls Gemini Enterprise Agent Platform, serves Gemini from your own Google Cloud project, which is billed for it. It also serves partner and open models such as DeepSeek, GLM and gpt-oss, and Anthropic's Claude. magpie's `google-vertex` preset brings them to Claude Code, Codex, OpenCode and other agents with no API key: each request is signed with a token minted from your Google credentials.
+
+## Add it
+
+1. **Turn on the API..** Turn on the Agent Platform API (`aiplatform.googleapis.com`) in the project. Billing has to be on there.
+2. **Sign in..** Run `gcloud auth application-default login`, or have a service account's key file.
+3. **Add and test..** Give the project id, then test:
+
+```
+gcloud auth application-default login
+magpie provider add google-vertex project=my-project
+magpie provider test google-vertex
+```
+
+The app's editor asks the same in Project ID, Location, Credentials file and Service account. The TUI's `a` asks for the project alone, and the CLI sets the rest. Adding, listing and showing it ask Google nothing; the credentials are read when a request is signed. Then pick a model for an agent:
+
+```
+magpie claude google-vertex/claude-sonnet-5-5
+magpie codex google-vertex/gemini-3.1-pro-preview
+```
+
+## Location, credentials, service account
+
+```
+magpie provider set google-vertex location=us-central1        # global (default), us, eu or a region
+magpie provider set google-vertex credentials=~/keys/vertex.json
+magpie provider set google-vertex impersonate=vertex@my-project.iam.gserviceaccount.com
+magpie provider set google-vertex impersonate=                # empty clears it
+```
+
+- `location=` is `global` (the default, and what an empty value goes back to), `us`, `eu` or a region such as `us-central1`.
+- `credentials=` names a credentials file to sign with in place of gcloud's sign-in, such as a service account's key. A relative path is made full from the folder the command runs in.
+- `impersonate=` has requests made as that service account. The account signed in needs the Service Account Token Creator role on it.
+- A key is refused, and so is an address (`url=` and the like): the project and location make the only address the token is sent to.
+
+## Models per location
+
+Each location serves models of its own, and Vertex AI has no list to ask which, so magpie gives each location the models it answered with:
+
+- `global`: Gemini (`gemini-3.8-flash`, `gemini-3.1-pro-preview`, `gemini-2.5-pro` and more), three partner models, and Claude models such as `claude-opus-5-5`, `claude-sonnet-5-5` and `claude-haiku-5-5`.
+- `us`, `eu`: the 3.8, 3.7, 3.6 and 3.5 Flash models, `gemini-3.5-flash-lite` and `gemini-3.1-flash-lite`.
+- A region: `gemini-2.5-pro`, `gemini-2.5-flash` and `gemini-2.5-flash-lite`.
+
+When a region serves one more, as asia-northeast1 serves `gemini-3.5-flash`, type it in with the rest you want. Moving location keeps the models picked, so pick again after a move.
+
+## Partner models
+
+A partner model names its publisher before a slash, as `deepseek-ai/deepseek-v4.1-flash-maas`, `zai-org/glm-5.2-maas` and `openai/gpt-oss-120b-maas` do. magpie asks it on Google's OpenAI-compatible chat completions in your project, with the same credentials and nothing to set. Type in another one (in preview, or listed later) under its full id:
+
+```
+magpie provider models google-vertex gemini-3.8-flash deepseek-ai/deepseek-v4.1-flash-maas google/gemma-4-26b-a4b-it-maas
+magpie provider models google-vertex all     # back to the location's list
+magpie provider test google-vertex zai-org/glm-5.2-maas
+```
+
+Turn each partner model on for the project in Model Garden first: until then Google refuses it. `magpie provider test google-vertex` tests Gemini; test a partner model on its own, by right-clicking it in the app or by naming it after the command.
+
+## Claude on Vertex AI
+
+A model whose id starts with `claude-` is asked on Anthropic's Messages API in your project (streamRawPredict), as Claude Code asks it with `CLAUDE_CODE_USE_VERTEX`, with nothing more to set. Every agent can use it, whatever API it speaks, Codex and OpenCode included.
+
+- `global` lists the current models under the ids Claude Code gives them for Vertex AI.
+- An older model goes under Vertex's id with its date, such as `claude-sonnet-4-5@20250929`, typed in.
+- At another location (`us-east5`, `europe-west1`), type in the Claude models it serves.
+- Turn each Claude model on in Model Garden first, as a partner model is, and test it on its own.
+
+## Priority PayGo and Flex PayGo
+
+Google's Priority PayGo and Flex PayGo are asked for with request headers. The editor's Headers offers both, `X-Vertex-AI-LLM-Request-Type` and `X-Vertex-AI-LLM-Shared-Request-Type`; their values are the ones Google's pages give. From the CLI:
+
+```
+magpie provider set google-vertex header.=
+```
+
+## Common errors
+
+- `no Google credentials at <file>`: there is no credentials file there. If it is your `credentials=`, correct it or clear it with `credentials=` alone; otherwise run `gcloud auth application-default login`.
+- `GOOGLE_APPLICATION_CREDENTIALS names <file>, which isn't there`, or `… not a full path`: the variable names no file magpie can read, and gcloud's own isn't read in its place. Give the whole path, unset it, or set `credentials=`.
+- `the sign-in was refused`: the sign-in expired or was revoked. Run the command the advice names, such as `gcloud auth application-default login`. The next request reads the new file, with no restart.
+- A 403 `PERMISSION_DENIED` naming `aiplatform.endpoints.predict`: the account that signs, or the service account it goes as, may not use Vertex AI in the project. Give it Agent Platform User (`roles/aiplatform.user`) on the project.
+- `impersonating …: the sign-in was refused (403)`: the account signed in needs Service Account Token Creator (`roles/iam.serviceAccountTokenCreator`) on that service account.
+
+## FAQ
+
+### Does Vertex AI need an API key in magpie?
+
+No. magpie signs each request with gcloud's Application Default Credentials, a service account's key file or an impersonated service account. A key is refused.
+
+### Can Claude Code use Claude on Vertex AI through magpie?
+
+Yes. claude- models are asked on Anthropic's Messages API, as with CLAUDE_CODE_USE_VERTEX, and Codex, OpenCode and other agents can use them too. Turn the model on in Model Garden first.
+
+### Why did the models change when I moved location?
+
+Each location serves models of its own: global has the most, us and eu the newer Flash models, and a region the 2.5 models. Type others in with magpie provider models google-vertex.
+
+### What does a 403 PERMISSION_DENIED mean?
+
+The account that signs needs Agent Platform User (roles/aiplatform.user) on the project; when it impersonates a service account, it also needs Service Account Token Creator on that account.
+
+Related: [Gemini in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/gemini), [DeepSeek in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/deepseek). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 

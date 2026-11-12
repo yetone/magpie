@@ -317,6 +317,8 @@ magpie claude google-vertex/gemini-3.1-pro-preview</pre></div>
       <li><b>Checking a key.</b> <code>magpie provider test google</code> sends a tiny request through each endpoint, or to each model you name. Add <code>--as codex</code> or <code>--as claude-code</code> to send it the way that agent would.</li>
     </ul>
 
+    <p>More on Vertex AI: <a href="/docs/vertex">Google Vertex AI in Claude Code, Codex and other agents</a>.</p>
+
     <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
     <h3>How do I use Gemini in Claude Code?</h3>
     <p>Add a Gemini API key in magpie (Providers, Add provider, Google Gemini), then pick a model such as <code>gemini-3.1-pro-preview</code> on Claude Code’s row, or run <code>magpie claude google/gemini-3.1-pro-preview</code>. magpie writes Claude Code’s <code>settings.json</code> and translates each Messages request to Gemini’s Chat Completions, tool calls and streaming included.</p>

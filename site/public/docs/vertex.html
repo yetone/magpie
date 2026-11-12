@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Google Vertex AI in Claude Code and Codex: Gemini, Claude, DeepSeek and GLM from your own GCP project · magpie</title>
+<meta name="description" content="Connect Google Vertex AI (Gemini Enterprise Agent Platform) to Claude Code, Codex, OpenCode and other agents with magpie: no API key, requests signed with gcloud credentials or a service account, and Gemini, Claude and partner models such as DeepSeek, GLM and gpt-oss served from your own Google Cloud project, per location.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/vertex">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/vertex">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/vertex">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/vertex">
+<link rel="canonical" href="https://usemagpie.ai/docs/vertex">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Google Vertex AI in Claude Code, Codex and other agents">
+<meta property="og:description" content="Connect Google Vertex AI (Gemini Enterprise Agent Platform) to Claude Code, Codex, OpenCode and other agents with magpie: no API key, requests signed with gcloud credentials or a service account, and Gemini, Claude and partner models such as DeepSeek, GLM and gpt-oss served from your own Google Cloud project, per location.">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/vertex">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Google Vertex AI in Claude Code, Codex and other agents",
+   "description": "Connect Google Vertex AI (Gemini Enterprise Agent Platform) to Claude Code, Codex, OpenCode and other agents with magpie: no API key, requests signed with gcloud credentials or a service account, and Gemini, Claude and partner models such as DeepSeek, GLM and gpt-oss served from your own Google Cloud project, per location.",
+   "inLanguage": "en",
+   "url": "https://usemagpie.ai/docs/vertex",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Does Vertex AI need an API key in magpie?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "No. magpie signs each request with gcloud's Application Default Credentials, a service account's key file or an impersonated service account. A key is refused."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can Claude Code use Claude on Vertex AI through magpie?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. claude- models are asked on Anthropic's Messages API, as with CLAUDE_CODE_USE_VERTEX, and Codex, OpenCode and other agents can use them too. Turn the model on in Model Garden first."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Why did the models change when I moved location?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Each location serves models of its own: global has the most, us and eu the newer Flash models, and a region the 2.5 models. Type others in with magpie provider models google-vertex."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "What does a 403 PERMISSION_DENIED mean?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "The account that signs needs Agent Platform User (roles/aiplatform.user) on the project; when it impersonates a service account, it also needs Service Account Token Creator on that account."
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "Docs",
+     "item": "https://usemagpie.ai/docs/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "Google Vertex AI in Claude Code, Codex and other agents",
+     "item": "https://usemagpie.ai/docs/vertex"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>Docs</small></a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/start">Get started</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a class="toc-only" href="/docs/remote">Remote magpie</a>
+    <a class="toc-only" href="/docs/docker">Docker</a>
+    <a class="toc-only" href="/docs/privacy">Privacy</a>
+    <a class="toc-only" href="/docs/masking">Privacy masking</a>
+    <a class="toc-only" href="/docs/mcp-router">MCP router</a>
+    <a class="toc-only" href="/docs/library">Library</a>
+    <a class="toc-only" href="/docs/claude-code-models">Models in Claude Code</a>
+    <a class="toc-only" href="/docs/codex-models">Models in Codex</a>
+    <a class="toc-only" href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a class="toc-only" href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a class="toc-only" href="/docs/local-models">Local models</a>
+    <a class="toc-only" href="/docs/opencode-models">Models in OpenCode</a>
+    <a class="toc-only" href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/vertex" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/vertex" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/vertex" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">Download</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Google Vertex AI</p>
+    <a href="#overview">What it is</a>
+    <a href="#add">Add it</a>
+    <a href="#settings">Location, credentials, service account</a>
+    <a href="#models">Models per location</a>
+    <a href="#partner">Partner models</a>
+    <a href="#claude">Claude on Vertex AI</a>
+    <a href="#paygo">Priority PayGo and Flex PayGo</a>
+    <a href="#trouble">Common errors</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">Docs · Guide</p>
+    <h1>Google Vertex AI in Claude Code, Codex and other agents</h1>
+    <p class="lede">Google Vertex AI, which Google's documentation now calls Gemini Enterprise Agent Platform, serves Gemini from your own Google Cloud project, which is billed for it. It also serves partner and open models such as DeepSeek, GLM and gpt-oss, and Anthropic's Claude. magpie's <code>google-vertex</code> preset brings them to Claude Code, Codex, OpenCode and other agents with no API key: each request is signed with a token minted from your Google credentials.</p>
+    <h2 id="add"><a class="anchor" href="#add">Add it</a></h2>
+    <ol class="steps">
+      <li><b>Turn on the API.</b>Turn on the Agent Platform API (<code>aiplatform.googleapis.com</code>) in the project. Billing has to be on there.</li>
+      <li><b>Sign in.</b>Run <code>gcloud auth application-default login</code>, or have a service account's key file.</li>
+      <li><b>Add and test.</b>Give the project id, then test:</li>
+    </ol>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="vx-add">Copy</button><pre id="vx-add">gcloud auth application-default login
+magpie provider add google-vertex project=my-project
+magpie provider test google-vertex</pre></div>
+    <p>The app's editor asks the same in <span class="ui">Project ID</span>, <span class="ui">Location</span>, <span class="ui">Credentials file</span> and <span class="ui">Service account</span>. The TUI's <code>a</code> asks for the project alone, and the CLI sets the rest. Adding, listing and showing it ask Google nothing; the credentials are read when a request is signed. Then pick a model for an agent:</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="vx-use">Copy</button><pre id="vx-use">magpie claude google-vertex/claude-sonnet-5-5
+magpie codex google-vertex/gemini-3.1-pro-preview</pre></div>
+    <h2 id="settings"><a class="anchor" href="#settings">Location, credentials, service account</a></h2>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="vx-set">Copy</button><pre id="vx-set">magpie provider set google-vertex location=us-central1        # global (default), us, eu or a region
+magpie provider set google-vertex credentials=~/keys/vertex.json
+magpie provider set google-vertex impersonate=vertex@my-project.iam.gserviceaccount.com
+magpie provider set google-vertex impersonate=                # empty clears it</pre></div>
+    <ul><li><code>location=</code> is <code>global</code> (the default, and what an empty value goes back to), <code>us</code>, <code>eu</code> or a region such as <code>us-central1</code>.</li><li><code>credentials=</code> names a credentials file to sign with in place of gcloud's sign-in, such as a service account's key. A relative path is made full from the folder the command runs in.</li><li><code>impersonate=</code> has requests made as that service account. The account signed in needs the Service Account Token Creator role on it.</li><li>A key is refused, and so is an address (<code>url=</code> and the like): the project and location make the only address the token is sent to.</li></ul>
+    <h2 id="models"><a class="anchor" href="#models">Models per location</a></h2>
+    <p>Each location serves models of its own, and Vertex AI has no list to ask which, so magpie gives each location the models it answered with:</p>
+    <ul><li><code>global</code>: Gemini (<code>gemini-3.8-flash</code>, <code>gemini-3.1-pro-preview</code>, <code>gemini-2.5-pro</code> and more), three partner models, and Claude models such as <code>claude-opus-5-5</code>, <code>claude-sonnet-5-5</code> and <code>claude-haiku-5-5</code>.</li><li><code>us</code>, <code>eu</code>: the 3.8, 3.7, 3.6 and 3.5 Flash models, <code>gemini-3.5-flash-lite</code> and <code>gemini-3.1-flash-lite</code>.</li><li>A region: <code>gemini-2.5-pro</code>, <code>gemini-2.5-flash</code> and <code>gemini-2.5-flash-lite</code>.</li></ul>
+    <p>When a region serves one more, as asia-northeast1 serves <code>gemini-3.5-flash</code>, type it in with the rest you want. Moving location keeps the models picked, so pick again after a move.</p>
+    <h2 id="partner"><a class="anchor" href="#partner">Partner models</a></h2>
+    <p>A partner model names its publisher before a slash, as <code>deepseek-ai/deepseek-v4.1-flash-maas</code>, <code>zai-org/glm-5.2-maas</code> and <code>openai/gpt-oss-120b-maas</code> do. magpie asks it on Google's OpenAI-compatible chat completions in your project, with the same credentials and nothing to set. Type in another one (in preview, or listed later) under its full id:</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="vx-mod">Copy</button><pre id="vx-mod">magpie provider models google-vertex gemini-3.8-flash deepseek-ai/deepseek-v4.1-flash-maas google/gemma-4-26b-a4b-it-maas
+magpie provider models google-vertex all     # back to the location's list
+magpie provider test google-vertex zai-org/glm-5.2-maas</pre></div>
+    <p>Turn each partner model on for the project in Model Garden first: until then Google refuses it. <code>magpie provider test google-vertex</code> tests Gemini; test a partner model on its own, by right-clicking it in the app or by naming it after the command.</p>
+    <h2 id="claude"><a class="anchor" href="#claude">Claude on Vertex AI</a></h2>
+    <p>A model whose id starts with <code>claude-</code> is asked on Anthropic's Messages API in your project (streamRawPredict), as Claude Code asks it with <code>CLAUDE_CODE_USE_VERTEX</code>, with nothing more to set. Every agent can use it, whatever API it speaks, Codex and OpenCode included.</p>
+    <ul><li><code>global</code> lists the current models under the ids Claude Code gives them for Vertex AI.</li><li>An older model goes under Vertex's id with its date, such as <code>claude-sonnet-4-5@20250929</code>, typed in.</li><li>At another location (<code>us-east5</code>, <code>europe-west1</code>), type in the Claude models it serves.</li><li>Turn each Claude model on in Model Garden first, as a partner model is, and test it on its own.</li></ul>
+    <h2 id="paygo"><a class="anchor" href="#paygo">Priority PayGo and Flex PayGo</a></h2>
+    <p>Google's Priority PayGo and Flex PayGo are asked for with request headers. The editor's <span class="ui">Headers</span> offers both, <code>X-Vertex-AI-LLM-Request-Type</code> and <code>X-Vertex-AI-LLM-Shared-Request-Type</code>; their values are the ones Google's pages give. From the CLI:</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="vx-hdr">Copy</button><pre id="vx-hdr">magpie provider set google-vertex header.<Name>=<value></pre></div>
+    <h2 id="trouble"><a class="anchor" href="#trouble">Common errors</a></h2>
+    <ul><li><code>no Google credentials at &lt;file&gt;</code>: there is no credentials file there. If it is your <code>credentials=</code>, correct it or clear it with <code>credentials=</code> alone; otherwise run <code>gcloud auth application-default login</code>.</li><li><code>GOOGLE_APPLICATION_CREDENTIALS names &lt;file&gt;, which isn't there</code>, or <code>… not a full path</code>: the variable names no file magpie can read, and gcloud's own isn't read in its place. Give the whole path, unset it, or set <code>credentials=</code>.</li><li><code>the sign-in was refused</code>: the sign-in expired or was revoked. Run the command the advice names, such as <code>gcloud auth application-default login</code>. The next request reads the new file, with no restart.</li><li>A 403 <code>PERMISSION_DENIED</code> naming <code>aiplatform.endpoints.predict</code>: the account that signs, or the service account it goes as, may not use Vertex AI in the project. Give it Agent Platform User (<code>roles/aiplatform.user</code>) on the project.</li><li><code>impersonating …: the sign-in was refused (403)</code>: the account signed in needs Service Account Token Creator (<code>roles/iam.serviceAccountTokenCreator</code>) on that service account.</li></ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
+    <h3>Does Vertex AI need an API key in magpie?</h3>
+    <p>No. magpie signs each request with gcloud's Application Default Credentials, a service account's key file or an impersonated service account. A key is refused.</p>
+    <h3>Can Claude Code use Claude on Vertex AI through magpie?</h3>
+    <p>Yes. claude- models are asked on Anthropic's Messages API, as with CLAUDE_CODE_USE_VERTEX, and Codex, OpenCode and other agents can use them too. Turn the model on in Model Garden first.</p>
+    <h3>Why did the models change when I moved location?</h3>
+    <p>Each location serves models of its own: global has the most, us and eu the newer Flash models, and a region the 2.5 models. Type others in with magpie provider models google-vertex.</p>
+    <h3>What does a 403 PERMISSION_DENIED mean?</h3>
+    <p>The account that signs needs Agent Platform User (roles/aiplatform.user) on the project; when it impersonates a service account, it also needs Service Account Token Creator on that account.</p>
+
+    <p style="margin-top:48px">Related: <a href="/docs/gemini">Gemini in Claude Code, Codex, Gemini CLI and OpenCode</a>, <a href="/docs/deepseek">DeepSeek in Claude Code, Codex, Gemini CLI and OpenCode</a>. If something fails, see <a href="/docs/troubleshooting">Fixing common errors: 401, 429, 502, 504 and more</a> or ask on <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>.</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a href="/docs/remote">Remote magpie</a>
+    <a href="/docs/docker">Docker</a>
+    <a href="/docs/privacy">Privacy</a>
+    <a href="/docs/masking">Privacy masking</a>
+    <a href="/docs/mcp-router">MCP router</a>
+    <a href="/docs/library">Library</a>
+    <a href="/docs/claude-code-models">Models in Claude Code</a>
+    <a href="/docs/codex-models">Models in Codex</a>
+    <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a href="/docs/local-models">Local models</a>
+    <a href="/docs/opencode-models">Models in OpenCode</a>
+    <a href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/contributors">Contributors</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

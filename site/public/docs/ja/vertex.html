@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Google Vertex AI を Claude Code・Codex で使う：自分の GCP プロジェクトで Gemini・Claude・DeepSeek・GLM · magpie</title>
+<meta name="description" content="magpie で Google Vertex AI（Gemini Enterprise Agent Platform）を Claude Code・Codex・OpenCode などのエージェントにつなぎます。API キーは不要で、gcloud の認証情報やサービスアカウントで署名し、自分の Google Cloud プロジェクトで Gemini・Claude と DeepSeek・GLM・gpt-oss などのパートナーモデルをロケーションごとに使えます。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/vertex">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/vertex">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/vertex">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/vertex">
+<link rel="canonical" href="https://usemagpie.ai/docs/ja/vertex">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Google Vertex AI を Claude Code・Codex などのエージェントで使う">
+<meta property="og:description" content="magpie で Google Vertex AI（Gemini Enterprise Agent Platform）を Claude Code・Codex・OpenCode などのエージェントにつなぎます。API キーは不要で、gcloud の認証情報やサービスアカウントで署名し、自分の Google Cloud プロジェクトで Gemini・Claude と DeepSeek・GLM・gpt-oss などのパートナーモデルをロケーションごとに使えます。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/ja/vertex">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Google Vertex AI を Claude Code・Codex などのエージェントで使う",
+   "description": "magpie で Google Vertex AI（Gemini Enterprise Agent Platform）を Claude Code・Codex・OpenCode などのエージェントにつなぎます。API キーは不要で、gcloud の認証情報やサービスアカウントで署名し、自分の Google Cloud プロジェクトで Gemini・Claude と DeepSeek・GLM・gpt-oss などのパートナーモデルをロケーションごとに使えます。",
+   "inLanguage": "ja",
+   "url": "https://usemagpie.ai/docs/ja/vertex",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "magpie で Vertex AI を使うのに API キーは必要ですか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "不要です。gcloud のアプリケーションのデフォルト認証情報、サービスアカウントのキーファイル、または借用したサービスアカウントで各リクエストに署名します。キーは拒否されます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Claude Code から magpie 経由で Vertex AI の Claude を使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。claude- のモデルは CLAUDE_CODE_USE_VERTEX と同じく Anthropic の Messages API に問い合わせ、Codex や OpenCode からも使えます。先に Model Garden で有効にしてください。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "ロケーションを変えたらモデルが変わったのはなぜ？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "ロケーションごとに提供モデルが違います。global が最も多く、us と eu は新しい Flash、リージョンは 2.5 系です。ほかは magpie provider models google-vertex で入力します。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "403 PERMISSION_DENIED が出たら？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "署名するアカウントにプロジェクトの Agent Platform User（roles/aiplatform.user）が必要です。サービスアカウントを借用するなら、そのアカウントの Service Account Token Creator も必要です。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/ja/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "ドキュメント",
+     "item": "https://usemagpie.ai/docs/ja/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "Google Vertex AI を Claude Code・Codex などのエージェントで使う",
+     "item": "https://usemagpie.ai/docs/ja/vertex"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/ja/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>ドキュメント</small></a>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/start">はじめに</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a class="toc-only" href="/docs/ja/remote">リモート magpie</a>
+    <a class="toc-only" href="/docs/ja/docker">Docker</a>
+    <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
+    <a class="toc-only" href="/docs/ja/masking">プライバシーマスキング</a>
+    <a class="toc-only" href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a class="toc-only" href="/docs/ja/library">ライブラリ</a>
+    <a class="toc-only" href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a class="toc-only" href="/docs/ja/local-models">ローカルモデル</a>
+    <a class="toc-only" href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="言語" title="言語" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/vertex" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/vertex" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/vertex" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="Discord の magpie" title="Discord に参加"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="GitHub の magpie" title="GitHub のソースコード"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">ダウンロード</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Google Vertex AI</p>
+    <a href="#overview">概要</a>
+    <a href="#add">追加する</a>
+    <a href="#settings">ロケーション・認証情報・サービスアカウント</a>
+    <a href="#models">ロケーションごとのモデル</a>
+    <a href="#partner">パートナーモデル</a>
+    <a href="#claude">Vertex AI の Claude</a>
+    <a href="#paygo">Priority PayGo と Flex PayGo</a>
+    <a href="#trouble">よくあるエラー</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">ドキュメント · ガイド</p>
+    <h1>Google Vertex AI を Claude Code・Codex などのエージェントで使う</h1>
+    <p class="lede">Google Vertex AI（Google のドキュメントでは現在 Gemini Enterprise Agent Platform）は、自分の Google Cloud プロジェクトで Gemini を提供し、そのプロジェクトに課金されます。DeepSeek・GLM・gpt-oss などのパートナーモデルやオープンモデル、Anthropic の Claude も提供します。magpie の <code>google-vertex</code> プリセットは、これらを API キーなしで Claude Code・Codex・OpenCode などにつなぎます。各リクエストは Google の認証情報から作ったトークンで署名されます。</p>
+    <h2 id="add"><a class="anchor" href="#add">追加する</a></h2>
+    <ol class="steps">
+      <li><b>API を有効にする。</b>プロジェクトで Agent Platform API（<code>aiplatform.googleapis.com</code>）を有効にします。課金が有効である必要があります。</li>
+      <li><b>サインインする。</b><code>gcloud auth application-default login</code> を実行するか、サービスアカウントのキーファイルを用意します。</li>
+      <li><b>追加してテストする。</b>プロジェクト ID を指定してテストします。</li>
+    </ol>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="vx-add">コピー</button><pre id="vx-add">gcloud auth application-default login
+magpie provider add google-vertex project=my-project
+magpie provider test google-vertex</pre></div>
+    <p>アプリのエディターでは <span class="ui">プロジェクト ID</span>・<span class="ui">ロケーション</span>・<span class="ui">認証ファイル</span>・<span class="ui">権限借用</span> で同じ内容を入力します。TUI の <code>a</code> はプロジェクトだけを聞き、残りは CLI で設定します。追加・一覧・表示では Google に問い合わせず、認証情報はリクエストの署名時に読みます。続いてエージェントのモデルを選びます。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="vx-use">コピー</button><pre id="vx-use">magpie claude google-vertex/claude-sonnet-5-5
+magpie codex google-vertex/gemini-3.1-pro-preview</pre></div>
+    <h2 id="settings"><a class="anchor" href="#settings">ロケーション・認証情報・サービスアカウント</a></h2>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="vx-set">コピー</button><pre id="vx-set">magpie provider set google-vertex location=us-central1        # global (default), us, eu or a region
+magpie provider set google-vertex credentials=~/keys/vertex.json
+magpie provider set google-vertex impersonate=vertex@my-project.iam.gserviceaccount.com
+magpie provider set google-vertex impersonate=                # empty clears it</pre></div>
+    <ul><li><code>location=</code> は <code>global</code>（既定。空にするとこれに戻る）、<code>us</code>、<code>eu</code>、または <code>us-central1</code> などのリージョンです。</li><li><code>credentials=</code> は gcloud のサインインの代わりに使う認証ファイル（サービスアカウントのキーなど）です。相対パスはコマンドを実行したフォルダーから補われます。</li><li><code>impersonate=</code> はそのサービスアカウントとしてリクエストします。サインインしたアカウントに、そのアカウントの Service Account Token Creator ロールが必要です。</li><li>キーやアドレス（<code>url=</code> など）は拒否されます。トークンの送り先はプロジェクトとロケーションで決まる 1 つだけです。</li></ul>
+    <h2 id="models"><a class="anchor" href="#models">ロケーションごとのモデル</a></h2>
+    <p>ロケーションごとに提供されるモデルが違い、Vertex AI には問い合わせられる一覧がないため、magpie は各ロケーションに実際に応答したモデルを用意しています。</p>
+    <ul><li><code>global</code>：Gemini（<code>gemini-3.8-flash</code>、<code>gemini-3.1-pro-preview</code>、<code>gemini-2.5-pro</code> など）、3 つのパートナーモデル、<code>claude-opus-5-5</code>・<code>claude-sonnet-5-5</code>・<code>claude-haiku-5-5</code> などの Claude。</li><li><code>us</code>・<code>eu</code>：3.8・3.7・3.6・3.5 の Flash と <code>gemini-3.5-flash-lite</code>・<code>gemini-3.1-flash-lite</code>。</li><li>リージョン：<code>gemini-2.5-pro</code>・<code>gemini-2.5-flash</code>・<code>gemini-2.5-flash-lite</code>。</li></ul>
+    <p>asia-northeast1 の <code>gemini-3.5-flash</code> のように、リージョンがもう 1 つ提供している場合は、使いたいモデルと一緒に入力します。ロケーションを変えても選んだモデルはそのままなので、変えたあとに選び直してください。</p>
+    <h2 id="partner"><a class="anchor" href="#partner">パートナーモデル</a></h2>
+    <p>パートナーモデルの ID はスラッシュの前に提供元が入ります（<code>deepseek-ai/deepseek-v4.1-flash-maas</code>、<code>zai-org/glm-5.2-maas</code>、<code>openai/gpt-oss-120b-maas</code>）。magpie は同じ認証情報で、プロジェクト内の Google の OpenAI 互換 Chat Completions に問い合わせます。設定は不要です。ほかのモデル（プレビュー版や後から公開されたもの）は完全な ID で入力します。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="vx-mod">コピー</button><pre id="vx-mod">magpie provider models google-vertex gemini-3.8-flash deepseek-ai/deepseek-v4.1-flash-maas google/gemma-4-26b-a4b-it-maas
+magpie provider models google-vertex all     # back to the location's list
+magpie provider test google-vertex zai-org/glm-5.2-maas</pre></div>
+    <p>各パートナーモデルは、先にプロジェクトの Model Garden で有効にしてください。それまでは Google が拒否します。<code>magpie provider test google-vertex</code> は Gemini をテストします。パートナーモデルは単独で、アプリで右クリックするか、コマンドのあとにモデル ID を付けてテストします。</p>
+    <h2 id="claude"><a class="anchor" href="#claude">Vertex AI の Claude</a></h2>
+    <p>ID が <code>claude-</code> で始まるモデルは、プロジェクト内の Anthropic の Messages API（streamRawPredict）に問い合わせます。Claude Code が <code>CLAUDE_CODE_USE_VERTEX</code> で問い合わせるのと同じで、追加の設定は不要です。どの API を話すエージェントでも使え、Codex や OpenCode も使えます。</p>
+    <ul><li><code>global</code> には、Claude Code が Vertex AI で使う ID で現在のモデルが並びます。</li><li>古いモデルは <code>claude-sonnet-4-5@20250929</code> のような日付付きの Vertex の ID で入力します。</li><li>ほかのロケーション（<code>us-east5</code>、<code>europe-west1</code>）では、そこで提供される Claude を入力します。</li><li>パートナーモデルと同じく、各 Claude は先に Model Garden で有効にし、単独でテストします。</li></ul>
+    <h2 id="paygo"><a class="anchor" href="#paygo">Priority PayGo と Flex PayGo</a></h2>
+    <p>Google の Priority PayGo と Flex PayGo はリクエストヘッダーで指定します。エディターの <span class="ui">ヘッダー</span> に <code>X-Vertex-AI-LLM-Request-Type</code> と <code>X-Vertex-AI-LLM-Shared-Request-Type</code> があり、値は Google のページのとおりです。CLI では次のようにします。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="vx-hdr">コピー</button><pre id="vx-hdr">magpie provider set google-vertex header.<Name>=<value></pre></div>
+    <h2 id="trouble"><a class="anchor" href="#trouble">よくあるエラー</a></h2>
+    <ul><li><code>no Google credentials at &lt;file&gt;</code>：そこに認証ファイルがありません。自分で設定した <code>credentials=</code> なら直すか、<code>credentials=</code> だけで消します。それ以外は <code>gcloud auth application-default login</code> を実行します。</li><li><code>GOOGLE_APPLICATION_CREDENTIALS names &lt;file&gt;, which isn't there</code> または <code>… not a full path</code>：この環境変数が読めないファイルを指していて、代わりに gcloud のものは読まれません。完全なパスにするか、変数を外すか、<code>credentials=</code> を設定します。</li><li><code>the sign-in was refused</code>：サインインが期限切れか取り消されています。案内のコマンド（<code>gcloud auth application-default login</code> など）を実行してください。再起動なしで次のリクエストから新しいファイルを読みます。</li><li><code>aiplatform.endpoints.predict</code> を含む 403 <code>PERMISSION_DENIED</code>：署名するアカウント（またはその借用先のサービスアカウント）がプロジェクトで Vertex AI を使えません。プロジェクトで Agent Platform User（<code>roles/aiplatform.user</code>）を付与します。</li><li><code>impersonating …: the sign-in was refused (403)</code>：サインインしたアカウントに、そのサービスアカウントの Service Account Token Creator（<code>roles/iam.serviceAccountTokenCreator</code>）が必要です。</li></ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
+    <h3>magpie で Vertex AI を使うのに API キーは必要ですか？</h3>
+    <p>不要です。gcloud のアプリケーションのデフォルト認証情報、サービスアカウントのキーファイル、または借用したサービスアカウントで各リクエストに署名します。キーは拒否されます。</p>
+    <h3>Claude Code から magpie 経由で Vertex AI の Claude を使えますか？</h3>
+    <p>使えます。claude- のモデルは CLAUDE_CODE_USE_VERTEX と同じく Anthropic の Messages API に問い合わせ、Codex や OpenCode からも使えます。先に Model Garden で有効にしてください。</p>
+    <h3>ロケーションを変えたらモデルが変わったのはなぜ？</h3>
+    <p>ロケーションごとに提供モデルが違います。global が最も多く、us と eu は新しい Flash、リージョンは 2.5 系です。ほかは magpie provider models google-vertex で入力します。</p>
+    <h3>403 PERMISSION_DENIED が出たら？</h3>
+    <p>署名するアカウントにプロジェクトの Agent Platform User（roles/aiplatform.user）が必要です。サービスアカウントを借用するなら、そのアカウントの Service Account Token Creator も必要です。</p>
+
+    <p style="margin-top:48px">関連ページ：<a href="/docs/ja/gemini">Gemini を Claude Code・Codex・Gemini CLI・OpenCode で使う</a>、<a href="/docs/ja/deepseek">DeepSeek を Claude Code・Codex・Gemini CLI・OpenCode で使う</a>。エラーが出たら <a href="/docs/ja/troubleshooting">よくあるエラーの直し方：401・429・502・504 など</a> を見るか、<a href="https://discord.gg/vGSnD3ZKQF">Discord</a> で質問してください。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a href="/docs/ja/remote">リモート magpie</a>
+    <a href="/docs/ja/docker">Docker</a>
+    <a href="/docs/ja/privacy">プライバシー</a>
+    <a href="/docs/ja/masking">プライバシーマスキング</a>
+    <a href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a href="/docs/ja/library">ライブラリ</a>
+    <a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a href="/docs/ja/local-models">ローカルモデル</a>
+    <a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/ja/contributors">コントリビューター</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "コピーしました"; setTimeout(() => (b.textContent = "コピー"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Google Vertex AI 接入 Claude Code、Codex：在自己的 GCP 项目里用 Gemini、Claude、DeepSeek 和 GLM · magpie</title>
+<meta name="description" content="用 magpie 把 Google Vertex AI（Gemini Enterprise Agent Platform）接到 Claude Code、Codex、OpenCode 等 Agent：不需要 API Key，用 gcloud 凭据或服务账号签名，在自己的 Google Cloud 项目里调用 Gemini、Claude 以及 DeepSeek、GLM、gpt-oss 等合作方模型，按区域选模型。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/vertex">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/vertex">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/vertex">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/vertex">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/vertex">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Google Vertex AI 接入 Claude Code、Codex 等 Agent">
+<meta property="og:description" content="用 magpie 把 Google Vertex AI（Gemini Enterprise Agent Platform）接到 Claude Code、Codex、OpenCode 等 Agent：不需要 API Key，用 gcloud 凭据或服务账号签名，在自己的 Google Cloud 项目里调用 Gemini、Claude 以及 DeepSeek、GLM、gpt-oss 等合作方模型，按区域选模型。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/vertex">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Google Vertex AI 接入 Claude Code、Codex 等 Agent",
+   "description": "用 magpie 把 Google Vertex AI（Gemini Enterprise Agent Platform）接到 Claude Code、Codex、OpenCode 等 Agent：不需要 API Key，用 gcloud 凭据或服务账号签名，在自己的 Google Cloud 项目里调用 Gemini、Claude 以及 DeepSeek、GLM、gpt-oss 等合作方模型，按区域选模型。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/vertex",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "用 Vertex AI 需要 API Key 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "不需要。magpie 用 gcloud 的应用默认凭据、服务账号密钥文件或模拟的服务账号签名每个请求。API Key 会被拒绝。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Claude Code 能通过 magpie 用 Vertex AI 上的 Claude 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。claude- 开头的模型走 Anthropic 的 Messages API，和 CLAUDE_CODE_USE_VERTEX 的方式一样；Codex、OpenCode 等其他 Agent 也能用。先在 Model Garden 里开启该模型。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "为什么换了区域后模型变了？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "每个区域提供的模型不同：global 最全，us 和 eu 只有新的 Flash，具体区域是 2.5 系列。其他模型用 magpie provider models google-vertex 手动填入。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "报 403 PERMISSION_DENIED 怎么办？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "签名的账号需要项目上的 Agent Platform User（roles/aiplatform.user）角色；模拟服务账号时，登录的账号还要在它上面有 Service Account Token Creator。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/zh/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "文档",
+     "item": "https://usemagpie.ai/docs/zh/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "Google Vertex AI 接入 Claude Code、Codex 等 Agent",
+     "item": "https://usemagpie.ai/docs/zh/vertex"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/vertex" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/vertex" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/vertex" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Google Vertex AI</p>
+    <a href="#overview">是什么</a>
+    <a href="#add">添加</a>
+    <a href="#settings">区域、凭据和服务账号</a>
+    <a href="#models">每个区域的模型</a>
+    <a href="#partner">合作方模型</a>
+    <a href="#claude">Vertex AI 上的 Claude</a>
+    <a href="#paygo">Priority PayGo 和 Flex PayGo</a>
+    <a href="#trouble">常见错误</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 指南</p>
+    <h1>Google Vertex AI 接入 Claude Code、Codex 等 Agent</h1>
+    <p class="lede">Google Vertex AI（Google 文档现在叫 Gemini Enterprise Agent Platform）在你自己的 Google Cloud 项目里提供 Gemini，费用记在这个项目上。它还提供 DeepSeek、GLM、gpt-oss 等合作方和开放模型，以及 Anthropic 的 Claude。magpie 的 <code>google-vertex</code> 预设把它们接到 Claude Code、Codex、OpenCode 等 Agent，不需要 API Key：每次请求都用从你的 Google 凭据换来的令牌签名。</p>
+    <h2 id="add"><a class="anchor" href="#add">添加</a></h2>
+    <ol class="steps">
+      <li><b>开启 API。</b>在项目里开启 Agent Platform API（<code>aiplatform.googleapis.com</code>），项目需要开通结算。</li>
+      <li><b>登录。</b>运行 <code>gcloud auth application-default login</code>，或者准备好服务账号的密钥文件。</li>
+      <li><b>添加并测试。</b>填上项目 id，再测一次：</li>
+    </ol>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="vx-add">复制</button><pre id="vx-add">gcloud auth application-default login
+magpie provider add google-vertex project=my-project
+magpie provider test google-vertex</pre></div>
+    <p>应用里的编辑器问的是同样的内容：<span class="ui">项目 ID</span>、<span class="ui">位置</span>、<span class="ui">凭据文件</span> 和 <span class="ui">服务账号</span>。TUI 的 <code>a</code> 只问项目，其余用 CLI 设置。添加、列出和查看都不会访问 Google，凭据在签名请求时才读取。然后给 Agent 选模型：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="vx-use">复制</button><pre id="vx-use">magpie claude google-vertex/claude-sonnet-5-5
+magpie codex google-vertex/gemini-3.1-pro-preview</pre></div>
+    <h2 id="settings"><a class="anchor" href="#settings">区域、凭据和服务账号</a></h2>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="vx-set">复制</button><pre id="vx-set">magpie provider set google-vertex location=us-central1        # global (default), us, eu or a region
+magpie provider set google-vertex credentials=~/keys/vertex.json
+magpie provider set google-vertex impersonate=vertex@my-project.iam.gserviceaccount.com
+magpie provider set google-vertex impersonate=                # empty clears it</pre></div>
+    <ul><li><code>location=</code> 可以是 <code>global</code>（默认，留空也回到它）、<code>us</code>、<code>eu</code>，或 <code>us-central1</code> 这样的具体区域。</li><li><code>credentials=</code> 指定一个凭据文件代替 gcloud 的登录，比如服务账号密钥；相对路径按运行命令的文件夹补全。</li><li><code>impersonate=</code> 让请求以该服务账号的身份发出，你登录的账号需要在它上面有 Service Account Token Creator 角色。</li><li>API Key 和地址（<code>url=</code> 等）都会被拒绝：令牌只发往项目和区域决定的那一个地址。</li></ul>
+    <h2 id="models"><a class="anchor" href="#models">每个区域的模型</a></h2>
+    <p>每个区域提供的模型不同，而 Vertex AI 没有可以查询的列表，所以 magpie 给每个区域预设了它实际应答过的模型：</p>
+    <ul><li><code>global</code>：Gemini（<code>gemini-3.8-flash</code>、<code>gemini-3.1-pro-preview</code>、<code>gemini-2.5-pro</code> 等）、三个合作方模型，以及 <code>claude-opus-5-5</code>、<code>claude-sonnet-5-5</code>、<code>claude-haiku-5-5</code> 等 Claude 模型。</li><li><code>us</code>、<code>eu</code>：3.8、3.7、3.6、3.5 的 Flash，以及 <code>gemini-3.5-flash-lite</code>、<code>gemini-3.1-flash-lite</code>。</li><li>具体区域：<code>gemini-2.5-pro</code>、<code>gemini-2.5-flash</code>、<code>gemini-2.5-flash-lite</code>。</li></ul>
+    <p>某个区域多提供一个模型（比如 asia-northeast1 的 <code>gemini-3.5-flash</code>）时，把想要的模型都填进去即可。换区域会保留已选的模型，换完请重新选。</p>
+    <h2 id="partner"><a class="anchor" href="#partner">合作方模型</a></h2>
+    <p>合作方模型的 id 在斜杠前写着发布方，比如 <code>deepseek-ai/deepseek-v4.1-flash-maas</code>、<code>zai-org/glm-5.2-maas</code>、<code>openai/gpt-oss-120b-maas</code>。magpie 用同样的凭据，在你的项目里通过 Google 的 OpenAI 兼容 Chat Completions 调用它们，不用另外设置。其他合作方模型（预览版或 Google 之后上线的）按完整 id 填进去：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="vx-mod">复制</button><pre id="vx-mod">magpie provider models google-vertex gemini-3.8-flash deepseek-ai/deepseek-v4.1-flash-maas google/gemma-4-26b-a4b-it-maas
+magpie provider models google-vertex all     # back to the location's list
+magpie provider test google-vertex zai-org/glm-5.2-maas</pre></div>
+    <p>每个合作方模型都要先在项目的 Model Garden 里开启，否则 Google 会拒绝。<code>magpie provider test google-vertex</code> 测的是 Gemini，合作方模型要单独测：在应用里右键该模型，或者在命令后面加上模型 id。</p>
+    <h2 id="claude"><a class="anchor" href="#claude">Vertex AI 上的 Claude</a></h2>
+    <p>id 以 <code>claude-</code> 开头的模型会在你的项目里走 Anthropic 的 Messages API（streamRawPredict），和 Claude Code 设置 <code>CLAUDE_CODE_USE_VERTEX</code> 时的调用方式一样，不需要再设置什么。不管 Agent 说的是哪种 API，都能用这些模型，Codex 和 OpenCode 也行。</p>
+    <ul><li><code>global</code> 列出当前的模型，id 和 Claude Code 在 Vertex AI 上用的一样。</li><li>旧模型用 Vertex 带日期的 id，比如 <code>claude-sonnet-4-5@20250929</code>，手动填入。</li><li>在 <code>us-east5</code>、<code>europe-west1</code> 等其他区域，把该区域提供的 Claude 模型填进去。</li><li>和合作方模型一样，每个 Claude 模型都要先在 Model Garden 里开启，并单独测试。</li></ul>
+    <h2 id="paygo"><a class="anchor" href="#paygo">Priority PayGo 和 Flex PayGo</a></h2>
+    <p>Google 的 Priority PayGo 和 Flex PayGo 通过请求头开启。编辑器的 <span class="ui">请求头</span> 里可以直接添加 <code>X-Vertex-AI-LLM-Request-Type</code> 和 <code>X-Vertex-AI-LLM-Shared-Request-Type</code>，值用 Google 文档给出的。命令行：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="vx-hdr">复制</button><pre id="vx-hdr">magpie provider set google-vertex header.<Name>=<value></pre></div>
+    <h2 id="trouble"><a class="anchor" href="#trouble">常见错误</a></h2>
+    <ul><li><code>no Google credentials at &lt;file&gt;</code>：那里没有凭据文件。如果是你设的 <code>credentials=</code>，改正它或用 <code>credentials=</code> 清空；否则运行 <code>gcloud auth application-default login</code>。</li><li><code>GOOGLE_APPLICATION_CREDENTIALS names &lt;file&gt;, which isn't there</code> 或 <code>… not a full path</code>：这个环境变量指向的文件读不到，也不会改用 gcloud 的凭据。写完整路径、取消这个变量，或者设置 <code>credentials=</code>。</li><li><code>the sign-in was refused</code>：登录过期或被撤销，按提示重新运行 <code>gcloud auth application-default login</code>。下一次请求就会读新文件，不用重启。</li><li>403 <code>PERMISSION_DENIED</code>，提到 <code>aiplatform.endpoints.predict</code>：签名的账号（或它模拟的服务账号）不能在这个项目里用 Vertex AI。给它项目上的 Agent Platform User（<code>roles/aiplatform.user</code>）角色。</li><li><code>impersonating …: the sign-in was refused (403)</code>：登录的账号需要在该服务账号上有 Service Account Token Creator（<code>roles/iam.serviceAccountTokenCreator</code>）。</li></ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>用 Vertex AI 需要 API Key 吗？</h3>
+    <p>不需要。magpie 用 gcloud 的应用默认凭据、服务账号密钥文件或模拟的服务账号签名每个请求。API Key 会被拒绝。</p>
+    <h3>Claude Code 能通过 magpie 用 Vertex AI 上的 Claude 吗？</h3>
+    <p>能。claude- 开头的模型走 Anthropic 的 Messages API，和 CLAUDE_CODE_USE_VERTEX 的方式一样；Codex、OpenCode 等其他 Agent 也能用。先在 Model Garden 里开启该模型。</p>
+    <h3>为什么换了区域后模型变了？</h3>
+    <p>每个区域提供的模型不同：global 最全，us 和 eu 只有新的 Flash，具体区域是 2.5 系列。其他模型用 magpie provider models google-vertex 手动填入。</p>
+    <h3>报 403 PERMISSION_DENIED 怎么办？</h3>
+    <p>签名的账号需要项目上的 Agent Platform User（roles/aiplatform.user）角色；模拟服务账号时，登录的账号还要在它上面有 Service Account Token Creator。</p>
+
+    <p style="margin-top:48px">相关页面：<a href="/docs/zh/gemini">Gemini 接入 Claude Code、Codex、Gemini CLI 和 OpenCode</a>、<a href="/docs/zh/deepseek">DeepSeek 接入 Claude Code、Codex、Gemini CLI 和 OpenCode</a>。遇到错误请看 <a href="/docs/zh/troubleshooting">常见错误排查：401、429、502、504 等</a>，或者到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

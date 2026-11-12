@@ -142,6 +142,7 @@ DeepSeek, Kimi (Moonshot), GLM (Zhipu), Qwen, MiniMax, Anthropic (Claude), OpenA
 - [Quota left on every subscription and key](https://usemagpie.ai/docs/quota): each window's use and reset on Claude, Codex, Copilot and other subscriptions and each key's balance: magpie quota and --json, GET /v1/magpie/quotas, quota alerts, magpie quota wait to go on once allowance is back, history, and a Codex account's resets and credits.
 - [Image recognition and generation for any model](https://usemagpie.ai/docs/images): an Image recognition model describes images for models that can't see; analyze_image MCP server; Magpie Image generates images and videos into the project
 - [Token usage and cost per agent](https://usemagpie.ai/docs/usage): tokens and cost per agent, model, account and session; magpie usage --csv; magpie model price for a relay's real price; Claude Code status line; /v1/magpie/usage
+- [Google Vertex AI in Claude Code, Codex and other agents](https://usemagpie.ai/docs/vertex): Gemini, Claude and partner models (DeepSeek, GLM, gpt-oss) from your own Google Cloud project, signed with gcloud credentials or a service account, no API key; models per location, Model Garden, PayGo headers and common errors.
 - [Library](https://usemagpie.ai/docs/library): instructions, MCP servers, skills, hooks and subagents for each agent.
 - [MCP router](https://usemagpie.ai/docs/mcp-router): one magpie MCP server per agent.
 - [Remote magpie](https://usemagpie.ai/docs/remote): use one magpie from several computers.

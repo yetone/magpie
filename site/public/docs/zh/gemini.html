@@ -317,6 +317,8 @@ magpie claude google-vertex/gemini-3.1-pro-preview</pre></div>
       <li><b>检查 Key。</b><code>magpie provider test google</code> 会向每个接口发一个很小的请求，或者发给你指定的每个模型。加上 <code>--as codex</code> 或 <code>--as claude-code</code>，就按那个工具的方式发送。</li>
     </ul>
 
+    <p>Vertex AI 的详细说明：<a href="/docs/zh/vertex">Google Vertex AI 接入 Claude Code、Codex 等 Agent</a>。</p>
+
     <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
     <h3>Claude Code 怎么用 Gemini？</h3>
     <p>在 magpie 里添加 Gemini API Key（供应商页，添加供应商，选 Google Gemini），然后在 Claude Code 那一行选一个模型，比如 <code>gemini-3.1-pro-preview</code>，或者运行 <code>magpie claude google/gemini-3.1-pro-preview</code>。magpie 会写好 Claude Code 的 <code>settings.json</code>，把每个 Messages 请求转换成 Gemini 的 Chat Completions，工具调用和流式输出都保留。</p>
