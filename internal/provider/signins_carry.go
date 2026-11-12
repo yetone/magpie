@@ -196,8 +196,16 @@ func (s *SignIns) records() map[string]signInRec {
 // rotatesKnown are the community plugins whose vendor spends a refresh
 // token once, read from their sources: MiniMax Code ("MiniMax spends a
 // refresh token once", invalid_grant 400 after) and Qoder ("a refresh
-// token is spent once, so two refreshes would spend it twice").
-var rotatesKnown = []string{"minimax-code", "minimax-code-global", "qoder", "qoder-cn"}
+// token is spent once, so two refreshes would spend it twice"), and the
+// six whose auth hooks say rotating since plugins #1027: Cline (a spent
+// token is 400 invalid_grant), CodeArts and OfficeAce ("one-time refresh
+// token"), Factory (WorkOS rotates), Nous Portal (refresh_token_reused),
+// SenseNova (Hydra rotates) and WorkBuddy. The hooks say so too; this list
+// holds for a sync that runs before the plugin host's list is read.
+var rotatesKnown = []string{
+	"cline", "codearts", "factory", "minimax-code", "minimax-code-global", "nous-portal",
+	"officeace", "qoder", "qoder-cn", "sensenova-token-plan", "workbuddy", "workbuddy-ai",
+}
 
 // rotatingPlugins are the ids of the plugins whose auth hook says their
 // refresh tokens rotate (Rotating): a sign-in of theirs is never carried,
