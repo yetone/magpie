@@ -270,6 +270,11 @@ type model struct {
 	// the model's whole window, which Codex shows (95% of it) as the
 	// context the conversation has
 	Context *int `json:"context_window,omitempty"`
+	// the share of the window Codex counts as the conversation's room, as
+	// every entry of its own catalog says (95): an entry without it left
+	// a newer Codex with no limit to compact against, so a long
+	// conversation ran into the vendor's "too long" (codealc on X)
+	EffectivePct int `json:"effective_context_window_percent"`
 	// where Codex compacts the conversation when that is before the
 	// window: the threshold set on the model or its provider, else
 	// Long conversations' (settings.Working). Codex compacts at the
@@ -383,7 +388,7 @@ func entriesAt(ms []catalog.Model, after int, effort string) []any {
 			Shell: "unified_exec", Visibility: "list", InAPI: true, Priority: after + i + 1,
 			ApplyPatch: "freeform", Tools: []string{}, Modalities: []string{"text"},
 			Tiers: []tier{}, SearchTool: true, Parallel: true,
-			AutoReview: autoReview,
+			AutoReview: autoReview, EffectivePct: effectivePct,
 		}
 		if e.AutoReview == settings.CodexAutoReviewSession {
 			e.AutoReview = m.ID
@@ -1032,6 +1037,10 @@ func Remember(entries []any) {
 // ChatGPT sign-in: its entry as Codex has it (images, context window, tools,
 // instructions), under magpie's id. The start-up notice and the upgrade
 // prompt are left out; they name slugs the catalog does not have.
+// effectivePct is the effective_context_window_percent of Codex's own
+// entries.
+const effectivePct = 95
+
 func ownEntry(raw map[string]any, id, name string, priority int) map[string]any {
 	e := make(map[string]any, len(raw))
 	for k, v := range raw {
@@ -1039,6 +1048,9 @@ func ownEntry(raw map[string]any, id, name string, priority int) map[string]any 
 	}
 	delete(e, "availability_nux")
 	delete(e, "upgrade")
+	if _, ok := e["effective_context_window_percent"]; !ok {
+		e["effective_context_window_percent"] = effectivePct
+	}
 	e["slug"], e["display_name"], e["priority"], e["visibility"] = id, name, priority, "list"
 	if s, _ := e["base_instructions"].(string); s == "" {
 		// an entry with model_messages alone carries its instructions
