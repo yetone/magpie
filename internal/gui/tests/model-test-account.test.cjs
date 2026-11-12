@@ -18,11 +18,14 @@ const base = { icon: "generic", responses: "", anthropic: "", catalog: "", agent
 const PICKS = [{ id: "k1", name: "Work" }, { id: "k2", name: "Spare" }];
 const relay = { ...base, id: "relay", name: "Relay", chat: "https://relay.example.com/v1",
   models: [{ id: "gpt-5.5", name: "gpt-5.5", on: true }], testPicks: PICKS };
+// tmr11235's: ChatGPT API signed in under two ChatGPT accounts, both on
+const gpt = { ...base, id: "chatgpt-api", name: "ChatGPT API", chat: "", responses: "https://api.openai.com/v1", key: { set: false, masked: "" },
+  models: [{ id: "gpt-6.1-sol", name: "gpt-6.1-sol", on: true }], testPicks: [{ id: "a@mmuu.mom", name: "a@mmuu.mom" }, { id: "b@tirol.url", name: "b@tirol.url" }] };
 const plain = { ...base, id: "plain", name: "Plain", chat: "https://plain.example.com/v1",
   models: [{ id: "model-p", name: "model-p", on: true }] };
 
 function serve(lang, tests) {
-  const providers = { providers: [relay, plain], presets: [], excluded: [], gateway: { running: true, window: true } };
+  const providers = { providers: [relay, gpt, plain], presets: [], excluded: [], gateway: { running: true, window: true } };
   const state = { agents: [], profiles: [], settings: { lang, theme: "light" } };
   return async (route) => {
     const url = new URL(route.request().url());
@@ -99,6 +102,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       for (let i = 0; i < 60 && tests.length < 2; i++) await page.waitForTimeout(50);
       assert.equal(tests[1].account, undefined, "a plain test names no account");
       await page.waitForFunction(() => document.querySelector("#status")?.textContent.endsWith(" · Work"));
+
+      // two ChatGPT sign-ins of the ChatGPT API offer it too
+      await page.goto("http://magpie.test/?view=providers");
+      await page.locator(".row.provider", { hasText: "ChatGPT API" }).click();
+      const sol = page.locator(".editor .mchips .mchip", { hasText: "gpt-6.1-sol" });
+      await sol.waitFor();
+      await rightClick(sol);
+      await menu.getByRole("menuitem", { name: new RegExp("^" + (await tr("Test on account…")).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) }).click();
+      assert.deepEqual(await page.locator(".pop.proto-menu .pm-name").allTextContents(), ["a@mmuu.mom", "b@tirol.url"]);
+      await page.keyboard.press("Escape");
 
       // a provider with one account has no such entry
       await page.goto("http://magpie.test/?view=providers");
