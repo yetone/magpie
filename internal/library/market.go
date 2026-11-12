@@ -641,6 +641,13 @@ func rank(r *registryServer, m MarketServer, q string) int {
 	return s
 }
 
+// brandIcons are logos the registry doesn't carry, by repository, taken
+// from the project's own site, so its server isn't shown with its owner's
+// avatar.
+var brandIcons = map[string]string{
+	"https://github.com/morluto/rea": "https://rea.tools/assets/favicon.svg", // MIT, the site's own favicon
+}
+
 // fromRegistry is what a registry entry becomes in the library: its remote
 // when it has one, else the package it's published as.
 func fromRegistry(r *registryServer) (MarketServer, bool) {
@@ -678,6 +685,9 @@ func fromRegistry(r *registryServer) (MarketServer, bool) {
 			m.Icon = ic.Src
 			break
 		}
+	}
+	if m.Icon == "" {
+		m.Icon = brandIcons[strings.ToLower(strings.TrimSuffix(r.Repository.URL, "/"))]
 	}
 	if m.Icon == "" && owner != "" {
 		m.Icon = gh(owner)
@@ -867,6 +877,13 @@ func serverIcon(l *Library, s *Server) string {
 		}
 	}
 	if u := l.Icons[k]; u != "" {
+		if _, avatar := strings.CutPrefix(u, "https://github.com/"); avatar {
+			for _, m := range popularServers() { // added before its logo was known
+				if m.Icon != u && serverKey(&m.server) == k && !strings.HasPrefix(m.Icon, "https://github.com/") {
+					return m.Icon
+				}
+			}
+		}
 		return u
 	}
 	for _, m := range featured {

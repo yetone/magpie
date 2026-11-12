@@ -523,3 +523,27 @@ func TestThirdPartyMemoryServers(t *testing.T) {
 		t.Fatalf("everme %+v", e)
 	}
 }
+
+func TestReaKeepsItsOwnLogo(t *testing.T) {
+	const logo = "https://rea.tools/assets/favicon.svg"
+	i := slices.IndexFunc(popularServers(), func(m MarketServer) bool { return m.ID == "io.github.morluto/rea" })
+	if i < 0 || popularServers()[i].Icon != logo {
+		t.Fatalf("crawl icon: %v", i)
+	}
+	var r registryServer
+	if err := json.Unmarshal([]byte(`{"name":"io.github.morluto/rea","repository":{"url":"https://github.com/morluto/rea"},"packages":[{"registryType":"npm","identifier":"rea-agents","transport":{"type":"stdio"}}]}`), &r); err != nil {
+		t.Fatal(err)
+	}
+	m, ok := fromRegistry(&r)
+	if !ok || m.Icon != logo {
+		t.Fatalf("live icon: %q %v", m.Icon, ok)
+	}
+	s := popularServers()[i].server
+	l := &Library{Icons: map[string]string{serverKey(&s): gh("morluto")}}
+	if got := serverIcon(l, &s); got != logo {
+		t.Fatalf("added with the avatar: %q", got)
+	}
+	if !offered(logo) {
+		t.Fatal("not offered")
+	}
+}
