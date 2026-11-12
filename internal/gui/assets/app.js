@@ -13689,8 +13689,9 @@ function renderAccounts(a, p) {
       imp.title = importSay(a.agent).from;
       list.append(imp);
     }
-    if (sub.importable && (a.agent === "claude" || a.agent === "codex")) list.append(addRow(t("Export accounts to a file…"), () => startExport(a.agent)));
     if (a.agent === "claude") list.append(addRow(t("Add an account by setup-token…"), startClaudeToken));
+    // last of them, and no plus: it adds nothing (the owner, 11-12)
+    if (sub.importable && (a.agent === "claude" || a.agent === "codex")) list.append(addRow(t("Export accounts to a file…"), () => startExport(a.agent), EXPORT_GLYPH));
   }
   arrangeAccountRows(list, p);
   return list;
@@ -14219,9 +14220,11 @@ function accountNameButton(p, user) {
   return wrap;
 }
 // an account or key list's last row, adding one
-function addRow(say, go) {
+// an arrow up out of a tray: what leaves magpie, CLI_UP the other way
+const EXPORT_GLYPH = "M8 10.5v-8M4.5 6 8 2.5 11.5 6M3.5 13.5h9";
+function addRow(say, go, glyph = PLUS) {
   const b = el("button", "acc add"), ic = el("span", "dot");
-  ic.append(svg(PLUS, 10, 1.8));
+  ic.append(svg(glyph, 10, 1.8));
   b.append(ic, el("span", "n", say));
   b.onclick = go;
   return b;
