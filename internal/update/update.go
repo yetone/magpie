@@ -49,7 +49,7 @@ func Feed() string {
 	if f := os.Getenv("MAGPIE_UPDATE_FEED"); f != "" {
 		return f
 	}
-	return Site + "/api/latest"
+	return siteFeed
 }
 
 // Release is one published version.
@@ -141,6 +141,29 @@ func LatestEvery(ctx context.Context, lang string) (*Release, error) {
 }
 
 func latestAt(ctx context.Context, feed, lang string) (*Release, error) {
+	if !fallsBack(ctx) {
+		return latestFrom(ctx, feed, lang)
+	}
+	// the site may be unreachable where github.com is (a company's allow
+	// list): after a failed feed, GitHub's own release is read and held
+	// to the same signature (fallback.go)
+	fctx, cancel := context.WithTimeout(ctx, feedWait)
+	defer cancel()
+	rel, err := latestFrom(fctx, feed, lang)
+	if err == nil {
+		return rel, nil
+	}
+	if ctx.Err() != nil {
+		return nil, err
+	}
+	rel, gerr := githubLatest(ctx, lang)
+	if gerr != nil {
+		return nil, fmt.Errorf("%w (and GitHub: %v)", err, gerr)
+	}
+	return rel, nil
+}
+
+func latestFrom(ctx context.Context, feed, lang string) (*Release, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", feed, nil)
 	if err != nil {
 		return nil, err
@@ -164,6 +187,7 @@ func latestAt(ctx context.Context, feed, lang string) (*Release, error) {
 		return nil, fmt.Errorf("update feed: %w", err)
 	}
 	r.Notes = InLang(r.Notes, lang)
+	r.githubAddresses()
 	return &r, nil
 }
 
@@ -1542,4 +1566,17 @@ func openBeside(bundle string, window, quiet bool) string {
 func StartBeside(exe string, window bool, view string) error {
 	_, _, err := launch(exe, RelaunchArgs(window, view), os.Environ())
 	return err
+}
+
+// githubAddresses gives each file the feed names on the site its
+// github.com address, where download goes on when the site's can't be
+// reached; the hash it is checked against is the same.
+func (rel *Release) githubAddresses() {
+	for name, a := range rel.Assets {
+		if a.GitHub != "" || rel.Version == "" || !strings.HasPrefix(a.URL, Site+"/") {
+			continue
+		}
+		a.GitHub = fmt.Sprintf("%s/%s/releases/download/v%s/%s", githubWeb, releaseRepo, rel.Version, url.PathEscape(name))
+		rel.Assets[name] = a
+	}
 }

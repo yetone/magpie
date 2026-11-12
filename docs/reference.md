@@ -3268,6 +3268,17 @@ magpie update --mirror https://mirror.example/
 No mirror is used unless you give one, and the SHA-256 every download is
 checked against still comes from usemagpie.ai, never from the mirror.
 
+On a network that lets github.com through and not usemagpie.ai (a company
+allow list), the app and `magpie update` need no setting: when the feed
+fails, the newest release is read from `yetone/magpie-releases` itself
+(`api.github.com/repos/yetone/magpie-releases/releases/latest`, or the
+release page's redirect when the API is rate-limited), with its
+`SHA256SUMS` and `SHA256SUMS.sig` from github.com. They go through the same
+check as the feed's: the ed25519 signature against the key built into the
+binary, the version in the signed message, each file's hash from the signed
+list. A release read this way must be signed whatever its version. The
+Stable channel and a `MAGPIE_UPDATE_FEED` of your own don't fall back.
+
 Release files are downloaded from usemagpie.ai's copy on Cloudflare R2
 (`usemagpie.ai/files/<tag>/<file>`). Every five minutes the site copies the
 newest release and the Stable one from GitHub into R2, which takes a file
