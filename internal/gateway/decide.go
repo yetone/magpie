@@ -751,6 +751,9 @@ func requestEffort(proto provider.Protocol, body []byte) string {
 	if e := effortOf(v.OutputConfig.Effort); e != "" {
 		return e
 	}
+	if e := turnEffort(body); e != "" {
+		return e
+	}
 	return effortOfBudget(v.Thinking.Budget)
 }
 

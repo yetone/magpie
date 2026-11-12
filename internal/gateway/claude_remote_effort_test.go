@@ -62,6 +62,9 @@ done
 		{"messages budget", provider.Anthropic, "/v1/messages", `{"model":"claude-opus-5-5","max_tokens":9000,"thinking":{"type":"enabled","budget_tokens":20000},"messages":[{"role":"user","content":"a1"}]}`, "--effort high"},
 		{"messages adaptive", provider.Anthropic, "/v1/messages", `{"model":"claude-opus-5-5","max_tokens":9000,"thinking":{"type":"adaptive","display":"omitted"},"output_config":{"effort":"xhigh"},"messages":[{"role":"user","content":"a2"}]}`, "--effort xhigh"},
 		{"messages turn effort", provider.Anthropic, "/v1/messages", `{"model":"claude-opus-5-5","max_tokens":9000,"thinking":{"type":"adaptive"},"messages":[{"role":"user","content":"a3"},{"role":"system","content":[],"output_config":{"effort":"max"}}]}`, "--effort max"},
+		{"turn effort over budget", provider.Anthropic, "/v1/messages", `{"model":"claude-opus-5-5","max_tokens":40000,"thinking":{"type":"enabled","budget_tokens":31999},"messages":[{"role":"user","content":"a4"},{"role":"system","content":[],"output_config":{"effort":"high"}}]}`, "--effort high"},
+		{"top effort over budget", provider.Anthropic, "/v1/messages", `{"model":"claude-opus-5-5","max_tokens":40000,"thinking":{"type":"enabled","budget_tokens":31999},"output_config":{"effort":"high"},"messages":[{"role":"user","content":"a5"}]}`, "--effort high"},
+		{"thinking summaries on", provider.Anthropic, "/v1/messages", `{"model":"claude-opus-5-5","max_tokens":9000,"thinking":{"type":"adaptive"},"messages":[{"role":"user","content":"a6"}]}`, `"showThinkingSummaries":true`},
 		{"chat reasoning object", provider.Chat, "/v1/chat/completions", `{"model":"claude-opus-5-5","reasoning":{"effort":"high"},"messages":[{"role":"user","content":"b3"}]}`, "--effort high"},
 		{"chat output_config", provider.Chat, "/v1/chat/completions", `{"model":"claude-opus-5-5","output_config":{"effort":"max"},"messages":[{"role":"user","content":"b4"}]}`, "--effort max"},
 		{"chat thinking budget", provider.Chat, "/v1/chat/completions", `{"model":"claude-opus-5-5","thinking":{"type":"enabled","budget_tokens":8000},"messages":[{"role":"user","content":"b5"}]}`, "--effort medium"},
@@ -73,5 +76,18 @@ done
 		if args := post(c.proto, c.path, c.body); !strings.Contains(args, c.want) {
 			t.Errorf("%s: no %q in %q", c.name, c.want, args)
 		}
+	}
+}
+
+// TestTurnEffortBeatsBudget: a High carried in the turn's own message is the
+// level routing reads too, not the budget beside it (DIYgod on X, #5379).
+func TestTurnEffortBeatsBudget(t *testing.T) {
+	body := []byte(`{"model":"m","thinking":{"type":"enabled","budget_tokens":31999},"messages":[{"role":"user","content":"x"},{"role":"system","content":[],"output_config":{"effort":"high"}}]}`)
+	if got := requestEffort(provider.Anthropic, body); got != "high" {
+		t.Errorf("requestEffort = %q, want high", got)
+	}
+	r, err := parseAnthropicRequest(body, false)
+	if err != nil || r.Effort != "high" {
+		t.Errorf("parsed effort = %q (%v), want high", r.Effort, err)
 	}
 }

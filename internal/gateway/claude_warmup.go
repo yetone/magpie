@@ -506,6 +506,13 @@ func claudeResult(b []byte) (claudeRun, bool) {
 // read.
 const disableDeepLinkSettings = `{"disableDeepLinkRegistration":"disable"}`
 
+// claudeRunSettings is a run's settings: no deep link, and the thinking
+// shown as a summary. -p has --thinking-display, but the interactive mode
+// (interactiveArgs drops that flag) shows none unless showThinkingSummaries
+// is on, so a client saw no thinking at all (DIYgod on X, #5379). It costs
+// no quota.
+const claudeRunSettings = `{"disableDeepLinkRegistration":"disable","showThinkingSummaries":true}`
+
 func claudeUsageArgs() []string {
 	return []string{"-p", "/usage", "--output-format", "json",
 		// verbose: the array of every message, whose usage_report holds

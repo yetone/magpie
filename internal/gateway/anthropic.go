@@ -299,13 +299,32 @@ func readAnthropic(body []byte, clientMarks, facts bool) (*Request, error) {
 	} else if th != nil && (th.Type == "enabled" || th.Type == "adaptive") {
 		r.Thinking = true
 		r.Effort = effortOfBudget(th.BudgetTokens)
-		if oc := a.OutputConfig; oc != nil {
-			if e := effortOf(oc.Effort); e != "" {
-				r.Effort = e
-			}
+		if oc := a.OutputConfig; oc != nil && effortOf(oc.Effort) != "" {
+			r.Effort = effortOf(oc.Effort)
+		} else if e := turnEffort(body); e != "" {
+			// the level of the turn, kept in a message of its own (Claude
+			// Desktop's and Claude Code's {role: "system"} message with an
+			// output_config), is the one picked; the budget beside it is
+			// only nearest to it (a High asked as 31999 read as Max)
+			r.Effort = e
 		}
 	}
 	return r, nil
+}
+
+// turnEffort is the last effort a message of an Anthropic request carries
+// in its own output_config; "" when none does.
+func turnEffort(body []byte) string {
+	if !bytes.Contains(body, []byte(`"output_config"`)) {
+		return ""
+	}
+	last := ""
+	for _, e := range gjson.GetBytes(body, "messages.#.output_config.effort").Array() {
+		if v := effortOf(e.String()); v != "" {
+			last = v
+		}
+	}
+	return last
 }
 
 // thinkingOffUnlessAsked says thinking is off when the request doesn't
