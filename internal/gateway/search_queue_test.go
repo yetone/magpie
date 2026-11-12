@@ -29,8 +29,12 @@ func TestSearchQueueKeepsCodexAlive(t *testing.T) {
 			fresh(t)
 			release, stopped := make(chan struct{}), make(chan struct{})
 			proceed := make(chan struct{})
-			var once sync.Once
+			var once, onceGo sync.Once
 			finish := func() { once.Do(func() { close(release) }) }
+			// #5666: a client that fails before go (t.Fatal on a loaded
+			// runner) must not leave the handler on proceed, or up.Close
+			// waits for it until the package alarm.
+			goOn := func() { onceGo.Do(func() { close(proceed) }) }
 			up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				defer close(stopped)
 				var q struct{ Tools []struct{ Type, Name string } }
@@ -48,7 +52,11 @@ func TestSearchQueueKeepsCodexAlive(t *testing.T) {
 					http.Error(w, "missing tools", 400)
 					return
 				}
-				<-proceed
+				select {
+				case <-proceed:
+				case <-r.Context().Done():
+					return
+				}
 				w.Header().Set("Content-Type", "text/event-stream")
 				io.WriteString(w, "data: "+`{"type":"response.created","response":{"id":"queued","model":"m1","status":"in_progress"}}`+"\n\n")
 				w.(http.Flusher).Flush()
@@ -81,6 +89,7 @@ func TestSearchQueueKeepsCodexAlive(t *testing.T) {
 			}))
 			defer up.Close()
 			defer finish()
+			defer goOn()
 			if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Key: "fixture", Models: []string{"m1"}, Responses: up.URL + "/v1"}); err != nil {
 				t.Fatal(err)
 			}
@@ -119,7 +128,7 @@ func TestSearchQueueKeepsCodexAlive(t *testing.T) {
 			if mode == "silent" {
 				time.Sleep(500 * time.Millisecond)
 			}
-			close(proceed)
+			goOn()
 			var body strings.Builder
 			pings, completed := 0, false
 			sc := bufio.NewScanner(res.Body)
