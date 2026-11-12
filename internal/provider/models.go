@@ -3737,9 +3737,9 @@ func resolveIn(entries []Entry, id string) (Provider, string, bool) {
 	// kept across requests, as the catalog is: built again for each model
 	// value no entry has (an agent's bare "gpt-5.5"), every provider's whole
 	// list was 835 MB of a live magpie's 33 GB in 53 minutes
-	for _, p := range heldOf("listed", func() map[string][]Provider { return keptOf("listed", listedBy) })[id] {
+	for _, p := range heldOf("listed", func() map[string][]*Provider { return keptOf("listed", listedBy) })[id] {
 		if !p.DecidesModel(id) {
-			found = append(found, p)
+			found = append(found, *p)
 		}
 	}
 	if len(found) == 1 {
@@ -3749,17 +3749,18 @@ func resolveIn(entries []Entry, id string) (Provider, string, bool) {
 }
 
 // listedBy is the providers on that list each model, in order, each once.
-func listedBy() map[string][]Provider {
-	out := map[string][]Provider{}
+// Every model of a provider points at one copy of it: a copy a model was
+// 1.3KB each, 32 MB allocated at start-up on a real account's lists.
+func listedBy() map[string][]*Provider {
+	out := map[string][]*Provider{}
 	for _, p := range All() {
 		if !p.On() || p.ServesNone() {
 			continue
 		}
-		seen := map[string]bool{}
+		pp := &p
 		for _, m := range p.Available() {
-			if !seen[m.ID] {
-				seen[m.ID] = true
-				out[m.ID] = append(out[m.ID], p)
+			if l := out[m.ID]; len(l) == 0 || l[len(l)-1] != pp { // each once
+				out[m.ID] = append(l, pp)
 			}
 		}
 	}
