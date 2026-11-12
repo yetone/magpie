@@ -7282,7 +7282,85 @@ The ones you picked for Avibe on magpie's Agents page. Avibe reads them from the
 
 Switch Avibe back to its default in magpie, or run magpie avibe default. magpie deletes the source it added.
 
-More agents on the same models: [MothX on any model](https://usemagpie.ai/docs/mothx), [PenguinHarness on any model](https://usemagpie.ai/docs/penguin) and [Paimon on any model](https://usemagpie.ai/docs/paimon). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [MothX on any model](https://usemagpie.ai/docs/mothx), [PenguinHarness on any model](https://usemagpie.ai/docs/penguin), [Paimon on any model](https://usemagpie.ai/docs/paimon) and [StepCode on any model](https://usemagpie.ai/docs/stepcode). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/stepcode
+
+# StepCode on any model
+
+StepCode is StepFun's coding agent in the terminal, the `step` command. Its default provider and model are in config.toml, and its providers in models.json, in Pi's provider format. magpie adds a provider named magpie to models.json and makes it the default in config.toml, so StepCode runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription.
+
+## Set up StepCode
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model for StepCode on the Agents page.** Pick a model via magpie. On the command line, `magpie step` is the same agent.
+3. **Start StepCode.** StepCode reads both files when it starts, so a new session is on the model you picked.
+
+```
+magpie stepcode deepseek/deepseek-v4-pro
+```
+
+## config.toml and models.json
+
+The files are in `~/.stepcode`, or the folder above an absolute `STEP_CODING_AGENT_DIR`. A folder renamed with `STEPCODE_CONFIG_DIR` is followed on this computer. In config.toml magpie writes only these keys, and the rest of the file stays as it was:
+
+```
+# ~/.stepcode/config.toml
+defaultProvider = "magpie"
+defaultModel = "deepseek/deepseek-v4-pro"
+enabledModels = ["…", "magpie/deepseek/deepseek-v4-pro"]
+```
+
+In models.json magpie writes only `providers.magpie`: the gateway's `/v1` as baseUrl, the `openai-completions` api, magpie's own key for StepCode, and magpie's models. models.json may have comments (JSONC). magpie checks it first: the root, providers and providers.magpie must be objects, or nothing is written, so a file it can't read safely isn't broken.
+
+```
+// ~/.stepcode/models.json
+{
+  "providers": {
+    "magpie": {
+      "name": "magpie",
+      "baseUrl": "http://127.0.0.1:3425/v1",
+      "api": "openai-completions",
+      "apiKey": "",
+      "models": [ { "id": "deepseek/deepseek-v4-pro", … } ]
+    }
+  }
+}
+```
+
+## The enabledModels scope
+
+`enabledModels` is a scope of patterns matched against models. At start-up StepCode uses the default model when a pattern in the scope takes it, and otherwise the scope's first entry, with any `:level` suffix taken off. So the default alone isn't enough: when you have a scope, magpie appends its pick to it and remembers that it did. Switching back takes out only those entries, never your own. A provider renamed takes its scope entries with it.
+
+## Switching back
+
+Before its first write magpie saves the original provider, model and scope, the original `providers.magpie` text, and whether config.toml, models.json and providers existed. Switching back puts all of these back, and removes files magpie made.
+
+```
+magpie stepcode default
+```
+
+## FAQ
+
+### Can StepCode run on DeepSeek, GLM or a ChatGPT subscription?
+
+Yes. Pick a via-magpie model for StepCode on magpie's Agents page, then start StepCode.
+
+### Why did StepCode start on another model when defaultModel was set?
+
+With enabledModels set, the default is used only when the scope takes it. magpie appends its pick to the scope and removes only that entry when switching back.
+
+### Does a models.json with comments work?
+
+Yes. magpie reads it as JSONC, and writes nothing when the root, providers or providers.magpie isn't an object.
+
+### Does switching back restore my settings?
+
+Yes. The original provider, model, scope and providers.magpie go back, and files magpie made are removed.
+
+More agents on the same models: [Avibe on any model](https://usemagpie.ai/docs/avibe), [MothX on any model](https://usemagpie.ai/docs/mothx) and [Pi on any model](https://usemagpie.ai/docs/pi). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
