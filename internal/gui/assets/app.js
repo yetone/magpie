@@ -7757,7 +7757,6 @@ function proxyPicker() {
   });
   seg.classList.add("proxy-mode");
   place(draft.proxyMode || "");
-  // its room kept while not asked for: a pick never moves the dialog
   const row = el("div", "proxy-row");
   row.append(seg, addr, saved);
   box.append(row, login, hint);

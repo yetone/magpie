@@ -4,11 +4,11 @@
 // its Proxy row, a line per account — Provider's proxy | Direct | Custom —
 // opening on what each has; Save posts accountProxies with each account
 // that doesn't follow Codex's, and Custom with no address is refused
-// before anything is posted. A pick moves nothing and the page stays where
-// it is. A subscription with one account has no such lines. A provider's
-// keys have the same lines, a key by its fingerprint (Beyfish_Wang on X:
-// 不同 key 走不同的代理), and one with one key none. In English and
-// Chinese.
+// before anything is posted. A pick moves nothing above it and the page
+// stays where it is; only Custom's address takes room, under its options.
+// A subscription with one account has no such lines. A provider's keys
+// have the same lines, a key by its fingerprint (Beyfish_Wang on X: 不同
+// key 走不同的代理), and one with one key none. In English and Chinese.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -112,13 +112,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const addr = (page, user) => line(page, user).locator(".proxy-url");
     // what the page and the dialog's scrollers have scrolled
     const scrolled = (page) => page.evaluate(() => [window.scrollY, ...[...document.querySelectorAll("*")].filter((e) => e.scrollTop > 0).map((e) => `${e.className}:${e.scrollTop}`)].join(" "));
-    // a click on one of an account's options: it, the lines and the Save
-    // button left where they were, nothing scrolled
+    // a click on one of an account's options: it and the lines down to its
+    // own left where they were, nothing scrolled (Custom's address, or its
+    // going, moves the ones under it)
     const pick = async (page, user, name) => {
       const b = line(page, user).locator(".proxy-mode .opt", { hasText: name });
       await b.scrollIntoViewIfNeeded();
       await page.waitForTimeout(200);
-      const where = () => page.evaluate(() => [...document.querySelectorAll(".editor .acct-proxy, .editor .bar")].map((e) => Math.round(e.getBoundingClientRect().top)));
+      const n = await line(page, user).evaluate((l) => [...document.querySelectorAll(".editor .acct-proxy")].indexOf(l) + 1);
+      const where = () => page.evaluate((n) => [...document.querySelectorAll(".editor .acct-proxy")].slice(0, n).map((e) => Math.round(e.getBoundingClientRect().top)), n);
       const before = await b.evaluate((e) => e.getBoundingClientRect().top), lines = await where(), sc = await scrolled(page);
       await b.click();
       await page.waitForTimeout(250);
