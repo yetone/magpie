@@ -117,12 +117,49 @@ func TestArkBaseKeepsItsPath(t *testing.T) {
 		t.Errorf("chat base changed to %q", q.Chat)
 	}
 	// even told /v1/models answered, a versioned base is left as it is
-	if got := p.fixV1(base, base+"/v1/models"); got != base {
+	if got := p.fixV1(context.Background(), base, base+"/v1/models"); got != base {
 		t.Errorf("fixV1: %q", got)
 	}
 	// the ids typed in are what agents see
 	p.Models = []string{"doubao-seed-2.1-pro"}
 	if ms := p.Exposed(); len(ms) != 1 || ms[0].ID != "doubao-seed-2.1-pro" {
 		t.Errorf("exposed %+v", ms)
+	}
+}
+
+// JNDliuliuM on X: a custom provider whose API has no /v1 kept getting one
+// added. A vendor that lists its models under /v1 but serves chat at the
+// base as typed is kept as typed: the models fetch must not rewrite it.
+func TestFetchKeepsTypedBaseThatServesChat(t *testing.T) {
+	isolate(t)
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
+	t.Setenv("PATH", h)
+	for _, v := range agentenv.Vars {
+		t.Setenv(v, "")
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/models":
+			w.Write([]byte(`{"data":[{"id":"m1"}]}`))
+		case r.URL.Path == "/chat/completions" && r.Method == http.MethodPost:
+			http.Error(w, `{"error":"model required"}`, http.StatusBadRequest)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	if err := Save(Provider{ID: "nov1", Name: "Nov1", Chat: srv.URL, Key: "sk-x"}); err != nil {
+		t.Fatal(err)
+	}
+	p, _ := Find("nov1")
+	if _, err := p.Fetch(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if q, _ := Find("nov1"); q.Chat != srv.URL {
+		t.Errorf("chat changed to %q; the URL was typed without /v1 and serves chat there", q.Chat)
 	}
 }

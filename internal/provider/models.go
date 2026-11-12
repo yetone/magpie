@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math"
+	"net/http"
 	"slices"
 	"sort"
 	"strings"
@@ -956,7 +958,7 @@ func (p Provider) fetchOne(ctx context.Context) (fetched, error) {
 			// list is fetched beside it, and it is saved with the models
 			base = protoBase
 			if proto != Anthropic {
-				base = p.fixV1(base, u)
+				base = p.fixV1(ctx, base, u)
 			}
 			// the base as it will be asked next time, /v1 and all, so
 			// this side is found again by the fetch after this one
@@ -1363,12 +1365,53 @@ func (p Provider) planMedia(ids func(*Region) []string, draws, films bool, serve
 // version in its path (Ark's …/api/plan/v3, Zhipu's …/api/paas/v4) is
 // the vendor's API as written and is never given a /v1: no list is asked
 // for under one there (catalog.FetchAt), and none is added here.
-func (p Provider) fixV1(base, at string) string {
+func (p Provider) fixV1(ctx context.Context, base, at string) string {
 	base = strings.TrimRight(strings.TrimSpace(base), "/")
 	if base == "" || at != base+"/v1/models" && at != catalog.RelayOpenAIList(base) || catalog.Versioned(base) {
 		return base
 	}
+	if p.servesAtBase(ctx, base) {
+		// a URL the user typed is kept as typed: a vendor that lists its
+		// models under /v1 but serves chat at the base has no /v1 to add
+		// (JNDliuliuM on X)
+		return base
+	}
 	return p.setV1(base)
+}
+
+// servesAtBase reports whether p's OpenAI URL that is base has its
+// endpoint there: a POST of an empty body to base/chat/completions (or
+// /responses) that is answered with anything but 404 or 405 — a 400 for the
+// missing model, a 401 for the key — names a route that exists. A request
+// that fails to connect says nothing, and is taken as the URL being right.
+func (p Provider) servesAtBase(ctx context.Context, base string) bool {
+	for _, e := range []struct{ at, end string }{{p.Chat, "/chat/completions"}, {p.Responses, "/responses"}} {
+		if strings.TrimRight(strings.TrimSpace(e.at), "/") != base {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+e.end, strings.NewReader("{}"))
+		if err != nil {
+			cancel()
+			return true
+		}
+		req.Header.Set("Content-Type", "application/json")
+		for k, v := range AuthHeaders(p, Chat) {
+			req.Header.Set(k, v)
+		}
+		res, err := p.Do(http.DefaultClient, req)
+		if err != nil {
+			cancel()
+			return true
+		}
+		io.Copy(io.Discard, io.LimitReader(res.Body, 1<<16))
+		res.Body.Close()
+		cancel()
+		if res.StatusCode != http.StatusNotFound && res.StatusCode != http.StatusMethodNotAllowed {
+			return true
+		}
+	}
+	return false
 }
 
 // setV1 is base with the /v1 it was given without, set on p's OpenAI

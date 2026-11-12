@@ -2,6 +2,7 @@ package provider
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -113,7 +114,7 @@ func TestFixV1KeepsInvalidFile(t *testing.T) {
 	}
 	base := "https://original.example.invalid"
 	p := Provider{ID: "original", Chat: base}
-	if got := p.fixV1(base, base+"/v1/models"); got != base {
+	if got := p.fixV1(context.Background(), base, base+"/v1/models"); got != base {
 		t.Errorf("failed correction returned %q, want %q", got, base)
 	}
 	after, err := os.ReadFile(path)
