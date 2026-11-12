@@ -1217,14 +1217,21 @@ func APIOf(providerID, modelID string) string {
 // A vendor's own /models answer, once fetched, is layered over it by the
 // provider package (see provider.Provider.Available).
 func Provider(id string) []Model {
+	return slices.Clone(ProviderShared(id))
+}
+
+// ProviderShared is Provider without the copy, for a caller that only
+// reads it: every provider's model list is built from it on each look at
+// the catalog, and the copies were a third of what building them took.
+func ProviderShared(id string) []Model {
 	loadMu.Lock()
 	out, ok := built[id]
 	at := gen
 	loadMu.Unlock()
 	if ok {
-		return slices.Clone(out)
+		return out
 	}
-	out = provider(load(), id)
+	out = slices.Clip(provider(load(), id))
 	loadMu.Lock()
 	if at == gen {
 		if built == nil {
@@ -1233,7 +1240,7 @@ func Provider(id string) []Model {
 		built[id] = out
 	}
 	loadMu.Unlock()
-	return slices.Clone(out)
+	return out
 }
 
 func provider(all map[string]mdProvider, id string) []Model {
