@@ -7958,7 +7958,71 @@ No. Both say pi/ in their User-Agent, so magpie gives mu its own key (magpie-mu)
 
 No. mu.json and MU_JUDGE are mu's own settings, and magpie leaves them alone.
 
-More agents on the same models: [Pi on any model](https://usemagpie.ai/docs/pi), [Mister Morph on any model](https://usemagpie.ai/docs/mister-morph) and [Grok App on any model](https://usemagpie.ai/docs/grok-app). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Pi on any model](https://usemagpie.ai/docs/pi), [Mister Morph on any model](https://usemagpie.ai/docs/mister-morph), [Grok App on any model](https://usemagpie.ai/docs/grok-app) and [Claude Science on any model](https://usemagpie.ai/docs/claude-science). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/claude-science
+
+# Claude Science on any model
+
+Claude Science is Anthropic's research app: a daemon, `claude-science`, serves its UI on localhost, and a window (a Swift launcher on the Mac, Electron on Windows, a browser on Linux) attaches to the daemon running, or starts one. The daemon asks Anthropic's Messages API at the address its environment's `ANTHROPIC_BASE_URL` names, and the app has no setting for it. So magpie starts the daemon with ANTHROPIC_BASE_URL set to the gateway, and Claude Science runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen or a ChatGPT subscription.
+
+## Set up Claude Science
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Set Claude Science's provider to magpie on the Agents page.** magpie restarts its daemon; a session running in it is cut off.
+3. **Open Claude Science again.** Reload its window if it is open, then pick one of magpie's models in its model menu.
+
+## The daemon
+
+magpie does one thing: `stop`, then `serve --detached --no-browser` on the port it was on, with ANTHROPIC_BASE_URL set. It sets no variable for you and writes none of Claude Science's files. Started by hand in a terminal, the same is:
+
+```
+claude-science stop; ANTHROPIC_BASE_URL=http://127.0.0.1:3425 claude-science serve --detached
+```
+
+Claude Science takes an https address, or http on a loopback address, so the local gateway's `http://127.0.0.1` works as it is. magpie finds claude-science in the Mac app's bundle, Windows' per-user Programs folder, the `~/.local/bin` its installers link it into (the only place on Linux), or on PATH.
+
+## The Claude sign-in
+
+Claude Science still needs you signed in with your Claude account; API keys are not supported, and with no sign-in it sends nothing. Signed in, it sends that sign-in as its request's bearer, which magpie's gateway never passes on to any provider. The gateway knows its requests by the `X-Anthropic-Surface: operon` header it sends on every one.
+
+## The model menu
+
+Claude Science's model menu lists only ids that start with `claude-`, so magpie lists each model to it by an alias, `claude-magpie-<number>`, named as the Agents page names it. Where no pick of yours is in play (its default before you pick, the haiku for its small tasks) it asks for Claude's own ids; one magpie doesn't serve goes to the model its last turn was on.
+
+## Staying connected
+
+The daemon runs until it is stopped or the computer restarts. While it is connected magpie starts it again when it isn't running. Claude Science's window starts its own, without the variable, when none runs, and the app may offer to run its own after an update. magpie puts its daemon back once no session runs in the other, but never in place of one a service manager such as launchd or systemd keeps, which would come back at once; the Agents page says so meanwhile. One you keep putting back within an hour is left running.
+
+## WSL
+
+With Claude Science in a WSL distro, magpie on Windows starts its daemon there through wsl.exe with ANTHROPIC_BASE_URL set, and keeps it connected while the distro runs; it never starts a stopped distro. In mirrored networking the distro's 127.0.0.1 is Windows', and the daemon is given the gateway's address. Under NAT magpie starts a socat relay in the distro on 127.0.0.1 at the gateway's port, leading to Windows' address on the WSL network.
+
+## Switching back
+
+Turn magpie off for Claude Science on the Agents page, and magpie restarts its daemon, when it runs, without the variable, back on Anthropic's API.
+
+## FAQ
+
+### Can Claude Science run on DeepSeek, GLM or a ChatGPT subscription?
+
+Yes. Set Claude Science's provider to magpie on magpie's Agents page, then pick one of magpie's models in its model menu.
+
+### Does magpie change Claude Science's files or my environment?
+
+No. magpie only restarts its daemon with ANTHROPIC_BASE_URL set; it writes no file and sets no variable for you.
+
+### Do I still sign in with a Claude account?
+
+Yes. Claude Science doesn't take API keys and needs a Claude sign-in, which magpie never passes on to any provider.
+
+### Why do its models read claude-magpie?
+
+Claude Science lists only ids that start with claude-, so magpie lists each model as claude-magpie-, named as its Agents page names it.
+
+More agents on the same models: [Claude Desktop on any model](https://usemagpie.ai/docs/claude-desktop), [mu on any model](https://usemagpie.ai/docs/mu) and [Mister Morph on any model](https://usemagpie.ai/docs/mister-morph). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
