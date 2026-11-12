@@ -3,6 +3,7 @@ package edit
 import (
 	"maps"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -69,8 +70,10 @@ func dropTOMLParses() {
 // tomlAnswers, empty.
 type tomlAnswers struct {
 	sync.Mutex
-	top    map[string]tomlTop
-	tables map[string]map[string]string // nil for a table the file hasn't
+	top       map[string]tomlTop
+	tables    map[string]map[string]string // nil for a table the file hasn't
+	names     []string                     // TOMLTables' answer, once haveNames
+	haveNames bool
 }
 
 type tomlTop struct {
@@ -124,4 +127,25 @@ func (a *tomlAnswers) setTable(name string, t map[string]string) {
 		a.tables = map[string]map[string]string{}
 	}
 	a.tables[name] = maps.Clone(t)
+}
+
+// getNames is TOMLTables' kept answer, shared, so read only.
+func (a *tomlAnswers) getNames() ([]string, bool) {
+	a.Lock()
+	defer a.Unlock()
+	return a.names, a.haveNames
+}
+
+// setNames keeps a copy of names that holds no piece of the file's text.
+func (a *tomlAnswers) setNames(names []string) {
+	var kept []string
+	if names != nil {
+		kept = make([]string, len(names))
+		for i, n := range names {
+			kept[i] = strings.Clone(n)
+		}
+	}
+	a.Lock()
+	defer a.Unlock()
+	a.names, a.haveNames = kept, true
 }

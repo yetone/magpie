@@ -30,10 +30,25 @@ import (
 // caller, so read only (an append makes a copy): a Codex config.toml with a
 // table for each of 11,000 projects had it made again for each look, 46 MB
 // of what twenty window polls allocated.
+//
+// The list is kept beside the file's other answers, so a poll that only
+// lists tables doesn't hold the whole parse: the Codex agent's drift
+// listed its config's tables on every look, and over a Codex config.toml
+// of ~11k projects that kept its 3 to 5 MB parse for as long as a page
+// was open.
 func TOMLTables(path string) ([]string, error) {
+	a := tomlAnswersOf(path)
+	if a != nil {
+		if names, ok := a.getNames(); ok {
+			return names, nil
+		}
+	}
 	doc, err := tomlFileOf(path)
 	if err != nil {
 		return nil, err
+	}
+	if a != nil {
+		a.setNames(doc.names)
 	}
 	return doc.names, nil
 }

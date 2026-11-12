@@ -3,6 +3,7 @@ package edit
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -66,5 +67,46 @@ func TestTOMLParseLetGoWhenIdle(t *testing.T) {
 	}
 	if tb, err := GetTOMLTable(p, "model_providers.magpie"); tb != nil || err != nil {
 		t.Fatalf("after a change the table = %v, %v", tb, err)
+	}
+}
+
+// TOMLTables' list is kept as the other answers are: a poll that only
+// lists a file's tables parses nothing once the whole parse is let go,
+// and a change to the file is listed.
+func TestTOMLTablesKeptWhenIdle(t *testing.T) {
+	tomlKept.off = false
+	t.Cleanup(func() { tomlKept.off = true })
+	p := filepath.Join(t.TempDir(), "config.toml")
+	old := time.Now().Add(-time.Hour)
+	write := func(s string) {
+		if err := os.WriteFile(p, []byte(s), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		old = old.Add(time.Second)
+		os.Chtimes(p, old, old)
+		filememo.Forget()
+	}
+	write("a = 1\n\n[projects.\"/x\"]\ntrust_level = \"trusted\"\n\n[[arr]]\nb = 1\n\n[model_providers.magpie]\nbase_url = \"http://x\"\n")
+	want := []string{`projects."/x"`, "model_providers.magpie"}
+	names, err := TOMLTables(p)
+	if err != nil || !slices.Equal(names, want) {
+		t.Fatalf("tables = %q, %v; want %q", names, err, want)
+	}
+	tomlKept.last.Store(time.Now().Add(-2 * tomlIdle).UnixNano())
+	tomlIdleCheck()
+
+	n := tomlParses.Load()
+	for range 3 {
+		if names, _ := TOMLTables(p); !slices.Equal(names, want) {
+			t.Fatalf("tables after the let-go = %q", names)
+		}
+	}
+	if got := tomlParses.Load() - n; got != 0 {
+		t.Fatalf("listing the tables parsed the file %d times", got)
+	}
+
+	write("[other]\nc = 1\n")
+	if names, _ := TOMLTables(p); !slices.Equal(names, []string{"other"}) {
+		t.Fatalf("after a change the tables = %q", names)
 	}
 }
