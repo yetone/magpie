@@ -919,3 +919,8 @@ input.lib-memq:focus, input.lib-memtags:focus, input.lib-memwhy:focus { border-c
 .lib-acct-act { display: flex; gap: 8px; }
 @media (hover: hover) and (pointer: fine) { .lib-acct:not(.on):hover { background: var(--hover, var(--accent-soft)); } }
 @media (prefers-reduced-motion: reduce) { .lib-acct, .lib-acct-dot { transition: none; } }
+
+/* an agent's profiles as one chip: how many have the item, in the corner */
+.lib-ag.profiles .cnt { position: absolute; right: -3px; bottom: -3px; min-width: 12px; height: 12px; padding: 0 3px; border-radius: 6px; box-sizing: border-box; background: var(--card); border: 1px solid var(--line); color: var(--fg-2); font-size: 9px; line-height: 10px; text-align: center; font-variant-numeric: tabular-nums; pointer-events: none; }
+.lib-ag.profiles .cnt:empty { display: none; }
+.lib-ag.profiles.open { background: var(--pill); }
