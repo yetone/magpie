@@ -799,7 +799,13 @@ before the merge, are in the code standards.)
   out to a plugin (#5918). A budget that counts comments makes them the
   cheapest thing to cut. Measure what the budget is about, and run the
   sub-second guard before pushing a change near it.
-- Seen 2× (2026-10-17, 2026-11-10).
+- 11-12: coreScriptBudget was raised four times in one afternoon, by
+  367 (d96403141), 151 (05cadcafd), 458 (4519eea71) and 113 (09e2eef0d),
+  1,089 bytes in all, each saying there was no page left to move it to.
+  09e2eef0d's 113 came from a rebase: 6055f626e fit at its base and the
+  two commits that landed under it filled the room.
+- Seen 3× (2026-10-17, 2026-11-10, 2026-11-12); moved to the code
+  standards.
 
 **A release published after a newer one takes Latest, and with it the
 update feed and the tap, unless the publish step checks.**
@@ -930,6 +936,9 @@ each one.
   answered psikent (/v1/models says every model takes tools) and windy
   (a group's Context hint names the member a longer conversation skips)
   under one subject that names only the first.
+- **A size budget is met, not raised** (10-17, 11-10, 11-12). On 11-12
+  coreScriptBudget rose four times in one afternoon (d96403141,
+  05cadcafd, 4519eea71, 09e2eef0d), 1,089 bytes, with nothing moved out.
 - **Never let magpie's default override a value the user set themselves**
   (10-05, 10-10, 10-17). On 10-17 5a2414acd brought every plugins.yml
   without `settled` up once, Essentials to All. A user who had run
