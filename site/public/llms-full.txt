@@ -9688,6 +9688,8 @@ curl http://127.0.0.1:3425/v1/audio/transcriptions \
 - Groq takes its turn in a routing group like any provider: when it fails, the group's next member answers.
 - When one key isn't enough, add another as a second account of the same provider.
 
+[Fireworks and Fireworks Nexus in Claude Code, Codex and other agents](https://usemagpie.ai/docs/fireworks)
+
 ## FAQ
 
 ### Does magpie support Groq?
@@ -9923,6 +9925,76 @@ Run magpie model price relay/model with the input, output, cache read and cache 
 magpie model wire sets the name the relay is asked for: 'relay-b/*' 'vendor-c/*' sends every model with a vendor-c/ prefix.
 
 Related: [OpenRouter in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/openrouter), [Round robin and failover across accounts, keys and providers](https://usemagpie.ai/docs/routing-groups). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/fireworks
+
+# Fireworks and Fireworks Nexus in Claude Code, Codex and other agents
+
+Fireworks hosts open models, paid as you go; Fireworks Nexus is an account and plan of its own at nexus.fireworks.ai, where Nexus Auto picks the model. magpie has a preset for each: `fireworks` and `fireworks-nexus`.
+
+## Fireworks, pay as you go
+
+1. **Get a key..** Make one at app.fireworks.ai under Settings → Users → API Keys.
+2. **Add it..** Pick Fireworks in the app and paste the key into API key, or from the CLI:
+
+```
+magpie provider add fireworks fw_…
+magpie provider test fireworks
+magpie claude fireworks/
+```
+
+The preset asks Chat Completions alone, at `https://api.fireworks.ai/inference/v1`, with models.dev's `fireworks-ai` for the list and prices. magpie translates Claude Code's Anthropic requests and Codex's Responses requests to Chat for Fireworks.
+
+## Fireworks Nexus
+
+A Nexus key is made at nexus.fireworks.ai, not on the Fireworks platform. Its `/inference` endpoints speak Chat Completions, Responses and Anthropic Messages alike, so Codex's and Claude Code's requests go on their own APIs.
+
+```
+magpie provider add fireworks-nexus fw_…
+magpie codex fireworks-nexus/auto
+magpie claude fireworks-nexus/auto
+```
+
+Pro and Team take only `auto`, Nexus Auto, and refuse an open model named directly with a 403, so `auto` is the preset's list. An Enterprise account's open models are typed in by id among the provider's models.
+
+## Claude and GPT in Nexus
+
+Nexus Auto reaches Claude and GPT with your own keys, in the `x-anthropic-api-key` and `x-openai-api-key` headers, or with Provider Keys set up on the Nexus account. In magpie's provider editor, Headers offers both names to add, with the values yours to fill in; from the CLI:
+
+```
+magpie provider set fireworks-nexus header.x-anthropic-api-key=sk-ant-…
+magpie provider set fireworks-nexus header.x-openai-api-key=sk-…
+```
+
+A header of your own goes on every request. An empty value removes it.
+
+## Notes
+
+- Agents only reach magpie; they never hold the Fireworks key or its address.
+- Fireworks can share a routing group with other providers of the same open models: when one fails, the group's next member answers.
+- Nexus plans and limits are as Fireworks' own pages say; this page covers how magpie connects.
+
+## FAQ
+
+### Does magpie support Fireworks AI?
+
+Yes. The fireworks preset takes a Fireworks API key and asks Chat Completions at api.fireworks.ai/inference/v1; a model id is fireworks/.
+
+### How is Fireworks Nexus different from Fireworks?
+
+Nexus is an account and plan of its own, with keys made at nexus.fireworks.ai. Its endpoints speak Chat, Responses and Messages, Nexus Auto picks the model, and Pro and Team take only auto.
+
+### Why does Nexus list only auto?
+
+Pro and Team refuse an open model named directly with a 403 and take only auto. An Enterprise account types its open models in by id.
+
+### How do I use Claude and GPT in Nexus?
+
+Put your own Anthropic and OpenAI keys in the x-anthropic-api-key and x-openai-api-key headers, or set up Provider Keys on the Nexus account.
+
+Related: [Groq in Claude Code, Codex and other agents](https://usemagpie.ai/docs/groq), [API relays in Claude Code, Codex and other agents](https://usemagpie.ai/docs/relay). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 

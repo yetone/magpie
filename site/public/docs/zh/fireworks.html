@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fireworks 与 Fireworks Nexus 接入 Claude Code、Codex 等 Agent · magpie</title>
+<meta name="description" content="用 magpie 把 Fireworks AI 和 Fireworks Nexus 接到 Claude Code、Codex 等 Agent：fireworks 预设走 api.fireworks.ai 的 Chat Completions，按量付费；fireworks-nexus 预设走 Nexus Auto，Pro 和 Team 只能用 auto，Claude 和 GPT 靠你自己的 Key 放在请求头里。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/fireworks">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/fireworks">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/fireworks">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/fireworks">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/fireworks">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Fireworks 与 Fireworks Nexus 接入 Claude Code、Codex 等 Agent">
+<meta property="og:description" content="用 magpie 把 Fireworks AI 和 Fireworks Nexus 接到 Claude Code、Codex 等 Agent：fireworks 预设走 api.fireworks.ai 的 Chat Completions，按量付费；fireworks-nexus 预设走 Nexus Auto，Pro 和 Team 只能用 auto，Claude 和 GPT 靠你自己的 Key 放在请求头里。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/fireworks">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Fireworks 与 Fireworks Nexus 接入 Claude Code、Codex 等 Agent",
+   "description": "用 magpie 把 Fireworks AI 和 Fireworks Nexus 接到 Claude Code、Codex 等 Agent：fireworks 预设走 api.fireworks.ai 的 Chat Completions，按量付费；fireworks-nexus 预设走 Nexus Auto，Pro 和 Team 只能用 auto，Claude 和 GPT 靠你自己的 Key 放在请求头里。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/fireworks",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "magpie 支持 Fireworks AI 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "支持。fireworks 预设填一把 Fireworks 的 API Key，走 api.fireworks.ai/inference/v1 的 Chat Completions，模型 id 写成 fireworks/<模型>。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Fireworks Nexus 和 Fireworks 有什么不同？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Nexus 是单独的账号和套餐，Key 在 nexus.fireworks.ai 生成。它的接口同时支持 Chat、Responses 和 Messages，模型由 Nexus Auto 选，Pro 和 Team 只能用 auto。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "为什么 Nexus 只列出 auto？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Pro 和 Team 套餐直接点名开源模型会被 403 拒绝，只接受 auto。Enterprise 账号可以在供应商的模型里自己填上开源模型的 id。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Nexus 里怎么用 Claude 和 GPT？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "把你自己的 Anthropic 和 OpenAI Key 放进 x-anthropic-api-key 和 x-openai-api-key 两个请求头，或者在 Nexus 账号上配置 Provider Keys。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/zh/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "文档",
+     "item": "https://usemagpie.ai/docs/zh/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "Fireworks 与 Fireworks Nexus 接入 Claude Code、Codex 等 Agent",
+     "item": "https://usemagpie.ai/docs/zh/fireworks"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/fireworks" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/fireworks" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/fireworks" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Fireworks</p>
+    <a href="#overview">是什么</a>
+    <a href="#fireworks">Fireworks 按量付费</a>
+    <a href="#nexus">Fireworks Nexus</a>
+    <a href="#headers">在 Nexus 里用 Claude 和 GPT</a>
+    <a href="#notes">几点说明</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 指南</p>
+    <h1>Fireworks 与 Fireworks Nexus 接入 Claude Code、Codex 等 Agent</h1>
+    <p class="lede">Fireworks 托管开源模型，按量付费；Fireworks Nexus 是它单独的账号和套餐，在 nexus.fireworks.ai 开通，由 Nexus Auto 替你选模型。magpie 两个都有预设：<code>fireworks</code> 和 <code>fireworks-nexus</code>。</p>
+    <h2 id="fireworks"><a class="anchor" href="#fireworks">Fireworks 按量付费</a></h2>
+    <ol class="steps">
+      <li><b>拿一把 Key。</b>在 app.fireworks.ai 的 Settings → Users → API Keys 里生成。</li>
+      <li><b>添加。</b>在应用里选 Fireworks，把 Key 填进 <span class="ui">API 密钥</span>，或者在命令行：</li>
+    </ol>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="fw-add">复制</button><pre id="fw-add">magpie provider add fireworks fw_…
+magpie provider test fireworks
+magpie claude fireworks/<model id></pre></div>
+    <p>预设只走 Chat Completions，地址是 <code>https://api.fireworks.ai/inference/v1</code>，模型列表和价格来自 models.dev 的 <code>fireworks-ai</code>。Claude Code 的 Anthropic 请求和 Codex 的 Responses 请求由 magpie 转成 Chat 发给 Fireworks。</p>
+    <h2 id="nexus"><a class="anchor" href="#nexus">Fireworks Nexus</a></h2>
+    <p>Nexus 的 Key 要在 nexus.fireworks.ai 生成，和 Fireworks 平台的 Key 不是一回事。它的 <code>/inference</code> 接口同时说 Chat Completions、Responses 和 Anthropic Messages，所以 Codex 和 Claude Code 的请求按各自的协议直接发过去。</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="nx-add">复制</button><pre id="nx-add">magpie provider add fireworks-nexus fw_…
+magpie codex fireworks-nexus/auto
+magpie claude fireworks-nexus/auto</pre></div>
+    <p>Pro 和 Team 套餐只接受 <code>auto</code>，也就是 Nexus Auto；直接点名一个开源模型会被 403 拒绝。所以这个预设的模型列表就只有 <code>auto</code>。Enterprise 账号能用的开源模型，要在供应商的模型里自己填上 id。</p>
+    <h2 id="headers"><a class="anchor" href="#headers">在 Nexus 里用 Claude 和 GPT</a></h2>
+    <p>Nexus Auto 要用到 Claude 和 GPT 时，用的是你自己的 Key：放在 <code>x-anthropic-api-key</code> 和 <code>x-openai-api-key</code> 两个请求头里，或者在 Nexus 账号上配置 Provider Keys。在 magpie 的供应商编辑器里，<span class="ui">请求头</span> 会直接提供这两个名字，值由你来填；命令行是：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="nx-headers">复制</button><pre id="nx-headers">magpie provider set fireworks-nexus header.x-anthropic-api-key=sk-ant-…
+magpie provider set fireworks-nexus header.x-openai-api-key=sk-…</pre></div>
+    <p>自己加的请求头每次请求都会带上。值留空就是删掉这个请求头。</p>
+    <h2 id="notes"><a class="anchor" href="#notes">几点说明</a></h2>
+    <ul><li>Agent 只连 magpie，不拿 Fireworks 的 Key，也不知道它的地址。</li><li>Fireworks 可以和其他托管同一批开源模型的供应商放进同一个路由组，一个出错了，组里的下一个接着回答。</li><li>Nexus 的套餐和额度以 Fireworks 自己的页面为准，这一页只写 magpie 怎么接。</li></ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>magpie 支持 Fireworks AI 吗？</h3>
+    <p>支持。fireworks 预设填一把 Fireworks 的 API Key，走 api.fireworks.ai/inference/v1 的 Chat Completions，模型 id 写成 fireworks/<模型>。</p>
+    <h3>Fireworks Nexus 和 Fireworks 有什么不同？</h3>
+    <p>Nexus 是单独的账号和套餐，Key 在 nexus.fireworks.ai 生成。它的接口同时支持 Chat、Responses 和 Messages，模型由 Nexus Auto 选，Pro 和 Team 只能用 auto。</p>
+    <h3>为什么 Nexus 只列出 auto？</h3>
+    <p>Pro 和 Team 套餐直接点名开源模型会被 403 拒绝，只接受 auto。Enterprise 账号可以在供应商的模型里自己填上开源模型的 id。</p>
+    <h3>Nexus 里怎么用 Claude 和 GPT？</h3>
+    <p>把你自己的 Anthropic 和 OpenAI Key 放进 x-anthropic-api-key 和 x-openai-api-key 两个请求头，或者在 Nexus 账号上配置 Provider Keys。</p>
+
+    <p style="margin-top:48px">相关页面：<a href="/docs/zh/groq">Groq 接入 Claude Code、Codex 等 Agent</a>、<a href="/docs/zh/relay">中转站 API 接入 Claude Code、Codex 等 Agent</a>。遇到错误请看 <a href="/docs/zh/troubleshooting">常见错误排查：401、429、502、504 等</a>，或者到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
