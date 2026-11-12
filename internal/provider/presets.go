@@ -972,10 +972,22 @@ func (p *Provider) atRegionOf(pr *PresetDef, r Region) {
 }
 
 // IconForCatalog names the logo of the vendor behind a models.dev
-// provider id, or "" when no preset covers it.
+// provider id, or "" when no preset covers it. A preset names several
+// catalogs ("stepfun-ai-step-plan, stepfun-ai"), so an id is also found in
+// that list; a preset whose catalog is exactly the id comes first, so
+// Azure's "azure, openai" never gives OpenAI's models Azure's logo.
 func IconForCatalog(catalogID string) string {
+	if catalogID == "" {
+		return ""
+	}
 	for _, p := range presets {
 		if p.Catalog == catalogID || slices.ContainsFunc(p.Regions, func(r Region) bool { return r.Catalog == catalogID }) {
+			return p.Icon
+		}
+	}
+	for _, p := range presets {
+		if slices.Contains(Provider{Catalog: p.Catalog}.Catalogs(), catalogID) ||
+			slices.ContainsFunc(p.Regions, func(r Region) bool { return slices.Contains(Provider{Catalog: r.Catalog}.Catalogs(), catalogID) }) {
 			return p.Icon
 		}
 	}
