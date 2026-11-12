@@ -7613,7 +7613,90 @@ The one Aside is on, unless you pick one in magpie, for example magpie aside acc
 
 Yes. magpie restores only the settings it changed, from the values it saved before.
 
-More agents on the same models: [Ante on any model](https://usemagpie.ai/docs/ante), [omp on any model](https://usemagpie.ai/docs/omp) and [Pi on any model](https://usemagpie.ai/docs/pi). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Ante on any model](https://usemagpie.ai/docs/ante), [omp on any model](https://usemagpie.ai/docs/omp), [Pi on any model](https://usemagpie.ai/docs/pi) and [fx on any model](https://usemagpie.ai/docs/fx). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/fx
+
+# fx on any model
+
+fx (fx.sh, from Vercel Labs, not the JSON viewer of the same name) keeps its settings in `~/.fx/settings.json`: `provider` is the provider it talks to (gateway, codex, grok or one of your own), `models` each provider's model, and `providers` the providers of your own. magpie adds itself there as the provider magpie, so fx runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription.
+
+## Set up fx
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model for fx on the Agents page.** Pick one via magpie. magpie finds fx by its `~/.fx` folder, not the `fx` command, as the name is a common one.
+3. **Restart fx.** fx reads its settings at start-up.
+
+```
+magpie fx deepseek/deepseek-v4-pro
+```
+
+## settings.json
+
+With one of magpie's models picked, magpie sets `provider` to magpie and `models.magpie` to the model, such as `deepseek/deepseek-v4-pro`, and writes `providers.magpie`: the openai-chat-completions protocol, the gateway's `/v1` as base_url, and auth none, so no key. In fx the model reads `magpie/deepseek/deepseek-v4-pro`.
+
+```
+// ~/.fx/settings.json
+{
+  "provider": "magpie",
+  "models": { "magpie": "deepseek/deepseek-v4-pro" },
+  "providers": {
+    "magpie": {
+      "protocol": "openai-chat-completions",
+      "base_url": "http://127.0.0.1:3425/v1",
+      "auth": { "type": "none" },
+      "tool_choice_mode": "send",
+      "model_metadata": {
+        "deepseek/deepseek-v4-pro": { "supports_tool_use": true, "supports_vision": …, "context_window": …, "max_output_tokens": … }
+      }
+    }
+  }
+}
+```
+
+fx sends no effort to a provider of your own, so there is no effort to pick. An fx in WSL is set up the same way, its base_url the gateway as that distro reaches it.
+
+## The model list
+
+fx's model picker lists `model_metadata`: magpie's catalog, each model marked as taking tools, with whether it takes images, its context window and its output limit. fx refuses an output limit that isn't below the context window, so magpie leaves such a limit out. fx takes at most 256 models and refuses the whole settings file past that, so magpie writes at most 256, the model in use first so it is never the one cut. When the catalog changes, magpie brings the list up to date while fx is connected.
+
+## What you set yourself
+
+A provider in fx can have a `reviewer_model`, the model its auto permission mode asks. magpie doesn't write one, and one you set stays. magpie writes `tool_choice_mode` send, and omit stays when you turn it to that. The protocol, address, auth and model_metadata are magpie's; auth is written whole, as fx refuses an env beside type none.
+
+## Restarting fx
+
+fx reads its settings at start-up. When fx is running as the model changes, magpie says to restart open fx sessions.
+
+## Switching back
+
+Picking one of fx's own models removes `providers.magpie` and `models.magpie`, and `provider` when it is magpie, so fx is back on the provider it talks to without magpie: Vercel's AI Gateway when none was set. The model goes into that provider's `models`; default removes it, leaving fx on its own default.
+
+```
+magpie fx default
+```
+
+## FAQ
+
+### Which fx is this?
+
+Vercel Labs' coding agent fx (fx.sh), with its settings in ~/.fx. The JSON viewer named fx is another program.
+
+### Does fx need an API key for magpie?
+
+No. magpie's provider in fx has auth none and talks to the gateway on this computer.
+
+### Why does fx list at most 256 of magpie's models?
+
+fx refuses the whole settings file when model_metadata holds more than 256, so magpie writes at most 256, the model in use first.
+
+### Which provider does fx use after switching back?
+
+The one it talks to without magpie; Vercel's AI Gateway when none was set.
+
+More agents on the same models: [Aside on any model](https://usemagpie.ai/docs/aside), [Ante on any model](https://usemagpie.ai/docs/ante) and [omp on any model](https://usemagpie.ai/docs/omp). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
