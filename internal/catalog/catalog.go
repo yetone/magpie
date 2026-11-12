@@ -1233,6 +1233,7 @@ func provider(all map[string]mdProvider, id string) []Model {
 			InputModalities: m.Modalities.Input, OutputModalities: m.Modalities.Output}
 		mm.Efforts = p.levels(m, id)
 		mm.Reasoning = m.Thinks || len(mm.Efforts) > 0
+		mistralSeesImages(&mm)
 		out = append(out, mm)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -1242,6 +1243,22 @@ func provider(all map[string]mdProvider, id string) []Model {
 		return out[i].ID < out[j].ID
 	})
 	return out
+}
+
+// mistralSeesImages is Mistral's own word over models.dev's for its
+// DeepSeek V4.1 Flash (deepseek-v4-1-flash-1017): models.dev lists it
+// text-only, Mistral's models page says "text and image inputs" (regain4125
+// on X: images off by default). Only that model on Mistral's own entry;
+// the same model at another vendor keeps that vendor's row.
+func mistralSeesImages(m *Model) {
+	if m.Provider != "mistral" || !strings.HasPrefix(m.ID, "deepseek-v4-1-flash") {
+		return
+	}
+	yes := true
+	m.Images, m.ImageInput = true, &yes
+	if m.InputModalities != nil && !slices.Contains(m.InputModalities, "image") {
+		m.InputModalities = append(slices.Clone(m.InputModalities), "image")
+	}
 }
 
 // ProviderName is a models.dev provider's display name ("GitHub Copilot"

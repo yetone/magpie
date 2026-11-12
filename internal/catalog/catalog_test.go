@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -507,5 +508,38 @@ func TestNoChannel(t *testing.T) {
 		if got := NoChannel(c.status, []byte(c.body)); got != c.want {
 			t.Errorf("NoChannel(%d, %s) = %v", c.status, c.body, got)
 		}
+	}
+}
+
+// Mistral's models page says its DeepSeek V4.1 Flash takes images while
+// models.dev lists it text-only (regain4125 on X): the Mistral entry sees,
+// and the same model at another vendor, or another Mistral model, keeps
+// the row models.dev gives it.
+func TestMistralDeepSeekFlashSeesImages(t *testing.T) {
+	writeCatalog(t, `{
+	  "mistral": {"models": {
+	    "deepseek-v4-1-flash-1017": {"id":"deepseek-v4-1-flash-1017","name":"DeepSeek V4.1 Flash 1017","modalities":{"input":["text"],"output":["text"]}},
+	    "devstral-latest": {"id":"devstral-latest","name":"Devstral","modalities":{"input":["text"],"output":["text"]}}
+	  }},
+	  "chutes": {"models": {
+	    "deepseek-v4-1-flash-1017": {"id":"deepseek-v4-1-flash-1017","name":"DeepSeek V4.1 Flash 1017","modalities":{"input":["text"],"output":["text"]}}
+	  }}
+	}`)
+	by := func(p string) map[string]Model {
+		out := map[string]Model{}
+		for _, m := range Provider(p) {
+			out[m.ID] = m
+		}
+		return out
+	}
+	m := by("mistral")["deepseek-v4-1-flash-1017"]
+	if !m.Images || m.ImageInput == nil || !*m.ImageInput || !slices.Contains(m.InputModalities, "image") {
+		t.Errorf("mistral's deepseek flash: %+v", m)
+	}
+	if d := by("mistral")["devstral-latest"]; d.Images || d.ImageInput == nil || *d.ImageInput {
+		t.Errorf("devstral changed: %+v", d)
+	}
+	if c := by("chutes")["deepseek-v4-1-flash-1017"]; c.Images || c.ImageInput == nil || *c.ImageInput {
+		t.Errorf("chutes changed: %+v", c)
 	}
 }
