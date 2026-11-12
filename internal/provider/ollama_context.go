@@ -25,6 +25,10 @@ import (
 // is only the fallback (a model with no num_ctx runs on the server's
 // default, but its maximum is the most it can be asked for).
 //
+// A name that says its window ("qwen-3.8-27b-128k", catalog.NameWindow) is
+// the window over the architecture's maximum, and under a num_ctx the
+// Modelfile sets.
+//
 // The window lands in catalog.Model.Context, under what the user typed
 // (Provider.Contexts, windowIn) and over models.dev's guess. The reply
 // limit is a quarter of it up to 32K when neither the user nor models.dev
@@ -93,7 +97,13 @@ func (p Provider) withOllamaWindows(ctx context.Context, base string, ms []catal
 		sem <- struct{}{}
 		go func() {
 			defer func() { <-sem; wg.Done() }()
-			n := p.ollamaShow(ctx, root, out[i].ID)
+			n, set := p.ollamaShow(ctx, root, out[i].ID)
+			// a name that says its window ("qwen-3.8-27b-128k") is heard over
+			// the architecture's maximum, which is only the fallback, but
+			// not over a num_ctx the Modelfile sets (maohy915 on X)
+			if named := catalog.NameWindow(out[i].ID); named > 0 && !set {
+				n = named
+			}
 			if n <= 0 {
 				return
 			}
@@ -107,25 +117,24 @@ func (p Provider) withOllamaWindows(ctx context.Context, base string, ms []catal
 	return out
 }
 
-func (p Provider) ollamaShow(ctx context.Context, root, model string) int {
+func (p Provider) ollamaShow(ctx context.Context, root, model string) (window int, fromModelfile bool) {
 	body, _ := json.Marshal(map[string]string{"model": model, "name": model})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, root+"/api/show", bytes.NewReader(body))
 	if err != nil {
-		return 0
+		return 0, false
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if err := p.Sign(ctx, req, Chat, body); err != nil {
-		return 0
+		return 0, false
 	}
 	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
-		return 0
+		return 0, false
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 4<<20))
 	if res.StatusCode != http.StatusOK {
-		return 0
+		return 0, false
 	}
-	n, _ := ollamaWindow(b)
-	return n
+	return ollamaWindow(b)
 }

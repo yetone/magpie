@@ -3748,12 +3748,18 @@ func IDs() []string {
 // whose list says none, as Cline's) serves models it knows from others, under
 // the vendor's prefix too: cline-free/mimo-v2.6-flash is mimo-v2.6-flash.
 // A window the vendor lists under catalog.LeastWindow (512, H20 on Discord)
-// is no window: models.dev's answers, else none, and the agent's default.
+// is no window: models.dev's answers, else the one the id's name says
+// ("qwen-3.8-27b-128k", catalog.NameWindow), else none, and the agent's
+// default.
 func ListedWindow(m catalog.Model) int {
 	if n := catalog.Window(m.Context); n > 0 {
 		return n
 	}
-	return catalog.ContextOf(m.ID)
+	if n := catalog.ContextOf(m.ID); n > 0 {
+		return n
+	}
+	// last, what the name says ("qwen-3.8-27b-128k")
+	return catalog.NameWindow(m.ID)
 }
 
 // WindowOf is the window one of the provider's models takes, as agents are

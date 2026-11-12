@@ -105,3 +105,74 @@ func TestOllamaListGivesModelfileWindow(t *testing.T) {
 		t.Fatalf("a model whose show fails keeps what the list said: %+v", m)
 	}
 }
+
+// maohy915 on X: "the model's name itself, Qwen-3.8-27b-128k". A window the
+// name says is the window when nothing more authoritative is known: below
+// the user's own and the vendor's list and models.dev, above nothing; for
+// Ollama it replaces the architecture's maximum, never a Modelfile's num_ctx.
+func TestNameWindowIsTheLastWord(t *testing.T) {
+	p := Provider{ID: "local", Chat: "http://127.0.0.1:1/v1"}
+	s := settings.Settings{}
+	if got := p.WindowIn(catalog.Model{ID: "Qwen-3.8-27b-128k"}, s); got != 128_000 {
+		t.Fatalf("the name's window: %d", got)
+	}
+	if got := p.WindowIn(catalog.Model{ID: "Qwen-3.8-27b-128k", Context: 40960}, s); got != 40960 {
+		t.Fatalf("the list's window is read before the name's: %d", got)
+	}
+	if got := p.WindowIn(catalog.Model{ID: "gpt-4o-2024"}, s); got != catalog.ContextOf("gpt-4o-2024") {
+		t.Fatalf("not a context suffix: %d", got)
+	}
+	p.Contexts = map[string]int{"Qwen-3.8-27b-128k": 8192}
+	if got := p.WindowIn(catalog.Model{ID: "Qwen-3.8-27b-128k"}, s); got != 8192 {
+		t.Fatalf("a window the user typed stays theirs: %d", got)
+	}
+	p.Contexts = map[string]int{"*": 16384}
+	if got := p.WindowIn(catalog.Model{ID: "Qwen-3.8-27b-128k"}, s); got != 16384 {
+		t.Fatalf("the provider's window the user typed: %d", got)
+	}
+}
+
+func TestOllamaNameWindowOverArchitectureNotModelfile(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/models":
+			w.Write([]byte(`{"object":"list","data":[{"id":"plain-128k:latest","object":"model"},{"id":"tuned-128k:latest","object":"model"},{"id":"plain:3b","object":"model"}]}`))
+		case "/api/show":
+			b := make([]byte, 512)
+			n, _ := r.Body.Read(b)
+			if strings.Contains(string(b[:n]), "tuned-128k") {
+				w.Write([]byte(ollamaShowTuned))
+			} else {
+				w.Write([]byte(ollamaShowPlain))
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	p := Provider{ID: "ollama", Name: "Ollama", Preset: "ollama", Chat: srv.URL + "/v1", Anthropic: srv.URL}
+	if err := Save(p); err != nil {
+		t.Fatal(err)
+	}
+	q, _ := Find("ollama")
+	ms, _, _, err := q.refetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]int{}
+	for _, m := range ms {
+		got[m.ID] = m.Context
+	}
+	want := map[string]int{"plain-128k:latest": 128_000, "tuned-128k:latest": 16384, "plain:3b": 131072}
+	for id, w := range want {
+		if got[id] != w {
+			t.Errorf("%s: %d, want %d (%v)", id, got[id], w, got)
+		}
+	}
+}
