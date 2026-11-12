@@ -7531,7 +7531,89 @@ The gateway takes no key on this computer, and Ante counts a provider with no au
 
 Yes. Your original provider and model go back and magpie's entry comes out; a choice you made in Ante since stands.
 
-More agents on the same models: [omp on any model](https://usemagpie.ai/docs/omp), [StepCode on any model](https://usemagpie.ai/docs/stepcode) and [Avibe on any model](https://usemagpie.ai/docs/avibe). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [omp on any model](https://usemagpie.ai/docs/omp), [StepCode on any model](https://usemagpie.ai/docs/stepcode), [Avibe on any model](https://usemagpie.ai/docs/avibe) and [Aside on any model](https://usemagpie.ai/docs/aside). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/aside
+
+# Aside on any model
+
+Aside (the `aside` command) keeps settings, a model list and sign-in for each account. magpie adds a provider named magpie to the account's models.json and has Aside itself make it the default, so Aside runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription, and draws with magpie's image models too.
+
+## Set up Aside
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model for Aside on the Agents page.** Pick a default model via magpie, and a thinking level, categories and an image model if you want.
+3. **Carry on in Aside.** magpie has Aside change its own settings, then reads them back to check they took.
+
+```
+magpie aside deepseek/deepseek-v4-pro
+```
+
+## models.json
+
+Each Aside account has a folder, `~/.aside/u/<id>`, with settings.json, models.json and its sign-in. magpie writes `providers.magpie` in models.json in Pi's format: the gateway's `/v1` as baseUrl, magpie's own key for Aside, and magpie's models.
+
+```
+// ~/.aside/u//models.json
+{
+  "providers": {
+    "magpie": {
+      "baseUrl": "http://127.0.0.1:3425/v1",
+      "api": "…",
+      "apiKey": "",
+      "models": [ { "id": "deepseek/deepseek-v4-pro", … } ]
+    }
+  }
+}
+```
+
+magpie changes only its own entry. When the magpie entry there has no key or another key, magpie won't write over it; one pointing at another gateway changes only when you reconnect on purpose.
+
+## Aside's own settings
+
+magpie doesn't edit settings.json for the default model and the like. It has Aside set them, through `aside repl --account <id> --host local`, then reads them back. When the value read back differs, magpie says so instead of calling it done. The default model is a provider and a modelId, and magpie's are the ones whose provider is magpie. The thinking level goes with the default model, offering only the levels that model takes.
+
+## Categories and the image model
+
+Aside's `modelCategories` are fast, standard, deep and visual, and each can take its own model; unset, they follow the default. `imageGenerationModel` is the model Aside draws with, and can be one of magpie's image models. One unticked in its provider's editor isn't offered, but one already picked keeps drawing.
+
+## More than one account
+
+`currentAccountId` in `~/.aside/accounts.json` is the account Aside is on. magpie sets up the account picked in magpie, else the one Aside has active, else u0 when neither can be read. Each account's settings, and what magpie remembers of them, stay with that account. Picking another account changes only which one magpie sets up; nothing in Aside changes.
+
+```
+magpie aside account u1
+```
+
+## Switching back
+
+Before each setting it changes, magpie saves what was there. Switching back restores only the settings magpie changed; the rest are left as they are.
+
+```
+magpie aside default
+```
+
+## FAQ
+
+### Can Aside run on DeepSeek, GLM or a ChatGPT subscription?
+
+Yes. Pick a via-magpie default model for Aside on magpie's Agents page; magpie has Aside apply it.
+
+### Can fast, standard, deep and visual each have their own model?
+
+Yes. Each category can take its own magpie model, and follows the default when unset.
+
+### Which account does magpie set up when Aside has several?
+
+The one Aside is on, unless you pick one in magpie, for example magpie aside account u1.
+
+### Does switching back restore my settings?
+
+Yes. magpie restores only the settings it changed, from the values it saved before.
+
+More agents on the same models: [Ante on any model](https://usemagpie.ai/docs/ante), [omp on any model](https://usemagpie.ai/docs/omp) and [Pi on any model](https://usemagpie.ai/docs/pi). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
