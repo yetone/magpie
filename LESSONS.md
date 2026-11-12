@@ -855,6 +855,20 @@ held process-wide.**
   gateway (#6265).
 - Seen 1× (2026-11-12).
 
+**A commit saved early stays local until it is finished; "wip" never
+reaches main.**
+- f1e6705c5 (11-12 12:10), subject "wip" and no body, pushed the
+  turn-effort and thinking-summary code to main. Its test change came
+  35 minutes later in 9d47b441e, a one-line commit that carries the
+  whole record, and in between
+  TestClaudeSubscriptionPromptKeepsForeignHarnessOutOfSystem was red on
+  main (the CLI's --settings gained showThinkingSummaries). Its CI run
+  was cancelled, so nothing showed it.
+- Committing at once (the machine reboots) is right; pushing it isn't.
+  Before a push, `git log origin/main..HEAD --format=%s` names no
+  "wip", and the change and its tests go out as one commit.
+- Seen 1× (2026-11-12).
+
 **A squash merge's message is written, not GitHub's default.** Give
 `gh pr merge --squash` a `--subject` and a `--body-file` holding the PR's
 own change and what was run at the reviewed head.
