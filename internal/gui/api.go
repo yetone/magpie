@@ -333,6 +333,9 @@ type stateJSON struct {
 	// GatewayOther is a magpie of another version serving the gateway in
 	// this one's place, which the Agents page says (gateway_older.go)
 	GatewayOther *gatewaySkew `json:"gatewayOther,omitempty"`
+	// GatewayHeld: the program that has the gateway's port when this magpie
+	// couldn't listen on it, as far as it could be read (gateway.PortHeld)
+	GatewayHeld *gateway.PortHeld `json:"gatewayHeld,omitempty"`
 }
 
 // unlistedJSON is a model of a provider kept for routing groups, and the
@@ -3111,6 +3114,7 @@ func state() stateJSON {
 	s.ConfigBlocked = configBlocked()
 	if served.Load() == nil {
 		s.GatewayOther = gatewayOther.Load()
+		s.GatewayHeld = gateway.LastHeld()
 	}
 	for _, e := range provider.Served() {
 		if e.Group == "" {

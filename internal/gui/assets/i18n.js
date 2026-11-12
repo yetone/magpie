@@ -4,8 +4,6 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
-    "Cards": "卡片",
-    "Table": "表格",
     "Quick check": "快速检测",
     "Test all": "全部测试",
     "One real call each, at the provider's price": "每项真实调用一次，按服务商的价格计费",
@@ -3130,6 +3128,8 @@ const I18N = {
     "magpie {v} (pid {pid}) didn't quit. End it in your system's process list (Activity Monitor, Task Manager).": "magpie {v}（pid {pid}）没有退出。请在系统的进程列表（活动监视器、任务管理器）里结束它。",
     "Something started magpie on port {port} again at once ({path}, pid {pid}): a login item or a service keeps it running (a LaunchAgent, a systemd unit, a scheduled task). Remove that, then try again.": "端口 {port} 上的 magpie 被立即重新启动了（{path}，pid {pid}）：有登录项或系统服务让它一直运行（LaunchAgent、systemd 单元、计划任务）。请先移除它，再重试。",
     "Port {port} is in use by {path} (pid {pid}): quit it, or move the gateway to another port in Settings.": "端口 {port} 被 {path}（pid {pid}）占用：请退出它，或在设置里把网关换到其他端口。",
+    "Port {port} is in use by {name} (pid {pid}): quit it, or move the gateway to another port in Settings.": "端口 {port} 被 {name}（pid {pid}）占用：请退出它，或在设置里把网关换到其他端口。",
+    "Tailscale's serve or funnel has port {port}. Point it at magpie from another port: tailscale serve --https={alt} http://127.0.0.1:{port} (or move the gateway to another port in Settings).": "Tailscale 的 serve 或 funnel 占用了端口 {port}。请让它从另一个端口转发给 magpie：tailscale serve --https={alt} http://127.0.0.1:{port}（或在设置里把网关换到其他端口）。",
     "Port {port} is in use by another program: quit it, or move the gateway to another port in Settings.": "端口 {port} 被其他程序占用：请退出它，或在设置里把网关换到其他端口。",
     "magpie {v} serves the gateway, and it isn't older than this one: quit it there to serve the gateway here.": "网关由 magpie {v} 提供，它不比当前版本旧：请在那边退出它，再由这里提供网关。",
     "The gateway couldn't be served here: {error}": "无法在这里提供网关：{error}",
@@ -5124,8 +5124,6 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "这份报告已经不在了：magpie 只保留最近 5 份。",
   },
   "zh-TW": {
-    "Cards": "卡片",
-    "Table": "表格",
     "Quick check": "快速檢測",
     "Test all": "全部測試",
     "One real call each, at the provider's price": "每項真實呼叫一次，按服務商的價格計費",
@@ -8214,6 +8212,8 @@ const I18N = {
     "magpie {v} (pid {pid}) didn't quit. End it in your system's process list (Activity Monitor, Task Manager).": "magpie {v}（pid {pid}）沒有退出。請在系統的程序列表（活動監視器、工作管理員）裡結束它。",
     "Something started magpie on port {port} again at once ({path}, pid {pid}): a login item or a service keeps it running (a LaunchAgent, a systemd unit, a scheduled task). Remove that, then try again.": "連接埠 {port} 上的 magpie 被立即重新啟動了（{path}，pid {pid}）：有登入項或系統服務讓它一直執行（LaunchAgent、systemd 單元、計劃任務）。請先移除它，再重試。",
     "Port {port} is in use by {path} (pid {pid}): quit it, or move the gateway to another port in Settings.": "連接埠 {port} 被 {path}（pid {pid}）佔用：請退出它，或在設定裡把閘道換到其他連接埠。",
+    "Port {port} is in use by {name} (pid {pid}): quit it, or move the gateway to another port in Settings.": "連接埠 {port} 被 {name}（pid {pid}）佔用：請退出它，或在設定裡把閘道換到其他連接埠。",
+    "Tailscale's serve or funnel has port {port}. Point it at magpie from another port: tailscale serve --https={alt} http://127.0.0.1:{port} (or move the gateway to another port in Settings).": "Tailscale 的 serve 或 funnel 佔用了連接埠 {port}。請讓它從另一個連接埠轉發給 magpie：tailscale serve --https={alt} http://127.0.0.1:{port}（或在設定裡把閘道換到其他連接埠）。",
     "Port {port} is in use by another program: quit it, or move the gateway to another port in Settings.": "連接埠 {port} 被其他程式佔用：請退出它，或在設定裡把閘道換到其他連接埠。",
     "magpie {v} serves the gateway, and it isn't older than this one: quit it there to serve the gateway here.": "閘道由 magpie {v} 提供，它不比目前版本舊：請在那邊退出它，再由這裡提供閘道。",
     "The gateway couldn't be served here: {error}": "無法在這裡提供閘道：{error}",
@@ -10229,8 +10229,6 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "這份報告已經不在了：magpie 只保留最近 5 份。",
   },
   ja: {
-    "Cards": "カード",
-    "Table": "表",
     "Quick check": "クイックチェック",
     "Test all": "すべてテスト",
     "One real call each, at the provider's price": "それぞれ実際に 1 回呼び出し、プロバイダの料金がかかります",
@@ -13322,6 +13320,8 @@ const I18N = {
     "magpie {v} (pid {pid}) didn't quit. End it in your system's process list (Activity Monitor, Task Manager).": "magpie {v}（pid {pid}）が終了しませんでした。システムのプロセス一覧（アクティビティモニタ、タスクマネージャー）で終了してください。",
     "Something started magpie on port {port} again at once ({path}, pid {pid}): a login item or a service keeps it running (a LaunchAgent, a systemd unit, a scheduled task). Remove that, then try again.": "ポート {port} の magpie がすぐに再起動されました（{path}、pid {pid}）。ログイン項目やサービス（LaunchAgent、systemd ユニット、タスクスケジューラ）が動かし続けています。それを削除してからもう一度お試しください。",
     "Port {port} is in use by {path} (pid {pid}): quit it, or move the gateway to another port in Settings.": "ポート {port} は {path}（pid {pid}）が使用中です。終了するか、設定でゲートウェイを別のポートに移してください。",
+    "Port {port} is in use by {name} (pid {pid}): quit it, or move the gateway to another port in Settings.": "ポート {port} は {name}（pid {pid}）が使用中です。終了するか、設定でゲートウェイを別のポートに移してください。",
+    "Tailscale's serve or funnel has port {port}. Point it at magpie from another port: tailscale serve --https={alt} http://127.0.0.1:{port} (or move the gateway to another port in Settings).": "Tailscale の serve または funnel がポート {port} を使っています。別のポートから magpie に転送してください: tailscale serve --https={alt} http://127.0.0.1:{port}（または設定でゲートウェイを別のポートに移してください）。",
     "Port {port} is in use by another program: quit it, or move the gateway to another port in Settings.": "ポート {port} は他のプログラムが使用中です。終了するか、設定でゲートウェイを別のポートに移してください。",
     "magpie {v} serves the gateway, and it isn't older than this one: quit it there to serve the gateway here.": "ゲートウェイは magpie {v} が提供しており、これより古くありません。ここで提供するには、そちらで終了してください。",
     "The gateway couldn't be served here: {error}": "ここでゲートウェイを提供できませんでした: {error}",
@@ -15336,8 +15336,6 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "このレポートはもう残っていません。magpie は最新の 5 件だけを保存します。",
   },
   de: {
-    "Cards": "Karten",
-    "Table": "Tabelle",
     "Quick check": "Schnelltest",
     "Test all": "Alle testen",
     "One real call each, at the provider's price": "Je ein echter Aufruf, zum Preis des Anbieters",
@@ -18439,6 +18437,8 @@ const I18N = {
     "magpie {v} (pid {pid}) didn't quit. End it in your system's process list (Activity Monitor, Task Manager).": "magpie {v} (PID {pid}) wurde nicht beendet. Beenden Sie es in der Prozessliste Ihres Systems (Aktivitätsanzeige, Task-Manager).",
     "Something started magpie on port {port} again at once ({path}, pid {pid}): a login item or a service keeps it running (a LaunchAgent, a systemd unit, a scheduled task). Remove that, then try again.": "magpie auf Port {port} wurde sofort wieder gestartet ({path}, PID {pid}): Ein Anmeldeobjekt oder ein Dienst hält es am Laufen (ein LaunchAgent, eine systemd-Unit, eine geplante Aufgabe). Entfernen Sie diesen und versuchen Sie es erneut.",
     "Port {port} is in use by {path} (pid {pid}): quit it, or move the gateway to another port in Settings.": "Port {port} wird von {path} (PID {pid}) verwendet: Beenden Sie es oder legen Sie den Zugangspunkt in den Einstellungen auf einen anderen Port.",
+    "Port {port} is in use by {name} (pid {pid}): quit it, or move the gateway to another port in Settings.": "Port {port} wird von {name} (PID {pid}) verwendet: Beenden Sie es oder legen Sie den Zugangspunkt in den Einstellungen auf einen anderen Port.",
+    "Tailscale's serve or funnel has port {port}. Point it at magpie from another port: tailscale serve --https={alt} http://127.0.0.1:{port} (or move the gateway to another port in Settings).": "Tailscales serve oder funnel belegt Port {port}. Leiten Sie es von einem anderen Port an magpie weiter: tailscale serve --https={alt} http://127.0.0.1:{port} (oder legen Sie den Zugangspunkt in den Einstellungen auf einen anderen Port).",
     "Port {port} is in use by another program: quit it, or move the gateway to another port in Settings.": "Port {port} wird von einem anderen Programm verwendet: Beenden Sie es oder legen Sie den Zugangspunkt in den Einstellungen auf einen anderen Port.",
     "magpie {v} serves the gateway, and it isn't older than this one: quit it there to serve the gateway here.": "magpie {v} stellt den Zugangspunkt bereit und ist nicht älter als diese Version: Beenden Sie es dort, um den Zugangspunkt hier bereitzustellen.",
     "The gateway couldn't be served here: {error}": "Der Zugangspunkt konnte hier nicht bereitgestellt werden: {error}",

@@ -361,23 +361,6 @@ card's "Show … accounts" button keeps its room but is hidden and inert, so
 the strip stays where it was. A menu bar cell asking for one of the
 accounts unfolds them (`focusQuotaCard`). See `usage-all-fold.test.cjs`.
 
-The Usage page's allowances are cards, or a table when the reader picks
-Table in the Allowances head (`#quotaView`; zysicyj on X: a dozen-plus
-accounts were hard to scan as cards). The pick is kept in localStorage
-`magpie.quotaView` on this computer and nothing is written until it is
-made, so the default stays cards. The table (`quotaTable` in
-`quotatable.js`, which app.js imports once it is picked) has a row per
-account in the cards' order, so what the cards hide or merge is hidden or
-merged here too, with the subscription, the account, the four windows most
-accounts have (each as its used or left share, a bar and when it resets,
-from the same `quotaFill` and `quotaText` as the cards, so Used/Left turns
-both) and the rest of an account's windows in a last column; a failed read
-and a balance say so across the windows. A head sorts by it (most used first
-for a window, A first for a name), again the other way, a third time back
-to the cards' order; accounts with nothing in that column stay last. It
-scrolls in its own box at a narrow width, the subscription held at the left.
-See `usage-quota-table.test.cjs`.
-
 ### The Sessions page's folders
 
 The Sessions page lists an agent's project folders as one list, newest
@@ -1245,3 +1228,5 @@ still follows the existing Not set up folding rules. The dialog explains that
 restoring visibility does not pin an unconfigured agent into the main list.
 See `agent-bulk-visibility.test.cjs` for persistence, partial selection, failed
 saves, narrow layouts and all five languages in Chromium and WebKit.
+
+- A gateway port another program holds names that program (pluoki on X). `gateway.NoteHeld` reads the holder with `proc.PortHolder` (lsof on the Mac, /proc on Linux, Get-NetTCPConnection on Windows) and, when the daemon is root's and unreadable, falls back to `tailscale serve status --json` for the port. Tailscale's line carries `tailscale serve --https=<other> http://127.0.0.1:<port>`. The sentence (`PortHeld.Sentence`) goes to the `magpie serve` standby line and bind error, the app's log, `gatewayHeld` in `/api/state` (Gateway page) and Start's `taken` answer. A holder that can't be read says nothing, and the old wording stands. Nothing is killed or touched. See `TestWhoHolds`, `TestListenErrorNamesTheHolder`, `TestPortHolderNamesTheProgram` and `gateway-port-holder.test.cjs`.

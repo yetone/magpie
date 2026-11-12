@@ -3,6 +3,7 @@ package proc
 import (
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"testing"
 
@@ -16,7 +17,21 @@ import (
 //
 // With MAGPIE_PROC_SLEEP set, it runs until its stdin closes
 // (listener_test.go).
+//
+// With MAGPIE_PROC_LISTEN set to an address, it listens there first, says
+// "listening" and then runs the same way (holder_test.go).
 func TestMain(m *testing.M) {
+	if addr := os.Getenv("MAGPIE_PROC_LISTEN"); addr != "" {
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			fmt.Println("error", err)
+			os.Exit(1)
+		}
+		defer ln.Close()
+		fmt.Println("listening")
+		io.Copy(io.Discard, os.Stdin)
+		os.Exit(0)
+	}
 	if os.Getenv("MAGPIE_PROC_SLEEP") != "" {
 		io.Copy(io.Discard, os.Stdin)
 		os.Exit(0)

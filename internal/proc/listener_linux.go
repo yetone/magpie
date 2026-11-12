@@ -79,3 +79,12 @@ func listenInodes(table string, port int) map[string]bool {
 func executable(pid int) (string, error) {
 	return os.Readlink(filepath.Join("/proc", strconv.Itoa(pid), "exe"))
 }
+
+// processName is /proc/<pid>/comm, which any user may read.
+func processName(pid int) string {
+	b, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "comm"))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}

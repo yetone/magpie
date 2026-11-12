@@ -607,7 +607,7 @@ type Server struct {
 	// minute, and those about to go (rpm.go)
 	rpms          rpms
 	requestLimits requestLimits
-	// what a restart would cut short (busy.go)
+	// what a restart would cut short (portbusy.go)
 	busyCounters
 	// every request's bytes up and down, as they go (Traffic)
 	traffic traffic
@@ -803,8 +803,15 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	}
 	ln, err := s.listen(listenAddr())
 	if err != nil {
+		if addrInUse(err) {
+			// say who has it, when that can be read (portbusy.go)
+			if b, ok := NoteHeld(); ok {
+				return fmt.Errorf("%w (%s)", err, b.Sentence())
+			}
+		}
 		return err
 	}
+	ClearHeld()
 	s.lnMu.Lock()
 	s.ln = ln
 	s.lnMu.Unlock()

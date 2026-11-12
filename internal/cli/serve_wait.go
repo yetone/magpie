@@ -58,6 +58,12 @@ func awaitGatewayFree(every time.Duration) {
 		if !said {
 			said = true
 			fmt.Println(amber.Render("!"), standbyLine(o))
+			// another program: who it is, when that can be read
+			if !o.Running {
+				if h, ok := gateway.NoteHeld(); ok {
+					fmt.Println(amber.Render("!"), h.Sentence())
+				}
+			}
 		}
 		time.Sleep(every)
 	}

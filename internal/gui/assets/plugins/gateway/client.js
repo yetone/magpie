@@ -172,7 +172,7 @@ function gatewayFixButton(g, older) {
 // gatewayFixSays is why a take-over or a restart didn't go, in the page's
 // language, naming the process it was
 function gatewayFixSays(o) {
-  const p = { port: o.port || "", pid: o.pid || "", path: o.path || "", v: o.version || "", error: o.error || "" };
+  const p = { port: o.port || "", pid: o.pid || "", path: o.path || "", v: o.version || "", error: o.error || "", name: o.name || "", alt: o.alt || "8443" };
   switch (o.reason) {
     case "not-magpie": return t("Port {port} is held by {path} (pid {pid}), which isn't magpie, so magpie leaves it alone. Quit it yourself, or move the gateway to another port in Settings.", p);
     // leslie_luo on Discord: an old magpie in OrbStack, its helper named
@@ -182,7 +182,13 @@ function gatewayFixSays(o) {
     case "denied": return t("magpie {v} (pid {pid}, {path}) runs as another user or as administrator, so this magpie can't quit it. Quit it there.", p);
     case "stuck": return t("magpie {v} (pid {pid}) didn't quit. End it in your system's process list (Activity Monitor, Task Manager).", p);
     case "respawned": return t("Something started magpie on port {port} again at once ({path}, pid {pid}): a login item or a service keeps it running (a LaunchAgent, a systemd unit, a scheduled task). Remove that, then try again.", p);
-    case "taken": return p.pid
+    // pluoki on X: Tailscale's serve on the gateway's port number, found
+    // only by trial and error; the program is named when it can be read
+    case "taken": return o.tailscale
+      ? t("Tailscale's serve or funnel has port {port}. Point it at magpie from another port: tailscale serve --https={alt} http://127.0.0.1:{port} (or move the gateway to another port in Settings).", p)
+      : p.name && !p.path
+      ? t("Port {port} is in use by {name} (pid {pid}): quit it, or move the gateway to another port in Settings.", p)
+      : p.pid
       ? t("Port {port} is in use by {path} (pid {pid}): quit it, or move the gateway to another port in Settings.", p)
       : t("Port {port} is in use by another program: quit it, or move the gateway to another port in Settings.", p);
     case "other": return t("magpie {v} serves the gateway, and it isn't older than this one: quit it there to serve the gateway here.", p);
@@ -285,6 +291,9 @@ function renderGateway() {
     who.append(name, el("div", "sub old", t("Agents' requests go through magpie {v} and are sent as it sends them, without this version's fixes. Quit it here and this one serves the gateway at once.", { v: g.version })));
   } else if (g.paused) {
     who.append(name, el("div", "sub", t("Paused, agents are disconnected and use their own settings")));
+  } else if (!g.running && state.gatewayHeld) {
+    // the gateway couldn't listen: what has the port, as far as it is read
+    who.append(name, el("div", "sub old err", gatewayFixSays({ reason: "taken", ...state.gatewayHeld })));
   } else who.append(name, el("div", "sub", g.running
     ? [t(g.models === 1 ? "{n} model" : "{n} models", { n: g.models }), n ? t(n === 1 ? "{n} agent routed through it" : "{n} agents routed through it", { n }) : t("no agent routed through it yet"), t("five APIs, one URL")].join(" · ")
     : t("start it with magpie serve, or open magpie at login")));

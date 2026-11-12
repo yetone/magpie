@@ -998,41 +998,14 @@ body.panel .row.pref.flash { border-radius: 10px; }
 /* packed into columns (packUsage): each card as tall as itself, placed on
    rows a pixel high, the gap between cards in its place on them (#860) */
 .subscription-usage.packed { grid-auto-rows: 1px; row-gap: 0; }
-/* the allowances as a table: a row an account (quotatable.js); wider than the
-   page, it scrolls in its own box with the subscription held at the left */
-.subscription-usage.tabled { display: block; }
-.qt-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
-.qt { width: 100%; min-width: 560px; border-collapse: separate; border-spacing: 0; font-size: 12px; }
-.qt th, .qt td { padding: 8px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
-.qt tbody tr:last-child td { border-bottom: 0; }
-.qt th { padding-block: 4px; font-size: 10.5px; font-weight: 500; color: var(--muted); white-space: nowrap; }
-.qt .qt-sub { position: sticky; left: 0; z-index: 1; min-width: 118px; background: var(--card); }
-.qt .qt-w { min-width: 84px; width: 15%; }
-.qt-sort { display: inline-flex; align-items: center; gap: 3px; padding: 2px 0; font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
-.qt-sort.on { color: var(--fg); }
-.qt-arrow { display: inline-block; min-width: 1ch; }
-@media (hover: hover) and (pointer: fine) { .qt-sort:hover { color: var(--fg); } }
-.qt-id { display: flex; align-items: center; gap: 6px; }
-.qt-id .ic { width: 15px; height: 15px; flex: none; }
-.qt-id b { font-weight: 600; white-space: nowrap; }
-.qt .plan { display: block; margin: 2px 0 0 21px; font-size: 10.5px; color: var(--muted); text-transform: capitalize; white-space: nowrap; }
-.qt .qt-acct { min-width: 120px; max-width: 220px; color: var(--fg-2); }
-.qt .subscription-account { margin: 0; font-size: 12px; }
-.qt .qt-acct .quota-of, .qt .qt-acct .quota-seat { color: var(--muted); }
-.qt-win { display: grid; gap: 4px; }
-.qt-win + .qt-win { margin-top: 8px; }
-.qt-fig { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.qt-name { font-weight: 400; color: var(--muted); }
-.qt-reset { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.qt .qt-msg { color: var(--muted); }
 .subscription-card { padding: 10px 12px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); min-width: 0; }
 /* a card's captions (resets, the period, a curve's dates) read at 4.5:1 or
    better on the card, below its figures (Jiabubu on Discord): light's
    --muted is 3.7:1 on white, so a card takes the controls' quiet text;
    dark's --muted is 4.6:1 already */
-.subscription-card, .pq-card, .quota-all, .qt-wrap { --muted: var(--ctl-fg); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) :is(.subscription-card, .pq-card, .qt-wrap) { --muted: inherit; } }
-:root[data-theme="dark"] :is(.subscription-card, .pq-card, .qt-wrap) { --muted: inherit; }
+.subscription-card, .pq-card, .quota-all { --muted: var(--ctl-fg); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) :is(.subscription-card, .pq-card) { --muted: inherit; } }
+:root[data-theme="dark"] :is(.subscription-card, .pq-card) { --muted: inherit; }
 .subscription-head { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; }
 .subscription-head:last-child { margin-bottom: 0; }
 .subscription-head .ic { width: 17px; height: 17px; }

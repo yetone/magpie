@@ -78,3 +78,14 @@ func exitWith(pid int, code uint32) error {
 	}
 	return nil
 }
+
+// processName is Get-Process' name, which names a service's process where
+// opening it for its path is denied.
+func processName(pid int) string {
+	out, err := CommandContext(context.Background(), "powershell", "-NoProfile", "-NonInteractive", "-Command",
+		`(Get-Process -Id `+strconv.Itoa(pid)+` -ErrorAction SilentlyContinue).ProcessName`).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}

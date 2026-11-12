@@ -56,3 +56,13 @@ func executable(pid int) (string, error) {
 	}
 	return "", errors.New("no program path")
 }
+
+// processName is the program's name by ps, which names any user's process
+// where the path (kern.procargs2) is denied.
+func processName(pid int) string {
+	out, err := CommandContext(context.Background(), "ps", "-o", "comm=", "-p", strconv.Itoa(pid)).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}

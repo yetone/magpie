@@ -165,12 +165,17 @@ func serveGatewayLocked() *gateway.Server {
 		if gateway.Taken() {
 			if !takenSaid.Swap(true) {
 				log.Printf("gateway: %s is taken but doesn't answer as magpie yet; this magpie serves the gateway once it is free", gateway.URL())
+				// who has it, when that can be read: the page says it too
+				if h, ok := gateway.NoteHeld(); ok {
+					log.Printf("gateway: %s", h.Sentence())
+				}
 			}
 			return nil
 		}
 	}
 	takenSaid.Store(false)
 	gatewayOther.Store(nil)
+	gateway.ClearHeld()
 	gw := gateway.New()
 	served.Store(gw)
 	serving.Add(1)
