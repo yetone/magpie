@@ -68,6 +68,11 @@ export const SignInEndPlugin = async () => ({
           },
         }),
       },
+      // 8: an auto sign-in with no refresh token, the field left out, as
+      // codearts' CodeArts Agent sign-in was (plugins#998)
+      { type: "oauth", label: "no refresh", authorize: async () => ({ url: "", method: "auto", callback: async () => ({ type: "success", access: "acc-only", expires: 4102444800000, accountId: "norefresh" }) }) },
+      // 9: a success with nothing in it to keep
+      { type: "oauth", label: "nothing", authorize: async () => ({ url: "", method: "auto", callback: async () => ({ type: "success" }) }) },
     ],
   },
 })

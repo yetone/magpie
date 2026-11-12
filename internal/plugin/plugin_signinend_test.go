@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -169,4 +170,45 @@ func TestSignInFailsWithThePluginsReason(t *testing.T) {
 	if SignedIn("signinend") {
 		t.Error("a failed sign-in was saved")
 	}
+}
+
+// plugins#998: an OAuth success with no refresh field said "signed in"
+// and kept nothing, since a sign-in is kept as OAuth only when its result
+// has one. One with an access is kept; one with nothing to keep fails.
+func TestSignInWithNoRefreshIsKept(t *testing.T) {
+	ctx, _ := signInEnd(t)
+	a, err := Authorize(ctx, "signinend", 9, nil, NewAccount)
+	if err == nil {
+		_, err = Finish(ctx, a.Session, "")
+	}
+	if !errors.Is(err, ErrFailed) || !strings.HasSuffix(err.Error(), ": signinend's sign-in gave nothing to keep") {
+		t.Errorf("a success with nothing to keep: %v", err)
+	}
+	if SignedIn("signinend") {
+		t.Fatal("nothing was there to keep, and something was")
+	}
+	a, err = Authorize(ctx, "signinend", 8, nil, NewAccount)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Finish(ctx, a.Session, ""); err != nil {
+		t.Fatalf("Finish = %v", err)
+	}
+	if !SignedIn("signinend") {
+		t.Fatal("a sign-in with an access and no refresh was not kept")
+	}
+	for _, v := range authRaw() {
+		var got struct {
+			Type    string  `json:"type"`
+			Access  string  `json:"access"`
+			Refresh *string `json:"refresh"`
+		}
+		if json.Unmarshal(v, &got) == nil && got.Access == "acc-only" {
+			if got.Type != "oauth" || got.Refresh == nil || *got.Refresh != "" {
+				t.Errorf("kept as %s", v)
+			}
+			return
+		}
+	}
+	t.Errorf("no account holds the access: %v", authRaw())
 }

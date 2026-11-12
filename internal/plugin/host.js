@@ -2841,7 +2841,22 @@ async function callback({ session, code }, signal) {
   const r = await signingIn(signal, s.proxy, s.provider, s.key, () => (s.a.method === "code" ? s.a.callback(code ?? "", { signal }) : s.a.callback(undefined, { signal })))
   if (signal?.aborted) throw abortedSignIn()
   if (!r || r.type !== "success") return failed(r)
-  return { ok: true, ...(await save(s.provider, s.key, r, undefined)) }
+  const kept = keptAs(r)
+  if (!kept) return { ok: false, error: `${s.provider}'s sign-in gave nothing to keep` }
+  return { ok: true, ...(await save(s.provider, s.key, kept, undefined)) }
+}
+
+// keptAs is an OAuth callback's success r as save keeps it. save keeps an
+// OAuth sign-in only when "refresh" is in r, as OpenCode's CLI does; a
+// plugin whose sign-in has no refresh token and leaves the field out
+// (codearts' CodeArts Agent sign-in, plugins#998) was told "signed in"
+// with nothing kept. An access with no refresh is kept with an empty one,
+// and a success with nothing at all to keep is null, a failure, as
+// apiKey's is.
+function keptAs(r) {
+  if ("refresh" in r || "key" in r) return r
+  if (typeof r.access === "string" && r.access) return { ...r, refresh: "" }
+  return null
 }
 
 async function apiKey({ provider, method, inputs, key, account, proxy }, signal) {
