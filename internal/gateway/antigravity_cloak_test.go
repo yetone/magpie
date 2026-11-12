@@ -258,3 +258,36 @@ func TestOnlyAntigravityIsSentThePromptBrokenUp(t *testing.T) {
 		}
 	}
 }
+
+// DeepSeek Harness's paragraph on @ paths goes to an Antigravity account
+// reworded, and to every other provider as written (plugins#1028).
+func TestAntigravityDSHAtPathsGoReworded(t *testing.T) {
+	dsh := agReworded[0][0]
+	r := &Request{System: "You are DeepSeek Harness.\n\n" + dsh + "\n\nBe brief.", Messages: []Message{{Role: "user", Parts: []Part{{Kind: Text, Text: "hi"}}}}}
+	ag := provider.Provider{ID: "antigravity", Account: &provider.Account{Agent: "antigravity"}}
+	b := string(codeAssistBody(ag, r, "gemini-4-argon", nil))
+	if strings.Contains(b, "Tokens prefixed with @") || !strings.Contains(b, "When the user writes @ followed by a path, they are pointing at that file or folder.") || !strings.Contains(b, "Be brief.") {
+		t.Fatalf("Antigravity's account was sent %s", b)
+	}
+	if r.System != "You are DeepSeek Harness.\n\n"+dsh+"\n\nBe brief." {
+		t.Fatalf("the caller's request was changed: %q", r.System)
+	}
+	gemini := provider.Provider{ID: "gemini-cli", Account: &provider.Account{Agent: "gemini"}}
+	if b := string(codeAssistBody(gemini, r, "gemini-3-flash", nil)); !strings.Contains(b, "Tokens prefixed with @ are paths the user explicitly referenced.") {
+		t.Fatalf("Gemini CLI's account was sent %s", b)
+	}
+	asWritten := ag
+	asWritten.PromptAsWritten = true
+	if b := string(codeAssistBody(asWritten, r, "gemini-4-argon", nil)); !strings.Contains(b, "Tokens prefixed with @ are paths the user explicitly referenced.") {
+		t.Fatalf("prompt=as-written was sent %s", b)
+	}
+	// a prompt that only mentions @ paths, and one with the Claude Code
+	// line besides, are each changed only where they match
+	if got := antigravityReword("Tokens prefixed with @ are paths. Be brief."); got != "Tokens prefixed with @ are paths. Be brief." {
+		t.Fatalf("a mention was changed: %q", got)
+	}
+	both := antigravityReword(antigravityCloak("x-anthropic-billing-header: cc\n" + dsh))
+	if antigravityTurnsAway(both) || !strings.Contains(both, "When the user writes @") {
+		t.Fatalf("broken up and reworded: %q", both)
+	}
+}

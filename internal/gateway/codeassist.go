@@ -119,6 +119,27 @@ func antigravityTurnsHermesAway(system string) bool {
 	return strings.Contains(strings.ToLower(system), "hermes agent, an intelligent ai assistant created by nous research")
 }
 
+// agReworded are paragraphs Antigravity takes but answers badly, each with
+// a rewording that says the same. DeepSeek Harness's desktop app puts the
+// first in every system prompt: with it word for word, gemini-4-argon
+// answered most requests in about 3s at about 300 tok/s with no thinking,
+// and ended after one shallow step. With only it removed, or reworded, a
+// recorded DSH request was answered normally 20 of 20 times
+// (magpie-community/plugins#1028, whose antigravity plugin does the same).
+var agReworded = [][2]string{{
+	`Tokens prefixed with @ are paths the user explicitly referenced. Relative paths resolve from the workspace root; absolute paths identify files or directories on the host. A trailing slash marks a directory: list it when its contents matter. Anything else is a file: use the read tool when its contents are needed, and do not claim to have inspected it before reading. @"..." quotes a path containing spaces.`,
+	`When the user writes @ followed by a path, they are pointing at that file or folder. Relative paths start at the workspace root; absolute paths are host paths. A path ending in a slash is a folder, so list it if its contents matter; otherwise it is a file, so open it with the read tool before relying on it. Paths with spaces appear as @"...".`,
+}}
+
+// antigravityReword is system with each paragraph of agReworded in it, word
+// for word, said as its rewording, and everything else as written.
+func antigravityReword(system string) string {
+	for _, w := range agReworded {
+		system = strings.ReplaceAll(system, w[0], w[1])
+	}
+	return system
+}
+
 // zeroWidth is what antigravityCloak puts inside a line Antigravity turns
 // away: U+200B, which the model reads past and Google's check doesn't.
 const zeroWidth = "\u200b"
@@ -325,10 +346,11 @@ func codeAssistBody(p provider.Provider, r *Request, model string, wires map[str
 	model = p.OwnModelID(model)
 	sent := codeAssistID(model, r.Effort, p.Account.Agent)
 	if p.Account.Agent == "antigravity" && !p.PromptAsWritten {
-		// the lines Google turns away, broken up; the request the
+		// the lines Google turns away, broken up, and the paragraphs
+		// it answers badly, reworded; the request the
 		// caller holds keeps the system prompt as written, which the
 		// refusal is told against (antigravityTurnedAway)
-		if cloaked := antigravityCloak(r.System); cloaked != r.System {
+		if cloaked := antigravityReword(antigravityCloak(r.System)); cloaked != r.System {
 			rc := *r
 			rc.System = cloaked
 			r = &rc
