@@ -358,13 +358,13 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
    it never move. The cards are dealt out one after another, the one with
    the furthest to go first, so none passes over another, and go back
    together, quicker. Transform stays free for the press. */
-.lib-row > .lib-agents .lib-ag[data-agent] { translate: calc(var(--k, 0) * (var(--lib-fan) - var(--lib-stack))) 0; }
-.lib-row > .lib-agents:hover .lib-ag[data-agent], .lib-row > .lib-agents:focus-within .lib-ag[data-agent] { translate: 0 0; transition-delay: 0s, 0s, 0s, 0s, 0s, calc((var(--lib-agent-count, 1) - 1 - var(--k, 0)) * var(--lib-step)); }
+.lib-row > .lib-agents .lib-ag[data-agent], .lib-row > .lib-agents .lib-ag[data-members] { translate: calc(var(--k, 0) * (var(--lib-fan) - var(--lib-stack))) 0; }
+.lib-row > .lib-agents:hover .lib-ag[data-agent], .lib-row > .lib-agents:focus-within .lib-ag[data-agent], .lib-row > .lib-agents:hover .lib-ag[data-members], .lib-row > .lib-agents:focus-within .lib-ag[data-members] { translate: 0 0; transition-delay: 0s, 0s, 0s, 0s, 0s, calc((var(--lib-agent-count, 1) - 1 - var(--k, 0)) * var(--lib-step)); }
 .lib-row > .lib-agents .lib-ag { flex: none; width: 24px; min-width: 0; height: 24px; padding: 0 0 0 4px; justify-content: flex-start; background: var(--card); border-color: var(--line-2); box-shadow: none; transition: background .14s, border-color .14s, transform .14s var(--ease), outline-color .2s, box-shadow .2s, translate .22s cubic-bezier(.32, .72, 0, 1); }
 .lib-row > .lib-agents:hover .lib-ag, .lib-row > .lib-agents:focus-within .lib-ag { transition-duration: .14s, .14s, .14s, .2s, .2s, .3s; transition-timing-function: ease, ease, var(--ease), ease, ease, cubic-bezier(.23, 1, .32, 1); }
 .lib-row > .lib-agents { --lib-step: min(16ms, calc(120ms / max(1, var(--lib-agent-count, 1) - 1))); }
 @media (prefers-reduced-motion: reduce) {
-  .lib-row > .lib-agents .lib-ag[data-agent], .lib-row > .lib-agents:hover .lib-ag[data-agent], .lib-row > .lib-agents:focus-within .lib-ag[data-agent] { transition-duration: .14s, .14s, .14s, .2s, .2s, 0s; transition-delay: 0s; }
+  .lib-row > .lib-agents .lib-ag[data-agent], .lib-row > .lib-agents:hover .lib-ag[data-agent], .lib-row > .lib-agents:focus-within .lib-ag[data-agent], .lib-row > .lib-agents .lib-ag[data-members], .lib-row > .lib-agents:hover .lib-ag[data-members], .lib-row > .lib-agents:focus-within .lib-ag[data-members] { transition-duration: .14s, .14s, .14s, .2s, .2s, 0s; transition-delay: 0s; }
 }
 .lib-row > .lib-agents .lib-ag .ic { width: 14px; height: 14px; }
 /* the ring in the card's colour that cuts each chip out of the one under

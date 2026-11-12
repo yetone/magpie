@@ -5616,7 +5616,7 @@ magpie.plugin("library", (ctx) => {
       for (const g of by.values()) v = await api("library/" + kind + "/agents-some", { names: g.names, agents: g.agents, on });
       return v;
     };
-    const box = agentChips(all, full, async (next) => {
+    const change = async (next) => {
       const on = next.filter((id) => !full.includes(id)), off = full.filter((id) => !next.includes(id));
       box.classList.add("busy");
       try {
@@ -5640,11 +5640,20 @@ magpie.plugin("library", (ctx) => {
         status(e.message, "err", 6000);
       }
       render();
-    }, { all: true, blocked: servers ? (a) => (reach(a) ? "" : n === 1 ? sseBlocked(skills[0])(a) : t("{agent} can reach none of these servers", { agent: a.name }))
+    };
+    // an agent's profiles are one chip here too (Yanzhongixuy on X: a
+    // repository's heading drew an icon for each of twenty Hermes profiles)
+    change.rows = true;
+    const box = agentChips(all, full, change, { all: true, blocked: servers ? (a) => (reach(a) ? "" : n === 1 ? sseBlocked(skills[0])(a) : t("{agent} can reach none of these servers", { agent: a.name }))
       : hooks ? (a) => (reach(a) ? "" : n === 1 ? hookBlocked(skills[0])(a) : t("{agent} can run none of these hooks", { agent: a.name })) : null,
     always: servers || hooks || !n ? null : (a) => (reach(a) ? "" : n === 1 ? alwaysFor(skills[0])(a)
       : t("{agent} reads ~/.agents/skills itself, where all of these are kept — it has them whatever is ticked here", { agent: a.name })) });
     box.classList.add("lib-groupchips");
+    // a profiles chip is half lit when a profile of it has some of the skills
+    for (const c of box.querySelectorAll(".lib-ag[data-members]")) {
+      const ms = idsOf(c).map((id) => all.find((x) => x.id === id)).filter((a) => a && reach(a));
+      if (ms.some((a) => count(a) && count(a) < reach(a)) || (ms.some((a) => count(a)) && !c.classList.contains("on"))) c.classList.add("some");
+    }
     for (const c of box.querySelectorAll(".lib-ag[data-agent]")) {
       const a = all.find((x) => x.id === c.dataset.agent), k = count(a), m = reach(a);
       if (!m) continue;
