@@ -14,3 +14,18 @@ func readHourCycle() string {
 	}
 	return windowsHourCycle(f)
 }
+
+// readLocale is the regional format (Control Panel → International,
+// LocaleName), which is not the display language WebView2 reports.
+func readLocale() string {
+	k, err := registry.OpenKey(registry.CURRENT_USER, `Control Panel\International`, registry.QUERY_VALUE)
+	if err != nil {
+		return ""
+	}
+	defer k.Close()
+	n, _, err := k.GetStringValue("LocaleName")
+	if err != nil {
+		return ""
+	}
+	return localeTag(n)
+}

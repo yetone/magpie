@@ -1152,6 +1152,9 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			if hc := systemHourCycle(); hc != "" {
 				boot["hourCycle"] = hc
 			}
+			if loc := systemLocale(); loc != "" {
+				boot["locale"] = loc
+			}
 		}
 		if s.Colorblind {
 			boot["colorblind"] = true

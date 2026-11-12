@@ -12,6 +12,11 @@ import (
 // X). boot.js tells the page as "h23" or "h12", or leaves it out when the
 // system says nothing beyond its region's own, and the page asks its
 // formatters for it (intlLang in i18n.js).
+//
+// The region is the system's too: a Mac set to English with Japan as its
+// region (AppleLocale en_JP) reads 24 hours, but WKWebView's
+// navigator.language says en-US and the page formatted in that (iXerol on
+// X). boot.js tells the page the system's own tag as "locale".
 
 // hourCycleCache holds the answer for a while: the page asks at every load,
 // and macOS's costs two processes.
@@ -23,6 +28,66 @@ var hourCycleCache struct {
 
 // systemHourCycle is "h23", "h12", or "" when the system names none.
 var systemHourCycle = cachedHourCycle
+
+// systemLocale is the system's language and region as a BCP 47 tag
+// ("en-JP"), or "" when it names none.
+var systemLocale = cachedLocale
+
+var localeCache struct {
+	sync.Mutex
+	at  time.Time
+	val string
+}
+
+func cachedLocale() string {
+	c := &localeCache
+	c.Lock()
+	defer c.Unlock()
+	if !c.at.IsZero() && time.Since(c.at) < 30*time.Second {
+		return c.val
+	}
+	c.val, c.at = readLocale(), time.Now()
+	return c.val
+}
+
+// localeTag turns a system's locale name into a BCP 47 tag: "en_JP",
+// "en_JP.UTF-8", "en_JP@rg=gbzzzz" and "en-JP" all become a language and a
+// region ("en-JP"). The C and POSIX locales, and anything that isn't a
+// language, give "". A macOS "@rg=" keyword is the region the user picked
+// apart from the language, and wins.
+func localeTag(raw string) string {
+	raw = strings.TrimSpace(raw)
+	name, kw, _ := strings.Cut(raw, "@")
+	if i := strings.IndexAny(name, ".:"); i >= 0 {
+		name = name[:i]
+	}
+	parts := strings.Split(strings.ReplaceAll(name, "_", "-"), "-")
+	lang := strings.ToLower(parts[0])
+	if len(lang) < 2 || len(lang) > 3 || lang == "c" || lang == "posix" {
+		return ""
+	}
+	for _, r := range lang {
+		if r < 'a' || r > 'z' {
+			return ""
+		}
+	}
+	tag := lang
+	region := ""
+	for _, p := range parts[1:] {
+		if len(p) == 2 && region == "" {
+			region = strings.ToUpper(p)
+		}
+	}
+	for _, k := range strings.Split(kw, ";") {
+		if v, ok := strings.CutPrefix(k, "rg="); ok && len(v) >= 2 {
+			region = strings.ToUpper(v[:2])
+		}
+	}
+	if region != "" {
+		tag += "-" + region
+	}
+	return tag
+}
 
 func cachedHourCycle() string {
 	c := &hourCycleCache

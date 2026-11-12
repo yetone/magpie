@@ -20643,13 +20643,14 @@ function sysLocale(sys) {
 
 // intlLang is the tag every date, time and number the GUI shows is
 // formatted in: the GUI's language, never the system's alone. English takes
-// the system's own English (en-GB keeps its day-month order) and is plain
+// the system's own English (en-GB keeps its day-month order; so does the
+// region a Mac is set to, boot.js "locale", over the webview's en-US) and is plain
 // "en" on a system in another language, so a Chinese Mac set to English
 // reads "Oct 11", not "10月11日" (#1843). Never format with no locale, [] or
 // undefined: those follow the system, not the language picked here.
 const LANG_TAGS = { zh: "zh-CN", "zh-TW": "zh-TW", ja: "ja-JP", de: "de-DE" };
 function intlLang() {
-  const sys = navigator.language || "", hc = window.bootPrefs?.hourCycle;
+  const sys = window.bootPrefs?.locale || navigator.language || "", hc = window.bootPrefs?.hourCycle;
   const base = LANG_TAGS[locale] || (/^en(-|$)/i.test(sys) ? sys : "en");
   return hc ? base.replace(/-u-.*/, "") + "-u-hc-" + hc : base;
 }

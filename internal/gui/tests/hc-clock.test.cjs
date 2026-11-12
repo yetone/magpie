@@ -10,11 +10,11 @@ const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
 
-function serve(hc) {
+function serve(hc, loc) {
   return async (r) => {
     const url = new URL(r.request().url());
     const json = (data) => r.fulfill({ json: data });
-    const boot = `window.bootPrefs = {lang:"en",theme:"light",web:false${hc ? `,hourCycle:"${hc}"` : ""}};`;
+    const boot = `window.bootPrefs = {lang:"en",theme:"light",web:false${hc ? `,hourCycle:"${hc}"` : ""}${loc ? `,locale:"${loc}"` : ""}};`;
     if (url.pathname === "/boot.js") return r.fulfill({ contentType: "text/javascript", body: boot });
     if (url.pathname === "/wails/runtime.js") return r.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang: "en", theme: "light" } });
@@ -32,6 +32,9 @@ const cases = [
   { hc: "h12", locale: "en-GB", plain: "3:05", fixed: "3:05" },
   // the system says nothing: the region's own, and the GUI's 24-hour places
   { hc: "", locale: "en-US", plain: "3:05", fixed: "15:05" },
+  // no override, a webview saying en-US, and a Mac whose region is Japan
+  // (AppleLocale en_JP): the system's tag decides, 24 hours (iXerol on X)
+  { hc: "", locale: "en-US", sys: "en-JP", plain: "15:05", fixed: "15:05" },
 ];
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -43,7 +46,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       page.setDefaultTimeout(5000);
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
-      await page.route("**/*", serve(c.hc));
+      await page.route("**/*", serve(c.hc, c.sys));
       await page.goto("http://magpie.test/");
       await page.waitForFunction(() => typeof intlLang === "function");
       const out = await page.evaluate(() => {
@@ -55,7 +58,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       });
       if (c.hc === "h12") { assert.match(out.plain, /3:05/); assert.match(out.plain, /pm/i); assert.match(out.fixed, /pm/i); }
       if (c.hc === "h23") { assert.match(out.plain, /^15:05/); assert.match(out.fixed, /^15:05/); }
-      if (c.hc === "") { assert.match(out.plain, /3:05.*pm/i); assert.match(out.fixed, /^15:05/); }
+      if (c.sys === "en-JP") { assert.match(out.plain, /^15:05/); assert.equal(await page.evaluate(() => intlLang()), "en-JP"); }
+      else if (c.hc === "") { assert.match(out.plain, /3:05.*pm/i); assert.match(out.fixed, /^15:05/); }
       assert.deepEqual(errors, []);
     });
   }

@@ -22,6 +22,27 @@ func TestForcedHourCycle(t *testing.T) {
 	}
 }
 
+func TestLocaleTag(t *testing.T) {
+	for raw, want := range map[string]string{
+		"en_JP\n":                 "en-JP",
+		"en_US":                   "en-US",
+		"en-JP":                   "en-JP",
+		"en_JP.UTF-8":             "en-JP",
+		"en_US@rg=jpzzzz":         "en-JP",
+		"en_US@calendar=japanese": "en-US",
+		"zh_Hans_CN":              "zh-CN",
+		"en":                      "en",
+		"C":                       "",
+		"POSIX":                   "",
+		"C.UTF-8":                 "",
+		"":                        "",
+	} {
+		if got := localeTag(raw); got != want {
+			t.Errorf("localeTag(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
+
 func TestWindowsHourCycle(t *testing.T) {
 	for format, want := range map[string]string{
 		"HH:mm:ss":    "h23",
@@ -69,5 +90,16 @@ func TestBootSaysHourCycle(t *testing.T) {
 	systemHourCycle = func() string { return "" }
 	if b := boot(Handler(nil, nil)); strings.Contains(b, "hourCycle") {
 		t.Fatalf("the system names none: %s", b)
+	}
+	// a Mac set to English in Japan: no clock override, and the region is
+	// the system's (iXerol on X)
+	prevLoc := systemLocale
+	t.Cleanup(func() { systemLocale = prevLoc })
+	systemLocale = func() string { return "en-JP" }
+	if b := boot(Handler(nil, nil)); !strings.Contains(b, `"locale":"en-JP"`) || strings.Contains(b, "hourCycle") {
+		t.Fatalf("the app, region Japan and no override: %s", b)
+	}
+	if b := boot(webPageHandler(t, webHost{}, nil)); strings.Contains(b, "locale") {
+		t.Fatalf("a browser tab keeps its own locale: %s", b)
 	}
 }

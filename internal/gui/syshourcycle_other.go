@@ -2,7 +2,11 @@
 
 package gui
 
-import "github.com/yetone/magpie/internal/proc"
+import (
+	"os"
+
+	"github.com/yetone/magpie/internal/proc"
+)
 
 // readHourCycle asks GNOME (and what follows its setting: Cinnamon,
 // Budgie, Omarchy's GNOME apps) for the clock format; other desktops say
@@ -13,4 +17,15 @@ func readHourCycle() string {
 		return ""
 	}
 	return gnomeHourCycle(string(out))
+}
+
+// readLocale is the locale the session sets for times (LC_ALL, LC_TIME,
+// then LANG), as every GTK app reads it.
+func readLocale() string {
+	for _, k := range []string{"LC_ALL", "LC_TIME", "LANG"} {
+		if v := os.Getenv(k); v != "" {
+			return localeTag(v)
+		}
+	}
+	return ""
 }
