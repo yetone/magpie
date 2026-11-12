@@ -1204,6 +1204,18 @@ each one.
     Their CI runs were cancelled by the next push, and ubuntu fails at
     apt (#6198), so no run showed it. A new package-level value runs
     `go test .` at the root too.
+- **11-12, criteria still missed.**
+  - The same root guard a fourth day running: 36eebea13 (the Update
+    pill) put `regexp.MustCompile` at package level in
+    internal/update/behind.go, and TestNoEagerPackageRegexps was red on
+    ubuntu and macOS CI at 67f61bd78 until 10e783080. Its body names no
+    run of `.`. The rule has been written here on 11-10 and 11-11 and is
+    still missed, so writing it again won't hold it: the guard should
+    run where every chosen-package run already goes (a vet check, or
+    the same test in each package that has package-level vars), not only
+    in the root package.
+  - A test swapped time.Local (4028687b8), and main went red under
+    -race; see "A test never swaps time.Local" above.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
