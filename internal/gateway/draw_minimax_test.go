@@ -45,6 +45,9 @@ func (f *minimaxImages) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			answer = `{"id":"03ff3cd0820949eb8a410056b5f21d38","data":{"image_base64":["` + base64.StdEncoding.EncodeToString(pngBytes) + `"]},"metadata":{"failed_count":"0","success_count":"1"},"base_resp":{"status_code":0,"status_msg":"success"}}`
 		}
 		io.WriteString(w, answer)
+	case "/v1/images/generations", "/v1/images/edits":
+		// H3-Image, as platform.minimax.io/docs/guides/image-generation has it
+		io.WriteString(w, `{"created":1792308690,"model":"MiniMax-H3-Image","output_format":"jpeg","data":[{"b64_json":"`+base64.StdEncoding.EncodeToString(pngBytes)+`","size":"2720x1536","revised_prompt":"a cat, revised"},{"error":{"code":"1027","message":"output image failed content safety check"}}],"usage":{"generated_images":1}}`)
 	case "/v1/chat/completions":
 		w.WriteHeader(400)
 		io.WriteString(w, `{"type":"error","error":{"type":"bad_request_error","message":"invalid params, unknown model 'image-01' (2013)","http_code":"400"},"request_id":"1"}`)
@@ -201,5 +204,77 @@ func TestMiniMaxDrawingOnlyAtMiniMax(t *testing.T) {
 		!drawsMiniMax(provider.Provider{ID: "mm", Chat: "https://api.minimax.cn/v1", Key: "k"}, "image-01-live") ||
 		drawsMiniMax(provider.Provider{ID: "minimax", Chat: "https://api.minimax.io/v1", Key: "k"}, "MiniMax-M3") {
 		t.Fatal("drawsMiniMax")
+	}
+}
+
+// netube99 on X: MiniMax's list lacked MiniMax-H3-Image. Both H3 image ids
+// of the docs are offered, and draw on /v1/images/generations (or /edits
+// with images[].image_url), not image_generation; the failed item of a
+// partial answer is skipped.
+func TestMiniMaxH3ImageDraws(t *testing.T) {
+	for _, preset := range []string{"minimax", "minimax-cn"} {
+		t.Run(preset, func(t *testing.T) {
+			s, f, p := minimaxDrawing(t, preset)
+			have := map[string]bool{}
+			for _, m := range OfferedDrawers(p) {
+				have[m.ID] = true
+			}
+			if !have["MiniMax-H3-Image"] || !have["MiniMax-H3-Image-Highspeed"] || !have["image-01"] {
+				t.Fatalf("offered %v", have)
+			}
+			code, a, raw := postImages(t, s, "/v1/images/generations", "application/json", `{"model":"`+preset+`/MiniMax-H3-Image-Highspeed","prompt":"a cat","n":2,"size":"2720x1536"}`)
+			if code != 200 || len(a.Data) != 1 {
+				t.Fatalf("%d %s", code, raw)
+			}
+			if strings.Join(f.paths, ",") != "/v1/images/generations" {
+				t.Fatalf("asked %v", f.paths)
+			}
+			m := f.sent(t)
+			if m["model"] != "MiniMax-H3-Image-Highspeed" || m["n"] != float64(2) || m["size"] != "2720x1536" {
+				t.Fatalf("sent %v", m)
+			}
+			if _, ok := m["aspect_ratio"]; ok {
+				t.Fatalf("a size beside a ratio: %v", m)
+			}
+			f.mu.Lock()
+			f.paths = nil
+			f.mu.Unlock()
+			code, _, raw = postImages(t, s, "/v1/images/edits", "application/json", `{"model":"`+preset+`/MiniMax-H3-Image","prompt":"swap","image":["https://example.com/a.jpg","https://example.com/b.png"]}`)
+			if code != 200 || strings.Join(f.paths, ",") != "/v1/images/edits" {
+				t.Fatalf("%d %s asked %v", code, raw, f.paths)
+			}
+			imgs, _ := f.sent(t)["images"].([]any)
+			if len(imgs) != 2 || imgs[1].(map[string]any)["image_url"] != "https://example.com/b.png" {
+				t.Fatalf("sent %v", f.sent(t))
+			}
+		})
+	}
+}
+
+// A size is the one form H3-Image takes: WIDTHxHEIGHT as it is when it
+// can draw it, else a ratio and a tier, never both.
+func TestMiniMaxH3Size(t *testing.T) {
+	for _, c := range []struct{ size, want string }{
+		{"", `{}`},
+		{"auto", `{}`},
+		{"1024x1024", `{"size":"1024x1024"}`},
+		{"2720x1536", `{"size":"2720x1536"}`},
+		{"16:9", `{"aspect_ratio":"16:9"}`},
+		{"2K", `{"area":"2K"}`},
+		{"512x512", `{"area":"1K","aspect_ratio":"1:1"}`},
+		{"6000x4000", `{"area":"4K","aspect_ratio":"3:2"}`},
+		{"4000x1000", `{"area":"2K","aspect_ratio":"3:1"}`},
+		{"1x400", `{"area":"1K","aspect_ratio":"1:3"}`},
+		{"4:1", `{}`},
+		{"nonsense", `{}`},
+	} {
+		req := map[string]any{}
+		minimaxH3Size(req, c.size)
+		if b, _ := json.Marshal(req); string(b) != c.want {
+			t.Errorf("%q: %s, want %s", c.size, b, c.want)
+		}
+	}
+	if _, _, err := minimaxH3Body("MiniMax-H3-Image", drawing{Prompt: "x", Mask: &picture{}}); err == nil {
+		t.Error("a mask was taken")
 	}
 }

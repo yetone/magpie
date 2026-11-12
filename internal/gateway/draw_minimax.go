@@ -37,6 +37,115 @@ import (
 var minimaxDrawModels = []catalog.Model{
 	{ID: "image-01", Name: "MiniMax Image-01", Draws: true, Images: true},
 	{ID: "image-01-live", Name: "MiniMax Image-01 Live", Draws: true, Images: true},
+	{ID: "MiniMax-H3-Image", Name: "MiniMax H3 Image", Draws: true, Images: true},
+	{ID: "MiniMax-H3-Image-Highspeed", Name: "MiniMax H3 Image Highspeed", Draws: true, Images: true},
+}
+
+// minimaxH3Image is whether model is one of MiniMax's H3 image models, which
+// draw on an OpenAI-shaped images API of their own (platform.minimax.io/docs/
+// guides/image-generation): POST <host>/v1/images/generations, and
+// /v1/images/edits with images[].image_url, answered with data[].url
+// (netube99 on X: the list lacked MiniMax-H3-Image).
+func minimaxH3Image(model string) bool {
+	return strings.EqualFold(model, "MiniMax-H3-Image") || strings.EqualFold(model, "MiniMax-H3-Image-Highspeed")
+}
+
+// minimaxH3Size puts an images API size into req as H3-Image takes it: a
+// WIDTHxHEIGHT of 655,360 to 20,000,000 pixels within 1:3 and 3:1 as it is;
+// else the other form (a ratio X:Y within 1:3 and 3:1, a tier 1K, 2K or 4K,
+// never together with a size): a tier as the tier, a ratio as the ratio,
+// and a pixel size it can't draw as its ratio and the tier nearest to it.
+// Nothing asked is the vendor's own: auto at 4K.
+func minimaxH3Size(req map[string]any, size string) {
+	size = strings.ToLower(strings.TrimSpace(size))
+	switch size {
+	case "", "auto":
+		return
+	case "1k", "2k", "4k":
+		req["area"] = strings.ToUpper(size)
+		return
+	}
+	if strings.Contains(size, ":") {
+		if ratioWithin(size) {
+			req["aspect_ratio"] = size
+		}
+		return
+	}
+	w, h, ok := strings.Cut(size, "x")
+	x, err1 := strconv.Atoi(strings.TrimSpace(w))
+	y, err2 := strconv.Atoi(strings.TrimSpace(h))
+	if !ok || err1 != nil || err2 != nil || x <= 0 || y <= 0 {
+		return
+	}
+	area := x * y
+	if area >= 655360 && area <= 20000000 && x <= 3*y && y <= 3*x {
+		req["size"] = strconv.Itoa(x) + "x" + strconv.Itoa(y)
+		return
+	}
+	switch g := gcd(x, y); {
+	case x > 3*y:
+		req["aspect_ratio"] = "3:1"
+	case y > 3*x:
+		req["aspect_ratio"] = "1:3"
+	default:
+		req["aspect_ratio"] = strconv.Itoa(x/g) + ":" + strconv.Itoa(y/g)
+	}
+	switch {
+	case area <= 1024*1024:
+		req["area"] = "1K"
+	case area <= 2048*2048:
+		req["area"] = "2K"
+	default:
+		req["area"] = "4K"
+	}
+}
+
+// ratioWithin is whether r is an X:Y H3-Image takes: 1 to 300 each, within
+// 1:3 and 3:1.
+func ratioWithin(r string) bool {
+	a, b, _ := strings.Cut(r, ":")
+	x, err1 := strconv.Atoi(a)
+	y, err2 := strconv.Atoi(b)
+	return err1 == nil && err2 == nil && x >= 1 && y >= 1 && x <= 300 && y <= 300 && x <= 3*y && y <= 3*x
+}
+
+func gcd(a, b int) int {
+	for b != 0 {
+		a, b = b, a%b
+	}
+	return a
+}
+
+// minimaxH3Body is d as H3-Image's images API takes it, and the path it is
+// asked at. The images of an edit go as JSON, each as images[].image_url (a
+// URL or a data URL); it takes no mask, and has no markup layer.
+func minimaxH3Body(model string, d drawing) ([]byte, string, error) {
+	if d.Mask != nil {
+		return nil, "", errors.New("MiniMax-H3-Image takes no mask: say in the prompt what to change")
+	}
+	if d.Markup != nil {
+		return nil, "", errors.New("MiniMax-H3-Image takes no markup layer: say in the prompt what to change")
+	}
+	if len(d.Images) > 16 {
+		return nil, "", errors.New("MiniMax-H3-Image takes at most 16 reference images")
+	}
+	req := map[string]any{"model": model, "prompt": d.Prompt, "n": min(max(d.N, 1), 10)}
+	minimaxH3Size(req, d.Size)
+	switch f := strings.ToLower(d.Format); f {
+	case "png", "jpeg", "jpg", "webp":
+		req["output_format"] = f
+	}
+	path := "/v1/images/generations"
+	if len(d.Images) > 0 {
+		path = "/v1/images/edits"
+		var imgs []map[string]string
+		for _, pic := range d.Images {
+			imgs = append(imgs, map[string]string{"image_url": pic.dataURL()})
+		}
+		req["images"] = imgs
+	}
+	b, err := json.Marshal(req)
+	return b, path, err
 }
 
 // minimaxDrawRatios are the aspect ratios image_generation takes, each with
@@ -126,6 +235,18 @@ func minimaxDrawBody(model string, d drawing) ([]byte, error) {
 }
 
 func (s *Server) drawMiniMax(ctx context.Context, p provider.Provider, model string, d drawing) (drawn, int, error) {
+	if minimaxH3Image(model) {
+		body, path, err := minimaxH3Body(model, d)
+		if err != nil {
+			return drawn{}, http.StatusBadRequest, err
+		}
+		url := minimaxHost(p) + path
+		b, code, err := s.send(ctx, p, url, "application/json", body, true)
+		if err != nil {
+			return drawn{}, code, err
+		}
+		return readImagesAnswer(p, url, b, code)
+	}
 	body, err := minimaxDrawBody(model, d)
 	if err != nil {
 		return drawn{}, http.StatusBadRequest, err
