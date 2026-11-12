@@ -212,6 +212,8 @@ magpie quota auto-reset on
 magpie quota credits off</pre></div>
     <ul><li><code>magpie quota reset</code> spends one, starting the account's current windows again. It can't be undone, so it asks first; <code>--yes</code> doesn't.</li><li><code>magpie quota auto-reset on</code> lets the account spend one by itself when its weekly window is used up and no other account can take a request, one a week at most (the five hours running out never does), and spend the one about to expire about half an hour before it does, if the account's windows have been used. Off until turned on.</li><li><code>magpie quota credits off</code> keeps a Codex account from spending its credits once a window is used up: routing holds it as used up and the request goes to the other accounts, groups and fallbacks. On, the default, lets the task go on.</li></ul>
 
+    <p><a href="/docs/usage">Token usage and cost per agent</a>: what each agent, model, account and session spent, and a relay's real price.</p>
+
     <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
     <h3>How do I see Claude Code's five hours and week left?</h3>
     <p>Run magpie quota, or open magpie's Usage page. A Claude account's use updates as Claude Code answers or runs /usage; magpie quota refresh claude runs /usage to read it again.</p>

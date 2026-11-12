@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>查看 Claude Code、Codex 每次请求用了多少 Token、花了多少钱：按 Agent、模型和账号统计 · magpie</title>
+<meta name="description" content="magpie 记下经过它的每次请求：按 Agent、模型和订阅账号统计 Token 和费用，导出 CSV，看每个会话花了多少，给中转站或打折供应商设置真实价格，在 Claude Code 状态栏显示用量，以及用 /v1/magpie/usage 从其他程序读取。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/usage">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/usage">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/usage">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/usage">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/usage">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="查看 Agent 的 Token 用量和费用">
+<meta property="og:description" content="magpie 记下经过它的每次请求：按 Agent、模型和订阅账号统计 Token 和费用，导出 CSV，看每个会话花了多少，给中转站或打折供应商设置真实价格，在 Claude Code 状态栏显示用量，以及用 /v1/magpie/usage 从其他程序读取。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/usage">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "查看 Agent 的 Token 用量和费用",
+   "description": "magpie 记下经过它的每次请求：按 Agent、模型和订阅账号统计 Token 和费用，导出 CSV，看每个会话花了多少，给中转站或打折供应商设置真实价格，在 Claude Code 状态栏显示用量，以及用 /v1/magpie/usage 从其他程序读取。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/usage",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "怎么看 Claude Code 花了多少钱？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "通过 magpie 用 Claude Code 时，每次请求都会记下 Token 和估算费用。在用量页按 Agent 查看，或运行 magpie usage；每个会话的花费在会话页或 magpie sessions。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "中转站的价格和官方不一样，怎么算准？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "用 magpie model price <供应商>/<模型> 输入,输出,缓存读取,缓存写入 设置它实际收的价格（美元每百万 Token），用量和会话合计就按这个算。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "能导出每条请求吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。magpie usage --csv 导出每个请求，含模型、Token、费用、时间、状态和账号；加 --account 只导出一个账号的。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "为什么有的请求没有费用？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "找不到价格的请求不计入合计，用量页会写明有几次未定价。给它设个价格就会计入。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/zh/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "文档",
+     "item": "https://usemagpie.ai/docs/zh/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "查看 Agent 的 Token 用量和费用",
+     "item": "https://usemagpie.ai/docs/zh/usage"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/usage" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/usage" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/usage" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Usage</p>
+    <a href="#overview">记了什么</a>
+    <a href="#cli">命令行查看</a>
+    <a href="#sessions">每个会话花了多少</a>
+    <a href="#price">价格从哪来</a>
+    <a href="#unpriced">没有价格的请求</a>
+    <a href="#statusline">Claude Code 状态栏</a>
+    <a href="#api">从其他程序读取</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 指南</p>
+    <h1>查看 Agent 的 Token 用量和费用</h1>
+    <p class="lede">经过 magpie 的每次请求都会记下来：哪个 Agent、问的哪个模型、实际由哪个模型回答、哪个账号、多少 Token、估算多少钱、用时和状态。<span class="ui">用量</span> 页按 Agent、模型和订阅账号汇总，<span class="ui">请求</span> 页列出每一条。用 Claude Code、Codex 等时，不用另装统计工具就能知道钱花在哪里。</p>
+    <h2 id="cli"><a class="anchor" href="#cli">命令行查看</a></h2>
+    <p>同样的数字在命令行里也能看，默认是最近 30 天：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="use-cli">复制</button><pre id="use-cli">magpie usage                      # the last 30 days: tokens and cost per agent, model and account
+magpie usage today                # or 7d, 30d, all
+magpie usage --last 24h           # a window ending now (90m, 1.5 days…)
+magpie usage --csv 7d             # every request as CSV
+magpie usage --csv --account <name> 30d</pre></div>
+    <p><code>--last</code> 和 <code>--days</code> 统计截至现在的一段时间，而不是从某天零点算起。CSV 里每一行是一个请求：请求的模型、发出的模型和实际回答的模型、Token、费用、时间、状态和账号。</p>
+    <h2 id="sessions"><a class="anchor" href="#sessions">每个会话花了多少</a></h2>
+    <p><span class="ui">会话</span> 页和 <code>magpie sessions</code> 列出 Claude Code、Codex、OpenCode、Pi 等 Agent 最近的会话，以及每个会话的花费，可以按模型或项目文件夹筛选：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="use-ses">复制</button><pre id="use-ses">magpie sessions                   # the latest sessions, with what each cost
+magpie sessions --days 7          # what every session spent, day by day
+magpie sessions --model <m> --folder <f> --json
+magpie sessions read              # which agents' history magpie may read</pre></div>
+    <p>Agent 自己的会话文件，要你允许该 Agent 后 magpie 才会读取，默认一个都不读。允许后，没经过 magpie 的请求（比如 Claude Code 直接登录 claude.ai 时）也能从这些文件计入用量。</p>
+    <h2 id="price"><a class="anchor" href="#price">价格从哪来</a></h2>
+    <p>每次请求按“实际价格”计费：你给该供应商和模型设了价格就用你的；没设就用供应商自己目录里的价格；再没有就用 models.dev 上模型厂商的价格。</p>
+    <p>中转站打折或按倍率卖时，厂商的价格就不对了。告诉 magpie 它实际收多少，用量和会话的合计就会按这个算：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="use-price">复制</button><pre id="use-price">magpie model price relay-a/gpt-5.5                        # what it is counted at, and where that came from
+magpie model price relay-a/gpt-5.5 0.12,0.60,0.01,0.15   # input,output,cache read,cache write
+magpie model price relay-a/gpt-5.5 --reset
+magpie model prices                                       # every model you priced</pre></div>
+    <ul><li>四个数字依次是输入、输出、缓存读取、缓存写入，单位是美元每百万 Token，四个都要填。<code>0</code> 表示免费，也算一个价格。</li><li>也可以在供应商编辑器里该模型下面填。</li><li>可以加第五个数字，表示 1 小时缓存写入的价格。Claude 模型不填时按 Anthropic 的规则算，即输入价的 2 倍。</li><li>供应商实际换了模型回答时，按回答的那个模型计费，因为供应商按它收费。</li></ul>
+    <h2 id="unpriced"><a class="anchor" href="#unpriced">没有价格的请求</a></h2>
+    <p>找不到价格的请求不计入合计费用，也不会当成免费。<span class="ui">用量</span> 页会在合计旁写明有几次请求没定价（比如“3 个没有价格”），<code>magpie usage</code> 也会在合计后说明。magpie 不会按相似的名字猜价格：<code>-auto</code>、<code>-max</code>、<code>-fast</code> 等变体价格可能不同，请用 <code>magpie model price</code> 设置。</p>
+    <h2 id="statusline"><a class="anchor" href="#statusline">Claude Code 状态栏</a></h2>
+    <p><code>magpie statusline</code> 给 Claude Code 的状态栏输出一行：本会话最近一轮用的模型，以及每个订阅账号各个窗口的用量，星号标出最近回答的账号。在 <span class="ui">Agent</span> 页 Claude Code 那一行打开状态栏，或者运行：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="use-sl">复制</button><pre id="use-sl">magpie claude statusline on
+# → claude/claude-opus-5-5 | claude a@example.com* 5h 62% 7d 41% | claude B 5h 8% 7d 30%</pre></div>
+    <p>你自己的状态栏（claude-hud 或脚本）不会被覆盖。不论 Claude Code 怎么登录网关都能用。</p>
+    <h2 id="api"><a class="anchor" href="#api">从其他程序读取</a></h2>
+    <p>用量页的汇总和请求列表也能通过网关读取，只读，不含对话内容：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="use-api">复制</button><pre id="use-api">GET /v1/magpie/usage
+GET /v1/magpie/usage/requests</pre></div>
+    <p>从其他电脑读取需要网关密钥。限定了预算、模型或账号的密钥读不到汇总，请求列表只含它自己的请求。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>怎么看 Claude Code 花了多少钱？</h3>
+    <p>通过 magpie 用 Claude Code 时，每次请求都会记下 Token 和估算费用。在用量页按 Agent 查看，或运行 magpie usage；每个会话的花费在会话页或 magpie sessions。</p>
+    <h3>中转站的价格和官方不一样，怎么算准？</h3>
+    <p>用 magpie model price <供应商>/<模型> 输入,输出,缓存读取,缓存写入 设置它实际收的价格（美元每百万 Token），用量和会话合计就按这个算。</p>
+    <h3>能导出每条请求吗？</h3>
+    <p>能。magpie usage --csv 导出每个请求，含模型、Token、费用、时间、状态和账号；加 --account 只导出一个账号的。</p>
+    <h3>为什么有的请求没有费用？</h3>
+    <p>找不到价格的请求不计入合计，用量页会写明有几次未定价。给它设个价格就会计入。</p>
+
+    <p style="margin-top:48px">相关页面：<a href="/docs/zh/quota">查看 Claude、Codex 等订阅的剩余额度</a>、<a href="/docs/zh/routing-groups">多个账号、Key 和供应商轮询与故障切换</a>。遇到报错？见 <a href="/docs/zh/troubleshooting">常见错误排查：401、429、502、504 等</a>，或到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

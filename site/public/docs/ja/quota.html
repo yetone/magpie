@@ -212,6 +212,8 @@ magpie quota auto-reset on
 magpie quota credits off</pre></div>
     <ul><li><code>magpie quota reset</code> は一回使って、アカウントの現在の枠を再開させます。取り消せないので先に確認します。<code>--yes</code> なら確認しません。</li><li><code>magpie quota auto-reset on</code> は、週の枠を使い切りほかのアカウントも受けられないときに自分で一回使います（週に一回まで、5 時間枠の使い切りでは使いません）。期限切れ間近のものは、枠を使っていれば期限の約 30 分前に使います。既定はオフです。</li><li><code>magpie quota credits off</code> は、枠を使い切った Codex アカウントにクレジットを使わせません。ルーティングは使い切りとして扱い、リクエストはほかのアカウント、グループ、フォールバックへ回ります。既定のオンなら作業が続きます。</li></ul>
 
+    <p><a href="/docs/ja/usage">エージェントごとのトークン使用量とコスト</a>：エージェント・モデル・アカウント・セッションごとの費用と、中継サービスの実際の価格。</p>
+
     <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
     <h3>Claude Code の 5 時間枠と週の残りはどう見ますか？</h3>
     <p>magpie quota を実行するか、magpie の 使用量 タブを開きます。Claude アカウントの使用量は Claude Code が答えるか /usage を実行したときに更新され、magpie quota refresh claude で /usage を実行して読み直せます。</p>

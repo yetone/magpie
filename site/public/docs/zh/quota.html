@@ -212,6 +212,8 @@ magpie quota auto-reset on
 magpie quota credits off</pre></div>
     <ul><li><code>magpie quota reset</code> 用掉一次，让账号当前的窗口重新开始。不能撤销，所以会先问；<code>--yes</code> 不问。</li><li><code>magpie quota auto-reset on</code>：每周窗口用完、又没有别的账号能接请求时，让账号自己用掉一次，每周最多一次（5 小时窗口用完从不会触发）；快过期的那次会在过期前约半小时用掉（如果账号的窗口用过）。默认关闭。</li><li><code>magpie quota credits off</code>：窗口用完后不让 Codex 账号花 credits，路由把它当作用完，请求交给其他账号、组和备用。默认 on，任务能继续。</li></ul>
 
+    <p><a href="/docs/zh/usage">查看 Agent 的 Token 用量和费用</a>：每个 Agent、模型、账号和会话花了多少，以及给中转站设置真实价格。</p>
+
     <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
     <h3>怎么查看 Claude Code 剩余的 5 小时和每周额度？</h3>
     <p>运行 magpie quota，或打开 magpie 的 用量 页。Claude 账号的用量在 Claude Code 应答或运行 /usage 时更新；magpie quota refresh claude 会运行 /usage 重新读取。</p>

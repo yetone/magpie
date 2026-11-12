@@ -9151,6 +9151,8 @@ magpie quota credits off
 - `magpie quota auto-reset on` lets the account spend one by itself when its weekly window is used up and no other account can take a request, one a week at most (the five hours running out never does), and spend the one about to expire about half an hour before it does, if the account's windows have been used. Off until turned on.
 - `magpie quota credits off` keeps a Codex account from spending its credits once a window is used up: routing holds it as used up and the request goes to the other accounts, groups and fallbacks. On, the default, lets the task go on.
 
+[Token usage and cost per agent](https://usemagpie.ai/docs/usage): what each agent, model, account and session spent, and a relay's real price.
+
 ## FAQ
 
 ### How do I see Claude Code's five hours and week left?
@@ -9250,6 +9252,105 @@ Give Claude Code Magpie Image from the Library. It then has a generate_image too
 Yes. Add /mcp/magpie/vision to Cursor as an MCP server (Streamable HTTP) and it has the analyze_image tool.
 
 Related: [Web search for any model](https://usemagpie.ai/docs/web-search), [DeepSeek in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/deepseek). Hit an error? See [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/usage
+
+# Token usage and cost per agent
+
+Every request through magpie is recorded: the agent, the model asked for and the one that answered, the account, the tokens, an estimated cost, the time and the status. The Usage page sums them per agent, model and subscription account, and the Requests page lists each one. With Claude Code, Codex and the rest, you see where the money goes without another tracking tool.
+
+## On the command line
+
+The same numbers are on the command line, the last 30 days by default:
+
+```
+magpie usage                      # the last 30 days: tokens and cost per agent, model and account
+magpie usage today                # or 7d, 30d, all
+magpie usage --last 24h           # a window ending now (90m, 1.5 days…)
+magpie usage --csv 7d             # every request as CSV
+magpie usage --csv --account  30d
+```
+
+`--last` and `--days` count a window ending now, not from a midnight. Each CSV row is one request: the model asked for, sent and served, tokens, cost, time, status and account.
+
+## What each session cost
+
+The Sessions page and `magpie sessions` list the latest Claude Code, Codex, OpenCode, Pi and other agents' sessions with what each cost, filtered by model or project folder:
+
+```
+magpie sessions                   # the latest sessions, with what each cost
+magpie sessions --days 7          # what every session spent, day by day
+magpie sessions --model  --folder  --json
+magpie sessions read              # which agents' history magpie may read
+```
+
+An agent's own session files are read only once you allow that agent; none are read until then. Once allowed, calls that didn't go through magpie (Claude Code signed in to claude.ai directly, say) reach Usage from those files too.
+
+## Where a price comes from
+
+A call is counted at its effective price: what you set for that provider and model if you did, otherwise what the provider's own catalogue lists, otherwise what models.dev lists for the model's maker.
+
+A relay that resells at a discount or a multiplier isn't charging the maker's price. Say what it actually charges, and Usage and the session totals use that:
+
+```
+magpie model price relay-a/gpt-5.5                        # what it is counted at, and where that came from
+magpie model price relay-a/gpt-5.5 0.12,0.60,0.01,0.15   # input,output,cache read,cache write
+magpie model price relay-a/gpt-5.5 --reset
+magpie model prices                                       # every model you priced
+```
+
+- The four numbers are input, output, cache read and cache write, in USD per million tokens, and all four are needed. `0` is a model served at no cost, which is a price.
+- Or set it in the provider's editor, under the model.
+- A fifth number is a 1-hour cache write's price. For a Claude model it defaults to 2× input, Anthropic's rule.
+- A call the vendor answered with another model is counted at the model that answered, the one the vendor billed for.
+
+## Calls with no price
+
+A call with no price is left out of a total's cost, never counted as free. The Usage page says how many calls it couldn't price beside the sum (3 unpriced, say), and `magpie usage` says so after its totals. magpie doesn't guess a variant's price from a similar name: `-auto`, `-max` and `-fast` can each cost differently, so give it one with `magpie model price`.
+
+## Claude Code's status line
+
+`magpie statusline` prints one line for Claude Code's status line: the model the session's latest turn went to, then each subscription account's windows, with `*` on the one that answered last. Turn it on from Claude Code's row on the Agents page, or:
+
+```
+magpie claude statusline on
+# → claude/claude-opus-5-5 | claude a@example.com* 5h 62% 7d 41% | claude B 5h 8% 7d 30%
+```
+
+A status line of your own (claude-hud, a script) is never written over. It works however Claude Code signs in to the gateway.
+
+## From other programs
+
+The Usage page's summary and request list are served by the gateway too, read-only and without conversation text:
+
+```
+GET /v1/magpie/usage
+GET /v1/magpie/usage/requests
+```
+
+From another computer they need a gateway key. A key held to a budget, models or accounts is refused the summary and gets only its own requests in the list.
+
+## FAQ
+
+### How do I see what Claude Code costs?
+
+With Claude Code going through magpie, every request is recorded with its tokens and an estimated cost. See it per agent on the Usage page or with magpie usage, and per session on the Sessions page or with magpie sessions.
+
+### My relay charges less than list price. How do I get the cost right?
+
+Set what it charges with magpie model price / input,output,cache read,cache write (USD per million tokens), and Usage and the session totals use it.
+
+### Can I export every request?
+
+Yes. magpie usage --csv exports each request with its models, tokens, cost, time, status and account; --account limits it to one account.
+
+### Why do some calls have no cost?
+
+A call with no known price is left out of the total, and the Usage page says how many are unpriced. Give the model a price and they are counted.
+
+Related: [Quota left on every subscription and key](https://usemagpie.ai/docs/quota), [Round robin and failover across accounts, keys and providers](https://usemagpie.ai/docs/routing-groups). Hit an error? See [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
