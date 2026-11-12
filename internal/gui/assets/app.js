@@ -20194,6 +20194,16 @@ function renderSettings() {
   repo.title = "github.com/yetone/magpie";
   repo.onclick = () => api("open", { url: "https://github.com/yetone/magpie" }).catch(() => {});
   row(t("Community"), t("questions, ideas and feedback, on Discord or GitHub"), "", join, repo);
+  // the facts that help a fix, copied (never put in the link), then the
+  // feedback post on X, to reply to there (River_WLan on X)
+  const report = el("button", "text", t("Open"));
+  report.onclick = async () => {
+    const f = await fetch("/api/feedback?surface=" + (web ? "browser" : "app")).then((r) => r.ok ? r.json() : null).catch(() => null);
+    if (!f) return status(t("Couldn't read the details to copy"), "err");
+    await copy(f.text, "", report, t("Details copied. Paste them in your reply"));
+    api("open", { url: f.url }).catch(statusErr);
+  };
+  row(t("Report a problem"), "", "", report);
   // magpie uninstall, from the app (Jevik_AI on X deleted magpie's folders
   // by hand and Codex kept pointing at a gateway that was gone). Never in a
   // browser: magpie web would be taken off the computer serving the page.

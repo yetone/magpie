@@ -1135,6 +1135,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	mux.Handle("/", devPage(revalidated(http.FileServer(http.FS(staticFS())))))
 	devRoutes(mux)
 	pluginPageRoutes(mux, isWeb(w))
+	feedbackRoutes(mux)
 	// boot.js hands the page the saved language and theme before it paints:
 	// they came only with the settings, so the tabs showed English first
 	mux.HandleFunc("GET /boot.js", func(rw http.ResponseWriter, r *http.Request) {
