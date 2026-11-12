@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -49,6 +50,10 @@ func loadRemote() (remoteConf, error) {
 	}
 	if err := json.Unmarshal(b, &c); err != nil {
 		return remoteConf{}, fmt.Errorf("%s: %w", remoteFile(), err)
+	}
+	// an address saved with its scheme twice reads as one
+	if c.URL != "" {
+		c.URL = provider.WithScheme(c.URL, "https")
 	}
 	return c, nil
 }
@@ -88,9 +93,7 @@ func remoteAddr(raw string) (addr, key string, err error) {
 	if raw == "" {
 		return "", "", errors.New("type the other magpie's address")
 	}
-	if !strings.Contains(raw, "://") {
-		raw = "https://" + raw
-	}
+	raw = provider.WithScheme(raw, "https")
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" || u.Hostname() == "" {
 		return "", "", fmt.Errorf("%q isn't an address such as https://magpie.example.com", raw)

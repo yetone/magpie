@@ -88,9 +88,7 @@ func (p *Provider) remoteMagpieEndpoints() {
 	if root == "" {
 		return
 	}
-	if !strings.Contains(root, "://") {
-		root = "http://" + root
-	}
+	root = strings.TrimRight(WithScheme(root, "http"), "/")
 	for _, suf := range []string{
 		"/v1/messages/count_tokens", "/v1/messages",
 		"/v1/chat/completions", "/v1/responses", "/v1/systemone",

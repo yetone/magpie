@@ -72,10 +72,7 @@ func parseAddress(addr string) (*url.URL, error) {
 	if strings.ContainsAny(addr, " \t\r\n") {
 		return nil, bad
 	}
-	s := addr
-	if !strings.Contains(s, "://") {
-		s = "http://" + s
-	}
+	s := WithScheme(addr, "http")
 	u, err := url.Parse(s)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
 		return nil, bad

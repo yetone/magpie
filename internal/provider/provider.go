@@ -1865,10 +1865,9 @@ func normalize(p Provider) Provider {
 	}
 	p.remoteMagpieEndpoints()
 	for _, u := range []*string{&p.Chat, &p.Responses, &p.Anthropic, &p.Gemini, &p.Decide, &p.Website, &p.KeysURL} {
-		*u = strings.TrimRight(strings.TrimSpace(*u), "/")
-		if *u != "" && !strings.Contains(*u, "://") {
-			*u = "https://" + *u
-		}
+		// a scheme already there stays (WithScheme), whatever its case; one
+		// saved twice by an older editor is one again
+		*u = strings.TrimRight(WithScheme(*u, "https"), "/")
 	}
 	// the Anthropic base is the root /v1/messages is asked at: one given as
 	// .../v1 or .../v1/messages, as vendors' docs often show it, would have

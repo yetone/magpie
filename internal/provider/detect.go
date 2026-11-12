@@ -205,9 +205,7 @@ func (q Provider) detectOne(proto Protocol, m string, wait time.Duration) (Detec
 // the one p is asked with when none is given, and says how it answered.
 func (p Provider) DetectDecide(ctx context.Context, model string) Detection {
 	p.Decide = strings.TrimSuffix(strings.TrimRight(strings.TrimSpace(p.Decide), "/"), "/systemone")
-	if p.Decide != "" && !strings.Contains(p.Decide, "://") {
-		p.Decide = "https://" + p.Decide
-	}
+	p.Decide = WithScheme(p.Decide, "https")
 	if model = strings.TrimSpace(model); model == "" {
 		model = p.Jev()
 	}

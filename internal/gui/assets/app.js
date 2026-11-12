@@ -9213,10 +9213,7 @@ const apiLabel = (proto) => (PROTOS.find(([k]) => k === proto) || [])[1] || prot
 // vertexBase: a Vertex AI provider's address (provider.vertexBase), "" till its project is one
 // vertexRoot: the base URL typed as a root, as provider.vertexRootOf keeps it
 function vertexRoot(u) {
-  u = (u || "").trim().replace(/\/+$/, "");
-  if (!u) return "";
-  if (!u.includes("://")) u = "https://" + u;
-  return u.replace(/\/v1(?:beta1)?$/, "");
+  return withScheme(u, "https").replace(/\/+$/, "").replace(/\/v1(?:beta1)?$/, "");
 }
 function vertexBase(v, keyed) {
   const project = (v?.project || "").trim().toLowerCase(), loc = (v?.location || "").trim().toLowerCase() || "global";
@@ -15430,7 +15427,7 @@ function workspaceOf(tmpl, url) {
 }
 
 function respellURL(u, api) {
-  u = u.trim().replace(/\/+$/, "");
+  u = withScheme(u).replace(/\/+$/, "");
   if (api === "anthropic") return u.replace(/\/v1$/, "");
   if (api === "decide") u = u.replace(/\/systemone$/, "");
   if (api === "gemini") return /^https?:\/\/[^/]+\/v1$/.test(u) ? u + "beta" : /^https?:\/\/[^/]+$/.test(u) ? u + "/v1beta" : u;
@@ -15616,7 +15613,15 @@ function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^
 // groupSlug: a routing group's id as provider.GroupSlug derives it, the
 // dots kept (gpt-6.1-sol, #968).
 function groupSlug(s) { return s.toLowerCase().replace(/[^a-z0-9.]+/g, "-").replace(/\.{2,}/g, ".").replace(/^[-.]+|[-.]+$/g, ""); }
-function hostOf(u) { try { return new URL(u.includes("://") ? u : "https://" + u).host; } catch { return ""; } }
+// withScheme: a typed address with its scheme certain, as provider.WithScheme
+// has it: http or https already there stays, in any letter case, and is never
+// given a second; one saved twice ("http://http://host") is one again; none
+// gets def (none, when def is empty).
+function withScheme(s, def) {
+  s = (s || "").trim();
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s.replace(/^(?:https?:\/\/)*(https?)(?=:\/\/)/i, (_, x) => x.toLowerCase()) : s && def ? def + "://" + s : s;
+}
+function hostOf(u) { try { return new URL(withScheme(u, "https")).host; } catch { return ""; } }
 
 // localAddress is a local server's address as typed, as provider.AtAddress
 // takes it: its origin, http when no scheme is given, any path dropped; ""
@@ -15626,7 +15631,7 @@ function localAddress(s) {
   if (!s) return "";
   if (/\s/.test(s)) return null;
   try {
-    const u = new URL(s.includes("://") ? s : "http://" + s);
+    const u = new URL(withScheme(s, "http"));
     if ((u.protocol !== "http:" && u.protocol !== "https:") || !u.hostname) return null;
     return u.protocol + "//" + u.host;
   } catch { return null; }
