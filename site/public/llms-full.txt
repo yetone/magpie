@@ -6965,7 +6965,80 @@ Muse Code reads settings.json at start-up. Restart open muse sessions.
 
 Yes. magpie stashed the endpoint_transport and model you had and puts them back; the file's other keys were never touched.
 
-More agents on the same models: [Prime Agent on any model](https://usemagpie.ai/docs/prime-agent), [Pi on any model](https://usemagpie.ai/docs/pi) and [Kimi Code on any model](https://usemagpie.ai/docs/kimi-code). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Prime Agent on any model](https://usemagpie.ai/docs/prime-agent), [Pi on any model](https://usemagpie.ai/docs/pi), [Kimi Code on any model](https://usemagpie.ai/docs/kimi-code) and [Paimon on any model](https://usemagpie.ai/docs/paimon). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/paimon
+
+# Paimon on any model
+
+Paimon (aisk/paimon, installed with `uv tool install paimon`) is a coding agent in the terminal, built on pydantic-ai. Its settings are one JSON file: the model is `provider:name`, and each provider keeps its own address and key. magpie adds a provider at the gateway, so Paimon runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription.
+
+## Set up Paimon
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model for Paimon on the Agents page.** Pick a model via magpie.
+3. **Restart Paimon.** Paimon reads its settings when it starts, so a running one keeps its model until it starts again.
+
+```
+magpie paimon deepseek/deepseek-v4-pro
+```
+
+## config.json
+
+The file is `$PAIMON_CONFIG_HOME/config.json`, else `~/.config/paimon/config.json` (on Windows too). magpie changes three things:
+
+```
+{
+  "model": "litellm:deepseek/deepseek-v4-pro",
+  "providers": {
+    "litellm": {
+      "api_base": "http://127.0.0.1:3425/v1",
+      "api_key": ""
+    }
+  },
+  "compaction": { "context_window": 1000000 }
+}
+```
+
+A model is sent with its own provider's key only. The rest of the file is left alone; with no file, magpie makes one readable by you alone (it holds keys), as Paimon makes it. Paimon in a WSL distro is set up the same way.
+
+## Why litellm
+
+magpie uses pydantic-ai's litellm provider, an OpenAI-compatible proxy that profiles a `vendor/model` name by its vendor, as magpie's ids are spelled. Paimon's login doesn't offer it, so it is almost never one of your own. The gateway knows the provider for magpie's by magpie's own key for Paimon.
+
+## Context window and compaction
+
+For a name genai-prices doesn't know, which magpie's ids aren't, Paimon compacts against `compaction.context_window` only, and doesn't compact at all without it. So magpie writes the window it knows the model to take; for a model whose window it doesn't know, your own value, never the last model's.
+
+## Switching back
+
+When it first steps in, magpie stashes the model, providers.litellm and compaction.context_window you had. Switching back puts all three back, takes out the empty objects it left, and removes a file it made once nothing is left in it. A model you picked in Paimon since, on a provider of your own, counts as yours and is the one put back.
+
+```
+magpie paimon default
+```
+
+## FAQ
+
+### Can Paimon run on DeepSeek, GLM or a ChatGPT subscription?
+
+Yes. Pick a via-magpie model for Paimon on magpie's Agents page, then restart Paimon.
+
+### Why does the model in config.json start with litellm:?
+
+magpie goes through pydantic-ai's litellm provider, an OpenAI-compatible proxy that reads magpie's vendor/model ids.
+
+### Does Paimon still compact its context?
+
+Yes. magpie writes the model's context window, which Paimon compacts against; without it Paimon doesn't compact.
+
+### Does switching back restore my settings?
+
+Yes. magpie stashed the model, litellm provider and context window you had and puts them back; the rest of the file was never touched.
+
+More agents on the same models: [Muse Code on any model](https://usemagpie.ai/docs/muse-code), [Prime Agent on any model](https://usemagpie.ai/docs/prime-agent) and [Pi on any model](https://usemagpie.ai/docs/pi). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
