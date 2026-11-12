@@ -886,7 +886,7 @@ backend) take the slot in the try, after `keepQueued`, so a waiting stream
 gets its 200 and keepalive comments as it does waiting for a provider's
 slot. A try on an account within 5 points of its usage cap takes it
 before the account's one turn at a time (`nearCap`), its wait still in the
-try's `Queued`: taken the other way round, a turn kept on the account after
+try's `Queued` (only when the user set a usage limit on the account, or there is another candidate to go to: a sole account held only by Codex credits being off, with no limit of the user's, is sent at once, `userCapped`): taken the other way round, a turn kept on the account after
 a passing failure held the key's slot and waited for the account's turn,
 while the turn that had taken it waited for the key's, each till its agent
 hung up (ox0pine on X: a key held to one provider stuck in routing;

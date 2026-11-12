@@ -112,6 +112,17 @@ func nearCapOf(c candidate, now time.Time) (float64, bool) {
 	return used, true
 }
 
+// userCapped says whether c's account has a usage limit the user set on it
+// (a share of its windows, or an amount): not only a Codex account set not
+// to spend its credits, which holds it at 100% of a window and sets no
+// limit of the user's own. A turn near that alone, with no other account
+// or member to go to, is sent and not made to wait for the one before it
+// (tmr11235 on X: one account at 95%, no cap, queued).
+func userCapped(c candidate) bool {
+	a := c.p.Account
+	return a != nil && c.p.CapsOf(a.User).Holds()
+}
+
 // nearCapAgain, once a turn has waited for the one before it on an
 // account near its cap that was at used then, reads the account's usage
 // again when nothing has told it since (the reply before it said nothing

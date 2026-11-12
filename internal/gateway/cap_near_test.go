@@ -368,3 +368,29 @@ func TestNearCapWaitSaysQueued(t *testing.T) {
 		}
 	}
 }
+
+// tmr11235 on X: one Codex account at 95% of its window, no cap and no
+// concurrency set, and its requests queued. Only credits turned off held it
+// (at 100%), a limit the user never set on usage, and with no other account
+// to go to the turns wait for nothing but each other: they go out together.
+func TestNearCapOnlyCreditsOffOneAccountSendsAtOnce(t *testing.T) {
+	codexSignedIn(t)
+	b := newNearCapBackend(t, map[string]float64{"acct-1": 95}, map[string]float64{"acct-1": 95}, nil)
+	nearCapAccounts(t, 0, 95)
+	if err := provider.SetCodexCredits("me@example.com", false); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { provider.SetCodexCredits("me@example.com", true) })
+	srv := New()
+	replies := postAtOnce(t, srv, 2)
+	waitFor(t, "both turns out at the vendor at once", func() bool { return len(b.sent()) == 2 })
+	if n := srv.nearCap.waiting(); n != 0 {
+		t.Fatalf("%d turns waiting for a turn; want none", n)
+	}
+	close(b.open)
+	for range 2 {
+		if r := <-replies; r.code != 200 {
+			t.Fatalf("status %d: %s", r.code, r.body)
+		}
+	}
+}
