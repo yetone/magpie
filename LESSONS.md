@@ -1225,6 +1225,14 @@ each one.
     in the root package.
   - A test swapped time.Local (4028687b8), and main went red under
     -race; see "A test never swaps time.Local" above.
+  - The same guard again three hours later: 4519eea71 (Settings ›
+    About's Report a problem) put a package-level regexp in
+    internal/gui/feedback.go, and gave GET /api/feedback no command and
+    no notYet line, so TestNoEagerPackageRegexps and
+    TestEveryRouteHasACommandOrIsNamed were red at d0a4e0be6 until
+    f97415bc0. Its body lists the gui tests and vet it ran, and neither
+    guard's package. A new package-level var runs `go test .`; a new
+    route runs internal/cli's parity test.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
