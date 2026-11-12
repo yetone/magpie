@@ -9,6 +9,7 @@ import (
 
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // moer2831 on Discord: a model picked for one of Claude Desktop's tiers ran
@@ -228,5 +229,23 @@ func TestDesktopInferenceModelsNamed(t *testing.T) {
 	}
 	if mythos < 2 {
 		t.Fatalf("the reporter's shape needs models listed as %s<n>: %v", desktopEffortAlias, list)
+	}
+}
+
+// usage.MagpieAlias reads the alias ids this package lists, so the
+// Usage page counts a call under one as the gateway's own: it must agree with
+// magpieAliasAsked on every form claudeLooking makes.
+func TestUsageKnowsEveryAliasForm(t *testing.T) {
+	for _, id := range []string{
+		"anthropic/magpie-" + aliasNumber("sub/m"),
+		"mythos-magpie-" + aliasNumber("sub/m"),
+		"claude-magpie-" + aliasNumber("sub/m"),
+		"magpie-" + aliasNumber("sub/claude-opus-5-5") + desktopClaudeInfix + "claude-opus-5-5",
+		"magpie-" + aliasNumber("sub/claude-opus-5-5") + desktopClaudeInfix + "claude-opus-5-5[1m]",
+		"claude-opus-5-5", "gpt-6", "magpie",
+	} {
+		if got, want := usage.MagpieAlias(id), magpieAliasAsked(id); got != want {
+			t.Errorf("usage.MagpieAlias(%q) = %v, gateway says %v", id, got, want)
+		}
 	}
 }

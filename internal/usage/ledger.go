@@ -460,6 +460,7 @@ func ledgerWith(since time.Time, f Filter, recs []Record, logs []sessions.Call) 
 // priced and judged here as this computer's are, and none from until on (a
 // picked range's end, #1492; zero for none).
 func ledgerWithShared(since, until time.Time, f Filter, recs []Record, logs []sessions.Call, others []SharedCall) (rows []Row, sum Totals, agents, providers []string) {
+	logs = ownCalls(logs)
 	matched, pairs, actors, compactions := gatewayMatchesDetails(recs, logs)
 	return ledgerMatched(since, until, f, recs, logs, others, matched, pairs, actors, compactions)
 }

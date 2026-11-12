@@ -44,7 +44,7 @@ func directRows(p Period, now time.Time) []Row {
 	if reader == nil {
 		reader = sessions.Calls
 	}
-	logs, others := reader(since), sharedRecords(since)
+	logs, others := ownCalls(reader(since)), sharedRecords(since)
 	matched := map[int]bool{}
 	actors := map[int]string{}
 	_, _, compactions := duplicateCodexCalls(logs)
