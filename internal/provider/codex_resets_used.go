@@ -22,6 +22,7 @@ import (
 
 	"github.com/yetone/magpie/internal/filelock"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/steady"
 )
 
 // Why a reset was used: by itself as the account's week was used up and no
@@ -104,7 +105,7 @@ func noteResetUsed(user, why string, out ResetOutcome) error {
 	if err := os.MkdirAll(settings.Dir(), 0o755); err != nil {
 		return fmt.Errorf("keeping that a reset was used to %s: %w", resetsUsedPath(), err)
 	}
-	if err := writeChanged(resetsUsedPath(), append(b, '\n'), 0o600); err != nil {
+	if err := steady.WriteFile(resetsUsedPath(), append(b, '\n'), 0o600); err != nil {
 		return fmt.Errorf("keeping that a reset was used to %s: %w", resetsUsedPath(), err)
 	}
 	return nil

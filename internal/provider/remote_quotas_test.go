@@ -703,3 +703,33 @@ func TestRemoteCardWantedByWholePath(t *testing.T) {
 		}
 	}
 }
+
+// A user on X (0.1.3929): a Remote magpie added for the Usage page's
+// quotas, with Select none (no model of it served), showed the remote's
+// cards before cfd49e36a and none after, as no card was wanted of a
+// provider with no enabled model. Select none still reads and shows usage.
+func TestRemoteSelectNoneStillShowsItsCards(t *testing.T) {
+	peer := &fakePeer{cards: []SubscriptionQuota{
+		{Provider: "kiro", Name: "Kiro", Kind: "subscription", User: "k@x.com", Windows: []QuotaWindow{{Name: "credits", Used: 10}}},
+		{Provider: "codex", Name: "Codex", Kind: "subscription", User: "a@x.com", Windows: []QuotaWindow{{Name: "5h", Used: 40}}},
+	}}
+	remoteQuotaHome(t, peer)
+	p, err := Find("office")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.NoModels, p.Models = true, nil
+	if err := Save(*p); err != nil {
+		t.Fatal(err)
+	}
+	ForgetRemoteCardsForTest()
+	got := map[string]bool{}
+	for _, q := range RemoteCards(context.Background()) {
+		if q.Kind == "subscription" && q.Error == "" {
+			got[q.Provider] = true
+		}
+	}
+	if !got["office/kiro"] || !got["office/codex"] {
+		t.Fatalf("a Remote set to serve no model still tells its cards: %v", got)
+	}
+}

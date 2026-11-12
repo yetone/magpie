@@ -2199,20 +2199,6 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
-	// the Codex client magpie presents to the ChatGPT backend: "" (Codex
-	// CLI) or "desktop" (ouhthuo on X)
-	mux.HandleFunc("POST /api/settings/codex-client", func(rw http.ResponseWriter, r *http.Request) {
-		var in struct{ Client string }
-		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-			fail(rw, err)
-			return
-		}
-		if err := provider.SetCodexClient(in.Client); err != nil {
-			fail(rw, err)
-			return
-		}
-		writeJSON(rw, settingsState())
-	})
 	// what the Open button of Codex's Agents row opens: "", "app" or
 	// "terminal" (Yink88564391 on X)
 	mux.HandleFunc("POST /api/settings/codex-open", func(rw http.ResponseWriter, r *http.Request) {

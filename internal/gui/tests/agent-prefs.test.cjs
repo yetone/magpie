@@ -20,7 +20,7 @@ const { chromium, webkit } = require("playwright");
 const { watchSettingsReads, agentRow, openAgentSettings } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
-const CODEX = ["codexAgentsV1Row", "codexOpenRow", "codexServiceTierRow", "codexClientRow", "fullContextRow", "codexAsyncRow", "codexTitlesRow", "codexDescriptionsRow", "codexPredictionsRow", "codexAutoReviewRow", "codexMemoriesRow"];
+const CODEX = ["codexAgentsV1Row", "codexOpenRow", "codexServiceTierRow", "fullContextRow", "codexAsyncRow", "codexTitlesRow", "codexDescriptionsRow", "codexPredictionsRow", "codexAutoReviewRow", "codexMemoriesRow"];
 
 function settingsPayload(over) {
   return {

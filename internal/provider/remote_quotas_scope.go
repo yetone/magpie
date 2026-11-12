@@ -27,10 +27,14 @@ import (
 // remoteCardWanted says whether a card of provider id (as the remote p
 // tells it: "kiro", "remote-C/kiro") is of a provider p is enabled for.
 // It is unknown, and so wanted, while p's list isn't read, or a model of
-// it is listed with no provider before its name.
+// it is listed with no provider before its name; and all are wanted when p
+// is set to serve no model (Select none), which still reads usage.
 func remoteCardWanted(p Provider) func(id string) bool {
+	// Select none serves no model, "while its balance and usage are still
+	// read and shown" (Provider.NoModels): a Remote kept for its quotas
+	// alone tells every card it has (a user on X, 0.1.3929)
 	if p.ServesNone() {
-		return func(string) bool { return false }
+		return func(string) bool { return true }
 	}
 	ms := p.Exposed()
 	if len(ms) == 0 {

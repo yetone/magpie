@@ -53,10 +53,6 @@ const CodexTierStandard = "default"
 // CodexOpens are the values CodexOpen may take, "" for the default.
 var CodexOpens = []string{"", "app", "terminal"}
 
-// CodexClients are the values CodexClient may take, "" for Codex CLI, the
-// default. Each is a client OpenAI makes, and only those.
-var CodexClients = []string{"", "desktop"}
-
 // CodexServiceTiers are the values CodexServiceTier may take, "" (as
 // Codex asks) first.
 var CodexServiceTiers = []string{"", CodexTierStandard, "priority", "ultrafast"}
@@ -853,11 +849,6 @@ type Settings struct {
 	// Ultra Fast). Codex's words, as codex-rs ServiceTier::request_value
 	// sends them; its Flex is not offered, the ChatGPT backend takes none.
 	CodexServiceTier string `json:"codexServiceTier,omitempty"`
-	// CodexClient is the Codex client magpie presents to the ChatGPT
-	// backend on a signed-in account's requests (ouhthuo on X): "" is Codex
-	// CLI (originator codex_cli_rs), "desktop" the Codex app (originator
-	// "Codex Desktop"), each with the User-Agent that client sends.
-	CodexClient string `json:"codexClient,omitempty"`
 	// CodexOpen is what the Open button of Codex's Agents row opens
 	// (Yink88564391 on X): "app" the Codex desktop app, "terminal" the CLI
 	// in a terminal. "" is the app where one is installed, else the
@@ -2587,10 +2578,6 @@ func saveOwn(s Settings, recording, reads bool) error {
 	s.CodexServiceTier = strings.TrimSpace(s.CodexServiceTier)
 	if !slices.Contains(CodexServiceTiers, s.CodexServiceTier) {
 		return fmt.Errorf("Codex's service tier must be one of %q, not %q", CodexServiceTiers[1:], s.CodexServiceTier)
-	}
-	s.CodexClient = strings.TrimSpace(s.CodexClient)
-	if !slices.Contains(CodexClients, s.CodexClient) {
-		return fmt.Errorf("the Codex client must be one of %q, not %q", CodexClients[1:], s.CodexClient)
 	}
 	s.CodexOpen = strings.TrimSpace(s.CodexOpen)
 	if !slices.Contains(CodexOpens, s.CodexOpen) {
