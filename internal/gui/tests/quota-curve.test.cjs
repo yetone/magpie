@@ -325,7 +325,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await curve.locator("path.qc-line.qc-short").getAttribute("data-name"), "5 hours");
         assert.equal(await curve.locator("line.qc-now").count(), 1);
         const five = await curve.locator('path.qc-line[data-name="5 hours"]').getAttribute("d");
-        assert.equal((five.match(/M/g) || []).length, 2, "the 5-hour line breaks where its window started again: " + five);
+        assert.equal((five.match(/M/g) || []).length, 1, "the 5-hour line is its current cycle only, no comb of earlier drops: " + five);
         const legend = await curve.locator(".qc-key").allTextContents();
         assert.deepEqual(legend, [w.five + "40%", w.week + "70%"]);
         assert.equal(await page.locator(".subscription-card", { hasText: "Kimi" }).locator(".quota-curve").count(), 0, "no readings, no curve");

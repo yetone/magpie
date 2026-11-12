@@ -16800,13 +16800,17 @@ function drawQuotaPlot(g, lines, x0, x1, w, h, now, thin) {
     const s = i % 7, color = `var(--c${s + 1})`;
     const c = l.cycle || quotaCycle(l, now);
     // a window far shorter than the span (a 5-hour one over a week) is
-    // drawn faint, without its even burn, an all but upright dash
+    // drawn without its even burn, an all but upright dash
     const short = !thin && c.reset && c.reset - c.start < (x1 - x0) / 12;
     if (c.reset && c.start < c.reset && !short) {
       const e = sv("line", { x1: X(c.start), y1: 0, x2: X(c.reset), y2: h, class: "qc-even", "data-series": s }, { stroke: color });
       g.append(e);
     }
-    const d = quotaPaths(l.points, x0, x1, w, h);
+    // and only its current cycle: the cycles before it, each a drop of its
+    // own, crawled across the week like a comb of bugs (@xxxxxthhh on X)
+    let pts = l.points;
+    if (short) { const now1 = pts.filter((p) => p.at >= c.start); pts = now1.length ? now1 : pts.slice(-1); }
+    const d = quotaPaths(pts, x0, x1, w, h);
     if (d) g.append(sv("path", { d, class: "qc-line" + (short ? " qc-short" : ""), "data-name": l.name, "data-series": s }, { stroke: color }));
   });
   // a spark ends at now already, and in 16px the dotted now line read as a

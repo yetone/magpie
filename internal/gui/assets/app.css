@@ -1161,9 +1161,9 @@ body.panel .row.pref.flash { border-radius: 10px; }
 .balance-curve .bc-pace { color: var(--muted); }
 .qc-grid { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .qc-line { fill: none; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
-/* a window far shorter than the span drawn (a 5-hour one over a week) is a
-   comb of drops: faint, and without its upright even burn */
-.qc-line.qc-short { stroke-width: 1; opacity: .45; }
+/* a window far shorter than the span drawn (a 5-hour one over a week) draws
+   its current cycle only, lighter, and without its upright even burn */
+.qc-line.qc-short { stroke-width: 1.25; opacity: .7; }
 .qc-even { stroke-width: 1; stroke-dasharray: 3 3; opacity: .45; vector-effect: non-scaling-stroke; }
 .qc-now { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 1 2; vector-effect: non-scaling-stroke; }
 .quota-curve .qc-axis { display: flex; justify-content: space-between; gap: 8px; margin-top: 3px; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
