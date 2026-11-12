@@ -3471,13 +3471,37 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .tile .cnt { flex: none; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .sheet .row-head .custom { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); }
 .sheet .row-head .custom:hover, .sheet .row-head .custom.on { color: var(--accent); background: var(--accent-soft); }
-/* narrow: the search and Custom provider on a line of their own */
+.sheet .add-tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* narrow: the tools on a line of their own */
 @media (max-width: 760px) {
   .sheet .row-head { flex-wrap: wrap; height: auto; row-gap: 8px; }
   .sheet .row-head::after { content: ""; order: 1; flex-basis: 100%; }
-  .sheet .row-head .find { order: 2; flex: 1; width: auto; min-width: 0; }
-  .sheet .row-head .custom { order: 2; }
+  .sheet .add-tools { order: 2; flex: 1 1 100%; }
+  .sheet .row-head .find { flex: 1; width: auto; min-width: 0; }
 }
+/* scrolled out of sight beside the sidebar, the tools show in the title
+   bar's empty right, where Settings' search is (app.js addToolsFloat) */
+body.side-nav #addSheet .add-tools.afloat {
+  position: fixed; z-index: 11; top: 0; left: var(--tools-l, 50%); right: var(--tools-r, 64px);
+  height: var(--top-h, 46px); margin: 0; justify-content: flex-end; gap: 10px;
+  pointer-events: none; --wails-draggable: drag;
+}
+body.side-nav.mac #addSheet .add-tools.afloat { padding-top: calc(2px / var(--zoom, 1)); }
+body.side-nav #addSheet .add-tools.afloat > * { pointer-events: auto; --wails-draggable: no-drag; flex: none; }
+body.side-nav #addSheet .add-tools.afloat > .find { flex: 0 1 180px; min-width: 120px; }
+/* a narrow window has no room in its bar: the sheet's head stays at the
+   top while the sheet is under it, as Settings' does */
+body:not(.side-nav) #addSheet > .row-head { position: sticky; top: 0; z-index: 5; --bleed-l: 12px; --bleed-r: 12px; }
+body.window:not(.side-nav) #addSheet > .row-head { top: -2px; --bleed-l: 16px; --bleed-r: 16px; }
+body:not(.side-nav) #addSheet > .row-head::before {
+  content: ""; position: absolute; z-index: -1; pointer-events: none;
+  top: -6px; bottom: -6px; left: calc(-1 * var(--bleed-l)); right: calc(var(--bar, 0px) - var(--bleed-r));
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  -webkit-backdrop-filter: saturate(1.6) blur(16px); backdrop-filter: saturate(1.6) blur(16px);
+  box-shadow: 0 1px 0 transparent; transition: box-shadow .18s var(--ease);
+}
+body:not(.side-nav) #addSheet > .row-head.stuck::before { box-shadow: 0 1px 0 var(--line-2); }
+@supports not (color: color-mix(in srgb, red 50%, blue)) { body:not(.side-nav) #addSheet > .row-head::before { background: var(--bg); } }
 /* the provider editor, in a dialog */
 /* the label column is as wide as its longest label, so that label starts
    at the padding and the fields end the same way on the right (the
