@@ -6373,7 +6373,87 @@ magpie writes only the models picked for OpenBot, at most 64, and skips ids Open
 
 OpenBot reads custom endpoints only at start-up, so restart it. Don't save an endpoint in OpenBot before that, or it writes magpie's endpoint out.
 
-More desktop apps on the same models: [Lody on any model](https://usemagpie.ai/docs/lody), [Cindy on any model](https://usemagpie.ai/docs/cindy) and [miniQ on any model](https://usemagpie.ai/docs/miniq). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More desktop apps on the same models: [Lody on any model](https://usemagpie.ai/docs/lody), [Cindy on any model](https://usemagpie.ai/docs/cindy), [miniQ on any model](https://usemagpie.ai/docs/miniq) and [Tuanjie Cowork on any model](https://usemagpie.ai/docs/tuanjie-cowork). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/tuanjie-cowork
+
+# Tuanjie Cowork on any model
+
+Tuanjie Cowork is Unity China's AI coworker app, whose core runs Codely sessions. The Custom Models in its Settings are kept in `~/.codely/settings.json`. magpie adds a provider and a model of its own there, so Cowork runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, GPT or a ChatGPT subscription.
+
+## Set up Tuanjie Cowork
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model for Tuanjie Cowork on the Agents page.** Pick a model via magpie; magpie writes it into Cowork's custom models.
+3. **Pick it in Cowork's model menu.** Once, as below.
+
+```
+magpie tuanjie-cowork deepseek/deepseek-v4-pro
+```
+
+## What gets written
+
+```
+{
+  "customModelProviders": [
+    …your own providers, left as they are…,
+    {"id": "magpie", "name": "magpie",
+     "baseUrl": "http://127.0.0.1:3425/v1",
+     "apiKey": "",
+     "authType": "openai"}
+  ],
+  "customModels": [
+    …your own models…,
+    {"id": "magpie", "providerId": "magpie",
+     "model": "deepseek/deepseek-v4-pro",
+     "displayName": "deepseek/deepseek-v4-pro",
+     "roles": ["model"], "wireApi": "chat",
+     "supportsMultimodal": false}
+  ]
+}
+```
+
+The provider and the model both have the id `magpie`. The provider is the gateway's `/v1` with magpie's own key for Tuanjie Cowork, which is how the gateway knows the requests are Cowork's. The model is on Chat Completions (`wireApi` `chat`), with `supportsMultimodal` true when the model takes images.
+
+Cowork reads the file afresh on every lookup and writes it whole, other keys kept. A session is started with its provider's `baseUrl` and key as `OPENAI_BASE_URL` and `OPENAI_API_KEY`. Your own providers and models stay as they are, and so does a name, roles or another field you give magpie's entries in Cowork. Where there is no file, magpie makes one with 0600 permissions, since it holds keys.
+
+If you have a provider or a model of your own with the id `magpie`, or the file isn't settings Cowork reads, magpie says so and leaves the file alone. Cowork's start-up migrations only move models with no `providerId`, so magpie's entries are left alone.
+
+## Picking it in Cowork
+
+Which model a chat is on is Cowork's own pick in its model menu, kept per workspace by model id. magpie doesn't write that pick, so the first time you pick magpie's model in Cowork's menu. The model's id stays `magpie`, so a model you change in magpie later is the one that pick sends, with no new pick.
+
+While Cowork is running, magpie reminds you to pick its model in the model menu, and to restart Tuanjie Cowork if it isn't there yet.
+
+## Switching back
+
+Switching back removes magpie's provider and model. If magpie made settings.json and nothing else is left in it, the file goes too. Your own models are picked in Cowork's model menu; magpie doesn't set them.
+
+```
+magpie tuanjie-cowork default
+```
+
+## FAQ
+
+### How do I use DeepSeek, GLM or a ChatGPT subscription in Tuanjie Cowork?
+
+Pick a via-magpie model for Tuanjie Cowork on magpie's Agents page. magpie adds a magpie provider and model to ~/.codely/settings.json. Then pick it once in Cowork's model menu.
+
+### After changing the model in magpie, do I pick it again in Cowork?
+
+No. magpie's model id is always magpie, so Cowork's pick stays on it and sends the model you picked in magpie.
+
+### Are my own custom models changed?
+
+No. magpie adds and removes only entries with the id magpie. If you have one of your own with that id, magpie says so and leaves the file alone.
+
+### magpie's model isn't in the model menu. What now?
+
+Restart Tuanjie Cowork. While it runs, magpie says so too.
+
+More desktop apps on the same models: [OpenBot on any model](https://usemagpie.ai/docs/openbot), [miniQ on any model](https://usemagpie.ai/docs/miniq) and [Cindy on any model](https://usemagpie.ai/docs/cindy). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
