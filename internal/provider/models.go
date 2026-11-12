@@ -996,6 +996,7 @@ func (p Provider) fetchOne(ctx context.Context) (fetched, error) {
 	if len(asked) > 1 {
 		parts = sidesOf(sides)
 	}
+	out = p.withOllamaWindows(ctx, base, out)
 	return fetched{
 		catalog.WithDrawers(p.planModels(out), catalog.PublicDrawers(ctx, base)),
 		base,
