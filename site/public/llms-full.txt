@@ -6276,7 +6276,104 @@ auto guesses the protocol from a model's name and could pick Responses or Anthro
 
 No. magpie changes only settings.json's provider, and switching back restores the one you had.
 
-More agents on the same models: [Empryo on any model](https://usemagpie.ai/docs/empryo), [Lody on any model](https://usemagpie.ai/docs/lody) and [Cindy on any model](https://usemagpie.ai/docs/cindy). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Empryo on any model](https://usemagpie.ai/docs/empryo), [Lody on any model](https://usemagpie.ai/docs/lody), [Cindy on any model](https://usemagpie.ai/docs/cindy) and [OpenBot on any model](https://usemagpie.ai/docs/openbot). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/openbot
+
+# OpenBot on any model
+
+OpenBot is an Electron workspace that runs Codex, Claude, OpenCode and other agents. Its model picker lists the OpenAI-compatible endpoints you add yourself. magpie adds one named magpie, so the picker lists the models in magpie: DeepSeek, GLM, Kimi, Qwen, GPT or a ChatGPT subscription.
+
+## Set up OpenBot
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Set OpenBot's provider to magpie on the Agents page.** magpie writes its endpoint into OpenBot's custom endpoints file.
+3. **Restart OpenBot and pick a model in its own picker.** magpie's models show as `magpie/<id>`.
+
+```
+magpie openbot provider magpie
+```
+
+## Where the file is
+
+OpenBot keeps custom endpoints in Electron's userData folder:
+
+```
+macOS:   ~/Library/Application Support/OpenBot/openbot-custom-providers-v1.json
+Windows: %APPDATA%\OpenBot\openbot-custom-providers-v1.json
+Linux:   ~/.config/OpenBot/openbot-custom-providers-v1.json
+```
+
+## What gets written
+
+```
+{
+  "version": 1,
+  "providers": [
+    …your own endpoints, left as they are…,
+    {
+      "id": "magpie",
+      "name": "magpie",
+      "baseUrl": "http://127.0.0.1:3425/agent/openbot/v1",
+      "models": [
+        {"id": "deepseek/deepseek-v4-pro", "name": "DeepSeek V4 Pro", "contextWindow": 1000000},
+        …
+      ],
+      "secret": null
+    }
+  ]
+}
+```
+
+`version` must be 1. A file OpenBot can't parse leaves it with no endpoints and refuses every save, so magpie leaves alone a file it can't read either.
+
+OpenBot keeps each endpoint's key and headers together in `secret`, sealed with Electron's safeStorage (the Keychain, DPAPI). magpie doesn't open it, so magpie's endpoint has no key (`secret` is `null`). OpenBot hands it to OpenCode keyless, and the gateway takes a request with no key from this computer.
+
+OpenCode sends the requests, with OpenCode's User-Agent. The `/agent/openbot` in the address tells the gateway they are OpenBot's, and they are counted as OpenBot's. A name, harness or key you give magpie's endpoint in OpenBot stays. Your other endpoints stay as written.
+
+## Which models show
+
+OpenBot's list check fails closed: one endpoint or model it wouldn't accept empties the whole list. So magpie writes only the models picked for OpenBot in magpie, and:
+
+1. **At most 64.** That is OpenBot's limit for one endpoint; a longer list hides them all.
+2. **Ids OpenBot accepts.** ASCII letters, digits and `._:/[],=-`, at most 160 characters with the `magpie/` prefix.
+3. **Context windows in range.** contextWindow is written only between 1,024 and 100,000,000.
+
+## When it takes effect
+
+OpenBot reads the file once, when it starts. It writes the file whole from what it holds only when an endpoint is saved, edited or removed there. So a change shows after a restart. An endpoint saved in OpenBot before the restart writes magpie's endpoint out again. While OpenBot is running, magpie reminds you to restart it before adding or editing an endpoint there.
+
+MCP servers live in OpenBot's SQLite database, which magpie doesn't write. To use magpie's own MCP servers (`/mcp/magpie/…`), add them in OpenBot by hand as HTTP servers.
+
+## Switching back
+
+Switching back removes only magpie's endpoint. When nothing else is left in the file, magpie removes the file, since OpenBot starts with an empty list without one.
+
+```
+magpie openbot default
+```
+
+## FAQ
+
+### How do I use DeepSeek, GLM or a ChatGPT subscription in OpenBot?
+
+Set OpenBot's provider to magpie on magpie's Agents page, restart OpenBot, then pick a magpie/ model in its model picker.
+
+### Why does magpie's endpoint have no API key?
+
+OpenBot seals each endpoint's key with the system keychain, which magpie doesn't open. The gateway takes keyless requests from this computer, and /agent/openbot in the address tells it they are OpenBot's.
+
+### Why don't I see every magpie model?
+
+magpie writes only the models picked for OpenBot, at most 64, and skips ids OpenBot wouldn't accept. One bad model would make OpenBot empty the whole list.
+
+### Why hasn't the change shown up?
+
+OpenBot reads custom endpoints only at start-up, so restart it. Don't save an endpoint in OpenBot before that, or it writes magpie's endpoint out.
+
+More desktop apps on the same models: [Lody on any model](https://usemagpie.ai/docs/lody), [Cindy on any model](https://usemagpie.ai/docs/cindy) and [miniQ on any model](https://usemagpie.ai/docs/miniq). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
