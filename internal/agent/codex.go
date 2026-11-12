@@ -22,7 +22,6 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
-	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/codexcat"
 	"github.com/yetone/magpie/internal/codexrelay"
@@ -264,6 +263,9 @@ func writeOwnList(path string, b []byte) error {
 }
 
 func codexIn(at place) *Agent {
+	if codexProfileOnly(at) {
+		return codexProfileIn(at)
+	}
 	dir := at.codexHome()
 	path := filepath.Join(dir, "config.toml")
 	catalogPath := filepath.Join(dir, "magpie-models.json")
@@ -593,15 +595,7 @@ func codexIn(at place) *Agent {
 	// refuse is wired over (#2545). The sharing key magpie made is magpie's
 	// own, however much Authenticate takes it, so it never counts as theirs
 	// (Default): sharing going off brings gateway.Token back
-	keptBearerToken := func(table string) string {
-		tok := at.gwKey()
-		if t, err := edit.GetTOMLTable(path, table); err == nil {
-			if v := t["experimental_bearer_token"]; v != tok && keyHolds(v, tok) && !access.Default(v) {
-				return v
-			}
-		}
-		return tok
-	}
+	keptBearerToken := func(table string) string { return codexKeptToken(path, table, at.gwKey()) }
 	// openaiAuth: whether magpie's provider table says
 	// requires_openai_auth, and whether that is known. Without it Codex's
 	// app-server answers account/read and getAuthStatus with no account and
@@ -641,25 +635,7 @@ func codexIn(at place) *Agent {
 		return signedIn && !codexUsedUp(), true
 	}
 	putProvider := func() error {
-		kvs := []edit.KV{
-			{Path: "name", Value: "magpie"},
-			{Path: "base_url", Value: at.v1()},
-			{Path: "wire_api", Value: "responses"},
-			{Path: "experimental_bearer_token", Value: keptBearerToken("model_providers." + magpieID)},
-			// Codex offers its built-in image tool (image_gen.imagegen) and
-			// the other OpenAI-provider tools only to a provider it reads as
-			// the OpenAI actor: one that does not require OpenAI auth but
-			// carries x-openai-actor-authorization. Without this header the
-			// model is never given the tool, so a Codex on magpie can't draw
-			// (the request that names model/draws never happens at all).
-			// uses_openai_actor_authorization() is exactly this check.
-			// An Inline table: a config that holds the headers as their own
-			// [model_providers.magpie.http_headers] table, or as dotted keys,
-			// gets the header set there, the user's others kept; written
-			// inline beside that table it defined http_headers twice and
-			// every model switch failed (wztlink1013 on Discord).
-			{Path: "http_headers", Value: edit.Inline{{Path: "x-openai-actor-authorization", Value: "magpie"}}},
-		}
+		kvs := codexProviderTable(at.v1(), keptBearerToken("model_providers."+magpieID))
 		// the table's capabilities, the user's or the background
 		// compaction's, aren't lost as it is written again
 		if caps := codexProviderCaps(path); caps != nil {
@@ -2478,6 +2454,7 @@ func codexIn(at place) *Agent {
 			},
 		},
 	}, path, catalogPath)
+	a.Fields = append(a.Fields, codexScopeField(at, func() bool { return a.Wired() }))
 	// this machine's Codex: the address its config keeps is tried (Drift),
 	// and moved to WSL's new one when that changed (#1013)
 	if at.spell == nil {
