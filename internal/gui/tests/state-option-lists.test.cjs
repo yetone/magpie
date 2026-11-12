@@ -22,6 +22,7 @@ const catalog = [
   // sent fast for the agent whose list it is: "*" on the wire
   { value: "magpie/codex/gpt-5.5-fast", ref: "codex/gpt-5.5-fast", label: "GPT-5.5 Fast", note: "", group: "ChatGPT", fastFor: "*" },
 ];
+const crushOwn = { value: "crush/own", label: "Crush Own", note: "" };
 const effort = [{ value: "low", note: "" }, { value: "high", note: "" }];
 
 function sharedState(lang, last) {
@@ -32,11 +33,13 @@ function sharedState(lang, last) {
         { key: "effort", label: "effort", value: "high", options: effort },
       ] },
       { id: "crush", name: "Crush", path: "/test/crush", wired: true, fields: [
-        { key: "model", label: "model", value: "magpie/kimi/k2", options: null, list: 1 },
+        { key: "model", label: "model", value: "magpie/kimi/k2", options: null, list: 2 },
       ] },
     ],
     profiles: [], settings: { lang, theme: "light" }, served: 3,
-    optionLists: [catalog],
+    // each option once, a list its indexes: crush's has one of its own first
+    options: [...catalog, crushOwn],
+    optionLists: [catalog.map((_, i) => i), [catalog.length, ...catalog.map((_, i) => i)]],
     ...(last ? { last: true } : {}),
   };
 }
@@ -88,7 +91,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const own = (id) => catalog.map((o) => o.value + (o.fastFor ? " " + id : ""));
         const want = [
           ["codex", [["model", own("codex")], ["effort", ["low", "high"]]]],
-          ["crush", [["model", own("crush")]]],
+          ["crush", [["model", ["crush/own", ...own("crush")]]]],
         ];
         assert.deepEqual(await read(), want, "the kept state's lists put back");
         release();

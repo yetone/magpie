@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"reflect"
 	"slices"
+	"strconv"
+	"strings"
 	"sync/atomic"
 
 	"github.com/yetone/magpie/internal/agent"
@@ -55,10 +57,11 @@ const agentsNull = `{"agents":null`
 // s goes as shareOptions has it, each option list once.
 func writeStateJSON(rw http.ResponseWriter, s stateJSON) ([32]byte, bool) {
 	s = shareOptions(s)
-	agents, lists := s.Agents, s.OptionLists
+	agents, lists, opts := s.Agents, s.OptionLists, s.Options
 	f := keptFile(s)
 	s.Agents, f.State.Agents = nil, nil
 	s.OptionLists, f.State.OptionLists = nil, nil
+	s.Options, f.State.Options = nil, nil
 	bufs := stateHeld.Swap(nil)
 	if bufs == nil {
 		bufs = new(stateBufs)
@@ -78,7 +81,7 @@ func writeStateJSON(rw http.ResponseWriter, s stateJSON) ([32]byte, bool) {
 	if agents == nil || err != nil || kerr != nil ||
 		!bytes.HasPrefix(tail, []byte(agentsNull)) || !bytes.HasPrefix(keptTail, []byte(keptHead)) ||
 		!bytes.HasSuffix(tail, []byte("}")) || !bytes.HasSuffix(keptTail, []byte("}}")) {
-		s.Agents, s.OptionLists = agents, lists
+		s.Agents, s.OptionLists, s.Options = agents, lists, opts
 		writeJSON(rw, s)
 		sum, err := encodedSum(keptFile(s))
 		return sum, err == nil
@@ -107,17 +110,40 @@ func writeStateJSON(rw http.ResponseWriter, s stateJSON) ([32]byte, bool) {
 		}
 	}
 	_, _ = both.Write([]byte{']'})
-	// the rest, up to the state's closing brace: the option lists, the
-	// state's last field, go after it one by one, as the agents do
+	// the rest, up to the state's closing brace: the option lists and
+	// options, the state's last fields, go after it, each option alone as
+	// each agent is
 	_, _ = out.Write(tail[len(agentsNull) : len(tail)-1])
 	h.Write(keptTail[len(keptHead) : len(keptTail)-2])
 	if len(lists) > 0 {
+		// the lists' indexes as Encode writes them, through one small
+		// buffer; then each option alone
 		_, _ = both.Write([]byte(`,"optionLists":[`))
-		for i := range lists {
+		nb := make([]byte, 0, 512)
+		for i, l := range lists {
+			if i > 0 {
+				nb = append(nb, ',')
+			}
+			nb = append(nb, '[')
+			for j, k := range l {
+				if j > 0 {
+					nb = append(nb, ',')
+				}
+				nb = strconv.AppendInt(nb, int64(k), 10)
+				if len(nb) > 480 {
+					_, _ = both.Write(nb)
+					nb = nb[:0]
+				}
+			}
+			nb = append(nb, ']')
+		}
+		_, _ = both.Write(nb)
+		_, _ = both.Write([]byte(`],"options":[`))
+		for i := range opts {
 			if i > 0 {
 				_, _ = both.Write([]byte{','})
 			}
-			if enc.Encode(lists[i]) != nil {
+			if enc.Encode(opts[i]) != nil {
 				return [32]byte{}, false
 			}
 		}
@@ -143,39 +169,91 @@ func (l lineless) Write(b []byte) (int, error) {
 // shareOptions is s with each fields' option list sent once, in
 // OptionLists, and named by the field's List: a list two fields offer
 // alike is one entry, a FastFor naming the field's own agent sent as
-// fastSelf. s's own agents are left as they were. The page
-// puts each field's list back as it reads the state (api in app.js).
+// fastSelf. A list is of indexes into Options, where an option that
+// several lists offer is once. s's own agents are left as they were. The
+// page puts each field's list back as it reads the state (api in app.js).
+//
+// A state with real accounts has ~1,700 options in its lists, ~260 of
+// them unlike the rest. They are told apart by sorting them by Value, not
+// in a map, and each list is a run of one slice of indexes: what this
+// allocates is a few bytes an option, not a map entry and a list each.
 func shareOptions(s stateJSON) stateJSON {
 	if s.OptionLists != nil {
 		return s
 	}
+	n := 0
+	for i := range s.Agents {
+		for _, f := range s.Agents[i].Fields {
+			if len(f.Options) >= 2 {
+				n += len(f.Options)
+			}
+		}
+	}
+	if n == 0 {
+		return s
+	}
+	// every listed option, in field order, as it is sent
+	all := make([]*agent.Option, 0, n)
 	agents := slices.Clone(s.Agents)
-	var lists [][]agent.Option
 	for i := range agents {
-		fields := agents[i].Fields
-		cloned := false
+		fields := slices.Clone(agents[i].Fields)
 		for j := range fields {
-			opts := fields[j].Options
-			if len(opts) < 2 {
-				continue
+			if opts := fields[j].Options; len(opts) >= 2 {
+				opts = fastForSelf(opts, agents[i].ID)
+				for k := range opts {
+					all = append(all, &opts[k])
+				}
 			}
-			opts = fastForSelf(opts, agents[i].ID)
-			k := slices.IndexFunc(lists, func(l []agent.Option) bool { return sameOptions(l, opts) })
-			if k < 0 {
-				lists = append(lists, opts)
-				k = len(lists) - 1
-			}
-			if !cloned {
-				fields, cloned = slices.Clone(fields), true
-			}
-			fields[j].Options, fields[j].List = nil, k+1
 		}
 		agents[i].Fields = fields
 	}
-	if lists == nil {
-		return s
+	// each option's index in the table: alike options sort together
+	order := make([]int32, n)
+	for i := range order {
+		order[i] = int32(i)
 	}
-	s.Agents, s.OptionLists = agents, lists
+	slices.SortStableFunc(order, func(a, b int32) int { return strings.Compare(all[a].Value, all[b].Value) })
+	ids := make([]int32, n)
+	var table []*agent.Option
+	for g := 0; g < n; {
+		e := g + 1
+		for e < n && all[order[e]].Value == all[order[g]].Value {
+			e++
+		}
+		first := int32(len(table))
+		for _, k := range order[g:e] {
+			ids[k] = -1
+			for t := first; t < int32(len(table)); t++ {
+				if sameOption(table[t], all[k]) {
+					ids[k] = t
+					break
+				}
+			}
+			if ids[k] < 0 {
+				ids[k] = int32(len(table))
+				table = append(table, all[k])
+			}
+		}
+		g = e
+	}
+	var lists [][]int32
+	at := 0
+	for i := range agents {
+		for j := range agents[i].Fields {
+			f := &agents[i].Fields[j]
+			if len(f.Options) < 2 {
+				continue
+			}
+			l := ids[at : at+len(f.Options) : at+len(f.Options)]
+			at += len(f.Options)
+			k := slices.IndexFunc(lists, func(m []int32) bool { return slices.Equal(m, l) })
+			if k < 0 {
+				lists, k = append(lists, l), len(lists)
+			}
+			f.Options, f.List = nil, k+1
+		}
+	}
+	s.Agents, s.OptionLists, s.Options = agents, lists, table
 	return s
 }
 
@@ -200,16 +278,9 @@ func fastForSelf(opts []agent.Option, id string) []agent.Option {
 	return opts
 }
 
-// sameOptions reports whether a and b are the same options, in the same
-// order.
-func sameOptions(a, b []agent.Option) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	if &a[0] == &b[0] {
-		return true
-	}
-	if a[0].Value != b[0].Value || a[len(a)-1].Value != b[len(b)-1].Value {
+// sameOption reports whether a and b are the same option.
+func sameOption(a, b *agent.Option) bool {
+	if a.Label != b.Label || a.Ref != b.Ref || a.FastFor != b.FastFor || a.Note != b.Note {
 		return false
 	}
 	return reflect.DeepEqual(a, b)

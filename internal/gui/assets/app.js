@@ -150,9 +150,10 @@ async function api(path, body, heads, signal) {
   try { data = text ? JSON.parse(text) : null; } catch {
     throw new Error(notJSON(res, text));
   }
-  // a state sends each fields' option list once, "*" for a fastFor of
-  // the agent's own (shareOptions, statewrite.go)
-  if (data?.optionLists) for (const a of data.agents) for (const f of a.fields) if (f.list) f.options = data.optionLists[f.list - 1].map((o) => o.fastFor == "*" ? { ...o, fastFor: a.id } : o);
+  // a state sends each fields' option list once, as indexes into its
+  // options, "*" for a fastFor of the agent's own (shareOptions,
+  // statewrite.go)
+  if (data?.optionLists) for (const a of data.agents) for (const f of a.fields) if (f.list) f.options = data.optionLists[f.list - 1].map((o) => (o = data.options[o]).fastFor == "*" ? { ...o, fastFor: a.id } : o);
   if (!res.ok) {
     const err = new Error(data?.error || `${res.status} ${res.statusText}`);
     if (data?.code === "runtime_unavailable") {

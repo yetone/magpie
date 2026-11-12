@@ -154,13 +154,19 @@ func TestStateSendsEachOptionListOnce(t *testing.T) {
 				List    int            `json:"list"`
 			} `json:"fields"`
 		} `json:"agents"`
-		OptionLists [][]agent.Option `json:"optionLists"`
+		OptionLists [][]int32      `json:"optionLists"`
+		Options     []agent.Option `json:"options"`
 	}
 	if err := json.Unmarshal(w.body.Bytes(), &sent); err != nil {
 		t.Fatal(err)
 	}
 	if len(sent.OptionLists) != 4 {
 		t.Fatalf("%d option lists sent, want 4 (the catalog, codex's fast one's, the other icons', f's and g's): %s", len(sent.OptionLists), w.body.Bytes())
+	}
+	// a/1 as the catalog has it, a/2, a/2 fast for codex, a/1 of the
+	// other icons, x/1, x/2 fast for its own agent, x/3 fast for codex
+	if len(sent.Options) != 7 {
+		t.Fatalf("%d options sent, want each of the 7 once: %s", len(sent.Options), w.body.Bytes())
 	}
 	lists := map[string]int{}
 	for _, a := range sent.Agents {
@@ -193,14 +199,14 @@ func TestStateSendsEachOptionListOnce(t *testing.T) {
 	if err := json.Unmarshal(w.body.Bytes(), &back); err != nil {
 		t.Fatal(err)
 	}
-	ol := back["optionLists"].([]any)
+	ol, table := back["optionLists"].([]any), back["options"].([]any)
 	for _, a := range back["agents"].([]any) {
 		for _, f := range a.(map[string]any)["fields"].([]any) {
 			f := f.(map[string]any)
 			if l, ok := f["list"].(float64); ok {
 				var opts []any
-				for _, o := range ol[int(l)-1].([]any) {
-					o := o.(map[string]any)
+				for _, k := range ol[int(l)-1].([]any) {
+					o := table[int(k.(float64))].(map[string]any)
 					if o["fastFor"] == "*" {
 						c := map[string]any{}
 						for k, v := range o {
@@ -217,6 +223,7 @@ func TestStateSendsEachOptionListOnce(t *testing.T) {
 		}
 	}
 	delete(back, "optionLists")
+	delete(back, "options")
 	var want map[string]any
 	if err := json.Unmarshal(before.Bytes(), &want); err != nil {
 		t.Fatal(err)

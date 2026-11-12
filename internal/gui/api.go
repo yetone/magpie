@@ -340,10 +340,12 @@ type stateJSON struct {
 	// couldn't listen on it, as far as it could be read (gateway.PortHeld)
 	GatewayHeld *gateway.PortHeld `json:"gatewayHeld,omitempty"`
 	// OptionLists are the fields' option lists, each once, that a field's
-	// List names (shareOptions). With real accounts 13 agents' model
-	// pickers offered the same 51KB catalog, 650KB of a 690KB state.
-	// Last of the fields: writeStateJSON writes them after the rest.
-	OptionLists [][]agent.Option `json:"optionLists,omitempty"`
+	// List names (shareOptions), as indexes into Options, where each option
+	// is once: with real accounts 13 agents' model pickers offered the same
+	// 51KB catalog, 650KB of a 690KB state, beside a few models of their
+	// own. Last of the fields: writeStateJSON writes them after the rest.
+	OptionLists [][]int32       `json:"optionLists,omitempty"`
+	Options     []*agent.Option `json:"options,omitempty"`
 }
 
 // unlistedJSON is a model of a provider kept for routing groups, and the
