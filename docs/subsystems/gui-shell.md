@@ -361,6 +361,23 @@ card's "Show … accounts" button keeps its room but is hidden and inert, so
 the strip stays where it was. A menu bar cell asking for one of the
 accounts unfolds them (`focusQuotaCard`). See `usage-all-fold.test.cjs`.
 
+The Usage page's allowances are cards, or a table when the reader picks
+Table in the Allowances head (`#quotaView`; zysicyj on X: a dozen-plus
+accounts were hard to scan as cards). The pick is kept in localStorage
+`magpie.quotaView` on this computer and nothing is written until it is
+made, so the default stays cards. The table (`quotaTable` in
+`quotatable.js`, which app.js imports once it is picked) has a row per
+account in the cards' order, so what the cards hide or merge is hidden or
+merged here too, with the subscription, the account, the four windows most
+accounts have (each as its used or left share, a bar and when it resets,
+from the same `quotaFill` and `quotaText` as the cards, so Used/Left turns
+both) and the rest of an account's windows in a last column; a failed read
+and a balance say so across the windows. A head sorts by it (most used first
+for a window, A first for a name), again the other way, a third time back
+to the cards' order; accounts with nothing in that column stay last. It
+scrolls in its own box at a narrow width, the subscription held at the left.
+See `usage-quota-table.test.cjs`.
+
 ### The Sessions page's folders
 
 The Sessions page lists an agent's project folders as one list, newest
