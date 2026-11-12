@@ -7038,7 +7038,89 @@ Yes. magpie writes the model's context window, which Paimon compacts against; wi
 
 Yes. magpie stashed the model, litellm provider and context window you had and puts them back; the rest of the file was never touched.
 
-More agents on the same models: [Muse Code on any model](https://usemagpie.ai/docs/muse-code), [Prime Agent on any model](https://usemagpie.ai/docs/prime-agent) and [Pi on any model](https://usemagpie.ai/docs/pi). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Muse Code on any model](https://usemagpie.ai/docs/muse-code), [Prime Agent on any model](https://usemagpie.ai/docs/prime-agent), [Pi on any model](https://usemagpie.ai/docs/pi) and [PenguinHarness on any model](https://usemagpie.ai/docs/penguin). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/penguin
+
+# PenguinHarness on any model
+
+PenguinHarness (Prism-Shadow/penguin-harness, the `penguin` command, npm `@prismshadow/penguin-cli`, and a desktop app) keeps each Project's models in one TOML file. magpie adds a provider named magpie and its models there, so PenguinHarness runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription. The CLI and the desktop app read the same file.
+
+## Set up PenguinHarness
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model for PenguinHarness on the Agents page.** Pick a model via magpie. A running PenguinHarness moves to it at once, with no restart.
+
+```
+magpie penguin deepseek/deepseek-v4-pro
+```
+
+## .project_config.toml
+
+The file is under the data root: `$PENGUIN_HOME`, else `~/.penguin/data` on every system. The CLI works in the Project `$PENGUIN_PROJECT_ID`, else `default_project`, so the file is `~/.penguin/data/default_project/.project_config.toml`. What magpie writes:
+
+```
+default_model = { provider = "magpie", model_id = "deepseek/deepseek-v4-pro" }
+
+[providers.magpie]
+base_url = "http://127.0.0.1:3425/v1"
+client_type = "openai-responses"
+api_key = ""
+
+[[models]]
+provider = "magpie"
+model_id = "deepseek/deepseek-v4-pro"
+display_name = "…"
+context_window = …
+vision = …
+max_tokens = …
+
+[models.pricing]
+unit = "usd_per_mtok"
+cache_read = …
+cache_write = …
+output = …
+```
+
+A model is the pair of provider and model_id, and one without an address or key of its own takes its provider's. magpie uses the `openai-responses` client: requests go to base_url plus `/responses`, with the thinking level as reasoning.effort, which the openai-chat client leaves out. Your own providers and models stay as they are. With no file, magpie makes one readable by you alone (it holds keys), as PenguinHarness makes it. PenguinHarness in a WSL distro is set up the same way, in `~/.penguin/data` there.
+
+## The model list
+
+Each of magpie's models is one `[[models]]` entry, with what PenguinHarness's own Models page records for one: the display name, context window, cap on a reply, whether it reads images, and its price per million tokens. `vision` is always written, since PenguinHarness takes a model to read images unless told not. PenguinHarness refuses a default_model naming no entry, so magpie writes the entries before the default, and on the way back changes the default before taking them out.
+
+## No restart
+
+PenguinHarness's server reads the file again whenever its modification time moves, so a change needs no restart. Its own Models page and `penguin config model …` write the whole file back, and every key magpie writes is one it knows, so none is lost. A sync with nothing new leaves the file, and its time, alone.
+
+## Switching back
+
+When it first steps in, magpie stashes the default_model you had. Switching back picks it again if PenguinHarness still has it, takes out a vision_model picked among magpie's, then removes magpie's models and `[providers.magpie]`. A file magpie made is removed once nothing is left in it.
+
+```
+magpie penguin default
+```
+
+## FAQ
+
+### Can PenguinHarness run on DeepSeek, GLM or a ChatGPT subscription?
+
+Yes. Pick a via-magpie model for PenguinHarness on magpie's Agents page; the CLI and the desktop app both use it.
+
+### Which file does magpie change?
+
+The current Project's .project_config.toml under the data root ($PENGUIN_HOME, else ~/.penguin/data). The default Project is default_project.
+
+### Do I need to restart PenguinHarness?
+
+No. It reads its settings again whenever the file's modification time moves.
+
+### Does switching back restore my model?
+
+Yes. magpie stashed the default_model you had, picks it again if PenguinHarness still has it, and removes the provider and models it added.
+
+More agents on the same models: [Paimon on any model](https://usemagpie.ai/docs/paimon), [Muse Code on any model](https://usemagpie.ai/docs/muse-code) and [Prime Agent on any model](https://usemagpie.ai/docs/prime-agent). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
