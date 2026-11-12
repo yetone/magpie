@@ -114,9 +114,19 @@ func DrawerMissing() string { return drawerMissing(settings.Load().ImageGen) }
 // drawerMissing is v, an Image generation pick, when magpie can't draw
 // with it: pickedMissing's, and a routing group ("group/<id>", 7up6666 on
 // X) none of whose members draws any more.
+// DrawerMissingOf is drawerMissing: what Settings checks an Image
+// generation pick with before it saves it.
+func DrawerMissingOf(v string) string { return drawerMissing(v) }
+
 func drawerMissing(v string) string {
 	if !provider.IsGroupRef(v) {
-		return pickedMissing(v)
+		if v == "" || v == "off" {
+			return ""
+		}
+		if _, _, ok := resolveDrawing(v); ok {
+			return ""
+		}
+		return v
 	}
 	// a group of image models only is no model agents are offered, so
 	// Resolve doesn't take it: it is missing when none of it draws
@@ -172,6 +182,15 @@ func resolveDrawing(id string) (provider.Provider, string, bool) {
 		return provider.Resolve(id)
 	}
 	if strings.Contains(id, "/") {
+		if p, m, ok := provider.Resolve(id); ok {
+			return p, m, true
+		}
+		// an image model of a key kept for them: Select none serves no
+		// chat model, yet the key still draws (netube99 on X, minimax-cn)
+		pid, model, _ := strings.Cut(id, "/")
+		if p, err := provider.Find(pid); err == nil && p.On() && !p.DecideOnly() && drawsModel(*p, model) {
+			return *p, model, true
+		}
 		return provider.Resolve(id)
 	}
 	for _, p := range provider.All() {

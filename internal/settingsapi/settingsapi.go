@@ -414,7 +414,7 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 		}
 	}
 	if v := strings.TrimSpace(in.ImageGen); v != "" && v != "off" && v != cur.ImageGen {
-		if _, _, ok := provider.Resolve(v); !ok {
+		if gateway.DrawerMissingOf(v) != "" {
 			return in, fmt.Errorf("no model %s to generate images", v)
 		}
 	}
