@@ -1074,15 +1074,11 @@ func revalidated(next http.Handler) http.Handler {
 		if name == "" {
 			name = "index.html"
 		}
-		b, err := fs.ReadFile(staticFS(), name)
-		if err != nil {
+		sum, page, ok := staticSum(name, r.URL.Path == "/")
+		if !ok {
 			next.ServeHTTP(rw, r)
 			return
 		}
-		if r.URL.Path == "/" {
-			b = versionedPage(b)
-		}
-		sum := sha256.Sum256(b)
 		rw.Header().Set("ETag", `"`+hex.EncodeToString(sum[:12])+`"`)
 		rw.Header().Set("Cache-Control", "no-cache")
 		// a file asked for by the address the page names it by, its
@@ -1095,7 +1091,7 @@ func revalidated(next http.Handler) http.Handler {
 		}
 		if r.URL.Path == "/" {
 			rw.Header().Set("Content-Type", "text/html; charset=utf-8")
-			http.ServeContent(rw, r, "index.html", time.Time{}, bytes.NewReader(b))
+			http.ServeContent(rw, r, "index.html", time.Time{}, bytes.NewReader(page))
 			return
 		}
 		next.ServeHTTP(rw, r)
@@ -1109,14 +1105,53 @@ var pageFile = lazyre.New(`(src|href)="([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\.(?
 // versionedPage is the page with each of its own scripts and stylesheets
 // named with its content's hash; one not among the page's files (boot.js,
 // which the API writes) keeps its name.
+// staticSum is the sha256 of a static file, or with root of the page as
+// versionedPage names its files, and that page: made once in a build,
+// whose files never change (staticFixed). Each load read every file
+// whole and hashed it again, the page's scripts twice, ~17 MB of a page
+// load with app.js alone over a megabyte (#2278). ok is false for a file
+// that can't be read, which isn't kept.
+func staticSum(name string, root bool) (sum [32]byte, page []byte, ok bool) {
+	key := name
+	if root {
+		key = "/"
+	}
+	if staticFixed {
+		if v, hit := staticSums.Load(key); hit {
+			a := v.(staticFile)
+			return a.sum, a.page, true
+		}
+	}
+	b, err := fs.ReadFile(staticFS(), name)
+	if err != nil {
+		return sum, nil, false
+	}
+	if root {
+		b = versionedPage(b)
+		page = b
+	}
+	sum = sha256.Sum256(b)
+	if staticFixed {
+		staticSums.Store(key, staticFile{sum, page})
+	}
+	return sum, page, true
+}
+
+// staticSums are staticSum's answers by name ("/" for the page).
+var staticSums sync.Map
+
+type staticFile struct {
+	sum  [32]byte
+	page []byte
+}
+
 func versionedPage(page []byte) []byte {
 	return pageFile.ReplaceAllFunc(page, func(m []byte) []byte {
 		g := pageFile.FindSubmatch(m)
-		b, err := fs.ReadFile(staticFS(), string(g[2]))
-		if err != nil {
+		sum, _, ok := staticSum(string(g[2]), false)
+		if !ok {
 			return m
 		}
-		sum := sha256.Sum256(b)
 		return []byte(fmt.Sprintf(`%s="%s?v=%s"`, g[1], g[2], hex.EncodeToString(sum[:6])))
 	})
 }

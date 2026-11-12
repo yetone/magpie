@@ -7,6 +7,9 @@ import (
 	"net/http"
 )
 
+// staticFixed: the UI's files are the binary's, the same for its life.
+const staticFixed = true
+
 // The shipped app serves the UI from the binary, in one process.
 func staticFS() fs.FS                             { f, _ := fs.Sub(assets, "assets"); return f }
 func devRoutes(*http.ServeMux)                    {}

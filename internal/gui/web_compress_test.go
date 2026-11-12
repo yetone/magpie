@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -138,5 +139,54 @@ func TestVersionedFilesKept(t *testing.T) {
 	}
 	if cc := get("/").Header().Get("Cache-Control"); cc != "no-cache" {
 		t.Errorf("the page: Cache-Control %q, want no-cache", cc)
+	}
+}
+
+// A load asks for the page and each of its files; their ETags and the
+// page's names for its files are made once, not by reading and hashing
+// every file again (app.js alone is over a megabyte) at each load
+// (#2278).
+func TestStaticFilesHashedOnce(t *testing.T) {
+	if !staticFixed {
+		t.Skip("a dev build reads the files from disk each time")
+	}
+	app, err := fs.ReadFile(staticFS(), "app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := revalidated(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	get := func(path string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
+		return rec
+	}
+	first, page := get("/app.js").Header().Get("ETag"), get("/").Body.String()
+	const loads = 20
+	spent := func(load func()) uint64 {
+		var before, after runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&before)
+		for range loads {
+			load()
+		}
+		runtime.ReadMemStats(&after)
+		return after.TotalAlloc - before.TotalAlloc
+	}
+	// a read of app.js at each load is loads times its size
+	if n := spent(func() {
+		if tag := get("/app.js").Header().Get("ETag"); tag != first {
+			t.Fatalf("app.js's ETag changed: %s, then %s", first, tag)
+		}
+	}); n > uint64(len(app)) {
+		t.Errorf("%d loads of app.js allocated %d bytes, app.js is %d", loads, n, len(app))
+	}
+	// the page names app.js by its hash, read again at each load before;
+	// what is left is the page copied out, a few times its size a load
+	if n := spent(func() {
+		if got := get("/").Body.String(); got != page {
+			t.Fatal("the page changed between loads")
+		}
+	}); n > uint64(loads*len(page)*6) {
+		t.Errorf("%d loads of the page allocated %d bytes, the page is %d", loads, n, len(page))
 	}
 }

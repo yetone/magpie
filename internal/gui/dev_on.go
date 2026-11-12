@@ -41,6 +41,9 @@ func assetsDir() string {
 
 func staticFS() fs.FS { return os.DirFS(assetsDir()) }
 
+// staticFixed: the UI's files are read from disk, and change under it.
+const staticFixed = false
+
 // stamp is the newest modification time under assets, as a string.
 func stamp() string {
 	var newest time.Time
