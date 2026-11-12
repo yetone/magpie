@@ -336,6 +336,8 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	in.UsageAgentsHidden = cur.UsageAgentsHidden
 	// and the allowance cards the Usage page's Overview leaves out, set there
 	in.UsageCardsHidden = cur.UsageCardsHidden
+	// and the quota rows of a card it leaves out, set there too
+	in.UsageWindowsHidden = cur.UsageWindowsHidden
 	// and the names models' usage is counted under (magpie model alias)
 	in.UsageAliases = cur.UsageAliases
 	// and the clears of usage made on the Usage page

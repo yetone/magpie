@@ -130,6 +130,47 @@ func TestUsageArrangeCardsHidden(t *testing.T) {
 	want(nil)
 }
 
+// The quota rows of a card that the Overview leaves out (wangshaowei39 on
+// X: Antigravity's Claude & GPT) are saved on their own, trimmed and once
+// each, leave the card list as it was, and are kept through a save of the
+// Settings page.
+func TestUsageArrangeWindowsHidden(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
+	t.Setenv("APPDATA", filepath.Join(h, "AppData", "Roaming"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(h, "AppData", "Local"))
+	post := func(path, body string) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		Handler(nil, nil).ServeHTTP(rec, httptest.NewRequest("POST", path, strings.NewReader(body)))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: %d %s", path, rec.Code, rec.Body)
+		}
+	}
+	want := func(rows []string) {
+		t.Helper()
+		s := settings.Load()
+		if !slices.Equal(s.UsageWindowsHidden, rows) {
+			t.Fatalf("windows hidden %v, want %v", s.UsageWindowsHidden, rows)
+		}
+		if !slices.Equal(s.UsageCardsHidden, []string{"stepfun|balance"}) {
+			t.Fatalf("cards hidden %v, want them kept", s.UsageCardsHidden)
+		}
+	}
+	post("/api/usage/arrange", `{"cardsHidden":["stepfun|balance"]}`)
+	post("/api/usage/arrange", `{"windowsHidden":["antigravity|Claude & GPT"," antigravity|Claude & GPT","claude|7 days"]}`)
+	want([]string{"antigravity|Claude & GPT", "claude|7 days"})
+	post("/api/settings", `{"theme":"dark"}`)
+	want([]string{"antigravity|Claude & GPT", "claude|7 days"})
+	post("/api/usage/arrange", `{"cardsHidden":["stepfun|balance"]}`)
+	want([]string{"antigravity|Claude & GPT", "claude|7 days"})
+	post("/api/usage/arrange", `{"windowsHidden":[]}`)
+	want(nil)
+}
+
 // A client magpie doesn't know is counted as one of its agents from the
 // Usage page's Agents list (#1958, NorethSea), saved on its own and kept
 // through a save of the Settings page; As "" counts it on its own again.

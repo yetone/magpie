@@ -1163,7 +1163,52 @@ const cardPeeked = (q) => !!usagePeek && (trayCardID(q) === usagePeek || q.provi
 function overviewCards(list) {
   const hid = hiddenCards();
   list = sharedBalances(list);
-  return hid.size ? list.filter((q) => !hid.has(cardHideKey(q)) || cardPeeked(q)) : list;
+  list = hid.size ? list.filter((q) => !hid.has(cardHideKey(q)) || cardPeeked(q)) : list;
+  return list.map(withoutHiddenRows);
+}
+// A card's quota rows can be hidden one by one (wangshaowei39 on X:
+// Antigravity's Claude & GPT rows unwanted), by provider and row group, a
+// pool's or family's name else the window's (windowGroup), in
+// settings.usageWindowsHidden, every account of the provider alike. Only
+// the Overview's copy loses them; a card is never left with none.
+const windowGroup = (w) => w.pool || w.family || w.name;
+const windowHideKey = (q, g) => q.provider + "|" + g;
+const hiddenRows = () => new Set(state.settings?.usageWindowsHidden || []);
+function withoutHiddenRows(q) {
+  const hid = hiddenRows();
+  if (!hid.size || q.error || !q.windows?.length) return q;
+  const ws = q.windows.filter((w) => !hid.has(windowHideKey(q, windowGroup(w))));
+  return ws.length && ws.length < q.windows.length ? { ...q, windows: ws } : q;
+}
+// hiddenRowList: the rows the Overview leaves out, one a provider and group,
+// those of a card with every row named showing again excepted
+function hiddenRowList() {
+  const hid = hiddenRows(), out = [], seen = new Set();
+  if (!hid.size) return out;
+  for (const q of quotas || []) {
+    if (q.error || !q.windows?.length) continue;
+    const gone = q.windows.filter((w) => hid.has(windowHideKey(q, windowGroup(w))));
+    if (gone.length === q.windows.length) continue;
+    for (const w of gone) {
+      const key = windowHideKey(q, windowGroup(w));
+      if (!seen.has(key)) { seen.add(key); out.push({ key, q, group: windowGroup(w) }); }
+    }
+  }
+  return out;
+}
+// quotaRowMenuItems: Hide for the row under the pointer, else for each row
+// of the card, when it has more than one
+function quotaRowMenuItems(card, target, of) {
+  const q = of[0];
+  const groups = [...new Set((q.windows || []).map(windowGroup))];
+  if (q.error || groups.length < 2) return [];
+  // the row under the pointer, told by its name: a pool's window is named
+  // "Pool · 5 hours", a family's and a model's by their own
+  const row = target?.closest?.(".quota");
+  const name = row && card.contains(row) && row.querySelector(".quota-name")?.textContent;
+  const own = name && [...familyWindows(q.windows), ...q.windows].find((w) => t(w.name) === name);
+  const pick = own ? [windowGroup(own)] : groups;
+  return pick.map((g, i) => ({ name: t("Hide {name} from Overview", { name: t(g) }), literal: true, icon: EYE_OFF, sep: i === 0, run: () => hideQuotaRows([windowHideKey(q, g)], true) }));
 }
 // quotaCardMenus gives a card its menu: a right-click, the keyboard's menu
 // key on its handle, or on a touch screen a long press (iOS Safari sends
@@ -1222,12 +1267,14 @@ function quotaCardMenu(target, card, subs, from) {
   // a card shown though hidden, a menu bar cell having asked for it
   // (usagePeek): its way back, not Hide again
   const hid = hiddenCards(), peeked = of.flatMap(cardHideKeys).filter((k) => hid.has(k));
-  const others = hiddenQuotas().length;
+  const others = hiddenQuotas().length + hiddenRowList().length;
+  const rows = peeked.length ? [] : quotaRowMenuItems(card, target, of);
   openRowMenu(anchor, [
     ...(peeked.length ? [{ name: "Show in Overview", icon: EYE, run: () => hideQuotaCards(peeked, false) }]
       : [{ name: who && subs.length > 1 ? "Hide this account from Overview" : "Hide from Overview", icon: EYE_OFF, run: () => hideQuotaCards(of.flatMap(cardHideKeys), true) }]),
     // a plan's card showing its key's balance: the balance alone
     ...(one?.balanceCard && !peeked.length ? [{ name: "Hide its balance from Overview", icon: EYE_OFF, run: () => hideQuotaCards([one.balanceCard + "|balance"], true) }] : []),
+    ...rows,
     // the ones hidden already, from the menu that hid them
     ...(others ? [{ name: t("Show {n} Hidden", { n: others }), literal: true, icon: EYE, sep: true, run: (e) => openHidden(e, "quotaHid", () => { quotaHidOpen = true; renderQuotaHid(); }) }] : []),
   ]);
@@ -1241,7 +1288,8 @@ function hiddenQuotas() {
 // opening them, each with Unhide, and Show all
 function renderQuotaHid() {
   const hb = $("#quotaHid");
-  const hidden = hiddenQuotas();
+  const cards = hiddenQuotas(), rowList = hiddenRowList();
+  const hidden = [...cards, ...rowList];
   hb.hidden = !hidden.length;
   if (!hidden.length) { quotaHidOpen = false; return; }
   const line = hb.querySelector(".us-hidline"), hl = hb.querySelector(".list");
@@ -1253,7 +1301,7 @@ function renderQuotaHid() {
   }
   all.textContent = t("Show all");
   all.hidden = !quotaHidOpen || hidden.length < 2;
-  all.onclick = () => hideQuotaCards(hidden.map(cardHideKey), false);
+  all.onclick = () => { if (cards.length) hideQuotaCards(cards.map(cardHideKey), false); if (rowList.length) hideQuotaRows(rowList.map((r) => r.key), false); };
   line.replaceChildren(el("span", "", t("{n} hidden", { n: hidden.length })), svg(CHEV, 11, 1.6));
   line.title = t("Hidden from the Overview only: they are still used and counted. Click to see them.");
   line.setAttribute("aria-expanded", String(quotaHidOpen));
@@ -1261,7 +1309,7 @@ function renderQuotaHid() {
   hl.hidden = !quotaHidOpen;
   hl.replaceChildren();
   if (!quotaHidOpen) return;
-  for (const q of hidden) {
+  for (const q of cards) {
     const r = el("div", "row stat hid acts");
     r.dataset.id = cardHideKey(q);
     r.append(icon(q.icon));
@@ -1272,6 +1320,40 @@ function renderQuotaHid() {
     b.onclick = (e) => { e.stopPropagation(); hideQuotaCards([cardHideKey(q)], false); };
     r.append(who, b);
     hl.append(r);
+  }
+  for (const { key, q, group } of rowList) {
+    const r = el("div", "row stat hid acts");
+    r.dataset.id = key;
+    r.append(icon(q.icon));
+    const who = el("div", "who");
+    who.append(el("div", "name", quotaName(q)), el("div", "sub", t(group)));
+    const b = el("button", "text us-unhide", t("Unhide"));
+    b.type = "button";
+    b.onclick = (e) => { e.stopPropagation(); hideQuotaRows([key], false); };
+    r.append(who, b);
+    hl.append(r);
+  }
+}
+// hideQuotaRows hides a card's rows from the Overview, or has them back:
+// drawn at once, put back if the save fails
+async function hideQuotaRows(keys, hide) {
+  const prev = state.settings || {};
+  const cur = (prev.usageWindowsHidden || []).filter((k) => !keys.includes(k));
+  const windowsHidden = hide ? [...cur, ...keys] : cur;
+  state.settings = { ...prev, usageWindowsHidden: windowsHidden };
+  const again = () => {
+    renderQuotas();
+    const to = $("#quotaHid .us-hidline");
+    (hide && to && !to.closest("[hidden]") ? to : null)?.focus({ preventScroll: true });
+  };
+  again();
+  try {
+    const s = await api("usage/arrange", { windowsHidden });
+    state.settings = { ...state.settings, usageWindowsHidden: s.usageWindowsHidden || [] };
+  } catch (e) {
+    state.settings = prev;
+    again();
+    status(e.message, "err");
   }
 }
 // hideQuotaCards hides cards from the Overview, or has them back: drawn at

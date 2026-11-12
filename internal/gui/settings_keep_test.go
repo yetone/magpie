@@ -163,6 +163,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		PanelUsageHidden:     []string{"deepseek"},
 		UsageAgentsHidden:    []string{"curl"},
 		UsageCardsHidden:     []string{"stepfun|balance"},
+		UsageWindowsHidden:   []string{"antigravity|Claude & GPT"},
 		ClientAgents:         map[string]string{"hermes-codex-thread-bridge": "codex"},
 		PlainNames:           true,
 		PlainOwnNames:        true,
