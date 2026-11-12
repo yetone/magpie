@@ -67,12 +67,21 @@ func TestProviderInfoReadsTheListOnce(t *testing.T) {
 		runtime.ReadMemStats(&b)
 		return (b.TotalAlloc - a.TotalAlloc) / 5
 	}
-	list := bytesPer(func() { p.Available() })
+	// The row's own work (each model's price, window and protocol
+	// look-ups) is measured apart, with the list read beforehand, so
+	// the bound follows neither: e6184b368 made the list 8x cheaper
+	// while the look-ups stayed, and a bar of 5 lists went red with the
+	// list still read once.
+	avail := bytesPer(func() { p.Available() })
+	list := bytesPer(func() { p.Listing() })
+	ls := p.Listing()
+	rest := bytesPer(func() { providerInfoWith(p, ls, nil, desktopNumbers(nil)) })
 	row := bytesPer(func() { providerInfo(p, nil) })
-	t.Logf("a row %d bytes, the list %d", row, list)
-	// each model's own look-ups besides (its price, window, protocols)
-	// are about 2.5 lists here; reading it four times over made 6.8
-	if row > list*5 {
-		t.Fatalf("a row took %d bytes, the list %d: read more than once", row, list)
+	t.Logf("a row %d bytes: the listing %d (the list %d), the rest %d", row, list, avail, rest)
+	// read once: row = listing + rest; one more read of the list adds a
+	// whole list, so half of one is the room left for what else a build
+	// allocates
+	if row > rest+list+avail/2 {
+		t.Fatalf("a row took %d bytes, the listing %d (the list %d) and the rest %d: the list read more than once", row, list, avail, rest)
 	}
 }
