@@ -901,6 +901,20 @@ own change and what was run at the reviewed head.
   short line; the rest goes in the body.
 - Seen 2× (2026-10-13, 2026-10-14).
 
+**A commit message file is made fresh for this commit, and its subject
+is read back before the push.**
+- plugins bc9f611e (11-12) went out as "qoder 0.2.60: the business record
+  names the model", another session's stale message file. Its content was
+  qoder 0.2.67, a different change; 7b42e404 had to note it after the
+  push, since main isn't rewritten.
+- 10-15: ce1251cc9, the Windows dsh fix, shipped under a lessons subject
+  for the same reason: zsh's noclobber made `cat >` onto the existing
+  file fail, and the commit took the old text.
+- Name the file for this change in your own scratch folder, write it with
+  `>|`, and check `git log -1 --format=%s` against the diff before
+  pushing.
+- Seen 2× (2026-10-15, 2026-11-12).
+
 **A community PR that changes how a page looks is not merged on review
 alone.**
 - #1354 (Nxir) rearranged the Routing page with no issue asking for it. It
