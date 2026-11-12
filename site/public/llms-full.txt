@@ -7861,7 +7861,100 @@ Mister Morph looks a window up only in its own list, which doesn't have magpie's
 
 No. They are yours; magpie changes only its keys under llm and puts them back when you switch back.
 
-More agents on the same models: [Grok App on any model](https://usemagpie.ai/docs/grok-app), [fx on any model](https://usemagpie.ai/docs/fx) and [Aside on any model](https://usemagpie.ai/docs/aside). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Grok App on any model](https://usemagpie.ai/docs/grok-app), [fx on any model](https://usemagpie.ai/docs/fx), [Aside on any model](https://usemagpie.ai/docs/aside) and [mu on any model](https://usemagpie.ai/docs/mu). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/mu
+
+# mu on any model
+
+mu (qybaihe/mu: npm's `mu-agent`, the `mu` command and the mu desktop app) is Pi with a judgment kernel added as an extension. It starts Pi, with Pi's `settings.json` and `models.json` in its own `~/.mu/agent` folder, and the desktop app uses the same folder. So magpie sets mu up as it does Pi, and mu runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription.
+
+## Set up mu
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model for mu on the Agents page.** Pick one via magpie, and an effort if you want. The command and the desktop app both use it.
+3. **Start a new session.** New mu sessions use the model.
+
+```
+magpie mu deepseek/deepseek-v4-pro
+```
+
+## settings.json and models.json
+
+magpie writes `defaultProvider`, `defaultModel` and `defaultThinkingLevel` in `settings.json`, and adds itself to `models.json` as the provider `magpie`, as it does for Pi.
+
+```
+// ~/.mu/agent/settings.json
+{
+  "defaultProvider": "magpie",
+  "defaultModel": "deepseek/deepseek-v4-pro",
+  "defaultThinkingLevel": "…"
+}
+```
+
+```
+// ~/.mu/agent/models.json
+{
+  "providers": {
+    "magpie": { "apiKey": "", … }
+  }
+}
+```
+
+On its first run mu asks for `mu setup` only while models.json has no provider and settings.json no defaultProvider. Once magpie has written them, mu counts as set up and doesn't ask.
+
+## mu's own key
+
+mu's requests say `pi/` and a version, as Pi's do. So magpie gives mu a key of its own (magpie-mu), and the gateway counts its requests as mu's, not Pi's.
+
+## mu's folder
+
+magpie finds mu's folder as mu does: the first of these variables that is set, with `~` in it standing for your home.
+
+```
+MU_AGENT_DIR
+KYRN_AGENT_DIR
+MU_CODING_AGENT_DIR
+KYRN_CODING_AGENT_DIR
+```
+
+With none set it is `~/.mu/agent`, or `~/.kyrn/agent` when only `~/.kyrn`, its old name, exists and `~/.mu` doesn't. A mu in WSL is set up the same way, though magpie can't read the variables there.
+
+`mu` is a common name: a mu on PATH that is maildir-utils' mu (djcb/mu) isn't taken for mu-agent. mu is also found by its alias `mu-agent`.
+
+## The judge
+
+mu's judgment kernel has settings of its own (`mu.json` and `MU_JUDGE`). They are mu's, and magpie leaves them alone.
+
+## Switching back
+
+Before its first write magpie saves settings.json and models.json as they were. Switching back puts them back byte for byte while they still say what magpie left.
+
+```
+magpie mu default
+```
+
+## FAQ
+
+### Can mu run on DeepSeek, GLM or a ChatGPT subscription?
+
+Yes. Pick a via-magpie model for mu on magpie's Agents page, and magpie writes settings.json and models.json in ~/.mu/agent.
+
+### Do I still run mu setup?
+
+No. mu asks for it only while models.json has no provider and settings.json no defaultProvider, and magpie writes both.
+
+### Are mu's requests counted as Pi's?
+
+No. Both say pi/ in their User-Agent, so magpie gives mu its own key (magpie-mu) and counts its requests as mu's.
+
+### Is mu's judge changed?
+
+No. mu.json and MU_JUDGE are mu's own settings, and magpie leaves them alone.
+
+More agents on the same models: [Pi on any model](https://usemagpie.ai/docs/pi), [Mister Morph on any model](https://usemagpie.ai/docs/mister-morph) and [Grok App on any model](https://usemagpie.ai/docs/grok-app). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
