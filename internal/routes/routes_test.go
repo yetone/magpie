@@ -298,7 +298,7 @@ func TestLeastUsedSpendsLapsingFirst(t *testing.T) {
 	if got := keys(s, Apply(LeastUsed, "p", s)); !slices.Equal(got, []string{"half", "fresh"}) {
 		t.Fatalf("lapsing credits not spent first: %v", got)
 	}
-	s = []Seat{{Key: "fresh", Known: true, Used: 20}, {Key: "half", Known: true, Used: 50, Lapsing: 0.1, Lapse: now.Add(24 * time.Hour)}}
+	s = []Seat{{Key: "fresh", Known: true, Used: 20}, {Key: "half", Known: true, Used: 50, Lapsing: 0.05, Lapse: now.Add(24 * time.Hour)}}
 	if got := keys(s, Apply(LeastUsed, "p", s)); !slices.Equal(got, []string{"fresh", "half"}) {
 		t.Fatalf("a trifle unbalanced the pool: %v", got)
 	}

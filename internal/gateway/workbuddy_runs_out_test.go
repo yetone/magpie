@@ -169,3 +169,24 @@ func TestLeastUsedSpendsWorkBuddyCheckInCreditsAboutToLapse(t *testing.T) {
 		t.Fatalf("least used first as before: %s", got)
 	}
 }
+
+// kudi3699 on X, again: the check-in reward that lapses is a few dozen
+// credits (20 of 5100, six days out), not 500 tomorrow. It was faded to
+// under the threshold, so the half-used account was still never picked.
+func TestLeastUsedSpendsSmallCheckInRewardSixDaysOut(t *testing.T) {
+	old := allowances
+	defer func() { allowances = old }()
+	now := time.Now()
+	share := map[string]provider.Allowance{}
+	allowances = func(string) map[string]provider.Allowance { return share }
+	p := provider.Provider{ID: "workbuddy", Routing: provider.LeastUsed, Account: &provider.Account{Agent: "workbuddy", User: "a"}}
+	acct := func(user string) candidate {
+		return candidate{p: provider.Provider{ID: "workbuddy", Account: &provider.Account{Agent: "workbuddy", User: user}}, model: "hy3", rest: "workbuddy#" + user}
+	}
+	share["old"] = provider.Allowance{{Used: 50, Amount: 2550, Of: 5100, Unit: "credits", RunsOut: now.Add(6 * 24 * time.Hour), RunsOutLeft: 20}}
+	share["new"] = provider.Allowance{{Used: 20, Amount: 1020, Of: 5100, Unit: "credits", RunsOut: now.Add(200 * 24 * time.Hour), RunsOutLeft: 4080}}
+	got, _ := weigh(p, []candidate{acct("new"), acct("old")}, "hy3", provider.Chat)
+	if got[0].p.Account.User != "old" {
+		t.Fatalf("a small reward ending in 6 days not spent first: %s", got[0].p.Account.User)
+	}
+}

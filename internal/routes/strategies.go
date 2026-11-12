@@ -22,7 +22,7 @@ const (
 // lapsingMin is the points of the used share that lapsing soon unspent
 // (Seat.Lapsing) must reach to send an account ahead in Least used first:
 // a few credits of a large pool are not worth unbalancing it for.
-const lapsingMin = 0.5
+const lapsingMin = 0.1
 
 // urgent says a seat with room has credits to spend before they lapse.
 func urgent(s Seat) bool { return tier(s.Used) == 0 && s.Lapsing >= lapsingMin }

@@ -677,14 +677,16 @@ func (a Allowance) Lapse(model string, now time.Time) time.Time {
 }
 
 // lapseHorizon is how far ahead credits about to be lost count as spent
-// already: they weigh in full when they lapse now and fade to nothing a
-// week out (Allowance.Lapsing).
+// already: all of them within a week, none past it (Allowance.Lapsing).
+// They were faded across the week before, so a daily check-in reward of a
+// few dozen credits, a fraction of a point of a 5000-credit pool, fell
+// under the threshold until its last hours (kudi3699 on X).
 const lapseHorizon = 7 * 24 * time.Hour
 
 // Lapsing is the share of an allowance, in points of the 0–100 used share,
 // that is lost soon whatever is done: what a window that counts model
-// loses at RunsOut (RunsOutLeft of Of, never more than it has left), less
-// the further off that is, to nothing at lapseHorizon. Credits that are
+// loses at RunsOut (RunsOutLeft of Of, never more than it has left), when
+// that is within lapseHorizon. Credits that are
 // lost unspent cost nothing to spend, so a ranking by the share used takes
 // them off it, and an account whose month is half used but whose check-in
 // credits lapse tomorrow is not kept behind a fresh one (kudi3699 on X).
@@ -697,12 +699,11 @@ func (a Allowance) Lapsing(model string, now time.Time) float64 {
 		if !l.applies(model) || !l.RunsOut.After(now) || l.RunsOutLeft <= 0 || l.Of <= 0 {
 			continue
 		}
-		fade := 1 - float64(l.RunsOut.Sub(now))/float64(lapseHorizon)
-		if fade <= 0 {
+		if l.RunsOut.Sub(now) >= lapseHorizon {
 			continue
 		}
 		u := min(100, max(0, l.Used))
-		best = max(best, fade*min(100*l.RunsOutLeft/l.Of, 100-u))
+		best = max(best, min(100*l.RunsOutLeft/l.Of, 100-u))
 	}
 	return best
 }
