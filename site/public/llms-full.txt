@@ -6815,7 +6815,86 @@ magpie tells Alma each model's capabilities: whether it reasons, its thinking le
 
 magpie's provider is removed, a default model of magpie's is cleared for Alma to pick, and the image generation model goes back to Auto.
 
-More desktop apps on the same models: [Kun on any model](https://usemagpie.ai/docs/kun), [Every model in Cherry Studio, through magpie](https://usemagpie.ai/docs/cherry-studio) and [OpenHanako on any model](https://usemagpie.ai/docs/openhanako). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More desktop apps on the same models: [Kun on any model](https://usemagpie.ai/docs/kun), [Every model in Cherry Studio, through magpie](https://usemagpie.ai/docs/cherry-studio), [OpenHanako on any model](https://usemagpie.ai/docs/openhanako) and [OpenPencil on any model](https://usemagpie.ai/docs/openpencil). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/openpencil
+
+# OpenPencil on any model
+
+OpenPencil (ZSeven-W/openpencil, the openpencil-desktop app) is a design canvas whose chat runs models through builtin agents of your own: an Anthropic or OpenAI-compatible endpoint, a key and a list of models, each listed in the chat's model picker. magpie adds an entry named magpie, so OpenPencil runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription.
+
+## Set up OpenPencil
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Quit OpenPencil.** Why is below.
+3. **Pick magpie for OpenPencil on the Agents page.** Then tick the models it should list.
+4. **Open OpenPencil and pick a magpie model in its chat's model picker.** The model is picked in OpenPencil, not in a file.
+
+```
+magpie openpencil magpie
+```
+
+## The entry in settings.json
+
+OpenPencil keeps its settings in one settings.json:
+
+```
+macOS    ~/Library/Application Support/openpencil/settings.json
+Linux    ~/.config/openpencil/settings.json   ($XDG_CONFIG_HOME)
+Windows  %APPDATA%\openpencil\settings.json
+```
+
+magpie writes one entry of `builtin_agents`, id `magpie`, of kind openai-compat, which posts to `/chat/completions` under the gateway's `/v1`. OpenPencil's User-Agent isn't known, so the gateway tells its requests apart by the key `magpie-openpencil`:
+
+```
+{"version": 1,
+ "builtin_agents": [{"id": "magpie", "preset": "custom", "display_name": "magpie",
+   "kind": "openai-compat", "api_key": "magpie-openpencil",
+   "model": "", "models": ["", …],
+   "base_url": "http://127.0.0.1:3425/v1", "enabled": true}]}
+```
+
+Your other entries and settings stay, and so do the name and the on/off you give magpie's entry in OpenPencil. `version` has to be 1: without it OpenPencil sets the file aside as corrupt and then refuses to save at all. So magpie writes version 1 in a file it makes, and leaves alone a file whose version it doesn't know.
+
+## Quit OpenPencil first
+
+OpenPencil reads settings.json once, when it starts, and writes all of it back from what it holds when a setting changes and when it quits. A change magpie makes while it runs is written over when it quits, so magpie refuses one then and says to quit OpenPencil and try again. On Windows, where magpie can't tell it is running, a notice asks you to quit it first.
+
+## The model list
+
+The entry's models are the ones you tick for OpenPencil on magpie's Agents page, each once, at most 64 (OpenPencil drops the rest when it next saves). The `models` list is written for two or more, with the first again as `model`; v0.8.4 knows only `model`, so it lists the first model alone. Changes in magpie are synced to it.
+
+## Switching back
+
+Switching back takes magpie's entry out of `builtin_agents`, and the file too when all that is left is the version and empty list magpie wrote. Quit OpenPencil first here too.
+
+```
+magpie openpencil default
+```
+
+open-pencil/open-pencil, the other app of the name, keeps its providers in its webview's localStorage, which magpie can't write. It reaches magpie through an agent magpie sets up (Pi, an ACP agent) or a base URL typed in.
+
+## FAQ
+
+### Can OpenPencil run on DeepSeek, GLM or a ChatGPT subscription?
+
+Yes. Quit OpenPencil, pick magpie for it on magpie's Agents page, then open OpenPencil and pick a magpie model in its chat's model picker.
+
+### Why quit OpenPencil first?
+
+OpenPencil writes its whole settings back to settings.json when it quits, over what magpie wrote while it ran.
+
+### Why does OpenPencil show only one magpie model?
+
+OpenPencil v0.8.4 reads only the model field, so it lists the first model; later versions read the models list, up to 64.
+
+### Are my other builtin agents kept when I switch back?
+
+Yes. magpie removes only the entry with id magpie and leaves the rest as it was.
+
+More desktop apps on the same models: [Alma on any model](https://usemagpie.ai/docs/alma), [Kun on any model](https://usemagpie.ai/docs/kun) and [Pi on any model](https://usemagpie.ai/docs/pi). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
