@@ -3086,6 +3086,20 @@ func Titles(keys []string) map[string]string {
 	if len(keys) == 0 {
 		return out
 	}
+	// A ZCode session the CLI database has no row for (the app keeps its
+	// tasks in an index of its own) is still named as the app names it.
+	defer func() {
+		for _, k := range keys {
+			if out[k] != "" {
+				continue
+			}
+			if agent, id, ok := strings.Cut(k, ":"); ok && agent == "zcode" {
+				if t, ok := zcodeTaskOf("sess_" + zcodeBareID(id)); ok && title(t.title) != "" && !ocDefaultTitle(title(t.title)) {
+					out[k] = t.title
+				}
+			}
+		}
+	}()
 	want := make(map[string]bool, len(keys))
 	// alias maps the key a file is grouped under back to the key asked for:
 	// ZCode's request id, without the prefix its database gives it.
