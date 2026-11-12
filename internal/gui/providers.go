@@ -3037,7 +3037,13 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		var change func() error
 		switch r.PathValue("action") {
 		case "switch":
-			change = func() error { return provider.SwitchLogin(in.Agent, in.User) }
+			change = func() error {
+				err := provider.SwitchLogin(in.Agent, in.User)
+				if err == nil {
+					provider.NoteReordered()
+				}
+				return err
+			}
 		case "forget":
 			change = func() error { return provider.ForgetLogin(in.Agent, in.User) }
 		case "on", "off":

@@ -221,6 +221,7 @@ func accountsCmd(args []string) error {
 		if err := provider.SwitchLogin(id, args[3]); err != nil {
 			return err
 		}
+		provider.NoteReordered()
 		if _, plug := provider.PluginOf(id); plug || id == "gemini" || id == "antigravity" || id == "copilot" {
 			fmt.Println(green.Render("✓"), "magpie now uses", args[3], "for", id)
 			return nil

@@ -571,6 +571,14 @@ func affine(scope, mode string, rotate, spread, inOrder, hoursOver bool, in http
 	if had && time.Since(st.at) > stickKeep {
 		had = false
 	}
+	if had && mode == "" && !a.Within && st.at.Before(provider.ReorderedAt()) {
+		// the user put the accounts in another order after this
+		// conversation was last answered: the order they chose counts at
+		// its next turn, whatever the old answerer cached (Richyisaflower
+		// on X: B moved above A, the conversation went on to A). Session
+		// and Strict, the user's own, and a turn under way keep it
+		had = false
+	}
 	if had {
 		a.Last, a.LastTurn, a.At, a.CacheRead, a.CacheWrite = st.rest, st.turn, st.at, st.cacheRead, st.cacheWrite
 	}

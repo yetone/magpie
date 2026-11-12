@@ -1,11 +1,41 @@
 package provider
 
-import "fmt"
+import (
+	"fmt"
+	"sync/atomic"
+	"time"
+)
+
+var reorderedAt atomic.Int64
+
+// NoteReordered records that the user just changed which account goes
+// first (a drag in the pool, Make first, the CLI), so a conversation
+// last answered before it is routed anew at its next turn (the gateway's
+// affine) instead of staying with the account the user moved down.
+func NoteReordered() { reorderedAt.Store(time.Now().UnixNano()) }
+
+// ReorderedAt is when NoteReordered was last called in this process; the
+// zero time before.
+func ReorderedAt() time.Time {
+	n := reorderedAt.Load()
+	if n == 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, n)
+}
 
 // SetAccountOrder changes the order used by routing, not just its presentation.
 // The first enabled account becomes first through the same switch used by Make
 // first, unless the agent is kept signed in to another (KeepLoginAs). Disabled accounts can be moved, but never silently enabled by a drag.
 func SetAccountOrder(id string, order []string) error {
+	err := setAccountOrder(id, order)
+	if err == nil {
+		NoteReordered()
+	}
+	return err
+}
+
+func setAccountOrder(id string, order []string) error {
 	p, err := Find(id)
 	if err != nil {
 		return err
