@@ -52,7 +52,7 @@ func TestProviderModelWindowSaid(t *testing.T) {
 		}
 		return out
 	}
-	if got := said(); got["zai/glm-5.3-flash"] != [2]int{1_000_000, 1_000_000} || got["own-model"] != [2]int{} {
+	if got := said(); got["zai/glm-5.3-flash"] != [2]int{1_000_000, 0} || got["own-model"] != [2]int{} { // a listed window in use isn't sent twice
 		t.Fatalf("before a window is set: %v", got)
 	}
 	p, _ := provider.Find("relay")

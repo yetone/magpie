@@ -53,7 +53,7 @@ type modelJSON struct {
 	Best       bool    `json:"best,omitempty"`      // the newest of its family in the list: what Best in family serves (provider.NewestInFamily)
 	Context    int     `json:"context,omitempty"`   // the window agents are told: the user's, else Listed
 	Output     int     `json:"output,omitempty"`    // the reply limit agents are told: provider.ReplyLimit within Context (provider.OutputWithin)
-	Listed     int     `json:"listed,omitempty"`    // its window before the user's: its vendor's list's, else models.dev's
+	Listed     int     `json:"listed,omitempty"`    // its window before the user's: its vendor's list's, else models.dev's; absent when Context
 	Max        int     `json:"max,omitempty"`       // the most its context may be set to, above Listed
 	Free       bool    `json:"free,omitempty"`      // costs the subscription nothing
 	Zero       bool    `json:"zero,omitempty"`      // listed at $0 on this provider (provider.PricedFree), where Free is the vendor's word
@@ -66,7 +66,7 @@ type modelJSON struct {
 	Auto  []string `json:"auto,omitempty"`  // the APIs its vendor's list says it is served on, what Auto asks it on
 	NoAPI bool     `json:"noAPI,omitempty"` // the provider has a URL for none of them: agents aren't offered it (provider.NoAPIFor, #2094)
 	Same  string   `json:"same,omitempty"`  // the model the user said it is the same as, for the groups magpie finds (#583)
-	Merge string   `json:"merge,omitempty"` // what those groups merge it by when the user says nothing
+	Merge string   `json:"merge,omitempty"` // what those groups merge it by when the user says nothing; absent when ID
 	Kind  string   `json:"kind,omitempty"`  // what the user said it makes: image or video (#1399)
 	// Headers are the request headers the user gave the model, sent after
 	// the provider's (provider.SetModelHeaders)
@@ -101,7 +101,7 @@ type modelJSON struct {
 	// ListedOutput is its reply limit before the user's Max output: its
 	// vendor's list's, else models.dev's, within Listed; Model settings'
 	// Max output shows it when none is set (sayagoodbyeplz on Discord)
-	ListedOutput int `json:"listedOutput,omitempty"`
+	ListedOutput int `json:"listedOutput,omitempty"` // absent when Output
 }
 
 type providerJSON struct {
@@ -1138,7 +1138,18 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 			j.Tier = held.ModelTiers[ref]
 			j.CanUltra = provider.UltraOn(p, m.ID, ultraModels())
 		}
-		j.Merge = provider.MergeName(m.ID)
+		// a value the page reads as its default isn't sent: the window and
+		// reply limit the vendor listed are the ones in use unless the user
+		// set their own, and most models merge by their own id
+		if j.Merge = provider.MergeName(m.ID); j.Merge == m.ID {
+			j.Merge = ""
+		}
+		if j.Listed == j.Context {
+			j.Listed = 0
+		}
+		if j.ListedOutput == j.Output {
+			j.ListedOutput = 0
+		}
 		j.Desktop = desktop[ref]
 		if mp, ok := held.ModelPrices[ref]; ok {
 			if pr, bad := mp.Price(); bad == "" {
