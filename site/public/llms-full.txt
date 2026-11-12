@@ -8189,7 +8189,87 @@ No. Models you turned off, models pointed at a NAS, reply limits you typed and y
 
 Yes. Its data is in ~/.workbuddy-ai, and magpie wires it as an agent of its own.
 
-More agents on the same models: [VS Code on any model](https://usemagpie.ai/docs/vscode), [CodeBuddy on any model](https://usemagpie.ai/docs/codebuddy) and [Claude Science on any model](https://usemagpie.ai/docs/claude-science). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [VS Code on any model](https://usemagpie.ai/docs/vscode), [CodeBuddy on any model](https://usemagpie.ai/docs/codebuddy), [Claude Science on any model](https://usemagpie.ai/docs/claude-science) and [Pencil on any model](https://usemagpie.ai/docs/pencil). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/pencil
+
+# Pencil on any model
+
+Pencil (pen.dev) is a design canvas whose agent runs models. It takes custom providers of your own in `~/.pencil/models.json`, in Pi's format. magpie adds a provider named magpie there, so Pencil's model picker lists DeepSeek, GLM, Kimi, Qwen, Claude, a ChatGPT subscription or any other model in magpie.
+
+## Set up Pencil
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Set Pencil's provider to magpie on the Agents page.** Pencil's model picker then lists the models magpie picked for it.
+3. **Restart Pencil and pick the model in its agent composer.** Pencil reads its custom models at start-up, so restart it once. The model is picked in Pencil's agent composer, not in a file magpie reads.
+
+How magpie finds Pencil: the `~/.pencil` folder, there once the app or pen.dev's CLI has run; on a Mac, an app installed and never opened is found as Pencil.app or pen.dev.app.
+
+## models.json
+
+Pencil's settings offer a custom provider on OpenAI Completions, OpenAI Responses or Anthropic Messages, set for the provider as a whole. magpie's provider is on OpenAI Completions (Pi's openai-completions) at the gateway's `/v1`, which the gateway takes for every model:
+
+```
+// ~/.pencil/models.json
+{
+  "providers": {
+    "magpie": {
+      "name": "magpie",
+      "baseUrl": "http://127.0.0.1:3425/v1",
+      "api": "openai-completions",
+      "apiKey": "",
+      "models": [
+        {
+          "id": "deepseek/deepseek-v4-pro",
+          "name": "…",
+          "reasoning": …,
+          "input": ["text", …],
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+          "contextWindow": …,
+          "maxTokens": …,
+          "compat": {}
+        }
+      ]
+    }
+  }
+}
+```
+
+Pencil's requests carry magpie's key for Pencil, which is how magpie tells them apart, as Pencil's User-Agent isn't known.
+
+## Model fields
+
+Each model carries every field Pencil writes for one. Where magpie knows no better it uses Pi's defaults: a 128K window and 16K out. Every cost is 0, as magpie counts the spend itself. A model's own api and baseUrl are left out: Pi reads them, but Pencil's own editor never writes them.
+
+## Your providers stay
+
+The other providers you set up in Pencil stay as they are. A key in magpie's provider that magpie doesn't write, such as a setting another tool added, stays too. The model list is magpie's alone, so a model gone from the catalog leaves it.
+
+## Switching back
+
+When you switch Pencil off in magpie, magpie deletes the magpie provider from models.json and leaves your other providers as they were.
+
+## FAQ
+
+### Can Pencil use DeepSeek or GLM?
+
+Yes. magpie adds a magpie provider to ~/.pencil/models.json; restart Pencil and pick the model in its agent composer.
+
+### Why don't magpie's models show in Pencil?
+
+Pencil reads its custom models at start-up. Restart Pencil.
+
+### Which protocol does magpie's provider use?
+
+OpenAI Completions, at the gateway's /v1, for every model.
+
+### Does magpie change my other Pencil providers?
+
+No. magpie writes only its own magpie provider.
+
+More agents on the same models: [OpenPencil on any model](https://usemagpie.ai/docs/openpencil), [WorkBuddy on any model](https://usemagpie.ai/docs/workbuddy) and [Pi on any model](https://usemagpie.ai/docs/pi). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
