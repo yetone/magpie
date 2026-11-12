@@ -182,6 +182,25 @@ var rules = append([]rule{
 	{kind: "API_KEY", re: lazyre.New(`(?:AKIA|ASIA)[0-9A-Z]{16}`), markers: []string{"AKIA", "ASIA"}, bound: alnum},
 	{kind: "API_KEY", re: lazyre.New(`(?:hf_[A-Za-z0-9]{30,}|gsk_[A-Za-z0-9]{40,}|xai-[A-Za-z0-9]{40,}|npm_[A-Za-z0-9]{36}|pypi-[A-Za-z0-9_-]{50,}|dop_v1_[a-f0-9]{64}|SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43})`),
 		markers: []string{"hf_", "gsk_", "xai-", "npm_", "pypi-", "dop_v1_", "SG."}, bound: tokenCh},
+	// Cloudflare's: the scannable prefixes of a user token, an account
+	// token, a Global API Key and a Wrangler OAuth token (cfut_, cfat_,
+	// cfk_, cfoat_; 40 characters and a checksum,
+	// developers.cloudflare.com/fundamentals/api/get-started/token-formats),
+	// an Origin CA key (always v1.0-, two hex runs), and a tunnel token
+	// (base64 of {"a":account,"t":tunnel,"s":secret}, so it starts eyJhIjoi).
+	// The unprefixed older tokens and keys are 40 letters or 37 to 45 hex
+	// and have no shape of their own; they are masked by the name they sit
+	// under (secretNames).
+	{kind: "API_KEY", re: lazyre.New(`cf(?:ut|at|k|oat)_[A-Za-z0-9_-]{40,}`), markers: []string{"cfut_", "cfat_", "cfk_", "cfoat_"}, bound: tokenCh},
+	{kind: "API_KEY", re: lazyre.New(`v1\.0-[A-Za-z0-9]{16,}-[A-Za-z0-9]{40,}`), markers: []string{"v1.0-"}, bound: tokenCh},
+	{kind: "TOKEN", re: lazyre.New(`eyJhIjoi[A-Za-z0-9+/_-]{40,}={0,2}`), markers: []string{"eyJhIjoi"}, bound: tokenCh},
+	// X-Auth-Key (the Global API Key) and X-Auth-User-Service-Key (the
+	// Origin CA key) headers, whatever the key looks like
+	{kind: "SECRET", re: lazyre.New(`(?i)x-auth-(?:user-service-)?key["']?[ \t]*[:=][ \t]*["']?([A-Za-z0-9._-]{16,})`),
+		fold: []string{"x-auth-"}, ahead: 120, ok: notAVariable},
+	// An R2 Access Key ID (32 hex, the id of its API token) is an id and
+	// goes as written (TestIDsGoAsWritten); its Secret Access Key (64 hex)
+	// is masked under a secret's name.
 	{kind: "TOKEN", re: lazyre.New(`eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`), markers: []string{"eyJ"}, bound: tokenCh},
 	// the password of user:password@host, or of :password@host as a Redis
 	// URL has it with no user
