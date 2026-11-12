@@ -2613,6 +2613,12 @@ func (b *subscriptionBridge) unshelve(req *Request, owner string) *savedSession 
 	b.mu.Lock()
 	s, behind := b.shelf[key], false
 	if s == nil {
+		b.mu.Unlock()
+		b.loadShelf() // what a gateway that ended left (#6292)
+		b.mu.Lock()
+		s = b.shelf[key]
+	}
+	if s == nil {
 		// rewritten (resume); its Claude Code is told the tools the
 		// client offers now, and the session keeps the calls made of
 		// those it had
@@ -6611,6 +6617,7 @@ func (r *subscriptionRun) abortFor(why string) {
 // abortAll ends every run, as the gateway stops: they are no terminal's
 // to be interrupted with it.
 func (b *subscriptionBridge) abortAll() {
+	b.keepShelf() // the next gateway resumes what waits for a next turn (#6292)
 	b.mu.Lock()
 	runs := make([]*subscriptionRun, 0, len(b.runs))
 	for _, run := range b.runs {

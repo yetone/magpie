@@ -328,8 +328,13 @@ func TestClaudeSessionFilesAreRemoved(t *testing.T) {
 		t.Fatal("a discarded session's file stayed")
 	}
 
-	// the runs waiting end: their sessions go with them
+	// the runs waiting end as the gateway does: their sessions stay for
+	// the next start (#6292), which discards what it doesn't take
 	h.s.subscription.abortAll()
+	eventually(t, "the waiting runs ended", func() bool { return len(h.s.subscription.idle) == 0 && len(h.s.subscription.runs) == 0 })
+	for _, s := range h.s.subscription.shelf {
+		s.discard()
+	}
 	eventually(t, "sessions left", func() bool { return len(h.sessions()) == 0 })
 }
 
