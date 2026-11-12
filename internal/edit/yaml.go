@@ -23,11 +23,11 @@ func GetYAML(path, keyPath string) (string, bool) {
 	if err != nil || root == nil {
 		return "", false
 	}
-	n := lookupYAML(root, strings.Split(keyPath, "."))
-	if n == nil || n.Kind != yaml.ScalarNode {
+	n := root.lookup(strings.Split(keyPath, "."))
+	if n == nil || n.kind != yaml.ScalarNode {
 		return "", false
 	}
-	return n.Value, true
+	return n.value, true
 }
 
 // GetYAMLMap reads the scalar entries of the mapping at a key path.
@@ -36,14 +36,14 @@ func GetYAMLMap(path, keyPath string) map[string]string {
 	if err != nil || root == nil {
 		return nil
 	}
-	n := lookupYAML(root, strings.Split(keyPath, "."))
-	if n == nil || n.Kind != yaml.MappingNode {
+	n := root.lookup(strings.Split(keyPath, "."))
+	if n == nil || n.kind != yaml.MappingNode {
 		return nil
 	}
 	out := map[string]string{}
-	for i := 0; i+1 < len(n.Content); i += 2 {
-		if v := n.Content[i+1]; v.Kind == yaml.ScalarNode {
-			out[n.Content[i].Value] = v.Value
+	for i := 0; i+1 < len(n.content); i += 2 {
+		if v := &n.content[i+1]; v.kind == yaml.ScalarNode {
+			out[n.content[i].value] = v.value
 		}
 	}
 	return out
@@ -55,14 +55,14 @@ func GetYAMLList(path, keyPath string) []string {
 	if err != nil || root == nil {
 		return nil
 	}
-	n := lookupYAML(root, strings.Split(keyPath, "."))
-	if n == nil || n.Kind != yaml.SequenceNode {
+	n := root.lookup(strings.Split(keyPath, "."))
+	if n == nil || n.kind != yaml.SequenceNode {
 		return nil
 	}
 	var out []string
-	for _, c := range n.Content {
-		if c.Kind == yaml.ScalarNode {
-			out = append(out, c.Value)
+	for i := range n.content {
+		if c := &n.content[i]; c.kind == yaml.ScalarNode {
+			out = append(out, c.value)
 		}
 	}
 	return out
@@ -70,9 +70,10 @@ func GetYAMLList(path, keyPath string) []string {
 
 // GetYAMLText reads the value at a key path as the YAML it is written in —
 // a list flow ("[a, b]") or block as it is — for SetYAML to put back as a
-// YAMLText.
+// YAMLText. It reads yaml.v3's whole tree, styles and comments, which the
+// other looks don't keep (loadYAML).
 func GetYAMLText(path, keyPath string) (string, bool) {
-	root, err := loadYAML(path)
+	root, err := filememo.Read("yaml text root", path, parseYAMLRoot)
 	if err != nil || root == nil {
 		return "", false
 	}
@@ -289,8 +290,8 @@ func JSONToYAML(src, dst string) error {
 // loadYAML reads the first document's mapping without decoding its values.
 // Unrelated duplicate keys, complex keys or invalid tags must not hide a
 // readable model setting. Writers use loadYAMLForEdit to validate the whole file.
-func loadYAML(path string) (*yaml.Node, error) {
-	root, err := filememo.Read("yaml root", path, parseYAMLRoot)
+func loadYAML(path string) (*yamlLook, error) {
+	root, err := filememo.Read("yaml root", path, parseYAMLLook)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
@@ -300,9 +301,71 @@ func loadYAML(path string) (*yaml.Node, error) {
 	return root, nil
 }
 
-// parseYAMLRoot is loadYAML's parse, made once each time the file is read
-// and shared by every look (GetYAML, GetYAMLMap, GetYAMLList,
-// GetYAMLText), so read only. Each look parsed the file again: dsh's
+// yamlLook is what the looks (GetYAML, GetYAMLMap, GetYAMLList) read of a
+// node: its kind, a scalar's value and the nodes under it, held inline. A
+// yaml.Node is ~160 bytes behind a pointer, with a tag, styles, comments
+// and places none of them reads: kept for dsh's 68 KB settings.yaml it
+// was ~4.5 MB of an idle tray's 10 MB heap.
+type yamlLook struct {
+	kind    yaml.Kind
+	value   string
+	content []yamlLook
+}
+
+// parseYAMLLook is parseYAMLRoot's tree as a yamlLook.
+func parseYAMLLook(b []byte) (*yamlLook, error) {
+	root, err := parseYAMLRoot(b)
+	if err != nil || root == nil {
+		return nil, err
+	}
+	l := lookOf(root)
+	return &l, nil
+}
+
+func lookOf(n *yaml.Node) yamlLook {
+	l := yamlLook{kind: n.Kind}
+	if n.Kind == yaml.ScalarNode {
+		l.value = n.Value
+	}
+	if len(n.Content) > 0 {
+		l.content = make([]yamlLook, len(n.Content))
+		for i, c := range n.Content {
+			if n.Kind == yaml.MappingNode && i%2 == 0 {
+				// a key is looked at by its value whatever its kind, as
+				// lookupYAML does
+				l.content[i] = yamlLook{kind: c.Kind, value: c.Value}
+				continue
+			}
+			l.content[i] = lookOf(c)
+		}
+	}
+	return l
+}
+
+// lookup is lookupYAML on a yamlLook.
+func (n *yamlLook) lookup(parts []string) *yamlLook {
+	for _, p := range parts {
+		if n.kind != yaml.MappingNode {
+			return nil
+		}
+		var next *yamlLook
+		for i := 0; i+1 < len(n.content); i += 2 {
+			if n.content[i].value == p {
+				next = &n.content[i+1]
+				break
+			}
+		}
+		if next == nil {
+			return nil
+		}
+		n = next
+	}
+	return n
+}
+
+// parseYAMLRoot is the looks' parse, made once each time the file is read
+// and shared by every look (GetYAML, GetYAMLMap, GetYAMLList through
+// parseYAMLLook, GetYAMLText), so read only. Each look parsed the file again: dsh's
 // 80 KB settings.yaml, read per field by every /api/drift poll, was
 // 465 MB of what a live magpie allocated in 37 minutes.
 func parseYAMLRoot(b []byte) (*yaml.Node, error) {
