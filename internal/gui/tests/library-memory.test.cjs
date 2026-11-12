@@ -368,6 +368,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(await drow.locator(".lib-disteffort .effort-ic").count(), 1);
           await drow.locator(".lib-disteffort").click();
           assert.equal(await page.locator(".proto-menu .pm-item").count(), 4);
+          // opened, only the chevron turns; the bars stay upright (xMopf7RF on X)
+          await page.waitForTimeout(300);
+          assert.ok(await drow.locator(".lib-disteffort.open").count(), "the picker is not marked open");
+          assert.equal(await drow.locator(".lib-disteffort .effort-ic svg").evaluate((e) => getComputedStyle(e).transform), "none", "the effort bars turn with the chevron");
+          assert.notEqual(await drow.locator(".lib-disteffort > svg").evaluate((e) => getComputedStyle(e).transform), "none", "the chevron stays put");
           await page.locator(".proto-menu .pm-item").nth(3).click();
           await page.waitForFunction(() => document.querySelector("#view-library .lib-disteffort")?.textContent.trim() !== "" && !document.querySelector(".proto-menu"));
           assert.deepEqual(sent.findLast((x) => x.path === "/api/memory/distill").body, { on: true, model: "dt/m1", effort: "high" });

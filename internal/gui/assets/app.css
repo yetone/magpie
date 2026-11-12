@@ -1796,7 +1796,7 @@ details.cx-part[open] > summary .cx-h { margin-bottom: 2px; }
 .sess-pick svg { flex: none; opacity: .7; transition: transform .15s var(--ease); }
 .sess-pick:hover { background: var(--pill); }
 .sess-pick.set { color: var(--fg); border-color: var(--line-2); background: var(--pill); }
-.sess-pick.open svg { transform: rotate(180deg); }
+.sess-pick.open > svg { transform: rotate(180deg); }
 .pop.proto-menu.sess-menu { width: 300px; max-height: min(360px, 70vh); overflow-y: auto; overscroll-behavior: contain; }
 .sess-menu .pm-name, .sess-menu .pm-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pop.proto-menu.sess-menu { width: 340px; padding-top: 0; display: block; background: var(--card); }
