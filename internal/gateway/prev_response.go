@@ -267,6 +267,10 @@ type prevAsk struct {
 	upstreamID   string // the id the provider that answered it keeps it under
 	route        string
 	made         string // the route whose reply the named response was
+	// the client replayed the conversation whole itself (store false, no
+	// previous_response_id), so nothing of it is magpie's to take back;
+	// a cross-resource refusal of an id it echoes is still recoverable
+	clientWhole bool
 	// which try answered: its route if it was relayed to a provider
 	// that keeps what it is sent, empty otherwise; and by, its route
 	// for any relayed try
@@ -286,6 +290,14 @@ func prevAskOf(ctx context.Context) *prevAsk {
 func prevHeld(r *http.Request) bool {
 	a := prevAskOf(r.Context())
 	return a != nil && a.known
+}
+
+// prevClientWhole is whether the client replayed the conversation whole
+// itself (store false, no previous_response_id), nothing of it magpie's
+// to take back.
+func prevClientWhole(r *http.Request) bool {
+	a := prevAskOf(r.Context())
+	return a != nil && a.clientWhole
 }
 
 // prevLost is the id a request named that magpie doesn't hold, which a
@@ -361,6 +373,15 @@ func previousResponse(w http.ResponseWriter, r *http.Request, from provider.Prot
 	}
 	var store bool
 	if json.Unmarshal(q["store"], &store) == nil && !store && !keepsTurnFor(r) {
+		// a client replaying its whole conversation itself (Codex's
+		// store-off history) echoes ids the upstream handed out for
+		// earlier turns: a cross-resource refusal of one is still
+		// recoverable without a store (#6320), so the ask goes along
+		// marked, never recorded
+		if !ask.known && clientWholeHistory(fresh) {
+			ask.clientWhole = true
+			r = r.WithContext(context.WithValue(r.Context(), prevAskKey{}, ask))
+		}
 		return w, r, body, nothing // the client asked that nothing be kept
 	}
 	if keepsTurnFor(r) {
@@ -431,6 +452,33 @@ func prevInput(raw json.RawMessage) (all, fresh []json.RawMessage) {
 		items = []json.RawMessage{}
 	}
 	return items, items
+}
+
+// clientWholeHistory is whether an input reads as a conversation the
+// client brought back whole: more than one item, and one before the last
+// naming an id that may go without one, or a reasoning's — ids the
+// upstream handed out for earlier turns, echoed back with the history.
+// One item with an id alone is the client's own new input, and goes as it
+// came (#6320, TestPreviousResponseOtherResourceWholeSentWithoutIDs).
+func clientWholeHistory(fresh []json.RawMessage) bool {
+	if len(fresh) < 2 {
+		return false
+	}
+	for _, raw := range fresh[:len(fresh)-1] {
+		var it map[string]json.RawMessage
+		if json.Unmarshal(raw, &it) != nil {
+			continue
+		}
+		if _, has := it["id"]; !has {
+			continue
+		}
+		var typ string
+		json.Unmarshal(it["type"], &typ)
+		if typ == "reasoning" || idOptional[typ] {
+			return true
+		}
+	}
+	return false
 }
 
 // prevReply is a Responses reply's id and output items, a stream's or a
@@ -549,20 +597,21 @@ func prevForeign(status int, b []byte) bool {
 // whole, with the items it brought back no longer naming what the
 // upstream that made them keeps them under, when they go to another
 // provider or key than the one whose reply they were (or always, when
-// force: one upstream said they are another resource's). An item that
-// can go without its id (idOptional) goes without it, its text and
-// call_id kept; reasoning keeps its place only with its encrypted_content,
-// as Codex sends it, since what it held lives only where it was made. Any
-// other kind, and the client's own new input, stay as they were. A body
-// whose items the tries changed in number is left as it is, as prevDelta
-// leaves it.
+// force: one upstream said they are another resource's — a conversation
+// the client replayed whole itself goes the same way, its echoed ids
+// taken out, #6320). An item that can go without its id (idOptional) goes
+// without it, its text and call_id kept; reasoning keeps its place only
+// with its encrypted_content, as Codex sends it, since what it held lives
+// only where it was made. Any other kind, and the client's own new input
+// of a conversation magpie gave, stay as they were. A body whose items
+// the tries changed in number is left as it is, as prevDelta leaves it.
 func prevElsewhere(r *http.Request, p provider.Provider, body []byte, force bool) []byte {
 	a := prevAskOf(r.Context())
-	if a == nil || !a.known || !force && a.made == prevRoute(p) {
+	if a == nil || !a.known && !force || !force && a.made == prevRoute(p) {
 		return body
 	}
 	n := a.total - a.fresh
-	if n <= 0 || !bodyHas(body, `"id"`) {
+	if !a.clientWhole && n <= 0 || !bodyHas(body, `"id"`) {
 		return body
 	}
 	var q map[string]json.RawMessage
@@ -570,8 +619,13 @@ func prevElsewhere(r *http.Request, p provider.Provider, body []byte, force bool
 		return body
 	}
 	items, ok := inputList(q["input"])
-	if !ok || len(items) != a.total {
+	if !ok || !a.clientWhole && len(items) != a.total {
 		return body
+	}
+	if a.clientWhole {
+		// the whole conversation is the client's own replay: every item
+		// is history, none of it is the turn being asked now (#6320)
+		n = len(items)
 	}
 	out := make([]json.RawMessage, 0, len(items))
 	changed := false

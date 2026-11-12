@@ -3123,10 +3123,16 @@ included). `previousResponse` in
   its resources (`prevForeign`: Azure OpenAI behind a relay that spreads
   one key over several resources, hykql's report; the text was not
   reproduced against Azure) is asked once more with the conversation
-  whole and those ids taken out. Only a request whose conversation magpie
-  holds is asked again, and only with a body that differs: an id magpie
-  doesn't hold, or a refusal with nothing of magpie's to take out, is
-  passed on as before.
+  whole and those ids taken out. A conversation the client replayed whole
+  itself (Codex's store-off history, no `previous_response_id`) goes the
+  same way: the ids it echoes, of the kinds that may go without one and
+  reasonings with their `encrypted_content`, are taken out on that one
+  more ask, the turns and the calls' pairing kept; an input that is one
+  id'd item of the client's own is not a replay, and goes as it came.
+  Only a request whose conversation magpie holds, or one that brought a
+  whole replayed conversation, is asked again, and only with a body that
+  differs: an id magpie doesn't hold, or a refusal with nothing to take
+  out, is passed on as before.
 - A ChatGPT account's streamed turn goes on its conversation's kept
   socket as a delta after the backend's own `previous_response_id`
   (`codexKept`, see [Providers and accounts](providers-accounts.md)).

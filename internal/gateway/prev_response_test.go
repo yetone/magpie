@@ -377,6 +377,64 @@ func TestPreviousResponseOtherResourceWholeSentWithoutIDs(t *testing.T) {
 	}
 }
 
+// A client that replays its whole conversation itself, store false and no
+// previous_response_id (Codex's store-off history), meets the same
+// cross-resource refusal of the ids it echoes back: the ids that can go
+// without one go, the conversation and its call pairing kept, asked again
+// once (#6320).
+func TestClientWholeReplayForeignIDsAskedWithoutThem(t *testing.T) {
+	var foreign atomic.Bool
+	up := foreignUp(t, &foreign)
+	s := prevSandbox(t, provider.Provider{ID: "fake", Name: "Fake", Key: "k", Models: []string{"m1"}, Responses: up.srv.URL + "/v1"})
+	foreign.Store(true)
+	replay := `{"model":"fake/m1","store":false,"stream":true,"input":[` +
+		`{"role":"user","content":"Remember 47."},` +
+		`{"type":"reasoning","id":"rs_9","summary":[],"encrypted_content":"sealed9"},` +
+		`{"type":"message","id":"msg_1","role":"assistant","content":[{"type":"output_text","text":"Remembered."}]},` +
+		`{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{}"},` +
+		`{"type":"function_call_output","id":"fco_1","call_id":"call_1","output":"47"},` +
+		`{"role":"user","content":"What was the number?"}]}`
+	rec := askResponses(t, s, "", replay)
+	if rec.Code != 200 {
+		t.Fatalf("client given %d: %s", rec.Code, rec.Body.String())
+	}
+	if n := up.calls(); n != 2 {
+		t.Fatalf("%d upstream calls, want the refusal and the replay without ids", n)
+	}
+	in, _ := json.Marshal(up.last()["input"])
+	sent := string(in)
+	if _, has := up.last()["previous_response_id"]; has {
+		t.Fatalf("previous_response_id still sent: %.400s", sent)
+	}
+	for _, gone := range []string{`"id":"msg_1"`, `"id":"rs_9"`, `"id":"fc_1"`, `"id":"fco_1"`} {
+		if strings.Contains(sent, gone) {
+			t.Fatalf("%s still sent: %.500s", gone, sent)
+		}
+	}
+	for _, want := range []string{"Remember 47.", "sealed9", "Remembered.", `"call_id":"call_1"`, "What was the number?"} {
+		if !strings.Contains(sent, want) {
+			t.Fatalf("%q missing from the replay: %.500s", want, sent)
+		}
+	}
+	if got := strings.Count(sent, `"call_id":"call_1"`); got != 2 {
+		t.Fatalf("call pairing %d times, want the call and its output: %.500s", got, sent)
+	}
+}
+
+// One item of the client's own with an id is not a replayed conversation:
+// it goes as it came, the refusal with it (#6320, beside
+// TestPreviousResponseOtherResourceWholeSentWithoutIDs).
+func TestClientWholeSingleIDedItemStaysAsItCame(t *testing.T) {
+	var foreign atomic.Bool
+	up := foreignUp(t, &foreign)
+	s := prevSandbox(t, provider.Provider{ID: "fake", Name: "Fake", Key: "k", Models: []string{"m1"}, Responses: up.srv.URL + "/v1"})
+	foreign.Store(true)
+	rec := askResponses(t, s, "", `{"model":"fake/m1","store":false,"input":[{"type":"message","id":"msg_mine","role":"user","content":"hi"}]}`)
+	if rec.Code != 400 || up.calls() != 1 {
+		t.Fatalf("client given %d after %d calls, want the 400 after one", rec.Code, up.calls())
+	}
+}
+
 // A conversation going on with another provider than the one whose reply
 // it holds goes without that reply's ids at once: the other never made
 // them. The same provider and key is sent them as before.
