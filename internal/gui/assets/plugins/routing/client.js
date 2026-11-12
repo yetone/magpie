@@ -7123,6 +7123,9 @@ function routingPage(part) {
       // the group as text for someone else's magpie (laincatx on X)
       { name: "Copy to share", icon: OUT, tip: t("{name} as text to paste into another magpie: its models, routing and rules, no key", { name: g.name }),
         run: () => shareGroup(g) },
+      // the card's own Remove, with its own question first (jimlee0824v2 on X)
+      { name: "Remove", icon: "M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5M7 7v4M9 7v4", sep: true,
+        run: () => groupAction("delete", { id: g.id }, t("{name} removed", { name: g.name })) },
     ], at);
   }
   // nextTo: where a group moved one up (-1) or down goes, among them all:
