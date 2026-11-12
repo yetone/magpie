@@ -39,3 +39,20 @@ func TestPanelOnFirstOpen(t *testing.T) {
 		}
 	}
 }
+
+func TestMainOnFirstOpen(t *testing.T) {
+	for _, c := range []struct {
+		goos     string
+		showMain bool
+		want     bool
+	}{
+		{"darwin", false, true},
+		{"darwin", true, false},
+		{"linux", false, false},
+		{"windows", false, false},
+	} {
+		if got := mainOnFirstOpen(c.goos, c.showMain); got != c.want {
+			t.Errorf("mainOnFirstOpen(%q, %v) = %v, want %v", c.goos, c.showMain, got, c.want)
+		}
+	}
+}

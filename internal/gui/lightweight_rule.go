@@ -33,3 +33,8 @@ func lightStep(on, shown bool, ticks int) (int, bool) {
 // opened rather than as magpie starts: on the Mac, where a hidden panel's
 // page kept a WebContent process of its own (~67 MB) for nothing.
 func panelOnFirstOpen(goos string) bool { return goos == "darwin" }
+
+// mainOnFirstOpen says whether the main window is made the first time it is
+// shown rather than as magpie starts: on the Mac, when it starts without the
+// window (showMain false: at login, for the panel or a link).
+func mainOnFirstOpen(goos string, showMain bool) bool { return goos == "darwin" && !showMain }

@@ -522,7 +522,13 @@ func Run(version string, showMain bool, link string) error {
 	if !panelOnFirstOpen(runtime.GOOS) {
 		h.panel = h.makePanel()
 	}
-	h.main = h.makeMain("/?" + theme)
+	// So is its main window, when magpie starts without it (at login,
+	// `magpie tray`, or for the panel): it is made by openMain when first
+	// shown, the way lightweight mode makes one again, and its page's
+	// WebContent process (~69 MB) isn't kept until then.
+	if !mainOnFirstOpen(runtime.GOOS, showMain) {
+		h.main = h.makeMain("/?" + theme)
+	}
 	onFonts = h.fontsChanged
 
 	// the menu in the page's language, relabelled when that changes (#301)
