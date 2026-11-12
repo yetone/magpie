@@ -23,7 +23,11 @@ import (
 // provider.ListWaitHeader saying how many seconds to wait at most and
 // If-None-Match the list it has (the ETag of its last answer). The list
 // is answered, with its ETag, once it is other than that one; at the end
-// of the wait, and as this gateway stops, 304 says it is the same. A list
+// of the wait, and as this gateway stops, 304 says it is the same. The tag
+// is compared weakly (tagNamed), for a proxy such as Cloudflare's that
+// compresses the list turns its ETag weak (W/"…") and sends it back so:
+// compared exactly, each wait was answered at once and asked again, once a
+// second (y0ngb1n on X). A list
 // is looked at again on each write magpie makes and on each change
 // another process makes to its files (filememo.Written), not polled.
 // A client asking without the header is answered the list with the same
@@ -116,7 +120,7 @@ func (s *Server) modelsOnceChanged(w http.ResponseWriter, r *http.Request) {
 		written := filememo.Written()
 		a := s.lookAtList(r)
 		tag = listTag(a.status, a.body.Bytes())
-		if a.status != http.StatusOK || tag != since {
+		if a.status != http.StatusOK || !tagNamed(since, tag) {
 			for k, v := range a.header {
 				w.Header()[k] = v
 			}

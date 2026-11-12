@@ -226,3 +226,23 @@ func TestModelsWaitGuardedAsTheList(t *testing.T) {
 		}
 	}
 }
+
+// A proxy that compresses the list (Cloudflare's) makes its ETag weak and
+// sends it back so in If-None-Match. The wait still names the list it
+// has: held to the end and answered 304, not answered at once (y0ngb1n on
+// X: a magpie behind Cloudflare was asked for /v1/models once a second).
+func TestModelsWaitNamedByAWeakTag(t *testing.T) {
+	setup(t, provider.Chat, &fake{t: t})
+	srv := httptest.NewServer(New().Handler())
+	defer srv.Close()
+	_, tag, _ := listAsk(t, srv.URL, "1", "")
+
+	start := time.Now()
+	code, _, _ := listAsk(t, srv.URL, "1", "W/"+tag)
+	if code != http.StatusNotModified {
+		t.Fatalf("a wait naming W/%s: %d, want 304", tag, code)
+	}
+	if d := time.Since(start); d < 900*time.Millisecond {
+		t.Errorf("answered after %v, before its wait ended", d)
+	}
+}

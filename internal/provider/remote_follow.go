@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -261,6 +262,16 @@ func waitRemoteList(ctx context.Context, p Provider, tag string) (string, error)
 	now := res.Header.Get("ETag")
 	if now == "" {
 		return "", errListNotWaited
+	}
+	// the list it already has, answered at once: a wait that was not held
+	// (a gateway that compares tags exactly, behind a proxy that made them
+	// weak). Asked again it is answered the same each followGap, a request
+	// a second for ever (y0ngb1n on X), so it is left to the schedule.
+	if tag != "" && strings.TrimPrefix(now, "W/") == strings.TrimPrefix(tag, "W/") {
+		if time.Since(asked) < followQuick {
+			return "", errListNotWaited
+		}
+		return tag, nil
 	}
 	return now, nil
 }

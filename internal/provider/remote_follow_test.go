@@ -213,3 +213,36 @@ func TestRemoteMagpieOffNotFollowed(t *testing.T) {
 		t.Errorf("a list set to off was asked %d times", n)
 	}
 }
+
+// A gateway that answers each wait at once with the list's tag, as one
+// does that compares tags exactly behind a proxy that made them weak
+// (W/"…"), is not asked again each followGap: y0ngb1n on X saw a magpie
+// behind Cloudflare asked for /v1/models once a second for days.
+func TestRemoteMagpieWeakTagNotAskedOver(t *testing.T) {
+	var asks atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asks.Add(1)
+		w.Header().Set("ETag", `W/"ml-1"`)
+		w.Header().Set(ListWaitHeader, "50")
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"object":"list","data":[{"id":"own/m1","object":"model"}]}`)
+	}))
+	defer srv.Close()
+	isolate(t)
+	isolateFetchHome(t)
+	followFast(t)
+	if _, err := Add(Provider{ID: "office", Name: "Office", Preset: RemoteMagpiePreset, Key: "secret", Chat: strings.TrimPrefix(srv.URL, "http://")}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); KeepRemoteListsFollowed(ctx) }()
+	t.Cleanup(func() { cancel(); <-done })
+	followUntil(t, "asked", func() bool { return asks.Load() >= 1 })
+	time.Sleep(300 * time.Millisecond) // the first lists and the one repeat
+	n := asks.Load()
+	time.Sleep(400 * time.Millisecond)
+	if got := asks.Load(); got != n {
+		t.Errorf("asked %d more times in 400ms (followGap is 10ms here), want none", got-n)
+	}
+}
