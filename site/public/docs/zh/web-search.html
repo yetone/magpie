@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>让 DeepSeek、GLM、Kimi、Qwen 等任意模型联网搜索：Claude Code 的 WebSearch 和 Codex 的 web_search 都能用 · magpie</title>
+<meta name="description" content="通过 magpie 让不能联网的模型也能搜索：Claude Code 的 WebSearch、Codex 的 web_search 发到 DeepSeek、GLM、Qwen 等模型时，magpie 代为搜索并把结果交给模型。代搜供应商、失败时依次换用、搜索 API（Tavily、Brave、Exa、SearXNG 等）、每次搜索的结果条数，以及把搜索作为 MCP 服务器给 Cursor、Claude Desktop 用。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/web-search">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/web-search">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/web-search">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/web-search">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/web-search">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="让任意模型联网搜索">
+<meta property="og:description" content="通过 magpie 让不能联网的模型也能搜索：Claude Code 的 WebSearch、Codex 的 web_search 发到 DeepSeek、GLM、Qwen 等模型时，magpie 代为搜索并把结果交给模型。代搜供应商、失败时依次换用、搜索 API（Tavily、Brave、Exa、SearXNG 等）、每次搜索的结果条数，以及把搜索作为 MCP 服务器给 Cursor、Claude Desktop 用。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/web-search">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "让任意模型联网搜索",
+   "description": "通过 magpie 让不能联网的模型也能搜索：Claude Code 的 WebSearch、Codex 的 web_search 发到 DeepSeek、GLM、Qwen 等模型时，magpie 代为搜索并把结果交给模型。代搜供应商、失败时依次换用、搜索 API（Tavily、Brave、Exa、SearXNG 等）、每次搜索的结果条数，以及把搜索作为 MCP 服务器给 Cursor、Claude Desktop 用。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/web-search",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "DeepSeek 能联网搜索吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "DeepSeek 的 API 本身不联网。通过 magpie 用它时，Claude Code 的 WebSearch 或 Codex 的 web_search 会由 magpie 代搜：用能搜索的供应商，或你添加的搜索 API。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "没有能搜索的供应商怎么办？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "在 设置 › 模型 › 联网搜索 里添加一个搜索 API，比如 Tavily 或 Brave Search。You.com 不填 Key 也能用，每天 100 次；也可以填自建 SearXNG 的地址。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "代搜要花钱吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "代搜用的是所选服务的额度：代搜供应商会消耗它的额度或产生费用，搜索 API 按各自的价格计费。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Cursor 能用 magpie 的联网搜索吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。把 /mcp/magpie/web-search 作为 MCP 服务器（Streamable HTTP）添加到 Cursor，就有 web_search 和 web_fetch 两个工具。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/zh/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "文档",
+     "item": "https://usemagpie.ai/docs/zh/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "让任意模型联网搜索",
+     "item": "https://usemagpie.ai/docs/zh/web-search"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/web-search" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/web-search" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/web-search" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Web search</p>
+    <a href="#overview">工作原理</a>
+    <a href="#on">设置</a>
+    <a href="#providers">代搜供应商</a>
+    <a href="#apis">搜索 API</a>
+    <a href="#own">自带联网搜索的模型</a>
+    <a href="#mcp">作为 MCP 服务器</a>
+    <a href="#routing">谁搜的</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 指南</p>
+    <h1>让任意模型联网搜索</h1>
+    <p class="lede">Claude Code 有 WebSearch，Codex 有 web_search，但这些工具要模型的供应商自己会搜索才有用。DeepSeek、GLM、Qwen 等很多模型的 API 并不联网，通过 magpie 用它们时，magpie 会代为搜索：模型拿到 magpie 的 web_search 工具，调用时 magpie 去搜，把找到的网页交回给模型，回复里的搜索结果和来源也按 Agent 认识的格式返回。所以在 Claude Code 或 Codex 里换成任何模型，联网搜索都照常可用。</p>
+    <h2 id="on"><a class="anchor" href="#on">设置</a></h2>
+    <p>搜索的来源有两类：能搜索的供应商（代搜供应商），和你配置的搜索 API。都在 <span class="ui">设置</span> › <span class="ui">模型</span> › <span class="ui">联网搜索</span>。</p>
+    <ol class="steps">
+      <li><b>有能搜索的供应商就不用设置</b>magpie 会自己挑一个代搜供应商，比如 Google 登录、ChatGPT 账号（Codex 登录）、Kimi Code、GLM Coding Plan 或 WorkBuddy 的计划。</li>
+      <li><b>或者添加一个搜索 API</b>在 <span class="ui">搜索 API</span> 里加上 Tavily、Brave Search 等的 Key。没有能搜索的供应商时，就由这些 API 来搜。</li>
+      <li><b>用 <span class="ui">优先使用</span> 选先用哪一类</b>另一类在前一类失败时再用。</li>
+    </ol>
+    <p>代搜可能消耗所用服务的额度或产生费用。</p>
+    <h2 id="providers"><a class="anchor" href="#providers">代搜供应商</a></h2>
+    <p>代搜供应商是自带联网搜索的供应商，由它替不能搜索的模型去搜。在 <span class="ui">代搜供应商</span> 里可以选一个，不选就由 magpie 挑：</p>
+    <ul><li><b>magpie 挑的：</b>它失败或没找到结果时，magpie 换下一个能搜索的供应商，最多试三个。</li><li><b>你选的：</b>它失败时，只换成你在 <span class="ui">失败时依次换用</span> 里排在它后面的供应商，按顺序。只有它完全搜不了（额度用完或被限流）时，才再试其他可用的来源，最后用你的搜索 API。</li><li>所有来源都失败时，错误作为工具结果交回模型，这一轮继续。</li></ul>
+    <p>有几个供应商会先给自己的模型搜索：Kimi Code 计划用它自己的搜索服务，GLM Coding Plan 用计划自带的 Web Search MCP 服务器（用同一个 Key，不用另外配置），WorkBuddy 计划用它的搜索服务，Google 登录用 Google 搜索。ChatGPT 账号用 ChatGPT 后台自己的搜索，也就是 Codex 的 web.run 发的那个请求。</p>
+    <p>想只用搜索 API，可以把供应商代搜关掉：这时所有模型都只用已配置的搜索 API，一个都没有时 magpie 不添加搜索工具。供应商自带的联网搜索不受影响。</p>
+    <h2 id="apis"><a class="anchor" href="#apis">搜索 API</a></h2>
+    <p>可以添加的搜索 API：Tavily、Brave Search、Exa、Firecrawl、You.com、DeepSeek、Doubao Search (Volcengine)、Yuanbao Search (Tencent Cloud)、TinyFish、SearXNG，以及插件提供的。它们按列表顺序调用，可以拖动排序，也可以单独关闭（保留它和它的密钥，但不再调用）。命令行也能设置：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ws-cli">复制</button><pre id="ws-cli">magpie search add tavily <key>
+magpie search add you              # You.com: free with no key (100 searches a day)
+magpie search add searxng url=<address>
+magpie search                      # the search APIs, in the order they are asked
+magpie search move <api> <n>
+magpie search count 10             # results per search, 1 to 20, 6 by default</pre></div>
+    <ul><li>一个 API 可以填多个 Key，用逗号隔开，搜索时轮流使用；加 <code>pick=order</code> 则一直用第一个，直到它被拒绝。</li><li>SearXNG 必须填地址。其他 API 也可以用 <code>url=</code> 指向你自己的、和该 API 接口一致的端点，Key 只发给那个地址。</li><li><span class="ui">每次搜索的结果条数</span>：客户端没指定条数时（Claude Code 的 WebSearch、Codex 的 web_search）用这个值，1 到 20，默认 6。每条最多带 1500 字节的网页正文，条数越多模型要读的越多。</li><li><code>magpie search mix &lt;api&gt;,&lt;api&gt;</code> 让几个 API 同时搜，合并后最多给 12 个网页。这会消耗每个 API 的额度。</li></ul>
+    <h2 id="own"><a class="anchor" href="#own">自带联网搜索的模型</a></h2>
+    <p>Grok、Gemini 等供应商的模型自己会搜索，客户端的联网搜索默认按原样交给它们。<span class="ui">自带联网搜索的模型</span> 一项可以改成 <span class="ui">magpie 代搜</span>，让它们也像其他模型一样用 magpie 的代搜供应商和搜索 API；选 <span class="ui">自带搜索</span> 则保持原样。</p>
+    <h2 id="mcp"><a class="anchor" href="#mcp">作为 MCP 服务器</a></h2>
+    <p>同样的搜索也是一个 MCP 服务器，Cursor、Claude Desktop 或任何 Agent 都能添加。它提供 web_search 工具，还有按 URL 读取网页的 web_fetch 工具，给没有自带抓取工具的 Agent 用。地址在 <span class="ui">联网搜索</span> 页的 <span class="ui">MCP 服务器</span> 一行，默认是：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ws-mcp">复制</button><pre id="ws-mcp">http://127.0.0.1:3425/mcp/magpie/web-search</pre></div>
+    <p>它只支持 Streamable HTTP。只支持 stdio 的客户端可以通过 <code>mcp-remote</code> 挂载。从其他电脑访问时（magpie 开着局域网共享），以 <code>Authorization: Bearer &lt;key&gt;</code> 发送网关密钥。web_fetch 只读公网地址，单次最多 30 秒、5 MiB。</p>
+    <h2 id="routing"><a class="anchor" href="#routing">谁搜的</a></h2>
+    <p>每次代搜都会出现在 <span class="ui">路由</span> 页。换了来源时，会写明是谁替它搜的。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>DeepSeek 能联网搜索吗？</h3>
+    <p>DeepSeek 的 API 本身不联网。通过 magpie 用它时，Claude Code 的 WebSearch 或 Codex 的 web_search 会由 magpie 代搜：用能搜索的供应商，或你添加的搜索 API。</p>
+    <h3>没有能搜索的供应商怎么办？</h3>
+    <p>在 设置 › 模型 › 联网搜索 里添加一个搜索 API，比如 Tavily 或 Brave Search。You.com 不填 Key 也能用，每天 100 次；也可以填自建 SearXNG 的地址。</p>
+    <h3>代搜要花钱吗？</h3>
+    <p>代搜用的是所选服务的额度：代搜供应商会消耗它的额度或产生费用，搜索 API 按各自的价格计费。</p>
+    <h3>Cursor 能用 magpie 的联网搜索吗？</h3>
+    <p>能。把 /mcp/magpie/web-search 作为 MCP 服务器（Streamable HTTP）添加到 Cursor，就有 web_search 和 web_fetch 两个工具。</p>
+
+    <p style="margin-top:48px">相关页面：<a href="/docs/zh/deepseek">DeepSeek 接入 Claude Code、Codex、Gemini CLI 和 OpenCode</a>、<a href="/docs/zh/agent-drift">Agent 没走 magpie 怎么办</a>。遇到报错？见 <a href="/docs/zh/troubleshooting">常见错误排查：401、429、502、504 等</a>，或到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

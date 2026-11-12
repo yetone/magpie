@@ -1287,6 +1287,8 @@ magpie opencode deepseek/deepseek-v4-pro
 
 The DeepSeek row shows your balance, read from DeepSeek: the total, what was granted and what you topped up. The Usage tab counts tokens, cache hits and cost for each agent and model that went through magpie.
 
+DeepSeek's API doesn't search the web by itself; through magpie, Claude Code's WebSearch and Codex's web_search still work. See [Web search for any model](https://usemagpie.ai/docs/web-search).
+
 ## FAQ
 
 ### How do I use DeepSeek in Claude Code?
@@ -8891,6 +8893,92 @@ Most often Windows' firewall keeps WSL out: allow magpie when Windows asks, or r
 A proxy takes Codex's requests for magpie. Have it send 127.0.0.1 direct, or add 127.0.0.1 to NO_PROXY, then reopen Codex.
 
 Related: [Use DeepSeek, Kimi, GLM, Claude or any model in Codex](https://usemagpie.ai/docs/codex-models) and [Remote magpie](https://usemagpie.ai/docs/remote). Something else fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/web-search
+
+# Web search for any model
+
+Claude Code has WebSearch and Codex has web_search, but those tools only work when the model's provider can search the web itself. Many models' APIs can't: DeepSeek, GLM, Qwen and others. When you use them through magpie, magpie searches for them: the model is given magpie's web_search tool, and when it calls it, magpie searches and gives it the pages found, with the search and its sources sent back in the shape the agent knows. So web search keeps working in Claude Code or Codex whichever model you switch to.
+
+## Set it up
+
+Searches come from two kinds of source: providers that can search, and the Search APIs you add. Both are in Settings › Models › Web search.
+
+1. **With a provider that can search, there is nothing to set.** magpie picks one by itself, such as a Google sign-in, a ChatGPT account (Codex's sign-in), or a Kimi Code, GLM Coding Plan or WorkBuddy plan.
+2. **Or add a Search API.** Add a key for Tavily, Brave Search or another under Search APIs. With no provider that can search, these do the searching.
+3. **Pick which kind goes first with Search first with.** The other is asked when it fails.
+
+A search may use the service's quota or incur charges.
+
+## Providers that search
+
+A provider whose models search the web by themselves can search for a model that can't. Pick one under Searches for other models, or leave it to magpie:
+
+- **One magpie picks:.** when it fails or finds nothing, magpie moves on to the next provider that can search, up to three in all.
+- **One you pick:.** when it fails, only the providers you put after it under If it fails take over, in their order. Only when it can't search at all (out of quota or rate-limited) do other available sources try, then your Search APIs.
+- When every source fails, the errors go back to the model as the tool's result, and the turn goes on.
+
+Some providers search for their own models first: a Kimi Code plan through its own search service, a GLM Coding Plan through the plan's Web Search MCP server (with the same key, nothing to set up), a WorkBuddy plan through its search service, and a Google sign-in through Google Search. A ChatGPT account searches through the ChatGPT backend's own search, the request Codex's web.run sends.
+
+To use Search APIs only, turn provider search off: every model then uses only the Search APIs you added, and with none, magpie adds no search tool. A provider's own web search is unchanged.
+
+## Search APIs
+
+The Search APIs you can add are Tavily, Brave Search, Exa, Firecrawl, You.com, DeepSeek, Doubao Search (Volcengine), Yuanbao Search (Tencent Cloud), TinyFish and SearXNG, and the ones a plugin gives. They are asked in the list's order: drag them to reorder, or switch one off (kept with its key, and never asked). The CLI does the same:
+
+```
+magpie search add tavily 
+magpie search add you              # You.com: free with no key (100 searches a day)
+magpie search add searxng url=
+magpie search                      # the search APIs, in the order they are asked
+magpie search move  
+magpie search count 10             # results per search, 1 to 20, 6 by default
+```
+
+- One API can take several keys, separated by commas, which searches take in turn; with `pick=order` the first is used until it is refused.
+- SearXNG needs its address. Any other API can take `url=` for an endpoint of your own that answers as that API does, and its key is sent only there.
+- Results per search: the count when the client names none (Claude Code's WebSearch, Codex's web_search), 1 to 20, 6 by default. Each result carries up to 1500 bytes of its page, so more results give the model more to read.
+- `magpie search mix <api>,<api>` asks several APIs at once and gives at most 12 pages, merged. It spends each mixed API's quota.
+
+## Models that search by themselves
+
+Models such as Grok's and Gemini's search the web by themselves, and a client's web search goes to them as sent. Models that search by themselves can be set to magpie's, so they use magpie's providers and Search APIs as every other model does; Their own leaves them as they are.
+
+## As an MCP server
+
+The same search is an MCP server too, for Cursor, Claude Desktop or any agent. It has a web_search tool, and a web_fetch tool that reads a page by its URL, for an agent with no fetch tool of its own. Its address is on the MCP server row of the Web search page; by default:
+
+```
+http://127.0.0.1:3425/mcp/magpie/web-search
+```
+
+It speaks Streamable HTTP only. A client that only speaks stdio mounts it through `mcp-remote`. From another computer (with magpie shared on the local network), send a gateway key as `Authorization: Bearer <key>`. web_fetch reads public addresses only, for at most 30 seconds and 5 MiB.
+
+## Who searched
+
+Every search magpie makes shows on the Routing page. When another source searched in place of the first, it says who searched instead.
+
+## FAQ
+
+### Can DeepSeek search the web?
+
+DeepSeek's API doesn't search by itself. Through magpie, Claude Code's WebSearch or Codex's web_search is answered by magpie's search: a provider that can search, or a Search API you added.
+
+### What if no provider I have can search?
+
+Add a Search API under Settings › Models › Web search, such as Tavily or Brave Search. You.com works with no key, 100 searches a day, or give the address of your own SearXNG.
+
+### Does a search cost anything?
+
+It uses the chosen service's allowance: a provider that searches spends its quota or may charge, and a Search API bills at its own prices.
+
+### Can Cursor use magpie's web search?
+
+Yes. Add /mcp/magpie/web-search to Cursor as an MCP server (Streamable HTTP), and it gets the web_search and web_fetch tools.
+
+Related: [DeepSeek in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/deepseek) and [When an agent stops going through magpie](https://usemagpie.ai/docs/agent-drift). Something fails? See [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
