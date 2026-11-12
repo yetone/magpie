@@ -4,11 +4,11 @@ import (
 	"context"
 	"net/http"
 	"os"
-	"regexp"
 	"runtime"
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
 )
 
@@ -16,7 +16,7 @@ import (
 // About's Report a problem opens it after copying the facts below.
 const FeedbackURL = "https://x.com/magpie_router/status/2119861020978188499"
 
-var osVersionRE = regexp.MustCompile(`\d+(\.\d+)+`)
+var osVersionRE = lazyre.New(`\d+(\.\d+)+`)
 
 // osVersion names the system and its version: "macOS 26.2", "Windows
 // 10.0.26100", "Ubuntu 24.04.1 LTS". Only what the system calls itself:
