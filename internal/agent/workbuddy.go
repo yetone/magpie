@@ -154,12 +154,15 @@ func workbuddyRead(path string) (workbuddyDoc, error) {
 
 // workbuddyEntry is what magpie reads of an entry.
 type workbuddyEntry struct {
-	ID        string `json:"id"`
-	Vendor    string `json:"vendor"`
-	Disabled  *bool  `json:"disabled"`
-	URL       string `json:"url"`
-	APIKey    string `json:"apiKey"`
-	Reasoning *struct {
+	ID       string `json:"id"`
+	Vendor   string `json:"vendor"`
+	Disabled *bool  `json:"disabled"`
+	URL      string `json:"url"`
+	APIKey   string `json:"apiKey"`
+	// MaxOutputTokens is the reply limit the entry has now: one typed in
+	// WorkBuddy's model settings stays (outputsKept)
+	MaxOutputTokens int `json:"maxOutputTokens"`
+	Reasoning       *struct {
 		DefaultEffort string `json:"defaultEffort"`
 		Effort        string `json:"effort"` // the older key WorkBuddy still reads
 	} `json:"reasoning"`
@@ -250,6 +253,7 @@ func buddyWriteAt(path, agent string, on bool, where place) error {
 	var ours []string
 	off := map[string]bool{}
 	effort := map[string]string{} // the default effort each model was given in WorkBuddy, "" for its Auto
+	haveOut := map[string]int{}   // the reply limit each model has in the file now
 	var remote, remoteKey string
 	at := -1 // where magpie's were, which they keep
 	for _, raw := range d.models {
@@ -268,6 +272,7 @@ func buddyWriteAt(path, agent string, on bool, where place) error {
 				remote, remoteKey = e.URL, e.APIKey
 			}
 			ours = append(ours, e.ID)
+			haveOut[e.ID] = e.MaxOutputTokens
 			if e.Disabled != nil && *e.Disabled {
 				off[e.ID] = true
 			}
@@ -284,8 +289,18 @@ func buddyWriteAt(path, agent string, on bool, where place) error {
 	var add []json.RawMessage
 	var ids []string
 	if on {
-		for _, m := range sharedModels(agent) {
-			e := buddyModel(agent, m.ID, m.Name, m.Context, outputOr(m, zcodeOutput(maxTokens(m))), m.Images, m.Efforts)
+		models := sharedModels(agent)
+		// a reply limit typed into the file stays; magpie's is put where
+		// the user set none (outputsKept)
+		wantOut := map[string]int{}
+		for _, m := range models {
+			if n := outputOr(m, zcodeOutput(maxTokens(m))); n > 0 {
+				wantOut[m.ID] = n
+			}
+		}
+		keptOut := outputsKept(path, wantOut, haveOut)
+		for _, m := range models {
+			e := buddyModel(agent, m.ID, m.Name, m.Context, keptOut[m.ID], m.Images, m.Efforts)
 			if off[m.ID] {
 				e["disabled"] = true
 			}

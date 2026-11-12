@@ -1,8 +1,10 @@
 package agent
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"testing"
 
@@ -119,4 +121,166 @@ func TestOpenCodeKeepsALimitOutputTypedByHand(t *testing.T) {
 	if got() != "100000" {
 		t.Fatalf("a Max output set in magpie didn't reach OpenCode: %s", got())
 	}
+}
+
+// Flandern1211 on X: a max output edited by hand in dsh or ZCode was
+// written back by the next sync. For each file magpie writes the models
+// into: magpie's own value first, then one typed by hand stays through
+// syncs and models.dev changing, a Max output set in magpie is written over
+// it, and taken away, magpie's own follows models.dev again.
+func checkOutputKept(t *testing.T, name string, wantFirst int, read func() string, typeIn func(n int), sync func()) {
+	t.Helper()
+	const model = "relay/deepseek-v4.1-flash"
+	want := func(n int, why string) {
+		t.Helper()
+		if got := read(); got != strconv.Itoa(n) {
+			t.Fatalf("%s: %s: output = %q, want %d", name, why, got, n)
+		}
+	}
+	sync()
+	want(wantFirst, "first sync")
+	typeIn(64000)
+	sync()
+	want(64000, "typed by hand, synced")
+	listOutput(t, 300000)
+	sync()
+	want(64000, "typed by hand, models.dev changed")
+	if err := provider.SetModelOutput(model, 100000); err != nil {
+		t.Fatal(err)
+	}
+	sync()
+	want(100000, "Max output set in magpie")
+	if err := provider.SetModelOutput(model, 0); err != nil {
+		t.Fatal(err)
+	}
+	sync()
+	if got := read(); got == "100000" || got == "64000" {
+		t.Fatalf("%s: with no Max output set, output = %s, want models.dev's", name, got)
+	}
+}
+
+func TestZCodeKeepsAMaxOutputTypedByHand(t *testing.T) {
+	home := outputHome(t)
+	a := zcode(home)
+	if err := a.Field("provider").Set("magpie"); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(home, ".zcode", "v2", "config.json")
+	// config.json's limit.output
+	const at = "provider.magpie.models.relay/deepseek-v4\\.1-flash.limit.output"
+	checkOutputKept(t, "zcode config.json", 128000,
+		func() string { v, _ := edit.GetJSON(cfg, at); return v },
+		func(n int) {
+			if err := edit.SetJSON(cfg, edit.KV{Path: at, Value: n}); err != nil {
+				t.Fatal(err)
+			}
+		},
+		func() {
+			if err := a.Sync(); err != nil {
+				t.Fatal(err)
+			}
+		})
+}
+
+func TestZCodeRulesKeepAMaxOutputTypedByHand(t *testing.T) {
+	home := outputHome(t)
+	a := zcode(home)
+	if err := a.Field("provider").Set("magpie"); err != nil {
+		t.Fatal(err)
+	}
+	rules := filepath.Join(home, ".zcode", "v2", "provider_config.json")
+	read := func() string {
+		var d struct {
+			Config struct {
+				Models struct {
+					Rules []struct {
+						Provider string `json:"providerId"`
+						Config   struct {
+							Specs struct {
+								Out struct {
+									Max int `json:"max"`
+								} `json:"maxOutputTokens"`
+							} `json:"optionSpecs"`
+						} `json:"config"`
+					} `json:"providerModelRules"`
+				} `json:"modelConfigRules"`
+			} `json:"config"`
+		}
+		_ = json.Unmarshal([]byte(readFile(rules)), &d)
+		for _, r := range d.Config.Models.Rules {
+			if r.Provider == "magpie" {
+				return strconv.Itoa(r.Config.Specs.Out.Max)
+			}
+		}
+		return "none"
+	}
+	checkOutputKept(t, "zcode provider_config.json", 128000, read,
+		func(n int) {
+			var d map[string]any
+			_ = json.Unmarshal([]byte(readFile(rules)), &d)
+			mcr := d["config"].(map[string]any)["modelConfigRules"].(map[string]any)
+			for _, r := range mcr["providerModelRules"].([]any) {
+				if m := r.(map[string]any); m["providerId"] == "magpie" {
+					m["config"].(map[string]any)["optionSpecs"].(map[string]any)["maxOutputTokens"] = map[string]any{"max": n}
+				}
+			}
+			b, _ := json.Marshal(d)
+			writeFile(t, rules, string(b))
+		},
+		func() {
+			if err := a.Sync(); err != nil {
+				t.Fatal(err)
+			}
+		})
+}
+
+func TestDshKeepsAMaxTokensTypedByHand(t *testing.T) {
+	home := outputHome(t)
+	web := filepath.Join(home, ".dsh", "profiles", "web", "cordis.patch.yml")
+	os.MkdirAll(filepath.Dir(web), 0o755)
+	os.WriteFile(web, []byte("# Your patch layer for this dsh profile.\n"), 0o644)
+	a := dsh(home)
+	if err := a.Field("model").Set("magpie/relay/deepseek-v4.1-flash"); err != nil {
+		t.Fatal(err)
+	}
+	path := web
+	re := regexp.MustCompile(`(?m)^(\s+maxTokens: )(\d+)$`)
+	checkOutputKept(t, "dsh", 384000,
+		func() string {
+			m := re.FindStringSubmatch(readFile(path))
+			if m == nil {
+				return "none:\n" + readFile(path)
+			}
+			return m[2]
+		},
+		func(n int) {
+			writeFile(t, path, re.ReplaceAllString(readFile(path), "${1}"+strconv.Itoa(n)))
+		},
+		func() {
+			if err := a.Sync(); err != nil {
+				t.Fatal(err)
+			}
+		})
+}
+
+func TestWorkBuddyKeepsAMaxOutputTypedByHand(t *testing.T) {
+	home := outputHome(t)
+	path := filepath.Join(home, "models.json")
+	re := regexp.MustCompile(`("maxOutputTokens": )(\d+)`)
+	checkOutputKept(t, "workbuddy", 128000,
+		func() string {
+			m := re.FindStringSubmatch(readFile(path))
+			if m == nil {
+				return "none:\n" + readFile(path)
+			}
+			return m[2]
+		},
+		func(n int) {
+			writeFile(t, path, re.ReplaceAllString(readFile(path), "${1}"+strconv.Itoa(n)))
+		},
+		func() {
+			if err := workbuddyWrite(path, true); err != nil {
+				t.Fatal(err)
+			}
+		})
 }

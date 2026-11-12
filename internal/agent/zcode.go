@@ -155,6 +155,7 @@ func zcodeProviderJSON(path string, keep bool) any {
 		}
 		ms[m.ID] = e
 	}
+	zcodeOutputsKept(path, ms)
 	on := true
 	if v, ok := edit.GetJSON(path, "provider."+magpieID+".enabled"); ok && v == "false" {
 		on = false
@@ -165,6 +166,43 @@ func zcodeProviderJSON(path string, keep bool) any {
 	}
 	return map[string]any{"name": "magpie", "kind": zcodeKinds[zcodeFormat(filepath.Dir(path))], "enabled": on, "source": "custom",
 		"options": map[string]any{"apiKey": token, "baseURL": base}, "models": ms}
+}
+
+// zcodeOutputsKept keeps a limit.output the user typed into one of
+// magpie's models in config.json at path, in ms, the models magpie writes
+// (outputsKept).
+func zcodeOutputsKept(path string, ms map[string]any) {
+	want := map[string]int{}
+	for id, e := range ms {
+		m, _ := e.(map[string]any)
+		l, _ := m["limit"].(map[string]any)
+		if n := numberOf(l["output"]); n > 0 {
+			want[id] = n
+		}
+	}
+	if len(want) == 0 {
+		return
+	}
+	have := map[string]int{}
+	if raw, ok := edit.GetJSON(path, "provider."+magpieID+".models"); ok {
+		var cur map[string]struct {
+			Limit struct {
+				Output int `json:"output"`
+			} `json:"limit"`
+		}
+		if json.Unmarshal([]byte(raw), &cur) == nil {
+			for id, c := range cur {
+				have[id] = c.Limit.Output
+			}
+		}
+	}
+	kept := outputsKept(path, want, have)
+	for id, e := range ms {
+		m, _ := e.(map[string]any)
+		if l, _ := m["limit"].(map[string]any); l != nil && kept[id] > 0 {
+			l["output"] = kept[id]
+		}
+	}
 }
 
 // zcodeDefaultLevels is the default level each of magpie's models has in
@@ -533,6 +571,21 @@ func zcodeRules(path string, on, keep bool) error {
 		format := zcodeFormat(filepath.Dir(path))
 		searched, known := zcodeSearched()
 		var ids []string
+		// a maxOutputTokens typed into a model's rule in ZCode's settings
+		// stays; magpie's is put where the user set none (outputsKept)
+		wantOut, haveOut := map[string]int{}, map[string]int{}
+		for _, m := range sharedModels("zcode") {
+			if n := outputOr(m, zcodeOutput(maxTokens(m))); n > 0 && !byHand[m.ID] {
+				wantOut[m.ID] = n
+			}
+			if r := ours[m.ID]; r != nil {
+				c, _ := r["config"].(map[string]any)
+				s, _ := c["optionSpecs"].(map[string]any)
+				o, _ := s["maxOutputTokens"].(map[string]any)
+				haveOut[m.ID] = numberOf(o["max"])
+			}
+		}
+		keptOut := outputsKept(path, wantOut, haveOut)
 		for _, m := range sharedModels("zcode") {
 			ids = append(ids, m.ID)
 			if byHand[m.ID] {
@@ -552,7 +605,7 @@ func zcodeRules(path string, on, keep bool) error {
 			// ZCode's own rules give a model it doesn't know 32000 tokens
 			// out and thinking only on or off
 			specs := map[string]any{}
-			if out := outputOr(m, zcodeOutput(maxTokens(m))); out > 0 {
+			if out := keptOut[m.ID]; out > 0 {
 				specs["maxOutputTokens"] = map[string]any{"max": out}
 			}
 			if levels := zcodeLevels(m.Efforts); levels != nil {

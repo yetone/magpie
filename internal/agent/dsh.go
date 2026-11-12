@@ -40,6 +40,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	satomic "sync/atomic"
@@ -1866,12 +1867,15 @@ func dshPutProviders(providers *yaml.Node, on bool, models []catalog.Model, gw s
 			api = v.Value
 		}
 		var route yaml.Node
-		if err := route.Encode(dshKindConfig(k, ms, api, gw)); err != nil {
+		cfg := dshKindConfig(k, ms, api, gw)
+		cur := yamlKey(providers, k.key)
+		dshOutputsKept(&cfg, cur)
+		if err := route.Encode(cfg); err != nil {
 			return err
 		}
 		// what dsh's Models page added to it (a default level, headers)
 		// stays; magpie's fields are put as they are now
-		if cur := yamlKey(providers, k.key); cur != nil && cur.Kind == yaml.MappingNode {
+		if cur != nil && cur.Kind == yaml.MappingNode {
 			dshKeepCompat(cur, &route)
 			for j := 0; j+1 < len(route.Content); j += 2 {
 				if route.Content[j].Value == dshIdleKey && yamlKey(cur, dshIdleKey) != nil {
@@ -1921,6 +1925,40 @@ func dshKeepCompat(cur, route *yaml.Node) {
 			if yamlKey(c, old[id.Value].Content[j].Value) == nil {
 				yamlSetKey(c, old[id.Value].Content[j].Value, old[id.Value].Content[j+1])
 			}
+		}
+	}
+}
+
+// dshOutputsKept keeps a maxTokens the user typed into one of magpie's
+// models on route cur, in dsh's Models page or by hand, in r, the route as
+// magpie writes it (outputsKept). One record serves every file dsh keeps
+// the route in: what magpie wanted for a model is the same in each.
+func dshOutputsKept(r *dshPiRoute, cur *yaml.Node) {
+	want := map[string]int{}
+	for _, m := range r.Models {
+		if m.MaxTokens > 0 {
+			want[m.ID] = m.MaxTokens
+		}
+	}
+	if len(want) == 0 {
+		return
+	}
+	have := map[string]int{}
+	if cur != nil && cur.Kind == yaml.MappingNode {
+		if ms := yamlKey(cur, "models"); ms != nil && ms.Kind == yaml.SequenceNode {
+			for _, m := range ms.Content {
+				id, mt := yamlKey(m, "id"), yamlKey(m, "maxTokens")
+				if id != nil && mt != nil {
+					n, _ := strconv.Atoi(mt.Value)
+					have[id.Value] = n
+				}
+			}
+		}
+	}
+	kept := outputsKept("dsh:routes", want, have)
+	for i := range r.Models {
+		if n := kept[r.Models[i].ID]; n > 0 {
+			r.Models[i].MaxTokens = n
 		}
 	}
 }
