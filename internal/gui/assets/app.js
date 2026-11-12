@@ -21186,7 +21186,7 @@ function renderAlerts(s, keep) {
 
 // AGENT_PREFS: an agent's own settings rows, by its id (openAgentPrefs)
 const AGENT_PREFS = {
-  codex: ["codexAgentsV1Row", "codexOpenRow", "codexSubagentModelRow", "codexServiceTierRow", "fullContextRow", "codexAsyncRow", "codexTitlesRow", "codexDescriptionsRow", "codexPredictionsRow", "codexAutoReviewRow", "codexMemoriesRow"],
+  codex: ["codexAgentsV1Row", "codexOpenRow", "codexSubagentModelRow", "codexServiceTierRow", "codexClientRow", "fullContextRow", "codexAsyncRow", "codexTitlesRow", "codexDescriptionsRow", "codexPredictionsRow", "codexAutoReviewRow", "codexMemoriesRow"],
   claude: ["fullContextRow"],
   grok: ["fullContextRow"],
 };
@@ -21270,6 +21270,7 @@ function renderAgentPrefs() {
   homeAgentPrefRows();
   // what each row does, in its tooltip (#2120)
   for (const [row, en] of [
+    ["#codexClientRow", "Which Codex requests to your ChatGPT accounts say they come from: the CLI or the desktop app"],
     ["#codexServiceTierRow", "Every request Codex sends goes at this tier, whatever /fast is set to in Codex; Ultrafast goes as Fast where the plan has none"],
     ["#codexTitlesRow", "Names each thread in a hidden request of its own; same as the session, it goes on the session’s model, as Codex sends it when that is one of Codex’s own"],
     ["#codexDescriptionsRow", "Writes each thread’s short description in a hidden request of its own; same as the session, it goes on the session’s model, as Codex sends it when that is one of Codex’s own"],
@@ -21327,6 +21328,7 @@ function renderAgentPrefs() {
   if (held.length) box.append(el("div", "hint codex-async-held", codexHeld(held)));
   $("#codexAsyncSegs").replaceChildren(box);
   renderCodexServiceTier(s);
+  renderCodexClient(s);
   renderCodexOpen(s);
   renderCodexTitles(s);
   renderCodexDescriptions(s);
@@ -21413,39 +21415,31 @@ const CODEX_TIERS = [
   { v: "priority", name: "Fast", note: "priority" },
   { v: "ultrafast", name: "Ultrafast", note: "ultrafast" },
 ];
-function renderCodexServiceTier(s) {
-  const v = s.codexServiceTier || "";
-  const cur = CODEX_TIERS.find((o) => o.v === v) || CODEX_TIERS[0];
-  const b = el("button", "rt-cond on");
+function renderCodexServiceTier(s) { codexMenuPick(CODEX_TIERS, s.codexServiceTier, "Codex service tier", "codexServiceTier", "tier"); }
+
+// a Codex row's button: the choice made, and the app's menu to change it,
+// posted on its own to settings/<path> as {<field>: value}
+function codexMenuPick(opts, v, label, key, field) {
+  const cur = opts.find((o) => o.v === (v || "")) || opts[0];
+  const b = el("button", "rt-cond on", t(cur.name));
   b.type = "button";
-  b.setAttribute("aria-label", t("Codex service tier"));
+  b.setAttribute("aria-label", t(label));
   b.setAttribute("aria-haspopup", "menu");
-  b.append(el("span", "", t(cur.name)));
   b.onclick = (e) => {
     e.stopPropagation();
     if (b.classList.contains("open")) return closeProtoMenu();
-    openProtoMenu(b, CODEX_TIERS, cur.v, (tier) => {
-      if (tier === cur.v) return;
-      prefWrite(api("settings/codex-service-tier", { tier }));
-    }, "Codex service tier", "sess-menu");
+    openProtoMenu(b, opts, cur.v, (x) => x !== cur.v && prefWrite(api("settings/" + key.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase()), { [field]: x })), label, "sess-menu");
   };
-  $("#codexServiceTierPick").replaceChildren(b);
+  $("#" + key + "Pick").replaceChildren(b);
 }
+
+// the Codex magpie presents to ChatGPT (ouhthuo on X)
+const CODEX_CLIENTS = [{ v: "", name: "Codex CLI" }, { v: "desktop", name: "Codex Desktop" }];
+function renderCodexClient(s) { codexMenuPick(CODEX_CLIENTS, s.codexClient, "Codex client", "codexClient", "client"); }
 
 // what Codex's Open button opens (Yink88564391 on X)
 const CODEX_OPENS = [{ v: "", name: "Automatic" }, { v: "app", name: "Codex app" }, { v: "terminal", name: "Terminal" }];
-function renderCodexOpen(s) {
-  const cur = CODEX_OPENS.find((o) => o.v === (s.codexOpen || "")) || CODEX_OPENS[0];
-  const b = el("button", "rt-cond on", t(cur.name));
-  b.type = "button";
-  b.setAttribute("aria-label", t("Open Codex with"));
-  b.onclick = (e) => {
-    e.stopPropagation();
-    if (b.classList.contains("open")) return closeProtoMenu();
-    openProtoMenu(b, CODEX_OPENS, cur.v, (open) => open !== cur.v && prefWrite(api("settings/codex-open", { open })), "Open Codex with", "sess-menu");
-  };
-  $("#codexOpenPick").replaceChildren(b);
-}
+function renderCodexOpen(s) { codexMenuPick(CODEX_OPENS, s.codexOpen, "Open Codex with", "codexOpen", "open"); }
 
 // Codex's descriptions: as sent, off, or a model
 function renderCodexDescriptions(s) { codexSidePick(s, "codexDescriptions", "Codex thread descriptions", "no description, nothing sent", "codex-descriptions"); }

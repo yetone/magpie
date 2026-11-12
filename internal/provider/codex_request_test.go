@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -406,5 +407,59 @@ func TestCodexInputDropsStatusWithID(t *testing.T) {
 		if has != want[i] {
 			t.Errorf("input[%d] status kept %v, want %v: %v", i, has, want[i], item)
 		}
+	}
+}
+
+// The Codex client magpie presents is the user's choice (ouhthuo on X): Codex
+// CLI unless "desktop" is set, and then the Codex app's originator and
+// User-Agent on a model request and on the account calls alike (/wham, the
+// token refresh), and as a test is asked as Codex asks. Anything else is
+// refused, and read as Codex CLI from a file edited by hand.
+func TestCodexClientSetting(t *testing.T) {
+	signIn(t)
+	p, _ := find(All(), "codex")
+	sign := func() http.Header {
+		t.Helper()
+		req, _ := http.NewRequest("POST", p.Responses+"/responses", nil)
+		if err := p.Sign(context.Background(), req, Responses, []byte(`{"prompt_cache_key":"thread-1"}`)); err != nil {
+			t.Fatal(err)
+		}
+		return req.Header
+	}
+	cli := func(h http.Header) bool {
+		return h.Get("originator") == "codex_cli_rs" && strings.HasPrefix(h.Get("User-Agent"), "codex_cli_rs/0.")
+	}
+	if h := sign(); !cli(h) {
+		t.Fatalf("by default: %v", h)
+	}
+	for _, bad := range []string{"Codex Desktop", "codex_cli_rs", "evil", "desktop2"} {
+		if err := SetCodexClient(bad); err == nil {
+			t.Errorf("%q was accepted", bad)
+		}
+	}
+	if err := SetCodexClient("desktop"); err != nil {
+		t.Fatal(err)
+	}
+	h := sign()
+	if h.Get("originator") != "Codex Desktop" || !regexp.MustCompile(`^Codex Desktop/0\.\d+[^ ]* \([^;]+; [^)]+\) unknown \(Codex Desktop; \d+\.\d+\.\d+\)$`).MatchString(h.Get("User-Agent")) {
+		t.Fatalf("as the Codex app: %v", h)
+	}
+	if h.Get("version") == "" || h.Get("session-id") != "thread-1" || h.Get("chatgpt-account-id") != "acct-1" {
+		t.Fatalf("the rest of the headers: %v", h)
+	}
+	acct := codexAccountHeaders("acct-1")
+	if acct["Originator"] != "Codex Desktop" || !strings.HasPrefix(acct["User-Agent"], "Codex Desktop/") {
+		t.Fatalf("an account call: %v", acct)
+	}
+	asked := http.Header{}
+	clientHeaders(ClientCodex, asked)
+	if asked.Get("originator") != "Codex Desktop" || !strings.HasPrefix(asked.Get("User-Agent"), "Codex Desktop/") {
+		t.Fatalf("a test asked as Codex: %v", asked)
+	}
+	if err := SetCodexClient(""); err != nil {
+		t.Fatal(err)
+	}
+	if h := sign(); !cli(h) {
+		t.Fatalf("back to the default: %v", h)
 	}
 }
