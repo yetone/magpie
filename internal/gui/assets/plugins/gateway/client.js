@@ -291,6 +291,10 @@ function renderGateway() {
     who.append(name, el("div", "sub old", t("Agents' requests go through magpie {v} and are sent as it sends them, without this version's fixes. Quit it here and this one serves the gateway at once.", { v: g.version })));
   } else if (g.paused) {
     who.append(name, el("div", "sub", t("Paused, agents are disconnected and use their own settings")));
+  } else if (!g.running && state.gatewayHeld?.own) {
+    // magpie's own service (magpie daemon), starting after an update or a
+    // restart: it serves the gateway in a moment, nothing to quit or move
+    who.append(name, el("div", "sub", t("Starting the gateway…")));
   } else if (!g.running && state.gatewayHeld) {
     // the gateway couldn't listen: what has the port, as far as it is read
     who.append(name, el("div", "sub old err", gatewayFixSays({ reason: "taken", ...state.gatewayHeld })));

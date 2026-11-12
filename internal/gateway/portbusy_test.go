@@ -3,6 +3,8 @@ package gateway
 import (
 	"context"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -119,5 +121,44 @@ func TestAddrInUseIsOnlyThat(t *testing.T) {
 	_, err := net.Listen("tcp", "256.256.256.256:1")
 	if err == nil || addrInUse(err) {
 		t.Fatalf("a bad address: %v", err)
+	}
+}
+
+// Norethcy on X: the service of the same install, starting after an update,
+// held the port and the page said another program had it. A holder that is
+// this install's own magpie is marked, one that isn't, not.
+func TestWhoHoldsOwnMagpie(t *testing.T) {
+	was := readOwn
+	defer func() { readOwn = was }()
+	svc := func(context.Context, int) (proc.Holder, bool) {
+		return proc.Holder{PID: 47634, Name: "magpie", Path: "/home/u/.local/bin/magpie"}, true
+	}
+	readOwn = func(h proc.Holder) bool { return h.PID == 47634 }
+	b, ok := whoHolds(context.Background(), "3425", svc, noServe)
+	if !ok || !b.Own {
+		t.Fatalf("own service: %+v %v", b, ok)
+	}
+	readOwn = func(proc.Holder) bool { return false }
+	if b, _ := whoHolds(context.Background(), "3425", svc, noServe); b.Own {
+		t.Fatalf("another magpie marked own: %+v", b)
+	}
+}
+
+// ownMagpie compares programs by file, so the service's link and the app's
+// binary are one.
+func TestSameProgramFollowsLinks(t *testing.T) {
+	d := t.TempDir()
+	bin := filepath.Join(d, "magpie-real")
+	if err := os.WriteFile(bin, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(d, "magpie")
+	if err := os.Symlink(bin, link); err != nil {
+		t.Skip("no symlinks here")
+	}
+	other := filepath.Join(d, "other")
+	os.WriteFile(other, []byte("y"), 0o755)
+	if !sameProgram(link, bin) || sameProgram(link, other) || sameProgram(filepath.Join(d, "gone"), bin) {
+		t.Fatal("sameProgram wrong")
 	}
 }

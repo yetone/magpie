@@ -198,6 +198,37 @@ func Addr() string {
 	return envOf(string(b), "MAGPIE_ADDR")
 }
 
+// Program is the program the installed service runs, "" when it isn't
+// installed: from the service's own file, the first word of a unit's
+// ExecStart or a launch agent's ProgramArguments.
+func Program() string {
+	m, err := current()
+	if err != nil {
+		return ""
+	}
+	b, err := os.ReadFile(m.file())
+	if err != nil {
+		return ""
+	}
+	return programOf(string(b))
+}
+
+var (
+	programPlistRe = lazyre.New(`<key>ProgramArguments</key>\s*<array>\s*<string>([^<]*)</string>`)
+	programUnitRe  = lazyre.New(`(?m)^ExecStart="((?:[^"\\]|\\.)*)"`)
+)
+
+// programOf is Program from a unit's or a launch agent's text.
+func programOf(text string) string {
+	if m := programPlistRe.FindStringSubmatch(text); m != nil {
+		return html.UnescapeString(m[1])
+	}
+	if m := programUnitRe.FindStringSubmatch(text); m != nil {
+		return strings.NewReplacer(`\\`, `\`, `\"`, `"`, "%%", "%").Replace(m[1])
+	}
+	return ""
+}
+
 // envOf is the value of NAME in a unit's or a launch agent's text, "" when
 // it has none.
 func envOf(text, name string) string {

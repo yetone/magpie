@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -29,6 +31,10 @@ type PortHeld struct {
 	// Tailscale: Tailscale's serve or funnel has the port (the holder is
 	// Tailscale's, or `tailscale serve status` lists the port)
 	Tailscale bool `json:"tailscale,omitempty"`
+	// Own: the holder is a magpie of this install (the background
+	// service, `magpie daemon`, starting up or restarted onto an update),
+	// which serves the gateway once it answers: nothing to quit or move
+	Own bool `json:"own,omitempty"`
 	// Alt: a port to give Tailscale's HTTPS proxy in its place
 	Alt string `json:"alt,omitempty"`
 }
@@ -37,7 +43,40 @@ type PortHeld struct {
 var (
 	readHolder = proc.PortHolder
 	readServes = proc.TailscaleServes
+	readOwn    = ownMagpie
 )
+
+// ownMagpie says h is a magpie running this install's program: the same
+// file as this process's, symlinks followed (the service starts
+// ~/.local/bin/magpie, a link to the app's binary), as proc.RunsMagpie
+// reads its process. Norethcy on X: `magpie daemon restart` after an
+// update, and the app said another program held the port.
+func ownMagpie(h proc.Holder) bool {
+	if h.PID <= 0 || h.Path == "" || !proc.RunsMagpie(h.PID, h.Path) {
+		return false
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	return sameProgram(h.Path, exe)
+}
+
+// sameProgram is whether two paths name one file, symlinks followed.
+func sameProgram(a, b string) bool {
+	if r, err := filepath.EvalSymlinks(a); err == nil {
+		a = r
+	}
+	if r, err := filepath.EvalSymlinks(b); err == nil {
+		b = r
+	}
+	x, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	y, err := os.Stat(b)
+	return err == nil && os.SameFile(x, y)
+}
 
 var lastHeld atomic.Pointer[PortHeld]
 
@@ -74,6 +113,7 @@ func whoHolds(ctx context.Context, port string,
 	if h, ok := holder(ctx, n); ok {
 		b.Name, b.PID, b.Path = h.Name, h.PID, h.Path
 		b.Tailscale = h.IsTailscale()
+		b.Own = !b.Tailscale && readOwn(h)
 		// a holder that isn't Tailscale's own process may still be
 		// Tailscale's serve (a forwarder it runs): only its own list says
 	} else if serves(ctx, n) {

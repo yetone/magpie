@@ -564,3 +564,17 @@ func TestUninstallRecordsTheUsersNo(t *testing.T) {
 		t.Fatal("still recorded after the user installed it")
 	}
 }
+
+// Program is what the installed service runs, read from its own file.
+func TestProgramOf(t *testing.T) {
+	exe := `/Users/a b/.local/bin/magpie`
+	if got := programOf(plist(exe, []string{"serve"}, nil)); got != exe {
+		t.Errorf("plist: %q", got)
+	}
+	if got := programOf(unitText(exe, []string{"serve"}, nil)); got != exe {
+		t.Errorf("unit: %q", got)
+	}
+	if got := programOf("nothing"); got != "" {
+		t.Errorf("none: %q", got)
+	}
+}

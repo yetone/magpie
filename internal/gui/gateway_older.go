@@ -1,10 +1,19 @@
 package gui
 
 import (
+	"encoding/json"
+	"io"
 	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
+	"time"
 
+	"github.com/yetone/magpie/internal/daemon"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/update"
 )
@@ -84,6 +93,97 @@ func replaceable(o gateway.Served, sk *gatewaySkew) bool {
 		replacedOlder.Load() < replaceMost
 }
 
+// The background service (`magpie daemon`) of this install, left on the
+// version before an app update (Norethcy on X): the link ~/.local/bin/magpie
+// follows the app's binary, but the service runs the old one until it
+// restarts itself, which it does only once the gateway is idle, and the
+// user ran `magpie daemon restart` by hand. The app now asks it, as
+// `magpie update` does (gateway.RestartPath): it restarts into the new
+// version once idle, in the same place under the system's service manager,
+// and the page says nothing is wrong while it comes up (PortHeld.Own).
+
+// ownDaemon says the magpie o is this install's background service: the
+// process the service manager runs, and its program is this app's own
+// (the link, or the file itself). A var for the tests.
+var ownDaemon = func(o gateway.Served) bool {
+	if o.Serves != "serve" || o.Pid <= 0 {
+		return false
+	}
+	st, err := daemon.Get()
+	if err != nil || !st.Installed || !st.Running || st.PID != o.Pid {
+		return false
+	}
+	prog, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	return samePath(daemon.Program(), prog)
+}
+
+func samePath(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	if r, err := filepath.EvalSymlinks(a); err == nil {
+		a = r
+	}
+	if r, err := filepath.EvalSymlinks(b); err == nil {
+		b = r
+	}
+	x, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	y, err := os.Stat(b)
+	return err == nil && os.SameFile(x, y)
+}
+
+// nudged is the service processes asked to restart: the app asks once per
+// process, not at every look.
+var (
+	nudgedMu sync.Mutex
+	nudged   = map[int]bool{}
+)
+
+// askRestart is the ask itself; a var for the tests.
+var askRestart = func(version string) (gateway.RestartReply, error) {
+	c := &http.Client{Timeout: 10 * time.Second}
+	res, err := c.Post(gateway.URL()+gateway.RestartPath, "application/json",
+		strings.NewReader(`{"version":`+strconv.Quote(version)+`}`))
+	if err != nil {
+		return gateway.RestartReply{}, err
+	}
+	defer res.Body.Close()
+	var r gateway.RestartReply
+	err = json.NewDecoder(io.LimitReader(res.Body, 1<<16)).Decode(&r)
+	return r, err
+}
+
+// nudgeDaemon asks the background service o, older than this app, to
+// restart into the version on disk, once per process. It waits for its
+// requests in flight as its own look at the disk does, then runs the new
+// program in its place.
+func nudgeDaemon(o gateway.Served, sk *gatewaySkew) {
+	if sk == nil || !sk.Older || !update.Released(o.Version) || !ownDaemon(o) {
+		return
+	}
+	nudgedMu.Lock()
+	if nudged[o.Pid] {
+		nudgedMu.Unlock()
+		return
+	}
+	nudged[o.Pid] = true
+	nudgedMu.Unlock()
+	go func() {
+		r, err := askRestart(gateway.Version)
+		if err != nil {
+			log.Printf("gateway: the background service (magpie %s, pid %d) wasn't asked to restart: %v", sk.Version, o.Pid, err)
+			return
+		}
+		log.Printf("gateway: asked the background service (magpie %s, pid %d) to restart into %s: %s", sk.Version, o.Pid, sk.Mine, r.State)
+	}()
+}
+
 // otherServes, under gatewayMu with this one serving nothing, looks at the
 // magpie o that serves the gateway: what the page is told of it, and, for
 // an older copy of the app with no request in flight, quits it. True when
@@ -116,6 +216,7 @@ func otherServes(o gateway.Served) bool {
 			sk.Replacing, sk.Busy, sk.Stuck = false, 0, out.Reason
 		}
 	}
+	nudgeDaemon(o, sk)
 	if before == nil || before.Version != sk.Version || before.Pid != sk.Pid {
 		how := "older than this one"
 		switch {
