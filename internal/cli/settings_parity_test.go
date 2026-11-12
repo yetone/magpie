@@ -287,9 +287,11 @@ var notYet = map[string]string{
 	"POST /api/settings/codex-service-tier":      S2, // api.go
 	"POST /api/settings/codex-auto-reset":        S2, // api.go
 	"POST /api/settings/codex-auto-review":       S2, // api.go
+	"POST /api/settings/codex-client":            S2, // api.go
 	"POST /api/settings/codex-compact-held/drop": S2, // api.go
 	"POST /api/settings/codex-credits":           S2, // api.go
 	"POST /api/settings/codex-descriptions":      S2, // api.go
+	"POST /api/settings/codex-open":              S2, // api.go
 	"POST /api/settings/codex-predictions":       S2, // api.go
 	"POST /api/settings/codex-reset-lead":        S2, // api.go
 	"POST /api/settings/codex-titles":            S2, // api.go
