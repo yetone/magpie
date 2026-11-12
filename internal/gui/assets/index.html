@@ -545,7 +545,7 @@
 <!-- an agent's own settings, drawn here and shown in its sheet or opened row (AGENT_PREFS) -->
 <div id="agentPrefRows" hidden>
   <div class="row pref" id="codexAgentsV1Row">
-    <div class="who"><div class="name" data-t>Codex subagents on any model</div><div class="sub" data-t>A GPT lead spawns subagents on magpie’s other models. New threads only; Codex’s own multi_agent_v2 still wins</div><div class="sub err" id="codexAgentsV1Warn" hidden></div></div>
+    <div class="who"><div class="name" data-t>Codex subagents on any model</div><div class="sub" data-t>A GPT lead can start subagents on magpie’s other models. New threads only.</div><div class="sub err" id="codexAgentsV1Warn" hidden></div></div>
     <div id="codexAgentsV1Segs"></div>
   </div>
   <div class="row pref" id="codexSubagentModelRow" hidden>
@@ -553,7 +553,7 @@
     <div class="val" id="codexSubagentModelPick"></div>
   </div>
   <div class="row pref" id="fullContextRow">
-    <div class="who"><div class="name" data-t>Long conversations</div><div class="sub" data-t>Codex, Claude Code and Grok Build compact at 272K (non-Claude [1m] too) or the size typed, on magpie's models only; a subscription's own models keep their own window and compaction; full window: slower, costlier</div></div>
+    <div class="who"><div class="name" data-t>Long conversations</div><div class="sub" data-t>Codex, Claude Code and Grok Build compact at 272K or the size typed; the full window is slower and costlier. magpie's models only: a subscription's own models keep their own.</div></div>
     <div id="fullContextSegs"></div>
   </div>
   <div class="row pref" id="codexAsyncRow">

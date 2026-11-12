@@ -3941,8 +3941,8 @@ const codexRowed = (a, f) => a.id === "codex" && !gatewayMode && (f.label === SU
 const CODEX_SUB_LEAD = "lead";
 const LEADS_PICK = "Lead's pick";
 const SAME_AS_LEAD = "Same as the lead";
-const SUB_MODEL_UNSET = "The lead picks each subagent's model, one of Codex's own too; one it names none for runs on the lead's model ({model}). A resumed subagent stays on the model it started on. Same as the lead, or a model picked here, holds every subagent to it, even when the lead names another.";
-const SUB_MODEL_UNSET_PLAIN = "The lead picks each subagent's model, one of Codex's own too; one it names none for runs on the lead's model. A resumed subagent stays on the model it started on. Same as the lead, or a model picked here, holds every subagent to it, even when the lead names another.";
+const SUB_MODEL_UNSET = "The lead picks each subagent's model, or the lead's own ({model}) if it names none. Pick one here to use it for every subagent.";
+const SUB_MODEL_UNSET_PLAIN = "The lead picks each subagent's model, or the lead's own if it names none. Pick one here to use it for every subagent.";
 const SUB_MODEL_LEAD = "Every subagent runs on the lead's model ({model}), even when the lead names another. Lead's pick lets the lead choose again.";
 const SUB_MODEL_LEAD_PLAIN = "Every subagent runs on the lead's model, even when the lead names another. Lead's pick lets the lead choose again.";
 const SUB_MODEL_SET = "Every subagent runs on this model, even when the lead names another. Lead's pick lets the lead choose again.";
